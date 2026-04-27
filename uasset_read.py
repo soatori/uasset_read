@@ -277,7 +277,6 @@ class PackageFileSummary:
     file_version_ue4: int               # UE4 版本号
     file_version_ue5: int               # UE5 版本号（>= 1000 D-04）
     file_version_licensee: int          # Licensee 版本
-    custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
     package_flags: int                  # D-12 仅存储
     name_count: int
     name_offset: int                    # 名称表绝对偏移
@@ -295,7 +294,8 @@ class PackageFileSummary:
     asset_registry_data_offset: int
     bulk_data_start_offset: int         # BulkData 基准偏移（D-13 不解析载荷）
     total_header_size: int
-    # UE5+ trailer 字段
+    # 有默认值的字段（UE5+ 可选字段）
+    custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
     payload_toc_offset: int = 0
     data_resource_offset: int = 0
 
