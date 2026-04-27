@@ -1,68 +1,69 @@
-# Project State
+# 项目状态
 
-**Project:** uasset_read
-**Initialized:** 2026-04-27
-**Milestone:** v1.0 — Initial
+**项目：** uasset_read
+**初始化：** 2026-04-27
+**里程碑：** v1.0 —— 初始
 
-## Current Phase
+## 当前阶段
 
-**Phase 1: Core Parsing**
-- Status: ○ Pending
-- Goal: Parse .uasset header, name table, import/export maps
+**阶段 1：核心解析**
+- 状态：○ 待定
+- 目标：解析 .uasset 文件头、名称表、导入/导出表
 
-## Phase Status
+## 阶段状态
 
-| # | Phase | Status | Plans | Progress |
-|---|-------|--------|-------|----------|
-| 1 | Core Parsing | ◐ Context Gathered | 0/0 | 10% |
-| 2 | Property Parsing | ○ Pending | 0/0 | 0% |
-| 3 | Blueprint Extraction | ○ Pending | 0/0 | 0% |
-| 4 | Output & CLI | ○ Pending | 0/0 | 0% |
-| 5 | Polish & Safety | ○ Pending | 0/0 | 0% |
+| # | 阶段 | 状态 | 计划 | 进度 |
+|---|------|------|------|------|
+| 1 | 核心解析 | ◐ 上下文已收集 | 0/0 | 10% |
+| 2 | 属性解析 | ○ 待定 | 0/0 | 0% |
+| 3 | 蓝图提取 | ○ 待定 | 0/0 | 0% |
+| 4 | 输出与 CLI | ○ 待定 | 0/0 | 0% |
+| 5 | 优化与安全 | ○ 待定 | 0/0 | 0% |
 
-## Recent Activity
+## 近期活动
 
-| Date | Action | Result |
-|------|--------|--------|
-| 2026-04-27 | Project initialized | PROJECT.md, config.json created |
-| 2026-04-27 | Research completed | STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md written |
-| 2026-04-27 | Research synthesized | SUMMARY.md written |
-| 2026-04-27 | Requirements defined | 37 v1 requirements mapped to 5 phases |
-| 2026-04-27 | Roadmap created | 5 phases defined with success criteria |
-| 2026-04-28 | Phase 1 context gathered | 01-CONTEXT.md created with 18 decisions |
+| 日期 | 动作 | 结果 |
+|------|------|------|
+| 2026-04-27 | 项目初始化 | PROJECT.md、config.json 创建 |
+| 2026-04-27 | 研究完成 | STACK.md、FEATURES.md、ARCHITECTURE.md、PITFALLS.md 写入 |
+| 2026-04-27 | 研究综合 | SUMMARY.md 写入 |
+| 2026-04-27 | 需求定义 | 37 个 v1 需求映射到 5 阶段 |
+| 2026-04-27 | 路线图创建 | 5 阶段定义配成功标准 |
+| 2026-04-28 | 阶段 1 上下文收集 | 01-CONTEXT.md 创建，含 18 项决策 |
+| 2026-04-28 | 文档汉化完成 | 所有规划文档翻译为中文 |
 
-## Project Reference
+## 项目参考
 
-See: `.planning/PROJECT.md` (updated 2026-04-27)
+参见：`.planning/PROJECT.md`（2026-04-27 更新）
 
-**Core value:** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
-**Current focus:** Phase 1 — Core Parsing
+**核心价值：** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
+**当前重点：** 阶段 1 —— 核心解析
 
-## Key Decisions
+## 关键决策
 
-| Decision | Status | Impact |
-|----------|--------|--------|
-| Python 3.10+ with zero runtime deps | Decided | Simpler deployment, stdlib-only |
-| Focus on uncooked assets | Decided | Full blueprint data available |
-| Blueprint graphs deferred to v2 | Decided | Reduced initial complexity |
+| 决策 | 状态 | 影响 |
+|------|------|------|
+| Python 3.10+ 零运行时依赖 | 已决定 | 部署更简单，仅标准库 |
+| 专注于未 cooked 资产 | 已决定 | 完整蓝图数据可用 |
+| 蓝图图推迟到 v2 | 已决定 | 降低初始复杂度 |
 
-## Outstanding Items
+## 待处理事项
 
-- Phase 1 planning pending (run `/gsd-plan-phase 1`)
-- Test files needed (sample .uasset from UE project — user will provide)
-- Version compatibility matrix to be built during Phase 1
+- 阶段 1 规划待定（运行 `/gsd-plan-phase 1`）
+- 需测试文件（UE 项目示例 .uasset —— 用户将提供）
+- 版本兼容矩阵在阶段 1 构建
 
-## Next Action
+## 下一步动作
 
 ```
-/gsd-plan-phase 1 — create detailed execution plan
+/gsd-plan-phase 1 —— 创建详细执行计划
 ```
 
-Or review/edit context first:
+或先审阅/编辑上下文：
 ```
 .planning/phases/01-core-parsing/01-CONTEXT.md
 ```
 
 ---
-*State initialized: 2026-04-27*
-*Last updated: 2026-04-27*
+*状态初始化：2026-04-27*
+*最后更新：2026-04-28*

@@ -1,265 +1,265 @@
-# Roadmap: uasset_read
+# 路线图：uasset_read
 
-**Created:** 2026-04-27
-**Project:** Python .uasset parser for AI agents
-**Total Phases:** 5
-**Granularity:** Standard (5-8 phases, balanced size)
+**创建日期：** 2026-04-27
+**项目：** Python .uasset 解析器（面向 AI agent）
+**总阶段数：** 5
+**粒度：** 标准（5-8 阶段，均衡规模）
 
-## Phase Overview
+## 阶段概览
 
-| # | Phase | Goal | Requirements | Success Criteria |
-|---|-------|------|--------------|-------------------|
-| 1 | Core Parsing | Parse .uasset header, name table, and maps; detect asset structure | CORE-01 through CORE-08 | 4 criteria |
-| 2 | Property Parsing | Read and extract property values from exports | PROP-01 through PROP-09 | 4 criteria |
-| 3 | Blueprint Extraction | Extract blueprint-specific metadata (variables, parent class) | BLUE-01 through BLUE-06 | 4 criteria |
-| 4 | Output & CLI | JSON/text output formats, command-line interface | OUT-01 through OUT-06, CLI-01 through CLI-06 | 4 criteria |
-| 5 | Polish & Safety | Performance optimization, error handling, safety checks | SAFE-01 through SAFE-05 | 3 criteria |
-
----
-
-## Phase 1: Core Parsing
-
-**Goal:** Parse .uasset file header, name table, import map, and export map; identify asset structure and type.
-
-**Requirements:** CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, CORE-07, CORE-08
-
-**Duration Estimate:** Medium (foundation layer, sets up all subsequent work)
-
-### Success Criteria
-
-1. **Given** any valid .uasset file, **When** parser reads header, **Then** PackageFileSummary contains correct magic tag, version numbers, and offsets.
-2. **Given** a file with swapped endianness magic tag, **When** parser detects it, **Then** byte swapping is enabled and all subsequent reads are correct.
-3. **Given** a valid .uasset file, **When** parser reads name table and maps, **Then** NameMap, ImportMap, and ExportMap contain all entries with correct values.
-4. **Given** an unsupported version .uasset, **When** parser detects version, **Then** clear error message is returned without crash.
-
-### Key Work
-
-- FArchive base class with read methods (u8, u32, u64, f32, fstring)
-- Byte swapping detection and handling (PACKAGE_FILE_TAG vs PACKAGE_FILE_TAG_SWAPPED)
-- PackageFileSummary parsing (all header fields)
-- Name table extraction (NameOffset, NameCount, FString entries)
-- Import map parsing (FObjectImport structure)
-- Export map parsing (FObjectExport structure)
-- Asset class identification from ClassIndex
-- Version handling (UE4/UE5/Custom versions)
-- Error handling framework (custom exceptions)
-
-### Dependencies
-
-None — foundation phase.
-
-### Risks
-
-- **Endianness edge cases:** Files saved on different platforms may have unexpected byte order
-- **Version complexity:** UE version system is multi-layered (UE4, UE5, custom, legacy)
-- **Offset arithmetic:** Mixing absolute vs relative offsets causes misreads
-
-### UE Source References
-
-- `PackageFileSummary.h` — Header structure
-- `ObjectResource.h` — Import/Export structures
-- `Archive.h` — FArchive pattern
-- `PackageFileSummary.cpp` — Summary serialization
+| # | 阶段 | 目标 | 需求 | 成功标准 |
+|---|------|------|------|----------|
+| 1 | 核心解析 | 解析 .uasset 文件头、名称表和映射表；检测资产结构 | CORE-01 至 CORE-08 | 4 条标准 |
+| 2 | 属性解析 | 从导出读取并提取属性值 | PROP-01 至 PROP-09 | 4 条标准 |
+| 3 | 蓝图提取 | 提取蓝图特定元数据（变量、父类） | BLUE-01 至 BLUE-06 | 4 条标准 |
+| 4 | 输出与 CLI | JSON/文本输出格式，命令行接口 | OUT-01 至 OUT-06, CLI-01 至 CLI-06 | 4 条标准 |
+| 5 | 优化与安全 | 性能优化，错误处理，安全检查 | SAFE-01 至 SAFE-05 | 3 条标准 |
 
 ---
 
-## Phase 2: Property Parsing
+## 阶段 1：核心解析
 
-**Goal:** Parse PropertyTag and extract basic property values (int, float, bool, string, name, object, array).
+**目标：** 解析 .uasset 文件头、名称表、导入表和导出表；识别资产结构和类型。
 
-**Requirements:** PROP-01, PROP-02, PROP-03, PROP-04, PROP-05, PROP-06, PROP-07, PROP-08, PROP-09
+**需求：** CORE-01, CORE-02, CORE-03, CORE-04, CORE-05, CORE-06, CORE-07, CORE-08
 
-**Duration Estimate:** Medium (property types are diverse, need systematic handling)
+**工期估算：** 中等（基础层，为后续所有工作奠定基础）
 
-### Success Criteria
+### 成功标准
 
-1. **Given** an export with properties, **When** parser reads PropertyTag, **Then** tag contains correct name, type, size, and flags.
-2. **Given** properties of basic types (Int, Float, Bool, String, Name), **When** parser extracts values, **Then** values match expected content.
-3. **Given** an ArrayProperty, **When** parser reads elements, **Then** all elements are correctly parsed.
-4. **Given** PropertyTag with HasPropertyGuid flag, **When** parser reads full tag, **Then** GUID field is extracted correctly.
+1. **给定**任意有效 .uasset 文件，**当**解析器读取文件头，**则**PackageFileSummary 包含正确的魔术标签、版本号和偏移。
+2. **给定**带有交换字节序魔术标签的文件，**当**解析器检测到它，**则**启用字节交换，后续所有读取正确。
+3. **给定**有效 .uasset 文件，**当**解析器读取名称表和映射表，**则**NameMap、ImportMap 和 ExportMap 包含所有条目及正确值。
+4. **给定**不支持的版本 .uasset，**当**解析器检测版本，**则**返回清晰错误信息而不崩溃。
 
-### Key Work
+### 主要工作
 
-- PropertyTag parsing (name, type, array index, size, flags, GUID, extensions)
-- IntProperty parsing (int32, int64)
-- FloatProperty parsing (float, double)
-- BoolProperty parsing (inline bool byte)
-- StrProperty parsing (FString with length prefix)
-- NameProperty parsing (FName resolved from NameMap)
-- ObjectProperty parsing (FPackageIndex reference)
-- ArrayProperty parsing (count + element loop)
-- PropertyTag flags handling (HasPropertyGuid, HasPropertyExtensions)
+- FArchive 基类及读取方法（u8、u32、u64、f32、fstring）
+- 字节交换检测与处理（PACKAGE_FILE_TAG vs PACKAGE_FILE_TAG_SWAPPED）
+- PackageFileSummary 解析（所有文件头字段）
+- 名称表提取（NameOffset、NameCount、FString 条目）
+- 导入表解析（FObjectImport 结构）
+- 导出表解析（FObjectExport 结构）
+- 从 ClassIndex 识别资产类
+- 版本处理（UE4/UE5/自定义版本）
+- 错误处理框架（自定义异常）
 
-### Dependencies
+### 依赖
 
-- Phase 1 (needs PackageFileSummary, NameMap, ExportMap, FArchive)
+无 —— 基础阶段。
 
-### Risks
+### 风险
 
-- **PropertyTag evolution:** Flags and fields differ between UE versions
-- **FString encoding:** UTF-8 vs UTF-16 depends on version
-- **Array nesting:** Nested arrays or arrays of complex types increase complexity
+- **字节序边缘情况：** 不同平台保存的文件可能有意外的字节顺序
+- **版本复杂性：** UE 版本系统多层（UE4、UE5、自定义、遗留）
+- **偏移算术：** 混用绝对与相对偏移导致读取错误
 
-### UE Source References
+### UE 源码参考
 
-- `PropertyTag.h` — Property tag structure
-- `PropertyTag.cpp` — Serialization
-- `UnrealString.h` — FString format
-
----
-
-## Phase 3: Blueprint Extraction
-
-**Goal:** Detect blueprint assets and extract blueprint-specific metadata (variables, parent class, blueprint type).
-
-**Requirements:** BLUE-01, BLUE-02, BLUE-03, BLUE-04, BLUE-05, BLUE-06
-
-**Duration Estimate:** Medium (blueprint structures are known, extraction needs care)
-
-### Success Criteria
-
-1. **Given** a blueprint .uasset file, **When** parser detects asset type, **Then** asset is identified as Blueprint with correct blueprint type.
-2. **Given** a blueprint export, **When** parser reads ParentClass, **Then** parent class name is resolved correctly.
-3. **Given** a blueprint with variables, **When** parser extracts NewVariables, **Then** all variables have correct name, type, and default value.
-4. **Given** variable types, **When** parser reads FEdGraphPinType, **Then** type string is human-readable (e.g., "Integer", "Object Reference").
-
-### Key Work
-
-- Blueprint type detection (class name contains "Blueprint" or package path pattern)
-- Parent class resolution (ParentClass FPackageIndex → ImportMap or ExportMap)
-- Blueprint type extraction (BlueprintType enum)
-- Variable definitions parsing (FBPVariableDescription array)
-- FEdGraphPinType interpretation (PinCategory, PinSubCategory, ContainerType)
-- Variable metadata extraction (Category, PropertyFlags, MetaDataArray)
-
-### Dependencies
-
-- Phase 1 (needs PackageFileSummary, NameMap, ExportMap, ImportMap)
-- Phase 2 (needs property parsing for variable values)
-
-### Risks
-
-- **Blueprint serialization variants:** Different blueprint types may have different structures
-- **Variable type complexity:** FEdGraphPinType has many variants (Array, Map, Set, Reference, Const)
-- **Default value parsing:** DefaultValue stored as string may need conversion
-
-### UE Source References
-
-- `Blueprint.h` — Blueprint structure
-- `EdGraphPin.h` — FEdGraphPinType
-- `K2Node.h` — Node hierarchy (for type detection)
+- `PackageFileSummary.h` —— 文件头结构
+- `ObjectResource.h` —— 导入/导出结构
+- `Archive.h` —— FArchive 模式
+- `PackageFileSummary.cpp` —— Summary 序列化
 
 ---
 
-## Phase 4: Output & CLI
+## 阶段 2：属性解析
 
-**Goal:** Produce JSON and text output formats; implement command-line interface for tool execution.
+**目标：** 解析 PropertyTag 并提取基本属性值（int、float、bool、string、name、object、array）。
 
-**Requirements:** OUT-01, OUT-02, OUT-03, OUT-04, OUT-05, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05, CLI-06
+**需求：** PROP-01, PROP-02, PROP-03, PROP-04, PROP-05, PROP-06, PROP-07, PROP-08, PROP-09
 
-**Duration Estimate:** Medium (output format design, CLI argument handling)
+**工期估算：** 中等（属性类型多样，需系统性处理）
 
-### Success Criteria
+### 成功标准
 
-1. **Given** parsed asset data, **When** output formatter generates JSON, **Then** JSON is valid, hierarchical, and contains all parsed data.
-2. **Given** parsed asset data, **When** output formatter generates text, **Then** text is human-readable with semantic descriptions.
-3. **Given** blueprint data, **When** JSON output is generated, **Then** structure follows Package → Exports → Properties → Variables hierarchy.
-4. **Given** CLI arguments, **When** tool runs with --json flag, **Then** JSON output is written to stdout.
+1. **给定**带属性的导出，**当**解析器读取 PropertyTag，**则**标签包含正确的名称、类型、大小和标志。
+2. **给定**基本类型属性（Int、Float、Bool、String、Name），**当**解析器提取值，**则**值与预期内容匹配。
+3. **给定**ArrayProperty，**当**解析器读取元素，**则**所有元素正确解析。
+4. **给定**带 HasPropertyGuid 标志的 PropertyTag，**当**解析器读取完整标签，**则**GUID 字段正确提取。
 
-### Key Work
+### 主要工作
 
-- JSON output formatter (dataclasses.asdict + json.dumps)
-- Text output formatter (semantic descriptions, not raw data)
-- Summary output formatter (condensed overview)
-- Hierarchical structure design (Package → Exports → Properties)
-- Reference resolution in output (FPackageIndex → resolved name)
-- CLI argument parsing (argparse)
-- Output format flags (--json, --text, --summary)
-- Error handling and exit codes
-- Single-file execution support
+- PropertyTag 解析（名称、类型、数组索引、大小、标志、GUID、扩展）
+- IntProperty 解析（int32、int64）
+- FloatProperty 解析（float、double）
+- BoolProperty 解析（内联 bool 字节）
+- StrProperty 解析（带长度前缀的 FString）
+- NameProperty 解析（从 NameMap 解析的 FName）
+- ObjectProperty 解析（FPackageIndex 引用）
+- ArrayProperty 解析（计数 + 元素循环）
+- PropertyTag 标志处理（HasPropertyGuid、HasPropertyExtensions）
 
-### Dependencies
+### 依赖
 
-- Phase 1 (needs PackageFileSummary, NameMap, ExportMap)
-- Phase 2 (needs property data)
-- Phase 3 (needs blueprint data)
+- 阶段 1（需要 PackageFileSummary、NameMap、ExportMap、FArchive）
 
-### Risks
+### 风险
 
-- **Output size:** Large assets may produce huge JSON; need summary format
-- **Missing data handling:** Unresolved references need null markers
-- **CLI ergonomics:** Need clear help text and error messages
+- **PropertyTag演进：** 标志和字段在 UE 版本间有差异
+- **FString 编码：** UTF-8 vs UTF-16 取决于版本
+- **数组嵌套：** 嵌套数组或复杂类型数组增加复杂度
 
----
+### UE 源码参考
 
-## Phase 5: Polish & Safety
-
-**Goal:** Optimize for large files, add comprehensive error handling, implement safety checks.
-
-**Requirements:** SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-05
-
-**Duration Estimate:** Medium (performance tuning, edge case handling)
-
-### Success Criteria
-
-1. **Given** a .uasset file > 50MB, **When** parser reads file, **Then** memory usage is bounded (mmap used, not full read).
-2. **Given** a file with invalid offset, **When** parser attempts to seek, **Then** error is caught and partial results returned.
-3. **Given** a corrupted/truncated file, **When** parser reads, **Then** parser returns error without hanging or crashing.
-
-### Key Work
-
-- Memory-mapped archive (FMappedArchive for large files)
-- File size validation before reading offsets
-- Offset bounds checking before seeking
-- Partial results on recoverable errors
-- Timeout or size limits for safety
-- Comprehensive error messages
-- Edge case handling (truncated files, corrupted sections)
-
-### Dependencies
-
-- Phase 1 (needs FArchive base class)
-- Phase 2 (needs property parsing)
-- Phase 3 (needs blueprint extraction)
-- Phase 4 (needs output handling)
-
-### Risks
-
-- **Memory limit edge cases:** mmap may fail on very large files or certain platforms
-- **Error recovery complexity:** Many edge cases need specific handling
-- **Performance vs correctness:** mmap is fast but needs careful position tracking
+- `PropertyTag.h` —— 属性标签结构
+- `PropertyTag.cpp` —— 序列化
+- `UnrealString.h` —— FString 格式
 
 ---
 
-## Milestone Summary
+## 阶段 3：蓝图提取
 
-| Milestone | Phases | Deliverable |
-|-----------|--------|-------------|
-| **v1.0** | 1-5 | Complete Python .uasset parser with blueprint extraction, JSON/text output, CLI |
+**目标：** 检测蓝图资产并提取蓝图特定元数据（变量、父类、蓝图类型）。
+
+**需求：** BLUE-01, BLUE-02, BLUE-03, BLUE-04, BLUE-05, BLUE-06
+
+**工期估算：** 中等（蓝图结构已知，提取需谨慎）
+
+### 成功标准
+
+1. **给定**蓝图 .uasset 文件，**当**解析器检测资产类型，**则**资产被识别为蓝图并带正确蓝图类型。
+2. **给定**蓝图导出，**当**解析器读取 ParentClass，**则**父类名称正确解析。
+3. **给定**带变量的蓝图，**当**解析器提取 NewVariables，**则**所有变量具有正确的名称、类型和默认值。
+4. **给定**变量类型，**当**解析器读取 FEdGraphPinType，**则**类型字符串人类可读（如 "Integer"、"Object Reference"）。
+
+### 主要工作
+
+- 蓝图类型检测（类名包含 "Blueprint" 或包路径模式）
+- 父类解析（ParentClass FPackageIndex → ImportMap 或 ExportMap）
+- 蓝图类型提取（BlueprintType 枚举）
+- 变量定义解析（FBPVariableDescription 数组）
+- FEdGraphPinType 解释（PinCategory、PinSubCategory、ContainerType）
+- 变量元数据提取（Category、PropertyFlags、MetaDataArray）
+
+### 依赖
+
+- 阶段 1（需要 PackageFileSummary、NameMap、ExportMap、ImportMap）
+- 阶段 2（需要属性解析来获取变量值）
+
+### 风险
+
+- **蓝图序列化变体：** 不同蓝图类型可能有不同结构
+- **变量类型复杂性：** FEdGraphPinType 有多种变体（Array、Map、Set、Reference、Const）
+- **默认值解析：** DefaultValue 存储为字符串，可能需要转换
+
+### UE 源码参考
+
+- `Blueprint.h` —— 蓝图结构
+- `EdGraphPin.h` —— FEdGraphPinType
+- `K2Node.h` —— 节点层次（用于类型检测）
 
 ---
 
-## Requirement Coverage
+## 阶段 4：输出与 CLI
 
-| Category | Total | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 |
-|----------|-------|---------|---------|---------|---------|---------|
-| Core Parsing | 8 | 8 | - | - | - | - |
-| Property Parsing | 9 | - | 9 | - | - | - |
-| Blueprint Extraction | 6 | - | - | 6 | - | - |
-| Output Formats | 5 | - | - | - | 5 | - |
-| CLI & Execution | 6 | - | - | - | 6 | - |
-| Performance & Safety | 5 | - | - | - | - | 5 |
-| **Total** | 37 | 8 | 9 | 6 | 11 | 5 |
+**目标：** 生成 JSON 和文本输出格式；实现命令行接口用于工具执行。
+
+**需求：** OUT-01, OUT-02, OUT-03, OUT-04, OUT-05, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05, CLI-06
+
+**工期估算：** 中等（输出格式设计，CLI 参数处理）
+
+### 成功标准
+
+1. **给定**解析后的资产数据，**当**输出格式器生成 JSON，**则**JSON 有效、分层且包含所有解析数据。
+2. **给定**解析后的资产数据，**当**输出格式器生成文本，**则**文本人类可读并带语义描述。
+3. **给定**蓝图数据，**当**生成 JSON 输出，**则**结构遵循 Package → Exports → Properties → Variables 层级。
+4. **给定**CLI 参数，**当**工具带 --json 标志运行，**则**JSON 输出写入 stdout。
+
+### 主要工作
+
+- JSON 输出格式器（dataclasses.asdict + json.dumps）
+- 文本输出格式器（语义描述，非原始数据）
+- 概要输出格式器（精简概览）
+- 层级结构设计（Package → Exports → Properties）
+- 输出中的引用解析（FPackageIndex → 解析后的名称）
+- CLI 参数解析（argparse）
+- 输出格式标志（--json、--text、--summary）
+- 错误处理与退出码
+- 单文件执行支持
+
+### 依赖
+
+- 阶段 1（需要 PackageFileSummary、NameMap、ExportMap）
+- 阶段 2（需要属性数据）
+- 阶段 3（需要蓝图数据）
+
+### 风险
+
+- **输出大小：** 大资产可能产生巨大 JSON；需要概要格式
+- **缺失数据处理：** 未解析引用需要 null 标记
+- **CLI 易用性：** 需清晰帮助文本和错误信息
 
 ---
 
-## Notes
+## 阶段 5：优化与安全
 
-- Research files in `.planning/research/` provide detailed context for each phase
-- UE 5.7 source at `D:/Program Files/Epic Games/Engine/UE_5.7` is authoritative reference
-- Focus on uncooked/editor-saved assets (cooked assets have stripped editor data)
-- Blueprint graph extraction (Phase 4 in research) deferred to v2 due to complexity
+**目标：** 大文件性能优化，添加全面错误处理，实现安全检查。
+
+**需求：** SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-05
+
+**工期估算：** 中等（性能调优，边缘情况处理）
+
+### 成功标准
+
+1. **给定**超过 50MB 的 .uasset 文件，**当**解析器读取文件，**则**内存使用受限（使用 mmap，非全量读取）。
+2. **给定**带无效偏移的文件，**当**解析器尝试定位，**则**错误被捕获并返回部分结果。
+3. **给定**损坏/截断文件，**当**解析器读取，**则**解析器返回错误而不挂起或崩溃。
+
+### 主要工作
+
+- 内存映射归档（大文件用 FMappedArchive）
+- 读取偏移前验证文件大小
+- 定位前检查偏移边界
+- 可恢复错误时返回部分结果
+- 超时或大小限制保障安全
+- 全面错误信息
+- 边缘情况处理（截断文件、损坏区块）
+
+### 依赖
+
+- 阶段 1（需要 FArchive 基类）
+- 阶段 2（需要属性解析）
+- 阶段 3（需要蓝图提取）
+- 阶段 4（需要输出处理）
+
+### 风险
+
+- **内存限制边缘情况：** mmap 在超大文件或特定平台可能失败
+- **错误恢复复杂性：** 许多边缘情况需特定处理
+- **性能与正确性：** mmap 快但需谨慎位置跟踪
 
 ---
-*Roadmap created: 2026-04-27*
-*Last updated: 2026-04-27 after initial creation*
+
+## 里程碑概要
+
+| 里程碑 | 阶段 | 交付物 |
+|--------|------|--------|
+| **v1.0** | 1-5 | 完整 Python .uasset 解析器，含蓝图提取、JSON/文本输出、CLI |
+
+---
+
+## 需求覆盖
+
+| 类别 | 总数 | 阶段 1 | 阶段 2 | 阶段 3 | 阶段 4 | 阶段 5 |
+|------|------|--------|--------|--------|--------|--------|
+| 核心解析 | 8 | 8 | - | - | - | - |
+| 属性解析 | 9 | - | 9 | - | - | - |
+| 蓝图提取 | 6 | - | - | 6 | - | - |
+| 输出格式 | 5 | - | - | - | 5 | - |
+| CLI 与执行 | 6 | - | - | - | 6 | - |
+| 性能与安全 | 5 | - | - | - | - | 5 |
+| **合计** | 37 | 8 | 9 | 6 | 11 | 5 |
+
+---
+
+## 备注
+
+- `.planning/research/` 中的研究文件为各阶段提供详细背景
+- UE 5.7 源码位于 `D:/Program Files/Epic Games/Engine/UE_5.7`，为权威参考
+- 专注于未 cooked/编辑器保存的资产（cooked 资产已剥离编辑器数据）
+- 蓝图图提取（研究中的阶段 4）因复杂性推迟到 v2
+
+---
+*路线图创建日期：2026-04-27*
+*最后更新：2026-04-27 初始创建后*

@@ -1,27 +1,27 @@
-# Architecture Patterns
+# 架构模式
 
-**Domain:** Binary file parser for Unreal Engine .uasset files
-**Researched:** 2026-04-27
+**领域：** Unreal Engine .uasset 文件二进制解析器
+**研究日期：** 2026-04-27
 
-## Recommended Architecture
+## 推荐架构
 
-The recommended architecture follows a **layered pipeline** pattern, mirroring Unreal Engine's own serialization architecture while adapting to Python idioms.
+推荐架构遵循 **分层管道** 模式，镜像 Unreal Engine 自身序列化架构，同时适配 Python 习惯。
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              OUTPUT LAYER                                   │
+│                              输出层                                         │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
 │  │   TextOutput    │  │   JsonOutput    │  │      SummaryOutput         │  │
-│  │  (Human-readable)│  │ (Agent-parseable)│  │  (Condensed overview)      │  │
+│  │  (人类可读)     │  │ (Agent 可解析)  │  │  (精简概览)                │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     ▲
                                     │
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              MODEL LAYER                                    │
+│                              模型层                                         │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
-│  │   UObject       │  │   UBlueprint    │  │      FProperty            │  │
-│  │   (Base class)  │  │   (Blueprint)   │  │   (Property types)        │  │
+│  │   UObject       │  │   UBlueprint    │  │      FProperty             │  │
+│  │   (基类)        │  │   (蓝图)        │  │   (属性类型)               │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘  │
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
@@ -31,65 +31,65 @@ The recommended architecture follows a **layered pipeline** pattern, mirroring U
                                     ▲
                                     │
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DESERIALIZER LAYER                                │
+│                           反序列化层                                        │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │                         AssetDeserializer                            │   │
-│  │  - Reads NameTable, ImportMap, ExportMap                           │   │
-│  │  - Dispatches to type-specific handlers                             │   │
-│  │  - Resolves cross-references (FPackageIndex)                        │   │
+│  │  - 读取 NameTable、ImportMap、ExportMap                            │   │
+│  │  - 分发到类型特定处理器                                             │   │
+│  │  - 解析交叉引用（FPackageIndex）                                    │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
-│  │ BlueprintHandler  │  │  TextureHandler   │  │    ...other types    │   │
+│  │ BlueprintHandler  │  │  TextureHandler   │  │    ...其他类型        │   │
 │  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     ▲
                                     │
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              READER LAYER                                   │
+│                              读取层                                         │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │                           BinaryReader                               │   │
-│  │  - Low-level byte operations (read_u8, read_u32, read_f32, etc.)   │   │
-│  │  - Endianness handling                                              │   │
-│  │  - Stream position management                                        │   │
-│  │  - Memory-mapped file support                                       │   │
+│  │  - 低级字节操作（read_u8、read_u32、read_f32 等）                   │   │
+│  │  - 字节序处理                                                        │   │
+│  │  - 流位置管理                                                        │   │
+│  │  - 内存映射文件支持                                                  │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
-│  │   FileReader      │  │   MemoryReader    │  │    PakReader         │   │
-│  │  (file streams)   │  │  (bytes buffer)   │  │   (pak archives)     │   │
+│  │   FileReader      │  │   MemoryReader    │  │    PakReader          │   │
+│  │  (文件流)         │  │  (字节缓冲)       │  │   (pak 归档)          │   │
 │  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     ▲
                                     │
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            INPUT LAYER                                      │
+│                            输入层                                           │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                           .uasset file                               │   │
+│  │                           .uasset 文件                               │   │
 │  │  [PackageFileSummary][NameTable][ImportMap][ExportMap][Payload]     │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Boundaries
+### 组件边界
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **BinaryReader** | Low-level byte reading, endianness, seeking | Input layer (reads from), Deserializer (serves) |
-| **AssetDeserializer** | Orchestrates parsing, type dispatch, reference resolution | Reader (reads from), Model (creates), Handlers (dispatches to) |
-| **TypeHandlers** | Type-specific parsing logic (Blueprint, Texture, etc.) | Deserializer (receives context), Model (creates) |
-| **Models** | Structured data representation | Deserializer (created by), Output (served to) |
-| **OutputFormatters** | Transform models to text/JSON/summary | Model (reads from) |
+| 组件 | 职责 | 与谁通信 |
+|------|------|----------|
+| **BinaryReader** | 低级字节读取、字节序、定位 | 输入层（读取）、反序列化器（服务） |
+| **AssetDeserializer** | 协调解析、类型分发、引用解析 | Reader（读取）、模型（创建）、处理器（分发） |
+| **TypeHandlers** | 类型特定解析逻辑（Blueprint、Texture 等） | 反序列化器（接收上下文）、模型（创建） |
+| **Models** | 结构化数据表示 | 反序列化器（创建）、输出（服务） |
+| **OutputFormatters** | 将模型转换为文本/JSON/概要 | 模型（读取） |
 
-### Data Flow
+### 数据流
 
 ```
-.uasset file
+.uasset 文件
     │
     ▼
 BinaryReader.open(path)
     │
-    ├─► read_package_summary() ─► PackageSummary model
+    ├─► read_package_summary() ─► PackageSummary 模型
     │
     ├─► read_name_table() ─► List[str] (NameMap)
     │
@@ -100,30 +100,30 @@ BinaryReader.open(path)
     ▼
 AssetDeserializer.parse_exports()
     │
-    ├─► resolve_export_type() ─► "Blueprint", "Texture", etc.
+    ├─► resolve_export_type() ─► "Blueprint"、"Texture" 等
     │
     ├─► dispatch_to_handler(export_type)
     │       │
     │       └─► BlueprintHandler.parse(reader, context)
     │               │
-    │               └─► Blueprint model (with nodes, properties, etc.)
+    │               └─► Blueprint 模型（带节点、属性等）
     │
     ▼
 OutputFormatter.format(model, format="text"|"json"|"summary")
     │
     ▼
-Structured output (text/JSON/summary)
+结构化输出（text/JSON/概要）
 ```
 
-## Patterns to Follow
+## 遵循的模式
 
-### Pattern 1: Archive/Reader Abstraction (from UE FArchive)
+### 模式 1：Archive/Reader 抽象（源于 UE FArchive）
 
-**What:** Abstract base class for all binary reading operations, inspired by UE's `FArchive` pattern.
+**概念：** 二进制读取操作的抽象基类，灵感来自 UE 的 `FArchive` 模式。
 
-**When:** Foundation of the entire parsing system.
+**时机：** 整个解析系统的基础。
 
-**Example:**
+**示例：**
 
 ```python
 from abc import ABC, abstractmethod
@@ -132,7 +132,7 @@ from dataclasses import dataclass
 
 @dataclass
 class ArchiveState:
-    """Tracks parsing state, mirrors UE's FArchiveState."""
+    """跟踪解析状态，镜像 UE 的 FArchiveState。"""
     position: int = 0
     is_error: bool = False
     engine_version: int = 0
@@ -140,8 +140,8 @@ class ArchiveState:
 
 class FArchive(ABC):
     """
-    Abstract base for binary reading, mirroring UE's FArchive pattern.
-    Provides serialization-independent interface.
+    二进制读取抽象基类，镜像 UE 的 FArchive 模式。
+    提供序列化无关接口。
     """
     def __init__(self):
         self._state = ArchiveState(custom_versions={})
@@ -155,7 +155,7 @@ class FArchive(ABC):
     @abstractmethod
     def total_size(self) -> int: ...
 
-    # Convenience methods for typed reading
+    # 类型读取便捷方法
     def read_u8(self) -> int:
         return int.from_bytes(self.read(1), 'little')
 
@@ -169,30 +169,30 @@ class FArchive(ABC):
         return struct.unpack('<f', self.read(4))[0]
 
     def read_fstring(self) -> str:
-        """Read UE FString (length-prefixed UTF-16 or UTF-8)."""
+        """读取 UE FString（带长度前缀的 UTF-16 或 UTF-8）。"""
         length = self.read_i32()
         if length == 0:
             return ""
         if length < 0:
-            # UTF-16 encoded
+            # UTF-16 编码
             data = self.read(-length * 2)
             return data.decode('utf-16-le').rstrip('\x00')
         else:
-            # UTF-8 encoded
+            # UTF-8 编码
             data = self.read(length)
             return data.decode('utf-8').rstrip('\x00')
 
     def read_name(self, name_map: list[str]) -> str:
-        """Read FName (index into name table)."""
+        """读取 FName（名称表索引）。"""
         index = self.read_u32()
-        number = self.read_u32()  # Instance number
+        number = self.read_u32()  # 实例编号
         if 0 <= index < len(name_map):
             base = name_map[index]
             return f"{base}_{number}" if number > 0 else base
         return "None"
 
 class FFileArchive(FArchive):
-    """File-backed archive implementation."""
+    """文件后端归档实现。"""
 
     def __init__(self, path: str):
         super().__init__()
@@ -215,7 +215,7 @@ class FFileArchive(FArchive):
         return size
 
 class FMemoryArchive(FArchive):
-    """Memory-backed archive for testing and nested archives."""
+    """内存后端归档，用于测试和嵌套归档。"""
 
     def __init__(self, data: bytes):
         super().__init__()
@@ -237,13 +237,13 @@ class FMemoryArchive(FArchive):
         return len(self._data)
 ```
 
-### Pattern 2: Model-First with Dataclasses
+### 模式 2：模型优先使用 Dataclasses
 
-**What:** Use Python dataclasses for structured data representation.
+**概念：** 使用 Python dataclasses 表示结构化数据。
 
-**When:** All model classes (PackageSummary, ObjectImport, ObjectExport, etc.).
+**时机：** 所有模型类（PackageSummary、ObjectImport、ObjectExport 等）。
 
-**Example:**
+**示例：**
 
 ```python
 from dataclasses import dataclass, field
@@ -251,7 +251,7 @@ from typing import Optional
 
 @dataclass
 class FPackageFileSummary:
-    """Mirrors UE's FPackageFileSummary - package header."""
+    """镜像 UE 的 FPackageFileSummary —— 包文件头。"""
     tag: int  # PACKAGE_FILE_TAG = 0x9E2A83C1
     file_version_ue: int
     file_version_licensee: int
@@ -264,31 +264,31 @@ class FPackageFileSummary:
     import_count: int
     import_offset: int
     total_header_size: int
-    # ... other fields
+    # ... 其他字段
 
 @dataclass
 class FObjectImport:
-    """Mirrors UE's FObjectImport - external reference."""
-    class_package: str  # Package name
-    class_name: str     # Class name
-    outer_index: int    # FPackageIndex to outer
-    object_name: str    # Object name
+    """镜像 UE 的 FObjectImport —— 外部引用。"""
+    class_package: str  # 包名
+    class_name: str     # 类名
+    outer_index: int    # FPackageIndex 到 outer
+    object_name: str    # 对象名
 
 @dataclass
 class FObjectExport:
-    """Mirrors UE's FObjectExport - object definition in package."""
-    class_index: int       # FPackageIndex to class
-    super_index: int       # FPackageIndex to superclass
-    outer_index: int       # FPackageIndex to outer
-    object_name: str       # Object name
+    """镜像 UE 的 FObjectExport —— 包内对象定义。"""
+    class_index: int       # FPackageIndex 到类
+    super_index: int       # FPackageIndex 到超类
+    outer_index: int       # FPackageIndex 到 outer
+    object_name: str       # 对象名
     object_flags: int      # EObjectFlags
-    serial_size: int       # Size of serialized data
-    serial_offset: int     # Offset to serialized data
+    serial_size: int       # 序列化数据大小
+    serial_offset: int     # 序列化数据偏移
 
 @dataclass
 class FPackageIndex:
     """
-    Mirrors UE's FPackageIndex.
+    镜像 UE 的 FPackageIndex。
     Index > 0: ExportMap[index - 1]
     Index < 0: ImportMap[-index - 1]
     Index = 0: null
@@ -314,13 +314,13 @@ class FPackageIndex:
         return self.index - 1
 ```
 
-### Pattern 3: Handler/Plugin Registry
+### 模式 3：处理器/插件注册
 
-**What:** Registry pattern for type-specific deserializers.
+**概念：** 类型特定反序列化器的注册表模式。
 
-**When:** Extending support for new asset types.
+**时机：** 扩展支持新资产类型。
 
-**Example:**
+**示例：**
 
 ```python
 from typing import Protocol, TypeVar, Callable
@@ -330,7 +330,7 @@ T = TypeVar('T')
 
 @dataclass
 class ParseContext:
-    """Context passed to all handlers during parsing."""
+    """解析时传递给所有处理器的上下文。"""
     archive: FArchive
     name_map: list[str]
     import_map: list[FObjectImport]
@@ -338,38 +338,38 @@ class ParseContext:
     summary: FPackageFileSummary
 
 class TypeHandler(Protocol[T]):
-    """Protocol for type-specific handlers."""
+    """类型特定处理器协议。"""
 
     @staticmethod
     def can_handle(class_name: str, package_path: str) -> bool: ...
 
     def parse(self, ctx: ParseContext, export: FObjectExport) -> T: ...
 
-# Global registry
+# 全局注册表
 _handler_registry: dict[str, type[TypeHandler]] = {}
 
 def register_handler(asset_type: str):
-    """Decorator to register a handler for an asset type."""
+    """装饰器：为资产类型注册处理器。"""
     def decorator(cls: type[TypeHandler]) -> type[TypeHandler]:
         _handler_registry[asset_type] = cls
         return cls
     return decorator
 
 def get_handler(class_name: str) -> Optional[type[TypeHandler]]:
-    """Get handler for a class name."""
-    # Direct match
+    """根据类名获取处理器。"""
+    # 直接匹配
     if class_name in _handler_registry:
         return _handler_registry[class_name]
-    # Pattern match (e.g., "BlueprintGeneratedClass" -> "Blueprint")
+    # 模式匹配（如 "BlueprintGeneratedClass" -> "Blueprint"）
     for pattern, handler in _handler_registry.items():
         if pattern.lower() in class_name.lower():
             return handler
     return None
 
-# Handler implementation example
+# 处理器实现示例
 @register_handler("Blueprint")
 class BlueprintHandler:
-    """Handles blueprint asset deserialization."""
+    """处理蓝图资产反序列化。"""
 
     @staticmethod
     def can_handle(class_name: str, package_path: str) -> bool:
@@ -377,24 +377,24 @@ class BlueprintHandler:
 
     def parse(self, ctx: ParseContext, export: FObjectExport) -> 'Blueprint':
         ctx.archive.seek(export.serial_offset)
-        # Parse blueprint-specific data
+        # 解析蓝图特定数据
         return Blueprint(...)
 ```
 
-### Pattern 4: Streaming for Large Files
+### 模式 4：大文件流式处理
 
-**What:** Memory-mapped file access and chunked reading for large files.
+**概念：** 内存映射文件访问和大文件分块读取。
 
-**When:** Files > 100MB or when processing multiple files.
+**时机：** 文件 > 100MB 或处理多个文件。
 
-**Example:**
+**示例：**
 
 ```python
 import mmap
 from contextlib import contextmanager
 
 class FMappedArchive(FArchive):
-    """Memory-mapped archive for large files."""
+    """大文件内存映射归档。"""
 
     def __init__(self, path: str):
         super().__init__()
@@ -420,16 +420,16 @@ class FMappedArchive(FArchive):
         return len(self._mmap)
 
     def read_at(self, offset: int, size: int) -> bytes:
-        """Random access without affecting position."""
+        """随机访问不影响位置。"""
         return self._mmap[offset:offset + size]
 
     def close(self):
         self._mmap.close()
         self._file.close()
 
-# Factory function
+# 工厂函数
 def create_archive(path: str, use_mmap: bool = True) -> FArchive:
-    """Create appropriate archive based on file size."""
+    """根据文件大小创建合适归档。"""
     import os
     file_size = os.path.getsize(path)
     if use_mmap and file_size > 50 * 1024 * 1024:  # > 50MB
@@ -437,20 +437,20 @@ def create_archive(path: str, use_mmap: bool = True) -> FArchive:
     return FFileArchive(path)
 ```
 
-### Pattern 5: Version-Aware Deserialization
+### 模式 5：版本感知反序列化
 
-**What:** Handle multiple UE versions with version-specific parsing branches.
+**概念：** 处理多个 UE 版本，使用版本特定解析分支。
 
-**When:** Parsing .uasset from different UE versions.
+**时机：** 解析不同 UE 版本的 .uasset。
 
-**Example:**
+**示例：**
 
 ```python
 from enum import IntEnum
 from typing import Callable
 
 class UEVersion(IntEnum):
-    """Key UE version milestones for serialization changes."""
+    """关键 UE 版本里程碑，对应序列化变更。"""
     VER_4_0 = 400
     VER_4_14 = 414
     VER_4_22 = 422
@@ -463,101 +463,101 @@ class UEVersion(IntEnum):
     VER_5_4 = 540
     VER_5_5 = 550
 
-# Custom versions (UE uses these for specific subsystems)
+# 自定义版本（UE 用于特定子系统）
 CUSTOM_VERSIONS = {
     0x7E7A3F3E: "CoreObjectVersion",
     0x12E8C3E4: "BlueprintVersion",
     0x4B4B2E28: "NiagaraVersion",
-    # ... from UE source
+    # ... 来自 UE 源码
 }
 
 class VersionedParser:
-    """Handles version-specific parsing logic."""
+    """处理版本特定解析逻辑。"""
 
     def __init__(self, engine_version: int, custom_versions: dict[int, int]):
         self.engine_version = engine_version
         self.custom_versions = custom_versions
 
     def should_read_fstring_as_utf8(self) -> bool:
-        """UE 5.0+ uses UTF-8 by default."""
+        """UE 5.0+ 默认使用 UTF-8。"""
         return self.engine_version >= UEVersion.VER_5_0
 
     def should_use_new_guid_format(self) -> bool:
-        """GUID serialization changed in 5.1."""
+        """5.1 GUID 序列化变更。"""
         return self.engine_version >= UEVersion.VER_5_1
 
     def get_custom_version(self, version_key: int) -> int:
-        """Get custom version for a subsystem."""
+        """获取子系统自定义版本。"""
         return self.custom_versions.get(version_key, 0)
 
-# Usage in parser
+# 解析器中使用
 def parse_property(ctx: ParseContext) -> Property:
     parser = VersionedParser(
         ctx.summary.file_version_ue,
         ctx.summary.custom_versions
     )
 
-    # Version-specific logic
+    # 版本特定逻辑
     if parser.should_read_fstring_as_utf8():
         value = ctx.archive.read_utf8_string()
     else:
         value = ctx.archive.read_utf16_string()
 ```
 
-## Anti-Patterns to Avoid
+## 需避免的反模式
 
-### Anti-Pattern 1: Loading Entire File into Memory
+### 反模式 1：全量加载文件到内存
 
-**What:** `data = open(path, 'rb').read()` on multi-GB files.
+**概念：** `data = open(path, 'rb').read()` 在多 GB 文件上。
 
-**Why bad:** Memory exhaustion, slow startup, crashes on large files.
+**为何不好：** 内存耗尽、启动慢、大文件崩溃。
 
-**Instead:** Use streaming or memory-mapped files.
+**替代：** 使用流式或内存映射文件。
 
 ```python
-# BAD
+# 错误做法
 with open(path, 'rb') as f:
-    data = f.read()  # Loads entire file
+    data = f.read()  # 加载整个文件
     process(data)
 
-# GOOD
+# 正确做法
 with FMappedArchive(path) as archive:
-    process_streaming(archive)  # Reads on demand
+    process_streaming(archive)  # 按需读取
 ```
 
-### Anti-Pattern 2: Hardcoded Offsets
+### 反模式 2：硬编码偏移
 
-**What:** `archive.seek(0x1234)` without reading headers first.
+**概念：** `archive.seek(0x1234)` 不先读取文件头。
 
-**Why bad:** UE format changes between versions; offsets become invalid.
+**为何不好：** UE 格式随版本变化；偏移会失效。
 
-**Instead:** Parse PackageFileSummary first, use its offsets.
+**替代：** 先解析 PackageFileSummary，使用其偏移。
 
 ```python
-# BAD
-archive.seek(0x1234)  # Magic number - breaks on different files
+# 错误做法
+archive.seek(0x1234)  # 魔术数字 —— 不同文件会崩溃
 
-# GOOD
+# 正确做法
 summary = read_package_summary(archive)
-archive.seek(summary.export_offset)  # From actual header
+archive.seek(summary.export_offset)  # 来自实际文件头
 ```
 
-### Anti-Pattern 3: Monolithic Parser
+### 反模式 3：单体解析器
 
-**What:** Single 2000-line `parse_uasset()` function.
+**概念：** 单个 2000 行 `parse_uasset()` 函数。
 
-**Why bad:** Unmaintainable, hard to test, hard to extend.
+**为何不好：** 不可维护、难测试、难扩展。
 
-**Instead:** Separate concerns into Reader, Deserializer, Model, Output layers.
+**替代：** 分离关注点到 Reader、Deserializer、Model、Output 层。
 
 ```python
-# BAD
+# 错误做法
 def parse_uasset(path):
     with open(path, 'rb') as f:
-        # 2000 lines of everything mixed together
+        # 2000 行所有内容混在一起
         pass
 
-# GOOD
+# 正确做法
 def parse_uasset(path):
     with FFileArchive(path) as archive:
         summary = read_package_summary(archive)
@@ -573,22 +573,22 @@ def parse_uasset(path):
                 yield handler.parse(ctx, export)
 ```
 
-### Anti-Pattern 4: Ignoring Import Resolution
+### 反模式 4：忽略导入解析
 
-**What:** Only parsing exports without resolving import references.
+**概念：** 只解析导出而不解析导入引用。
 
-**Why bad:** Blueprints reference parent classes, interfaces, types from other packages. Without resolution, you get incomplete data.
+**为何不好：** 蓝图引用父类、接口、其他包的类型。不解析则数据不完整。
 
-**Instead:** Build import resolution into the architecture.
+**替代：** 将导入解析纳入架构。
 
 ```python
-# GOOD - Import resolution built in
+# 正确做法 —— 内置导入解析
 @dataclass
 class ResolvedExport:
     export: FObjectExport
-    resolved_class: Optional[str]  # From ImportMap or ExportMap
-    resolved_super: Optional[str]  # Parent class
-    resolved_outer: Optional[str]  # Containing object
+    resolved_class: Optional[str]  # 来自 ImportMap 或 ExportMap
+    resolved_super: Optional[str]  # 父类
+    resolved_outer: Optional[str]  # 包含对象
 
 def resolve_reference(
     index: FPackageIndex,
@@ -604,49 +604,49 @@ def resolve_reference(
     return None
 ```
 
-### Anti-Pattern 5: Tight Coupling to Output Format
+### 反模式 5：紧密耦合输出格式
 
-**What:** Returning formatted strings directly from parser.
+**概念：** 解析器直接返回格式化字符串。
 
-**Why bad:** Can't produce JSON, can't filter, can't test structure.
+**为何不好：** 无法生成 JSON、无法过滤、无法测试结构。
 
-**Instead:** Return structured models, format separately.
+**替代：** 返回结构化模型，单独格式化。
 
 ```python
-# BAD
+# 错误做法
 def parse_blueprint(archive) -> str:
-    return f"Blueprint: {name}\nNodes: {nodes}"
+    return f"蓝图: {name}\n节点: {nodes}"
 
-# GOOD
+# 正确做法
 def parse_blueprint(archive) -> Blueprint:
     return Blueprint(name=name, nodes=nodes, ...)
 
-# Then format:
+# 然后格式化：
 class JsonOutput:
     def format(self, blueprint: Blueprint) -> str:
         return json.dumps(asdict(blueprint))
 
 class TextOutput:
     def format(self, blueprint: Blueprint) -> str:
-        return f"Blueprint: {blueprint.name}\nNodes: {len(blueprint.nodes)}"
+        return f"蓝图: {blueprint.name}\n节点: {len(blueprint.nodes)}"
 ```
 
-## Scalability Considerations
+## 可扩展性考量
 
-| Concern | At 100 exports | At 10K exports | At 100K exports |
-|---------|---------------|----------------|-----------------|
-| **Memory** | Load all | Stream exports | mmap + lazy parse |
-| **Startup** | Parse all headers | Parse summary only | Parse summary + lazy imports |
-| **Output** | Full serialization | Paginated output | Stream to file |
-| **Resolution** | Full import resolution | Cache resolved names | Lazy resolution on-demand |
+| 关注点 | 100 导出时 | 10K 导出时 | 100K 导出时 |
+|--------|------------|------------|-------------|
+| **内存** | 全量加载 | 流式导出 | mmap + 延迟解析 |
+| **启动** | 解析所有文件头 | 仅解析 Summary | Summary + 延迟导入 |
+| **输出** | 全量序列化 | 分页输出 | 流式写入文件 |
+| **解析** | 全量导入解析 | 缓存已解析名称 | 按需延迟解析 |
 
-### Lazy Parsing Strategy
+### 延迟解析策略
 
-For very large packages (e.g., large maps with many actors):
+超大包（如带大量 Actor 的大地图）：
 
 ```python
 class LazyExportIterator:
-    """Iterate exports without parsing all at once."""
+    """迭代导出而不一次性全部解析。"""
 
     def __init__(self, ctx: ParseContext, exports: list[FObjectExport]):
         self.ctx = ctx
@@ -654,7 +654,7 @@ class LazyExportIterator:
         self._parsed: dict[int, Any] = {}
 
     def get(self, index: int) -> Any:
-        """Get export, parsing on first access."""
+        """首次访问时解析导出。"""
         if index not in self._parsed:
             export = self.exports[index]
             handler = get_handler(export.class_name)
@@ -667,72 +667,72 @@ class LazyExportIterator:
             yield self.get(i)
 ```
 
-## Sources
+## 来源
 
-- **Unreal Engine Source**: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/`
-  - `Private/UObject/Package.cpp` - Package handling
-  - `Private/Serialization/AsyncLoading.cpp` - Loading architecture
-  - `Public/UObject/Linker.h` - Linker structure
-  - `Public/UObject/LinkerLoad.h` - Package loading
-  - `Public/UObject/PackageFileSummary.h` - File header structure
-  - `Public/UObject/ObjectResource.h` - Import/Export structures
-  - `Public/Serialization/Archive.h` - Archive abstraction
+- **Unreal Engine 源码**：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/`
+  - `Private/UObject/Package.cpp` —— 包处理
+  - `Private/Serialization/AsyncLoading.cpp` —— 加载架构
+  - `Public/UObject/Linker.h` —— Linker 结构
+  - `Public/UObject/LinkerLoad.h` —— 包加载
+  - `Public/UObject/PackageFileSummary.h` —— 文件头结构
+  - `Public/UObject/ObjectResource.h` —— 导入/导出结构
+  - `Public/Serialization/Archive.h` —— Archive 抽象
 
-- **CUE4Parse Architecture**: [https://github.com/Fabian-Creostone/CUE4Parse](https://github.com/Fabian-Creostone/CUE4Parse)
-  - FArchive pattern for C# implementation
-  - Handler registry for type-specific parsing
-  - Version-aware deserialization
+- **CUE4Parse 架构**：[https://github.com/Fabian-Creostone/CUE4Parse](https://github.com/Fabian-Creostone/CUE4Parse)
+  - C# FArchive 模式实现
+  - 类型特定处理器注册
+  - 版本感知反序列化
 
-- **FModel Architecture**: [https://github.com/4sval/FModel](https://github.com/4sval/FModel)
-  - Layered architecture (Reader -> Deserializer -> Model -> Output)
-  - CUE4Parse integration patterns
+- **FModel 架构**：[https://github.com/4sval/FModel](https://github.com/4sval/FModel)
+  - 分层架构（Reader -> Deserializer -> Model -> Output）
+  - CUE4Parse 集成模式
 
-- **Python Binary Parsing**:
-  - `struct` module for low-level parsing (built-in)
-  - `dataclasses` for model representation (built-in)
-  - `mmap` for memory-efficient large file handling (built-in)
-  - Generator patterns for streaming
+- **Python 二进制解析**：
+  - `struct` 模块用于低级解析（内置）
+  - `dataclasses` 用于模型表示（内置）
+  - `mmap` 用于高效大文件处理（内置）
+  - 生成器模式用于流式处理
 
-## Build Order Implications
+## 构建顺序启示
 
-Based on the architecture, recommended build order:
+基于架构，推荐构建顺序：
 
-1. **Phase 1: Reader Layer**
-   - `FArchive` base class
-   - `FFileArchive` implementation
-   - `FMemoryArchive` for testing
-   - Low-level read methods (u8, u32, fstring, fname)
+1. **阶段 1：读取层**
+   - `FArchive` 基类
+   - `FFileArchive` 实现
+   - `FMemoryArchive` 用于测试
+   - 低级读取方法（u8、u32、fstring、fname）
 
-2. **Phase 2: Model Layer (Core)**
+2. **阶段 2：模型层（核心）**
    - `FPackageFileSummary`
    - `FPackageIndex`
    - `FObjectImport` / `FObjectExport`
-   - Name table structures
+   - 名称表结构
 
-3. **Phase 3: Deserializer Layer (Core)**
+3. **阶段 3：反序列化层（核心）**
    - `read_package_summary()`
    - `read_name_table()`
    - `read_import_map()`
    - `read_export_map()`
    - `ParseContext`
 
-4. **Phase 4: Model Layer (Types)**
-   - Base `UObject` model
-   - `Blueprint` model
-   - Property types (`FProperty`, `FArrayProperty`, etc.)
+4. **阶段 4：模型层（类型）**
+   - 基础 `UObject` 模型
+   - `Blueprint` 模型
+   - 属性类型（`FProperty`、`FArrayProperty` 等）
 
-5. **Phase 5: Handler Layer**
-   - Handler registry
+5. **阶段 5：处理器层**
+   - 处理器注册表
    - `BlueprintHandler`
-   - Other type handlers as needed
+   - 其他类型处理器按需添加
 
-6. **Phase 6: Output Layer**
+6. **阶段 6：输出层**
    - `TextOutput`
    - `JsonOutput`
    - `SummaryOutput`
 
-7. **Phase 7: Performance & Polish**
-   - `FMappedArchive` for large files
-   - Lazy parsing
-   - Version handling
-   - Error recovery
+7. **阶段 7：性能与优化**
+   - `FMappedArchive` 用于大文件
+   - 延迟解析
+   - 版本处理
+   - 错误恢复

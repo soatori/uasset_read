@@ -1,138 +1,138 @@
-# Phase 1: Core Parsing - Context
+# 阶段 1：核心解析 - 上下文
 
-**Gathered:** 2026-04-28
-**Status:** Ready for planning
+**收集日期：** 2026-04-28
+**状态：** 准备规划
 
 <domain>
-## Phase Boundary
+## 阶段边界
 
-Parse .uasset file header, name table, import map, and export map; identify asset structure and type. This phase delivers the foundation layer that all subsequent phases depend on.
+解析 .uasset 文件头、名称表、导入表和导出表；识别资产结构和类型。此阶段交付所有后续阶段依赖的基础层。
 
-**Fixed scope (from ROADMAP.md):**
-- PackageFileSummary header parsing
-- Name table extraction (NameMap)
-- Import map parsing (FObjectImport)
-- Export map parsing (FObjectExport)
-- Asset class identification from ClassIndex
-- Version handling (UE4/UE5/Custom versions)
-- Error handling framework
+**固定范围（来自 ROADMAP.md）：**
+- PackageFileSummary 文件头解析
+- 名称表提取（NameMap）
+- 导入表解析（FObjectImport）
+- 导出表解析（FObjectExport）
+- 从 ClassIndex 识别资产类
+- 版本处理（UE4/UE5/自定义版本）
+- 错误处理框架
 
 </domain>
 
 <decisions>
-## Implementation Decisions
+## 实现决策
 
-### Architecture Design
-- **D-01:** Single FArchive class — all read methods in one class (not layered FArchive + FileReader + MemoryReader)
-- **D-02:** Phase 1 single-file implementation; Phase 5 adds MappedArchive for large file support
-- **Rationale:** Simpler for initial implementation, matches zero-dependency philosophy
+### 架构设计
+- **D-01:** 单一 FArchive 类 —— 所有读取方法在一类中（非分层 FArchive + FileReader + MemoryReader）
+- **D-02:** 阶段 1 单文件实现；阶段 5 添加 MappedArchive 支持大文件
+- **原因：** 初始实现更简单，符合零依赖理念
 
-### Version Support
-- **D-03:** UE 5.x only — focus on UE 5.x format (stable, matches UE 5.7 source reference)
-- **D-04:** Strict version validation with clear error messages — UE5 version >= 1000, LegacyFileVersion in [-2, -9]
-- **D-05:** Custom Versions GUID — read and store, but no validation of specific subsystem versions
-- **Rationale:** Reduces initial complexity; UE 5.x format aligns with source reference at D:/Program Files/Epic Games/Engine/UE_5.7
+### 版本支持
+- **D-03:** 仅 UE 5.x —— 专注 UE 5.x 格式（稳定，与 UE 5.7 源码参考匹配）
+- **D-04:** 严格版本验证配清晰错误信息 —— UE5 版本 >= 1000，LegacyFileVersion 在 [-2, -9]
+- **D-05:** 自定义版本 GUID —— 读取并存储，但不验证特定子系统版本
+- **原因：** 降低初始复杂度；UE 5.x 格式与 D:/Program Files/Epic Games/Engine/UE_5.7 源码参考对齐
 
-### Data Model
-- **D-06:** Use dataclasses for all parsed structures (PackageFileSummary, ObjectImport, ObjectExport, etc.)
-- **D-07:** PackageIndex stored as raw signed int32 — delayed resolution (Phase 1 stores indices, Phase 3+ resolves names)
-- **Rationale:** Python 3.10+ native dataclasses, asdict() → JSON directly; delayed resolution keeps Phase 1 focused
+### 数据模型
+- **D-06:** 所有解析结构使用 dataclasses（PackageFileSummary、ObjectImport、ObjectExport 等）
+- **D-07:** PackageIndex 存储为原始有符号 int32 —— 延迟解析（阶段 1 存索引，阶段 3+ 解析名称）
+- **原因：** Python 3.10+ 原生 dataclasses，asdict() → JSON 直接；延迟解析保持阶段 1 专注
 
-### Header Parsing
-- **D-08:** Read ALL PackageFileSummary fields — complete header for downstream phases
-- **D-09:** Name Table format — version-adaptive (handle both UTF-8 and FNameEntry structure variants)
-- **D-10:** FString encoding — UTF-8 only (UE 5.x standard)
-- **D-11:** Endianness detection via Magic Tag — compare first u32 against PACKAGE_FILE_TAG (0x9E2A83C1) and PACKAGE_FILE_TAG_SWAPPED (0xC1832A9E)
-- **D-12:** PackageFlags — store raw value only (no flag interpretation in Phase 1)
-- **Rationale:** Complete header enables all downstream phases; UTF-8 simplifies string handling
+### 文件头解析
+- **D-08:** 读取所有 PackageFileSummary 字段 —— 完整文件头供下游阶段
+- **D-09:** 名称表格式 —— 版本自适应（处理 UTF-8 和 FNameEntry 结构变体）
+- **D-10:** FString 编码 —— 仅 UTF-8（UE 5.x 标准）
+- **D-11:** 通过魔术标签检测字节序 —— 比对首 u32 与 PACKAGE_FILE_TAG（0x9E2A83C1）和 PACKAGE_FILE_TAG_SWAPPED（0xC1832A9E）
+- **D-12:** PackageFlags —— 仅存储原始值（阶段 1 不解释标志）
+- **原因：** 完整文件头启用所有下游阶段；UTF-8 简化字符串处理
 
-### BulkData Handling
-- **D-13:** Skip BulkData in Phase 1 — no embedded payload parsing
-- **Rationale:** BulkData is complex; defer to later phases or v2
+### BulkData 处理
+- **D-13:** 阶段 1 跳过 BulkData —— 不解析嵌入载荷
+- **原因：** BulkData 复杂；推迟到后续阶段或 v2
 
-### Error Handling
-- **D-14:** Validate offsets/sizes before seeking — return partial results with error info on recoverable errors
-- **D-15:** Never crash on invalid/corrupted files — graceful degradation
-- **Rationale:** Matches SAFE-04 requirement; AI agents need partial data, not exceptions
+### 错误处理
+- **D-14:** 定位前验证偏移/大小 —— 可恢复错误返回带错误信息的部分结果
+- **D-15:** 无效/损坏文件绝不崩溃 —— 优雅降级
+- **原因：** 匹配 SAFE-04 需求；AI agent 需部分数据，非异常
 
-### Testing Strategy
-- **D-16:** Combined approach — unit tests with synthetic data + integration tests with real .uasset
-- **D-17:** Integration test samples provided by user — user has UE environment for sample files
-- **Rationale:** Synthetic data validates edge cases; real files validate actual format
+### 测试策略
+- **D-16:** 组合方案 —— 合成数据单元测试 + 真实 .uasset 集成测试
+- **D-17:** 集成测试样本由用户提供 —— 用户有 UE 环境提供示例文件
+- **原因：** 合成数据验证边缘情况；真实文件验证实际格式
 
-### File Layout
-- **D-18:** Progressive split — Phase 1 single file, later phases can modularize
-- **Rationale:** Start simple; refactor when needed
+### 文件布局
+- **D-18:** 渐进拆分 —— 阶段 1 单文件，后续阶段可模块化
+- **原因：** 先简单；需要时重构
 
-### Claude's Discretion
-- Exact struct.unpack format strings
-- FArchive method naming conventions
-- Error message format and detail level
-- Unit test organization
+### Claude 自行决定
+- 具体 struct.unpack 格式字符串
+- FArchive 方法命名约定
+- 错误信息格式和详细程度
+- 单元测试组织
 
 </decisions>
 
 <specifics>
-## Specific Ideas
+## 具体想法
 
-- "让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器" — core value from PROJECT.md
-- UE 5.7 source at `D:/Program Files/Epic Games/Engine/UE_5.7` is authoritative reference
-- Focus on uncooked/editor-saved assets (full blueprint data available)
+- "让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器" —— PROJECT.md 核心价值
+- UE 5.7 源码在 `D:/Program Files/Epic Games/Engine/UE_5.7` 为权威参考
+- 专注于未 cooked/编辑器保存的资产（完整蓝图数据可用）
 
 </specifics>
 
 <canonical_refs>
-## Canonical References
+## 权威参考
 
-**Downstream agents MUST read these before planning or implementing.**
+**下游 agent 必须在规划或实现前阅读这些。**
 
-### UE Source Reference
-- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PackageFileSummary.h` — Header structure, all fields, offsets
-- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h` — Import/Export structures, FPackageIndex encoding
-- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/Serialization/Archive.h` — FArchive pattern reference
+### UE 源码参考
+- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PackageFileSummary.h` —— 文件头结构、所有字段、偏移
+- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h` —— 导入/导出结构、FPackageIndex 编码
+- `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/Serialization/Archive.h` —— FArchive 模式参考
 
-### Project Planning
-- `.planning/PROJECT.md` — Project context, core value, constraints
-- `.planning/REQUIREMENTS.md` — CORE-01 through CORE-08 requirements
-- `.planning/ROADMAP.md` — Phase 1 success criteria, key work, risks
-- `.planning/research/STACK.md` — Python stack decisions, struct/mmap patterns
-- `.planning/research/ARCHITECTURE.md` — Layered pipeline pattern, FArchive implementation example
-- `.planning/research/PITFALLS.md` — Critical pitfalls (endianness, version, offsets, FName)
+### 项目规划
+- `.planning/PROJECT.md` —— 项目上下文、核心价值、约束
+- `.planning/REQUIREMENTS.md` —— CORE-01 至 CORE-08 需求
+- `.planning/ROADMAP.md` —— 阶段 1 成功标准、主要工作、风险
+- `.planning/research/STACK.md` —— Python 技术栈决策、struct/mmap 模式
+- `.planning/research/ARCHITECTURE.md` —— 分层管道模式、FArchive 实现示例
+- `.planning/research/PITFALLS.md` —— 关键陷阱（字节序、版本、偏移、FName）
 
 </canonical_refs>
 
 <code_context>
-## Existing Code Insights
+## 现有代码洞察
 
-### No Existing Project Code
-This is a new project. No reusable assets exist yet.
+### 无现有项目代码
+这是新项目。无可复用资产。
 
-### UE Source Patterns
-- FArchive pattern with read_u8, read_u32, read_fstring, read_name methods
-- PackageFileSummary structure with NameOffset, ExportOffset, ImportOffset
-- FPackageIndex signed encoding: >0 export, <0 import, 0 null
-- FName = index into NameMap + instance number
+### UE 源码模式
+- FArchive 模式含 read_u8、read_u32、read_fstring、read_name 方法
+- PackageFileSummary 结构含 NameOffset、ExportOffset、ImportOffset
+- FPackageIndex 有符号编码：>0 导出、<0 导入、0 null
+- FName = NameMap 索引 + 实例编号
 
-### External References
-- CUE4Parse (C#): Handler registry pattern, version-aware parsing
-- FModel: Layered architecture, output formatters
+### 外部参考
+- CUE4Parse（C#）：处理器注册模式、版本感知解析
+- FModel：分层架构、输出格式器
 
 </code_context>
 
 <deferred>
-## Deferred Ideas
+## 推迟想法
 
-None — discussion stayed within phase scope.
+无 —— 讨论保持在阶段范围内。
 
-**Future phases will handle:**
-- Property parsing (Phase 2)
-- Blueprint extraction (Phase 3)
-- Output formatters (Phase 4)
-- Performance/mmap (Phase 5)
+**后续阶段将处理：**
+- 属性解析（阶段 2）
+- 蓝图提取（阶段 3）
+- 输出格式器（阶段 4）
+- 性能/mmap（阶段 5）
 
 </deferred>
 
 ---
 
-*Phase: 01-core-parsing*
-*Context gathered: 2026-04-28*
+*阶段：01-core-parsing*
+*上下文收集：2026-04-28*

@@ -1,181 +1,181 @@
-# Feature Landscape
+# 功能全景
 
-**Domain:** Unreal Engine .uasset file parsing for AI agent consumption
-**Researched:** 2026-04-27
+**领域：** Unreal Engine .uasset 文件解析（面向 AI agent 消费）
+**研究日期：** 2026-04-27
 
-## Table Stakes
+## 基础功能
 
-Features users expect. Missing = product feels incomplete.
+用户期望的功能。缺失 = 产品不完整。
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Parse .uasset header** | Required to identify file structure, version, and offsets | Low | FPackageFileSummary contains magic tag, version info, offsets to name/import/export tables |
-| **Extract name table** | All object/property names reference this table; fundamental for interpreting any data | Low | NameCount + NameOffset in header; name entries are FName with number index |
-| **Extract export map** | Lists all objects defined within this package (blueprints, graphs, nodes) | Low | FObjectExport: ObjectName, ClassIndex, OuterIndex, SerialOffset, SerialSize |
-| **Extract import map** | Lists external dependencies (other packages this asset references) | Low | FObjectImport: ObjectName, ClassName, ClassPackage - critical for understanding asset dependencies |
-| **Identify asset class/type** | User needs to know what kind of asset they're reading | Medium | ClassIndex in export map points to asset class (Blueprint, Material, Texture, etc.) |
-| **Extract basic property values** | Assets contain data - integers, floats, strings, bools, arrays must be readable | Medium | FPropertyTag + FEdGraphPinType define value types; DefaultValue stored as string |
-| **JSON output format** | Standard structured output for programmatic consumption | Low | Core requirement per PROJECT.md |
-| **Human-readable text output** | User/AI needs to understand content without deep UE knowledge | Medium | Core requirement per PROJECT.md; semantic descriptions, not raw data |
-| **Single-file parsing** | Must read one .uasset without requiring full project context | Low | Per PROJECT.md constraint; cannot require UE editor or pak extraction |
-| **Version identification** | UE versions differ; must know what version file was saved with | Low | FileVersionUE + FileVersionLicenseeUE in header; determines serialization format |
+| 功能 | 期望原因 | 复杂度 | 备注 |
+|------|----------|--------|------|
+| **解析 .uasset 文件头** | 识别文件结构、版本和偏移的必要条件 | 低 | FPackageFileSummary 含魔术标签、版本信息、名称/导入/导出表偏移 |
+| **提取名称表** | 所有对象/属性名称引用此表；解析任何数据的基础 | 低 | 文件头中 NameCount + NameOffset；名称条目为 FName 带数字索引 |
+| **提取导出表** | 列出包内定义的所有对象（蓝图、图、节点） | 低 | FObjectExport：ObjectName、ClassIndex、OuterIndex、SerialOffset、SerialSize |
+| **提取导入表** | 列出外部依赖（此资产引用的其他包） | 低 | FObjectImport：ObjectName、ClassName、ClassPackage —— 理解资产依赖的关键 |
+| **识别资产类/类型** | 用户需知道读取的是何种资产 | 中 | 导出表中 ClassIndex 指向资产类（Blueprint、Material、Texture 等） |
+| **提取基本属性值** | 资产含数据 —— 整数、浮点、字符串、布尔、数组必须可读 | 中 | FPropertyTag + FEdGraphPinType 定义值类型；DefaultValue 存为字符串 |
+| **JSON 输出格式** | 程序化消费的标准结构化输出 | 低 | PROJECT.md 核心需求 |
+| **人类可读文本输出** | 用户/AI 无需深入 UE 知识即可理解内容 | 中 | PROJECT.md 核心需求；语义描述，非原始数据 |
+| **单文件解析** | 必须能读取单个 .uasset 而无需完整项目上下文 | 低 | PROJECT.md 约束；不依赖 UE 编辑器或 pak 提取 |
+| **版本识别** | UE 版本不同；必须知道文件保存的版本 | 低 | 文件头中 FileVersionUE + FileVersionLicenseeUE；决定序列化格式 |
 
-## Differentiators
+## 差异化功能
 
-Features that set product apart. Not expected, but valued.
+让产品脱颖更出的功能。非期望但有价值。
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Blueprint graph extraction** | AI agents need to understand blueprint logic - nodes, connections, flow | High | UEdGraph contains Nodes array; each UK2Node has Pins with LinkedTo connections. Critical for understanding blueprint behavior. |
-| **Variable definitions extraction** | Know what data blueprint stores - names, types, defaults, metadata | Medium | FBPVariableDescription in Blueprint: VarName, VarType (FEdGraphPinType), DefaultValue, MetaDataArray, PropertyFlags |
-| **Function definitions extraction** | Know what functions blueprint exposes - name, parameters, return type | High | FunctionGraphs array in Blueprint; UEdGraph with nodes representing function signature |
-| **Reference dependency graph** | AI needs to know what other assets this asset uses/depends on | Medium | ImportMap + SoftObjectPathsCount; combine with property values that reference external assets |
-| **Property type interpretation** | AI needs semantic understanding of types (not just "IntProperty" but "integer") | Medium | FEdGraphPinType: PinCategory, PinSubCategory, ContainerType (Array/Set/Map), bIsReference, bIsConst |
-| **Node type identification** | AI needs to know what each blueprint node does | High | UK2Node class hierarchy - K2Node_CallFunction, K2Node_VariableGet, K2Node_Event, etc. Each has specific data fields. |
-| **Pin connection mapping** | AI needs to trace data flow through blueprint | Medium | UEdGraphPin.LinkedTo array connects output pins to input pins; trace execution/data flow |
-| **Hierarchical structure output** | Package -> Exports -> Graphs -> Nodes -> Pins - nested JSON for clarity | Medium | Matches UE's object hierarchy; AI can navigate logically |
-| **Error recovery & partial parsing** | If unknown property type encountered, continue parsing and flag it | High | UE has many property types; some may be version-specific or custom. Cannot fail entire parse on one unknown type. |
-| **Semantic node descriptions** | Instead of raw node class, output human-readable description ("Calls function X") | High | Requires understanding node semantics; e.g., K2Node_CallFunction with FunctionReference -> "Calls [FunctionName]" |
+| 功能 | 价值主张 | 复杂度 | 备注 |
+|------|----------|--------|------|
+| **蓝图图提取** | AI agent 需理解蓝图逻辑 —— 节点、连接、流程 | 高 | UEdGraph 含 Nodes 数组；各 UK2Node 有 Pins 带 LinkedTo 连接。理解蓝图行为的关键。 |
+| **变量定义提取** | 知道蓝图存储什么数据 —— 名称、类型、默认值、元数据 | 中 | 蓝图中 FBPVariableDescription：VarName、VarType（FEdGraphPinType）、DefaultValue、MetaDataArray、PropertyFlags |
+| **函数定义提取** | 知道蓝图暴露什么函数 —— 名称、参数、返回类型 | 高 | 蓝图中 FunctionGraphs 数组；UEdGraph 含表示函数签名的节点 |
+| **引用依赖图** | AI 需知道此资产使用/依赖哪些其他资产 | 中 | ImportMap + SoftObjectPathsCount；结合引用外部资产的属性值 |
+| **属性类型解释** | AI 需语义理解类型（非仅 "IntProperty" 而是 "整数"） | 中 | FEdGraphPinType：PinCategory、PinSubCategory、ContainerType（Array/Set/Map）、bIsReference、bIsConst |
+| **节点类型识别** | AI 需知道各蓝图节点做什么 | 高 | UK2Node 类层次 —— K2Node_CallFunction、K2Node_VariableGet、K2Node_Event 等。各具特定数据字段。 |
+| **引脚连接映射** | AI 需追踪蓝图中数据流 | 中 | UEdGraphPin.LinkedTo 数组连接输出引脚到输入引脚；追踪执行/数据流 |
+| **层级结构输出** | Package → Exports → Graphs → Nodes → Pins —— 清晰嵌套 JSON | 中 | 匹配 UE 对象层次；AI 可逻辑导航 |
+| **错误恢复与部分解析** | 遇未知属性类型时继续解析并标记 | 高 | UE 有众多属性类型；部分版本特定或自定义。单未知类型不应导致整个解析失败。 |
+| **语义节点描述** | 非原始节点类，输出人类可读描述（"调用函数 X"） | 高 | 需理解节点语义；如 K2Node_CallFunction 带 FunctionReference → "调用 [FunctionName]" |
 
-## Anti-Features
+## 反功能
 
-Features to explicitly NOT build.
+明确不构建的功能。
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Binary asset export** | Out of scope per PROJECT.md; textures/models are complex binary formats that require specialized handling | Focus on structured data extraction; let dedicated tools handle binary exports |
-| **Asset modification/writing** | Out of scope per PROJECT.md; modifying .uasset requires understanding of serialization, cooking, dependencies - extremely complex | Read-only parsing only |
-| **Blueprint bytecode decompilation** | Compiled blueprints use Kismet VM bytecode; decompilation is extremely complex and not needed for reading editor-saved assets | Focus on extracting editor-time graph data (UEdGraph/UK2Node) from uncooked assets |
-| **Pak file extraction** | Different domain; .pak is an archive format, not asset format | User provides extracted .uasset; pak extraction is separate problem (u4pak handles this) |
-| **Real-time parsing/monitoring** | Out of scope per PROJECT.md; adds complexity without core value | Single-file parse with clear output |
-| **UE Editor integration** | Out of scope per PROJECT.md; would require running UE, not standalone Python | Standalone Python tool, no UE dependency |
-| **Asset preview/visualization** | Complex UI work; AI agents don't need visual preview | Structured text/JSON output only |
-| **Asset conversion/transcoding** | Different domain; converting UE assets to other formats requires understanding target formats | Read and output structure, not convert |
-| **Cooked asset parsing** | Cooked assets have stripped editor data; different serialization format | Focus on uncooked/editor-saved assets which contain full graph data |
-| **Custom property type handlers** | Game-specific custom property types require game-specific knowledge | Generic handling; flag unknown types rather than try to interpret |
+| 反功能 | 避免原因 | 替代做法 |
+|--------|----------|----------|
+| **二进制资产导出** | 超出 PROJECT.md 范围；纹理/模型是复杂二进制格式需专门处理 | 专注结构化数据提取；让专用工具处理二进制导出 |
+| **资产修改/写入** | 超出 PROJECT.md 范围；修改 .uasset 需理解序列化、cooking、依赖 —— 极其复杂 | 仅支持只读解析 |
+| **蓝图字节码反编译** | 编译蓝图使用 Kismet VM 字节码；反编译极复杂，编辑器保存资产无需 | 专注提取编辑器时图数据（UEdGraph/UK2Node）从未 cooked 资产 |
+| **Pak 文件提取** | 不同领域；.pak 是归档格式，非资产格式 | 用户提供提取的 .uasset；pak 提取是独立问题（u4pak 处理） |
+| **实时解析/监控** | 超出 PROJECT.md 范围；增加复杂性而无核心价值 | 单文件解析带清晰输出 |
+| **UE 编辑器集成** | 超出 PROJECT.md 范围；需运行 UE，非独立 Python | 独立 Python 工具，无 UE 依赖 |
+| **资产预览/可视化** | 复杂 UI 工作；AI agent 无需视觉预览 | 仅结构化文本/JSON 输出 |
+| **资产转换/转码** | 不同领域；转换 UE 资产到其他格式需理解目标格式 | 读取并输出结构，而非转换 |
+| **Cooked 资产解析** | Cooked 资产已剥离编辑器数据；使用不同序列化格式 | 专注于未 cooked/编辑器保存的资产，含完整图数据 |
+| **自定义属性类型处理器** | 游戏特定自定义属性类型需游戏特定知识 | 通用处理；标记未知类型而非尝试解释 |
 
-## Feature Dependencies
+## 功能依赖
 
 ```
-Parse Header
-  |-- Extract Name Table (requires header offsets)
-  |-- Extract Export Map (requires header offsets)
-  |-- Extract Import Map (requires header offsets)
+解析文件头
+  |-- 提取名称表（需文件头偏移）
+  |-- 提取导出表（需文件头偏移）
+  |-- 提取导入表（需文件头偏移）
 
-Extract Export Map
-  |-- Identify Asset Class (requires ClassIndex resolution via Import/Export)
-  |-- Parse Export Data (requires SerialOffset + SerialSize)
+提取导出表
+  |-- 识别资产类（需通过导入/导出解析 ClassIndex）
+  |-- 解析导出数据（需 SerialOffset + SerialSize）
 
-Parse Export Data
-  |-- Extract Properties (requires property type knowledge)
-  |-- Extract Blueprint Graphs (if asset is Blueprint)
-      |-- Extract Nodes (requires UEdGraph.Nodes)
-          |-- Extract Node Pins (requires UK2Node.Pins)
-              |-- Map Pin Connections (requires LinkedTo)
+解析导出数据
+  |-- 提取属性（需属性类型知识）
+  |-- 提取蓝图图（若资产是蓝图）
+      |-- 提取节点（需 UEdGraph.Nodes）
+          |-- 提取节点引脚（需 UK2Node.Pins）
+              |-- 映射引脚连接（需 LinkedTo）
 
-Blueprint-specific extraction:
-  |-- Variables (FBPVariableDescription)
-  |-- Functions (FunctionGraphs)
-  |-- Event Graphs (UbergraphPages)
-  |-- Interfaces (ImplementedInterfaces)
+蓝图特定提取：
+  |-- 变量（FBPVariableDescription）
+  |-- 函数（FunctionGraphs）
+  |-- 事件图（UbergraphPages）
+  |-- 接口（ImplementedInterfaces）
 ```
 
-## MVP Recommendation
+## MVP 推荐
 
-Prioritize:
-1. **Parse .uasset header** - Entry point for all parsing
-2. **Extract name/import/export tables** - Foundation for understanding content
-3. **Identify asset class** - Determines what extraction path to take
-4. **JSON output format** - Core output requirement
-5. **Blueprint type detection** - Know if file contains blueprint data
-6. **Variable definitions extraction** - Most valuable blueprint data, moderate complexity
+优先：
+1. **解析 .uasset 文件头** —— 所有解析的入口
+2. **提取名称/导入/导出表** —— 理解内容的基础
+3. **识别资产类** —— 决定提取路径
+4. **JSON 输出格式** —— 核心输出需求
+5. **蓝图类型检测** —— 知晓文件是否含蓝图数据
+6. **变量定义提取** —— 最有价值的蓝图数据，复杂度中等
 
-Defer to Phase 2:
-- **Blueprint graph extraction** - High complexity, requires deep node/pin understanding
-- **Function definitions** - High complexity, needs graph parsing foundation
-- **Semantic node descriptions** - Requires node type catalog
+推迟到阶段 2：
+- **蓝图图提取** —— 复杂度高，需深入理解节点/引脚
+- **函数定义** —— 复杂度高，需图解析基础
+- **语义节点描述** —— 需节点类型目录
 
-Defer to Phase 3:
-- **Error recovery & partial parsing** - Requires handling many edge cases
-- **Pin connection mapping** - Requires full graph parsing
+推迟到阶段 3：
+- **错误恢复与部分解析** —— 需处理众多边缘情况
+- **引脚连接映射** —— 需完整图解析
 
-## Data Structure Reference
+## 数据结构参考
 
-Key structures discovered from UE 5.7 source:
+UE 5.7 源码发现的关键结构：
 
-### Package File Summary (Header)
-- `FPackageFileSummary` in `PackageFileSummary.h`
-- Contains: Tag (magic), FileVersionUE, NameCount/Offset, ExportCount/Offset, ImportCount/Offset, PackageFlags
+### 包文件摘要（文件头）
+- `FPackageFileSummary` 在 `PackageFileSummary.h`
+- 含：Tag（魔术）、FileVersionUE、NameCount/Offset、ExportCount/Offset、ImportCount/Offset、PackageFlags
 
-### Name Table Entry
-- Each name: FName (string + number index for disambiguation)
-- All object/property names come from this table
+### 名称表条目
+- 各名称：FName（字符串 + 数字索引用于区分）
+- 所有对象/属性名称来自此表
 
-### Export Map Entry
-- `FObjectExport`: ObjectName, ClassIndex, OuterIndex, SuperIndex, TemplateIndex, ObjectFlags, SerialSize, SerialOffset
+### 导出表条目
+- `FObjectExport`：ObjectName、ClassIndex、OuterIndex、SuperIndex、TemplateIndex、ObjectFlags、SerialSize、SerialOffset
 
-### Import Map Entry
-- `FObjectImport`: ObjectName, ClassPackage, ClassName, OuterIndex
+### 导入表条目
+- `FObjectImport`：ObjectName、ClassPackage、ClassName、OuterIndex
 
-### Blueprint Structure
-- `UBlueprint` in `Blueprint.h`
-- Key fields:
-  - `ParentClass` - What class this blueprint extends
-  - `BlueprintType` - BPTYPE_Normal, Interface, MacroLibrary, etc.
-  - `NewVariables` - TArray<FBPVariableDescription>
-  - `FunctionGraphs` - TArray<UEdGraph>
-  - `UbergraphPages` - TArray<UEdGraph> (event graphs)
-  - `ImplementedInterfaces` - TArray<FBPInterfaceDescription>
-  - `ComponentTemplates` - TArray<UActorComponent>
+### 蓝图结构
+- `UBlueprint` 在 `Blueprint.h`
+- 关键字段：
+  - `ParentClass` —— 此蓝图继承的类
+  - `BlueprintType` —— BPTYPE_Normal、Interface、MacroLibrary 等
+  - `NewVariables` —— TArray<FBPVariableDescription>
+  - `FunctionGraphs` —— TArray<UEdGraph>
+  - `UbergraphPages` —— TArray<UEdGraph>（事件图）
+  - `ImplementedInterfaces` —— TArray<FBPInterfaceDescription>
+  - `ComponentTemplates` —— TArray<UActorComponent>
 
-### Variable Definition
-- `FBPVariableDescription`: VarName, VarGuid, VarType, FriendlyName, Category, PropertyFlags, DefaultValue, MetaDataArray
+### 变量定义
+- `FBPVariableDescription`：VarName、VarGuid、VarType、FriendlyName、Category、PropertyFlags、DefaultValue、MetaDataArray
 
-### Graph Structure
-- `UEdGraph`: Schema, Nodes (TArray<UEdGraphNode>), GraphGuid, bEditable
-- `UEdGraphNode`: Pins, NodePosX/Y, NodeComment, NodeGuid, EnabledState
+### 图结构
+- `UEdGraph`：Schema、Nodes（TArray<UEdGraphNode>）、GraphGuid、bEditable
+- `UEdGraphNode`：Pins、NodePosX/Y、NodeComment、NodeGuid、EnabledState
 
-### Node Structure
-- `UK2Node` (extends UEdGraphNode): Base class for all blueprint nodes
-- Subclasses: K2Node_CallFunction, K2Node_VariableGet, K2Node_Event, K2Node_MacroInstance, etc.
+### 节点结构
+- `UK2Node`（继承 UEdGraphNode）：所有蓝图节点基类
+- 子类：K2Node_CallFunction、K2Node_VariableGet、K2Node_Event、K2Node_MacroInstance 等
 
-### Pin Structure
-- `UEdGraphPin`: PinId, PinName, Direction, PinType, DefaultValue, LinkedTo (connections), SubPins, ParentPin
-- `FEdGraphPinType`: PinCategory, PinSubCategory, ContainerType (None/Array/Set/Map), bIsReference, bIsConst
+### 引脚结构
+- `UEdGraphPin`：PinId、PinName、Direction、PinType、DefaultValue、LinkedTo（连接）、SubPins、ParentPin
+- `FEdGraphPinType`：PinCategory、PinSubCategory、ContainerType（None/Array/Set/Map）、bIsReference、bIsConst
 
-### Property Types (FPropertyTag.Type)
-- BoolProperty, IntProperty, FloatProperty, StrProperty, NameProperty
-- ObjectProperty, ClassProperty, StructProperty, ArrayProperty
-- MapProperty, SetProperty, EnumProperty, ByteProperty
-- DelegateProperty, MulticastDelegateProperty
-- TextProperty, SoftObjectProperty, WeakObjectProperty
+### 属性类型（FPropertyTag.Type）
+- BoolProperty、IntProperty、FloatProperty、StrProperty、NameProperty
+- ObjectProperty、ClassProperty、StructProperty、ArrayProperty
+- MapProperty、SetProperty、EnumProperty、ByteProperty
+- DelegateProperty、MulticastDelegateProperty
+- TextProperty、SoftObjectProperty、WeakObjectProperty
 
-## Sources
+## 来源
 
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PackageFileSummary.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/Engine/Blueprint.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraph.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphNode.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphPin.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Editor/BlueprintGraph/Classes/K2Node.h`
-- UE 5.7 Source Code: `D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PropertyTag.h`
-- PROJECT.md: `E:\Develop\uasset_read\.planning\PROJECT.md` (requirements context)
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PackageFileSummary.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/Engine/Blueprint.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraph.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphNode.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphPin.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Editor/BlueprintGraph/Classes/K2Node.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/PropertyTag.h`
+- PROJECT.md：`E:\Develop\uasset_read\.planning\PROJECT.md`（需求背景）
 
-## Confidence Assessment
+## 置信度评估
 
-| Area | Level | Reason |
-|------|-------|--------|
-| Package structure | HIGH | Directly read from UE 5.7 source code; authoritative |
-| Blueprint data structures | HIGH | Directly read from UE 5.7 source code; authoritative |
-| Graph/Node/Pin structures | HIGH | Directly read from UE 5.7 source code; authoritative |
-| Existing tools features | MEDIUM | Web search results; tools like FModel, UE Viewer confirmed |
-| AI-agent-friendly output patterns | LOW | No direct research on AI agent consumption patterns; inferred from requirements |
+| 区域 | 水平 | 原因 |
+|------|------|------|
+| 包结构 | 高 | 直接读取 UE 5.7 源码；权威 |
+| 蓝图数据结构 | 高 | 直接读取 UE 5.7 源码；权威 |
+| 图/节点/引脚结构 | 高 | 直接读取 UE 5.7 源码；权威 |
+| 现有工具功能 | 中 | 网络搜索结果；FModel、UE Viewer 已确认 |
+| AI-agent 友好输出模式 | 低 | 无 AI agent 消费模式直接研究；从需求推断 |
 
-## Gaps to Address
+## 待解决缺口
 
-- **Blueprint bytecode vs editor data**: Need to clarify whether target assets are cooked (bytecode) or uncooked (editor graphs). PROJECT.md implies uncooked since "blueprint nodes" are mentioned.
-- **Version compatibility matrix**: UE versions 4.x through 5.7 have different serialization; need to identify which versions to support initially.
-- **Property value deserialization**: Understanding how to actually read property values (not just metadata) requires deeper serialization research.
-- **Node type catalog**: For semantic descriptions, need catalog of all UK2Node subclasses and their specific data fields.
-- **Error handling patterns**: Need research on common parsing failures and how to recover gracefully.
+- **蓝图字节码 vs 编辑器数据**：需明确目标资产是 cooked（字节码）还是未 cooked（编辑器图）。PROJECT.md 暗示未 cooked，因提及"蓝图节点"。
+- **版本兼容矩阵**：UE 4.x 到 5.7 版本序列化不同；需确定初始支持哪些版本。
+- **属性值反序列化**：理解如何实际读取属性值（非仅元数据）需更深序列化研究。
+- **节点类型目录**：语义描述需所有 UK2Node 子类及其特定数据字段目录。
+- **错误处理模式**：需研究常见解析失败及如何优雅恢复。
