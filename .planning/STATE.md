@@ -14,7 +14,7 @@
 
 | # | Phase | Status | Plans | Progress |
 |---|-------|--------|-------|----------|
-| 1 | Core Parsing | ○ Pending | 0/0 | 0% |
+| 1 | Core Parsing | ◐ Context Gathered | 0/0 | 10% |
 | 2 | Property Parsing | ○ Pending | 0/0 | 0% |
 | 3 | Blueprint Extraction | ○ Pending | 0/0 | 0% |
 | 4 | Output & CLI | ○ Pending | 0/0 | 0% |
@@ -29,6 +29,7 @@
 | 2026-04-27 | Research synthesized | SUMMARY.md written |
 | 2026-04-27 | Requirements defined | 37 v1 requirements mapped to 5 phases |
 | 2026-04-27 | Roadmap created | 5 phases defined with success criteria |
+| 2026-04-28 | Phase 1 context gathered | 01-CONTEXT.md created with 18 decisions |
 
 ## Project Reference
 
@@ -48,18 +49,18 @@ See: `.planning/PROJECT.md` (updated 2026-04-27)
 ## Outstanding Items
 
 - Phase 1 planning pending (run `/gsd-plan-phase 1`)
-- Test files needed (sample .uasset from UE project)
+- Test files needed (sample .uasset from UE project — user will provide)
 - Version compatibility matrix to be built during Phase 1
 
 ## Next Action
 
 ```
-/gsd-discuss-phase 1 — gather context and clarify approach
+/gsd-plan-phase 1 — create detailed execution plan
 ```
 
-Or skip discussion:
+Or review/edit context first:
 ```
-/gsd-plan-phase 1 — create detailed execution plan
+.planning/phases/01-core-parsing/01-CONTEXT.md
 ```
 
 ---
