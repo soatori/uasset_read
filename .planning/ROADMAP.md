@@ -25,11 +25,12 @@
 
 **工期估算：** 中等（基础层，为后续所有工作奠定基础）
 
-**计划：** 1 个计划，Wave 1
-**状态：** ✓ 已验证（2026-04-28）
+**计划：** 2 个计划（1 个主计划 + 1 个 gap closure）
+**状态：** Gap Closure 进行中（UAT 发现版本解析 bug）
 
 计划列表：
 - [x] 01-01-PLAN.md — 核心解析器实现（FArchive、dataclasses、解析函数、测试） ✓ 13 测试通过
+- [ ] 01-02-PLAN.md — Gap Closure：修复 LegacyFileVersion=-7 文件头解析 bug
 
 ### 成功标准
 
