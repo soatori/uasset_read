@@ -275,26 +275,26 @@ class PackageFileSummary:
     tag: int                            # 魔术标签（0x9E2A83C1）
     legacy_file_version: int            # -2 至 -9（D-04）
     file_version_ue4: int               # UE4 版本号
-    file_version_ue5: int               # UE5 版本号（>= 1000 D-04）
-    file_version_licensee: int          # Licensee 版本
-    package_flags: int                  # D-12 仅存储
-    name_count: int
-    name_offset: int                    # 名称表绝对偏移
-    soft_object_paths_count: int
-    soft_object_paths_offset: int
-    import_count: int
-    import_offset: int                  # 导入表绝对偏移
-    export_count: int
-    export_offset: int                  # 导出表绝对偏移
-    export_hashes_offset: int
-    import_export_guids_offset: int
-    import_export_guids_count: int
-    cooked_packages_offset: int
-    cooked_packages_count: int
-    asset_registry_data_offset: int
-    bulk_data_start_offset: int         # BulkData 基准偏移（D-13 不解析载荷）
-    total_header_size: int
-    # 有默认值的字段（UE5+ 可选字段）
+    legacy_ue3_version: int = 0         # LegacyUE3版本（仅 legacy != -4）
+    file_version_ue5: int = 0           # UE5 版本号（仅 legacy <= -8）
+    file_version_licensee: int = 0      # Licensee 版本
+    package_flags: int = 0              # D-12 仅存储
+    name_count: int = 0
+    name_offset: int = 0                # 名称表绝对偏移
+    soft_object_paths_count: int = 0
+    soft_object_paths_offset: int = 0
+    import_count: int = 0
+    import_offset: int = 0              # 导入表绝对偏移
+    export_count: int = 0
+    export_offset: int = 0              # 导出表绝对偏移
+    export_hashes_offset: int = 0
+    import_export_guids_offset: int = 0
+    import_export_guids_count: int = 0
+    cooked_packages_offset: int = 0
+    cooked_packages_count: int = 0
+    asset_registry_data_offset: int = 0
+    bulk_data_start_offset: int = 0     # BulkData 基准偏移（D-13 不解析载荷）
+    total_header_size: int = 0
     custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
     payload_toc_offset: int = 0
     data_resource_offset: int = 0
@@ -389,16 +389,27 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if legacy_file_version < LEGACY_FILE_VERSION_MIN or legacy_file_version > LEGACY_FILE_VERSION_MAX:
         raise VersionError(f"Unsupported legacy version: {legacy_file_version}")
 
-    # UE5+ 版本字段（legacy_file_version >= -8）
-    if legacy_file_version >= -8:
-        file_version_ue4 = archive.read_i32()
+    # LegacyUE3Version（仅在 legacy_file_version != -4 时存在）
+    # 参考 UE 源码 PackageFileSummary.cpp line 130-134
+    if legacy_file_version != -4:
+        legacy_ue3_version = archive.read_i32()
+    else:
+        legacy_ue3_version = 0
+
+    # UE4 版本（所有现代版本都有）
+    # 参考 UE 源码 PackageFileSummary.cpp line 136
+    file_version_ue4 = archive.read_i32()
+
+    # UE5 版本（仅在 legacy_file_version <= -8 时存在）
+    # 参考 UE 源码 PackageFileSummary.cpp line 138-141
+    # 注意：UE 源码使用 <= -8，而非 >= -8
+    if legacy_file_version <= -8:
         file_version_ue5 = archive.read_i32()
     else:
-        file_version_ue4 = 0
         file_version_ue5 = 0
 
-    # UE5 版本验证（D-04）
-    if file_version_ue5 < UE5_VERSION_MIN and legacy_file_version >= -8:
+    # UE5 版本验证（仅对 -8 及以上版本）
+    if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
         raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
 
     # Licensee 版本
@@ -417,9 +428,25 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # PackageFlags（D-12 仅存储）
     package_flags = archive.read_u32()
 
-    # 名称表偏移
+    # 名称表处理
+    # 参考 UE-SOURCE-INDEX.md section 3.2：
+    # - legacy >= -5: NameCount + NameOffset（标准格式）
+    # - legacy < -5: NameCount + inline 名称数据（无 NameOffset）
     name_count = archive.read_i32()
-    name_offset = archive.read_i32()
+
+    if legacy_file_version >= -5:
+        # 标准 UE5 格式：有 NameOffset 字段
+        name_offset = archive.read_i32()
+    else:
+        # legacy < -5: inline 名称，无 NameOffset
+        name_offset = archive.tell()  # 名称当前位置
+        # 跳过 inline 名称以便读取后续字段
+        for _ in range(name_count):
+            slen = archive.read_i32()
+            if slen > 0:
+                archive.read(slen)
+            elif slen < 0:
+                archive.read(-slen * 2)
 
     # SoftObjectPaths（UE5+）
     soft_object_paths_count = archive.read_i32()
@@ -463,6 +490,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         tag=tag,
         legacy_file_version=legacy_file_version,
         file_version_ue4=file_version_ue4,
+        legacy_ue3_version=legacy_ue3_version,
         file_version_ue5=file_version_ue5,
         file_version_licensee=file_version_licensee,
         custom_versions=custom_versions,
@@ -490,12 +518,9 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
     """
-    读取名称表（CORE-03/D-09）。
+    读取名称表。
 
-    来自 PackageFileSummary.cpp：
-    定位到 name_offset，循环读取 name_count 个名称。
-
-    UE 5.x 格式：UTF-8 FString。
+    使用 FString 格式（Length + Data）。
 
     Args:
         archive: FArchive 实例
@@ -508,7 +533,6 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
 
     name_map: List[str] = []
     for _ in range(summary.name_count):
-        # UE 5.x 使用 UTF-8 FString（D-10）
         name = archive.read_fstring()
         name_map.append(name)
 

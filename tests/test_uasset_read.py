@@ -93,9 +93,17 @@ def create_test_uasset(
         # LegacyFileVersion
         f.write(struct.pack(endian_fmt + 'i', legacy_version))
 
-        # UE5+ 版本字段（legacy_version >= -8）
-        if legacy_version >= -8:
-            f.write(struct.pack(endian_fmt + 'i', ue4_version))
+        # LegacyUE3Version（仅在 legacy_version != -4 时存在）
+        # 参考 UE 源码 PackageFileSummary.cpp line 130-134
+        if legacy_version != -4:
+            f.write(struct.pack(endian_fmt + 'i', 864))  # LegacyUE3Version
+
+        # UE4 版本（所有现代版本都有）
+        f.write(struct.pack(endian_fmt + 'i', ue4_version))
+
+        # UE5 版本（仅在 legacy_version <= -8 时存在）
+        # 参考 UE 源码 PackageFileSummary.cpp line 138-141
+        if legacy_version <= -8:
             f.write(struct.pack(endian_fmt + 'i', ue5_version))
 
         # Licensee 版本
@@ -113,11 +121,26 @@ def create_test_uasset(
         # 计算名称表位置（当前文件头大小）
         header_size_before_names = f.tell()
 
-        # 名称表计数和偏移（先写入占位符，后续更新）
+        # 名称表计数
         name_count_pos = f.tell()
         f.write(struct.pack(endian_fmt + 'i', len(names)))  # NameCount
-        name_offset_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
+
+        # 名称表位置处理（参考 UE-SOURCE-INDEX.md section 3.2）
+        # - legacy_version >= -5: NameOffset 字段存在，名称在文件末尾
+        # - legacy_version < -5: 名称 inline，紧跟 NameCount，无 NameOffset 字段
+        if legacy_version >= -5:
+            name_offset_pos = f.tell()
+            f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
+            name_offset = None  # 后续在文件末尾写入名称时设置
+        else:
+            # inline names: 名称紧跟 NameCount
+            name_offset_pos = None
+            name_offset = f.tell()  # 当前位置即为名称起始
+            # 立即写入名称表（inline）
+            for name in names:
+                name_bytes = name.encode('utf-8') + b'\x00'
+                f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
+                f.write(name_bytes)
 
         # SoftObjectPaths（UE5+）
         f.write(struct.pack(endian_fmt + 'i', 0))  # Count
@@ -157,12 +180,14 @@ def create_test_uasset(
         f.write(struct.pack(endian_fmt + 'i', 0))
 
         # === 名称表 ===
-        name_offset = f.tell()
-        for name in names:
-            # FString 格式：长度 + UTF-8 数据 + null 终止符
-            name_bytes = name.encode('utf-8') + b'\x00'
-            f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
-            f.write(name_bytes)
+        # 仅在 legacy_version >= -5 时写入名称（legacy < -5 已 inline 写入）
+        if legacy_version >= -5:
+            name_offset = f.tell()
+            for name in names:
+                # FString 格式：长度 + UTF-8 数据 + null 终止符
+                name_bytes = name.encode('utf-8') + b'\x00'
+                f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
+                f.write(name_bytes)
 
         # === 导入表 ===
         import_offset = f.tell()
@@ -194,9 +219,10 @@ def create_test_uasset(
         # === 更新偏移 ===
         total_header_size = f.tell()
 
-        # 回写名称表偏移
-        f.seek(name_offset_pos)
-        f.write(struct.pack(endian_fmt + 'i', name_offset))
+        # 回写名称表偏移（仅 legacy_version >= -5 时需要）
+        if name_offset_pos is not None:
+            f.seek(name_offset_pos)
+            f.write(struct.pack(endian_fmt + 'i', name_offset))
 
         # 回写导入表偏移
         f.seek(import_offset_pos)
@@ -423,18 +449,18 @@ def test_invalid_tag():
 
 def test_low_ue5_version():
     """
-    测试低 UE5 版本错误处理（CORE-08/D-04）。
+    测试低 UE5 版本处理（CORE-08/D-04）。
 
-    验证：ue5_version < 1000 返回清晰错误。
+    UE5_VERSION_MIN 已改为 0，接受真实 UE5 文件（版本 521-522）。
+    验证：ue5_version=500 被接受，解析成功。
     """
     path = create_test_uasset(ue5_version=500)
 
     try:
         result = parse_uasset(path)
 
-        assert not result.is_success
-        assert len(result.errors) > 0
-        assert "Unsupported UE5 version" in result.errors[0]
+        assert result.is_success
+        assert result.summary.file_version_ue5 == 500
     finally:
         cleanup_test_file(path)
 

@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-04-27T17:07:05.746Z"
+progress:
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 50
+---
+
 # 项目状态
 
 **项目：** uasset_read
@@ -8,19 +22,20 @@
 ## 当前阶段
 
 **阶段 1：核心解析**
+
 - 状态：● 已验证（待人工测试）
 - 目标：解析 .uasset 文件头、名称表、导入/导出表
 - 进度：1/1 计划完成，4/4 truths 验证通过
 
 ## 阶段状态
 
-| # | 阶段 | 状态 | 计划 | 进度 |
-|---|------|------|------|------|
-| 1 | 核心解析 | ● 已验证 | 1/1 | 100% |
-| 2 | 属性解析 | ○ 待定 | 0/0 | 0% |
-| 3 | 蓝图提取 | ○ 待定 | 0/0 | 0% |
-| 4 | 输出与 CLI | ○ 待定 | 0/0 | 0% |
-| 5 | 优化与安全 | ○ 待定 | 0/0 | 0% |
+| # | 阶段 | 状态 | 计划 | 验证 | 进度 |
+|---|------|------|------|------|------|
+| 1 | 核心解析 | ● 已验证 | 1/1 | - | 100% |
+| 2 | 属性解析 | ○ 待定 | 0/0 | - | 0% |
+| 3 | 蓝图提取 | ○ 待定 | 0/0 | - | 0% |
+| 4 | 输出与 CLI | ○ 待定 | 0/0 | - | 0% |
+| 5 | 优化与安全 | ○ 待定 | 0/0 | - | 0% |
 
 ## 近期活动
 
@@ -64,6 +79,7 @@
 ```
 
 或先进行阶段 1 人工测试：
+
 ```
 python -c "from uasset_read import parse_uasset; result = parse_uasset('your_file.uasset'); print(result)" <your_ue5_uasset_file>
 ```
