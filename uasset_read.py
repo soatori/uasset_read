@@ -25,7 +25,7 @@ from typing import Optional, List, Dict, BinaryIO
 
 PACKAGE_FILE_TAG = 0x9E2A83C1       # 正确字节序魔术标签
 PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
-UE5_VERSION_MIN = 1000             # UE5 版本最低值
+UE5_VERSION_MIN = 0                # UE5 版本最低值（接受任何 UE5 文件）
 LEGACY_FILE_VERSION_MIN = -9       # LegacyFileVersion 范围下限
 LEGACY_FILE_VERSION_MAX = -2       # LegacyFileVersion 范围上限
 
