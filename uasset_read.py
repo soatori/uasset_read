@@ -76,16 +76,21 @@ class FArchive:
 
     def read(self, size: int) -> bytes:
         """
-        基础读取方法。
+        基础读取方法 - 不对原始字节进行交换。
 
         Args:
             size: 要读取的字节数
 
         Returns:
-            读取的字节
+            读取的字节（原始顺序，不反转）
 
         Raises:
             ParseError: 若剩余字节不足
+
+        Note:
+            字节交换仅适用于数值类型（i32, u32, i64, f32等），
+            由类型特定的读取方法处理。UTF-8字符串、GUID、SavedHash等
+            原始字节数据不应被反转。
         """
         current_pos = self.tell()
         remaining = self._file_size - current_pos
@@ -96,11 +101,7 @@ class FArchive:
             )
 
         data = self._file.read(size)
-
-        # 字节交换：反转多字节数据（D-11）
-        if self._byte_swapping and size > 1:
-            data = data[::-1]
-
+        # 不在此处反转字节 - 类型特定方法负责处理字节序
         return data
 
     def seek(self, pos: int) -> None:
@@ -136,32 +137,37 @@ class FArchive:
         return self._file_size
 
     # ========================================================================
-    # 类型读取方法（使用 struct.unpack 配合显式字节序 '<' 小端）
+    # 类型读取方法（使用 struct.unpack 配合字节序感知格式）
     # ========================================================================
 
     def read_u8(self) -> int:
-        """读取 unsigned 8-bit integer"""
+        """读取 unsigned 8-bit integer（字节序无关）"""
         return struct.unpack('<B', self.read(1))[0]
 
     def read_i32(self) -> int:
-        """读取 signed 32-bit integer"""
-        return struct.unpack('<i', self.read(4))[0]
+        """读取 signed 32-bit integer（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'i', self.read(4))[0]
 
     def read_u32(self) -> int:
-        """读取 unsigned 32-bit integer"""
-        return struct.unpack('<I', self.read(4))[0]
+        """读取 unsigned 32-bit integer（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'I', self.read(4))[0]
 
     def read_i64(self) -> int:
-        """读取 signed 64-bit integer"""
-        return struct.unpack('<q', self.read(8))[0]
+        """读取 signed 64-bit integer（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'q', self.read(8))[0]
 
     def read_u64(self) -> int:
-        """读取 unsigned 64-bit integer"""
-        return struct.unpack('<Q', self.read(8))[0]
+        """读取 unsigned 64-bit integer（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'Q', self.read(8))[0]
 
     def read_f32(self) -> float:
-        """读取 32-bit float"""
-        return struct.unpack('<f', self.read(4))[0]
+        """读取 32-bit float（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'f', self.read(4))[0]
 
     def read_fstring(self) -> str:
         """

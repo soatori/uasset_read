@@ -300,6 +300,38 @@ def test_byte_swapping_detection():
         cleanup_test_file(path)
 
 
+def test_byte_swapping_string_content():
+    """
+    Test that UTF-8 strings are NOT corrupted by byte swapping (CR-01 fix).
+
+    Validates:
+    - NameMap content is correct in byte-swapped files
+    - String bytes are NOT reversed (UTF-8 is byte-order independent)
+    """
+    # Create byte-swapped file with specific names
+    names = ["Alice", "Bob", "Charlie"]
+    path = create_test_uasset(
+        tag=PACKAGE_FILE_TAG_SWAPPED,
+        legacy_version=-8,
+        ue5_version=UE5_VERSION_MIN,
+        names=names,
+        use_big_endian=True
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        # Verify NameMap content is correct (not reversed garbage)
+        assert len(result.name_map) == len(names) + 1  # "None" + names
+        assert result.name_map[0] == "None"
+        assert result.name_map[1] == "Alice"  # NOT "ecilA\x00"
+        assert result.name_map[2] == "Bob"    # NOT "boB\x00"
+        assert result.name_map[3] == "Charlie"
+    finally:
+        cleanup_test_file(path)
+
+
 def test_name_table_extraction():
     """
     测试名称表提取（CORE-03）。
@@ -543,6 +575,82 @@ def test_farchive_read_boundary():
             archive.read(10)
 
         assert "Cannot read" in str(exc_info.value)
+
+        archive.close()
+    finally:
+        cleanup_test_file(path)
+
+
+def test_farchive_type_specific_byte_swapping():
+    """
+    Test that type-specific read methods correctly swap bytes (CR-01).
+
+    Validates:
+    - read_i32/read_u32/read_i64/read_u64/read_f32 use '>' format when byte_swapping=True
+    - Numeric values are correctly interpreted from big-endian files
+    """
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+    # Write big-endian values (need swapping to be interpreted correctly)
+    os.write(fd, struct.pack('>i', -7))        # -7 as big-endian int32
+    os.write(fd, struct.pack('>I', 0x9E2A83C1)) # PACKAGE_FILE_TAG as big-endian uint32
+    os.write(fd, struct.pack('>q', 1000))      # 1000 as big-endian int64
+    os.write(fd, struct.pack('>Q', 0xFFFFFFFFFFFFFFFF)) # max uint64 as big-endian
+    os.write(fd, struct.pack('>f', 3.14159))   # float as big-endian
+    os.close(fd)
+
+    try:
+        archive = FArchive(path)
+        archive.set_byte_swapping(True)
+
+        # Test read_i32 - should interpret big-endian bytes correctly
+        assert archive.read_i32() == -7, "read_i32 failed to swap bytes"
+
+        # Test read_u32 - should interpret big-endian bytes correctly
+        assert archive.read_u32() == 0x9E2A83C1, "read_u32 failed to swap bytes"
+
+        # Test read_i64 - should interpret big-endian bytes correctly
+        assert archive.read_i64() == 1000, "read_i64 failed to swap bytes"
+
+        # Test read_u64 - should interpret big-endian bytes correctly
+        assert archive.read_u64() == 0xFFFFFFFFFFFFFFFF, "read_u64 failed to swap bytes"
+
+        # Test read_f32 - should interpret big-endian bytes correctly
+        fval = archive.read_f32()
+        assert abs(fval - 3.14159) < 0.0001, f"read_f32 failed to swap bytes: {fval}"
+
+        archive.close()
+    finally:
+        cleanup_test_file(path)
+
+
+def test_farchive_raw_bytes_no_reversal():
+    """
+    Test that FArchive.read() does NOT reverse raw bytes when byte_swapping=True (CR-01).
+
+    Validates:
+    - Raw byte reads return original bytes (no reversal)
+    - UTF-8 string data is NOT corrupted
+    - Byte swapping only affects numeric type methods (read_i32, etc.)
+
+    This test catches the bug: if read() reverses all multi-byte data,
+    GUIDs, SavedHash, and UTF-8 strings would be corrupted.
+    """
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+    # Write big-endian int (needs swapping) + raw UTF-8 bytes (should NOT swap)
+    os.write(fd, struct.pack('>I', 0x12345678) + b'TestName')
+    os.close(fd)
+
+    try:
+        archive = FArchive(path)
+        archive.set_byte_swapping(True)
+
+        # Read 4 raw bytes - should NOT be reversed
+        raw_bytes = archive.read(4)
+        assert raw_bytes == b'\x12\x34\x56\x78', f"Raw bytes were reversed: {raw_bytes.hex()}"
+
+        # Read UTF-8 string bytes - should NOT be reversed
+        string_bytes = archive.read(8)
+        assert string_bytes == b'TestName', f"UTF-8 bytes were reversed: {string_bytes}"
 
         archive.close()
     finally:
