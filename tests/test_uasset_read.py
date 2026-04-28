@@ -1107,6 +1107,36 @@ def test_ue4_total_header_size_at_correct_position():
         cleanup_test_file(path)
 
 
+def test_ue4_localization_id_and_gatherable_text_data_fields():
+    """
+    Test LocalizationId and GatherableTextData fields exist in PackageFileSummary.
+
+    Validates fix for 01-08 gap:
+    - PackageFileSummary dataclass has localization_id field (default empty string)
+    - PackageFileSummary dataclass has gatherable_text_data_count/offset fields (default 0)
+
+    RED test: This test will fail until fields are added to dataclass.
+    """
+    from uasset_read import PackageFileSummary
+
+    # Create default summary - fields should exist with correct defaults
+    summary = PackageFileSummary(
+        tag=PACKAGE_FILE_TAG,
+        legacy_file_version=-7,
+        file_version_ue4=521
+    )
+
+    # LocalizationId should exist and default to empty string
+    assert hasattr(summary, 'localization_id'), "PackageFileSummary missing localization_id field"
+    assert summary.localization_id == "", "localization_id should default to empty string"
+
+    # GatherableTextData fields should exist and default to 0
+    assert hasattr(summary, 'gatherable_text_data_count'), "PackageFileSummary missing gatherable_text_data_count field"
+    assert summary.gatherable_text_data_count == 0, "gatherable_text_data_count should default to 0"
+    assert hasattr(summary, 'gatherable_text_data_offset'), "PackageFileSummary missing gatherable_text_data_offset field"
+    assert summary.gatherable_text_data_offset == 0, "gatherable_text_data_offset should default to 0"
+
+
 def test_utf16_length_overflow():
     """
     Test that UTF-16 strings with extreme length raise ParseError (WR-02 fix).

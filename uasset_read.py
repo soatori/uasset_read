@@ -296,6 +296,9 @@ class PackageFileSummary:
     file_version_licensee: int = 0      # Licensee 版本
     saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= PACKAGE_SAVED_HASH
     package_name: str = ""              # PackageName FString (UE PackageFileSummary.cpp line 258)
+    localization_id: str = ""           # LocalizationId FString (UE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID)
+    gatherable_text_data_count: int = 0  # GatherableTextData entries count (UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES)
+    gatherable_text_data_offset: int = 0  # GatherableTextData offset (UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES)
     package_flags: int = 0              # D-12 仅存储
     name_count: int = 0
     name_offset: int = 0                # 名称表绝对偏移
