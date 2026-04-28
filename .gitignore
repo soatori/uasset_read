@@ -1,6 +1,7 @@
 # External references - not part of this project
 UnrealEngine/
 LyraStarterGame/
+UnrealProjects/
 
 # Python
 __pycache__/
