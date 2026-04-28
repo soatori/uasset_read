@@ -489,6 +489,25 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     soft_object_paths_count = archive.read_i32()
     soft_object_paths_offset = archive.read_i32()
 
+    # LocalizationId FString - UE4 files only (legacy > -8)
+    # Reference: UE PackageFileSummary.cpp line 289-292
+    # FileVersionUE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (added in UE 4.20)
+    # All UE4 v521+ files have this field
+    localization_id = ""
+    is_ue4_file = legacy_file_version > -8  # UE4 files (not UE5)
+    if is_ue4_file:
+        localization_id = archive.read_fstring()
+
+    # GatherableTextData Count/Offset - UE4 files only
+    # Reference: UE PackageFileSummary.cpp line 295-298
+    # FileVersionUE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (added in UE 4.26)
+    # All UE4 v521+ files have these fields
+    gatherable_text_data_count = 0
+    gatherable_text_data_offset = 0
+    if is_ue4_file:
+        gatherable_text_data_count = archive.read_i32()
+        gatherable_text_data_offset = archive.read_i32()
+
     # 导入表偏移
     import_count = archive.read_i32()
     if import_count > MAX_IMPORT_COUNT:
@@ -546,6 +565,9 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         file_version_licensee=file_version_licensee,
         saved_hash=saved_hash,
         package_name=package_name,
+        localization_id=localization_id,
+        gatherable_text_data_count=gatherable_text_data_count,
+        gatherable_text_data_offset=gatherable_text_data_offset,
         custom_versions=custom_versions,
         package_flags=package_flags,
         name_count=name_count,

@@ -159,6 +159,18 @@ def create_test_uasset(
         f.write(struct.pack(endian_fmt + 'i', 0))  # Count
         f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
 
+        # LocalizationId FString - UE4 files only (legacy > -8)
+        # Reference: UE PackageFileSummary.cpp line 289-292
+        # For synthetic files, we emit empty LocalizationId
+        if not is_ue5_file:
+            # Empty LocalizationId FString (length=0 for empty string)
+            f.write(struct.pack(endian_fmt + 'i', 0))
+
+            # GatherableTextData Count/Offset - UE4 files only
+            # Reference: UE PackageFileSummary.cpp line 295-298
+            f.write(struct.pack(endian_fmt + 'i', 0))  # count = 0
+            f.write(struct.pack(endian_fmt + 'i', 0))  # offset = 0
+
         # 导入表计数和偏移
         import_count_pos = f.tell()
         f.write(struct.pack(endian_fmt + 'i', len(imports)))  # ImportCount
@@ -1103,6 +1115,50 @@ def test_ue4_total_header_size_at_correct_position():
         assert len(result.name_map) == 2
         assert result.name_map[0] == "None"
         assert result.name_map[1] == "TestName"
+    finally:
+        cleanup_test_file(path)
+
+
+def test_ue4_localization_id_field_reading():
+    """
+    Test LocalizationId and GatherableTextData fields are read for UE4 files.
+
+    Validates fix for 01-08 gap:
+    - UE4 files (legacy=-7) read LocalizationId FString
+    - UE4 files read GatherableTextData Count/Offset
+    - ImportOffset is valid (not garbage from missing fields)
+
+    RED test: This test will fail until read_package_summary() reads these fields.
+    """
+    names = ["TestClass", "TestObject"]
+    imports = [
+        (1, 0, 0, 2),  # ClassPackage=1 (TestClass), ClassName=0 (None), ObjectName=2 (TestObject)
+    ]
+
+    path = create_test_uasset(
+        legacy_version=-7,
+        ue4_version=522,
+        ue5_version=0,
+        names=names,
+        imports=imports
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert result.summary is not None
+        # LocalizationId should be populated (empty for synthetic files)
+        assert hasattr(result.summary, 'localization_id')
+        assert result.summary.localization_id == ""  # Empty for synthetic files
+        # GatherableTextData fields should be populated (0 for synthetic files)
+        assert result.summary.gatherable_text_data_count == 0
+        assert result.summary.gatherable_text_data_offset == 0
+        # ImportOffset should be valid (not garbage)
+        assert result.summary.import_offset > 0
+        assert result.summary.import_offset < result.summary.total_header_size
+        # ImportMap should populate
+        assert len(result.import_map) == len(imports)
     finally:
         cleanup_test_file(path)
 
