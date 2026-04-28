@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-04-28T04:05:02Z"
+status: complete
+last_updated: "2026-04-28T17:00:00Z"
 progress:
   total_phases: 1
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_phases: 1
+  total_plans: 8
+  completed_plans: 8
+  percent: 100
 ---
 
 # 项目状态
@@ -17,21 +17,21 @@ progress:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v1.0 —— 初始
-**状态：** 阶段 1 SavedHash gap 已修复
+**状态：** 阶段 1 完成 ✓
 
 ## 当前阶段
 
 **阶段 1：核心解析**
 
-- 状态：● 已验证（SavedHash gap 已修复）
+- 状态：✓ 完成
 - 目标：解析 .uasset 文件头、名称表、导入/导出表
-- 进度：2/3 计划完成，SavedHash bug 已修复
+- 进度：8/8 计划完成，28 测试通过，Lyra 文件解析成功
 
 ## 阶段状态
 
 | # | 阶段 | 状态 | 计划 | 验证 | 进度 |
 |---|------|------|------|------|------|
-| 1 | 核心解析 | ● 进行中 | 2/3 | - | 67% |
+| 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | 100% |
 | 2 | 属性解析 | ○ 待定 | 0/0 | - | 0% |
 | 3 | 蓝图提取 | ○ 待定 | 0/0 | - | 0% |
 | 4 | 输出与 CLI | ○ 待定 | 0/0 | - | 0% |
@@ -51,14 +51,16 @@ progress:
 | 2026-04-28 | 阶段 1 规划完成 | 01-01-PLAN.md 创建，4 任务，覆盖 8 需求 |
 | 2026-04-28 | 阶段 1 执行完成 | uasset_read.py（719 行）、tests（549 行）创建 |
 | 2026-04-28 | 阶段 1 验证通过 | 4/4 truths 验证，13 测试通过，待人工测试 |
-| 2026-04-28 | SavedHash gap 修复 | 01-03-PLAN.md 执行完成，14 测试通过，Lyra UE5 文件可解析 |
+| 2026-04-28 | SavedHash gap 修复 | 01-03-PLAN.md 执行完成，14 测试通过 |
+| 2026-04-28 | Gap Closure 执行 | 01-04~01-08 执行完成，28 测试通过 |
+| 2026-04-28 | Lyra 文件解析成功 | Character_Default.uasset 解析成功，ImportMap/ExportMap 填充 |
 
 ## 项目参考
 
 参见：`.planning/PROJECT.md`（2026-04-27 更新）
 
 **核心价值：** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
-**当前重点：** 阶段 1 —— 核心解析
+**当前重点：** 阶段 1 已完成 ✓，待规划阶段 2
 
 ## 关键决策
 
@@ -67,39 +69,14 @@ progress:
 | Python 3.10+ 零运行时依赖 | 已决定 | 部署更简单，仅标准库 |
 | 专注于未 cooked 资产 | 已决定 | 完整蓝图数据可用 |
 | 蓝图图推迟到 v2 | 已决定 | 降低初始复杂度 |
-| SavedHash 条件读取 | 已决定 | UE5 >= 1004 文件正确解析 |
-
-## 待处理事项
-
-- 阶段 1 SavedHash gap 已修复，待验证 Lyra UE5 文件解析
-- 阶段 2（属性解析）待规划
+| SavedHash 条件读取 | 已验证 | UE5 >= 1004 文件正确解析 |
+| PackageName FString | 已验证 | 所有 UE4/UE5 文件正确解析 |
+| LocalizationId/GatherableTextData | 已验证 | UE4 >= 521 文件正确解析 |
 
 ## 下一步动作
 
 ```
-/gsd-plan-phase 2 —— 规划属性解析阶段
+/gsd-discuss-phase 2    —— 规划属性解析阶段
+/gsd-plan-phase 2       —— 创建阶段 2 计划
+/gsd-execute-phase 2    —— 执行阶段 2
 ```
-
-或先进行阶段 1 人工测试：
-
-```
-python -c "from uasset_read import parse_uasset; result = parse_uasset('your_file.uasset'); print(result)" <your_ue5_uasset_file>
-```
-## 指令提示
-/gsd-plan-phase 1 --gaps
-/gsd-execute-phase 1 --gaps-only
-
-/gsd-discuss-phase 2
-/gsd-plan-phase 2
-/gsd-execute-phase 2
-/gsd-verify-work 2
-/gsd-ship 2                  # 从已验证的工作创建 PR
-...
-/gsd-complete-milestone
-/gsd-new-milestone
-
-/gsd-next                    # 自动检测并执行下一步
-
----
-*状态初始化：2026-04-27*
-*最后更新：2026-04-28*
