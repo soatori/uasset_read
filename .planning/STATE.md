@@ -3,13 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: complete
-last_updated: "2026-04-28T17:00:00Z"
+last_updated: "2026-04-28T18:00:00Z"
 progress:
   total_phases: 1
   completed_phases: 1
   total_plans: 8
   completed_plans: 8
   percent: 100
+shipped:
+  date: "2026-04-28"
+  branch: master
+  remote: https://github.com/soatori/uasset_read
 ---
 
 # 项目状态
@@ -17,7 +21,7 @@ progress:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v1.0 —— 初始
-**状态：** 阶段 1 完成 ✓
+**状态：** 阶段 1 已发布 ✓ (master → GitHub)
 
 ## 当前阶段
 
