@@ -85,6 +85,20 @@ progress:
 ```
 python -c "from uasset_read import parse_uasset; result = parse_uasset('your_file.uasset'); print(result)" <your_ue5_uasset_file>
 ```
+## 指令提示
+/gsd-plan-phase 1 --gaps
+/gsd-execute-phase 1 --gaps-only
+
+/gsd-discuss-phase 2
+/gsd-plan-phase 2
+/gsd-execute-phase 2
+/gsd-verify-work 2
+/gsd-ship 2                  # 从已验证的工作创建 PR
+...
+/gsd-complete-milestone
+/gsd-new-milestone
+
+/gsd-next                    # 自动检测并执行下一步
 
 ---
 *状态初始化：2026-04-27*
