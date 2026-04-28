@@ -840,6 +840,80 @@ def test_ue4_export_no_script_serialization():
         cleanup_test_file(path)
 
 
+def test_name_count_bounds_validation():
+    """
+    Test that excessive name_count raises ParseError (WR-01 fix).
+
+    Validates:
+    - Parser rejects files with name_count > MAX_NAME_COUNT
+    - Error message contains "exceeds maximum"
+    """
+    import struct
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+
+    # Minimal header with huge name_count (WR-01 test)
+    # Use UE5 version 500 (< 1004) to avoid SavedHash reading
+    header = struct.pack('<I', PACKAGE_FILE_TAG)  # Tag
+    header += struct.pack('<i', -8)  # LegacyFileVersion
+    header += struct.pack('<i', 864)  # LegacyUE3Version
+    header += struct.pack('<i', 0)  # UE4 version
+    header += struct.pack('<i', 500)  # UE5 version (< 1004, no SavedHash)
+    header += struct.pack('<i', 0)  # Licensee
+    header += struct.pack('<I', 0)  # CustomVersions count
+    header += struct.pack('<i', 5) + b'None\x00'  # PackageName
+    header += struct.pack('<I', 0)  # PackageFlags
+    header += struct.pack('<i', 20_000_000)  # name_count > MAX
+
+    os.write(fd, header)
+    os.close(fd)
+
+    try:
+        result = parse_uasset(path)
+        assert not result.is_success
+        assert "exceeds maximum" in result.errors[0]
+    finally:
+        cleanup_test_file(path)
+
+
+def test_export_count_bounds_validation():
+    """
+    Test that excessive export_count raises ParseError (WR-01 fix).
+
+    Validates:
+    - Parser rejects files with export_count > MAX_EXPORT_COUNT
+    - Error message contains "exceeds maximum"
+    """
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+
+    # Use UE5 version 500 (< 1004) to avoid SavedHash reading
+    header = struct.pack('<I', PACKAGE_FILE_TAG)
+    header += struct.pack('<i', -8)
+    header += struct.pack('<i', 864)
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 500)  # UE5 version (< 1004, no SavedHash)
+    header += struct.pack('<i', 0)
+    header += struct.pack('<I', 0)  # CustomVersions
+    header += struct.pack('<i', 5) + b'None\x00'  # PackageName
+    header += struct.pack('<I', 0)  # PackageFlags
+    header += struct.pack('<i', 10)  # name_count (valid)
+    header += struct.pack('<i', 100)  # name_offset (placeholder)
+    header += struct.pack('<i', 0)  # soft_object_paths_count
+    header += struct.pack('<i', 0)  # soft_object_paths_offset
+    header += struct.pack('<i', 0)  # import_count
+    header += struct.pack('<i', 0)  # import_offset
+    header += struct.pack('<i', 5_000_000)  # export_count > MAX
+
+    os.write(fd, header)
+    os.close(fd)
+
+    try:
+        result = parse_uasset(path)
+        assert not result.is_success
+        assert "exceeds maximum" in result.errors[0]
+    finally:
+        cleanup_test_file(path)
+
+
 # ============================================================================
 # pytest 配置
 # ============================================================================

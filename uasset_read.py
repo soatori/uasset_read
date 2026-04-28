@@ -29,6 +29,12 @@ UE5_VERSION_MIN = 0                # UE5 版本最低值（接受任何 UE5 文�
 LEGACY_FILE_VERSION_MIN = -9       # LegacyFileVersion 范围下限
 LEGACY_FILE_VERSION_MAX = -2       # LegacyFileVersion 范围上限
 
+# Bounds validation constants (WR-01 mitigation)
+MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
+MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
+MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
+MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
+
 
 # ============================================================================
 # 自定义异常（D-15 优雅降级）
@@ -435,6 +441,10 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # CustomVersions 数组（D-05 存储 GUID 不验证）
     custom_versions_count = archive.read_u32()
+    if custom_versions_count > MAX_CUSTOM_VERSIONS:
+        raise ParseError(
+            f"Custom versions count {custom_versions_count} exceeds maximum {MAX_CUSTOM_VERSIONS}"
+        )
     custom_versions: List[CustomVersion] = []
     for _ in range(custom_versions_count):
         # GUID 为 16 bytes
@@ -454,6 +464,10 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # NameCount + NameOffset ALWAYS present for modern UE4/UE5 files (legacy < 0)
     # Inline names format only for UE3 files (legacy >= 0), not supported per D-04
     name_count = archive.read_i32()
+    if name_count > MAX_NAME_COUNT:
+        raise ParseError(
+            f"Name count {name_count} exceeds maximum {MAX_NAME_COUNT}"
+        )
     name_offset = archive.read_i32()  # Always read for legacy < 0
 
     # SoftObjectPaths（UE5+）
@@ -462,10 +476,18 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 导入表偏移
     import_count = archive.read_i32()
+    if import_count > MAX_IMPORT_COUNT:
+        raise ParseError(
+            f"Import count {import_count} exceeds maximum {MAX_IMPORT_COUNT}"
+        )
     import_offset = archive.read_i32()
 
     # 导出表偏移
     export_count = archive.read_i32()
+    if export_count > MAX_EXPORT_COUNT:
+        raise ParseError(
+            f"Export count {export_count} exceeds maximum {MAX_EXPORT_COUNT}"
+        )
     export_offset = archive.read_i32()
 
     # 导出哈希偏移
