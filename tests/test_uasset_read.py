@@ -198,8 +198,9 @@ def create_test_uasset(
             f.write(struct.pack(endian_fmt + 'I', flags))  # ObjectFlags
             f.write(struct.pack(endian_fmt + 'q', serial_size))  # SerialSize
             f.write(struct.pack(endian_fmt + 'q', serial_offset))  # SerialOffset
-            # UE5+ 脚本序列化字段
-            if ue5_version >= UE5_VERSION_MIN:
+            # UE5+ 脚本序列化字段（CR-02 fix: check legacy_version <= -8, NOT ue5_version >= 0）
+            is_ue5_file = legacy_version <= -8
+            if is_ue5_file:
                 f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialSize
                 f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialOffset
 
@@ -800,6 +801,43 @@ def test_saved_hash_ue5_package_saved_hash_version():
 
     # Final verification: saved_hash field exists in PackageFileSummary dataclass
     # This is verified by the baseline test above and the PackageFileSummary class definition
+
+
+def test_ue4_export_no_script_serialization():
+    """
+    Test that UE4 files (legacy > -8) do NOT read script_serial fields (CR-02 fix).
+
+    Validates:
+    - UE4 files skip script_serial_size/script_serial_offset
+    - Export parsing works correctly for legacy=-7 files
+    - script_serial fields should be 0 (not read from file)
+    """
+    # Create UE4-style file (legacy=-7, NOT UE5)
+    exports = [
+        (-1, 0, 0, 1, 0, 100, 200),  # class=-1, name_idx=1
+    ]
+
+    path = create_test_uasset(
+        legacy_version=-7,  # UE4 file (NOT UE5)
+        ue4_version=522,    # Real UE4 version
+        ue5_version=0,      # No UE5 version for legacy=-7
+        exports=exports
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert len(result.export_map) == 1
+        export = result.export_map[0]
+        # For UE4 files, script_serial fields should be 0 (not read)
+        assert export.script_serial_size == 0, f"UE4 file should not have script_serial_size: {export.script_serial_size}"
+        assert export.script_serial_offset == 0, f"UE4 file should not have script_serial_offset: {export.script_serial_offset}"
+        # Basic fields should be correct
+        assert export.serial_size == 100
+        assert export.serial_offset == 200
+    finally:
+        cleanup_test_file(path)
 
 
 # ============================================================================

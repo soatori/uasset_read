@@ -632,9 +632,11 @@ def read_export_map(
         serial_offset = archive.read_i64()
 
         # UE5+ 脚本序列化字段（根据版本决定是否读取）
-        # 版本 >= SCRIPT_SERIALIZATION_OFFSET 时存在
-        # 简化处理：UE5 版本 >= 1000 时读取
-        if summary.file_version_ue5 >= UE5_VERSION_MIN:
+        # CR-02 fix: Check if file is actually UE5 (legacy <= -8), NOT ue5_version >= 0
+        # UE4 files (legacy > -8) don't have these fields - file_version_ue5 stays at 0
+        is_ue5_file = summary.legacy_file_version <= -8
+
+        if is_ue5_file:
             script_serial_size = archive.read_i64()
             script_serial_offset = archive.read_i64()
         else:
