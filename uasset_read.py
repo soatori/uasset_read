@@ -278,6 +278,7 @@ class PackageFileSummary:
     legacy_ue3_version: int = 0         # LegacyUE3版本（仅 legacy != -4）
     file_version_ue5: int = 0           # UE5 版本号（仅 legacy <= -8）
     file_version_licensee: int = 0      # Licensee 版本
+    saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= PACKAGE_SAVED_HASH
     package_flags: int = 0              # D-12 仅存储
     name_count: int = 0
     name_offset: int = 0                # 名称表绝对偏移
@@ -415,6 +416,16 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # Licensee 版本
     file_version_licensee = archive.read_i32()
 
+    # SavedHash and early TotalHeaderSize for UE5 >= PACKAGE_SAVED_HASH (version 1004)
+    # Reference: UE 5.7 PackageFileSummary.cpp line 176-180
+    saved_hash = b''
+    total_header_size = 0
+    PACKAGE_SAVED_HASH_VERSION = 1004  # EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH
+
+    if legacy_file_version <= -8 and file_version_ue5 >= PACKAGE_SAVED_HASH_VERSION:
+        saved_hash = archive.read(20)  # FIoHash structure
+        total_header_size = archive.read_i32()  # Early read, replaces trailer read
+
     # CustomVersions 数组（D-05 存储 GUID 不验证）
     custom_versions_count = archive.read_u32()
     custom_versions: List[CustomVersion] = []
@@ -477,8 +488,9 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # BulkDataStartOffset（D-13 不解析载荷）
     bulk_data_start_offset = archive.read_i64()
 
-    # TotalHeaderSize
-    total_header_size = archive.read_i32()
+    # TotalHeaderSize (only for UE5 < PACKAGE_SAVED_HASH, already read for >= 1004)
+    if not (legacy_file_version <= -8 and file_version_ue5 >= PACKAGE_SAVED_HASH_VERSION):
+        total_header_size = archive.read_i32()
 
     # UE5+ trailer 字段（可选，取决于版本）
     # 这些字段在文件末尾的 trailer 中，不是 header 连续字段
@@ -493,6 +505,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         legacy_ue3_version=legacy_ue3_version,
         file_version_ue5=file_version_ue5,
         file_version_licensee=file_version_licensee,
+        saved_hash=saved_hash,
         custom_versions=custom_versions,
         package_flags=package_flags,
         name_count=name_count,
