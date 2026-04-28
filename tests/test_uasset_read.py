@@ -155,9 +155,11 @@ def create_test_uasset(
         name_offset_pos = f.tell()
         f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
 
-        # SoftObjectPaths（UE5+）
-        f.write(struct.pack(endian_fmt + 'i', 0))  # Count
-        f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+        # SoftObjectPaths（UE5+ only）
+        # UE4 files do NOT have SoftObjectPaths
+        if is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Count
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
 
         # LocalizationId FString - UE4 files only (legacy > -8)
         # Reference: UE PackageFileSummary.cpp line 289-292
@@ -214,11 +216,25 @@ def create_test_uasset(
         # === 名称表 ===
         # Always write names at the end for modern UE4/UE5 files (legacy < 0)
         name_offset = f.tell()
+
+        # UE4 version constant: VER_UE4_NAME_HASHES_SERIALIZED = 502
+        # For UE4 >= 502, name entries have 4-byte hash suffix
+        NAME_HASHES_SERIALIZED_VERSION = 502
+        emit_name_hashes = (not is_ue5_file) and (ue4_version >= NAME_HASHES_SERIALIZED_VERSION)
+
         for name in names:
             # FString 格式：长度 + UTF-8 数据 + null 终止符
             name_bytes = name.encode('utf-8') + b'\x00'
             f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
             f.write(name_bytes)
+
+            # Emit hash bytes for UE4 >= 502
+            # Reference: UE UnrealNames.cpp line 4429-4431
+            if emit_name_hashes:
+                # NonCasePreservingHash (uint16) + CasePreservingHash (uint16) = 4 bytes
+                # Use dummy hash values (zeros)
+                f.write(struct.pack(endian_fmt + 'H', 0))  # NonCasePreservingHash
+                f.write(struct.pack(endian_fmt + 'H', 0))  # CasePreservingHash
 
         # === 导入表 ===
         import_offset = f.tell()
@@ -1054,9 +1070,16 @@ def test_ue4_total_header_size_at_correct_position():
     name_offset_placeholder_pos = len(header)
     header += struct.pack('<i', 0)  # NameOffset placeholder
 
-    # SoftObjectPaths
-    header += struct.pack('<i', 0)
-    header += struct.pack('<i', 0)
+    # LocalizationId FString - UE4 files only (legacy > -8)
+    # VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 514
+    # UE4 v522 >= 514, so LocalizationId is present
+    header += struct.pack('<i', 0)  # Empty LocalizationId (length=0)
+
+    # GatherableTextData Count/Offset - UE4 files only
+    # VER_UE4_SERIALIZE_TEXT_IN_PACKAGES = 457
+    # UE4 v522 >= 457, so GatherableTextData is present
+    header += struct.pack('<i', 0)  # Count = 0
+    header += struct.pack('<i', 0)  # Offset = 0
 
     # ImportCount, ImportOffset
     header += struct.pack('<i', 0)
@@ -1085,10 +1108,19 @@ def test_ue4_total_header_size_at_correct_position():
 
     # Name table data
     name_offset = len(header)
+    # UE4 v522 >= 502 (VER_UE4_NAME_HASHES_SERIALIZED), so hash bytes are present
+    NAME_HASHES_SERIALIZED_VERSION = 502
+    emit_name_hashes = True  # UE4 v522 >= 502
     for name in ["None", "TestName"]:
         name_bytes = name.encode('utf-8') + b'\x00'
         header += struct.pack('<i', len(name_bytes))
         header += name_bytes
+
+        # Emit hash bytes for UE4 >= 502
+        if emit_name_hashes:
+            # NonCasePreservingHash (uint16) + CasePreservingHash (uint16) = 4 bytes
+            header += struct.pack('<H', 0)  # NonCasePreservingHash
+            header += struct.pack('<H', 0)  # CasePreservingHash
 
     total_header_size = len(header)
 
@@ -1117,6 +1149,48 @@ def test_ue4_total_header_size_at_correct_position():
         assert result.name_map[1] == "TestName"
     finally:
         cleanup_test_file(path)
+
+
+def test_real_lyra_character_default_file():
+    """
+    Test parsing real Lyra Character_Default.uasset.
+
+    Integration test validating all Phase 1 fixes together.
+    - LocalizationId FString correctly read for UE4 files
+    - GatherableTextData Count/Offset correctly read
+    - ImportOffset/ExportOffset are valid values (not garbage)
+
+    This is the definitive test for Phase 1 completion.
+    """
+    lyra_path = "UnrealProjects/LyraStarterGame/Content/Characters/Character_Default.uasset"
+
+    # Skip if file not available
+    if not os.path.exists(lyra_path):
+        pytest.skip(f"Lyra test file not found: {lyra_path}")
+
+    result = parse_uasset(lyra_path)
+
+    assert result.is_success, f"Lyra parse failed: {result.errors}"
+    assert result.summary.legacy_file_version == -7
+    assert result.summary.file_version_ue4 == 521
+
+    # Verify offsets are valid (not garbage from missing LocalizationId/GatherableTextData)
+    assert result.summary.name_offset > 0
+    assert result.summary.import_offset > 0
+    assert result.summary.export_offset > 0
+    # Get file size for validation
+    file_size = os.path.getsize(lyra_path)
+    assert result.summary.name_offset < file_size
+    assert result.summary.import_offset < file_size
+    assert result.summary.export_offset < file_size
+
+    # Verify maps populate
+    assert len(result.name_map) > 100  # ~129 expected
+    assert len(result.import_map) > 10  # ~20 expected
+    assert len(result.export_map) > 20  # ~35 expected
+
+    # Verify LocalizationId - should be a GUID string
+    assert len(result.summary.localization_id) > 0
 
 
 def test_ue4_localization_id_field_reading():

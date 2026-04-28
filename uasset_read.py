@@ -485,16 +485,22 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         )
     name_offset = archive.read_i32()  # Always read for legacy < 0
 
-    # SoftObjectPaths（UE5+）
-    soft_object_paths_count = archive.read_i32()
-    soft_object_paths_offset = archive.read_i32()
+    # SoftObjectPaths（UE5+ only）
+    # Reference: UE PackageFileSummary.cpp line 282-285
+    # FileVersionUE >= ADD_SOFTOBJECTPATH_LIST (UE5 only)
+    # UE4 files do NOT have SoftObjectPaths
+    soft_object_paths_count = 0
+    soft_object_paths_offset = 0
+    is_ue4_file = legacy_file_version > -8  # UE4 files (not UE5)
+    if not is_ue4_file:  # UE5 files only
+        soft_object_paths_count = archive.read_i32()
+        soft_object_paths_offset = archive.read_i32()
 
     # LocalizationId FString - UE4 files only (legacy > -8)
     # Reference: UE PackageFileSummary.cpp line 289-292
     # FileVersionUE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (added in UE 4.20)
     # All UE4 v521+ files have this field
     localization_id = ""
-    is_ue4_file = legacy_file_version > -8  # UE4 files (not UE5)
     if is_ue4_file:
         localization_id = archive.read_fstring()
 
@@ -595,7 +601,9 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     """
     读取名称表。
 
-    使用 FString 格式（Length + Data）。
+    使用 FNameEntrySerialized 格式：
+    - FString (Length + Data)
+    - Hash bytes (4 bytes) for UE4 >= VER_UE4_NAME_HASHES_SERIALIZED (502)
 
     Args:
         archive: FArchive 实例
@@ -606,10 +614,21 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     """
     archive.seek(summary.name_offset)
 
+    # UE4 version constant: VER_UE4_NAME_HASHES_SERIALIZED = 502
+    # For UE4 >= 502, name entries have 4-byte hash suffix
+    NAME_HASHES_SERIALIZED_VERSION = 502
+    has_name_hashes = (summary.legacy_file_version > -8) and (summary.file_version_ue4 >= NAME_HASHES_SERIALIZED_VERSION)
+
     name_map: List[str] = []
     for _ in range(summary.name_count):
         name = archive.read_fstring()
         name_map.append(name)
+
+        # Read hash bytes if UE4 >= 502
+        # Reference: UE UnrealNames.cpp line 4429-4431
+        if has_name_hashes:
+            # NonCasePreservingHash (uint16) + CasePreservingHash (uint16)
+            archive.read(4)  # Skip hash bytes
 
     return name_map
 
