@@ -285,6 +285,7 @@ class PackageFileSummary:
     file_version_ue5: int = 0           # UE5 版本号（仅 legacy <= -8）
     file_version_licensee: int = 0      # Licensee 版本
     saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= PACKAGE_SAVED_HASH
+    package_name: str = ""              # PackageName FString (UE PackageFileSummary.cpp line 258)
     package_flags: int = 0              # D-12 仅存储
     name_count: int = 0
     name_offset: int = 0                # 名称表绝对偏移
@@ -442,28 +443,18 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         version = archive.read_i32()
         custom_versions.append(CustomVersion(guid=guid_str, version=version))
 
+    # PackageName (FString) - Reference: UE PackageFileSummary.cpp line 258
+    # Note: PackageName is FString type (int32 length + UTF-8 data), NOT FName
+    package_name = archive.read_fstring()
+
     # PackageFlags（D-12 仅存储）
     package_flags = archive.read_u32()
 
-    # 名称表处理
-    # 参考 UE-SOURCE-INDEX.md section 3.2：
-    # - legacy >= -5: NameCount + NameOffset（标准格式）
-    # - legacy < -5: NameCount + inline 名称数据（无 NameOffset）
+    # 名称表处理 (UE PackageFileSummary.cpp line 278)
+    # NameCount + NameOffset ALWAYS present for modern UE4/UE5 files (legacy < 0)
+    # Inline names format only for UE3 files (legacy >= 0), not supported per D-04
     name_count = archive.read_i32()
-
-    if legacy_file_version >= -5:
-        # 标准 UE5 格式：有 NameOffset 字段
-        name_offset = archive.read_i32()
-    else:
-        # legacy < -5: inline 名称，无 NameOffset
-        name_offset = archive.tell()  # 名称当前位置
-        # 跳过 inline 名称以便读取后续字段
-        for _ in range(name_count):
-            slen = archive.read_i32()
-            if slen > 0:
-                archive.read(slen)
-            elif slen < 0:
-                archive.read(-slen * 2)
+    name_offset = archive.read_i32()  # Always read for legacy < 0
 
     # SoftObjectPaths（UE5+）
     soft_object_paths_count = archive.read_i32()
@@ -512,6 +503,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         file_version_ue5=file_version_ue5,
         file_version_licensee=file_version_licensee,
         saved_hash=saved_hash,
+        package_name=package_name,
         custom_versions=custom_versions,
         package_flags=package_flags,
         name_count=name_count,
