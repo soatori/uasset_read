@@ -457,6 +457,14 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         version = archive.read_i32()
         custom_versions.append(CustomVersion(guid=guid_str, version=version))
 
+    # TotalHeaderSize for UE4 files (legacy > -8, version < PACKAGE_SAVED_HASH)
+    # Reference: UE PackageFileSummary.cpp lines 254-258
+    # For UE4 files, TotalHeaderSize is read BEFORE PackageName (after CustomVersions)
+    # For UE5 >= PACKAGE_SAVED_HASH, TotalHeaderSize was already read in SavedHash block above
+    if legacy_file_version > -8:
+        # UE4 file: TotalHeaderSize after CustomVersions, before PackageName
+        total_header_size = archive.read_i32()
+
     # PackageName (FString) - Reference: UE PackageFileSummary.cpp line 258
     # Note: PackageName is FString type (int32 length + UTF-8 data), NOT FName
     package_name = archive.read_fstring()
@@ -511,8 +519,13 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # BulkDataStartOffset（D-13 不解析载荷）
     bulk_data_start_offset = archive.read_i64()
 
-    # TotalHeaderSize (only for UE5 < PACKAGE_SAVED_HASH, already read for >= 1004)
-    if not (legacy_file_version <= -8 and file_version_ue5 >= PACKAGE_SAVED_HASH_VERSION):
+    # TotalHeaderSize for UE5 files < PACKAGE_SAVED_HASH (version < 1004)
+    # Reference: UE PackageFileSummary.cpp lines 254-258
+    # UE4 files (legacy > -8): already read after CustomVersions
+    # UE5 >= PACKAGE_SAVED_HASH: already read in SavedHash block
+    # UE5 < PACKAGE_SAVED_HASH: need to read here (same position as UE4)
+    if legacy_file_version <= -8 and file_version_ue5 < PACKAGE_SAVED_HASH_VERSION:
+        # UE5 file with version < 1004: TotalHeaderSize at trailer position
         total_header_size = archive.read_i32()
 
     # UE5+ trailer 字段（可选，取决于版本）
