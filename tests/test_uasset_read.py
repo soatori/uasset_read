@@ -109,11 +109,36 @@ def create_test_uasset(
         # Licensee 版本
         f.write(struct.pack(endian_fmt + 'i', licensee_version))
 
+        # SavedHash and TotalHeaderSize for UE5 >= PACKAGE_SAVED_HASH (version 1004)
+        # Reference: UE PackageFileSummary.cpp lines 236-240
+        # For UE5 >= 1004, SavedHash + TotalHeaderSize are BEFORE CustomVersions
+        PACKAGE_SAVED_HASH_VERSION = 1004
+        saved_hash_placeholder_pos = 0  # Not used for tracking, saved_hash is fixed 20 bytes
+
+        is_ue5_file = legacy_version <= -8
+
+        if is_ue5_file and ue5_version >= PACKAGE_SAVED_HASH_VERSION:
+            # UE5 >= PACKAGE_SAVED_HASH: SavedHash + TotalHeaderSize before CustomVersions
+            f.write(b'\x00' * 20)  # SavedHash placeholder (20 bytes)
+            total_header_size_pos = f.tell()
+            f.write(struct.pack(endian_fmt + 'i', 0))  # TotalHeaderSize placeholder
+
         # CustomVersions
         f.write(struct.pack(endian_fmt + 'I', len(custom_versions)))
         for guid_bytes, version in custom_versions:
             f.write(guid_bytes)  # 16 bytes GUID
             f.write(struct.pack(endian_fmt + 'i', version))
+
+        # TotalHeaderSize for UE4 files (legacy > -8)
+        # Reference: UE PackageFileSummary.cpp lines 254-258
+        # UE4: TotalHeaderSize BEFORE PackageName
+        # UE5 >= PACKAGE_SAVED_HASH: TotalHeaderSize already written above (in SavedHash block)
+        # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at trailer position (after BulkDataStartOffset)
+
+        if not is_ue5_file:
+            # UE4 file: TotalHeaderSize placeholder at correct position
+            total_header_size_pos = f.tell()
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Placeholder
 
         # PackageName (FString) - matches UE PackageFileSummary.cpp line 258
         # Default package name is "None" for synthetic files
@@ -163,9 +188,16 @@ def create_test_uasset(
         # BulkDataStartOffset
         f.write(struct.pack(endian_fmt + 'q', 0))
 
-        # TotalHeaderSize（占位）
-        total_header_size_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', 0))
+        # TotalHeaderSize trailer position (only for UE5 files < PACKAGE_SAVED_HASH)
+        # UE4 files: TotalHeaderSize already written at correct position (after CustomVersions)
+        # UE5 >= PACKAGE_SAVED_HASH: TotalHeaderSize in SavedHash block (not here)
+        # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at this trailer position
+        # Note: We need to track position for ALL cases to update the placeholder later
+        if is_ue5_file and ue5_version < 1004:  # PACKAGE_SAVED_HASH_VERSION
+            # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at trailer position
+            total_header_size_pos = f.tell()
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Placeholder
+        # For UE4, total_header_size_pos is already set above
 
         # === 名称表 ===
         # Always write names at the end for modern UE4/UE5 files (legacy < 0)
@@ -910,6 +942,167 @@ def test_export_count_bounds_validation():
         result = parse_uasset(path)
         assert not result.is_success
         assert "exceeds maximum" in result.errors[0]
+    finally:
+        cleanup_test_file(path)
+
+
+def test_total_header_size_position_ue4():
+    """
+    Test TotalHeaderSize is read BEFORE PackageName for UE4 files.
+
+    Validates fix for 01-07 gap:
+    - UE4 files (legacy=-7) read TotalHeaderSize after CustomVersions, before PackageName
+    - TotalHeaderSize position enables correct PackageName reading
+    - Lyra Character_Default.uasset (legacy=-7, UE4 v521) requires this fix
+
+    UE source reference (PackageFileSummary.cpp lines 254-258):
+    ```cpp
+    if (Sum.GetFileVersionUE() < EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH)
+    {
+        Record << SA_VALUE(TEXT("TotalHeaderSize"), Sum.TotalHeaderSize);
+    }
+    Record << SA_VALUE(TEXT("PackageName"), Sum.PackageName);
+    ```
+    """
+    # Create UE4-style file (legacy=-7) with names
+    names = ["TestName", "TestClass"]
+    path = create_test_uasset(
+        legacy_version=-7,  # UE4 file (NOT UE5)
+        ue4_version=522,    # Real UE4 version
+        ue5_version=0,      # No UE5 version for legacy=-7
+        names=names
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert result.summary is not None
+        # Verify TotalHeaderSize is positive (valid)
+        assert result.summary.total_header_size > 0
+        # Verify PackageName parsed correctly (not garbage from wrong position)
+        assert result.summary.package_name == "None"
+        # Verify NameOffset is valid (within total_header_size)
+        assert result.summary.name_offset < result.summary.total_header_size
+        # Verify NameMap populated correctly
+        assert len(result.name_map) == len(names) + 1  # "None" + names
+        assert result.name_map[1] == "TestName"
+    finally:
+        cleanup_test_file(path)
+
+
+def test_ue4_total_header_size_at_correct_position():
+    """
+    Test parsing UE4 file with TotalHeaderSize at correct UE position.
+
+    Creates a file manually with TotalHeaderSize BEFORE PackageName,
+    matching real Lyra Character_Default.uasset structure.
+
+    This test catches the bug: if parser reads TotalHeaderSize at wrong position,
+    PackageName FString length will be garbage (like 14620 from Lyra file).
+
+    Expected UE4 file structure:
+    - Tag, LegacyVersion, LegacyUE3Version, UE4Version, LicenseeVersion
+    - CustomVersions (count=0 for simplicity)
+    - TotalHeaderSize (at correct position)
+    - PackageName FString
+    - PackageFlags
+    - NameCount, NameOffset
+    - ... rest of header
+    - Name table data
+    """
+    import struct
+    import tempfile
+
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+
+    # Build header with TotalHeaderSize at CORRECT UE4 position
+    header = struct.pack('<I', PACKAGE_FILE_TAG)  # Tag
+    header += struct.pack('<i', -7)  # LegacyFileVersion (UE4)
+    header += struct.pack('<i', 864)  # LegacyUE3Version
+    header += struct.pack('<i', 522)  # UE4 version
+    header += struct.pack('<i', 0)  # Licensee version
+    header += struct.pack('<I', 0)  # CustomVersions count = 0
+
+    # CORRECT UE4 POSITION: TotalHeaderSize BEFORE PackageName
+    # We don't know the final size yet, use placeholder
+    total_header_size_placeholder_pos = len(header)
+    header += struct.pack('<i', 0)  # TotalHeaderSize placeholder
+
+    # PackageName FString
+    package_name_bytes = "None".encode('utf-8') + b'\x00'
+    header += struct.pack('<i', len(package_name_bytes))
+    header += package_name_bytes
+
+    # PackageFlags
+    header += struct.pack('<I', 0)
+
+    # NameCount, NameOffset
+    header += struct.pack('<i', 2)  # NameCount = 2 ("None", "TestName")
+    name_offset_placeholder_pos = len(header)
+    header += struct.pack('<i', 0)  # NameOffset placeholder
+
+    # SoftObjectPaths
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
+
+    # ImportCount, ImportOffset
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
+
+    # ExportCount, ExportOffset
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
+
+    # ExportHashesOffset
+    header += struct.pack('<i', 0)
+
+    # ImportExportGuidsOffset, Count
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
+
+    # CookedPackagesOffset, Count
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
+
+    # AssetRegistryDataOffset
+    header += struct.pack('<i', 0)
+
+    # BulkDataStartOffset (i64)
+    header += struct.pack('<q', 0)
+
+    # Name table data
+    name_offset = len(header)
+    for name in ["None", "TestName"]:
+        name_bytes = name.encode('utf-8') + b'\x00'
+        header += struct.pack('<i', len(name_bytes))
+        header += name_bytes
+
+    total_header_size = len(header)
+
+    # Update placeholders
+    header_bytes = bytearray(header)
+    struct.pack_into('<i', header_bytes, total_header_size_placeholder_pos, total_header_size)
+    struct.pack_into('<i', header_bytes, name_offset_placeholder_pos, name_offset)
+
+    os.write(fd, bytes(header_bytes))
+    os.close(fd)
+
+    try:
+        result = parse_uasset(path)
+
+        # KEY VERIFICATION: Parser must read TotalHeaderSize from correct position
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert result.summary is not None
+        assert result.summary.total_header_size == total_header_size
+        # PackageName must be correct (not garbage from wrong TotalHeaderSize position)
+        assert result.summary.package_name == "None"
+        # NameOffset must be valid
+        assert result.summary.name_offset == name_offset
+        # NameMap must have correct entries
+        assert len(result.name_map) == 2
+        assert result.name_map[0] == "None"
+        assert result.name_map[1] == "TestName"
     finally:
         cleanup_test_file(path)
 
