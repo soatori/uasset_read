@@ -914,6 +914,42 @@ def test_export_count_bounds_validation():
         cleanup_test_file(path)
 
 
+def test_utf16_length_overflow():
+    """
+    Test that UTF-16 strings with extreme length raise ParseError (WR-02 fix).
+
+    Validates:
+    - Parser rejects UTF-16 strings with length > 10M bytes
+    - Prevents integer overflow in -length * 2 calculation
+    - Error message contains "too large"
+    """
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+
+    # Create a file that triggers UTF-16 read with extreme length
+    # UTF-16 is indicated by negative length in FString
+    # length = -2147483648 (INT_MIN) would cause -length * 2 = 4GB overflow
+    # We test with a more reasonable extreme value: -5_000_001 -> 10_000_002 bytes
+    header = struct.pack('<I', PACKAGE_FILE_TAG)
+    header += struct.pack('<i', -8)  # LegacyFileVersion
+    header += struct.pack('<i', 864)  # LegacyUE3Version
+    header += struct.pack('<i', 0)   # UE4 version
+    header += struct.pack('<i', 500) # UE5 version (< 1004, no SavedHash)
+    header += struct.pack('<i', 0)   # Licensee
+    header += struct.pack('<I', 0)   # CustomVersions count
+    # PackageName FString with negative length (UTF-16 marker)
+    header += struct.pack('<i', -5_000_001)  # UTF-16 length indicator (> 10M bytes)
+
+    os.write(fd, header)
+    os.close(fd)
+
+    try:
+        result = parse_uasset(path)
+        assert not result.is_success
+        assert "too large" in result.errors[0]
+    finally:
+        cleanup_test_file(path)
+
+
 # ============================================================================
 # pytest 配置
 # ============================================================================

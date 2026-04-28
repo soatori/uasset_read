@@ -195,7 +195,11 @@ class FArchive:
         if length < 0:
             # UE 5.x 不应出现 UTF-16，但作为防御性处理
             # length < 0 表示 UTF-16 编码，实际长度为 -length * 2
-            self.read(-length * 2)  # 跳过 UTF-16 数据
+            # WR-02 fix: Sanity check for overflow prevention
+            utf16_len = -length * 2
+            if utf16_len > 10_000_000:  # Sanity check for overflow
+                raise ParseError(f"UTF-16 string length {utf16_len} too large")
+            self.read(utf16_len)  # 跳过 UTF-16 数据
             return ""
 
         # UTF-8 编码（UE 5.x 标准）
