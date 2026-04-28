@@ -25,12 +25,16 @@
 
 **工期估算：** 中等（基础层，为后续所有工作奠定基础）
 
-**计划：** 2 个计划（1 个主计划 + 1 个 gap closure）
-**状态：** Gap Closure 完成（测试通过，Lyra 文件格式待研究）
+**计划：** 6 个计划（3 个主计划 + 3 个 gap closure）
+**状态：** Gap Closure 规划完成（待执行）
 
 计划列表：
-- [x] 01-01-PLAN.md — 核心解析器实现（FArchive、dataclasses、解析函数、测试） ✓ 13 测试通过
+- [x] 01-01-PLAN.md — 核心解析器实现（FArchive、dataclasses、解析函数、测试） ✓ 14 测试通过
 - [x] 01-02-PLAN.md — Gap Closure：修复 LegacyFileVersion 版本解析 bug ✓ 已完成
+- [x] 01-03-PLAN.md — Gap Closure：修复 SavedHash 读取 bug ✓ 已完成
+- [ ] 01-04-PLAN.md — Gap Closure：修复 CR-01 字节交换 UTF-8 字符串损坏（Wave 1）
+- [ ] 01-05-PLAN.md — Gap Closure：修复 PackageName 缺失 + inline names 条件错误（Wave 1）
+- [ ] 01-06-PLAN.md — Gap Closure：修复 CR-02 script serialization + 边界验证（Wave 2）
 
 ### 成功标准
 
@@ -277,4 +281,4 @@
 
 ---
 *路线图创建日期：2026-04-27*
-*最后更新：2026-04-28 Phase 1 计划创建*
+*最后更新：2026-04-28 Gap Closure Plans 01-04/05/06 创建*
