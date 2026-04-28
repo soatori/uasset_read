@@ -115,32 +115,20 @@ def create_test_uasset(
             f.write(guid_bytes)  # 16 bytes GUID
             f.write(struct.pack(endian_fmt + 'i', version))
 
+        # PackageName (FString) - matches UE PackageFileSummary.cpp line 258
+        # Default package name is "None" for synthetic files
+        package_name_bytes = "None".encode('utf-8') + b'\x00'
+        f.write(struct.pack(endian_fmt + 'i', len(package_name_bytes)))
+        f.write(package_name_bytes)
+
         # PackageFlags
         f.write(struct.pack(endian_fmt + 'I', package_flags))
 
-        # 计算名称表位置（当前文件头大小）
-        header_size_before_names = f.tell()
-
-        # 名称表计数
+        # 名称表计数 + 偏移（modern UE4/UE5 files ALWAYS have NameOffset for legacy < 0）
         name_count_pos = f.tell()
         f.write(struct.pack(endian_fmt + 'i', len(names)))  # NameCount
-
-        # 名称表位置处理（参考 UE-SOURCE-INDEX.md section 3.2）
-        # - legacy_version >= -5: NameOffset 字段存在，名称在文件末尾
-        # - legacy_version < -5: 名称 inline，紧跟 NameCount，无 NameOffset 字段
-        if legacy_version >= -5:
-            name_offset_pos = f.tell()
-            f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
-            name_offset = None  # 后续在文件末尾写入名称时设置
-        else:
-            # inline names: 名称紧跟 NameCount
-            name_offset_pos = None
-            name_offset = f.tell()  # 当前位置即为名称起始
-            # 立即写入名称表（inline）
-            for name in names:
-                name_bytes = name.encode('utf-8') + b'\x00'
-                f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
-                f.write(name_bytes)
+        name_offset_pos = f.tell()
+        f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
 
         # SoftObjectPaths（UE5+）
         f.write(struct.pack(endian_fmt + 'i', 0))  # Count
@@ -180,14 +168,13 @@ def create_test_uasset(
         f.write(struct.pack(endian_fmt + 'i', 0))
 
         # === 名称表 ===
-        # 仅在 legacy_version >= -5 时写入名称（legacy < -5 已 inline 写入）
-        if legacy_version >= -5:
-            name_offset = f.tell()
-            for name in names:
-                # FString 格式：长度 + UTF-8 数据 + null 终止符
-                name_bytes = name.encode('utf-8') + b'\x00'
-                f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
-                f.write(name_bytes)
+        # Always write names at the end for modern UE4/UE5 files (legacy < 0)
+        name_offset = f.tell()
+        for name in names:
+            # FString 格式：长度 + UTF-8 数据 + null 终止符
+            name_bytes = name.encode('utf-8') + b'\x00'
+            f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
+            f.write(name_bytes)
 
         # === 导入表 ===
         import_offset = f.tell()
@@ -219,10 +206,9 @@ def create_test_uasset(
         # === 更新偏移 ===
         total_header_size = f.tell()
 
-        # 回写名称表偏移（仅 legacy_version >= -5 时需要）
-        if name_offset_pos is not None:
-            f.seek(name_offset_pos)
-            f.write(struct.pack(endian_fmt + 'i', name_offset))
+        # 回写名称表偏移（always needed for modern files）
+        f.seek(name_offset_pos)
+        f.write(struct.pack(endian_fmt + 'i', name_offset))
 
         # 回写导入表偏移
         f.seek(import_offset_pos)
@@ -653,6 +639,73 @@ def test_farchive_raw_bytes_no_reversal():
         assert string_bytes == b'TestName', f"UTF-8 bytes were reversed: {string_bytes}"
 
         archive.close()
+    finally:
+        cleanup_test_file(path)
+
+
+def test_legacy_minus_seven_ue4_521():
+    """
+    Test parsing file similar to Lyra Character_Default.uasset (01-05 gap closure).
+
+    Validates:
+    - legacy=-7, UE4=521 files parse correctly
+    - NameOffset is valid (not garbage from missing PackageName)
+    - PackageName field correctly read
+    - Inline names branch NOT triggered for legacy=-7
+
+    This test catches the bugs fixed in 01-05:
+    - Missing PackageName FString field
+    - Incorrect inline names condition for legacy=-7
+    """
+    names = ["TestName", "TestClass", "TestPackage"]
+    path = create_test_uasset(
+        legacy_version=-7,  # Lyra uses -7
+        ue4_version=521,    # Lyra uses UE4 version 521
+        ue5_version=0,      # No UE5 version for legacy=-7
+        names=names
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert result.summary is not None
+        assert result.summary.legacy_file_version == -7
+        assert result.summary.file_version_ue4 == 521
+        # Verify NameOffset is valid (within file size)
+        assert result.summary.name_offset < result.summary.total_header_size
+        # Verify NameMap populated
+        assert len(result.name_map) == len(names) + 1  # "None" + names
+        assert result.name_map[0] == "None"
+        assert result.name_map[1] == "TestName"
+        # Verify PackageName read correctly (added in 01-05)
+        assert result.summary.package_name == "None"
+    finally:
+        cleanup_test_file(path)
+
+
+def test_package_name_field_reading():
+    """
+    Test that PackageName FString is correctly read (01-05 Task 1).
+
+    Validates:
+    - PackageName FString field exists in PackageFileSummary
+    - PackageName is FString (read_fstring), not FName
+    - PackageName read from correct position (after TotalHeaderSize)
+    """
+    path = create_test_uasset(
+        legacy_version=-8,
+        ue5_version=UE5_VERSION_MIN
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert result.summary is not None
+        # PackageName field should exist (default "None" for synthetic files)
+        assert hasattr(result.summary, 'package_name')
+        assert result.summary.package_name == "None"
     finally:
         cleanup_test_file(path)
 
