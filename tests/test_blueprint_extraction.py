@@ -1,22 +1,40 @@
 """Tests for Phase 3: Blueprint Extraction (BLUE-01, BLUE-02, BLUE-03, BLUE-05, BLUE-06)"""
 
 import pytest
+from typing import TYPE_CHECKING
+
+# Phase 1/2 imports (implemented)
 from uasset_read import (
     FArchive,
     PackageFileSummary,
     PackageIndex,
     ObjectImport,
     ObjectExport,
-    FEdGraphPinType,
-    BlueprintVariable,
-    BlueprintMetadata,
     ParseResult,
-    detect_blueprint,
-    resolve_parent_class,
-    read_ed_graph_pin_type,
-    read_blueprint_variable,
-    parse_default_value,
 )
+
+# Phase 3 imports (stub for TDD Wave 0 - implementations in 03-01~03-03)
+if TYPE_CHECKING:
+    from uasset_read import (
+        FEdGraphPinType,
+        BlueprintVariable,
+        BlueprintMetadata,
+        detect_blueprint,
+        resolve_parent_class,
+        read_ed_graph_pin_type,
+        read_blueprint_variable,
+        parse_default_value,
+    )
+else:
+    # Runtime stubs - will be replaced by implementations
+    FEdGraphPinType = None  # type: ignore
+    BlueprintVariable = None  # type: ignore
+    BlueprintMetadata = None  # type: ignore
+    detect_blueprint = None  # type: ignore
+    resolve_parent_class = None  # type: ignore
+    read_ed_graph_pin_type = None  # type: ignore
+    read_blueprint_variable = None  # type: ignore
+    parse_default_value = None  # type: ignore
 
 
 # ============================================================================
