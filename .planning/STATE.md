@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-01T12:50:00Z"
+last_updated: "2026-05-01T13:06:36Z"
 progress:
   total_phases: 5
   completed_phases: 2
   active_phase: 3
   total_plans: 15
-  completed_plans: 12
-  percent: 40
+  completed_plans: 13
+  percent: 43
 shipped:
   date: null
   branch: null
@@ -30,7 +30,7 @@ shipped:
 
 - 状态：● 执行中
 - 目标：检测蓝图资产并提取蓝图特定元数据（变量、父类）
-- 进度：1/4 计划完成（03-00 测试脚手架已完成）
+- 进度：2/4 计划完成（03-00 测试脚手架、03-01 蓝图检测、03-02 类型解析已完成）
 - 计划列表：03-00（Wave 0 测试）、03-01（蓝图检测）、03-02（类型解析）、03-03（集成）
 
 ## 阶段状态
@@ -39,7 +39,7 @@ shipped:
 |---|------|------|------|------|------|
 | 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | 100% |
 | 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | 100% |
-| 3 | 蓝图提取 | ● 执行中 | 1/4 | - | 25% |
+| 3 | 蓝图提取 | ● 执行中 | 2/4 | - | 50% |
 | 4 | 输出与 CLI | ○ 待定 | 0/0 | - | 0% |
 | 5 | 优化与安全 | ○ 待定 | 0/0 | - | 0% |
 
@@ -69,6 +69,8 @@ shipped:
 | 2026-05-01 | 阶段 3 模式映射 | 03-PATTERNS.md 创建，FArchive/dataclass 模式复用 |
 | 2026-05-01 | 阶段 3 规划完成 | 03-00~03-03 计划创建，覆盖 BLUE-01/02/03/05/06，BLUE-04 已延期 |
 | 2026-05-01 | 阶段 3 Wave 0 完成 | 03-00-PLAN.md 执行完成，21 个测试脚手架创建 |
+| 2026-05-01 | 阶段 3 Wave 1 蓝图检测 | 03-01-PLAN.md 执行完成，detect_blueprint/resolve_parent_class 实现 |
+| 2026-05-01 | 阶段 3 Wave 1 类型解析 | 03-02-PLAN.md 执行完成，read_ed_graph_pin_type/parse_default_value/read_blueprint_variable 实现，21 测试通过 |
 
 ## 项目参考
 
