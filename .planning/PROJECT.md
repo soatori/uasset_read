@@ -1,20 +1,20 @@
 # uasset_read
 
-## What This Is
+## 项目简介
 
 Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接解析资产内容（尤其是蓝图），避免手动在 UE 编辑器中操作。
 
-## Core Value
+## 核心价值
 
 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器。
 
-## Requirements
+## 需求
 
-### Validated
+### 已验证
 
-(None yet — ship to validate)
+（暂无 —— 需发布后验证）
 
-### Active
+### 活跃需求
 
 - [ ] 能解析 .uasset 文件格式
 - [ ] 提取蓝图节点信息
@@ -23,14 +23,14 @@ Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接�
 - [ ] 输出可读摘要供人理解
 - [ ] 单文件读取不能卡死
 
-### Out of Scope
+### 超出范围
 
 - 导出资源文件（纹理、模型等二进制数据）
 - 修改/编辑 .uasset 文件
 - 实时解析/监控
 - UE 编辑器集成
 
-## Context
+## 背景
 
 ### 技术背景
 - .uasset 是 Unreal Engine 的资产文件格式
@@ -46,37 +46,37 @@ Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接�
 - AI agents（主要）
 - 开发者（次要）
 
-## Constraints
+## 约束
 
-- **语言**: Python — 用户指定
+- **语言**: Python —— 用户指定
 - **性能**: 不能卡死，需响应及时
 - **进度管理**: Git 版本控制
 - **源码依赖**: 需要参考 UE 源码理解格式
 
-## Key Decisions
+## 关键决策
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Python 实现 | 易于 agent 调用，快速原型开发 | — Pending |
-| 参考 UE 源码 | .uasset 格式未公开文档，需要从源码推断 | — Pending |
-| 结构化文本优先 | agent 直接理解，无需二次转换 | — Pending |
+| 决策 | 理由 | 结果 |
+|------|------|------|
+| Python 实现 | 易于 agent 调用，快速原型开发 | — 待定 |
+| 参考 UE 源码 | .uasset 格式未公开文档，需要从源码推断 | — 待定 |
+| 结构化文本优先 | agent 直接理解，无需二次转换 | — 待定 |
 
 ---
-*Last updated: 2026-04-27 after initialization*
+*最后更新：2026-04-27 初始化后*
 
-## Evolution
+##演进
 
-This document evolves at phase transitions and milestone boundaries.
+本文档在阶段过渡和里程碑边界时演进。
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
+**每次阶段过渡后**（通过 `/gsd-transition`）：
+1. 需求失效？ → 移至超出范围并注明原因
+2. 需求验证？ → 移至已验证并引用阶段
+3. 新需求出现？ → 添加至活跃需求
+4. 需记录决策？ → 添加至关键决策
+5. "项目简介"仍准确？ → 如有偏离则更新
 
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+**每个里程碑后**（通过 `/gsd-complete-milestone`）：
+1. 全面审查所有章节
+2. 核心价值检查 —— 仍是正确优先级？
+3. 审计超出范围 —— 原因仍有效？
+4. 用当前状态更新背景

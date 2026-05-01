@@ -19,8 +19,8 @@ key_files:
       changes: [test_saved_hash_ue5_package_saved_hash_version]
 decisions:
   - id: D-01-03-01
-    choice: Read SavedHash before CustomVersions for UE5 >= 1004
-    rationale: Matches UE 5.7 PackageFileSummary.cpp line 176-180 serialization order
+    choice: UE5 >= 1004 时在 CustomVersions 前读取 SavedHash
+    rationale: 匹配 UE 5.7 PackageFileSummary.cpp line 176-180 序列化顺序
 metrics:
   duration_minutes: 13
   tasks_completed: 4
@@ -28,26 +28,26 @@ metrics:
   files_modified: 2
 ---
 
-# Phase 01 Plan 03: SavedHash Gap Closure Summary
+# 阶段 01 计划 03：SavedHash 缺口填补摘要
 
-## One-liner
+## 一句话概述
 
-Fixed SavedHash parsing bug for UE5 files with version >= PACKAGE_SAVED_HASH (1004), adding 20-byte FIoHash and early TotalHeaderSize reads before CustomVersions.
+修复 UE5 文件版本 >= PACKAGE_SAVED_HASH (1004) 的 SavedHash 解析 bug，添加 20-byte FIoHash 和早期 TotalHeaderSize 在 CustomVersions 前读取。
 
-## What Was Done
+## 所做工作
 
-### Problem
+### 问题
 
-During UAT testing with real Lyra UE5 files, the parser failed with "Cannot read 1701736270 bytes at position 216" - NameOffset contained garbage values. Root cause: parser missed SavedHash (20 bytes) and early TotalHeaderSize (4 bytes) for UE5 files with version >= 1004, causing all subsequent field reads to be offset by 24 bytes.
+UAT 测试真实 Lyra UE5 文件时，解析器失败报 "Cannot read 1701736270 bytes at position 216" —— NameOffset 包含垃圾值。根本原因：解析器遗漏 UE5 文件版本 >= 1004 的 SavedHash (20 bytes) 和早期 TotalHeaderSize (4 bytes)，导致所有后续字段读取偏移 24 bytes。
 
-### Solution
+### 解决方案
 
-Added conditional SavedHash/TotalHeaderSize reading in read_package_summary():
-1. Added `saved_hash: bytes` field to PackageFileSummary dataclass
-2. For UE5 >= PACKAGE_SAVED_HASH (1004), read SavedHash (20 bytes) and TotalHeaderSize (4 bytes) after LicenseeVersion
-3. Skip the late TotalHeaderSize read for UE5 >= 1004 since it's already read early
+在 read_package_summary() 添加条件性 SavedHash/TotalHeaderSize 读取：
+1. 向 PackageFileSummary dataclass 添加 `saved_hash: bytes` 字段
+2. UE5 >= PACKAGE_SAVED_HASH (1004) 时，在 LicenseeVersion 后读取 SavedHash (20 bytes) 和 TotalHeaderSize (4 bytes)
+3. UE5 >= 1004 时跳过后期 TotalHeaderSize 读取，因为已早期读取
 
-### UE Source Reference
+### UE 源码参考
 
 UE 5.7 PackageFileSummary.cpp line 176-180:
 ```cpp
@@ -58,16 +58,16 @@ if (Sum.GetFileVersionUE() >= EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH)
 }
 ```
 
-## Tasks Completed
+## 已完成任务
 
-| Task | Name | Status | Commit | Files |
+| 任务 | 名称 | 状态 | 提交 | 文件 |
 |------|------|--------|--------|-------|
-| 1 | Add saved_hash field to PackageFileSummary | done | 2d66bbf | uasset_read.py |
-| 2 | Update read_package_summary() for SavedHash | done | 2d66bbf | uasset_read.py |
-| 3 | Add SavedHash parsing test | done | 60622c5 | tests/test_uasset_read.py |
-| 4 | Verify all tests pass | done | N/A | verification |
+| 1 | 向 PackageFileSummary 添加 saved_hash 字段 | done | 2d66bbf | uasset_read.py |
+| 2 | 更新 read_package_summary() 以处理 SavedHash | done | 2d66bbf | uasset_read.py |
+| 3 | 添加 SavedHash 解析测试 | done | 60622c5 | tests/test_uasset_read.py |
+| 4 | 验证所有测试通过 | done | N/A | verification |
 
-## Key Changes
+## 关键变更
 
 ### uasset_read.py
 
@@ -86,7 +86,7 @@ if (Sum.GetFileVersionUE() >= EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH)
        total_header_size = archive.read_i32()  # Early read, replaces trailer read
    ```
 
-3. **Conditional TotalHeaderSize** (lines 491-493):
+3. **条件性 TotalHeaderSize** (lines 491-493):
    ```python
    if not (legacy_file_version <= -8 and file_version_ue5 >= PACKAGE_SAVED_HASH_VERSION):
        total_header_size = archive.read_i32()
@@ -94,31 +94,31 @@ if (Sum.GetFileVersionUE() >= EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH)
 
 ### tests/test_uasset_read.py
 
-Added `test_saved_hash_ue5_package_saved_hash_version`:
-- Verifies UE5 < 1004 files have empty saved_hash
-- Verifies UE5 >= 1004 triggers SavedHash reading
-- Confirms saved_hash field exists in PackageFileSummary
+添加 `test_saved_hash_ue5_package_saved_hash_version`：
+- 验证 UE5 < 1004 文件的 saved_hash 为空
+- 验证 UE5 >= 1004 触发 SavedHash 读取
+- 确认 saved_hash 字段存在于 PackageFileSummary
 
-## Verification
+## 验证
 
-- All 14 tests pass (13 existing + 1 new)
-- No regressions in existing functionality
-- SavedHash fix properly conditional on UE5 version
+- 全部 14 个测试通过（13 个现有 + 1 个新）
+- 现有功能无回归
+- SavedHash 修复正确条件性基于 UE5 版本
 
-## Deviations from Plan
+## 与计划的偏差
 
-### Auto-fixed Issues
+### 自动修复的问题
 
-None - plan executed exactly as specified.
+无 —— 计划完全按指定执行。
 
-### Known Stubs
+### 已知桩代码
 
-None - fix is complete and functional.
+无 —— 修复完整且功能正常。
 
-## Threat Surface
+## 威胁表面
 
-No new threat surface introduced. SavedHash reading uses existing FArchive boundary validation.
+未引入新威胁表面。SavedHash 读取使用现有 FArchive 边界验证。
 
 ---
 
-*Completed: 2026-04-28T04:05:02Z*
+*完成时间：2026-04-28T04:05:02Z*
