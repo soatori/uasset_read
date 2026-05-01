@@ -1799,26 +1799,81 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
 
     Per D-11/D-12: ParentClass, SuperIndex resolved in Phase 3
     Per D-13: Warning field on resolution failure
+    Per D-15: Soft object paths output raw path strings
 
     Args:
         result: ParseResult containing export_map
 
     Returns:
-        List of dicts with keys: index, name, class, serial_size, properties
+        List of dicts with keys: index, name, class, serial_size, properties,
+        outer_index, super_index, parent_class
     """
     exports_list = []
 
     for i, exp in enumerate(result.export_map):
+        # Resolve ParentClass from Phase 3 extraction
+        parent_class = None
+        parent_warning = None
+        if result.blueprint and result.blueprint.is_blueprint:
+            parent_class = result.blueprint.parent_class
+            parent_warning = result.blueprint.detection_warning
+
         export_dict = {
             "index": i,
             "name": exp.object_name,
             "class": get_asset_class(exp, result.import_map, result.export_map),
             "serial_size": exp.serial_size,
-            "properties": format_properties_list(exp.properties) if exp.properties else []
+            "properties": format_properties_list(exp.properties) if exp.properties else [],
+            # Per D-12: resolved references
+            "outer_index": resolve_fpackage_index(exp.outer_index, result),
+            "super_index": resolve_fpackage_index(exp.super_index, result),
+            "parent_class": parent_class,  # from Phase 3 or resolution
         }
+
+        # Per D-13: include warning if resolution failed
+        if parent_warning:
+            export_dict["parent_warning"] = parent_warning
+
         exports_list.append(export_dict)
 
     return exports_list
+
+
+def resolve_fpackage_index(idx: PackageIndex, result: ParseResult) -> Dict:
+    """
+    Resolve FPackageIndex to object name (OUT-04, D-11/D-12).
+
+    Args:
+        idx: PackageIndex to resolve
+        result: ParseResult containing import_map and export_map
+
+    Returns:
+        Dict with keys: raw, resolved, kind
+        - raw: original int32 value
+        - resolved: object name string or None
+        - kind: "null", "import", or "export"
+    """
+    if idx.is_null:
+        return {"raw": 0, "resolved": None, "kind": "null"}
+    elif idx.is_import:
+        # Import: negative index, maps to import_map
+        import_idx = -idx.index - 1  # Convert to 0-based import index
+        if 0 <= import_idx < len(result.import_map):
+            resolved = result.import_map[import_idx].object_name
+            return {"raw": idx.index, "resolved": resolved, "kind": "import"}
+        else:
+            return {"raw": idx.index, "resolved": None, "kind": "import"}
+    elif idx.is_export:
+        # Export: positive index, maps to export_map
+        export_idx = idx.index - 1  # Convert to 0-based export index
+        if 0 <= export_idx < len(result.export_map):
+            resolved = result.export_map[export_idx].object_name
+            return {"raw": idx.index, "resolved": resolved, "kind": "export"}
+        else:
+            return {"raw": idx.index, "resolved": None, "kind": "export"}
+    else:
+        # Fallback for edge cases
+        return {"raw": idx.index, "resolved": None, "kind": "unknown"}
 
 
 def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
@@ -2223,6 +2278,7 @@ __all__ = [
     'format_exports_list',
     'format_properties_list',
     'format_blueprint_dict',
+    'resolve_fpackage_index',
 
     # CLI functions (Phase 4)
     'create_parser',
