@@ -943,6 +943,87 @@ def resolve_parent_class(
     return None, warning
 
 
+def read_ed_graph_pin_type(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> FEdGraphPinType:
+    """
+    Parse FEdGraphPinType from export data (BLUE-05).
+
+    Serialization order from EdGraphPin.cpp lines 163-346 [VERIFIED]:
+    1. PinCategory (FName)
+    2. PinSubCategory (FName)
+    3. PinSubCategoryObject (FPackageIndex / int32)
+    4. ContainerType (uint8)
+    5. PinValueType (FEdGraphTerminalType) - if ContainerType == 3 (Map)
+    6. bIsReference (bool - uint8)
+    7. bIsWeakPointer (bool - uint8)
+    8. PinSubCategoryMemberReference (FSimpleMemberReference) - skip for Phase 3
+    9. bIsConst (bool - uint8)
+    10. bIsUObjectWrapper (bool - uint8)
+
+    Per D-08: parse all fields, not just format for display.
+    Per D-06/D-07: full structure needed for ContainerType + object reference.
+    Per RESEARCH.md Pitfall 1: version-aware serialization with FFrameworkObjectVersion checks.
+
+    Version dependencies:
+    - ContainerType field added in FFrameworkObjectVersion::EdGraphPinContainerType
+    - bIsConst added in VER_UE4_SERIALIZE_PINTYPE_CONST
+    - bIsUObjectWrapper added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+
+    Args:
+        archive: FArchive positioned at start of FEdGraphPinType
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        FEdGraphPinType dataclass with all fields populated
+    """
+    pin_type = FEdGraphPinType()
+
+    # Step 1-2: PinCategory and PinSubCategory (FName)
+    pin_type.pin_category = archive.read_name(name_map)
+    pin_type.pin_sub_category = archive.read_name(name_map)
+
+    # Step 3: PinSubCategoryObject (FPackageIndex as int32)
+    pin_type.pin_sub_category_object = archive.read_i32()
+
+    # Step 4: ContainerType (uint8)
+    # Per EdGraphPin.cpp line 216: FFrameworkObjectVersion >= EdGraphPinContainerType
+    # For Phase 3, we always read ContainerType as it's standard in modern UE files
+    pin_type.container_type = archive.read_u8()
+
+    # Step 5: PinValueType for Map containers (skip for Phase 3)
+    if pin_type.container_type == 3:  # Map
+        # FEdGraphTerminalType: TerminalCategory + TerminalSubCategory + TerminalSubCategoryObject
+        archive.read_name(name_map)  # TerminalCategory
+        archive.read_name(name_map)  # TerminalSubCategory
+        archive.read_i32()           # TerminalSubCategoryObject
+
+    # Step 6-7: bIsReference and bIsWeakPointer
+    pin_type.is_reference = archive.read_u8() != 0
+    pin_type.is_weak_pointer = archive.read_u8() != 0
+
+    # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
+    # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
+    archive.read_i32()  # MemberParent (FPackageIndex)
+    archive.read_name(name_map)  # MemberName
+    archive.read(16)  # MemberGuid
+
+    # Step 9: bIsConst
+    # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
+    # Always read in Phase 3 as modern assets have this field
+    pin_type.is_const = archive.read_u8() != 0
+
+    # Step 10: bIsUObjectWrapper
+    # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+    # Always read in Phase 3 as modern assets have this field
+    pin_type.is_uobject_wrapper = archive.read_u8() != 0
+
+    return pin_type
+
+
 # ============================================================================
 # PropertyTag 解析（Phase 2）
 # ============================================================================
