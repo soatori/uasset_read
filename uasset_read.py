@@ -16,6 +16,10 @@ Phase 1: 核心解析器实现
 import struct
 import os
 import re
+import sys
+import json
+import argparse
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, BinaryIO, Tuple
 
@@ -2039,6 +2043,114 @@ def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
 
 
 # ============================================================================
+# CLI Functions (Phase 4)
+# ============================================================================
+
+# Exit code constants (D-26)
+EXIT_SUCCESS = 0
+EXIT_PARSE_ERROR = 1
+EXIT_FILE_NOT_FOUND = 2
+EXIT_ARGUMENT_ERROR = 3
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """
+    Create argparse parser for CLI (CLI-01 to CLI-04).
+
+    Per D-23: Double entry point support
+    Per D-24: Mutually exclusive --json/--text/--summary flags
+    Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
+
+    Returns:
+        argparse.ArgumentParser: Configured parser
+    """
+    parser = argparse.ArgumentParser(
+        prog='uasset_read',
+        description='Parse Unreal Engine .uasset files and output structured data'
+    )
+
+    # Positional: file path (CLI-01)
+    parser.add_argument('file', help='Path to .uasset file to parse')
+
+    # Mutually exclusive output flags (D-24)
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--json', action='store_true', help='Output full JSON structure')
+    group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
+    group.add_argument('--summary', action='store_true', help='Output compact summary format')
+
+    # Optional flags (D-27)
+    parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
+    parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
+    parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
+
+    return parser
+
+
+def main():
+    """
+    Main CLI entry point (CLI-05).
+
+    Per D-23: Double entry point (also __main__.py)
+    Per D-25: stdout for data, stderr for errors
+    Per D-26: Exit codes 0/1/2/3
+    Per D-28: UTF-8 encoding for file output
+
+    Exit codes:
+    - 0: Success
+    - 1: Parse error
+    - 2: File not found
+    - 3: Argument error
+    """
+    parser = create_parser()
+
+    try:
+        args = parser.parse_args()
+    except SystemExit as e:
+        # argparse exits on error, map to EXIT_ARGUMENT_ERROR
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+    # D-26: file not found check
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(f"Error: File not found: {args.file}", file=sys.stderr)
+        sys.exit(EXIT_FILE_NOT_FOUND)
+
+    # Parse the file
+    result = parse_uasset(args.file)
+
+    # D-26: parse error handling
+    if not result.is_success:
+        print("Parse errors:", file=sys.stderr)
+        for err in result.errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
+
+    # Select formatter (D-24: --json, --summary, default --text)
+    if args.json:
+        output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+    elif args.summary:
+        output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
+    else:
+        # Default: --text or no flag
+        output_str = format_text_full(result)
+
+    # D-25/D-28: Output routing with UTF-8
+    if args.output:
+        try:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                f.write(output_str)
+            print(f"Output written to {args.output}", file=sys.stderr)
+        except IOError as e:
+            print(f"Error writing to file: {e}", file=sys.stderr)
+            sys.exit(EXIT_ARGUMENT_ERROR)
+    else:
+        # stdout for data (D-25)
+        print(output_str)
+
+    sys.exit(EXIT_SUCCESS)
+
+
+# ============================================================================
 # Public API Exports
 # ============================================================================
 
@@ -2111,4 +2223,20 @@ __all__ = [
     'format_exports_list',
     'format_properties_list',
     'format_blueprint_dict',
+
+    # CLI functions (Phase 4)
+    'create_parser',
+    'main',
+    'EXIT_SUCCESS',
+    'EXIT_PARSE_ERROR',
+    'EXIT_FILE_NOT_FOUND',
+    'EXIT_ARGUMENT_ERROR',
 ]
+
+
+# ============================================================================
+# Module Entry Point (D-23 double entry)
+# ============================================================================
+
+if __name__ == '__main__':
+    main()
