@@ -59,40 +59,6 @@ PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
 VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
 VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
-# Package Flags (ObjectMacros.h)
-PKG_Cooked = 0x200                     # Package is cooked
-
-# UE5 Version Constants (EUnrealEngineObjectUE5Version)
-UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001  # NAMES_REFERENCED_FROM_EXPORT_DATA
-UE5_PAYLOAD_TOC = 1002                        # PAYLOAD_TOC
-UE5_LARGE_WORLD_COORDINATES = 1004            # LARGE_WORLD_COORDINATES
-UE5_ADD_SOFTOBJECTPATH_LIST = 1008            # ADD_SOFTOBJECTPATH_LIST
-UE5_DATA_RESOURCES = 1009                     # DATA_RESOURCES
-UE5_SCRIPT_SERIALIZATION_OFFSET = 1010        # SCRIPT_SERIALIZATION_OFFSET
-UE5_PROPERTY_TAG_EXTENSION = 1011             # PROPERTY_TAG_EXTENSION_AND_OVERRIDABLE_SERIALIZATION
-UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012   # PROPERTY_TAG_COMPLETE_TYPE_NAME
-UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES = 1013  # ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES
-UE5_METADATA_SERIALIZATION_OFFSET = 1014     # METADATA_SERIALIZATION_OFFSET
-UE5_VERSE_CELLS = 1015                        # VERSE_CELLS
-UE5_PACKAGE_SAVED_HASH = 1016                 # PACKAGE_SAVED_HASH (修正：原代码误用 1004)
-UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017  # OS_SUB_OBJECT_SHADOW_SERIALIZATION
-UE5_IMPORT_TYPE_HIERARCHIES = 1018            # IMPORT_TYPE_HIERARCHIES
-
-# UE4 Version Constants (EUnrealEngineObjectUE4Version) - 按实际值计算
-UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385  # VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (old)
-UE4_SERIALIZE_TEXT_IN_PACKAGES = 401            # VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (old)
-# 正确值（从 ObjectVersion.h 计算）
-UE4_WORLD_LEVEL_INFO = 223                      # VER_UE4_WORLD_LEVEL_INFO
-UE4_ADDED_CHUNKID = 277                         # VER_UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE
-UE4_CHANGED_CHUNKID_TO_ARRAY = 341             # VER_UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS
-UE4_ENGINE_VERSION_OBJECT = 334                 # VER_UE4_ENGINE_VERSION_OBJECT
-UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382      # VER_UE4_ADD_STRING_ASSET_REFERENCES_MAP
-UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
-UE4_ADDED_SEARCHABLE_NAMES = 508               # VER_UE4_ADDED_SEARCHABLE_NAMES
-UE4_ADDED_PACKAGE_OWNER = 516                  # VER_UE4_ADDED_PACKAGE_OWNER
-UE4_NON_OUTER_PACKAGE_IMPORT = 518             # VER_UE4_NON_OUTER_PACKAGE_IMPORT
-
 
 # ============================================================================
 # 自定义异常（D-15 优雅降级）
@@ -319,11 +285,6 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'i', self.read(4))[0]
 
-    def read_u16(self) -> int:
-        """读取 unsigned 16-bit integer（支持字节交换）"""
-        fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'H', self.read(2))[0]
-
     def read_u32(self) -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
@@ -406,33 +367,6 @@ class FArchive:
 # ============================================================================
 # Dataclass 模型（D-06 使用 dataclasses）
 # ============================================================================
-
-@dataclass
-class GenerationInfo:
-    """
-    FGenerationInfo 版本世代信息。
-
-    来自 UE 源码 PackageFileSummary.h：
-    记录包的编辑世代信息，用于增量保存。
-    """
-    export_count: int = 0  # 该世代导出数量
-    name_count: int = 0    # 该世代名称数量
-
-
-@dataclass
-class EngineVersion:
-    """
-    FEngineVersion 引擎版本信息。
-
-    来自 UE 源码 EngineVersion.h：
-    记录保存文件的引擎版本。
-    """
-    major: int = 0       # 主版本号 (u16)
-    minor: int = 0       # 次版本号 (u16)
-    patch: int = 0       # 补丁版本号 (u16)
-    changelist: int = 0  # Changelist 号 (u32)
-    branch: str = ""     # 分支名 (FString)
-
 
 @dataclass
 class CustomVersion:
@@ -518,7 +452,6 @@ class PackageFileSummary:
 
     来自 PackageFileSummary.h：
     包含版本信息、偏移量、计数等完整文件头数据。
-    字段顺序按 UE 源码 PackageFileSummary.cpp 序列化顺序。
     """
     tag: int                            # 魔术标签（0x9E2A83C1）
     legacy_file_version: int            # -2 至 -9（D-04）
@@ -526,95 +459,30 @@ class PackageFileSummary:
     legacy_ue3_version: int = 0         # LegacyUE3版本（仅 legacy != -4）
     file_version_ue5: int = 0           # UE5 版本号（仅 legacy <= -8）
     file_version_licensee: int = 0      # Licensee 版本
-    saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= 1016
-    total_header_size: int = 0          # 文件头总大小
-    custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
-    package_name: str = ""              # PackageName FString
+    saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= PACKAGE_SAVED_HASH
+    package_name: str = ""              # PackageName FString (UE PackageFileSummary.cpp line 258)
+    localization_id: str = ""           # LocalizationId FString (UE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID)
+    gatherable_text_data_count: int = 0  # GatherableTextData entries count (UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES)
+    gatherable_text_data_offset: int = 0  # GatherableTextData offset (UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES)
     package_flags: int = 0              # D-12 仅存储
-
-    # 名称表字段（按 UE 源码顺序）
     name_count: int = 0
-    name_offset: int = 0
-
-    # 软对象路径（UE5 >= 1008，在 NameOffset 之后、LocalizationId 之前）
+    name_offset: int = 0                # 名称表绝对偏移
     soft_object_paths_count: int = 0
     soft_object_paths_offset: int = 0
-
-    # UE4 专用字段（在 SoftObjectPaths 之后）
-    localization_id: str = ""           # UE4 >= 385
-    gatherable_text_data_count: int = 0  # UE4 >= 401
-    gatherable_text_data_offset: int = 0  # UE4 >= 401
-
-    # 导出表字段（Export 在 Import 之前！）
-    export_count: int = 0
-    export_offset: int = 0
-
-    # 导入表字段
     import_count: int = 0
-    import_offset: int = 0
-
-    # Cell Export/Import（UE5 >= 1015 VERSE_CELLS）
-    cell_export_count: int = 0
-    cell_export_offset: int = 0
-    cell_import_count: int = 0
-    cell_import_offset: int = 0
-
-    # MetaData Offset（UE5 >= 1014）
-    metadata_offset: int = 0
-
-    # Depends Offset（通用字段）
-    depends_offset: int = 0
-
-    # Soft Package References（UE4 >= 382）
-    soft_package_references_count: int = 0
-    soft_package_references_offset: int = 0
-
-    # Searchable Names（UE4 >= 508）
-    searchable_names_offset: int = 0
-
-    # Thumbnail Table（通用字段）
-    thumbnail_table_offset: int = 0
-
-    # Import Type Hierarchies（UE5 >= 1018）
-    import_type_hierarchies_count: int = 0
-    import_type_hierarchies_offset: int = 0
-
-    # Guid（UE5 < 1016，Legacy Guid，16 bytes）- 已合并到 saved_hash
-    # Persistent Guid（UE4 >= 516，WITH_EDITORONLY_DATA）
-    persistent_guid: str = ""  # FGuid hex string
-
-    # Generations 和引擎版本（通用字段）
-    generations: List[GenerationInfo] = field(default_factory=list)
-    saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
-    compatible_with_engine_version: EngineVersion = field(default_factory=EngineVersion)
-
-    # 压缩和包源（通用字段）
-    compression_flags: int = 0
-    package_source: int = 0
-
-    # Asset Registry Data（通用字段）
+    import_offset: int = 0              # 导入表绝对偏移
+    export_count: int = 0
+    export_offset: int = 0              # 导出表绝对偏移
+    export_hashes_offset: int = 0
+    import_export_guids_offset: int = 0
+    import_export_guids_count: int = 0
+    cooked_packages_offset: int = 0
+    cooked_packages_count: int = 0
     asset_registry_data_offset: int = 0
-
-    # Bulk Data Start Offset（通用字段）
-    bulk_data_start_offset: int = 0
-
-    # World Tile Info（UE4 >= 223）
-    world_tile_info_data_offset: int = 0
-
-    # Chunk IDs（UE4 >= 277）
-    chunk_ids: List[str] = field(default_factory=list)  # FGuid hex strings
-
-    # Preload Dependencies（UE4 >= 505）
-    preload_dependency_count: int = 0
-    preload_dependency_offset: int = 0
-
-    # NamesReferencedFromExportDataCount（UE5 >= 1001，在文件头末尾！）
-    names_referenced_from_export_data_count: int = 0
-
-    # Payload Toc Offset（UE5 >= 1002）
+    bulk_data_start_offset: int = 0     # BulkData 基准偏移（D-13 不解析载荷）
+    total_header_size: int = 0
+    custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
     payload_toc_offset: int = 0
-
-    # Data Resource Offset（UE5 >= 1009）
     data_resource_offset: int = 0
 
 
@@ -765,20 +633,6 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     来自 PackageFileSummary.cpp：
     读取魔术标签、检测字节序、验证版本、读取所有字段。
 
-    字段读取顺序严格按 UE 源码 PackageFileSummary.cpp 序列化顺序（lines 178-539）：
-    Tag → LegacyFileVersion → LegacyUE3Version → FileVersionUE4 → FileVersionUE5 →
-    FileVersionLicensee → SavedHash(UE5>=1016) → CustomVersions → TotalHeaderSize(UE4) →
-    PackageName → PackageFlags → NameCount → NameOffset →
-    SoftObjectPaths(UE5>=1008) → LocalizationId(UE4) → GatherableTextData(UE4) →
-    ExportCount → ExportOffset → ImportCount → ImportOffset →
-    CellExport/CellImport(UE5>=1015) → MetaDataOffset(UE5>=1014) → DependsOffset →
-    SoftPackageReferences(UE4>=382) → SearchableNames(UE4>=508) → ThumbnailTable →
-    ImportTypeHierarchies(UE5>=1018) → Guid(UE5<1016) → PersistentGuid(UE4>=516) →
-    Generations → EngineVersion → CompressionFlags → CompressedChunks → PackageSource →
-    AdditionalPackagesToCook → NumTextureAllocations(legacy) → AssetRegistryData →
-    BulkDataStart → WorldTileInfo(UE4>=223) → ChunkIDs(UE4>=277) → PreloadDependencies(UE4>=505) →
-    NamesReferencedCount(UE5>=1001, 末尾!) → PayloadToc(UE5>=1002) → DataResource(UE5>=1009)
-
     Args:
         archive: FArchive 实例
 
@@ -791,345 +645,177 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     """
     archive.seek(0)
 
-    # === 第 1 步：魔数和版本号 ===
+    # 读取魔术标签
     tag = archive.read_u32()
 
+    # 字节序检测（CORE-02/D-11）
     if tag == PACKAGE_FILE_TAG_SWAPPED:
         archive.set_byte_swapping(True)
         tag = PACKAGE_FILE_TAG
     elif tag != PACKAGE_FILE_TAG:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
+    # 读取 legacy_file_version
     legacy_file_version = archive.read_i32()
 
+    # 版本验证（CORE-08/D-04）
     if legacy_file_version < LEGACY_FILE_VERSION_MIN or legacy_file_version > LEGACY_FILE_VERSION_MAX:
         raise VersionError(f"Unsupported legacy version: {legacy_file_version}")
 
     # LegacyUE3Version（仅在 legacy_file_version != -4 时存在）
+    # 参考 UE 源码 PackageFileSummary.cpp line 130-134
     if legacy_file_version != -4:
         legacy_ue3_version = archive.read_i32()
     else:
         legacy_ue3_version = 0
 
-    # UE4 版本
+    # UE4 版本（所有现代版本都有）
+    # 参考 UE 源码 PackageFileSummary.cpp line 136
     file_version_ue4 = archive.read_i32()
 
     # UE5 版本（仅在 legacy_file_version <= -8 时存在）
+    # 参考 UE 源码 PackageFileSummary.cpp line 138-141
+    # 注意：UE 源码使用 <= -8，而非 >= -8
     if legacy_file_version <= -8:
         file_version_ue5 = archive.read_i32()
     else:
         file_version_ue5 = 0
 
+    # UE5 版本验证（仅对 -8 及以上版本）
     if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
         raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
 
     # Licensee 版本
     file_version_licensee = archive.read_i32()
 
-    # === 第 2 步：SavedHash（UE5 >= 1016）===
-    # PackageFileSummary.cpp line 181-196: SavedHash 读取
+    # SavedHash and early TotalHeaderSize for UE5 >= PACKAGE_SAVED_HASH (version 1004)
+    # Reference: UE 5.7 PackageFileSummary.cpp line 176-180
     saved_hash = b''
     total_header_size = 0
-    is_ue4_file = legacy_file_version > -8
+    PACKAGE_SAVED_HASH_VERSION = 1004  # EUnrealEngineObjectUE5Version::PACKAGE_SAVED_HASH
 
-    if legacy_file_version <= -8 and file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
-        saved_hash = archive.read(20)  # FIoHash = 20 bytes
-        # TotalHeaderSize 在 SavedHash 之后立即读取（UE5 >= 1016）
-        total_header_size = archive.read_i32()
+    if legacy_file_version <= -8 and file_version_ue5 >= PACKAGE_SAVED_HASH_VERSION:
+        saved_hash = archive.read(20)  # FIoHash structure
+        total_header_size = archive.read_i32()  # Early read, replaces trailer read
 
-    # === 第 3 步：CustomVersions ===
-    # PackageFileSummary.cpp line 198-208
+    # CustomVersions 数组（D-05 存储 GUID 不验证）
     custom_versions_count = archive.read_u32()
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
-        raise ParseError(f"Custom versions count exceeds maximum")
+        raise ParseError(
+            f"Custom versions count {custom_versions_count} exceeds maximum {MAX_CUSTOM_VERSIONS}"
+        )
     custom_versions: List[CustomVersion] = []
     for _ in range(custom_versions_count):
+        # GUID 为 16 bytes
         guid_bytes = archive.read(16)
+        guid_str = guid_bytes.hex()
         version = archive.read_i32()
-        custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
+        custom_versions.append(CustomVersion(guid=guid_str, version=version))
 
-    # === 第 4 步：TotalHeaderSize（UE4 文件）===
-    if is_ue4_file:
+    # TotalHeaderSize for UE4 files (legacy > -8, version < PACKAGE_SAVED_HASH)
+    # Reference: UE PackageFileSummary.cpp lines 254-258
+    # For UE4 files, TotalHeaderSize is read BEFORE PackageName (after CustomVersions)
+    # For UE5 >= PACKAGE_SAVED_HASH, TotalHeaderSize was already read in SavedHash block above
+    if legacy_file_version > -8:
+        # UE4 file: TotalHeaderSize after CustomVersions, before PackageName
         total_header_size = archive.read_i32()
 
-    # === 第 5 步：PackageName 和 PackageFlags ===
+    # PackageName (FString) - Reference: UE PackageFileSummary.cpp line 258
+    # Note: PackageName is FString type (int32 length + UTF-8 data), NOT FName
     package_name = archive.read_fstring()
+
+    # PackageFlags（D-12 仅存储）
     package_flags = archive.read_u32()
 
-    # === 第 6 步：NameCount 和 NameOffset ===
-    # PackageFileSummary.cpp line 278
+    # 名称表处理 (UE PackageFileSummary.cpp line 278)
+    # NameCount + NameOffset ALWAYS present for modern UE4/UE5 files (legacy < 0)
+    # Inline names format only for UE3 files (legacy >= 0), not supported per D-04
     name_count = archive.read_i32()
     if name_count > MAX_NAME_COUNT:
-        raise ParseError(f"Name count exceeds maximum")
-    name_offset = archive.read_i32()
-    archive.validate_offset(name_offset, "NameOffset")
+        raise ParseError(
+            f"Name count {name_count} exceeds maximum {MAX_NAME_COUNT}"
+        )
+    name_offset = archive.read_i32()  # Always read for legacy < 0
+    archive.validate_offset(name_offset, "NameOffset")  # D-10: validate table offset
 
-    # === 第 7 步：SoftObjectPaths（UE5 >= 1008，在 NameOffset 之后！）===
-    # PackageFileSummary.cpp line 282-285
+    # SoftObjectPaths（UE5+ only）
+    # Reference: UE PackageFileSummary.cpp line 282-285
+    # FileVersionUE >= ADD_SOFTOBJECTPATH_LIST (UE5 only)
+    # UE4 files do NOT have SoftObjectPaths
     soft_object_paths_count = 0
     soft_object_paths_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+    is_ue4_file = legacy_file_version > -8  # UE4 files (not UE5)
+    if not is_ue4_file:  # UE5 files only
         soft_object_paths_count = archive.read_i32()
         soft_object_paths_offset = archive.read_i32()
 
-    # === 第 8 步：LocalizationId（未烘焙文件）===
-    # PackageFileSummary.cpp line 287-292: wrapped in !IsFilterEditorOnly()
-    # 对于未烘焙文件（PKG_Cooked 未设置），LocalizationId 应该被序列化
-    # 版本检查: FileVersionUE >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (385)
-    # 对于 UE5 文件，FileVersionUE5 >= 1000 总是 >= 385
+    # LocalizationId FString - UE4 files only (legacy > -8)
+    # Reference: UE PackageFileSummary.cpp line 289-292
+    # FileVersionUE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (added in UE 4.20)
+    # All UE4 v521+ files have this field
     localization_id = ""
-    is_cooked = (package_flags & PKG_Cooked) != 0
-    if not is_cooked:
-        # 版本检查：对于 UE5 文件总是满足，对于 UE4 文件检查 >= 385
-        if is_ue4_file and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
-            localization_id = archive.read_fstring()
-        elif not is_ue4_file:  # UE5 文件，版本总是 >= 385
-            localization_id = archive.read_fstring()
+    if is_ue4_file:
+        localization_id = archive.read_fstring()
 
-    # === 第 9 步：GatherableTextData（所有文件）===
-    # PackageFileSummary.cpp line 295-298: 不在 IsFilterEditorOnly() 检查内！
-    # 版本检查: FileVersionUE >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (401)
-    # 对于 UE5 文件，FileVersionUE5 >= 1000 总是 >= 401（operator>= 用 UE4 分支）
+    # GatherableTextData Count/Offset - UE4 files only
+    # Reference: UE PackageFileSummary.cpp line 295-298
+    # FileVersionUE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (added in UE 4.26)
+    # All UE4 v521+ files have these fields
     gatherable_text_data_count = 0
     gatherable_text_data_offset = 0
-    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES or not is_ue4_file:
+    if is_ue4_file:
         gatherable_text_data_count = archive.read_i32()
         gatherable_text_data_offset = archive.read_i32()
 
-    # === 第 10 步：ExportCount 和 ExportOffset ===
-    # PackageFileSummary.cpp line 299
-    export_count = archive.read_i32()
-    if export_count > MAX_EXPORT_COUNT:
-        raise ParseError(f"Export count exceeds maximum")
-    export_offset = archive.read_i32()
-    archive.validate_offset(export_offset, "ExportOffset")
-
-    # === 第 11 步：ImportCount 和 ImportOffset ===
-    # PackageFileSummary.cpp line 300
+    # 导入表偏移
     import_count = archive.read_i32()
     if import_count > MAX_IMPORT_COUNT:
-        raise ParseError(f"Import count exceeds maximum")
+        raise ParseError(
+            f"Import count {import_count} exceeds maximum {MAX_IMPORT_COUNT}"
+        )
     import_offset = archive.read_i32()
-    archive.validate_offset(import_offset, "ImportOffset")
+    archive.validate_offset(import_offset, "ImportOffset")  # D-10: validate table offset
 
-    # === 第 12 步：CellExport/CellImport（UE5 >= 1015 VERSE_CELLS）===
-    # PackageFileSummary.cpp line 302-306
-    cell_export_count = 0
-    cell_export_offset = 0
-    cell_import_count = 0
-    cell_import_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_VERSE_CELLS:
-        cell_export_count = archive.read_i32()
-        cell_export_offset = archive.read_i32()
-        cell_import_count = archive.read_i32()
-        cell_import_offset = archive.read_i32()
-
-    # === 第 13 步：MetaDataOffset（UE5 >= 1014）===
-    # PackageFileSummary.cpp line 308-310
-    metadata_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
-        metadata_offset = archive.read_i32()
-
-    # === 第 14 步：DependsOffset ===
-    # PackageFileSummary.cpp line 313
-    depends_offset = archive.read_i32()
-
-    # === 第 15 步：SoftPackageReferences（UE4 >= 382）===
-    # PackageFileSummary.cpp line 315-318
-    soft_package_references_count = 0
-    soft_package_references_offset = 0
-    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
-        soft_package_references_count = archive.read_i32()
-        soft_package_references_offset = archive.read_i32()
-
-    # === 第 16 步：SearchableNames（UE4 >= 508）===
-    # PackageFileSummary.cpp line 320-323
-    searchable_names_offset = 0
-    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
-        searchable_names_offset = archive.read_i32()
-
-    # === 第 17 步：ThumbnailTableOffset ===
-    # PackageFileSummary.cpp line 325
-    thumbnail_table_offset = archive.read_i32()
-
-    # === 第 18 步：ImportTypeHierarchies（UE5 >= 1018）===
-    # PackageFileSummary.cpp line 327-335
-    import_type_hierarchies_count = 0
-    import_type_hierarchies_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
-        import_type_hierarchies_count = archive.read_i32()
-        import_type_hierarchies_offset = archive.read_i32()
-
-    # === 第 19 步：Legacy Guid（UE5 < 1016 或 UE4）===
-    # PackageFileSummary.cpp line 337-352: 对于 UE5 < 1016 或 UE4 文件，读取 FGuid (16 bytes)
-    # 对于 UE5 >= 1016，SavedHash 已经在头部开始时读取，跳过这个 Legacy Guid
-    # 注意：Legacy Guid (FGuid 16 bytes) 和 SavedHash (FIoHash 20 bytes) 是不同结构
-    # saved_hash 字段仅用于 UE5 >= 1016 的 FIoHash，UE5 < 1016 和 UE4 应保持为空
-    if not is_ue4_file and file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
-        # UE5 < 1016: 读取 Legacy Guid (16 bytes)，但不存入 saved_hash
-        archive.read(16)  # Legacy Guid, 跳过
-    elif is_ue4_file:
-        # UE4 文件: 总是读取 Legacy Guid (16 bytes)
-        archive.read(16)  # Legacy Guid, 跳过
-
-    # === 第 20 步：PersistentGuid（UE4 >= 516，WITH_EDITORONLY_DATA && !IsFilterEditorOnly）===
-    # PackageFileSummary.cpp line 354-376: 包裹在 WITH_EDITORONLY_DATA 和 !IsFilterEditorOnly()
-    # 对于 cooked 文件，PersistentGuid 不被序列化
-    persistent_guid = ""
-    if not is_cooked and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
-        guid_bytes = archive.read(16)
-        persistent_guid = guid_bytes.hex()
-
-        # OwnerPersistentGuid（UE4 >= 516 and < 518）
-        # PackageFileSummary.cpp line 370-375
-        if file_version_ue4 < UE4_NON_OUTER_PACKAGE_IMPORT:
-            archive.read(16)  # OwnerPersistentGuid，跳过
-
-    # === 第 21 步：Generations ===
-    # PackageFileSummary.cpp line 379-395
-    generations_count = archive.read_i32()
-    generations: List[GenerationInfo] = []
-    for _ in range(generations_count):
-        gen_export_count = archive.read_i32()
-        gen_name_count = archive.read_i32()
-        generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
-
-    # === 第 22 步：SavedByEngineVersion ===
-    # PackageFileSummary.cpp line 397-419
-    saved_by_engine_version = EngineVersion()
-    if file_version_ue4 >= UE4_ENGINE_VERSION_OBJECT:
-        saved_by_engine_version = EngineVersion(
-            major=archive.read_u16(),
-            minor=archive.read_u16(),
-            patch=archive.read_u16(),
-            changelist=archive.read_u32(),
-            branch=archive.read_fstring()
+    # 导出表偏移
+    export_count = archive.read_i32()
+    if export_count > MAX_EXPORT_COUNT:
+        raise ParseError(
+            f"Export count {export_count} exceeds maximum {MAX_EXPORT_COUNT}"
         )
-    else:
-        # UE4 < 334: 读取 EngineChangelist
-        engine_changelist = archive.read_i32()
-        if engine_changelist != 0:
-            saved_by_engine_version = EngineVersion(
-                major=4, minor=0, patch=0,
-                changelist=engine_changelist,
-                branch=""
-            )
+    export_offset = archive.read_i32()
+    archive.validate_offset(export_offset, "ExportOffset")  # D-10: validate table offset
 
-    # === 第 23 步：CompatibleWithEngineVersion ===
-    # PackageFileSummary.cpp line 421-440
-    compatible_with_engine_version = EngineVersion()
-    if file_version_ue4 >= UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION:
-        compatible_with_engine_version = EngineVersion(
-            major=archive.read_u16(),
-            minor=archive.read_u16(),
-            patch=archive.read_u16(),
-            changelist=archive.read_u32(),
-            branch=archive.read_fstring()
-        )
-    else:
-        # UE4 < 442: 复用 SavedByEngineVersion
-        compatible_with_engine_version = EngineVersion(
-            major=saved_by_engine_version.major,
-            minor=saved_by_engine_version.minor,
-            patch=saved_by_engine_version.patch,
-            changelist=saved_by_engine_version.changelist,
-            branch=saved_by_engine_version.branch
-        )
+    # 导出哈希偏移
+    export_hashes_offset = archive.read_i32()
 
-    # === 第 24 步：CompressionFlags ===
-    # PackageFileSummary.cpp line 442-448
-    compression_flags = archive.read_u32()
+    # ImportExportGuids
+    import_export_guids_offset = archive.read_i32()
+    import_export_guids_count = archive.read_i32()
 
-    # === 第 25 步：CompressedChunks（已废弃，TArray）===
-    # PackageFileSummary.cpp line 450-451
-    compressed_chunks_count = archive.read_i32()
-    for _ in range(compressed_chunks_count):
-        archive.read(12)  # FCompressedChunk = 12 bytes (int64 start + int32 size)，跳过
+    # CookedPackages
+    cooked_packages_offset = archive.read_i32()
+    cooked_packages_count = archive.read_i32()
 
-    # === 第 26 步：PackageSource ===
-    # PackageFileSummary.cpp line 461
-    package_source = archive.read_u32()
-
-    # === 第 27 步：AdditionalPackagesToCook（已废弃，TArray）===
-    # PackageFileSummary.cpp line 465-466
-    additional_packages_count = archive.read_i32()
-    for _ in range(additional_packages_count):
-        archive.read_fstring()  # FString，跳过
-
-    # === 第 28 步：NumTextureAllocations（legacy，LegacyFileVersion > -7）===
-    # PackageFileSummary.cpp line 468-474
-    if legacy_file_version > -7:
-        archive.read_i32()  # NumTextureAllocations，跳过
-
-    # === 第 29 步：AssetRegistryDataOffset ===
-    # PackageFileSummary.cpp line 476
+    # AssetRegistryData 偏移
     asset_registry_data_offset = archive.read_i32()
 
-    # === 第 30 步：BulkDataStartOffset ===
-    # PackageFileSummary.cpp line 477
+    # BulkDataStartOffset（D-13 不解析载荷）
     bulk_data_start_offset = archive.read_i64()
 
-    # === 第 31 步：WorldTileInfoDataOffset（UE4 >= 223）===
-    # PackageFileSummary.cpp line 479-482
-    world_tile_info_data_offset = 0
-    if file_version_ue4 >= UE4_WORLD_LEVEL_INFO:
-        world_tile_info_data_offset = archive.read_i32()
-
-    # === 第 32 步：ChunkIDs（UE4 >= 277）===
-    # PackageFileSummary.cpp line 484-502
-    chunk_ids: List[str] = []
-    if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_ARRAY:
-        # TArray<FGuid>
-        chunk_ids_count = archive.read_i32()
-        for _ in range(chunk_ids_count):
-            guid_bytes = archive.read(16)
-            chunk_ids.append(guid_bytes.hex())
-    elif file_version_ue4 >= UE4_ADDED_CHUNKID:
-        # Single ChunkID (int32)
-        chunk_id = archive.read_i32()
-        if chunk_id >= 0:
-            # 转换为 FGuid 格式（但实际是 int32）
-            chunk_ids.append(hex(chunk_id))
-
-    # === 第 33 步：PreloadDependencies（UE4 >= 505）===
-    # PackageFileSummary.cpp line 503-511
-    preload_dependency_count = 0
-    preload_dependency_offset = 0
-    if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-        preload_dependency_count = archive.read_i32()
-        preload_dependency_offset = archive.read_i32()
-    else:
-        preload_dependency_count = -1
-        preload_dependency_offset = 0
-
-    # === 第 34 步：NamesReferencedFromExportDataCount（UE5 >= 1001，在末尾！）===
-    # PackageFileSummary.cpp line 513-520
-    names_referenced_from_export_data_count = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
-        names_referenced_from_export_data_count = archive.read_i32()
-    else:
-        names_referenced_from_export_data_count = name_count  # UE 默认值
-
-    # === 第 35 步：PayloadTocOffset（UE5 >= 1002）===
-    # PackageFileSummary.cpp line 522-529
-    payload_toc_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_PAYLOAD_TOC:
-        payload_toc_offset = archive.read_i64()  # int64
-    else:
-        payload_toc_offset = -1  # INDEX_NONE
-
-    # === 第 36 步：DataResourceOffset（UE5 >= 1009）===
-    # PackageFileSummary.cpp line 531-538
-    data_resource_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_DATA_RESOURCES:
-        data_resource_offset = archive.read_i32()
-    else:
-        data_resource_offset = -1
-
-    # === 第 37 步：TotalHeaderSize（UE5 < 1016 版本）===
-    # PackageFileSummary.cpp: UE5 < 1016 时 TotalHeaderSize 在最后
-    if not is_ue4_file and file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
+    # TotalHeaderSize for UE5 files < PACKAGE_SAVED_HASH (version < 1004)
+    # Reference: UE PackageFileSummary.cpp lines 254-258
+    # UE4 files (legacy > -8): already read after CustomVersions
+    # UE5 >= PACKAGE_SAVED_HASH: already read in SavedHash block
+    # UE5 < PACKAGE_SAVED_HASH: need to read here (same position as UE4)
+    if legacy_file_version <= -8 and file_version_ue5 < PACKAGE_SAVED_HASH_VERSION:
+        # UE5 file with version < 1004: TotalHeaderSize at trailer position
         total_header_size = archive.read_i32()
+
+    # UE5+ trailer 字段（可选，取决于版本）
+    # 这些字段在文件末尾的 trailer 中，不是 header 连续字段
+    # 我们在 header 中将它们初始化为 0，后续需要时可从 trailer 解析
+    payload_toc_offset = 0
+    data_resource_offset = 0
 
     return PackageFileSummary(
         tag=tag,
@@ -1139,46 +825,28 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         file_version_ue5=file_version_ue5,
         file_version_licensee=file_version_licensee,
         saved_hash=saved_hash,
-        total_header_size=total_header_size,
-        custom_versions=custom_versions,
         package_name=package_name,
+        localization_id=localization_id,
+        gatherable_text_data_count=gatherable_text_data_count,
+        gatherable_text_data_offset=gatherable_text_data_offset,
+        custom_versions=custom_versions,
         package_flags=package_flags,
         name_count=name_count,
         name_offset=name_offset,
         soft_object_paths_count=soft_object_paths_count,
         soft_object_paths_offset=soft_object_paths_offset,
-        localization_id=localization_id,
-        gatherable_text_data_count=gatherable_text_data_count,
-        gatherable_text_data_offset=gatherable_text_data_offset,
-        export_count=export_count,
-        export_offset=export_offset,
         import_count=import_count,
         import_offset=import_offset,
-        cell_export_count=cell_export_count,
-        cell_export_offset=cell_export_offset,
-        cell_import_count=cell_import_count,
-        cell_import_offset=cell_import_offset,
-        metadata_offset=metadata_offset,
-        depends_offset=depends_offset,
-        soft_package_references_count=soft_package_references_count,
-        soft_package_references_offset=soft_package_references_offset,
-        searchable_names_offset=searchable_names_offset,
-        thumbnail_table_offset=thumbnail_table_offset,
-        import_type_hierarchies_count=import_type_hierarchies_count,
-        import_type_hierarchies_offset=import_type_hierarchies_offset,
-        persistent_guid=persistent_guid,
-        generations=generations,
-        saved_by_engine_version=saved_by_engine_version,
-        compatible_with_engine_version=compatible_with_engine_version,
-        compression_flags=compression_flags,
-        package_source=package_source,
+        export_count=export_count,
+        export_offset=export_offset,
+        export_hashes_offset=export_hashes_offset,
+        import_export_guids_offset=import_export_guids_offset,
+        import_export_guids_count=import_export_guids_count,
+        cooked_packages_offset=cooked_packages_offset,
+        cooked_packages_count=cooked_packages_count,
         asset_registry_data_offset=asset_registry_data_offset,
         bulk_data_start_offset=bulk_data_start_offset,
-        world_tile_info_data_offset=world_tile_info_data_offset,
-        chunk_ids=chunk_ids,
-        preload_dependency_count=preload_dependency_count,
-        preload_dependency_offset=preload_dependency_offset,
-        names_referenced_from_export_data_count=names_referenced_from_export_data_count,
+        total_header_size=total_header_size,
         payload_toc_offset=payload_toc_offset,
         data_resource_offset=data_resource_offset
     )
@@ -1190,7 +858,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
 
     使用 FNameEntrySerialized 格式：
     - FString (Length + Data)
-    - Hash bytes (4 bytes) for UE4 >= VER_UE4_NAME_HASHES_SERIALIZED (502) and UE5 files
+    - Hash bytes (4 bytes) for UE4 >= VER_UE4_NAME_HASHES_SERIALIZED (502)
 
     Args:
         archive: FArchive 实例
@@ -1202,18 +870,16 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     archive.seek(summary.name_offset)
 
     # UE4 version constant: VER_UE4_NAME_HASHES_SERIALIZED = 502
-    # For UE4 >= 502 AND UE5 files, name entries have 4-byte hash suffix
-    # UE5 files always have name hashes (FileVersionUE5 >= 1000 > 502)
+    # For UE4 >= 502, name entries have 4-byte hash suffix
     NAME_HASHES_SERIALIZED_VERSION = 502
-    is_ue4_file = summary.legacy_file_version > -8
-    has_name_hashes = (is_ue4_file and summary.file_version_ue4 >= NAME_HASHES_SERIALIZED_VERSION) or (not is_ue4_file)
+    has_name_hashes = (summary.legacy_file_version > -8) and (summary.file_version_ue4 >= NAME_HASHES_SERIALIZED_VERSION)
 
     name_map: List[str] = []
     for _ in range(summary.name_count):
         name = archive.read_fstring()
         name_map.append(name)
 
-        # Read hash bytes if UE4 >= 502 or UE5
+        # Read hash bytes if UE4 >= 502
         # Reference: UE UnrealNames.cpp line 4429-4431
         if has_name_hashes:
             # NonCasePreservingHash (uint16) + CasePreservingHash (uint16)

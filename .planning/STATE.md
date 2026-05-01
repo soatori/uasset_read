@@ -1,47 +1,50 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: 蓝图图解析
-status: planning
-last_updated: "2026-05-02T04:30:00Z"
+milestone: v1.0
+milestone_name: milestone
+status: complete
+last_updated: "2026-05-02T03:45:00Z"
 progress:
-  total_phases: 0
-  completed_phases: 0
+  total_phases: 5
+  completed_phases: 5
   active_phase: null
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 21
+  completed_plans: 21
+  percent: 100
 shipped:
-  date: null
-  branch: null
-  remote: null
+  date: 2026-05-01
+  branch: v1.0-release
+  remote: origin
+  pr_number: 1
+  pr_url: https://github.com/soatori/uasset_read/pull/1
 ---
 
 # 项目状态
 
 **项目：** uasset_read
 **初始化：** 2026-04-27
-**里程碑：** v2.0 —— 蓝图图解析
-**状态：** 规划阶段
+**里程碑：** v1.0 —— 初始
+**状态：** 所有阶段已完成 ✓
 
 ## 当前阶段
 
-**Phase: Not started (defining requirements)**
-
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-02 — Milestone v2.0 started
+**项目已完成** — 所有 5 个阶段已交付
 
 ## 阶段状态
 
-（暂无阶段 —— 需求定义中）
+| # | 阶段 | 状态 | 计划 | 验证 | 进度 |
+|---|------|------|------|------|------|
+| 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | 100% |
+| 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | 100% |
+| 3 | 蓝图提取 | ✓ 完成 | 4/4 | ✓ | 100% |
+| 4 | 输出与 CLI | ✓ 完成 | 5/5 | ✓ | 100% |
+| 5 | 优化与安全 | ✓ 完成 | 5/5 | ✓ | 100% |
 
 ## 近期活动
 
 | 日期 | 动作 | 结果 |
 |------|------|------|
-| 2026-05-02 | v2.0 里程碑启动 | 目标：蓝图图解析，作为 C++ 转换参考 |
-| 2026-05-02 | v1.0 完成 | 所有 5 阶段交付，PR #1 合并 |
+| 2026-04-27 | 项目初始化 | PROJECT.md、config.json 创建 |
 | 2026-04-27 | 研究完成 | STACK.md、FEATURES.md、ARCHITECTURE.md、PITFALLS.md 写入 |
 | 2026-04-27 | 研究综合 | SUMMARY.md 写入 |
 | 2026-04-27 | 需求定义 | 37 个 v1 需求映射到 5 阶段 |
