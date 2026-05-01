@@ -79,39 +79,39 @@
 
 ## 可追溯性
 
-各阶段覆盖的需求。在路线图创建时更新。
+v2.0 路线图创建后覆盖的需求。
 
 | 需求 | 阶段 | 状态 |
 |------|------|------|
-| BUG-01 | 阶段 6 | 待定 |
-| BUG-02 | 阶段 6 | 待定 |
-| BUG-03 | 阶段 6 | 待定 |
-| GRAPH-01 | 阶段 6 | 待定 |
-| GRAPH-02 | 阶段 6 | 待定 |
-| GRAPH-03 | 阶段 6 | 待定 |
-| GRAPH-04 | 阶段 6 | 待定 |
-| GRAPH-05 | 阶段 6 | 待定 |
-| GRAPH-06 | 阶段 6 | 待定 |
-| GRAPH-07 | 阶段 6 | 待定 |
-| GRAPH-08 | 阶段 6 | 待定 |
-| GRAPH-09 | 阶段 6 | 待定 |
-| GRAPH-10 | 阶段 6 | 待定 |
-| GRAPH-11 | 阶段 7 | 待定 |
-| GRAPH-12 | 阶段 7 | 待定 |
-| ADVP-01 | 阶段 8 | 待定 |
-| ADVP-02 | 阶段 8 | 待定 |
-| ADVP-03 | 阶段 8 | 待定 |
-| ADVP-04 | 阶段 8 | 待定 |
-| ADVP-05 | 阶段 8 | 待定 |
-| ADVP-06 | 阶段 8 | 待定 |
-| DEPS-01 | 阶段 9 | 待定 |
-| DEPS-02 | 阶段 9 | 待定 |
-| DEPS-03 | 阶段 9 | 待定 |
-| DEPS-04 | 阶段 9 | 待定 |
-| OUT2-01 | 阶段 7 | 待定 |
-| OUT2-02 | 阶段 7 | 待定 |
-| OUT2-03 | 阶段 7 | 待定 |
-| OUT2-04 | 阶段 7 | 待定 |
+| BUG-01 | Phase 6 | Pending |
+| BUG-02 | Phase 6 | Pending |
+| BUG-03 | Phase 6 | Pending |
+| GRAPH-01 | Phase 7 | Pending |
+| GRAPH-02 | Phase 7 | Pending |
+| GRAPH-03 | Phase 7 | Pending |
+| GRAPH-04 | Phase 7 | Pending |
+| GRAPH-05 | Phase 7 | Pending |
+| GRAPH-06 | Phase 7 | Pending |
+| GRAPH-07 | Phase 7 | Pending |
+| GRAPH-08 | Phase 7 | Pending |
+| GRAPH-09 | Phase 7 | Pending |
+| GRAPH-10 | Phase 7 | Pending |
+| GRAPH-11 | Phase 8 | Pending |
+| GRAPH-12 | Phase 8 | Pending |
+| ADVP-01 | Phase 9 | Pending |
+| ADVP-02 | Phase 9 | Pending |
+| ADVP-03 | Phase 9 | Pending |
+| ADVP-04 | Phase 9 | Pending |
+| ADVP-05 | Phase 9 | Pending |
+| ADVP-06 | Phase 9 | Pending |
+| DEPS-01 | Phase 10 | Pending |
+| DEPS-02 | Phase 10 | Pending |
+| DEPS-03 | Phase 10 | Pending |
+| DEPS-04 | Phase 10 | Pending |
+| OUT2-01 | Phase 8 | Pending |
+| OUT2-02 | Phase 8 | Pending |
+| OUT2-03 | Phase 8 | Pending |
+| OUT2-04 | Phase 8 | Pending |
 
 **覆盖率：**
 - v2.0 需求总数：29
@@ -121,4 +121,4 @@
 ---
 
 *需求定义日期：2026-05-02*
-*最后更新：2026-05-02 - v2.0 需求定义完成*
+*最后更新：2026-05-02 - v2.0 路线图创建完成*
