@@ -89,9 +89,16 @@ UE4_ENGINE_VERSION_OBJECT = 334                 # VER_UE4_ENGINE_VERSION_OBJECT
 UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382      # VER_UE4_ADD_STRING_ASSET_REFERENCES_MAP
 UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
 UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
+VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 506    # Phase 6: ObjectVersion.h line 711
 UE4_ADDED_SEARCHABLE_NAMES = 508               # VER_UE4_ADDED_SEARCHABLE_NAMES
+VER_UE4_64BIT_EXPORTOFFSETS = 508              # Phase 6: 64-bit export offsets
 UE4_ADDED_PACKAGE_OWNER = 516                  # VER_UE4_ADDED_PACKAGE_OWNER
 UE4_NON_OUTER_PACKAGE_IMPORT = 518             # VER_UE4_NON_OUTER_PACKAGE_IMPORT
+
+# UE5 Release Object Version constants (Phase 6 D-08/D-10)
+UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1010    # FReleaseObjectVersion::RemoveObjectExportPackageGuid
+UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1011     # FReleaseObjectVersion::TrackObjectExportIsInherited
+UE5_GENERATE_PUBLIC_HASH = 1015                 # FReleaseObjectVersion::GeneratePublicHash
 
 
 # ============================================================================
@@ -114,11 +121,19 @@ class ErrorContext:
     D-15/D-18: 错误上下文信息。
 
     记录错误发生时的解析状态，帮助定位问题。
+
+    Phase 6 D-12/D-13/D-14: 新增导出表解析阶段信息。
     """
     offset: int           # 文件偏移位置
     phase: str            # 解析阶段：header/name_table/import_map/export_map/properties/blueprint
     operation: str        # 操作类型：read_i32/read_name/seek 等
     context_name: str = ""  # 相关对象名或属性名
+    # Phase 6 新增（D-12/D-13/D-14）：导出表解析阶段信息
+    export_index: Optional[int] = None    # 当前导出索引（0-based）
+    expected_offset: Optional[int] = None  # 期望偏移
+    actual_offset: Optional[int] = None    # 实际偏移
+    field_name: str = ""                  # 字段名（如 "TemplateIndex"）
+    version_info: Dict[str, int] = field(default_factory=dict)  # 版本检查失败信息
 
 
 class ParseError(UAssetError):
@@ -313,6 +328,10 @@ class FArchive:
     def read_u8(self) -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
         return struct.unpack('<B', self.read(1))[0]
+
+    def read_bytes(self, n: int) -> bytes:
+        """读取原始字节（无字节序交换，Phase 6 D-10）"""
+        return self.read(n)
 
     def read_i32(self) -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
@@ -635,11 +654,15 @@ class ObjectImport:
 @dataclass
 class ObjectExport:
     """
-    FObjectExport 导出表条目（CORE-05/CORE-06）。
+    FObjectExport 导出表条目（CORE-05/CORE-06, Phase 6 BUG-01/BUG-02）。
 
-    来自 ObjectResource.h：
-    表示包内对象定义。
+    来自 ObjectResource.h：表示包内对象定义。
+
+    Phase 6 D-04/D-16/D-17: 完整字段实现。
+    字段顺序遵守 Python dataclass 规则：必填字段在前，可选字段在后。
+    注意：dataclass 定义顺序与 UE 源码读取顺序不同（UE 读取顺序在 read_export_map 中实现）。
     """
+    # 必填字段（无默认值）
     class_index: PackageIndex      # 类引用（CORE-06 资产类型识别）
     super_index: PackageIndex      # 父类引用
     outer_index: PackageIndex      # Outer 引用
@@ -647,6 +670,19 @@ class ObjectExport:
     object_flags: int              # EObjectFlags
     serial_size: int               # 序列化数据大小
     serial_offset: int             # 序列化数据偏移
+    # 可选/条件字段（有默认值）
+    template_index: PackageIndex = field(default_factory=lambda: PackageIndex(0))  # D-04/D-01: TemplateIndex（UE4 >= 506）
+    # bool flags（D-07）
+    b_forced_export: bool = False
+    b_not_for_client: bool = False
+    b_not_for_server: bool = False
+    # 条件 bool flags（D-08）
+    b_is_inherited_instance: Optional[bool] = None  # UE5 >= 1011
+    package_flags: int = 0         # D-09: PackageFlags
+    # 其他条件 bool flags（D-08）
+    b_not_always_loaded_for_editor_game: Optional[bool] = None
+    b_is_asset: Optional[bool] = None
+    b_generate_public_hash: Optional[bool] = None
     # UE5+ 字段
     script_serial_size: int = 0
     script_serial_offset: int = 0
@@ -1270,18 +1306,14 @@ def read_export_map(
     name_map: List[str]
 ) -> List[ObjectExport]:
     """
-    读取导出表（CORE-05/CORE-06）。
+    读取导出表（CORE-05/CORE-06, Phase 6 BUG-01/BUG-02/BUG-03）。
 
-    来自 ObjectResource.h：
-    FObjectExport 结构：
-    - ClassIndex (FPackageIndex)
-    - SuperIndex (FPackageIndex)
-    - OuterIndex (FPackageIndex)
-    - ObjectName (FName)
-    - ObjectFlags (u32)
-    - SerialSize (i64)
-    - SerialOffset (i64)
-    - UE5+: ScriptSerialSize, ScriptSerialOffset
+    严格按 ObjectResource.cpp 第 130-217 行顺序：
+    1. ClassIndex → 2. SuperIndex → 3. TemplateIndex(条件) → 4. OuterIndex →
+    5. ObjectName → 6. ObjectFlags → 7-8. SerialSize/Offset →
+    9-11. bool flags → 12. PackageGuid(条件) → 13. bIsInheritedInstance(条件) →
+    14. PackageFlags → 15-17. 其他 bool flags →
+    19-20. ScriptSerializationStartOffset/EndOffset(条件)
 
     Args:
         archive: FArchive 实例
@@ -1290,42 +1322,132 @@ def read_export_map(
 
     Returns:
         导出表列表（ExportMap）
+
+    Raises:
+        ParseError: 导出表解析失败（携带 ErrorContext）
     """
     archive.seek(summary.export_offset)
 
     export_map: List[ObjectExport] = []
-    for _ in range(summary.export_count):
-        class_index = PackageIndex(archive.read_i32())
-        super_index = PackageIndex(archive.read_i32())
-        outer_index = PackageIndex(archive.read_i32())
-        object_name = archive.read_name(name_map)
-        object_flags = archive.read_u32()
-        serial_size = archive.read_i64()
-        serial_offset = archive.read_i64()
+    is_ue5_file = summary.legacy_file_version <= -8
 
-        # UE5+ 脚本序列化字段（根据版本决定是否读取）
-        # CR-02 fix: Check if file is actually UE5 (legacy <= -8), NOT ue5_version >= 0
-        # UE4 files (legacy > -8) don't have these fields - file_version_ue5 stays at 0
-        is_ue5_file = summary.legacy_file_version <= -8
+    # UE5 文件自动满足所有 UE4 版本条件（file_version_ue4 可能是 0）
+    # 参考 FPackageFileVersion::operator>= 实现
+    effective_ue4_version = summary.file_version_ue4 if not is_ue5_file else 1000  # UE5 视为高版本
 
-        if is_ue5_file:
-            script_serial_size = archive.read_i64()
-            script_serial_offset = archive.read_i64()
-        else:
+    for export_idx in range(summary.export_count):
+        object_name = ""  # 初始化用于错误上下文
+
+        try:
+            # 1. ClassIndex
+            class_index = PackageIndex(archive.read_i32())
+
+            # 2. SuperIndex
+            super_index = PackageIndex(archive.read_i32())
+
+            # 3. TemplateIndex（D-01：条件读取 UE4 >= 506，UE5 文件自动满足）
+            template_index = PackageIndex(0)
+            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:  # 506
+                template_index = PackageIndex(archive.read_i32())
+
+            # 4. OuterIndex（D-02：TemplateIndex 之后）
+            outer_index = PackageIndex(archive.read_i32())
+
+            # 5. ObjectName
+            object_name = archive.read_name(name_map)
+
+            # 6. ObjectFlags
+            object_flags = archive.read_u32()
+
+            # 7-8. SerialSize/Offset（UE4 >= 508 使用 i64，否则 i32）
+            if effective_ue4_version >= VER_UE4_64BIT_EXPORTOFFSETS:  # 508
+                serial_size = archive.read_i64()
+                serial_offset = archive.read_i64()
+            else:
+                serial_size = archive.read_i32()
+                serial_offset = archive.read_i32()
+
+            # 9-11. bool flags（D-07：各读取 1 byte）
+            b_forced_export = bool(archive.read_u8())
+            b_not_for_client = bool(archive.read_u8())
+            b_not_for_server = bool(archive.read_u8())
+
+            # 12. PackageGuid（D-10/D-11：UE5 < 1010时读取但不存储）
+            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1010
+                # 读取 16 bytes FGuid，但不存储（DummyPackageGuid）
+                archive.read_bytes(16)
+
+            # 13. bIsInheritedInstance（D-08：UE5 >= 1011）
+            b_is_inherited_instance = None
+            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1011
+                b_is_inherited_instance = bool(archive.read_u8())
+
+            # 14. PackageFlags（D-09）
+            package_flags = archive.read_u32()
+
+            # 15-17. 其他 bool flags（D-08：条件读取）
+            b_not_always_loaded_for_editor_game = None
+            b_is_asset = None
+            b_generate_public_hash = None
+
+            # UE5 版本条件（D-08）
+            if is_ue5_file and summary.file_version_ue5 >= UE5_GENERATE_PUBLIC_HASH:  # 1015
+                b_generate_public_hash = bool(archive.read_u8())
+
+            # 18. 依赖数组（D-06：推迟到 Phase 10）
+            # FirstExportDependency + 4个数组 → Phase 10 依赖分析阶段
+
+            # 19-20. ScriptSerializationStartOffset/EndOffset（UE5+ 条件）
             script_serial_size = 0
             script_serial_offset = 0
+            if is_ue5_file:
+                script_serial_size = archive.read_i64()
+                script_serial_offset = archive.read_i64()
 
-        export_map.append(ObjectExport(
-            class_index=class_index,
-            super_index=super_index,
-            outer_index=outer_index,
-            object_name=object_name,
-            object_flags=object_flags,
-            serial_size=serial_size,
-            serial_offset=serial_offset,
-            script_serial_size=script_serial_size,
-            script_serial_offset=script_serial_offset
-        ))
+            # 构建导出条目
+            export_map.append(ObjectExport(
+                class_index=class_index,
+                super_index=super_index,
+                template_index=template_index,
+                outer_index=outer_index,
+                object_name=object_name,
+                object_flags=object_flags,
+                serial_size=serial_size,
+                serial_offset=serial_offset,
+                b_forced_export=b_forced_export,
+                b_not_for_client=b_not_for_client,
+                b_not_for_server=b_not_for_server,
+                b_is_inherited_instance=b_is_inherited_instance,
+                package_flags=package_flags,
+                b_not_always_loaded_for_editor_game=b_not_always_loaded_for_editor_game,
+                b_is_asset=b_is_asset,
+                b_generate_public_hash=b_generate_public_hash,
+                script_serial_size=script_serial_size,
+                script_serial_offset=script_serial_offset
+            ))
+
+        except Exception as e:
+            # D-12/D-13/D-14：错误上下文增强
+            context = ErrorContext(
+                offset=archive.tell(),
+                phase="export_map",
+                operation="read_export",
+                context_name=object_name,
+                export_index=export_idx,
+                expected_offset=None,  # 无法精确计算（字段可变）
+                actual_offset=archive.tell(),
+                field_name="",
+                version_info={
+                    "file_version_ue4": summary.file_version_ue4,
+                    "file_version_ue5": summary.file_version_ue5,
+                    "threshold": VER_UE4_TemplateIndex_IN_COOKED_EXPORTS
+                }
+            )
+            raise ParseError(
+                f"导出表解析失败（导出 #{export_idx}）：{str(e)}",
+                partial_result={"export_map": export_map},
+                context=context
+            )
 
     return export_map
 

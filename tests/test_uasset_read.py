@@ -357,14 +357,36 @@ def create_test_uasset(
         for class_index, super_index, outer_index, object_name_idx, flags, serial_size, serial_offset in exports:
             f.write(struct.pack(endian_fmt + 'i', class_index))  # ClassIndex
             f.write(struct.pack(endian_fmt + 'i', super_index))  # SuperIndex
+            # Phase 6: TemplateIndex (UE4 >= 506)
+            if ue4_version >= 506 or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # TemplateIndex (default 0)
             f.write(struct.pack(endian_fmt + 'i', outer_index))  # OuterIndex
             f.write(struct.pack(endian_fmt + 'I', object_name_idx))  # ObjectName index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
             f.write(struct.pack(endian_fmt + 'I', flags))  # ObjectFlags
-            f.write(struct.pack(endian_fmt + 'q', serial_size))  # SerialSize
-            f.write(struct.pack(endian_fmt + 'q', serial_offset))  # SerialOffset
+            # SerialSize/Offset: UE4 >= 508 uses i64, otherwise i32
+            if ue4_version >= 508 or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'q', serial_size))  # SerialSize (i64)
+                f.write(struct.pack(endian_fmt + 'q', serial_offset))  # SerialOffset (i64)
+            else:
+                f.write(struct.pack(endian_fmt + 'i', serial_size))  # SerialSize (i32)
+                f.write(struct.pack(endian_fmt + 'i', serial_offset))  # SerialOffset (i32)
+            # Phase 6: bool flags (always present in modern files)
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bForcedExport
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForClient
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForServer
+            # Phase 6: PackageGuid (UE5 < 1010)
+            if is_ue5_file and ue5_version < 1010:
+                f.write(b'\x00' * 16)  # FGuid (16 bytes, read but not stored)
+            # Phase 6: bIsInheritedInstance (UE5 >= 1011)
+            if is_ue5_file and ue5_version >= 1011:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bIsInheritedInstance
+            # Phase 6: PackageFlags
+            f.write(struct.pack(endian_fmt + 'I', 0))  # PackageFlags
+            # Phase 6: bGeneratePublicHash (UE5 >= 1015)
+            if is_ue5_file and ue5_version >= 1015:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bGeneratePublicHash
             # UE5+ 脚本序列化字段（CR-02 fix: check legacy_version <= -8, NOT ue5_version >= 0）
-            is_ue5_file = legacy_version <= -8
             if is_ue5_file:
                 f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialSize
                 f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialOffset
