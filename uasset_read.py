@@ -1666,6 +1666,11 @@ __all__ = [
     'resolve_parent_class',
     'parse_uasset',
 
+    # Blueprint parsing functions (Phase 3)
+    'read_ed_graph_pin_type',
+    'parse_default_value',
+    'read_blueprint_variable',
+
     # Property parsing functions (Phase 2)
     'use_complete_type_name',
     'read_property_tag',
