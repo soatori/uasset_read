@@ -12,9 +12,11 @@ progress:
   completed_plans: 21
   percent: 100
 shipped:
-  date: null
-  branch: null
-  remote: null
+  date: 2026-05-01
+  branch: v1.0-release
+  remote: origin
+  pr_number: 1
+  pr_url: https://github.com/soatori/uasset_read/pull/1
 ---
 
 # 项目状态
