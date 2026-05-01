@@ -1152,6 +1152,102 @@ def read_blueprint_variable(
     return var
 
 
+def extract_blueprint_metadata(
+    export: ObjectExport,
+    archive: FArchive,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> Tuple[Optional[BlueprintMetadata], Optional[str]]:
+    """
+    Extract complete blueprint metadata from export (BLUE-06).
+
+    Flow:
+    1. Check if export is a blueprint via detect_blueprint()
+    2. Use export.super_index for ParentClass resolution
+    3. Seek to export.serial_offset
+    4. Read NewVariables count + array via read_blueprint_variable()
+    5. Return BlueprintMetadata
+
+    Per D-02/D-03: auto-detection with warning on failure.
+
+    Args:
+        export: ObjectExport to extract from
+        archive: FArchive instance
+        import_map: Import table for resolution
+        export_map: Export table for resolution
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        Tuple of (BlueprintMetadata, warning_if_any)
+        - (blueprint_metadata, None) on success
+        - (None, warning_string) on detection failure
+    """
+    # Step 1: Detect if this export is a blueprint
+    if not detect_blueprint(export, import_map, export_map):
+        return None, None  # Not a blueprint, no warning
+
+    # Step 2: ParentClass - use export.super_index directly
+    # Per D-09/D-10: resolve to object name from ImportMap/ExportMap
+    parent_class, parent_warning = resolve_parent_class(
+        export.super_index,
+        import_map,
+        export_map
+    )
+
+    # Step 3: Seek to export data
+    archive.seek(export.serial_offset)
+
+    # Step 4: Read NewVariables array (TArray<FBPVariableDescription>)
+    # Per Blueprint.h: NewVariables is TArray, so read count first
+    # Note: Blueprint exports have additional fields before NewVariables
+    # For Phase 3, we use a simplified approach that reads variables directly
+
+    variables: List[BlueprintVariable] = []
+
+    try:
+        # Read NewVariables count (int32)
+        var_count = archive.read_i32()
+
+        # Per D-04: sanity check on variable count
+        if var_count > 1000:
+            warning = f"NewVariables count {var_count} exceeds reasonable limit"
+            blueprint = BlueprintMetadata(
+                is_blueprint=True,
+                parent_class=parent_class,
+                variables=variables,
+                detection_warning=warning
+            )
+            return blueprint, warning
+
+        # Read each variable
+        for _ in range(var_count):
+            var = read_blueprint_variable(archive, name_map, summary)
+            variables.append(var)
+
+    except ParseError as e:
+        # Per D-03: add warning on extraction failure
+        warning = f"Variable extraction failed: {e}"
+        blueprint = BlueprintMetadata(
+            is_blueprint=True,
+            parent_class=parent_class,
+            variables=variables,
+            detection_warning=warning
+        )
+        return blueprint, warning
+
+    blueprint = BlueprintMetadata(
+        is_blueprint=True,
+        parent_class=parent_class,
+        variables=variables,
+        detection_warning=parent_warning
+    )
+
+    return blueprint, None
+
+
 # ============================================================================
 # PropertyTag 解析（Phase 2）
 # ============================================================================
@@ -1596,6 +1692,38 @@ def parse_uasset(path: str) -> ParseResult:
 
         result.is_success = True
 
+        # Blueprint extraction (Phase 3)
+        # Per D-02: auto-detect and extract on every parse
+        # Per D-03: add warnings to errors list if detection fails
+
+        blueprint_metadata = None
+        for export in result.export_map:
+            if detect_blueprint(export, result.import_map, result.export_map):
+                # Create temporary archive for extraction
+                temp_archive = FArchive(path)
+                temp_archive.set_byte_swapping(archive._byte_swapping)
+
+                try:
+                    meta, warn = extract_blueprint_metadata(
+                        export,
+                        temp_archive,
+                        result.import_map,
+                        result.export_map,
+                        result.name_map,
+                        result.summary
+                    )
+                    if meta:
+                        blueprint_metadata = meta
+                        if warn:
+                            result.errors.append(f"blueprint parent warning: {warn}")
+                except ParseError as e:
+                    result.errors.append(f"blueprint extraction error: {e}")
+                finally:
+                    temp_archive.close()
+                break  # Only process first blueprint found
+
+        result.blueprint = blueprint_metadata
+
     except VersionError as e:
         result.errors.append(str(e))
         result.is_success = False
@@ -1670,6 +1798,7 @@ __all__ = [
     'read_ed_graph_pin_type',
     'parse_default_value',
     'read_blueprint_variable',
+    'extract_blueprint_metadata',
 
     # Property parsing functions (Phase 2)
     'use_complete_type_name',
