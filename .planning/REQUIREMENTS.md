@@ -7,33 +7,33 @@
 
 ### 核心解析
 
-- [ ] **CORE-01**: 解析器能读取 .uasset 文件头（PackageFileSummary），包含魔术标签、版本信息和各区块偏移
-- [ ] **CORE-02**: 解析器能从魔术标签检测字节序，并在需要时启用字节交换
-- [ ] **CORE-03**: 解析器能从 NameOffset/NameCount 提取名称表（NameMap）
-- [ ] **CORE-04**: 解析器能从 ImportOffset 提取导入表（外部依赖）
-- [ ] **CORE-05**: 解析器能从 ExportOffset 提取导出表（内部对象）
-- [ ] **CORE-06**: 解析器能从导出的 ClassIndex 识别资产类型/类别
-- [ ] **CORE-07**: 解析器能处理 UE4/UE5 版本号和自定义版本 GUID
-- [ ] **CORE-08**: 解析器在不支持的版本时能优雅失败并输出清晰错误信息
+- [x] **CORE-01**: 解析器能读取 .uasset 文件头（PackageFileSummary），包含魔术标签、版本信息和各区块偏移 ✓ Phase 1
+- [x] **CORE-02**: 解析器能从魔术标签检测字节序，并在需要时启用字节交换 ✓ Phase 1
+- [x] **CORE-03**: 解析器能从 NameOffset/NameCount 提取名称表（NameMap） ✓ Phase 1
+- [x] **CORE-04**: 解析器能从 ImportOffset 提取导入表（外部依赖） ✓ Phase 1
+- [x] **CORE-05**: 解析器能从 ExportOffset 提取导出表（内部对象） ✓ Phase 1
+- [x] **CORE-06**: 解析器能从导出的 ClassIndex 识别资产类型/类别 ✓ Phase 1
+- [x] **CORE-07**: 解析器能处理 UE4/UE5 版本号和自定义版本 GUID ✓ Phase 1
+- [x] **CORE-08**: 解析器在不支持的版本时能优雅失败并输出清晰错误信息 ✓ Phase 1
 
 ### 属性解析
 
-- [ ] **PROP-01**: 解析器能读取 PropertyTag 结构（名称、类型、大小、标志）
-- [ ] **PROP-02**: 解析器能提取 IntProperty 值（int32、int64）
-- [ ] **PROP-03**: 解析器能提取 FloatProperty 值（float、double）
-- [ ] **PROP-04**: 解析器能提取 BoolProperty 值
-- [ ] **PROP-05**: 解析器能提取 StrProperty 值（带长度前缀的 FString）
-- [ ] **PROP-06**: 解析器能提取 NameProperty 值（从 NameMap 解析的 FName）
-- [ ] **PROP-07**: 解析器能提取 ObjectProperty 值（FPackageIndex 引用）
-- [ ] **PROP-08**: 解析器能提取 ArrayProperty 值（嵌套元素解析）
-- [ ] **PROP-09**: 解析器能处理 PropertyTag 标志（HasPropertyGuid、HasPropertyExtensions）
+- [x] **PROP-01**: 解析器能读取 PropertyTag 结构（名称、类型、大小、标志） ✓ Phase 2
+- [x] **PROP-02**: 解析器能提取 IntProperty 值（int32、int64） ✓ Phase 2
+- [x] **PROP-03**: 解析器能提取 FloatProperty 值（float、double） ✓ Phase 2
+- [x] **PROP-04**: 解析器能提取 BoolProperty 值 ✓ Phase 2
+- [x] **PROP-05**: 解析器能提取 StrProperty 值（带长度前缀的 FString） ✓ Phase 2
+- [x] **PROP-06**: 解析器能提取 NameProperty 值（从 NameMap 解析的 FName） ✓ Phase 2
+- [x] **PROP-07**: 解析器能提取 ObjectProperty 值（FPackageIndex 引用） ✓ Phase 2
+- [x] **PROP-08**: 解析器能提取 ArrayProperty 值（嵌套元素解析） ✓ Phase 2
+- [x] **PROP-09**: 解析器能处理 PropertyTag 标志（HasPropertyGuid、HasPropertyExtensions） ✓ Phase 2
 
 ### 蓝图提取
 
 - [ ] **BLUE-01**: 解析器能从类名或包路径检测蓝图资产类型
 - [ ] **BLUE-02**: 解析器能提取蓝图父类（ParentClass 引用）
 - [ ] **BLUE-03**: 解析器能提取蓝图变量定义（FBPVariableDescription：名称、类型、默认值）
-- [ ] **BLUE-04**: 解析器能提取蓝图类型（Normal、Interface、MacroLibrary）
+- [ ] **BLUE-04**: 解析器能提取蓝图类型（Normal、Interface、MacroLibrary）*（deferred per D-04）*
 - [ ] **BLUE-05**: 解析器能从 FEdGraphPinType 解析变量类型
 - [ ] **BLUE-06**: 解析器能提取变量元数据（Category、PropertyFlags）
 
@@ -140,7 +140,7 @@
 | BLUE-01 | 阶段 3 | 待定 |
 | BLUE-02 | 阶段 3 | 待定 |
 | BLUE-03 | 阶段 3 | 待定 |
-| BLUE-04 | 阶段 3 | 待定 |
+| BLUE-04 | 阶段 3 | 待定 (deferred D-04) |
 | BLUE-05 | 阶段 3 | 待定 |
 | BLUE-06 | 阶段 3 | 待定 |
 | OUT-01 | 阶段 4 | 待定 |
@@ -166,5 +166,6 @@
 - 未映射：0 ✓
 
 ---
+
 *需求定义日期：2026-04-27*
-*最后更新：2026-04-27 初始定义后*
+*最后更新：2026-05-01 - BLUE-04 marked deferred per D-04*

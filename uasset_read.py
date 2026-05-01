@@ -15,8 +15,14 @@ Phase 1: 核心解析器实现
 
 import struct
 import os
+import re
+import sys
+import json
+import argparse
+import mmap
+from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, BinaryIO
+from typing import Optional, List, Dict, BinaryIO, Tuple
 
 
 # ============================================================================
@@ -35,6 +41,24 @@ MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 
+# Memory-mapped file threshold (SAFE-03, D-01)
+MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
+MAX_PROPERTY_COUNT = 10_000        # D-09: property loop limit
+
+# PropertyTag flags (PropertyTag.h lines 17-26)
+PROP_TAG_NONE = 0x00
+PROP_TAG_HAS_ARRAY_INDEX = 0x01      # ArrayIndex field present
+PROP_TAG_HAS_PROPERTY_GUID = 0x02    # PropertyGuid field present
+PROP_TAG_HAS_EXTENSIONS = 0x04       # Extension data (defer to Phase 3)
+PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
+PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
+PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
+
+# PropertyTag version thresholds (PropertyTag.cpp)
+PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
+VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
+VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
+
 
 # ============================================================================
 # 自定义异常（D-15 优雅降级）
@@ -50,12 +74,26 @@ class VersionError(UAssetError):
     pass
 
 
-class ParseError(UAssetError):
-    """解析错误（可携带部分结果）"""
+@dataclass
+class ErrorContext:
+    """
+    D-15/D-18: 错误上下文信息。
 
-    def __init__(self, message: str, partial_result: Optional[Dict] = None):
+    记录错误发生时的解析状态，帮助定位问题。
+    """
+    offset: int           # 文件偏移位置
+    phase: str            # 解析阶段：header/name_table/import_map/export_map/properties/blueprint
+    operation: str        # 操作类型：read_i32/read_name/seek 等
+    context_name: str = ""  # 相关对象名或属性名
+
+
+class ParseError(UAssetError):
+    """解析错误（可携带部分结果和上下文）"""
+
+    def __init__(self, message: str, partial_result: Optional[Dict] = None, context: Optional[ErrorContext] = None):
         super().__init__(message)
         self.partial_result = partial_result
+        self.context = context  # D-15: error context
 
 
 # ============================================================================
@@ -79,6 +117,26 @@ class FArchive:
         self._file: BinaryIO = open(path, 'rb')
         self._byte_swapping: bool = False
         self._file_size: int = os.path.getsize(path)
+
+        # D-02/D-03: mmap branch
+        self._mmap: Optional[mmap.mmap] = None
+        self._use_mmap: bool = False
+        self._mmap_warning: Optional[str] = None
+
+        # D-01: Check threshold
+        if self._file_size >= MMAP_THRESHOLD:
+            try:
+                # D-04/D-07: Full file mapping, cross-platform
+                self._mmap = mmap.mmap(
+                    self._file.fileno(),
+                    0,  # Maps entire file
+                    access=mmap.ACCESS_READ
+                )
+                self._use_mmap = True
+            except (OSError, ValueError, PermissionError) as e:
+                # D-03: mmap failure - fallback to normal read
+                self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
+                self._use_mmap = False
 
     def read(self, size: int) -> bytes:
         """
@@ -106,9 +164,16 @@ class FArchive:
                 f"only {remaining} bytes remaining"
             )
 
-        data = self._file.read(size)
-        # 不在此处反转字节 - 类型特定方法负责处理字节序
-        return data
+        # D-02: mmap branch
+        if self._use_mmap and self._mmap:
+            data = self._mmap.read(size)
+            if len(data) < size:
+                raise ParseError(
+                    f"mmap.read() returned {len(data)} bytes, expected {size}"
+                )
+            return data
+
+        return self._file.read(size)
 
     def seek(self, pos: int) -> None:
         """
@@ -118,21 +183,79 @@ class FArchive:
             pos: 目标位置
 
         Raises:
-            ParseError: 若 pos 超出文件大小
+            ParseError: 若 pos 超出文件大小或为负数
         """
-        if pos > self._file_size:
+        # D-10: use validate_offset
+        self.validate_offset(pos, "seek")
+
+        # D-02: mmap branch
+        if self._use_mmap and self._mmap:
+            self._mmap.seek(pos)
+        else:
+            self._file.seek(pos)
+
+    def validate_offset(self, offset: int, context: str = "") -> None:
+        """
+        D-10: 全偏移验证 - 在定位前检查偏移有效性。
+
+        Args:
+            offset: 要验证的偏移值
+            context: 上下文信息（如 "NameOffset", "ExportOffset"）
+
+        Raises:
+            ParseError: 若偏移无效（负数或超出文件大小）
+        """
+        if offset < 0:
             raise ParseError(
-                f"Offset {pos} exceeds file size {self._file_size}"
+                f"Invalid offset {offset} (negative) at {context}"
             )
-        self._file.seek(pos)
+        if offset > self._file_size:
+            raise ParseError(
+                f"Offset {offset} exceeds file size {self._file_size} at {context}"
+            )
+
+    def validate_size(self, size: int, context: str = "") -> None:
+        """
+        D-11/D-16: PropertyTag.Size 完整验证。
+
+        验证维度：
+        1. size >= 0（非负）
+        2. size <= remaining_bytes（不超剩余）
+        3. size <= max_reasonable（合理上限）
+
+        max_reasonable = 文件大小 10%，最小 1KB，最大 100MB（D-16）
+        """
+        if size < 0:
+            raise ParseError(f"Invalid size {size} (negative) at {context}")
+
+        current_pos = self.tell()
+        remaining = self._file_size - current_pos
+        if size > remaining:
+            raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
+
+        min_reasonable = 1024
+        max_reasonable_cap = 100 * 1024 * 1024
+        max_reasonable = max(min_reasonable, min(self._file_size // 10, max_reasonable_cap))
+
+        if size > max_reasonable:
+            raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
 
     def tell(self) -> int:
         """返回当前位置"""
+        if self._use_mmap and self._mmap:
+            return self._mmap.tell()
         return self._file.tell()
 
     def close(self) -> None:
-        """关闭文件"""
-        self._file.close()
+        """关闭文件和 mmap（D-05 统一关闭）"""
+        # D-05: Unified close - release mmap then file
+        if self._mmap:
+            self._mmap.close()
+            self._mmap = None
+        if self._file:
+            self._file.close()
+            self._file = None
+        self._use_mmap = False
 
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志（D-11）"""
@@ -141,6 +264,13 @@ class FArchive:
     def total_size(self) -> int:
         """返回文件总大小"""
         return self._file_size
+
+    def get_mmap_info(self) -> Dict:
+        """返回 mmap 状态信息（D-03）"""
+        return {
+            "used": self._use_mmap,
+            "warning": self._mmap_warning
+        }
 
     # ========================================================================
     # 类型读取方法（使用 struct.unpack 配合字节序感知格式）
@@ -174,6 +304,11 @@ class FArchive:
         """读取 32-bit float（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'f', self.read(4))[0]
+
+    def read_f64(self) -> float:
+        """读取 64-bit double（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'd', self.read(8))[0]
 
     def read_fstring(self) -> str:
         """
@@ -280,6 +415,36 @@ class PackageIndex:
         return self.index - 1
 
 
+def validate_package_index(
+    index: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    context: str = ""
+) -> Optional[str]:
+    """
+    D-12/D-17: PackageIndex 完整验证。
+
+    验证维度：范围验证、失败信息、类型一致性、目标有效性
+    Returns: None if valid, warning string if invalid
+    """
+    if index.is_null:
+        return None
+
+    if index.is_import:
+        import_idx = index.to_import_index()
+        if not (0 <= import_idx < len(import_map)):
+            return f"PackageIndex {index.index} import out of range at {context}"
+        return None
+
+    elif index.is_export:
+        export_idx = index.to_export_index()
+        if not (0 <= export_idx < len(export_map)):
+            return f"PackageIndex {index.index} export out of range at {context}"
+        return None
+
+    return f"PackageIndex {index.index} invalid at {context}"
+
+
 @dataclass
 class PackageFileSummary:
     """
@@ -353,6 +518,88 @@ class ObjectExport:
     # UE5+ 字段
     script_serial_size: int = 0
     script_serial_offset: int = 0
+    # 属性列表 (Phase 2 PROP-01 至 PROP-08)
+    properties: List["PropertyValue"] = field(default_factory=list)
+
+
+@dataclass
+class PropertyTag:
+    """
+    PropertyTag 结构（PROP-01）。
+
+    来自 PropertyTag.h lines 37-105:
+    FPropertyTag 包含属性元信息，用于标识属性类型和大小。
+    """
+    name: str                         # 属性名（FName）
+    type: str                         # 类型名字符串（如 "IntProperty")
+    size: int                         # 序列化数据大小（字节）
+    array_index: int = 0              # 数组元素索引（默认 0）
+    flags: int = 0                    # EPropertyTagFlags 标志位
+    property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
+    bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+
+
+@dataclass
+class PropertyValue:
+    """
+    属性值容器（D-08/D-09）。
+
+    存储解析后的属性值，使用 Python 原生类型。
+    """
+    name: str                         # 属性名
+    type: str                         # 属性类型
+    value: any = None                 # 解析后的值（int, float, str, list 等）
+    array_index: int = 0              # 数组元素索引
+
+
+@dataclass
+class FEdGraphPinType:
+    """
+    Pin type structure from EdGraphPin.h lines 76-225.
+
+    Per D-08: full structure parsing, not just name formatting.
+    Per RESEARCH.md Pitfall 1: version-aware serialization with FFrameworkObjectVersion checks.
+    ContainerType added in FFrameworkObjectVersion::EdGraphPinContainerType.
+    bIsConst added in VER_UE4_SERIALIZE_PINTYPE_CONST.
+    bIsUObjectWrapper added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag.
+    """
+    pin_category: str = ""           # FName (RenderName, bool, int, etc.)
+    pin_sub_category: str = ""       # FName (sub-type, e.g., "Int" for Integer)
+    pin_sub_category_object: int = 0 # FPackageIndex (resolved to class name)
+    container_type: int = 0          # EPinContainerType: 0=None, 1=Array, 2=Set, 3=Map
+    is_reference: bool = False
+    is_const: bool = False           # Added in VER_UE4_SERIALIZE_PINTYPE_CONST
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+
+
+@dataclass
+class BlueprintVariable:
+    """
+    Variable definition from FBPVariableDescription.
+
+    Per D-05/D-06: use UE original names with container prefix.
+    """
+    var_name: str                    # FName
+    var_type: "FEdGraphPinType"      # Full type structure (defined next)
+    category: str                    # FText (simplified to string)
+    property_flags: int              # uint64 EPropertyFlags
+    default_value: any = None        # Parsed or raw string per D-13/D-14
+    friendly_name: str = ""          # FString
+
+
+@dataclass
+class BlueprintMetadata:
+    """
+    Blueprint metadata extracted from ExportMap.
+
+    Per D-01/D-02/D-03: auto-detect with warning on failure.
+    Per D-04: deferred BlueprintType detection (normal:class->ImportExport).
+    """
+    is_blueprint: bool
+    parent_class: Optional[str] = None  # Per D-09: only direct parent
+    variables: List["BlueprintVariable"] = field(default_factory=list)
+    detection_warning: Optional[str] = None  # Per D-03
 
 
 @dataclass
@@ -367,7 +614,12 @@ class ParseResult:
     import_map: List[ObjectImport] = field(default_factory=list)
     export_map: List[ObjectExport] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)  # 收集所有错误
+    blueprint: Optional["BlueprintMetadata"] = None  # Per D-02: auto-extracted
     is_success: bool = False
+    # D-02/D-03: mmap tracking (Phase 5)
+    mmap_used: bool = False
+    mmap_warning: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)  # D-13: for Wave 4
 
 
 # ============================================================================
@@ -484,6 +736,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Name count {name_count} exceeds maximum {MAX_NAME_COUNT}"
         )
     name_offset = archive.read_i32()  # Always read for legacy < 0
+    archive.validate_offset(name_offset, "NameOffset")  # D-10: validate table offset
 
     # SoftObjectPaths（UE5+ only）
     # Reference: UE PackageFileSummary.cpp line 282-285
@@ -521,6 +774,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Import count {import_count} exceeds maximum {MAX_IMPORT_COUNT}"
         )
     import_offset = archive.read_i32()
+    archive.validate_offset(import_offset, "ImportOffset")  # D-10: validate table offset
 
     # 导出表偏移
     export_count = archive.read_i32()
@@ -529,6 +783,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Export count {export_count} exceeds maximum {MAX_EXPORT_COUNT}"
         )
     export_offset = archive.read_i32()
+    archive.validate_offset(export_offset, "ExportOffset")  # D-10: validate table offset
 
     # 导出哈希偏移
     export_hashes_offset = archive.read_i32()
@@ -773,6 +1028,803 @@ def get_asset_class(
     return None
 
 
+def detect_blueprint(
+    export: ObjectExport,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> bool:
+    """
+    Detect if export is a blueprint asset (BLUE-01).
+
+    Per D-01: check ClassIndex resolution for "Blueprint" keyword in class name.
+    Per D-04: only detect presence, don't distinguish BlueprintType.
+
+    Args:
+        export: ObjectExport to check
+        import_map: Import table for ClassIndex lookup
+        export_map: Export table for ClassIndex lookup
+
+    Returns:
+        True if export is a blueprint, False otherwise
+    """
+    class_name = get_asset_class(export, import_map, export_map)
+    if class_name and "Blueprint" in class_name:
+        return True
+    return False
+
+
+def resolve_parent_class(
+    super_index: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve ParentClass FPackageIndex to object name (BLUE-02).
+
+    Per D-09: only direct parent (no inheritance chain).
+    Per D-10: resolve to ImportMap/ExportMap object name.
+    Per D-11: return raw index + warning on resolution failure.
+
+    Args:
+        super_index: FPackageIndex from ObjectExport.super_index
+        import_map: Import table for lookup
+        export_map: Export table for lookup
+
+    Returns:
+        Tuple of (resolved_name, warning_if_any)
+        - (class_name, None) on success
+        - (None, warning_string) on failure
+    """
+    if super_index.is_null:
+        # No parent (UObject root)
+        return None, None
+
+    if super_index.is_import:
+        import_idx = super_index.to_import_index()
+        if 0 <= import_idx < len(import_map):
+            return import_map[import_idx].object_name, None
+        warning = f"ParentClass import index {super_index.index} out of range"
+        return None, warning
+
+    elif super_index.is_export:
+        export_idx = super_index.to_export_index()
+        if 0 <= export_idx < len(export_map):
+            return export_map[export_idx].object_name, None
+        warning = f"ParentClass export index {super_index.index} out of range"
+        return None, warning
+
+    # Invalid index (should not happen, but handle defensively)
+    warning = f"ParentClass invalid FPackageIndex: {super_index.index}"
+    return None, warning
+
+
+def read_ed_graph_pin_type(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> FEdGraphPinType:
+    """
+    Parse FEdGraphPinType from export data (BLUE-05).
+
+    Serialization order from EdGraphPin.cpp lines 163-346 [VERIFIED]:
+    1. PinCategory (FName)
+    2. PinSubCategory (FName)
+    3. PinSubCategoryObject (FPackageIndex / int32)
+    4. ContainerType (uint8)
+    5. PinValueType (FEdGraphTerminalType) - if ContainerType == 3 (Map)
+    6. bIsReference (bool - uint8)
+    7. bIsWeakPointer (bool - uint8)
+    8. PinSubCategoryMemberReference (FSimpleMemberReference) - skip for Phase 3
+    9. bIsConst (bool - uint8)
+    10. bIsUObjectWrapper (bool - uint8)
+
+    Per D-08: parse all fields, not just format for display.
+    Per D-06/D-07: full structure needed for ContainerType + object reference.
+    Per RESEARCH.md Pitfall 1: version-aware serialization with FFrameworkObjectVersion checks.
+
+    Version dependencies:
+    - ContainerType field added in FFrameworkObjectVersion::EdGraphPinContainerType
+    - bIsConst added in VER_UE4_SERIALIZE_PINTYPE_CONST
+    - bIsUObjectWrapper added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+
+    Args:
+        archive: FArchive positioned at start of FEdGraphPinType
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        FEdGraphPinType dataclass with all fields populated
+    """
+    pin_type = FEdGraphPinType()
+
+    # Step 1-2: PinCategory and PinSubCategory (FName)
+    pin_type.pin_category = archive.read_name(name_map)
+    pin_type.pin_sub_category = archive.read_name(name_map)
+
+    # Step 3: PinSubCategoryObject (FPackageIndex as int32)
+    pin_type.pin_sub_category_object = archive.read_i32()
+
+    # Step 4: ContainerType (uint8)
+    # Per EdGraphPin.cpp line 216: FFrameworkObjectVersion >= EdGraphPinContainerType
+    # For Phase 3, we always read ContainerType as it's standard in modern UE files
+    pin_type.container_type = archive.read_u8()
+
+    # Step 5: PinValueType for Map containers (skip for Phase 3)
+    if pin_type.container_type == 3:  # Map
+        # FEdGraphTerminalType: TerminalCategory + TerminalSubCategory + TerminalSubCategoryObject
+        archive.read_name(name_map)  # TerminalCategory
+        archive.read_name(name_map)  # TerminalSubCategory
+        archive.read_i32()           # TerminalSubCategoryObject
+
+    # Step 6-7: bIsReference and bIsWeakPointer
+    pin_type.is_reference = archive.read_u8() != 0
+    pin_type.is_weak_pointer = archive.read_u8() != 0
+
+    # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
+    # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
+    archive.read_i32()  # MemberParent (FPackageIndex)
+    archive.read_name(name_map)  # MemberName
+    archive.read(16)  # MemberGuid
+
+    # Step 9: bIsConst
+    # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
+    # Always read in Phase 3 as modern assets have this field
+    pin_type.is_const = archive.read_u8() != 0
+
+    # Step 10: bIsUObjectWrapper
+    # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+    # Always read in Phase 3 as modern assets have this field
+    pin_type.is_uobject_wrapper = archive.read_u8() != 0
+
+    return pin_type
+
+
+def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
+    """
+    Parse DefaultValue string to Python native type (BLUE-03).
+
+    Per D-13: Parse to int, float, bool, str.
+    Per D-14: Fallback to raw string on parse failure.
+    Per D-15: Only basic types - no arrays, vectors, objects.
+    Per D-16: Vector types stay as string "(X=...,Y=...,Z=...)".
+
+    Args:
+        value_str: The DefaultValue FString from FBPVariableDescription
+        var_type: FEdGraphPinType for type detection (PinCategory)
+
+    Returns:
+        Parsed Python value (int, float, bool, str) or raw string.
+    """
+    if not value_str:
+        return None
+
+    # Check for vector format per D-16: keep as string
+    if value_str.startswith("(") and value_str.endswith(")"):
+        return value_str
+
+    # Match PinCategory for type detection
+    category = var_type.pin_category.lower()
+
+    # Boolean parsing (D-13)
+    if category in ("bool", "boolean"):
+        if value_str.lower() in ("true", "1"):
+            return True
+        elif value_str.lower() in ("false", "0"):
+            return False
+        # D-14: fallback to raw string
+        return value_str
+
+    # Integer parsing (D-13)
+    if category in ("int", "integer"):
+        match = re.match(r'^-?\d+$', value_str)
+        if match:
+            return int(value_str)
+        return value_str  # D-14: fallback
+
+    # Float/Real parsing (D-13)
+    if category in ("float", "real", "double"):
+        match = re.match(r'^-?\d+\.?\d*$', value_str)
+        if match:
+            return float(value_str)
+        return value_str  # D-14: fallback
+
+    # String/Name: keep as-is (D-15)
+    if category in ("string", "name", "text"):
+        return value_str
+
+    # Unknown category: fallback to raw string (D-14)
+    return value_str
+
+
+def read_blueprint_variable(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> BlueprintVariable:
+    """
+    Parse FBPVariableDescription from blueprint export (BLUE-03).
+
+    Serialization order from Blueprint.h lines 200-256 [VERIFIED]:
+    1. VarName (FName)
+    2. VarGuid (FGuid - 16 bytes) - skip
+    3. VarType (FEdGraphPinType)
+    4. FriendlyName (FString)
+    5. Category (FText - simplified to FString)
+    6. PropertyFlags (uint64)
+    7. RepNotifyFunc (FName) - skip
+    8. ReplicationCondition (uint8) - skip
+    9. MetaDataArray (TArray) - skip for Phase 3
+    10. DefaultValue (FString)
+
+    Per D-05/D-06/D-07: full FEdGraphPinType for type info.
+    Per D-13/D-14/D-15/D-16: parse DefaultValue with parse_default_value().
+
+    Args:
+        archive: FArchive positioned at start of FBPVariableDescription
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        BlueprintVariable dataclass with all parsed fields
+    """
+    var = BlueprintVariable(
+        var_name=archive.read_name(name_map)
+    )
+
+    # VarGuid (16 bytes) - skip, not needed for Phase 3
+    archive.read(16)
+
+    # VarType (FEdGraphPinType)
+    var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
+
+    # FriendlyName (FString)
+    var.friendly_name = archive.read_fstring()
+
+    # Category (FText) - simplified to FString for Phase 3
+    # FText has complex serialization; simplified representation
+    var.category = archive.read_fstring()
+
+    # PropertyFlags (uint64)
+    var.property_flags = archive.read_u64()
+
+    # RepNotifyFunc (FName) - skip for Phase 3 (D-16 deferred metadata)
+    archive.read_name(name_map)
+
+    # ReplicationCondition (uint8) - skip for Phase 3
+    archive.read_u8()
+
+    # MetaDataArray count + entries - skip for Phase 3 (deferred)
+    meta_count = archive.read_i32()
+    for _ in range(meta_count):
+        archive.read_name(name_map)  # DataKey
+        archive.read_fstring()       # DataValue
+
+    # DefaultValue (FString) - parse per D-13/D-14/D-15
+    default_str = archive.read_fstring()
+    var.default_value = parse_default_value(default_str, var.var_type)
+
+    return var
+
+
+def extract_blueprint_metadata(
+    export: ObjectExport,
+    archive: FArchive,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> Tuple[Optional[BlueprintMetadata], Optional[str]]:
+    """
+    Extract complete blueprint metadata from export (BLUE-06).
+
+    Flow:
+    1. Check if export is a blueprint via detect_blueprint()
+    2. Use export.super_index for ParentClass resolution
+    3. Seek to export.serial_offset
+    4. Read NewVariables count + array via read_blueprint_variable()
+    5. Return BlueprintMetadata
+
+    Per D-02/D-03: auto-detection with warning on failure.
+
+    Args:
+        export: ObjectExport to extract from
+        archive: FArchive instance
+        import_map: Import table for resolution
+        export_map: Export table for resolution
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        Tuple of (BlueprintMetadata, warning_if_any)
+        - (blueprint_metadata, None) on success
+        - (None, warning_string) on detection failure
+    """
+    # Step 1: Detect if this export is a blueprint
+    if not detect_blueprint(export, import_map, export_map):
+        return None, None  # Not a blueprint, no warning
+
+    # Step 2: ParentClass - use export.super_index directly
+    # Per D-09/D-10: resolve to object name from ImportMap/ExportMap
+    parent_class, parent_warning = resolve_parent_class(
+        export.super_index,
+        import_map,
+        export_map
+    )
+
+    # Step 3: Seek to export data
+    archive.seek(export.serial_offset)
+
+    # Step 4: Read NewVariables array (TArray<FBPVariableDescription>)
+    # Per Blueprint.h: NewVariables is TArray, so read count first
+    # Note: Blueprint exports have additional fields before NewVariables
+    # For Phase 3, we use a simplified approach that reads variables directly
+
+    variables: List[BlueprintVariable] = []
+
+    try:
+        # Read NewVariables count (int32)
+        var_count = archive.read_i32()
+
+        # Per D-04: sanity check on variable count
+        if var_count > 1000:
+            warning = f"NewVariables count {var_count} exceeds reasonable limit"
+            blueprint = BlueprintMetadata(
+                is_blueprint=True,
+                parent_class=parent_class,
+                variables=variables,
+                detection_warning=warning
+            )
+            return blueprint, warning
+
+        # Read each variable
+        for _ in range(var_count):
+            var = read_blueprint_variable(archive, name_map, summary)
+            variables.append(var)
+
+    except ParseError as e:
+        # Per D-03: add warning on extraction failure
+        warning = f"Variable extraction failed: {e}"
+        blueprint = BlueprintMetadata(
+            is_blueprint=True,
+            parent_class=parent_class,
+            variables=variables,
+            detection_warning=warning
+        )
+        return blueprint, warning
+
+    blueprint = BlueprintMetadata(
+        is_blueprint=True,
+        parent_class=parent_class,
+        variables=variables,
+        detection_warning=parent_warning
+    )
+
+    return blueprint, None
+
+
+# ============================================================================
+# PropertyTag 解析（Phase 2）
+# ============================================================================
+
+def use_complete_type_name(legacy_version: int, ue5_version: int) -> bool:
+    """
+    判断是否使用完整 TypeName 格式（PROP-09）。
+
+    UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME (1000) 使用完整 TypeName 字符串。
+    UE4 始终使用旧格式（短名称 + 分离字段）。
+
+    Args:
+        legacy_version: LegacyFileVersion（-2 至 -9）
+        ue5_version: UE5 版本号
+
+    Returns:
+        True 使用 UE5 新格式，False 使用 UE4 旧格式
+    """
+    if legacy_version <= -8 and ue5_version >= PROPERTY_TAG_COMPLETE_TYPE_NAME:
+        return True
+    return False
+
+
+def read_property_tag(
+    archive: FArchive,
+    name_map: List[str],
+    legacy_version: int,
+    ue5_version: int
+) -> PropertyTag:
+    """
+    读取 PropertyTag 结构（PROP-01）。
+
+    根据 UE 源码 PropertyTag.cpp：
+    - UE5 新格式（>= PROPERTY_TAG_COMPLETE_TYPE_NAME）：完整 TypeName 字符串
+    - UE4 旧格式：短 Type 名称 + 分离字段（ArrayIndex、BoolVal 等）
+
+    Args:
+        archive: FArchive 实例
+        name_map: 名称表
+        legacy_version: LegacyFileVersion
+        ue5_version: UE5 版本号
+
+    Returns:
+        PropertyTag dataclass
+    """
+    tag = PropertyTag(
+        name=archive.read_name(name_map),
+        type="",
+        size=0
+    )
+
+    if use_complete_type_name(legacy_version, ue5_version):
+        # UE5 新格式（PropertyTag.cpp lines 436-545）
+        tag.type = archive.read_fstring()  # Complete TypeName string
+        tag.size = archive.read_i32()
+        archive.validate_size(tag.size, tag.name)  # D-11: validate PropertyTag.Size
+        tag.flags = archive.read_u8()
+
+        # 条件字段（基于标志位）
+        if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
+            tag.array_index = archive.read_i32()
+
+        if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
+            tag.property_guid = archive.read(16)
+
+        # BoolTrue 标志表示 bool 值为 true
+        if tag.flags & PROP_TAG_BOOL_TRUE:
+            tag.bool_val = 1
+    else:
+        # UE4 旧格式（PropertyTag.cpp lines 195-401）
+        tag.type = archive.read_name(name_map)  # Short type name only
+        tag.size = archive.read_i32()
+        archive.validate_size(tag.size, tag.name)  # D-11: validate PropertyTag.Size
+        tag.array_index = archive.read_i32()  # Always present in UE4
+
+        # 类型特定的额外字段（Phase 2 仅处理基本类型）
+        # BoolProperty: BoolVal 字段存在
+        if tag.type == "BoolProperty":
+            tag.bool_val = archive.read_u8()
+
+        # PropertyGuid（UE4 >= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG）
+        # Phase 2 简化处理：不读取 PropertyGuid，跳过依赖版本检查
+        # 完整实现需检查 file_version_ue4 >= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG
+
+    return tag
+
+
+# ============================================================================
+# 属性值解析（Phase 2 基本类型）
+# ============================================================================
+
+def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
+    """
+    解析 BoolProperty（PROP-04）。
+
+    BoolProperty 值存储在 PropertyTag.BoolVal，无额外数据读取。
+    参考 PropertyTag.cpp lines 558-571。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例（不读取额外数据）
+
+    Returns:
+        bool 值
+    """
+    return bool(tag.bool_val)
+
+
+def parse_int_property(tag: PropertyTag, archive: FArchive) -> int:
+    """
+    解析 IntProperty（PROP-02）。
+
+    根据 Type 名称分派：
+    - IntProperty: read_i32() → 4 bytes
+    - Int64Property: read_i64() → 8 bytes
+    - Int16Property: read_u16() → 2 bytes
+    - Int8Property/ByteProperty: read_u8() → 1 byte
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        int 值
+    """
+    type_name = tag.type
+    if type_name == "Int64Property":
+        return archive.read_i64()
+    elif type_name == "Int16Property":
+        return struct.unpack('<h', archive.read(2))[0]
+    elif type_name in ("Int8Property", "ByteProperty"):
+        return archive.read_u8()
+    else:  # IntProperty (default)
+        return archive.read_i32()
+
+
+def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
+    """
+    解析 FloatProperty（PROP-03）。
+
+    根据 Type 名称分派：
+    - FloatProperty: read_f32() → 4 bytes IEEE 754
+    - DoubleProperty: read_f64() → 8 bytes IEEE 754
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        float 值
+    """
+    type_name = tag.type
+    if type_name == "DoubleProperty":
+        return archive.read_f64()
+    else:  # FloatProperty (default)
+        return archive.read_f32()
+
+
+def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """
+    解析 StrProperty（PROP-05）。
+
+    使用 archive.read_fstring() 方法读取带长度前缀的 UTF-8 字符串。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        str 值
+    """
+    return archive.read_fstring()
+
+
+def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> str:
+    """
+    解析 NameProperty（PROP-06）。
+
+    使用 archive.read_name() 方法从 NameMap 读取 FName。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+
+    Returns:
+        str 值（名称字符串）
+    """
+    return archive.read_name(name_map)
+
+
+def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """
+    解析 ObjectProperty（PROP-07）。
+
+    读取 FPackageIndex（int32），返回原始索引值。
+    索引解析（映射到 ImportMap/ExportMap）推迟到阶段 3/4。
+
+    参考 ObjectResource.h - FPackageIndex 序列化。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        int 值（原始 FPackageIndex）
+    """
+    return archive.read_i32()
+
+
+def parse_array_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    depth: int = 0
+) -> List[any]:
+    """
+    解析 ArrayProperty（PROP-08, D-16）。
+
+    ArrayProperty 格式：
+    1. 读取元素数量（int32）
+    2. 循环读取各元素值
+
+    参考 PropertyArray.cpp lines 128-824。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        depth: 当前嵌套深度（D-18 最大 10）
+
+    Returns:
+        List 值（元素列表）
+
+    Raises:
+        ParseError: 若嵌套深度超过 10
+    """
+    MAX_DEPTH = 10  # D-18 嵌套深度限制
+
+    if depth > MAX_DEPTH:
+        raise ParseError(
+            f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
+        )
+
+    count = archive.read_i32()
+    elements: List[any] = []
+
+    # Phase 2: 基本类型数组元素解析
+    # 注意：复杂类型数组（如结构体数组）需要读取内部 PropertyTag
+    # 此实现假设元素类型可从 tag.type 推断或为基本类型
+    for i in range(count):
+        # 简化实现：假设元素为基本类型，直接读取值
+        # 完整实现需要读取内部 PropertyTag 并分派
+        # Phase 2 仅处理基本类型数组
+        inner_tag = PropertyTag(
+            name=f"{tag.name}[{i}]",
+            type=_get_inner_type(tag.type),
+            size=tag.size // count if count > 0 else 0
+        )
+
+        inner_value = parse_property_value(inner_tag, archive, name_map, export_map)
+        elements.append(inner_value)
+
+    return elements
+
+
+def _get_inner_type(array_type: str) -> str:
+    """
+    从 ArrayProperty 类型名推断内部元素类型（简化版）。
+
+    Phase 2 简化：假设基本类型数组。
+    完整实现需从 TypeName 参数或 InnerType 字段获取。
+
+    Args:
+        array_type: 数组类型名（如 "ArrayProperty"）
+
+    Returns:
+        推断的元素类型名
+    """
+    # Phase 2 简化：返回通用类型，实际值由 parse_property_value 处理
+    # 完整实现需解析 TypeName 参数获取真实内部类型
+    return "IntProperty"  # 默认假设
+
+
+def parse_properties_from_export(
+    export: ObjectExport,
+    archive: FArchive,
+    summary: PackageFileSummary,
+    name_map: List[str],
+    export_map: List[ObjectExport]
+) -> List[PropertyValue]:
+    """
+    从导出条目解析所有属性（PROP-01 至 PROP-08）。
+
+    参考 Class.cpp SerializeVersionedTaggedProperties 模式：
+    1. Seek 到 export.serial_offset
+    2. 循环读取 PropertyTag 直到 Name == "None"
+    3. 分派到类型特定解析函数
+    4. 边界验证（seek 到 start + tag.size）
+
+    Args:
+        export: ObjectExport 实例
+        archive: FArchive 实例
+        summary: PackageFileSummary 实例（版本信息）
+        name_map: 名称表
+        export_map: 导出表
+
+    Returns:
+        List[PropertyValue] 属性值列表
+    """
+    archive.seek(export.serial_offset)
+    properties: List[PropertyValue] = []
+    property_count = 0  # D-08: loop counter for SAFE-05
+
+    while True:
+        # D-08/D-09: Property loop limit check
+        if property_count >= MAX_PROPERTY_COUNT:
+            raise ParseError(
+                f"Property count exceeds {MAX_PROPERTY_COUNT} - possible infinite loop"
+            )
+        property_count += 1
+
+        try:
+            tag = read_property_tag(
+                archive,
+                name_map,
+                summary.legacy_file_version,
+                summary.file_version_ue5
+            )
+
+            # 终止标记：Name == "None"
+            if tag.name == "None":
+                break
+
+            # 记录起始位置用于边界验证
+            start_pos = archive.tell()
+
+            # 分派到类型特定解析器
+            value = parse_property_value(tag, archive, name_map, export_map)
+
+            # 边界验证：确保定位到正确位置
+            expected_end = start_pos + tag.size
+            current_pos = archive.tell()
+            if current_pos != expected_end:
+                # 修正位置（处理读取不足或过多）
+                archive.seek(expected_end)
+
+            properties.append(PropertyValue(
+                name=tag.name,
+                type=tag.type,
+                value=value,
+                array_index=tag.array_index
+            ))
+
+        except ParseError as e:
+            # D-19: Smart continue - skip damaged property using PropertyTag.Size
+            if tag.size > 0 and start_pos + tag.size <= archive.total_size():
+                archive.seek(start_pos + tag.size)
+                # D-14: Record warning (would be passed to caller via ParseResult)
+                properties.append(PropertyValue(
+                    name=tag.name,
+                    type="Warning",
+                    value=f"Property skipped: {e}"
+                ))
+                continue
+            else:
+                # Cannot skip - Size invalid, abort property parsing for this export
+                properties.append(PropertyValue(
+                    name="ParseError",
+                    type="Error",
+                    value=f"Property parsing aborted: {e}"
+                ))
+                break
+
+    return properties
+
+
+def parse_property_value(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport]
+) -> any:
+    """
+    分派属性值解析（PROP-02 至 PROP-06）。
+
+    根据 tag.type 分派到类型特定的解析函数。
+    未知类型返回 None（D-26 跳过策略）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+
+    Returns:
+        解析后的值（Python 原生类型）或 None（未知类型）
+    """
+    type_dispatch = {
+        "BoolProperty": lambda t, a, n, e: parse_bool_property(t, a),
+        "IntProperty": lambda t, a, n, e: parse_int_property(t, a),
+        "Int64Property": lambda t, a, n, e: parse_int_property(t, a),
+        "Int16Property": lambda t, a, n, e: parse_int_property(t, a),
+        "Int8Property": lambda t, a, n, e: parse_int_property(t, a),
+        "ByteProperty": lambda t, a, n, e: parse_int_property(t, a),
+        "FloatProperty": lambda t, a, n, e: parse_float_property(t, a),
+        "DoubleProperty": lambda t, a, n, e: parse_float_property(t, a),
+        "StrProperty": lambda t, a, n, e: parse_str_property(t, a),
+        "NameProperty": lambda t, a, n, e: parse_name_property(t, a, n),
+        "ObjectProperty": lambda t, a, n, e: parse_object_property(t, a),
+        "ArrayProperty": lambda t, a, n, e: parse_array_property(t, a, n, e),
+    }
+
+    parser = type_dispatch.get(tag.type)
+    if parser:
+        return parser(tag, archive, name_map, export_map)
+
+    # 未知类型：跳过（D-26）
+    return None
+
+
 def parse_uasset(path: str) -> ParseResult:
     """
     主入口：解析 .uasset 文件（D-15 优雅降级）。
@@ -801,6 +1853,11 @@ def parse_uasset(path: str) -> ParseResult:
     try:
         archive = FArchive(path)
 
+        # D-02/D-03: Extract mmap info for ParseResult
+        mmap_info = archive.get_mmap_info()
+        result.mmap_used = mmap_info["used"]
+        result.mmap_warning = mmap_info["warning"]
+
         # 读取文件头
         result.summary = read_package_summary(archive)
 
@@ -814,6 +1871,38 @@ def parse_uasset(path: str) -> ParseResult:
         result.export_map = read_export_map(archive, result.summary, result.name_map)
 
         result.is_success = True
+
+        # Blueprint extraction (Phase 3)
+        # Per D-02: auto-detect and extract on every parse
+        # Per D-03: add warnings to errors list if detection fails
+
+        blueprint_metadata = None
+        for export in result.export_map:
+            if detect_blueprint(export, result.import_map, result.export_map):
+                # Create temporary archive for extraction
+                temp_archive = FArchive(path)
+                temp_archive.set_byte_swapping(archive._byte_swapping)
+
+                try:
+                    meta, warn = extract_blueprint_metadata(
+                        export,
+                        temp_archive,
+                        result.import_map,
+                        result.export_map,
+                        result.name_map,
+                        result.summary
+                    )
+                    if meta:
+                        blueprint_metadata = meta
+                        if warn:
+                            result.errors.append(f"blueprint parent warning: {warn}")
+                except ParseError as e:
+                    result.errors.append(f"blueprint extraction error: {e}")
+                finally:
+                    temp_archive.close()
+                break  # Only process first blueprint found
+
+        result.blueprint = blueprint_metadata
 
     except VersionError as e:
         result.errors.append(str(e))
@@ -837,3 +1926,557 @@ def parse_uasset(path: str) -> ParseResult:
             archive.close()
 
     return result
+
+
+# ============================================================================
+# Output Formatting Functions (Phase 4)
+# ============================================================================
+
+def format_json_full(result: ParseResult) -> Dict:
+    """
+    Format full JSON output with complete asset data (OUT-01, OUT-03).
+
+    Per D-01: Tiered output (full detail)
+    Per D-02: Package → Exports → Properties hierarchy
+    Per D-03: Top-level errors field
+    Per D-04: Top-level blueprint_metadata (None for non-blueprint)
+    Per D-05: Raw FPackageIndex values preserved where unresolved
+    Per D-06: name_map excluded (already parsed to object names)
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        Dict with keys: summary, exports, blueprint_metadata, errors
+    """
+    from dataclasses import asdict
+
+    summary_dict = {}
+    if result.summary:
+        summary_dict = {
+            "version_ue4": result.summary.file_version_ue4,
+            "version_ue5": result.summary.file_version_ue5,
+            "legacy_version": result.summary.legacy_file_version,
+            "package_flags": result.summary.package_flags,  # D-08: raw u32
+            "package_name": result.summary.package_name
+        }
+
+    return {
+        "summary": summary_dict,
+        "exports": format_exports_list(result),
+        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "errors": result.errors
+    }
+
+
+def format_exports_list(result: ParseResult) -> List[Dict]:
+    """
+    Format exports list for JSON output.
+
+    Per D-11/D-12: ParentClass, SuperIndex resolved in Phase 3
+    Per D-13: Warning field on resolution failure
+    Per D-15: Soft object paths output raw path strings
+
+    Args:
+        result: ParseResult containing export_map
+
+    Returns:
+        List of dicts with keys: index, name, class, serial_size, properties,
+        outer_index, super_index, parent_class
+    """
+    exports_list = []
+
+    for i, exp in enumerate(result.export_map):
+        # Resolve ParentClass from Phase 3 extraction
+        parent_class = None
+        parent_warning = None
+        if result.blueprint and result.blueprint.is_blueprint:
+            parent_class = result.blueprint.parent_class
+            parent_warning = result.blueprint.detection_warning
+
+        export_dict = {
+            "index": i,
+            "name": exp.object_name,
+            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "serial_size": exp.serial_size,
+            "properties": format_properties_list(exp.properties) if exp.properties else [],
+            # Per D-12: resolved references
+            "outer_index": resolve_fpackage_index(exp.outer_index, result),
+            "super_index": resolve_fpackage_index(exp.super_index, result),
+            "parent_class": parent_class,  # from Phase 3 or resolution
+        }
+
+        # Per D-13: include warning if resolution failed
+        if parent_warning:
+            export_dict["parent_warning"] = parent_warning
+
+        exports_list.append(export_dict)
+
+    return exports_list
+
+
+def resolve_fpackage_index(idx: PackageIndex, result: ParseResult) -> Dict:
+    """
+    Resolve FPackageIndex to object name (OUT-04, D-11/D-12).
+
+    Args:
+        idx: PackageIndex to resolve
+        result: ParseResult containing import_map and export_map
+
+    Returns:
+        Dict with keys: raw, resolved, kind
+        - raw: original int32 value
+        - resolved: object name string or None
+        - kind: "null", "import", or "export"
+    """
+    if idx.is_null:
+        return {"raw": 0, "resolved": None, "kind": "null"}
+    elif idx.is_import:
+        # Import: negative index, maps to import_map
+        import_idx = -idx.index - 1  # Convert to 0-based import index
+        if 0 <= import_idx < len(result.import_map):
+            resolved = result.import_map[import_idx].object_name
+            return {"raw": idx.index, "resolved": resolved, "kind": "import"}
+        else:
+            return {"raw": idx.index, "resolved": None, "kind": "import"}
+    elif idx.is_export:
+        # Export: positive index, maps to export_map
+        export_idx = idx.index - 1  # Convert to 0-based export index
+        if 0 <= export_idx < len(result.export_map):
+            resolved = result.export_map[export_idx].object_name
+            return {"raw": idx.index, "resolved": resolved, "kind": "export"}
+        else:
+            return {"raw": idx.index, "resolved": None, "kind": "export"}
+    else:
+        # Fallback for edge cases
+        return {"raw": idx.index, "resolved": None, "kind": "unknown"}
+
+
+def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
+    """
+    Format properties list for JSON output.
+
+    Per OUT-05: None → null in JSON (Python None preserved)
+
+    Args:
+        properties: List of PropertyValue objects
+
+    Returns:
+        List of dicts with keys: name, type, value, array_index
+    """
+    props_list = []
+
+    for prop in properties:
+        prop_dict = {
+            "name": prop.name,
+            "type": prop.type,
+            "value": prop.value,  # None → JSON null automatically
+            "array_index": prop.array_index
+        }
+        props_list.append(prop_dict)
+
+    return props_list
+
+
+def format_json_summary(result: ParseResult) -> Dict:
+    """
+    Format compact JSON summary (OUT-03).
+
+    Per D-09: Medium detail - export names + types + properties (name+type+value)
+    Per D-10: Skip low-level details - no name_map, import_map, CustomVersions
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        Dict with keys: version, package_name, exports, blueprint_metadata, errors
+    """
+    version_dict = {}
+    if result.summary:
+        version_dict = {
+            "ue4": result.summary.file_version_ue4,
+            "ue5": result.summary.file_version_ue5 or result.summary.legacy_file_version,
+            "legacy": result.summary.legacy_file_version
+        }
+
+    exports_summary = []
+    for exp in result.export_map:
+        export_summary = {
+            "name": exp.object_name,
+            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "properties": [
+                {"name": p.name, "type": p.type, "value": p.value}
+                for p in (exp.properties or [])
+            ]
+        }
+        exports_summary.append(export_summary)
+
+    return {
+        "version": version_dict,
+        "package_name": result.summary.package_name if result.summary else "",
+        "exports": exports_summary,
+        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "errors": result.errors
+    }
+
+
+def format_text_full(result: ParseResult) -> str:
+    """
+    Format YAML-style text output with full detail (OUT-02).
+
+    Per D-17: YAML style hierarchy with 2-space indentation
+    Per D-19: ERRORS block at end
+    Per D-21: Blueprint metadata embedded
+    Per D-22: Nested YAML indentation
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: YAML-style text output
+    """
+    lines = []
+
+    # Package header
+    if result.summary:
+        package_name = result.summary.package_name or "Unknown"
+        lines.append(f"Package: {package_name}")
+        lines.append(f"  Version: UE4={result.summary.file_version_ue4}, UE5={result.summary.file_version_ue5}")
+        lines.append(f"  Flags: 0x{result.summary.package_flags:08X}")
+        lines.append(f"  Imports: {len(result.import_map)}")
+        lines.append(f"  Exports: {len(result.export_map)}")
+        lines.append("")
+    else:
+        lines.append("Package: Unknown")
+        lines.append("  Version: Unknown")
+        lines.append("  Flags: Unknown")
+        lines.append("  Imports: 0")
+        lines.append("  Exports: 0")
+        lines.append("")
+
+    # Exports section
+    lines.append("Exports:")
+    for i, exp in enumerate(result.export_map):
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - Name: {exp.object_name}")
+        lines.append(f"    Class: {asset_class}")
+        lines.append(f"    SerialSize: {exp.serial_size}")
+
+        if exp.properties:
+            lines.append(f"    Properties:")
+            for prop in exp.properties:
+                lines.append(f"      - Name: {prop.name}")
+                lines.append(f"        Type: {prop.type}")
+                value_str = str(prop.value) if prop.value is not None else "null"
+                lines.append(f"        Value: {value_str}")
+
+        lines.append("")  # Blank line between exports
+
+    # Blueprint section
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  ParentClass: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+        for var in result.blueprint.variables:
+            lines.append(f"  - Name: {var.var_name}")
+            lines.append(f"    Type: {var.var_type.pin_category}")
+            default = var.default_value or "None"
+            lines.append(f"    Default: {default}")
+            category = var.category or "Default"
+            lines.append(f"    Category: {category}")
+
+        lines.append("")  # Blank line after blueprint
+
+    # ERRORS block
+    if result.errors:
+        lines.append("ERRORS:")
+        for err in result.errors:
+            lines.append(f"  - {err}")
+    else:
+        lines.append("ERRORS:")
+        lines.append("  (none)")
+
+    return "\n".join(lines)
+
+
+def format_text_summary(result: ParseResult) -> str:
+    """
+    Format compact YAML-style text summary (OUT-02).
+
+    Per D-18: One line per export: "Name (Type)"
+    Per D-22: YAML indentation
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: Compact YAML-style text summary
+    """
+    lines = []
+
+    # Package header
+    package_name = result.summary.package_name if result.summary else "Unknown"
+    lines.append(f"Package: {package_name}")
+    lines.append(f"Exports: {len(result.export_map)}")
+    lines.append("")  # Blank line
+
+    # Exports: one line each
+    for exp in result.export_map:
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - {exp.object_name} ({asset_class})")
+
+    # Blueprint summary
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("")
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  Parent: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+    return "\n".join(lines)
+
+
+def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
+    """
+    Format BlueprintMetadata for JSON output (D-04).
+
+    Args:
+        blueprint: BlueprintMetadata object
+
+    Returns:
+        Dict with keys: parent_class, variables, detection_warning
+    """
+    variables_list = []
+    for v in blueprint.variables:
+        var_dict = {
+            "name": v.var_name,
+            "type": {
+                "pin_category": v.var_type.pin_category,
+                "pin_sub_category": v.var_type.pin_sub_category,
+                "container_type": v.var_type.container_type,
+                "is_reference": v.var_type.is_reference,
+                "is_const": v.var_type.is_const
+            },
+            "category": v.category,
+            "property_flags": v.property_flags,
+            "default_value": v.default_value,  # None if not set
+            "friendly_name": v.friendly_name
+        }
+        variables_list.append(var_dict)
+
+    return {
+        "parent_class": blueprint.parent_class,  # None if not resolved
+        "variables": variables_list,
+        "detection_warning": blueprint.detection_warning  # None if no warning
+    }
+
+
+# ============================================================================
+# CLI Functions (Phase 4)
+# ============================================================================
+
+# Exit code constants (D-26)
+EXIT_SUCCESS = 0
+EXIT_PARSE_ERROR = 1
+EXIT_FILE_NOT_FOUND = 2
+EXIT_ARGUMENT_ERROR = 3
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """
+    Create argparse parser for CLI (CLI-01 to CLI-04).
+
+    Per D-23: Double entry point support
+    Per D-24: Mutually exclusive --json/--text/--summary flags
+    Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
+
+    Returns:
+        argparse.ArgumentParser: Configured parser
+    """
+    parser = argparse.ArgumentParser(
+        prog='uasset_read',
+        description='Parse Unreal Engine .uasset files and output structured data'
+    )
+
+    # Positional: file path (CLI-01)
+    parser.add_argument('file', help='Path to .uasset file to parse')
+
+    # Mutually exclusive output flags (D-24)
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--json', action='store_true', help='Output full JSON structure')
+    group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
+    group.add_argument('--summary', action='store_true', help='Output compact summary format')
+
+    # Optional flags (D-27)
+    parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
+    parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
+    parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
+
+    return parser
+
+
+def main():
+    """
+    Main CLI entry point (CLI-05).
+
+    Per D-23: Double entry point (also __main__.py)
+    Per D-25: stdout for data, stderr for errors
+    Per D-26: Exit codes 0/1/2/3
+    Per D-28: UTF-8 encoding for file output
+
+    Exit codes:
+    - 0: Success
+    - 1: Parse error
+    - 2: File not found
+    - 3: Argument error
+    """
+    parser = create_parser()
+
+    try:
+        args = parser.parse_args()
+    except SystemExit as e:
+        # argparse exits on error, map to EXIT_ARGUMENT_ERROR
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+    # D-26: file not found check
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(f"Error: File not found: {args.file}", file=sys.stderr)
+        sys.exit(EXIT_FILE_NOT_FOUND)
+
+    # Parse the file
+    result = parse_uasset(args.file)
+
+    # D-26: parse error handling
+    if not result.is_success:
+        print("Parse errors:", file=sys.stderr)
+        for err in result.errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
+
+    # Select formatter (D-24: --json, --summary, default --text)
+    if args.json:
+        output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+    elif args.summary:
+        output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
+    else:
+        # Default: --text or no flag
+        output_str = format_text_full(result)
+
+    # D-25/D-28: Output routing with UTF-8
+    if args.output:
+        try:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                f.write(output_str)
+            print(f"Output written to {args.output}", file=sys.stderr)
+        except IOError as e:
+            print(f"Error writing to file: {e}", file=sys.stderr)
+            sys.exit(EXIT_ARGUMENT_ERROR)
+    else:
+        # stdout for data (D-25)
+        print(output_str)
+
+    sys.exit(EXIT_SUCCESS)
+
+
+# ============================================================================
+# Public API Exports
+# ============================================================================
+
+__all__ = [
+    # Dataclasses
+    'CustomVersion',
+    'PackageIndex',
+    'PackageFileSummary',
+    'ObjectImport',
+    'ObjectExport',
+    'PropertyTag',
+    'PropertyValue',
+    'ParseResult',
+    'FEdGraphPinType',
+    'BlueprintVariable',
+    'BlueprintMetadata',
+
+    # FArchive
+    'FArchive',
+
+    # Exceptions and Context
+    'UAssetError',
+    'VersionError',
+    'ParseError',
+    'ErrorContext',
+
+    # Constants
+    'PACKAGE_FILE_TAG',
+    'PACKAGE_FILE_TAG_SWAPPED',
+    'PROP_TAG_NONE',
+    'PROP_TAG_HAS_ARRAY_INDEX',
+    'PROP_TAG_HAS_PROPERTY_GUID',
+    'PROP_TAG_HAS_EXTENSIONS',
+    'PROP_TAG_BOOL_TRUE',
+    'PROPERTY_TAG_COMPLETE_TYPE_NAME',
+
+    # Phase 5: Performance and safety constants
+    'MMAP_THRESHOLD',
+    'MAX_PROPERTY_COUNT',
+
+    # Phase 5: Boundary validation functions
+    'validate_package_index',
+
+    # Core parsing functions
+    'read_package_summary',
+    'read_name_table',
+    'read_import_map',
+    'read_export_map',
+    'get_asset_class',
+    'detect_blueprint',
+    'resolve_parent_class',
+    'parse_uasset',
+
+    # Blueprint parsing functions (Phase 3)
+    'read_ed_graph_pin_type',
+    'parse_default_value',
+    'read_blueprint_variable',
+    'extract_blueprint_metadata',
+
+    # Property parsing functions (Phase 2)
+    'use_complete_type_name',
+    'read_property_tag',
+    'parse_bool_property',
+    'parse_int_property',
+    'parse_float_property',
+    'parse_str_property',
+    'parse_name_property',
+    'parse_object_property',
+    'parse_array_property',
+    'parse_property_value',
+    'parse_properties_from_export',
+
+    # Output formatting functions (Phase 4)
+    'format_json_full',
+    'format_json_summary',
+    'format_text_full',
+    'format_text_summary',
+    'format_exports_list',
+    'format_properties_list',
+    'format_blueprint_dict',
+    'resolve_fpackage_index',
+
+    # CLI functions (Phase 4)
+    'create_parser',
+    'main',
+    'EXIT_SUCCESS',
+    'EXIT_PARSE_ERROR',
+    'EXIT_FILE_NOT_FOUND',
+    'EXIT_ARGUMENT_ERROR',
+]
+
+
+# ============================================================================
+# Module Entry Point (D-23 double entry)
+# ============================================================================
+
+if __name__ == '__main__':
+    main()
