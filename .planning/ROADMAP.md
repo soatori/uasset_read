@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-05-02T00:35:00Z"
+status: complete
+last_updated: "2026-05-02T01:00:00Z"
 progress:
   total_phases: 5
-  completed_phases: 4
-  active_phase: 5
+  completed_phases: 5
+  active_phase: null
   total_plans: 21
-  completed_plans: 17
-  percent: 80
+  completed_plans: 21
+  percent: 100
 shipped:
   date: null
   branch: null
@@ -22,15 +22,11 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v1.0 —— 初始
-**状态：** 阶段 1、2、3、4 已完成 ✓，阶段 5 待规划
+**状态：** 所有阶段已完成 ✓
 
 ## 当前阶段
 
-**阶段 5：优化与安全**
-
-- 状态：○ 待定
-- 目标：性能优化和安全加固
-- 进度：0/0 计划，等待规划
+**项目已完成** — 所有 5 个阶段已交付
 
 ## 阶段状态
 
@@ -40,7 +36,7 @@ shipped:
 | 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | - | 100% |
 | 3 | 蓝图提取 | ✓ 完成 | 4/4 | ✓ | - | 100% |
 | 4 | 输出与 CLI | ✓ 完成 | 5/5 | ✓ | ✓ | 100% |
-| 5 | 优化与安全 | ○ 待定 | 0/0 | - | - | 0% |
+| 5 | 优化与安全 | ✓ 完成 | 5/5 | ✓ | ✓ | 100% |
 
 ## 近期活动
 
@@ -79,6 +75,12 @@ shipped:
 | 2026-05-01 | 阶段 4 执行完成 | 83+11 测试，OUT-01~05, CLI-01~06 需求覆盖 |
 | 2026-05-02 | 阶段 4 UAT 通过 | 10/10 测试通过，CLI 和输出功能验证 |
 | 2026-05-02 | 阶段 4 安全审查通过 | 4 威胁已缓解，1 接受风险（推迟到 Phase 5） |
+| 2026-05-02 | 阶段 5 Wave 1 完成 | mmap 大文件支持，50MB 阈值，回退机制 |
+| 2026-05-02 | 阶段 5 Wave 2 完成 | 边界验证增强，validate_offset/size/package_index |
+| 2026-05-02 | 阶段 5 Wave 3 完成 | 循环计数限制，属性循环 10000 次 |
+| 2026-05-02 | 阶段 5 Wave 4 完成 | 部分结果改进，ErrorContext，智能继续 |
+| 2026-05-02 | 阶段 5 验证通过 | SAFE-01~05 全部覆盖，85 测试通过 |
+| 2026-05-02 | 项目完成 | 所有 5 阶段交付，v1.0 milestone 达成 |
 
 ## 项目参考
 

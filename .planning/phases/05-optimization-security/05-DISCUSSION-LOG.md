@@ -174,15 +174,69 @@
 
 ---
 
-## Claude's Discretion
+## Claude's Discretion 具体化讨论 (2026-05-01 更新)
 
-以下领域用户选择让 Claude 自行决定具体实现：
+以下领域用户选择让 Claude 自行决定具体实现，现已具体化：
 
-- max_reasonable Size 具体阈值选择
-- PackageIndex 解析验证的具体逻辑
-- 失败位置记录格式
-- 跳到下一个有效点的启发式方法
-- 单元测试组织和测试用例设计
+### max_reasonable Size 阈值
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| 1MB 固定阈值 | 保守阈值，单个属性最大 1MB（适用于大多数属性） | |
+| 文件大小 10%（动态） | 动态计算，适应不同大小文件 | ✓ |
+| 10MB 固定阈值 | 保守固定阈值 10MB，覆盖大型结构体属性 | |
+| 仅检查越界 | 不设 max_reasonable 限制，仅检查 remaining_bytes | |
+
+**User's choice:** 文件大小 10%（动态）
+**Notes:** 最小 1KB，最大 100MB，防止异常大 PropertyTag.Size 值
+
+### PackageIndex 解析验证维度
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| 范围验证（已实现） | 基础范围检查：0 <= index < len(map) | ✓ |
+| 失败信息记录 | 记录失败的 PackageIndex 信息（原始值、目标表、解析位置） | ✓ |
+| 类型一致性检查 | 引用对象类型与期望类型匹配检查 | ✓ |
+| 目标对象有效性 | 验证 PackageIndex 指向的对象确实存在 | ✓ |
+
+**User's choice:** 全部 4 个维度
+**Notes:** 完整验证策略，覆盖范围、信息记录、类型一致性、目标有效性
+
+### 错误信息上下文字段
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| 偏移位置 (offset) | 错误发生时的文件偏移位置 | ✓ |
+| 解析阶段 (phase) | 当前解析阶段（header、name_table、import_map 等） | ✓ |
+| 操作类型 (operation) | 失败的具体操作（read_i32、read_name、seek 等） | ✓ |
+| 上下文对象名 (context_name) | 相关的对象名或属性名 | ✓ |
+
+**User's choice:** 全部 4 个字段
+**Notes:** 丰富的错误上下文帮助定位问题
+
+### 智能继续策略
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| 按 Size 跳过属性（推荐） | 使用 PropertyTag.Size 跳过当前属性，继续下一个 | ✓ |
+| 立即中止 | 遇到错误立即中止解析，返回已收集的数据 | |
+| 扫描 'None' 标记 | 扫描寻找下一个 'None' FName 终止标记（启发式） | |
+| 不跳过，继续解析 | 记录错误位置，不尝试跳过 | |
+
+**User's choice:** 按 Size 跳过属性（推荐）
+**Notes:** 当 Size 无效（负数或越界）时中止当前导出的属性解析，尝试下一个导出
+
+---
+
+## Claude's Discretion (原始记录)
+
+以下领域用户最初选择让 Claude 自行决定具体实现：
+
+- max_reasonable Size 具体阈值选择 → 已具体化
+- PackageIndex 解析验证的具体逻辑 → 已具体化
+- 失败位置记录格式 → 已具体化
+- 跳到下一个有效点的启发式方法 → 已具体化
+- 单元测试组织和测试用例设计 → 待实现时决定
 
 ---
 

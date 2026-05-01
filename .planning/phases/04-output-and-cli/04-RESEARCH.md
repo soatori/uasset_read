@@ -737,17 +737,11 @@ def main():
 
 **Verification status:** A1-A3 verified via tests, A4-A5 assumed (discretion areas).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **YAML indentation depth**
-   - What we know: D-22 mandates YAML indentation, discretion allows 2 or 4 spaces
-   - What's unclear: Which indentation level is better for AI agent parsing
-   - Recommendation: Use 2 spaces (compact, standard YAML)
-
-2. **JSON field naming (exports vs objects)**
-   - What we know: D-02 says "exports array", discretion allows naming choice
-   - What's unclear: Whether "exports" or "objects" is clearer for users
-   - Recommendation: Use "exports" (matches ExportMap terminology from Phase 1)
+1. **YAML indentation depth** — RESOLVED: Use 2 spaces (compact, standard YAML, D-22 discretion applied)
+2. **JSON field naming (exports vs objects)** — RESOLVED: Use "exports" (matches ExportMap terminology from Phase 1, D-02 discretion applied)
+3. **Error message verbosity** — RESOLVED: Summary format for CLI errors (user-friendly), full details in JSON errors array (D-03)
 
 3. **Error message verbosity**
    - What we know: D-25 mandates stderr for errors, discretion allows format choice

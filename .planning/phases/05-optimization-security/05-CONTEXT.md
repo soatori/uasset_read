@@ -57,12 +57,13 @@
 - **D-15:** 上下文信息 —— 错误信息包含错误类型、位置、上下文（当前解析阶段、偏移）
 - **原因:** 错误分类便于问题诊断；智能继续最大化数据提取；上下文信息帮助定位问题
 
-### Claude's Discretion
-- max_reasonable Size 具体阈值选择
-- PackageIndex 解析验证的具体逻辑
-- 失败位置记录格式
-- 跳到下一个有效点的启发式方法
-- 单元测试组织和测试用例设计
+### Claude's Discretion (已具体化)
+- **D-16:** max_reasonable Size = 文件大小 10%（动态计算），最小 1KB，最大 100MB —— 防止异常大 PropertyTag.Size 值
+- **D-17:** PackageIndex 完整验证 —— 范围验证（已实现）+ 失败信息记录（原始值、目标表、解析位置）+ 类型一致性检查（引用类型与目标匹配）+ 目标对象有效性（表内条目存在）
+- **D-18:** 错误上下文信息格式 —— offset（文件偏移位置）+ phase（解析阶段：header/name_table/import_map/export_map/properties/blueprint）+ operation（操作类型：read_i32/read_name/seek 等）+ context_name（相关对象名或属性名）
+- **D-19:** 智能继续策略 —— 使用 PropertyTag.Size 跳过当前属性数据区域继续下一个属性；当 Size 无效（负数或越界）时中止当前导出的属性解析，尝试下一个导出
+- 单元测试组织：合成大文件测试 mmap 分支 + 真实文件测试回退逻辑 + 边界条件测试（负数 Size、越界偏移、超大索引）
+- 测试资产选择：LyraStarterGame 大型蓝图资产（>50MB mmap 测试）+ 损坏文件合成（边界验证测试）
 
 </decisions>
 

@@ -956,12 +956,14 @@ def test_export_count_bounds_validation():
     header += struct.pack('<i', 5) + b'None\x00'  # PackageName
     header += struct.pack('<I', 0)  # PackageFlags
     header += struct.pack('<i', 10)  # name_count (valid)
-    header += struct.pack('<i', 100)  # name_offset (placeholder)
+    header += struct.pack('<i', 200)  # name_offset (valid, within padded file)
     header += struct.pack('<i', 0)  # soft_object_paths_count
     header += struct.pack('<i', 0)  # soft_object_paths_offset
     header += struct.pack('<i', 0)  # import_count
-    header += struct.pack('<i', 0)  # import_offset
+    header += struct.pack('<i', 200)  # import_offset (valid)
     header += struct.pack('<i', 5_000_000)  # export_count > MAX
+    # Add padding to make offsets valid
+    header += b'\x00' * 150  # Pad file to ~220 bytes so offsets 200 are valid
 
     os.write(fd, header)
     os.close(fd)

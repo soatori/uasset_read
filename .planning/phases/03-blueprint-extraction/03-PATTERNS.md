@@ -1,8 +1,8 @@
 # Phase 3: Blueprint Extraction - Pattern Map
 
-**Mapped:** 2026-05-01
-**Files analyzed:** 2 (1 modified, 1 created)
-**Analogs found:** 2 / 2
+**映射日期:** 2026-05-01
+**文件分析:** 2 (1 修改, 1 创建)
+**找到类比:** 2 / 2
 
 ## File Classification
 
@@ -61,7 +61,7 @@ def read_u64(self) -> int:
     return struct.unpack(fmt + 'Q', self.read(8))[0]
 ```
 
-**Apply to:** read_ed_graph_pin_type(), read_blueprint_variable() - use existing FArchive methods
+**Apply to:** read_ed_graph_pin_type(), read_blueprint_variable() - 使用现有 FArchive 方法
 
 ---
 
@@ -90,7 +90,7 @@ def use_complete_type_name(legacy_version: int, ue5_version: int) -> bool:
     return False
 ```
 
-**Apply to:** FEdGraphPinType version checks (FFrameworkObjectVersion thresholds)
+**Apply to:** FEdGraphPinType 版本检查 (FFrameworkObjectVersion thresholds)
 
 ---
 
@@ -125,7 +125,7 @@ def parse_property_value(
     return None
 ```
 
-**Apply to:** parse_default_value() - dispatch based on PinCategory
+**Apply to:** parse_default_value() - 基于 PinCategory 分发
 
 ---
 
@@ -190,7 +190,7 @@ def parse_properties_from_export(
     return properties
 ```
 
-**Apply to:** extract_blueprint_metadata() - seek to export.SerialOffset, parse blueprint structures
+**Apply to:** extract_blueprint_metadata() - seek 到 export.SerialOffset,解析蓝图结构
 
 ---
 
@@ -224,7 +224,7 @@ def get_asset_class(
     return None
 ```
 
-**Apply to:** resolve_parent_class(), resolve_pin_sub_category_object() - same FPackageIndex → map lookup pattern
+**Apply to:** resolve_parent_class(), resolve_pin_sub_category_object() - 相同 FPackageIndex → map lookup pattern
 
 ---
 
@@ -252,7 +252,7 @@ except Exception as e:
     result.is_success = False
 ```
 
-**Apply to:** Blueprint extraction - add warnings to ParseResult.errors on detection failure (D-03)
+**Apply to:** Blueprint extraction - 检测失败时在 ParseResult.errors 添加警告 (D-03)
 
 ---
 
@@ -283,7 +283,7 @@ def create_mock_archive_with_data(data: bytes) -> MockArchive:
     return MockArchive(data)
 ```
 
-**Apply to:** Blueprint extraction tests - reuse MockArchive for FEdGraphPinType, BlueprintVariable tests
+**Apply to:** Blueprint extraction tests - 为 FEdGraphPinType、BlueprintVariable tests 重用 MockArchive
 
 ---
 
@@ -311,7 +311,7 @@ def test_property_tag_ue5_format_basic():
     """Test UE5 PropertyTag basic format parsing."""
 ```
 
-**Apply to:** Blueprint tests - group by BLUE-01 to BLUE-06 requirement IDs
+**Apply to:** Blueprint tests - 按 BLUE-01 到 BLUE-06 requirement IDs 分组
 
 ---
 
@@ -345,7 +345,7 @@ def test_property_tag_ue5_format_basic():
     assert tag.type == "IntProperty"
 ```
 
-**Apply to:** FEdGraphPinType tests - construct binary data with struct.pack for PinCategory, PinSubCategory, ContainerType, etc.
+**Apply to:** FEdGraphPinType tests - 用 struct.pack 为 PinCategory、PinSubCategory、ContainerType 等构造二进制数据
 
 ---
 
@@ -353,7 +353,7 @@ def test_property_tag_ue5_format_basic():
 
 ### FArchive Binary Reading
 **Source:** `uasset_read.py` lines 163-249
-**Apply to:** All blueprint parsing functions
+**Apply to:** 所有蓝图解析函数
 ```python
 # Use existing FArchive methods:
 archive.read_name(name_map)      # FName
@@ -403,7 +403,7 @@ elif pkg_idx.is_export:
 
 ### Test Assertion Pattern
 **Source:** `tests/test_property_parsing.py` lines 110-119, 246-267
-**Apply to:** All blueprint extraction tests
+**Apply to:** 所有蓝图提取测试
 ```python
 # Direct value assertion
 assert tag.name == "TestProperty"

@@ -43,3 +43,9 @@ Thumbs.db
 # Temp
 *.tmp
 *.log
+# 校验报告（临时）
+VERIFICATION-REPORT.md
+
+# src 目录废弃结构
+src/
+

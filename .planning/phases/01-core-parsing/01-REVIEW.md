@@ -14,74 +14,74 @@ findings:
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# 阶段 01：代码审查报告
 
-**Reviewed:** 2026-04-28
-**Depth:** standard
-**Files Reviewed:** 2
-**Status:** issues_found
+**审查日期：** 2026-04-28
+**深度：** standard
+**审查文件数：** 2
+**状态：** issues_found
 
-## Summary
+## 摘要
 
-Reviewed core uasset parser implementation and test suite. Found 2 critical bugs and several quality issues. The most severe issues are: (1) byte swapping incorrectly reverses UTF-8 string bytes, corrupting string data for big-endian files, and (2) script serialization fields are always read regardless of UE version, causing UE4 file parsing to fail. The test suite has insufficient coverage for byte-swapped file content validation.
+审查核心 uasset 解析器实现和测试套件。发现 2 个严重 bug 和若干质量问题。最严重的问题是：（1）字节交换错误反转 UTF-8 字符串字节，损坏大端序文件字符串数据；（2）script serialization 字段总是读取，忽略 UE 版本，导致 UE4 文件解析失败。测试套件字节交换文件内容验证覆盖不足。
 
-## Critical Issues
+## 严重问题
 
-### CR-01: Byte Swapping Corrupts UTF-8 String Data
+### CR-01：字节交换损坏 UTF-8 字符串数据
 
-**File:** `uasset_read.py:100-102`
-**Issue:** The `FArchive.read()` method reverses bytes for all multi-byte reads when byte swapping is enabled. This is correct for integer/float values but **incorrect for UTF-8 string data**. UTF-8 encoding is byte-order independent; reversing string bytes corrupts the data.
+**文件：** `uasset_read.py:100-102`
+**问题：** `FArchive.read()` 方法启用字节交换时反转所有多字节读取。这对整数/浮点值正确但**对 UTF-8 字符串数据不正确**。UTF-8 编码与字节序无关；反转字符串字节损坏数据。
 
-When parsing a big-endian file:
-1. `read_i32()` correctly reverses the 4-byte length integer
-2. `read(length)` for string data **incorrectly reverses** the UTF-8 bytes
+解析大端序文件时：
+1. `read_i32()` 正确反转 4-byte length 整数
+2. 字符串数据的 `read(length)` **错误反转** UTF-8 bytes
 
-For example, string "TestName\x00" (9 bytes) becomes "\x00emanTseT" after reversal, producing garbage output.
+例如，字符串 "TestName\x00"（9 bytes）反转后变成 "\x00emanTseT"，产生垃圾输出。
 
-The `test_byte_swapping_detection` test only validates header parsing succeeds but does not check that `name_map` content is correct, so this bug goes undetected.
+`test_byte_swapping_detection` 测试仅验证文件头解析成功，不检查 `name_map` 内容正确，所以此 bug 未被发现。
 
-**Fix:**
+**修复：**
 ```python
 def read(self, size: int) -> bytes:
-    """Base read method - NO byte swapping for raw byte reads."""
+    """基础读取方法 - 原始字节读取不进行字节交换。"""
     # ... boundary validation ...
     data = self._file.read(size)
-    # Do NOT reverse bytes here - let type-specific methods handle swapping
+    # 不要在此反转字节 - 类型特定方法处理交换
     return data
 
 def read_i32(self) -> int:
-    """Read signed 32-bit integer with proper byte order handling."""
+    """读取有符号 32 位整数，正确处理字节序。"""
     if self._byte_swapping:
-        # Use big-endian format for swapped files
+        # 大端序文件使用大端序格式
         return struct.unpack('>i', self.read(4))[0]
     return struct.unpack('<i', self.read(4))[0]
 
-# Similarly update all other type-specific read methods
-# read_u32, read_i64, read_u64, read_f32 should use '>' when byte_swapping
+# 同样更新所有其他类型特定读取方法
+# read_u32、read_i64、read_u64、read_f32 应在 byte_swapping 时使用 '>'
 
 def read_fstring(self) -> str:
-    """Read FString - length needs swapping, string data does NOT."""
-    length = self.read_i32()  # Properly swapped via type-specific method
-    # ... rest unchanged, string bytes are NOT swapped ...
+    """读取 FString - length 需交换，字符串数据不交换。"""
+    length = self.read_i32()  # 通过类型特定方法正确交换
+    # ... 其余不变，字符串字节不交换 ...
 ```
 
-### CR-02: Script Serialization Fields Always Read for All Files
+### CR-02：Script Serialization 字段对所有文件总是读取
 
-**File:** `uasset_read.py:639-644`
-**Issue:** The condition `if summary.file_version_ue5 >= UE5_VERSION_MIN` is always True since `UE5_VERSION_MIN = 0`. This causes the parser to always read 16 extra bytes (`script_serial_size` and `script_serial_offset`) per export entry, even for UE4 files where these fields don't exist.
+**文件：** `uasset_read.py:639-644`
+**问题：** 条件 `if summary.file_version_ue5 >= UE5_VERSION_MIN` 因 `UE5_VERSION_MIN = 0` 总是 True。这导致解析器每个导出条目多读 16 bytes（`script_serial_size` 和 `script_serial_offset`），即使 UE4 文件这些字段不存在。
 
-For UE4 files (legacy_file_version > -8), `file_version_ue5` remains at default 0, and the condition evaluates to True. The parser then reads garbage data or fails with boundary errors.
+UE4 文件（legacy_file_version > -8），`file_version_ue5` 保持默认 0，条件评估为 True。解析器读取垃圾数据或边界错误失败。
 
-**Fix:**
+**修复：**
 ```python
 def read_export_map(...) -> List[ObjectExport]:
     # ...
-    # Script serialization fields only exist for UE5 files (legacy <= -8)
-    # Check if file is actually UE5, not just if ue5_version >= 0
+    # Script serialization 字段仅对 UE5 文件存在（legacy <= -8）
+    # 检查文件是否为 UE5，而非仅 ue5_version >= 0
     is_ue5_file = summary.legacy_file_version <= -8
     
     for _ in range(summary.export_count):
-        # ... read base fields ...
+        # ... 读取基础字段 ...
         
         if is_ue5_file:
             script_serial_size = archive.read_i64()
@@ -91,16 +91,16 @@ def read_export_map(...) -> List[ObjectExport]:
             script_serial_offset = 0
 ```
 
-## Warnings
+## 警告
 
-### WR-01: No Bounds Validation on Array Counts (DoS Risk)
+### WR-01：数组计数无边界验证（DoS 风险）
 
-**File:** `uasset_read.py:430-437, 446, 463, 467, 471`
-**Issue:** Counts read from file (`custom_versions_count`, `name_count`, `soft_object_paths_count`, `import_count`, `export_count`) are used directly in loops without validation. A malicious file with huge count values could cause memory exhaustion or denial of service.
+**文件：** `uasset_read.py:430-437, 446, 463, 467, 471`
+**问题：** 从文件读取的计数（`custom_versions_count`、`name_count`、`soft_object_paths_count`、`import_count`、`export_count`）直接用于循环无验证。巨大计数的恶意文件可能导致内存耗尽或拒绝服务。
 
-**Fix:**
+**修复：**
 ```python
-# Define reasonable maximums
+# 定义合理最大值
 MAX_NAME_COUNT = 10_000_000
 MAX_IMPORT_COUNT = 1_000_000
 MAX_EXPORT_COUNT = 1_000_000
@@ -111,15 +111,15 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     custom_versions_count = archive.read_u32()
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
         raise ParseError(f"Custom versions count {custom_versions_count} exceeds maximum {MAX_CUSTOM_VERSIONS}")
-    # Similarly for name_count, import_count, export_count
+    # 同样处理 name_count、import_count、export_count
 ```
 
-### WR-02: Integer Overflow Potential in UTF-16 String Length
+### WR-02：UTF-16 字符串长度整数溢出可能
 
-**File:** `uasset_read.py:459-460`
-**Issue:** When handling legacy UTF-16 strings (`slen < 0`), the calculation `-slen * 2` could produce a very large value if `slen` is INT_MIN (-2147483648). While Python handles big integers, the resulting 4GB read would likely fail, but an explicit check would be clearer.
+**文件：** `uasset_read.py:459-460`
+**问题：** 处理 legacy UTF-16 字符串（`slen < 0`）时，计算 `-slen * 2` 若 `slen` 为 INT_MIN（-2147483648）可能产生极大值。虽然 Python 处理大整数，但结果 4GB 读取可能失败，但显式检查更清晰。
 
-**Fix:**
+**修复：**
 ```python
 elif slen < 0:
     utf16_len = -slen * 2
@@ -128,40 +128,40 @@ elif slen < 0:
     archive.read(utf16_len)
 ```
 
-### WR-03: Unused Variables in PackageFileSummary
+### WR-03：PackageFileSummary 中未使用变量
 
-**File:** `uasset_read.py:498-499`
-**Issue:** `payload_toc_offset` and `data_resource_offset` are set to 0 but never used. These appear to be placeholder fields for future implementation.
+**文件：** `uasset_read.py:498-499`
+**问题：** `payload_toc_offset` 和 `data_resource_offset` 设为 0 但从未使用。这些似乎是未来实现的占位符字段。
 
-**Fix:** Either implement the parsing for these fields or add a TODO comment explaining they're reserved for future use:
+**修复：** 实现这些字段的解析或添加 TODO 注释说明保留供未来使用：
 ```python
-# UE5+ trailer fields (reserved for future implementation)
-payload_toc_offset: int = 0  # TODO: Parse from file trailer
-data_resource_offset: int = 0  # TODO: Parse from file trailer
+# UE5+ trailer 字段（保留供未来实现）
+payload_toc_offset: int = 0  # TODO: 从文件 trailer 解析
+data_resource_offset: int = 0  # TODO: 从文件 trailer 解析
 ```
 
-### WR-04: Incomplete Test for SavedHash Parsing
+### WR-04：SavedHash 解析测试不完整
 
-**File:** `tests/test_uasset_read.py:568-642`
-**Issue:** The test `test_saved_hash_ue5_package_saved_hash_version` is convoluted and doesn't properly verify SavedHash parsing. Lines 608-636 contain confusing logic with a test that may pass regardless of whether SavedHash is correctly read. The test should verify actual byte content of `saved_hash` field.
+**文件：** `tests/test_uasset_read.py:568-642`
+**问题：** 测试 `test_saved_hash_ue5_package_saved_hash_version` 复杂且未正确验证 SavedHash 解析。Lines 608-636 包含混淆逻辑，测试可能不管 SavedHash 是否正确读取都通过。测试应验证 `saved_hash` 字段的实际字节内容。
 
-**Fix:**
+**修复：**
 ```python
 def test_saved_hash_ue5_package_saved_hash_version():
-    """Test SavedHash reading for UE5 >= PACKAGE_SAVED_HASH (1004)."""
-    # Create a minimal valid UE5 >= 1004 file with known SavedHash bytes
-    # Then verify saved_hash contains exactly those 20 bytes
-    # Use a simpler, more direct test approach
+    """测试 UE5 >= PACKAGE_SAVED_HASH（1004）的 SavedHash 读取。"""
+    # 创建含已知 SavedHash bytes 的最小有效 UE5 >= 1004 文件
+    # 然后验证 saved_hash 精确包含这 20 bytes
+    # 使用更简单、直接的测试方法
 ```
 
-## Info
+## 信息
 
-### IN-01: FArchive Lacks Context Manager Support
+### IN-01：FArchive 缺少上下文管理器支持
 
-**File:** `uasset_read.py:59-128`
-**Issue:** `FArchive` doesn't implement `__enter__`/`__exit__` for context manager support. While `parse_uasset` handles cleanup in `finally`, users of `FArchive` directly could leak file handles.
+**文件：** `uasset_read.py:59-128`
+**问题：** `FArchive` 未实现 `__enter__`/`__exit__` 上下文管理器支持。虽然 `parse_uasset` 在 `finally` 处理清理，但直接使用 `FArchive` 用户可能泄漏文件句柄。
 
-**Fix:**
+**修复：**
 ```python
 def __enter__(self):
     return self
@@ -171,12 +171,12 @@ def __exit__(self, exc_type, exc_val, exc_tb):
     return False
 ```
 
-### IN-02: Silent Data Loss in UTF-8 Decode
+### IN-02：UTF-8 解码静默数据丢失
 
-**File:** `uasset_read.py:191`
-**Issue:** `decode('utf-8', errors='replace')` silently replaces invalid bytes with the Unicode replacement character. Corrupted string data would not raise an error.
+**文件：** `uasset_read.py:191`
+**问题：** `decode('utf-8', errors='replace')` 静默用 Unicode 替换字符替换无效字节。损坏字符串数据不会抛错误。
 
-**Fix:** Consider logging a warning when replacement occurs, or using `errors='strict'` with exception handling:
+**修复：** 考虑替换发生时记录警告，或使用 `errors='strict'` 配异常处理：
 ```python
 try:
     return data.decode('utf-8').rstrip('\x00')
@@ -185,12 +185,12 @@ except UnicodeDecodeError as e:
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 ```
 
-### IN-03: Magic Number for SavedHash Size
+### IN-03：SavedHash 大小魔术数字
 
-**File:** `uasset_read.py:426`
-**Issue:** The value 20 for SavedHash size is a magic number. While it's defined in a comment, a named constant would be clearer.
+**文件：** `uasset_read.py:426`
+**问题：** SavedHash 大小值 20 是魔术数字。虽然注释中定义，命名常量更清晰。
 
-**Fix:**
+**修复：**
 ```python
 SAVED_HASH_SIZE = 20  # FIoHash structure size
 
@@ -199,6 +199,6 @@ saved_hash = archive.read(SAVED_HASH_SIZE)
 
 ---
 
-_Reviewed: 2026-04-28_
-_Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_审查日期：2026-04-28_
+_审查者：Claude（gsd-code-reviewer）_
+_深度：standard_

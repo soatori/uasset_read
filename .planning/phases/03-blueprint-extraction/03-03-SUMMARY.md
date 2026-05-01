@@ -19,9 +19,9 @@ key-files:
   modified:
     - uasset_read.py (extract_blueprint_metadata, parse_uasset extension, __all__)
 decisions:
-  - D-02: Auto-detect blueprints on every parse_uasset() call
-  - D-03: Log warnings to ParseResult.errors on detection failure
-  - D-09: Only resolve direct parent class (no inheritance chain)
+  - D-02: 每次 parse_uasset() 调用自动检测蓝图
+  - D-03: 检测失败时记录警告到 ParseResult.errors
+  - D-09: 仅解析直接父类 (无继承链)
 metrics:
   duration: 2 minutes
   tasks: 3
@@ -30,11 +30,11 @@ metrics:
 
 # Phase 03 Plan 03: Blueprint Extraction Integration Summary
 
-Blueprint extraction integrated into parse_uasset() main flow with auto-detection and full variable metadata extraction (BLUE-06).
+蓝图提取集成到 parse_uasset() 主流程,带自动检测和完整变量元数据提取 (BLUE-06)。
 
 ## One-Liner
 
-Implemented extract_blueprint_metadata() for BLUE-06 integration, extending parse_uasset() to auto-detect and extract blueprint metadata from exports.
+实现 extract_blueprint_metadata() 用于 BLUE-06 集成,扩展 parse_uasset() 自动检测并从导出提取蓝图元数据。
 
 ## Tasks Completed
 
@@ -48,25 +48,25 @@ Implemented extract_blueprint_metadata() for BLUE-06 integration, extending pars
 
 ### extract_blueprint_metadata() (BLUE-06)
 
-Added function that:
-- Detects blueprint via `detect_blueprint()` check on ClassIndex
-- Resolves parent class via `resolve_parent_class()` from export.super_index
-- Seeks to export.serial_offset
-- Reads NewVariables TArray count + loop via `read_blueprint_variable()`
-- Returns BlueprintMetadata with detection_warning on failure
+添加函数,功能包括:
+- 通过 ClassIndex 上的 `detect_blueprint()` 检查检测蓝图
+- 从 export.super_index 通过 `resolve_parent_class()` 解析父类
+- Seek 到 export.serial_offset
+- 通过 `read_blueprint_variable()` 读取 NewVariables TArray count + loop
+- 失败时返回带 detection_warning 的 BlueprintMetadata
 
 ### parse_uasset() Extension
 
-Added blueprint extraction loop after `result.is_success = True`:
-- Iterates through exports calling `detect_blueprint()`
-- Creates temporary FArchive for extraction (preserves original archive state)
-- Calls `extract_blueprint_metadata()` on first blueprint found
-- Handles ParseError exceptions, adds to `result.errors`
-- Assigns metadata to `result.blueprint`
+在 `result.is_success = True` 后添加蓝图提取循环:
+- 遍历导出调用 `detect_blueprint()`
+- 为提取创建临时 FArchive (保留原始 archive state)
+- 在找到的第一个蓝图上调用 `extract_blueprint_metadata()`
+- 处理 ParseError exceptions,添加到 `result.errors`
+- 将 metadata 赋值给 `result.blueprint`
 
 ### __all__ Updates
 
-Added `extract_blueprint_metadata` to Phase 3 exports section.
+添加 `extract_blueprint_metadata` 到 Phase 3 exports section。
 
 ## Verification Results
 

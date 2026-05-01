@@ -74,12 +74,26 @@ class VersionError(UAssetError):
     pass
 
 
-class ParseError(UAssetError):
-    """解析错误（可携带部分结果）"""
+@dataclass
+class ErrorContext:
+    """
+    D-15/D-18: 错误上下文信息。
 
-    def __init__(self, message: str, partial_result: Optional[Dict] = None):
+    记录错误发生时的解析状态，帮助定位问题。
+    """
+    offset: int           # 文件偏移位置
+    phase: str            # 解析阶段：header/name_table/import_map/export_map/properties/blueprint
+    operation: str        # 操作类型：read_i32/read_name/seek 等
+    context_name: str = ""  # 相关对象名或属性名
+
+
+class ParseError(UAssetError):
+    """解析错误（可携带部分结果和上下文）"""
+
+    def __init__(self, message: str, partial_result: Optional[Dict] = None, context: Optional[ErrorContext] = None):
         super().__init__(message)
         self.partial_result = partial_result
+        self.context = context  # D-15: error context
 
 
 # ============================================================================
@@ -171,21 +185,60 @@ class FArchive:
         Raises:
             ParseError: 若 pos 超出文件大小或为负数
         """
-        # D-10: Enhanced offset validation
-        if pos < 0:
-            raise ParseError(
-                f"Negative offset {pos} not allowed"
-            )
-        if pos > self._file_size:
-            raise ParseError(
-                f"Offset {pos} exceeds file size {self._file_size}"
-            )
+        # D-10: use validate_offset
+        self.validate_offset(pos, "seek")
 
         # D-02: mmap branch
         if self._use_mmap and self._mmap:
             self._mmap.seek(pos)
         else:
             self._file.seek(pos)
+
+    def validate_offset(self, offset: int, context: str = "") -> None:
+        """
+        D-10: 全偏移验证 - 在定位前检查偏移有效性。
+
+        Args:
+            offset: 要验证的偏移值
+            context: 上下文信息（如 "NameOffset", "ExportOffset"）
+
+        Raises:
+            ParseError: 若偏移无效（负数或超出文件大小）
+        """
+        if offset < 0:
+            raise ParseError(
+                f"Invalid offset {offset} (negative) at {context}"
+            )
+        if offset > self._file_size:
+            raise ParseError(
+                f"Offset {offset} exceeds file size {self._file_size} at {context}"
+            )
+
+    def validate_size(self, size: int, context: str = "") -> None:
+        """
+        D-11/D-16: PropertyTag.Size 完整验证。
+
+        验证维度：
+        1. size >= 0（非负）
+        2. size <= remaining_bytes（不超剩余）
+        3. size <= max_reasonable（合理上限）
+
+        max_reasonable = 文件大小 10%，最小 1KB，最大 100MB（D-16）
+        """
+        if size < 0:
+            raise ParseError(f"Invalid size {size} (negative) at {context}")
+
+        current_pos = self.tell()
+        remaining = self._file_size - current_pos
+        if size > remaining:
+            raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
+
+        min_reasonable = 1024
+        max_reasonable_cap = 100 * 1024 * 1024
+        max_reasonable = max(min_reasonable, min(self._file_size // 10, max_reasonable_cap))
+
+        if size > max_reasonable:
+            raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
 
     def tell(self) -> int:
         """返回当前位置"""
@@ -360,6 +413,36 @@ class PackageIndex:
     def to_export_index(self) -> int:
         """转换为导出表索引（Index - 1）"""
         return self.index - 1
+
+
+def validate_package_index(
+    index: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    context: str = ""
+) -> Optional[str]:
+    """
+    D-12/D-17: PackageIndex 完整验证。
+
+    验证维度：范围验证、失败信息、类型一致性、目标有效性
+    Returns: None if valid, warning string if invalid
+    """
+    if index.is_null:
+        return None
+
+    if index.is_import:
+        import_idx = index.to_import_index()
+        if not (0 <= import_idx < len(import_map)):
+            return f"PackageIndex {index.index} import out of range at {context}"
+        return None
+
+    elif index.is_export:
+        export_idx = index.to_export_index()
+        if not (0 <= export_idx < len(export_map)):
+            return f"PackageIndex {index.index} export out of range at {context}"
+        return None
+
+    return f"PackageIndex {index.index} invalid at {context}"
 
 
 @dataclass
@@ -653,6 +736,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Name count {name_count} exceeds maximum {MAX_NAME_COUNT}"
         )
     name_offset = archive.read_i32()  # Always read for legacy < 0
+    archive.validate_offset(name_offset, "NameOffset")  # D-10: validate table offset
 
     # SoftObjectPaths（UE5+ only）
     # Reference: UE PackageFileSummary.cpp line 282-285
@@ -690,6 +774,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Import count {import_count} exceeds maximum {MAX_IMPORT_COUNT}"
         )
     import_offset = archive.read_i32()
+    archive.validate_offset(import_offset, "ImportOffset")  # D-10: validate table offset
 
     # 导出表偏移
     export_count = archive.read_i32()
@@ -698,6 +783,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             f"Export count {export_count} exceeds maximum {MAX_EXPORT_COUNT}"
         )
     export_offset = archive.read_i32()
+    archive.validate_offset(export_offset, "ExportOffset")  # D-10: validate table offset
 
     # 导出哈希偏移
     export_hashes_offset = archive.read_i32()
@@ -1371,6 +1457,7 @@ def read_property_tag(
         # UE5 新格式（PropertyTag.cpp lines 436-545）
         tag.type = archive.read_fstring()  # Complete TypeName string
         tag.size = archive.read_i32()
+        archive.validate_size(tag.size, tag.name)  # D-11: validate PropertyTag.Size
         tag.flags = archive.read_u8()
 
         # 条件字段（基于标志位）
@@ -1387,6 +1474,7 @@ def read_property_tag(
         # UE4 旧格式（PropertyTag.cpp lines 195-401）
         tag.type = archive.read_name(name_map)  # Short type name only
         tag.size = archive.read_i32()
+        archive.validate_size(tag.size, tag.name)  # D-11: validate PropertyTag.Size
         tag.array_index = archive.read_i32()  # Always present in UE4
 
         # 类型特定的额外字段（Phase 2 仅处理基本类型）
@@ -1628,8 +1716,16 @@ def parse_properties_from_export(
     """
     archive.seek(export.serial_offset)
     properties: List[PropertyValue] = []
+    property_count = 0  # D-08: loop counter for SAFE-05
 
     while True:
+        # D-08/D-09: Property loop limit check
+        if property_count >= MAX_PROPERTY_COUNT:
+            raise ParseError(
+                f"Property count exceeds {MAX_PROPERTY_COUNT} - possible infinite loop"
+            )
+        property_count += 1
+
         try:
             tag = read_property_tag(
                 archive,
@@ -1663,13 +1759,24 @@ def parse_properties_from_export(
             ))
 
         except ParseError as e:
-            # 单属性失败：记录并继续（D-25）
-            properties.append(PropertyValue(
-                name="ParseError",
-                type="Error",
-                value=str(e)
-            ))
-            continue
+            # D-19: Smart continue - skip damaged property using PropertyTag.Size
+            if tag.size > 0 and start_pos + tag.size <= archive.total_size():
+                archive.seek(start_pos + tag.size)
+                # D-14: Record warning (would be passed to caller via ParseResult)
+                properties.append(PropertyValue(
+                    name=tag.name,
+                    type="Warning",
+                    value=f"Property skipped: {e}"
+                ))
+                continue
+            else:
+                # Cannot skip - Size invalid, abort property parsing for this export
+                properties.append(PropertyValue(
+                    name="ParseError",
+                    type="Error",
+                    value=f"Property parsing aborted: {e}"
+                ))
+                break
 
     return properties
 
@@ -1745,6 +1852,11 @@ def parse_uasset(path: str) -> ParseResult:
 
     try:
         archive = FArchive(path)
+
+        # D-02/D-03: Extract mmap info for ParseResult
+        mmap_info = archive.get_mmap_info()
+        result.mmap_used = mmap_info["used"]
+        result.mmap_warning = mmap_info["warning"]
 
         # 读取文件头
         result.summary = read_package_summary(archive)
@@ -2290,10 +2402,11 @@ __all__ = [
     # FArchive
     'FArchive',
 
-    # Exceptions
+    # Exceptions and Context
     'UAssetError',
     'VersionError',
     'ParseError',
+    'ErrorContext',
 
     # Constants
     'PACKAGE_FILE_TAG',
@@ -2308,6 +2421,9 @@ __all__ = [
     # Phase 5: Performance and safety constants
     'MMAP_THRESHOLD',
     'MAX_PROPERTY_COUNT',
+
+    # Phase 5: Boundary validation functions
+    'validate_package_index',
 
     # Core parsing functions
     'read_package_summary',

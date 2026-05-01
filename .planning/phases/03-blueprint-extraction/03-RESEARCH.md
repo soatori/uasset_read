@@ -1,16 +1,16 @@
 # Phase 3: Blueprint Extraction - Research
 
-**Researched:** 2026-05-01
-**Domain:** Blueprint metadata extraction from .uasset files
-**Confidence:** HIGH (UE 5.7 source verified)
+**研究日期:** 2026-05-01
+**领域:** 从 .uasset 文件提取蓝图元数据
+**置信度:** HIGH (UE 5.7 源码已验证)
 
 ## Summary
 
-Blueprint extraction requires parsing blueprint-specific structures stored in the export data of .uasset files. The key structures are `FBPVariableDescription` (variable definitions) and `FEdGraphPinType` (type information). Blueprint detection uses ClassIndex from ExportMap to identify blueprint assets by checking if the class name contains "Blueprint". Parent class resolution maps FPackageIndex to object names in ImportMap/ExportMap.
+蓝图提取需要解析存储在 .uasset 文件导出数据中的蓝图特定结构。关键结构是 `FBPVariableDescription` (变量定义) 和 `FEdGraphPinType` (类型信息)。蓝图检测使用 ExportMap 中的 ClassIndex,通过检查类名是否包含 "Blueprint" 来识别蓝图资产。父类解析将 FPackageIndex 映射到 ImportMap/ExportMap 中的对象名。
 
-UE source code in `Blueprint.h` and `EdGraphPin.h` defines the exact serialization format. FEdGraphPinType has evolved across UE versions with container type support (Array/Set/Map) added via custom versioning. The existing FArchive, dataclass patterns, and ParseResult partial result pattern from Phase 1/2 are directly applicable.
+UE 源码中的 `Blueprint.h` 和 `EdGraphPin.h` 定义了精确的序列化格式。FEdGraphPinType 在 UE 版本间演进,通过自定义版本添加了容器类型支持 (Array/Set/Map)。阶段 1/2 中现有的 FArchive、dataclass 模式和 ParseResult 部分结果模式可直接应用。
 
-**Primary recommendation:** Implement blueprint extraction as an extension to `parse_uasset()` that auto-detects blueprints and extracts metadata using the established FArchive patterns.
+**主要推荐:** 将蓝图提取实现为 `parse_uasset()` 的扩展,使用已建立的 FArchive 模式自动检测蓝图并提取元数据。
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
@@ -20,50 +20,50 @@ UE source code in `Blueprint.h` and `EdGraphPin.h` defines the exact serializati
 ### Implementation Decisions
 
 **Blueprint Detection Strategy**
-- D-01: Class name detection — check ExportMap ClassIndex for class name containing "Blueprint" keyword
-- D-02: Auto-detection — parse_uasset() automatically detects and extracts blueprint metadata
-- D-03: Log warnings on detection failure in ParseResult.errors (not silent skip)
-- D-04: Only detect if blueprint, don't distinguish BlueprintType (Normal, Interface, MacroLibrary, etc.)
+- D-01: 类名检测 —— 检查 ExportMap ClassIndex 中类名是否包含 "Blueprint" 关键字
+- D-02: 自动检测 —— parse_uasset() 自动检测并提取蓝图元数据
+- D-03: 检测失败时在 ParseResult.errors 中记录警告 (非静默跳过)
+- D-04: 仅检测是否为蓝图,不区分 BlueprintType (Normal、Interface、MacroLibrary 等)
 
 **Variable Type Naming**
-- D-05: Use UE original PinCategory values (e.g., "Integer", "Object Reference")
-- D-06: Container+element type format like Array[Int], Map[Str,Obj]
-- D-07: Resolve PinSubCategoryObject to specific class name (e.g., "AActor Reference")
-- D-08: Full FEdGraphPinType structure parsing (all fields)
+- D-05: 使用 UE 原始 PinCategory 值 (如 "Integer"、"Object Reference")
+- D-06: 容器+元素类型格式如 Array[Int]、Map[Str,Obj]
+- D-07: 解析 PinSubCategoryObject 为具体类名 (如 "AActor Reference")
+- D-08: 完整 FEdGraphPinType 结构解析 (所有字段)
 
 **Parent Class Resolution**
-- D-09: Only direct parent class (no inheritance chain traversal)
-- D-10: Resolve FPackageIndex to object name in ImportMap/ExportMap
-- D-11: Return raw FPackageIndex + warning on resolution failure
-- D-12: No circular reference check (single layer only, no loop possible)
+- D-09: 仅直接父类 (无继承链追溯)
+- D-10: 将 FPackageIndex 解析为 ImportMap/ExportMap 中的对象名
+- D-11: 解析失败时返回原始 FPackageIndex + 警告
+- D-12: 无循环引用检查 (仅单层,无循环可能)
 
 **Default Value Handling**
-- D-13: Parse DefaultValue string to Python native types (int, float, bool, str)
-- D-14: Return raw string on parse failure (fallback)
-- D-15: Only basic types (int, float, bool, string) — no complex types
-- D-16: Vector types stay as string "(X=1.0,Y=2.0,Z=3.0)" format
+- D-13: 将 DefaultValue 字符串解析为 Python 原生类型 (int、float、bool、str)
+- D-14: 解析失败时返回原始字符串 (fallback)
+- D-15: 仅基本类型 (int、float、bool、string) —— 无复杂类型
+- D-16: 向量类型保持字符串 "(X=1.0,Y=2.0,Z=3.0)" 格式
 
 ### Claude's Discretion
 
-- Specific blueprint detection class name matching logic
-- FEdGraphPinType field parsing order and data types
-- DefaultValue string parsing regex or parser implementation
-- Variable metadata (Category, PropertyFlags) output format
-- Unit test organization and test asset selection
+- 具体蓝图检测类名匹配逻辑
+- FEdGraphPinType 字段解析顺序和数据类型
+- DefaultValue 字符串解析正则表达式或解析器实现
+- 变量元数据 (Category、PropertyFlags) 输出格式
+- 单元测试组织和测试资产选择
 
 ### Deferred Ideas (OUT OF SCOPE)
 
 **Phase 4 (Output and CLI)**
-- BlueprintMetadata JSON output formatting
-- Blueprint data text summary format
+- BlueprintMetadata JSON 输出格式化
+- 蓝图数据文本摘要格式
 
 **v2 (Blueprint Advanced)**
-- BlueprintType full classification (Normal, Interface, MacroLibrary, FunctionLibrary)
-- Complete inheritance chain resolution (recursive to UObject)
-- Circular reference detection
-- Blueprint graph extraction (UEdGraph, Nodes, Pins)
-- Complex default value parsing (arrays, vectors, object references)
-- Complete variable metadata extraction (MetaDataArray detailed parsing)
+- BlueprintType 完整分类 (Normal、Interface、MacroLibrary、FunctionLibrary)
+- 完整继承链解析 (递归到 UObject)
+- 循环引用检测
+- 蓝图图提取 (UEdGraph、Nodes、Pins)
+- 复杂默认值解析 (数组、向量、对象引用)
+- 完整变量元数据提取 (MetaDataArray 详细解析)
 
 </user_constraints>
 
@@ -72,45 +72,45 @@ UE source code in `Blueprint.h` and `EdGraphPin.h` defines the exact serializati
 
 | ID | Description | Research Support |
 |----|-------------|------------------|
-| BLUE-01 | Detect blueprint asset type from class name or package path | FEdGraphPinType serialization, ClassIndex resolution pattern from Phase 1 |
-| BLUE-02 | Extract blueprint parent class (ParentClass reference) | FPackageIndex resolution, ImportMap/ExportMap lookup pattern |
-| BLUE-03 | Extract blueprint variable definitions (FBPVariableDescription) | Blueprint.h structure verified, serialization pattern documented |
-| BLUE-04 | Extract blueprint type (Normal, Interface, MacroLibrary) | Deferred per D-04 |
-| BLUE-05 | Parse variable types from FEdGraphPinType | EdGraphPin.h structure verified, all fields documented |
-| BLUE-06 | Extract variable metadata (Category, PropertyFlags) | FBPVariableDescription fields documented, EPropertyFlags enum verified |
+| BLUE-01 | 从类名或包路径检测蓝图资产类型 | FEdGraphPinType 序列化,阶段 1 ClassIndex 解析模式 |
+| BLUE-02 | 提取蓝图父类 (ParentClass 引用) | FPackageIndex 解析,ImportMap/ExportMap 查找模式 |
+| BLUE-03 | 提取蓝图变量定义 (FBPVariableDescription) | Blueprint.h 结构已验证,序列化模式已记录 |
+| BLUE-04 | 提取蓝图类型 (Normal、Interface、MacroLibrary) | 按 D-04 推迟 |
+| BLUE-05 | 从 FEdGraphPinType 解析变量类型 | EdGraphPin.h 结构已验证,所有字段已记录 |
+| BLUE-06 | 提取变量元数据 (Category、PropertyFlags) | FBPVariableDescription 字段已记录,EPropertyFlags 枚举已验证 |
 </phase_requirements>
 
 ## Architectural Responsibility Map
 
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|-------------|----------------|-----------|
-| Blueprint detection | Parse layer | — | Uses ExportMap ClassIndex (already parsed in Phase 1) |
-| ParentClass resolution | Parse layer | — | FPackageIndex → ImportMap/ExportMap lookup |
-| FEdGraphPinType parsing | Parse layer | — | Binary deserialization from export data |
-| DefaultValue parsing | Parse layer | Output tier (v2) | Basic Python types in Phase 3; complex types deferred |
-| BlueprintMetadata output | Parse layer | Output tier | ParseResult extension; JSON formatting in Phase 4 |
+| Blueprint detection | Parse layer | — | 使用 ExportMap ClassIndex (已在阶段 1 解析) |
+| ParentClass resolution | Parse layer | — | FPackageIndex → ImportMap/ExportMap 查找 |
+| FEdGraphPinType parsing | Parse layer | — | 从导出数据二进制反序列化 |
+| DefaultValue parsing | Parse layer | Output tier (v2) | 阶段 3 基本 Python 类型;复杂类型推迟 |
+| BlueprintMetadata output | Parse layer | Output tier | ParseResult 扩展;阶段 4 JSON 格式化 |
 
 ## Standard Stack
 
 ### Core
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| dataclasses | stdlib | BlueprintMetadata, FEdGraphPinType, FBPVariableDescription models | Phase 1/2 pattern, JSON serialization via asdict() |
-| struct | stdlib | Binary parsing | Phase 1 FArchive pattern |
-| re | stdlib | DefaultValue string parsing | stdlib only, D-13 basic types |
+| dataclasses | stdlib | BlueprintMetadata、FEdGraphPinType、FBPVariableDescription 模型 | 阶段 1/2 模式,通过 asdict() JSON 序列化 |
+| struct | stdlib | 二进制解析 | 阶段 1 FArchive 模式 |
+| re | stdlib | DefaultValue 字符串解析 | 仅 stdlib,D-13 基本类型 |
 
 ### Supporting
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| typing | stdlib | Type hints | All dataclass definitions |
+| typing | stdlib | 类型提示 | 所有 dataclass 定义 |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
-| Regex for DefaultValue | Full parser | Over-engineering for D-15 basic types only |
+| Regex for DefaultValue | Full parser | 仅 D-15 基本类型过度工程化 |
 
 **Installation:**
-No new dependencies — stdlib only per Phase 1 decision.
+无新依赖 —— 按阶段 1 决策仅 stdlib。
 
 ## Architecture Patterns
 
@@ -182,8 +182,8 @@ tests/
 
 ### Pattern 1: Blueprint Detection from ClassIndex
 
-**What:** Check if export's ClassIndex points to a blueprint class
-**When to use:** For every export in ExportMap after Phase 1 parsing
+**What:** 检查导出的 ClassIndex 是否指向蓝图类
+**When to use:** 阶段 1 解析后对 ExportMap 中每个导出使用
 
 **Example:**
 ```python
@@ -194,10 +194,10 @@ def detect_blueprint(
     export_map: List[ObjectExport]
 ) -> bool:
     """
-    Detect if export is a blueprint asset.
+    检测导出是否为蓝图资产。
     
-    Check ClassIndex resolution for "Blueprint" keyword.
-    Per D-01/D-04: only detect presence, not BlueprintType.
+    检查 ClassIndex 解析是否包含 "Blueprint" 关键字。
+    按 D-01/D-04: 仅检测存在性,不检测 BlueprintType。
     """
     class_name = get_asset_class(export, import_map, export_map)
     if class_name and "Blueprint" in class_name:
@@ -207,15 +207,15 @@ def detect_blueprint(
 
 ### Pattern 2: FEdGraphPinType Parsing
 
-**What:** Deserialize pin type structure from binary data
-**When to use:** When parsing FBPVariableDescription.VarType
+**What:** 从二进制数据反序列化 Pin 类型结构
+**When to use:** 解析 FBPVariableDescription.VarType 时
 
 **Example (from EdGraphPin.cpp Serialize method):**
 ```python
 # Source: EdGraphPin.cpp lines 163-346 [VERIFIED]
 @dataclass
 class FEdGraphPinType:
-    """Pin type structure from EdGraphPin.h lines 76-225."""
+    """Pin 类型结构来自 EdGraphPin.h lines 76-225."""
     pin_category: str = ""          # FName
     pin_sub_category: str = ""      # FName
     pin_sub_category_object: int = 0  # FPackageIndex (resolved later)
@@ -231,9 +231,9 @@ def read_ed_graph_pin_type(
     summary: PackageFileSummary
 ) -> FEdGraphPinType:
     """
-    Parse FEdGraphPinType from export data.
+    从导出数据解析 FEdGraphPinType。
     
-    Serialization order (from EdGraphPin.cpp):
+    序列化顺序 (from EdGraphPin.cpp):
     1. PinCategory (FName)
     2. PinSubCategory (FName)
     3. PinSubCategoryObject (FPackageIndex)
@@ -287,8 +287,8 @@ def read_ed_graph_pin_type(
 
 ### Pattern 3: FBPVariableDescription Parsing
 
-**What:** Parse variable definition from blueprint export data
-**When to use:** After blueprint detection, parse NewVariables array
+**What:** 从蓝图导出数据解析变量定义
+**When to use:** 蓝图检测后,解析 NewVariables 数组
 
 **Example (from Blueprint.h lines 200-256):**
 ```python
@@ -296,9 +296,9 @@ def read_ed_graph_pin_type(
 @dataclass
 class BlueprintVariable:
     """
-    Variable definition from FBPVariableDescription.
+    来自 FBPVariableDescription 的变量定义。
     
-    Per D-05/D-06: use UE original names with container prefix.
+    按 D-05/D-06: 使用 UE 原始名称加容器前缀。
     """
     var_name: str                    # FName
     var_type: FEdGraphPinType        # Full type structure
@@ -313,9 +313,9 @@ def read_blueprint_variable(
     summary: PackageFileSummary
 ) -> BlueprintVariable:
     """
-    Parse FBPVariableDescription from blueprint export.
+    从蓝图导出解析 FBPVariableDescription。
     
-    Serialization order (from Blueprint.h USTRUCT):
+    序列化顺序 (from Blueprint.h USTRUCT):
     1. VarName (FName)
     2. VarGuid (FGuid - 16 bytes)
     3. VarType (FEdGraphPinType)
@@ -369,62 +369,62 @@ def read_blueprint_variable(
 
 ### Anti-Patterns to Avoid
 
-- **Parsing BlueprintType too early:** D-04 explicitly defers BlueprintType classification — only detect blueprint presence
-- **Assuming fixed FEdGraphPinType size:** The structure has version-dependent fields — must handle container type branching
-- **Parsing FText fully:** FText has complex serialization (namespace, source, history) — simplify to FString for Phase 3
-- **Ignoring ContainerType:** Array/Set/Map affect VarType serialization (Map adds PinValueType)
+- **过早解析 BlueprintType:** D-04 明确推迟 BlueprintType 分类 —— 仅检测蓝图存在性
+- **假设固定 FEdGraphPinType 大小:** 结构有版本依赖字段 —— 必须处理容器类型分支
+- **完全解析 FText:** FText 有复杂序列化 (namespace、source、history) —— 阶段 3 简化为 FString
+- **忽略 ContainerType:** Array/Set/Map 影响 VarType 序列化 (Map 添加 PinValueType)
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Blueprint detection | Custom package path regex | ClassIndex lookup | ExportMap already has class info from Phase 1 |
-| ParentClass resolution | Custom index mapping | FPackageIndex pattern | Phase 1 pattern with to_import_index/to_export_index |
-| FEdGraphPinType parsing | Guess field order | EdGraphPin.cpp Serialize order | Verified from UE source, version-dependent |
-| DefaultValue parsing | Full expression parser | Regex for basic types | D-15 limits to int/float/bool/string |
+| Blueprint detection | 自定义包路径正则 | ClassIndex lookup | ExportMap 已有阶段 1 类信息 |
+| ParentClass resolution | 自定义索引映射 | FPackageIndex pattern | 阶段 1 模式有 to_import_index/to_export_index |
+| FEdGraphPinType parsing | 猜测字段顺序 | EdGraphPin.cpp Serialize order | 从 UE 源码验证,版本依赖 |
+| DefaultValue parsing | 完整表达式解析器 | 基本类型正则 | D-15 仅限 int/float/bool/string |
 
-**Key insight:** Blueprint structures follow UE USTRUCT serialization — must follow exact field order from source.
+**Key insight:** 蓝图结构遵循 UE USTRUCT 序列化 —— 必须遵循源码精确字段顺序。
 
 ## Common Pitfalls
 
 ### Pitfall 1: FEdGraphPinType Version Dependency
 
-**What goes wrong:** Assuming fixed field order without checking UE version
-**Why it happens:** FEdGraphPinType serialization evolved across UE4/UE5 versions
-**How to avoid:** Follow EdGraphPin.cpp Serialize method exactly; check custom version flags
-**Warning signs:** Parse errors after ContainerType field, misaligned position
+**What goes wrong:** 不检查 UE 版本假设固定字段顺序
+**Why it happens:** FEdGraphPinType 序列化在 UE4/UE5 版本间演进
+**How to avoid:** 精确遵循 EdGraphPin.cpp Serialize 方法;检查自定义版本标志
+**Warning signs:** ContainerType 字段后解析错误,位置错位
 
 **Version thresholds (from EdGraphPin.cpp):**
-- `FFrameworkObjectVersion::PinsStoreFName`: PinCategory as FName (else FString)
-- `FFrameworkObjectVersion::EdGraphPinContainerType`: ContainerType field added
-- `VER_UE4_MEMBER_REFERENCE_IN_PINTYPE`: PinSubCategoryMemberReference added
-- `VER_UE4_SERIALIZE_PINTYPE_CONST`: bIsConst added
-- `FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag`: bIsUObjectWrapper added
+- `FFrameworkObjectVersion::PinsStoreFName`: PinCategory 作为 FName (否则 FString)
+- `FFrameworkObjectVersion::EdGraphPinContainerType`: 添加 ContainerType 字段
+- `VER_UE4_MEMBER_REFERENCE_IN_PINTYPE`: 添加 PinSubCategoryMemberReference
+- `VER_UE4_SERIALIZE_PINTYPE_CONST`: 添加 bIsConst
+- `FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag`: 添加 bIsUObjectWrapper
 
 ### Pitfall 2: ContainerType Serialization Branching
 
-**What goes wrong:** Not reading PinValueType for Map containers
-**Why it happens:** ContainerType==Map requires additional FEdGraphTerminalType
-**How to avoid:** Check ContainerType before proceeding; read PinValueType for Map (3)
-**Warning signs:** Position mismatch after parsing Map-typed variables
+**What goes wrong:** 不为 Map 容器读取 PinValueType
+**Why it happens:** ContainerType==Map 需要额外 FEdGraphTerminalType
+**How to avoid:** 处理前检查 ContainerType;为 Map (3) 读取 PinValueType
+**Warning signs:** 解析 Map 类型变量后位置不匹配
 
 ### Pitfall 3: FText Complexity
 
-**What goes wrong:** Attempting to parse FText fully with namespace/history
-**Why it happens:** FText has 4-field serialization (flags, history, namespace, source)
-**How to avoid:** Simplify to FString for Phase 3; defer full FText parsing to v2
-**Warning signs:** Category field garbage, position misalignment
+**What goes wrong:** 尝试带 namespace/history 完全解析 FText
+**Why it happens:** FText 有 4 字段序列化 (flags、history、namespace、source)
+**How to avoid:** 阶段 3 简化为 FString;推迟完整 FText 解析到 v2
+**Warning signs:** Category 字段垃圾值,位置错位
 
 ### Pitfall 4: Blueprint Export Selection
 
-**What goes wrong:** Parsing wrong export as blueprint metadata
-**Why it happens:** Blueprint .uasset has multiple exports; need to find the blueprint object
-**How to avoid:** Look for export with ObjectName matching package name + "_C" pattern
-**Warning signs:** ParseError on VarName, unexpected data at SerialOffset
+**What goes wrong:** 解析错误导出为蓝图元数据
+**Why it happens:** Blueprint .uasset 有多个导出;需要找到蓝图对象
+**How to avoid:** 查找 ObjectName 匹配包名 + "_C" 模式的导出
+**Warning signs:** VarName 上 ParseError,SerialOffset 处意外数据
 
 ## Code Examples
 
-Verified patterns from UE source:
+从 UE 源码验证的模式:
 
 ### PinCategory Values (from EdGraphPin.cpp)
 ```python
@@ -497,7 +497,7 @@ PROPERTY_FLAGS = {
 }
 
 def format_property_flags(flags: int) -> List[str]:
-    """Convert uint64 flags to human-readable list."""
+    """将 uint64 标志转换为人类可读列表。"""
     result = []
     for bit, name in PROPERTY_FLAGS.items():
         if flags & bit:
@@ -511,24 +511,24 @@ import re
 
 def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
     """
-    Parse DefaultValue string to Python native type.
+    将 DefaultValue 字符串解析为 Python 原生类型。
     
-    Per D-13/D-14/D-15/D-16:
-    - Parse basic types: int, float, bool, str
-    - Return raw string on failure
-    - Vector types stay as string "(X=...,Y=...,Z=...)"
+    按 D-13/D-14/D-15/D-16:
+    - 解析基本类型: int、float、bool、str
+    - 失败时返回原始字符串
+    - 向量类型保持字符串 "(X=...,Y=...,Z=...)"
     """
     if not value_str:
         return None
     
-    # Check for vector format (D-16: keep as string)
+    # 检查向量格式 (D-16: 保持字符串)
     if value_str.startswith("(") and value_str.endswith(")"):
         return value_str
     
-    # Match PinCategory
+    # 匹配 PinCategory
     category = var_type.pin_category.lower()
     
-    # Boolean parsing
+    # Boolean 解析
     if category in ("bool", "boolean"):
         if value_str.lower() in ("true", "1"):
             return True
@@ -536,21 +536,21 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
             return False
         return value_str  # D-14: fallback
     
-    # Integer parsing
+    # Integer 解析
     if category in ("int", "integer"):
         match = re.match(r'^-?\d+$', value_str)
         if match:
             return int(value_str)
         return value_str  # D-14: fallback
     
-    # Float/Real parsing
+    # Float/Real 解析
     if category in ("float", "real", "double"):
         match = re.match(r'^-?\d+\.?\d*$', value_str)
         if match:
             return float(value_str)
         return value_str  # D-14: fallback
     
-    # String/Name: keep as-is
+    # String/Name: 保持原样
     return value_str
 ```
 
@@ -558,16 +558,16 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
 ```python
 def format_pin_type_name(pin_type: FEdGraphPinType, name_map: List[str], import_map: List[ObjectImport]) -> str:
     """
-    Format human-readable type name from FEdGraphPinType.
+    从 FEdGraphPinType 格式化人类可读类型名。
     
-    Per D-05: Use UE original names
-    Per D-06: Container+element format (Array[Int])
-    Per D-07: Resolve PinSubCategoryObject to class name
+    按 D-05: 使用 UE 原始名称
+    按 D-06: 容器+元素格式 (Array[Int])
+    按 D-07: 解析 PinSubCategoryObject 为类名
     """
-    # Base element type
+    # 基本元素类型
     element_type = pin_type.pin_category
     
-    # D-07: Try to resolve PinSubCategoryObject for object types
+    # D-07: 尝试为对象类型解析 PinSubCategoryObject
     if pin_type.pin_sub_category_object != 0:
         pkg_idx = PackageIndex(pin_type.pin_sub_category_object)
         if pkg_idx.is_import:
@@ -575,12 +575,12 @@ def format_pin_type_name(pin_type: FEdGraphPinType, name_map: List[str], import_
             if 0 <= idx < len(import_map):
                 element_type = f"{import_map[idx].object_name} Reference"
     
-    # D-06: Add container prefix
+    # D-06: 添加容器前缀
     container_name = CONTAINER_TYPES.get(pin_type.container_type, "None")
     if container_name == "None":
         return element_type
     elif container_name == "Map":
-        # Map needs key and value types (simplified for Phase 3)
+        # Map 需要键值类型 (阶段 3 简化)
         return f"Map[{element_type}]"
     else:
         return f"{container_name}[{element_type}]"
@@ -590,42 +590,42 @@ def format_pin_type_name(pin_type: FEdGraphPinType, name_map: List[str], import_
 
 | Old Approach | Current Approach | When Changed | Impact |
 |--------------|------------------|--------------|--------|
-| FString PinCategory | FName PinCategory | UE 4.17+ (FFrameworkObjectVersion::PinsStoreFName) | More efficient, needs version check |
-| bIsArray/bIsSet/bIsMap flags | EPinContainerType enum | UE 4.17+ (FFrameworkObjectVersion::EdGraphPinContainerType) | Cleaner, single field |
-| "float"/"double" categories | "real" category with subcategory | UE 5.0+ (FUE5ReleaseStreamObjectVersion::BlueprintPinsUseRealNumbers) | Unified real type |
+| FString PinCategory | FName PinCategory | UE 4.17+ (FFrameworkObjectVersion::PinsStoreFName) | 更高效,需要版本检查 |
+| bIsArray/bIsSet/bIsMap flags | EPinContainerType enum | UE 4.17+ (FFrameworkObjectVersion::EdGraphPinContainerType) | 更清晰,单一字段 |
+| "float"/"double" categories | "real" category with subcategory | UE 5.0+ (FUE5ReleaseStreamObjectVersion::BlueprintPinsUseRealNumbers) | 统一 real 类型 |
 
 **Deprecated/outdated:**
-- `bIsArray_DEPRECATED`: Use ContainerType instead (UE < 4.17)
-- `asset`/`assetclass` PinCategories: Renamed to `softobject`/`softclass` (UE 4.20+)
+- `bIsArray_DEPRECATED`: 使用 ContainerType 替代 (UE < 4.17)
+- `asset`/`assetclass` PinCategories: 重命名为 `softobject`/`softclass` (UE 4.20+)
 
 ## Assumptions Log
 
-> All claims in this research were verified from UE 5.7 source code. No user confirmation needed.
+> 本研究所有声明已从 UE 5.7 源码验证。无需用户确认。
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | FEdGraphPinType serialization order | Pattern 2 | LOW - Verified from EdGraphPin.cpp |
-| A2 | FBPVariableDescription field order | Pattern 3 | LOW - Verified from Blueprint.h |
-| A3 | ContainerType values 0-3 | Code Examples | LOW - Verified from EdGraphNode.h |
-| A4 | PropertyFlags bit values | Code Examples | LOW - Verified from ObjectMacros.h |
+| A1 | FEdGraphPinType 序列化顺序 | Pattern 2 | LOW - 从 EdGraphPin.cpp 验证 |
+| A2 | FBPVariableDescription 字段顺序 | Pattern 3 | LOW - 从 Blueprint.h 验证 |
+| A3 | ContainerType 值 0-3 | Code Examples | LOW - 从 EdGraphNode.h 验证 |
+| A4 | PropertyFlags 位值 | Code Examples | LOW - 从 ObjectMacros.h 验证 |
 
-**If this table is empty:** All claims in this research were verified — no user confirmation needed.
+**If this table is empty:** 本研究所有声明已验证 —— 无需用户确认。
 
 ## Open Questions
 
 1. **Blueprint export identification**
-   - What we know: Blueprint .uasset has multiple exports; need to find correct one
-   - What's unclear: Exact pattern for selecting blueprint export (ObjectName ending "_C"?)
-   - Recommendation: Test with sample assets; look for export whose ObjectName matches package
+   - 已知: Blueprint .uasset 有多个导出;需要找到正确的
+   - 不明确: 选择蓝图导出的精确模式 (ObjectName 结尾 "_C"?)
+   - 推荐: 用示例资产测试;查找 ObjectName 匹配包名的导出
 
 2. **FText serialization complexity**
-   - What we know: FText has flags, history, namespace, source fields
-   - What's unclear: Exact FText serialization format for Category field
-   - Recommendation: Simplify to FString for Phase 3; verify with real assets
+   - 已知: FText 有 flags、history、namespace、source 字段
+   - 不明确: Category 字段精确 FText 序列化格式
+   - 推荐: 阶段 3 简化为 FString;用真实资产验证
 
 ## Environment Availability
 
-> External UE source reference exists; no runtime dependencies.
+> 外部 UE 源码参考存在;无运行时依赖。
 
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
@@ -635,7 +635,7 @@ def format_pin_type_name(pin_type: FEdGraphPinType, name_map: List[str], import_
 | Sample .uasset files | Testing | ✓ | Lyra, FirstPerson samples | — |
 
 **Missing dependencies with no fallback:**
-None — all dependencies verified.
+None —— 所有依赖已验证。
 
 **Missing dependencies with fallback:**
 None.
@@ -661,18 +661,18 @@ None.
 | BLUE-06 | Variable metadata extraction | unit | `pytest tests/test_blueprint_extraction.py::test_variable_metadata -x` | ❌ Wave 0 |
 
 ### Sampling Rate
-- **Per task commit:** `python -m pytest tests/test_blueprint_extraction.py -v`
-- **Per wave merge:** `python -m pytest tests/ -v`
-- **Phase gate:** Full suite green before `/gsd-verify-work`
+- **每次任务提交:** `python -m pytest tests/test_blueprint_extraction.py -v`
+- **每次波合并:** `python -m pytest tests/ -v`
+- **Phase gate:** `/gsd-verify-work` 前完整套件绿色
 
 ### Wave 0 Gaps
-- [ ] `tests/test_blueprint_extraction.py` — covers BLUE-01, BLUE-02, BLUE-03, BLUE-05, BLUE-06
-- [ ] Mock blueprint .uasset data for unit tests
-- [ ] Integration test with Lyra/FirstPerson sample assets
+- [ ] `tests/test_blueprint_extraction.py` —— 覆盖 BLUE-01、BLUE-02、BLUE-03、BLUE-05、BLUE-06
+- [ ] Mock blueprint .uasset 数据用于单元测试
+- [ ] Lyra/FirstPerson 示例资产集成测试
 
 ## Security Domain
 
-> Phase 3 adds no new external dependencies or network operations. Security profile unchanged from Phase 1/2.
+> 阶段 3 不添加新外部依赖或网络操作。安全配置与阶段 1/2 相同。
 
 ### Applicable ASVS Categories
 
@@ -695,25 +695,25 @@ None.
 ## Sources
 
 ### Primary (HIGH confidence)
-- EdGraphPin.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphPin.h) - FEdGraphPinType structure definition
-- EdGraphPin.cpp (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Private/EdGraph/EdGraphPin.cpp) - FEdGraphPinType serialization order
-- Blueprint.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/Engine/Blueprint.h) - FBPVariableDescription structure
-- Blueprint.cpp (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Private/Blueprint.cpp) - Blueprint serialization patterns
-- EdGraphNode.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphNode.h) - EPinContainerType enum
-- ObjectMacros.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h) - EPropertyFlags enum
+- EdGraphPin.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphPin.h) - FEdGraphPinType 结构定义
+- EdGraphPin.cpp (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Private/EdGraph/EdGraphPin.cpp) - FEdGraphPinType 序列化顺序
+- Blueprint.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/Engine/Blueprint.h) - FBPVariableDescription 结构
+- Blueprint.cpp (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Private/Blueprint.cpp) - Blueprint 序列化模式
+- EdGraphNode.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraphNode.h) - EPinContainerType 枚举
+- ObjectMacros.h (E:/Develop/lib/UnrealEngine/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h) - EPropertyFlags 枚举
 
 ### Secondary (MEDIUM confidence)
-- Phase 1/2 code patterns (uasset_read.py) - Established FArchive, dataclass, ParseResult patterns
+- Phase 1/2 code patterns (uasset_read.py) - 已建立的 FArchive、dataclass、ParseResult 模式
 
 ### Tertiary (LOW confidence)
-None — all claims verified from UE source.
+None —— 所有声明从 UE 源码验证。
 
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH - stdlib only, matches Phase 1/2 decisions
-- Architecture: HIGH - UE source verified, existing patterns applicable
-- Pitfalls: HIGH - Documented from source, version thresholds explicit
+- Standard stack: HIGH - 仅 stdlib,匹配阶段 1/2 决策
+- Architecture: HIGH - UE 源码验证,现有模式可应用
+- Pitfalls: HIGH - 从源码记录,版本阈值明确
 
 **Research date:** 2026-05-01
 **Valid until:** 30 days (UE structure stable across versions)

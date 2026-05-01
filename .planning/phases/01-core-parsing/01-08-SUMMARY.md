@@ -10,20 +10,20 @@ tech-stack:
   added:
     - LocalizationId FString field in PackageFileSummary
     - GatherableTextData Count/Offset fields in PackageFileSummary
-    - Name hash bytes (4 bytes) after each FString for UE4 >= 502
-    - SoftObjectPaths conditional (UE5 only)
+    - Name hash bytes（4 bytes）after each FString for UE4 >= 502
+    - SoftObjectPaths conditional（UE5 only）
   patterns:
     - UE4 version-gated field reading
-    - FNameEntrySerialized format (FString + hash bytes)
+    - FNameEntrySerialized format（FString + hash bytes）
 key-files:
   created: []
   modified:
     - uasset_read.py: PackageFileSummary fields, read_package_summary(), read_name_table()
     - tests/test_uasset_read.py: create_test_uasset helper, test_ue4_total_header_size_at_correct_position, test_real_lyra_character_default_file
 decisions:
-  - LocalizationId/GatherableTextData only for UE4 files (legacy > -8)
-  - SoftObjectPaths only for UE5 files (legacy <= -8)
-  - Name hash bytes for UE4 >= VER_UE4_NAME_HASHES_SERIALIZED (502)
+  - LocalizationId/GatherableTextData 仅用于 UE4 文件（legacy > -8）
+  - SoftObjectPaths 仅用于 UE5 文件（legacy <= -8）
+  - UE4 >= VER_UE4_NAME_HASHES_SERIALIZED（502）的 Name hash bytes
 metrics:
   duration: ~45 minutes
   tasks_completed: 5
@@ -33,81 +33,81 @@ metrics:
 completed_date: 2026-04-28T06:00:00Z
 ---
 
-# Phase 1 Plan 08: LocalizationId and GatherableTextData Gap Closure Summary
+# 阶段 1 计划 08：LocalizationId 和 GatherableTextData 缺口填补摘要
 
-**One-liner:** Fixed UE4 file parsing by adding LocalizationId, GatherableTextData fields, SoftObjectPaths conditional, and name table hash bytes - Lyra Character_Default.uasset now parses successfully.
+**一句话概述：** 修复 UE4 文件解析，添加 LocalizationId、GatherableTextData 字段、SoftObjectPaths 条件和名称表哈希字节 - Lyra Character_Default.uasset 现在成功解析。
 
-## Context
+## 背景
 
-VERIFICATION.md identified that Lyra Character_Default.uasset (UE4 file, legacy=-7, UE4 v521) failed parsing due to missing LocalizationId and GatherableTextData fields in header. The parser read garbage values for ImportOffset (910241842 instead of 4776), blocking ImportMap/ExportMap parsing.
+VERIFICATION.md 识别到 Lyra Character_Default.uasset（UE4 文件, legacy=-7, UE4 v521）解析失败，原因是文件头缺失 LocalizationId 和 GatherableTextData 字段。解析器读取垃圾值作为 ImportOffset（910241842 而非 4776），阻塞 ImportMap/ExportMap 解析。
 
-## Tasks Completed
+## 已完成任务
 
-| Task | Name | Status | Commit |
+| 任务 | 名称 | 状态 | 提交 |
 |------|------|--------|--------|
-| 1 | Add LocalizationId and GatherableTextData fields to PackageFileSummary | COMPLETE | 817e412 |
-| 2 | Read LocalizationId and GatherableTextData in read_package_summary() | COMPLETE | 5f4e2eb |
-| 3 | Update create_test_uasset helper to emit fields for UE4 files | COMPLETE | 5f4e2eb |
-| 4 | Add test for UE4 LocalizationId field parsing | COMPLETE | 5f4e2eb |
-| 5 | Add real Lyra file parsing test | COMPLETE | 5c5cafa |
+| 1 | 向 PackageFileSummary 添加 LocalizationId 和 GatherableTextData 字段 | COMPLETE | 817e412 |
+| 2 | 在 read_package_summary() 中读取 LocalizationId 和 GatherableTextData | COMPLETE | 5f4e2eb |
+| 3 | 更新 create_test_uasset helper 以对 UE4 文件输出字段 | COMPLETE | 5f4e2eb |
+| 4 | 添加 UE4 LocalizationId 字段解析测试 | COMPLETE | 5f4e2eb |
+| 5 | 添加真实 Lyra 文件解析测试 | COMPLETE | 5c5cafa |
 
-## Deviations from Plan
+## 与计划的偏差
 
-### Auto-fixed Issues
+### 自动修复的问题
 
-**1. [Rule 1 - Bug] SoftObjectPaths was read for UE4 files (should be UE5 only)**
-- **Found during:** Task 2 - Lyra file test failed with UTF-16 error
-- **Issue:** Parser read SoftObjectPaths (8 bytes) for UE4 files, shifting position
-- **Fix:** Added conditional - only read SoftObjectPaths for UE5 files (legacy <= -8)
-- **Files modified:** uasset_read.py lines 488-496
-- **Commit:** 5c5cafa
+**1. [规则 1 - Bug] SoftObjectPaths 被 UE4 文件读取（应仅限 UE5）**
+- **发现时机：** 任务 2 - Lyra 文件测试失败报 UTF-16 错误
+- **问题：** 解析器为 UE4 文件读取 SoftObjectPaths（8 bytes），偏移位置
+- **修复：** 添加条件 - 仅 UE5 文件（legacy <= -8）读取 SoftObjectPaths
+- **修改文件：** uasset_read.py lines 488-496
+- **提交：** 5c5cafa
 
-**2. [Rule 1 - Bug] Name table hash bytes not read for UE4 >= 502**
-- **Found during:** Task 5 - Lyra file parsing showed UTF-16 error at position 487
-- **Issue:** UE4 >= VER_UE4_NAME_HASHES_SERIALIZED (502) has 4-byte hash suffix after each FString
-- **Fix:** read_name_table now reads 4 hash bytes after each FString for UE4 >= 502
-- **Files modified:** uasset_read.py read_name_table function
-- **Commit:** 5c5cafa
+**2. [规则 1 - Bug] UE4 >= 502 的名称表哈希字节未读取**
+- **发现时机：** 任务 5 - Lyra 文件解析显示 position 487 有 UTF-16 错误
+- **问题：** UE4 >= VER_UE4_NAME_HASHES_SERIALIZED（502）在每个 FString 后有 4-byte 哈希后缀
+- **修复：** read_name_table 现在对 UE4 >= 502 每个 FString 后读取 4 哈希字节
+- **修改文件：** uasset_read.py read_name_table function
+- **提交：** 5c5cafa
 
-**3. [Rule 3 - Blocking] Synthetic tests needed hash bytes**
-- **Found during:** After name hash fix, synthetic tests failed
-- **Issue:** create_test_uasset didn't emit hash bytes for UE4 >= 502
-- **Fix:** Updated helper to emit 4-byte hash after each name for UE4 >= 502
-- **Files modified:** tests/test_uasset_read.py create_test_uasset
-- **Commit:** 5c5cafa
+**3. [规则 3 - Blocking] 合成测试需要哈希字节**
+- **发现时机：** 名称哈希修复后，合成测试失败
+- **问题：** create_test_uasset 未对 UE4 >= 502 输出哈希字节
+- **修复：** 更新 helper 以对 UE4 >= 502 每个名称后输出 4-byte 哈希
+- **修改文件：** tests/test_uasset_read.py create_test_uasset
+- **提交：** 5c5cafa
 
-**4. [Rule 3 - Blocking] Manual test file missing UE4 fields**
-- **Found during:** test_ue4_total_header_size_at_correct_position failed
-- **Issue:** Manual file creation in test didn't include LocalizationId, GatherableTextData, or hash bytes
-- **Fix:** Updated test to emit all UE4 fields correctly
-- **Files modified:** tests/test_uasset_read.py
-- **Commit:** 5c5cafa
+**4. [规则 3 - Blocking] 手动测试文件缺失 UE4 字段**
+- **发现时机：** test_ue4_total_header_size_at_correct_position 失败
+- **问题：** 测试中手动文件创建未包含 LocalizationId、GatherableTextData 或哈希字节
+- **修复：** 更新测试以正确输出所有 UE4 字段
+- **修改文件：** tests/test_uasset_read.py
+- **提交：** 5c5cafa
 
-## Key Technical Decisions
+## 关键技术决策
 
-### UE Version Constants Discovered
+### 发现的 UE 版本常量
 
-From UE 5.7 source ObjectVersion.h:
-- VER_UE4_NAME_HASHES_SERIALIZED = 502 (name hashes after FString)
+来自 UE 5.7 源码 ObjectVersion.h：
+- VER_UE4_NAME_HASHES_SERIALIZED = 502（FString 后的名称哈希）
 - VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 514
-- VER_UE4_SERIALIZE_TEXT_IN_PACKAGES = 457 (GatherableTextData)
+- VER_UE4_SERIALIZE_TEXT_IN_PACKAGES = 457（GatherableTextData）
 
-### Field Reading Logic
+### 字段读取逻辑
 
-| Field | UE4 (legacy > -8) | UE5 (legacy <= -8) |
+| 字段 | UE4（legacy > -8） | UE5（legacy <= -8） |
 |-------|-------------------|--------------------|
 | SoftObjectPaths | NO | YES |
-| LocalizationId | YES (UE4 >= 514) | NO |
-| GatherableTextData | YES (UE4 >= 457) | NO |
-| Name Hash Bytes | YES (UE4 >= 502) | NO |
+| LocalizationId | YES（UE4 >= 514） | NO |
+| GatherableTextData | YES（UE4 >= 457） | NO |
+| Name Hash Bytes | YES（UE4 >= 502） | NO |
 
-### Name Table Format
+### 名称表格式
 
-UE4 >= 502 uses FNameEntrySerialized format:
-- FString (int32 length + UTF-8 data + null terminator)
-- 4 bytes hash (NonCasePreservingHash uint16 + CasePreservingHash uint16)
+UE4 >= 502 使用 FNameEntrySerialized 格式：
+- FString（int32 length + UTF-8 data + null terminator）
+- 4 bytes hash（NonCasePreservingHash uint16 + CasePreservingHash uint16）
 
-## Verification Results
+## 验证结果
 
 ### Lyra Character_Default.uasset
 
@@ -121,51 +121,51 @@ ImportOffset: 4776
 ExportOffset: 3516
 ```
 
-All values match VERIFICATION.md expected values. ImportMap and ExportMap correctly populated.
+所有值匹配 VERIFICATION.md 预期值。ImportMap 和 ExportMap 正确填充。
 
-### Test Results
+### 测试结果
 
-All 28 tests pass including:
-- test_real_lyra_character_default_file (integration test)
-- test_ue4_localization_id_field_reading (field validation)
-- test_ue4_total_header_size_at_correct_position (manual file test)
+全部 28 个测试通过包括：
+- test_real_lyra_character_default_file（集成测试）
+- test_ue4_localization_id_field_reading（字段验证）
+- test_ue4_total_header_size_at_correct_position（手动文件测试）
 
-## Files Modified
+## 修改文件
 
 ### uasset_read.py
 
-1. PackageFileSummary dataclass: Added localization_id, gatherable_text_data_count, gatherable_text_data_offset fields
-2. read_package_summary(): 
-   - SoftObjectPaths conditional (UE5 only)
-   - LocalizationId reading for UE4 files
-   - GatherableTextData reading for UE4 files
-3. read_name_table(): Added hash bytes reading for UE4 >= 502
+1. PackageFileSummary dataclass：添加 localization_id、gatherable_text_data_count、gatherable_text_data_offset 字段
+2. read_package_summary()：
+   - SoftObjectPaths 条件（仅 UE5）
+   - UE4 文件的 LocalizationId 读取
+   - UE4 文件的 GatherableTextData 读取
+3. read_name_table()：UE4 >= 502 添加哈希字节读取
 
 ### tests/test_uasset_read.py
 
-1. create_test_uasset: 
-   - SoftObjectPaths conditional (UE5 only)
-   - LocalizationId/GatherableTextData emission for UE4
-   - Name hash bytes emission for UE4 >= 502
-2. test_ue4_total_header_size_at_correct_position: Updated manual file creation
-3. test_real_lyra_character_default_file: New integration test
-4. test_ue4_localization_id_field_reading: New field validation test
+1. create_test_uasset：
+   - SoftObjectPaths 条件（仅 UE5）
+   - UE4 LocalizationId/GatherableTextData 输出
+   - UE4 >= 502 的名称哈希字节输出
+2. test_ue4_total_header_size_at_correct_position：更新手动文件创建
+3. test_real_lyra_character_default_file：新集成测试
+4. test_ue4_localization_id_field_reading：新字段验证测试
 
-## Success Criteria Met
+## 成功标准达成
 
-1. All tests pass (existing + new) - 28/28 passed
-2. Lyra Character_Default.uasset parses successfully - VERIFIED
-3. LocalizationId field populated with GUID string - "20A614D64ED8D59F9004C9AAB041067E"
-4. ImportOffset=4776, ExportOffset=3516 (valid values) - VERIFIED
-5. ImportMap and ExportMap populate correctly - 20 imports, 35 exports
+1. 所有测试通过（现有 + 新） - 28/28 passed
+2. Lyra Character_Default.uasset 成功解析 - 已验证
+3. LocalizationId 字段填充 GUID 字符串 - "20A614D64ED8D59F9004C9AAB041067E"
+4. ImportOffset=4776, ExportOffset=3516（有效值） - 已验证
+5. ImportMap 和 ExportMap 正确填充 - 20 imports, 35 exports
 
-## Self-Check: PASSED
+## 自检：通过
 
-- All files exist and modified correctly
-- All commits in git log (817e412, 5f4e2eb, 5c5cafa)
-- All tests pass (28/28)
-- Lyra file parses with correct values
+- 所有文件存在并正确修改
+- git log 中所有提交（817e412, 5f4e2eb, 5c5cafa）
+- 所有测试通过（28/28）
+- Lyra 文件正确解析，值正确
 
 ---
-*Completed: 2026-04-28T06:00:00Z*
-*Executor: Claude (gsd-execute-phase)*
+*完成时间：2026-04-28T06:00:00Z*
+*执行器：Claude（gsd-execute-phase）*

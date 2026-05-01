@@ -2,88 +2,85 @@
 status: complete
 phase: 02-property-parsing
 source: 02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md
-started: 2026-05-01T13:00:00Z
-updated: 2026-05-01T13:30:00Z
+started: 2026-05-01T14:00:00Z
+updated: 2026-05-01T14:05:00Z
 ---
 
-## Current Test
+## 当前测试
 
-[testing complete]
+[测试完成]
 
-## Tests
+## 测试
 
-### 1. PropertyTag Parsing API
-expected: Import PropertyTag from uasset_read, call read_property_tag() on valid data, verify PropertyTag dataclass with name, type, size, flags fields
-result: pass
-note: 10 PropertyTag tests passed after adding tests/__init__.py
+### 1. PropertyTag 解析 API
+预期: 从 uasset_read 导入 PropertyTag，在有效数据上调用 read_property_tag()，验证带 name, type, size, flags 字段的 PropertyTag dataclass
+结果: 通过
+备注: 35 测试通过, PropertyTag 字段已验证: name, type, size, array_index, flags, property_guid, bool_val
 
-### 2. IntProperty Extraction
-expected: parse_int_property() returns correct int32/int64 values from test binary data
-result: pass
-note: 2 tests passed (int32, int64)
+### 2. IntProperty 提取
+预期: parse_int_property() 从测试二进制数据返回正确 int32/int64 值
+结果: 通过
+备注: test_parse_int_property_int32 + test_parse_int_property_int64 通过
 
-### 3. FloatProperty Extraction
-expected: parse_float_property() returns correct float/double values from test binary data
-result: pass
-note: 1 float + 1 double test passed; fixed pytest import issue by adding tests/__init__.py
+### 3. FloatProperty 提取
+预期: parse_float_property() 从测试二进制数据返回正确 float/double 值
+结果: 通过
+备注: test_parse_float_property + test_parse_double_property 通过
 
-### 4. BoolProperty Extraction
-expected: parse_bool_property() extracts value from tag.bool_val correctly (True/False)
-result: pass
+### 4. BoolProperty 提取
+预期: parse_bool_property() 从 tag.bool_val 正确提取值 (True/False)
+结果: 通过
+备注: test_parse_bool_property 通过
 
-### 5. StrProperty Extraction
-expected: parse_str_property() reads FString (length-prefixed UTF-8) and returns correct string
-result: pass
-note: 2 tests passed (normal string + empty string)
+### 5. StrProperty 提取
+预期: parse_str_property() 读取 FString（长度前缀 UTF-8）并返回正确字符串
+结果: 通过
+备注: test_parse_str_property + test_parse_str_property_empty 通过
 
-### 6. NameProperty Extraction
-expected: parse_name_property() reads FName from NameMap and returns correct name string
-result: pass
-note: 2 tests passed (with suffix + no suffix)
+### 6. NameProperty 提取
+预期: parse_name_property() 从 NameMap 读取 FName 并返回正确名称字符串
+结果: 通过
+备注: test_parse_name_property + test_parse_name_property_no_suffix 通过
 
-### 7. ObjectProperty Extraction
-expected: parse_object_property() returns FPackageIndex (signed int32 raw value)
-result: pass
-note: 2 tests passed (basic reference + import reference)
+### 7. ObjectProperty 提取
+预期: parse_object_property() 返回 FPackageIndex（有符号 int32 原始值）
+结果: 通过
+备注: test_parse_object_property + test_parse_object_property_import_reference 通过
 
-### 8. ArrayProperty Extraction
-expected: parse_array_property() reads count + elements loop, returns list with all elements parsed
-result: pass
-note: 2 tests passed (empty array + int elements) + depth limit test
+### 8. ArrayProperty 提取
+预期: parse_array_property() 读取计数 + 元素循环，返回所有元素解析的列表
+结果: 通过
+备注: test_parse_array_property_empty + test_parse_array_property_int_elements + test_array_property_depth_limit 通过
 
-### 9. UE4/UE5 Version Detection
-expected: use_complete_type_name() returns True for UE5 (ue5_version >= 1000), False for UE4
-result: pass
-note: 3 tests passed (UE5 above/below threshold + UE4 always old)
+### 9. UE4/UE5 版本检测
+预期: use_complete_type_name() 对 UE5 (ue5_version >= 1000) 返回 True，对 UE4 返回 False
+结果: 通过
+备注: 3 个版本测试通过（UE5 阈值以上/以下 + UE4 总是旧格式）
 
-### 10. HasPropertyGuid Flag Handling
-expected: PropertyTag with HasPropertyGuid flag has property_guid field populated (16 bytes)
-result: pass
-note: 2 tests passed (guid in tag + guid UE5 format)
+### 10. HasPropertyGuid 标志处理
+预期: 带 HasPropertyGuid 标志的 PropertyTag 有 property_guid 字段填充（16 字节）
+结果: 通过
+备注: test_property_tag_ue5_with_guid + test_property_guid_ue5_format 通过
 
-### 11. Test Suite Execution
-expected: Run pytest tests/test_property_parsing.py -v, all 35 tests pass
-result: pass
-note: 35 passed in 0.09s
+### 11. 测试套件执行
+预期: 运行 pytest tests/test_property_parsing.py -v，所有测试通过
+结果: 通过
+备注: 35 个在 0.11s 内通过
 
-### 12. Public API Exports
-expected: All Phase 2 functions in __all__: read_property_tag, parse_bool_property, parse_int_property, parse_float_property, parse_str_property, parse_name_property, parse_object_property, parse_array_property, parse_property_value, parse_properties_from_export, use_complete_type_name
-result: pass
-note: All imports verified successfully
+### 12. 公共 API 导出
+预期: 所有 Phase 2 函数在 __all__ 中导出: read_property_tag, parse_bool_property, parse_int_property, parse_float_property, parse_str_property, parse_name_property, parse_object_property, parse_array_property, parse_property_value, parse_properties_from_export, use_complete_type_name
+结果: 通过
+备注: 所有导入通过 Python 导入测试成功验证
 
-## Summary
+## 总结
 
-total: 12
-passed: 12
-issues: 0
-pending: 0
-skipped: 0
-blocked: 0
+总计: 12
+通过: 12
+问题: 0
+待定: 0
+跳过: 0
+阻塞: 0
 
-## Gaps
+## 缺口
 
-[none]
-
-## Fix Applied During UAT
-
-- Added `tests/__init__.py` to fix pytest import error (FArchive not found)
+[无]
