@@ -57,7 +57,11 @@ progress:
 2. 解析器正确读取 FObjectExport.OuterIndex 字段（所有版本），导出表偏移正确
 3. 导出表解析失败时返回清晰错误信息（包含文件偏移、期望值、实际值）
 
-**Plans:** TBD
+**Plans:** 2 plans in 2 waves
+
+Plans:
+- [ ] 06-01-PLAN.md — 实现修复：ErrorContext扩展、ObjectExport扩展、read_export_map重构
+- [ ] 06-02-PLAN.md — 测试验证：单元测试、功能测试、Lyra资产对比验证
 
 **UI hint:** no
 
