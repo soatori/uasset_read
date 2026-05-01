@@ -1082,6 +1082,76 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
     return value_str
 
 
+def read_blueprint_variable(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary
+) -> BlueprintVariable:
+    """
+    Parse FBPVariableDescription from blueprint export (BLUE-03).
+
+    Serialization order from Blueprint.h lines 200-256 [VERIFIED]:
+    1. VarName (FName)
+    2. VarGuid (FGuid - 16 bytes) - skip
+    3. VarType (FEdGraphPinType)
+    4. FriendlyName (FString)
+    5. Category (FText - simplified to FString)
+    6. PropertyFlags (uint64)
+    7. RepNotifyFunc (FName) - skip
+    8. ReplicationCondition (uint8) - skip
+    9. MetaDataArray (TArray) - skip for Phase 3
+    10. DefaultValue (FString)
+
+    Per D-05/D-06/D-07: full FEdGraphPinType for type info.
+    Per D-13/D-14/D-15/D-16: parse DefaultValue with parse_default_value().
+
+    Args:
+        archive: FArchive positioned at start of FBPVariableDescription
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+
+    Returns:
+        BlueprintVariable dataclass with all parsed fields
+    """
+    var = BlueprintVariable(
+        var_name=archive.read_name(name_map)
+    )
+
+    # VarGuid (16 bytes) - skip, not needed for Phase 3
+    archive.read(16)
+
+    # VarType (FEdGraphPinType)
+    var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
+
+    # FriendlyName (FString)
+    var.friendly_name = archive.read_fstring()
+
+    # Category (FText) - simplified to FString for Phase 3
+    # FText has complex serialization; simplified representation
+    var.category = archive.read_fstring()
+
+    # PropertyFlags (uint64)
+    var.property_flags = archive.read_u64()
+
+    # RepNotifyFunc (FName) - skip for Phase 3 (D-16 deferred metadata)
+    archive.read_name(name_map)
+
+    # ReplicationCondition (uint8) - skip for Phase 3
+    archive.read_u8()
+
+    # MetaDataArray count + entries - skip for Phase 3 (deferred)
+    meta_count = archive.read_i32()
+    for _ in range(meta_count):
+        archive.read_name(name_map)  # DataKey
+        archive.read_fstring()       # DataValue
+
+    # DefaultValue (FString) - parse per D-13/D-14/D-15
+    default_str = archive.read_fstring()
+    var.default_value = parse_default_value(default_str, var.var_type)
+
+    return var
+
+
 # ============================================================================
 # PropertyTag 解析（Phase 2）
 # ============================================================================
