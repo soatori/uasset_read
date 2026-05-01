@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-01T13:06:36Z"
+last_updated: "2026-05-01T21:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  active_phase: 3
+  active_phase: 4
   total_plans: 15
   completed_plans: 13
   percent: 43
@@ -22,7 +22,7 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v1.0 —— 初始
-**状态：** 阶段 1、2 已发布 ✓，阶段 3 执行中
+**状态：** 阶段 1、2 已发布 ✓，阶段 3 执行中，阶段 4 上下文已收集
 
 ## 当前阶段
 
@@ -33,6 +33,12 @@ shipped:
 - 进度：2/4 计划完成（03-00 测试脚手架、03-01 蓝图检测、03-02 类型解析已完成）
 - 计划列表：03-00（Wave 0 测试）、03-01（蓝图检测）、03-02（类型解析）、03-03（集成）
 
+**阶段 4：输出与 CLI**
+
+- 状态：○ 上下文已收集
+- 目标：输出格式化（JSON、文本、摘要）和命令行接口
+- 进度：0/0 计划，等待规划
+
 ## 阶段状态
 
 | # | 阶段 | 状态 | 计划 | 验证 | 进度 |
@@ -40,7 +46,7 @@ shipped:
 | 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | 100% |
 | 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | 100% |
 | 3 | 蓝图提取 | ● 执行中 | 2/4 | - | 50% |
-| 4 | 输出与 CLI | ○ 待定 | 0/0 | - | 0% |
+| 4 | 输出与 CLI | ○ 上下文已收集 | 0/0 | - | 0% |
 | 5 | 优化与安全 | ○ 待定 | 0/0 | - | 0% |
 
 ## 近期活动
@@ -71,13 +77,14 @@ shipped:
 | 2026-05-01 | 阶段 3 Wave 0 完成 | 03-00-PLAN.md 执行完成，21 个测试脚手架创建 |
 | 2026-05-01 | 阶段 3 Wave 1 蓝图检测 | 03-01-PLAN.md 执行完成，detect_blueprint/resolve_parent_class 实现 |
 | 2026-05-01 | 阶段 3 Wave 1 类型解析 | 03-02-PLAN.md 执行完成，read_ed_graph_pin_type/parse_default_value/read_blueprint_variable 实现，21 测试通过 |
+| 2026-05-01 | 阶段 4 上下文收集 | 04-CONTEXT.md 创建，含 29 项决策，8 个灰色区域讨论 |
 
 ## 项目参考
 
 参见：`.planning/PROJECT.md`（2026-04-27 更新）
 
 **核心价值：** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
-**当前重点：** 阶段 3 执行中（Wave 0 已完成）
+**当前重点：** 阶段 3 执行中（Wave 1 已完成），阶段 4 上下文已收集
 
 ## 关键决策
 
@@ -99,9 +106,15 @@ shipped:
 | 自动蓝图检测 | 已决定（阶段 3）| parse_uasset() 后自动提取 |
 | 仅直接父类解析 | 已决定（阶段 3）| 不追溯继承链 |
 | DefaultValue 基本类型解析 | 已决定（阶段 3）| int、float、bool、str |
+| JSON 分级输出 | 已决定（阶段 4）| --json 完整、--summary 精简 |
+| Package→Exports→Properties 层级 | 已决定（阶段 4）| 清晰层级结构 |
+| YAML 风格文本输出 | 已决定（阶段 4）| AI agent 优先 |
+| 双入口 CLI | 已决定（阶段 4）| python -m 和脚本均可 |
+| 语义退出码 | 已决定（阶段 4）| 0/1/2/3 分类 |
 
 ## 下一步动作
 
 ```
-/gsd-execute-phase 3 —— 继续执行阶段 3（03-01~03-03）
+/gsd-execute-phase 3 —— 继续执行阶段 3（03-03 集成）
+/gsd-plan-phase 4    —— 创建阶段 4 计划（上下文已收集）
 ```
