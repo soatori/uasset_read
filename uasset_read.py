@@ -1749,6 +1749,296 @@ def parse_uasset(path: str) -> ParseResult:
 
 
 # ============================================================================
+# Output Formatting Functions (Phase 4)
+# ============================================================================
+
+def format_json_full(result: ParseResult) -> Dict:
+    """
+    Format full JSON output with complete asset data (OUT-01, OUT-03).
+
+    Per D-01: Tiered output (full detail)
+    Per D-02: Package → Exports → Properties hierarchy
+    Per D-03: Top-level errors field
+    Per D-04: Top-level blueprint_metadata (None for non-blueprint)
+    Per D-05: Raw FPackageIndex values preserved where unresolved
+    Per D-06: name_map excluded (already parsed to object names)
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        Dict with keys: summary, exports, blueprint_metadata, errors
+    """
+    from dataclasses import asdict
+
+    summary_dict = {}
+    if result.summary:
+        summary_dict = {
+            "version_ue4": result.summary.file_version_ue4,
+            "version_ue5": result.summary.file_version_ue5,
+            "legacy_version": result.summary.legacy_file_version,
+            "package_flags": result.summary.package_flags,  # D-08: raw u32
+            "package_name": result.summary.package_name
+        }
+
+    return {
+        "summary": summary_dict,
+        "exports": format_exports_list(result),
+        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "errors": result.errors
+    }
+
+
+def format_exports_list(result: ParseResult) -> List[Dict]:
+    """
+    Format exports list for JSON output.
+
+    Per D-11/D-12: ParentClass, SuperIndex resolved in Phase 3
+    Per D-13: Warning field on resolution failure
+
+    Args:
+        result: ParseResult containing export_map
+
+    Returns:
+        List of dicts with keys: index, name, class, serial_size, properties
+    """
+    exports_list = []
+
+    for i, exp in enumerate(result.export_map):
+        export_dict = {
+            "index": i,
+            "name": exp.object_name,
+            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "serial_size": exp.serial_size,
+            "properties": format_properties_list(exp.properties) if exp.properties else []
+        }
+        exports_list.append(export_dict)
+
+    return exports_list
+
+
+def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
+    """
+    Format properties list for JSON output.
+
+    Per OUT-05: None → null in JSON (Python None preserved)
+
+    Args:
+        properties: List of PropertyValue objects
+
+    Returns:
+        List of dicts with keys: name, type, value, array_index
+    """
+    props_list = []
+
+    for prop in properties:
+        prop_dict = {
+            "name": prop.name,
+            "type": prop.type,
+            "value": prop.value,  # None → JSON null automatically
+            "array_index": prop.array_index
+        }
+        props_list.append(prop_dict)
+
+    return props_list
+
+
+def format_json_summary(result: ParseResult) -> Dict:
+    """
+    Format compact JSON summary (OUT-03).
+
+    Per D-09: Medium detail - export names + types + properties (name+type+value)
+    Per D-10: Skip low-level details - no name_map, import_map, CustomVersions
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        Dict with keys: version, package_name, exports, blueprint_metadata, errors
+    """
+    version_dict = {}
+    if result.summary:
+        version_dict = {
+            "ue4": result.summary.file_version_ue4,
+            "ue5": result.summary.file_version_ue5 or result.summary.legacy_file_version,
+            "legacy": result.summary.legacy_file_version
+        }
+
+    exports_summary = []
+    for exp in result.export_map:
+        export_summary = {
+            "name": exp.object_name,
+            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "properties": [
+                {"name": p.name, "type": p.type, "value": p.value}
+                for p in (exp.properties or [])
+            ]
+        }
+        exports_summary.append(export_summary)
+
+    return {
+        "version": version_dict,
+        "package_name": result.summary.package_name if result.summary else "",
+        "exports": exports_summary,
+        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "errors": result.errors
+    }
+
+
+def format_text_full(result: ParseResult) -> str:
+    """
+    Format YAML-style text output with full detail (OUT-02).
+
+    Per D-17: YAML style hierarchy with 2-space indentation
+    Per D-19: ERRORS block at end
+    Per D-21: Blueprint metadata embedded
+    Per D-22: Nested YAML indentation
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: YAML-style text output
+    """
+    lines = []
+
+    # Package header
+    if result.summary:
+        package_name = result.summary.package_name or "Unknown"
+        lines.append(f"Package: {package_name}")
+        lines.append(f"  Version: UE4={result.summary.file_version_ue4}, UE5={result.summary.file_version_ue5}")
+        lines.append(f"  Flags: 0x{result.summary.package_flags:08X}")
+        lines.append(f"  Imports: {len(result.import_map)}")
+        lines.append(f"  Exports: {len(result.export_map)}")
+        lines.append("")
+    else:
+        lines.append("Package: Unknown")
+        lines.append("  Version: Unknown")
+        lines.append("  Flags: Unknown")
+        lines.append("  Imports: 0")
+        lines.append("  Exports: 0")
+        lines.append("")
+
+    # Exports section
+    lines.append("Exports:")
+    for i, exp in enumerate(result.export_map):
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - Name: {exp.object_name}")
+        lines.append(f"    Class: {asset_class}")
+        lines.append(f"    SerialSize: {exp.serial_size}")
+
+        if exp.properties:
+            lines.append(f"    Properties:")
+            for prop in exp.properties:
+                lines.append(f"      - Name: {prop.name}")
+                lines.append(f"        Type: {prop.type}")
+                value_str = str(prop.value) if prop.value is not None else "null"
+                lines.append(f"        Value: {value_str}")
+
+        lines.append("")  # Blank line between exports
+
+    # Blueprint section
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  ParentClass: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+        for var in result.blueprint.variables:
+            lines.append(f"  - Name: {var.var_name}")
+            lines.append(f"    Type: {var.var_type.pin_category}")
+            default = var.default_value or "None"
+            lines.append(f"    Default: {default}")
+            category = var.category or "Default"
+            lines.append(f"    Category: {category}")
+
+        lines.append("")  # Blank line after blueprint
+
+    # ERRORS block
+    if result.errors:
+        lines.append("ERRORS:")
+        for err in result.errors:
+            lines.append(f"  - {err}")
+    else:
+        lines.append("ERRORS:")
+        lines.append("  (none)")
+
+    return "\n".join(lines)
+
+
+def format_text_summary(result: ParseResult) -> str:
+    """
+    Format compact YAML-style text summary (OUT-02).
+
+    Per D-18: One line per export: "Name (Type)"
+    Per D-22: YAML indentation
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: Compact YAML-style text summary
+    """
+    lines = []
+
+    # Package header
+    package_name = result.summary.package_name if result.summary else "Unknown"
+    lines.append(f"Package: {package_name}")
+    lines.append(f"Exports: {len(result.export_map)}")
+    lines.append("")  # Blank line
+
+    # Exports: one line each
+    for exp in result.export_map:
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - {exp.object_name} ({asset_class})")
+
+    # Blueprint summary
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("")
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  Parent: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+    return "\n".join(lines)
+
+
+def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
+    """
+    Format BlueprintMetadata for JSON output (D-04).
+
+    Args:
+        blueprint: BlueprintMetadata object
+
+    Returns:
+        Dict with keys: parent_class, variables, detection_warning
+    """
+    variables_list = []
+    for v in blueprint.variables:
+        var_dict = {
+            "name": v.var_name,
+            "type": {
+                "pin_category": v.var_type.pin_category,
+                "pin_sub_category": v.var_type.pin_sub_category,
+                "container_type": v.var_type.container_type,
+                "is_reference": v.var_type.is_reference,
+                "is_const": v.var_type.is_const
+            },
+            "category": v.category,
+            "property_flags": v.property_flags,
+            "default_value": v.default_value,  # None if not set
+            "friendly_name": v.friendly_name
+        }
+        variables_list.append(var_dict)
+
+    return {
+        "parent_class": blueprint.parent_class,  # None if not resolved
+        "variables": variables_list,
+        "detection_warning": blueprint.detection_warning  # None if no warning
+    }
+
+
+# ============================================================================
 # Public API Exports
 # ============================================================================
 
@@ -1812,4 +2102,13 @@ __all__ = [
     'parse_array_property',
     'parse_property_value',
     'parse_properties_from_export',
+
+    # Output formatting functions (Phase 4)
+    'format_json_full',
+    'format_json_summary',
+    'format_text_full',
+    'format_text_summary',
+    'format_exports_list',
+    'format_properties_list',
+    'format_blueprint_dict',
 ]
