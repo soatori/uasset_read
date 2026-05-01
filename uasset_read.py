@@ -16,7 +16,7 @@ Phase 1: 核心解析器实现
 import struct
 import os
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, BinaryIO
+from typing import Optional, List, Dict, BinaryIO, Tuple
 
 
 # ============================================================================
@@ -34,6 +34,20 @@ MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
 MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
+
+# PropertyTag flags (PropertyTag.h lines 17-26)
+PROP_TAG_NONE = 0x00
+PROP_TAG_HAS_ARRAY_INDEX = 0x01      # ArrayIndex field present
+PROP_TAG_HAS_PROPERTY_GUID = 0x02    # PropertyGuid field present
+PROP_TAG_HAS_EXTENSIONS = 0x04       # Extension data (defer to Phase 3)
+PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
+PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
+PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
+
+# PropertyTag version thresholds (PropertyTag.cpp)
+PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
+VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
+VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
 
 # ============================================================================
@@ -174,6 +188,11 @@ class FArchive:
         """读取 32-bit float（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'f', self.read(4))[0]
+
+    def read_f64(self) -> float:
+        """读取 64-bit double（支持字节交换）"""
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'd', self.read(8))[0]
 
     def read_fstring(self) -> str:
         """
@@ -356,6 +375,86 @@ class ObjectExport:
 
 
 @dataclass
+class PropertyTag:
+    """
+    PropertyTag 结构（PROP-01）。
+
+    来自 PropertyTag.h lines 37-105:
+    FPropertyTag 包含属性元信息，用于标识属性类型和大小。
+    """
+    name: str                         # 属性名（FName）
+    type: str                         # 类型名字符串（如 "IntProperty")
+    size: int                         # 序列化数据大小（字节）
+    array_index: int = 0              # 数组元素索引（默认 0）
+    flags: int = 0                    # EPropertyTagFlags 标志位
+    property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
+    bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+
+
+@dataclass
+class PropertyValue:
+    """
+    属性值容器（D-08/D-09）。
+
+    存储解析后的属性值，使用 Python 原生类型。
+    """
+    name: str                         # 属性名
+    type: str                         # 属性类型
+    value: any = None                 # 解析后的值（int, float, str, list 等）
+    array_index: int = 0              # 数组元素索引
+
+
+@dataclass
+class FEdGraphPinType:
+    """
+    Pin type structure from EdGraphPin.h lines 76-225.
+
+    Per D-08: full structure parsing, not just name formatting.
+    Per RESEARCH.md Pitfall 1: version-aware serialization with FFrameworkObjectVersion checks.
+    ContainerType added in FFrameworkObjectVersion::EdGraphPinContainerType.
+    bIsConst added in VER_UE4_SERIALIZE_PINTYPE_CONST.
+    bIsUObjectWrapper added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag.
+    """
+    pin_category: str = ""           # FName (RenderName, bool, int, etc.)
+    pin_sub_category: str = ""       # FName (sub-type, e.g., "Int" for Integer)
+    pin_sub_category_object: int = 0 # FPackageIndex (resolved to class name)
+    container_type: int = 0          # EPinContainerType: 0=None, 1=Array, 2=Set, 3=Map
+    is_reference: bool = False
+    is_const: bool = False           # Added in VER_UE4_SERIALIZE_PINTYPE_CONST
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+
+
+@dataclass
+class BlueprintVariable:
+    """
+    Variable definition from FBPVariableDescription.
+
+    Per D-05/D-06: use UE original names with container prefix.
+    """
+    var_name: str                    # FName
+    var_type: "FEdGraphPinType"      # Full type structure (defined next)
+    category: str                    # FText (simplified to string)
+    property_flags: int              # uint64 EPropertyFlags
+    default_value: any = None        # Parsed or raw string per D-13/D-14
+    friendly_name: str = ""          # FString
+
+
+@dataclass
+class BlueprintMetadata:
+    """
+    Blueprint metadata extracted from ExportMap.
+
+    Per D-01/D-02/D-03: auto-detect with warning on failure.
+    Per D-04: deferred BlueprintType detection (normal:class->ImportExport).
+    """
+    is_blueprint: bool
+    parent_class: Optional[str] = None  # Per D-09: only direct parent
+    variables: List["BlueprintVariable"] = field(default_factory=list)
+    detection_warning: Optional[str] = None  # Per D-03
+
+
+@dataclass
 class ParseResult:
     """
     解析结果（D-15 部分结果）。
@@ -367,6 +466,7 @@ class ParseResult:
     import_map: List[ObjectImport] = field(default_factory=list)
     export_map: List[ObjectExport] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)  # 收集所有错误
+    blueprint: Optional["BlueprintMetadata"] = None  # Per D-02: auto-extracted
     is_success: bool = False
 
 
@@ -773,6 +873,478 @@ def get_asset_class(
     return None
 
 
+def detect_blueprint(
+    export: ObjectExport,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> bool:
+    """
+    Detect if export is a blueprint asset (BLUE-01).
+
+    Per D-01: check ClassIndex resolution for "Blueprint" keyword in class name.
+    Per D-04: only detect presence, don't distinguish BlueprintType.
+
+    Args:
+        export: ObjectExport to check
+        import_map: Import table for ClassIndex lookup
+        export_map: Export table for ClassIndex lookup
+
+    Returns:
+        True if export is a blueprint, False otherwise
+    """
+    class_name = get_asset_class(export, import_map, export_map)
+    if class_name and "Blueprint" in class_name:
+        return True
+    return False
+
+
+def resolve_parent_class(
+    super_index: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve ParentClass FPackageIndex to object name (BLUE-02).
+
+    Per D-09: only direct parent (no inheritance chain).
+    Per D-10: resolve to ImportMap/ExportMap object name.
+    Per D-11: return raw index + warning on resolution failure.
+
+    Args:
+        super_index: FPackageIndex from ObjectExport.super_index
+        import_map: Import table for lookup
+        export_map: Export table for lookup
+
+    Returns:
+        Tuple of (resolved_name, warning_if_any)
+        - (class_name, None) on success
+        - (None, warning_string) on failure
+    """
+    if super_index.is_null:
+        # No parent (UObject root)
+        return None, None
+
+    if super_index.is_import:
+        import_idx = super_index.to_import_index()
+        if 0 <= import_idx < len(import_map):
+            return import_map[import_idx].object_name, None
+        warning = f"ParentClass import index {super_index.index} out of range"
+        return None, warning
+
+    elif super_index.is_export:
+        export_idx = super_index.to_export_index()
+        if 0 <= export_idx < len(export_map):
+            return export_map[export_idx].object_name, None
+        warning = f"ParentClass export index {super_index.index} out of range"
+        return None, warning
+
+    # Invalid index (should not happen, but handle defensively)
+    warning = f"ParentClass invalid FPackageIndex: {super_index.index}"
+    return None, warning
+
+
+# ============================================================================
+# PropertyTag 解析（Phase 2）
+# ============================================================================
+
+def use_complete_type_name(legacy_version: int, ue5_version: int) -> bool:
+    """
+    判断是否使用完整 TypeName 格式（PROP-09）。
+
+    UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME (1000) 使用完整 TypeName 字符串。
+    UE4 始终使用旧格式（短名称 + 分离字段）。
+
+    Args:
+        legacy_version: LegacyFileVersion（-2 至 -9）
+        ue5_version: UE5 版本号
+
+    Returns:
+        True 使用 UE5 新格式，False 使用 UE4 旧格式
+    """
+    if legacy_version <= -8 and ue5_version >= PROPERTY_TAG_COMPLETE_TYPE_NAME:
+        return True
+    return False
+
+
+def read_property_tag(
+    archive: FArchive,
+    name_map: List[str],
+    legacy_version: int,
+    ue5_version: int
+) -> PropertyTag:
+    """
+    读取 PropertyTag 结构（PROP-01）。
+
+    根据 UE 源码 PropertyTag.cpp：
+    - UE5 新格式（>= PROPERTY_TAG_COMPLETE_TYPE_NAME）：完整 TypeName 字符串
+    - UE4 旧格式：短 Type 名称 + 分离字段（ArrayIndex、BoolVal 等）
+
+    Args:
+        archive: FArchive 实例
+        name_map: 名称表
+        legacy_version: LegacyFileVersion
+        ue5_version: UE5 版本号
+
+    Returns:
+        PropertyTag dataclass
+    """
+    tag = PropertyTag(
+        name=archive.read_name(name_map),
+        type="",
+        size=0
+    )
+
+    if use_complete_type_name(legacy_version, ue5_version):
+        # UE5 新格式（PropertyTag.cpp lines 436-545）
+        tag.type = archive.read_fstring()  # Complete TypeName string
+        tag.size = archive.read_i32()
+        tag.flags = archive.read_u8()
+
+        # 条件字段（基于标志位）
+        if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
+            tag.array_index = archive.read_i32()
+
+        if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
+            tag.property_guid = archive.read(16)
+
+        # BoolTrue 标志表示 bool 值为 true
+        if tag.flags & PROP_TAG_BOOL_TRUE:
+            tag.bool_val = 1
+    else:
+        # UE4 旧格式（PropertyTag.cpp lines 195-401）
+        tag.type = archive.read_name(name_map)  # Short type name only
+        tag.size = archive.read_i32()
+        tag.array_index = archive.read_i32()  # Always present in UE4
+
+        # 类型特定的额外字段（Phase 2 仅处理基本类型）
+        # BoolProperty: BoolVal 字段存在
+        if tag.type == "BoolProperty":
+            tag.bool_val = archive.read_u8()
+
+        # PropertyGuid（UE4 >= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG）
+        # Phase 2 简化处理：不读取 PropertyGuid，跳过依赖版本检查
+        # 完整实现需检查 file_version_ue4 >= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG
+
+    return tag
+
+
+# ============================================================================
+# 属性值解析（Phase 2 基本类型）
+# ============================================================================
+
+def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
+    """
+    解析 BoolProperty（PROP-04）。
+
+    BoolProperty 值存储在 PropertyTag.BoolVal，无额外数据读取。
+    参考 PropertyTag.cpp lines 558-571。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例（不读取额外数据）
+
+    Returns:
+        bool 值
+    """
+    return bool(tag.bool_val)
+
+
+def parse_int_property(tag: PropertyTag, archive: FArchive) -> int:
+    """
+    解析 IntProperty（PROP-02）。
+
+    根据 Type 名称分派：
+    - IntProperty: read_i32() → 4 bytes
+    - Int64Property: read_i64() → 8 bytes
+    - Int16Property: read_u16() → 2 bytes
+    - Int8Property/ByteProperty: read_u8() → 1 byte
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        int 值
+    """
+    type_name = tag.type
+    if type_name == "Int64Property":
+        return archive.read_i64()
+    elif type_name == "Int16Property":
+        return struct.unpack('<h', archive.read(2))[0]
+    elif type_name in ("Int8Property", "ByteProperty"):
+        return archive.read_u8()
+    else:  # IntProperty (default)
+        return archive.read_i32()
+
+
+def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
+    """
+    解析 FloatProperty（PROP-03）。
+
+    根据 Type 名称分派：
+    - FloatProperty: read_f32() → 4 bytes IEEE 754
+    - DoubleProperty: read_f64() → 8 bytes IEEE 754
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        float 值
+    """
+    type_name = tag.type
+    if type_name == "DoubleProperty":
+        return archive.read_f64()
+    else:  # FloatProperty (default)
+        return archive.read_f32()
+
+
+def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """
+    解析 StrProperty（PROP-05）。
+
+    使用 archive.read_fstring() 方法读取带长度前缀的 UTF-8 字符串。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        str 值
+    """
+    return archive.read_fstring()
+
+
+def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> str:
+    """
+    解析 NameProperty（PROP-06）。
+
+    使用 archive.read_name() 方法从 NameMap 读取 FName。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+
+    Returns:
+        str 值（名称字符串）
+    """
+    return archive.read_name(name_map)
+
+
+def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """
+    解析 ObjectProperty（PROP-07）。
+
+    读取 FPackageIndex（int32），返回原始索引值。
+    索引解析（映射到 ImportMap/ExportMap）推迟到阶段 3/4。
+
+    参考 ObjectResource.h - FPackageIndex 序列化。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        int 值（原始 FPackageIndex）
+    """
+    return archive.read_i32()
+
+
+def parse_array_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    depth: int = 0
+) -> List[any]:
+    """
+    解析 ArrayProperty（PROP-08, D-16）。
+
+    ArrayProperty 格式：
+    1. 读取元素数量（int32）
+    2. 循环读取各元素值
+
+    参考 PropertyArray.cpp lines 128-824。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        depth: 当前嵌套深度（D-18 最大 10）
+
+    Returns:
+        List 值（元素列表）
+
+    Raises:
+        ParseError: 若嵌套深度超过 10
+    """
+    MAX_DEPTH = 10  # D-18 嵌套深度限制
+
+    if depth > MAX_DEPTH:
+        raise ParseError(
+            f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
+        )
+
+    count = archive.read_i32()
+    elements: List[any] = []
+
+    # Phase 2: 基本类型数组元素解析
+    # 注意：复杂类型数组（如结构体数组）需要读取内部 PropertyTag
+    # 此实现假设元素类型可从 tag.type 推断或为基本类型
+    for i in range(count):
+        # 简化实现：假设元素为基本类型，直接读取值
+        # 完整实现需要读取内部 PropertyTag 并分派
+        # Phase 2 仅处理基本类型数组
+        inner_tag = PropertyTag(
+            name=f"{tag.name}[{i}]",
+            type=_get_inner_type(tag.type),
+            size=tag.size // count if count > 0 else 0
+        )
+
+        inner_value = parse_property_value(inner_tag, archive, name_map, export_map)
+        elements.append(inner_value)
+
+    return elements
+
+
+def _get_inner_type(array_type: str) -> str:
+    """
+    从 ArrayProperty 类型名推断内部元素类型（简化版）。
+
+    Phase 2 简化：假设基本类型数组。
+    完整实现需从 TypeName 参数或 InnerType 字段获取。
+
+    Args:
+        array_type: 数组类型名（如 "ArrayProperty"）
+
+    Returns:
+        推断的元素类型名
+    """
+    # Phase 2 简化：返回通用类型，实际值由 parse_property_value 处理
+    # 完整实现需解析 TypeName 参数获取真实内部类型
+    return "IntProperty"  # 默认假设
+
+
+def parse_properties_from_export(
+    export: ObjectExport,
+    archive: FArchive,
+    summary: PackageFileSummary,
+    name_map: List[str],
+    export_map: List[ObjectExport]
+) -> List[PropertyValue]:
+    """
+    从导出条目解析所有属性（PROP-01 至 PROP-08）。
+
+    参考 Class.cpp SerializeVersionedTaggedProperties 模式：
+    1. Seek 到 export.serial_offset
+    2. 循环读取 PropertyTag 直到 Name == "None"
+    3. 分派到类型特定解析函数
+    4. 边界验证（seek 到 start + tag.size）
+
+    Args:
+        export: ObjectExport 实例
+        archive: FArchive 实例
+        summary: PackageFileSummary 实例（版本信息）
+        name_map: 名称表
+        export_map: 导出表
+
+    Returns:
+        List[PropertyValue] 属性值列表
+    """
+    archive.seek(export.serial_offset)
+    properties: List[PropertyValue] = []
+
+    while True:
+        try:
+            tag = read_property_tag(
+                archive,
+                name_map,
+                summary.legacy_file_version,
+                summary.file_version_ue5
+            )
+
+            # 终止标记：Name == "None"
+            if tag.name == "None":
+                break
+
+            # 记录起始位置用于边界验证
+            start_pos = archive.tell()
+
+            # 分派到类型特定解析器
+            value = parse_property_value(tag, archive, name_map, export_map)
+
+            # 边界验证：确保定位到正确位置
+            expected_end = start_pos + tag.size
+            current_pos = archive.tell()
+            if current_pos != expected_end:
+                # 修正位置（处理读取不足或过多）
+                archive.seek(expected_end)
+
+            properties.append(PropertyValue(
+                name=tag.name,
+                type=tag.type,
+                value=value,
+                array_index=tag.array_index
+            ))
+
+        except ParseError as e:
+            # 单属性失败：记录并继续（D-25）
+            properties.append(PropertyValue(
+                name="ParseError",
+                type="Error",
+                value=str(e)
+            ))
+            continue
+
+    return properties
+
+
+def parse_property_value(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport]
+) -> any:
+    """
+    分派属性值解析（PROP-02 至 PROP-06）。
+
+    根据 tag.type 分派到类型特定的解析函数。
+    未知类型返回 None（D-26 跳过策略）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+
+    Returns:
+        解析后的值（Python 原生类型）或 None（未知类型）
+    """
+    type_dispatch = {
+        "BoolProperty": lambda t, a, n, e: parse_bool_property(t, a),
+        "IntProperty": lambda t, a, n, e: parse_int_property(t, a),
+        "Int64Property": lambda t, a, n, e: parse_int_property(t, a),
+        "Int16Property": lambda t, a, n, e: parse_int_property(t, a),
+        "Int8Property": lambda t, a, n, e: parse_int_property(t, a),
+        "ByteProperty": lambda t, a, n, e: parse_int_property(t, a),
+        "FloatProperty": lambda t, a, n, e: parse_float_property(t, a),
+        "DoubleProperty": lambda t, a, n, e: parse_float_property(t, a),
+        "StrProperty": lambda t, a, n, e: parse_str_property(t, a),
+        "NameProperty": lambda t, a, n, e: parse_name_property(t, a, n),
+        "ObjectProperty": lambda t, a, n, e: parse_object_property(t, a),
+        "ArrayProperty": lambda t, a, n, e: parse_array_property(t, a, n, e),
+    }
+
+    parser = type_dispatch.get(tag.type)
+    if parser:
+        return parser(tag, archive, name_map, export_map)
+
+    # 未知类型：跳过（D-26）
+    return None
+
+
 def parse_uasset(path: str) -> ParseResult:
     """
     主入口：解析 .uasset 文件（D-15 优雅降级）。
@@ -837,3 +1409,64 @@ def parse_uasset(path: str) -> ParseResult:
             archive.close()
 
     return result
+
+
+# ============================================================================
+# Public API Exports
+# ============================================================================
+
+__all__ = [
+    # Dataclasses
+    'CustomVersion',
+    'PackageIndex',
+    'PackageFileSummary',
+    'ObjectImport',
+    'ObjectExport',
+    'PropertyTag',
+    'PropertyValue',
+    'ParseResult',
+    'FEdGraphPinType',
+    'BlueprintVariable',
+    'BlueprintMetadata',
+
+    # FArchive
+    'FArchive',
+
+    # Exceptions
+    'UAssetError',
+    'VersionError',
+    'ParseError',
+
+    # Constants
+    'PACKAGE_FILE_TAG',
+    'PACKAGE_FILE_TAG_SWAPPED',
+    'PROP_TAG_NONE',
+    'PROP_TAG_HAS_ARRAY_INDEX',
+    'PROP_TAG_HAS_PROPERTY_GUID',
+    'PROP_TAG_HAS_EXTENSIONS',
+    'PROP_TAG_BOOL_TRUE',
+    'PROPERTY_TAG_COMPLETE_TYPE_NAME',
+
+    # Core parsing functions
+    'read_package_summary',
+    'read_name_table',
+    'read_import_map',
+    'read_export_map',
+    'get_asset_class',
+    'detect_blueprint',
+    'resolve_parent_class',
+    'parse_uasset',
+
+    # Property parsing functions (Phase 2)
+    'use_complete_type_name',
+    'read_property_tag',
+    'parse_bool_property',
+    'parse_int_property',
+    'parse_float_property',
+    'parse_str_property',
+    'parse_name_property',
+    'parse_object_property',
+    'parse_array_property',
+    'parse_property_value',
+    'parse_properties_from_export',
+]

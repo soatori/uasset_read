@@ -13,25 +13,24 @@ from uasset_read import (
     ParseResult,
 )
 
-# Phase 3 imports (stub for TDD Wave 0 - implementations in 03-01~03-03)
+# Phase 3 imports (implemented in 03-01)
+from uasset_read import (
+    FEdGraphPinType,
+    BlueprintVariable,
+    BlueprintMetadata,
+    detect_blueprint,
+    resolve_parent_class,
+)
+
+# Phase 3 imports (stub for TDD Wave 0 - implementations in 03-02~03-03)
 if TYPE_CHECKING:
     from uasset_read import (
-        FEdGraphPinType,
-        BlueprintVariable,
-        BlueprintMetadata,
-        detect_blueprint,
-        resolve_parent_class,
         read_ed_graph_pin_type,
         read_blueprint_variable,
         parse_default_value,
     )
 else:
     # Runtime stubs - will be replaced by implementations
-    FEdGraphPinType = None  # type: ignore
-    BlueprintVariable = None  # type: ignore
-    BlueprintMetadata = None  # type: ignore
-    detect_blueprint = None  # type: ignore
-    resolve_parent_class = None  # type: ignore
     read_ed_graph_pin_type = None  # type: ignore
     read_blueprint_variable = None  # type: ignore
     parse_default_value = None  # type: ignore
