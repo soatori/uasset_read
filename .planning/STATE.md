@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-01T21:00:00Z"
+last_updated: "2026-05-02T00:05:00Z"
 progress:
   total_phases: 5
-  completed_phases: 2
-  active_phase: 4
-  total_plans: 15
-  completed_plans: 13
-  percent: 43
+  completed_phases: 4
+  active_phase: 5
+  total_plans: 21
+  completed_plans: 17
+  percent: 80
 shipped:
   date: null
   branch: null
@@ -22,21 +22,14 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v1.0 —— 初始
-**状态：** 阶段 1、2 已发布 ✓，阶段 3 执行中，阶段 4 上下文已收集
+**状态：** 阶段 1、2、3、4 已完成 ✓，阶段 5 待规划
 
 ## 当前阶段
 
-**阶段 3：蓝图提取**
+**阶段 5：优化与安全**
 
-- 状态：● 执行中
-- 目标：检测蓝图资产并提取蓝图特定元数据（变量、父类）
-- 进度：2/4 计划完成（03-00 测试脚手架、03-01 蓝图检测、03-02 类型解析已完成）
-- 计划列表：03-00（Wave 0 测试）、03-01（蓝图检测）、03-02（类型解析）、03-03（集成）
-
-**阶段 4：输出与 CLI**
-
-- 状态：○ 上下文已收集
-- 目标：输出格式化（JSON、文本、摘要）和命令行接口
+- 状态：○ 待定
+- 目标：性能优化和安全加固
 - 进度：0/0 计划，等待规划
 
 ## 阶段状态
@@ -45,8 +38,8 @@ shipped:
 |---|------|------|------|------|------|
 | 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | 100% |
 | 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | 100% |
-| 3 | 蓝图提取 | ● 执行中 | 2/4 | - | 50% |
-| 4 | 输出与 CLI | ○ 上下文已收集 | 0/0 | - | 0% |
+| 3 | 蓝图提取 | ✓ 完成 | 4/4 | ✓ | 100% |
+| 4 | 输出与 CLI | ✓ 完成 | 5/5 | ✓ | 100% |
 | 5 | 优化与安全 | ○ 待定 | 0/0 | - | 0% |
 
 ## 近期活动
@@ -71,24 +64,30 @@ shipped:
 | 2026-05-01 | 阶段 2 执行完成 | PropertyTag 解析、基本类型、Object/Array 属性、版本感知格式 |
 | 2026-05-01 | 阶段 2 验证通过 | 9/9 truths 验证，62 测试通过 |
 | 2026-05-01 | 阶段 3 上下文收集 | 03-CONTEXT.md 创建，含 16 项决策，4 个灰色区域讨论 |
-| 2026-05-01 | 阶段 3 研究完成 | 03-RESEARCH.md 创建，UE 5.7 源码验证，FEdGraphPinType 序列化顺序 |
-| 2026-05-01 | 阶段 3 模式映射 | 03-PATTERNS.md 创建，FArchive/dataclass 模式复用 |
-| 2026-05-01 | 阶段 3 规划完成 | 03-00~03-03 计划创建，覆盖 BLUE-01/02/03/05/06，BLUE-04 已延期 |
+| 2026-05-01 | 阶段 3 规划完成 | 03-01~03-03 计划创建，覆盖 BLUE-01 至 BLUE-06 |
 | 2026-05-01 | 阶段 3 Wave 0 完成 | 03-00-PLAN.md 执行完成，21 个测试脚手架创建 |
-| 2026-05-01 | 阶段 3 Wave 1 蓝图检测 | 03-01-PLAN.md 执行完成，detect_blueprint/resolve_parent_class 实现 |
-| 2026-05-01 | 阶段 3 Wave 1 类型解析 | 03-02-PLAN.md 执行完成，read_ed_graph_pin_type/parse_default_value/read_blueprint_variable 实现，21 测试通过 |
+| 2026-05-01 | 阶段 3 Wave 1 完成 | 03-01-PLAN.md 执行完成，蓝图检测和父类解析实现 |
+| 2026-05-01 | 阶段 3 Wave 2 完成 | 03-02-PLAN.md 执行完成，FEdGraphPinType 和 BlueprintVariable 解析实现 |
+| 2026-05-01 | 阶段 3 Wave 3 完成 | 03-03-PLAN.md 执行完成，extract_blueprint_metadata() 集成到 parse_uasset() |
+| 2026-05-01 | 阶段 3 验证通过 | 83 测试通过，BLUE-01~BLUE-06 需求全部覆盖 |
 | 2026-05-01 | 阶段 4 上下文收集 | 04-CONTEXT.md 创建，含 29 项决策，8 个灰色区域讨论 |
+| 2026-05-01 | 阶段 4 规划完成 | 04-00~04-04 计划创建，覆盖 OUT-01~OUT-05, CLI-01~CLI-06 |
+| 2026-05-01 | 阶段 4 Wave 0 完成 | 04-00-PLAN.md 执行完成，11 测试脚手架创建 |
+| 2026-05-01 | 阶段 4 Wave 1 完成 | 04-01-PLAN.md 执行完成，format_json_full/text_full 实现 |
+| 2026-05-01 | 阶段 4 Wave 2 完成 | 04-02-PLAN.md 执行完成，CLI argparse 和 main() 实现 |
+| 2026-05-01 | 阶段 4 Wave 3 完成 | 04-03-PLAN.md 执行完成，FPackageIndex 引用解析实现 |
+| 2026-05-01 | 阶段 4 执行完成 | 83+11 测试，OUT-01~05, CLI-01~06 需求覆盖 |
 
 ## 项目参考
 
 参见：`.planning/PROJECT.md`（2026-04-27 更新）
 
 **核心价值：** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
-**当前重点：** 阶段 3 执行中（Wave 1 已完成），阶段 4 上下文已收集
+**当前重点：** 阶段 4 已完成（5 计划），阶段 5 待规划
 
 ## 关键决策
 
-| 策 | 状态 | 影响 |
+| 决策 | 状态 | 影响 |
 |------|------|------|
 | Python 3.10+ 零运行时依赖 | 已决定 | 部署更简单，仅标准库 |
 | 专注于未 cooked 资产 | 已决定 | 完整蓝图数据可用 |
@@ -102,19 +101,23 @@ shipped:
 | 蓝图属性推迟到阶段 3 | 已决定（阶段 2）| 阶段专注基本类型 |
 | PropertyTag 版本阈值 | 已验证（阶段 2）| UE5 >= 1000 新格式切换正确 |
 | ArrayProperty 深度限制 10 | 已验证（阶段 2）| 嵌套数组安全 |
-| 类名检测蓝图 | 已决定（阶段 3）| ExportMap ClassIndex 包含 Blueprint |
-| 自动蓝图检测 | 已决定（阶段 3）| parse_uasset() 后自动提取 |
-| 仅直接父类解析 | 已决定（阶段 3）| 不追溯继承链 |
-| DefaultValue 基本类型解析 | 已决定（阶段 3）| int、float、bool、str |
-| JSON 分级输出 | 已决定（阶段 4）| --json 完整、--summary 精简 |
-| Package→Exports→Properties 层级 | 已决定（阶段 4）| 清晰层级结构 |
-| YAML 风格文本输出 | 已决定（阶段 4）| AI agent 优先 |
-| 双入口 CLI | 已决定（阶段 4）| python -m 和脚本均可 |
-| 语义退出码 | 已决定（阶段 4）| 0/1/2/3 分类 |
+| 类名检测蓝图 | 已验证（阶段 3）| ExportMap ClassIndex 包含 Blueprint |
+| 自动蓝图检测 | 已验证（阶段 3）| parse_uasset() 后自动提取 |
+| 仅直接父类解析 | 已验证（阶段 3）| 不追溯继承链 |
+| DefaultValue 基本类型解析 | 已验证（阶段 3）| int、float、bool、str |
+| FEdGraphPinType 全字段解析 | 已验证（阶段 3）| 10 字段包含版本感知字段 |
+| Vector DefaultValue 保留字符串 | 已验证（阶段 3）| "(X=...,Y=...,Z=...)" 不解析 |
+| JSON 分级输出 | 已验证（阶段 4）| --json 完整、--summary 精简 |
+| Package→Exports→Properties 层级 | 已验证（阶段 4）| 清晰层级结构 |
+| YAML 风格文本输出 | 已验证（阶段 4）| AI agent 优先 |
+| 双入口 CLI | 已验证（阶段 4）| python -m 和脚本均可 |
+| 语义退出码 | 已验证（阶段 4）| 0/1/2/3 分类正确 |
+| UTF-8 编码 | 已验证（阶段 4）| 所有输出统一编码 |
+| FPackageIndex 引用解析 | 已验证（阶段 4）| outer_index/super_index → 名称 |
 
 ## 下一步动作
 
 ```
-/gsd-execute-phase 3 —— 继续执行阶段 3（03-03 集成）
-/gsd-plan-phase 4    —— 创建阶段 4 计划（上下文已收集）
+/gsd-discuss-phase 5 —— 讨论 Phase 5 (优化与安全) 的上下文
+/gsd-plan-phase 5 —— 规划 Phase 5
 ```
