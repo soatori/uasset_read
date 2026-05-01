@@ -15,6 +15,7 @@ Phase 1: 核心解析器实现
 
 import struct
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, BinaryIO, Tuple
 
@@ -1022,6 +1023,63 @@ def read_ed_graph_pin_type(
     pin_type.is_uobject_wrapper = archive.read_u8() != 0
 
     return pin_type
+
+
+def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
+    """
+    Parse DefaultValue string to Python native type (BLUE-03).
+
+    Per D-13: Parse to int, float, bool, str.
+    Per D-14: Fallback to raw string on parse failure.
+    Per D-15: Only basic types - no arrays, vectors, objects.
+    Per D-16: Vector types stay as string "(X=...,Y=...,Z=...)".
+
+    Args:
+        value_str: The DefaultValue FString from FBPVariableDescription
+        var_type: FEdGraphPinType for type detection (PinCategory)
+
+    Returns:
+        Parsed Python value (int, float, bool, str) or raw string.
+    """
+    if not value_str:
+        return None
+
+    # Check for vector format per D-16: keep as string
+    if value_str.startswith("(") and value_str.endswith(")"):
+        return value_str
+
+    # Match PinCategory for type detection
+    category = var_type.pin_category.lower()
+
+    # Boolean parsing (D-13)
+    if category in ("bool", "boolean"):
+        if value_str.lower() in ("true", "1"):
+            return True
+        elif value_str.lower() in ("false", "0"):
+            return False
+        # D-14: fallback to raw string
+        return value_str
+
+    # Integer parsing (D-13)
+    if category in ("int", "integer"):
+        match = re.match(r'^-?\d+$', value_str)
+        if match:
+            return int(value_str)
+        return value_str  # D-14: fallback
+
+    # Float/Real parsing (D-13)
+    if category in ("float", "real", "double"):
+        match = re.match(r'^-?\d+\.?\d*$', value_str)
+        if match:
+            return float(value_str)
+        return value_str  # D-14: fallback
+
+    # String/Name: keep as-is (D-15)
+    if category in ("string", "name", "text"):
+        return value_str
+
+    # Unknown category: fallback to raw string (D-14)
+    return value_str
 
 
 # ============================================================================
