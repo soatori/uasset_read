@@ -19,6 +19,7 @@ import re
 import sys
 import json
 import argparse
+import mmap
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, BinaryIO, Tuple
@@ -39,6 +40,10 @@ MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
 MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
+
+# Memory-mapped file threshold (SAFE-03, D-01)
+MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
+MAX_PROPERTY_COUNT = 10_000        # D-09: property loop limit
 
 # PropertyTag flags (PropertyTag.h lines 17-26)
 PROP_TAG_NONE = 0x00
@@ -99,6 +104,26 @@ class FArchive:
         self._byte_swapping: bool = False
         self._file_size: int = os.path.getsize(path)
 
+        # D-02/D-03: mmap branch
+        self._mmap: Optional[mmap.mmap] = None
+        self._use_mmap: bool = False
+        self._mmap_warning: Optional[str] = None
+
+        # D-01: Check threshold
+        if self._file_size >= MMAP_THRESHOLD:
+            try:
+                # D-04/D-07: Full file mapping, cross-platform
+                self._mmap = mmap.mmap(
+                    self._file.fileno(),
+                    0,  # Maps entire file
+                    access=mmap.ACCESS_READ
+                )
+                self._use_mmap = True
+            except (OSError, ValueError, PermissionError) as e:
+                # D-03: mmap failure - fallback to normal read
+                self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
+                self._use_mmap = False
+
     def read(self, size: int) -> bytes:
         """
         基础读取方法 - 不对原始字节进行交换。
@@ -125,9 +150,16 @@ class FArchive:
                 f"only {remaining} bytes remaining"
             )
 
-        data = self._file.read(size)
-        # 不在此处反转字节 - 类型特定方法负责处理字节序
-        return data
+        # D-02: mmap branch
+        if self._use_mmap and self._mmap:
+            data = self._mmap.read(size)
+            if len(data) < size:
+                raise ParseError(
+                    f"mmap.read() returned {len(data)} bytes, expected {size}"
+                )
+            return data
+
+        return self._file.read(size)
 
     def seek(self, pos: int) -> None:
         """
@@ -137,21 +169,40 @@ class FArchive:
             pos: 目标位置
 
         Raises:
-            ParseError: 若 pos 超出文件大小
+            ParseError: 若 pos 超出文件大小或为负数
         """
+        # D-10: Enhanced offset validation
+        if pos < 0:
+            raise ParseError(
+                f"Negative offset {pos} not allowed"
+            )
         if pos > self._file_size:
             raise ParseError(
                 f"Offset {pos} exceeds file size {self._file_size}"
             )
-        self._file.seek(pos)
+
+        # D-02: mmap branch
+        if self._use_mmap and self._mmap:
+            self._mmap.seek(pos)
+        else:
+            self._file.seek(pos)
 
     def tell(self) -> int:
         """返回当前位置"""
+        if self._use_mmap and self._mmap:
+            return self._mmap.tell()
         return self._file.tell()
 
     def close(self) -> None:
-        """关闭文件"""
-        self._file.close()
+        """关闭文件和 mmap（D-05 统一关闭）"""
+        # D-05: Unified close - release mmap then file
+        if self._mmap:
+            self._mmap.close()
+            self._mmap = None
+        if self._file:
+            self._file.close()
+            self._file = None
+        self._use_mmap = False
 
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志（D-11）"""
@@ -160,6 +211,13 @@ class FArchive:
     def total_size(self) -> int:
         """返回文件总大小"""
         return self._file_size
+
+    def get_mmap_info(self) -> Dict:
+        """返回 mmap 状态信息（D-03）"""
+        return {
+            "used": self._use_mmap,
+            "warning": self._mmap_warning
+        }
 
     # ========================================================================
     # 类型读取方法（使用 struct.unpack 配合字节序感知格式）
@@ -377,6 +435,8 @@ class ObjectExport:
     # UE5+ 字段
     script_serial_size: int = 0
     script_serial_offset: int = 0
+    # 属性列表 (Phase 2 PROP-01 至 PROP-08)
+    properties: List["PropertyValue"] = field(default_factory=list)
 
 
 @dataclass
@@ -473,6 +533,10 @@ class ParseResult:
     errors: List[str] = field(default_factory=list)  # 收集所有错误
     blueprint: Optional["BlueprintMetadata"] = None  # Per D-02: auto-extracted
     is_success: bool = False
+    # D-02/D-03: mmap tracking (Phase 5)
+    mmap_used: bool = False
+    mmap_warning: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)  # D-13: for Wave 4
 
 
 # ============================================================================
@@ -2240,6 +2304,10 @@ __all__ = [
     'PROP_TAG_HAS_EXTENSIONS',
     'PROP_TAG_BOOL_TRUE',
     'PROPERTY_TAG_COMPLETE_TYPE_NAME',
+
+    # Phase 5: Performance and safety constants
+    'MMAP_THRESHOLD',
+    'MAX_PROPERTY_COUNT',
 
     # Core parsing functions
     'read_package_summary',
