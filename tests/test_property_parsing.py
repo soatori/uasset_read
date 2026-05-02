@@ -25,6 +25,7 @@ from uasset_read import (
     parse_str_property,
     parse_name_property,
     parse_object_property,
+    parse_soft_object_property,
     parse_array_property,
     parse_property_value,
     parse_properties_from_export,
@@ -965,3 +966,114 @@ def test_object_property_null_in_parse_properties():
     prop = properties[0]
     assert prop.value["raw_index"] == 0
     assert prop.value["resolved"] is None
+
+
+# ============================================================================
+# Phase 11-03: SoftObjectProperty Tests
+# ============================================================================
+
+def test_soft_object_property_basic():
+    """测试SoftObjectProperty基本解析（无子路径）。"""
+    tag = PropertyTag(name="SkeletalMesh", type="SoftObjectProperty", size=50)
+    # FString: "/Game/Test/Asset" + null + "" (empty subpath)
+    asset_path = "/Game/Test/Asset"
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +  # asset_path length
+        (asset_path + "\x00").encode() +          # asset_path string
+        struct.pack('<i', 0)                       # sub_path length = 0 (empty)
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_with_subpath():
+    """测试SoftObjectProperty带子路径解析。"""
+    tag = PropertyTag(name="AnimBlueprint", type="SoftObjectProperty", size=80)
+    asset_path = "/Game/Characters/Animations"
+    sub_path = "SubObject.AnimSequence"
+
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +  # asset_path length
+        (asset_path + "\x00").encode() +          # asset_path string
+        struct.pack('<i', len(sub_path) + 1) +    # sub_path length
+        (sub_path + "\x00").encode()              # sub_path string
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == sub_path
+
+
+def test_soft_object_property_in_parse_property_value():
+    """测试parse_property_value分派SoftObjectProperty。"""
+    name_map = []
+    export_map = []
+
+    # 创建PropertyTag，type="SoftObjectProperty"
+    asset_path = "/Game/Meshes/Character"
+    tag = PropertyTag(name="Mesh", type="SoftObjectProperty", size=40)
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +
+        (asset_path + "\x00").encode() +
+        struct.pack('<i', 0)  # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+
+    # 调用parse_property_value
+    value = parse_property_value(tag, archive, name_map, export_map)
+
+    # 验证分派成功，返回值不为None
+    assert value is not None
+    assert isinstance(value, dict)
+    assert "asset_path" in value
+    assert "sub_path" in value
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_empty_asset_path():
+    """测试SoftObjectProperty空资产路径。"""
+    tag = PropertyTag(name="EmptyRef", type="SoftObjectProperty", size=4)
+    # 空asset_path和空sub_path
+    data = (
+        struct.pack('<i', 0) +  # empty asset_path
+        struct.pack('<i', 0)    # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == ""
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_unicode_path():
+    """测试SoftObjectProperty Unicode路径。"""
+    tag = PropertyTag(name="Texture", type="SoftObjectProperty", size=60)
+    asset_path = "/Game/素材/纹理"  # Chinese characters
+
+    data = (
+        struct.pack('<i', len(asset_path.encode('utf-8')) + 1) +
+        (asset_path + "\x00").encode('utf-8') +
+        struct.pack('<i', 0)  # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
