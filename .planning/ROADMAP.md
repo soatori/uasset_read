@@ -136,7 +136,12 @@ Plans:
 5. 解析器能提取 TextProperty 值（FText：Namespace、Key、SourceString）
 6. 解析器能提取 DelegateProperty 值（函数引用：对象 + 函数名）
 
-**Plans:** TBD
+**Plans:** 3 plans in 3 waves
+
+Plans:
+- [ ] 09-01-PLAN.md — 数据类定义 + type_dispatch 扩展（ADVP-01~06）
+- [ ] 09-02-PLAN.md — 六种高级属性解析函数实现（ADVP-01~06）
+- [ ] 09-03-PLAN.md — 单元测试 + Lyra 资产验证（ADVP-01~06）
 
 **UI hint:** no
 
@@ -176,7 +181,7 @@ Plans:
 
 ## Progress Table
 
-| Phase | Plans Complete | Status | Completed |
+| 9 - 高级属性 | 0/3 | Ready to execute | 0% |
 |-------|----------------|--------|-----------|
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
 | 7 - 蓝图图核心 | 3/3 | Complete | 100% |
