@@ -631,22 +631,22 @@ def extract_blueprint_graphs(
 
 **需要验证：** A1、A3、A4 建议在实现前通过真实 .uasset 文件验证。
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **UEdGraph.Nodes 序列化格式**
    - What we know: Nodes 是节点引用数组
    - What's unclear: 是 FPackageIndex 数组还是内嵌序列化？
-   - Recommendation: 实现时先假设 FPackageIndex 数组，遇错则调整
+   - **RESOLVED:** 采用 FPackageIndex 数组方案。Plan 02 L402-413 实现：读取 int32 node_index，从 export_map[node_index-1] 获取节点导出。此方案与 UE UObject 引用模式一致。
 
 2. **FMemberReference.MemberParent 类型**
    - What we know: 编辑器导出显示类路径字符串
    - What's unclear: 二进制是否为 FPackageIndex？
-   - Recommendation: 按 FPackageIndex 读取，解析为路径
+   - **RESOLVED:** 采用 FPackageIndex 方案。Plan 03 L156-161 实现：read_i32() 读取 member_parent_index，通过 resolve_class_name() 解析为类路径字符串。此方案与 ClassIndex 解析模式一致。
 
 3. **K2Node_EnhancedInputAction 多 exec 引脚**
    - What we know: 编辑器导出显示 Triggered/Started/Ongoing/Completed 多引脚
    - What's unclear: 这些引脚是否在 Pins 数组中？
-   - Recommendation: 应在 Pins 数组中，按标准引脚解析
+   - **RESOLVED:** 在 Pins 数组中。Plan 02 引脚解析不区分节点类型，所有 exec 引脚（Triggered/Started/Ongoing/Completed）作为标准 UEdGraphPin 在 Pins 数组解析，Direction=EGPD_Output。
 
 ## Environment Availability
 
