@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 解析完善 + Skill打包
-status: planning
+status: planning_complete
 last_updated: "2026-05-03T00:00:00Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   active_phase: null
-  total_plans: 0
+  total_plans: 5
   completed_plans: 0
   percent: 0
 shipped:
@@ -23,14 +23,14 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v3.0 解析完善 + Skill打包
-**状态：** 📋 规划中
+**状态：** 📋 路线图规划完成
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (ready to plan Phase 11)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-03 — Milestone v3.0 started
+Status: Roadmap created, awaiting Phase 11 planning
+Last activity: 2026-05-03 — Roadmap created for v3.0
 
 ## 阶段状态
 
@@ -46,6 +46,11 @@ Last activity: 2026-05-03 — Milestone v3.0 started
 | 8 | 蓝图图输出 | v2.0 | ✓ 完成 | 4/4 | ✓ | ✓ | 100% |
 | 9 | 高级属性 | v2.0 | ✓ 完成 | 3/3 | ✓ | ✓ | 100% |
 | 10 | 依赖分析 | v2.0 | ✓ 完成 | 6/6 | ✓ | ✓ | 100% |
+| 11 | ExportMap属性值提取 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 12 | BlueprintVariables完整提取 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 13 | 组件变换属性解析 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 14 | 输出格式优化并冻结 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 15 | Claude Code skill封装 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 
 ## 里程碑历史
 
@@ -62,6 +67,19 @@ Last activity: 2026-05-03 — Milestone v3.0 started
 - **发布日期：** 2026-05-02
 - **阶段：** Phase 1-5（5阶段，25计划）
 
+## v3.0 规划摘要
+
+**目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
+
+**阶段范围：**
+- Phase 11: ExportMap属性值提取（EXTR-01）
+- Phase 12: BlueprintVariables完整提取（EXTR-02, EXTR-03, EXTR-05）
+- Phase 13: 组件变换属性解析（EXTR-04）
+- Phase 14: 输出格式优化并冻结（OUT-01~06）
+- Phase 15: Claude Code skill封装（SKILL-01~04）
+
+**需求覆盖：** 15/15 ✓
+
 ## 下一步
 
 **运行 `/gsd-plan-phase 11` 开始Phase 11规划**
@@ -74,4 +92,4 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 **Current focus:** v3.0 解析完善 + Skill打包
 
 ---
-*最后更新：2026-05-03 - v3.0里程碑启动*
+*最后更新：2026-05-03 - v3.0路线图创建完成*
