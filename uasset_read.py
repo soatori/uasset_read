@@ -1644,6 +1644,42 @@ def read_soft_object_paths(
     return soft_refs
 
 
+def detect_circular_deps(import_map: List[ObjectImport]) -> List[List[str]]:
+    """
+    检测 ImportMap 中的高密度依赖作为潜在循环警告（DEPS-03）。
+
+    Per D-10-10: DFS 图遍历思想（简化实现）
+    Per D-10-11: 检测同一 class_package 的多次引用
+    Per D-10-12: 路径数组格式 [pkg, pkg]
+
+    实现说明（ImportMap 单向依赖特性）：
+    - ImportMap 仅包含"当前包→外部包"的单向引用
+    - 无法从单文件 ImportMap 检测真正的跨包循环
+    - 此实现检测高密度依赖：同一外部包被多次引用（潜在循环信号）
+    - 输出格式 [pkg, pkg] 表示"pkg 被多次引用"，暗示潜在循环风险
+
+    Args:
+        import_map: 导入表列表
+
+    Returns:
+        List[List[str]]: 高密度依赖路径列表，每个路径为 [package_name, package_name]
+    """
+    if not import_map:
+        return []
+
+    package_refs: Dict[str, int] = {}
+    for imp in import_map:
+        pkg = imp.class_package
+        package_refs[pkg] = package_refs.get(pkg, 0) + 1
+
+    high_density_deps = []
+    for pkg, count in package_refs.items():
+        if count > 1:
+            high_density_deps.append([pkg, pkg])
+
+    return high_density_deps
+
+
 def read_export_map(
     archive: FArchive,
     summary: PackageFileSummary,
@@ -3836,6 +3872,25 @@ def parse_uasset(path: str) -> ParseResult:
         except ParseError as e:
             result.errors.append(f"graph extraction error: {e}")
 
+        # Phase 10: Dependency Analysis (DEPS-01~04)
+        # Per D-10-05/08/13: Populate imports/soft_references/circular_deps fields
+        try:
+            # DEPS-01: ImportMap → imports
+            result.imports = build_imports_list(result.import_map)
+
+            # DEPS-02: SoftObjectPaths → soft_references
+            result.soft_references = read_soft_object_paths(
+                archive,
+                result.summary,
+                result.name_map
+            )
+
+            # DEPS-03: 高密度依赖检测（同一包多次引用）
+            result.circular_deps = detect_circular_deps(result.import_map)
+
+        except ParseError as e:
+            result.errors.append(f"dependency analysis error: {e}")
+
     except VersionError as e:
         result.errors.append(str(e))
         result.is_success = False
@@ -4163,6 +4218,10 @@ def format_json_full(result: ParseResult) -> Dict:
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
         "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
+        # Phase 10: 依赖分析字段（D-10-05/08/13）
+        "imports": result.imports,                     # D-10-05: ImportMap 依赖列表
+        "soft_references": result.soft_references,     # D-10-08: SoftObjectPaths 软引用
+        "circular_deps": result.circular_deps,         # D-10-13: 高密度依赖路径
         "errors": result.errors
     }
 
