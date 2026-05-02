@@ -770,12 +770,91 @@ class BlueprintMetadata:
     detection_warning: Optional[str] = None  # Per D-03
 
 
+# ============================================================================
+# Phase 7: Blueprint Graph Data Classes (GRAPH-01 to GRAPH-10)
+# ============================================================================
+
+@dataclass
+class UEdGraphPin:
+    """
+    UEdGraphPin 蓝图引脚完整结构（GRAPH-04）。
+
+    来自 UE 源码 EdGraphPin.h 第 76-225 行。
+
+    Per D-01/D-01a: LinkedTo 存储为原始数据列表，Phase 8 构建连接映射。
+    """
+    pin_id: str                          # FGuid hex（16 bytes）
+    pin_name: str                        # FName 解析结果
+    direction: int                       # uint8: 0=Input, 1=Output, 2=None (EGPD_Input/Output/None)
+    pin_type: "FEdGraphPinType"          # Phase 3 已实现的引脚类型结构
+    default_value: Optional[str] = None  # FString - 默认值
+    auto_default_value: Optional[str] = None  # FString - 自动生成的默认值
+    linked_to_raw: List[str] = field(default_factory=list)  # D-01a: 原始连接数据列表
+    sub_pins: List[str] = field(default_factory=list)       # SubPin PinIds（GUID hex）
+    parent_pin: Optional[str] = None                        # ParentPin PinId（GUID hex）
+    flags: int = 0                                          # uint8 bitfield
+
+
+@dataclass
+class UEdGraphNode:
+    """
+    UEdGraphNode 蓝图节点基类（GRAPH-03）。
+
+    来自 UE 源码 EdGraphNode.h + K2Node.h。
+
+    Per D-02: 基类字段 + 类型特定数据（node_data 多态）。
+    Per D-02b: class_name 用于类型识别分派。
+    """
+    node_guid: str                       # FGuid hex（16 bytes）
+    node_pos_x: int = 0                  # int32 - 编辑器位置 X
+    node_pos_y: int = 0                  # int32 - 编辑器位置 Y
+    node_comment: str = ""               # FString - 注释文本
+    pins: List["UEdGraphPin"] = field(default_factory=list)  # 引脚列表
+    class_name: str = ""                 # 类型识别结果（K2Node_CallFunction 等）
+    node_data: Optional[any] = None      # 类型特定数据（多态）
+
+
+@dataclass
+class UEdGraph:
+    """
+    UEdGraph 蓝图图容器（GRAPH-02）。
+
+    来自 UE 源码 EdGraph.h。
+
+    Per D-03: 完整解析 Graph→Node→Pin 三层结构。
+    Per D-04: 顶层 graphs 字段，与 blueprint 同级。
+    """
+    graph_name: str                      # 导出 ObjectName
+    graph_class: str                     # ClassIndex 解析结果（EdGraph/UberEdGraph）
+    schema: Optional[str] = None         # FPackageIndex 解析 - 图 Schema
+    nodes: List["UEdGraphNode"] = field(default_factory=list)  # 节点列表
+    graph_guid: Optional[str] = None     # FGuid hex（16 bytes）
+    b_editable: bool = True              # uint8 - 是否可编辑
+
+
+@dataclass
+class FMemberReference:
+    """
+    FMemberReference 成员引用结构（GRAPH-05/06）。
+
+    用于 K2Node_CallFunction 的 FunctionReference 和 K2Node_Event 的 EventReference。
+
+    来自 UE 源码 UObject.h - FSimpleMemberReference / FMemberReference。
+    """
+    member_parent: Optional[str] = None  # 类路径（FPackageIndex 解析结果）
+    member_name: str = ""                # FName - 函数/事件名
+    member_guid: Optional[str] = None    # FGuid hex（16 bytes）- 函数 GUID
+    b_self_context: bool = False         # uint8 - self 调用标志
+
+
 @dataclass
 class ParseResult:
     """
     解析结果（D-15 部分结果）。
 
     包含解析后的所有数据和错误信息。
+
+    Per D-04/D-04b: graphs 字段为顶层字段，与 blueprint 同级。
     """
     summary: Optional[PackageFileSummary] = None
     name_map: List[str] = field(default_factory=list)
@@ -783,6 +862,7 @@ class ParseResult:
     export_map: List[ObjectExport] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)  # 收集所有错误
     blueprint: Optional["BlueprintMetadata"] = None  # Per D-02: auto-extracted
+    graphs: List["UEdGraph"] = field(default_factory=list)  # Phase 7: 蓝图图数据
     is_success: bool = False
     # D-02/D-03: mmap tracking (Phase 5)
     mmap_used: bool = False
@@ -2854,6 +2934,11 @@ __all__ = [
     'FEdGraphPinType',
     'BlueprintVariable',
     'BlueprintMetadata',
+    # Phase 7: Blueprint Graph Data Classes
+    'UEdGraphPin',
+    'UEdGraphNode',
+    'UEdGraph',
+    'FMemberReference',
 
     # FArchive
     'FArchive',
