@@ -1,540 +1,542 @@
-# 领域陷阱
+# 领域陷阱：蓝图图解析
 
-**领域：** Unreal Engine .uasset 格式二进制文件解析
-**研究日期：** 2026-04-27
+**领域：** Unreal Engine 蓝图图结构解析
+**研究日期：** 2026-05-02（v2.0 里程碑）
+**置信度：** 中 - 基于 UE 源码分析和已知解析模式，但蓝图图序列化部分未完全逆向
+
+---
 
 ## 关键陷阱
 
 会导致重写或重大问题的错误。
 
-### 陷阱 1：字节序检测与字节交换
+### 陷阱 1：OuterIndex（SuperIndex）缺失导致导出表错位
 
-**出错情况：** 解析器假设本地字节序（通常是 Windows 小端序）而不检查包魔术标签。不同字节序平台保存的文件数据会损坏。
+**出错情况：** 解析 FObjectExport 时漏掉 TemplateIndex 字段，导致后续所有字段（OuterIndex、SerialSize、SerialOffset）读取偏移。
 
-**发生原因：** UE 使用两个魔术标签检测字节序：
-- `PACKAGE_FILE_TAG = 0x9E2A83C1`（正确字节序）
-- `PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E`（交换字节序）
+**发生原因：** UE4 >= 506 (VER_UE4_TemplateIndex_IN_COOKED_EXPORTS) 在 SuperIndex 和 OuterIndex 之间插入了 TemplateIndex 字段。
 
-交换标签表示文件保存于不同字节顺序平台。来自 PackageFileSummary.cpp：
+**后果：**
+- SerialSize/SerialOffset 数值异常大（超出文件大小）
+- 导出数据定位失败
+- 蓝图元数据提取失败（属性读取偏移）
+
+**来自 UE 5.7 源码 (ObjectResource.cpp lines 125-224)：**
+
 ```cpp
-if (Sum.Tag == PACKAGE_FILE_TAG_SWAPPED)
-{
-    Sum.Tag = PACKAGE_FILE_TAG;
-    if (BaseArchive.ForceByteSwapping())
-        BaseArchive.SetByteSwapping(false);
-    else
-        BaseArchive.SetByteSwapping(true);
+// FObjectExport 序列化顺序（UE4 >= 506）：
+1.  ClassIndex                (int32)
+2.  SuperIndex                (int32)
+3.  TemplateIndex             (int32)  [UE4 >= 506]
+4.  OuterIndex                (int32)
+5.  ObjectName                (FName = uint32 + uint32)
+6.  ObjectFlags               (uint32)
+7.  SerialSize                (int64)  [UE4 >= 508, 否则 int32]
+8.  SerialOffset              (int64)  [UE4 >= 508, 否则 int32]
+```
+
+**预防：**
+1. 检查 `summary.file_version_ue4 >= 506`
+2. 若条件满足，读取 TemplateIndex（32 位整数）
+3. 然后才能正确读取 OuterIndex
+
+**检测：**
+- SerialSize 超出文件大小
+- SerialOffset 指向文件外部
+- 外层对象名称解析为空或垃圾字符串
+
+**阶段：** 阶段 4 已修复（见 debug_export_map_bug.md）
+
+---
+
+### 陷阱 2：蓝图图节点类型误判
+
+**出错情况：** 将非节点对象（如类定义、变量）误识别为蓝图节点。
+
+**发生原因：** 蓝图资产包含多种导出类型：
+- `UBlueprint` —— 蓝图核心对象（通常第一个导出）
+- `UClass` —— 编译生成的类
+- `UEdGraph` —— 图对象（EventGraph、FunctionGraphs）
+- `UK2Node` 子类 —— 节点（K2Node_CallFunction、K2Node_Event 等）
+- `UFunction` —— 函数定义
+
+**发生位置：**
+- ClassIndex 引用 `/Script/BlueprintGraph.K2Node_*` → 真正节点
+- ClassIndex 引用 `/Script/Engine.Blueprint` → 蓝图容器
+- ClassIndex 引用 `/Script/Engine.Class` 或 `/Script/CoreUObject.Class` —— 类元数据
+
+**来自源码分析：**
+
+| ClassIndex 引用 | 类型 | 是否节点 | 说明 |
+|----------------|------|---------|------|
+| K2Node_CallFunction | UK2Node | 是 | 函数调用节点 |
+| K2Node_Event | UK2Node | 是 | 事件节点 |
+| K2Node_VariableGet | UK2Node | 是 | 变量读取节点 |
+| Blueprint | UBlueprint | 否 | 蓝图容器 |
+| Class | UClass | 否 | 编译类 |
+| EdGraph | UEdGraph | 否 | 图容器 |
+
+**预防：**
+1. 解析节点前检查 ClassIndex 解析的类名是否以 "K2Node_" 开头
+2. 排除 Blueprint、Class、EdGraph、Function 等容器类型
+3. 参考 K2Node.h 的类层次（所有节点继承 UK2Node）
+
+**检测：**
+- 解析节点时遇到非预期字段（如 Expected && Actual pin mismatch）
+- NodePosX/Y 解析为异常大值
+-endor 节点的 pins 数组为空但序列化仍在继续
+
+**阶段：** 阶段 2 已识别，阶段 4 需实现节点类型检测
+
+---
+
+### 陷阱 3：版本依赖的引脚类型序列化
+
+**出错情况：** 假设 FEdGraphPinType 字段顺序固定，但实际依赖版本。
+
+**发生原因：** 添加新字段时使用版本条件：
+
+| 字段 | 添加版本 | UE4 | UE5 |
+|------|---------|-----|-----|
+| ContainerType | FFrameworkObjectVersion::EdGraphPinContainerType | v500+ | all |
+| bIsConst | VER_UE4_SERIALIZE_PINTYPE_CONST | v500+ | all |
+| bIsUObjectWrapper | FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag | v510+ | all |
+| MemberReference | FFrameworkObjectVersion::MemberReferenceInPinType | v500+ | all |
+
+**序列化顺序（来自 EdGraphPin.cpp lines 163-346）：**
+
+```cpp
+// 基础字段（所有版本）
+PinCategory (FName)
+PinSubCategory (FName)
+PinSubCategoryObject (FPackageIndex)
+
+// 条件字段（依版本）
+if (FFrameworkObjectVersion >= EdGraphPinContainerType) {
+    ContainerType (uint8)
+    if (ContainerType == 3) { // Map
+        PinValueType (FEdGraphTerminalType)
+    }
+}
+
+bIsReference (bool)
+bIsWeakPointer (bool)
+if (FFrameworkObjectVersion >= MemberReferenceInPinType) {
+    PinSubCategoryMemberReference (FSimpleMemberReference)
+}
+if (VER_UE4_SERIALIZE_PINTYPE_CONST) {
+    bIsConst (bool)
+}
+if (FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag) {
+    bIsUObjectWrapper (bool)
 }
 ```
 
-**后果：** 所有多字节值（int32、int64、float 等）读取错误。名称索引、偏移、大小和所有结构化数据变成垃圾值。解析器会崩溃或产出无意义结果。
+**后果：**
+- ContainerType 误读为 bIsReference → 类型信息错乱
+- 引脚连接失败（PinType 不匹配）
+- 节点重建失败
 
 **预防：**
-1. 读取前 4 字节作为 uint32
-2. 同时检查 PACKAGE_FILE_TAG 和 PACKAGE_FILE_TAG_SWAPPED
-3. 若匹配交换标签，为后续所有读取启用字节交换
-4. 使用 Python `struct.unpack` 配合显式字节序前缀：`<` 小端序，`>` 大端序
+1. 检查 `summary.file_version_ue4` 和自定义版本
+2. 按版本条件跳过/读取字段
+3. 始终读取现代 UE 文件（UE4 >= 500, UE5 >= 1000）包含的字段
 
-**检测：** 若前 4 字节既非 0x9E2A83C1 也非 0xC1832A9E，文件非有效 uasset。若读取 summary 后偏移/计数为负或异常大，字节交换可能错误。
+**检测：**
+- PinCategory 读取为整数（应为字符串）
+- is_reference 为 true 但后续字段解析失败
+- 节点 pins 数组元素数量异常
 
-**阶段：** 阶段 1（格式解析）必须立即处理。
+**阶段：** 阶段 3 已实现基础解析（读取所有现代字段），版本感知可后续增强
 
 ---
 
-### 陷阱 2：版本处理 —— 太旧、太新或无版本
+### 陷阱 4：蓝图图结构嵌套与 Outer 引用
 
-**出错情况：** 解析器无法处理三种版本场景：
-1. **太旧** —— 古老 UE 版本的包，解析器无法加载
-2. **太新** —— 新 UE 版本的包，带解析器未知的格式变更
-3. **无版本** —— Cooked 包保存时无版本号
+**出错情况：** 假设图.nodes 与导出表 1:1 映射，但实际存在嵌套和引用。
 
-**发生原因：** UE 版本系统复杂：
-- `EUnrealEngineObjectUE4Version`（最旧可加载：214，最新：522+）
-- `EUnrealEngineObjectUE5Version`（从 1000 开始，最新：~1000+23）
-- `FCustomVersionContainer` 带 GUID 为键的子系统自定义版本
-- 遗留文件版本字段（-2 至 -9 表示现代格式）
+**发生原因：** UE 蓝图图结构：
 
-来自 PackageFileSummary.cpp，遗留文件版本表示格式变更：
-```cpp
-// -2: 枚举型自定义版本
-// -3: GUID 型自定义版本  
-// -4: 移除 UE3 版本
-// -5: 替换 UE3 版本写入
-// -6: 自定义版本优化
-// -7: 纹理分配信息移除
-// -8: UE5 版本添加到 summary
-// -9: 提前退出约定变更
+```
+UBlueprint (导出 N)
+├── EventGraph (UEdGraph, 导出 M)
+│   ├── K2Node_Event_1 (UK2Node, 导出 X)
+│   ├── K2Node_CallFunction_1 (UK2Node, 导出 Y)
+│   └── K2Node_Knot_1 (UK2Node, 导出 Z)
+├── FunctionGraphs[0] (UEdGraph, 导出 P)
+│   ├── K2Node_FunctionEntry_1 (UK2Node, 导出 Q)
+│   └── K2Node_CallFunction_2 (UK2Node, 导出 R)
+└── NewVariables[] (FBPVariableDescription, 内嵌)
 ```
 
-**后果：** 解析器可能：
-- 在未知属性类型或格式变更时崩溃
-- 误读不存在于旧版本的新字段偏移
-- 无版本包假定当前引擎格式时跳过关键数据
+**问题：**
+1. UEdGraph 作为单独导出，nodes 数组内的 UK2Node 也在导出表中
+2. UK2Node 的 outer index 指向其父图或蓝图
+3. 节点序列化时只保存节点特定数据，位置坐标等来自 EdGraphNode 基类
+
+**来自源码分析：**
+- `UEdGraph::Nodes` 是 `TArray<UEdGraphNode*>`
+- 每个节点有独立导出条目（.outer_index 指向图）
+- 图本身有 `.Nodes` 数组存储节点引用（PackageIndex）
+
+**序列化顺序（UEdGraph）：**
+```
+Schema (FObjectIndex)
+Nodes count + Nodes[] (each Node has own export)
+GraphGuid
+bEditable
+```
+
+**序列化顺序（UK2Node → UEdGraphNode）：**
+```
+// UEdGraphNode 基类
+Pins count + Pins[]
+NodePosX (float)
+NodePosY (float)
+NodeGuid
+EnabledState
+NodeComment
+
+// UK2Node 特定数据（依具体子类而变）
+```
 
 **预防：**
-1. 读取 LegacyFileVersion、FileVersionUE4、FileVersionUE5、FileVersionLicenseeUE
-2. 继续前检查 `IsFileVersionTooOld()` 和 `IsFileVersionTooNew()`
-3. 无版本包（`bUnversioned = true`）使用当前/最新格式假设
-4. 维护版本兼容矩阵 —— 知道解析器支持哪些版本
-5. 不支持版本时优雅失败并输出清晰错误信息
+1. 建立 outer_index → 导出名映射
+2. 先解析所有导出的 outer_index，理解对象树
+3. 图的 Nodes 数组是 PackageIndex 引用，需解析为节点导出
+4. 节点数据分两部分：基类（位置、引脚）+ 派生类（特定字段）
 
-**检测：** Summary 解析提前退出。无版本时版本号为负/零。自定义版本数组含未知 GUID。
+**检测：**
+- 节点位置（NodePosX/NodePosY）解析为垃圾值
+- 引脚连接指向不存在的对象
+- 图节点数量与导出数量不匹配
 
-**阶段：** 阶段 1（格式解析）。解析器需全流程版本感知序列化逻辑。
+**阶段：** 阶段 4 需要导出表全局分析
 
 ---
 
-### 陷阱 3：BulkData 标志与载荷位置
+### 陷阱 5：UK2Node 子类特定序列化
 
-**出错情况：** 解析器错误读取 BulkData，因未处理影响载荷存储位置和方式的众多标志组合。
+**出错情况：** 假设所有 UK2Node 子类序列化相同，但每个子类可重写 Serialize()。
 
-**发生原因：** BulkData 有众多标志来自 BulkData.cpp：
+**发生原因：** UE 使用虚函数序列化：
+- UK2Node::Serialize() → 调用 Super::Serialize() + 子类特定字段
+- K2Node_CallFunction::Serialize() → 调用 UK2Node::Serialize() + FunctionReference 字段
+- K2Node_VariableGet::Serialize() → 调用 UK2Node::Serialize() + VariableGuid/VariableReference 字段
+
+**来自源码 (K2Node.cpp lines 325-450)：**
+
 ```cpp
-BULKDATA_PayloadAtEndOfFile       // 数据在文件末尾，偏移相对于 BulkDataStartOffset
-BULKDATA_SerializeCompressedZLIB  // ZLIB 压缩
-BULKDATA_ForceInlinePayload       // 数据内嵌（小数据）
-BULKDATA_PayloadInSeparateFile    // 数据在独立 .ubulk 文件
-BULKDATA_OptionalPayload          // 可选数据，可能不存在
-BULKDATA_MemoryMappedPayload      // 流式内存映射
-BULKDATA_Size64Bit                // 大小使用 64 位而非 32 位
-BULKDATA_DuplicateNonOptionalPayload // 有备用偏移
-```
-
-序列化依标志变化：
-```cpp
-if (UNLIKELY(BulkMeta.Flags & BULKDATA_Size64Bit))
+void UK2Node::Serialize(FArchive& Ar)
 {
-    Ar << BulkMeta.ElementCount;  // 64 位
-    Ar << BulkMeta.SizeOnDisk;    // 64 位  
-    Ar << BulkMeta.Offset;        // 64 位
+    Super::Serialize(Ar);
+
+    // UK2Node-specific fields
+    Ar << Pins ;  // OldPins (deprecated, skip for Phase 2)
+    Ar << NodeCache ;  // Cached node data
+
+    // Version-dependent fields
+    if (Ar.UE5Version() >= SomeVersion) {
+        Ar << SomeNewField;
+    }
 }
-else
+```
+
+**来自源码 (K2Node_CallFunction.cpp lines 150-200)：**
+```cpp
+void UK2Node_CallFunction::Serialize(FArchive& Ar)
 {
-    SerializeAsInt32(Ar, BulkMeta.ElementCount);  // 32 位
-    SerializeAsInt32(Ar, BulkMeta.SizeOnDisk);    // 32 位
-    Ar << BulkMeta.Offset;                        // 某些情况仍 64 位
+    UK2Node::Serialize(Ar);
+
+    Ar << FunctionReference;  // FMemberReference
+    Ar << bHasExplicitSelf;   // bool
+    Ar << SelfObjectCategory; // FPropertyPickerProperties
+
+    if (Ar.UE4Version() >= SomeVersion) {
+        Ar << AdditionalFields;
+    }
 }
 ```
 
+**问题节点类型：**
+
+|节点类型|特定字段|复杂度|
+|--------|--------|------|
+|K2Node_CallFunction|FunctionReference, bAllowAnyArg, bIsPureCall|中|
+|K2Node_Event|MemberReference, EventDisplayName|低|
+|K2Node_VariableGet|VariableGuid, VariableReference|中|
+|K2Node_VariableSet|VariableGuid, VariableReference, bSkip SelfCast|中|
+|K2Node_MakeStruct|StructType|低|
+|K2Node_Knot|bIsDroppable, bIsInspected|低|
+|K2Node_CustomEvent|EventGuid, EventDisplayName|中|
+
 **后果：**
-- 偏移解释错误 → 从错误位置读取数据
-- 大小不匹配 → 缓冲溢出或截断读取
-- 未检测压缩 → 原始垃圾数据
-- 未处理独立文件 → 数据缺失
+- 序列化偏移错位（误读后续节点）
+- 函数调用节点解析为事件节点
+- 变量节点无法关联变量定义
 
 **预防：**
-1. 读取大小/偏移前始终检查 BULKDATA_Size64Bit
-2. 检查 BULKDATA_PayloadInSeparateFile 并从 .ubulk 加载
-3. 检查压缩标志并相应解压
-4. 处理 BULKDATA_DuplicateNonOptionalPayload 备用数据
-5. PayloadAtEndOfFile（BULKDATA_PayloadAtEndOfFile）偏移基于 BulkDataStartOffset
+1. 解析节点类型后分派到特定解析函数
+2. 使用版本条件读取可选字段
+3. 建立节点类型→解析器注册表
 
-**检测：** BulkData 读取返回错误大小。定位偏移失败。文件太小无法容纳声称的载荷大小。
+**检测：**
+- FunctionReference 读取失败但没有异常
+- 变量名称解析为函数名
+- 节点类型与序列化字段不匹配错误
 
-**阶段：** 阶段 1（格式解析）。BulkData 处理是任何非平凡资产的基础。
+**阶段：** 阶段 4 初始版本可只支持 K2Node_CallFunction（最常见）
 
 ---
 
-### 陷阱 4：FName 索引 vs 字符串混淆
+### 陷阱 6：蓝图图闭包与循环引用
 
-**出错情况：** 解析器将 FName 当作字符串，实际它是名称表索引，或反之。导致名称解析错误。
+**出错情况：** 假设图结构是树，但实际存在循环引用（如 Knot 节点、表达式节点）。
 
-**发生原因：** FName 序列化依上下文变化：
-- 包内：FName 序列化为 **索引 + 数字** 到包的 NameMap
-- BulkData 内：FName 可序列化为 **字符串**（来自 BulkDataReader.h）
-- FMappedName 有类型位（Package、Container、Global）影响解析
+**发生原因：** 引脚连接可以形成：
+1. 线性流：Event → FunctionCall → Result
+2. 分支：Switch → Branch → Path1/Path2
+3. 循环：Knot 节点用于组织图布局，可能创建逻辑循环
+4. 自引用：某些节点引用自身（如 ForEachLoop）
 
-来自 MappedName.h：
+**来自源码 (UEdGraphPin.cpp lines 200-250)：**
 ```cpp
-class FMappedName
-{
-    static constexpr uint32 IndexBits = 30u;  // 30 位索引
-    static constexpr uint32 TypeMask = ~IndexMask;  // 2 位类型
-    
-    enum class EType { Package, Container, Global };
-    
-    uint32 Index;  // 同时含索引（30 位）和类型（2 位）
-    uint32 Number; // 名称数字（用于编号名如 "Material_0"）
-};
+// 引脚连接存储为 TArray<UEdGraphPin*>
+LinkedTo;  // OutputPin.LinkedTo = [InputPin1, InputPin2, ...]
+
+// Knot 节点特性：
+// - 不执行任何逻辑
+// - 仅用于连接传递
+// - 可能形成"视觉循环"但逻辑线性
 ```
 
-**后果：**
-- 名称显示为垃圾字符串或错误名称
-- 对象引用失败，因名称不匹配
-- 解析器无法识别属性类型、类名或对象名
-- 蓝图节点类型误判
+**问题：**
+- 简单 DFS 遍历可能陷入无限循环
+- 强制.visited set 可能遗漏并行路径
+- PinId/Guid 引用 vs 指针引用可能不一致
 
 **预防：**
-1. **首先**，从 Summary 的 NameOffset/NameCount 反序列化 NameMap
-2. **然后**，读取 FNames 为索引+数字对
-3. 从 NameMap 解析索引为字符串
-4. 处理编号名（Number != 0）追加后缀
-5. 检查 FMappedName 类型位用于全局/包/容器解析
+1. 使用显式 visited set 防止循环
+2. 差异化处理：数据流（可循环）vs 执行流（线性）
+3. 记录节点 GUID 而非指针引用
 
-**检测：** 名称显示为空字符串或整数。对象类名错误。无法找到预期蓝图节点类型。
+**检测：**
+- 解析卡死或堆栈溢出
+- 同一节点多次出现在输出中
+- 连接信息缺失或重复
 
-**阶段：** 阶段 1（格式解析）。任何 FName 解析前必须先加载 NameMap。
+**阶段：** 阶段 4 输出格式化时需注意
 
 ---
 
-### 陷阱 5：偏移算术与相对/绝对位置
+### 陷阱 7：Cooked vs Uncooked 蓝图资产
 
-**出错情况：** 解析器混淆绝对文件偏移和相对偏移，导致定位到错误位置。
+**出错情况：** 尝试从 cooked 蓝图提取完整图结构，但 cooked 资产已剥离编辑器数据。
 
-**发生原因：** UE 使用不同偏移类型：
-- NameOffset、ExportOffset、ImportOffset：**绝对** 文件位置
-- BulkData Offset：PayloadAtEndOfFile 时**相对**于 BulkDataStartOffset
-- 部分偏移相对于 TotalHeaderSize
-- Trailer 偏移从文件末尾反向读取
+**发生原因：** UE 编译流程：
 
-来自 PackageFileSummary 结构：
-```cpp
-int32 NameOffset;      // 文件内绝对位置
-int32 ExportOffset;    // 文件内绝对位置  
-int32 ImportOffset;    // 文件内绝对位置
-int64 BulkDataStartOffset;  // BulkData 偏移基准
+```
+未 cooked (.uasset with PKG_Cooked=0)
+├── 蓝图 .uasset 包含：
+│   - UBlueprint (编辑器数据)
+│   - UEdGraph (图结构)
+│   - UK2Node (节点与引脚)
+│   - 编译结果存储在蓝图为下次启动准备
+└── 可被 uasset_read 解析
+
+ cooked (.uasset with PKG_Cooked=1)
+├── 蓝图 .uasset 包含：
+│   - UBlueprintGeneratedClass (运行时类)
+│   - 移除 UEdGraph/UK2Node（编辑器图已编译）
+│   - 只保留编译后的字节码和简要元数据
+└── 无法提取节点图结构
+
+ cooking 过程
+├── K2Compiler 编译 UEdGraph → 字节码 + BPGC
+├── 移除全部 UEdGraph/UK2Node 导出
+└── 仅保留 UBlueprintGeneratedClass
 ```
 
-**后果：** 解析器读取错误数据。定位"偏移"产出垃圾。偏移-文件头大小误差在整个解析中传播。
-
-**预防：**
-1. 使用前文档各偏移类型（绝对 vs 相对）
-2. 需要时加文件头大小：`absolute_pos = relative_offset + TotalHeaderSize`
-3. PayloadAtEndOfFile 使用 BulkDataStartOffset 为基准
-4. Trailer 从文件末尾反向定位
-
-**检测：** 定位偏移产出错误数据类型（预期导出却读取到名称）。解析器定位超过文件末尾时崩溃。
-
-**阶段：** 阶段 1（格式解析）。清晰偏移处理是基础。
-
----
-
-### 陷阱 6：无版本属性序列化
-
-**出错情况：** 解析器尝试读取无版本包的属性标签，但无版本包使用完全不同的序列化方案。
-
-**发生原因：** UE 有两种属性序列化模式：
-1. **有版本**：属性序列化带 FPropertyTag，含名称、类型、数组索引、大小、GUID
-2. **无版本**：属性序列化按固定 schema 顺序，无标签，用位掩码表示存在
-
-来自 UnversionedPropertySerialization.cpp：
+**PackageFlags 检测：**
 ```cpp
-// 无版本使用 schema 基方式
-// 属性按声明顺序序列化
-// 存在用位掩码表示，非标签
-// 流中无类型信息 —— 必须知道类布局
-```
+PKG_Cooked = 0x200  // 512 decimal
 
-无版本包常见于 cooked/已发布游戏。PackageFileSummary 中 `bUnversioned` 标志指示此模式。
-
-**后果：**
-- 解析器将位掩码误解为属性标签产出垃圾
-- 无法从 cooked 包反序列化任何属性
-- 蓝图数据完全不可访问
-
-**预防：**
-1. 从 summary 检查 `bUnversioned` 标志
-2. 若无版本，使用 schema 基序列化（需知道类布局）
-3. 需访问类定义（UClass/UStruct 属性链）
-4. 对独立解析器，这是**重大限制** —— 可能需回退到部分解析
-
-**检测：** 属性标签含无效类型名。数组索引异常。大小为负或过大。
-
-**阶段：** 阶段 1 或阶段 2，取决于方案。无版本支持需要类类型知识。
-
----
-
-### 陷阱 7：PropertyTag 跨版本演进
-
-**出错情况：** 解析器用旧 PropertyTag 格式假设处理新包，缺失影响解析的新字段。
-
-**发生原因：** PropertyTag 格式显著演进：
-- 早期 UE4：仅名称、类型、数组索引、大小
-- 后期 UE4：添加 HasPropertyGuid、PropertyGuid
-- UE5：添加 HasPropertyExtensions、完整类型名、可覆盖信息
-
-来自 PropertyTag.cpp：
-```cpp
-enum class EPropertyTagFlags : uint8
-{
-    HasArrayIndex              = 0x01,
-    HasPropertyGuid            = 0x02,
-    HasPropertyExtensions      = 0x04,
-    HasBinaryOrNativeSerialize = 0x08,
-    BoolTrue                   = 0x10,
-    SkippedSerialize           = 0x20,
-};
-```
-
-新版本还使用 `FPropertyTypeName` 表示完整类型信息而非仅类型 FName。
-
-**后果：**
-- 带 GUID 的属性未正确识别
-- 扩展数据跳过，导致偏移错位
-- 复杂类型（map、set、嵌套 struct）解析错误
-- 蓝图属性值错误或缺失
-
-**预防：**
-1. 检查 UE 版本确定 PropertyTag 格式
-2. 解析标志字节确定哪些字段存在
-3. 处理扩展（EPropertyTagExtension）获取可覆盖信息
-4. 新版本使用 FPropertyTypeName 获取完整类型信息
-
-**检测：** 属性大小与预期不符。下一属性起始偏移错误。未知属性类型名。
-
-**阶段：** 阶段 1（格式解析）。属性解析是任何资产读取的核心。
-
----
-
-### 陷阱 8：包 Trailer 与载荷 TOC（UE5+）
-
-**出错情况：** 解析器忽略 UE5 的包 trailer 结构，缺失载荷 TOC 和数据资源。
-
-**发生原因：** UE5 在包末尾添加 trailer：
-```cpp
-// 来自 PackageTrailer.h 文档：
-// [Footer]
-// Footer 允许反向加载 trailer，含 PACKAGE_FILE_TAG
-//
-// Trailer 含：
-// - Tag (uint64) —— 应匹配 FFooter::FooterTag
-// - TrailerLength (uint64) —— trailer 总大小
-// - PackageTag (uint32) —— PACKAGE_FILE_TAG
-// - Summary 偏移
-// - Payload TOC 条目
-// - 数据资源引用
-```
-
-UE5+ PackageFileSummary 新字段：
-```cpp
-int64 PayloadTocOffset;      // 载荷目录表
-int32 DataResourceOffset;    // 数据资源位置
-int32 NamesReferencedFromExportDataCount; // 导出数据中使用的名称
+// 若包标志包含 PKG_Cooked，图结构已被移除
 ```
 
 **后果：**
-- Payload TOC 数据不可访问
-- 数据资源未找到
-- 部分导出数据引用未解析
-- 包验证失败
+- 尝试读取不存在的 UEdGraph 导出 → 索引越界/空数组
+- 假设蓝图包含节点图 → 逻辑错误
+- 错误报告为"解析失败"而非"cooked 资产"
 
 **预防：**
-1. 检查 UE5 版本 >= PACKAGE_SAVED_HASH 判断 trailer 存在
-2. 若需要从文件末尾反向读取 trailer
-3. 处理 PayloadTocOffset 和 DataResourceOffset 字段
-4. 包验证应检查末尾 PACKAGE_FILE_TAG
+1. 检查 PackageFlags 是否有 PKG_Cooked
+2. 若 cooked，跳过图结构提取
+3. 返回警告而非错误
 
-**检测：** Payload TOC 数据未找到。数据资源引用未解析。包末尾无 PACKAGE_FILE_TAG。
+**检测：**
+- 导出表无 UEdGraph/UK2Node 类型
+- PackageFlags & PKG_Cooked != 0
+- 仅存在 BlueprintGeneratedClass
 
-**阶段：** 阶段 1（格式解析）。UE5 特定处理。
+**阶段：** 阶段 4 开始时添加 cooked 检测
+
+---
+
+### 陷阱 8：Ubergraph Pages 与多图支持
+
+**出错情况：** 假设蓝图只有一个 EventGraph，但实际支持多个图表页面。
+
+**发生原因：** UBlueprint 结构：
+
+```cpp
+// UE 5.7 Blueprint.h lines 530-570
+TArray<UEdGraph*> UbergraphPages ;       // 主图表页面（事件图）
+TArray<UEdGraph*> FunctionGraphs ;       // 函数图表
+TArray<UEdGraph*> MacroGraphs ;          // 宏图表（UE5+）
+TArray<FBPInterfaceDescription> ImplementedInterfaces ;
+```
+
+**问题：**
+- 事件图 (UbergraphPages[0]) 是默认执行入口
+- 函数图需要函数名识别（K2Node_FunctionEntry）
+- 宏图是可重用蓝图逻辑片段
+
+**序列化模式：**
+- 每个 UEdGraph 作为独立导出
+- 图导出的 outer_index 指向 UBlueprint
+- 图名存储在导出 ObjectName 中（如 "EventGraph"、"Aim"）
+
+**检测：**
+- 解析所有 UEdGraph 导出
+- 检查图名区分 EventGraph vs 函数图 vs 宏图
+- 为每个图构建节点列表
+
+**预防：**
+1. 识别所有 ClassIndex 引用 UEdGraph 的导出
+2. 根据导出名称和 outer_index 分组
+3. 为每个图构建节点列表
+
+**阶段：** 阶段 4 初始版本可只解析 EventGraph
 
 ---
 
 ## 中等陷阱
 
-### 陷阱 1：全量读取文件 vs 流式处理
+### 陷阱 1：NodeGuid vs PinId 引用不一致
 
-**出错情况：** 解析器在解析前将整个 .uasset 文件读入内存，导致大资产内存问题。
+**出错情况：** 假设节点通过 outer_index 唯一标识，但实际使用 Guid。
 
-**发生原因：** 大资产（纹理、模型）可达数百 MB。一次性读取：
-- 浪费内存（Python bytes 对象开销）
-- 大文件启动慢
-- 可能因内存限制崩溃
+**发生原因：** UE 使用多级引用：
+1. **导出表**：通过 FPackageIndex（导出索引）
+2. **序列化时**：UK2Node::Serialize() 使用 NodeGuid
+3. **编辑器内存**：UEdGraphNode* 指针
 
-**预防：**
-1. 使用带 seek/read 的文件句柄而非全量读取字节
-2. 先读取文件头，再仅读需要部分
-3. Bulk 数据用流式读取或跳过（若不需）
-4. 提前设置合理文件大小限制
-
-**检测：** 大文件内存使用飙升。解析在输出前耗时过长。
-
-**阶段：** 阶段 1。
-
----
-
-### 陷阱 2：Python struct.unpack 对齐与填充
-
-**出错情况：** 解析器假设 struct.unpack 字节大小匹配 C++ 结构大小，忽略对齐/填充差异。
-
-**发生原因：**
-- C++ 结构有对齐填充（如 int32 后 int64 有 4 字节填充）
-- Python struct 默认不加填充
-- UE 序列化依版本可能或可能不包含填充
-
-**预防：**
-1. 不要用 struct.unpack 复杂结构 —— 逐字段解析
-2. 对每字段计算预期位置，考虑 UE 对齐
-3. 用显式字节计数，非结构大小假设
-
-**检测：** 字段值偏移。定位偏移读取错误字段。
-
-**阶段：** 阶段 1。
-
----
-
-### 陷阱 3：字符串编码（ANSICHAR vs WIDECHAR vs UTF8）
-
-**出错情况：** 解析器使用错误字符串编码，产出垃圾或 Unicode 错误。
-
-**发生原因：** UE 字符串使用多种编码：
-- FName 条目：现代版本存为 UTF-8，旧版本用 TCHAR
-- FString：TCHAR 基（Windows UTF-16，某些平台 UTF-8）
-- ANSICHAR 路径：文件路径 ASCII
-- 序列化字符串：取决于归档上下文
-
-**预防：**
-1. FName 条目先尝试 UTF-8，回退到平台 TCHAR
-2. FString 序列化检查归档文本格式
-3. 正确处理 null 终止字符串
-4. 考虑序列化字符串的 LengthPrefix
-
-**检测：** 字符串含垃圾字符。Unicode 解码错误。名称与预期不符。
-
-**阶段：** 阶段 1。
-
----
-
-### 陷阱 4：FObjectImport/FObjectExport 结构
-
-**出错情况：** 解析器因版本依赖字段误读导入/导出表条目。
-
-**发生原因：** 导入/导出结构演进：
-- FObjectImport：ClassPackage、ClassName、OuterIndex、ObjectName（UE5+ 为包索引）
-- FObjectExport：ClassIndex、SuperIndex、OuterIndex、ObjectName、ObjectFlags、SerialSize、SerialOffset
-  - UE5 移除 PackageGuid，添加 SerialSize/SerialOffset script offset，添加 bIsInherited
-
-来自 ObjectResource.h：
+**来自源码：**
 ```cpp
-class FPackageIndex
-{
-    int32 Index;  // >0 = export (Index-1), <0 = import (-Index-1), 0 = null
-    
-    bool IsImport() const { return Index < 0; }
-    bool IsExport() const { return Index > 0; }
-    int32 ToImport() const { return -Index - 1; }
-    int32 ToExport() const { return Index - 1; }
-};
+// UEdGraphNode.h
+FGuid NodeGuid;  // 用于保存/加载引用，非导出索引
 ```
 
+**问题：**
+- 外部工具（如 FModel）导出的 JSON 可能使用 Guid
+- 解析器内部使用导出索引
+- 需要双向映射：导出索引 ↔ NodeGuid
+
 **预防：**
-1. 正确解析 FPackageIndex（有符号编码用于 import/export）
-2. 检查 UE 版本确定导出结构字段
-3. SCRIPT_SERIALIZATION_OFFSET 版本添加脚本序列化偏移
-4. TRACK_OBJECT_EXPORT_IS_INHERITED 版本添加 bIsInherited
+- 解析时收集 NodeGuid 并映射到导出索引
+- 输出 JSON 包含.guid 引用（除索引外）
 
-**检测：** 导入/导出索引超出范围。对象引用指向错误类。
-
-**阶段：** 阶段 1。
+**阶段：** 阶段 4 增强版需要
 
 ---
 
-### 陷阱 5：损坏数据缺失错误处理
+### 陷阱 2：PinName 与 PinDisplayName 差异
 
-**出错情况：** 文件部分损坏或截断时解析器崩溃或产出垃圾。
+**出错情况：** 输出使用 PinName（内部名）而非 PinDisplayName（人类可读）。
 
-**发生原因：** 现实文件可能有：
-- 截断数据（文件不完整）
-- 损坏区块（磁盘错误）
-- 大小不匹配（保存时序列化 bug）
-- 无效偏移（旧格式损坏）
+**发生原因：** UEdGraphPin 存储：
+```cpp
+FName PinName ;              // 内部名（如 "execute"、"then"、"ReturnValue"）
+FName PinDisplayName ;       // 显示名（可国际化，来自 Editor only）
+FText PinToolTip ;           // 工具提示
+```
+
+- PinName 是快速内部标识
+- PinDisplayName 是用户看到的（可能来自字符串表）
+
+**后果：**
+- AI agent 看到 "execute" 而非 "Exec"（中文版显示）
+- 引脚含义不清晰
 
 **预防：**
-1. 读取偏移前验证文件大小
-2. 定位前检查 offset < file_size
-3. 检查 count * element_size < remaining_data
-4. 二进制读取周围使用 try/except
-5. 返回带错误标志的部分结果，不崩溃
+- Phase 3：输出 PinName（稳定内部标识）
+- Phase 4 增强：添加 PinDisplayName 若存在
 
-**检测：** 定位超过文件末尾。读取返回字节少于预期。struct.unpack 抛异常。
-
-**阶段：** 阶段 1。
+**阶段：** 阶段 4 可选增强
 
 ---
 
-### 陷阱 6：蓝图图解析复杂性
+### 陷阱 3：Default coherent value (DCV) vs 实际值
 
-**出错情况：** 解析器尝试完整解析蓝图图（节点、引脚、连接）但格式极其复杂且无文档。
+**出错情况：** 读取 DefaultValue 为序列化值，但运行时可能不同。
 
-**发生原因：** 蓝图图涉及：
-- UK2Node 子类有类型特定序列化
-- EdGraphPin 有复杂引用
-- 连接存储为引脚到引脚引用
-- Ubergraph pages、函数图、宏图
-- 各节点类型有独特属性布局
+**发生原因：** UE 有 Default Coherent Value 机制：
+- DefaultValue 序列化为字符串
+- 编辑器重新解析字符串为实际值
+- 若类型变更，DefaultValue 可能陈旧
 
-这未被 Epic 文档化。第三方解析器如 FModel 持续困扰于此。
+**序列化：**
+```cpp
+// FBPVariableDescription::Serialize()
+DefaultValue.Serialize(Ar);  // FString
+```
+
+**问题：**
+- DefaultValue 可能与变量类型不匹配
+- 数组/结构体 DefaultValue 为复杂格式
 
 **预防：**
-1. 接受完整蓝图图解析可能无法实现，除非引擎集成
-2. 专注可提取元数据：类名、父类、暴露属性、函数
-3. 解析能解析的，标记不能的
-4. 若可用考虑使用 UE Python API 完整解析
+- 仅存储序列化字符串
+- 不尝试验证类型匹配
 
-**检测：** 节点属性空或错。引脚连接未解析。图结构不完整。
-
-**阶段：** 阶段 2。若完整图解析证明不实际可能需重定范围。
+**阶段：** 阶段 4 保持原始字符串即可
 
 ---
 
 ## 次要陷阱
 
-### 陷阱 1：文件扩展名混淆（.uasset vs .umap）
+### 陷阱 1：注释节点（EdGraphNode_Comment）处理
 
-**出错情况：** 解析器假设所有 .uasset 文件格式相同，但 .umap 文件（关卡包）有额外结构。
+**出错情况：** 尝试解析注释节点为执行节点。
 
-**发生原因：** .umap 文件也是包但含：
-- Level info（ULevel）
-- World tile info（用于 world partition）
-- 额外流式关卡引用
+**发生原因：** 注释节点：
+- ClassIndex: `/Script/UnrealEd.EdGraphNode_Comment`
+- 无 pins
+- 仅有矩形区域数据（NodeRect）
 
-**预防：** 检查包名或包标志用于关卡特定处理。
+**预防：**
+- 解析前检查节点类型
+- 跳过非 UK2Node 类型（或标记为注释）
 
-**阶段：** 阶段 1。
-
----
-
-### 陷阱 2：Generations 数组未处理
-
-**出错情况：** 解析器忽略 summary 中 Generations 数组，缺失历史版本数据。
-
-**发生原因：** Generations 跟踪包之前保存版本。用于：
-- 确定旧版本存在哪些对象
-- 迁移兼容性
-
-**预防：** 在包标志后解析 GenerationCount 和 Generations 数组。读取当前数据通常非关键。
-
-**阶段：** 阶段 1。
+**阶段：** 阶段 4 排除或特殊标记
 
 ---
 
-### 陷阱 3：PackageFlags 未考虑
+### 陷阱 2：临时变量（K2Node_TemporaryVariable）
 
-**出错情况：** 解析器忽略 PackageFlags，其指示特殊包状态。
+**出错情况：** 将临时变量节点误认为真实变量。
 
-**发生原因：** PackageFlags 含：
-- PKG_Cooked —— 包已 cooked（编辑器数据已剥离）
-- PKG_FilterEditorOnly —— 编辑器数据已排除
-- PKG_PlayInEditor —— PIE 包
-- PKG_UnversionedProperties —— 使用无版本序列化
+**发生原因：** 临时变量：
+- 编译时创建，不在蓝图变量列表中
+- 节点类型：K2Node_TemporaryVariable
+- 无对应 FBPVariableDescription
 
-这些影响存在哪些数据。
+**预防：**
+- 区分蓝图变量（NewVariables）与图内临时变量
+- 输出标记为 "temporary" 或跳过
 
-**预防：** 解析并检查 PackageFlags。为 cooked 包调整解析行为。
-
-**阶段：** 阶段 1。
-
----
-
-### 陷阱 4：SoftObjectPath 列表（UE5+）
-
-**出错情况：** 解析器忽略软对象路径引用列表。
-
-**发生原因：** UE5 添加 SoftObjectPathsCount/SoftObjectPathsOffset 用于软引用快速重映射。
-
-**预防：** 若版本 >= ADD_SOFTOBJECTPATH_LIST 则解析。用于依赖跟踪。
-
-**阶段：** 阶段 1。
+**阶段：** 阶段 4 可选
 
 ---
 
@@ -542,56 +544,95 @@ class FPackageIndex
 
 | 阶段主题 | 可能陷阱 | 缓解措施 |
 |----------|----------|----------|
-| **格式解析** | 字节序、版本、偏移、BulkData、FName | 全面文件头解析配版本感知逻辑 |
-| **蓝图提取** | PropertyTag演进、图复杂性 | 专注元数据提取，接受图解析限制 |
-| **输出格式** | 缺失数据处理 | 优雅降级，带标志的部分结果 |
-| **性能** | 全量文件加载 | 流式读取，延迟区块加载 |
+| **格式解析** | OuterIndex 缺失、版本字段顺序 | 读取 debug_export_map_bug.md 修复 |
+| **蓝图检测** | Cooked vs Uncooked 混淆 | 检查 PackageFlags PKG_Cooked |
+| **图结构** | Outer 引用嵌套、多图页面 | 先构建外层映射 |
+| **节点解析** | 子类特定序列化 | 分派到类型特定解析器 |
+| **引脚连接** | 循环引用、Knot 节点 | visited set + 类型过滤 |
+| **输出格式** | PinName vs 显示名、Guid vs 索引 | 输出双引用（索引+Guid） |
 
 ---
 
-## UE 特定格式特性
+## 已知 v1.0 陷阱（已修复或记录）
 
-### 特性 1：名称表必须首先加载
+| 陷阱 | 状态 | 修复/文档 |
+|------|------|-----------|
+| OuterIndex 漏掉 TemplateIndex | 修复 | debug_export_map_bug.md + uasset_read.py |
+| 导出表序列化顺序错误 | 修复 | ObjectResource.cpp 参考 |
+| 版本阈值判断错误 (>= vs <=) | 修复 | UESOURCE-INDEX.md |
+| Cookie 包检测缺失 | 记录 | PITFALLS.md 条目 7 |
 
-FNames 在整个包中引用名称表索引。**必须在任何其他 FName 依赖数据前反序列化 NameMap。**
+---
 
-顺序：Summary -> NameMap（在 NameOffset）-> ImportMap/ExportMap -> Exports
+## 推荐蓝图图解析顺序
 
-### 特性 2：PackageIndex 有符号编码
+为避免陷阱，建议此解析顺序：
 
-FPackageIndex 使用有符号编码：
-- 正数（1+）：导出索引（减 1）
-- 负数（-1-）：导入索引（取负减 1）
-- 零：空引用
+```
+阶段 4 蓝图图解析流程：
 
-### 特性 3：PayloadAtEndOfFile BulkData
+1. 读取 PackageFlags
+   ├─ 若 PKG_Cooked，跳过图结构（警告）
+   └─ 否则继续
 
-当 BULKDATA_PayloadAtEndOfFile 标志设置，偏移**相对于 BulkDataStartOffset**，非绝对文件位置。
+2. 构建外层映射 (outer_index → 导出名)
+   └─ 允许解析嵌套引用
 
-### 特性 4：自定义版本 GUID
+3. 识别所有导出类型
+   ├─ UEdGraph: 收集图形定义
+   ├─ UK2Node*: 收集节点定义
+   └─ 其他: 跳过/标记
 
-自定义版本使用 GUID 作为键，非枚举。解析器需维护 GUID->版本映射用于已知子系统。
+4. 按外层分组节点到图
+   ├─ EventGraph → Event nodes
+   ├─ FunctionGraphs[i] → Function nodes
+   └─ MacroGraphs[i] → Macro nodes
 
-### 特性 5：无版本包假设
+5. 对每个图解析节点
+   ├─ 读取 UEdGraphNode 基类字段 (Pins, Pos)
+   ├─ 识别 UK2Node 子类类型
+   ├─ 分派到类型特定解析器
+   └─ 读取子类特定字段
 
-无版本包版本号为零但假定当前引擎格式。当 bUnversioned 为 true，解析器必须使用"已知最新"格式。
+6. 解析引脚连接
+   ├─ UEdGraphPin.LinkedTo 是 PackageIndex 引用
+   ├─ 建立导出索引 → 节点映射
+   └─ 填充 LinkedTo 列表
 
-### 特性 6：Trailer 反向读取
-
-UE5 包有 trailer 可从文件末尾反向读取用于验证和载荷发现。
+7. 输出增强 JSON
+   ├─ 包含 .outer_index 解析
+   ├─ 包含 NodeGuid（若存在）
+   └─ 包含节点类型识别
+```
 
 ---
 
 ## 来源
 
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/UObject/PackageFileSummary.cpp`（包 summary 序列化、版本处理）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/Serialization/BulkData.cpp`（BulkData 标志、载荷处理）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/UObject/PropertyTag.cpp`（属性标签演进、标志）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Core/Public/UObject/ObjectVersion.h`（版本常量、UE4/UE5 版本）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Core/Public/Serialization/CustomVersion.h`（自定义版本系统）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Core/Public/Serialization/MappedName.h`（FName 索引结构）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/Serialization/UnversionedPropertySerialization.cpp`（无版本 schema）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`（导入/导出结构）
-- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp`（异步加载、依赖映射）
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Editor/BlueprintGraph/Classes/K2Node.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Editor/BlueprintGraph/Private/K2Node.cpp`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Editor/BlueprintGraph/Private/K2Node_CallFunction.cpp`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/engine/Classes/EdGraph/EdGraph.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/engine/Classes/EdGraph/EdGraphNode.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/engine/Classes/EdGraph/EdGraphPin.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/engine/Classes/Engine/Blueprint.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/UObject/PackageFileSummary.cpp`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/Private/Serialization/BulkData.cpp`
+- UE 5.7 源码：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/Core/Public/UObject/ObjectVersion.h`
 
-**置信度：高** —— 所有发现直接从 UE 5.7 源码验证。
+**置信度：中高** — 大部分陷阱来自 UE 源码直接分析，少数来自社区工具（FModel）经验
+
+---
+
+## 下一步研究问题
+
+- [ ] K2Node_Event 序列化格式详细分析
+- [ ] K2Node_CallFunction FunctionReference 结构
+- [ ] UEdGraphPin 引脚连接序列化偏移验证
+- [ ] 蓝图字节码编译输出格式（用途：验证图提取正确性）
+- [ ] EdGraphSchema_K2 如何类型检查引脚连接
+
+---
+
+*本文件由 GSD Research 系统于 2026-05-02 生成*
