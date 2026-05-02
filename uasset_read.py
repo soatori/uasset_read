@@ -1568,6 +1568,82 @@ def read_import_map(
     return import_map
 
 
+def build_imports_list(import_map: List[ObjectImport]) -> List[Dict]:
+    """
+    构建 imports 依赖列表（DEPS-01）。
+
+    Per D-10-01: {class, package, object} 格式
+    Per D-10-03: 保持原始顺序（首次出现）
+    Per D-10-04: 合并重复（相同三元组）
+
+    Args:
+        import_map: read_import_map() 返回的导入表
+
+    Returns:
+        List[Dict]: [{"class": str, "package": str, "object": str}]
+    """
+    seen = set()
+    imports = []
+
+    for imp in import_map:
+        key = (imp.class_name, imp.class_package, imp.object_name)
+
+        if key not in seen:
+            seen.add(key)
+            imports.append({
+                "class": imp.class_name,
+                "package": imp.class_package,
+                "object": imp.object_name
+            })
+
+    return imports
+
+
+def read_soft_object_paths(
+    archive: FArchive,
+    summary: PackageFileSummary,
+    name_map: List[str]
+) -> List[Dict]:
+    """
+    读取 SoftObjectPaths 数组（DEPS-02）。
+
+    Per D-10-06: 实现完整解析
+    Per D-10-07: {asset_path, sub_path} 格式
+    Per D-10-09: 仅 UE5 >= 1008 时解析
+
+    Args:
+        archive: FArchive 实例
+        summary: PackageFileSummary 实例
+        name_map: 已解析的名称表
+
+    Returns:
+        List[Dict]: [{"asset_path": str, "sub_path": str}]
+    """
+    is_ue5_file = summary.legacy_file_version <= -8
+    if not is_ue5_file or summary.file_version_ue5 < UE5_ADD_SOFTOBJECTPATH_LIST:
+        return []
+
+    if summary.soft_object_paths_count <= 0:
+        return []
+
+    if summary.soft_object_paths_offset <= 0:
+        return []
+
+    archive.seek(summary.soft_object_paths_offset)
+
+    soft_refs = []
+    for _ in range(summary.soft_object_paths_count):
+        asset_path = archive.read_name(name_map)
+        sub_path = archive.read_fstring()
+
+        soft_refs.append({
+            "asset_path": asset_path,
+            "sub_path": sub_path
+        })
+
+    return soft_refs
+
+
 def read_export_map(
     archive: FArchive,
     summary: PackageFileSummary,
