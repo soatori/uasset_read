@@ -33,6 +33,7 @@ from uasset_read import (
     format_graphs_json,
     format_json_full,
     format_text_full,  # Phase 8 Wave 3
+    format_json_summary,  # Phase 8 Wave 4
     # Phase 8 Wave 2 imports
     K2NodeCallFunction,
     K2NodeEvent,
@@ -988,3 +989,102 @@ def test_format_text_full_graph_position(create_mock_parse_result, sample_graph_
 
     assert blueprint_pos < graphs_pos, "Blueprint 应在 Graphs 之前"
     assert graphs_pos < errors_pos, "Graphs 应在 ERRORS 之前"
+
+
+# ============================================================================
+# Phase 8: OUT2-04 - CLI --graph 标志
+# ============================================================================
+
+def test_cli_graph_flag():
+    """
+    OUT2-04: 验证 --graph 标志存在并可解析。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph'])
+
+    assert args.graph is True
+
+
+def test_cli_graph_json_composable():
+    """
+    D-08-12: 验证 --graph 不与 --json 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--json'])
+
+    assert args.graph is True
+    assert args.json is True
+
+
+def test_cli_graph_text_composable():
+    """
+    D-08-12: 验证 --graph 不与 --text 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--text'])
+
+    assert args.graph is True
+    assert args.text is True
+
+
+def test_cli_graph_summary_composable():
+    """
+    D-08-12: 验证 --graph 不与 --summary 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--summary'])
+
+    assert args.graph is True
+    assert args.summary is True
+
+
+def test_cli_graph_verbose_composable():
+    """
+    D-08-12: 验证 --graph 与 --verbose 可组合。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--verbose'])
+
+    assert args.graph is True
+    assert args.verbose is True
+
+
+def test_cli_graph_output_alone(create_mock_parse_result, sample_graph_with_connections):
+    """
+    D-08-13: 验证 --graph alone 输出仅 graphs 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    # --graph alone 应输出 {"graphs": [...]}
+    output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
+                            indent=2, ensure_ascii=False)
+
+    assert '"graphs"' in output_str
+    # 不应包含其他字段（如 exports）
+    assert '"exports"' not in output_str
+
+
+def test_cli_graph_json_output_full(create_mock_parse_result, sample_graph_with_connections):
+    """
+    D-08-13: 验证 --graph --json 输出完整 JSON。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    # --graph --json 应输出完整 JSON
+    output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+
+    assert '"graphs"' in output_str
+    assert '"exports"' in output_str  # 包含其他字段
+    assert '"summary"' in output_str

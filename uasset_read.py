@@ -3021,6 +3021,132 @@ def _get_inner_type(array_type: str) -> str:
 
 
 # ============================================================================
+# Phase 9: TypeName 参数解析辅助函数（Wave 2）
+# ============================================================================
+
+def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
+    """
+    从 PropertyTag 提取结构体类型名（D-08）。
+
+    UE5 格式: "StructProperty(/Script/CoreUObject.Vector)"
+    UE4 格式: 使用分离字段（简化处理）。
+
+    Args:
+        tag: PropertyTag 实例
+
+    Returns:
+        结构体类型名（去除路径前缀）
+    """
+    type_str = tag.type
+
+    # UE5: 提取括号内参数
+    if "(" in type_str:
+        # 格式: "StructProperty(/Script/CoreUObject.Vector)"
+        # 提取括号内内容
+        start = type_str.find("(")
+        end = type_str.find(")")
+        if start != -1 and end != -1:
+            struct_path = type_str[start+1:end]
+            # 提取类型名（去除路径前缀）
+            if "." in struct_path:
+                return struct_path.split(".")[-1]
+            return struct_path
+
+    # UE4: 简化处理，返回类型名
+    # 完整实现需要从分离字段获取（StructName 字段）
+    return "UnknownStruct"
+
+
+def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
+    """
+    从 PropertyTag 提取 Map Key/Value 类型（D-08）。
+
+    UE5 格式: "MapProperty(IntProperty,StrProperty)"
+    UE4 格式: 使用分离字段（简化处理）。
+
+    Args:
+        tag: PropertyTag 实例
+
+    Returns:
+        (key_type, value_type) 元组
+    """
+    type_str = tag.type
+
+    # UE5: 提取括号内参数
+    if "(" in type_str:
+        start = type_str.find("(")
+        end = type_str.find(")")
+        if start != -1 and end != -1:
+            params = type_str[start+1:end]
+            # 分割 Key,Value
+            parts = params.split(",")
+            if len(parts) >= 2:
+                return parts[0].strip(), parts[1].strip()
+
+    # UE4: 简化处理，返回默认类型
+    # 完整实现需要从分离字段获取（InnerType、ValueType 字段）
+    return "IntProperty", "IntProperty"
+
+
+def _extract_set_type_from_tag(tag: PropertyTag) -> str:
+    """
+    从 PropertyTag 提取 Set 元素类型（D-08）。
+
+    UE5 格式: "SetProperty(IntProperty)"
+    UE4 格式: 使用分离字段（简化处理）。
+
+    Args:
+        tag: PropertyTag 实例
+
+    Returns:
+        元素类型名
+    """
+    type_str = tag.type
+
+    # UE5: 提取括号内参数
+    if "(" in type_str:
+        start = type_str.find("(")
+        end = type_str.find(")")
+        if start != -1 and end != -1:
+            return type_str[start+1:end].strip()
+
+    # UE4: 简化处理
+    # 完整实现需要从分离字段获取（InnerType 字段）
+    return "IntProperty"
+
+
+def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
+    """
+    从 PropertyTag 提取枚举类型名（D-08）。
+
+    UE5 格式: "EnumProperty(/Script/Game.EWalletState)"
+    UE4 格式: 使用分离字段（简化处理）。
+
+    Args:
+        tag: PropertyTag 实例
+
+    Returns:
+        枚举类型名（去除路径前缀）
+    """
+    type_str = tag.type
+
+    # UE5: 提取括号内参数
+    if "(" in type_str:
+        start = type_str.find("(")
+        end = type_str.find(")")
+        if start != -1 and end != -1:
+            enum_path = type_str[start+1:end]
+            # 提取类型名（去除路径前缀）
+            if "." in enum_path:
+                return enum_path.split(".")[-1]
+            return enum_path
+
+    # UE4: 简化处理
+    # 完整实现需要从分离字段获取（EnumName 字段）
+    return "UnknownEnum"
+
+
+# ============================================================================
 # Phase 9: 高级属性解析函数（Wave 1 占位符）
 # ============================================================================
 
@@ -3035,8 +3161,10 @@ def parse_struct_property(
     """
     解析 StructProperty（ADVP-01）。
 
-    Wave 2 完整实现：PropertyTag 循环递归解析。
-    递归深度限制 5（D-01）。
+    递归 PropertyTag 循环解析内部字段。
+    最大递归深度 5（D-01）。
+
+    来自 PropertyStruct.cpp §167-172。
 
     Args:
         tag: PropertyTag 实例
@@ -3050,10 +3178,56 @@ def parse_struct_property(
         StructValue dataclass
 
     Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
+        ParseError: 若嵌套深度超过 5
     """
-    # Wave 2 实现：PropertyTag 循环递归解析
-    raise NotImplementedError("StructProperty parsing - Wave 2 implementation")
+    MAX_DEPTH = 5  # D-01 深度限制（不同于 ArrayProperty 的 10）
+
+    if depth > MAX_DEPTH:
+        raise ParseError(
+            f"StructProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
+        )
+
+    # 提取结构体类型名（UE5 格式）
+    # UE5: tag.type = "StructProperty(/Script/CoreUObject.Vector)"
+    struct_type = _extract_struct_type_from_tag(tag)
+
+    fields: Dict[str, Any] = {}
+    property_count = 0
+
+    # PropertyTag 循环（直到 Name == "None"）
+    while property_count < MAX_PROPERTY_COUNT:
+        property_count += 1
+
+        # 需要版本信息来调用 read_property_tag
+        if summary is None:
+            # 无版本信息时使用默认值（可能导致解析错误）
+            legacy_version = 0
+            ue5_version = 0
+        else:
+            legacy_version = summary.legacy_file_version
+            ue5_version = summary.file_version_ue5
+
+        inner_tag = read_property_tag(
+            archive, name_map,
+            legacy_version,
+            ue5_version
+        )
+
+        if inner_tag.name == "None":
+            break
+
+        # 递归解析字段值（depth + 1）
+        field_value = parse_property_value(
+            inner_tag, archive, name_map, export_map,
+            summary, depth + 1
+        )
+        fields[inner_tag.name] = field_value
+
+    return StructValue(
+        property_type="StructProperty",
+        struct_type=struct_type,
+        fields=fields
+    )
 
 
 def parse_map_property(
@@ -3066,8 +3240,9 @@ def parse_map_property(
     """
     解析 MapProperty（ADVP-02）。
 
-    Wave 2 完整实现：NumEntries + Key/Value pairs。
     支持基本类型、枚举、Struct、Object 键（D-02）。
+
+    来自 PropertyMap.cpp §267-880。
 
     Args:
         tag: PropertyTag 实例
@@ -3078,12 +3253,98 @@ def parse_map_property(
 
     Returns:
         MapValue dataclass
-
-    Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
     """
-    # Wave 2 实现：NumEntries + Key/Value pairs
-    raise NotImplementedError("MapProperty parsing - Wave 2 implementation")
+    # 提取 Key/Value 类型（UE5 格式）
+    # UE5: tag.type = "MapProperty(IntProperty,StrProperty)"
+    key_type, value_type = _extract_map_types_from_tag(tag)
+
+    # 简化格式：NumEntries + Key/Value pairs
+    num_entries = archive.read_i32()
+    entries: List[Dict[str, Any]] = []
+
+    for _ in range(num_entries):
+        # D-02b 键解析分派
+        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
+        entries.append({"key": key, "value": value})
+
+    return MapValue(
+        property_type="MapProperty",
+        key_type=key_type,
+        value_type=value_type,
+        entries=entries
+    )
+
+
+def _dispatch_key_parse(
+    key_type: str,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None
+) -> Any:
+    """
+    键类型分派解析（D-02b）。
+
+    支持：基本类型、枚举、Struct、Object。
+
+    Args:
+        key_type: 键类型名
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        summary: PackageFileSummary 实例
+
+    Returns:
+        解析后的键值
+    """
+    # 基本类型分派（复用 parse_property_value）
+    basic_types = [
+        "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
+        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty"
+    ]
+    if key_type in basic_types:
+        dummy_tag = PropertyTag(name="Key", type=key_type, size=0)
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+
+    # ObjectProperty 键
+    if key_type == "ObjectProperty":
+        return archive.read_i32()  # FPackageIndex 原始值
+
+    # EnumProperty 键
+    if key_type == "EnumProperty":
+        return archive.read_name(name_map)  # FName 枚举值名
+
+    # StructProperty 键（简化处理）
+    # 完整实现需要 PropertyTag 循环
+    # D-02b: 简化处理，返回 None
+    return None
+
+
+def _dispatch_value_parse(
+    value_type: str,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None
+) -> Any:
+    """
+    值类型分派解析。
+
+    复用 parse_property_value type_dispatch。
+
+    Args:
+        value_type: 值类型名
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        summary: PackageFileSummary 实例
+
+    Returns:
+        解析后的值
+    """
+    dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
+    return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
 
 def parse_set_property(
@@ -3096,8 +3357,10 @@ def parse_set_property(
     """
     解析 SetProperty（ADVP-03）。
 
-    Wave 2 完整实现：NumElements + 元素循环。
     解析为 List，不验证唯一性（D-03）。
+    格式与 ArrayProperty 相似。
+
+    来自 PropertySet.cpp §221-427。
 
     Args:
         tag: PropertyTag 实例
@@ -3108,12 +3371,26 @@ def parse_set_property(
 
     Returns:
         SetValue dataclass
-
-    Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
     """
-    # Wave 2 实现：NumElements + 元素循环
-    raise NotImplementedError("SetProperty parsing - Wave 2 implementation")
+    # 提取元素类型（UE5 格式）
+    # UE5: tag.type = "SetProperty(IntProperty)"
+    element_type = _extract_set_type_from_tag(tag)
+
+    # 简化格式：NumElements + 元素循环
+    num_elements = archive.read_i32()
+    elements: List[Any] = []
+
+    for _ in range(num_elements):
+        # 元素解析（复用 type_dispatch）
+        dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
+        element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        elements.append(element)
+
+    return SetValue(
+        property_type="SetProperty",
+        element_type=element_type,
+        elements=elements
+    )
 
 
 def parse_enum_property(
@@ -3125,23 +3402,36 @@ def parse_enum_property(
     """
     解析 EnumProperty（ADVP-04）。
 
-    Wave 2 完整实现：FName EnumValueName 序列化。
+    FName EnumValueName 序列化（非整数值）。
     返回枚举值名（如 'EWalletState::Active'）（D-04）。
+
+    来自 EnumProperty.cpp §279-353。
 
     Args:
         tag: PropertyTag 实例
         archive: FArchive 实例
         name_map: 名称表
-        summary: PackageFileSummary 实例（版本检查）
+        summary: PackageFileSummary 实例（版本检查，未使用）
 
     Returns:
         EnumValue dataclass
-
-    Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
     """
-    # Wave 2 实现：FName EnumValueName 序列化
-    raise NotImplementedError("EnumProperty parsing - Wave 2 implementation")
+    # 提取枚举类型名（UE5 格式）
+    # UE5: tag.type = "EnumProperty(/Script/Game.EWalletState)"
+    enum_type = _extract_enum_type_from_tag(tag)
+
+    # SerializeItem: FName EnumValueName
+    enum_value_name = archive.read_name(name_map)
+
+    # D-04 返回枚举值名（如 "EWalletState::Active"）
+    # 格式：EnumType::ValueName
+    value_name = f"{enum_type}::{enum_value_name}"
+
+    return EnumValue(
+        property_type="EnumProperty",
+        enum_type=enum_type,
+        value_name=value_name
+    )
 
 
 def parse_text_property(
@@ -3151,8 +3441,15 @@ def parse_text_property(
     """
     解析 TextProperty（ADVP-05）。
 
-    Wave 2 完整实现：Flags + Namespace + Key + SourceString。
-    完整 FText 结构返回（D-05）。
+    FText 序列化格式：
+    - Flags (int32)
+    - Namespace (FString)
+    - Key (FString)
+    - SourceString (FString)
+
+    完整结构返回（D-05）。
+
+    来自 TextProperty.cpp §135-139。
 
     Args:
         tag: PropertyTag 实例
@@ -3160,12 +3457,20 @@ def parse_text_property(
 
     Returns:
         TextValue dataclass
-
-    Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
     """
-    # Wave 2 实现：Flags + Namespace + Key + SourceString
-    raise NotImplementedError("TextProperty parsing - Wave 2 implementation")
+    # FText 序列化格式
+    flags = archive.read_i32()
+    namespace = archive.read_fstring()
+    key = archive.read_fstring()
+    source_string = archive.read_fstring()
+
+    # D-05 完整结构返回
+    return TextValue(
+        property_type="TextProperty",
+        namespace=namespace or "",
+        key=key or "",
+        source_string=source_string or ""
+    )
 
 
 def parse_delegate_property(
@@ -3176,8 +3481,13 @@ def parse_delegate_property(
     """
     解析 DelegateProperty（ADVP-06）。
 
-    Wave 2 完整实现：ObjectRef + FunctionName。
+    FScriptDelegate 序列化：
+    - ObjectRef (FPackageIndex = int32)
+    - FunctionName (FName)
+
     原始引用格式，延迟解析（D-06b）。
+
+    来自 PropertyDelegate.cpp §86-89。
 
     Args:
         tag: PropertyTag 实例
@@ -3186,12 +3496,18 @@ def parse_delegate_property(
 
     Returns:
         DelegateValue dataclass
-
-    Raises:
-        NotImplementedError: Wave 2 实现完整解析逻辑
     """
-    # Wave 2 实现：ObjectRef + FunctionName
-    raise NotImplementedError("DelegateProperty parsing - Wave 2 implementation")
+    # FScriptDelegate 序列化
+    object_ref = archive.read_i32()  # FPackageIndex 原始值
+    function_name = archive.read_name(name_map)
+
+    # D-06b 延迟解析 ObjectRef
+    # Phase 10 依赖分析时解析为对象名
+    return DelegateValue(
+        property_type="DelegateProperty",
+        object_ref=object_ref,
+        function_name=function_name
+    )
 
 
 def parse_properties_from_export(
@@ -4140,6 +4456,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
+    parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
 
     return parser
 
@@ -4183,8 +4500,20 @@ def main():
             print(f"  - {err}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
-    # Select formatter (D-24: --json, --summary, default --text)
-    if args.json:
+    # Phase 8: --graph flag handling (D-08-12/13)
+    # 优先级：--graph 检查在最前
+    if args.graph:
+        # D-08-13: --graph + --json/--verbose = full output with graphs
+        if args.json or args.verbose:
+            output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+        elif args.text:
+            # --graph --text = text output with Graphs section
+            output_str = format_text_full(result)
+        else:
+            # D-08-13: --graph alone = only graphs in JSON format
+            output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
+                                    indent=2, ensure_ascii=False)
+    elif args.json:
         output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
     elif args.summary:
         output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
