@@ -2,7 +2,7 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 规划完成，Phase 11 gap closure计划创建
+**当前状态：** v3.0 Phase 12规划完成，准备执行
 
 ## Milestones
 
@@ -48,8 +48,8 @@
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
-- [ ] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure待执行）
-- [ ] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量
+- [ ] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
+- [ ] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
 - [ ] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性
 - [ ] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式
 - [ ] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill
@@ -79,12 +79,10 @@ Plans:
 - [x] 11-02-PLAN.md — 增强ObjectProperty解析 (Wave 2, completed)
 - [x] 11-03-PLAN.md — 新增SoftObjectProperty解析器 (Wave 2, completed)
 - [x] 11-04-PLAN.md — 创建完整测试覆盖 (Wave 3, completed)
-- [ ] 11-05-GAP-PLAN.md — 修复ScriptSerialization读取条件 (Wave 1, gap closure)
-- [ ] 11-06-GAP-PLAN.md — 验证属性解析功能完整 (Wave 2, gap closure, depends on 11-05)
+- [x] 11-05-GAP-PLAN.md — 修复ScriptSerialization读取条件 (Wave 1, gap closure, completed)
+- [x] 11-06-GAP-PLAN.md — 验证属性解析功能完整 (Wave 2, gap closure, completed)
 
-**Gap Found:** VERIFICATION.md发现ExportMap serial_offset异常（Phase 6遗留bug）
-**Root Cause:** ScriptSerialization读取条件使用PKG_Cooked (0x200)而非PKG_UnversionedProperties (0x2000)
-**Fix:** 修改read_export_map()的条件判断，使用正确的PKG_UnversionedProperties标志
+**Gap Resolution:** UE5/UE4版本常量修正，ExportMap解析恢复正常
 
 ### Phase 12: BlueprintVariables完整提取
 
@@ -101,7 +99,12 @@ Plans:
   4. 用户可以看到变量的类型完整显示（包括泛型参数，如TArray<UObject*>）
   5. 变量默认值正确处理多种类型（数值、字符串、布尔、向量、对象引用）
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — BlueprintVariable数据模型增强 (Wave 1)
+- [ ] 12-02-PLAN.md — 变量解析函数增强 (Wave 2, depends on 12-01)
+- [ ] 12-03-PLAN.md — 测试和验证 (Wave 3, depends on 12-01, 12-02)
 
 ### Phase 13: 组件变换属性解析
 
@@ -171,8 +174,8 @@ Plans:
 | 8. 蓝图图输出 | v2.0 | 4/4 | Complete | 2026-05-02 |
 | 9. 高级属性 | v2.0 | 3/3 | Complete | 2026-05-02 |
 | 10. 依赖分析 | v2.0 | 6/6 | Complete | 2026-05-02 |
-| 11. ExportMap属性值提取 | v3.0 | 4/6 | Gap closure | - |
-| 12. BlueprintVariables完整提取 | v3.0 | 0/1 | Not started | - |
+| 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
+| 12. BlueprintVariables完整提取 | v3.0 | 0/3 | Planning complete | - |
 | 13. 组件变换属性解析 | v3.0 | 0/1 | Not started | - |
 | 14. 输出格式优化并冻结 | v3.0 | 0/1 | Not started | - |
 | 15. Claude Code skill封装 | v3.0 | 0/1 | Not started | - |
@@ -183,11 +186,11 @@ Plans:
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXTR-01 | Phase 11 | Gap closure |
-| EXTR-02 | Phase 12 | Pending |
-| EXTR-03 | Phase 12 | Pending |
+| EXTR-01 | Phase 11 | Complete |
+| EXTR-02 | Phase 12 | Planning |
+| EXTR-03 | Phase 12 | Planning |
 | EXTR-04 | Phase 13 | Pending |
-| EXTR-05 | Phase 12 | Pending |
+| EXTR-05 | Phase 12 | Planning |
 | OUT-01 | Phase 14 | Pending |
 | OUT-02 | Phase 14 | Pending |
 | OUT-03 | Phase 14 | Pending |
@@ -209,4 +212,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 11 gap closure计划创建*
+*最后更新：2026-05-03 — Phase 12规划完成，3 plans created*
