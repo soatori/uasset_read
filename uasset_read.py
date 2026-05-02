@@ -1943,12 +1943,12 @@ def read_export_map(
 
             # 19-20. ScriptSerializationStartOffset/EndOffset
             # 条件: !UseUnversionedPropertySerialization() && UEVer() >= SCRIPT_SERIALIZATION_OFFSET(1010)
-            # 未烘焙/编辑器保存的文件 UseUnversionedPropertySerialization()=true，不序列化这些字段
-            # 烘焙文件 UseUnversionedPropertySerialization()=false，序列化这些字段
+            # UseUnversionedPropertySerialization()基于PKG_UnversionedProperties标志判断
+            # 若PKG_UnversionedProperties未设置，则使用versioned property serialization，需要读取这些字段
             script_serial_size = 0
             script_serial_offset = 0
-            is_cooked_pkg = (summary.package_flags & PKG_Cooked) != 0
-            if is_ue5_file and is_cooked_pkg and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+            uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
+            if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
                 script_serial_size = archive.read_i64()
                 script_serial_offset = archive.read_i64()
 
