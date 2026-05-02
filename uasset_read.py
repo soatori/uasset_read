@@ -725,6 +725,109 @@ class PropertyValue:
     array_index: int = 0              # 数组元素索引
 
 
+# ============================================================================
+# Phase 9: 高级属性类型 dataclass 定义
+# ============================================================================
+
+@dataclass
+class AdvancedPropertyValue:
+    """
+    高级属性值基类（D-07a）。
+
+    统一基类设计，包含 property_type 字段用于类型识别。
+    所有高级属性 dataclass 继承此基类。
+
+    来自 CONTEXT.md D-07a。
+    """
+    property_type: str  # 属性类型名（如 "StructProperty", "MapProperty")
+
+
+@dataclass
+class StructValue(AdvancedPropertyValue):
+    """
+    StructProperty 值容器（D-01a）。
+
+    格式：{struct_type: str, fields: dict}
+    嵌套结构体解析，递归深度限制 5（D-01）。
+
+    来自 PropertyStruct.cpp §167-172。
+    """
+    struct_type: str              # 结构体类型名
+    fields: Dict[str, Any]        # 嵌套字段（递归解析）
+
+
+@dataclass
+class MapValue(AdvancedPropertyValue):
+    """
+    MapProperty 值容器（D-02a）。
+
+    格式：{key_type: str, value_type: str, entries: List[{key: Any, value: Any}]}
+    支持基本类型、枚举、Struct、Object 键（D-02）。
+
+    来自 PropertyMap.cpp §267-880。
+    """
+    key_type: str                 # 键类型名
+    value_type: str               # 值类型名
+    entries: List[Dict[str, Any]] # 键值对列表
+
+
+@dataclass
+class SetValue(AdvancedPropertyValue):
+    """
+    SetProperty 值容器（D-03a）。
+
+    格式：{element_type: str, elements: List[Any]}
+    解析为 List，不验证唯一性（D-03）。
+
+    来自 PropertySet.cpp §221-427。
+    """
+    element_type: str             # 元素类型名
+    elements: List[Any]           # 元素列表
+
+
+@dataclass
+class EnumValue(AdvancedPropertyValue):
+    """
+    EnumProperty 值容器（D-04a）。
+
+    格式：{enum_type: str, value_name: str}
+    返回枚举值名（如 'EWalletState::Active'）（D-04）。
+
+    来自 EnumProperty.cpp §279-353。
+    """
+    enum_type: str                # 枚举类型名
+    value_name: str               # 枚举值名（包含类型前缀）
+
+
+@dataclass
+class TextValue(AdvancedPropertyValue):
+    """
+    TextProperty 值容器（D-05a）。
+
+    格式：{namespace: str, key: str, source_string: str}
+    完整 FText 结构返回（D-05）。
+
+    来自 TextProperty.cpp §135-139。
+    """
+    namespace: str                # 本地化命名空间
+    key: str                      # 本地化键
+    source_string: str            # 源字符串
+
+
+@dataclass
+class DelegateValue(AdvancedPropertyValue):
+    """
+    DelegateProperty 值容器（D-06a）。
+
+    格式：{object_ref: int, function_name: str}
+    原始引用格式，延迟解析（D-06b）。
+
+    来自 PropertyDelegate.cpp §86-89。
+    """
+    object_ref: int               # FPackageIndex 原始值
+    function_name: str            # 函数名（FName）
+
+
 @dataclass
 class FEdGraphPinType:
     """
@@ -2917,6 +3020,180 @@ def _get_inner_type(array_type: str) -> str:
     return "IntProperty"  # 默认假设
 
 
+# ============================================================================
+# Phase 9: 高级属性解析函数（Wave 1 占位符）
+# ============================================================================
+
+def parse_struct_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None,
+    depth: int = 0
+) -> StructValue:
+    """
+    解析 StructProperty（ADVP-01）。
+
+    Wave 2 完整实现：PropertyTag 循环递归解析。
+    递归深度限制 5（D-01）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        summary: PackageFileSummary 实例（版本检查）
+        depth: 递归深度（最大 5）
+
+    Returns:
+        StructValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：PropertyTag 循环递归解析
+    raise NotImplementedError("StructProperty parsing - Wave 2 implementation")
+
+
+def parse_map_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None
+) -> MapValue:
+    """
+    解析 MapProperty（ADVP-02）。
+
+    Wave 2 完整实现：NumEntries + Key/Value pairs。
+    支持基本类型、枚举、Struct、Object 键（D-02）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        summary: PackageFileSummary 实例（版本检查）
+
+    Returns:
+        MapValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：NumEntries + Key/Value pairs
+    raise NotImplementedError("MapProperty parsing - Wave 2 implementation")
+
+
+def parse_set_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None
+) -> SetValue:
+    """
+    解析 SetProperty（ADVP-03）。
+
+    Wave 2 完整实现：NumElements + 元素循环。
+    解析为 List，不验证唯一性（D-03）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        export_map: 导出表
+        summary: PackageFileSummary 实例（版本检查）
+
+    Returns:
+        SetValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：NumElements + 元素循环
+    raise NotImplementedError("SetProperty parsing - Wave 2 implementation")
+
+
+def parse_enum_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    summary: Optional[PackageFileSummary] = None
+) -> EnumValue:
+    """
+    解析 EnumProperty（ADVP-04）。
+
+    Wave 2 完整实现：FName EnumValueName 序列化。
+    返回枚举值名（如 'EWalletState::Active'）（D-04）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+        summary: PackageFileSummary 实例（版本检查）
+
+    Returns:
+        EnumValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：FName EnumValueName 序列化
+    raise NotImplementedError("EnumProperty parsing - Wave 2 implementation")
+
+
+def parse_text_property(
+    tag: PropertyTag,
+    archive: FArchive
+) -> TextValue:
+    """
+    解析 TextProperty（ADVP-05）。
+
+    Wave 2 完整实现：Flags + Namespace + Key + SourceString。
+    完整 FText 结构返回（D-05）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+
+    Returns:
+        TextValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：Flags + Namespace + Key + SourceString
+    raise NotImplementedError("TextProperty parsing - Wave 2 implementation")
+
+
+def parse_delegate_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str]
+) -> DelegateValue:
+    """
+    解析 DelegateProperty（ADVP-06）。
+
+    Wave 2 完整实现：ObjectRef + FunctionName。
+    原始引用格式，延迟解析（D-06b）。
+
+    Args:
+        tag: PropertyTag 实例
+        archive: FArchive 实例
+        name_map: 名称表
+
+    Returns:
+        DelegateValue dataclass
+
+    Raises:
+        NotImplementedError: Wave 2 实现完整解析逻辑
+    """
+    # Wave 2 实现：ObjectRef + FunctionName
+    raise NotImplementedError("DelegateProperty parsing - Wave 2 implementation")
+
+
 def parse_properties_from_export(
     export: ObjectExport,
     archive: FArchive,
@@ -3014,7 +3291,9 @@ def parse_property_value(
     tag: PropertyTag,
     archive: FArchive,
     name_map: List[str],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    summary: Optional[PackageFileSummary] = None,
+    depth: int = 0
 ) -> any:
     """
     分派属性值解析（PROP-02 至 PROP-06）。
@@ -3022,33 +3301,47 @@ def parse_property_value(
     根据 tag.type 分派到类型特定的解析函数。
     未知类型返回 None（D-26 跳过策略）。
 
+    Phase 9 扩展（D-08）：
+    - 添加 summary 参数用于版本检查
+    - 添加 depth 参数用于 StructProperty 递归深度限制
+
     Args:
         tag: PropertyTag 实例
         archive: FArchive 实例
         name_map: 名称表
         export_map: 导出表
+        summary: PackageFileSummary 实例（Phase 9 高级属性需要）
+        depth: 递归深度（Phase 9 StructProperty 需要）
 
     Returns:
         解析后的值（Python 原生类型）或 None（未知类型）
     """
     type_dispatch = {
-        "BoolProperty": lambda t, a, n, e: parse_bool_property(t, a),
-        "IntProperty": lambda t, a, n, e: parse_int_property(t, a),
-        "Int64Property": lambda t, a, n, e: parse_int_property(t, a),
-        "Int16Property": lambda t, a, n, e: parse_int_property(t, a),
-        "Int8Property": lambda t, a, n, e: parse_int_property(t, a),
-        "ByteProperty": lambda t, a, n, e: parse_int_property(t, a),
-        "FloatProperty": lambda t, a, n, e: parse_float_property(t, a),
-        "DoubleProperty": lambda t, a, n, e: parse_float_property(t, a),
-        "StrProperty": lambda t, a, n, e: parse_str_property(t, a),
-        "NameProperty": lambda t, a, n, e: parse_name_property(t, a, n),
-        "ObjectProperty": lambda t, a, n, e: parse_object_property(t, a),
-        "ArrayProperty": lambda t, a, n, e: parse_array_property(t, a, n, e),
+        # Phase 2 基本类型（忽略 summary/depth 参数）
+        "BoolProperty": lambda t, a, n, e, s, d: parse_bool_property(t, a),
+        "IntProperty": lambda t, a, n, e, s, d: parse_int_property(t, a),
+        "Int64Property": lambda t, a, n, e, s, d: parse_int_property(t, a),
+        "Int16Property": lambda t, a, n, e, s, d: parse_int_property(t, a),
+        "Int8Property": lambda t, a, n, e, s, d: parse_int_property(t, a),
+        "ByteProperty": lambda t, a, n, e, s, d: parse_int_property(t, a),
+        "FloatProperty": lambda t, a, n, e, s, d: parse_float_property(t, a),
+        "DoubleProperty": lambda t, a, n, e, s, d: parse_float_property(t, a),
+        "StrProperty": lambda t, a, n, e, s, d: parse_str_property(t, a),
+        "NameProperty": lambda t, a, n, e, s, d: parse_name_property(t, a, n),
+        "ObjectProperty": lambda t, a, n, e, s, d: parse_object_property(t, a),
+        "ArrayProperty": lambda t, a, n, e, s, d: parse_array_property(t, a, n, e),
+        # Phase 9 高级属性（Wave 2 实现函数）
+        "StructProperty": lambda t, a, n, e, s, d: parse_struct_property(t, a, n, e, s, d),
+        "MapProperty": lambda t, a, n, e, s, d: parse_map_property(t, a, n, e, s),
+        "SetProperty": lambda t, a, n, e, s, d: parse_set_property(t, a, n, e, s),
+        "EnumProperty": lambda t, a, n, e, s, d: parse_enum_property(t, a, n, s),
+        "TextProperty": lambda t, a, n, e, s, d: parse_text_property(t, a),
+        "DelegateProperty": lambda t, a, n, e, s, d: parse_delegate_property(t, a, n),
     }
 
     parser = type_dispatch.get(tag.type)
     if parser:
-        return parser(tag, archive, name_map, export_map)
+        return parser(tag, archive, name_map, export_map, summary, depth)
 
     # 未知类型：跳过（D-26）
     return None
@@ -3631,12 +3924,13 @@ def format_json_summary(result: ParseResult) -> Dict:
 
 def format_text_full(result: ParseResult) -> str:
     """
-    Format YAML-style text output with full detail (OUT-02).
+    Format YAML-style text output with full detail (OUT-02, OUT2-03).
 
     Per D-17: YAML style hierarchy with 2-space indentation
     Per D-19: ERRORS block at end
     Per D-21: Blueprint metadata embedded
     Per D-22: Nested YAML indentation
+    Phase 8: Graphs section with summary (OUT2-03)
 
     Args:
         result: ParseResult from parse_uasset()
@@ -3697,6 +3991,30 @@ def format_text_full(result: ParseResult) -> str:
             lines.append(f"    Category: {category}")
 
         lines.append("")  # Blank line after blueprint
+
+    # Phase 8: Graphs section (OUT2-03)
+    if result.graphs:
+        lines.append("Graphs:")
+        for graph in result.graphs:
+            # 获取连接数量
+            connections, _ = build_connections_map(graph)
+
+            # 获取执行流数据
+            execution_flows = build_execution_flows(graph)
+
+            lines.append(f"  - Name: {graph.graph_name}")
+            lines.append(f"    Class: {graph.graph_class}")
+            lines.append(f"    Nodes: {len(graph.nodes)}")
+            lines.append(f"    Connections: {len(connections)}")
+
+            # 执行流概览
+            lines.append(f"    ExecutionFlows: {len(execution_flows)}")
+            for flow in execution_flows:
+                start_event = flow.get("start_event", "Unknown")
+                node_count = len(flow.get("nodes", []))
+                lines.append(f"      - {start_event}: {node_count} nodes")
+
+        lines.append("")  # Graphs 区块后的空行
 
     # ERRORS block
     if result.errors:
@@ -3918,6 +4236,14 @@ __all__ = [
     'K2NodeKnot',
     'EdGraphNodeComment',
     'K2NodeEnhancedInputAction',
+    # Phase 9: Advanced Property Value Data Classes (ADVP-01~06)
+    'AdvancedPropertyValue',
+    'StructValue',
+    'MapValue',
+    'SetValue',
+    'EnumValue',
+    'TextValue',
+    'DelegateValue',
 
     # FArchive
     'FArchive',
@@ -3990,6 +4316,13 @@ __all__ = [
     'parse_array_property',
     'parse_property_value',
     'parse_properties_from_export',
+    # Phase 9: Advanced Property Parsing Functions (ADVP-01~06)
+    'parse_struct_property',
+    'parse_map_property',
+    'parse_set_property',
+    'parse_enum_property',
+    'parse_text_property',
+    'parse_delegate_property',
 
     # Output formatting functions (Phase 4)
     'format_json_full',

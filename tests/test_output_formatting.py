@@ -32,6 +32,7 @@ from uasset_read import (
     build_connections_map,
     format_graphs_json,
     format_json_full,
+    format_text_full,  # Phase 8 Wave 3
     # Phase 8 Wave 2 imports
     K2NodeCallFunction,
     K2NodeEvent,
@@ -907,3 +908,83 @@ def test_control_flow_nodes_constant():
     assert "K2Node_IfThenElse" in CONTROL_FLOW_NODES
     assert "K2Node_Switch" in CONTROL_FLOW_NODES
     assert "K2Node_SwitchEnum" in CONTROL_FLOW_NODES
+
+
+# ============================================================================
+# Phase 8: OUT2-03 - 文本输出图结构摘要
+# ============================================================================
+
+def test_format_text_full_contains_graph_summary(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证 format_text_full() 包含图结构摘要。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    assert "Graphs:" in text
+    assert "EventGraph" in text  # graph_name
+    assert "Nodes:" in text
+    assert "Connections:" in text
+
+
+def test_format_text_full_graph_details(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证 Graphs 区块显示正确的详细信息。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    # 验证 YAML 风格缩进（2 空格）
+    assert "  - Name: EventGraph" in text
+    assert "    Class: UberEdGraph" in text
+    assert "    Nodes: 2" in text  # 2 个节点
+    assert "    Connections: 1" in text  # 1 个连接
+
+
+def test_format_text_full_execution_flow_summary(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证执行流概览显示。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    assert "ExecutionFlows:" in text
+    assert "BeginPlay" in text  # start_event
+    assert "nodes" in text.lower()  # 节点数量
+
+
+def test_format_text_full_no_graphs(create_mock_parse_result):
+    """
+    OUT2-03: 验证无图数据时不输出 Graphs 区块。
+    """
+    result = create_mock_parse_result
+    result.graphs = []  # 空
+
+    text = format_text_full(result)
+
+    assert "Graphs:" not in text
+
+
+def test_format_text_full_graph_position(create_mock_parse_result, sample_graph_with_execution_flow, create_mock_blueprint_metadata):
+    """
+    验证 Graphs 区块位置正确（Blueprint 之后、ERRORS 之前）。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+    result.blueprint = create_mock_blueprint_metadata
+
+    text = format_text_full(result)
+
+    # 验证顺序：Blueprint → Graphs → ERRORS
+    blueprint_pos = text.find("Blueprint:")
+    graphs_pos = text.find("Graphs:")
+    errors_pos = text.find("ERRORS:")
+
+    assert blueprint_pos < graphs_pos, "Blueprint 应在 Graphs 之前"
+    assert graphs_pos < errors_pos, "Graphs 应在 ERRORS 之前"
