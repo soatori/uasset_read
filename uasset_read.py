@@ -3227,6 +3227,39 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
+def parse_soft_object_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str]
+) -> Dict[str, str]:
+    """
+    解析 SoftObjectProperty（FSoftObjectPath）。
+
+    Phase 11-03: 新增SoftObjectProperty解析器。
+
+    UE5格式：
+    - AssetPath: FString（如 "/Game/Characters/Mannequin/Animations/Walk")
+    - SubPath: FString（如 "" 空字符串表示无子路径，或"SubObject.Path")
+
+    参考 SoftObjectPath.h - FSoftObjectPath 序列化。
+
+    Args:
+        tag: PropertyTag 实例（包含属性名和类型）
+        archive: FArchive 二进制读取器
+        name_map: NameMap列表（未使用，保持签名一致性）
+
+    Returns:
+        {"asset_path": str, "sub_path": str}
+    """
+    asset_path = archive.read_fstring()
+    sub_path = archive.read_fstring()
+
+    return {
+        "asset_path": asset_path,
+        "sub_path": sub_path
+    }
+
+
 def parse_array_property(
     tag: PropertyTag,
     archive: FArchive,
@@ -3952,6 +3985,8 @@ def parse_property_value(
         "EnumProperty": lambda t, a, n, e, s, d: parse_enum_property(t, a, n, s),
         "TextProperty": lambda t, a, n, e, s, d: parse_text_property(t, a),
         "DelegateProperty": lambda t, a, n, e, s, d: parse_delegate_property(t, a, n),
+        # Phase 11-03: SoftObjectProperty解析器
+        "SoftObjectProperty": lambda t, a, n, e, s, d: parse_soft_object_property(t, a, n),
     }
 
     parser = type_dispatch.get(tag.type)
