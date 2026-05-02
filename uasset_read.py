@@ -1627,7 +1627,9 @@ def detect_blueprint(
 
 
 def extract_blueprint_graphs(
+    archive: FArchive,
     summary: PackageFileSummary,
+    name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> List[UEdGraph]:
@@ -1663,15 +1665,11 @@ def extract_blueprint_graphs(
         class_name = get_asset_class(export, import_map, export_map)
 
         if class_name and ("EdGraph" in class_name or "UberEdGraph" in class_name):
-            # 创建 UEdGraph 对象（仅基本信息）
-            # D-03b: 此阶段不深入解析 Nodes 数组
-            graph = UEdGraph(
-                graph_name=export.object_name,
-                graph_class=class_name,
-                schema=None,  # Wave 2 实现
-                nodes=[],     # Wave 2 实现
-                graph_guid=None,  # Wave 2 实现
-                b_editable=True   # 默认值，Wave 2 实现解析
+            # D-03b/D-03c: 完整解析 Graph→Node→Pin 三层结构
+            graph = read_ue_graph(
+                archive, name_map, summary,
+                export_map, import_map,
+                export, class_name
             )
             graphs.append(graph)
 
@@ -1914,6 +1912,177 @@ def read_ue_graph_pin(
         sub_pins=sub_pins,
         parent_pin=parent_pin,
         flags=flags
+    )
+
+
+def read_ue_graph_node(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    node_export: ObjectExport
+) -> UEdGraphNode:
+    """
+    读取 UEdGraphNode 基类字段（GRAPH-03）。
+
+    序列化顺序（基于 UE 源码 EdGraphNode.cpp）：
+    1. Pins 数组 (int32 count + loop call read_ue_graph_pin)
+    2. NodePosX (int32)
+    3. NodePosY (int32)
+    4. NodeGuid (FGuid 16 bytes)
+    5. NodeComment (FString)
+
+    安全边界（T-07-02-02）：
+    - pins_count <= MAX_PINS_PER_NODE (1000)
+
+    Args:
+        archive: FArchive positioned at node serial_offset
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+        export_map: 导出表（用于类名解析）
+        import_map: 导入表（用于类名解析）
+        node_export: 当前节点导出条目
+
+    Returns:
+        UEdGraphNode（基类字段 + class_name）
+
+    Raises:
+        ParseError: 若 pins_count 超出安全边界
+    """
+    # 定位到节点序列化数据起始位置
+    archive.seek(node_export.serial_offset)
+
+    # 1. Pins 数组
+    pins_count = archive.read_i32()
+    if pins_count < 0:
+        raise ParseError(
+            f"Invalid pins_count {pins_count} (negative) at node {node_export.object_name}"
+        )
+    if pins_count > MAX_PINS_PER_NODE:
+        raise ParseError(
+            f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} "
+            f"at node {node_export.object_name}"
+        )
+
+    pins: List[UEdGraphPin] = []
+    for _ in range(pins_count):
+        pin = read_ue_graph_pin(archive, name_map, summary)
+        pins.append(pin)
+
+    # 2-3. NodePos
+    node_pos_x = archive.read_i32()
+    node_pos_y = archive.read_i32()
+
+    # 4. NodeGuid
+    node_guid_bytes = archive.read_bytes(16)
+    node_guid = node_guid_bytes.hex()
+
+    # 5. NodeComment
+    node_comment = archive.read_fstring()
+
+    # 类型识别（D-02b）
+    class_name = resolve_class_name(node_export.class_index, import_map, export_map)
+    if class_name is None:
+        class_name = ""
+
+    # Wave 3 将实现类型特定解析器，此处 node_data = None
+    return UEdGraphNode(
+        node_guid=node_guid,
+        node_pos_x=node_pos_x,
+        node_pos_y=node_pos_y,
+        node_comment=node_comment,
+        pins=pins,
+        class_name=class_name,
+        node_data=None  # Wave 3 实现
+    )
+
+
+def read_ue_graph(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    graph_export: ObjectExport,
+    graph_class: str
+) -> UEdGraph:
+    """
+    读取 UEdGraph（GRAPH-02/03）。
+
+    序列化顺序（基于 UE 源码 EdGraph.cpp）：
+    1. Schema (FPackageIndex -> resolve)
+    2. Nodes 数组 (int32 count + FPackageIndex[])
+       — 需从 FPackageIndex 找到对应导出并调用 read_ue_graph_node
+    3. GraphGuid (FGuid 16 bytes)
+    4. bEditable (uint8)
+
+    安全边界（T-07-02-03）：
+    - nodes_count <= MAX_NODES_PER_GRAPH (5000)
+
+    Args:
+        archive: FArchive
+        name_map: NameMap for FName resolution
+        summary: PackageFileSummary for version info
+        export_map: 导出表
+        import_map: 导入表
+        graph_export: 图导出条目
+        graph_class: 已解析的类名
+
+    Returns:
+        UEdGraph with nodes populated
+
+    Raises:
+        ParseError: 若 nodes_count 超出安全边界
+    """
+    # 定位到图序列化数据起始位置
+    archive.seek(graph_export.serial_offset)
+
+    # 1. Schema (FPackageIndex)
+    schema_index = archive.read_i32()
+    schema: Optional[str] = None
+    if schema_index != 0:
+        schema = resolve_class_name(PackageIndex(schema_index), import_map, export_map)
+
+    # 2. Nodes 数组（FPackageIndex 数组）
+    nodes_count = archive.read_i32()
+    if nodes_count < 0:
+        raise ParseError(
+            f"Invalid nodes_count {nodes_count} (negative) at graph {graph_export.object_name}"
+        )
+    if nodes_count > MAX_NODES_PER_GRAPH:
+        raise ParseError(
+            f"nodes_count {nodes_count} exceeds MAX_NODES_PER_GRAPH {MAX_NODES_PER_GRAPH} "
+            f"at graph {graph_export.object_name}"
+        )
+
+    nodes: List[UEdGraphNode] = []
+
+    # Nodes 是导出索引数组（FPackageIndex > 0）
+    for _ in range(nodes_count):
+        node_index = archive.read_i32()  # FPackageIndex
+        if node_index > 0 and node_index <= len(export_map):
+            node_export = export_map[node_index - 1]
+            node = read_ue_graph_node(
+                archive, name_map, summary,
+                export_map, import_map, node_export
+            )
+            nodes.append(node)
+
+    # 3. GraphGuid
+    graph_guid_bytes = archive.read_bytes(16)
+    graph_guid = graph_guid_bytes.hex()
+
+    # 4. bEditable
+    b_editable = archive.read_u8() != 0
+
+    return UEdGraph(
+        graph_name=graph_export.object_name,
+        graph_class=graph_class,
+        schema=schema,
+        nodes=nodes,
+        graph_guid=graph_guid,
+        b_editable=b_editable
     )
 
 
@@ -2642,6 +2811,20 @@ def parse_uasset(path: str) -> ParseResult:
 
         result.blueprint = blueprint_metadata
 
+        # Phase 7: Blueprint Graph Extraction
+        # Per D-03/D-04: Extract graphs after blueprint metadata
+        try:
+            # Re-open archive for graph parsing (previous archive still open at this point)
+            result.graphs = extract_blueprint_graphs(
+                archive,
+                result.summary,
+                result.name_map,
+                result.import_map,
+                result.export_map
+            )
+        except ParseError as e:
+            result.errors.append(f"graph extraction error: {e}")
+
     except VersionError as e:
         result.errors.append(str(e))
         result.is_success = False
@@ -3191,6 +3374,8 @@ __all__ = [
     'resolve_class_name',
     'extract_blueprint_graphs',
     'read_ue_graph_pin',
+    'read_ue_graph_node',
+    'read_ue_graph',
 
     # Property parsing functions (Phase 2)
     'use_complete_type_name',
