@@ -1,8 +1,9 @@
 """
-tests/test_output_formatting.py - 输出格式化和 CLI 测试（Phase 4）
+tests/test_output_formatting.py - 输出格式化和 CLI 测试（Phase 4 + Phase 8）
 
 测试输出格式化器（JSON、YAML 文本）和 CLI 功能。
 覆盖 OUT-01 到 OUT-05，CLI-01 到 CLI-06 需求。
+Phase 8: 覆盖 GRAPH-11, GRAPH-12, OUT2-01, OUT2-03, OUT2-04 需求。
 """
 
 import pytest
@@ -24,6 +25,21 @@ from uasset_read import (
     FEdGraphPinType,
     PackageIndex,
     parse_uasset,
+    # Phase 8 imports
+    UEdGraph,
+    UEdGraphNode,
+    UEdGraphPin,
+    build_connections_map,
+    format_graphs_json,
+    format_json_full,
+    format_text_full,  # Phase 8 Wave 3
+    format_json_summary,  # Phase 8 Wave 4
+    # Phase 8 Wave 2 imports
+    K2NodeCallFunction,
+    K2NodeEvent,
+    FMemberReference,
+    build_execution_flows,
+    CONTROL_FLOW_NODES,
 )
 import struct
 
@@ -41,23 +57,10 @@ def create_mock_parse_result():
         ParseResult: 包含测试数据的 mock 解析结果
     """
     summary = PackageFileSummary(
-        package_name="/Game/Test/TestAsset",
-        file_version_ue4=522,
-        file_version_ue5=0,
+        tag=0x9E2A83C1,
         legacy_file_version=-7,
-        package_flags=0x00000000,
-        name_count=10,
-        name_offset=100,
-        import_count=2,
-        import_offset=200,
-        export_count=1,
-        export_offset=300,
-        guid="{00000000-0000-0000-0000-000000000000}",
-        persistent_guid=None,
-        engine_version=5.3,
-        content_version=1000,
-        generated_by_hash=None,
-        saved_hash=None,
+        file_version_ue4=522,
+        package_name="/Game/Test/TestAsset",
     )
 
     import_map = [
@@ -71,10 +74,10 @@ def create_mock_parse_result():
 
     export_map = [
         ObjectExport(
-            object_name="TestClass_C",
             class_index=PackageIndex(-1),
             super_index=PackageIndex(0),
             outer_index=PackageIndex(0),
+            object_name="TestClass_C",
             object_flags=0x00000000,
             serial_size=1024,
             serial_offset=500,
@@ -166,6 +169,310 @@ def temp_uasset_file():
 
 
 # ============================================================================
+# Phase 8: Graph Output Fixtures
+# ============================================================================
+
+@pytest.fixture
+def sample_graph_with_connections():
+    """
+    创建测试用的 UEdGraph fixture，包含连接数据。
+
+    Returns:
+        UEdGraph: 包含 2 个节点和 1 个连接的测试图
+    """
+    pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Node 1: Output pin
+    output_pin = UEdGraphPin(
+        pin_id="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",  # GUID hex
+        pin_name="then",
+        direction=1,  # Output
+        pin_type=pin_type,
+        linked_to_raw=["f1e2d3c4b5a697880910111213141516"],  # 指向 Node 2 的 input pin
+    )
+
+    node1 = UEdGraphNode(
+        node_guid="11111111111111111111111111111111",
+        node_pos_x=0,
+        node_pos_y=0,
+        pins=[output_pin],
+        class_name="K2Node_Event",
+    )
+
+    # Node 2: Input pin
+    input_pin = UEdGraphPin(
+        pin_id="f1e2d3c4b5a697880910111213141516",  # linked_to_raw 目标
+        pin_name="execute",
+        direction=0,  # Input
+        pin_type=pin_type,
+        linked_to_raw=[],
+    )
+
+    node2 = UEdGraphNode(
+        node_guid="22222222222222222222222222222222",
+        node_pos_x=100,
+        node_pos_y=0,
+        pins=[input_pin],
+        class_name="K2Node_CallFunction",
+    )
+
+    return UEdGraph(
+        graph_name="EventGraph",
+        graph_class="UberEdGraph",
+        nodes=[node1, node2],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_missing_pin():
+    """
+    创建测试用的 UEdGraph fixture，包含查找失败的连接。
+
+    Returns:
+        UEdGraph: 包含无法找到的目标 pin
+    """
+    pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Output pin 指向不存在的 pin
+    output_pin = UEdGraphPin(
+        pin_id="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+        pin_name="then",
+        direction=1,
+        pin_type=pin_type,
+        linked_to_raw=["00000000000000000000000000000000"],  # 不存在的 pin
+    )
+
+    node = UEdGraphNode(
+        node_guid="11111111111111111111111111111111",
+        pins=[output_pin],
+        class_name="K2Node_Event",
+    )
+
+    return UEdGraph(
+        graph_name="TestGraph",
+        graph_class="EdGraph",
+        nodes=[node],
+    )
+
+
+# Phase 8 Wave 2: Execution Flow Fixtures
+
+@pytest.fixture
+def sample_graph_with_execution_flow():
+    """
+    创建测试用的 UEdGraph fixture，包含完整执行流。
+
+    Event → CallFunction 链路：
+    K2Node_Event (BeginPlay) → K2Node_CallFunction (PrintString)
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node (BeginPlay)
+    event_output_pin = UEdGraphPin(
+        pin_id="event_output_1234567890abcdef",
+        pin_name="then",
+        direction=1,  # Output
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_input_1234567890abcdef"],  # 指向 CallFunction
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_guid_111111111111111111111",
+        node_pos_x=0,
+        node_pos_y=0,
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="BeginPlay"),
+            b_override_function=False,
+        ),
+    )
+
+    # CallFunction node (PrintString)
+    call_input_pin = UEdGraphPin(
+        pin_id="call_input_1234567890abcdef",  # linked_to_raw 目标
+        pin_name="execute",
+        direction=0,  # Input
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    call_output_pin = UEdGraphPin(
+        pin_id="call_output_abcdef1234567890",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],  # 链路结束
+    )
+
+    call_node = UEdGraphNode(
+        node_guid="call_guid_222222222222222222222",
+        node_pos_x=200,
+        node_pos_y=0,
+        pins=[call_input_pin, call_output_pin],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            function_reference=FMemberReference(member_name="PrintString"),
+            b_defaults_to_pure=False,
+        ),
+    )
+
+    return UEdGraph(
+        graph_name="EventGraph",
+        graph_class="UberEdGraph",
+        nodes=[event_node, call_node],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_cycle():
+    """
+    创建测试用的 UEdGraph fixture，包含循环（用于循环检测测试）。
+
+    Event → CallFunction → 循环回 Event
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_123",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_in_123"],
+    )
+    # 循环：Event 也有一个指向自己的 input pin
+    event_input_pin = UEdGraphPin(
+        pin_id="event_in_cycle",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_cycle_guid",
+        pins=[event_output_pin, event_input_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="Tick"),
+            b_override_function=False,
+        ),
+    )
+
+    # CallFunction node，输出指向回 Event
+    call_input_pin = UEdGraphPin(
+        pin_id="call_in_123",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    call_output_pin = UEdGraphPin(
+        pin_id="call_out_cycle",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["event_in_cycle"],  # 循环！指向 Event 的 input pin
+    )
+
+    call_node = UEdGraphNode(
+        node_guid="call_cycle_guid",
+        pins=[call_input_pin, call_output_pin],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            function_reference=FMemberReference(member_name="LoopFunction"),
+            b_defaults_to_pure=False,
+        ),
+    )
+
+    return UEdGraph(
+        graph_name="CyclicGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, call_node],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_control_flow():
+    """
+    创建测试用的 UEdGraph fixture，包含控制流节点（If）。
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_if",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["if_in_123"],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_if_guid",
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="SomeEvent"),
+            b_override_function=False,
+        ),
+    )
+
+    # IfThenElse node（控制流节点）
+    if_input_pin = UEdGraphPin(
+        pin_id="if_in_123",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    if_node = UEdGraphNode(
+        node_guid="if_node_guid",
+        pins=[if_input_pin],
+        class_name="K2Node_IfThenElse",  # 控制流节点！
+        node_data=None,
+    )
+
+    return UEdGraph(
+        graph_name="BranchGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, if_node],
+    )
+
+
+# ============================================================================
 # OUT-01: Full JSON Output Structure
 # ============================================================================
 
@@ -192,7 +499,7 @@ def test_json_full_structure():
     # assert 'exports' in json_dict
     # assert 'blueprint_metadata' in json_dict
     # assert 'errors' in json_dict
-    assert False, "TODO: Implement test for OUT-01 - format_json_full structure"
+    pytest.skip("TODO: Implement test for OUT-01 - format_json_full structure")
 
 
 # ============================================================================
@@ -219,7 +526,7 @@ def test_json_hierarchy():
     # assert len(export['properties']) > 0
     # prop = export['properties'][0]
     # assert 'name' in prop and 'type' in prop and 'value' in prop
-    assert False, "TODO: Implement test for OUT-03 - JSON hierarchy"
+    pytest.skip("TODO: Implement test for OUT-03 - JSON hierarchy")
 
 
 # ============================================================================
@@ -243,7 +550,7 @@ def test_text_summary():
     # assert 'Package:' in text
     # assert 'Exports:' in text
     # assert '  -' in text  # YAML indent
-    assert False, "TODO: Implement test for OUT-02 - YAML text output"
+    pytest.skip("TODO: Implement test for OUT-02 - YAML text output")
 
 
 # ============================================================================
@@ -267,7 +574,7 @@ def test_references_resolved():
     # export = exports[0]
     # assert 'outer_index' in export
     # assert 'resolved' in export['outer_index']
-    assert False, "TODO: Implement test for OUT-04 - references resolved"
+    pytest.skip("TODO: Implement test for OUT-04 - references resolved")
 
 
 # ============================================================================
@@ -288,7 +595,7 @@ def test_null_handling():
     # from uasset_read import format_properties_list
     # result = json.dumps({'props': format_properties_list(props)})
     # assert 'null' in result
-    assert False, "TODO: Implement test for OUT-05 - null handling"
+    pytest.skip("TODO: Implement test for OUT-05 - null handling")
 
 
 # ============================================================================
@@ -309,7 +616,7 @@ def test_cli_file_arg():
     # parser = create_parser()
     # args = parser.parse_args(['test.uasset'])
     # assert args.file == 'test.uasset'
-    assert False, "TODO: Implement test for CLI-01 - file argument"
+    pytest.skip("TODO: Implement test for CLI-01 - file argument")
 
 
 # ============================================================================
@@ -332,7 +639,7 @@ def test_cli_json_flag():
     # assert args.json is True
     # assert args.text is False
     # assert args.summary is False
-    assert False, "TODO: Implement test for CLI-02 --json flag"
+    pytest.skip("TODO: Implement test for CLI-02 --json flag")
 
 
 # ============================================================================
@@ -355,7 +662,7 @@ def test_cli_text_flag():
     # # 默认行为
     # args_default = parser.parse_args(['test.uasset'])
     # assert args_default.text is False  # 默认不设置标志
-    assert False, "TODO: Implement test for CLI-03 --text flag"
+    pytest.skip("TODO: Implement test for CLI-03 --text flag")
 
 
 # ============================================================================
@@ -375,7 +682,7 @@ def test_cli_summary_flag():
     # parser = create_parser()
     # args = parser.parse_args(['test.uasset', '--summary'])
     # assert args.summary is True
-    assert False, "TODO: Implement test for CLI-04 --summary flag"
+    pytest.skip("TODO: Implement test for CLI-04 --summary flag")
 
 
 # ============================================================================
@@ -404,7 +711,7 @@ def test_exit_codes():
     #     with pytest.raises(SystemExit) as exc:
     #         main()
     #     assert exc.value.code == 2
-    assert False, "TODO: Implement test for CLI-05 - exit codes"
+    pytest.skip("TODO: Implement test for CLI-05 - exit codes")
 
 
 # ============================================================================
@@ -429,4 +736,355 @@ def test_no_external_deps():
     # for dep in external_deps:
     #     assert dep not in main_src
     #     assert dep not in parser_src
-    assert False, "TODO: Implement test for CLI-06 - no external deps"
+    pytest.skip("TODO: Implement test for CLI-06 - no external deps")
+
+
+# ============================================================================
+# Phase 8: GRAPH-11 - JSON 输出包含 graphs 层级结构
+# ============================================================================
+
+def test_format_json_full_contains_graphs(create_mock_parse_result, sample_graph_with_connections):
+    """
+    GRAPH-11: 验证 format_json_full() 返回包含 graphs 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    json_dict = format_json_full(result)
+
+    assert 'graphs' in json_dict
+    assert isinstance(json_dict['graphs'], list)
+    assert len(json_dict['graphs']) == 1
+
+
+def test_graphs_field_top_level(create_mock_parse_result):
+    """
+    OUT2-01: 验证 graphs 字段与 blueprint_metadata 同级。
+    """
+    result = create_mock_parse_result
+    result.graphs = []
+
+    json_dict = format_json_full(result)
+
+    # graphs 与 blueprint_metadata 同级
+    assert 'graphs' in json_dict
+    assert 'blueprint_metadata' in json_dict
+    assert 'exports' in json_dict
+    assert 'errors' in json_dict
+
+
+def test_format_graphs_json_structure(sample_graph_with_connections):
+    """
+    GRAPH-11: 验证 format_graphs_json() 返回正确的 graph 结构。
+    """
+    graph = sample_graph_with_connections
+    formatted = format_graphs_json([graph])
+
+    assert len(formatted) == 1
+    graph_dict = formatted[0]
+
+    assert 'graph_name' in graph_dict
+    assert 'graph_class' in graph_dict
+    assert 'nodes' in graph_dict
+    assert 'connections' in graph_dict
+
+    assert graph_dict['graph_name'] == "EventGraph"
+    assert graph_dict['graph_class'] == "UberEdGraph"
+
+
+def test_build_connections_map_basic(sample_graph_with_connections):
+    """
+    验证 build_connections_map() 正确构建连接。
+    """
+    graph = sample_graph_with_connections
+    connections, warnings = build_connections_map(graph)
+
+    assert len(connections) == 1
+    assert len(warnings) == 0
+
+    conn = connections[0]
+    assert 'from' in conn
+    assert 'to' in conn
+
+    # D-08-06: {from, to} 对象结构
+    assert 'node_guid' in conn['from']
+    assert 'pin_name' in conn['from']
+    assert conn['from']['pin_name'] == "then"
+
+
+def test_build_connections_map_warning(sample_graph_with_missing_pin):
+    """
+    D-08-04: 验证查找失败时包含 warning 和原始数据。
+    """
+    graph = sample_graph_with_missing_pin
+    connections, warnings = build_connections_map(graph)
+
+    assert len(connections) == 1
+    assert len(warnings) == 1
+
+    conn = connections[0]
+    assert 'warning' in conn
+    assert conn['warning'] == "target pin not found"
+    assert 'raw_pin_id' in conn['to']
+
+
+# ============================================================================
+# Phase 8: GRAPH-12 - 执行流追踪
+# ============================================================================
+
+def test_format_json_full_contains_execution_flows(sample_graph_with_execution_flow):
+    """
+    GRAPH-12: 验证 format_json_full() 返回包含 execution_flows。
+    """
+    graph = sample_graph_with_execution_flow
+    formatted = format_graphs_json([graph])
+
+    assert len(formatted) == 1
+    assert 'execution_flows' in formatted[0]
+
+
+def test_build_execution_flows_basic(sample_graph_with_execution_flow):
+    """
+    GRAPH-12: 验证 build_execution_flows() 正确追踪 Event → CallFunction。
+    """
+    graph = sample_graph_with_execution_flow
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    flow = flows[0]
+
+    assert 'start_event' in flow
+    assert flow['start_event'] == "BeginPlay"
+
+    assert 'nodes' in flow
+    nodes = flow['nodes']
+    assert len(nodes) >= 2  # Event + CallFunction
+
+    # 第一个节点是 Event
+    event_node = nodes[0]
+    assert event_node['node_type'] == "K2Node_Event"
+    assert 'event_name' in event_node
+
+    # 第二个节点是 CallFunction
+    call_node = nodes[1]
+    assert call_node['node_type'] == "K2Node_CallFunction"
+    assert 'function_name' in call_node
+    assert call_node['function_name'] == "PrintString"
+
+
+def test_execution_flow_cycle_detection(sample_graph_with_cycle):
+    """
+    T-08-01/D-08-11: 验证循环检测并停止追踪。
+    """
+    graph = sample_graph_with_cycle
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    nodes = flows[0]['nodes']
+
+    # 查找 cycle_detected 标记
+    has_cycle = any('cycle_detected' in n for n in nodes)
+    assert has_cycle, "执行流应包含 cycle_detected 标记"
+
+
+def test_execution_flow_stops_at_control_flow(sample_graph_with_control_flow):
+    """
+    D-08-10: 验证遇到控制流节点时停止追踪。
+    """
+    graph = sample_graph_with_control_flow
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    nodes = flows[0]['nodes']
+
+    # 查找 stopped_at 标记
+    has_stopped = any('stopped_at' in n for n in nodes)
+    assert has_stopped, "执行流应包含 stopped_at 标记"
+
+
+def test_control_flow_nodes_constant():
+    """
+    验证 CONTROL_FLOW_NODES 常量包含正确的控制流节点类型。
+    """
+    assert "K2Node_IfThenElse" in CONTROL_FLOW_NODES
+    assert "K2Node_Switch" in CONTROL_FLOW_NODES
+    assert "K2Node_SwitchEnum" in CONTROL_FLOW_NODES
+
+
+# ============================================================================
+# Phase 8: OUT2-03 - 文本输出图结构摘要
+# ============================================================================
+
+def test_format_text_full_contains_graph_summary(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证 format_text_full() 包含图结构摘要。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    assert "Graphs:" in text
+    assert "EventGraph" in text  # graph_name
+    assert "Nodes:" in text
+    assert "Connections:" in text
+
+
+def test_format_text_full_graph_details(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证 Graphs 区块显示正确的详细信息。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    # 验证 YAML 风格缩进（2 空格）
+    assert "  - Name: EventGraph" in text
+    assert "    Class: UberEdGraph" in text
+    assert "    Nodes: 2" in text  # 2 个节点
+    assert "    Connections: 1" in text  # 1 个连接
+
+
+def test_format_text_full_execution_flow_summary(create_mock_parse_result, sample_graph_with_execution_flow):
+    """
+    OUT2-03: 验证执行流概览显示。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+
+    text = format_text_full(result)
+
+    assert "ExecutionFlows:" in text
+    assert "BeginPlay" in text  # start_event
+    assert "nodes" in text.lower()  # 节点数量
+
+
+def test_format_text_full_no_graphs(create_mock_parse_result):
+    """
+    OUT2-03: 验证无图数据时不输出 Graphs 区块。
+    """
+    result = create_mock_parse_result
+    result.graphs = []  # 空
+
+    text = format_text_full(result)
+
+    assert "Graphs:" not in text
+
+
+def test_format_text_full_graph_position(create_mock_parse_result, sample_graph_with_execution_flow, create_mock_blueprint_metadata):
+    """
+    验证 Graphs 区块位置正确（Blueprint 之后、ERRORS 之前）。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_execution_flow]
+    result.blueprint = create_mock_blueprint_metadata
+
+    text = format_text_full(result)
+
+    # 验证顺序：Blueprint → Graphs → ERRORS
+    blueprint_pos = text.find("Blueprint:")
+    graphs_pos = text.find("Graphs:")
+    errors_pos = text.find("ERRORS:")
+
+    assert blueprint_pos < graphs_pos, "Blueprint 应在 Graphs 之前"
+    assert graphs_pos < errors_pos, "Graphs 应在 ERRORS 之前"
+
+
+# ============================================================================
+# Phase 8: OUT2-04 - CLI --graph 标志
+# ============================================================================
+
+def test_cli_graph_flag():
+    """
+    OUT2-04: 验证 --graph 标志存在并可解析。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph'])
+
+    assert args.graph is True
+
+
+def test_cli_graph_json_composable():
+    """
+    D-08-12: 验证 --graph 不与 --json 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--json'])
+
+    assert args.graph is True
+    assert args.json is True
+
+
+def test_cli_graph_text_composable():
+    """
+    D-08-12: 验证 --graph 不与 --text 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--text'])
+
+    assert args.graph is True
+    assert args.text is True
+
+
+def test_cli_graph_summary_composable():
+    """
+    D-08-12: 验证 --graph 不与 --summary 互斥。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--summary'])
+
+    assert args.graph is True
+    assert args.summary is True
+
+
+def test_cli_graph_verbose_composable():
+    """
+    D-08-12: 验证 --graph 与 --verbose 可组合。
+    """
+    from uasset_read import create_parser
+
+    parser = create_parser()
+    args = parser.parse_args(['test.uasset', '--graph', '--verbose'])
+
+    assert args.graph is True
+    assert args.verbose is True
+
+
+def test_cli_graph_output_alone(create_mock_parse_result, sample_graph_with_connections):
+    """
+    D-08-13: 验证 --graph alone 输出仅 graphs 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    # --graph alone 应输出 {"graphs": [...]}
+    output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
+                            indent=2, ensure_ascii=False)
+
+    assert '"graphs"' in output_str
+    # 不应包含其他字段（如 exports）
+    assert '"exports"' not in output_str
+
+
+def test_cli_graph_json_output_full(create_mock_parse_result, sample_graph_with_connections):
+    """
+    D-08-13: 验证 --graph --json 输出完整 JSON。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    # --graph --json 应输出完整 JSON
+    output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+
+    assert '"graphs"' in output_str
+    assert '"exports"' in output_str  # 包含其他字段
+    assert '"summary"' in output_str

@@ -1,5 +1,15 @@
 # uasset_read
 
+## Current Milestone: v2.0 蓝图图解析
+
+**Goal:** 输出足够详细的 JSON，让 AI agent 能理解蓝图逻辑，可作为 C++ 转换参考
+
+**Target features:**
+- 修复导出表解析 bug（OuterIndex 缺失导致解析失败）
+- 蓝图图结构解析（节点、引脚、连接、执行流）
+- 高级属性类型（Struct、Map、Set、Enum、Text、Delegate）
+- 依赖分析（ImportMap + SoftObjectPaths 依赖图）
+
 ## 项目简介
 
 Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接解析资产内容（尤其是蓝图），避免手动在 UE 编辑器中操作。
@@ -12,16 +22,24 @@ Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接�
 
 ### 已验证
 
-（暂无 —— 需发布后验证）
+- ✓ 能解析 .uasset 文件格式（Phase 1）
+- ✓ 提取名称表、导入表、导出表（Phase 1）
+- ✓ 解析基本属性类型（Phase 2）
+- ✓ 提取蓝图元数据（父类、变量）（Phase 3）
+- ✓ 输出 JSON 和文本格式（Phase 4）
+- ✓ CLI 工具可用（Phase 4）
+- ✓ 安全边界验证（Phase 5）
 
 ### 活跃需求
 
-- [ ] 能解析 .uasset 文件格式
-- [ ] 提取蓝图节点信息
-- [ ] 输出结构化文本供 agent 理解
-- [ ] 输出 JSON 格式供程序解析
-- [ ] 输出可读摘要供人理解
-- [ ] 单文件读取不能卡死
+- [ ] 修复导出表 OuterIndex 缺失 bug
+- [ ] 解析蓝图图结构（节点类型、引脚、连接）
+- [ ] 输出蓝图执行流程（事件图、函数图）
+- [ ] 解析 StructProperty 嵌套结构
+- [ ] 解析 MapProperty/SetProperty 值
+- [ ] 解析 EnumProperty/TextProperty 值
+- [ ] 构建 ImportMap + SoftObjectPaths 依赖图
+- [ ] 输出可作为 C++ 转换参考的详细 JSON
 
 ### 超出范围
 
@@ -62,7 +80,7 @@ Python 工具用于读取 Unreal Engine .uasset 文件，让 AI agent 能直接�
 | 结构化文本优先 | agent 直接理解，无需二次转换 | — 待定 |
 
 ---
-*最后更新：2026-04-27 初始化后*
+*最后更新：2026-05-02 v2.0 里程碑启动*
 
 ##演进
 

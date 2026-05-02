@@ -1,128 +1,298 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: complete
-last_updated: "2026-05-02T01:00:00Z"
+milestone: v2.0
+milestone_name: 蓝图图解析
+status: in_progress
+last_updated: "2026-05-02T02:00:00Z"
 progress:
   total_phases: 5
-  completed_phases: 5
+  completed_phases: 0
   active_phase: null
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
-shipped:
-  date: null
-  branch: null
-  remote: null
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# 项目状态
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: 蓝图图解析
+status: in_progress
+last_updated: "2026-05-02T02:00:00Z"
+progress:
+  total_phases: 5
+  completed_phases: 0
+  active_phase: null
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
 
-**项目：** uasset_read
-**初始化：** 2026-04-27
-**里程碑：** v1.0 —— 初始
-**状态：** 所有阶段已完成 ✓
+# uasset_read v2.0 路线图
 
-## 当前阶段
+** milestone:** v2.0 —— 蓝图图解析
+** 创建日期：** 2026-05-02
+** 状态：** 进行中
 
-**项目已完成** — 所有 5 个阶段已交付
+## Phases
 
-## 阶段状态
+- [x] **Phase 6: 导出表修复** - 修复 OuterIndex/TemplateIndex 解析 bug ✓ 2026-05-02
+- [x] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析 ✓ 2026-05-02
+- [x] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强 ✓ 2026-05-02
+- [x] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty ✓ 2026-05-02
+- [x] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图 ✓ 2026-05-02
 
-| # | 阶段 | 状态 | 计划 | 验证 | 安全 | 进度 |
-|---|------|------|------|------|------|------|
-| 1 | 核心解析 | ✓ 完成 | 8/8 | ✓ | - | 100% |
-| 2 | 属性解析 | ✓ 完成 | 3/3 | ✓ | - | 100% |
-| 3 | 蓝图提取 | ✓ 完成 | 4/4 | ✓ | - | 100% |
-| 4 | 输出与 CLI | ✓ 完成 | 5/5 | ✓ | ✓ | 100% |
-| 5 | 优化与安全 | ✓ 完成 | 5/5 | ✓ | ✓ | 100% |
+## Phase Details
 
-## 近期活动
+### Phase 6: 导出表修复
 
-| 日期 | 动作 | 结果 |
+**Goal:** 修复 v1.0 中导出表解析的 OuterIndex 缺失 bug，确保正确读取 FObjectExport 结构
+
+**Depends on:** Nothing (Foundation phase for v2.0)
+
+**Requirements:** BUG-01, BUG-02, BUG-03
+
+**Success Criteria** (what must be TRUE):
+1. 解析器正确读取 FObjectExport.TemplateIndex 字段（当 file_version_ue4 >= 506 时）
+2. 解析器正确读取 FObjectExport.OuterIndex 字段（所有版本），导出表偏移正确
+3. 导出表解析失败时返回清晰错误信息（包含文件偏移、期望值、实际值）
+
+**Plans:** 2 plans in 2 waves
+
+Plans:
+- [ ] 06-01-PLAN.md — 实现修复：ErrorContext扩展、ObjectExport扩展、read_export_map重构
+- [ ] 06-02-PLAN.md — 测试验证：单元测试、功能测试、Lyra资产对比验证
+
+**UI hint:** no
+
+---
+
+### Phase 7: 蓝图图核心解析
+
+**Goal:** 实现蓝图图结构的基础解析（Graph → Node → Pin）
+
+**Depends on:** Phase 6
+
+**Requirements:** GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, GRAPH-06, GRAPH-07, GRAPH-08, GRAPH-09
+
+**Success Criteria** (what must be TRUE):
+1. 解析器能识别 UEdGraph 导出类型（ClassIndex 包含 "EdGraph"）
+2. 解析器能提取 UEdGraph 基本信息（Schema、GraphGuid、Nodes 数量）
+3. 解析器能解析 UEdGraphNode 基类字段（NodeGuid、NodePosX/Y、NodeComment、Pins）
+4. 解析器能解析 UEdGraphPin 完整结构（PinId、PinName、Direction、PinType、DefaultValue、LinkedTo 原始数据、SubPins、ParentPin）
+5. 解析器能构建引脚连接映射（LinkedTo PinId → 目标节点/引脚）— **推迟到 Phase 8（D-01）**
+
+**Plans:** 3 plans in 3 waves
+
+Plans:
+- [x] 07-01-PLAN.md — 数据结构定义 + EdGraph 检测（GRAPH-01, GRAPH-02） ✓
+- [x] 07-02-PLAN.md — Node/Pin 核心解析（GRAPH-03, GRAPH-04） ✓
+- [x] 07-03-PLAN.md — 节点类型特定解析器 + 测试（GRAPH-05~09） ✓
+
+**UI hint:** no
+
+---
+
+### Phase 8: 蓝图图输出增强
+
+**Goal:** 完善 JSON 和文本输出格式，包含蓝图图数据和连接映射
+
+**Depends on:** Phase 7
+
+**Requirements:** GRAPH-11, GRAPH-12, OUT2-01, OUT2-03, OUT2-04 (OUT2-02 推迟到 Phase 9)
+
+**Success Criteria** (what must be TRUE):
+1. JSON 输出包含蓝图图层级结构（Graph → Nodes → Pins）
+2. JSON 输出包含执行流路径（从 Event → CallFunction 链路）
+3. JSON 输出包含完整的蓝图图数据（与 blueprint 字段同级的 graphs 字段）
+4. CLI 支持 --graph 标志仅输出蓝图图数据
+5. 文本输出包含图结构摘要（节点数、连接数、执行流概览）
+
+**Plans:** 4 plans in 4 waves
+
+Plans:
+- [x] 08-01-PLAN.md — 连接映射构建（GRAPH-11, OUT2-01） ✓
+- [x] 08-02-PLAN.md — 执行流追踪（GRAPH-12） ✓
+- [x] 08-03-PLAN.md — 文本输出扩展（OUT2-03） ✓
+- [x] 08-04-PLAN.md — CLI --graph 标志（OUT2-04） ✓
+
+**UI hint:** yes
+
+---
+
+### Phase 9: 高级属性类型
+
+**Goal:** 实现高级属性类型的完整解析（StructProperty、MapProperty、SetProperty、EnumProperty、TextProperty、DelegateProperty）
+
+**Depends on:** Phase 7
+
+**Requirements:** ADVP-01, ADVP-02, ADVP-03, ADVP-04, ADVP-05, ADVP-06
+
+**Success Criteria** (what must be TRUE):
+1. 解析器能提取 StructProperty 值（嵌套结构体解析，递归深度限制 5）
+2. 解析器能提取 MapProperty 值（键值对数组，支持基本类型键）
+3. 解析器能提取 SetProperty 值（唯一元素集）
+4. 解析器能提取 EnumProperty 值（枚举类型名 + 枚举值名）
+5. 解析器能提取 TextProperty 值（FText：Namespace、Key、SourceString）
+6. 解析器能提取 DelegateProperty 值（函数引用：对象 + 函数名）
+
+**Plans:** 3 plans in 3 waves
+
+Plans:
+- [x] 09-01-PLAN.md — 数据类定义 + type_dispatch 扩展（ADVP-01~06） ✓
+- [x] 09-02-PLAN.md — 六种高级属性解析函数实现（ADVP-01~06） ✓
+- [x] 09-03-PLAN.md — 单元测试 + Lyra 资产验证（ADVP-01~06） ✓
+
+**UI hint:** no
+
+---
+
+### Phase 10: 依赖分析
+
+**Goal:** 构建 ImportMap + SoftObjectPaths 依赖图，检测循环依赖
+
+**Depends on:** Phase 7
+
+**Requirements:** DEPS-01, DEPS-02, DEPS-03, DEPS-04
+
+**Success Criteria** (what must be TRUE):
+1. 解析器能从 ImportMap 构建依赖列表（包路径、类名、对象名）
+2. 解析器能从 SoftObjectPaths 构建软引用依赖列表（AssetReference）
+3. 解析器能检测循环依赖（ImportMap 中的相互引用）
+4. JSON 输出包含依赖图结构（imports、soft_references、circular_deps）
+
+**Plans:** 6 plans in 6 waves (including 2 gap closure plans)
+
+Plans:
+- [x] 10-01-PLAN.md — ParseResult 扩展：imports/soft_references/circular_deps 字段（D-10-05/08/13） ✓
+- [x] 10-02-PLAN.md — build_imports_list + read_soft_object_paths 函数实现（DEPS-01, DEPS-02） ✓
+- [x] 10-03-PLAN.md — detect_circular_deps + format_json_full 扩展 + parse_uasset 集成（DEPS-03, DEPS-04） ✓
+- [x] 10-04-PLAN.md — 单元测试 + 完整验证（DEPS-01~04） ✓
+- [x] 10-05-PLAN.md — [GAP CLOSURE] SoftObjectPath UE5 >= 1007 FTopLevelAssetPath 格式修复 ✓ 2026-05-02
+- [x] 10-06-PLAN.md — [GAP CLOSURE] ImportMap UE5 条件字段 + 蓝图提取修复 ✓ 2026-05-02
+
+**UI hint:** no
+
+---
+
+## Phase Summary
+
+| Phase | Goal | Requirements | Success Criteria Count |
+|-------|------|--------------|------------------------|
+| 6 - 导出表修复 | 修复 OuterIndex/TemplateIndex 解析 bug | BUG-01, BUG-02, BUG-03 | 3 |
+| 7 - 蓝图图核心 | UEdGraph/Node/Pin 基础解析 | GRAPH-01~09 (10→Phase8) | 5 |
+| 8 - 蓝图图输出 | JSON/文本输出增强 | GRAPH-11~12, OUT2-01~04 | 5 |
+| 9 - 高级属性 | Struct/Map/Set/Enum/Text/Delegate 解析 | ADVP-01~06 | 6 |
+| 10 - 依赖分析 | ImportMap + SoftObjectPaths 依赖图 | DEPS-01~04 | 4 |
+
+---
+
+## Progress Table
+
+| Phase | Plans | Status | Progress |
+|-------|-------|--------|----------|
+| 6 - 导出表修复 | 2/2 | Complete | 100% |
+| 7 - 蓝图图核心 | 3/3 | Complete | 100% |
+| 8 - 蓝图图输出 | 4/4 | Complete | 100% |
+| 9 - 高级属性 | 3/3 | Complete | 100% |
+| 10 - 依赖分析 | 0/4 | Ready to execute | 0% |
+
+---
+
+## v2.0 需求覆盖
+
+| 需求 | 阶段 | 状态 |
 |------|------|------|
-| 2026-04-27 | 项目初始化 | PROJECT.md、config.json 创建 |
-| 2026-04-27 | 研究完成 | STACK.md、FEATURES.md、ARCHITECTURE.md、PITFALLS.md 写入 |
-| 2026-04-27 | 研究综合 | SUMMARY.md 写入 |
-| 2026-04-27 | 需求定义 | 37 个 v1 需求映射到 5 阶段 |
-| 2026-04-27 | 路线图创建 | 5 阶段定义配成功标准 |
-| 2026-04-28 | 阶段 1 上下文收集 | 01-CONTEXT.md 创建，含 18 项决策 |
-| 2026-04-28 | 文档汉化完成 | 所有规划文档翻译为中文 |
-| 2026-04-28 | 阶段 1 规划完成 | 01-01-PLAN.md 创建，4 任务，覆盖 8 需求 |
-| 2026-04-28 | 阶段 1 执行完成 | uasset_read.py（719 行）、tests（549 行）创建 |
-| 2026-04-28 | 阶段 1 验证通过 | 4/4 truths 验证，13 测试通过，待人工测试 |
-| 2026-04-28 | SavedHash gap 修复 | 01-03-PLAN.md 执行完成，14 测试通过 |
-| 2026-04-28 | Gap Closure 执行 | 01-04~01-08 执行完成，28 测试通过 |
-| 2026-04-28 | Lyra 文件解析成功 | Character_Default.uasset 解析成功，ImportMap/ExportMap 填充 |
-| 2026-05-01 | 阶段 2 上下文收集 | 02-CONTEXT.md 创建，含 27 项决策，17 个灰色区域讨论 |
-| 2026-05-01 | 阶段 2 规划完成 | 02-01~02-03 计划创建，覆盖 PROP-01 至 PROP-09 |
-| 2026-05-01 | 阶段 2 执行完成 | PropertyTag 解析、基本类型、Object/Array 属性、版本感知格式 |
-| 2026-05-01 | 阶段 2 验证通过 | 9/9 truths 验证，62 测试通过 |
-| 2026-05-01 | 阶段 3 上下文收集 | 03-CONTEXT.md 创建，含 16 项决策，4 个灰色区域讨论 |
-| 2026-05-01 | 阶段 3 规划完成 | 03-01~03-03 计划创建，覆盖 BLUE-01 至 BLUE-06 |
-| 2026-05-01 | 阶段 3 Wave 0 完成 | 03-00-PLAN.md 执行完成，21 个测试脚手架创建 |
-| 2026-05-01 | 阶段 3 Wave 1 完成 | 03-01-PLAN.md 执行完成，蓝图检测和父类解析实现 |
-| 2026-05-01 | 阶段 3 Wave 2 完成 | 03-02-PLAN.md 执行完成，FEdGraphPinType 和 BlueprintVariable 解析实现 |
-| 2026-05-01 | 阶段 3 Wave 3 完成 | 03-03-PLAN.md 执行完成，extract_blueprint_metadata() 集成到 parse_uasset() |
-| 2026-05-01 | 阶段 3 验证通过 | 83 测试通过，BLUE-01~BLUE-06 需求全部覆盖 |
-| 2026-05-01 | 阶段 4 上下文收集 | 04-CONTEXT.md 创建，含 29 项决策，8 个灰色区域讨论 |
-| 2026-05-01 | 阶段 4 规划完成 | 04-00~04-04 计划创建，覆盖 OUT-01~OUT-05, CLI-01~CLI-06 |
-| 2026-05-01 | 阶段 4 Wave 0 完成 | 04-00-PLAN.md 执行完成，11 测试脚手架创建 |
-| 2026-05-01 | 阶段 4 Wave 1 完成 | 04-01-PLAN.md 执行完成，format_json_full/text_full 实现 |
-| 2026-05-01 | 阶段 4 Wave 2 完成 | 04-02-PLAN.md 执行完成，CLI argparse 和 main() 实现 |
-| 2026-05-01 | 阶段 4 Wave 3 完成 | 04-03-PLAN.md 执行完成，FPackageIndex 引用解析实现 |
-| 2026-05-01 | 阶段 4 执行完成 | 83+11 测试，OUT-01~05, CLI-01~06 需求覆盖 |
-| 2026-05-02 | 阶段 4 UAT 通过 | 10/10 测试通过，CLI 和输出功能验证 |
-| 2026-05-02 | 阶段 4 安全审查通过 | 4 威胁已缓解，1 接受风险（推迟到 Phase 5） |
-| 2026-05-02 | 阶段 5 Wave 1 完成 | mmap 大文件支持，50MB 阈值，回退机制 |
-| 2026-05-02 | 阶段 5 Wave 2 完成 | 边界验证增强，validate_offset/size/package_index |
-| 2026-05-02 | 阶段 5 Wave 3 完成 | 循环计数限制，属性循环 10000 次 |
-| 2026-05-02 | 阶段 5 Wave 4 完成 | 部分结果改进，ErrorContext，智能继续 |
-| 2026-05-02 | 阶段 5 验证通过 | SAFE-01~05 全部覆盖，85 测试通过 |
-| 2026-05-02 | 项目完成 | 所有 5 阶段交付，v1.0 milestone 达成 |
+| BUG-01 | Phase 6 | ✓ Complete |
+| BUG-02 | Phase 6 | ✓ Complete |
+| BUG-03 | Phase 6 | ✓ Complete |
+| GRAPH-01 | Phase 7 | ✓ Complete |
+| GRAPH-02 | Phase 7 | ✓ Complete |
+| GRAPH-03 | Phase 7 | ✓ Complete |
+| GRAPH-04 | Phase 7 | ✓ Complete |
+| GRAPH-05 | Phase 7 | ✓ Complete |
+| GRAPH-06 | Phase 7 | ✓ Complete |
+| GRAPH-07 | Phase 7 | ✓ Complete |
+| GRAPH-08 | Phase 7 | ✓ Complete |
+| GRAPH-09 | Phase 7 | ✓ Complete |
+| GRAPH-10 | Phase 8 | Deferred (D-01) |
+| GRAPH-11 | Phase 8 | ✓ Complete |
+| GRAPH-12 | Phase 8 | ✓ Complete |
+| ADVP-01 | Phase 9 | ✓ Complete |
+| ADVP-02 | Phase 9 | ✓ Complete |
+| ADVP-03 | Phase 9 | ✓ Complete |
+| ADVP-04 | Phase 9 | ✓ Complete |
+| ADVP-05 | Phase 9 | ✓ Complete |
+| ADVP-06 | Phase 9 | ✓ Complete |
+| DEPS-01 | Phase 10 | Pending |
+| DEPS-02 | Phase 10 | Pending |
+| DEPS-03 | Phase 10 | Pending |
+| DEPS-04 | Phase 10 | Pending |
+| OUT2-01 | Phase 8 | ✓ Complete |
+| OUT2-02 | Phase 9 | Deferred (高级属性需先实现) |
+| OUT2-03 | Phase 8 | ✓ Complete |
+| OUT2-04 | Phase 8 | ✓ Complete |
 
-## 项目参考
+**覆盖率：** 25/29 需求已完成 ✓
 
-参见：`.planning/PROJECT.md`（2026-04-27 更新）
+---
 
-**核心价值：** 让 AI agent 能直接读取 .uasset 文件内容，无需人工介入 UE 编辑器
-**当前重点：** 阶段 4 已完成（5 计划），阶段 5 待规划
+## 技术架构
 
-## 关键决策
-
-| 决策 | 状态 | 影响 |
-|------|------|------|
-| Python 3.10+ 零运行时依赖 | 已决定 | 部署更简单，仅标准库 |
-| 专注于未 cooked 资产 | 已决定 | 完整蓝图数据可用 |
-| 蓝图图推迟到 v2 | 已决定 | 降低初始复杂度 |
-| SavedHash 条件读取 | 已验证 | UE5 >= 1004 文件正确解析 |
-| PackageName FString | 已验证 | 所有 UE4/UE5 文件正确解析 |
-| LocalizationId/GatherableTextData | 已验证 | UE4 >= 521 文件正确解析 |
-| ExportReader 类设计 | 已决定（阶段 2）| 统一导出头 + 属性循环 |
-| 函数分派模式 | 已决定（阶段 2）| 清晰易测试 |
-| BoolProperty 从 Tag.BoolVal | 已决定（阶段 2）| 无额外数据读取 |
-| 蓝图属性推迟到阶段 3 | 已决定（阶段 2）| 阶段专注基本类型 |
-| PropertyTag 版本阈值 | 已验证（阶段 2）| UE5 >= 1000 新格式切换正确 |
-| ArrayProperty 深度限制 10 | 已验证（阶段 2）| 嵌套数组安全 |
-| 类名检测蓝图 | 已验证（阶段 3）| ExportMap ClassIndex 包含 Blueprint |
-| 自动蓝图检测 | 已验证（阶段 3）| parse_uasset() 后自动提取 |
-| 仅直接父类解析 | 已验证（阶段 3）| 不追溯继承链 |
-| DefaultValue 基本类型解析 | 已验证（阶段 3）| int、float、bool、str |
-| FEdGraphPinType 全字段解析 | 已验证（阶段 3）| 10 字段包含版本感知字段 |
-| Vector DefaultValue 保留字符串 | 已验证（阶段 3）| "(X=...,Y=...,Z=...)" 不解析 |
-| JSON 分级输出 | 已验证（阶段 4）| --json 完整、--summary 精简 |
-| Package→Exports→Properties 层级 | 已验证（阶段 4）| 清晰层级结构 |
-| YAML 风格文本输出 | 已验证（阶段 4）| AI agent 优先 |
-| 双入口 CLI | 已验证（阶段 4）| python -m 和脚本均可 |
-| 语义退出码 | 已验证（阶段 4）| 0/1/2/3 分类正确 |
-| UTF-8 编码 | 已验证（阶段 4）| 所有输出统一编码 |
-| FPackageIndex 引用解析 | 已验证（阶段 4）| outer_index/super_index → 名称 |
-| 安全威胁缓解 | 已验证（阶段 4）| Path 验证 + UTF-8 控制 |
-
-## 下一步动作
+### 分层管道（v2.0 扩展）
 
 ```
-/gsd-discuss-phase 5 —— 讨论 Phase 5 (优化与安全) 的上下文
-/gsd-plan-phase 5 —— 规划 Phase 5
+.uasset → FArchive → Deserializer → Models → OutputFormatter
+                    ↓ 新增组件
+              GraphParser (Phase 7)
+              AdvancedPropParser (Phase 9)
+              DependencyGraphBuilder (Phase 10)
 ```
+
+### 关键修复（Phase 6）
+
+- FObjectExport.TemplateIndex 字段条件读取（file_version_ue4 >= 506）
+- OuterIndex 正确读取（UE4/UE5 统一）
+- 错误上下文增强（offset, phase, operation, context_name）
+
+###蓝图图数据类（Phase 7）
+
+```python
+@dataclass
+class UEdGraphPinRef:
+    pin_name: str
+    target_node: Optional[str]
+    resolved_pin: Optional["UEdGraphPin"] = None
+
+@dataclass
+class UEdGraphPin:
+    pin_id: str                      # Guid hex
+    pin_name: str
+    direction: str                   # EGPD_Input/EGPD_Output
+    pin_type: "FEdGraphPinType"
+    default_value: Optional[str]
+    auto_default_value: Optional[str]
+    linked_to: List["UEdGraphPinRef"]
+    sub_pins: List["UEdGraphPin"]
+    parent_pin: Optional["UEdGraphPin"]
+    
+@dataclass
+class UEdGraphNode:
+    node_guid: str
+    node_pos_x: int
+    node_pos_y: int
+    node_comment: str
+    pins: List["UEdGraphPin"]
+    class_name: str                  # K2Node_Event, K2Node_CallFunction, etc.
+    
+@dataclass
+class UEdGraph:
+    graph_name: str
+    graph_class: str
+    nodes: List["UEdGraphNode"]
+    is_ubergraph: bool
+```
+
+---
+
+*最后更新：2026-05-02 - Phase 9 完成*
