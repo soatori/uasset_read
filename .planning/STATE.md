@@ -71,6 +71,7 @@ shipped:
 | 2026-05-02 | Phase 9 Wave 2 完成 | 六种高级属性解析函数实现 |
 | 2026-05-02 | Phase 9 Wave 3 完成 | 24 单元测试通过 |
 | 2026-05-02 | Phase 9 验证通过 | 6/6 must-haves，151 tests pass |
+| 2026-05-02 | Phase 6-9 安全验证 | 19/31 mitigate已验证，12/31 accept已记录，0 OPEN |
 
 ## 下一步动作
 
