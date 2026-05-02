@@ -198,6 +198,154 @@ def test_read_soft_object_paths_offset_zero(ue5_summary_no_soft_refs):
     assert ue5_summary_no_soft_refs.soft_object_paths_offset == 0
 
 
+def test_read_soft_object_paths_ue5_1008_ftoplevelassetpath():
+    """测试 UE5 >= 1008 的 FTopLevelAssetPath 格式解析（UE5 >= 1007 格式）。"""
+    import struct
+    import tempfile
+    import os
+
+    # UE5 >= 1008 时 SoftObjectPaths 数组存在
+    # UE5 >= 1007 时 FTopLevelAssetPath 格式（双 FName）
+    # 所以 UE5 >= 1008 必定使用双 FName 格式
+    name_map = ["/Game/Maps/TestMap", "TestMapAsset", "SubObject"]
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=0,
+        file_version_ue5=1008,  # >= UE5_ADD_SOFTOBJECTPATH_LIST
+        soft_object_paths_count=1,
+        soft_object_paths_offset=1  # > 0，避免 offset <= 0 检查返回空
+    )
+
+    # 构造二进制数据：PackageName(FName) + AssetName(FName) + SubPathString(FString)
+    data = bytearray()
+    data.extend(b'\x00')  # 占位字节，使 offset=1 有效
+    # PackageName: index=0, number=0
+    data.extend(struct.pack('<I', 0))  # index
+    data.extend(struct.pack('<I', 0))  # number
+    # AssetName: index=1, number=0
+    data.extend(struct.pack('<I', 1))  # index
+    data.extend(struct.pack('<I', 0))  # number
+    # SubPathString: FString (length + UTF-8)
+    sub_path = "SubObject"
+    data.extend(struct.pack('<i', len(sub_path) + 1))
+    data.extend(sub_path.encode('utf-8'))
+    data.extend(b'\x00')  # null terminator
+
+    # 创建临时文件
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+    os.write(fd, data)
+    os.close(fd)
+
+    try:
+        archive = FArchive(path)
+        archive.name_map = name_map
+
+        result = read_soft_object_paths(archive, summary, name_map)
+
+        assert len(result) == 1
+        # 验证 FTopLevelAssetPath 组合格式
+        assert result[0]["asset_path"] == "/Game/Maps/TestMap.TestMapAsset"
+        assert result[0]["sub_path"] == "SubObject"
+    finally:
+        archive._file.close()
+        os.unlink(path)
+
+
+def test_read_soft_object_paths_ue5_1016_format():
+    """测试典型 UE5 版本（1016）的 FTopLevelAssetPath 格式。"""
+    import struct
+    import tempfile
+    import os
+
+    # 使用真实 UE5 版本号（PACKAGE_SAVED_HASH = 1016）
+    name_map = ["/Game/Blueprints/MyBlueprint", "MyBlueprint_C", "SubPath.Test"]
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=0,
+        file_version_ue5=1016,  # 当前常见 UE5 版本
+        soft_object_paths_count=1,
+        soft_object_paths_offset=1
+    )
+
+    # 构造二进制数据
+    data = bytearray()
+    data.extend(b'\x00')  # 占位字节
+    data.extend(struct.pack('<I', 0))  # PackageName index
+    data.extend(struct.pack('<I', 0))  # number
+    data.extend(struct.pack('<I', 1))  # AssetName index
+    data.extend(struct.pack('<I', 0))  # number
+    sub_path = "SubPath.Test"
+    data.extend(struct.pack('<i', len(sub_path) + 1))
+    data.extend(sub_path.encode('utf-8'))
+    data.extend(b'\x00')
+
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+    os.write(fd, data)
+    os.close(fd)
+
+    try:
+        archive = FArchive(path)
+        archive.name_map = name_map
+
+        result = read_soft_object_paths(archive, summary, name_map)
+
+        assert len(result) == 1
+        assert result[0]["asset_path"] == "/Game/Blueprints/MyBlueprint.MyBlueprint_C"
+        assert result[0]["sub_path"] == "SubPath.Test"
+    finally:
+        archive._file.close()
+        os.unlink(path)
+
+
+def test_read_soft_object_paths_ue5_1008_empty_asset_name():
+    """测试 UE5 >= 1008 时 AssetName 为空的格式。"""
+    import struct
+    import tempfile
+    import os
+
+    name_map = ["/Game/Maps/TestMap", "", ""]
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=0,
+        file_version_ue5=1008,
+        soft_object_paths_count=1,
+        soft_object_paths_offset=1
+    )
+
+    # 构造二进制数据：PackageName + 空 AssetName
+    data = bytearray()
+    data.extend(b'\x00')  # 占位字节
+    data.extend(struct.pack('<I', 0))  # PackageName index
+    data.extend(struct.pack('<I', 0))
+    data.extend(struct.pack('<I', 1))  # AssetName index (empty string)
+    data.extend(struct.pack('<I', 0))
+    sub_path = ""
+    data.extend(struct.pack('<i', len(sub_path) + 1))
+    data.extend(sub_path.encode('utf-8'))
+    data.extend(b'\x00')
+
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+    os.write(fd, data)
+    os.close(fd)
+
+    try:
+        archive = FArchive(path)
+        archive.name_map = name_map
+
+        result = read_soft_object_paths(archive, summary, name_map)
+
+        assert len(result) == 1
+        # 验证空 AssetName 时 asset_path = PackageName
+        assert result[0]["asset_path"] == "/Game/Maps/TestMap"
+        assert result[0]["sub_path"] == ""
+    finally:
+        archive._file.close()
+        os.unlink(path)
+
+
 # === detect_circular_deps 测试 ===
 
 def test_detect_circular_deps_empty(empty_import_map):
