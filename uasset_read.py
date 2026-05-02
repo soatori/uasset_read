@@ -61,6 +61,7 @@ VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
 # Package Flags (ObjectMacros.h)
 PKG_Cooked = 0x200                     # Package is cooked
+PKG_UnversionedProperties = 0x2000     # Uses unversioned property serialization (Phase 11 GAP-01)
 PKG_FilterEditorOnly = 0x00000080      # Filter editor-only objects (Phase 10 Gap #2)
 
 # Phase 7: Blueprint Graph Parsing Safety Constants
