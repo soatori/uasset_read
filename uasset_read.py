@@ -3746,6 +3746,9 @@ def parse_properties_from_export(
             )
         property_count += 1
 
+        tag = None  # Phase 11 D-01: 初始化 tag 用于异常处理
+        start_pos = None  # Phase 11 D-01: 初始化 start_pos 用于异常处理
+
         try:
             tag = read_property_tag(
                 archive,
@@ -3780,7 +3783,8 @@ def parse_properties_from_export(
 
         except ParseError as e:
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
-            if tag.size > 0 and start_pos + tag.size <= archive.total_size():
+            # Phase 11 D-01: 检查 tag 和 start_pos 是否已定义
+            if tag is not None and start_pos is not None and tag.size > 0 and start_pos + tag.size <= archive.total_size():
                 archive.seek(start_pos + tag.size)
                 # D-14: Record warning (would be passed to caller via ParseResult)
                 properties.append(PropertyValue(
@@ -3790,7 +3794,7 @@ def parse_properties_from_export(
                 ))
                 continue
             else:
-                # Cannot skip - Size invalid, abort property parsing for this export
+                # Cannot skip - tag undefined or Size invalid, abort property parsing for this export
                 properties.append(PropertyValue(
                     name="ParseError",
                     type="Error",
@@ -3905,6 +3909,17 @@ def parse_uasset(path: str) -> ParseResult:
 
         # 读取导出表
         result.export_map = read_export_map(archive, result.summary, result.name_map)
+
+        # Phase 11: 解析ExportMap属性（EXTR-01）
+        for export in result.export_map:
+            if export.serial_size > 0:
+                try:
+                    export.properties = parse_properties_from_export(
+                        export, archive, result.summary, result.name_map, result.export_map
+                    )
+                except UAssetError as e:
+                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                    export.properties = []  # 保持空列表而非None
 
         result.is_success = True
 
