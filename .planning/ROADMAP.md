@@ -38,7 +38,7 @@ progress:
 
 - [x] **Phase 6: 导出表修复** - 修复 OuterIndex/TemplateIndex 解析 bug ✓ 2026-05-02
 - [x] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析 ✓ 2026-05-02
-- [ ] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强
+- [x] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强 ✓ 2026-05-02
 - [ ] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty
 - [ ] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图
 
@@ -111,10 +111,10 @@ Plans:
 **Plans:** 4 plans in 4 waves
 
 Plans:
-- [ ] 08-01-PLAN.md — 连接映射构建（GRAPH-11, OUT2-01）
-- [ ] 08-02-PLAN.md — 执行流追踪（GRAPH-12）
-- [ ] 08-03-PLAN.md — 文本输出扩展（OUT2-03）
-- [ ] 08-04-PLAN.md — CLI --graph 标志（OUT2-04）
+- [x] 08-01-PLAN.md — 连接映射构建（GRAPH-11, OUT2-01） ✓
+- [x] 08-02-PLAN.md — 执行流追踪（GRAPH-12） ✓
+- [x] 08-03-PLAN.md — 文本输出扩展（OUT2-03） ✓
+- [x] 08-04-PLAN.md — CLI --graph 标志（OUT2-04） ✓
 
 **UI hint:** yes
 
@@ -161,7 +161,13 @@ Plans:
 3. 解析器能检测循环依赖（ImportMap 中的相互引用）
 4. JSON 输出包含依赖图结构（imports、soft_references、circular_deps）
 
-**Plans:** TBD
+**Plans:** 4 plans in 4 waves
+
+Plans:
+- [ ] 10-01-PLAN.md — ParseResult 扩展：imports/soft_references/circular_deps 字段（D-10-05/08/13）
+- [ ] 10-02-PLAN.md — build_imports_list + read_soft_object_paths 函数实现（DEPS-01, DEPS-02）
+- [ ] 10-03-PLAN.md — detect_circular_deps + format_json_full 扩展 + parse_uasset 集成（DEPS-03, DEPS-04）
+- [ ] 10-04-PLAN.md — 单元测试 + 完整验证（DEPS-01~04）
 
 **UI hint:** no
 
@@ -185,9 +191,9 @@ Plans:
 |-------|----------------|--------|-----------|
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
 | 7 - 蓝图图核心 | 3/3 | Complete | 100% |
-| 8 - 蓝图图输出 | 0/4 | Ready to execute | 0% |
+| 8 - 蓝图图输出 | 4/4 | Complete | 100% |
 | 9 - 高级属性 | 0/0 | Not started | - |
-| 10 - 依赖分析 | 0/0 | Not started | - |
+| 10 - 依赖分析 | 0/4 | Ready to execute | 0% |
 
 ---
 
@@ -208,8 +214,8 @@ Plans:
 | GRAPH-08 | Phase 7 | ✓ Complete |
 | GRAPH-09 | Phase 7 | ✓ Complete |
 | GRAPH-10 | Phase 8 | Deferred (D-01) |
-| GRAPH-11 | Phase 8 | Pending |
-| GRAPH-12 | Phase 8 | Pending |
+| GRAPH-11 | Phase 8 | ✓ Complete |
+| GRAPH-12 | Phase 8 | ✓ Complete |
 | ADVP-01 | Phase 9 | Pending |
 | ADVP-02 | Phase 9 | Pending |
 | ADVP-03 | Phase 9 | Pending |
@@ -220,12 +226,12 @@ Plans:
 | DEPS-02 | Phase 10 | Pending |
 | DEPS-03 | Phase 10 | Pending |
 | DEPS-04 | Phase 10 | Pending |
-| OUT2-01 | Phase 8 | Pending |
+| OUT2-01 | Phase 8 | ✓ Complete |
 | OUT2-02 | Phase 9 | Deferred (高级属性需先实现) |
-| OUT2-03 | Phase 8 | Pending |
-| OUT2-04 | Phase 8 | Pending |
+| OUT2-03 | Phase 8 | ✓ Complete |
+| OUT2-04 | Phase 8 | ✓ Complete |
 
-**覆盖率：** 14/29 需求已完成 ✓
+**覆盖率：** 19/29 需求已完成 ✓
 
 ---
 
@@ -287,4 +293,4 @@ class UEdGraph:
 
 ---
 
-*最后更新：2026-05-02 - Phase 8 规划完成*
+*最后更新：2026-05-02 - Phase 10 规划完成*
