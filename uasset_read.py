@@ -953,6 +953,7 @@ class BlueprintVariable:
     Variable definition from FBPVariableDescription.
 
     Per D-05/D-06: use UE original names with container prefix.
+    Phase 12: enhanced with is_component, metadata, flags_labels (per D-02/D-03).
     """
     var_name: str                    # FName
     var_type: "FEdGraphPinType"      # Full type structure (defined next)
@@ -960,6 +961,9 @@ class BlueprintVariable:
     property_flags: int              # uint64 EPropertyFlags
     default_value: any = None        # Parsed or raw string per D-13/D-14
     friendly_name: str = ""          # FString
+    is_component: bool = False       # Phase 12: component variable flag (per D-02)
+    metadata: Dict[str, str] = field(default_factory=dict)  # Phase 12: MetaDataArray (per D-03)
+    flags_labels: List[str] = field(default_factory=list)   # Phase 12: PropertyFlags labels (per D-03)
 
 
 @dataclass
@@ -2856,6 +2860,160 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
 
     # Unknown category: fallback to raw string (D-14)
     return value_str
+
+
+# ============================================================================
+# Phase 12: PropertyFlags parsing (per D-03)
+# ============================================================================
+
+# EPropertyFlags constants from ObjectMacros.h L415-480
+CPF_Edit = 0x0000000000000001               # EditAnywhere/EditConst
+CPF_BlueprintVisible = 0x0000000000000004   # BlueprintReadWrite/BlueprintReadOnly
+CPF_BlueprintReadOnly = 0x0000000000000010  # Determines read vs write
+CPF_Transient = 0x0000000000002000          # Transient
+CPF_EditConst = 0x0000000000020000          # EditConst
+CPF_InstancedReference = 0x0000000000080000 # Component reference (per D-02)
+CPF_Config = 0x0000000000004000             # Config
+CPF_SaveGame = 0x0000000001000000           # SaveGame
+CPF_Deprecated = 0x0000000020000000         # Deprecated
+CPF_Protected = 0x0000080000000000          # Protected
+CPF_AdvancedDisplay = 0x0000040000000000    # AdvancedDisplay
+CPF_ExposeOnSpawn = 0x0001000000000000      # ExposeOnSpawn
+
+
+def parse_property_flags_to_labels(flags: int) -> List[str]:
+    """
+    Parse EPropertyFlags uint64 to readable label list (Phase 12, per D-03).
+
+    From ObjectMacros.h L415-480. Key flags for blueprint variables:
+    - CPF_Edit: Edit visibility
+    - CPF_BlueprintVisible: Blueprint access
+    - CPF_InstancedReference: Component reference (per D-02)
+
+    Args:
+        flags: uint64 EPropertyFlags value
+
+    Returns:
+        List of readable flag labels (sorted by importance)
+    """
+    labels = []
+
+    # Edit flags (mutually exclusive patterns)
+    if flags & CPF_Edit:
+        if flags & CPF_EditConst:
+            labels.append("EditConst")
+        else:
+            labels.append("EditAnywhere")
+
+    # Blueprint visibility flags (mutually exclusive)
+    if flags & CPF_BlueprintVisible:
+        if flags & CPF_BlueprintReadOnly:
+            labels.append("BlueprintReadOnly")
+        else:
+            labels.append("BlueprintReadWrite")
+
+    # Component reference flag (per D-02)
+    if flags & CPF_InstancedReference:
+        labels.append("InstancedReference")
+
+    # Other flags
+    if flags & CPF_Protected:
+        labels.append("Protected")
+    if flags & CPF_ExposeOnSpawn:
+        labels.append("ExposeOnSpawn")
+    if flags & CPF_Config:
+        labels.append("Config")
+    if flags & CPF_Transient:
+        labels.append("Transient")
+    if flags & CPF_SaveGame:
+        labels.append("SaveGame")
+    if flags & CPF_Deprecated:
+        labels.append("Deprecated")
+    if flags & CPF_AdvancedDisplay:
+        labels.append("AdvancedDisplay")
+
+    return labels
+
+
+def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
+    """
+    Format FEdGraphPinType to complete type string (Phase 12, per D-04).
+
+    Handles:
+    - Basic types (bool, int, float, string, etc.)
+    - Container types (TArray, TSet, TMap)
+    - Reference types (adds '*' suffix)
+    - Const types (adds 'const' prefix)
+
+    Args:
+        pin_type: FEdGraphPinType structure
+        name_map: Optional NameMap for resolving pin_sub_category_object
+
+    Returns:
+        Complete type string (e.g., "TArray<UObject*>", "const float")
+    """
+    # Container type prefix
+    container_prefix = ""
+    if pin_type.container_type == 1:  # Array
+        container_prefix = "TArray<"
+    elif pin_type.container_type == 2:  # Set
+        container_prefix = "TSet<"
+    elif pin_type.container_type == 3:  # Map
+        container_prefix = "TMap<"  # Simplified - needs key/value info
+
+    # Base type from PinCategory
+    category = pin_type.pin_category.lower()
+    sub_category = pin_type.pin_sub_category.lower()
+
+    # Type mapping
+    type_str = ""
+    if category in ("bool", "boolean"):
+        type_str = "bool"
+    elif category in ("int", "integer"):
+        type_str = "int"
+    elif category in ("float", "real", "double"):
+        type_str = "float"
+    elif category in ("string", "str"):
+        type_str = "FString"
+    elif category in ("name"):
+        type_str = "FName"
+    elif category in ("text"):
+        type_str = "FText"
+    elif category in ("object", "class", "interface"):
+        # Try to resolve pin_sub_category_object to class name
+        if pin_type.pin_sub_category_object != 0 and name_map:
+            # FPackageIndex resolution would require ImportMap/ExportMap
+            # For Phase 12, use sub_category if available
+            if sub_category and sub_category != "none":
+                type_str = sub_category
+            else:
+                type_str = "UObject"
+        else:
+            type_str = "UObject"
+        # Add reference pointer for object types
+        if not pin_type.is_weak_pointer:
+            type_str += "*"
+    elif sub_category and sub_category != "none":
+        # Use sub_category as type name (more specific)
+        type_str = sub_category
+        # Check if it's a reference type
+        if category in ("object", "class") or "object" in category:
+            type_str += "*"
+    else:
+        # Fallback to category name
+        type_str = category
+
+    # Container suffix
+    container_suffix = ""
+    if container_prefix:
+        container_suffix = ">"
+
+    # Const prefix
+    const_prefix = ""
+    if pin_type.is_const:
+        const_prefix = "const "
+
+    return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"
 
 
 def read_blueprint_variable(
@@ -4997,6 +5155,9 @@ __all__ = [
     'parse_default_value',
     'read_blueprint_variable',
     'extract_blueprint_metadata',
+    # Phase 12: PropertyFlags and variable type formatting
+    'parse_property_flags_to_labels',
+    'format_variable_type',
     # Phase 7: Blueprint Graph Extraction and Parsing
     'resolve_class_name',
     'extract_blueprint_graphs',
