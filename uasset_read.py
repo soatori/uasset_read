@@ -510,6 +510,91 @@ class PackageIndex:
         return self.index - 1
 
 
+def resolve_package_index_to_reference(
+    pkg_idx: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    name_map: List[str]
+) -> Optional[Dict[str, Any]]:
+    """
+    解析FPackageIndex为可读对象引用信息。
+
+    Phase 11-02: 增强ObjectProperty解析返回可读对象引用。
+
+    Args:
+        pkg_idx: PackageIndex对象（已解码的FPackageIndex）
+        import_map: ImportMap列表
+        export_map: ExportMap列表
+        name_map: NameMap列表（用于解析FName索引）
+
+    Returns:
+        None if pkg_idx.is_null
+        {"type": "import", "class_name": str, "object_name": str, "package": str} if import
+        {"type": "export", "class_name": str, "object_name": str} if export
+    """
+    if pkg_idx.is_null:
+        return None
+
+    if pkg_idx.is_import:
+        imp_idx = pkg_idx.to_import_index()
+        if 0 <= imp_idx < len(import_map):
+            imp = import_map[imp_idx]
+            # class_name 和 object_name 可能是 FName 索引或已解析字符串
+            class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
+            object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
+            package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
+            return {
+                "type": "import",
+                "class_name": class_name,
+                "object_name": object_name,
+                "package": package
+            }
+
+    elif pkg_idx.is_export:
+        exp_idx = pkg_idx.to_export_index()
+        if 0 <= exp_idx < len(export_map):
+            exp = export_map[exp_idx]
+            # 类名可能需要递归解析class_index
+            class_name = _resolve_class_name(exp.class_index, import_map, export_map, name_map)
+            object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
+            return {
+                "type": "export",
+                "class_name": class_name,
+                "object_name": object_name
+            }
+
+    return None  # 索引越界等异常情况
+
+
+def _resolve_class_name(
+    class_index: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    name_map: List[str]
+) -> str:
+    """
+    递归解析class_index获取类名。
+
+    Phase 11-02: 辅助函数用于解析导出对象的类名。
+
+    Args:
+        class_index: PackageIndex对象（类引用）
+        import_map: ImportMap列表
+        export_map: ExportMap列表
+        name_map: NameMap列表
+
+    Returns:
+        类名字符串，如果无法解析则返回 "Unknown"
+    """
+    if class_index.is_null or class_index.index == 0:
+        return "None"
+
+    resolved = resolve_package_index_to_reference(class_index, import_map, export_map, name_map)
+    if resolved:
+        return resolved.get("class_name", "Unknown")
+    return "Unknown"
+
+
 def validate_package_index(
     index: PackageIndex,
     import_map: List["ObjectImport"],
@@ -3713,7 +3798,8 @@ def parse_properties_from_export(
     archive: FArchive,
     summary: PackageFileSummary,
     name_map: List[str],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    import_map: Optional[List["ObjectImport"]] = None
 ) -> List[PropertyValue]:
     """
     从导出条目解析所有属性（PROP-01 至 PROP-08）。
@@ -3724,12 +3810,15 @@ def parse_properties_from_export(
     3. 分派到类型特定解析函数
     4. 边界验证（seek 到 start + tag.size）
 
+    Phase 11-02: 增强ObjectProperty返回可读对象引用。
+
     Args:
         export: ObjectExport 实例
         archive: FArchive 实例
         summary: PackageFileSummary 实例（版本信息）
         name_map: 名称表
         export_map: 导出表
+        import_map: 导入表（Phase 11-02 ObjectProperty解析需要）
 
     Returns:
         List[PropertyValue] 属性值列表
@@ -3780,6 +3869,14 @@ def parse_properties_from_export(
                 value=value,
                 array_index=tag.array_index
             ))
+
+            # Phase 11-02: 增强ObjectProperty解析返回可读对象引用
+            # 在append之后修改最后一个属性值（如果import_map可用）
+            if import_map is not None and tag.type == "ObjectProperty" and isinstance(value, int):
+                pkg_idx = PackageIndex(value)
+                resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+                # 更新最后一个属性的value为增强格式
+                properties[-1].value = {"raw_index": value, "resolved": resolved}
 
         except ParseError as e:
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
@@ -3915,7 +4012,8 @@ def parse_uasset(path: str) -> ParseResult:
             if export.serial_size > 0:
                 try:
                     export.properties = parse_properties_from_export(
-                        export, archive, result.summary, result.name_map, result.export_map
+                        export, archive, result.summary, result.name_map, result.export_map,
+                        result.import_map  # Phase 11-02: 传递import_map用于ObjectProperty解析
                     )
                 except UAssetError as e:
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
@@ -4839,6 +4937,8 @@ __all__ = [
 
     # Phase 5: Boundary validation functions
     'validate_package_index',
+    # Phase 11-02: PackageIndex resolution function
+    'resolve_package_index_to_reference',
 
     # Core parsing functions
     'read_package_summary',
