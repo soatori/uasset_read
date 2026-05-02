@@ -85,6 +85,37 @@ def create_test_uasset(
     fd, path = tempfile.mkstemp(suffix='.uasset')
     os.close(fd)
 
+    # UE Version constants (from uasset_read.py)
+    UE5_ADD_SOFTOBJECTPATH_LIST = 1008
+    UE5_VERSE_CELLS = 1015
+    UE5_METADATA_SERIALIZATION_OFFSET = 1014
+    UE5_PACKAGE_SAVED_HASH = 1016
+    UE5_PAYLOAD_TOC = 1002
+    UE5_DATA_RESOURCES = 1009
+    UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001
+    UE5_IMPORT_TYPE_HIERARCHIES = 1018
+
+    UE4_WORLD_LEVEL_INFO = 223
+    UE4_ADDED_CHUNKID = 277
+    UE4_CHANGED_CHUNKID_TO_ARRAY = 341
+    UE4_ENGINE_VERSION_OBJECT = 334
+    UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382
+    UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442
+    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505
+    UE4_ADDED_SEARCHABLE_NAMES = 508
+    UE4_ADDED_PACKAGE_OWNER = 516
+    UE4_NON_OUTER_PACKAGE_IMPORT = 518
+    UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385
+    UE4_SERIALIZE_TEXT_IN_PACKAGES = 401
+    UE4_LOAD_FOR_EDITOR_GAME = 383
+    UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 401
+    PKG_Cooked = 0x200
+
+    NAME_HASHES_SERIALIZED_VERSION = 502
+
+    is_ue5_file = legacy_version <= -8
+    is_cooked = (package_flags & PKG_Cooked) != 0
+
     with open(path, 'wb') as f:
         # === 文件头 ===
         # 魔术标签（始终使用小端序，因为字节交换检测基于此）
@@ -94,31 +125,22 @@ def create_test_uasset(
         f.write(struct.pack(endian_fmt + 'i', legacy_version))
 
         # LegacyUE3Version（仅在 legacy_version != -4 时存在）
-        # 参考 UE 源码 PackageFileSummary.cpp line 130-134
         if legacy_version != -4:
             f.write(struct.pack(endian_fmt + 'i', 864))  # LegacyUE3Version
 
-        # UE4 版本（所有现代版本都有）
+        # UE4 版本
         f.write(struct.pack(endian_fmt + 'i', ue4_version))
 
         # UE5 版本（仅在 legacy_version <= -8 时存在）
-        # 参考 UE 源码 PackageFileSummary.cpp line 138-141
-        if legacy_version <= -8:
+        if is_ue5_file:
             f.write(struct.pack(endian_fmt + 'i', ue5_version))
 
         # Licensee 版本
         f.write(struct.pack(endian_fmt + 'i', licensee_version))
 
-        # SavedHash and TotalHeaderSize for UE5 >= PACKAGE_SAVED_HASH (version 1004)
-        # Reference: UE PackageFileSummary.cpp lines 236-240
-        # For UE5 >= 1004, SavedHash + TotalHeaderSize are BEFORE CustomVersions
-        PACKAGE_SAVED_HASH_VERSION = 1004
-        saved_hash_placeholder_pos = 0  # Not used for tracking, saved_hash is fixed 20 bytes
-
-        is_ue5_file = legacy_version <= -8
-
-        if is_ue5_file and ue5_version >= PACKAGE_SAVED_HASH_VERSION:
-            # UE5 >= PACKAGE_SAVED_HASH: SavedHash + TotalHeaderSize before CustomVersions
+        # SavedHash (UE5 >= 1016)
+        total_header_size_pos = 0
+        if is_ue5_file and ue5_version >= UE5_PACKAGE_SAVED_HASH:
             f.write(b'\x00' * 20)  # SavedHash placeholder (20 bytes)
             total_header_size_pos = f.tell()
             f.write(struct.pack(endian_fmt + 'i', 0))  # TotalHeaderSize placeholder
@@ -129,19 +151,12 @@ def create_test_uasset(
             f.write(guid_bytes)  # 16 bytes GUID
             f.write(struct.pack(endian_fmt + 'i', version))
 
-        # TotalHeaderSize for UE4 files (legacy > -8)
-        # Reference: UE PackageFileSummary.cpp lines 254-258
-        # UE4: TotalHeaderSize BEFORE PackageName
-        # UE5 >= PACKAGE_SAVED_HASH: TotalHeaderSize already written above (in SavedHash block)
-        # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at trailer position (after BulkDataStartOffset)
-
+        # TotalHeaderSize for UE4 files
         if not is_ue5_file:
-            # UE4 file: TotalHeaderSize placeholder at correct position
             total_header_size_pos = f.tell()
             f.write(struct.pack(endian_fmt + 'i', 0))  # Placeholder
 
-        # PackageName (FString) - matches UE PackageFileSummary.cpp line 258
-        # Default package name is "None" for synthetic files
+        # PackageName (FString)
         package_name_bytes = "None".encode('utf-8') + b'\x00'
         f.write(struct.pack(endian_fmt + 'i', len(package_name_bytes)))
         f.write(package_name_bytes)
@@ -149,52 +164,130 @@ def create_test_uasset(
         # PackageFlags
         f.write(struct.pack(endian_fmt + 'I', package_flags))
 
-        # 名称表计数 + 偏移（modern UE4/UE5 files ALWAYS have NameOffset for legacy < 0）
+        # NameCount + NameOffset
         name_count_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', len(names)))  # NameCount
+        f.write(struct.pack(endian_fmt + 'i', len(names)))
         name_offset_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset（占位）
+        f.write(struct.pack(endian_fmt + 'i', 0))  # NameOffset placeholder
 
-        # SoftObjectPaths（UE5+ only）
-        # UE4 files do NOT have SoftObjectPaths
-        if is_ue5_file:
+        # SoftObjectPaths (UE5 >= 1008)
+        if is_ue5_file and ue5_version >= UE5_ADD_SOFTOBJECTPATH_LIST:
             f.write(struct.pack(endian_fmt + 'i', 0))  # Count
             f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
 
-        # LocalizationId FString - UE4 files only (legacy > -8)
-        # Reference: UE PackageFileSummary.cpp line 289-292
-        # For synthetic files, we emit empty LocalizationId
-        if not is_ue5_file:
-            # Empty LocalizationId FString (length=0 for empty string)
+        # LocalizationId (uncooked files only)
+        # UE source: wrapped in !IsFilterEditorOnly()
+        if not is_cooked:
+            # LocalizationId FString
+            if not is_ue5_file and ue4_version >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # Empty string
+            elif is_ue5_file:  # UE5 files always have version >= 385
+                f.write(struct.pack(endian_fmt + 'i', 0))  # Empty string
+
+            # GatherableTextData (uncooked files only)
+            # UE source: not wrapped in IsFilterEditorOnly but we assume uncooked for synthetic
+            if ue4_version >= UE4_SERIALIZE_TEXT_IN_PACKAGES or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # Count
+                f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+
+        # ExportCount + ExportOffset (Export BEFORE Import!)
+        export_count_pos = f.tell()
+        f.write(struct.pack(endian_fmt + 'i', len(exports)))
+        export_offset_pos = f.tell()
+        f.write(struct.pack(endian_fmt + 'i', 0))  # ExportOffset placeholder
+
+        # ImportCount + ImportOffset
+        import_count_pos = f.tell()
+        f.write(struct.pack(endian_fmt + 'i', len(imports)))
+        import_offset_pos = f.tell()
+        f.write(struct.pack(endian_fmt + 'i', 0))  # ImportOffset placeholder
+
+        # CellExport/CellImport (UE5 >= 1015)
+        if is_ue5_file and ue5_version >= UE5_VERSE_CELLS:
+            f.write(struct.pack(endian_fmt + 'i', 0))  # CellExportCount
+            f.write(struct.pack(endian_fmt + 'i', 0))  # CellExportOffset
+            f.write(struct.pack(endian_fmt + 'i', 0))  # CellImportCount
+            f.write(struct.pack(endian_fmt + 'i', 0))  # CellImportOffset
+
+        # MetaDataOffset (UE5 >= 1014)
+        if is_ue5_file and ue5_version >= UE5_METADATA_SERIALIZATION_OFFSET:
             f.write(struct.pack(endian_fmt + 'i', 0))
 
-            # GatherableTextData Count/Offset - UE4 files only
-            # Reference: UE PackageFileSummary.cpp line 295-298
-            f.write(struct.pack(endian_fmt + 'i', 0))  # count = 0
-            f.write(struct.pack(endian_fmt + 'i', 0))  # offset = 0
-
-        # 导入表计数和偏移
-        import_count_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', len(imports)))  # ImportCount
-        import_offset_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', 0))  # ImportOffset（占位）
-
-        # 导出表计数和偏移
-        export_count_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', len(exports)))  # ExportCount
-        export_offset_pos = f.tell()
-        f.write(struct.pack(endian_fmt + 'i', 0))  # ExportOffset（占位）
-
-        # ExportHashesOffset
+        # DependsOffset
         f.write(struct.pack(endian_fmt + 'i', 0))
 
-        # ImportExportGuids
-        f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+        # SoftPackageReferences (UE4 >= 382)
+        if ue4_version >= UE4_ADD_STRING_ASSET_REFERENCES_MAP or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Count
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+
+        # SearchableNames (UE4 >= 508)
+        if ue4_version >= UE4_ADDED_SEARCHABLE_NAMES or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', 0))
+
+        # ThumbnailTableOffset
+        f.write(struct.pack(endian_fmt + 'i', 0))
+
+        # ImportTypeHierarchies (UE5 >= 1018)
+        if is_ue5_file and ue5_version >= UE5_IMPORT_TYPE_HIERARCHIES:
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Count
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+
+        # Legacy Guid (UE5 < 1016, or UE4 files)
+        # PackageFileSummary.cpp line 337-352: FGuid (16 bytes)
+        # For UE4 files: always read (FileVersionUE5 = 0 < 1016)
+        # For UE5 files: read if ue5_version < 1016
+        if is_ue5_file and ue5_version < UE5_PACKAGE_SAVED_HASH:
+            f.write(b'\x00' * 16)  # Legacy Guid placeholder
+        elif not is_ue5_file:
+            # UE4 file: always read Legacy Guid
+            f.write(b'\x00' * 16)  # Legacy Guid placeholder
+
+        # PersistentGuid (UE4 >= 516, uncooked only)
+        # PackageFileSummary.cpp line 354-376: WITH_EDITORONLY_DATA && !IsFilterEditorOnly
+        # For test fixtures, assume uncooked (is_cooked = False from PKG_Cooked check)
+        # Note: fixture sets package_flags=0 by default, so is_cooked=False
+        if ue4_version >= UE4_ADDED_PACKAGE_OWNER or is_ue5_file:
+            f.write(b'\x00' * 16)  # PersistentGuid placeholder
+            # OwnerPersistentGuid (UE4 >= 516 and < 518)
+            if not is_ue5_file and ue4_version >= UE4_ADDED_PACKAGE_OWNER and ue4_version < UE4_NON_OUTER_PACKAGE_IMPORT:
+                f.write(b'\x00' * 16)  # OwnerPersistentGuid
+
+        # Generations
+        f.write(struct.pack(endian_fmt + 'i', 0))  # GenerationCount (empty)
+
+        # SavedByEngineVersion (UE4 >= 334)
+        if ue4_version >= UE4_ENGINE_VERSION_OBJECT or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'H', 5))  # Major
+            f.write(struct.pack(endian_fmt + 'H', 0))  # Minor
+            f.write(struct.pack(endian_fmt + 'H', 0))  # Patch
+            f.write(struct.pack(endian_fmt + 'I', 0))  # Changelist
+            # Branch FString
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Empty branch
+
+        # CompatibleWithEngineVersion (UE4 >= 442)
+        if ue4_version >= UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'H', 5))  # Major
+            f.write(struct.pack(endian_fmt + 'H', 0))  # Minor
+            f.write(struct.pack(endian_fmt + 'H', 0))  # Patch
+            f.write(struct.pack(endian_fmt + 'I', 0))  # Changelist
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Empty branch
+
+        # CompressionFlags
+        f.write(struct.pack(endian_fmt + 'I', 0))
+
+        # CompressedChunks (TArray)
         f.write(struct.pack(endian_fmt + 'i', 0))  # Count
 
-        # CookedPackages
-        f.write(struct.pack(endian_fmt + 'i', 0))  # Offset
+        # PackageSource
+        f.write(struct.pack(endian_fmt + 'I', 0))
+
+        # AdditionalPackagesToCook (TArray)
         f.write(struct.pack(endian_fmt + 'i', 0))  # Count
+
+        # NumTextureAllocations (legacy > -7)
+        if legacy_version > -7:
+            f.write(struct.pack(endian_fmt + 'i', 0))
 
         # AssetRegistryDataOffset
         f.write(struct.pack(endian_fmt + 'i', 0))
@@ -202,25 +295,43 @@ def create_test_uasset(
         # BulkDataStartOffset
         f.write(struct.pack(endian_fmt + 'q', 0))
 
-        # TotalHeaderSize trailer position (only for UE5 files < PACKAGE_SAVED_HASH)
-        # UE4 files: TotalHeaderSize already written at correct position (after CustomVersions)
-        # UE5 >= PACKAGE_SAVED_HASH: TotalHeaderSize in SavedHash block (not here)
-        # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at this trailer position
-        # Note: We need to track position for ALL cases to update the placeholder later
-        if is_ue5_file and ue5_version < 1004:  # PACKAGE_SAVED_HASH_VERSION
-            # UE5 < PACKAGE_SAVED_HASH: TotalHeaderSize at trailer position
+        # WorldTileInfoDataOffset (UE4 >= 223)
+        if ue4_version >= UE4_WORLD_LEVEL_INFO or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', 0))
+
+        # ChunkIDs (UE4 >= 277, changed to array at 341)
+        if ue4_version >= UE4_CHANGED_CHUNKID_TO_ARRAY or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', 0))  # Count (empty)
+        elif ue4_version >= UE4_ADDED_CHUNKID:
+            f.write(struct.pack(endian_fmt + 'i', -1))  # Single ChunkID
+
+        # PreloadDependencies (UE4 >= 505)
+        if ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS or is_ue5_file:
+            f.write(struct.pack(endian_fmt + 'i', -1))  # Count
+            f.write(struct.pack(endian_fmt + 'i', 0))   # Offset
+
+        # NamesReferencedFromExportDataCount (UE5 >= 1001, at END!)
+        if is_ue5_file and ue5_version >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
+            f.write(struct.pack(endian_fmt + 'i', len(names)))
+
+        # PayloadTocOffset (UE5 >= 1002)
+        if is_ue5_file and ue5_version >= UE5_PAYLOAD_TOC:
+            f.write(struct.pack(endian_fmt + 'q', -1))  # int64, INDEX_NONE
+
+        # DataResourceOffset (UE5 >= 1009)
+        if is_ue5_file and ue5_version >= UE5_DATA_RESOURCES:
+            f.write(struct.pack(endian_fmt + 'i', -1))
+
+        # TotalHeaderSize trailer (UE5 < 1016)
+        if is_ue5_file and ue5_version < UE5_PACKAGE_SAVED_HASH:
             total_header_size_pos = f.tell()
-            f.write(struct.pack(endian_fmt + 'i', 0))  # Placeholder
-        # For UE4, total_header_size_pos is already set above
+            f.write(struct.pack(endian_fmt + 'i', 0))
 
         # === 名称表 ===
-        # Always write names at the end for modern UE4/UE5 files (legacy < 0)
         name_offset = f.tell()
 
-        # UE4 version constant: VER_UE4_NAME_HASHES_SERIALIZED = 502
-        # For UE4 >= 502, name entries have 4-byte hash suffix
-        NAME_HASHES_SERIALIZED_VERSION = 502
-        emit_name_hashes = (not is_ue5_file) and (ue4_version >= NAME_HASHES_SERIALIZED_VERSION)
+        # Name hashes: UE4 >= 502 AND UE5 files
+        emit_name_hashes = (not is_ue5_file and ue4_version >= NAME_HASHES_SERIALIZED_VERSION) or is_ue5_file
 
         for name in names:
             # FString 格式：长度 + UTF-8 数据 + null 终止符
@@ -228,16 +339,17 @@ def create_test_uasset(
             f.write(struct.pack(endian_fmt + 'i', len(name_bytes)))
             f.write(name_bytes)
 
-            # Emit hash bytes for UE4 >= 502
-            # Reference: UE UnrealNames.cpp line 4429-4431
+            # Emit hash bytes for UE4 >= 502 and UE5
             if emit_name_hashes:
-                # NonCasePreservingHash (uint16) + CasePreservingHash (uint16) = 4 bytes
-                # Use dummy hash values (zeros)
-                f.write(struct.pack(endian_fmt + 'H', 0))  # NonCasePreservingHash
-                f.write(struct.pack(endian_fmt + 'H', 0))  # CasePreservingHash
+                f.write(struct.pack(endian_fmt + 'HH', 0, 0))  # 4 bytes hash
 
         # === 导入表 ===
         import_offset = f.tell()
+        # Conditionally written fields per UE ObjectResource.cpp:
+        # PackageName (FName): UEVer >= 518 && !IsFilterEditorOnly
+        # bImportOptional (bool/byte): UEVer >= 1003 (OPTIONAL_RESOURCES)
+        has_package_name = (is_ue5_file or ue4_version >= 518)
+        has_import_optional = (is_ue5_file and ue5_version >= 1003) or (not is_ue5_file and ue4_version >= 1003)
         for class_package_idx, class_name_idx, outer_index, object_name_idx in imports:
             f.write(struct.pack(endian_fmt + 'I', class_package_idx))  # ClassPackage index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
@@ -246,23 +358,62 @@ def create_test_uasset(
             f.write(struct.pack(endian_fmt + 'i', outer_index))  # OuterIndex
             f.write(struct.pack(endian_fmt + 'I', object_name_idx))  # ObjectName index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
+            if has_package_name:
+                # PackageName (FName): write index 0 ("None") + number 0
+                f.write(struct.pack(endian_fmt + 'I', 0))
+                f.write(struct.pack(endian_fmt + 'I', 0))
+            if has_import_optional:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bImportOptional = false
 
         # === 导出表 ===
         export_offset = f.tell()
         for class_index, super_index, outer_index, object_name_idx, flags, serial_size, serial_offset in exports:
             f.write(struct.pack(endian_fmt + 'i', class_index))  # ClassIndex
             f.write(struct.pack(endian_fmt + 'i', super_index))  # SuperIndex
+            # Phase 6: TemplateIndex (UE4 >= 506)
+            if ue4_version >= 506 or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # TemplateIndex (default 0)
             f.write(struct.pack(endian_fmt + 'i', outer_index))  # OuterIndex
             f.write(struct.pack(endian_fmt + 'I', object_name_idx))  # ObjectName index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
             f.write(struct.pack(endian_fmt + 'I', flags))  # ObjectFlags
-            f.write(struct.pack(endian_fmt + 'q', serial_size))  # SerialSize
-            f.write(struct.pack(endian_fmt + 'q', serial_offset))  # SerialOffset
-            # UE5+ 脚本序列化字段（CR-02 fix: check legacy_version <= -8, NOT ue5_version >= 0）
-            is_ue5_file = legacy_version <= -8
-            if is_ue5_file:
-                f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialSize
-                f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialOffset
+            # SerialSize/Offset: UE4 >= 508 uses i64, otherwise i32
+            if ue4_version >= 508 or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'q', serial_size))  # SerialSize (i64)
+                f.write(struct.pack(endian_fmt + 'q', serial_offset))  # SerialOffset (i64)
+            else:
+                f.write(struct.pack(endian_fmt + 'i', serial_size))  # SerialSize (i32)
+                f.write(struct.pack(endian_fmt + 'i', serial_offset))  # SerialOffset (i32)
+            # Phase 6: bool flags (always present in modern files)
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bForcedExport
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForClient
+            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForServer
+            # Phase 6: PackageGuid (UE5 < 1010)
+            if is_ue5_file and ue5_version < 1010:
+                f.write(b'\x00' * 16)  # FGuid (16 bytes, read but not stored)
+            # Phase 6: bIsInheritedInstance (UE5 >= 1011)
+            if is_ue5_file and ue5_version >= 1011:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bIsInheritedInstance
+            # Phase 6: PackageFlags
+            f.write(struct.pack(endian_fmt + 'I', 0))  # PackageFlags
+            # Phase 6: bGeneratePublicHash (UE5 >= 1015)
+            if is_ue5_file and ue5_version >= 1015:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bGeneratePublicHash
+            # bNotAlwaysLoadedForEditorGame (UE4 >= 383, UE5 always satisfies)
+            if ue4_version >= UE4_LOAD_FOR_EDITOR_GAME or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'B', 0))
+            # bIsAsset (UE4 >= 401, UE5 always satisfies)
+            if ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'B', 0))
+            # Preload dependencies (UE4 >= 505, UE5 always satisfies)
+            if ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # FirstExportDependency
+                f.write(struct.pack(endian_fmt + 'i', 0))  # SerializationBeforeSerializationDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # CreateBeforeSerializationDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # SerializationBeforeCreateDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # CreateBeforeCreateDeps
+            # Script serialization offsets (only for cooked UE5 packages)
+            # Uncooked packages don't serialize these fields
 
         # === 更新偏移 ===
         total_header_size = f.tell()
@@ -427,6 +578,44 @@ def test_import_map():
         assert import_entry.class_name == "TestClass"
         assert import_entry.object_name == "TestName"
         assert import_entry.outer_index.index == 0
+    finally:
+        cleanup_test_file(path)
+
+
+def test_import_map_ue5_condition_fields():
+    """
+    测试 UE5 ImportMap 条件字段读取（Phase 10 Gap #2）。
+
+    验证：
+    - PackageName 字段正确读取（UEVer >= 518 且 !FilterEditorOnly）
+    - bImportOptional 字段正确读取（UEVer >= 1003）
+    """
+    # 导入表条目：(class_package_idx, class_name_idx, outer_index, object_name_idx)
+    # 使用名称表索引（默认包含 ["None", "TestName", "AnotherName", "TestClass", "TestPackage"])
+    imports = [
+        (4, 3, 0, 1),  # TestPackage, TestClass, outer=0, TestName
+    ]
+
+    # UE5 文件且 ue5_version >= 1003 会读取 PackageName 和 bImportOptional
+    path = create_test_uasset(
+        imports=imports,
+        ue5_version=1003,  # >= UE5_OPTIONAL_RESOURCES
+        package_flags=0   # 无 PKG_FilterEditorOnly
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert len(result.import_map) == 1
+        import_entry = result.import_map[0]
+        assert import_entry.class_package == "TestPackage"
+        assert import_entry.class_name == "TestClass"
+        assert import_entry.object_name == "TestName"
+        assert import_entry.outer_index.index == 0
+        # 条件字段（UE5 >= 1003）
+        assert import_entry.package_name == "None"  # PackageName 条件字段（index 0）
+        assert import_entry.b_import_optional == False  # bImportOptional 条件字段
     finally:
         cleanup_test_file(path)
 
@@ -789,78 +978,48 @@ def test_parse_result_structure():
 
 def test_saved_hash_ue5_package_saved_hash_version():
     """
-    Test SavedHash and early TotalHeaderSize parsing for UE5 >= PACKAGE_SAVED_HASH (1004).
+    Test SavedHash and early TotalHeaderSize parsing for UE5 >= PACKAGE_SAVED_HASH (1016).
 
     Validates:
-    - Parser correctly reads 20-byte SavedHash for UE5 >= 1004 files
-    - TotalHeaderSize is read early (before CustomVersions) for UE5 >= 1004
+    - Parser correctly reads 20-byte SavedHash for UE5 >= 1016 files
+    - TotalHeaderSize is read early (before CustomVersions) for UE5 >= 1016
     - saved_hash field populated in PackageFileSummary
 
-    Strategy: Use baseline test with UE5 < 1004 to verify saved_hash is empty,
-    then use manual binary creation to test UE5 >= 1004 SavedHash reading.
-
-    Note: The parser's legacy < -5 inline names handling complicates testing.
-    We focus on verifying SavedHash bytes are correctly read and stored.
+    Strategy: Use baseline test with UE5 < 1016 to verify saved_hash is empty,
+    then test UE5 >= 1016 SavedHash reading.
     """
-    # First verify UE5 < 1004 still works (baseline) - saved_hash should be empty
+    # First verify UE5 < 1016 still works (baseline) - saved_hash should be empty
     path_baseline = create_test_uasset(
         legacy_version=-8,
-        ue5_version=500,  # < PACKAGE_SAVED_HASH (1004)
+        ue5_version=1015,  # < PACKAGE_SAVED_HASH (1016)
         names=["TestName"]
     )
 
     try:
         result_baseline = parse_uasset(path_baseline)
         assert result_baseline.is_success, f"Baseline parse failed: {result_baseline.errors}"
-        assert result_baseline.summary.file_version_ue5 == 500
-        assert result_baseline.summary.saved_hash == b''  # Should be empty for < 1004
+        assert result_baseline.summary.file_version_ue5 == 1015
+        assert result_baseline.summary.saved_hash == b''  # Should be empty for < 1016
         assert len(result_baseline.name_map) == 2  # "None" + "TestName"
     finally:
         cleanup_test_file(path_baseline)
 
-    # Now test UE5 >= 1004 SavedHash reading with minimal file
-    # We use create_test_uasset which handles the complexity, but it doesn't emit SavedHash
-    # So we test that the parser correctly handles the SavedHash conditional by:
-    # 1. Creating a file that would cause errors if SavedHash wasn't read
-    # 2. Verifying saved_hash field exists and has correct default
-
-    # For UE5 >= 1004 files with legacy=-8, create_test_uasset creates files that
-    # the parser would fail to parse if SavedHash wasn't being read.
-    # Since create_test_uasset doesn't include SavedHash bytes, parsing will fail
-    # if the parser tries to read SavedHash from wrong position.
-
-    # Instead, we manually verify the SavedHash conditional logic works:
-    # The key assertion is that saved_hash field exists and the conditional is checked.
-
-    # Create a file with UE5 version 1004 using create_test_uasset
-    # The parser will enter the SavedHash conditional and try to read 20 bytes
-    # If the file is too small, it will fail - proving the conditional works
-    path_ue5_1004 = create_test_uasset(
+    # Now test UE5 >= 1016 SavedHash reading
+    path_ue5_1016 = create_test_uasset(
         legacy_version=-8,
-        ue5_version=1004,  # >= PACKAGE_SAVED_HASH
+        ue5_version=1016,  # >= PACKAGE_SAVED_HASH
         names=["TestName"]
     )
 
     try:
-        result_ue5_1004 = parse_uasset(path_ue5_1004)
-        # This parse might fail because create_test_uasset doesn't emit SavedHash bytes
-        # But we've verified that saved_hash field exists in the dataclass
-        # and the conditional is being checked (from the baseline test)
-
-        # If parse succeeds, verify saved_hash is populated
-        if result_ue5_1004.is_success:
-            # The parser read 20 bytes as SavedHash (from wherever the file had data)
-            # We just verify the field exists and has 20 bytes
-            assert len(result_ue5_1004.summary.saved_hash) == 20
-        else:
-            # Parse might fail due to offset mismatch - that's OK for this test
-            # The key verification is that saved_hash field exists in PackageFileSummary
-            pass
+        result_ue5_1016 = parse_uasset(path_ue5_1016)
+        assert result_ue5_1016.is_success, f"Parse failed: {result_ue5_1016.errors}"
+        assert result_ue5_1016.summary.file_version_ue5 == 1016
+        # SavedHash should be 20 bytes (from fixture's placeholder zeros)
+        assert len(result_ue5_1016.summary.saved_hash) == 20
+        assert result_ue5_1016.summary.total_header_size > 0
     finally:
-        cleanup_test_file(path_ue5_1004)
-
-    # Final verification: saved_hash field exists in PackageFileSummary dataclass
-    # This is verified by the baseline test above and the PackageFileSummary class definition
+        cleanup_test_file(path_ue5_1016)
 
 
 def test_ue4_export_no_script_serialization():
@@ -945,25 +1104,31 @@ def test_export_count_bounds_validation():
     """
     fd, path = tempfile.mkstemp(suffix='.uasset')
 
-    # Use UE5 version 500 (< 1004) to avoid SavedHash reading
+    # Use UE5 version 1015 (< 1016) to avoid SavedHash reading
+    # Follow correct UE field order: ExportCount BEFORE ImportCount
     header = struct.pack('<I', PACKAGE_FILE_TAG)
-    header += struct.pack('<i', -8)
-    header += struct.pack('<i', 864)
-    header += struct.pack('<i', 0)
-    header += struct.pack('<i', 500)  # UE5 version (< 1004, no SavedHash)
-    header += struct.pack('<i', 0)
-    header += struct.pack('<I', 0)  # CustomVersions
-    header += struct.pack('<i', 5) + b'None\x00'  # PackageName
-    header += struct.pack('<I', 0)  # PackageFlags
-    header += struct.pack('<i', 10)  # name_count (valid)
-    header += struct.pack('<i', 200)  # name_offset (valid, within padded file)
-    header += struct.pack('<i', 0)  # soft_object_paths_count
-    header += struct.pack('<i', 0)  # soft_object_paths_offset
-    header += struct.pack('<i', 0)  # import_count
-    header += struct.pack('<i', 200)  # import_offset (valid)
-    header += struct.pack('<i', 5_000_000)  # export_count > MAX
-    # Add padding to make offsets valid
-    header += b'\x00' * 150  # Pad file to ~220 bytes so offsets 200 are valid
+    header += struct.pack('<i', -8)  # LegacyFileVersion
+    header += struct.pack('<i', 864)  # LegacyUE3Version
+    header += struct.pack('<i', 0)    # FileVersionUE4
+    header += struct.pack('<i', 1015)  # FileVersionUE5 (< 1016, no SavedHash)
+    header += struct.pack('<i', 0)    # FileVersionLicensee
+    header += struct.pack('<I', 0)    # CustomVersions count
+    header += struct.pack('<i', 5) + b'None\x00'  # PackageName FString
+    header += struct.pack('<I', 0)    # PackageFlags
+    header += struct.pack('<i', 10)   # NameCount (valid)
+    header += struct.pack('<i', 500)  # NameOffset (far into padded file)
+    # SoftObjectPaths (UE5>=1008)
+    header += struct.pack('<i', 0)    # Count
+    header += struct.pack('<i', 0)    # Offset
+    # LocalizationId (uncooked UE5)
+    header += struct.pack('<i', 0)    # Empty FString
+    # GatherableTextData (uncooked)
+    header += struct.pack('<i', 0)    # Count
+    header += struct.pack('<i', 0)    # Offset
+    # ExportCount, ExportOffset (Export BEFORE Import!)
+    header += struct.pack('<i', 5_000_000)  # ExportCount > MAX - should fail here
+    # Add lots of padding to make offsets valid and ensure parser reaches ExportCount
+    header += b'\x00' * 600  # Pad file so offsets are valid
 
     os.write(fd, header)
     os.close(fd)
@@ -1031,13 +1196,17 @@ def test_ue4_total_header_size_at_correct_position():
     This test catches the bug: if parser reads TotalHeaderSize at wrong position,
     PackageName FString length will be garbage (like 14620 from Lyra file).
 
-    Expected UE4 file structure:
+    Expected UE4 file structure (correct order per UE PackageFileSummary.cpp):
     - Tag, LegacyVersion, LegacyUE3Version, UE4Version, LicenseeVersion
     - CustomVersions (count=0 for simplicity)
     - TotalHeaderSize (at correct position)
     - PackageName FString
     - PackageFlags
     - NameCount, NameOffset
+    - LocalizationId (UE4 >= 385, uncooked)
+    - GatherableTextData (UE4 >= 401, uncooked)
+    - ExportCount, ExportOffset (Export BEFORE Import!)
+    - ImportCount, ImportOffset
     - ... rest of header
     - Name table data
     """
@@ -1072,41 +1241,88 @@ def test_ue4_total_header_size_at_correct_position():
     name_offset_placeholder_pos = len(header)
     header += struct.pack('<i', 0)  # NameOffset placeholder
 
-    # LocalizationId FString - UE4 files only (legacy > -8)
-    # VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 514
-    # UE4 v522 >= 514, so LocalizationId is present
+    # LocalizationId FString - UE4 uncooked files (>= 385)
+    # UE4 v522 >= 385, so LocalizationId is present
     header += struct.pack('<i', 0)  # Empty LocalizationId (length=0)
 
-    # GatherableTextData Count/Offset - UE4 files only
-    # VER_UE4_SERIALIZE_TEXT_IN_PACKAGES = 457
-    # UE4 v522 >= 457, so GatherableTextData is present
+    # GatherableTextData Count/Offset - UE4 uncooked files (>= 401)
+    # UE4 v522 >= 401, so GatherableTextData is present
     header += struct.pack('<i', 0)  # Count = 0
     header += struct.pack('<i', 0)  # Offset = 0
+
+    # ExportCount, ExportOffset (Export BEFORE Import - correct UE order!)
+    header += struct.pack('<i', 0)
+    header += struct.pack('<i', 0)
 
     # ImportCount, ImportOffset
     header += struct.pack('<i', 0)
     header += struct.pack('<i', 0)
 
-    # ExportCount, ExportOffset
-    header += struct.pack('<i', 0)
-    header += struct.pack('<i', 0)
-
-    # ExportHashesOffset
+    # DependsOffset
     header += struct.pack('<i', 0)
 
-    # ImportExportGuidsOffset, Count
-    header += struct.pack('<i', 0)
+    # SoftPackageReferences (UE4 >= 382, v522 >= 382)
+    header += struct.pack('<i', 0)  # Count
+    header += struct.pack('<i', 0)  # Offset
+
+    # SearchableNames (UE4 >= 508, v522 >= 508)
     header += struct.pack('<i', 0)
 
-    # CookedPackagesOffset, Count
+    # ThumbnailTableOffset
     header += struct.pack('<i', 0)
-    header += struct.pack('<i', 0)
+
+    # Legacy Guid (UE4 files always have 16 bytes Legacy Guid before PersistentGuid)
+    header += b'\x00' * 16  # Legacy Guid (FGuid)
+
+    # PersistentGuid (UE4 >= 516, v522 >= 516)
+    header += b'\x00' * 16  # FGuid
+
+    # Generations
+    header += struct.pack('<i', 0)  # GenerationCount = 0
+
+    # SavedByEngineVersion (UE4 >= 334, v522 >= 334)
+    header += struct.pack('<H', 5)  # Major
+    header += struct.pack('<H', 0)  # Minor
+    header += struct.pack('<H', 0)  # Patch
+    header += struct.pack('<I', 0)  # Changelist
+    header += struct.pack('<i', 0)  # Branch FString (empty)
+
+    # CompatibleWithEngineVersion (UE4 >= 442, v522 >= 442)
+    header += struct.pack('<H', 5)  # Major
+    header += struct.pack('<H', 0)  # Minor
+    header += struct.pack('<H', 0)  # Patch
+    header += struct.pack('<I', 0)  # Changelist
+    header += struct.pack('<i', 0)  # Branch FString (empty)
+
+    # CompressionFlags
+    header += struct.pack('<I', 0)
+
+    # CompressedChunks (TArray)
+    header += struct.pack('<i', 0)  # Count = 0
+
+    # PackageSource
+    header += struct.pack('<I', 0)
+
+    # AdditionalPackagesToCook (TArray)
+    header += struct.pack('<i', 0)  # Count = 0
+
+    # NumTextureAllocations (legacy=-7 > -7, so NOT present)
 
     # AssetRegistryDataOffset
     header += struct.pack('<i', 0)
 
     # BulkDataStartOffset (i64)
     header += struct.pack('<q', 0)
+
+    # WorldTileInfoDataOffset (UE4 >= 223, v522 >= 223)
+    header += struct.pack('<i', 0)
+
+    # ChunkIDs (UE4 >= 277, changed to array at 341, v522 >= 341)
+    header += struct.pack('<i', 0)  # Count = 0
+
+    # PreloadDependencies (UE4 >= 505, v522 >= 505)
+    header += struct.pack('<i', -1)  # Count = -1
+    header += struct.pack('<i', 0)   # Offset
 
     # Name table data
     name_offset = len(header)

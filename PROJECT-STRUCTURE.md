@@ -1,44 +1,68 @@
 # 项目结构文档
 
-**更新时间:** 2026-05-01
+**更新时间:** 2026-05-02
 
 ## 核心文件
 
 ```
 uasset_read/
-├── uasset_read.py           # 主解析器实现 (2104 行, 零依赖)
+├── uasset_read.py           # 主解析器实现 (4901 行, 零依赖)
 ├── CLAUDE.md                # Claude Code 项目指导
-├── VERIFICATION-REPORT.md   # 校验报告 (临时)
 ├── PROJECT-STRUCTURE.md     # 本文件
+├── SECURITY.md              # 安全文档
 ├── .gitignore               # Git 排除配置
 │
-├── tests/                   # 测试套件
+├── tests/                   # 测试套件 (11 个测试文件)
 │   ├── __init__.py
-│   ├── test_uasset_read.py           # 阶段 1: 核心解析 (1310 行)
-│   ├── test_property_parsing.py      # 阶段 2: 属性解析 (673 行)
-│   ├── test_blueprint_extraction.py  # 阶段 3: 蓝图提取 (173 行)
-│   └ test_output_formatting.py       # 阶段 4: 输出格式 (脚手架)
+│   ├── test_uasset_read.py           # 核心解析测试
+│   ├── test_property_parsing.py      # 属性解析测试
+│   ├── test_blueprint_extraction.py  # 蓝图提取测试
+│   ├── test_output_formatting.py     # 输出格式测试
+│   ├── test_graph_parsing.py         # 图解析测试
+│   ├── test_advanced_properties.py   # 高级属性测试
+│   ├── test_dependency_analysis.py   # 依赖分析测试
+│   ├── test_mmap_behavior.py         # mmap行为测试
+│   ├── test_boundary_validation.py   # 边界验证测试
+│   ├── test_loop_limits.py           # 循环限制测试
+│   └ test_partial_results.py        # 部分结果测试
 │
-└── .planning/               # GSD 规划文档
+├── test/                    # 测试资产分析产物
+│
+├── uasset_read_cpp/         # C++移植版本
+│   ├── include/
+│   ├── src/
+│   ├── tests/
+│   └ CMakeLists.txt
+│
+└── .planning/               # GSD规划文档
     ├── PROJECT.md           # 项目定义
-    ├── ROADMAP.md           # 5阶段路线图
+    ├── ROADMAP.md           # 路线图
     ├── STATE.md             # 当前状态
     ├── REQUIREMENTS.md      # 需求映射
-    ├── config.json          # GSD 配置
+    ├── VERIFICATION-REPORT.md # 校验报告
+    ├── config.json          # GSD配置
     │
-    ├── phases/              # 阶段执行记录
-    │   ├── 01-core-parsing/         # ✓ 已完成 (8 个计划)
-    │   ├── 02-property-parsing/     # ✓ 已完成 (3 个计划)
-    │   ├── 03-blueprint-extraction/ # ✓ 已完成 (4 个计划)
-    │   ├── 04-output-and-cli/       # ○ 已规划 (4 个计划)
-    │   └── 05-optimization-security/ # ○ 待定
+    ├── phases/              # 阶段执行记录 (10个阶段)
+    │   ├── 01-core-architecture/     # ✓ 已完成
+    │   ├── 01-core-parsing/          # ✓ 已完成
+    │   ├── 02-property-parsing/      # ✓ 已完成
+    │   ├── 03-blueprint-extraction/  # ✓ 已完成
+    │   ├── 04-output-and-cli/        # ✓ 已完成
+    │   ├── 05-optimization-security/ # ✓ 已完成
+    │   ├── 06-export-table-fix/      # ✓ 已完成
+    │   ├── 07-blueprint-graph-core/  # ✓ 已完成
+    │   ├── 08-blueprint-graph-output/# ✓ 已完成
+    │   ├── 09-advanced-properties/   # ✓ 已完成
+    │   └── 10-dependency-analysis/   # ✓ 已完成
     │
-    ├── research/            # 研究产物
-    └── templates/           # GSD 模板
-│
-└── .claude/                 # Claude Code 配置
-    ├── memory/              # 记忆系统
-    └── skills/              # 技能插件
+    └ research/              # 研究产物
+    │
+    └── .claude/             # Claude Code配置
+        ├── memory/          # 记忆系统
+        └── skills/          # 技能插件
+            ├── lyra-course/
+            ├── uasset-format/
+            └── uecpp-course/
 ```
 
 ## 已排除目录
@@ -50,20 +74,28 @@ uasset_read/
 - `src/` - 早期废弃的多文件结构
 - `__pycache__/` - Python 缓存
 - `.pytest_cache/` - pytest 缓存
+- `test/` - 测试分析产物目录
 
-## 测试统计
+## 开发阶段
 
-| 阶段 | 测试文件 | 测试数 | 状态 |
-|------|----------|--------|------|
-| 1 | test_uasset_read.py | 28 | ✓ 通过 |
-| 2 | test_property_parsing.py | 35 | ✓ 通过 |
-| 3 | test_blueprint_extraction.py | 21 | ✓ 通过 |
-| 4 | test_output_formatting.py | 11 | 脚手架 |
-| **总计** | - | **95** | 84 passed |
+项目已完成10个阶段：
+
+| 阶段 | 名称 | 状态 | 说明 |
+|------|------|------|------|
+| 01 | 核心架构 + 核心解析 | ✓ 完成 | 文件头、名称表、导入/导出映射 |
+| 02 | 属性解析 | ✓ 完成 | UObject属性反序列化 |
+| 03 | 蓝图提取 | ✓ 完成 | 蓝图元数据、变量、图表 |
+| 04 | 输出和CLI | ✓ 完成 | JSON输出、命令行接口 |
+| 05 | 优化和安全 | ✓ 完成 | 性能优化、边界验证 |
+| 06 | 导出表修复 | ✓ 完成 | UE5条件字段修复 |
+| 07 | 蓝图图核心 | ✓ 完成 | 图结构解析 |
+| 08 | 蓝图图输出 | ✓ 完成 | 图输出格式化 |
+| 09 | 高级属性 | ✓ 完成 | 复杂属性类型 |
+| 10 | 依赖分析 | ✓ 完成 | 资产依赖关系 |
 
 ## API 导出
 
-`uasset_read.py` 导出 14 个公共 API：
+`uasset_read.py` 导出多个公共 API：
 
 ```python
 from uasset_read import (
@@ -84,9 +116,19 @@ from uasset_read import (
 )
 ```
 
-## 下一步
+## 运行测试
 
-执行阶段 4 实现：
+```bash
+# 运行所有测试
+python -m pytest tests/ -v
+
+# 运行单个测试文件
+python -m pytest tests/test_uasset_read.py -v
+
+# 解析.uasset文件
+python -c "from uasset_read import parse_uasset; r = parse_uasset('file.uasset'); print(r)"
 ```
-/gsd-execute-phase 4
-```
+
+## 项目状态
+
+所有规划阶段已完成。项目可解析未烘焙的UE .uasset文件，提取蓝图元数据、变量、图表结构等信息。

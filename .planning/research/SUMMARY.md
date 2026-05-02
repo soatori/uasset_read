@@ -1,241 +1,380 @@
 # 研究摘要
 
-**项目：** uasset_read —— Python .uasset 解析器（面向 AI agent）
-**综合日期：** 2026-04-27
+**项目：** uasset_read — Python .uasset 解析器（面向 AI agent）
+**综合日期：** 2026-05-02
+**版本：** v2.0 蓝图图解析阶段
+**状态：** v1.0 已完成，v2.0 研究完成（待实施）
+
+---
 
 ## 执行摘要
 
-本项目构建 Python 工具解析 Unreal Engine .uasset 文件，使 AI agent 能直接读取蓝图内容无需 UE 编辑器依赖。.uasset 格式无文档但可从 UE 5.7 源码逆向工程（位于 `D:/Program Files/Epic Games/Engine/UE_5.7`）。
+本项目构建 Python 工具解析 Unreal Engine .uasset 文件，使 AI agent 能直接读取蓝图内容而无需 UE 编辑器依赖。
 
-**关键洞察：** 专注于未 cooked/编辑器保存的资产，其含完整图数据。Cooked 资产已剥离编辑器数据且使用不同序列化（无版本属性）。
+### 核心洞察
+
+**洞察 1：架构稳定性** — 现有 v1.0 架构（FArchive → Deserializer → Model → Output 分层管道）完整支持蓝图图解析，无需重构。
+
+**洞察 2：零新增依赖** — Python 3.10+ 标准库已完整覆盖 v2.0 蓝图图解析需求（struct、dataclasses、json、mmap），无需引入 construct、pydantic 等新库。
+
+**洞察 3：蓝图图结构** — 蓝图图是层叠结构：`UEdGraph`（图容器）→ `UEdGraphNode[]`（节点列表）→ `UEdGraphPin[]`（引脚列表），通过 `LinkedTo`（PinId GUID 引用）和 `ParentPin/SubPins`（结构体拆分）实现连接。
+
+**洞察 4：节点类型稳定** — 主要节点类型（K2Node_Event、K2Node_CallFunction、K2Node_Knot、EdGraphNode_Comment）序列化格式已从 UE 5.7 源码和编辑器导出验证。
+
+**洞察 5：版本敏感** — FEdGraphPinType 等结构包含版本条件字段（container_type、bIsConst、bIsUObjectWrapper），解析器需版本感知。
 
 ---
 
 ## 技术栈摘要
 
-**零运行时依赖** —— 仅 Python 3.10+ 标准库。
+### 现有技术栈（v1.0 → v2.0 一致）
 
-| 层级 | 组件 | 模式 |
+| 层级 | 组件 | 说明 |
 |------|------|------|
-| 输入 | pathlib、mmap | 大资产内存映射文件访问 |
-| 读取器 | struct、自定义 FArchive 类 | 显式字节序字节级解析 |
-| 模型 | dataclasses | 清晰数据结构、内置 JSON 序列化 |
-| 输出 | json、文本格式化 | agent 用结构化 JSON、人类用可读文本 |
-| CLI | argparse | 单文件执行：`python uasset_read.py file.uasset` |
+| **语言** | Python 3.10+ | match/case、类型提示、dataclasses |
+| **二进制读取** | struct + mmap | u8/u32/u64/f32/f64、大文件映射 |
+| **数据模型** | dataclasses | asdict() → JSON、清晰结构 |
+| **JSON 输出** | json | 结构化 Agent 输入 |
+| **CLI** | argparse | `python -m uasset_read` |
+| **编码** | UTF-8 | UE 5.x 标准 |
 
-**架构：** 分层管道（Reader → Deserializer → Model → Output），镜像 UE FArchive 模式。
+### v2.0 蓝图图解析新增数据类
+
+```python
+@dataclass
+class UEdGraphPinRef:
+    """引脚引用（LinkedTo 条目）"""
+    pin_name: str
+    target_node: Optional[str] = None
+    resolved_pin: Optional["UEdGraphPin"] = None
+
+@dataclass
+class UEdGraphPin:
+    """节点引脚"""
+    pin_name: str
+    pin_type: "FEdGraphPinType"        # Phase 3 已实现
+    default_value: Optional[str] = None
+    auto_default_value: Optional[str] = None
+    linked_to: List["UEdGraphPinRef"] = field(default_factory=list)
+    not_connectable: bool = False
+    default_value_readonly: bool = False
+    is_reference: bool = False
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uproperty: bool = False
+    owning_node: Optional["K2Node"] = None
+
+@dataclass
+class K2Node:
+    """蓝图节点基类（K2Node）"""
+    class_name: str                      # "K2Node_Event", "K2Node_CallFunction"
+    node_guid: str                       # FGuid hex
+    node_pos_x: int = 0
+    node_pos_y: int = 0
+    pins: List["UEdGraphPin"] = field(default_factory=list)
+    node_data: Optional["NodeData"] = None
+
+@dataclass
+class UEdGraph:
+    """蓝图图"""
+    graph_name: str                      # "Ubergraph", "Function", "Macro"
+    graph_class: str                     # 所属蓝图类
+    nodes: List["K2Node"] = field(default_factory=list)
+    is_ubergraph: bool = False
+    is_function_graph: bool = False
+    is_macro_graph: bool = False
+
+@dataclass
+class BlueprintGraphMetadata:
+    """蓝图图完整元数据"""
+    ubergraph_pages: List["UEdGraph"] = field(default_factory=list)
+    function_graphs: List["UEdGraph"] = field(default_factory=list)
+    macro_graphs: List["UEdGraph"] = field(default_factory=list)
+```
 
 ---
 
-## 功能摘要
+## 功能全景
 
-### 基础功能（必须有）
+### 表类型功能（Table Stakes）——v2.0 必须
 
-1. **解析 .uasset 文件头** —— PackageFileSummary 含魔术标签、版本、偏移
-2. **提取名称表** —— 所有对象/属性名称引用此表
-3. **提取导出/导入表** —— 对象和依赖定义于此
-4. **识别资产类** —— Blueprint、Material、Texture 等
-5. **基本属性解析** —— Int、Float、String、Bool、Array 值
-6. **JSON 输出** —— AI agent 消费核心需求
-7. **人类可读文本** —— 语义描述，非原始数据
-8. **单文件解析** —— 无需 UE 编辑器或 pak 提取
+| 功能 | 为什么表类型 | 复杂度 | v1.0 状态 | v2.0 计划 |
+|------|-------------|--------|-----------|-----------|
+| 解析 UEdGraph | 蓝图逻辑容器 | 低 | | ✓ v2.0 |
+| 识别 UK2Node | 蓝图节点基类 | 低 | | ✓ v2.0 |
+| 解析 UEdGraphPin | 引脚数据/执行流端点 | 中 | | ✓ v2.0 |
+| 引脚类型提取 | FEdGraphPinType 10 字段 | 中 | ✓ Phase 3 | ✓ v2.0 复用 |
+|LinkedTo连接 | 节点间连接 | 中 | | ✓ v2.0（名称索引）|
+| 节点类型分辨 | 辨别 K2Node_CallFunction / Event | 中 | | ✓ v2.0 |
 
-### 差异化功能（增值）
+### 差异化功能（Differentiators）——v2.1+
 
-1. **蓝图图提取** —— 节点、引脚、连接（高复杂度）
-2. **变量定义** —— 名称、类型、默认值（中复杂度）
-3. **函数定义** —— 签名、参数（高复杂度）
-4. **依赖图** —— 此资产使用哪些其他资产（中复杂度）
-5. **语义节点描述** —— "调用函数 X"而非"K2Node_CallFunction"
+| 功能 | 价值 | 复杂度 | 优先级 |
+|------|------|--------|--------|
+| 节点上下文信息 | AI 语义理解（如 "jump action"） | 高 | v2.1 后期 |
+| 节点分组识别 | 注释框理解逻辑分组 | 低 | v2.1 早期 |
+| 路径追踪 | 事件→函数调用完整路径 | 高 | v2.1 |
+| 依赖倒排索引 | 输入动作反查使用位置 | 高 | v2.1+ |
+| 类 C++ 伪代码生成 | 输出等价代码 | 极高 | v3.0 |
 
-### 反功能（明确超出范围）
+### 反功能（Anti-Features）——明确不支持
 
-- 二进制资产导出（纹理、模型）
-- 资产修改/写入
-- 蓝图字节码反编译
-- Pak 文件提取
-- UE 编辑器集成
-- Cooked 资产解析（专注未 cooked/编辑器保存）
+| 反功能 | 避免原因 |
+|--------|----------|
+| cooked 资产图结构提取 | 已剥离编辑器数据，仅保留字节码 |
+| 蓝图字节码反编译 | 需专门 VM 解析器 |
+| 节点执行模拟 | 需完整运行时环境 |
+| 资产修改/写入 | 仅支持只读解析 |
 
 ---
 
 ## 架构摘要
 
-### 分层管道
+### 分层管道（v1.0 → v2.0 一致）
 
 ```
 .uasset 文件 → BinaryReader → AssetDeserializer → Models → OutputFormatter
 ```
 
-### 关键组件
+### v2.0 新增组件
 
-1. **FArchive** —— 二进制读取抽象基类（镜像 UE 模式）
-2. **PackageSummary** —— 文件头 dataclass 含各区块偏移
-3. **NameTable** —— FName 索引引用的字符串池
-4. **ImportMap/ExportMap** —— 对象引用和定义
-5. **TypeHandlers** —— 资产特定解析插件注册表
-6. **BlueprintHandler** —— 蓝图特定提取逻辑
+| 组件 | 职责 | 与谁通信 |
+|------|------|----------|
+| **GraphHandler** | 蓝图图解析协调 | Deserializer（接收上下文） |
+| **PinParser** | UEdGraphPin 解析 | GraphHandler |
+| **NodeDispatcher** | UK2Node 子类分派 | PinParser（节点类型识别后） |
+| **LinkBuilder** | LinkedTo 引用解析 | PinParser（构建连接） |
 
-### 数据流
+### 数据流（v2.0 蓝图图解析）
 
 ```
-1. 读取文件头（PackageFileSummary）
-2. 读取名称表（在 NameOffset）
-3. 读取导入表（在 ImportOffset）
-4. 读取导出表（在 ExportOffset）
-5. 对每个导出：
-   - 解析类类型
-   - 分发到处理器
-   - 解析属性和类型特定数据
-6. 格式化输出（JSON/文本/概要）
+1. 标识图导出（ClassIndex 包含 "EdGraph"）
+   ↓
+2. 对每个 UEdGraph 导出：
+   ├─ read_schema() → FPackageIndex
+   ├─ read_nodes_count() → int32
+   ├─ 对每个节点引用：
+   │  ├─ resolve_export_index() → NodeExport
+   │  ├─ parse_node_base() → UEdGraphNode (Pins, Pos, Guid)
+   │  ├─ detect_k2node_type() → 子类名
+   │  └─ dispatch_to_k2node_handler() → K2Node 特定数据
+   └─ build_connections() → LinkedTo → PinId 映射
+   ↓
+3. 输出：
+   ├─ Graphs → Nodes → Pins 层级 JSON
+   ├─ Connections 辅助结构
+   └─ ExecutionOrder 辅助结构
 ```
-
-### 构建顺序
-
-1. 读取层（FArchive、二进制操作）
-2. 模型层核心（PackageSummary、PackageIndex、Import/Export）
-3. 反序列化器核心（文件头、名称表、导入/导出解析）
-4. 模型层类型（UObject、Blueprint、Properties）
-5. 处理器层（类型注册表、BlueprintHandler）
-6. 输出层（JSON、文本、概要格式器）
-7. 性能/优化（mmap、延迟解析、版本处理）
 
 ---
 
-## 陷阱摘要
+## 关键陷阱与缓解
 
-### 关键（导致重写）
+### 关键陷阱（导致重写）
 
-1. **字节序检测** —— 检查魔术标签；检测到交换标签时启用字节交换
-2. **版本处理** —— UE4/UE5/自定义版本；无版本包需特殊处理
-3. **BulkData 标志** —— PayloadAtEndOfFile、SeparateFile、Compression、64 位大小
-4. **FName 索引 vs 字符串** —— FName 是 NameMap 索引非字符串；先加载 NameMap
-5. **偏移算术** —— 绝对 vs 相对偏移；BulkDataStartOffset 为载荷基准
-6. **无版本属性** —— Schema 基序列化（无属性标签）；需要类布局知识
-7. **PropertyTag演进** —— GUID、扩展、类型名标志；版本依赖字段
-8. **UE5 包 Trailer** —— Payload TOC、数据资源、从文件末尾反向读取
+| 陷阱 | 说明 | 缓解措施 | 阶段 |
+|------|------|----------|------|
+| **OuterIndex 缺失 TemplateIndex** | UE4 >= 506 在 SuperIndex 和 OuterIndex 间插入 TemplateIndex | 检查 `summary.file_version_ue4 >= 506`，条件读取 | v1.0 Phase 4 已修复 |
+| **Cooked 资产检测缺失** | PKG_Cooked 标志指示图结构已移除 | 解析前检查 PackageFlags & 0x200 | v2.0 开始需添加 |
+| **FEdGraphPinType 版本依赖** | ContainerType、bIsConst、bIsUObjectWrapper 依版本添加 | 版本条件分支读取 | v2.0 Phase 1 |
+| **节点类型误判** | Blueprint/Class/EdGraph 导出非节点 | 检查类名以 "K2Node_" 开头 | v2.0 Phase 2 |
+| **LinkedTo GUID 格式** | 存储为 PinId GUID，非索引 | 构建 pin_id → pin_object 字典二次查找 | v2.0 Phase 1 |
 
-### 中等（导致问题）
+### 中等陷阱
 
-1. **内存管理** —— 不全量读取文件；大文件使用 mmap
-2. **struct 对齐** —— C++ 填充与 Python 不同；逐字段解析
-3. **字符串编码** —— UE5+ UTF-8，旧版本 UTF-16；处理 LengthPrefix
-4. **Import/Export 结构** —— 版本依赖字段；FPackageIndex 有符号编码
-5. **错误恢复** —— 验证大小/偏移；返回部分结果，不崩溃
-6. **蓝图图复杂性** —— 无文档；专注元数据，接受限制
+| 陷阱 | 说明 | 缓解 |
+|------|------|------|
+| SubPin/ParentPin 关系 | 结构体拆分的子引脚需ParentPin 引用 | 解析时构建双向引用 |
+| NodeGuid vs 导出索引 | 外部工具使用 Guid，内部用索引 | 输出双引用 |
+| 多图页面（Ubergraph/Function/Macro） | 蓝图可含多个图 | 先收集所有 UEdGraph 导出 |
 
-### 次要
+### 次要陷阱
 
-1. .umap vs .uasset（关卡包有额外结构）
-2. Generations 数组（历史版本数据）
-3. Package flags（PKG_Cooked、PKG_UnversionedProperties）
-4. SoftObjectPath 列表（UE5+ 依赖跟踪）
-
----
-
-## 关键 UE 源码参考
-
-| 文件 | 目的 |
+| 陷阱 | 说明 |
 |------|------|
-| `PackageFileSummary.h` | 文件头结构、偏移、版本 |
-| `ObjectResource.h` | 导入/导出结构、PackageIndex |
-| `PropertyTag.h` | 属性序列化格式 |
-| `Archive.h` | FArchive 抽象模式 |
-| `BulkData.cpp` | BulkData 标志和载荷处理 |
-| `Blueprint.h` | 蓝图数据结构 |
-| `EdGraph/EdGraphPin.h` | 引脚类型、连接 |
-| `K2Node.h` | 蓝图节点层次 |
+| 节点注释（EdGraphNode_Comment） | 无执行引脚，需特殊标记 |
+| 临时变量节点（K2Node_TemporaryVariable） | 非蓝图变量，标记为 temporary |
 
 ---
 
-## 推荐阶段
+## v2.0 实施优先级（Phase 6）
 
-基于研究，建议此路线图结构：
+### Phase 6.1：核心图节点（Week 1-2）——最高优先级
 
-### 阶段 1：核心解析（基础）
+**目标：** 解析 UEdGraph → UEdGraphNode → UEdGraphPin → FEdGraphPinType
 
-- FArchive 基类配字节交换
-- PackageFileSummary 文件头解析
-- 名称表提取
-- 导入/导出表解析
-- 版本检测和处理
-- 错误处理框架
+**交付：**
+- `parse_graphs()` 函数
+- `BlueprintGraph`, `BlueprintNode`, `BlueprintPin` dataclasses
+- 连接映射：`pin_id → pin_object` 字典
 
-**成功：** 能读取文件头、名称表并识别 .uasset 文件中有哪些对象。
+**关键实现：**
+```python
+def parse_graphs(export_map, name_map, archive, summary):
+    graph_exports = [e for e in export_map if is_graph_export(e, name_map)]
+    for ge in graph_exports:
+        graphs.append(parse_graph(ge, export_map, name_map, archive, summary))
+    return graphs
+```
 
-### 阶段 2：属性解析（数据提取）
+---
 
-- PropertyTag 解析
-- 基本属性类型（Int、Float、String、Bool、Name、Object）
-- 数组属性处理
-- Struct 属性基础
-- 属性值输出
+### Phase 6.2：节点类型分派（Week 3）
 
-**成功：** 能从简单导出读取属性值。
+**目标：** K2Node_CallFunction / Event / Knot / Comment
 
-### 阶段 3：蓝图基础（目标功能）
+**交付：**
+- `parse_k2node_callfunction()`
+- `parse_k2node_event()`
+- `parse_k2node_knot()`
+- `parse_comment_node()`
 
-- 蓝图类型检测
-- 变量定义提取
-- 父类解析
-- 基本蓝图元数据
-- 蓝图聚焦输出格式
+---
 
-**成功：** 能从蓝图 .uasset 列出蓝图变量和父类。
+### Phase 6.3：引脚类型与连接（Week 4）
 
-### 阶段 4：蓝图图（高级）
+**目标：** 完整 FEdGraphPinType + LinkedTo 构建
 
-- 图结构解析（UEdGraph）
-- 节点识别（UK2Node 类型）
-- 引脚解析和连接
-- 语义节点描述
-- 图可视化文本输出
+**交付：**
+- `parse_pin_type()`（版本感知）
+- `LinkedTo` 解析（PinId GUID → 目标引用）
+- SubPin/ParentPin 处理
 
-**成功：** 能用节点/引脚描述追踪蓝图逻辑流。
+---
 
-### 阶段 5：优化与性能
+### Phase 6.4：输出集成（Week 5）
 
-- 大文件内存映射归档
-- 延迟导出解析
-- 全面错误恢复
-- 版本兼容矩阵
-- 输出格式优化
+**目标：** JSON 输出包含蓝图图结构
 
-**成功：** 处理边缘情况、大文件并提供清晰输出。
+**交付：**
+- `--graph` CLI 选项
+- Graph/Node/Pin in JSON
+- 执行流可视化辅助（execution_order 字段）
+
+---
+
+## Cookbook：节点类型识别
+
+| 类名 | 名称空间 | 类型 | 解析策略 |
+|------|----------|------|----------|
+| K2Node_Event | BlueprintGraph | 节点 | EventReference + OutputDelegate |
+| K2Node_CallFunction | BlueprintGraph | 节点 | FunctionReference + 参数引脚 |
+| K2Node_VariableGet | BlueprintGraph | 节点 | VariableReference |
+| K2Node_Knot | BlueprintGraph | 节点 | InputPin/OutputPin 转发 |
+| K2Node_EnhancedInputAction | InputBlueprintNodes | 节点 | InputAction + 多 exec 引脚 |
+| EdGraphNode_Comment | UnrealEd | 注释 | 无引脚，仅 NodeComment |
+| UEdGraph | BlueprintGraph | 容器 | 跳过（包 Nodes） |
+| Blueprint | Engine | 容器 | 跳过（蓝图元数据） |
+
+---
+
+## 版本兼容性矩阵
+
+### FEdGraphPinType 字段添加
+
+| 字段 | 添加版本 | 条件 |
+|------|----------|------|
+| container_type | FFrameworkObjectVersion::EdGraphPinContainerType | Version >= X |
+| is_const | VER_UE4_SERIALIZE_PINTYPE_CONST | UE4 >= 4.8, UE5 >= 5.0 |
+| is_uobject_wrapper | FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag | UE5 >= 5.0 |
+
+### FObjectExport 字段添加
+
+| 字段 | 添加版本 | 条件 |
+|------|----------|------|
+| TemplateIndex | UE4 >= 506 (VER_UE4_TemplateIndex_IN_COOKED_EXPORTS) | file_version_ue4 >= 506 |
+| 64 位 SerialSize/Offset | UE4 >= 508 (VER_UE4_64BIT_EXPORTOFFSETS) | file_version_ue4 >= 508 |
 
 ---
 
 ## 置信度评估
 
-| 区域 | 水平 | 备注 |
-|------|------|------|
-| 包结构 | 高 | 直接来自 UE 5.7 源码 |
-| 导入/导出格式 | 高 | 直接来自 UE 5.7 源码 |
+### 核心区域
+
+| 区域 | 置信度 | 依据 |
+|------|--------|------|
+| 包结构 | 高 | UE 5.7 源码直接确认 |
+| 导入/导出格式 | 高 | UE 5.7 源码直接确认 |
 | 属性序列化 | 中 | 复杂但有文档 |
-| 蓝图元数据 | 中 | 结构已知，提取需谨慎 |
-| 蓝图图 | 低 | 无文档，可能遇限制 |
-| AI-agent 输出模式 | 低 | 从需求推断，无研究 |
+| 蓝图元数据 | 高 | v1.0 Phase 3 已验证 |
+| **蓝图图结构** | **高** | **WebSearch + 编辑器导出直接验证** |
+| **引脚类型系统** | **高** | **FEdGraphPinType API 文档确认** |
+| **节点类型分类** | **高** | **编辑器导出示例直接确认** |
+| **连接机制** | **高** | **LinkedTo (node pin_id) 格式直接确认** |
+
+### v2.0 新增评估
+
+| 区域 | 置信度 | 说明 |
+|------|--------|------|
+| 节点类型识别 | 高 | 编辑器导出格式直接确认 |
+| 引脚类型版本感知 | 中 | 部分字段版本阈值需实测确认 |
+| LinkedTo GUID 映射 | 中 | 需真实文件验证 PinId GUID 格式 |
+| 图嵌套处理 | 中 | FunctionGraph 内部节点需测试验证 |
 
 ---
 
-## 缺口与未知
+## 需求缺口与待验证
 
-1. **Cooked vs Uncooked** —— 需明确目标资产类型；假设未 cooked 以获取完整图数据
-2. **版本矩阵** —— 初始支持哪些 UE 版本？推荐先 UE 5.x
-3. **属性值反序列化** —— 如何读取实际值（非仅元数据）
-4. **节点类型目录** —— 语义描述需完整 UK2Node 子类列表
-5. **测试文件** —— 需示例 .uasset 文件测试；创建简单 UE 项目
+### v2.0 需调研的领域
+
+1. **节点类完整目录**
+   - K2Node_ 开头的节点类（BlueprintGraph）
+   - Enhanced Input 相关节点（InputBlueprintNodes）
+   - 插件蓝图节点处理
+
+2. **节点特有数据序列化**
+   - FunctionReference/EventReference 结构
+   - ExtraFlags 字段含义
+   - 各节点类型特有字段偏移
+
+3. **版本阈值确认**
+   - FFrameworkObjectVersion::EdGraphPinContainerType 的确切版本号
+   - UE4/UE5 的分界点验证
+
+4. **真实文件验证**
+   - LyraStarterGame/BP_Character.uasset 图结构解析
+   - PinId GUID 格式验证
+   - LinkedTo 解析测试
 
 ---
 
-## 下一步
+## 下一步行动
 
-1. 在 REQUIREMENTS.md 定义正式需求
-2. 在 ROADMAP.md 创建带阶段分解的路线图
-3. 初始化 STATE.md 用于项目记忆
-4. 通过 `/gsd-plan-phase 1` 开始阶段 1 规划
+### 立即行动
+
+1. **验证Cooked检测**：在 Phase 6 开始前添加 PackageFlags PKG_Cooked 检查
+2. **选择测试文件**：LyraStarterGame/BP_Character.uasset 验证图解析
+3. **启动 Phase 6 规划**：/gsd-plan-phase 6
+
+### Phase 6 规划要点
+
+- 优先实现 UEdGraphPin（LinkedTo + PinType）
+- 基础节点类型（CallFunction / Event / Knot）
+- 版本条件读取框架
+- JSON 输出格式设计
+
+---
+
+## 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| `STACK.md` | 技术栈推荐（零新增依赖确认） |
+| `FEATURES.md` | 功能全景（表类型/差异化/反功能） |
+| `ARCHITECTURE.md` | 系统架构模式（分层管道） |
+| `PITFALLS.md` | 常见陷阱（OuterIndex/TemplateIndex、Cooked检测） |
+| `UE-SOURCE-INDEX.md` | UE 源码参考索引 |
+
+---
+
+## 源文件信息
+
+- **研究日期：** 2026-05-02
+- **综合者：** GSD Research Synthesizer
+- **v1.0 完成：** 2026-04-27（5 个阶段）
+- **v2.0 研究：** 2026-05-02（蓝图图解析）
+- **置信度：** 核心解析高，蓝图图高（v2.0 更新）
 
 ---
 
 *综合自：STACK.md、FEATURES.md、ARCHITECTURE.md、PITFALLS.md*
-*研究置信度：核心解析高，蓝图提取中*
