@@ -107,6 +107,8 @@ def create_test_uasset(
     UE4_NON_OUTER_PACKAGE_IMPORT = 518
     UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385
     UE4_SERIALIZE_TEXT_IN_PACKAGES = 401
+    UE4_LOAD_FOR_EDITOR_GAME = 383
+    UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 401
     PKG_Cooked = 0x200
 
     NAME_HASHES_SERIALIZED_VERSION = 502
@@ -343,6 +345,11 @@ def create_test_uasset(
 
         # === 导入表 ===
         import_offset = f.tell()
+        # Conditionally written fields per UE ObjectResource.cpp:
+        # PackageName (FName): UEVer >= 518 && !IsFilterEditorOnly
+        # bImportOptional (bool/byte): UEVer >= 1003 (OPTIONAL_RESOURCES)
+        has_package_name = (is_ue5_file or ue4_version >= 518)
+        has_import_optional = (is_ue5_file and ue5_version >= 1003) or (not is_ue5_file and ue4_version >= 1003)
         for class_package_idx, class_name_idx, outer_index, object_name_idx in imports:
             f.write(struct.pack(endian_fmt + 'I', class_package_idx))  # ClassPackage index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
@@ -351,6 +358,12 @@ def create_test_uasset(
             f.write(struct.pack(endian_fmt + 'i', outer_index))  # OuterIndex
             f.write(struct.pack(endian_fmt + 'I', object_name_idx))  # ObjectName index
             f.write(struct.pack(endian_fmt + 'I', 0))  # Number
+            if has_package_name:
+                # PackageName (FName): write index 0 ("None") + number 0
+                f.write(struct.pack(endian_fmt + 'I', 0))
+                f.write(struct.pack(endian_fmt + 'I', 0))
+            if has_import_optional:
+                f.write(struct.pack(endian_fmt + 'B', 0))  # bImportOptional = false
 
         # === 导出表 ===
         export_offset = f.tell()
@@ -386,10 +399,21 @@ def create_test_uasset(
             # Phase 6: bGeneratePublicHash (UE5 >= 1015)
             if is_ue5_file and ue5_version >= 1015:
                 f.write(struct.pack(endian_fmt + 'B', 0))  # bGeneratePublicHash
-            # UE5+ 脚本序列化字段（CR-02 fix: check legacy_version <= -8, NOT ue5_version >= 0）
-            if is_ue5_file:
-                f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialSize
-                f.write(struct.pack(endian_fmt + 'q', 0))  # ScriptSerialOffset
+            # bNotAlwaysLoadedForEditorGame (UE4 >= 383, UE5 always satisfies)
+            if ue4_version >= UE4_LOAD_FOR_EDITOR_GAME or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'B', 0))
+            # bIsAsset (UE4 >= 401, UE5 always satisfies)
+            if ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'B', 0))
+            # Preload dependencies (UE4 >= 505, UE5 always satisfies)
+            if ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS or is_ue5_file:
+                f.write(struct.pack(endian_fmt + 'i', 0))  # FirstExportDependency
+                f.write(struct.pack(endian_fmt + 'i', 0))  # SerializationBeforeSerializationDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # CreateBeforeSerializationDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # SerializationBeforeCreateDeps
+                f.write(struct.pack(endian_fmt + 'i', 0))  # CreateBeforeCreateDeps
+            # Script serialization offsets (only for cooked UE5 packages)
+            # Uncooked packages don't serialize these fields
 
         # === 更新偏移 ===
         total_header_size = f.tell()
@@ -554,6 +578,44 @@ def test_import_map():
         assert import_entry.class_name == "TestClass"
         assert import_entry.object_name == "TestName"
         assert import_entry.outer_index.index == 0
+    finally:
+        cleanup_test_file(path)
+
+
+def test_import_map_ue5_condition_fields():
+    """
+    测试 UE5 ImportMap 条件字段读取（Phase 10 Gap #2）。
+
+    验证：
+    - PackageName 字段正确读取（UEVer >= 518 且 !FilterEditorOnly）
+    - bImportOptional 字段正确读取（UEVer >= 1003）
+    """
+    # 导入表条目：(class_package_idx, class_name_idx, outer_index, object_name_idx)
+    # 使用名称表索引（默认包含 ["None", "TestName", "AnotherName", "TestClass", "TestPackage"])
+    imports = [
+        (4, 3, 0, 1),  # TestPackage, TestClass, outer=0, TestName
+    ]
+
+    # UE5 文件且 ue5_version >= 1003 会读取 PackageName 和 bImportOptional
+    path = create_test_uasset(
+        imports=imports,
+        ue5_version=1003,  # >= UE5_OPTIONAL_RESOURCES
+        package_flags=0   # 无 PKG_FilterEditorOnly
+    )
+
+    try:
+        result = parse_uasset(path)
+
+        assert result.is_success, f"Parse failed: {result.errors}"
+        assert len(result.import_map) == 1
+        import_entry = result.import_map[0]
+        assert import_entry.class_package == "TestPackage"
+        assert import_entry.class_name == "TestClass"
+        assert import_entry.object_name == "TestName"
+        assert import_entry.outer_index.index == 0
+        # 条件字段（UE5 >= 1003）
+        assert import_entry.package_name == "None"  # PackageName 条件字段（index 0）
+        assert import_entry.b_import_optional == False  # bImportOptional 条件字段
     finally:
         cleanup_test_file(path)
 
