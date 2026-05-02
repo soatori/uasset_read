@@ -2,7 +2,7 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 规划完成，待执行
+**当前状态：** v3.0 规划完成，Phase 11 gap closure计划创建
 
 ## Milestones
 
@@ -48,7 +48,7 @@
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
-- [ ] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用
+- [ ] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure待执行）
 - [ ] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量
 - [ ] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性
 - [ ] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式
@@ -72,7 +72,19 @@
   3. 用户可以解析EnhancedInputAction引用，获取引用的输入动作名称
   4. 用户可以通过JSON输出查看完整的属性值层次结构（Package→Exports→Properties）
 
-**Plans:** TBD
+**Plans:** 6 plans (4 standard + 2 gap closure)
+
+Plans:
+- [x] 11-01-PLAN.md — 集成ExportMap属性解析 (Wave 1, completed)
+- [x] 11-02-PLAN.md — 增强ObjectProperty解析 (Wave 2, completed)
+- [x] 11-03-PLAN.md — 新增SoftObjectProperty解析器 (Wave 2, completed)
+- [x] 11-04-PLAN.md — 创建完整测试覆盖 (Wave 3, completed)
+- [ ] 11-05-GAP-PLAN.md — 修复ScriptSerialization读取条件 (Wave 1, gap closure)
+- [ ] 11-06-GAP-PLAN.md — 验证属性解析功能完整 (Wave 2, gap closure, depends on 11-05)
+
+**Gap Found:** VERIFICATION.md发现ExportMap serial_offset异常（Phase 6遗留bug）
+**Root Cause:** ScriptSerialization读取条件使用PKG_Cooked (0x200)而非PKG_UnversionedProperties (0x2000)
+**Fix:** 修改read_export_map()的条件判断，使用正确的PKG_UnversionedProperties标志
 
 ### Phase 12: BlueprintVariables完整提取
 
@@ -159,7 +171,7 @@
 | 8. 蓝图图输出 | v2.0 | 4/4 | Complete | 2026-05-02 |
 | 9. 高级属性 | v2.0 | 3/3 | Complete | 2026-05-02 |
 | 10. 依赖分析 | v2.0 | 6/6 | Complete | 2026-05-02 |
-| 11. ExportMap属性值提取 | v3.0 | 0/1 | Not started | - |
+| 11. ExportMap属性值提取 | v3.0 | 4/6 | Gap closure | - |
 | 12. BlueprintVariables完整提取 | v3.0 | 0/1 | Not started | - |
 | 13. 组件变换属性解析 | v3.0 | 0/1 | Not started | - |
 | 14. 输出格式优化并冻结 | v3.0 | 0/1 | Not started | - |
@@ -171,7 +183,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXTR-01 | Phase 11 | Pending |
+| EXTR-01 | Phase 11 | Gap closure |
 | EXTR-02 | Phase 12 | Pending |
 | EXTR-03 | Phase 12 | Pending |
 | EXTR-04 | Phase 13 | Pending |
@@ -197,4 +209,4 @@
 
 ---
 
-*最后更新：2026-05-03 — v3.0路线图创建完成*
+*最后更新：2026-05-03 — Phase 11 gap closure计划创建*
