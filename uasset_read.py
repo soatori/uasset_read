@@ -3177,6 +3177,17 @@ def parse_uasset(path: str) -> ParseResult:
 
 # Phase 8: Graph Output Functions (GRAPH-11, GRAPH-12, OUT2-01)
 
+# D-08-10: 控制流节点类型（追踪时停止）
+CONTROL_FLOW_NODES = frozenset({
+    "K2Node_IfThenElse",
+    "K2Node_Switch",
+    "K2Node_SwitchString",
+    "K2Node_SwitchEnum",
+    "K2Node_SwitchInteger",
+    "K2Node_MacroInstance",  # 宏实例可能包含循环
+})
+
+
 def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     """
     构建引脚连接映射（D-08-01~06）。
@@ -3231,10 +3242,11 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     """
-    格式化蓝图图数据为 JSON 输出（GRAPH-11, OUT2-01）。
+    格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT2-01）。
 
     Per D-08-03: connections 放在 graph 层级
     Per D-04: graphs 与 blueprint_metadata 同级
+    Per D-08-09: execution_flows 数组
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -3249,11 +3261,15 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建连接映射
         connections, warnings = build_connections_map(graph)
 
+        # 构建执行流（Phase 8 Wave 2）
+        execution_flows = build_execution_flows(graph)
+
         graph_dict = {
             "graph_name": graph.graph_name,
             "graph_class": graph.graph_class,
             "nodes": [asdict(node) for node in graph.nodes],
             "connections": connections,
+            "execution_flows": execution_flows,  # D-08-09: execution_flows 数组
         }
 
         # D-08-04: 添加 warnings（如果有）
@@ -3269,6 +3285,159 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
+
+
+def build_execution_flows(graph: UEdGraph) -> List[Dict]:
+    """
+    构建执行流路径（D-08-07~11）。
+
+    从 K2Node_Event 开始，沿 exec pin 连接追踪到 CallFunction 链路。
+
+    算法：
+    1. 找到所有 K2Node_Event 节点（执行流起点）
+    2. 对每个 Event，沿 exec pin 连接追踪
+    3. 记录节点信息：{node_guid, node_type, function_name}
+    4. 检测控制流节点 → 停止
+    5. 检测已访问节点 → 停止并标记循环
+
+    Args:
+        graph: UEdGraph 对象
+
+    Returns:
+        List[Dict]: execution_flows 数组
+    """
+    # 构建节点和引脚查找表
+    pin_lookup: Dict[str, Tuple[str, str]] = {}
+    node_lookup: Dict[str, UEdGraphNode] = {}
+
+    for node in graph.nodes:
+        node_lookup[node.node_guid] = node
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    execution_flows: List[Dict] = []
+
+    # Step 1: 找到所有 Event 节点
+    event_nodes = [n for n in graph.nodes if n.class_name == "K2Node_Event"]
+
+    for event_node in event_nodes:
+        flow = _trace_execution_from_event(
+            event_node, pin_lookup, node_lookup
+        )
+
+        # 构建执行流记录
+        start_event_name = _get_event_name(event_node)
+        execution_flows.append({
+            "start_event": start_event_name,
+            "nodes": flow
+        })
+
+    return execution_flows
+
+
+def _trace_execution_from_event(
+    start_node: UEdGraphNode,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, UEdGraphNode]
+) -> List[Dict]:
+    """
+    追踪单条执行流（D-08-07~11）。
+
+    Args:
+        start_node: K2Node_Event 起点
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表
+        node_lookup: node_guid → node 查找表
+
+    Returns:
+        List[Dict]: 节点信息序列
+    """
+    visited: Set[str] = set()  # D-08-11: 循环检测
+    flow: List[Dict] = []
+    current_node = start_node
+
+    while current_node:
+        # 循环检测（D-08-11）
+        if current_node.node_guid in visited:
+            flow.append({
+                "node_guid": current_node.node_guid,
+                "node_type": current_node.class_name,
+                "cycle_detected": True
+            })
+            break
+
+        visited.add(current_node.node_guid)
+
+        # 记录节点信息（D-08-08）
+        node_info = {
+            "node_guid": current_node.node_guid,
+            "node_type": current_node.class_name,
+        }
+
+        # 提取 function_name（CallFunction 类型）
+        if current_node.class_name == "K2Node_CallFunction":
+            if current_node.node_data and hasattr(current_node.node_data, 'function_reference'):
+                node_info["function_name"] = current_node.node_data.function_reference.member_name
+
+        # 提取 event_name（Event 类型）
+        if current_node.class_name == "K2Node_Event":
+            if current_node.node_data and hasattr(current_node.node_data, 'event_reference'):
+                node_info["event_name"] = current_node.node_data.event_reference.member_name
+
+        flow.append(node_info)
+
+        # D-08-10: 控制流节点停止
+        if current_node.class_name in CONTROL_FLOW_NODES:
+            flow.append({"stopped_at": "control_flow_node"})
+            break
+
+        # 查找下一个节点（沿 exec output pin）
+        current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
+
+    return flow
+
+
+def _find_next_exec_node(
+    node: UEdGraphNode,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, UEdGraphNode]
+) -> Optional[UEdGraphNode]:
+    """
+    查找 exec output pin 连接的下一个节点。
+
+    Args:
+        node: 当前节点
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表
+        node_lookup: node_guid → node 查找表
+
+    Returns:
+        Optional[UEdGraphNode]: 下一个节点，或 None
+    """
+    # 找到 exec 类型 output pin
+    for pin in node.pins:
+        if pin.direction == 1:  # Output
+            # 检查 pin_type.pin_category 是否为 exec
+            if pin.pin_type and pin.pin_type.pin_category == "exec":
+                # 查找连接的目标 pin
+                for linked_pin_id in pin.linked_to_raw:
+                    if linked_pin_id in pin_lookup:
+                        target_node_guid, _ = pin_lookup[linked_pin_id]
+                        return node_lookup.get(target_node_guid)
+    return None
+
+
+def _get_event_name(node: UEdGraphNode) -> str:
+    """
+    获取 Event 节点的事件名称。
+
+    Args:
+        node: K2Node_Event 节点
+
+    Returns:
+        str: 事件名称，或 "Unknown"
+    """
+    if node.node_data and hasattr(node.node_data, 'event_reference'):
+        return node.node_data.event_reference.member_name
+    return "Unknown"
 
 
 def format_json_full(result: ParseResult) -> Dict:

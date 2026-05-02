@@ -32,6 +32,12 @@ from uasset_read import (
     build_connections_map,
     format_graphs_json,
     format_json_full,
+    # Phase 8 Wave 2 imports
+    K2NodeCallFunction,
+    K2NodeEvent,
+    FMemberReference,
+    build_execution_flows,
+    CONTROL_FLOW_NODES,
 )
 import struct
 
@@ -256,6 +262,211 @@ def sample_graph_with_missing_pin():
         graph_name="TestGraph",
         graph_class="EdGraph",
         nodes=[node],
+    )
+
+
+# Phase 8 Wave 2: Execution Flow Fixtures
+
+@pytest.fixture
+def sample_graph_with_execution_flow():
+    """
+    创建测试用的 UEdGraph fixture，包含完整执行流。
+
+    Event → CallFunction 链路：
+    K2Node_Event (BeginPlay) → K2Node_CallFunction (PrintString)
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node (BeginPlay)
+    event_output_pin = UEdGraphPin(
+        pin_id="event_output_1234567890abcdef",
+        pin_name="then",
+        direction=1,  # Output
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_input_1234567890abcdef"],  # 指向 CallFunction
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_guid_111111111111111111111",
+        node_pos_x=0,
+        node_pos_y=0,
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="BeginPlay"),
+            b_override_function=False,
+        ),
+    )
+
+    # CallFunction node (PrintString)
+    call_input_pin = UEdGraphPin(
+        pin_id="call_input_1234567890abcdef",  # linked_to_raw 目标
+        pin_name="execute",
+        direction=0,  # Input
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    call_output_pin = UEdGraphPin(
+        pin_id="call_output_abcdef1234567890",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],  # 链路结束
+    )
+
+    call_node = UEdGraphNode(
+        node_guid="call_guid_222222222222222222222",
+        node_pos_x=200,
+        node_pos_y=0,
+        pins=[call_input_pin, call_output_pin],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            function_reference=FMemberReference(member_name="PrintString"),
+            b_defaults_to_pure=False,
+        ),
+    )
+
+    return UEdGraph(
+        graph_name="EventGraph",
+        graph_class="UberEdGraph",
+        nodes=[event_node, call_node],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_cycle():
+    """
+    创建测试用的 UEdGraph fixture，包含循环（用于循环检测测试）。
+
+    Event → CallFunction → 循环回 Event
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_123",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_in_123"],
+    )
+    # 循环：Event 也有一个指向自己的 input pin
+    event_input_pin = UEdGraphPin(
+        pin_id="event_in_cycle",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_cycle_guid",
+        pins=[event_output_pin, event_input_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="Tick"),
+            b_override_function=False,
+        ),
+    )
+
+    # CallFunction node，输出指向回 Event
+    call_input_pin = UEdGraphPin(
+        pin_id="call_in_123",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    call_output_pin = UEdGraphPin(
+        pin_id="call_out_cycle",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["event_in_cycle"],  # 循环！指向 Event 的 input pin
+    )
+
+    call_node = UEdGraphNode(
+        node_guid="call_cycle_guid",
+        pins=[call_input_pin, call_output_pin],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            function_reference=FMemberReference(member_name="LoopFunction"),
+            b_defaults_to_pure=False,
+        ),
+    )
+
+    return UEdGraph(
+        graph_name="CyclicGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, call_node],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_control_flow():
+    """
+    创建测试用的 UEdGraph fixture，包含控制流节点（If）。
+    """
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event node
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_if",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["if_in_123"],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_if_guid",
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="SomeEvent"),
+            b_override_function=False,
+        ),
+    )
+
+    # IfThenElse node（控制流节点）
+    if_input_pin = UEdGraphPin(
+        pin_id="if_in_123",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    if_node = UEdGraphNode(
+        node_guid="if_node_guid",
+        pins=[if_input_pin],
+        class_name="K2Node_IfThenElse",  # 控制流节点！
+        node_data=None,
+    )
+
+    return UEdGraph(
+        graph_name="BranchGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, if_node],
     )
 
 
@@ -613,3 +824,86 @@ def test_build_connections_map_warning(sample_graph_with_missing_pin):
     assert 'warning' in conn
     assert conn['warning'] == "target pin not found"
     assert 'raw_pin_id' in conn['to']
+
+
+# ============================================================================
+# Phase 8: GRAPH-12 - 执行流追踪
+# ============================================================================
+
+def test_format_json_full_contains_execution_flows(sample_graph_with_execution_flow):
+    """
+    GRAPH-12: 验证 format_json_full() 返回包含 execution_flows。
+    """
+    graph = sample_graph_with_execution_flow
+    formatted = format_graphs_json([graph])
+
+    assert len(formatted) == 1
+    assert 'execution_flows' in formatted[0]
+
+
+def test_build_execution_flows_basic(sample_graph_with_execution_flow):
+    """
+    GRAPH-12: 验证 build_execution_flows() 正确追踪 Event → CallFunction。
+    """
+    graph = sample_graph_with_execution_flow
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    flow = flows[0]
+
+    assert 'start_event' in flow
+    assert flow['start_event'] == "BeginPlay"
+
+    assert 'nodes' in flow
+    nodes = flow['nodes']
+    assert len(nodes) >= 2  # Event + CallFunction
+
+    # 第一个节点是 Event
+    event_node = nodes[0]
+    assert event_node['node_type'] == "K2Node_Event"
+    assert 'event_name' in event_node
+
+    # 第二个节点是 CallFunction
+    call_node = nodes[1]
+    assert call_node['node_type'] == "K2Node_CallFunction"
+    assert 'function_name' in call_node
+    assert call_node['function_name'] == "PrintString"
+
+
+def test_execution_flow_cycle_detection(sample_graph_with_cycle):
+    """
+    T-08-01/D-08-11: 验证循环检测并停止追踪。
+    """
+    graph = sample_graph_with_cycle
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    nodes = flows[0]['nodes']
+
+    # 查找 cycle_detected 标记
+    has_cycle = any('cycle_detected' in n for n in nodes)
+    assert has_cycle, "执行流应包含 cycle_detected 标记"
+
+
+def test_execution_flow_stops_at_control_flow(sample_graph_with_control_flow):
+    """
+    D-08-10: 验证遇到控制流节点时停止追踪。
+    """
+    graph = sample_graph_with_control_flow
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    nodes = flows[0]['nodes']
+
+    # 查找 stopped_at 标记
+    has_stopped = any('stopped_at' in n for n in nodes)
+    assert has_stopped, "执行流应包含 stopped_at 标记"
+
+
+def test_control_flow_nodes_constant():
+    """
+    验证 CONTROL_FLOW_NODES 常量包含正确的控制流节点类型。
+    """
+    assert "K2Node_IfThenElse" in CONTROL_FLOW_NODES
+    assert "K2Node_Switch" in CONTROL_FLOW_NODES
+    assert "K2Node_SwitchEnum" in CONTROL_FLOW_NODES
