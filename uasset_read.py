@@ -3172,8 +3172,104 @@ def parse_uasset(path: str) -> ParseResult:
 
 
 # ============================================================================
-# Output Formatting Functions (Phase 4)
+# Output Formatting Functions (Phase 4 + Phase 8)
 # ============================================================================
+
+# Phase 8: Graph Output Functions (GRAPH-11, GRAPH-12, OUT2-01)
+
+def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
+    """
+    构建引脚连接映射（D-08-01~06）。
+
+    将 linked_to_raw（PinId GUID hex）转换为 {node_guid, pin_name} 表示。
+
+    算法：
+    1. 构建 PinId → (node_guid, pin_name) 查找表
+    2. 遍历所有 Output pins (direction=1)
+    3. 对每个 linked_to_raw 中的 PinId，查找目标 pin
+    4. 构建 {from, to} 连接对象
+    5. 处理查找失败（warning + 原始数据）
+
+    Args:
+        graph: UEdGraph 对象
+
+    Returns:
+        Tuple[List[Dict], List[str]]: (connections 列表, warnings 列表)
+    """
+    # Step 1: Build pin_lookup: pin_id → (node_guid, pin_name)
+    pin_lookup: Dict[str, Tuple[str, str]] = {}
+    for node in graph.nodes:
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # Step 2-4: Build connections (only from Output pins, D-08-05)
+    connections: List[Dict] = []
+    warnings: List[str] = []
+
+    for node in graph.nodes:
+        for pin in node.pins:
+            if pin.direction == 1:  # EGPD_Output
+                for linked_pin_id in pin.linked_to_raw:
+                    if linked_pin_id in pin_lookup:
+                        target_node_guid, target_pin_name = pin_lookup[linked_pin_id]
+                        # D-08-06: {from, to} 对象结构
+                        connections.append({
+                            "from": {"node_guid": node.node_guid, "pin_name": pin.pin_name},
+                            "to": {"node_guid": target_node_guid, "pin_name": target_pin_name}
+                        })
+                    else:
+                        # D-08-04: Warning + raw data
+                        warnings.append(f"PinId {linked_pin_id} not found in graph")
+                        connections.append({
+                            "from": {"node_guid": node.node_guid, "pin_name": pin.pin_name},
+                            "to": {"raw_pin_id": linked_pin_id},
+                            "warning": "target pin not found"
+                        })
+
+    return connections, warnings
+
+
+def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
+    """
+    格式化蓝图图数据为 JSON 输出（GRAPH-11, OUT2-01）。
+
+    Per D-08-03: connections 放在 graph 层级
+    Per D-04: graphs 与 blueprint_metadata 同级
+
+    Args:
+        graphs: List[UEdGraph] from ParseResult.graphs
+
+    Returns:
+        List[Dict]: 每个 graph 的 JSON 表示
+    """
+    from dataclasses import asdict
+
+    formatted = []
+    for graph in graphs:
+        # 构建连接映射
+        connections, warnings = build_connections_map(graph)
+
+        graph_dict = {
+            "graph_name": graph.graph_name,
+            "graph_class": graph.graph_class,
+            "nodes": [asdict(node) for node in graph.nodes],
+            "connections": connections,
+        }
+
+        # D-08-04: 添加 warnings（如果有）
+        if warnings:
+            graph_dict["warnings"] = warnings
+
+        # 可选字段
+        if graph.graph_guid:
+            graph_dict["graph_guid"] = graph.graph_guid
+        if graph.schema:
+            graph_dict["schema"] = graph.schema
+
+        formatted.append(graph_dict)
+
+    return formatted
+
 
 def format_json_full(result: ParseResult) -> Dict:
     """
@@ -3208,6 +3304,7 @@ def format_json_full(result: ParseResult) -> Dict:
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
         "errors": result.errors
     }
 

@@ -1,8 +1,9 @@
 """
-tests/test_output_formatting.py - 输出格式化和 CLI 测试（Phase 4）
+tests/test_output_formatting.py - 输出格式化和 CLI 测试（Phase 4 + Phase 8）
 
 测试输出格式化器（JSON、YAML 文本）和 CLI 功能。
 覆盖 OUT-01 到 OUT-05，CLI-01 到 CLI-06 需求。
+Phase 8: 覆盖 GRAPH-11, GRAPH-12, OUT2-01, OUT2-03, OUT2-04 需求。
 """
 
 import pytest
@@ -24,6 +25,13 @@ from uasset_read import (
     FEdGraphPinType,
     PackageIndex,
     parse_uasset,
+    # Phase 8 imports
+    UEdGraph,
+    UEdGraphNode,
+    UEdGraphPin,
+    build_connections_map,
+    format_graphs_json,
+    format_json_full,
 )
 import struct
 
@@ -41,23 +49,10 @@ def create_mock_parse_result():
         ParseResult: 包含测试数据的 mock 解析结果
     """
     summary = PackageFileSummary(
-        package_name="/Game/Test/TestAsset",
-        file_version_ue4=522,
-        file_version_ue5=0,
+        tag=0x9E2A83C1,
         legacy_file_version=-7,
-        package_flags=0x00000000,
-        name_count=10,
-        name_offset=100,
-        import_count=2,
-        import_offset=200,
-        export_count=1,
-        export_offset=300,
-        guid="{00000000-0000-0000-0000-000000000000}",
-        persistent_guid=None,
-        engine_version=5.3,
-        content_version=1000,
-        generated_by_hash=None,
-        saved_hash=None,
+        file_version_ue4=522,
+        package_name="/Game/Test/TestAsset",
     )
 
     import_map = [
@@ -71,10 +66,10 @@ def create_mock_parse_result():
 
     export_map = [
         ObjectExport(
-            object_name="TestClass_C",
             class_index=PackageIndex(-1),
             super_index=PackageIndex(0),
             outer_index=PackageIndex(0),
+            object_name="TestClass_C",
             object_flags=0x00000000,
             serial_size=1024,
             serial_offset=500,
@@ -163,6 +158,105 @@ def temp_uasset_file():
     # 清理
     if temp_path.exists():
         temp_path.unlink()
+
+
+# ============================================================================
+# Phase 8: Graph Output Fixtures
+# ============================================================================
+
+@pytest.fixture
+def sample_graph_with_connections():
+    """
+    创建测试用的 UEdGraph fixture，包含连接数据。
+
+    Returns:
+        UEdGraph: 包含 2 个节点和 1 个连接的测试图
+    """
+    pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Node 1: Output pin
+    output_pin = UEdGraphPin(
+        pin_id="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",  # GUID hex
+        pin_name="then",
+        direction=1,  # Output
+        pin_type=pin_type,
+        linked_to_raw=["f1e2d3c4b5a697880910111213141516"],  # 指向 Node 2 的 input pin
+    )
+
+    node1 = UEdGraphNode(
+        node_guid="11111111111111111111111111111111",
+        node_pos_x=0,
+        node_pos_y=0,
+        pins=[output_pin],
+        class_name="K2Node_Event",
+    )
+
+    # Node 2: Input pin
+    input_pin = UEdGraphPin(
+        pin_id="f1e2d3c4b5a697880910111213141516",  # linked_to_raw 目标
+        pin_name="execute",
+        direction=0,  # Input
+        pin_type=pin_type,
+        linked_to_raw=[],
+    )
+
+    node2 = UEdGraphNode(
+        node_guid="22222222222222222222222222222222",
+        node_pos_x=100,
+        node_pos_y=0,
+        pins=[input_pin],
+        class_name="K2Node_CallFunction",
+    )
+
+    return UEdGraph(
+        graph_name="EventGraph",
+        graph_class="UberEdGraph",
+        nodes=[node1, node2],
+    )
+
+
+@pytest.fixture
+def sample_graph_with_missing_pin():
+    """
+    创建测试用的 UEdGraph fixture，包含查找失败的连接。
+
+    Returns:
+        UEdGraph: 包含无法找到的目标 pin
+    """
+    pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Output pin 指向不存在的 pin
+    output_pin = UEdGraphPin(
+        pin_id="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+        pin_name="then",
+        direction=1,
+        pin_type=pin_type,
+        linked_to_raw=["00000000000000000000000000000000"],  # 不存在的 pin
+    )
+
+    node = UEdGraphNode(
+        node_guid="11111111111111111111111111111111",
+        pins=[output_pin],
+        class_name="K2Node_Event",
+    )
+
+    return UEdGraph(
+        graph_name="TestGraph",
+        graph_class="EdGraph",
+        nodes=[node],
+    )
 
 
 # ============================================================================
@@ -430,3 +524,92 @@ def test_no_external_deps():
     #     assert dep not in main_src
     #     assert dep not in parser_src
     assert False, "TODO: Implement test for CLI-06 - no external deps"
+
+
+# ============================================================================
+# Phase 8: GRAPH-11 - JSON 输出包含 graphs 层级结构
+# ============================================================================
+
+def test_format_json_full_contains_graphs(create_mock_parse_result, sample_graph_with_connections):
+    """
+    GRAPH-11: 验证 format_json_full() 返回包含 graphs 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_graph_with_connections]
+
+    json_dict = format_json_full(result)
+
+    assert 'graphs' in json_dict
+    assert isinstance(json_dict['graphs'], list)
+    assert len(json_dict['graphs']) == 1
+
+
+def test_graphs_field_top_level(create_mock_parse_result):
+    """
+    OUT2-01: 验证 graphs 字段与 blueprint_metadata 同级。
+    """
+    result = create_mock_parse_result
+    result.graphs = []
+
+    json_dict = format_json_full(result)
+
+    # graphs 与 blueprint_metadata 同级
+    assert 'graphs' in json_dict
+    assert 'blueprint_metadata' in json_dict
+    assert 'exports' in json_dict
+    assert 'errors' in json_dict
+
+
+def test_format_graphs_json_structure(sample_graph_with_connections):
+    """
+    GRAPH-11: 验证 format_graphs_json() 返回正确的 graph 结构。
+    """
+    graph = sample_graph_with_connections
+    formatted = format_graphs_json([graph])
+
+    assert len(formatted) == 1
+    graph_dict = formatted[0]
+
+    assert 'graph_name' in graph_dict
+    assert 'graph_class' in graph_dict
+    assert 'nodes' in graph_dict
+    assert 'connections' in graph_dict
+
+    assert graph_dict['graph_name'] == "EventGraph"
+    assert graph_dict['graph_class'] == "UberEdGraph"
+
+
+def test_build_connections_map_basic(sample_graph_with_connections):
+    """
+    验证 build_connections_map() 正确构建连接。
+    """
+    graph = sample_graph_with_connections
+    connections, warnings = build_connections_map(graph)
+
+    assert len(connections) == 1
+    assert len(warnings) == 0
+
+    conn = connections[0]
+    assert 'from' in conn
+    assert 'to' in conn
+
+    # D-08-06: {from, to} 对象结构
+    assert 'node_guid' in conn['from']
+    assert 'pin_name' in conn['from']
+    assert conn['from']['pin_name'] == "then"
+
+
+def test_build_connections_map_warning(sample_graph_with_missing_pin):
+    """
+    D-08-04: 验证查找失败时包含 warning 和原始数据。
+    """
+    graph = sample_graph_with_missing_pin
+    connections, warnings = build_connections_map(graph)
+
+    assert len(connections) == 1
+    assert len(warnings) == 1
+
+    conn = connections[0]
+    assert 'warning' in conn
+    assert conn['warning'] == "target pin not found"
+    assert 'raw_pin_id' in conn['to']
