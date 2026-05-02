@@ -71,7 +71,7 @@ shipped:
 | 2026-05-02 | Phase 10 Wave 2 完成 | build_imports_list() + read_soft_object_paths() 实现 |
 | 2026-05-02 | Phase 10 Wave 3 完成 | detect_circular_deps() + JSON 输出扩展 + parse_uasset() 集成 |
 | 2026-05-02 | Phase 10 Wave 4 完成 | 14 单元测试全部通过，无回归 |
-| 2026-05-02 | Phase 10 验证通过 | 4/4 计划完成，165 tests pass |
+| 2026-05-02 | Phase 10 Gap Closure 完成 | SoftObjectPath + ImportMap UE5 格式修复，62 tests pass |
 | 2026-05-02 | Phase 6-9 安全验证 | 19/31 mitigate已验证，12/31 accept已记录，0 OPEN |
 
 ## v2.0 里程碑 ✓ 完成

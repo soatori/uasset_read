@@ -168,8 +168,8 @@ Plans:
 - [x] 10-02-PLAN.md — build_imports_list + read_soft_object_paths 函数实现（DEPS-01, DEPS-02） ✓
 - [x] 10-03-PLAN.md — detect_circular_deps + format_json_full 扩展 + parse_uasset 集成（DEPS-03, DEPS-04） ✓
 - [x] 10-04-PLAN.md — 单元测试 + 完整验证（DEPS-01~04） ✓
-- [ ] 10-05-PLAN.md — [GAP CLOSURE] SoftObjectPath UE5 >= 1007 FTopLevelAssetPath 格式修复
-- [ ] 10-06-PLAN.md — [GAP CLOSURE] ImportMap UE5 条件字段 + 蓝图提取修复
+- [x] 10-05-PLAN.md — [GAP CLOSURE] SoftObjectPath UE5 >= 1007 FTopLevelAssetPath 格式修复 ✓ 2026-05-02
+- [x] 10-06-PLAN.md — [GAP CLOSURE] ImportMap UE5 条件字段 + 蓝图提取修复 ✓ 2026-05-02
 
 **UI hint:** no
 
