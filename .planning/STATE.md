@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 解析完善 + Skill打包
-status: phase_12_planned
-last_updated: "2026-05-03T14:00:00Z"
+status: phase_12_complete
+last_updated: "2026-05-03T15:00:00Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  active_phase: 12
+  completed_phases: 2
+  active_phase: 13
   total_plans: 3
-  completed_plans: 0
-  percent: 20
+  completed_plans: 3
+  percent: 40
 shipped:
   v2_0_date: "2026-05-02"
   v2_0_branch: v2.0-dev
@@ -23,14 +23,14 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v3.0 解析完善 + Skill打包
-**状态：** Phase 12 规划完成
+**状态：** Phase 12 完成
 
 ## Current Position
 
-Phase: 12 planned (ready to execute)
+Phase: 12 complete (verification passed)
 Plan: —
-Status: Phase 12规划完成，3个PLAN文件已创建
-Last activity: 2026-05-03 — Phase 12规划完成
+Status: Phase 12验证通过，准备Phase 13
+Last activity: 2026-05-03 — Phase 12执行完成
 
 ## 阶段状态
 
@@ -47,7 +47,7 @@ Last activity: 2026-05-03 — Phase 12规划完成
 | 9 | 高级属性 | v2.0 | ✓ 完成 | 3/3 | ✓ | ✓ | 100% |
 | 10 | 依赖分析 | v2.0 | ✓ 完成 | 6/6 | ✓ | ✓ | 100% |
 | 11 | ExportMap属性值提取 | v3.0 | ✓ 完成 | 6/6 | ✓ | ✓ | 100% |
-| 12 | BlueprintVariables完整提取 | v3.0 | 📋 规划完成 | 0/3 | - | - | 0% |
+| 12 | BlueprintVariables完整提取 | v3.0 | ✓ 完成 | 3/3 | ✓ | - | 100% |
 | 13 | 组件变换属性解析 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 | 14 | 输出格式优化并冻结 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 | 15 | Claude Code skill封装 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
@@ -73,19 +73,19 @@ Last activity: 2026-05-03 — Phase 12规划完成
 
 **阶段范围：**
 - Phase 11: ExportMap属性值提取（EXTR-01）✓ 完成
-- Phase 12: BlueprintVariables完整提取（EXTR-02, EXTR-03, EXTR-05）📋 规划完成
+- Phase 12: BlueprintVariables完整提取（EXTR-02, EXTR-03, EXTR-05）✓ 完成
 - Phase 13: 组件变换属性解析（EXTR-04）
 - Phase 14: 输出格式优化并冻结（OUT-01~06）
 - Phase 15: Claude Code skill封装（SKILL-01~04）
 
 **需求覆盖：** 15/15 ✓
 
-## Phase 12 规划详情
+## Phase 12 完成详情
 
-**Plans Created:**
-- 12-01-PLAN.md — BlueprintVariable数据模型增强（Wave 1）
-- 12-02-PLAN.md — 变量解析函数增强（Wave 2）
-- 12-03-PLAN.md — 测试和验证（Wave 3）
+**Plans Executed:**
+- 12-01-PLAN.md — BlueprintVariable数据模型增强 ✓
+- 12-02-PLAN.md — 变量解析函数增强 ✓
+- 12-03-PLAN.md — 测试和验证 ✓
 
 **Key Enhancements:**
 - BlueprintVariable.is_component字段（组件变量识别）
@@ -93,11 +93,21 @@ Last activity: 2026-05-03 — Phase 12规划完成
 - BlueprintVariable.flags_labels列表（PropertyFlags可读标签）
 - parse_property_flags_to_labels()函数
 - format_variable_type()函数
+- detect_blueprint_generated_class()函数（per D-01）
+- find_main_blueprint_generated_class()函数
+
+**Commits:**
+- a98b116 feat(12-01): enhance BlueprintVariable dataclass with Phase 12 fields
+- 8fd7802 feat(12-02): enhance variable parsing with metadata and component detection
+- 3e723af test(12-03): add Phase 12 blueprint variables extraction tests
+- 2b7570c docs(12): create Phase 12 SUMMARY files for all 3 plans
+
+**Tests:** 226 passed, 48 skipped
 
 ## 下一步
 
-**运行 `/gsd-execute-phase 12` 开始Phase 12执行**
+**运行 `/gsd-discuss-phase 13` 开始Phase 13：组件变换属性解析**
 
 ---
 
-*最后更新：2026-05-03 - Phase 12规划完成，3 plans created*
+*最后更新：2026-05-03 - Phase 12完成，验证通过*
