@@ -95,21 +95,26 @@ Plans:
 
 ### Phase 8: 蓝图图输出增强
 
-**Goal:** 完善 JSON 和文本输出格式，包含蓝图图数据和高级属性解析结果
+**Goal:** 完善 JSON 和文本输出格式，包含蓝图图数据和连接映射
 
 **Depends on:** Phase 7
 
-**Requirements:** GRAPH-11, GRAPH-12, OUT2-01, OUT2-02, OUT2-03, OUT2-04
+**Requirements:** GRAPH-11, GRAPH-12, OUT2-01, OUT2-03, OUT2-04 (OUT2-02 推迟到 Phase 9)
 
 **Success Criteria** (what must be TRUE):
 1. JSON 输出包含蓝图图层级结构（Graph → Nodes → Pins）
 2. JSON 输出包含执行流路径（从 Event → CallFunction 链路）
 3. JSON 输出包含完整的蓝图图数据（与 blueprint 字段同级的 graphs 字段）
-4. JSON 输出包含高级属性解析结果（替换原始字符串值）
-5. CLI 支持 --graph 标志仅输出蓝图图数据
-6. 文本输出包含图结构摘要（节点数、连接数、执行流概览）
+4. CLI 支持 --graph 标志仅输出蓝图图数据
+5. 文本输出包含图结构摘要（节点数、连接数、执行流概览）
 
-**Plans:** TBD
+**Plans:** 4 plans in 4 waves
+
+Plans:
+- [ ] 08-01-PLAN.md — 连接映射构建（GRAPH-11, OUT2-01）
+- [ ] 08-02-PLAN.md — 执行流追踪（GRAPH-12）
+- [ ] 08-03-PLAN.md — 文本输出扩展（OUT2-03）
+- [ ] 08-04-PLAN.md — CLI --graph 标志（OUT2-04）
 
 **UI hint:** yes
 
@@ -163,7 +168,7 @@ Plans:
 |-------|------|--------------|------------------------|
 | 6 - 导出表修复 | 修复 OuterIndex/TemplateIndex 解析 bug | BUG-01, BUG-02, BUG-03 | 3 |
 | 7 - 蓝图图核心 | UEdGraph/Node/Pin 基础解析 | GRAPH-01~09 (10→Phase8) | 5 |
-| 8 - 蓝图图输出 | JSON/文本输出增强 | GRAPH-11~12, OUT2-01~04 | 6 |
+| 8 - 蓝图图输出 | JSON/文本输出增强 | GRAPH-11~12, OUT2-01~04 | 5 |
 | 9 - 高级属性 | Struct/Map/Set/Enum/Text/Delegate 解析 | ADVP-01~06 | 6 |
 | 10 - 依赖分析 | ImportMap + SoftObjectPaths 依赖图 | DEPS-01~04 | 4 |
 
@@ -175,7 +180,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
 | 7 - 蓝图图核心 | 3/3 | Complete | 100% |
-| 8 - 蓝图图输出 | 0/0 | Not started | - |
+| 8 - 蓝图图输出 | 0/4 | Ready to execute | 0% |
 | 9 - 高级属性 | 0/0 | Not started | - |
 | 10 - 依赖分析 | 0/0 | Not started | - |
 
@@ -211,7 +216,7 @@ Plans:
 | DEPS-03 | Phase 10 | Pending |
 | DEPS-04 | Phase 10 | Pending |
 | OUT2-01 | Phase 8 | Pending |
-| OUT2-02 | Phase 8 | Pending |
+| OUT2-02 | Phase 9 | Deferred (高级属性需先实现) |
 | OUT2-03 | Phase 8 | Pending |
 | OUT2-04 | Phase 8 | Pending |
 
@@ -277,4 +282,4 @@ class UEdGraph:
 
 ---
 
-*最后更新：2026-05-02 - v2.0 路线图创建完成*
+*最后更新：2026-05-02 - Phase 8 规划完成*
