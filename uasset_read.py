@@ -61,6 +61,7 @@ VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
 # Package Flags (ObjectMacros.h)
 PKG_Cooked = 0x200                     # Package is cooked
+PKG_FilterEditorOnly = 0x00000080      # Filter editor-only objects (Phase 10 Gap #2)
 
 # Phase 7: Blueprint Graph Parsing Safety Constants
 MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数（T-07-02-02）
@@ -653,11 +654,16 @@ class ObjectImport:
 
     来自 ObjectResource.h：
     表示外部依赖（其他包中的对象引用）。
+
+    Phase 10 Gap #2 修复：添加 UE5 条件字段（PackageName, bImportOptional）。
     """
     class_package: str      # 来源包名（FName 解析后）
     class_name: str         # 类名（FName 解析后）
     outer_index: PackageIndex  # Outer 引用
     object_name: str        # 对象名（FName 解析后）
+    # UE5 条件字段（Phase 10 Gap #2 修复）
+    package_name: Optional[str] = None   # PackageName（UEVer >= 518 且 !FilterEditorOnly）
+    b_import_optional: Optional[bool] = None  # bImportOptional（UEVer >= 1003）
 
 
 @dataclass
@@ -1576,7 +1582,7 @@ def read_import_map(
             elif not is_ue4_file:
                 has_package_name = True
 
-        package_name = ""
+        package_name: Optional[str] = None
         if has_package_name:
             package_name = archive.read_name(name_map)
 
@@ -1587,7 +1593,7 @@ def read_import_map(
         elif not is_ue4_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
             has_import_optional = True
 
-        b_import_optional = False
+        b_import_optional: Optional[bool] = None
         if has_import_optional:
             b_import_optional = bool(archive.read_u8())
 
@@ -1595,7 +1601,9 @@ def read_import_map(
             class_package=class_package,
             class_name=class_name,
             outer_index=outer_index,
-            object_name=object_name
+            object_name=object_name,
+            package_name=package_name,
+            b_import_optional=b_import_optional
         ))
 
     return import_map
