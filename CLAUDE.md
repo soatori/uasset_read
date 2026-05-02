@@ -12,9 +12,30 @@
 
 ## 当前状态
 
-**Phase 1 (核心解析): 完成** — 解析器读取头部、名称表、导入/导出映射。所有测试通过。
+**v2.0 (蓝图图解析): 完成** — 10个阶段全部完成，支持蓝图图解析、高级属性、依赖分析。
 
-后续阶段 (2-5) 已在 `.planning/ROADMAP.md` 中规划。
+### 已完成功能
+
+| 阶段 | 功能 | 状态 |
+|------|------|------|
+| 1-5 | v1.0核心 | ✓ 完成 |
+| 6 | 导出表修复 | ✓ 完成 |
+| 7 | 蓝图图核心解析 | ✓ 完成 |
+| 8 | 蓝图图输出增强 | ✓ 完成 |
+| 9 | 高级属性类型 | ✓ 完成 |
+| 10 | 依赖分析 | ✓ 完成 |
+
+### 解析能力
+
+- ✓ PackageFileSummary (文件头)
+- ✓ NameMap (名称表)
+- ✓ ImportMap (依赖映射)
+- ✓ ExportMap (导出映射)
+- ✓ Blueprint检测
+- ✓ UEdGraph/Node/Pin解析
+- ✓ 高级属性 (Struct/Map/Set/Enum/Text/Delegate)
+- ✓ 依赖图构建
+- ✓ 循环依赖检测
 
 ## UE 5.7 源码参考
 
@@ -28,41 +49,44 @@ UE 5.7源码位于 `E:\Develop\lib\UnrealEngine` (只读参考)。
 ## 外部目录 (Git排除)
 
 - `UnrealEngine/` — UE引擎源码参考 (请勿修改)
-- `E:\Develop\lib\UnrealEngine\Samples\FirstPerson` `E:\Develop\lib\UnrealEngine\Samples\FirstPersonC` - 示例蓝图/C++测试对照(请勿修改)
+- `E:\Develop\lib\UnrealEngine\Samples\FirstPerson` — 示例蓝图测试资产
+- `E:\Develop\lib\UnrealEngine\Samples\FirstPersonC` — C++对照文件
 - `LyraStarterGame/` — 示例游戏资产 (请勿修改)
-- `D:\Program Files\Epic Games\Engine\UE_5.7` — UE 5.7引擎路径 (本地参考请勿修改)
-- `D:\Program Files\Epic Games\Engine\UE_4.27` — UE 4.27引擎路径 (本地参考请勿修改)
 
 ## 技术栈
 
 - **语言**: Python 3.10+ (支持match/case，更好的类型提示)
 - **依赖**: 零运行时依赖 — 仅使用标准库
-- **解析**: `struct`用于二进制，`mmap`用于大文件 (计划中)
+- **解析**: `struct`用于二进制，`mmap`用于大文件
 - **模型**: `dataclasses`配合 `asdict()` → JSON
 - **CLI**: `argparse`
-- **编码**: 仅UTF-8 (UE 5.x标准)
+- **编码**: UTF-8 (UE 5.x标准)
 
 ## 架构
 
 采用镜像UE的FArchive管道模式：
 
 ```
-.uasset → FArchive (读取器) → 反序列化器 → 数据类 → 输出 (JSON/文本)
+.uasset → FArchive → Deserializer → Models → OutputFormatter
+                ↓ 扩展组件
+          GraphParser (Phase 7)
+          AdvancedPropParser (Phase 9)
+          DependencyGraphBuilder (Phase 10)
 ```
 
-`uasset_read.py`中的核心组件：
+`uasset_read.py`核心组件：
 - `FArchive`: 二进制读取器，支持字节交换、边界验证
-- `PackageFileSummary`: 包含NameTable/ImportMap/ExportMap偏移量的头部
-- `FPackageIndex`: 有符号整数编码 (>0 导出, <0 导入, 0 空)
-- `FName`: NameMap索引 + 实例编号
-- `ParseResult`: 错误时包含部分结果的容器
+- `PackageFileSummary`: 文件头，包含各表偏移量
+- `ParseResult`: 解析结果容器，包含所有提取数据
+- `UEdGraph/UEdGraphNode/UEdGraphPin`: 蓝图图结构
 
 ## 文件组织
 
-- 源码: `uasset_read.py` (Phase 1单文件)
-- 测试: `tests/` 目录
-- 文档: `docs/` 或 `.planning/`
+- 源码: `uasset_read.py` (单文件，4901行)
+- 测试: `tests/` 目录 (11测试文件，216测试用例)
+- C++移植: `uasset_read_cpp/` 目录
 - 规划: `.planning/` (GSD工作流文件)
+- 测试输出: `test/` (已在.gitignore中)
 
 ## 命令
 
@@ -73,6 +97,33 @@ python -c "from uasset_read import parse_uasset; r = parse_uasset('file.uasset')
 # 运行所有测试
 python -m pytest tests/ -v
 
-# 运行单个测试
-python -m pytest tests/test_uasset_read.py::test_package_summary_valid -v
+# 运行测试（简要）
+python -m pytest tests/ --tb=short
+
+# 查看解析数据
+python -c "
+from uasset_read import parse_uasset
+import json
+r = parse_uasset('BP_FirstPersonCharacter.uasset')
+print(json.dumps(r.name_map[:50], indent=2))
+"
 ```
+
+## API导出
+
+```python
+from uasset_read import (
+    parse_uasset,           # 主解析函数
+    ParseResult,            # 解析结果容器
+    PackageFileSummary,     # 文件头
+    FArchive,               # 二进制读取器
+    UAssetError,            # 错误基类
+)
+```
+
+## 规划文档
+
+- `.planning/ROADMAP.md` — 版本路线图
+- `.planning/STATE.md` — 当前状态
+- `.planning/REQUIREMENTS.md` — 需求映射
+- `.planning/v3_DRAFT.md` — v3.0草案（蓝图转C++自动化）

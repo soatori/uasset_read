@@ -73,6 +73,9 @@ shipped:
 | 2026-05-02 | Phase 10 Wave 4 完成 | 14 单元测试全部通过，无回归 |
 | 2026-05-02 | Phase 10 Gap Closure 完成 | SoftObjectPath + ImportMap UE5 格式修复，62 tests pass |
 | 2026-05-02 | Phase 6-9 安全验证 | 19/31 mitigate已验证，12/31 accept已记录，0 OPEN |
+| 2026-05-02 | 项目文件清理 | 删除备份/临时文件、空目录、更新PROJECT-STRUCTURE.md |
+| 2026-05-02 | 蓝图转C++测试 | BP_FirstPersonCharacter解析，95%转换质量，生成C++代码框架 |
+| 2026-05-02 | v3.0草案创建 | 蓝图转C++自动化里程碑规划 |
 
 ## v2.0 里程碑 ✓ 完成
 
