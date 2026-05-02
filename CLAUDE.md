@@ -18,7 +18,7 @@
 
 ## UE 5.7 源码参考
 
-UE 5.7源码位于 `./UnrealEngine` (只读参考)。
+UE 5.7源码位于 `E:\Develop\lib\UnrealEngine` (只读参考)。
 
 .uasset解析的关键文件：
 - `PackageFileSummary.h` — 文件头部结构
@@ -28,7 +28,10 @@ UE 5.7源码位于 `./UnrealEngine` (只读参考)。
 ## 外部目录 (Git排除)
 
 - `UnrealEngine/` — UE引擎源码参考 (请勿修改)
+- `E:\Develop\lib\UnrealEngine\Samples\FirstPerson` `E:\Develop\lib\UnrealEngine\Samples\FirstPersonC` - 示例蓝图/C++测试对照(请勿修改)
 - `LyraStarterGame/` — 示例游戏资产 (请勿修改)
+- `D:\Program Files\Epic Games\Engine\UE_5.7` — UE 5.7引擎路径 (本地参考请勿修改)
+- `D:\Program Files\Epic Games\Engine\UE_4.27` — UE 4.27引擎路径 (本地参考请勿修改)
 
 ## 技术栈
 
