@@ -1589,6 +1589,58 @@ def detect_blueprint(
     return False
 
 
+def extract_blueprint_graphs(
+    summary: PackageFileSummary,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> List[UEdGraph]:
+    """
+    从 ExportMap 提取蓝图图（GRAPH-01 入口）。
+
+    Per D-03a: 遍历 ExportMap，ClassIndex 解析后包含 "EdGraph" 或 "Ubergraph" 的导出视为图对象。
+    Per D-03b: 此阶段仅检测和基本信息提取，不深入解析 Nodes 数组（Wave 2 实现）。
+
+    安全检查（T-07-01-02）：
+    - PKG_Cooked 检查避免解析已剥离资产（Pitfall 3）
+
+    Args:
+        summary: PackageFileSummary 包含 package_flags
+        import_map: 导入表列表（用于 ClassIndex 解析）
+        export_map: 导出表列表（用于 ClassIndex 解析）
+
+    Returns:
+        List[UEdGraph]: 检测到的图列表（仅基本信息，nodes 为空）
+    """
+    graphs: List[UEdGraph] = []
+
+    # T-07-01-02: 检查 PKG_Cooked 标志
+    # Pitfall 3: cooked 资产无图数据（已剥离）
+    is_cooked = (summary.package_flags & PKG_Cooked) != 0
+    if is_cooked:
+        # cooked 资产返回空列表，Phase 8 输出警告
+        return []
+
+    # 遍历 ExportMap 寻找 EdGraph 类型导出
+    for export in export_map:
+        # D-03a: ClassIndex 解析为类名
+        class_name = get_asset_class(export, import_map, export_map)
+
+        if class_name and ("EdGraph" in class_name or "UberEdGraph" in class_name):
+            # 创建 UEdGraph 对象（仅基本信息）
+            # D-03b: 此阶段不深入解析 Nodes 数组
+            graph = UEdGraph(
+                graph_name=export.object_name,
+                graph_class=class_name,
+                schema=None,  # Wave 2 实现
+                nodes=[],     # Wave 2 实现
+                graph_guid=None,  # Wave 2 实现
+                b_editable=True   # 默认值，Wave 2 实现解析
+            )
+            graphs.append(graph)
+
+    return graphs
+
+
 def resolve_parent_class(
     super_index: PackageIndex,
     import_map: List[ObjectImport],
@@ -2981,6 +3033,8 @@ __all__ = [
     'parse_default_value',
     'read_blueprint_variable',
     'extract_blueprint_metadata',
+    # Phase 7: Blueprint Graph Extraction
+    'extract_blueprint_graphs',
 
     # Property parsing functions (Phase 2)
     'use_complete_type_name',
