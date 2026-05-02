@@ -86,7 +86,7 @@ UE5_PACKAGE_SAVED_HASH = 1016                 # PACKAGE_SAVED_HASH (修正：原
 UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017  # OS_SUB_OBJECT_SHADOW_SERIALIZATION
 UE5_IMPORT_TYPE_HIERARCHIES = 1018            # IMPORT_TYPE_HIERARCHIES
 
-# UE4 Version Constants (EUnrealEngineObjectUE4Version) - 按实际值计算
+# UE4 Version Constants (EUnrealEngineObjectUE4Version) - 从ObjectVersion.h精确解析
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385  # VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (old)
 UE4_SERIALIZE_TEXT_IN_PACKAGES = 401            # VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (old)
 # 正确值（从 ObjectVersion.h 计算）
@@ -96,20 +96,22 @@ UE4_CHANGED_CHUNKID_TO_ARRAY = 341             # VER_UE4_CHANGED_CHUNKID_TO_BE_A
 UE4_ENGINE_VERSION_OBJECT = 334                 # VER_UE4_ENGINE_VERSION_OBJECT
 UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382      # VER_UE4_ADD_STRING_ASSET_REFERENCES_MAP
 UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
-VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 506    # Phase 6: ObjectVersion.h line 711
-UE4_ADDED_SEARCHABLE_NAMES = 508               # VER_UE4_ADDED_SEARCHABLE_NAMES
-VER_UE4_64BIT_EXPORTOFFSETS = 508              # Phase 6: 64-bit export offsets
-UE4_ADDED_PACKAGE_OWNER = 516                  # VER_UE4_ADDED_PACKAGE_OWNER
-UE4_NON_OUTER_PACKAGE_IMPORT = 518             # VER_UE4_NON_OUTER_PACKAGE_IMPORT
-UE4_LOAD_FOR_EDITOR_GAME = 383                 # VER_UE4_LOAD_FOR_EDITOR_GAME
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 401      # VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT
+# Phase 11 GAP修复：版本常量精确值（从ObjectVersion.h枚举位置计算）
+UE4_LOAD_FOR_EDITOR_GAME = 365                  # VER_UE4_LOAD_FOR_EDITOR_GAME (line 422)
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485       # VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (line 665)
+UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (line 709)
+VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 508    # VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (line 711)
+UE4_ADDED_SEARCHABLE_NAMES = 510               # VER_UE4_ADDED_SEARCHABLE_NAMES (line 715)
+VER_UE4_64BIT_EXPORTOFFSETS = 511              # VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (line 717)
+UE4_ADDED_PACKAGE_OWNER = 518                  # VER_UE4_ADDED_PACKAGE_OWNER (line 731)
+UE4_NON_OUTER_PACKAGE_IMPORT = 520             # VER_UE4_NON_OUTER_PACKAGE_IMPORT (line 734)
 
-# UE5 Release Object Version constants (Phase 6 D-08/D-10)
-UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1010    # FReleaseObjectVersion::RemoveObjectExportPackageGuid
-UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1011     # FReleaseObjectVersion::TrackObjectExportIsInherited
-UE5_GENERATE_PUBLIC_HASH = 1015                 # FReleaseObjectVersion::GeneratePublicHash
-UE5_OPTIONAL_RESOURCES = 1003                   # FReleaseObjectVersion::OptionalResources (bImportOptional field)
+# UE5 Version Constants (EUnrealEngineObjectUE5Version) - 从ObjectVersion.h精确解析
+# Phase 11 GAP修复：UE5版本常量精确值
+UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1005    # EUnrealEngineObjectUE5Version::REMOVE_OBJECT_EXPORT_PACKAGE_GUID (line 62)
+UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1006     # EUnrealEngineObjectUE5Version::TRACK_OBJECT_EXPORT_IS_INHERITED (line 65)
+UE5_OPTIONAL_RESOURCES = 1003                   # EUnrealEngineObjectUE5Version::OPTIONAL_RESOURCES (line 56)
+UE5_SCRIPT_SERIALIZATION_OFFSET = 1010          # EUnrealEngineObjectUE5Version::SCRIPT_SERIALIZATION_OFFSET (line 77)
 
 
 # ============================================================================
@@ -1860,6 +1862,10 @@ def read_export_map(
     # 参考 FPackageFileVersion::operator>= 实现
     effective_ue4_version = summary.file_version_ue4 if not is_ue5_file else 1000  # UE5 视为高版本
 
+    # Phase 11 GAP修复：检查PKG_Cooked标志
+    # TemplateIndex和PreloadDependencies只在cooked资产中有效（ObjectVersion.h注释）
+    is_cooked = (summary.package_flags & PKG_Cooked) != 0
+
     for export_idx in range(summary.export_count):
         object_name = ""  # 初始化用于错误上下文
 
@@ -1870,9 +1876,9 @@ def read_export_map(
             # 2. SuperIndex
             super_index = PackageIndex(archive.read_i32())
 
-            # 3. TemplateIndex（D-01：条件读取 UE4 >= 506，UE5 文件自动满足）
+            # 3. TemplateIndex（条件读取 UE4 >= 508）
             template_index = PackageIndex(0)
-            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:  # 506
+            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:  # 508
                 template_index = PackageIndex(archive.read_i32())
 
             # 4. OuterIndex（D-02：TemplateIndex 之后）
@@ -1897,14 +1903,14 @@ def read_export_map(
             b_not_for_client = bool(archive.read_u8())
             b_not_for_server = bool(archive.read_u8())
 
-            # 12. PackageGuid（D-10/D-11：UE5 < 1010时读取但不存储）
-            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1010
+            # 12. PackageGuid（Phase 11 GAP: UE5 < 1005时读取但不存储）
+            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1005
                 # 读取 16 bytes FGuid，但不存储（DummyPackageGuid）
                 archive.read_bytes(16)
 
-            # 13. bIsInheritedInstance（D-08：UE5 >= 1011）
+            # 13. bIsInheritedInstance（Phase 11 GAP: UE5 >= 1006）
             b_is_inherited_instance = None
-            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1011
+            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1006
                 b_is_inherited_instance = bool(archive.read_u8())
 
             # 14. PackageFlags（D-09）
@@ -1923,18 +1929,18 @@ def read_export_map(
             if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
                 b_is_asset = bool(archive.read_u8())
 
-            # UE5 版本条件：bGeneratePublicHash（UE5 >= OPTIONAL_RESOURCES=1003）
-            if is_ue5_file and summary.file_version_ue5 >= UE5_GENERATE_PUBLIC_HASH:
+            # UE5 版本条件：bGeneratePublicHash（Phase 11 GAP: UE5 >= OPTIONAL_RESOURCES=1003）
+            if is_ue5_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
                 b_generate_public_hash = bool(archive.read_u8())
 
-            # 18. 依赖数组（UE4 >= 505 / UE5 总是满足）
+            # 18. 依赖数组（UE4 >= 507）
             # FirstExportDependency + 4个依赖计数（5个 i32）
             first_export_dependency = 0
             serialization_before_serialization_deps = 0
             create_before_serialization_deps = 0
             serialization_before_create_deps = 0
             create_before_create_deps = 0
-            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
+            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:  # 507
                 first_export_dependency = archive.read_i32()
                 serialization_before_serialization_deps = archive.read_i32()
                 create_before_serialization_deps = archive.read_i32()
