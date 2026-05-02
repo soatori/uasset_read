@@ -22,7 +22,7 @@ import argparse
 import mmap
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, BinaryIO, Tuple
+from typing import Optional, List, Dict, BinaryIO, Tuple, Any
 
 
 # ============================================================================
@@ -850,6 +850,82 @@ class FMemberReference:
     member_name: str = ""                # FName - 函数/事件名
     member_guid: Optional[str] = None    # FGuid hex（16 bytes）- 函数 GUID
     b_self_context: bool = False         # uint8 - self 调用标志
+
+
+# ============================================================================
+# 节点类型特定数据类（GRAPH-05~09）
+# ============================================================================
+
+@dataclass
+class K2NodeCallFunction:
+    """
+    K2Node_CallFunction 特有数据（GRAPH-05）。
+
+    来自编辑器导出格式验证：
+    FunctionReference=(MemberName="Jump",bSelfContext=True)
+
+    Per RESEARCH.md L546-555: FunctionReference + bDefaultsToPureFunc
+    """
+    function_reference: FMemberReference
+    b_defaults_to_pure: bool = False      # uint8 - 是否为纯函数
+
+
+@dataclass
+class K2NodeEvent:
+    """
+    K2Node_Event 特有数据（GRAPH-06）。
+
+    来自编辑器导出格式验证：
+    EventReference=(MemberParent="/Script/Engine.BPGenClass",MemberName="Touch Jump Start",MemberGuid=...)
+
+    Per RESEARCH.md L556-562: EventReference + bOverrideFunction
+    """
+    event_reference: FMemberReference
+    b_override_function: bool = False     # uint8 - 是否为重写函数
+
+
+@dataclass
+class K2NodeKnot:
+    """
+    K2Node_Knot 特有数据（GRAPH-07）。
+
+    Knot 节点（ reroute node）无额外字段，仅 InputPin/OutputPin 在基类 Pins 数组。
+
+    Per RESEARCH.md L563-566: 无额外字段
+    """
+    pass  # 仅基类字段
+
+
+@dataclass
+class EdGraphNodeComment:
+    """
+    EdGraphNode_Comment 特有数据（GRAPH-08）。
+
+    来自编辑器导出格式验证（test/编辑器中复制出的文本.txt L21-32, L275-302）：
+    CommentColor=(R=0.050980,G=0.050980,B=0.050980,A=1.000000)
+    NodeWidth=1440
+    NodeHeight=544
+    FontSize=14
+
+    Per RESEARCH.md L567-574: CommentColor + NodeWidth/Height + FontSize
+    """
+    comment_color: Tuple[float, float, float, float] = (0.05, 0.05, 0.05, 1.0)  # RGBA
+    node_width: int = 0                   # int32 - 注释框宽度
+    node_height: int = 0                  # int32 - 注释框高度
+    font_size: int = 14                   # int32 - 字体大小
+
+
+@dataclass
+class K2NodeEnhancedInputAction:
+    """
+    K2Node_EnhancedInputAction 特有数据（GRAPH-09）。
+
+    来自编辑器导出格式验证（test/编辑器中复制出的文本.txt L58-99）：
+    InputAction="/Script/EnhancedInput.InputAction'/Game/Input/Actions/IA_Look.IA_Look'"
+
+    Per RESEARCH.md L575-580: InputAction (FSoftObjectPath)
+    """
+    input_action_path: str = ""           # FSoftObjectPath AssetPath 字符串
 
 
 @dataclass
@@ -1986,7 +2062,28 @@ def read_ue_graph_node(
     if class_name is None:
         class_name = ""
 
-    # Wave 3 将实现类型特定解析器，此处 node_data = None
+    # 类型分派（D-02b, GRAPH-05~09）
+    # Per RESEARCH.md L260-316: match/case 类型分派
+    node_data: Any = None
+    match class_name:
+        case "K2Node_CallFunction":
+            node_data = read_k2node_call_function(
+                archive, name_map, import_map, export_map
+            )
+        case "K2Node_Event":
+            node_data = read_k2node_event(
+                archive, name_map, import_map, export_map
+            )
+        case "K2Node_Knot":
+            node_data = read_k2node_knot(archive)
+        case "EdGraphNode_Comment":
+            node_data = read_edgraph_node_comment(archive)
+        case "K2Node_EnhancedInputAction":
+            node_data = read_k2node_enhanced_input(archive, name_map)
+        case _:
+            # D-02a: 未知类型 — 记录类型名，继续解析
+            node_data = {"unknown_type": class_name}
+
     return UEdGraphNode(
         node_guid=node_guid,
         node_pos_x=node_pos_x,
@@ -1994,7 +2091,232 @@ def read_ue_graph_node(
         node_comment=node_comment,
         pins=pins,
         class_name=class_name,
-        node_data=None  # Wave 3 实现
+        node_data=node_data
+    )
+
+
+# ============================================================================
+# 节点类型特定解析器（GRAPH-05~09）
+# ============================================================================
+
+def read_fmember_reference(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> FMemberReference:
+    """
+    读取 FMemberReference（GRAPH-05/06 辅助函数）。
+
+    用于 K2Node_CallFunction 和 K2Node_Event 的函数/事件引用。
+
+    序列化顺序（基于 RESEARCH.md L318-355 推断，编辑器导出验证）：
+    1. MemberParent (FPackageIndex i32)
+    2. MemberName (FName)
+    3. MemberGuid (FGuid 16 bytes)
+    4. bSelfContext (uint8)
+
+    Args:
+        archive: FArchive positioned at FMemberReference
+        name_map: NameMap for FName resolution
+        import_map: 导入表（用于 FPackageIndex 解析）
+        export_map: 导出表（用于 FPackageIndex 解析）
+
+    Returns:
+        FMemberReference 实例
+    """
+    # 1. MemberParent (FPackageIndex)
+    member_parent_index = archive.read_i32()
+    member_parent: Optional[str] = None
+    if member_parent_index != 0:
+        member_parent = resolve_class_name(
+            PackageIndex(member_parent_index), import_map, export_map
+        )
+
+    # 2. MemberName (FName)
+    member_name = archive.read_name(name_map)
+
+    # 3. MemberGuid (FGuid 16 bytes)
+    member_guid_bytes = archive.read_bytes(16)
+    member_guid = member_guid_bytes.hex()
+
+    # 4. bSelfContext (uint8)
+    b_self_context = archive.read_u8() != 0
+
+    return FMemberReference(
+        member_parent=member_parent,
+        member_name=member_name,
+        member_guid=member_guid,
+        b_self_context=b_self_context
+    )
+
+
+def read_k2node_call_function(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> K2NodeCallFunction:
+    """
+    读取 K2Node_CallFunction 特有字段（GRAPH-05）。
+
+    来自编辑器导出验证（test/编辑器中复制出的文本.txt L0-9）：
+    FunctionReference=(MemberName="Jump",bSelfContext=True)
+
+    序列化顺序：
+    1. FunctionReference (FMemberReference)
+    2. bDefaultsToPureFunc (uint8)
+
+    Args:
+        archive: FArchive positioned after base class fields
+        name_map: NameMap for FName resolution
+        import_map: 导入表
+        export_map: 导出表
+
+    Returns:
+        K2NodeCallFunction 实例
+    """
+    # 1. FunctionReference (FMemberReference)
+    function_reference = read_fmember_reference(
+        archive, name_map, import_map, export_map
+    )
+
+    # 2. bDefaultsToPureFunc (uint8)
+    b_defaults_to_pure = archive.read_u8() != 0
+
+    return K2NodeCallFunction(
+        function_reference=function_reference,
+        b_defaults_to_pure=b_defaults_to_pure
+    )
+
+
+def read_k2node_event(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> K2NodeEvent:
+    """
+    读取 K2Node_Event 特有字段（GRAPH-06）。
+
+    来自编辑器导出验证：
+    EventReference=(MemberParent="/Script/Engine.BPGenClass",MemberName="...",MemberGuid=...)
+
+    序列化顺序：
+    1. EventReference (FMemberReference)
+    2. bOverrideFunction (uint8)
+
+    Args:
+        archive: FArchive positioned after base class fields
+        name_map: NameMap for FName resolution
+        import_map: 导入表
+        export_map: 导出表
+
+    Returns:
+        K2NodeEvent 实例
+    """
+    # 1. EventReference (FMemberReference)
+    event_reference = read_fmember_reference(
+        archive, name_map, import_map, export_map
+    )
+
+    # 2. bOverrideFunction (uint8)
+    b_override_function = archive.read_u8() != 0
+
+    return K2NodeEvent(
+        event_reference=event_reference,
+        b_override_function=b_override_function
+    )
+
+
+def read_k2node_knot(archive: FArchive) -> K2NodeKnot:
+    """
+    读取 K2Node_Knot 特有字段（GRAPH-07）。
+
+    Knot 节点无额外字段，仅 InputPin/OutputPin 在基类 Pins 数组。
+
+    Per RESEARCH.md L563-566: 无额外字段，返回空实例。
+
+    Args:
+        archive: FArchive（不读取任何数据）
+
+    Returns:
+        K2NodeKnot 空实例
+    """
+    return K2NodeKnot()
+
+
+def read_edgraph_node_comment(archive: FArchive) -> EdGraphNodeComment:
+    """
+    读取 EdGraphNode_Comment 特有字段（GRAPH-08）。
+
+    来自编辑器导出验证（test/编辑器中复制出的文本.txt L20-57, L275-302）：
+    CommentColor=(R=0.050980,G=0.050980,B=0.050980,A=1.000000)
+    NodeWidth=1440
+    NodeHeight=544
+    FontSize=14
+
+    序列化顺序：
+    1. CommentColor (4 floats RGBA)
+    2. NodeWidth (int32)
+    3. NodeHeight (int32)
+    4. FontSize (int32)
+
+    注意：NodeComment 已在基类 NodeComment 字段读取。
+
+    Args:
+        archive: FArchive positioned after base class fields
+
+    Returns:
+        EdGraphNodeComment 实例
+    """
+    # 1. CommentColor (4 floats RGBA)
+    r = struct.unpack('<f', archive.read(4))[0]
+    g = struct.unpack('<f', archive.read(4))[0]
+    b = struct.unpack('<f', archive.read(4))[0]
+    a = struct.unpack('<f', archive.read(4))[0]
+    comment_color = (r, g, b, a)
+
+    # 2-4. NodeWidth/Height/FontSize (int32)
+    node_width = archive.read_i32()
+    node_height = archive.read_i32()
+    font_size = archive.read_i32()
+
+    return EdGraphNodeComment(
+        comment_color=comment_color,
+        node_width=node_width,
+        node_height=node_height,
+        font_size=font_size
+    )
+
+
+def read_k2node_enhanced_input(
+    archive: FArchive,
+    name_map: List[str]
+) -> K2NodeEnhancedInputAction:
+    """
+    读取 K2Node_EnhancedInputAction 特有字段（GRAPH-09）。
+
+    来自编辑器导出验证（test/编辑器中复制出的文本.txt L58-99）：
+    InputAction="/Script/EnhancedInput.InputAction'/Game/Input/Actions/IA_Look.IA_Look'"
+
+    序列化顺序：
+    1. InputAction (FSoftObjectPath: AssetPath FString)
+
+    Args:
+        archive: FArchive positioned after base class fields
+        name_map: NameMap（可能用于其他字段，但 InputAction 为 FString）
+
+    Returns:
+        K2NodeEnhancedInputAction 实例
+    """
+    # 1. InputAction (FSoftObjectPath AssetPath)
+    # FSoftObjectPath 序列化为 AssetPath (FString) + SubPathString (FString)
+    # 但编辑器导出显示仅有 AssetPath，暂只读取 AssetPath
+    input_action_path = archive.read_fstring()
+
+    return K2NodeEnhancedInputAction(
+        input_action_path=input_action_path
     )
 
 
@@ -3324,6 +3646,12 @@ __all__ = [
     'UEdGraphNode',
     'UEdGraph',
     'FMemberReference',
+    # Phase 7 Wave 3: Node Type Specific Data Classes (GRAPH-05~09)
+    'K2NodeCallFunction',
+    'K2NodeEvent',
+    'K2NodeKnot',
+    'EdGraphNodeComment',
+    'K2NodeEnhancedInputAction',
 
     # FArchive
     'FArchive',
@@ -3376,6 +3704,13 @@ __all__ = [
     'read_ue_graph_pin',
     'read_ue_graph_node',
     'read_ue_graph',
+    # Phase 7 Wave 3: Node Type Specific Parsers (GRAPH-05~09)
+    'read_fmember_reference',
+    'read_k2node_call_function',
+    'read_k2node_event',
+    'read_k2node_knot',
+    'read_edgraph_node_comment',
+    'read_k2node_enhanced_input',
 
     # Property parsing functions (Phase 2)
     'use_complete_type_name',
