@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 蓝图图解析
-status: ready_to_execute
-last_updated: "2026-05-02T17:00:00Z"
+status: ready_to_plan
+last_updated: "2026-05-02T18:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
@@ -22,11 +22,11 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v2.0 —— 蓝图图解析
-**状态：** Ready to execute - Phase 7 完成
+**状态：** Ready to plan - Phase 8 上下文已收集
 
 ## 当前阶段
 
-**Phase 8: 蓝图图输出增强** - 待规划
+**Phase 8: 蓝图图输出增强** - 上下文已收集
 
 ## 阶段状态
 
@@ -39,7 +39,7 @@ shipped:
 | 5 | 优化与安全 | ✓ 完成 | 5/5 | ✓ | ✓ | 100% |
 | 6 | 导出表修复 | ✓ 完成 | 2/2 | ✓ | ✓ | 100% |
 | 7 | 蓝图图核心 | ✓ 完成 | 3/3 | ✓ | TBD | 100% |
-| 8 | 蓝图图输出 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
+| 8 | 蓝图图输出 | ◆ 上下文收集 | TBD | TBD | TBD | 0% |
 | 9 | 高级属性 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
 | 10 | 依赖分析 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
 
@@ -70,19 +70,20 @@ shipped:
 | 2026-05-02 | Phase 7 Wave 2 完成 | Node/Pin 核心解析实现 |
 | 2026-05-02 | Phase 7 Wave 3 完成 | 节点类型解析器 + 测试 |
 | 2026-05-02 | Phase 7 验证通过 | 5/5 must-haves, 105 tests pass |
+| 2026-05-02 | Phase 8 上下文收集完成 | 连接映射 + 执行流 + CLI 标志决策 |
 
 ## 下一步动作
 
 ```
-/gsd-discuss-phase 8 — 收集 Phase 8 上下文（蓝图图输出增强）
+/gsd-plan-phase 8 — 创建 Phase 8 规划（蓝图图输出增强）
 ```
 
-### Phase 6 规划要点
+### Phase 8 决策要点
 
-1. **OuterIndex 修复** - 在 read_export_map() 中正确读取字段偏移
-2. **TemplateIndex 条件读取** - 检查 `summary.file_version_ue4 >= 506`
-3. **错误上下文增强** - 添加 offset、phase、operation 字段
-4. **版本检测** - 区分 UE4/UE5 文件格式
+1. **连接映射构建** - PinName 全图匹配 + NodeGuid/PinName 表示 + Graph.connections 位置
+2. **执行流路径** - Event→CallFunction 链路 + execution_flows 数组 + 分支处停止
+3. **CLI --graph 标志** - 独立可组合 + 输出范围取决于 --verbose
+4. **graphs JSON 结构** - 层级结构需与 Phase 4 D-02 保持一致
 
 ## v2.0 技术展望
 
