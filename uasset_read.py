@@ -1644,6 +1644,10 @@ def read_soft_object_paths(
     Per D-10-07: {asset_path, sub_path} 格式
     Per D-10-09: 仅 UE5 >= 1008 时解析
 
+    UE5 版本格式变化（SoftObjectPath.cpp L555-591）：
+    - UE5 < 1007: AssetPathName(FName) + SubPathWide(FWideString)
+    - UE5 >= 1007: PackageName(FName) + AssetName(FName) + SubPathString(FUtf8String)
+
     Args:
         archive: FArchive 实例
         summary: PackageFileSummary 实例
@@ -1666,8 +1670,22 @@ def read_soft_object_paths(
 
     soft_refs = []
     for _ in range(summary.soft_object_paths_count):
-        asset_path = archive.read_name(name_map)
-        sub_path = archive.read_fstring()
+        # UE5 >= 1007: FTopLevelAssetPath 格式（两个 FName）
+        if summary.file_version_ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
+            package_name = archive.read_name(name_map)
+            asset_name = archive.read_name(name_map)
+            # 组合为完整 asset_path：PackageName.AssetName 或 PackageName
+            if asset_name:
+                asset_path = f"{package_name}.{asset_name}"
+            else:
+                asset_path = package_name
+            # SubPathString: FUtf8String（与 FString 格式相同）
+            sub_path = archive.read_fstring()
+        else:
+            # UE5 < 1007: 单 FName + FWideString 格式
+            asset_path = archive.read_name(name_map)
+            # FWideString 格式与 FString 相同（UTF-16 LE，但实际存储常为 UTF-8）
+            sub_path = archive.read_fstring()
 
         soft_refs.append({
             "asset_path": asset_path,
