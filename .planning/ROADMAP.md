@@ -36,8 +36,8 @@ progress:
 
 ## Phases
 
-- [ ] **Phase 6: 导出表修复** - 修复 OuterIndex/TemplateIndex 解析 bug
-- [ ] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析
+- [x] **Phase 6: 导出表修复** - 修复 OuterIndex/TemplateIndex 解析 bug ✓ 2026-05-02
+- [x] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析 ✓ 2026-05-02
 - [ ] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强
 - [ ] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty
 - [ ] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图
@@ -85,9 +85,9 @@ Plans:
 **Plans:** 3 plans in 3 waves
 
 Plans:
-- [ ] 07-01-PLAN.md — 数据结构定义 + EdGraph 检测（GRAPH-01, GRAPH-02）
-- [ ] 07-02-PLAN.md — Node/Pin 核心解析（GRAPH-03, GRAPH-04）
-- [ ] 07-03-PLAN.md — 节点类型特定解析器 + 测试（GRAPH-05~09）
+- [x] 07-01-PLAN.md — 数据结构定义 + EdGraph 检测（GRAPH-01, GRAPH-02） ✓
+- [x] 07-02-PLAN.md — Node/Pin 核心解析（GRAPH-03, GRAPH-04） ✓
+- [x] 07-03-PLAN.md — 节点类型特定解析器 + 测试（GRAPH-05~09） ✓
 
 **UI hint:** no
 
@@ -174,7 +174,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
-| 7 - 蓝图图核心 | 0/3 | Planning | 0% |
+| 7 - 蓝图图核心 | 3/3 | Complete | 100% |
 | 8 - 蓝图图输出 | 0/0 | Not started | - |
 | 9 - 高级属性 | 0/0 | Not started | - |
 | 10 - 依赖分析 | 0/0 | Not started | - |
@@ -185,18 +185,18 @@ Plans:
 
 | 需求 | 阶段 | 状态 |
 |------|------|------|
-| BUG-01 | Phase 6 | Pending |
-| BUG-02 | Phase 6 | Pending |
-| BUG-03 | Phase 6 | Pending |
-| GRAPH-01 | Phase 7 | Pending |
-| GRAPH-02 | Phase 7 | Pending |
-| GRAPH-03 | Phase 7 | Pending |
-| GRAPH-04 | Phase 7 | Pending |
-| GRAPH-05 | Phase 7 | Pending |
-| GRAPH-06 | Phase 7 | Pending |
-| GRAPH-07 | Phase 7 | Pending |
-| GRAPH-08 | Phase 7 | Pending |
-| GRAPH-09 | Phase 7 | Pending |
+| BUG-01 | Phase 6 | ✓ Complete |
+| BUG-02 | Phase 6 | ✓ Complete |
+| BUG-03 | Phase 6 | ✓ Complete |
+| GRAPH-01 | Phase 7 | ✓ Complete |
+| GRAPH-02 | Phase 7 | ✓ Complete |
+| GRAPH-03 | Phase 7 | ✓ Complete |
+| GRAPH-04 | Phase 7 | ✓ Complete |
+| GRAPH-05 | Phase 7 | ✓ Complete |
+| GRAPH-06 | Phase 7 | ✓ Complete |
+| GRAPH-07 | Phase 7 | ✓ Complete |
+| GRAPH-08 | Phase 7 | ✓ Complete |
+| GRAPH-09 | Phase 7 | ✓ Complete |
 | GRAPH-10 | Phase 8 | Deferred (D-01) |
 | GRAPH-11 | Phase 8 | Pending |
 | GRAPH-12 | Phase 8 | Pending |
@@ -215,7 +215,7 @@ Plans:
 | OUT2-03 | Phase 8 | Pending |
 | OUT2-04 | Phase 8 | Pending |
 
-**覆盖率：** 29/29 需求已映射 ✓
+**覆盖率：** 14/29 需求已完成 ✓
 
 ---
 
