@@ -161,13 +161,15 @@ Plans:
 3. 解析器能检测循环依赖（ImportMap 中的相互引用）
 4. JSON 输出包含依赖图结构（imports、soft_references、circular_deps）
 
-**Plans:** 4 plans in 4 waves
+**Plans:** 6 plans in 6 waves (including 2 gap closure plans)
 
 Plans:
-- [ ] 10-01-PLAN.md — ParseResult 扩展：imports/soft_references/circular_deps 字段（D-10-05/08/13）
-- [ ] 10-02-PLAN.md — build_imports_list + read_soft_object_paths 函数实现（DEPS-01, DEPS-02）
-- [ ] 10-03-PLAN.md — detect_circular_deps + format_json_full 扩展 + parse_uasset 集成（DEPS-03, DEPS-04）
-- [ ] 10-04-PLAN.md — 单元测试 + 完整验证（DEPS-01~04）
+- [x] 10-01-PLAN.md — ParseResult 扩展：imports/soft_references/circular_deps 字段（D-10-05/08/13） ✓
+- [x] 10-02-PLAN.md — build_imports_list + read_soft_object_paths 函数实现（DEPS-01, DEPS-02） ✓
+- [x] 10-03-PLAN.md — detect_circular_deps + format_json_full 扩展 + parse_uasset 集成（DEPS-03, DEPS-04） ✓
+- [x] 10-04-PLAN.md — 单元测试 + 完整验证（DEPS-01~04） ✓
+- [ ] 10-05-PLAN.md — [GAP CLOSURE] SoftObjectPath UE5 >= 1007 FTopLevelAssetPath 格式修复
+- [ ] 10-06-PLAN.md — [GAP CLOSURE] ImportMap UE5 条件字段 + 蓝图提取修复
 
 **UI hint:** no
 
