@@ -46,7 +46,7 @@ Last activity: 2026-05-03 — Roadmap created for v3.0
 | 8 | 蓝图图输出 | v2.0 | ✓ 完成 | 4/4 | ✓ | ✓ | 100% |
 | 9 | 高级属性 | v2.0 | ✓ 完成 | 3/3 | ✓ | ✓ | 100% |
 | 10 | 依赖分析 | v2.0 | ✓ 完成 | 6/6 | ✓ | ✓ | 100% |
-| 11 | ExportMap属性值提取 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 11 | ExportMap属性值提取 | v3.0 | 📋 已规划 | 4/4 | - | - | 0% |
 | 12 | BlueprintVariables完整提取 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 | 13 | 组件变换属性解析 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 | 14 | 输出格式优化并冻结 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
@@ -82,7 +82,13 @@ Last activity: 2026-05-03 — Roadmap created for v3.0
 
 ## 下一步
 
-**运行 `/gsd-plan-phase 11` 开始Phase 11规划**
+**运行 `/gsd-execute-phase 11` 执行Phase 11计划**
+
+**Phase 11计划概览：**
+- 11-01: 集成ExportMap属性解析（Wave 1）
+- 11-02: 增强ObjectProperty解析（Wave 2，依赖11-01）
+- 11-03: 新增SoftObjectProperty解析器（Wave 2，依赖11-01）
+- 11-04: 创建完整测试覆盖（Wave 3，依赖11-01/02/03）
 
 ## Project Reference
 
