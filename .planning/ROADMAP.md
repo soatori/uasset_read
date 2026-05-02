@@ -40,7 +40,7 @@ progress:
 - [x] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析 ✓ 2026-05-02
 - [x] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强 ✓ 2026-05-02
 - [x] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty ✓ 2026-05-02
-- [ ] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图
+- [x] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图 ✓ 2026-05-02
 
 ## Phase Details
 
