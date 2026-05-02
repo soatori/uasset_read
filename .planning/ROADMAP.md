@@ -187,12 +187,12 @@ Plans:
 
 ## Progress Table
 
-| 9 - 高级属性 | 0/3 | Ready to execute | 0% |
-|-------|----------------|--------|-----------|
+| Phase | Plans | Status | Progress |
+|-------|-------|--------|----------|
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
 | 7 - 蓝图图核心 | 3/3 | Complete | 100% |
 | 8 - 蓝图图输出 | 4/4 | Complete | 100% |
-| 9 - 高级属性 | 0/0 | Not started | - |
+| 9 - 高级属性 | 0/3 | Ready to execute | 0% |
 | 10 - 依赖分析 | 0/4 | Ready to execute | 0% |
 
 ---
