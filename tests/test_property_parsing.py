@@ -14,6 +14,8 @@ from uasset_read import (
     PropertyTag,
     PropertyValue,
     ObjectExport,
+    ObjectImport,
+    PackageIndex,
     PackageFileSummary,
     use_complete_type_name,
     read_property_tag,
@@ -26,6 +28,7 @@ from uasset_read import (
     parse_array_property,
     parse_property_value,
     parse_properties_from_export,
+    resolve_package_index_to_reference,
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
     PROP_TAG_BOOL_TRUE,
@@ -681,3 +684,284 @@ def test_all_property_types_dispatch():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ============================================================================
+# Phase 11-02: ObjectProperty Enhanced Resolution Tests
+# ============================================================================
+
+def test_object_property_resolved_import():
+    """测试resolve_package_index_to_reference解析import引用。"""
+    name_map = ["Package", "Class", "Object"]
+
+    # 创建import_map条目
+    import_map = [
+        ObjectImport(
+            class_package="Package",
+            class_name="Class",
+            outer_index=PackageIndex(0),
+            object_name="Object"
+        )
+    ]
+    export_map = []
+
+    # 创建import引用（负数索引：-1对应import_map[0]）
+    pkg_idx = PackageIndex(-1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "import"
+    assert resolved["class_name"] == "Class"
+    assert resolved["object_name"] == "Object"
+    assert resolved["package"] == "Package"
+
+
+def test_object_property_resolved_export():
+    """测试resolve_package_index_to_reference解析export引用。"""
+    name_map = ["TestClass", "TestObject"]
+
+    # 创建export_map条目
+    export_map = [
+        ObjectExport(
+            class_index=PackageIndex(0),  # None类
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="TestObject",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0
+        )
+    ]
+    import_map = []
+
+    # 创建export引用（正数索引：1对应export_map[0]）
+    pkg_idx = PackageIndex(1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "export"
+    assert resolved["class_name"] == "None"
+    assert resolved["object_name"] == "TestObject"
+
+
+def test_object_property_null_reference():
+    """测试resolve_package_index_to_reference返回None对于空引用。"""
+    name_map = []
+    import_map = []
+    export_map = []
+
+    # 创建null引用（索引0）
+    pkg_idx = PackageIndex(0)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is None
+
+
+def test_object_property_import_out_of_range():
+    """测试resolve_package_index_to_reference处理越界import索引。"""
+    name_map = []
+    import_map = []  # 空import_map
+    export_map = []
+
+    # 创建import引用但没有对应条目
+    pkg_idx = PackageIndex(-1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    # 越界应返回None
+    assert resolved is None
+
+
+def test_object_property_export_out_of_range():
+    """测试resolve_package_index_to_reference处理越界export索引。"""
+    name_map = []
+    import_map = []
+    export_map = []  # 空export_map
+
+    # 创建export引用但没有对应条目
+    pkg_idx = PackageIndex(1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    # 越界应返回None
+    assert resolved is None
+
+
+def test_object_property_export_with_import_class():
+    """测试resolve_package_index_to_reference解析export的类引用指向import。"""
+    name_map = ["Engine", "Actor", "MyActor"]
+
+    # 创建import条目作为类引用
+    import_map = [
+        ObjectImport(
+            class_package="Engine",
+            class_name="Actor",
+            outer_index=PackageIndex(0),
+            object_name="Default__Actor"
+        )
+    ]
+
+    # 创建export条目，其class_index指向import
+    export_map = [
+        ObjectExport(
+            class_index=PackageIndex(-1),  # 指向import_map[0]
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="MyActor",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0
+        )
+    ]
+
+    # 解析export引用
+    pkg_idx = PackageIndex(1)  # export_map[0]
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "export"
+    assert resolved["class_name"] == "Actor"  # 递归解析class_index得到类名
+    assert resolved["object_name"] == "MyActor"
+
+
+def test_object_property_in_parse_properties():
+    """测试parse_properties_from_export增强ObjectProperty返回可读引用。"""
+    # 构造测试数据：一个ObjectProperty + 终止标记
+    # name_map需要包含属性名和终止标记名"None"
+    name_map = ["TestProp", "None", "Package", "Class", "Target"]
+
+    # ObjectProperty = 14 chars, FString length = 15 (包括null terminator)
+    type_str_len = 15  # "ObjectProperty\x00" = 15 bytes
+
+    # PropertyTag数据 (UE5格式)
+    prop_data = (
+        struct.pack('<I', 0) +      # Name index (TestProp)
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', type_str_len) +  # Type string length (15)
+        b"ObjectProperty\x00" +     # Type string (15 bytes)
+        struct.pack('<i', 4) +      # Size
+        struct.pack('<B', 0) +      # Flags
+        struct.pack('<i', -1)       # Value: FPackageIndex = -1 (import reference)
+    )
+
+    # 终止标记 (UE5格式: Name=FName, Type=FString "None")
+    terminator_data = (
+        struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', 5) +      # Type string length (None + null = 5)
+        b"None\x00" +               # Type string
+        struct.pack('<i', 0) +      # Size = 0
+        struct.pack('<B', 0)        # Flags
+    )
+
+    full_data = prop_data + terminator_data
+    archive = create_mock_archive_with_data(full_data)
+
+    # 创建测试导出条目
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestExport",
+        object_flags=0,
+        serial_size=len(full_data),
+        serial_offset=0
+    )
+
+    # 创建import_map
+    import_map = [
+        ObjectImport(
+            class_package="Package",
+            class_name="Class",
+            outer_index=PackageIndex(0),
+            object_name="Target"
+        )
+    ]
+
+    # 创建summary
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=522,
+        file_version_ue5=1000
+    )
+
+    export_map = [export]
+
+    # 解析属性
+    properties = parse_properties_from_export(
+        export, archive, summary, name_map, export_map, import_map
+    )
+
+    # 验证ObjectProperty增强结果
+    assert len(properties) == 1
+    prop = properties[0]
+    assert prop.name == "TestProp"
+    assert prop.type == "ObjectProperty"
+
+    # value应该是增强格式
+    assert isinstance(prop.value, dict)
+    assert "raw_index" in prop.value
+    assert prop.value["raw_index"] == -1
+    assert "resolved" in prop.value
+    assert prop.value["resolved"]["type"] == "import"
+    assert prop.value["resolved"]["class_name"] == "Class"
+    assert prop.value["resolved"]["object_name"] == "Target"
+
+
+def test_object_property_null_in_parse_properties():
+    """测试parse_properties_from_export处理null ObjectProperty引用。"""
+    # name_map需要包含属性名和终止标记名"None"
+    name_map = ["NullProp", "None"]
+
+    # ObjectProperty = 14 chars, FString length = 15
+    type_str_len = 15
+
+    # PropertyTag数据 (UE5格式) - null引用
+    prop_data = (
+        struct.pack('<I', 0) +      # Name index (NullProp)
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', type_str_len) +  # Type string length
+        b"ObjectProperty\x00" +     # Type string
+        struct.pack('<i', 4) +      # Size
+        struct.pack('<B', 0) +      # Flags
+        struct.pack('<i', 0)        # Value: FPackageIndex = 0 (null)
+    )
+
+    # 终止标记 (UE5格式)
+    terminator_data = (
+        struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', 5) +      # Type string length
+        b"None\x00" +               # Type string
+        struct.pack('<i', 0) +      # Size
+        struct.pack('<B', 0)        # Flags
+    )
+
+    full_data = prop_data + terminator_data
+    archive = create_mock_archive_with_data(full_data)
+
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestExport",
+        object_flags=0,
+        serial_size=len(full_data),
+        serial_offset=0
+    )
+
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=522,
+        file_version_ue5=1000
+    )
+
+    properties = parse_properties_from_export(
+        export, archive, summary, name_map, [export], []  # import_map=[]
+    )
+
+    # 验证null引用的增强结果
+    assert len(properties) == 1
+    prop = properties[0]
+    assert prop.value["raw_index"] == 0
+    assert prop.value["resolved"] is None
