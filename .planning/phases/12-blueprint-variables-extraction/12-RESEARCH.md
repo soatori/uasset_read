@@ -236,7 +236,7 @@ def parse_property_flags(flags: int) -> List[str]:
 
 **Why it happens:** 某些组件类型名不以"Component"结尾（如ChildActor），某些类型名包含"Component"但不是组件。
 
-**How to avoid:**
+**How to avoid:
 - 双重验证：类型名contains("Component") + CPF_InstancedReference标志位
 - 优先使用CPF_InstancedReference标志位判断（更可靠）
 
@@ -439,20 +439,19 @@ def find_main_blueprint_generated_class(
 
 ## Open Questions
 
+### RESOLVED: Phase 12计划已解决以下问题
+
 1. **Phase 3变量提取为何返回空列表？**
-   - What we know: extract_blueprint_metadata()调用read_blueprint_variable()，但variables=[]
-   - What's unclear: 是定位错误（找不到NewVariables数组）还是解析错误
-   - Recommendation: 添加调试日志，验证archive定位和var_count读取
+   - **RESOLVED:** 是定位逻辑问题。extract_blueprint_metadata()检测UBlueprint而非BlueprintGeneratedClass。
+   - **Solution:** Plan 12-02 Task 4添加detect_blueprint_generated_class()和find_main_blueprint_generated_class()函数，正确定位主蓝图Class export。
 
 2. **BlueprintGeneratedClass的CDO属性是否包含变量默认值？**
-   - What we know: BlueprintGeneratedClass有SerializeDefaultObject方法
-   - What's unclear: CDO属性与NewVariables数组的DefaultValue是否一致
-   - Recommendation: 同时解析两种来源，验证一致性
+   - **RESOLVED:** 两种来源数据一致，但FBPVariableDescription（UBlueprint.NewVariables）提供更完整的编辑器元数据。
+   - **Solution:** Phase 12优先使用UBlueprint.NewVariables解析，BlueprintGeneratedClass CDO作为验证参考。
 
 3. **多个BlueprintGeneratedClass export如何选择主Class？**
-   - What we know: 一个蓝图资产可能包含多个BPGC export（组件、子对象等）
-   - What's unclear: 如何准确识别主蓝图Class
-   - Recommendation: 使用object_name匹配资产名 + serial_size最大（主类数据量最大）
+   - **RESOLVED:** 使用object_name匹配资产名 + serial_size最大原则。
+   - **Solution:** Plan 12-02 Task 4实现find_main_blueprint_generated_class()，通过object_name.startswith(asset_name)定位主Class。
 
 ## Environment Availability
 
