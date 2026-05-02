@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 蓝图图解析
-status: ready_to_execute
-last_updated: "2026-05-02T20:00:00Z"
+status: ready_to_plan
+last_updated: "2026-05-02T20:10:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  active_phase: 9
+  active_phase: 10
   total_plans: 7
   completed_plans: 0
   percent: 40
@@ -22,11 +22,11 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v2.0 —— 蓝图图解析
-**状态：** Ready to execute - Phase 9 规划完成
+**状态：** Ready to plan - Phase 10 上下文已收集
 
 ## 当前阶段
 
-**Phase 9: 高级属性类型** - 规划完成，3 个计划待执行
+**Phase 10: 依赖分析** - 上下文已收集
 
 ## 阶段状态
 
@@ -41,7 +41,7 @@ shipped:
 | 7 | 蓝图图核心 | ✓ 完成 | 3/3 | ✓ | ✓ | 100% |
 | 8 | 蓝图图输出 | ◆ 规划完成 | 4/4 | TBD | TBD | 0% |
 | 9 | 高级属性 | ◆ 规划完成 | 3/3 | TBD | TBD | 0% |
-| 10 | 依赖分析 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
+| 10 | 依赖分析 | ◆ 上下文收集 | TBD | TBD | TBD | 0% |
 
 ## v2.0 进度
 
@@ -73,29 +73,20 @@ shipped:
 | 2026-05-02 | Phase 9 上下文收集完成 | 12 个决策点，高级属性解析策略 |
 | 2026-05-02 | Phase 9 研究完成 | UE 源码验证，HIGH confidence |
 | 2026-05-02 | Phase 9 规划完成 | 3 plans, 19 tasks, 12 维度验证通过 |
+| 2026-05-02 | Phase 10 上下文收集完成 | ImportMap + SoftObjectPaths + 循环依赖检测决策 |
 
 ## 下一步动作
 
 ```
-/gsd-execute-phase 9 — 执行 Phase 9 规划（高级属性类型）
+/gsd-plan-phase 10 — 创建 Phase 10 规划（依赖分析）
 ```
 
-### Phase 9 规划摘要
+### Phase 10 决策要点
 
-| Wave | Plans | What it builds |
-|------|-------|----------------|
-| 1 | 09-01 | 数据类定义 + type_dispatch 扩展 |
-| 2 | 09-02 | 六种高级属性解析函数实现 |
-| 3 | 09-03 | 单元测试 + Lyra 资产验证 |
-
-### Phase 9 关键决策
-
-1. **StructProperty 递归解析（D-01）** - 深度限制 5，未知字段继续解析
-2. **MapProperty 全键类型支持（D-02）** - 基本/枚举/Struct/Object 四种键
-3. **SetProperty 解析为 List（D-03）** - 不验证唯一性
-4. **EnumProperty 返回值名（D-04）** - EnumType::ValueName 格式
-5. **TextProperty 完整结构（D-05）** - Namespace + Key + SourceString
-6. **DelegateProperty 延迟解析（D-06）** - ObjectRef 原始值，Phase 10 解析
+1. **ImportMap 依赖格式（D-01~05）** - {class, package, object} 对象格式，合并重复，顶层 imports 字段
+2. **SoftObjectPaths 解析（D-06~09）** - {asset_path, sub_path} 对象格式，仅 UE5 >= 1008
+3. **循环依赖检测（D-10~13）** - DFS 图遍历，跨包循环，路径数组格式
+4. **依赖数组处理（D-14~15）** - 不处理导出依赖数组，满足 ROADMAP 范围
 
 ## v2.0 技术展望
 
@@ -134,4 +125,4 @@ PropertyTag → Type Dispatch → Advanced Property Handlers
 ```
 
 ---
-*最后更新：2026-05-02 - Phase 9 规划完成*
+*最后更新：2026-05-02 - Phase 10 上下文收集完成*
