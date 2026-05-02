@@ -73,16 +73,21 @@ Plans:
 
 **Depends on:** Phase 6
 
-**Requirements:** GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, GRAPH-06, GRAPH-07, GRAPH-08, GRAPH-09, GRAPH-10
+**Requirements:** GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, GRAPH-06, GRAPH-07, GRAPH-08, GRAPH-09
 
 **Success Criteria** (what must be TRUE):
 1. 解析器能识别 UEdGraph 导出类型（ClassIndex 包含 "EdGraph"）
 2. 解析器能提取 UEdGraph 基本信息（Schema、GraphGuid、Nodes 数量）
 3. 解析器能解析 UEdGraphNode 基类字段（NodeGuid、NodePosX/Y、NodeComment、Pins）
-4. 解析器能解析 UEdGraphPin 完整结构（PinId、PinName、Direction、PinType、DefaultValue、LinkedTo、SubPins、ParentPin）
-5. 解析器能构建引脚连接映射（LinkedTo PinId → 目标节点/引脚）
+4. 解析器能解析 UEdGraphPin 完整结构（PinId、PinName、Direction、PinType、DefaultValue、LinkedTo 原始数据、SubPins、ParentPin）
+5. 解析器能构建引脚连接映射（LinkedTo PinId → 目标节点/引脚）— **推迟到 Phase 8（D-01）**
 
-**Plans:** TBD
+**Plans:** 3 plans in 3 waves
+
+Plans:
+- [ ] 07-01-PLAN.md — 数据结构定义 + EdGraph 检测（GRAPH-01, GRAPH-02）
+- [ ] 07-02-PLAN.md — Node/Pin 核心解析（GRAPH-03, GRAPH-04）
+- [ ] 07-03-PLAN.md — 节点类型特定解析器 + 测试（GRAPH-05~09）
 
 **UI hint:** no
 
@@ -157,7 +162,7 @@ Plans:
 | Phase | Goal | Requirements | Success Criteria Count |
 |-------|------|--------------|------------------------|
 | 6 - 导出表修复 | 修复 OuterIndex/TemplateIndex 解析 bug | BUG-01, BUG-02, BUG-03 | 3 |
-| 7 - 蓝图图核心 | UEdGraph/Node/Pin 基础解析 | GRAPH-01~10 | 5 |
+| 7 - 蓝图图核心 | UEdGraph/Node/Pin 基础解析 | GRAPH-01~09 (10→Phase8) | 5 |
 | 8 - 蓝图图输出 | JSON/文本输出增强 | GRAPH-11~12, OUT2-01~04 | 6 |
 | 9 - 高级属性 | Struct/Map/Set/Enum/Text/Delegate 解析 | ADVP-01~06 | 6 |
 | 10 - 依赖分析 | ImportMap + SoftObjectPaths 依赖图 | DEPS-01~04 | 4 |
@@ -168,8 +173,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6 - 导出表修复 | 0/0 | Not started | - |
-| 7 - 蓝图图核心 | 0/0 | Not started | - |
+| 6 - 导出表修复 | 2/2 | Complete | 100% |
+| 7 - 蓝图图核心 | 0/3 | Planning | 0% |
 | 8 - 蓝图图输出 | 0/0 | Not started | - |
 | 9 - 高级属性 | 0/0 | Not started | - |
 | 10 - 依赖分析 | 0/0 | Not started | - |
@@ -192,7 +197,7 @@ Plans:
 | GRAPH-07 | Phase 7 | Pending |
 | GRAPH-08 | Phase 7 | Pending |
 | GRAPH-09 | Phase 7 | Pending |
-| GRAPH-10 | Phase 7 | Pending |
+| GRAPH-10 | Phase 8 | Deferred (D-01) |
 | GRAPH-11 | Phase 8 | Pending |
 | GRAPH-12 | Phase 8 | Pending |
 | ADVP-01 | Phase 9 | Pending |
