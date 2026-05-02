@@ -71,6 +71,7 @@ MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数（T-07-02-04�
 UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001  # NAMES_REFERENCED_FROM_EXPORT_DATA
 UE5_PAYLOAD_TOC = 1002                        # PAYLOAD_TOC
 UE5_LARGE_WORLD_COORDINATES = 1004            # LARGE_WORLD_COORDINATES
+UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES = 1007  # FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES
 UE5_ADD_SOFTOBJECTPATH_LIST = 1008            # ADD_SOFTOBJECTPATH_LIST
 UE5_DATA_RESOURCES = 1009                     # DATA_RESOURCES
 UE5_SCRIPT_SERIALIZATION_OFFSET = 1010        # SCRIPT_SERIALIZATION_OFFSET
@@ -99,11 +100,14 @@ UE4_ADDED_SEARCHABLE_NAMES = 508               # VER_UE4_ADDED_SEARCHABLE_NAMES
 VER_UE4_64BIT_EXPORTOFFSETS = 508              # Phase 6: 64-bit export offsets
 UE4_ADDED_PACKAGE_OWNER = 516                  # VER_UE4_ADDED_PACKAGE_OWNER
 UE4_NON_OUTER_PACKAGE_IMPORT = 518             # VER_UE4_NON_OUTER_PACKAGE_IMPORT
+UE4_LOAD_FOR_EDITOR_GAME = 383                 # VER_UE4_LOAD_FOR_EDITOR_GAME
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 401      # VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT
 
 # UE5 Release Object Version constants (Phase 6 D-08/D-10)
 UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1010    # FReleaseObjectVersion::RemoveObjectExportPackageGuid
 UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1011     # FReleaseObjectVersion::TrackObjectExportIsInherited
 UE5_GENERATE_PUBLIC_HASH = 1015                 # FReleaseObjectVersion::GeneratePublicHash
+UE5_OPTIONAL_RESOURCES = 1003                   # FReleaseObjectVersion::OptionalResources (bImportOptional field)
 
 
 # ============================================================================
@@ -1534,12 +1538,14 @@ def read_import_map(
     """
     读取导入表（CORE-04）。
 
-    来自 ObjectResource.h：
+    来自 ObjectResource.h / ObjectResource.cpp：
     FObjectImport 结构：
     - ClassPackage (FName)
     - ClassName (FName)
     - OuterIndex (FPackageIndex)
     - ObjectName (FName)
+    - PackageName (FName, 条件: UEVer >= 518 且 !IsFilterEditorOnly)
+    - bImportOptional (bool, 条件: UEVer >= 1003 OPTIONAL_RESOURCES)
 
     Args:
         archive: FArchive 实例
@@ -1551,12 +1557,39 @@ def read_import_map(
     """
     archive.seek(summary.import_offset)
 
+    is_ue4_file = summary.legacy_file_version > -8
+    # 未烘焙文件 IsFilterEditorOnly = false，所以条件字段需要读取
+    is_filter_editor_only = False  # FLinkerLoad for uncooked packages
+
     import_map: List[ObjectImport] = []
     for _ in range(summary.import_count):
         class_package = archive.read_name(name_map)
         class_name = archive.read_name(name_map)
         outer_index = PackageIndex(archive.read_i32())
         object_name = archive.read_name(name_map)
+
+        # PackageName: UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT (518) && !IsFilterEditorOnly
+        has_package_name = False
+        if not is_filter_editor_only:
+            if is_ue4_file and summary.file_version_ue4 >= UE4_NON_OUTER_PACKAGE_IMPORT:
+                has_package_name = True
+            elif not is_ue4_file:
+                has_package_name = True
+
+        package_name = ""
+        if has_package_name:
+            package_name = archive.read_name(name_map)
+
+        # bImportOptional: UEVer >= OPTIONAL_RESOURCES (1003)
+        has_import_optional = False
+        if is_ue4_file and summary.file_version_ue4 >= UE5_OPTIONAL_RESOURCES:
+            has_import_optional = True
+        elif not is_ue4_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+            has_import_optional = True
+
+        b_import_optional = False
+        if has_import_optional:
+            b_import_optional = bool(archive.read_u8())
 
         import_map.append(ObjectImport(
             class_package=class_package,
@@ -1770,17 +1803,40 @@ def read_export_map(
             b_is_asset = None
             b_generate_public_hash = None
 
-            # UE5 版本条件（D-08）
-            if is_ue5_file and summary.file_version_ue5 >= UE5_GENERATE_PUBLIC_HASH:  # 1015
+            # UE4 版本条件：bNotAlwaysLoadedForEditorGame（UE4 >= 383，UE5 总是满足）
+            if effective_ue4_version >= UE4_LOAD_FOR_EDITOR_GAME:
+                b_not_always_loaded_for_editor_game = bool(archive.read_u8())
+
+            # UE4 版本条件：bIsAsset（UE4 >= 401，UE5 总是满足）
+            if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
+                b_is_asset = bool(archive.read_u8())
+
+            # UE5 版本条件：bGeneratePublicHash（UE5 >= OPTIONAL_RESOURCES=1003）
+            if is_ue5_file and summary.file_version_ue5 >= UE5_GENERATE_PUBLIC_HASH:
                 b_generate_public_hash = bool(archive.read_u8())
 
-            # 18. 依赖数组（D-06：推迟到 Phase 10）
-            # FirstExportDependency + 4个数组 → Phase 10 依赖分析阶段
+            # 18. 依赖数组（UE4 >= 505 / UE5 总是满足）
+            # FirstExportDependency + 4个依赖计数（5个 i32）
+            first_export_dependency = 0
+            serialization_before_serialization_deps = 0
+            create_before_serialization_deps = 0
+            serialization_before_create_deps = 0
+            create_before_create_deps = 0
+            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
+                first_export_dependency = archive.read_i32()
+                serialization_before_serialization_deps = archive.read_i32()
+                create_before_serialization_deps = archive.read_i32()
+                serialization_before_create_deps = archive.read_i32()
+                create_before_create_deps = archive.read_i32()
 
-            # 19-20. ScriptSerializationStartOffset/EndOffset（UE5+ 条件）
+            # 19-20. ScriptSerializationStartOffset/EndOffset
+            # 条件: !UseUnversionedPropertySerialization() && UEVer() >= SCRIPT_SERIALIZATION_OFFSET(1010)
+            # 未烘焙/编辑器保存的文件 UseUnversionedPropertySerialization()=true，不序列化这些字段
+            # 烘焙文件 UseUnversionedPropertySerialization()=false，序列化这些字段
             script_serial_size = 0
             script_serial_offset = 0
-            if is_ue5_file:
+            is_cooked_pkg = (summary.package_flags & PKG_Cooked) != 0
+            if is_ue5_file and is_cooked_pkg and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
                 script_serial_size = archive.read_i64()
                 script_serial_offset = archive.read_i64()
 
