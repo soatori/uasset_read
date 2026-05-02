@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: 蓝图图解析
 status: ready_to_plan
-last_updated: "2026-05-02T18:00:00Z"
+last_updated: "2026-05-02T19:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  active_phase: 8
+  active_phase: 9
   total_plans: 3
   completed_plans: 3
   percent: 40
@@ -22,11 +22,11 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **里程碑：** v2.0 —— 蓝图图解析
-**状态：** Ready to plan - Phase 8 上下文已收集
+**状态：** Ready to plan - Phase 9 上下文已收集
 
 ## 当前阶段
 
-**Phase 8: 蓝图图输出增强** - 上下文已收集
+**Phase 9: 高级属性类型** - 上下文已收集
 
 ## 阶段状态
 
@@ -40,7 +40,7 @@ shipped:
 | 6 | 导出表修复 | ✓ 完成 | 2/2 | ✓ | ✓ | 100% |
 | 7 | 蓝图图核心 | ✓ 完成 | 3/3 | ✓ | TBD | 100% |
 | 8 | 蓝图图输出 | ◆ 上下文收集 | TBD | TBD | TBD | 0% |
-| 9 | 高级属性 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
+| 9 | 高级属性 | ◆ 上下文收集 | TBD | TBD | TBD | 0% |
 | 10 | 依赖分析 | ⏳ 待启动 | TBD | TBD | TBD | 0% |
 
 ## v2.0 进度
@@ -71,19 +71,20 @@ shipped:
 | 2026-05-02 | Phase 7 Wave 3 完成 | 节点类型解析器 + 测试 |
 | 2026-05-02 | Phase 7 验证通过 | 5/5 must-haves, 105 tests pass |
 | 2026-05-02 | Phase 8 上下文收集完成 | 连接映射 + 执行流 + CLI 标志决策 |
+| 2026-05-02 | Phase 9 上下文收集完成 | 高级属性解析策略决策 |
 
 ## 下一步动作
 
 ```
-/gsd-plan-phase 8 — 创建 Phase 8 规划（蓝图图输出增强）
+/gsd-plan-phase 9 — 创建 Phase 9 规划（高级属性类型）
 ```
 
-### Phase 8 决策要点
+### Phase 9 决策要点
 
-1. **连接映射构建** - PinName 全图匹配 + NodeGuid/PinName 表示 + Graph.connections 位置
-2. **执行流路径** - Event→CallFunction 链路 + execution_flows 数组 + 分支处停止
-3. **CLI --graph 标志** - 独立可组合 + 输出范围取决于 --verbose
-4. **graphs JSON 结构** - 层级结构需与 Phase 4 D-02 保持一致
+1. **StructProperty 递归解析** - 深度限制 5 + 未知字段处理
+2. **MapProperty 全键类型支持** - 基本类型/枚举/Struct/Object 四种键
+3. **专用 dataclass 设计** - StructValue/MapValue/SetValue/EnumValue/TextValue/DelegateValue
+4. **UE4 + UE5 双支持** - 使用 Phase 2 D-05/D-06 版本检查模式
 
 ## v2.0 技术展望
 
