@@ -2099,6 +2099,66 @@ def detect_blueprint(
     return False
 
 
+def detect_blueprint_generated_class(
+    export: ObjectExport,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> bool:
+    """
+    Detect if export is a BlueprintGeneratedClass (Phase 12, per D-01).
+
+    Variables are extracted from BlueprintGeneratedClass exports, not UBlueprint.
+    BlueprintGeneratedClass is the compiled class representation.
+
+    Args:
+        export: ObjectExport to check
+        import_map: Import table for ClassIndex lookup
+        export_map: Export table for ClassIndex lookup
+
+    Returns:
+        True if export is BlueprintGeneratedClass, False otherwise
+    """
+    if export.class_index.is_import:
+        idx = export.class_index.to_import_index()
+        if 0 <= idx < len(import_map):
+            class_name = import_map[idx].class_name
+            # BlueprintGeneratedClass or subclasses (AnimBlueprintGeneratedClass, etc.)
+            return "BlueprintGeneratedClass" in class_name
+    return False
+
+
+def find_main_blueprint_generated_class(
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    asset_name: str
+) -> Optional[ObjectExport]:
+    """
+    Find the main BlueprintGeneratedClass export (Phase 12, per D-01).
+
+    Uses object_name matching with asset_name + serial_size maximum principle.
+    Main BPGC typically has object_name = asset_name + "_C".
+
+    Args:
+        export_map: Export table to search
+        import_map: Import table for ClassIndex lookup
+        asset_name: Asset name to match (without .uasset suffix)
+
+    Returns:
+        ObjectExport of main BlueprintGeneratedClass, or None if not found
+    """
+    candidates = []
+    for export in export_map:
+        if detect_blueprint_generated_class(export, import_map, export_map):
+            # Main BPGC object_name is typically asset_name + "_C"
+            if export.object_name and export.object_name.startswith(asset_name):
+                candidates.append(export)
+
+    if candidates:
+        # Select the one with largest serial_size (main class has most data)
+        return max(candidates, key=lambda e: e.serial_size)
+    return None
+
+
 def extract_blueprint_graphs(
     archive: FArchive,
     summary: PackageFileSummary,
@@ -3073,15 +3133,40 @@ def read_blueprint_variable(
     # ReplicationCondition (uint8) - skip for Phase 3
     archive.read_u8()
 
-    # MetaDataArray count + entries - skip for Phase 3 (deferred)
+    # MetaDataArray count + entries - Phase 12: store metadata (per D-03)
     meta_count = archive.read_i32()
+    var.metadata = {}
     for _ in range(meta_count):
-        archive.read_name(name_map)  # DataKey
-        archive.read_fstring()       # DataValue
+        key = archive.read_name(name_map)  # DataKey
+        value = archive.read_fstring()       # DataValue
+        if key:  # Avoid None key
+            var.metadata[key] = value
+
+    # Phase 12: Parse PropertyFlags to readable labels (per D-03)
+    var.flags_labels = parse_property_flags_to_labels(var.property_flags)
 
     # DefaultValue (FString) - parse per D-13/D-14/D-15
     default_str = archive.read_fstring()
     var.default_value = parse_default_value(default_str, var.var_type)
+
+    # Phase 12: Component variable identification (per D-02)
+    # Dual verification: type name contains "Component" OR CPF_InstancedReference flag
+    type_str = ""
+    if var.var_type:
+        # Prefer pin_sub_category for more specific type
+        if var.var_type.pin_sub_category and var.var_type.pin_sub_category.lower() != "none":
+            type_str = var.var_type.pin_sub_category
+        elif var.var_type.pin_category:
+            type_str = var.var_type.pin_category
+
+    # Check type name contains "Component"
+    is_component_by_name = isinstance(type_str, str) and "Component" in type_str
+
+    # Check CPF_InstancedReference flag (0x0000000000080000)
+    is_component_by_flag = (var.property_flags & CPF_InstancedReference) != 0
+
+    # Dual verification: either condition satisfies
+    var.is_component = is_component_by_flag or is_component_by_name
 
     return var
 
@@ -4224,17 +4309,31 @@ def parse_uasset(path: str) -> ParseResult:
         # Blueprint extraction (Phase 3)
         # Per D-02: auto-detect and extract on every parse
         # Per D-03: add warnings to errors list if detection fails
+        # Phase 12: prefer BlueprintGeneratedClass for variables (per D-01)
 
         blueprint_metadata = None
-        for export in result.export_map:
-            if detect_blueprint(export, result.import_map, result.export_map):
+
+        # Phase 12: First try BlueprintGeneratedClass (per D-01)
+        # Extract asset name from name_map or summary
+        asset_name = None
+        if result.name_map:
+            # First name is typically the asset name
+            asset_name = result.name_map[0] if result.name_map else None
+
+        if asset_name:
+            main_bpgc = find_main_blueprint_generated_class(
+                result.export_map,
+                result.import_map,
+                asset_name
+            )
+            if main_bpgc:
                 # Create temporary archive for extraction
                 temp_archive = FArchive(path)
                 temp_archive.set_byte_swapping(archive._byte_swapping)
 
                 try:
                     meta, warn = extract_blueprint_metadata(
-                        export,
+                        main_bpgc,
                         temp_archive,
                         result.import_map,
                         result.export_map,
@@ -4246,10 +4345,36 @@ def parse_uasset(path: str) -> ParseResult:
                         if warn:
                             result.errors.append(f"blueprint parent warning: {warn}")
                 except ParseError as e:
-                    result.errors.append(f"blueprint extraction error: {e}")
+                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
                 finally:
                     temp_archive.close()
-                break  # Only process first blueprint found
+
+        # Fall back to UBlueprint detection if BPGC not found
+        if not blueprint_metadata:
+            for export in result.export_map:
+                if detect_blueprint(export, result.import_map, result.export_map):
+                    # Create temporary archive for extraction
+                    temp_archive = FArchive(path)
+                    temp_archive.set_byte_swapping(archive._byte_swapping)
+
+                    try:
+                        meta, warn = extract_blueprint_metadata(
+                            export,
+                            temp_archive,
+                            result.import_map,
+                            result.export_map,
+                            result.name_map,
+                            result.summary
+                        )
+                        if meta:
+                            blueprint_metadata = meta
+                            if warn:
+                                result.errors.append(f"blueprint parent warning: {warn}")
+                    except ParseError as e:
+                        result.errors.append(f"blueprint extraction error: {e}")
+                    finally:
+                        temp_archive.close()
+                    break  # Only process first blueprint found
 
         result.blueprint = blueprint_metadata
 
@@ -5158,6 +5283,9 @@ __all__ = [
     # Phase 12: PropertyFlags and variable type formatting
     'parse_property_flags_to_labels',
     'format_variable_type',
+    # Phase 12: BlueprintGeneratedClass identification (per D-01)
+    'detect_blueprint_generated_class',
+    'find_main_blueprint_generated_class',
     # Phase 7: Blueprint Graph Extraction and Parsing
     'resolve_class_name',
     'extract_blueprint_graphs',
