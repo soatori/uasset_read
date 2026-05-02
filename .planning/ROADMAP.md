@@ -39,7 +39,7 @@ progress:
 - [x] **Phase 6: 导出表修复** - 修复 OuterIndex/TemplateIndex 解析 bug ✓ 2026-05-02
 - [x] **Phase 7: 蓝图图核心解析** - UEdGraph/UEdGraphNode/UEdGraphPin 基础解析 ✓ 2026-05-02
 - [x] **Phase 8: 蓝图图输出增强** - JSON/文本输出格式增强 ✓ 2026-05-02
-- [ ] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty
+- [x] **Phase 9: 高级属性类型** - StructProperty/MapProperty/SetProperty/EnumProperty/TextProperty/DelegateProperty ✓ 2026-05-02
 - [ ] **Phase 10: 依赖分析** - ImportMap + SoftObjectPaths 依赖图
 
 ## Phase Details
@@ -139,9 +139,9 @@ Plans:
 **Plans:** 3 plans in 3 waves
 
 Plans:
-- [ ] 09-01-PLAN.md — 数据类定义 + type_dispatch 扩展（ADVP-01~06）
-- [ ] 09-02-PLAN.md — 六种高级属性解析函数实现（ADVP-01~06）
-- [ ] 09-03-PLAN.md — 单元测试 + Lyra 资产验证（ADVP-01~06）
+- [x] 09-01-PLAN.md — 数据类定义 + type_dispatch 扩展（ADVP-01~06） ✓
+- [x] 09-02-PLAN.md — 六种高级属性解析函数实现（ADVP-01~06） ✓
+- [x] 09-03-PLAN.md — 单元测试 + Lyra 资产验证（ADVP-01~06） ✓
 
 **UI hint:** no
 
@@ -192,7 +192,7 @@ Plans:
 | 6 - 导出表修复 | 2/2 | Complete | 100% |
 | 7 - 蓝图图核心 | 3/3 | Complete | 100% |
 | 8 - 蓝图图输出 | 4/4 | Complete | 100% |
-| 9 - 高级属性 | 0/3 | Ready to execute | 0% |
+| 9 - 高级属性 | 3/3 | Complete | 100% |
 | 10 - 依赖分析 | 0/4 | Ready to execute | 0% |
 
 ---
@@ -216,12 +216,12 @@ Plans:
 | GRAPH-10 | Phase 8 | Deferred (D-01) |
 | GRAPH-11 | Phase 8 | ✓ Complete |
 | GRAPH-12 | Phase 8 | ✓ Complete |
-| ADVP-01 | Phase 9 | Pending |
-| ADVP-02 | Phase 9 | Pending |
-| ADVP-03 | Phase 9 | Pending |
-| ADVP-04 | Phase 9 | Pending |
-| ADVP-05 | Phase 9 | Pending |
-| ADVP-06 | Phase 9 | Pending |
+| ADVP-01 | Phase 9 | ✓ Complete |
+| ADVP-02 | Phase 9 | ✓ Complete |
+| ADVP-03 | Phase 9 | ✓ Complete |
+| ADVP-04 | Phase 9 | ✓ Complete |
+| ADVP-05 | Phase 9 | ✓ Complete |
+| ADVP-06 | Phase 9 | ✓ Complete |
 | DEPS-01 | Phase 10 | Pending |
 | DEPS-02 | Phase 10 | Pending |
 | DEPS-03 | Phase 10 | Pending |
@@ -231,7 +231,7 @@ Plans:
 | OUT2-03 | Phase 8 | ✓ Complete |
 | OUT2-04 | Phase 8 | ✓ Complete |
 
-**覆盖率：** 19/29 需求已完成 ✓
+**覆盖率：** 25/29 需求已完成 ✓
 
 ---
 
@@ -293,4 +293,4 @@ class UEdGraph:
 
 ---
 
-*最后更新：2026-05-02 - Phase 10 规划完成*
+*最后更新：2026-05-02 - Phase 9 完成*
