@@ -1052,6 +1052,10 @@ class ParseResult:
     mmap_used: bool = False
     mmap_warning: Optional[str] = None
     warnings: List[str] = field(default_factory=list)  # D-13: for Wave 4
+    # Phase 10: 依赖分析字段（D-10-05/08/13）
+    imports: List[Dict] = field(default_factory=list)           # D-10-05: ImportMap 依赖列表
+    soft_references: List[Dict] = field(default_factory=list)   # D-10-08: SoftObjectPaths 软引用列表
+    circular_deps: List[List[str]] = field(default_factory=list) # D-10-13: 循环依赖路径
 
 
 # ============================================================================
