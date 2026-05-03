@@ -1427,3 +1427,243 @@ def test_format_json_summary_has_graphs_summary(create_mock_parse_result):
 
     assert 'graphs_summary' in json_dict
     assert isinstance(json_dict['graphs_summary'], list)
+
+
+# ============================================================================
+# Phase 14 Plan 03: Markdown 格式 + Schema（OUT-04, OUT-05）TDD 测试
+# ============================================================================
+
+
+class TestFormatMarkdown:
+    """
+    OUT-04: Markdown 格式输出测试。
+
+    三节结构 + 表格优先 + Mermaid 流程图。
+    """
+
+    def test_markdown_asset_title(self, create_mock_parse_result):
+        """
+        OUT-04: Markdown 输出以 "# Asset: {name}" 开头。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证标题格式
+        assert md_output.startswith("# Asset: ")
+        # 资产名称从 package_name 提取（最后一段）
+        assert "TestAsset" in md_output
+
+    def test_markdown_sections_exist(self, create_mock_parse_result):
+        """
+        OUT-04: 包含 "## Asset Overview" 和 "## Blueprint Details" 节。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证三节结构
+        assert "## Asset Overview" in md_output
+        # Blueprint Details 只在蓝图资产时显示
+        # Exports 节
+        assert "## Exports" in md_output
+
+    def test_markdown_exports_table_format(self, create_mock_parse_result):
+        """
+        OUT-04: exports 使用 Markdown 表格格式。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证表格格式
+        assert "| Name | Class | Parent |" in md_output
+        assert "|------|-------|--------|" in md_output
+        # 验证数据行
+        assert "| TestClass_C" in md_output
+
+    def test_markdown_mermaid_flowchart(self, create_mock_parse_result):
+        """
+        OUT-04: graphs_summary 使用 mermaid 流程图语法。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        # 添加测试图数据
+        result.graphs = [
+            UEdGraph(
+                graph_name="EventGraph",
+                graph_class="EdGraph",
+                nodes=[
+                    UEdGraphNode(
+                        node_guid="event-md-001",
+                        class_name="K2Node_Event",
+                        pins=[
+                            UEdGraphPin(
+                                pin_id="pin-md-001",
+                                pin_name="EventBeginPlay",
+                                direction=1,
+                                pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                            ),
+                        ],
+                        node_data=K2NodeEvent(
+                            event_reference=FMemberReference(
+                                member_name="EventBeginPlay",
+                                member_parent="AActor",
+                            ),
+                        ),
+                    ),
+                    UEdGraphNode(
+                        node_guid="call-md-001",
+                        class_name="K2Node_CallFunction",
+                        pins=[
+                            UEdGraphPin(
+                                pin_id="pin-md-002",
+                                pin_name="execute",
+                                direction=0,
+                                pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                                linked_to_raw=["pin-md-001"],
+                            ),
+                            UEdGraphPin(
+                                pin_id="pin-md-003",
+                                pin_name="InStr",
+                                direction=0,
+                                pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                            ),
+                        ],
+                        node_data=K2NodeCallFunction(
+                            function_reference=FMemberReference(
+                                member_name="PrintString",
+                                member_parent="UKismetSystemLibrary",
+                            ),
+                        ),
+                    ),
+                ],
+            ),
+        ]
+
+        md_output = format_markdown(result)
+
+        # 验证 Mermaid 流程图语法
+        assert "```mermaid" in md_output
+        assert "graph LR" in md_output
+        # 验证调用链: EventBeginPlay --> PrintString
+        assert "EventBeginPlay --> PrintString" in md_output
+
+    def test_markdown_empty_graphs_message(self, create_mock_parse_result):
+        """
+        OUT-04: 空 graphs 输出时 Graph Summary 节显示 "No graphs"。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        result.graphs = []  # 空 graphs
+
+        md_output = format_markdown(result)
+
+        # 验证空图消息
+        assert "## Graph Summary" in md_output
+        assert "No graphs in this asset" in md_output
+
+
+class TestBuildSchemaInfo:
+    """
+    OUT-05: build_schema_info() 函数和 _schema 字段测试。
+    """
+
+    def test_schema_info_returns_dict(self):
+        """
+        OUT-05: build_schema_info() 返回字典。
+        """
+        from uasset_read import build_schema_info
+
+        schema = build_schema_info()
+
+        assert isinstance(schema, dict)
+        assert len(schema) > 0
+
+    def test_schema_info_contains_key_fields(self):
+        """
+        OUT-05: _schema 字段包含 parent_class/variables 等字段描述。
+        """
+        from uasset_read import build_schema_info
+
+        schema = build_schema_info()
+
+        # 验证关键字段存在
+        assert "parent_class" in schema
+        assert "variables" in schema
+        assert "graphs_summary" in schema
+        assert "execution_flows" in schema
+        # 验证描述不为空
+        assert len(schema["parent_class"]) > 0
+        assert len(schema["variables"]) > 0
+
+    def test_json_full_with_schema_flag(self, create_mock_parse_result):
+        """
+        OUT-05: --schema 标志输出 _schema 字段。
+        """
+        result = create_mock_parse_result
+
+        # 调用 format_json_full 并启用 include_schema
+        json_dict = format_json_full(result, include_schema=True)
+
+        assert "_schema" in json_dict
+        assert isinstance(json_dict["_schema"], dict)
+        assert "parent_class" in json_dict["_schema"]
+
+    def test_json_summary_with_schema_flag(self, create_mock_parse_result):
+        """
+        OUT-05: format_json_summary 也支持 include_schema 参数。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result, include_schema=True)
+
+        assert "_schema" in json_dict
+
+
+class TestCLIMarkdownSchemaFlags:
+    """
+    OUT-04/05: CLI --markdown/--schema 标志测试。
+    """
+
+    def test_markdown_flag_produces_markdown_output(self, create_mock_parse_result, temp_uasset_file):
+        """
+        OUT-04: --markdown 标志输出 Markdown 格式。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        # 模拟 --markdown 标志
+        args = parser.parse_args([temp_uasset_file, '--markdown'])
+
+        assert args.markdown is True
+
+    def test_markdown_json_mutually_exclusive(self, temp_uasset_file):
+        """
+        OUT-04: --markdown 与 --json 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        # 测试互斥：同时使用 --markdown 和 --json 应报错
+        with pytest.raises(SystemExit):
+            parser.parse_args([temp_uasset_file, '--markdown', '--json'])
+
+    def test_schema_flag_available(self, temp_uasset_file):
+        """
+        OUT-05: --schema 标志可用。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args([temp_uasset_file, '--json', '--schema'])
+
+        assert args.schema is True
