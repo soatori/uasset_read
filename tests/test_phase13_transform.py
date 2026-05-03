@@ -89,3 +89,56 @@ class TestTransformValuesConstructor:
         assert parsed["x"] == 1.5
         assert parsed["y"] == 1.5
         assert parsed["z"] == 1.5
+
+
+class TestStructValueConversion:
+    """Test StructValue to specialized value conversion (per 13-02)"""
+
+    def test_parse_vector_value(self):
+        """parse_vector_value should convert StructValue to VectorValue"""
+        struct_val = StructValue(
+            property_type="StructProperty",
+            struct_type="Vector",
+            fields={"X": 10.0, "Y": 20.0, "Z": 30.0}
+        )
+        result = parse_vector_value(struct_val)
+        assert isinstance(result, VectorValue)
+        assert result.x == 10
+        assert result.y == 20
+        assert result.z == 30
+
+    def test_parse_rotator_value(self):
+        """parse_rotator_value should convert StructValue to RotatorValue"""
+        struct_val = StructValue(
+            property_type="StructProperty",
+            struct_type="Rotator",
+            fields={"Roll": 100.0, "Pitch": 200.0, "Yaw": 300.0}
+        )
+        result = parse_rotator_value(struct_val)
+        assert isinstance(result, RotatorValue)
+        assert result.roll == 100.0
+        assert result.pitch == 200.0
+        assert result.yaw == 300.0
+
+    def test_parse_scale_value(self):
+        """parse_scale_value should convert StructValue to ScaleValue"""
+        struct_val = StructValue(
+            property_type="StructProperty",
+            struct_type="Vector",  # Scale3D uses same struct type
+            fields={"X": 1.5, "Y": 1.5, "Z": 1.5}
+        )
+        result = parse_scale_value(struct_val)
+        assert isinstance(result, ScaleValue)
+        assert result.x == 1.5
+        assert result.y == 1.5
+        assert result.z == 1.5
+
+    def test_parse_rotator_value_includes_unit(self):
+        """RotatorValue should have unit='degrees' field"""
+        struct_val = StructValue(
+            property_type="StructProperty",
+            struct_type="Rotator",
+            fields={"Roll": 0.0, "Pitch": 0.0, "Yaw": 0.0}
+        )
+        result = parse_rotator_value(struct_val)
+        assert result.unit == "degrees"
