@@ -2,13 +2,13 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 Phase 14规划完成，准备执行
+**当前状态：** v3.0 Phase 15规划完成，准备执行
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v2.0 蓝图图解析** — Phases 6-10 (shipped 2026-05-02 via PR #2) — [Archive](milestones/v2.0-ROADMAP.md)
-- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (planning 14/15, 14-01/14-04 complete)
+- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (Phase 15 planning complete)
 
 ## Phases
 
@@ -44,15 +44,15 @@
 
 </details>
 
-### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING IN PROGRESS
+### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING COMPLETE
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
 - [x] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
 - [x] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
 - [x] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性（规划完成）
-- [x] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（执行完成，待验证）
-- [ ] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill
+- [x] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（执行完成，UAT验证通过）
+- [x] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill（规划完成）
 
 ---
 
@@ -163,11 +163,16 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. 用户可以在.claude/skills/uasset-read/目录中找到SKILL.md主文件，包含触发词和能力范围说明
   2. 用户可以在knowledge/目录中找到5-6个知识文件（blueprint-semantics.md、node-types.md、pin-type-mapping.md、cpp-conversion.md、common-patterns.md、troubleshooting.md）
-  3. 用户可以在examples/目录中找到3-4个示例文件（basic-usage.md、blueprint-analysis.md、cpp-conversion.md）
+  3. 用户可以在examples/目录中找到3-4个示例文件（basic-usage.md、blueprint-analysis.md、cpp-conversion.md、troubleshooting.md）
   4. Claude Code可以通过触发词自动调用parse_uasset() API并正确解读输出结果
   5. 集成测试验证skill触发、API调用、输出解读三个环节正确工作
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 15-01-PLAN.md — SKILL.md主文件 + 目录结构（Wave 1, SKILL-01）
+- [ ] 15-02-PLAN.md — 知识库文件创建（Wave 2, SKILL-02, depends on 15-01）
+- [ ] 15-03-PLAN.md — 示例文件创建 + 集成测试（Wave 3, SKILL-03/SKILL-04, depends on 15-01, 15-02）
 
 ---
 
@@ -188,8 +193,8 @@ Plans:
 | 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
 | 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Planning complete | - |
 | 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
-| 14. 输出格式优化并冻结 | v3.0 | 4/4 | Executed | 2026-05-03 |
-| 15. Claude Code skill封装 | v3.0 | 0/1 | Not started | - |
+| 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
+| 15. Claude Code skill封装 | v3.0 | 3/3 | Planning complete | - |
 
 ---
 
@@ -202,16 +207,16 @@ Plans:
 | EXTR-03 | Phase 12 | Planning complete |
 | EXTR-04 | Phase 13 | Planning complete |
 | EXTR-05 | Phase 12 | Planning complete |
-| OUT-01 | Phase 14 | Planning complete |
-| OUT-02 | Phase 14 | Planning complete |
-| OUT-03 | Phase 14 | Planning complete |
-| OUT-04 | Phase 14 | Planning complete |
-| OUT-05 | Phase 14 | Planning complete |
-| OUT-06 | Phase 14 | Planning complete |
-| SKILL-01 | Phase 15 | Pending |
-| SKILL-02 | Phase 15 | Pending |
-| SKILL-03 | Phase 15 | Pending |
-| SKILL-04 | Phase 15 | Pending |
+| OUT-01 | Phase 14 | Complete |
+| OUT-02 | Phase 14 | Complete |
+| OUT-03 | Phase 14 | Complete |
+| OUT-04 | Phase 14 | Complete |
+| OUT-05 | Phase 14 | Complete |
+| OUT-06 | Phase 14 | Complete |
+| SKILL-01 | Phase 15 | Planning complete |
+| SKILL-02 | Phase 15 | Planning complete |
+| SKILL-03 | Phase 15 | Planning complete |
+| SKILL-04 | Phase 15 | Planning complete |
 
 **Coverage:** 15/15 requirements mapped ✓
 
@@ -223,4 +228,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 14规划完成，4 plans created*
+*最后更新：2026-05-03 — Phase 15规划完成，3 plans created*
