@@ -207,12 +207,25 @@
 
 ## Traceability
 
-| REQ-ID | Phase | Status |
-|--------|-------|--------|
-| PIN-01~05 | 18 | Pending |
-| LINK-01~03 | 19 | Pending |
-| OUT-01~03 | 20 | Pending |
-| TEST-01~04 | 21 | Pending |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| PIN-01 | Phase 18 | Pending |
+| PIN-02 | Phase 18 | Pending |
+| PIN-03 | Phase 18 | Pending |
+| PIN-04 | Phase 18 | Pending |
+| PIN-05 | Phase 18 | Pending |
+| LINK-01 | Phase 19 | Pending |
+| LINK-02 | Phase 19 | Pending |
+| LINK-03 | Phase 19 | Pending |
+| OUT-01 | Phase 20 | Pending |
+| OUT-02 | Phase 20 | Pending |
+| OUT-03 | Phase 20 | Pending |
+| TEST-01 | Phase 21 | Pending |
+| TEST-02 | Phase 21 | Pending |
+| TEST-03 | Phase 21 | Pending |
+| TEST-04 | Phase 21 | Pending |
+
+**Coverage:** 15/15 requirements mapped ✓
 
 ---
 
