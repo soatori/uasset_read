@@ -101,7 +101,7 @@ def create_test_uasset(
     UE4_ENGINE_VERSION_OBJECT = 334
     UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382
     UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442
-    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505
+    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507  # Fixed: match uasset_read.py constant
     UE4_ADDED_SEARCHABLE_NAMES = 508
     UE4_ADDED_PACKAGE_OWNER = 516
     UE4_NON_OUTER_PACKAGE_IMPORT = 518
@@ -363,7 +363,7 @@ def create_test_uasset(
                 f.write(struct.pack(endian_fmt + 'I', 0))
                 f.write(struct.pack(endian_fmt + 'I', 0))
             if has_import_optional:
-                f.write(struct.pack(endian_fmt + 'B', 0))  # bImportOptional = false
+                f.write(struct.pack(endian_fmt + 'I', 0))  # bImportOptional = false (4 bytes)
 
         # === 导出表 ===
         export_offset = f.tell()
@@ -384,27 +384,28 @@ def create_test_uasset(
             else:
                 f.write(struct.pack(endian_fmt + 'i', serial_size))  # SerialSize (i32)
                 f.write(struct.pack(endian_fmt + 'i', serial_offset))  # SerialOffset (i32)
-            # Phase 6: bool flags (always present in modern files)
-            f.write(struct.pack(endian_fmt + 'B', 0))  # bForcedExport
-            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForClient
-            f.write(struct.pack(endian_fmt + 'B', 0))  # bNotForServer
+            # Phase 6: bool flags (UE 标准：各序列化为 4 bytes uint32)
+            # 参考: ObjectResource.cpp - bForcedExport, bNotForClient, bNotForServer 使用 SerializeTaggedProperty
+            f.write(struct.pack(endian_fmt + 'I', 0))  # bForcedExport (4 bytes)
+            f.write(struct.pack(endian_fmt + 'I', 0))  # bNotForClient (4 bytes)
+            f.write(struct.pack(endian_fmt + 'I', 0))  # bNotForServer (4 bytes)
             # Phase 6: PackageGuid (UE5 < 1010)
             if is_ue5_file and ue5_version < 1010:
                 f.write(b'\x00' * 16)  # FGuid (16 bytes, read but not stored)
-            # Phase 6: bIsInheritedInstance (UE5 >= 1011)
-            if is_ue5_file and ue5_version >= 1011:
-                f.write(struct.pack(endian_fmt + 'B', 0))  # bIsInheritedInstance
+            # Phase 6: bIsInheritedInstance (UE5 >= 1006)
+            if is_ue5_file and ue5_version >= 1006:  # UE5_TRACK_OBJECT_EXPORT_IS_INHERITED
+                f.write(struct.pack(endian_fmt + 'I', 0))  # bIsInheritedInstance (4 bytes)
             # Phase 6: PackageFlags
             f.write(struct.pack(endian_fmt + 'I', 0))  # PackageFlags
-            # Phase 6: bGeneratePublicHash (UE5 >= 1015)
-            if is_ue5_file and ue5_version >= 1015:
-                f.write(struct.pack(endian_fmt + 'B', 0))  # bGeneratePublicHash
+            # Phase 6: bGeneratePublicHash (UE5 >= 1003 OPTIONAL_RESOURCES)
+            if is_ue5_file and ue5_version >= 1003:
+                f.write(struct.pack(endian_fmt + 'I', 0))  # bGeneratePublicHash (4 bytes)
             # bNotAlwaysLoadedForEditorGame (UE4 >= 383, UE5 always satisfies)
             if ue4_version >= UE4_LOAD_FOR_EDITOR_GAME or is_ue5_file:
-                f.write(struct.pack(endian_fmt + 'B', 0))
+                f.write(struct.pack(endian_fmt + 'I', 0))  # 4 bytes
             # bIsAsset (UE4 >= 401, UE5 always satisfies)
             if ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT or is_ue5_file:
-                f.write(struct.pack(endian_fmt + 'B', 0))
+                f.write(struct.pack(endian_fmt + 'I', 0))  # 4 bytes
             # Preload dependencies (UE4 >= 505, UE5 always satisfies)
             if ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS or is_ue5_file:
                 f.write(struct.pack(endian_fmt + 'i', 0))  # FirstExportDependency
