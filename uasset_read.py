@@ -4349,6 +4349,20 @@ def parse_properties_from_export(
     else:
         property_start = export.serial_offset
     archive.seek(property_start)
+
+    # D-02: SerializationControlExtensions 头部处理
+    # 参考: Class.cpp 第 1627-1654 行
+    # 当 UE5 >= PROPERTY_TAG_EXTENSION (1011) 时，属性数据前有额外头部
+    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        # EClassSerializationControlExtension (u8)
+        serialization_control = archive.read_u8()
+
+        # OverridableSerializationInformation 标志 (0x02)
+        if serialization_control & 0x02:
+            # EOverriddenPropertyOperation (u8) — 仅读取用于位置同步
+            overridden_operation = archive.read_u8()
+            # 注意：具体语义不解析，仅跳过字节
+
     properties: List[PropertyValue] = []
     property_count = 0  # D-08: loop counter for SAFE-05
 
