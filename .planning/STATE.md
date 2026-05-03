@@ -2,20 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: 解析完善 + Skill打包
-status: phase_13_complete
-last_updated: "2026-05-03T18:00:00Z"
+status: Phase 14规划完成，4 plans created
+last_updated: "2026-05-03T17:00:00.000Z"
+last_activity: 2026-05-03 — Phase 14规划完成
 progress:
   total_phases: 5
-  completed_phases: 4
-  active_phase: 14
-  total_plans: 9
-  completed_plans: 9
-  percent: 80
-shipped:
-  v2_0_date: "2026-05-02"
-  v2_0_branch: v2.0-dev
-  v2_0_pr: 2
-  v2_0_pr_url: https://github.com/soatori/uasset_read/pull/2
+  completed_phases: 3
+  total_plans: 16
+  completed_plans: 12
+  percent: 75
 ---
 
 # 项目状态
@@ -23,13 +18,13 @@ shipped:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v3.0 解析完善 + Skill打包
-**状态：** Phase 13 执行完成
+**状态：** Phase 14 规划完成
 
 ## Current Position
 
-Phase: 13 executed and verified (VERIFICATION.md: passed)
-Status: Phase 13执行完成，验证通过，准备Phase 14
-Last activity: 2026-05-03 — Phase 13执行完成
+Phase: 14 planned (4 plans: 14-01~14-04)
+Status: Phase 14规划完成，准备执行
+Last activity: 2026-05-03 — Phase 14规划完成
 
 ## 阶段状态
 
@@ -48,7 +43,7 @@ Last activity: 2026-05-03 — Phase 13执行完成
 | 11 | ExportMap属性值提取 | v3.0 | ✓ 完成 | 6/6 | ✓ | ✓ | 100% |
 | 12 | BlueprintVariables完整提取 | v3.0 | ✓ 完成 | 3/3 | ✓ | - | 100% |
 | 13 | 组件变换属性解析 | v3.0 | ✓ 完成 | 3/3 | ✓ | - | 100% |
-| 14 | 输出格式优化并冻结 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
+| 14 | 输出格式优化并冻结 | v3.0 | 📋 规划完成 | 4/4 | - | - | 0% |
 | 15 | Claude Code skill封装 | v3.0 | 📋 待规划 | 0/1 | - | - | 0% |
 
 ## 里程碑历史
@@ -71,37 +66,45 @@ Last activity: 2026-05-03 — Phase 13执行完成
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
 **阶段范围：**
+
 - Phase 11: ExportMap属性值提取（EXTR-01）✓ 完成
 - Phase 12: BlueprintVariables完整提取（EXTR-02, EXTR-03, EXTR-05）✓ 完成
-- Phase 13: 组件变换属性解析（EXTR-04）✓ 规划完成
-- Phase 14: 输出格式优化并冻结（OUT-01~06）📋 待规划
+- Phase 13: 组件变换属性解析（EXTR-04）✓ 完成
+- Phase 14: 输出格式优化并冻结（OUT-01~06）📋 规划完成
 - Phase 15: Claude Code skill封装（SKILL-01~04）📋 待规划
 
 **需求覆盖：** 15/15 ✓
 
-### Phase 13 规划详情
+### Phase 14 规划详情
 
 **Plans Created:**
-- 13-01-PLAN.md — Transform dataclass创建和精度处理 (Wave 1)
-- 13-02-PLAN.md — StructValue转换和组件变换提取 (Wave 2)
-- 13-03-PLAN.md — 测试和验证 (Wave 3)
+
+- 14-01-PLAN.md — Status 字段 + output_version（Wave 1, OUT-01/OUT-06）
+- 14-02-PLAN.md — graphs_summary 顶层化（Wave 1, OUT-02）
+- 14-03-PLAN.md — Markdown 格式 + Schema（Wave 2, OUT-04/OUT-05）
+- 14-04-PLAN.md — 摘要精简 + CLI扩展 + 测试覆盖 + API冻结标注（Wave 3, OUT-03/OUT-06）
 
 **Key Components:**
-- VectorValue/RotatorValue/ScaleValue dataclass（继承AdvancedPropertyValue）
-- format_transform_value()精度处理函数（Location整数优先/3位，Rotation 3位，Scale 4位）
-- parse_vector_value/parse_rotator_value/parse_scale_value()转换函数
-- extract_component_transforms()从ExportMap提取变换属性
-- RotatorValue.unit='degrees'标注UE度数格式
 
-**Commits:**
-- TBD: feat(13-01): add VectorValue/RotatorValue/ScaleValue dataclass
-- TBD: feat(13-02): add transform parsing functions
-- TBD: test(13-03): add Phase 13 transform tests
+- StatusInfo dataclass（JSend 风格 status 字段）
+- build_status_info() 三元分类函数
+- build_graphs_summary() execution_flows 顶层化
+- format_markdown() Markdown 输出函数
+- build_schema_info() 字段语义注释
+- format_json_summary() 精简版本（移除 imports/soft_references/circular_deps/properties）
+
+**Locked Decisions:**
+
+- D-14-01~03: status 三元分类 + JSend 结构
+- D-14-04~06: graphs_summary 按图分组 + 函数名+参数类型
+- D-14-07~09: 摘要移除依赖字段 + 精简 exports
+- D-14-10~12: Markdown 三节结构 + Mermaid 流程图
+- D-14-14~16: API 冻结 + output_version: "3.0"
 
 ## 下一步
 
-**运行 `/gsd-discuss-phase 14` 开始Phase 14：输出格式优化并冻结**
+**运行 `/gsd-execute-phase 14` 执行 Phase 14 计划**
 
 ---
 
-*最后更新：2026-05-03 — Phase 13规划完成，3 plans created*
+*最后更新：2026-05-03 — Phase 14规划完成，4 plans created*
