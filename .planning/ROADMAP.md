@@ -2,13 +2,14 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 Phase 15规划完成，准备执行
+**当前状态：** v3.1 Phase 16 规划完成，准备执行
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v2.0 蓝图图解析** — Phases 6-10 (shipped 2026-05-02 via PR #2) — [Archive](milestones/v2.0-ROADMAP.md)
-- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (Phase 15 planning complete)
+- ✅ **v3.0 解析完善 + Skill打包** — Phases 11-15 (shipped 2026-05-03)
+- 🔧 **v3.1 解析器兼容性修复** — Phase 16 (planning complete)
 
 ## Phases
 
@@ -44,7 +45,7 @@
 
 </details>
 
-### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING COMPLETE
+### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — COMPLETE
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
@@ -53,6 +54,14 @@
 - [x] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性（规划完成）
 - [x] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（执行完成，UAT验证通过）
 - [x] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill（规划完成）
+
+---
+
+### 🔧 v3.1 解析器兼容性修复 (Phase 16) — PLANNING COMPLETE
+
+**目标：** 修复 Bool 序列化大小错误（1 byte → 4 bytes），使 UE 5.7 资产解析正确工作
+
+- [ ] **Phase 16: Bool 序列化修复** — 修复 16 个 bool 字段的序列化大小错误
 
 ---
 
@@ -174,6 +183,29 @@ Plans:
 - [x] 15-02-PLAN.md — 知识库文件创建（Wave 2, SKILL-02, depends on 15-01, completed）
 - [x] 15-03-PLAN.md — 示例文件创建 + 集成测试（Wave 3, SKILL-03/SKILL-04, depends on 15-01, 15-02, completed）
 
+### Phase 16: Bool 序列化修复
+
+**Goal:** 修复 Bool 序列化大小错误（1 byte → 4 bytes），使导出表解析正确工作
+
+**Depends on:** Phase 15 (Skill封装完成)
+
+**Requirements:** FIX-01, FIX-02, FIX-03
+
+**Success Criteria** (what must be TRUE):
+  1. 解析 UE 5.7 资产返回 `status: success`
+  2. 所有 `serial_offset` 在有效文件范围内
+  3. 可以正确读取导出对象的类名和对象名
+  4. 属性解析可以正常开始（不再因偏移无效而失败）
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 16-01-PLAN.md — FArchive.read_bool() 添加 + ExportMap 修复（Wave 1, FIX-01/FIX-02）
+- [ ] 16-02-PLAN.md — ImportMap + 蓝图图结构修复（Wave 2, FIX-02, depends on 16-01）
+- [ ] 16-03-PLAN.md — 测试验证 + UE 5.7 资产测试（Wave 3, FIX-03, depends on 16-01, 16-02）
+
+**Status:** Planning complete
+
 ---
 
 ## Progress
@@ -195,6 +227,7 @@ Plans:
 | 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
 | 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
 | 15. Claude Code skill封装 | v3.0 | 3/3 | Complete | 2026-05-03 |
+| 16. Bool 序列化修复 | v3.1 | 3/3 | Planning complete | - |
 
 ---
 
@@ -217,8 +250,11 @@ Plans:
 | SKILL-02 | Phase 15 | Complete |
 | SKILL-03 | Phase 15 | Complete |
 | SKILL-04 | Phase 15 | Complete |
+| FIX-01 | Phase 16 | Planning complete |
+| FIX-02 | Phase 16 | Planning complete |
+| FIX-03 | Phase 16 | Planning complete |
 
-**Coverage:** 15/15 requirements mapped ✓
+**Coverage:** 18/18 requirements mapped ✓
 
 ---
 
@@ -228,4 +264,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 15执行完成，v3.0 milestone complete*
+*最后更新：2026-05-03 — Phase 16 planning complete*
