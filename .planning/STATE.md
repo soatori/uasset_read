@@ -1,63 +1,56 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.1
-milestone_name: 解析器兼容性修复
-status: Phase 16 complete
-last_updated: "2026-05-03T23:20:00.000Z"
-last_activity: 2026-05-03 — Phase 16 execution complete (Bool serialization fix)
+milestone: v3.2
+milestone_name: 属性解析修复
+status: Ready to execute
+last_updated: "2026-05-04T00:30:00.000Z"
+last_activity: 2026-05-04 — Phase 17 规划完成（3 plans，3 waves）
 progress:
   total_phases: 1
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 3
-  completed_plans: 3
-  percent: 100
+  completed_plans: 0
+  percent: 0
 ---
 
 # 项目状态
 
 **项目：** uasset_read
 **初始化：** 2026-04-27
-**当前里程碑：** v3.1 解析器兼容性修复
-**状态：** Phase 16 完成 ✓
+**当前里程碑：** v3.2 属性解析修复
+**状态：** Phase 17 规划完成，待执行
 
 ## Current Position
 
-Phase: 16 (Bool 序列化修复)
-Status: 完成 ✓
-Last activity: 2026-05-03 — 修复 16 个 bool 字段，UE 5.7 资产解析成功
+Phase: 17 (属性解析修复)
+Status: Ready to execute
+Last activity: 2026-05-04 — Phase 17 规划完成（D-01/D-02/D-03 根因验证，3 plans，3 waves）
 
 ## 问题摘要
 
-**修复完成：**
-- Bool 序列化从 1 byte 修正为 4 bytes (uint32)
-- UE 5.7 资产 BP_FirstPersonCharacter.uasset 解析成功 (69 exports)
-- 所有 serial_offset 在有效范围内
+**发现的错误：**
+- 解析 UE 5.7 资产 BP_FirstPersonCharacter.uasset
+- 53/69 (76.8%) 导出对象属性解析失败
+- 错误类型：negative_size (2)、exceeds_remaining (9)、cannot_read (42)
+
+**可能原因：**
+1. UE 5.7 属性标签格式变化
+2. serial_offset 计算错误
+3. 属性类型识别缺失
 
 ## 阶段状态
 
 | # | 阶段 | 里程碑 | 状态 | 计划 | 验证 | UAT | 进度 |
 |---|------|--------|------|------|------|-----|------|
-| 16 | Bool 序列化修复 | v3.1 | ✓ Complete | 3/3 | Pass | - | 100% |
-
-## 规划详情
-
-**Wave 结构：**
-
-| Wave | Plans | Autonomous | 描述 |
-|------|-------|------------|------|
-| 1 | 16-01 | yes | FArchive.read_bool() + ExportMap 修复 |
-| 2 | 16-02 | yes | ImportMap + 蓝图图结构修复 |
-| 3 | 16-03 | yes | 测试验证 + UE 5.7 资产测试 |
-
-**需求覆盖：**
-
-| Requirement | Plan | Wave |
-|-------------|------|------|
-| FIX-01 | 16-01 | 1 |
-| FIX-02 | 16-01, 16-02 | 1, 2 |
-| FIX-03 | 16-03 | 3 |
+| 17 | 属性解析修复 | v3.2 | Ready to execute | 3/3 | ✓ Pass | - | 0% |
 
 ## 里程碑历史
+
+### v3.1 解析器兼容性修复 ✓ 完成
+
+- **发布日期：** 2026-05-03
+- **阶段：** Phase 16（Bool序列化修复）
+- **成就：** Bool从1 byte修正为4 bytes，UE 5.7资产导出表可读取
 
 ### v3.0 解析完善 + Skill打包 ✓ 完成
 
@@ -80,12 +73,7 @@ Last activity: 2026-05-03 — 修复 16 个 bool 字段，UE 5.7 资产解析成
 
 ## 下一步
 
-**运行 `/gsd-execute-phase 16` 开始执行 Phase 16（Bool 序列化修复）**
-
-**Phase 16 Plan 文件:**
-- `.planning/phases/16-bool-serialization-fix/16-01-PLAN.md`
-- `.planning/phases/16-bool-serialization-fix/16-02-PLAN.md`
-- `.planning/phases/16-bool-serialization-fix/16-03-PLAN.md`
+**运行 `/gsd-execute-phase 17` 开始执行 Phase 17（属性解析修复）**
 
 ---
 
@@ -93,8 +81,16 @@ Last activity: 2026-05-03 — 修复 16 个 bool 字段，UE 5.7 资产解析成
 
 ### Roadmap Evolution
 
-- Phase 16 added: Bool 序列化修复（修复 16 个 bool 字段 1 byte → 4 bytes 问题）
-- Planning complete: 3 plans in 3 waves
+- Phase 17 planned: 属性解析修复 — 3 plans (D-01/D-02/D-03 根因验证)
+
+### Key Decisions
+
+- **2026-05-04:** Phase 17 规划完成
+  - D-01: ScriptSerializationStartOffset 偏移计算修复
+  - D-02: SerializationControlExtensions 头部处理
+  - D-03: PropertyTag Extensions 处理
+  - 验证通过，所有 FIX-04/FIX-05/FIX-06/FIX-07 覆盖
 
 ---
-*最后更新：2026-05-03 — Phase 16 planning complete*
+
+*最后更新：2026-05-04 — Phase 17 planned*
