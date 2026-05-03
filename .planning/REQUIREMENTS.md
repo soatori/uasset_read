@@ -1,124 +1,90 @@
-# 需求：uasset_read v2.0
+# Requirements: uasset_read v3.0
 
-**定义日期：** 2026-05-02
-**核心价值：** 输出足够详细的 JSON，让 AI agent 能理解蓝图逻辑，可作为 C++ 转换参考
+**Defined:** 2026-05-03
+**Core Value:** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
-## v2.0 需求
+## v1 Requirements
 
-### Bug 修复（P0）
+### 数据提取 (EXTR)
 
-- [ ] **BUG-01**: 解析器正确读取 FObjectExport.TemplateIndex 字段（UE4 >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS）
-- [ ] **BUG-02**: 解析器正确读取 FObjectExport.OuterIndex 字段（修复 v1.0 导出表偏移错位）
-- [ ] **BUG-03**: 解析器在导出表解析失败时返回清晰错误信息（包含偏移、期望值、实际值）
+- [ ] **EXTR-01**: ExportMap属性值提取 — 从ExportMap中提取组件属性值、变量默认值、输入动作引用
+- [ ] **EXTR-02**: BlueprintVariables完整提取 — 提取蓝图变量名称、类型、默认值、元数据（Category、BlueprintReadWrite等）
+- [ ] **EXTR-03**: 组件变量区分 — 区分组件变量（SkeletalMeshComponent等）和普通变量
+- [ ] **EXTR-04**: 组件变换属性解析 — 解析组件的RelativeLocation/RelativeRotation/RelativeScale3D属性
+- [ ] **EXTR-05**: 变量默认值类型覆盖 — 支持数值、字符串、布尔、向量、对象引用等类型默认值
 
-### 蓝图图结构（P0）
+### 输出优化 (OUT)
 
-- [ ] **GRAPH-01**: 解析器能识别 UEdGraph 导出类型（ClassIndex 包含 "EdGraph"）
-- [ ] **GRAPH-02**: 解析器能提取 UEdGraph 基本信息（Schema、GraphGuid、Nodes 数量）
-- [ ] **GRAPH-03**: 解析器能解析 UEdGraphNode 基类字段（NodeGuid、NodePosX/Y、NodeComment、Pins）
-- [ ] **GRAPH-04**: 解析器能解析 UEdGraphPin 完整结构（PinId、PinName、Direction、PinType、DefaultValue、LinkedTo、SubPins、ParentPin）
-- [ ] **GRAPH-05**: 解析器能识别 K2Node_CallFunction 节点类型并提取 FunctionReference
-- [ ] **GRAPH-06**: 解析器能识别 K2Node_Event 节点类型并提取 EventReference
-- [ ] **GRAPH-07**: 解析器能识别 K2Node_Knot 节点类型并提取 InputPin/OutputPin 连接
-- [ ] **GRAPH-08**: 解析器能识别 EdGraphNode_Comment 注释节点并提取注释文本
-- [ ] **GRAPH-09**: 解析器能识别 K2Node_EnhancedInputAction 输入节点并提取 Action 名称
-- [ ] **GRAPH-10**: 解析器能构建引脚连接映射（LinkedTo PinId → 目标节点/引脚）
-- [ ] **GRAPH-11**: JSON 输出包含蓝图图层级结构（Graph → Nodes → Pins）
-- [ ] **GRAPH-12**: JSON 输出包含执行流路径（从 Event → CallFunction 链路）
+- [ ] **OUT-01**: status字段 — 添加JSend style status字段（success/fail/error），AI一眼判断解析结果
+- [ ] **OUT-02**: execution_flows顶层化 — 将execution_flows从graphs[]内提升至顶层graphs_summary字段
+- [ ] **OUT-03**: 摘要模式 — 添加--summary标志，输出精简摘要减少70%+ token
+- [ ] **OUT-04**: Markdown输出格式 — 添加--markdown标志，输出Markdown格式（人类+AI双重友好）
+- [ ] **OUT-05**: Field描述增强 — 关键字段添加语义注释（parent_class、variables等含义说明）
+- [ ] **OUT-06**: 输出格式冻结 — Phase 14完成后冻结输出格式，确保API稳定供skill使用
 
-### 高级属性类型（P1）
+### Skill封装 (SKILL)
 
-- [ ] **ADVP-01**: 解析器能提取 StructProperty 值（嵌套结构体解析，递归深度限制 5）
-- [ ] **ADVP-02**: 解析器能提取 MapProperty 值（键值对数组，支持基本类型键）
-- [ ] **ADVP-03**: 解析器能提取 SetProperty 值（唯一元素集）
-- [ ] **ADVP-04**: 解析器能提取 EnumProperty 值（枚举类型名 + 枚举值名）
-- [ ] **ADVP-05**: 解析器能提取 TextProperty 值（FText：Namespace、Key、SourceString）
-- [ ] **ADVP-06**: 解析器能提取 DelegateProperty 值（函数引用：对象 + 函数名）
+- [ ] **SKILL-01**: SKILL.md定义 — 创建SKILL.md主文件（YAML Frontmatter格式，触发词、能力范围）
+- [ ] **SKILL-02**: knowledge知识库 — 编写5-6个知识文件：blueprint-semantics.md、node-types.md、pin-type-mapping.md、cpp-conversion.md、common-patterns.md、troubleshooting.md
+- [ ] **SKILL-03**: examples示例 — 编写3-4个示例文件：basic-usage.md、blueprint-analysis.md、cpp-conversion.md
+- [ ] **SKILL-04**: skill集成测试 — 验证skill触发、调用parse_uasset() API、输出解读正确
 
-### 依赖分析（P2）
+## v2 Requirements
 
-- [ ] **DEPS-01**: 解析器能从 ImportMap 构建依赖列表（包路径、类名、对象名）
-- [ ] **DEPS-02**: 解析器能从 SoftObjectPaths 构建软引用依赖列表（AssetReference）
-- [ ] **DEPS-03**: 解析器能检测循环依赖（ImportMap 中的相互引用）
-- [ ] **DEPS-04**: JSON 输出包含依赖图结构（imports、soft_references、circular_deps）
+Deferred to future release.
 
-### 输出格式增强（P1）
+### 高级输出格式
 
-- [ ] **OUT2-01**: JSON 输出包含完整的蓝图图数据（与 blueprint 字段同级）
-- [ ] **OUT2-02**: JSON 输出包含高级属性解析结果（替换原始字符串值）
-- [ ] **OUT2-03**: 文本输出包含图结构摘要（节点数、连接数、执行流概览）
-- [ ] **OUT2-04**: CLI 支持 --graph 标志仅输出蓝图图数据
+- **OUT-07**: 扁平化选项 — 添加--flat标志，深度嵌套资产扁平化（>3层阈值待验证）
+- **OUT-08**: JSON Schema文件生成 — 自动生成schema.json供外部验证
 
-## v3 需求
+### MCP Server集成
 
-推迟到未来版本。已跟踪但不在当前路线图中。
+- **SKILL-05**: MCP Server封装 — 创建uasset_mcp_server.py，支持MCP协议调用
+- **SKILL-06**: MCP错误处理 — 实现McpError错误码体系，符合JSON-RPC 2.0规范
 
-### 节点上下文（高级）
+## Out of Scope
 
-- **NODE-01**: 解析器提取节点上下文信息（所属函数、事件图名称）
-- **NODE-02**: 解析器生成节点路径追踪（从入口到当前节点的执行路径）
-- **NODE-03**: 解析器构建节点依赖倒排索引（变量 → 使用节点列表）
+Explicitly excluded. Documented to prevent scope creep.
 
-### 蓝图字节码
+| Feature | Reason |
+|---------|--------|
+| Pydantic迁移 | 手动Field描述足够；迁移成本待评估 |
+| FastMCP封装 | skill封装优先；MCP Server延后 |
+| 多资产批量输出 | 超出v3.0范围 |
+| TypeScript定义生成 | 次要，可文档化 |
+| 实时解析/监控 | 批量解析场景，无需实时功能 |
+| Cooked资产解析 | Cooked资产已剥离图数据 |
+| 蓝图字节码反编译 | 专注于编辑器保存的资产 |
+| 自动C++代码生成 | 仅提供参考级别JSON |
 
-- **BYTE-01**: 解析器识别 cooked 资产标志（PKG_Cooked = 0x200）
-- **BYTE-02**: 解析器解析蓝图字节码（编译后的执行逻辑）
+## Traceability
 
-## 超出范围
+Which phases cover which requirements. Updated during roadmap creation.
 
-明确排除。记录以防范围蔓延。
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| EXTR-01 | Phase 11 | Pending |
+| EXTR-02 | Phase 12 | Pending |
+| EXTR-03 | Phase 12 | Pending |
+| EXTR-04 | Phase 13 | Pending |
+| EXTR-05 | Phase 12 | Pending |
+| OUT-01 | Phase 14 | Pending |
+| OUT-02 | Phase 14 | Pending |
+| OUT-03 | Phase 14 | Pending |
+| OUT-04 | Phase 14 | Pending |
+| OUT-05 | Phase 14 | Pending |
+| OUT-06 | Phase 14 | Pending |
+| SKILL-01 | Phase 15 | Pending |
+| SKILL-02 | Phase 15 | Pending |
+| SKILL-03 | Phase 15 | Pending |
+| SKILL-04 | Phase 15 | Pending |
 
-| 功能 | 原因 |
-|------|------|
-| 自动 C++ 代码生成 | 仅提供参考级别 JSON，不实现自动转换 |
-| Cooked 资产解析 | Cooked 资产已剥离图数据；使用不同序列化格式 |
-| 蓝图字节码反编译 | 编译蓝图使用字节码格式；专注于编辑器保存的资产 |
-| 节点可视化 | 复杂 UI 工作；AI agent 无需视觉预览 |
-| 资产修改/写入 | 超出 PROJECT.md 范围；仅支持只读解析 |
-| 自定义节点类型处理器 | 游戏特定自定义节点需要游戏特定知识 |
-
-## 可追溯性
-
-v2.0 路线图创建后覆盖的需求。
-
-| 需求 | 阶段 | 状态 |
-|------|------|------|
-| BUG-01 | Phase 6 | Pending |
-| BUG-02 | Phase 6 | Pending |
-| BUG-03 | Phase 6 | Pending |
-| GRAPH-01 | Phase 7 | Pending |
-| GRAPH-02 | Phase 7 | Pending |
-| GRAPH-03 | Phase 7 | Pending |
-| GRAPH-04 | Phase 7 | Pending |
-| GRAPH-05 | Phase 7 | Pending |
-| GRAPH-06 | Phase 7 | Pending |
-| GRAPH-07 | Phase 7 | Pending |
-| GRAPH-08 | Phase 7 | Pending |
-| GRAPH-09 | Phase 7 | Pending |
-| GRAPH-10 | Phase 7 | Pending |
-| GRAPH-11 | Phase 8 | Pending |
-| GRAPH-12 | Phase 8 | Pending |
-| ADVP-01 | Phase 9 | Pending |
-| ADVP-02 | Phase 9 | Pending |
-| ADVP-03 | Phase 9 | Pending |
-| ADVP-04 | Phase 9 | Pending |
-| ADVP-05 | Phase 9 | Pending |
-| ADVP-06 | Phase 9 | Pending |
-| DEPS-01 | Phase 10 | Pending |
-| DEPS-02 | Phase 10 | Pending |
-| DEPS-03 | Phase 10 | Pending |
-| DEPS-04 | Phase 10 | Pending |
-| OUT2-01 | Phase 8 | Pending |
-| OUT2-02 | Phase 8 | Pending |
-| OUT2-03 | Phase 8 | Pending |
-| OUT2-04 | Phase 8 | Pending |
-
-**覆盖率：**
-- v2.0 需求总数：29
-- 映射到阶段：29
-- 未映射：0 ✓
+**Coverage:**
+- v1 requirements: 15 total
+- Mapped to phases: 15
+- Unmapped: 0 ✓
 
 ---
-
-*需求定义日期：2026-05-02*
-*最后更新：2026-05-02 - v2.0 路线图创建完成*
+*Requirements defined: 2026-05-03*
+*Last updated: 2026-05-03 after initial definition*
