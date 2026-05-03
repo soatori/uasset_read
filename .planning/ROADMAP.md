@@ -65,6 +65,14 @@
 
 ---
 
+### 🔧 v3.2 属性解析修复 (Phase 17) — PLANNING
+
+**目标：** 解决 UE 5.7 资产的属性解析错误，使 53/69 导出对象的属性可以正确解析
+
+- [ ] **Phase 17: 属性解析修复** — 解决 negative_size、exceeds_remaining、cannot_read 三类错误（added 2026-05-03）
+
+---
+
 ## Phase Details
 
 ### Phase 11: ExportMap属性值提取
@@ -208,6 +216,31 @@ Plans:
 
 ---
 
+### Phase 17: 属性解析修复
+
+**Goal:** 解决 UE 5.7 资产的属性解析错误，使导出对象的属性可以正确解析
+
+**Depends on:** Phase 16 (Bool 序列化修复完成)
+
+**Requirements:** FIX-04, FIX-05, FIX-06, FIX-07
+
+**Success Criteria** (what must be TRUE):
+  1. 解析 `BP_FirstPersonCharacter.uasset` 无属性解析错误
+  2. 69 个导出对象的属性全部可解析（当前 53/69 有错误）
+  3. 可以正确提取蓝图变量、组件属性等数据
+  4. `graphs` 字段包含 EventGraph 数据
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 17-01-PLAN.md — 偏移计算修复（D-01: serial_offset + script_serial_offset）
+- [ ] 17-02-PLAN.md — SerializationControlExtensions 头部处理（D-02, depends on 17-01）
+- [ ] 17-03-PLAN.md — PropertyTag Extensions 处理 + 验证（D-03, depends on 17-01, 17-02）
+
+**Status:** Planning complete (2026-05-03)
+
+---
+
 ## Progress
 
 | Phase | Milestone | Plans | Status | Completed |
@@ -228,6 +261,7 @@ Plans:
 | 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
 | 15. Claude Code skill封装 | v3.0 | 3/3 | Complete | 2026-05-03 |
 | 16. Bool 序列化修复 | v3.1 | 3/3 | Complete | 2026-05-03 |
+| 17. 属性解析修复 | v3.2 | 0/3 | Planning complete | - |
 
 ---
 
@@ -253,8 +287,12 @@ Plans:
 | FIX-01 | Phase 16 | Complete |
 | FIX-02 | Phase 16 | Complete |
 | FIX-03 | Phase 16 | Complete |
+| FIX-04 | Phase 17 | Planning complete |
+| FIX-05 | Phase 17 | Planning complete |
+| FIX-06 | Phase 17 | Planning complete |
+| FIX-07 | Phase 17 | Planning complete |
 
-**Coverage:** 18/18 requirements mapped ✓
+**Coverage:** 22/22 requirements mapped ✓
 
 ---
 
@@ -264,4 +302,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 16 complete (Bool serialization fix)*
+*最后更新：2026-05-03 — Phase 17 added (属性解析修复)*
