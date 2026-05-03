@@ -32,6 +32,7 @@ from uasset_read import (
     resolve_package_index_to_reference,
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
+    PROP_TAG_HAS_EXTENSIONS,
     PROP_TAG_BOOL_TRUE,
     PROPERTY_TAG_COMPLETE_TYPE_NAME,
 )
@@ -1194,6 +1195,60 @@ def test_serialization_control_extensions_version_threshold():
     """D-02: UE5_PROPERTY_TAG_EXTENSION = 1011 版本阈值验证"""
     from uasset_read import UE5_PROPERTY_TAG_EXTENSION
     assert UE5_PROPERTY_TAG_EXTENSION == 1011
+
+
+# ============================================================================
+# Phase 17 D-03: PropertyTag Extensions 测试
+# ============================================================================
+
+def test_property_tag_has_extensions_flag():
+    """D-03: flags & 0x04 时，Extensions 数据正确读取"""
+    assert PROP_TAG_HAS_EXTENSIONS == 0x04
+
+
+def test_property_tag_extensions_no_extension():
+    """D-03: property_extensions = 0x00 时，仅读取 1 byte"""
+    # 构造 mock PropertyTag 数据（UE5 格式）
+    # Name (FName index), Type (FString), Size (i32), Flags (u8), Extensions (u8)
+    # 简化：直接构造 flags + extensions 数据
+    data = bytes([
+        0x04,  # flags = HAS_EXTENSIONS
+        0x00,  # property_extensions = NoExtension
+    ])
+    archive = create_mock_archive_with_data(data)
+
+    flags = archive.read_u8()
+    assert flags == 0x04
+    assert flags & PROP_TAG_HAS_EXTENSIONS
+
+    property_extensions = archive.read_u8()
+    assert property_extensions == 0x00
+    assert not (property_extensions & 0x02)
+    assert archive.tell() == 2
+
+
+def test_property_tag_extensions_with_overridable():
+    """D-03: property_extensions = 0x02 时，读取 3 bytes"""
+    data = bytes([
+        0x04,  # flags = HAS_EXTENSIONS
+        0x02,  # property_extensions = OverridableInformation
+        0x00,  # override_operation
+        0x00,  # experimental_overridable_logic
+    ])
+    archive = create_mock_archive_with_data(data)
+
+    flags = archive.read_u8()
+    assert flags == 0x04
+    assert flags & PROP_TAG_HAS_EXTENSIONS
+
+    property_extensions = archive.read_u8()
+    assert property_extensions == 0x02
+    assert property_extensions & 0x02
+
+    # 读取扩展数据
+    override_operation = archive.read_u8()
+    experimental_overridable_logic = archive.read_u8()
+    assert archive.tell() == 4  # 总共 4 bytes (flags + extensions + operation + logic)
 
 
 if __name__ == "__main__":
