@@ -142,3 +142,40 @@ class TestStructValueConversion:
         )
         result = parse_rotator_value(struct_val)
         assert result.unit == "degrees"
+
+
+class TestPrecisionHandling:
+    """Test transform precision handling (per 13-01, D-03, D-03a)"""
+
+    def test_format_transform_value_location_integer(self):
+        """Location: integer value should output as int"""
+        result = format_transform_value(10.0, 'location')
+        assert result == 10  # int, not float
+        assert isinstance(result, int)
+
+    def test_format_transform_value_location_decimal(self):
+        """Location: decimal value should round to 3 decimal places"""
+        result = format_transform_value(10.123456, 'location')
+        assert result == 10.123  # 3 decimals
+
+    def test_format_transform_value_rotation(self):
+        """Rotation: should round to 3 decimal places"""
+        result = format_transform_value(1.23456789, 'rotation')
+        assert result == 1.235  # 3 decimals
+
+    def test_format_transform_value_scale(self):
+        """Scale: should round to 4 decimal places"""
+        result = format_transform_value(1.23456789, 'scale')
+        assert result == 1.2346  # 4 decimals
+
+    def test_parse_vector_value_precision(self):
+        """parse_vector_value should apply location precision"""
+        struct_val = StructValue(
+            property_type="StructProperty",
+            struct_type="Vector",
+            fields={"X": 10.0, "Y": 1.2345678, "Z": 100.9999}
+        )
+        result = parse_vector_value(struct_val)
+        assert result.x == 10  # int
+        assert result.y == 1.235  # 3 decimals
+        assert result.z == 101.0  # rounds to 101.0
