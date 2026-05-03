@@ -294,3 +294,45 @@ class TestComponentTransforms:
         result = extract_component_transforms(props)
         assert "relative_location" in result
         assert len(result) == 1
+
+
+class TestIntegration:
+    """Integration tests with actual UAsset files"""
+
+    def test_parse_uasset_has_transforms_attribute(self):
+        """parse_uasset should provide export.transforms attribute (accessible per EXTR-04)"""
+        if not os.path.exists(FIRST_PERSON_CHARACTER_PATH):
+            pytest.skip("Test asset not available")
+
+        result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
+
+        # Verify transforms attribute is accessible on all exports (per D-01a)
+        for exp in result.export_map:
+            assert hasattr(exp, 'transforms'), f"Export {exp.object_name} should have transforms attribute"
+            assert isinstance(exp.transforms, dict), f"transforms should be a dict"
+
+    def test_transforms_have_expected_fields(self):
+        """Extracted transforms should have expected fields"""
+        if not os.path.exists(FIRST_PERSON_CHARACTER_PATH):
+            pytest.skip("Test asset not available")
+
+        result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
+
+        for exp in result.export_map:
+            if hasattr(exp, 'transforms') and exp.transforms:
+                if "relative_location" in exp.transforms:
+                    loc = exp.transforms["relative_location"]
+                    assert hasattr(loc, 'x')
+                    assert hasattr(loc, 'y')
+                    assert hasattr(loc, 'z')
+                if "relative_rotation" in exp.transforms:
+                    rot = exp.transforms["relative_rotation"]
+                    assert hasattr(rot, 'roll')
+                    assert hasattr(rot, 'pitch')
+                    assert hasattr(rot, 'yaw')
+                    assert hasattr(rot, 'unit')
+                if "relative_scale" in exp.transforms:
+                    scale = exp.transforms["relative_scale"]
+                    assert hasattr(scale, 'x')
+                    assert hasattr(scale, 'y')
+                    assert hasattr(scale, 'z')
