@@ -47,7 +47,14 @@ v3.x需求（Phase 11-17）：
 
 ### Active
 
-下一里程碑需求待定义。
+v4.0需求（Phase 18-21）：
+
+- ⬜ 修复属性Size阈值检测 — v4.0 (Phase 18)
+- ⬜ 解析FunctionReference/EventReference/InputAction — v4.0 (Phase 18)
+- ⬜ 解析Pin数组与LinkedTo连接 — v4.0 (Phase 18-19)
+- ⬜ 解析NodeGuid/节点位置 — v4.0 (Phase 20)
+- ⬜ 构建执行流程图和数据流图 — v4.0 (Phase 19)
+- ⬜ 连接验证测试 — v4.0 (Phase 21)
 
 ### Out of Scope
 
