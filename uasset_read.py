@@ -791,6 +791,8 @@ class ObjectExport:
     script_serial_offset: int = 0
     # 属性列表 (Phase 2 PROP-01 至 PROP-08)
     properties: List["PropertyValue"] = field(default_factory=list)
+    # Phase 13-02: 变换属性提取结果
+    transforms: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -4506,6 +4508,10 @@ def parse_uasset(path: str) -> ParseResult:
                 except UAssetError as e:
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []  # 保持空列表而非None
+
+                # Phase 13-02: 提取组件变换属性
+                if export.properties:
+                    export.transforms = extract_component_transforms(export.properties)
 
         result.is_success = True
 
