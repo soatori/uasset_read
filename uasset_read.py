@@ -4340,7 +4340,15 @@ def parse_properties_from_export(
     Returns:
         List[PropertyValue] 属性值列表
     """
-    archive.seek(export.serial_offset)
+    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
+    # 参考: ObjectResource.h 第 280-285 行注释
+    # "The location (relative to SerialOffset) of the beginning of the
+    #  portion of this export's data that is serialized using tagged property serialization."
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_start = export.serial_offset + export.script_serial_offset
+    else:
+        property_start = export.serial_offset
+    archive.seek(property_start)
     properties: List[PropertyValue] = []
     property_count = 0  # D-08: loop counter for SAFE-05
 
