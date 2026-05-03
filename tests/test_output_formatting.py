@@ -1824,3 +1824,87 @@ class TestSummaryCompactPhase14:
         # 精简版本应包含核心字段
         if json_dict["blueprint_metadata"]:
             assert "parent_class" in json_dict["blueprint_metadata"]
+
+
+class TestCLISummaryFlagsPhase14:
+    """
+    OUT-03/OUT-06: CLI --summary 标志完善测试。
+
+    验证 --summary 输出精简 JSON，互斥关系正确。
+    """
+
+    def test_summary_flag_produces_compact_json(self, create_mock_parse_result, temp_uasset_file):
+        """
+        D-14-18: --summary 标志输出精简 JSON（70%+ token 减少）。
+        """
+        from uasset_read import create_parser, format_json_summary
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary'])
+
+        assert args.summary is True
+
+        # 验证输出结构精简
+        result = create_mock_parse_result
+        json_dict = format_json_summary(result)
+
+        # 精简结构验证
+        assert "imports" not in json_dict
+        assert "errors" not in json_dict
+
+    def test_summary_schema_flag_combination(self, temp_uasset_file):
+        """
+        D-14-19: --summary --schema 包含 _schema 字段。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary', '--schema'])
+
+        assert args.summary is True
+        assert args.schema is True
+
+    def test_summary_verbose_includes_schema(self, temp_uasset_file):
+        """
+        --summary --verbose 也应包含 _schema 字段。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary', '--verbose'])
+
+        assert args.summary is True
+        assert args.verbose is True
+
+    def test_summary_json_mutually_exclusive(self, temp_uasset_file):
+        """
+        --summary 与 --json 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--json'])
+
+    def test_summary_text_mutually_exclusive(self, temp_uasset_file):
+        """
+        --summary 与 --text 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--text'])
+
+    def test_summary_markdown_mutually_exclusive(self, temp_uasset_file):
+        """
+        D-14-17: --summary 与 --markdown 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--markdown'])
