@@ -1,380 +1,269 @@
-# 研究摘要
+# Project Research Summary
 
-**项目：** uasset_read — Python .uasset 解析器（面向 AI agent）
-**综合日期：** 2026-05-02
-**版本：** v2.0 蓝图图解析阶段
-**状态：** v1.0 已完成，v2.0 研究完成（待实施）
+**Project:** uasset_read v3.0
+**Domain:** Claude Code Skill封装 + 输出格式优化
+**Researched:** 2026-05-02
+**Confidence:** HIGH
+
+## Executive Summary
+
+本研究涵盖v3.0里程碑的两个核心方向：Phase 11-14的输出格式优化，以及Phase 15的Claude Code skill封装。研究揭示了一个关键洞察：skill不是代码封装而是知识封装——skill提供"如何使用"指导，Python工具提供"实际能力"。
+
+推荐的双层架构将现有Python解析器（uasset_read.py）作为执行层保持不变，skill作为独立知识层通过`parse_uasset()` API消费解析结果。这种分离确保API稳定性优先（Phase 11-14完成后再封装skill），避免skill与Python能力脱节。
+
+主要风险集中在Phase 15的MCP集成陷阱：stdio污染stdout、阻塞事件循环、类型提示缺失、错误处理不兼容、零依赖破坏、大文件内存问题。所有这些陷阱都有明确预防策略，关键是在skill封装前冻结输出格式，确保Python API稳定。
+
+## Key Findings
+
+### Recommended Stack (Skill封装)
+
+**核心格式技术：**
+
+- **Markdown (.md)**：Skill主文件格式 — Claude Code原生支持，文本格式易版本控制
+- **YAML Frontmatter**：元数据配置 — 官方推荐格式，支持name/description/triggers字段
+- **UTF-8 编码**：文件编码 — Claude Code默认编码，支持中英文
+- **Python CLI调用**：集成方式 — Skill通过Bash工具调用现有uasset_read.py，无需额外代码
+
+**Skill文件结构：**
+
+- **SKILL.md**：`.claude/skills/<skill-name>/SKILL.md` — Skill主入口文件（必需）
+- **knowledge/**：知识库目录（可选） — blueprint-semantics.md、node-types.md等
+- **examples/**：示例目录（可选） — 使用示例markdown文件
+
+**推荐采用YAML Frontmatter格式**（而非表格式），符合官方规范，自动触发更可靠。
+
+### Expected Features (输出格式优化)
+
+**Must have (table stakes):**
+
+- **JSON输出** — AI原生理解，v1.0已实现，需优化结构
+- **status字段** — JSend style: success/fail/error，AI一眼判断解析结果
+- **明确的类型标注** — AI需理解字段含义和数据类型
+- **层次结构清晰** — Package→Exports→Properties三层易懂
+- **引用解析** — FPackageIndex→对象名称，AI无需反向查找
+
+**Should have (competitive):**
+
+- **摘要模式 (`--summary`)** — 减少70%+ token，AI快速获取关键信息
+- **execution_flows顶层化** — 从graphs[]内提升至顶层或graphs_summary字段
+- **Markdown输出格式** — 人类+AI双重友好，token效率高
+- **Schema定义/Field描述** — AI自动理解结构，无需猜测字段含义
+- **扁平化选项 (`--flat`)** — 深度嵌套资产优化，减少认知负担
+
+**Defer (v2+):**
+
+- **JSON Schema文件生成** — 可后续文档化，非v3.0必需
+- **多资产批量输出** — 超出v3.0范围
+- **TypeScript定义生成** — 次要，可文档化
+
+### Architecture Approach (Skill集成架构)
+
+推荐双层架构：Python工具层（执行解析）+ Skill知识层（指导使用）。现有FArchive管道模式无需修改，skill作为独立消费者层通过`parse_uasset()` API调用。
+
+**Major components:**
+
+1. **Python工具层（现有）** — FArchive、ParseResult、GraphParser、AdvancedPropParser、DependencyAnalyzer等，提供解析执行能力
+2. **Skill知识层（新增）** — SKILL.md定义元信息和触发词，knowledge/*.md提供蓝图语义、节点类型、C++转换模式等知识库
+3. **集成点：`parse_uasset()` API** — 唯一入口，返回ParseResult容器，skill消费结果无需修改Python代码
+
+**构建顺序关键：**
+
+- Phase 11-14完善Python API输出质量 → Phase 15封装skill
+- 避免skill → API → skill反复调整
+- 知识库依赖实际解析能力验证（Phase 12-13完成后编写knowledge）
+
+### Critical Pitfalls (Phase 15 MCP集成)
+
+**Top 6 Critical Pitfalls:**
+
+1. **stdio传输污染stdout** — MCP使用stdout传输JSON-RPC消息，使用`print()`调试会污染通道。预防：所有日志输出到stderr，使用logging模块配置stream=sys.stderr。
+
+2. **阻塞事件循环** — async工具处理器中调用同步代码（文件I/O、mmap解析）阻塞整个事件循环。预防：使用`asyncio.to_thread()`或`loop.run_in_executor()`将同步代码包装为异步。
+
+3. **类型提示缺失导致JSON Schema生成失败** — FastMCP依赖类型提示生成JSON Schema，缺少类型提示导致工具无法注册。预防：使用完整类型提示，Pydantic BaseModel定义参数结构，mypy strict模式检查。
+
+4. **错误处理不兼容MCP协议** — Python异常（UAssetError、ParseError）不符合MCP JSON-RPC 2.0规范。预防：捕获异常转换为McpError，定义错误码常量，提供详细错误消息。
+
+5. **零依赖特性被破坏** — MCP封装引入过多依赖破坏uasset_read.py零依赖特性。预防：最小化MCP依赖（仅mcp包），核心解析器保持零依赖，独立模块uasset_mcp_server.py。
+
+6. **大文件内存问题** — 未正确处理大文件解析（>50MB），导致内存溢出或超时。预防：添加文件大小限制（500MB），提供摘要模式，使用线程池异步解析。
+
+**Phase 15特定警告：**
+
+所有Critical Pitfalls (1-6)需要在Phase 15代码审查和集成测试中专门检查。使用MCP inspector验证工具Schema，压力测试大文件解析，单元测试验证序列化。
+
+## Implications for Roadmap
+
+Based on combined research, suggested phase structure for v3.0:
+
+### Phase 11: ExportMap属性值提取
+
+**Rationale:** 输出格式优化的基础，需先完善数据提取能力再优化输出结构。
+
+**Delivers:** ExportMap属性值完整提取，ParseResult数据结构增强。
+
+**Addresses:** FEATURES.md table stakes - 层次结构清晰（Package→Exports→Properties三层）
+
+**Avoids:** PITFALLS.md Pitfall U1 - ParseResult序列化兼容性（审计字段类型）
+
+**Research flag:** Standard patterns — ExportMap解析模式在v2.0已建立，沿用FArchive模式。
+
+### Phase 12: BlueprintVariables完整提取
+
+**Rationale:** 蓝图变量提取是skill知识库（cpp-conversion.md）的前提，需验证转换模式实际可行。
+
+**Delivers:** BlueprintVariables完整提取，变量类型、默认值、分类信息。
+
+**Addresses:** FEATURES.md differentiators - Field描述（变量字段添加语义说明）
+
+**Uses:** STACK.md Python CLI调用 — parse_uasset() API增强
+
+**Implements:** ARCHITECTURE.md Python工具层 — GraphParser/BlueprintMetadata扩展
+
+**Research flag:** Needs research — 蓝图变量提取涉及复杂的UE属性系统，可能需要UE源码深入研究。
+
+### Phase 13: 组件变换属性解析
+
+**Rationale:** 组件变换是蓝图转C++的关键数据，需正确处理浮点精度。
+
+**Delivers:** 组件变换属性（Location/Rotation/Scale）完整解析。
+
+**Addresses:** FEATURES.md table stakes - 明确类型标注（Transform结构需类型文档）
+
+**Avoids:** PITFALLS.md Phase 13警告 - 数值精度问题（使用float精度控制，舍入策略）
+
+**Research flag:** Standard patterns — Transform属性结构相对稳定，参考UE源码即可。
+
+### Phase 14: 输出格式优化并冻结
+
+**Rationale:** Skill封装依赖稳定API输出格式，必须冻结后再启动Phase 15。
+
+**Delivers:** status字段、execution_flows顶层化、摘要模式增强、Markdown输出选项。
+
+**Addresses:** FEATURES.md MVP P0/P1 — status字段（AI判断成功/失败）、execution_flows位置优化、摘要模式
+
+**Avoids:** PITFALLS.md Pitfall 8 - JSON序列化问题（验证所有类型序列化）
+
+**Uses:** STACK.md技术栈 — Markdown输出格式、JSend响应规范
+
+**Implements:** ARCHITECTURE.md输出层 — OutputFormatter扩展
+
+**Research flag:** Needs research — AI易用性输出格式设计（扁平化阈值、自然语言注释token开销）需验证。
+
+### Phase 15: Claude Code skill封装
+
+**Rationale:** 所有Python API完善后封装skill，确保知识库与实际能力匹配。
+
+**Delivers:** SKILL.md定义、knowledge知识库（5-6文件）、examples示例（3-4文件）。
+
+**Addresses:** STACK.md Skill文件结构 — SKILL.md + knowledge/ + examples/
+
+**Avoids:** PITFALLS.md所有Critical Pitfalls (1-6) — stdio污染、阻塞事件循环、类型提示、错误处理、零依赖、大文件
+
+**Uses:** ARCHITECTURE.md双层架构 — Skill知识层独立于Python工具层
+
+**Implements:** STACK.md YAML Frontmatter格式 — 推荐官方格式
+
+**Research flag:** Needs research — skill触发词匹配机制、MCP Python SDK集成细节（但已有HIGH置信度文档）。
+
+### Phase Ordering Rationale
+
+**依赖顺序：**
+
+1. **Phase 11-14顺序执行** — 数据提取能力是输出格式优化的前提，输出格式冻结是skill封装的前提。
+2. **Phase 15在Phase 14后** — Skill依赖稳定API输出格式，避免反复调整。
+3. **Phase 15子阶段串行** — 15-A (SKILL.md) → 15-B (knowledge) → 15-C (examples) → 15-D (测试)，知识库依赖实际能力验证。
+
+**架构分组：**
+
+- **Phase 11-13（数据提取层）** — 完善Python解析能力，扩展ParseResult数据结构。
+- **Phase 14（输出优化层）** — 优化输出格式使AI易理解，冻结API。
+- **Phase 15（Skill封装层）** — 知识库编写，skill定义，集成测试。
+
+**Pitfall避免：**
+
+- Phase 14验证序列化 → 避免Phase 15 Pitfall 8
+- Phase 11-13审计字段类型 → 避免Phase 15 Pitfall 3
+- Phase 15使用stderr日志 → 避免Pitfall 1
+- Phase 15使用asyncio.to_thread → 避免Pitfall 2
+
+### Research Flags
+
+**Phases likely needing deeper research during planning:**
+
+- **Phase 12:** BlueprintVariables提取涉及复杂的UE属性系统，可能需要`/gsd-research-phase`深入研究UE源码中BlueprintVariable序列化细节。
+- **Phase 14:** AI易用性输出格式设计，需研究扁平化阈值、自然语言注释token开销等open questions。
+- **Phase 15 (MCP集成部分):** MCP Python SDK集成细节，FastMCP使用模式（虽有HIGH置信度文档，但实际集成可能遇到细节问题）。
+
+**Phases with standard patterns (skip research-phase):**
+
+- **Phase 11:** ExportMap解析模式在v2.0已建立，沿用FArchive管道模式，无需深入研究。
+- **Phase 13:** Transform属性结构相对稳定，参考UE源码PackageFileSummary.h即可。
+- **Phase 15 (Skill文件编写):** Skill文件格式、目录结构已有项目内3个示例（lyra-course、uasset-format、uecpp-course），可直接参考。
+
+## Confidence Assessment
+
+| Area | Confidence | Notes |
+|------|------------|-------|
+| Stack (Skill封装技术) | HIGH | 基于项目内3个现有skill示例（lyra-course、uasset-format、uecpp-course），Claude Code官方文档，YAML Frontmatter格式明确 |
+| Features (输出格式优化) | MEDIUM | JSend/JSONAPI规范HIGH置信度，但AI易用性部分（扁平化、自然语言注释）LOW置信度需验证 |
+| Architecture (双层架构) | HIGH | 基于现有架构分析，lyra-course成功模式验证，集成点parse_uasset() API清晰稳定 |
+| Pitfalls (MCP集成陷阱) | HIGH | 基于MCP官方文档、Python SDK源码、FastMCP库文档、JSON-RPC规范，所有陷阱有明确预防策略 |
+
+**Overall confidence:** HIGH
+
+### Gaps to Address
+
+**需要在规划/执行阶段处理的缺口：**
+
+1. **AI易用性输出格式验证**（FEATURES.md Open Questions）：
+   - 扁平化阈值（多层嵌套才算"需要扁平化"？）→ Phase 14实际测试不同资产嵌套深度，确定阈值。
+   - 自然语言注释token开销 → Phase 14在摘要模式测试注释字段对AI处理效率的影响。
+   - execution_flows展示层级是否影响结构一致性 → Phase 14添加graphs_summary顶层字段，保留原始层级，测试AI理解。
+
+2. **BlueprintVariables提取复杂度验证**（Phase 12）：
+   - UE属性系统序列化细节 → Phase 12执行时如遇困难，启动`/gsd-research-phase`深入研究UE源码。
+   - 默认值提取可行性 → Phase 12测试Lyra蓝图案例，验证默认值解析。
+
+3. **MCP实际集成细节**（Phase 15）：
+   - FastMCP vs MCP Python SDK选择 → Phase 15-A评估FastMCP简化开发是否适合本项目。
+   - Claude Code配置集成 → Phase 15-D测试claude_desktop_config.json配置。
+
+4. **Pydantic迁移必要性**（FEATURES.md Open Question）：
+   - 当前dataclass是否足够 → Phase 14先手动添加Field描述，评估后再决定是否迁移Pydantic。
+
+## Sources
+
+### Primary (HIGH confidence)
+
+- **项目内现有Skill示例** — `.claude/skills/lyra-course/SKILL.md`、`.claude/skills/uasset-format/SKILL.md`、`.claude/skills/uecpp-course/SKILL.md`（Skill文件格式、目录结构）
+- **Claude Code Documentation** — [docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code)（Skill集成指南）
+- **MCP官方文档** — [modelcontextprotocol.io](https://modelcontextprotocol.io/)（MCP协议规范、Python SDK指南）
+- **MCP Python SDK** — [github.com/modelcontextprotocol/python-sdk](https://github.com/modelcontextprotocol/python-sdk)（官方Python SDK仓库）
+- **FastMCP** — [github.com/jlowin/fastmcp](https://github.com/jlowin/fastmcp)（简化MCP开发的高级库）
+- **JSend specification** — [github.com/omniti-labs/jsend](https://github.com/omniti-labs/jsend)（JSON API响应格式规范）
+- **JSONAPI specification** — [jsonapi.org](https://jsonapi.org/)（复杂资产关联输出规范）
+- **JSON-RPC 2.0 Specification** — [jsonrpc.org](https://www.jsonrpc.org/specification)（错误码规范）
+- **Python Asyncio Best Practices** — [docs.python.org/3/library/asyncio.html](https://docs.python.org/3/library/asyncio.html)（异步编程最佳实践）
+- **uasset_read.py源码** — 4901行Python解析器（现有架构分析）
+
+### Secondary (MEDIUM confidence)
+
+- **WebSearch: JSON vs Markdown format AI readability comparison** — JSON为主Markdown为辅结论，需验证token效率
+- **WebSearch: API response format JSON design hierarchy nested data** — 扁平化原则（深度≤3层），需验证阈值
+- **WebSearch: output format design for AI readability** — 结构化对象优于自由文本，需验证注释字段效果
+- **NordAPIs Best Practices** — [nordicapis.com/best-practices-for-designing-json-api-response-objects](https://nordicapis.com/best-practices-for-designing-json-api-response-objects/)（JSON响应设计）
+- **MCP GitHub Issues** — [github.com/modelcontextprotocol/python-sdk/issues](https://github.com/modelcontextprotocol/python-sdk/issues)（常见问题和解决方案）
+
+### Tertiary (LOW confidence)
+
+- **WebSearch: flatten nested JSON structure LLM readability token efficiency** — 扁平化token效率，需Phase 14验证
+- **WebSearch: Pydantic BaseModel JSON output Python LLM** — Pydantic迁移必要性，需Phase 14评估
+- **WebSearch: AI agent readable output format natural language processing** — 自然语言注释效果，需Phase 14测试
+- **Anthropic docs** — [anthropic.com/index/controlling-claudes-output](https://www.anthropic.com/index/controlling-claudes-output)（无法访问，网络限制）
+- **OpenAI docs** — [platform.openai.com/docs/guides/structured-outputs](https://platform.openai.com/docs/guides/structured-outputs)（未验证）
+- **LangChain docs** — [python.langchain.com/docs/modules/model_io/output_parsers](https://python.langchain.com/docs/modules/model_io/output_parsers/)（未验证）
 
 ---
-
-## 执行摘要
-
-本项目构建 Python 工具解析 Unreal Engine .uasset 文件，使 AI agent 能直接读取蓝图内容而无需 UE 编辑器依赖。
-
-### 核心洞察
-
-**洞察 1：架构稳定性** — 现有 v1.0 架构（FArchive → Deserializer → Model → Output 分层管道）完整支持蓝图图解析，无需重构。
-
-**洞察 2：零新增依赖** — Python 3.10+ 标准库已完整覆盖 v2.0 蓝图图解析需求（struct、dataclasses、json、mmap），无需引入 construct、pydantic 等新库。
-
-**洞察 3：蓝图图结构** — 蓝图图是层叠结构：`UEdGraph`（图容器）→ `UEdGraphNode[]`（节点列表）→ `UEdGraphPin[]`（引脚列表），通过 `LinkedTo`（PinId GUID 引用）和 `ParentPin/SubPins`（结构体拆分）实现连接。
-
-**洞察 4：节点类型稳定** — 主要节点类型（K2Node_Event、K2Node_CallFunction、K2Node_Knot、EdGraphNode_Comment）序列化格式已从 UE 5.7 源码和编辑器导出验证。
-
-**洞察 5：版本敏感** — FEdGraphPinType 等结构包含版本条件字段（container_type、bIsConst、bIsUObjectWrapper），解析器需版本感知。
-
----
-
-## 技术栈摘要
-
-### 现有技术栈（v1.0 → v2.0 一致）
-
-| 层级 | 组件 | 说明 |
-|------|------|------|
-| **语言** | Python 3.10+ | match/case、类型提示、dataclasses |
-| **二进制读取** | struct + mmap | u8/u32/u64/f32/f64、大文件映射 |
-| **数据模型** | dataclasses | asdict() → JSON、清晰结构 |
-| **JSON 输出** | json | 结构化 Agent 输入 |
-| **CLI** | argparse | `python -m uasset_read` |
-| **编码** | UTF-8 | UE 5.x 标准 |
-
-### v2.0 蓝图图解析新增数据类
-
-```python
-@dataclass
-class UEdGraphPinRef:
-    """引脚引用（LinkedTo 条目）"""
-    pin_name: str
-    target_node: Optional[str] = None
-    resolved_pin: Optional["UEdGraphPin"] = None
-
-@dataclass
-class UEdGraphPin:
-    """节点引脚"""
-    pin_name: str
-    pin_type: "FEdGraphPinType"        # Phase 3 已实现
-    default_value: Optional[str] = None
-    auto_default_value: Optional[str] = None
-    linked_to: List["UEdGraphPinRef"] = field(default_factory=list)
-    not_connectable: bool = False
-    default_value_readonly: bool = False
-    is_reference: bool = False
-    is_const: bool = False
-    is_weak_pointer: bool = False
-    is_uproperty: bool = False
-    owning_node: Optional["K2Node"] = None
-
-@dataclass
-class K2Node:
-    """蓝图节点基类（K2Node）"""
-    class_name: str                      # "K2Node_Event", "K2Node_CallFunction"
-    node_guid: str                       # FGuid hex
-    node_pos_x: int = 0
-    node_pos_y: int = 0
-    pins: List["UEdGraphPin"] = field(default_factory=list)
-    node_data: Optional["NodeData"] = None
-
-@dataclass
-class UEdGraph:
-    """蓝图图"""
-    graph_name: str                      # "Ubergraph", "Function", "Macro"
-    graph_class: str                     # 所属蓝图类
-    nodes: List["K2Node"] = field(default_factory=list)
-    is_ubergraph: bool = False
-    is_function_graph: bool = False
-    is_macro_graph: bool = False
-
-@dataclass
-class BlueprintGraphMetadata:
-    """蓝图图完整元数据"""
-    ubergraph_pages: List["UEdGraph"] = field(default_factory=list)
-    function_graphs: List["UEdGraph"] = field(default_factory=list)
-    macro_graphs: List["UEdGraph"] = field(default_factory=list)
-```
-
----
-
-## 功能全景
-
-### 表类型功能（Table Stakes）——v2.0 必须
-
-| 功能 | 为什么表类型 | 复杂度 | v1.0 状态 | v2.0 计划 |
-|------|-------------|--------|-----------|-----------|
-| 解析 UEdGraph | 蓝图逻辑容器 | 低 | | ✓ v2.0 |
-| 识别 UK2Node | 蓝图节点基类 | 低 | | ✓ v2.0 |
-| 解析 UEdGraphPin | 引脚数据/执行流端点 | 中 | | ✓ v2.0 |
-| 引脚类型提取 | FEdGraphPinType 10 字段 | 中 | ✓ Phase 3 | ✓ v2.0 复用 |
-|LinkedTo连接 | 节点间连接 | 中 | | ✓ v2.0（名称索引）|
-| 节点类型分辨 | 辨别 K2Node_CallFunction / Event | 中 | | ✓ v2.0 |
-
-### 差异化功能（Differentiators）——v2.1+
-
-| 功能 | 价值 | 复杂度 | 优先级 |
-|------|------|--------|--------|
-| 节点上下文信息 | AI 语义理解（如 "jump action"） | 高 | v2.1 后期 |
-| 节点分组识别 | 注释框理解逻辑分组 | 低 | v2.1 早期 |
-| 路径追踪 | 事件→函数调用完整路径 | 高 | v2.1 |
-| 依赖倒排索引 | 输入动作反查使用位置 | 高 | v2.1+ |
-| 类 C++ 伪代码生成 | 输出等价代码 | 极高 | v3.0 |
-
-### 反功能（Anti-Features）——明确不支持
-
-| 反功能 | 避免原因 |
-|--------|----------|
-| cooked 资产图结构提取 | 已剥离编辑器数据，仅保留字节码 |
-| 蓝图字节码反编译 | 需专门 VM 解析器 |
-| 节点执行模拟 | 需完整运行时环境 |
-| 资产修改/写入 | 仅支持只读解析 |
-
----
-
-## 架构摘要
-
-### 分层管道（v1.0 → v2.0 一致）
-
-```
-.uasset 文件 → BinaryReader → AssetDeserializer → Models → OutputFormatter
-```
-
-### v2.0 新增组件
-
-| 组件 | 职责 | 与谁通信 |
-|------|------|----------|
-| **GraphHandler** | 蓝图图解析协调 | Deserializer（接收上下文） |
-| **PinParser** | UEdGraphPin 解析 | GraphHandler |
-| **NodeDispatcher** | UK2Node 子类分派 | PinParser（节点类型识别后） |
-| **LinkBuilder** | LinkedTo 引用解析 | PinParser（构建连接） |
-
-### 数据流（v2.0 蓝图图解析）
-
-```
-1. 标识图导出（ClassIndex 包含 "EdGraph"）
-   ↓
-2. 对每个 UEdGraph 导出：
-   ├─ read_schema() → FPackageIndex
-   ├─ read_nodes_count() → int32
-   ├─ 对每个节点引用：
-   │  ├─ resolve_export_index() → NodeExport
-   │  ├─ parse_node_base() → UEdGraphNode (Pins, Pos, Guid)
-   │  ├─ detect_k2node_type() → 子类名
-   │  └─ dispatch_to_k2node_handler() → K2Node 特定数据
-   └─ build_connections() → LinkedTo → PinId 映射
-   ↓
-3. 输出：
-   ├─ Graphs → Nodes → Pins 层级 JSON
-   ├─ Connections 辅助结构
-   └─ ExecutionOrder 辅助结构
-```
-
----
-
-## 关键陷阱与缓解
-
-### 关键陷阱（导致重写）
-
-| 陷阱 | 说明 | 缓解措施 | 阶段 |
-|------|------|----------|------|
-| **OuterIndex 缺失 TemplateIndex** | UE4 >= 506 在 SuperIndex 和 OuterIndex 间插入 TemplateIndex | 检查 `summary.file_version_ue4 >= 506`，条件读取 | v1.0 Phase 4 已修复 |
-| **Cooked 资产检测缺失** | PKG_Cooked 标志指示图结构已移除 | 解析前检查 PackageFlags & 0x200 | v2.0 开始需添加 |
-| **FEdGraphPinType 版本依赖** | ContainerType、bIsConst、bIsUObjectWrapper 依版本添加 | 版本条件分支读取 | v2.0 Phase 1 |
-| **节点类型误判** | Blueprint/Class/EdGraph 导出非节点 | 检查类名以 "K2Node_" 开头 | v2.0 Phase 2 |
-| **LinkedTo GUID 格式** | 存储为 PinId GUID，非索引 | 构建 pin_id → pin_object 字典二次查找 | v2.0 Phase 1 |
-
-### 中等陷阱
-
-| 陷阱 | 说明 | 缓解 |
-|------|------|------|
-| SubPin/ParentPin 关系 | 结构体拆分的子引脚需ParentPin 引用 | 解析时构建双向引用 |
-| NodeGuid vs 导出索引 | 外部工具使用 Guid，内部用索引 | 输出双引用 |
-| 多图页面（Ubergraph/Function/Macro） | 蓝图可含多个图 | 先收集所有 UEdGraph 导出 |
-
-### 次要陷阱
-
-| 陷阱 | 说明 |
-|------|------|
-| 节点注释（EdGraphNode_Comment） | 无执行引脚，需特殊标记 |
-| 临时变量节点（K2Node_TemporaryVariable） | 非蓝图变量，标记为 temporary |
-
----
-
-## v2.0 实施优先级（Phase 6）
-
-### Phase 6.1：核心图节点（Week 1-2）——最高优先级
-
-**目标：** 解析 UEdGraph → UEdGraphNode → UEdGraphPin → FEdGraphPinType
-
-**交付：**
-- `parse_graphs()` 函数
-- `BlueprintGraph`, `BlueprintNode`, `BlueprintPin` dataclasses
-- 连接映射：`pin_id → pin_object` 字典
-
-**关键实现：**
-```python
-def parse_graphs(export_map, name_map, archive, summary):
-    graph_exports = [e for e in export_map if is_graph_export(e, name_map)]
-    for ge in graph_exports:
-        graphs.append(parse_graph(ge, export_map, name_map, archive, summary))
-    return graphs
-```
-
----
-
-### Phase 6.2：节点类型分派（Week 3）
-
-**目标：** K2Node_CallFunction / Event / Knot / Comment
-
-**交付：**
-- `parse_k2node_callfunction()`
-- `parse_k2node_event()`
-- `parse_k2node_knot()`
-- `parse_comment_node()`
-
----
-
-### Phase 6.3：引脚类型与连接（Week 4）
-
-**目标：** 完整 FEdGraphPinType + LinkedTo 构建
-
-**交付：**
-- `parse_pin_type()`（版本感知）
-- `LinkedTo` 解析（PinId GUID → 目标引用）
-- SubPin/ParentPin 处理
-
----
-
-### Phase 6.4：输出集成（Week 5）
-
-**目标：** JSON 输出包含蓝图图结构
-
-**交付：**
-- `--graph` CLI 选项
-- Graph/Node/Pin in JSON
-- 执行流可视化辅助（execution_order 字段）
-
----
-
-## Cookbook：节点类型识别
-
-| 类名 | 名称空间 | 类型 | 解析策略 |
-|------|----------|------|----------|
-| K2Node_Event | BlueprintGraph | 节点 | EventReference + OutputDelegate |
-| K2Node_CallFunction | BlueprintGraph | 节点 | FunctionReference + 参数引脚 |
-| K2Node_VariableGet | BlueprintGraph | 节点 | VariableReference |
-| K2Node_Knot | BlueprintGraph | 节点 | InputPin/OutputPin 转发 |
-| K2Node_EnhancedInputAction | InputBlueprintNodes | 节点 | InputAction + 多 exec 引脚 |
-| EdGraphNode_Comment | UnrealEd | 注释 | 无引脚，仅 NodeComment |
-| UEdGraph | BlueprintGraph | 容器 | 跳过（包 Nodes） |
-| Blueprint | Engine | 容器 | 跳过（蓝图元数据） |
-
----
-
-## 版本兼容性矩阵
-
-### FEdGraphPinType 字段添加
-
-| 字段 | 添加版本 | 条件 |
-|------|----------|------|
-| container_type | FFrameworkObjectVersion::EdGraphPinContainerType | Version >= X |
-| is_const | VER_UE4_SERIALIZE_PINTYPE_CONST | UE4 >= 4.8, UE5 >= 5.0 |
-| is_uobject_wrapper | FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag | UE5 >= 5.0 |
-
-### FObjectExport 字段添加
-
-| 字段 | 添加版本 | 条件 |
-|------|----------|------|
-| TemplateIndex | UE4 >= 506 (VER_UE4_TemplateIndex_IN_COOKED_EXPORTS) | file_version_ue4 >= 506 |
-| 64 位 SerialSize/Offset | UE4 >= 508 (VER_UE4_64BIT_EXPORTOFFSETS) | file_version_ue4 >= 508 |
-
----
-
-## 置信度评估
-
-### 核心区域
-
-| 区域 | 置信度 | 依据 |
-|------|--------|------|
-| 包结构 | 高 | UE 5.7 源码直接确认 |
-| 导入/导出格式 | 高 | UE 5.7 源码直接确认 |
-| 属性序列化 | 中 | 复杂但有文档 |
-| 蓝图元数据 | 高 | v1.0 Phase 3 已验证 |
-| **蓝图图结构** | **高** | **WebSearch + 编辑器导出直接验证** |
-| **引脚类型系统** | **高** | **FEdGraphPinType API 文档确认** |
-| **节点类型分类** | **高** | **编辑器导出示例直接确认** |
-| **连接机制** | **高** | **LinkedTo (node pin_id) 格式直接确认** |
-
-### v2.0 新增评估
-
-| 区域 | 置信度 | 说明 |
-|------|--------|------|
-| 节点类型识别 | 高 | 编辑器导出格式直接确认 |
-| 引脚类型版本感知 | 中 | 部分字段版本阈值需实测确认 |
-| LinkedTo GUID 映射 | 中 | 需真实文件验证 PinId GUID 格式 |
-| 图嵌套处理 | 中 | FunctionGraph 内部节点需测试验证 |
-
----
-
-## 需求缺口与待验证
-
-### v2.0 需调研的领域
-
-1. **节点类完整目录**
-   - K2Node_ 开头的节点类（BlueprintGraph）
-   - Enhanced Input 相关节点（InputBlueprintNodes）
-   - 插件蓝图节点处理
-
-2. **节点特有数据序列化**
-   - FunctionReference/EventReference 结构
-   - ExtraFlags 字段含义
-   - 各节点类型特有字段偏移
-
-3. **版本阈值确认**
-   - FFrameworkObjectVersion::EdGraphPinContainerType 的确切版本号
-   - UE4/UE5 的分界点验证
-
-4. **真实文件验证**
-   - LyraStarterGame/BP_Character.uasset 图结构解析
-   - PinId GUID 格式验证
-   - LinkedTo 解析测试
-
----
-
-## 下一步行动
-
-### 立即行动
-
-1. **验证Cooked检测**：在 Phase 6 开始前添加 PackageFlags PKG_Cooked 检查
-2. **选择测试文件**：LyraStarterGame/BP_Character.uasset 验证图解析
-3. **启动 Phase 6 规划**：/gsd-plan-phase 6
-
-### Phase 6 规划要点
-
-- 优先实现 UEdGraphPin（LinkedTo + PinType）
-- 基础节点类型（CallFunction / Event / Knot）
-- 版本条件读取框架
-- JSON 输出格式设计
-
----
-
-## 相关文件
-
-| 文件 | 说明 |
-|------|------|
-| `STACK.md` | 技术栈推荐（零新增依赖确认） |
-| `FEATURES.md` | 功能全景（表类型/差异化/反功能） |
-| `ARCHITECTURE.md` | 系统架构模式（分层管道） |
-| `PITFALLS.md` | 常见陷阱（OuterIndex/TemplateIndex、Cooked检测） |
-| `UE-SOURCE-INDEX.md` | UE 源码参考索引 |
-
----
-
-## 源文件信息
-
-- **研究日期：** 2026-05-02
-- **综合者：** GSD Research Synthesizer
-- **v1.0 完成：** 2026-04-27（5 个阶段）
-- **v2.0 研究：** 2026-05-02（蓝图图解析）
-- **置信度：** 核心解析高，蓝图图高（v2.0 更新）
-
----
-
-*综合自：STACK.md、FEATURES.md、ARCHITECTURE.md、PITFALLS.md*
+*Research completed: 2026-05-02*
+*Ready for roadmap: yes*

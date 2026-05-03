@@ -22,7 +22,7 @@ import argparse
 import mmap
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, BinaryIO, Tuple, Any
+from typing import Optional, List, Dict, BinaryIO, Tuple, Any, Union
 
 
 # ============================================================================
@@ -55,12 +55,13 @@ PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 
 # PropertyTag version thresholds (PropertyTag.cpp)
-PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
+PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold (EUnrealEngineObjectUE5Version::PROPERTY_TAG_COMPLETE_TYPE_NAME)
 VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
 VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
 # Package Flags (ObjectMacros.h)
 PKG_Cooked = 0x200                     # Package is cooked
+PKG_UnversionedProperties = 0x2000     # Uses unversioned property serialization (Phase 11 GAP-01)
 PKG_FilterEditorOnly = 0x00000080      # Filter editor-only objects (Phase 10 Gap #2)
 
 # Phase 7: Blueprint Graph Parsing Safety Constants
@@ -85,7 +86,7 @@ UE5_PACKAGE_SAVED_HASH = 1016                 # PACKAGE_SAVED_HASH (修正：原
 UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017  # OS_SUB_OBJECT_SHADOW_SERIALIZATION
 UE5_IMPORT_TYPE_HIERARCHIES = 1018            # IMPORT_TYPE_HIERARCHIES
 
-# UE4 Version Constants (EUnrealEngineObjectUE4Version) - 按实际值计算
+# UE4 Version Constants (EUnrealEngineObjectUE4Version) - 从ObjectVersion.h精确解析
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385  # VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID (old)
 UE4_SERIALIZE_TEXT_IN_PACKAGES = 401            # VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (old)
 # 正确值（从 ObjectVersion.h 计算）
@@ -95,20 +96,22 @@ UE4_CHANGED_CHUNKID_TO_ARRAY = 341             # VER_UE4_CHANGED_CHUNKID_TO_BE_A
 UE4_ENGINE_VERSION_OBJECT = 334                 # VER_UE4_ENGINE_VERSION_OBJECT
 UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382      # VER_UE4_ADD_STRING_ASSET_REFERENCES_MAP
 UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 505  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
-VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 506    # Phase 6: ObjectVersion.h line 711
-UE4_ADDED_SEARCHABLE_NAMES = 508               # VER_UE4_ADDED_SEARCHABLE_NAMES
-VER_UE4_64BIT_EXPORTOFFSETS = 508              # Phase 6: 64-bit export offsets
-UE4_ADDED_PACKAGE_OWNER = 516                  # VER_UE4_ADDED_PACKAGE_OWNER
-UE4_NON_OUTER_PACKAGE_IMPORT = 518             # VER_UE4_NON_OUTER_PACKAGE_IMPORT
-UE4_LOAD_FOR_EDITOR_GAME = 383                 # VER_UE4_LOAD_FOR_EDITOR_GAME
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 401      # VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT
+# Phase 11 GAP修复：版本常量精确值（从ObjectVersion.h枚举位置计算）
+UE4_LOAD_FOR_EDITOR_GAME = 365                  # VER_UE4_LOAD_FOR_EDITOR_GAME (line 422)
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485       # VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (line 665)
+UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (line 709)
+VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 508    # VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (line 711)
+UE4_ADDED_SEARCHABLE_NAMES = 510               # VER_UE4_ADDED_SEARCHABLE_NAMES (line 715)
+VER_UE4_64BIT_EXPORTOFFSETS = 511              # VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (line 717)
+UE4_ADDED_PACKAGE_OWNER = 518                  # VER_UE4_ADDED_PACKAGE_OWNER (line 731)
+UE4_NON_OUTER_PACKAGE_IMPORT = 520             # VER_UE4_NON_OUTER_PACKAGE_IMPORT (line 734)
 
-# UE5 Release Object Version constants (Phase 6 D-08/D-10)
-UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1010    # FReleaseObjectVersion::RemoveObjectExportPackageGuid
-UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1011     # FReleaseObjectVersion::TrackObjectExportIsInherited
-UE5_GENERATE_PUBLIC_HASH = 1015                 # FReleaseObjectVersion::GeneratePublicHash
-UE5_OPTIONAL_RESOURCES = 1003                   # FReleaseObjectVersion::OptionalResources (bImportOptional field)
+# UE5 Version Constants (EUnrealEngineObjectUE5Version) - 从ObjectVersion.h精确解析
+# Phase 11 GAP修复：UE5版本常量精确值
+UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1005    # EUnrealEngineObjectUE5Version::REMOVE_OBJECT_EXPORT_PACKAGE_GUID (line 62)
+UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1006     # EUnrealEngineObjectUE5Version::TRACK_OBJECT_EXPORT_IS_INHERITED (line 65)
+UE5_OPTIONAL_RESOURCES = 1003                   # EUnrealEngineObjectUE5Version::OPTIONAL_RESOURCES (line 56)
+UE5_SCRIPT_SERIALIZATION_OFFSET = 1010          # EUnrealEngineObjectUE5Version::SCRIPT_SERIALIZATION_OFFSET (line 77)
 
 
 # ============================================================================
@@ -358,6 +361,18 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'I', self.read(4))[0]
 
+    def read_bool(self) -> bool:
+        """
+        读取 UE bool 值（序列化为 uint32，4 bytes）。
+
+        UE 源码参考：Archive.h line 1535
+        "Serialize bool as if it were UBOOL (legacy, 32 bit int)"
+
+        Returns:
+            bool: True 如果 uint32 != 0，False 如果 uint32 == 0
+        """
+        return self.read_u32() != 0
+
     def read_i64(self) -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
@@ -508,6 +523,91 @@ class PackageIndex:
     def to_export_index(self) -> int:
         """转换为导出表索引（Index - 1）"""
         return self.index - 1
+
+
+def resolve_package_index_to_reference(
+    pkg_idx: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    name_map: List[str]
+) -> Optional[Dict[str, Any]]:
+    """
+    解析FPackageIndex为可读对象引用信息。
+
+    Phase 11-02: 增强ObjectProperty解析返回可读对象引用。
+
+    Args:
+        pkg_idx: PackageIndex对象（已解码的FPackageIndex）
+        import_map: ImportMap列表
+        export_map: ExportMap列表
+        name_map: NameMap列表（用于解析FName索引）
+
+    Returns:
+        None if pkg_idx.is_null
+        {"type": "import", "class_name": str, "object_name": str, "package": str} if import
+        {"type": "export", "class_name": str, "object_name": str} if export
+    """
+    if pkg_idx.is_null:
+        return None
+
+    if pkg_idx.is_import:
+        imp_idx = pkg_idx.to_import_index()
+        if 0 <= imp_idx < len(import_map):
+            imp = import_map[imp_idx]
+            # class_name 和 object_name 可能是 FName 索引或已解析字符串
+            class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
+            object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
+            package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
+            return {
+                "type": "import",
+                "class_name": class_name,
+                "object_name": object_name,
+                "package": package
+            }
+
+    elif pkg_idx.is_export:
+        exp_idx = pkg_idx.to_export_index()
+        if 0 <= exp_idx < len(export_map):
+            exp = export_map[exp_idx]
+            # 类名可能需要递归解析class_index
+            class_name = _resolve_class_name(exp.class_index, import_map, export_map, name_map)
+            object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
+            return {
+                "type": "export",
+                "class_name": class_name,
+                "object_name": object_name
+            }
+
+    return None  # 索引越界等异常情况
+
+
+def _resolve_class_name(
+    class_index: PackageIndex,
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    name_map: List[str]
+) -> str:
+    """
+    递归解析class_index获取类名。
+
+    Phase 11-02: 辅助函数用于解析导出对象的类名。
+
+    Args:
+        class_index: PackageIndex对象（类引用）
+        import_map: ImportMap列表
+        export_map: ExportMap列表
+        name_map: NameMap列表
+
+    Returns:
+        类名字符串，如果无法解析则返回 "Unknown"
+    """
+    if class_index.is_null or class_index.index == 0:
+        return "None"
+
+    resolved = resolve_package_index_to_reference(class_index, import_map, export_map, name_map)
+    if resolved:
+        return resolved.get("class_name", "Unknown")
+    return "Unknown"
 
 
 def validate_package_index(
@@ -703,6 +803,8 @@ class ObjectExport:
     script_serial_offset: int = 0
     # 属性列表 (Phase 2 PROP-01 至 PROP-08)
     properties: List["PropertyValue"] = field(default_factory=list)
+    # Phase 13-02: 变换属性提取结果
+    transforms: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -720,6 +822,9 @@ class PropertyTag:
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    # D-03: PropertyTag Extensions 字段（PropertyTag.cpp lines 155-173）
+    override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
+    experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
 
 
 @dataclass
@@ -838,6 +943,209 @@ class DelegateValue(AdvancedPropertyValue):
     function_name: str            # 函数名（FName）
 
 
+# ============================================================================
+# Phase 13: 变换属性类型 dataclass 定义
+# ============================================================================
+
+@dataclass(kw_only=True)
+class VectorValue(AdvancedPropertyValue):
+    """
+    Vector struct property value (Phase 13)。
+
+    X/Y/Z 坐标值，用于 RelativeLocation 等位置属性。
+    继承 AdvancedPropertyValue 基类保持一致性（per D-04）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    x: float
+    y: float
+    z: float
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
+
+
+@dataclass(kw_only=True)
+class RotatorValue(AdvancedPropertyValue):
+    """
+    Rotator struct property value (Phase 13)。
+
+    Roll/Pitch/Yaw 角度值，UE 使用度数格式（per D-02）。
+    unit 字段标注单位为度数，防止误用弧度计算（per D-02a）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    roll: float    # UE FRotator.Roll (degrees)
+    pitch: float   # UE FRotator.Pitch (degrees)
+    yaw: float     # UE FRotator.Yaw (degrees)
+    unit: str = 'degrees'  # D-02a: 单位标注
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
+
+
+@dataclass(kw_only=True)
+class ScaleValue(AdvancedPropertyValue):
+    """
+    Scale3D struct property value (Phase 13)。
+
+    X/Y/Z 缩放因子，用于 RelativeScale3D 属性。
+    继承 AdvancedPropertyValue 基类保持一致性（per D-04）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    x: float
+    y: float
+    z: float
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
+
+
+def format_transform_value(value: float, precision_type: str) -> Union[int, float]:
+    """
+    格式化变换属性值，应用类型自适应精度处理（per D-03a）。
+
+    Location: 整数优先，否则 3 位小数
+    Rotation: 3 位小数
+    Scale: 4 位小数
+
+    Args:
+        value: 原始浮点值
+        precision_type: 精度类型 ('location', 'rotation', 'scale')
+
+    Returns:
+        格式化后的值（int 或 float）
+
+    来自 CONTEXT.md D-03a。
+    """
+    if precision_type == 'location':
+        # D-03a: Location 整数优先 - 检测是否为整数
+        if value == int(value):
+            return int(value)
+        return round(value, 3)
+    elif precision_type == 'rotation':
+        # D-03a: Rotation 3 位小数精度
+        return round(value, 3)
+    elif precision_type == 'scale':
+        # D-03a: Scale 4 位小数精度
+        return round(value, 4)
+    return value
+
+
+def parse_vector_value(struct_value: StructValue, precision_type: str = 'location') -> VectorValue:
+    """
+    解析 Vector struct property 到 VectorValue（per D-01a）。
+
+    从 StructValue.fields 提取 X/Y/Z 字段（大写字母命名），
+    应用 format_transform_value 精度处理。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Vector"
+        precision_type: 精度类型 ('location' 或 'scale')
+
+    Returns:
+        VectorValue dataclass
+
+    Raises:
+        KeyError: 若 fields 中缺少 X/Y/Z 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    x = format_transform_value(fields["X"], precision_type)
+    y = format_transform_value(fields["Y"], precision_type)
+    z = format_transform_value(fields["Z"], precision_type)
+    return VectorValue(x=x, y=y, z=z)
+
+
+def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
+    """
+    解析 Rotator struct property 到 RotatorValue（per D-01a）。
+
+    从 StructValue.fields 提取 Roll/Pitch/Yaw 字段（大写字母命名），
+    应用 format_transform_value 精度处理（rotation）。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Rotator"
+
+    Returns:
+        RotatorValue dataclass（unit='degrees'）
+
+    Raises:
+        KeyError: 若 fields 中缺少 Roll/Pitch/Yaw 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    roll = format_transform_value(fields["Roll"], 'rotation')
+    pitch = format_transform_value(fields["Pitch"], 'rotation')
+    yaw = format_transform_value(fields["Yaw"], 'rotation')
+    return RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
+
+
+def parse_scale_value(struct_value: StructValue) -> ScaleValue:
+    """
+    解析 Scale3D struct property 到 ScaleValue（per D-01a）。
+
+    从 StructValue.fields 提取 X/Y/Z 字段（大写字母命名），
+    Scale3D 使用与 Vector 相同的字段格式。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Vector"
+
+    Returns:
+        ScaleValue dataclass
+
+    Raises:
+        KeyError: 若 fields 中缺少 X/Y/Z 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    x = format_transform_value(fields["X"], 'scale')
+    y = format_transform_value(fields["Y"], 'scale')
+    z = format_transform_value(fields["Z"], 'scale')
+    return ScaleValue(x=x, y=y, z=z)
+
+
+def extract_component_transforms(
+    export_properties: List[PropertyValue],
+    component_name: str = None
+) -> Dict[str, Any]:
+    """
+    从组件 export 的 properties 中提取变换属性（per D-01, D-01a）。
+
+    筛选 RelativeLocation/RelativeRotation/RelativeScale3D 属性，
+    分派到对应解析函数转换为 VectorValue/RotatorValue/ScaleValue。
+
+    Args:
+        export_properties: PropertyValue 列表（来自 parse_properties_from_export）
+        component_name: 组件名称（可选，用于日志）
+
+    Returns:
+        Dict[str, Any]: 包含 relative_location/relative_rotation/relative_scale 键
+                       值为 VectorValue/RotatorValue/ScaleValue 或 None
+
+    来自 CONTEXT.md D-01, D-01a。
+    """
+    transforms = {}
+
+    for prop in export_properties:
+        if prop.type != "StructProperty" or not prop.value:
+            continue
+
+        struct_val = prop.value
+        if not isinstance(struct_val, StructValue):
+            continue
+
+        prop_name = prop.name
+
+        # D-01: 筛选 RelativeLocation/RelativeRotation/RelativeScale3D
+        if prop_name == "RelativeLocation" and struct_val.struct_type == "Vector":
+            transforms["relative_location"] = parse_vector_value(struct_val, 'location')
+        elif prop_name == "RelativeRotation" and struct_val.struct_type == "Rotator":
+            transforms["relative_rotation"] = parse_rotator_value(struct_val)
+        elif prop_name == "RelativeScale3D" and struct_val.struct_type == "Vector":
+            transforms["relative_scale"] = parse_scale_value(struct_val)
+
+    return transforms
+
+
 @dataclass
 class FEdGraphPinType:
     """
@@ -865,6 +1173,7 @@ class BlueprintVariable:
     Variable definition from FBPVariableDescription.
 
     Per D-05/D-06: use UE original names with container prefix.
+    Phase 12: enhanced with is_component, metadata, flags_labels (per D-02/D-03).
     """
     var_name: str                    # FName
     var_type: "FEdGraphPinType"      # Full type structure (defined next)
@@ -872,6 +1181,9 @@ class BlueprintVariable:
     property_flags: int              # uint64 EPropertyFlags
     default_value: any = None        # Parsed or raw string per D-13/D-14
     friendly_name: str = ""          # FString
+    is_component: bool = False       # Phase 12: component variable flag (per D-02)
+    metadata: Dict[str, str] = field(default_factory=dict)  # Phase 12: MetaDataArray (per D-03)
+    flags_labels: List[str] = field(default_factory=list)   # Phase 12: PropertyFlags labels (per D-03)
 
 
 @dataclass
@@ -1066,6 +1378,23 @@ class ParseResult:
     imports: List[Dict] = field(default_factory=list)           # D-10-05: ImportMap 依赖列表
     soft_references: List[Dict] = field(default_factory=list)   # D-10-08: SoftObjectPaths 软引用列表
     circular_deps: List[List[str]] = field(default_factory=list) # D-10-13: 循环依赖路径
+
+
+@dataclass
+class StatusInfo:
+    """
+    JSend 风格 status 字段（D-14-02, OUT-01）。
+
+    三元分类:
+    - success: 解析成功，无错误（可有警告）
+    - fail: 有解析错误但部分结果可用
+    - error: 无法解析，严重错误
+
+    Per D-14-02: JSend 结构 - status + message + code
+    """
+    status: str      # "success" | "fail" | "error"
+    message: Optional[str] = None
+    code: Optional[str] = None
 
 
 # ============================================================================
@@ -1595,7 +1924,7 @@ def read_import_map(
 
         b_import_optional: Optional[bool] = None
         if has_import_optional:
-            b_import_optional = bool(archive.read_u8())
+            b_import_optional = archive.read_bool()
 
         import_map.append(ObjectImport(
             class_package=class_package,
@@ -1774,6 +2103,10 @@ def read_export_map(
     # 参考 FPackageFileVersion::operator>= 实现
     effective_ue4_version = summary.file_version_ue4 if not is_ue5_file else 1000  # UE5 视为高版本
 
+    # Phase 11 GAP修复：检查PKG_Cooked标志
+    # TemplateIndex和PreloadDependencies只在cooked资产中有效（ObjectVersion.h注释）
+    is_cooked = (summary.package_flags & PKG_Cooked) != 0
+
     for export_idx in range(summary.export_count):
         object_name = ""  # 初始化用于错误上下文
 
@@ -1784,9 +2117,9 @@ def read_export_map(
             # 2. SuperIndex
             super_index = PackageIndex(archive.read_i32())
 
-            # 3. TemplateIndex（D-01：条件读取 UE4 >= 506，UE5 文件自动满足）
+            # 3. TemplateIndex（条件读取 UE4 >= 508）
             template_index = PackageIndex(0)
-            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:  # 506
+            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:  # 508
                 template_index = PackageIndex(archive.read_i32())
 
             # 4. OuterIndex（D-02：TemplateIndex 之后）
@@ -1806,20 +2139,20 @@ def read_export_map(
                 serial_size = archive.read_i32()
                 serial_offset = archive.read_i32()
 
-            # 9-11. bool flags（D-07：各读取 1 byte）
-            b_forced_export = bool(archive.read_u8())
-            b_not_for_client = bool(archive.read_u8())
-            b_not_for_server = bool(archive.read_u8())
+            # 9-11. bool flags（UE 标准：各序列化为 4 bytes uint32）
+            b_forced_export = archive.read_bool()
+            b_not_for_client = archive.read_bool()
+            b_not_for_server = archive.read_bool()
 
-            # 12. PackageGuid（D-10/D-11：UE5 < 1010时读取但不存储）
-            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1010
+            # 12. PackageGuid（Phase 11 GAP: UE5 < 1005时读取但不存储）
+            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1005
                 # 读取 16 bytes FGuid，但不存储（DummyPackageGuid）
                 archive.read_bytes(16)
 
-            # 13. bIsInheritedInstance（D-08：UE5 >= 1011）
+            # 13. bIsInheritedInstance（Phase 11 GAP: UE5 >= 1006）
             b_is_inherited_instance = None
-            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1011
-                b_is_inherited_instance = bool(archive.read_u8())
+            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1006
+                b_is_inherited_instance = archive.read_bool()
 
             # 14. PackageFlags（D-09）
             package_flags = archive.read_u32()
@@ -1831,24 +2164,24 @@ def read_export_map(
 
             # UE4 版本条件：bNotAlwaysLoadedForEditorGame（UE4 >= 383，UE5 总是满足）
             if effective_ue4_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = bool(archive.read_u8())
+                b_not_always_loaded_for_editor_game = archive.read_bool()
 
             # UE4 版本条件：bIsAsset（UE4 >= 401，UE5 总是满足）
             if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
-                b_is_asset = bool(archive.read_u8())
+                b_is_asset = archive.read_bool()
 
-            # UE5 版本条件：bGeneratePublicHash（UE5 >= OPTIONAL_RESOURCES=1003）
-            if is_ue5_file and summary.file_version_ue5 >= UE5_GENERATE_PUBLIC_HASH:
-                b_generate_public_hash = bool(archive.read_u8())
+            # UE5 版本条件：bGeneratePublicHash（Phase 11 GAP: UE5 >= OPTIONAL_RESOURCES=1003）
+            if is_ue5_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+                b_generate_public_hash = archive.read_bool()
 
-            # 18. 依赖数组（UE4 >= 505 / UE5 总是满足）
+            # 18. 依赖数组（UE4 >= 507）
             # FirstExportDependency + 4个依赖计数（5个 i32）
             first_export_dependency = 0
             serialization_before_serialization_deps = 0
             create_before_serialization_deps = 0
             serialization_before_create_deps = 0
             create_before_create_deps = 0
-            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
+            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:  # 507
                 first_export_dependency = archive.read_i32()
                 serialization_before_serialization_deps = archive.read_i32()
                 create_before_serialization_deps = archive.read_i32()
@@ -1857,14 +2190,16 @@ def read_export_map(
 
             # 19-20. ScriptSerializationStartOffset/EndOffset
             # 条件: !UseUnversionedPropertySerialization() && UEVer() >= SCRIPT_SERIALIZATION_OFFSET(1010)
-            # 未烘焙/编辑器保存的文件 UseUnversionedPropertySerialization()=true，不序列化这些字段
-            # 烘焙文件 UseUnversionedPropertySerialization()=false，序列化这些字段
-            script_serial_size = 0
+            # UseUnversionedPropertySerialization()基于PKG_UnversionedProperties标志判断
+            # 若PKG_UnversionedProperties未设置，则使用versioned property serialization，需要读取这些字段
+            # 参考: ObjectResource.cpp 第 212-222 行
+            # 序列化顺序: StartOffset 先, EndOffset 后
             script_serial_offset = 0
-            is_cooked_pkg = (summary.package_flags & PKG_Cooked) != 0
-            if is_ue5_file and is_cooked_pkg and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-                script_serial_size = archive.read_i64()
-                script_serial_offset = archive.read_i64()
+            script_serial_size = 0
+            uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
+            if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                script_serial_offset = archive.read_i64()  # ScriptSerializationStartOffset (第一个)
+                script_serial_size = archive.read_i64()  # ScriptSerializationEndOffset (第二个)
 
             # 构建导出条目
             export_map.append(ObjectExport(
@@ -2001,6 +2336,66 @@ def detect_blueprint(
     if class_name and "Blueprint" in class_name:
         return True
     return False
+
+
+def detect_blueprint_generated_class(
+    export: ObjectExport,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> bool:
+    """
+    Detect if export is a BlueprintGeneratedClass (Phase 12, per D-01).
+
+    Variables are extracted from BlueprintGeneratedClass exports, not UBlueprint.
+    BlueprintGeneratedClass is the compiled class representation.
+
+    Args:
+        export: ObjectExport to check
+        import_map: Import table for ClassIndex lookup
+        export_map: Export table for ClassIndex lookup
+
+    Returns:
+        True if export is BlueprintGeneratedClass, False otherwise
+    """
+    if export.class_index.is_import:
+        idx = export.class_index.to_import_index()
+        if 0 <= idx < len(import_map):
+            class_name = import_map[idx].class_name
+            # BlueprintGeneratedClass or subclasses (AnimBlueprintGeneratedClass, etc.)
+            return "BlueprintGeneratedClass" in class_name
+    return False
+
+
+def find_main_blueprint_generated_class(
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    asset_name: str
+) -> Optional[ObjectExport]:
+    """
+    Find the main BlueprintGeneratedClass export (Phase 12, per D-01).
+
+    Uses object_name matching with asset_name + serial_size maximum principle.
+    Main BPGC typically has object_name = asset_name + "_C".
+
+    Args:
+        export_map: Export table to search
+        import_map: Import table for ClassIndex lookup
+        asset_name: Asset name to match (without .uasset suffix)
+
+    Returns:
+        ObjectExport of main BlueprintGeneratedClass, or None if not found
+    """
+    candidates = []
+    for export in export_map:
+        if detect_blueprint_generated_class(export, import_map, export_map):
+            # Main BPGC object_name is typically asset_name + "_C"
+            if export.object_name and export.object_name.startswith(asset_name):
+                candidates.append(export)
+
+    if candidates:
+        # Select the one with largest serial_size (main class has most data)
+        return max(candidates, key=lambda e: e.serial_size)
+    return None
 
 
 def extract_blueprint_graphs(
@@ -2157,8 +2552,8 @@ def read_ed_graph_pin_type(
         archive.read_i32()           # TerminalSubCategoryObject
 
     # Step 6-7: bIsReference and bIsWeakPointer
-    pin_type.is_reference = archive.read_u8() != 0
-    pin_type.is_weak_pointer = archive.read_u8() != 0
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
     # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
@@ -2169,12 +2564,12 @@ def read_ed_graph_pin_type(
     # Step 9: bIsConst
     # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_const = archive.read_u8() != 0
+    pin_type.is_const = archive.read_bool()
 
     # Step 10: bIsUObjectWrapper
     # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_uobject_wrapper = archive.read_u8() != 0
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
     return pin_type
 
@@ -2269,7 +2664,7 @@ def read_ue_graph_pin(
         sub_pins.append(sub_pin_id)
 
     # 9. ParentPin（条件字段）
-    has_parent = archive.read_u8() != 0
+    has_parent = archive.read_bool()
     parent_pin: Optional[str] = None
     if has_parent:
         parent_pin_bytes = archive.read_bytes(16)
@@ -2442,7 +2837,7 @@ def read_fmember_reference(
     member_guid = member_guid_bytes.hex()
 
     # 4. bSelfContext (uint8)
-    b_self_context = archive.read_u8() != 0
+    b_self_context = archive.read_bool()
 
     return FMemberReference(
         member_parent=member_parent,
@@ -2483,7 +2878,7 @@ def read_k2node_call_function(
     )
 
     # 2. bDefaultsToPureFunc (uint8)
-    b_defaults_to_pure = archive.read_u8() != 0
+    b_defaults_to_pure = archive.read_bool()
 
     return K2NodeCallFunction(
         function_reference=function_reference,
@@ -2522,7 +2917,7 @@ def read_k2node_event(
     )
 
     # 2. bOverrideFunction (uint8)
-    b_override_function = archive.read_u8() != 0
+    b_override_function = archive.read_bool()
 
     return K2NodeEvent(
         event_reference=event_reference,
@@ -2697,7 +3092,7 @@ def read_ue_graph(
     graph_guid = graph_guid_bytes.hex()
 
     # 4. bEditable
-    b_editable = archive.read_u8() != 0
+    b_editable = archive.read_bool()
 
     return UEdGraph(
         graph_name=graph_export.object_name,
@@ -2766,6 +3161,160 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> any:
     return value_str
 
 
+# ============================================================================
+# Phase 12: PropertyFlags parsing (per D-03)
+# ============================================================================
+
+# EPropertyFlags constants from ObjectMacros.h L415-480
+CPF_Edit = 0x0000000000000001               # EditAnywhere/EditConst
+CPF_BlueprintVisible = 0x0000000000000004   # BlueprintReadWrite/BlueprintReadOnly
+CPF_BlueprintReadOnly = 0x0000000000000010  # Determines read vs write
+CPF_Transient = 0x0000000000002000          # Transient
+CPF_EditConst = 0x0000000000020000          # EditConst
+CPF_InstancedReference = 0x0000000000080000 # Component reference (per D-02)
+CPF_Config = 0x0000000000004000             # Config
+CPF_SaveGame = 0x0000000001000000           # SaveGame
+CPF_Deprecated = 0x0000000020000000         # Deprecated
+CPF_Protected = 0x0000080000000000          # Protected
+CPF_AdvancedDisplay = 0x0000040000000000    # AdvancedDisplay
+CPF_ExposeOnSpawn = 0x0001000000000000      # ExposeOnSpawn
+
+
+def parse_property_flags_to_labels(flags: int) -> List[str]:
+    """
+    Parse EPropertyFlags uint64 to readable label list (Phase 12, per D-03).
+
+    From ObjectMacros.h L415-480. Key flags for blueprint variables:
+    - CPF_Edit: Edit visibility
+    - CPF_BlueprintVisible: Blueprint access
+    - CPF_InstancedReference: Component reference (per D-02)
+
+    Args:
+        flags: uint64 EPropertyFlags value
+
+    Returns:
+        List of readable flag labels (sorted by importance)
+    """
+    labels = []
+
+    # Edit flags (mutually exclusive patterns)
+    if flags & CPF_Edit:
+        if flags & CPF_EditConst:
+            labels.append("EditConst")
+        else:
+            labels.append("EditAnywhere")
+
+    # Blueprint visibility flags (mutually exclusive)
+    if flags & CPF_BlueprintVisible:
+        if flags & CPF_BlueprintReadOnly:
+            labels.append("BlueprintReadOnly")
+        else:
+            labels.append("BlueprintReadWrite")
+
+    # Component reference flag (per D-02)
+    if flags & CPF_InstancedReference:
+        labels.append("InstancedReference")
+
+    # Other flags
+    if flags & CPF_Protected:
+        labels.append("Protected")
+    if flags & CPF_ExposeOnSpawn:
+        labels.append("ExposeOnSpawn")
+    if flags & CPF_Config:
+        labels.append("Config")
+    if flags & CPF_Transient:
+        labels.append("Transient")
+    if flags & CPF_SaveGame:
+        labels.append("SaveGame")
+    if flags & CPF_Deprecated:
+        labels.append("Deprecated")
+    if flags & CPF_AdvancedDisplay:
+        labels.append("AdvancedDisplay")
+
+    return labels
+
+
+def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
+    """
+    Format FEdGraphPinType to complete type string (Phase 12, per D-04).
+
+    Handles:
+    - Basic types (bool, int, float, string, etc.)
+    - Container types (TArray, TSet, TMap)
+    - Reference types (adds '*' suffix)
+    - Const types (adds 'const' prefix)
+
+    Args:
+        pin_type: FEdGraphPinType structure
+        name_map: Optional NameMap for resolving pin_sub_category_object
+
+    Returns:
+        Complete type string (e.g., "TArray<UObject*>", "const float")
+    """
+    # Container type prefix
+    container_prefix = ""
+    if pin_type.container_type == 1:  # Array
+        container_prefix = "TArray<"
+    elif pin_type.container_type == 2:  # Set
+        container_prefix = "TSet<"
+    elif pin_type.container_type == 3:  # Map
+        container_prefix = "TMap<"  # Simplified - needs key/value info
+
+    # Base type from PinCategory
+    category = pin_type.pin_category.lower()
+    sub_category = pin_type.pin_sub_category.lower()
+
+    # Type mapping
+    type_str = ""
+    if category in ("bool", "boolean"):
+        type_str = "bool"
+    elif category in ("int", "integer"):
+        type_str = "int"
+    elif category in ("float", "real", "double"):
+        type_str = "float"
+    elif category in ("string", "str"):
+        type_str = "FString"
+    elif category in ("name"):
+        type_str = "FName"
+    elif category in ("text"):
+        type_str = "FText"
+    elif category in ("object", "class", "interface"):
+        # Try to resolve pin_sub_category_object to class name
+        if pin_type.pin_sub_category_object != 0 and name_map:
+            # FPackageIndex resolution would require ImportMap/ExportMap
+            # For Phase 12, use sub_category if available
+            if sub_category and sub_category != "none":
+                type_str = sub_category
+            else:
+                type_str = "UObject"
+        else:
+            type_str = "UObject"
+        # Add reference pointer for object types
+        if not pin_type.is_weak_pointer:
+            type_str += "*"
+    elif sub_category and sub_category != "none":
+        # Use sub_category as type name (more specific)
+        type_str = sub_category
+        # Check if it's a reference type
+        if category in ("object", "class") or "object" in category:
+            type_str += "*"
+    else:
+        # Fallback to category name
+        type_str = category
+
+    # Container suffix
+    container_suffix = ""
+    if container_prefix:
+        container_suffix = ">"
+
+    # Const prefix
+    const_prefix = ""
+    if pin_type.is_const:
+        const_prefix = "const "
+
+    return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"
+
+
 def read_blueprint_variable(
     archive: FArchive,
     name_map: List[str],
@@ -2823,15 +3372,40 @@ def read_blueprint_variable(
     # ReplicationCondition (uint8) - skip for Phase 3
     archive.read_u8()
 
-    # MetaDataArray count + entries - skip for Phase 3 (deferred)
+    # MetaDataArray count + entries - Phase 12: store metadata (per D-03)
     meta_count = archive.read_i32()
+    var.metadata = {}
     for _ in range(meta_count):
-        archive.read_name(name_map)  # DataKey
-        archive.read_fstring()       # DataValue
+        key = archive.read_name(name_map)  # DataKey
+        value = archive.read_fstring()       # DataValue
+        if key:  # Avoid None key
+            var.metadata[key] = value
+
+    # Phase 12: Parse PropertyFlags to readable labels (per D-03)
+    var.flags_labels = parse_property_flags_to_labels(var.property_flags)
 
     # DefaultValue (FString) - parse per D-13/D-14/D-15
     default_str = archive.read_fstring()
     var.default_value = parse_default_value(default_str, var.var_type)
+
+    # Phase 12: Component variable identification (per D-02)
+    # Dual verification: type name contains "Component" OR CPF_InstancedReference flag
+    type_str = ""
+    if var.var_type:
+        # Prefer pin_sub_category for more specific type
+        if var.var_type.pin_sub_category and var.var_type.pin_sub_category.lower() != "none":
+            type_str = var.var_type.pin_sub_category
+        elif var.var_type.pin_category:
+            type_str = var.var_type.pin_category
+
+    # Check type name contains "Component"
+    is_component_by_name = isinstance(type_str, str) and "Component" in type_str
+
+    # Check CPF_InstancedReference flag (0x0000000000080000)
+    is_component_by_flag = (var.property_flags & CPF_InstancedReference) != 0
+
+    # Dual verification: either condition satisfies
+    var.is_component = is_component_by_flag or is_component_by_name
 
     return var
 
@@ -2997,6 +3571,19 @@ def read_property_tag(
         if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
             tag.property_guid = archive.read(16)
 
+        # D-03: PropertyTag Extensions 处理
+        # 参考: PropertyTag.cpp 第 155-173 行、第 541-544 行
+        if tag.flags & PROP_TAG_HAS_EXTENSIONS:
+            # EPropertyTagExtension (u8)
+            property_extensions = archive.read_u8()
+
+            # OverridableInformation 标志 (0x02) 触发额外字段
+            if property_extensions & 0x02:
+                # EOverriddenPropertyOperation (u8)
+                tag.override_operation = archive.read_u8()
+                # bExperimentalOverridableLogic — 根据研究暂按 u8 处理
+                tag.experimental_overridable_logic = archive.read_u8()
+
         # BoolTrue 标志表示 bool 值为 true
         if tag.flags & PROP_TAG_BOOL_TRUE:
             tag.bool_val = 1
@@ -3140,6 +3727,39 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
         int 值（原始 FPackageIndex）
     """
     return archive.read_i32()
+
+
+def parse_soft_object_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str]
+) -> Dict[str, str]:
+    """
+    解析 SoftObjectProperty（FSoftObjectPath）。
+
+    Phase 11-03: 新增SoftObjectProperty解析器。
+
+    UE5格式：
+    - AssetPath: FString（如 "/Game/Characters/Mannequin/Animations/Walk")
+    - SubPath: FString（如 "" 空字符串表示无子路径，或"SubObject.Path")
+
+    参考 SoftObjectPath.h - FSoftObjectPath 序列化。
+
+    Args:
+        tag: PropertyTag 实例（包含属性名和类型）
+        archive: FArchive 二进制读取器
+        name_map: NameMap列表（未使用，保持签名一致性）
+
+    Returns:
+        {"asset_path": str, "sub_path": str}
+    """
+    asset_path = archive.read_fstring()
+    sub_path = archive.read_fstring()
+
+    return {
+        "asset_path": asset_path,
+        "sub_path": sub_path
+    }
 
 
 def parse_array_property(
@@ -3713,7 +4333,8 @@ def parse_properties_from_export(
     archive: FArchive,
     summary: PackageFileSummary,
     name_map: List[str],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    import_map: Optional[List["ObjectImport"]] = None
 ) -> List[PropertyValue]:
     """
     从导出条目解析所有属性（PROP-01 至 PROP-08）。
@@ -3724,17 +4345,50 @@ def parse_properties_from_export(
     3. 分派到类型特定解析函数
     4. 边界验证（seek 到 start + tag.size）
 
+    Phase 11-02: 增强ObjectProperty返回可读对象引用。
+
     Args:
         export: ObjectExport 实例
         archive: FArchive 实例
         summary: PackageFileSummary 实例（版本信息）
         name_map: 名称表
         export_map: 导出表
+        import_map: 导入表（Phase 11-02 ObjectProperty解析需要）
 
     Returns:
         List[PropertyValue] 属性值列表
     """
-    archive.seek(export.serial_offset)
+    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
+    # 参考: ObjectResource.h 第 280-285 行注释
+    # "The location (relative to SerialOffset) of the beginning of the
+    #  portion of this export's data that is serialized using tagged property serialization."
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_start = export.serial_offset + export.script_serial_offset
+    else:
+        property_start = export.serial_offset
+    archive.seek(property_start)
+
+    # D-02: SerializationControlExtensions 头部处理
+    # 参考: Class.cpp 第 1627-1654 行
+    # 当 UE5 >= PROPERTY_TAG_EXTENSION (1011) 时，属性数据前有额外头部
+    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        # EClassSerializationControlExtension (u8)
+        serialization_control = archive.read_u8()
+
+        # OverridableSerializationInformation 标志 (0x02)
+        if serialization_control & 0x02:
+            # EOverriddenPropertyOperation (u8) — 仅读取用于位置同步
+            overridden_operation = archive.read_u8()
+            # 注意：具体语义不解析，仅跳过字节
+
+    # 计算属性数据边界
+    # ScriptSerializationStartOffset 和 EndOffset 都是相对于 SerialOffset
+    # 参考: ObjectResource.h 第 280-295 行
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_end = export.serial_offset + export.script_serial_size  # EndOffset 也是相对于 SerialOffset
+    else:
+        property_end = export.serial_offset + export.serial_size  # 无 EndOffset，使用 serial_size
+
     properties: List[PropertyValue] = []
     property_count = 0  # D-08: loop counter for SAFE-05
 
@@ -3746,7 +4400,16 @@ def parse_properties_from_export(
             )
         property_count += 1
 
+        tag = None  # Phase 11 D-01: 初始化 tag 用于异常处理
+        start_pos = None  # Phase 11 D-01: 初始化 start_pos 用于异常处理
+
         try:
+            # 边界检查：当前位置不应超过属性数据范围
+            current_pos = archive.tell()
+            if current_pos >= property_end:
+                # 属性数据已耗尽，中断解析
+                break
+
             tag = read_property_tag(
                 archive,
                 name_map,
@@ -3757,6 +4420,15 @@ def parse_properties_from_export(
             # 终止标记：Name == "None"
             if tag.name == "None":
                 break
+
+            # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
+            if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                remaining_property_data = property_end - archive.tell()
+                if tag.size > remaining_property_data:
+                    # Size 超出属性数据范围，可能数据格式变化
+                    raise ParseError(
+                        f"Property Size {tag.size} exceeds remaining property data {remaining_property_data} bytes"
+                    )
 
             # 记录起始位置用于边界验证
             start_pos = archive.tell()
@@ -3778,9 +4450,18 @@ def parse_properties_from_export(
                 array_index=tag.array_index
             ))
 
+            # Phase 11-02: 增强ObjectProperty解析返回可读对象引用
+            # 在append之后修改最后一个属性值（如果import_map可用）
+            if import_map is not None and tag.type == "ObjectProperty" and isinstance(value, int):
+                pkg_idx = PackageIndex(value)
+                resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+                # 更新最后一个属性的value为增强格式
+                properties[-1].value = {"raw_index": value, "resolved": resolved}
+
         except ParseError as e:
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
-            if tag.size > 0 and start_pos + tag.size <= archive.total_size():
+            # Phase 11 D-01: 检查 tag 和 start_pos 是否已定义
+            if tag is not None and start_pos is not None and tag.size > 0 and start_pos + tag.size <= archive.total_size():
                 archive.seek(start_pos + tag.size)
                 # D-14: Record warning (would be passed to caller via ParseResult)
                 properties.append(PropertyValue(
@@ -3790,7 +4471,7 @@ def parse_properties_from_export(
                 ))
                 continue
             else:
-                # Cannot skip - Size invalid, abort property parsing for this export
+                # Cannot skip - tag undefined or Size invalid, abort property parsing for this export
                 properties.append(PropertyValue(
                     name="ParseError",
                     type="Error",
@@ -3851,6 +4532,8 @@ def parse_property_value(
         "EnumProperty": lambda t, a, n, e, s, d: parse_enum_property(t, a, n, s),
         "TextProperty": lambda t, a, n, e, s, d: parse_text_property(t, a),
         "DelegateProperty": lambda t, a, n, e, s, d: parse_delegate_property(t, a, n),
+        # Phase 11-03: SoftObjectProperty解析器
+        "SoftObjectProperty": lambda t, a, n, e, s, d: parse_soft_object_property(t, a, n),
     }
 
     parser = type_dispatch.get(tag.type)
@@ -3906,22 +4589,52 @@ def parse_uasset(path: str) -> ParseResult:
         # 读取导出表
         result.export_map = read_export_map(archive, result.summary, result.name_map)
 
+        # Phase 11: 解析ExportMap属性（EXTR-01）
+        for export in result.export_map:
+            if export.serial_size > 0:
+                try:
+                    export.properties = parse_properties_from_export(
+                        export, archive, result.summary, result.name_map, result.export_map,
+                        result.import_map  # Phase 11-02: 传递import_map用于ObjectProperty解析
+                    )
+                except UAssetError as e:
+                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                    export.properties = []  # 保持空列表而非None
+
+                # Phase 13-02: 提取组件变换属性
+                if export.properties:
+                    export.transforms = extract_component_transforms(export.properties)
+
         result.is_success = True
 
         # Blueprint extraction (Phase 3)
         # Per D-02: auto-detect and extract on every parse
         # Per D-03: add warnings to errors list if detection fails
+        # Phase 12: prefer BlueprintGeneratedClass for variables (per D-01)
 
         blueprint_metadata = None
-        for export in result.export_map:
-            if detect_blueprint(export, result.import_map, result.export_map):
+
+        # Phase 12: First try BlueprintGeneratedClass (per D-01)
+        # Extract asset name from name_map or summary
+        asset_name = None
+        if result.name_map:
+            # First name is typically the asset name
+            asset_name = result.name_map[0] if result.name_map else None
+
+        if asset_name:
+            main_bpgc = find_main_blueprint_generated_class(
+                result.export_map,
+                result.import_map,
+                asset_name
+            )
+            if main_bpgc:
                 # Create temporary archive for extraction
                 temp_archive = FArchive(path)
                 temp_archive.set_byte_swapping(archive._byte_swapping)
 
                 try:
                     meta, warn = extract_blueprint_metadata(
-                        export,
+                        main_bpgc,
                         temp_archive,
                         result.import_map,
                         result.export_map,
@@ -3933,10 +4646,36 @@ def parse_uasset(path: str) -> ParseResult:
                         if warn:
                             result.errors.append(f"blueprint parent warning: {warn}")
                 except ParseError as e:
-                    result.errors.append(f"blueprint extraction error: {e}")
+                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
                 finally:
                     temp_archive.close()
-                break  # Only process first blueprint found
+
+        # Fall back to UBlueprint detection if BPGC not found
+        if not blueprint_metadata:
+            for export in result.export_map:
+                if detect_blueprint(export, result.import_map, result.export_map):
+                    # Create temporary archive for extraction
+                    temp_archive = FArchive(path)
+                    temp_archive.set_byte_swapping(archive._byte_swapping)
+
+                    try:
+                        meta, warn = extract_blueprint_metadata(
+                            export,
+                            temp_archive,
+                            result.import_map,
+                            result.export_map,
+                            result.name_map,
+                            result.summary
+                        )
+                        if meta:
+                            blueprint_metadata = meta
+                            if warn:
+                                result.errors.append(f"blueprint parent warning: {warn}")
+                    except ParseError as e:
+                        result.errors.append(f"blueprint extraction error: {e}")
+                    finally:
+                        temp_archive.close()
+                    break  # Only process first blueprint found
 
         result.blueprint = blueprint_metadata
 
@@ -4113,6 +4852,97 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     return formatted
 
 
+def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
+    """
+    构建顶层 graphs_summary 字段（D-14-04~06, OUT-02）。
+
+    将 execution_flows 从 graphs[] 内提升至顶层，按图分组。
+    函数调用格式: FunctionName(ParamName:TypeCategory)
+
+    Args:
+        graphs: List[UEdGraph] from ParseResult.graphs
+
+    Returns:
+        List[Dict]: graphs_summary 数组
+    """
+    summary = []
+    for graph in graphs:
+        # 复用现有 build_execution_flows 数据
+        flows = build_execution_flows(graph)
+
+        # 转换为目标格式
+        execution_flows_summary = []
+        for flow in flows:
+            event_name = flow.get("start_event", "Unknown")
+            # 提取函数调用链
+            calls = []
+            for node in flow.get("nodes", []):
+                if node.get("node_type") == "K2Node_CallFunction":
+                    func_name = node.get("function_name", "Unknown")
+                    # D-14-06: 提取参数类型（从 graph.nodes 中查找）
+                    param_str = _extract_function_params(graph, node.get("node_guid"))
+                    calls.append(f"{func_name}({param_str})")
+
+            execution_flows_summary.append({
+                "event": event_name,
+                "calls": calls
+            })
+
+        summary.append({
+            "graph": graph.graph_name,
+            "execution_flows": execution_flows_summary
+        })
+
+    return summary
+
+
+def _extract_function_params(graph: UEdGraph, node_guid: str) -> str:
+    """
+    提取函数参数类型（D-14-06）。
+
+    从节点 pins 中提取非 exec pin 的类型信息。
+    格式: "Param1:Type1, Param2:Type2"
+
+    Args:
+        graph: UEdGraph 对象
+        node_guid: 节点 GUID
+
+    Returns:
+        str: 参数类型字符串
+    """
+    # 查找节点
+    node = None
+    for n in graph.nodes:
+        if n.node_guid == node_guid:
+            node = n
+            break
+
+    if not node:
+        return ""
+
+    # 提取 input pins（非 exec 类型）
+    params = []
+    for pin in node.pins:
+        if pin.direction == 0:  # Input
+            if pin.pin_type and pin.pin_type.pin_category != "exec":
+                pin_type = pin.pin_type.pin_category
+                # 常见类型映射
+                type_map = {
+                    "string": "String",
+                    "float": "Float",
+                    "int": "Int",
+                    "bool": "Bool",
+                    "object": "Object",
+                    "struct": "Struct",
+                    "delegate": "Delegate",
+                    "class": "Class",
+                }
+                type_name = type_map.get(pin_type, pin_type.capitalize())
+                params.append(f"{pin.pin_name}:{type_name}")
+
+    return ", ".join(params[:3])  # 最多显示 3 个参数
+
+
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     """
     构建执行流路径（D-08-07~11）。
@@ -4266,7 +5096,79 @@ def _get_event_name(node: UEdGraphNode) -> str:
     return "Unknown"
 
 
-def format_json_full(result: ParseResult) -> Dict:
+def build_status_info(result: ParseResult) -> StatusInfo:
+    """
+    构建 status 字段（D-14-01, OUT-01）。
+
+    三元分类:
+    - success: is_success=True, errors=[]（解析成功，无错误）
+    - fail: is_success=True, errors non-empty（部分结果可用）
+    - error: is_success=False（严重错误）
+
+    Args:
+        result: ParseResult 对象
+
+    Returns:
+        StatusInfo: status 对象
+    """
+    if result.is_success:
+        if not result.errors:
+            return StatusInfo(status="success")
+        else:
+            # D-14-01: 有错误但部分结果可用 → fail
+            message = result.errors[0] if result.errors else None
+            return StatusInfo(status="fail", message=message, code="PARSE_ERROR")
+    else:
+        # is_success=False → error
+        message = result.errors[0] if result.errors else "Unknown error"
+        return StatusInfo(status="error", message=message, code="PARSE_ERROR")
+
+
+# ============================================================================
+# API Frozen Since Phase 14 (D-14-14~16, OUT-06)
+# ============================================================================
+#
+# 以下输出格式函数自 Phase 14 完成后冻结，后续 Phase 15+ 不修改核心字段结构:
+# - format_json_full(): 顶层字段固定
+# - format_json_summary(): 摘要字段固定（70%+ token 减少）
+# - build_status_info(): status 结构固定
+# - build_graphs_summary(): graphs_summary 结构固定
+#
+# 向后兼容承诺:
+# - 新字段可通过可选参数添加（如 include_schema）
+# - 字段语义不变（parent_class 含义保持）
+# - 底层字段通过注释标记，不删除
+# ============================================================================
+
+
+def build_schema_info() -> Dict[str, str]:
+    """
+    构建字段语义注释（D-14-13, OUT-05）。
+
+    仅在 --verbose 或 --schema 标志时输出。
+
+    Returns:
+        Dict[str, str]: 字段描述映射
+    """
+    return {
+        "status": "解析结果状态（success/fail/error）",
+        "output_version": "输出格式 API 版本标识",
+        "summary": "资产基本信息（版本、包名）",
+        "exports": "导出对象列表（蓝图、组件等）",
+        "blueprint_metadata": "蓝图元数据（父类、变量、图）",
+        "parent_class": "蓝图继承的父类名称",
+        "variables": "蓝图变量列表（名称、类型、默认值、元数据）",
+        "is_component": "变量是否为组件类型（SkeletalMeshComponent 等）",
+        "graphs": "蓝图执行图数据（完整节点/引脚信息）",
+        "graphs_summary": "顶层化的图执行流概览（事件→函数调用链）",
+        "execution_flows": "函数调用链路径",
+        "imports": "ImportMap 依赖列表（外部对象引用）",
+        "soft_references": "SoftObjectPaths 软引用列表",
+        "circular_deps": "检测到的循环依赖路径",
+    }
+
+
+def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     """
     Format full JSON output with complete asset data (OUT-01, OUT-03).
 
@@ -4279,6 +5181,7 @@ def format_json_full(result: ParseResult) -> Dict:
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
         Dict with keys: summary, exports, blueprint_metadata, errors
@@ -4295,17 +5198,26 @@ def format_json_full(result: ParseResult) -> Dict:
             "package_name": result.summary.package_name
         }
 
-    return {
+    output = {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
         "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # Phase 10: 依赖分析字段（D-10-05/08/13）
         "imports": result.imports,                     # D-10-05: ImportMap 依赖列表
         "soft_references": result.soft_references,     # D-10-08: SoftObjectPaths 软引用
         "circular_deps": result.circular_deps,         # D-10-13: 高密度依赖路径
         "errors": result.errors
     }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_exports_list(result: ParseResult) -> List[Dict]:
@@ -4417,19 +5329,29 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     return props_list
 
 
-def format_json_summary(result: ParseResult) -> Dict:
+def format_json_summary(result: ParseResult, include_schema: bool = False) -> Dict:
     """
-    Format compact JSON summary (OUT-03).
+    Format compact JSON summary - 70%+ token reduction（D-14-07~09, OUT-03）。
 
-    Per D-09: Medium detail - export names + types + properties (name+type+value)
-    Per D-10: Skip low-level details - no name_map, import_map, CustomVersions
+    精简策略:
+    - 移除: imports, soft_references, circular_deps, errors
+    - 精简 exports: 仅 name, class, parent_class
+    - 移除 properties 数组
+    - 保留: status, output_version, graphs_summary
+
+    Per D-07: 移除依赖字段
+    Per D-08: 精简 exports
+    Per D-09: 移除 properties 数组
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
-        Dict with keys: version, package_name, exports, blueprint_metadata, errors
+        Dict: 精简摘要
     """
+    from dataclasses import asdict
+
     version_dict = {}
     if result.summary:
         version_dict = {
@@ -4438,25 +5360,44 @@ def format_json_summary(result: ParseResult) -> Dict:
             "legacy": result.summary.legacy_file_version
         }
 
+    # D-14-08: 精简 exports（仅 name, class, parent_class）
     exports_summary = []
-    for exp in result.export_map:
-        export_summary = {
+    for i, exp in enumerate(result.export_map):
+        # 获取 parent_class（仅在蓝图主对象的第一个 export）
+        parent_class = ""
+        if result.blueprint and result.blueprint.is_blueprint and i == 0:
+            parent_class = result.blueprint.parent_class or ""
+
+        exports_summary.append({
             "name": exp.object_name,
             "class": get_asset_class(exp, result.import_map, result.export_map),
-            "properties": [
-                {"name": p.name, "type": p.type, "value": p.value}
-                for p in (exp.properties or [])
-            ]
-        }
-        exports_summary.append(export_summary)
+            "parent_class": parent_class
+        })
 
-    return {
+    output = {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
-        "exports": exports_summary,
-        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
-        "errors": result.errors
+        "exports": exports_summary,  # D-14-08: 精简版本（无 properties/serial_size 等）
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
     }
+
+    # D-14-07: 移除 imports/soft_references/circular_deps/errors
+    # errors 数组已移除（status 字段已包含状态信息）
+
+    # blueprint_metadata 精简（仅保留核心字段）
+    if result.blueprint and result.blueprint.is_blueprint:
+        output["blueprint_metadata"] = {
+            "parent_class": result.blueprint.parent_class,
+            "is_blueprint": True,
+        }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_text_full(result: ParseResult) -> str:
@@ -4602,6 +5543,102 @@ def format_text_summary(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+def format_markdown(result: ParseResult) -> str:
+    """
+    格式化 Markdown 输出（D-14-10~12, OUT-04）。
+
+    三节结构 + 表格优先 + Mermaid 流程图。
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: Markdown 格式文本
+    """
+    lines = []
+
+    # 标题
+    asset_name = result.summary.package_name if result.summary else "Unknown"
+    asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+    lines.append(f"# Asset: {asset_name}")
+    lines.append("")
+
+    # === Asset Overview ===
+    lines.append("## Asset Overview")
+    lines.append("| Field | Value |")
+    lines.append("|-------|-------|")
+    if result.summary:
+        lines.append(f"| Package | {result.summary.package_name} |")
+        ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
+        lines.append(f"| Version | UE {ue_version} |")
+    # Status
+    status_info = build_status_info(result)
+    lines.append(f"| Status | {status_info.status} |")
+    if status_info.message:
+        lines.append(f"| Message | {status_info.message} |")
+    lines.append("")
+
+    # === Blueprint Details ===
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("## Blueprint Details")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Parent Class | {result.blueprint.parent_class or 'Unknown'} |")
+        # Variables 统计
+        var_count = len(result.blueprint.variables) if result.blueprint.variables else 0
+        comp_count = sum(1 for v in result.blueprint.variables if v.is_component) if result.blueprint.variables else 0
+        lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+        lines.append("")
+
+    # === Graph Summary ===
+    graphs_summary = build_graphs_summary(result.graphs)
+    if graphs_summary:
+        lines.append("## Graph Summary")
+        for graph_summary in graphs_summary:
+            graph_name = graph_summary.get("graph", "Unknown")
+            lines.append(f"### {graph_name}")
+
+            # Mermaid 流程图
+            flows = graph_summary.get("execution_flows", [])
+            if flows:
+                lines.append("```mermaid")
+                lines.append("graph LR")
+                for flow in flows:
+                    event = flow.get("event", "Unknown")
+                    calls = flow.get("calls", [])
+                    if calls:
+                        # 第一个节点: event --> first_call
+                        first_func = calls[0].split("(")[0]
+                        lines.append(f"  {event} --> {first_func}")
+                        # 链式连接
+                        for i in range(len(calls) - 1):
+                            fn1 = calls[i].split("(")[0]
+                            fn2 = calls[i+1].split("(")[0]
+                            lines.append(f"  {fn1} --> {fn2}")
+                lines.append("```")
+                lines.append("")
+    else:
+        lines.append("## Graph Summary")
+        lines.append("No graphs in this asset.")
+        lines.append("")
+
+    # === Exports ===
+    if result.export_map:
+        lines.append("## Exports")
+        lines.append("| Name | Class | Parent |")
+        lines.append("|------|-------|--------|")
+        for i, exp in enumerate(result.export_map):
+            name = exp.object_name
+            cls = get_asset_class(exp, result.import_map, result.export_map)
+            parent = ""
+            if result.blueprint and i == 0:
+                parent = result.blueprint.parent_class or ""
+            lines.append(f"| {name} | {cls} | {parent} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
     """
     Format BlueprintMetadata for JSON output (D-04).
@@ -4653,8 +5690,10 @@ def create_parser() -> argparse.ArgumentParser:
     Create argparse parser for CLI (CLI-01 to CLI-04).
 
     Per D-23: Double entry point support
-    Per D-24: Mutually exclusive --json/--text/--summary flags
+    Per D-24: Mutually exclusive --json/--text/--summary/--markdown flags
     Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
+    D-14-17: --markdown flag (OUT-04)
+    D-14-19: --schema flag (OUT-05)
 
     Returns:
         argparse.ArgumentParser: Configured parser
@@ -4667,17 +5706,19 @@ def create_parser() -> argparse.ArgumentParser:
     # Positional: file path (CLI-01)
     parser.add_argument('file', help='Path to .uasset file to parse')
 
-    # Mutually exclusive output flags (D-24)
+    # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure')
     group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
+    group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
 
-    # Optional flags (D-27)
+    # Optional flags (D-27, D-14-19)
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
+    parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
 
     return parser
 
@@ -4726,7 +5767,8 @@ def main():
     if args.graph:
         # D-08-13: --graph + --json/--verbose = full output with graphs
         if args.json or args.verbose:
-            output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+            include_schema = args.schema or args.verbose
+            output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
         elif args.text:
             # --graph --text = text output with Graphs section
             output_str = format_text_full(result)
@@ -4734,10 +5776,15 @@ def main():
             # D-08-13: --graph alone = only graphs in JSON format
             output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
                                     indent=2, ensure_ascii=False)
+    elif args.markdown:
+        # D-14-17: --markdown 标志输出 Markdown 格式
+        output_str = format_markdown(result)
     elif args.json:
-        output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
     elif args.summary:
-        output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_summary(result, include_schema), indent=2, ensure_ascii=False)
     else:
         # Default: --text or no flag
         output_str = format_text_full(result)
@@ -4772,6 +5819,7 @@ __all__ = [
     'PropertyTag',
     'PropertyValue',
     'ParseResult',
+    'StatusInfo',  # Phase 14: JSend 风格 status 字段（OUT-01）
     'FEdGraphPinType',
     'BlueprintVariable',
     'BlueprintMetadata',
@@ -4794,6 +5842,15 @@ __all__ = [
     'EnumValue',
     'TextValue',
     'DelegateValue',
+    # Phase 13: Transform Property Value Data Classes
+    'VectorValue',
+    'RotatorValue',
+    'ScaleValue',
+    'format_transform_value',
+    'parse_vector_value',
+    'parse_rotator_value',
+    'parse_scale_value',
+    'extract_component_transforms',
 
     # FArchive
     'FArchive',
@@ -4824,6 +5881,8 @@ __all__ = [
 
     # Phase 5: Boundary validation functions
     'validate_package_index',
+    # Phase 11-02: PackageIndex resolution function
+    'resolve_package_index_to_reference',
 
     # Core parsing functions
     'read_package_summary',
@@ -4840,6 +5899,12 @@ __all__ = [
     'parse_default_value',
     'read_blueprint_variable',
     'extract_blueprint_metadata',
+    # Phase 12: PropertyFlags and variable type formatting
+    'parse_property_flags_to_labels',
+    'format_variable_type',
+    # Phase 12: BlueprintGeneratedClass identification (per D-01)
+    'detect_blueprint_generated_class',
+    'find_main_blueprint_generated_class',
     # Phase 7: Blueprint Graph Extraction and Parsing
     'resolve_class_name',
     'extract_blueprint_graphs',
@@ -4879,10 +5944,12 @@ __all__ = [
     'format_json_summary',
     'format_text_full',
     'format_text_summary',
+    'format_markdown',  # Phase 14: Markdown 格式（OUT-04）
     'format_exports_list',
     'format_properties_list',
     'format_blueprint_dict',
     'resolve_fpackage_index',
+    'build_schema_info',  # Phase 14: Schema 字段语义注释（OUT-05）
 
     # CLI functions (Phase 4)
     'create_parser',

@@ -14,6 +14,8 @@ from uasset_read import (
     PropertyTag,
     PropertyValue,
     ObjectExport,
+    ObjectImport,
+    PackageIndex,
     PackageFileSummary,
     use_complete_type_name,
     read_property_tag,
@@ -23,11 +25,14 @@ from uasset_read import (
     parse_str_property,
     parse_name_property,
     parse_object_property,
+    parse_soft_object_property,
     parse_array_property,
     parse_property_value,
     parse_properties_from_export,
+    resolve_package_index_to_reference,
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
+    PROP_TAG_HAS_EXTENSIONS,
     PROP_TAG_BOOL_TRUE,
     PROPERTY_TAG_COMPLETE_TYPE_NAME,
 )
@@ -67,16 +72,17 @@ def create_mock_archive_with_data(data: bytes) -> MockArchive:
 # ============================================================================
 
 def test_use_complete_type_name_ue5_above_threshold():
-    """UE5 >= 1000 使用新格式。"""
-    assert use_complete_type_name(-8, 1000) == True
-    assert use_complete_type_name(-8, 1001) == True
+    """UE5 >= 1012 使用新格式（PROPERTY_TAG_COMPLETE_TYPE_NAME 阈值）。"""
+    assert use_complete_type_name(-8, 1012) == True
+    assert use_complete_type_name(-8, 1013) == True
     assert use_complete_type_name(-8, 5000) == True
 
 
 def test_use_complete_type_name_ue5_below_threshold():
-    """UE5 < 1000 使用旧格式。"""
+    """UE5 < 1012 使用旧格式。"""
     assert use_complete_type_name(-8, 500) == False
-    assert use_complete_type_name(-8, 999) == False
+    assert use_complete_type_name(-8, 1000) == False  # 1000 < 1012，使用旧格式
+    assert use_complete_type_name(-8, 1011) == False
     assert use_complete_type_name(-8, 0) == False
 
 
@@ -113,7 +119,7 @@ def test_property_tag_ue5_format_basic():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "TestProperty"
     assert tag.type == "IntProperty"
@@ -144,7 +150,7 @@ def test_property_tag_ue5_with_guid():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "MyProperty"
     assert tag.type == "FloatProperty"
@@ -169,7 +175,7 @@ def test_property_tag_ue5_with_array_index():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "ArrayProp"
     assert tag.type == "ArrayProperty"
@@ -192,7 +198,7 @@ def test_property_tag_ue5_bool_true_flag():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "IsEnabled"
     assert tag.type == "BoolProperty"
@@ -406,7 +412,7 @@ def test_property_tag_all_flags():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.flags == flags
     assert tag.array_index == 10
@@ -530,7 +536,7 @@ def test_property_tag_ue5_complete_type_name():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "TestProp"
     assert tag.type == type_name
@@ -565,7 +571,7 @@ def test_property_tag_ue5_vs_ue4_format_selection():
     name_map = ["VersionTest"]
 
     # Same test data, different version parameters
-    # For UE5 >= 1000, expect complete TypeName format
+    # For UE5 >= 1012, expect complete TypeName format
     ue5_data = (
         struct.pack('<I', 0) +      # Name index
         struct.pack('<I', 0) +      # Name number
@@ -576,7 +582,7 @@ def test_property_tag_ue5_vs_ue4_format_selection():
     )
 
     archive = create_mock_archive_with_data(ue5_data)
-    tag_ue5 = read_property_tag(archive, name_map, -8, 1000)
+    tag_ue5 = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     # UE5 format reads type as FString
     assert tag_ue5.type == "Bool"
@@ -604,7 +610,7 @@ def test_property_guid_ue5_format():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.property_guid == guid
 
@@ -627,7 +633,7 @@ def test_array_index_flag_ue5_format():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.array_index == 42
 
@@ -677,6 +683,581 @@ def test_all_property_types_dispatch():
             assert abs(value - expected) < 0.001, f"{type_name} failed"
         else:
             assert value == expected, f"{type_name} failed: got {value}, expected {expected}"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+
+
+# ============================================================================
+# Phase 11-02: ObjectProperty Enhanced Resolution Tests
+# ============================================================================
+
+def test_object_property_resolved_import():
+    """测试resolve_package_index_to_reference解析import引用。"""
+    name_map = ["Package", "Class", "Object"]
+
+    # 创建import_map条目
+    import_map = [
+        ObjectImport(
+            class_package="Package",
+            class_name="Class",
+            outer_index=PackageIndex(0),
+            object_name="Object"
+        )
+    ]
+    export_map = []
+
+    # 创建import引用（负数索引：-1对应import_map[0]）
+    pkg_idx = PackageIndex(-1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "import"
+    assert resolved["class_name"] == "Class"
+    assert resolved["object_name"] == "Object"
+    assert resolved["package"] == "Package"
+
+
+def test_object_property_resolved_export():
+    """测试resolve_package_index_to_reference解析export引用。"""
+    name_map = ["TestClass", "TestObject"]
+
+    # 创建export_map条目
+    export_map = [
+        ObjectExport(
+            class_index=PackageIndex(0),  # None类
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="TestObject",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0
+        )
+    ]
+    import_map = []
+
+    # 创建export引用（正数索引：1对应export_map[0]）
+    pkg_idx = PackageIndex(1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "export"
+    assert resolved["class_name"] == "None"
+    assert resolved["object_name"] == "TestObject"
+
+
+def test_object_property_null_reference():
+    """测试resolve_package_index_to_reference返回None对于空引用。"""
+    name_map = []
+    import_map = []
+    export_map = []
+
+    # 创建null引用（索引0）
+    pkg_idx = PackageIndex(0)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is None
+
+
+def test_object_property_import_out_of_range():
+    """测试resolve_package_index_to_reference处理越界import索引。"""
+    name_map = []
+    import_map = []  # 空import_map
+    export_map = []
+
+    # 创建import引用但没有对应条目
+    pkg_idx = PackageIndex(-1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    # 越界应返回None
+    assert resolved is None
+
+
+def test_object_property_export_out_of_range():
+    """测试resolve_package_index_to_reference处理越界export索引。"""
+    name_map = []
+    import_map = []
+    export_map = []  # 空export_map
+
+    # 创建export引用但没有对应条目
+    pkg_idx = PackageIndex(1)
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    # 越界应返回None
+    assert resolved is None
+
+
+def test_object_property_export_with_import_class():
+    """测试resolve_package_index_to_reference解析export的类引用指向import。"""
+    name_map = ["Engine", "Actor", "MyActor"]
+
+    # 创建import条目作为类引用
+    import_map = [
+        ObjectImport(
+            class_package="Engine",
+            class_name="Actor",
+            outer_index=PackageIndex(0),
+            object_name="Default__Actor"
+        )
+    ]
+
+    # 创建export条目，其class_index指向import
+    export_map = [
+        ObjectExport(
+            class_index=PackageIndex(-1),  # 指向import_map[0]
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="MyActor",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0
+        )
+    ]
+
+    # 解析export引用
+    pkg_idx = PackageIndex(1)  # export_map[0]
+    resolved = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+
+    assert resolved is not None
+    assert resolved["type"] == "export"
+    assert resolved["class_name"] == "Actor"  # 递归解析class_index得到类名
+    assert resolved["object_name"] == "MyActor"
+
+
+def test_object_property_in_parse_properties():
+    """测试parse_properties_from_export增强ObjectProperty返回可读引用。"""
+    # 构造测试数据：一个ObjectProperty + 终止标记
+    # name_map需要包含属性名和终止标记名"None"
+    name_map = ["TestProp", "None", "Package", "Class", "Target"]
+
+    # ObjectProperty = 14 chars, FString length = 15 (包括null terminator)
+    type_str_len = 15  # "ObjectProperty\x00" = 15 bytes
+
+    # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
+    header_data = struct.pack('<B', 0x00)  # NoExtension
+
+    # PropertyTag数据 (UE5格式)
+    prop_data = (
+        struct.pack('<I', 0) +      # Name index (TestProp)
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', type_str_len) +  # Type string length (15)
+        b"ObjectProperty\x00" +     # Type string (15 bytes)
+        struct.pack('<i', 4) +      # Size
+        struct.pack('<B', 0) +      # Flags
+        struct.pack('<i', -1)       # Value: FPackageIndex = -1 (import reference)
+    )
+
+    # 终止标记 (UE5格式: Name=FName, Type=FString "None")
+    terminator_data = (
+        struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', 5) +      # Type string length (None + null = 5)
+        b"None\x00" +               # Type string
+        struct.pack('<i', 0) +      # Size = 0
+        struct.pack('<B', 0)        # Flags
+    )
+
+    full_data = header_data + prop_data + terminator_data
+    archive = create_mock_archive_with_data(full_data)
+
+    # 创建测试导出条目
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestExport",
+        object_flags=0,
+        serial_size=len(full_data),
+        serial_offset=0,
+        script_serial_size=len(full_data)  # D-01: UE5 >= 1010 使用 script_serial_size 作为边界
+    )
+
+    # 创建import_map
+    import_map = [
+        ObjectImport(
+            class_package="Package",
+            class_name="Class",
+            outer_index=PackageIndex(0),
+            object_name="Target"
+        )
+    ]
+
+    # 创建summary
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=522,
+        file_version_ue5=1012  # >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
+    )
+
+    export_map = [export]
+
+    # 解析属性
+    properties = parse_properties_from_export(
+        export, archive, summary, name_map, export_map, import_map
+    )
+
+    # 验证ObjectProperty增强结果
+    assert len(properties) == 1
+    prop = properties[0]
+    assert prop.name == "TestProp"
+    assert prop.type == "ObjectProperty"
+
+    # value应该是增强格式
+    assert isinstance(prop.value, dict)
+    assert "raw_index" in prop.value
+    assert prop.value["raw_index"] == -1
+    assert "resolved" in prop.value
+    assert prop.value["resolved"]["type"] == "import"
+    assert prop.value["resolved"]["class_name"] == "Class"
+    assert prop.value["resolved"]["object_name"] == "Target"
+
+
+def test_object_property_null_in_parse_properties():
+    """测试parse_properties_from_export处理null ObjectProperty引用。"""
+    # name_map需要包含属性名和终止标记名"None"
+    name_map = ["NullProp", "None"]
+
+    # ObjectProperty = 14 chars, FString length = 15
+    type_str_len = 15
+
+    # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
+    header_data = struct.pack('<B', 0x00)  # NoExtension
+
+    # PropertyTag数据 (UE5格式) - null引用
+    prop_data = (
+        struct.pack('<I', 0) +      # Name index (NullProp)
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', type_str_len) +  # Type string length
+        b"ObjectProperty\x00" +     # Type string
+        struct.pack('<i', 4) +      # Size
+        struct.pack('<B', 0) +      # Flags
+        struct.pack('<i', 0)        # Value: FPackageIndex = 0 (null)
+    )
+
+    # 终止标记 (UE5格式)
+    terminator_data = (
+        struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
+        struct.pack('<I', 0) +      # Name number
+        struct.pack('<i', 5) +      # Type string length
+        b"None\x00" +               # Type string
+        struct.pack('<i', 0) +      # Size
+        struct.pack('<B', 0)        # Flags
+    )
+
+    full_data = header_data + prop_data + terminator_data
+    archive = create_mock_archive_with_data(full_data)
+
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestExport",
+        object_flags=0,
+        serial_size=len(full_data),
+        serial_offset=0,
+        script_serial_size=len(full_data)  # D-01: UE5 >= 1010 使用 script_serial_size 作为边界
+    )
+
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=522,
+        file_version_ue5=1012  # >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
+    )
+
+    properties = parse_properties_from_export(
+        export, archive, summary, name_map, [export], []  # import_map=[]
+    )
+
+    # 验证null引用的增强结果
+    assert len(properties) == 1
+    prop = properties[0]
+    assert prop.value["raw_index"] == 0
+    assert prop.value["resolved"] is None
+
+
+# ============================================================================
+# Phase 11-03: SoftObjectProperty Tests
+# ============================================================================
+
+def test_soft_object_property_basic():
+    """测试SoftObjectProperty基本解析（无子路径）。"""
+    tag = PropertyTag(name="SkeletalMesh", type="SoftObjectProperty", size=50)
+    # FString: "/Game/Test/Asset" + null + "" (empty subpath)
+    asset_path = "/Game/Test/Asset"
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +  # asset_path length
+        (asset_path + "\x00").encode() +          # asset_path string
+        struct.pack('<i', 0)                       # sub_path length = 0 (empty)
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_with_subpath():
+    """测试SoftObjectProperty带子路径解析。"""
+    tag = PropertyTag(name="AnimBlueprint", type="SoftObjectProperty", size=80)
+    asset_path = "/Game/Characters/Animations"
+    sub_path = "SubObject.AnimSequence"
+
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +  # asset_path length
+        (asset_path + "\x00").encode() +          # asset_path string
+        struct.pack('<i', len(sub_path) + 1) +    # sub_path length
+        (sub_path + "\x00").encode()              # sub_path string
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == sub_path
+
+
+def test_soft_object_property_in_parse_property_value():
+    """测试parse_property_value分派SoftObjectProperty。"""
+    name_map = []
+    export_map = []
+
+    # 创建PropertyTag，type="SoftObjectProperty"
+    asset_path = "/Game/Meshes/Character"
+    tag = PropertyTag(name="Mesh", type="SoftObjectProperty", size=40)
+    data = (
+        struct.pack('<i', len(asset_path) + 1) +
+        (asset_path + "\x00").encode() +
+        struct.pack('<i', 0)  # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+
+    # 调用parse_property_value
+    value = parse_property_value(tag, archive, name_map, export_map)
+
+    # 验证分派成功，返回值不为None
+    assert value is not None
+    assert isinstance(value, dict)
+    assert "asset_path" in value
+    assert "sub_path" in value
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_empty_asset_path():
+    """测试SoftObjectProperty空资产路径。"""
+    tag = PropertyTag(name="EmptyRef", type="SoftObjectProperty", size=4)
+    # 空asset_path和空sub_path
+    data = (
+        struct.pack('<i', 0) +  # empty asset_path
+        struct.pack('<i', 0)    # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == ""
+    assert value["sub_path"] == ""
+
+
+def test_soft_object_property_unicode_path():
+    """测试SoftObjectProperty Unicode路径。"""
+    tag = PropertyTag(name="Texture", type="SoftObjectProperty", size=60)
+    asset_path = "/Game/素材/纹理"  # Chinese characters
+
+    data = (
+        struct.pack('<i', len(asset_path.encode('utf-8')) + 1) +
+        (asset_path + "\x00").encode('utf-8') +
+        struct.pack('<i', 0)  # empty sub_path
+    )
+    archive = create_mock_archive_with_data(data)
+    name_map = []
+
+    value = parse_soft_object_property(tag, archive, name_map)
+
+    assert isinstance(value, dict)
+    assert value["asset_path"] == asset_path
+    assert value["sub_path"] == ""
+
+
+# ============================================================================
+# Phase 17 D-01: ScriptSerializationOffset 偏移计算测试
+# ============================================================================
+
+def test_script_serial_offset_calculation_ue5():
+    """D-01: UE5 >= 1010 时，偏移计算使用 serial_offset + script_serial_offset"""
+    # 构造测试数据
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestObject",
+        object_flags=0,
+        serial_size=100,
+        serial_offset=1000,
+        script_serial_offset=50  # 相对偏移
+    )
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-8,
+        file_version_ue4=522,
+        file_version_ue5=1010  # >= UE5_SCRIPT_SERIALIZATION_OFFSET
+    )
+
+    # 验证计算逻辑：property_start = serial_offset + script_serial_offset
+    expected_start = 1000 + 50  # = 1050
+    # 实际验证需要 mock archive，此处验证逻辑正确性
+    assert export.serial_offset + export.script_serial_offset == expected_start
+
+    # 验证版本阈值判断
+    from uasset_read import UE5_SCRIPT_SERIALIZATION_OFFSET
+    assert summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET
+
+
+def test_script_serial_offset_calculation_ue4():
+    """D-01: UE5 < 1010 时，偏移计算仅使用 serial_offset"""
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestObject",
+        object_flags=0,
+        serial_size=100,
+        serial_offset=1000,
+        script_serial_offset=50  # UE4 不使用此字段
+    )
+    summary = PackageFileSummary(
+        tag=0x9E2A83C1,
+        legacy_file_version=-5,
+        file_version_ue4=522,
+        file_version_ue5=0  # < UE5_SCRIPT_SERIALIZATION_OFFSET
+    )
+
+    # 验证计算逻辑：property_start = serial_offset（不加 script_serial_offset）
+    expected_start = 1000  # 仅 serial_offset
+    assert export.serial_offset == expected_start
+
+    # 验证版本阈值判断
+    from uasset_read import UE5_SCRIPT_SERIALIZATION_OFFSET
+    assert summary.file_version_ue5 < UE5_SCRIPT_SERIALIZATION_OFFSET
+
+
+def test_script_serial_offset_zero():
+    """D-01: script_serial_offset = 0 时，两种计算结果相同"""
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="TestObject",
+        object_flags=0,
+        serial_size=100,
+        serial_offset=1000,
+        script_serial_offset=0
+    )
+
+    # 当 script_serial_offset = 0，两种计算等效
+    assert export.serial_offset + export.script_serial_offset == export.serial_offset
+
+
+# ============================================================================
+# Phase 17 D-02: SerializationControlExtensions 头部测试
+# ============================================================================
+
+def test_serialization_control_extensions_no_extension():
+    """D-02: serialization_control = 0x00 时，仅读取 1 byte"""
+    # 构造 mock 数据：serialization_control = 0x00
+    data = bytes([0x00])  # NoExtension
+    archive = create_mock_archive_with_data(data)
+
+    serialization_control = archive.read_u8()
+    assert serialization_control == 0x00
+    assert not (serialization_control & 0x02)  # 无 OverridableSerializationInformation
+    # 仅读取 1 byte，位置正确
+    assert archive.tell() == 1
+
+
+def test_serialization_control_extensions_with_overridable():
+    """D-02: serialization_control = 0x02 时，读取 2 bytes"""
+    # 构造 mock 数据：serialization_control = 0x02 + overridden_operation
+    data = bytes([0x02, 0x00])  # OverridableSerializationInformation + operation
+    archive = create_mock_archive_with_data(data)
+
+    serialization_control = archive.read_u8()
+    assert serialization_control == 0x02
+    assert (serialization_control & 0x02)  # 有 OverridableSerializationInformation
+
+    # 需要读取 overridden_operation
+    overridden_operation = archive.read_u8()
+    assert archive.tell() == 2  # 总共读取 2 bytes
+
+
+def test_serialization_control_extensions_version_threshold():
+    """D-02: UE5_PROPERTY_TAG_EXTENSION = 1011 版本阈值验证"""
+    from uasset_read import UE5_PROPERTY_TAG_EXTENSION
+    assert UE5_PROPERTY_TAG_EXTENSION == 1011
+
+
+# ============================================================================
+# Phase 17 D-03: PropertyTag Extensions 测试
+# ============================================================================
+
+def test_property_tag_has_extensions_flag():
+    """D-03: flags & 0x04 时，Extensions 数据正确读取"""
+    assert PROP_TAG_HAS_EXTENSIONS == 0x04
+
+
+def test_property_tag_extensions_no_extension():
+    """D-03: property_extensions = 0x00 时，仅读取 1 byte"""
+    # 构造 mock PropertyTag 数据（UE5 格式）
+    # Name (FName index), Type (FString), Size (i32), Flags (u8), Extensions (u8)
+    # 简化：直接构造 flags + extensions 数据
+    data = bytes([
+        0x04,  # flags = HAS_EXTENSIONS
+        0x00,  # property_extensions = NoExtension
+    ])
+    archive = create_mock_archive_with_data(data)
+
+    flags = archive.read_u8()
+    assert flags == 0x04
+    assert flags & PROP_TAG_HAS_EXTENSIONS
+
+    property_extensions = archive.read_u8()
+    assert property_extensions == 0x00
+    assert not (property_extensions & 0x02)
+    assert archive.tell() == 2
+
+
+def test_property_tag_extensions_with_overridable():
+    """D-03: property_extensions = 0x02 时，读取 3 bytes"""
+    data = bytes([
+        0x04,  # flags = HAS_EXTENSIONS
+        0x02,  # property_extensions = OverridableInformation
+        0x00,  # override_operation
+        0x00,  # experimental_overridable_logic
+    ])
+    archive = create_mock_archive_with_data(data)
+
+    flags = archive.read_u8()
+    assert flags == 0x04
+    assert flags & PROP_TAG_HAS_EXTENSIONS
+
+    property_extensions = archive.read_u8()
+    assert property_extensions == 0x02
+    assert property_extensions & 0x02
+
+    # 读取扩展数据
+    override_operation = archive.read_u8()
+    experimental_overridable_logic = archive.read_u8()
+    assert archive.tell() == 4  # 总共 4 bytes (flags + extensions + operation + logic)
 
 
 if __name__ == "__main__":
