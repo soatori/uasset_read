@@ -3,8 +3,11 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: 属性解析修复
 status: Complete
-last_updated: "2026-05-04T03:10:00.000Z"
-last_activity: 2026-05-04 — Phase 17 完成（D-01/D-02/D-03 + 阈值修复，359 测试通过）
+last_updated: "2026-05-04T04:30:00.000Z"
+last_activity: 2026-05-04 — v2.0-dev shipped (PR #4, 114 commits)
+status:
+  phase: "17 shipped — PR #4"
+  milestone: "v3.2 complete"
 progress:
   total_phases: 1
   completed_phases: 1
