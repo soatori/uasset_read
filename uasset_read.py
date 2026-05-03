@@ -55,7 +55,7 @@ PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 
 # PropertyTag version thresholds (PropertyTag.cpp)
-PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
+PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold (EUnrealEngineObjectUE5Version::PROPERTY_TAG_COMPLETE_TYPE_NAME)
 VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
 VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
