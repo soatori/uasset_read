@@ -822,6 +822,9 @@ class PropertyTag:
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    # D-03: PropertyTag Extensions 字段（PropertyTag.cpp lines 155-173）
+    override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
+    experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
 
 
 @dataclass
@@ -3565,6 +3568,19 @@ def read_property_tag(
 
         if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
             tag.property_guid = archive.read(16)
+
+        # D-03: PropertyTag Extensions 处理
+        # 参考: PropertyTag.cpp 第 155-173 行、第 541-544 行
+        if tag.flags & PROP_TAG_HAS_EXTENSIONS:
+            # EPropertyTagExtension (u8)
+            property_extensions = archive.read_u8()
+
+            # OverridableInformation 标志 (0x02) 触发额外字段
+            if property_extensions & 0x02:
+                # EOverriddenPropertyOperation (u8)
+                tag.override_operation = archive.read_u8()
+                # bExperimentalOverridableLogic — 根据研究暂按 u8 处理
+                tag.experimental_overridable_logic = archive.read_u8()
 
         # BoolTrue 标志表示 bool 值为 true
         if tag.flags & PROP_TAG_BOOL_TRUE:
