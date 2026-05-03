@@ -63,7 +63,7 @@
 <details>
 <summary>🔵 v4.0 节点属性深度解析 (Phases 18-21) — ACTIVE</summary>
 
-- [ ] Phase 18: Pin序列化解析
+- [ ] Phase 18: Pin序列化解析 (4 plans) — planning 2026-05-04
 - [ ] Phase 19: 连接关系重建
 - [ ] Phase 20: 整合输出
 - [ ] Phase 21: 验证测试
@@ -84,7 +84,13 @@
   3. 用户可以在JSON中看到每个Pin的default_value（非空时）
   4. 用户可以在JSON中看到每个Pin的linked_to数组，包含连接的节点和Pin引用
   5. 用户不会在JSON中看到offset、size、raw_bytes等底层字节细节
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 18-01-PLAN.md — CustomVersion常量 + UEdGraphPin dataclass扩展
+- [ ] 18-02-PLAN.md — Pin引用解析辅助函数 (read_pin_reference/read_pin_array)
+- [ ] 18-03-PLAN.md — 重写read_ue_graph_pin()核心函数
+- [ ] 18-04-PLAN.md — 修复read_ed_graph_pin_type()版本检查
 
 ### Phase 19: 连接关系重建
 **Goal**: 用户可以查看节点间的执行流和数据流关系
@@ -126,7 +132,7 @@
 | 1-5 | v1.0 MVP | 25 | Complete | 2026-05-02 |
 | 6-10 | v2.0 蓝图图解析 | 20 | Complete | 2026-05-02 |
 | 11-17 | v3.x 解析完善+Skill | 23 | Complete | 2026-05-04 |
-| 18 | Pin序列化解析 | TBD | Not started | - |
+| 18 | Pin序列化解析 | 4 | Planning | 2026-05-04 |
 | 19 | 连接关系重建 | TBD | Not started | - |
 | 20 | 整合输出 | TBD | Not started | - |
 | 21 | 验证测试 | TBD | Not started | - |
@@ -141,4 +147,4 @@
 
 ---
 
-*最后更新：2026-05-04 — v4.0 roadmap created*
+*最后更新：2026-05-04 — Phase 18 计划创建（4 plans）*
