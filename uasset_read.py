@@ -2192,12 +2192,14 @@ def read_export_map(
             # 条件: !UseUnversionedPropertySerialization() && UEVer() >= SCRIPT_SERIALIZATION_OFFSET(1010)
             # UseUnversionedPropertySerialization()基于PKG_UnversionedProperties标志判断
             # 若PKG_UnversionedProperties未设置，则使用versioned property serialization，需要读取这些字段
-            script_serial_size = 0
+            # 参考: ObjectResource.cpp 第 212-222 行
+            # 序列化顺序: StartOffset 先, EndOffset 后
             script_serial_offset = 0
+            script_serial_size = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
             if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-                script_serial_size = archive.read_i64()
-                script_serial_offset = archive.read_i64()
+                script_serial_offset = archive.read_i64()  # ScriptSerializationStartOffset (第一个)
+                script_serial_size = archive.read_i64()  # ScriptSerializationEndOffset (第二个)
 
             # 构建导出条目
             export_map.append(ObjectExport(
@@ -4379,6 +4381,14 @@ def parse_properties_from_export(
             overridden_operation = archive.read_u8()
             # 注意：具体语义不解析，仅跳过字节
 
+    # 计算属性数据边界
+    # ScriptSerializationStartOffset 和 EndOffset 都是相对于 SerialOffset
+    # 参考: ObjectResource.h 第 280-295 行
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_end = export.serial_offset + export.script_serial_size  # EndOffset 也是相对于 SerialOffset
+    else:
+        property_end = export.serial_offset + export.serial_size  # 无 EndOffset，使用 serial_size
+
     properties: List[PropertyValue] = []
     property_count = 0  # D-08: loop counter for SAFE-05
 
@@ -4394,6 +4404,12 @@ def parse_properties_from_export(
         start_pos = None  # Phase 11 D-01: 初始化 start_pos 用于异常处理
 
         try:
+            # 边界检查：当前位置不应超过属性数据范围
+            current_pos = archive.tell()
+            if current_pos >= property_end:
+                # 属性数据已耗尽，中断解析
+                break
+
             tag = read_property_tag(
                 archive,
                 name_map,
@@ -4404,6 +4420,15 @@ def parse_properties_from_export(
             # 终止标记：Name == "None"
             if tag.name == "None":
                 break
+
+            # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
+            if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                remaining_property_data = property_end - archive.tell()
+                if tag.size > remaining_property_data:
+                    # Size 超出属性数据范围，可能数据格式变化
+                    raise ParseError(
+                        f"Property Size {tag.size} exceeds remaining property data {remaining_property_data} bytes"
+                    )
 
             # 记录起始位置用于边界验证
             start_pos = archive.tell()
