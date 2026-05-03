@@ -4777,6 +4777,97 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     return formatted
 
 
+def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
+    """
+    构建顶层 graphs_summary 字段（D-14-04~06, OUT-02）。
+
+    将 execution_flows 从 graphs[] 内提升至顶层，按图分组。
+    函数调用格式: FunctionName(ParamName:TypeCategory)
+
+    Args:
+        graphs: List[UEdGraph] from ParseResult.graphs
+
+    Returns:
+        List[Dict]: graphs_summary 数组
+    """
+    summary = []
+    for graph in graphs:
+        # 复用现有 build_execution_flows 数据
+        flows = build_execution_flows(graph)
+
+        # 转换为目标格式
+        execution_flows_summary = []
+        for flow in flows:
+            event_name = flow.get("start_event", "Unknown")
+            # 提取函数调用链
+            calls = []
+            for node in flow.get("nodes", []):
+                if node.get("node_type") == "K2Node_CallFunction":
+                    func_name = node.get("function_name", "Unknown")
+                    # D-14-06: 提取参数类型（从 graph.nodes 中查找）
+                    param_str = _extract_function_params(graph, node.get("node_guid"))
+                    calls.append(f"{func_name}({param_str})")
+
+            execution_flows_summary.append({
+                "event": event_name,
+                "calls": calls
+            })
+
+        summary.append({
+            "graph": graph.graph_name,
+            "execution_flows": execution_flows_summary
+        })
+
+    return summary
+
+
+def _extract_function_params(graph: UEdGraph, node_guid: str) -> str:
+    """
+    提取函数参数类型（D-14-06）。
+
+    从节点 pins 中提取非 exec pin 的类型信息。
+    格式: "Param1:Type1, Param2:Type2"
+
+    Args:
+        graph: UEdGraph 对象
+        node_guid: 节点 GUID
+
+    Returns:
+        str: 参数类型字符串
+    """
+    # 查找节点
+    node = None
+    for n in graph.nodes:
+        if n.node_guid == node_guid:
+            node = n
+            break
+
+    if not node:
+        return ""
+
+    # 提取 input pins（非 exec 类型）
+    params = []
+    for pin in node.pins:
+        if pin.direction == 0:  # Input
+            if pin.pin_type and pin.pin_type.pin_category != "exec":
+                pin_type = pin.pin_type.pin_category
+                # 常见类型映射
+                type_map = {
+                    "string": "String",
+                    "float": "Float",
+                    "int": "Int",
+                    "bool": "Bool",
+                    "object": "Object",
+                    "struct": "Struct",
+                    "delegate": "Delegate",
+                    "class": "Class",
+                }
+                type_name = type_map.get(pin_type, pin_type.capitalize())
+                params.append(f"{pin.pin_name}:{type_name}")
+
+    return ", ".join(params[:3])  # 最多显示 3 个参数
+
+
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     """
     构建执行流路径（D-08-07~11）。
@@ -4994,6 +5085,7 @@ def format_json_full(result: ParseResult) -> Dict:
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
         "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # Phase 10: 依赖分析字段（D-10-05/08/13）
         "imports": result.imports,                     # D-10-05: ImportMap 依赖列表
         "soft_references": result.soft_references,     # D-10-08: SoftObjectPaths 软引用
@@ -5153,6 +5245,7 @@ def format_json_summary(result: ParseResult) -> Dict:
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         "errors": result.errors
     }
 
