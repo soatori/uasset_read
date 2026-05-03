@@ -37,9 +37,14 @@ v2.0需求（Phase 6-10）：
 
 ### Active
 
-下一里程碑需求待定义。
+v3.0需求（Phase 11-15）：
 
-运行 `/gsd-new-milestone` 开始需求收集。
+- [ ] ExportMap属性值提取（组件属性、变量默认值）
+- [ ] BlueprintVariables完整提取（名称、类型、默认值、元数据）
+- [ ] 组件变换属性解析（位置、旋转、缩放）
+- [ ] 输出格式优化（更易AI理解）
+- [ ] 测试覆盖完善
+- [ ] Claude Code skill封装
 
 ### Out of Scope
 
@@ -140,6 +145,22 @@ v2.0需求（Phase 6-10）：
 ---
 
 *最后更新：2026-05-02 after v2.0 milestone*
+
+## Current Milestone: v3.0 解析完善 + Skill打包
+
+**Goal:** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
+
+**Target features:**
+- ExportMap属性值提取
+- 变量默认值提取
+- 组件变换属性解析
+- 输出格式优化
+- 测试覆盖完善
+- Claude Code skill封装
+
+---
+
+*最后更新：2026-05-03 启动v3.0里程碑*
 
 ## 演进
 
