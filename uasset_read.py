@@ -5049,7 +5049,34 @@ def build_status_info(result: ParseResult) -> StatusInfo:
         return StatusInfo(status="error", message=message, code="PARSE_ERROR")
 
 
-def format_json_full(result: ParseResult) -> Dict:
+def build_schema_info() -> Dict[str, str]:
+    """
+    构建字段语义注释（D-14-13, OUT-05）。
+
+    仅在 --verbose 或 --schema 标志时输出。
+
+    Returns:
+        Dict[str, str]: 字段描述映射
+    """
+    return {
+        "status": "解析结果状态（success/fail/error）",
+        "output_version": "输出格式 API 版本标识",
+        "summary": "资产基本信息（版本、包名）",
+        "exports": "导出对象列表（蓝图、组件等）",
+        "blueprint_metadata": "蓝图元数据（父类、变量、图）",
+        "parent_class": "蓝图继承的父类名称",
+        "variables": "蓝图变量列表（名称、类型、默认值、元数据）",
+        "is_component": "变量是否为组件类型（SkeletalMeshComponent 等）",
+        "graphs": "蓝图执行图数据（完整节点/引脚信息）",
+        "graphs_summary": "顶层化的图执行流概览（事件→函数调用链）",
+        "execution_flows": "函数调用链路径",
+        "imports": "ImportMap 依赖列表（外部对象引用）",
+        "soft_references": "SoftObjectPaths 软引用列表",
+        "circular_deps": "检测到的循环依赖路径",
+    }
+
+
+def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     """
     Format full JSON output with complete asset data (OUT-01, OUT-03).
 
@@ -5062,6 +5089,7 @@ def format_json_full(result: ParseResult) -> Dict:
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
         Dict with keys: summary, exports, blueprint_metadata, errors
@@ -5078,7 +5106,7 @@ def format_json_full(result: ParseResult) -> Dict:
             "package_name": result.summary.package_name
         }
 
-    return {
+    output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
         "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "summary": summary_dict,
@@ -5092,6 +5120,12 @@ def format_json_full(result: ParseResult) -> Dict:
         "circular_deps": result.circular_deps,         # D-10-13: 高密度依赖路径
         "errors": result.errors
     }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_exports_list(result: ParseResult) -> List[Dict]:
@@ -5203,7 +5237,7 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     return props_list
 
 
-def format_json_summary(result: ParseResult) -> Dict:
+def format_json_summary(result: ParseResult, include_schema: bool = False) -> Dict:
     """
     Format compact JSON summary (OUT-03).
 
@@ -5212,6 +5246,7 @@ def format_json_summary(result: ParseResult) -> Dict:
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
         Dict with keys: version, package_name, exports, blueprint_metadata, errors
@@ -5238,7 +5273,7 @@ def format_json_summary(result: ParseResult) -> Dict:
         }
         exports_summary.append(export_summary)
 
-    return {
+    output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
         "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "version": version_dict,
@@ -5248,6 +5283,12 @@ def format_json_summary(result: ParseResult) -> Dict:
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         "errors": result.errors
     }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_text_full(result: ParseResult) -> str:
@@ -5393,6 +5434,102 @@ def format_text_summary(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+def format_markdown(result: ParseResult) -> str:
+    """
+    格式化 Markdown 输出（D-14-10~12, OUT-04）。
+
+    三节结构 + 表格优先 + Mermaid 流程图。
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: Markdown 格式文本
+    """
+    lines = []
+
+    # 标题
+    asset_name = result.summary.package_name if result.summary else "Unknown"
+    asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+    lines.append(f"# Asset: {asset_name}")
+    lines.append("")
+
+    # === Asset Overview ===
+    lines.append("## Asset Overview")
+    lines.append("| Field | Value |")
+    lines.append("|-------|-------|")
+    if result.summary:
+        lines.append(f"| Package | {result.summary.package_name} |")
+        ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
+        lines.append(f"| Version | UE {ue_version} |")
+    # Status
+    status_info = build_status_info(result)
+    lines.append(f"| Status | {status_info.status} |")
+    if status_info.message:
+        lines.append(f"| Message | {status_info.message} |")
+    lines.append("")
+
+    # === Blueprint Details ===
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("## Blueprint Details")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Parent Class | {result.blueprint.parent_class or 'Unknown'} |")
+        # Variables 统计
+        var_count = len(result.blueprint.variables) if result.blueprint.variables else 0
+        comp_count = sum(1 for v in result.blueprint.variables if v.is_component) if result.blueprint.variables else 0
+        lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+        lines.append("")
+
+    # === Graph Summary ===
+    graphs_summary = build_graphs_summary(result.graphs)
+    if graphs_summary:
+        lines.append("## Graph Summary")
+        for graph_summary in graphs_summary:
+            graph_name = graph_summary.get("graph", "Unknown")
+            lines.append(f"### {graph_name}")
+
+            # Mermaid 流程图
+            flows = graph_summary.get("execution_flows", [])
+            if flows:
+                lines.append("```mermaid")
+                lines.append("graph LR")
+                for flow in flows:
+                    event = flow.get("event", "Unknown")
+                    calls = flow.get("calls", [])
+                    if calls:
+                        # 第一个节点: event --> first_call
+                        first_func = calls[0].split("(")[0]
+                        lines.append(f"  {event} --> {first_func}")
+                        # 链式连接
+                        for i in range(len(calls) - 1):
+                            fn1 = calls[i].split("(")[0]
+                            fn2 = calls[i+1].split("(")[0]
+                            lines.append(f"  {fn1} --> {fn2}")
+                lines.append("```")
+                lines.append("")
+    else:
+        lines.append("## Graph Summary")
+        lines.append("No graphs in this asset.")
+        lines.append("")
+
+    # === Exports ===
+    if result.export_map:
+        lines.append("## Exports")
+        lines.append("| Name | Class | Parent |")
+        lines.append("|------|-------|--------|")
+        for i, exp in enumerate(result.export_map):
+            name = exp.object_name
+            cls = get_asset_class(exp, result.import_map, result.export_map)
+            parent = ""
+            if result.blueprint and i == 0:
+                parent = result.blueprint.parent_class or ""
+            lines.append(f"| {name} | {cls} | {parent} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
     """
     Format BlueprintMetadata for JSON output (D-04).
@@ -5444,8 +5581,10 @@ def create_parser() -> argparse.ArgumentParser:
     Create argparse parser for CLI (CLI-01 to CLI-04).
 
     Per D-23: Double entry point support
-    Per D-24: Mutually exclusive --json/--text/--summary flags
+    Per D-24: Mutually exclusive --json/--text/--summary/--markdown flags
     Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
+    D-14-17: --markdown flag (OUT-04)
+    D-14-19: --schema flag (OUT-05)
 
     Returns:
         argparse.ArgumentParser: Configured parser
@@ -5458,17 +5597,19 @@ def create_parser() -> argparse.ArgumentParser:
     # Positional: file path (CLI-01)
     parser.add_argument('file', help='Path to .uasset file to parse')
 
-    # Mutually exclusive output flags (D-24)
+    # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure')
     group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
+    group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
 
-    # Optional flags (D-27)
+    # Optional flags (D-27, D-14-19)
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
+    parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
 
     return parser
 
@@ -5517,7 +5658,8 @@ def main():
     if args.graph:
         # D-08-13: --graph + --json/--verbose = full output with graphs
         if args.json or args.verbose:
-            output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+            include_schema = args.schema or args.verbose
+            output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
         elif args.text:
             # --graph --text = text output with Graphs section
             output_str = format_text_full(result)
@@ -5525,10 +5667,15 @@ def main():
             # D-08-13: --graph alone = only graphs in JSON format
             output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
                                     indent=2, ensure_ascii=False)
+    elif args.markdown:
+        # D-14-17: --markdown 标志输出 Markdown 格式
+        output_str = format_markdown(result)
     elif args.json:
-        output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
     elif args.summary:
-        output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_summary(result, include_schema), indent=2, ensure_ascii=False)
     else:
         # Default: --text or no flag
         output_str = format_text_full(result)
@@ -5688,10 +5835,12 @@ __all__ = [
     'format_json_summary',
     'format_text_full',
     'format_text_summary',
+    'format_markdown',  # Phase 14: Markdown 格式（OUT-04）
     'format_exports_list',
     'format_properties_list',
     'format_blueprint_dict',
     'resolve_fpackage_index',
+    'build_schema_info',  # Phase 14: Schema 字段语义注释（OUT-05）
 
     # CLI functions (Phase 4)
     'create_parser',

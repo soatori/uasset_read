@@ -1505,8 +1505,9 @@ class TestFormatMarkdown:
                             UEdGraphPin(
                                 pin_id="pin-md-001",
                                 pin_name="EventBeginPlay",
-                                direction=1,
+                                direction=1,  # Output
                                 pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                                linked_to_raw=["pin-md-002"],  # 连接到 CallFunction 的 input exec pin
                             ),
                         ],
                         node_data=K2NodeEvent(
@@ -1523,9 +1524,9 @@ class TestFormatMarkdown:
                             UEdGraphPin(
                                 pin_id="pin-md-002",
                                 pin_name="execute",
-                                direction=0,
+                                direction=0,  # Input
                                 pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
-                                linked_to_raw=["pin-md-001"],
+                                linked_to_raw=["pin-md-001"],  # 连接到 Event 的 output exec pin
                             ),
                             UEdGraphPin(
                                 pin_id="pin-md-003",
@@ -1639,8 +1640,8 @@ class TestCLIMarkdownSchemaFlags:
 
         parser = create_parser()
 
-        # 模拟 --markdown 标志
-        args = parser.parse_args([temp_uasset_file, '--markdown'])
+        # 模拟 --markdown 标志（temp_uasset_file 是 Path 对象，需要转字符串）
+        args = parser.parse_args([str(temp_uasset_file), '--markdown'])
 
         assert args.markdown is True
 
@@ -1654,7 +1655,7 @@ class TestCLIMarkdownSchemaFlags:
 
         # 测试互斥：同时使用 --markdown 和 --json 应报错
         with pytest.raises(SystemExit):
-            parser.parse_args([temp_uasset_file, '--markdown', '--json'])
+            parser.parse_args([str(temp_uasset_file), '--markdown', '--json'])
 
     def test_schema_flag_available(self, temp_uasset_file):
         """
@@ -1664,6 +1665,6 @@ class TestCLIMarkdownSchemaFlags:
 
         parser = create_parser()
 
-        args = parser.parse_args([temp_uasset_file, '--json', '--schema'])
+        args = parser.parse_args([str(temp_uasset_file), '--json', '--schema'])
 
         assert args.schema is True
