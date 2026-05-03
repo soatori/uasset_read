@@ -5049,6 +5049,23 @@ def build_status_info(result: ParseResult) -> StatusInfo:
         return StatusInfo(status="error", message=message, code="PARSE_ERROR")
 
 
+# ============================================================================
+# API Frozen Since Phase 14 (D-14-14~16, OUT-06)
+# ============================================================================
+#
+# 以下输出格式函数自 Phase 14 完成后冻结，后续 Phase 15+ 不修改核心字段结构:
+# - format_json_full(): 顶层字段固定
+# - format_json_summary(): 摘要字段固定（70%+ token 减少）
+# - build_status_info(): status 结构固定
+# - build_graphs_summary(): graphs_summary 结构固定
+#
+# 向后兼容承诺:
+# - 新字段可通过可选参数添加（如 include_schema）
+# - 字段语义不变（parent_class 含义保持）
+# - 底层字段通过注释标记，不删除
+# ============================================================================
+
+
 def build_schema_info() -> Dict[str, str]:
     """
     构建字段语义注释（D-14-13, OUT-05）。
@@ -5239,17 +5256,24 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
 
 def format_json_summary(result: ParseResult, include_schema: bool = False) -> Dict:
     """
-    Format compact JSON summary (OUT-03).
+    Format compact JSON summary - 70%+ token reduction（D-14-07~09, OUT-03）。
 
-    Per D-09: Medium detail - export names + types + properties (name+type+value)
-    Per D-10: Skip low-level details - no name_map, import_map, CustomVersions
+    精简策略:
+    - 移除: imports, soft_references, circular_deps, errors
+    - 精简 exports: 仅 name, class, parent_class
+    - 移除 properties 数组
+    - 保留: status, output_version, graphs_summary
+
+    Per D-07: 移除依赖字段
+    Per D-08: 精简 exports
+    Per D-09: 移除 properties 数组
 
     Args:
         result: ParseResult from parse_uasset()
         include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
-        Dict with keys: version, package_name, exports, blueprint_metadata, errors
+        Dict: 精简摘要
     """
     from dataclasses import asdict
 
@@ -5261,28 +5285,38 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
             "legacy": result.summary.legacy_file_version
         }
 
+    # D-14-08: 精简 exports（仅 name, class, parent_class）
     exports_summary = []
-    for exp in result.export_map:
-        export_summary = {
+    for i, exp in enumerate(result.export_map):
+        # 获取 parent_class（仅在蓝图主对象的第一个 export）
+        parent_class = ""
+        if result.blueprint and result.blueprint.is_blueprint and i == 0:
+            parent_class = result.blueprint.parent_class or ""
+
+        exports_summary.append({
             "name": exp.object_name,
             "class": get_asset_class(exp, result.import_map, result.export_map),
-            "properties": [
-                {"name": p.name, "type": p.type, "value": p.value}
-                for p in (exp.properties or [])
-            ]
-        }
-        exports_summary.append(export_summary)
+            "parent_class": parent_class
+        })
 
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
         "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
-        "exports": exports_summary,
-        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
+        "exports": exports_summary,  # D-14-08: 精简版本（无 properties/serial_size 等）
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
-        "errors": result.errors
     }
+
+    # D-14-07: 移除 imports/soft_references/circular_deps/errors
+    # errors 数组已移除（status 字段已包含状态信息）
+
+    # blueprint_metadata 精简（仅保留核心字段）
+    if result.blueprint and result.blueprint.is_blueprint:
+        output["blueprint_metadata"] = {
+            "parent_class": result.blueprint.parent_class,
+            "is_blueprint": True,
+        }
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
     if include_schema:

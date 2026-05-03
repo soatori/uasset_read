@@ -1668,3 +1668,159 @@ class TestCLIMarkdownSchemaFlags:
         args = parser.parse_args([str(temp_uasset_file), '--json', '--schema'])
 
         assert args.schema is True
+
+
+# ============================================================================
+# Phase 14 Plan 04: 摘要精简 + CLI完善（OUT-03, OUT-06）TDD 测试
+# ============================================================================
+
+
+class TestSummaryCompactPhase14:
+    """
+    OUT-03: format_json_summary 摘要精简测试。
+
+    Per D-14-07~09: 70%+ token 减少
+    - 移除: imports, soft_references, circular_deps, errors
+    - 精简 exports: 仅 name, class, parent_class
+    - 移除: properties 数组
+    """
+
+    def test_summary_removes_imports(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 imports 字段。
+        """
+        # 添加 imports 数据
+        result = create_mock_parse_result
+        result.imports = [
+            ObjectImport(
+                class_package="/Script/CoreUObject",
+                class_name="Class",
+                object_name="Actor",
+                outer_index=PackageIndex(0),
+            )
+        ]
+
+        json_dict = format_json_summary(result)
+
+        # imports 应被移除
+        assert "imports" not in json_dict
+
+    def test_summary_removes_soft_references(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 soft_references 字段。
+        """
+        result = create_mock_parse_result
+        result.soft_references = [
+            {"path": "/Game/SomeAsset.SomeAsset"}
+        ]
+
+        json_dict = format_json_summary(result)
+
+        # soft_references 应被移除
+        assert "soft_references" not in json_dict
+
+    def test_summary_removes_circular_deps(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 circular_deps 字段。
+        """
+        result = create_mock_parse_result
+        result.circular_deps = [["A", "B", "A"]]
+
+        json_dict = format_json_summary(result)
+
+        # circular_deps 应被移除
+        assert "circular_deps" not in json_dict
+
+    def test_summary_removes_errors_array(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 errors 数组（status 已含状态）。
+        """
+        result = create_mock_parse_result
+        result.errors = ["Warning: deprecated field"]
+
+        json_dict = format_json_summary(result)
+
+        # errors 数组应被移除（status 字段已包含状态信息）
+        assert "errors" not in json_dict
+
+    def test_summary_exports_only_name_class_parent(self, create_mock_parse_result):
+        """
+        D-14-08: exports 仅包含 name/class/parent_class，移除 serial_size/properties 等。
+        """
+        result = create_mock_parse_result
+        # 确保 exports 有数据
+        assert len(result.export_map) > 0
+
+        json_dict = format_json_summary(result)
+        export = json_dict["exports"][0]
+
+        # 保留的字段
+        assert "name" in export
+        assert "class" in export
+        # parent_class 应在第一个 export（蓝图主对象）
+        # 其他 export 可能没有 parent_class
+
+        # 移除的字段
+        assert "serial_size" not in export
+        assert "outer_index" not in export
+        assert "super_index" not in export
+        assert "index" not in export
+
+    def test_summary_exports_no_properties(self, create_mock_parse_result):
+        """
+        D-14-09: exports 不包含 properties 数组。
+        """
+        result = create_mock_parse_result
+        # 确保 export 有 properties
+        assert result.export_map[0].properties is not None
+        assert len(result.export_map[0].properties) > 0
+
+        json_dict = format_json_summary(result)
+        export = json_dict["exports"][0]
+
+        # properties 数组应被移除
+        assert "properties" not in export
+
+    def test_summary_keeps_graphs_summary(self, create_mock_parse_result):
+        """
+        D-14-04: graphs_summary 保留（已在 14-02 顶层化）。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result)
+
+        # graphs_summary 应保留
+        assert "graphs_summary" in json_dict
+        assert isinstance(json_dict["graphs_summary"], list)
+
+    def test_summary_keeps_status_and_output_version(self, create_mock_parse_result):
+        """
+        OUT-06: status 和 output_version 字段保留。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result)
+
+        # status 和 output_version 应保留
+        assert "status" in json_dict
+        assert "output_version" in json_dict
+        assert json_dict["output_version"] == "3.0"
+
+    def test_summary_blueprint_metadata_compact(self, create_mock_parse_result):
+        """
+        摘要模式 blueprint_metadata 精简为仅核心字段。
+        """
+        result = create_mock_parse_result
+        result.blueprint = BlueprintMetadata(
+            is_blueprint=True,
+            parent_class="ACharacter",
+            variables=[],
+        )
+
+        json_dict = format_json_summary(result)
+
+        # blueprint_metadata 应存在
+        assert "blueprint_metadata" in json_dict
+        # 精简版本应包含核心字段
+        if json_dict["blueprint_metadata"]:
+            assert "parent_class" in json_dict["blueprint_metadata"]
