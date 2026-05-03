@@ -361,6 +361,18 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'I', self.read(4))[0]
 
+    def read_bool(self) -> bool:
+        """
+        读取 UE bool 值（序列化为 uint32，4 bytes）。
+
+        UE 源码参考：Archive.h line 1535
+        "Serialize bool as if it were UBOOL (legacy, 32 bit int)"
+
+        Returns:
+            bool: True 如果 uint32 != 0，False 如果 uint32 == 0
+        """
+        return self.read_u32() != 0
+
     def read_i64(self) -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
@@ -1909,7 +1921,7 @@ def read_import_map(
 
         b_import_optional: Optional[bool] = None
         if has_import_optional:
-            b_import_optional = bool(archive.read_u8())
+            b_import_optional = archive.read_bool()
 
         import_map.append(ObjectImport(
             class_package=class_package,
@@ -2124,10 +2136,10 @@ def read_export_map(
                 serial_size = archive.read_i32()
                 serial_offset = archive.read_i32()
 
-            # 9-11. bool flags（D-07：各读取 1 byte）
-            b_forced_export = bool(archive.read_u8())
-            b_not_for_client = bool(archive.read_u8())
-            b_not_for_server = bool(archive.read_u8())
+            # 9-11. bool flags（UE 标准：各序列化为 4 bytes uint32）
+            b_forced_export = archive.read_bool()
+            b_not_for_client = archive.read_bool()
+            b_not_for_server = archive.read_bool()
 
             # 12. PackageGuid（Phase 11 GAP: UE5 < 1005时读取但不存储）
             if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1005
@@ -2137,7 +2149,7 @@ def read_export_map(
             # 13. bIsInheritedInstance（Phase 11 GAP: UE5 >= 1006）
             b_is_inherited_instance = None
             if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1006
-                b_is_inherited_instance = bool(archive.read_u8())
+                b_is_inherited_instance = archive.read_bool()
 
             # 14. PackageFlags（D-09）
             package_flags = archive.read_u32()
@@ -2149,15 +2161,15 @@ def read_export_map(
 
             # UE4 版本条件：bNotAlwaysLoadedForEditorGame（UE4 >= 383，UE5 总是满足）
             if effective_ue4_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = bool(archive.read_u8())
+                b_not_always_loaded_for_editor_game = archive.read_bool()
 
             # UE4 版本条件：bIsAsset（UE4 >= 401，UE5 总是满足）
             if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
-                b_is_asset = bool(archive.read_u8())
+                b_is_asset = archive.read_bool()
 
             # UE5 版本条件：bGeneratePublicHash（Phase 11 GAP: UE5 >= OPTIONAL_RESOURCES=1003）
             if is_ue5_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-                b_generate_public_hash = bool(archive.read_u8())
+                b_generate_public_hash = archive.read_bool()
 
             # 18. 依赖数组（UE4 >= 507）
             # FirstExportDependency + 4个依赖计数（5个 i32）
@@ -2535,8 +2547,8 @@ def read_ed_graph_pin_type(
         archive.read_i32()           # TerminalSubCategoryObject
 
     # Step 6-7: bIsReference and bIsWeakPointer
-    pin_type.is_reference = archive.read_u8() != 0
-    pin_type.is_weak_pointer = archive.read_u8() != 0
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
     # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
@@ -2547,12 +2559,12 @@ def read_ed_graph_pin_type(
     # Step 9: bIsConst
     # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_const = archive.read_u8() != 0
+    pin_type.is_const = archive.read_bool()
 
     # Step 10: bIsUObjectWrapper
     # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_uobject_wrapper = archive.read_u8() != 0
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
     return pin_type
 
@@ -2647,7 +2659,7 @@ def read_ue_graph_pin(
         sub_pins.append(sub_pin_id)
 
     # 9. ParentPin（条件字段）
-    has_parent = archive.read_u8() != 0
+    has_parent = archive.read_bool()
     parent_pin: Optional[str] = None
     if has_parent:
         parent_pin_bytes = archive.read_bytes(16)
@@ -2820,7 +2832,7 @@ def read_fmember_reference(
     member_guid = member_guid_bytes.hex()
 
     # 4. bSelfContext (uint8)
-    b_self_context = archive.read_u8() != 0
+    b_self_context = archive.read_bool()
 
     return FMemberReference(
         member_parent=member_parent,
@@ -2861,7 +2873,7 @@ def read_k2node_call_function(
     )
 
     # 2. bDefaultsToPureFunc (uint8)
-    b_defaults_to_pure = archive.read_u8() != 0
+    b_defaults_to_pure = archive.read_bool()
 
     return K2NodeCallFunction(
         function_reference=function_reference,
@@ -2900,7 +2912,7 @@ def read_k2node_event(
     )
 
     # 2. bOverrideFunction (uint8)
-    b_override_function = archive.read_u8() != 0
+    b_override_function = archive.read_bool()
 
     return K2NodeEvent(
         event_reference=event_reference,
@@ -3075,7 +3087,7 @@ def read_ue_graph(
     graph_guid = graph_guid_bytes.hex()
 
     # 4. bEditable
-    b_editable = archive.read_u8() != 0
+    b_editable = archive.read_bool()
 
     return UEdGraph(
         graph_name=graph_export.object_name,

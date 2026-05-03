@@ -12,18 +12,17 @@
 
 ## 安装
 
-将此skill目录复制到目标项目的 `.claude/skills/` 下即可使用：
+将此skill目录复制到目标项目的 `.claude/skills/` 下，并将脚本放到项目根目录：
 
 ```bash
-# 复制整个skill目录
+# 复制skill目录（知识库和文档）
 cp -r .claude/skills/uasset-read /path/to/target-project/.claude/skills/
 
-# 或在目标项目中手动创建
-mkdir -p /path/to/target-project/.claude/skills/uasset-read/scripts
-cp scripts/uasset_read.py /path/to/target-project/.claude/skills/uasset-read/scripts/
+# 复制解析器脚本到项目根目录
+cp uasset_read.py /path/to/target-project/
 ```
 
-脚本位置：`scripts/uasset_read.py`（约5900行，零外部依赖）
+脚本位置：`uasset_read.py`（项目根目录，约5900行，零外部依赖）
 
 ---
 
@@ -50,13 +49,8 @@ cp scripts/uasset_read.py /path/to/target-project/.claude/skills/uasset-read/scr
 ## 快速开始
 
 ```python
-# 从skill内置脚本导入
-import sys
-sys.path.insert(0, ".claude/skills/uasset-read/scripts")
+# 直接从项目根目录导入
 from uasset_read import parse_uasset
-
-# 或将脚本复制到项目根目录后直接导入
-# from uasset_read import parse_uasset
 
 # 解析蓝图文件
 result = parse_uasset("path/to/BP_MyBlueprint.uasset")

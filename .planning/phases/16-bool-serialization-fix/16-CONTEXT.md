@@ -123,7 +123,7 @@ SERIALIZE_BIT_TO_RECORD(bNotForServer);
 
 ### 核心修改
 
-**文件:** `.claude/skills/uasset-read/scripts/uasset_read.py`
+**文件:** `uasset_read.py`
 
 ```python
 # 当前实现（错误）

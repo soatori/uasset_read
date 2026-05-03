@@ -25,7 +25,7 @@
 
 ### Locked Decisions
 - Bool 应使用 4-byte uint32（UE 标准，自 UE3 起）[VERIFIED: Archive.h:1535]
-- 修复文件：`.claude/skills/uasset-read/scripts/uasset_read.py` [VERIFIED: 当前主解析器]
+- 修复文件：`uasset_read.py` [VERIFIED: 当前主解析器]
 - 需求 ID：FIX-01, FIX-02, FIX-03
 
 ### Claude's Discretion

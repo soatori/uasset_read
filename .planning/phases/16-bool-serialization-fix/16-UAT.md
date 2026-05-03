@@ -15,7 +15,7 @@ updated: 2026-05-03T23:25:00Z
 ### 1. UE 5.7 资产解析
 expected: 解析 BP_FirstPersonCharacter.uasset (UE 5.7) 返回 is_success: True，无错误信息
 result: pass
-note: 使用 skill 目录代码 (.claude/skills/uasset-read/scripts/uasset_read.py)
+note: 使用项目根目录代码 (uasset_read.py)
 
 ### 2. 导出表数量验证
 expected: 解析结果包含 69 个 exports，数量与 SUMMARY 一致
@@ -50,12 +50,7 @@ blocked: 0
 
 ## Notes
 
-### 发现：主目录代码未同步
+### 发现：历史记录
 
-修复 commit 5225cda 只修改了 `.claude/skills/uasset-read/scripts/uasset_read.py`，
-主目录的 `uasset_read.py` (5893行) 未同步更新。
-
-- Skill 目录代码: 5905行，包含 read_bool() 方法
-- 主目录代码: 5893行，不包含 read_bool() 方法
-
-建议：同步主目录代码或明确 skill 为唯一入口。
+修复 commit 5225cda 曾修改 skill 子目录，现已同步到项目根目录。
+当前唯一入口：`uasset_read.py`（项目根目录）
