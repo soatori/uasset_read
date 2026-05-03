@@ -1158,5 +1158,43 @@ def test_script_serial_offset_zero():
     assert export.serial_offset + export.script_serial_offset == export.serial_offset
 
 
+# ============================================================================
+# Phase 17 D-02: SerializationControlExtensions 头部测试
+# ============================================================================
+
+def test_serialization_control_extensions_no_extension():
+    """D-02: serialization_control = 0x00 时，仅读取 1 byte"""
+    # 构造 mock 数据：serialization_control = 0x00
+    data = bytes([0x00])  # NoExtension
+    archive = create_mock_archive_with_data(data)
+
+    serialization_control = archive.read_u8()
+    assert serialization_control == 0x00
+    assert not (serialization_control & 0x02)  # 无 OverridableSerializationInformation
+    # 仅读取 1 byte，位置正确
+    assert archive.tell() == 1
+
+
+def test_serialization_control_extensions_with_overridable():
+    """D-02: serialization_control = 0x02 时，读取 2 bytes"""
+    # 构造 mock 数据：serialization_control = 0x02 + overridden_operation
+    data = bytes([0x02, 0x00])  # OverridableSerializationInformation + operation
+    archive = create_mock_archive_with_data(data)
+
+    serialization_control = archive.read_u8()
+    assert serialization_control == 0x02
+    assert (serialization_control & 0x02)  # 有 OverridableSerializationInformation
+
+    # 需要读取 overridden_operation
+    overridden_operation = archive.read_u8()
+    assert archive.tell() == 2  # 总共读取 2 bytes
+
+
+def test_serialization_control_extensions_version_threshold():
+    """D-02: UE5_PROPERTY_TAG_EXTENSION = 1011 版本阈值验证"""
+    from uasset_read import UE5_PROPERTY_TAG_EXTENSION
+    assert UE5_PROPERTY_TAG_EXTENSION == 1011
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
