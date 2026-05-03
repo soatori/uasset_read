@@ -2,13 +2,13 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 Phase 12规划完成，准备执行
+**当前状态：** v3.0 Phase 13规划完成，准备执行
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v2.0 蓝图图解析** — Phases 6-10 (shipped 2026-05-02 via PR #2) — [Archive](milestones/v2.0-ROADMAP.md)
-- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (planning complete 2026-05-03)
+- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (planning 13/15, 13-01/13-03 complete)
 
 ## Phases
 
@@ -44,13 +44,13 @@
 
 </details>
 
-### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING COMPLETE
+### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING IN PROGRESS
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
-- [ ] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
-- [ ] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
-- [ ] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性
+- [x] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
+- [x] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
+- [x] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性（规划完成）
 - [ ] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式
 - [ ] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill
 
@@ -102,9 +102,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 12-01-PLAN.md — BlueprintVariable数据模型增强 (Wave 1)
-- [ ] 12-02-PLAN.md — 变量解析函数增强 (Wave 2, depends on 12-01)
-- [ ] 12-03-PLAN.md — 测试和验证 (Wave 3, depends on 12-01, 12-02)
+- [x] 12-01-PLAN.md — BlueprintVariable数据模型增强 (Wave 1)
+- [x] 12-02-PLAN.md — 变量解析函数增强 (Wave 2, depends on 12-01)
+- [x] 12-03-PLAN.md — 测试和验证 (Wave 3, depends on 12-01, 12-02)
 
 ### Phase 13: 组件变换属性解析
 
@@ -118,10 +118,15 @@ Plans:
   1. 用户可以从组件属性中解析RelativeLocation（X/Y/Z坐标）
   2. 用户可以从组件属性中解析RelativeRotation（Roll/Pitch/Yaw角度）
   3. 用户可以从组件属性中解析RelativeScale3D（X/Y/Z缩放因子）
-  4. 变换值使用正确的浮点精度（保留6位小数）
-  5. FRotator角度正确转换（UE使用度数而非弧度）
+  4. 变换值使用正确的浮点精度（Location整数优先/3位，Rotation 3位，Scale 4位）
+  5. FRotator角度保持UE度数格式（RotatorValue.unit='degrees'标注）
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [x] 13-01-PLAN.md — Transform dataclass创建和精度处理 (Wave 1)
+- [x] 13-02-PLAN.md — StructValue转换和组件变换提取 (Wave 2)
+- [x] 13-03-PLAN.md — 测试和验证 (Wave 3)
 
 ### Phase 14: 输出格式优化并冻结
 
@@ -175,8 +180,8 @@ Plans:
 | 9. 高级属性 | v2.0 | 3/3 | Complete | 2026-05-02 |
 | 10. 依赖分析 | v2.0 | 6/6 | Complete | 2026-05-02 |
 | 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
-| 12. BlueprintVariables完整提取 | v3.0 | 0/3 | Planning complete | - |
-| 13. 组件变换属性解析 | v3.0 | 0/1 | Not started | - |
+| 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Planning complete | - |
+| 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
 | 14. 输出格式优化并冻结 | v3.0 | 0/1 | Not started | - |
 | 15. Claude Code skill封装 | v3.0 | 0/1 | Not started | - |
 
@@ -187,10 +192,10 @@ Plans:
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | EXTR-01 | Phase 11 | Complete |
-| EXTR-02 | Phase 12 | Planning |
-| EXTR-03 | Phase 12 | Planning |
-| EXTR-04 | Phase 13 | Pending |
-| EXTR-05 | Phase 12 | Planning |
+| EXTR-02 | Phase 12 | Planning complete |
+| EXTR-03 | Phase 12 | Planning complete |
+| EXTR-04 | Phase 13 | Planning complete |
+| EXTR-05 | Phase 12 | Planning complete |
 | OUT-01 | Phase 14 | Pending |
 | OUT-02 | Phase 14 | Pending |
 | OUT-03 | Phase 14 | Pending |
@@ -212,4 +217,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 12规划完成，3 plans created*
+*最后更新：2026-05-03 — Phase 13规划完成，3 plans created*
