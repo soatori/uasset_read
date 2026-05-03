@@ -791,6 +791,8 @@ class ObjectExport:
     script_serial_offset: int = 0
     # 属性列表 (Phase 2 PROP-01 至 PROP-08)
     properties: List["PropertyValue"] = field(default_factory=list)
+    # Phase 13-02: 变换属性提取结果
+    transforms: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -930,7 +932,7 @@ class DelegateValue(AdvancedPropertyValue):
 # Phase 13: 变换属性类型 dataclass 定义
 # ============================================================================
 
-@dataclass
+@dataclass(kw_only=True)
 class VectorValue(AdvancedPropertyValue):
     """
     Vector struct property value (Phase 13)。
@@ -943,9 +945,10 @@ class VectorValue(AdvancedPropertyValue):
     x: float
     y: float
     z: float
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
 
 
-@dataclass
+@dataclass(kw_only=True)
 class RotatorValue(AdvancedPropertyValue):
     """
     Rotator struct property value (Phase 13)。
@@ -959,9 +962,10 @@ class RotatorValue(AdvancedPropertyValue):
     pitch: float   # UE FRotator.Pitch (degrees)
     yaw: float     # UE FRotator.Yaw (degrees)
     unit: str = 'degrees'  # D-02a: 单位标注
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ScaleValue(AdvancedPropertyValue):
     """
     Scale3D struct property value (Phase 13)。
@@ -974,6 +978,157 @@ class ScaleValue(AdvancedPropertyValue):
     x: float
     y: float
     z: float
+    property_type: str = field(default='StructProperty')  # 覆盖父类字段，放最后
+
+
+def format_transform_value(value: float, precision_type: str) -> Union[int, float]:
+    """
+    格式化变换属性值，应用类型自适应精度处理（per D-03a）。
+
+    Location: 整数优先，否则 3 位小数
+    Rotation: 3 位小数
+    Scale: 4 位小数
+
+    Args:
+        value: 原始浮点值
+        precision_type: 精度类型 ('location', 'rotation', 'scale')
+
+    Returns:
+        格式化后的值（int 或 float）
+
+    来自 CONTEXT.md D-03a。
+    """
+    if precision_type == 'location':
+        # D-03a: Location 整数优先 - 检测是否为整数
+        if value == int(value):
+            return int(value)
+        return round(value, 3)
+    elif precision_type == 'rotation':
+        # D-03a: Rotation 3 位小数精度
+        return round(value, 3)
+    elif precision_type == 'scale':
+        # D-03a: Scale 4 位小数精度
+        return round(value, 4)
+    return value
+
+
+def parse_vector_value(struct_value: StructValue, precision_type: str = 'location') -> VectorValue:
+    """
+    解析 Vector struct property 到 VectorValue（per D-01a）。
+
+    从 StructValue.fields 提取 X/Y/Z 字段（大写字母命名），
+    应用 format_transform_value 精度处理。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Vector"
+        precision_type: 精度类型 ('location' 或 'scale')
+
+    Returns:
+        VectorValue dataclass
+
+    Raises:
+        KeyError: 若 fields 中缺少 X/Y/Z 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    x = format_transform_value(fields["X"], precision_type)
+    y = format_transform_value(fields["Y"], precision_type)
+    z = format_transform_value(fields["Z"], precision_type)
+    return VectorValue(x=x, y=y, z=z)
+
+
+def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
+    """
+    解析 Rotator struct property 到 RotatorValue（per D-01a）。
+
+    从 StructValue.fields 提取 Roll/Pitch/Yaw 字段（大写字母命名），
+    应用 format_transform_value 精度处理（rotation）。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Rotator"
+
+    Returns:
+        RotatorValue dataclass（unit='degrees'）
+
+    Raises:
+        KeyError: 若 fields 中缺少 Roll/Pitch/Yaw 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    roll = format_transform_value(fields["Roll"], 'rotation')
+    pitch = format_transform_value(fields["Pitch"], 'rotation')
+    yaw = format_transform_value(fields["Yaw"], 'rotation')
+    return RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
+
+
+def parse_scale_value(struct_value: StructValue) -> ScaleValue:
+    """
+    解析 Scale3D struct property 到 ScaleValue（per D-01a）。
+
+    从 StructValue.fields 提取 X/Y/Z 字段（大写字母命名），
+    Scale3D 使用与 Vector 相同的字段格式。
+
+    Args:
+        struct_value: StructValue 实例，struct_type="Vector"
+
+    Returns:
+        ScaleValue dataclass
+
+    Raises:
+        KeyError: 若 fields 中缺少 X/Y/Z 字段
+
+    来自 CONTEXT.md D-01a。
+    """
+    fields = struct_value.fields
+    x = format_transform_value(fields["X"], 'scale')
+    y = format_transform_value(fields["Y"], 'scale')
+    z = format_transform_value(fields["Z"], 'scale')
+    return ScaleValue(x=x, y=y, z=z)
+
+
+def extract_component_transforms(
+    export_properties: List[PropertyValue],
+    component_name: str = None
+) -> Dict[str, Any]:
+    """
+    从组件 export 的 properties 中提取变换属性（per D-01, D-01a）。
+
+    筛选 RelativeLocation/RelativeRotation/RelativeScale3D 属性，
+    分派到对应解析函数转换为 VectorValue/RotatorValue/ScaleValue。
+
+    Args:
+        export_properties: PropertyValue 列表（来自 parse_properties_from_export）
+        component_name: 组件名称（可选，用于日志）
+
+    Returns:
+        Dict[str, Any]: 包含 relative_location/relative_rotation/relative_scale 键
+                       值为 VectorValue/RotatorValue/ScaleValue 或 None
+
+    来自 CONTEXT.md D-01, D-01a。
+    """
+    transforms = {}
+
+    for prop in export_properties:
+        if prop.type != "StructProperty" or not prop.value:
+            continue
+
+        struct_val = prop.value
+        if not isinstance(struct_val, StructValue):
+            continue
+
+        prop_name = prop.name
+
+        # D-01: 筛选 RelativeLocation/RelativeRotation/RelativeScale3D
+        if prop_name == "RelativeLocation" and struct_val.struct_type == "Vector":
+            transforms["relative_location"] = parse_vector_value(struct_val, 'location')
+        elif prop_name == "RelativeRotation" and struct_val.struct_type == "Rotator":
+            transforms["relative_rotation"] = parse_rotator_value(struct_val)
+        elif prop_name == "RelativeScale3D" and struct_val.struct_type == "Vector":
+            transforms["relative_scale"] = parse_scale_value(struct_val)
+
+    return transforms
 
 
 @dataclass
@@ -4354,6 +4509,10 @@ def parse_uasset(path: str) -> ParseResult:
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []  # 保持空列表而非None
 
+                # Phase 13-02: 提取组件变换属性
+                if export.properties:
+                    export.transforms = extract_component_transforms(export.properties)
+
         result.is_success = True
 
         # Blueprint extraction (Phase 3)
@@ -5282,6 +5441,15 @@ __all__ = [
     'EnumValue',
     'TextValue',
     'DelegateValue',
+    # Phase 13: Transform Property Value Data Classes
+    'VectorValue',
+    'RotatorValue',
+    'ScaleValue',
+    'format_transform_value',
+    'parse_vector_value',
+    'parse_rotator_value',
+    'parse_scale_value',
+    'extract_component_transforms',
 
     # FArchive
     'FArchive',
