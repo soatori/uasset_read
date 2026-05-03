@@ -1088,3 +1088,128 @@ def test_cli_graph_json_output_full(create_mock_parse_result, sample_graph_with_
     assert '"graphs"' in output_str
     assert '"exports"' in output_str  # 包含其他字段
     assert '"summary"' in output_str
+
+
+# ============================================================================
+# Phase 14: OUT-01/OUT-06 - Status 字段 + output_version
+# ============================================================================
+
+
+def test_format_json_full_has_status_field(create_mock_parse_result):
+    """
+    OUT-01: 验证 format_json_full() 返回顶层 status 对象。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'status' in json_dict
+    assert isinstance(json_dict['status'], dict)
+    assert 'status' in json_dict['status']  # status.status 字段
+
+
+def test_status_success_when_no_errors(create_mock_parse_result):
+    """
+    OUT-01: is_success=True + errors=[] → status="success"
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = []
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "success"
+    assert json_dict['status']['message'] is None
+    assert json_dict['status']['code'] is None
+
+
+def test_status_fail_when_errors_non_empty(create_mock_parse_result):
+    """
+    OUT-01: is_success=True + errors non-empty → status="fail"
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = ["Partial parse error: missing property data"]
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "fail"
+    assert json_dict['status']['message'] == "Partial parse error: missing property data"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+def test_status_error_when_not_success(create_mock_parse_result):
+    """
+    OUT-01: is_success=False → status="error"
+    """
+    result = create_mock_parse_result
+    result.is_success = False
+    result.errors = ["Failed to parse file header"]
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "error"
+    assert json_dict['status']['message'] == "Failed to parse file header"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+def test_output_version_field(create_mock_parse_result):
+    """
+    OUT-06: 验证 output_version 字段存在且值为 "3.0"
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'output_version' in json_dict
+    assert json_dict['output_version'] == "3.0"
+
+
+def test_format_json_summary_has_status_field(create_mock_parse_result):
+    """
+    OUT-01: 验证 format_json_summary() 同样包含 status 字段。
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = []
+
+    json_dict = format_json_summary(result)
+
+    assert 'status' in json_dict
+    assert json_dict['status']['status'] == "success"
+
+
+def test_format_json_summary_has_output_version(create_mock_parse_result):
+    """
+    OUT-06: 验证 format_json_summary() 包含 output_version。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_summary(result)
+
+    assert 'output_version' in json_dict
+    assert json_dict['output_version'] == "3.0"
+
+
+def test_status_field_top_level_position(create_mock_parse_result):
+    """
+    D-14-03: 验证 status 字段在顶层显眼位置（dict 的第一个键）。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    # 获取第一个键名
+    first_key = next(iter(json_dict.keys()))
+    assert first_key == "status", "status 应为顶层 dict 的第一个字段"
+
+
+def test_status_error_with_empty_errors(create_mock_parse_result):
+    """
+    边界测试: is_success=False 但 errors=[] → 使用默认错误信息。
+    """
+    result = create_mock_parse_result
+    result.is_success = False
+    result.errors = []
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "error"
+    assert json_dict['status']['message'] == "Unknown error"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
