@@ -72,16 +72,17 @@ def create_mock_archive_with_data(data: bytes) -> MockArchive:
 # ============================================================================
 
 def test_use_complete_type_name_ue5_above_threshold():
-    """UE5 >= 1000 使用新格式。"""
-    assert use_complete_type_name(-8, 1000) == True
-    assert use_complete_type_name(-8, 1001) == True
+    """UE5 >= 1012 使用新格式（PROPERTY_TAG_COMPLETE_TYPE_NAME 阈值）。"""
+    assert use_complete_type_name(-8, 1012) == True
+    assert use_complete_type_name(-8, 1013) == True
     assert use_complete_type_name(-8, 5000) == True
 
 
 def test_use_complete_type_name_ue5_below_threshold():
-    """UE5 < 1000 使用旧格式。"""
+    """UE5 < 1012 使用旧格式。"""
     assert use_complete_type_name(-8, 500) == False
-    assert use_complete_type_name(-8, 999) == False
+    assert use_complete_type_name(-8, 1000) == False  # 1000 < 1012，使用旧格式
+    assert use_complete_type_name(-8, 1011) == False
     assert use_complete_type_name(-8, 0) == False
 
 
@@ -118,7 +119,7 @@ def test_property_tag_ue5_format_basic():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "TestProperty"
     assert tag.type == "IntProperty"
@@ -149,7 +150,7 @@ def test_property_tag_ue5_with_guid():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "MyProperty"
     assert tag.type == "FloatProperty"
@@ -174,7 +175,7 @@ def test_property_tag_ue5_with_array_index():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "ArrayProp"
     assert tag.type == "ArrayProperty"
@@ -197,7 +198,7 @@ def test_property_tag_ue5_bool_true_flag():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "IsEnabled"
     assert tag.type == "BoolProperty"
@@ -411,7 +412,7 @@ def test_property_tag_all_flags():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.flags == flags
     assert tag.array_index == 10
@@ -535,7 +536,7 @@ def test_property_tag_ue5_complete_type_name():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "TestProp"
     assert tag.type == type_name
@@ -570,7 +571,7 @@ def test_property_tag_ue5_vs_ue4_format_selection():
     name_map = ["VersionTest"]
 
     # Same test data, different version parameters
-    # For UE5 >= 1000, expect complete TypeName format
+    # For UE5 >= 1012, expect complete TypeName format
     ue5_data = (
         struct.pack('<I', 0) +      # Name index
         struct.pack('<I', 0) +      # Name number
@@ -581,7 +582,7 @@ def test_property_tag_ue5_vs_ue4_format_selection():
     )
 
     archive = create_mock_archive_with_data(ue5_data)
-    tag_ue5 = read_property_tag(archive, name_map, -8, 1000)
+    tag_ue5 = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     # UE5 format reads type as FString
     assert tag_ue5.type == "Bool"
@@ -609,7 +610,7 @@ def test_property_guid_ue5_format():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.property_guid == guid
 
@@ -632,7 +633,7 @@ def test_array_index_flag_ue5_format():
     )
 
     archive = create_mock_archive_with_data(data)
-    tag = read_property_tag(archive, name_map, -8, 1000)
+    tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.array_index == 42
 
@@ -833,6 +834,9 @@ def test_object_property_in_parse_properties():
     # ObjectProperty = 14 chars, FString length = 15 (包括null terminator)
     type_str_len = 15  # "ObjectProperty\x00" = 15 bytes
 
+    # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
+    header_data = struct.pack('<B', 0x00)  # NoExtension
+
     # PropertyTag数据 (UE5格式)
     prop_data = (
         struct.pack('<I', 0) +      # Name index (TestProp)
@@ -854,7 +858,7 @@ def test_object_property_in_parse_properties():
         struct.pack('<B', 0)        # Flags
     )
 
-    full_data = prop_data + terminator_data
+    full_data = header_data + prop_data + terminator_data
     archive = create_mock_archive_with_data(full_data)
 
     # 创建测试导出条目
@@ -865,7 +869,8 @@ def test_object_property_in_parse_properties():
         object_name="TestExport",
         object_flags=0,
         serial_size=len(full_data),
-        serial_offset=0
+        serial_offset=0,
+        script_serial_size=len(full_data)  # D-01: UE5 >= 1010 使用 script_serial_size 作为边界
     )
 
     # 创建import_map
@@ -883,7 +888,7 @@ def test_object_property_in_parse_properties():
         tag=0x9E2A83C1,
         legacy_file_version=-8,
         file_version_ue4=522,
-        file_version_ue5=1000
+        file_version_ue5=1012  # >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
     )
 
     export_map = [export]
@@ -917,6 +922,9 @@ def test_object_property_null_in_parse_properties():
     # ObjectProperty = 14 chars, FString length = 15
     type_str_len = 15
 
+    # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
+    header_data = struct.pack('<B', 0x00)  # NoExtension
+
     # PropertyTag数据 (UE5格式) - null引用
     prop_data = (
         struct.pack('<I', 0) +      # Name index (NullProp)
@@ -938,7 +946,7 @@ def test_object_property_null_in_parse_properties():
         struct.pack('<B', 0)        # Flags
     )
 
-    full_data = prop_data + terminator_data
+    full_data = header_data + prop_data + terminator_data
     archive = create_mock_archive_with_data(full_data)
 
     export = ObjectExport(
@@ -948,14 +956,15 @@ def test_object_property_null_in_parse_properties():
         object_name="TestExport",
         object_flags=0,
         serial_size=len(full_data),
-        serial_offset=0
+        serial_offset=0,
+        script_serial_size=len(full_data)  # D-01: UE5 >= 1010 使用 script_serial_size 作为边界
     )
 
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
         file_version_ue4=522,
-        file_version_ue5=1000
+        file_version_ue5=1012  # >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
     )
 
     properties = parse_properties_from_export(
