@@ -1213,3 +1213,217 @@ def test_status_error_with_empty_errors(create_mock_parse_result):
     assert json_dict['status']['status'] == "error"
     assert json_dict['status']['message'] == "Unknown error"
     assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+# ============================================================================
+# Phase 14: OUT-02 - graphs_summary 顶层化
+# ============================================================================
+
+
+def test_graphs_summary_field_exists(create_mock_parse_result):
+    """
+    OUT-02: 验证 format_json_full() 返回顶层 graphs_summary 字段。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'graphs_summary' in json_dict
+    assert isinstance(json_dict['graphs_summary'], list)
+
+
+def test_graphs_summary_entry_structure(create_mock_parse_result):
+    """
+    OUT-02: 每个 graphs_summary 条目包含 graph 和 execution_flows。
+    """
+    # 创建带 blueprint graph 的 mock result
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-001",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-001",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+                UEdGraphNode(
+                    node_guid="call-guid-001",
+                    class_name="K2Node_CallFunction",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-002",
+                            pin_name="execute",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                        UEdGraphPin(
+                            pin_id="pin-003",
+                            pin_name="InStr",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeCallFunction(
+                        function_reference=FMemberReference(
+                            member_name="PrintString",
+                            member_parent="UKismetSystemLibrary",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_full(result)
+
+    # graphs_summary 应有至少一个条目
+    assert len(json_dict['graphs_summary']) > 0
+
+    # 验证条目结构
+    entry = json_dict['graphs_summary'][0]
+    assert 'graph' in entry
+    assert 'execution_flows' in entry
+    assert entry['graph'] == "EventGraph"
+
+
+def test_graphs_summary_calls_format(create_mock_parse_result):
+    """
+    OUT-02: execution_flows.calls 格式为 ["FuncName(Param:Type)"]
+    """
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-002",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-101",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+                UEdGraphNode(
+                    node_guid="call-guid-002",
+                    class_name="K2Node_CallFunction",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-102",
+                            pin_name="execute",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                            linked_to_raw=["pin-101"],
+                        ),
+                        UEdGraphPin(
+                            pin_id="pin-103",
+                            pin_name="InStr",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeCallFunction(
+                        function_reference=FMemberReference(
+                            member_name="PrintString",
+                            member_parent="UKismetSystemLibrary",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_full(result)
+
+    # 验证 execution_flows 结构
+    entry = json_dict['graphs_summary'][0]
+    assert len(entry['execution_flows']) > 0
+
+    flow = entry['execution_flows'][0]
+    assert 'event' in flow
+    assert 'calls' in flow
+    assert isinstance(flow['calls'], list)
+
+    # 如果有函数调用，验证格式：FuncName(Param:Type)
+    if len(flow['calls']) > 0:
+        call_str = flow['calls'][0]
+        # 格式应为 "PrintString(InStr:String)" 或类似
+        assert '(' in call_str
+        assert ')' in call_str
+        # 验证包含函数名
+        assert 'PrintString' in call_str or call_str.startswith('Unknown')
+
+
+def test_graphs_summary_empty_graphs(create_mock_parse_result):
+    """
+    OUT-02: 空 graphs 输入返回空 graphs_summary []
+    """
+    result = create_mock_parse_result
+    result.graphs = []  # 空 graphs
+
+    json_dict = format_json_full(result)
+
+    assert 'graphs_summary' in json_dict
+    assert json_dict['graphs_summary'] == []
+
+
+def test_format_json_summary_has_graphs_summary(create_mock_parse_result):
+    """
+    OUT-02: 验证 format_json_summary() 也包含 graphs_summary 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-003",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-201",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_summary(result)
+
+    assert 'graphs_summary' in json_dict
+    assert isinstance(json_dict['graphs_summary'], list)
