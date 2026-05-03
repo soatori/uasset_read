@@ -55,7 +55,7 @@ PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 
 # PropertyTag version thresholds (PropertyTag.cpp)
-PROPERTY_TAG_COMPLETE_TYPE_NAME = 1000  # UE5 format switch threshold
+PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold (EUnrealEngineObjectUE5Version::PROPERTY_TAG_COMPLETE_TYPE_NAME)
 VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
 VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
@@ -360,6 +360,18 @@ class FArchive:
         """读取 unsigned 32-bit integer（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'I', self.read(4))[0]
+
+    def read_bool(self) -> bool:
+        """
+        读取 UE bool 值（序列化为 uint32，4 bytes）。
+
+        UE 源码参考：Archive.h line 1535
+        "Serialize bool as if it were UBOOL (legacy, 32 bit int)"
+
+        Returns:
+            bool: True 如果 uint32 != 0，False 如果 uint32 == 0
+        """
+        return self.read_u32() != 0
 
     def read_i64(self) -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
@@ -810,6 +822,9 @@ class PropertyTag:
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    # D-03: PropertyTag Extensions 字段（PropertyTag.cpp lines 155-173）
+    override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
+    experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
 
 
 @dataclass
@@ -1365,6 +1380,23 @@ class ParseResult:
     circular_deps: List[List[str]] = field(default_factory=list) # D-10-13: 循环依赖路径
 
 
+@dataclass
+class StatusInfo:
+    """
+    JSend 风格 status 字段（D-14-02, OUT-01）。
+
+    三元分类:
+    - success: 解析成功，无错误（可有警告）
+    - fail: 有解析错误但部分结果可用
+    - error: 无法解析，严重错误
+
+    Per D-14-02: JSend 结构 - status + message + code
+    """
+    status: str      # "success" | "fail" | "error"
+    message: Optional[str] = None
+    code: Optional[str] = None
+
+
 # ============================================================================
 # 解析函数
 # ============================================================================
@@ -1892,7 +1924,7 @@ def read_import_map(
 
         b_import_optional: Optional[bool] = None
         if has_import_optional:
-            b_import_optional = bool(archive.read_u8())
+            b_import_optional = archive.read_bool()
 
         import_map.append(ObjectImport(
             class_package=class_package,
@@ -2107,10 +2139,10 @@ def read_export_map(
                 serial_size = archive.read_i32()
                 serial_offset = archive.read_i32()
 
-            # 9-11. bool flags（D-07：各读取 1 byte）
-            b_forced_export = bool(archive.read_u8())
-            b_not_for_client = bool(archive.read_u8())
-            b_not_for_server = bool(archive.read_u8())
+            # 9-11. bool flags（UE 标准：各序列化为 4 bytes uint32）
+            b_forced_export = archive.read_bool()
+            b_not_for_client = archive.read_bool()
+            b_not_for_server = archive.read_bool()
 
             # 12. PackageGuid（Phase 11 GAP: UE5 < 1005时读取但不存储）
             if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:  # 1005
@@ -2120,7 +2152,7 @@ def read_export_map(
             # 13. bIsInheritedInstance（Phase 11 GAP: UE5 >= 1006）
             b_is_inherited_instance = None
             if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:  # 1006
-                b_is_inherited_instance = bool(archive.read_u8())
+                b_is_inherited_instance = archive.read_bool()
 
             # 14. PackageFlags（D-09）
             package_flags = archive.read_u32()
@@ -2132,15 +2164,15 @@ def read_export_map(
 
             # UE4 版本条件：bNotAlwaysLoadedForEditorGame（UE4 >= 383，UE5 总是满足）
             if effective_ue4_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = bool(archive.read_u8())
+                b_not_always_loaded_for_editor_game = archive.read_bool()
 
             # UE4 版本条件：bIsAsset（UE4 >= 401，UE5 总是满足）
             if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
-                b_is_asset = bool(archive.read_u8())
+                b_is_asset = archive.read_bool()
 
             # UE5 版本条件：bGeneratePublicHash（Phase 11 GAP: UE5 >= OPTIONAL_RESOURCES=1003）
             if is_ue5_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-                b_generate_public_hash = bool(archive.read_u8())
+                b_generate_public_hash = archive.read_bool()
 
             # 18. 依赖数组（UE4 >= 507）
             # FirstExportDependency + 4个依赖计数（5个 i32）
@@ -2160,12 +2192,14 @@ def read_export_map(
             # 条件: !UseUnversionedPropertySerialization() && UEVer() >= SCRIPT_SERIALIZATION_OFFSET(1010)
             # UseUnversionedPropertySerialization()基于PKG_UnversionedProperties标志判断
             # 若PKG_UnversionedProperties未设置，则使用versioned property serialization，需要读取这些字段
-            script_serial_size = 0
+            # 参考: ObjectResource.cpp 第 212-222 行
+            # 序列化顺序: StartOffset 先, EndOffset 后
             script_serial_offset = 0
+            script_serial_size = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
             if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-                script_serial_size = archive.read_i64()
-                script_serial_offset = archive.read_i64()
+                script_serial_offset = archive.read_i64()  # ScriptSerializationStartOffset (第一个)
+                script_serial_size = archive.read_i64()  # ScriptSerializationEndOffset (第二个)
 
             # 构建导出条目
             export_map.append(ObjectExport(
@@ -2518,8 +2552,8 @@ def read_ed_graph_pin_type(
         archive.read_i32()           # TerminalSubCategoryObject
 
     # Step 6-7: bIsReference and bIsWeakPointer
-    pin_type.is_reference = archive.read_u8() != 0
-    pin_type.is_weak_pointer = archive.read_u8() != 0
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
     # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
@@ -2530,12 +2564,12 @@ def read_ed_graph_pin_type(
     # Step 9: bIsConst
     # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_const = archive.read_u8() != 0
+    pin_type.is_const = archive.read_bool()
 
     # Step 10: bIsUObjectWrapper
     # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
     # Always read in Phase 3 as modern assets have this field
-    pin_type.is_uobject_wrapper = archive.read_u8() != 0
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
     return pin_type
 
@@ -2630,7 +2664,7 @@ def read_ue_graph_pin(
         sub_pins.append(sub_pin_id)
 
     # 9. ParentPin（条件字段）
-    has_parent = archive.read_u8() != 0
+    has_parent = archive.read_bool()
     parent_pin: Optional[str] = None
     if has_parent:
         parent_pin_bytes = archive.read_bytes(16)
@@ -2803,7 +2837,7 @@ def read_fmember_reference(
     member_guid = member_guid_bytes.hex()
 
     # 4. bSelfContext (uint8)
-    b_self_context = archive.read_u8() != 0
+    b_self_context = archive.read_bool()
 
     return FMemberReference(
         member_parent=member_parent,
@@ -2844,7 +2878,7 @@ def read_k2node_call_function(
     )
 
     # 2. bDefaultsToPureFunc (uint8)
-    b_defaults_to_pure = archive.read_u8() != 0
+    b_defaults_to_pure = archive.read_bool()
 
     return K2NodeCallFunction(
         function_reference=function_reference,
@@ -2883,7 +2917,7 @@ def read_k2node_event(
     )
 
     # 2. bOverrideFunction (uint8)
-    b_override_function = archive.read_u8() != 0
+    b_override_function = archive.read_bool()
 
     return K2NodeEvent(
         event_reference=event_reference,
@@ -3058,7 +3092,7 @@ def read_ue_graph(
     graph_guid = graph_guid_bytes.hex()
 
     # 4. bEditable
-    b_editable = archive.read_u8() != 0
+    b_editable = archive.read_bool()
 
     return UEdGraph(
         graph_name=graph_export.object_name,
@@ -3536,6 +3570,19 @@ def read_property_tag(
 
         if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
             tag.property_guid = archive.read(16)
+
+        # D-03: PropertyTag Extensions 处理
+        # 参考: PropertyTag.cpp 第 155-173 行、第 541-544 行
+        if tag.flags & PROP_TAG_HAS_EXTENSIONS:
+            # EPropertyTagExtension (u8)
+            property_extensions = archive.read_u8()
+
+            # OverridableInformation 标志 (0x02) 触发额外字段
+            if property_extensions & 0x02:
+                # EOverriddenPropertyOperation (u8)
+                tag.override_operation = archive.read_u8()
+                # bExperimentalOverridableLogic — 根据研究暂按 u8 处理
+                tag.experimental_overridable_logic = archive.read_u8()
 
         # BoolTrue 标志表示 bool 值为 true
         if tag.flags & PROP_TAG_BOOL_TRUE:
@@ -4311,7 +4358,37 @@ def parse_properties_from_export(
     Returns:
         List[PropertyValue] 属性值列表
     """
-    archive.seek(export.serial_offset)
+    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
+    # 参考: ObjectResource.h 第 280-285 行注释
+    # "The location (relative to SerialOffset) of the beginning of the
+    #  portion of this export's data that is serialized using tagged property serialization."
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_start = export.serial_offset + export.script_serial_offset
+    else:
+        property_start = export.serial_offset
+    archive.seek(property_start)
+
+    # D-02: SerializationControlExtensions 头部处理
+    # 参考: Class.cpp 第 1627-1654 行
+    # 当 UE5 >= PROPERTY_TAG_EXTENSION (1011) 时，属性数据前有额外头部
+    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        # EClassSerializationControlExtension (u8)
+        serialization_control = archive.read_u8()
+
+        # OverridableSerializationInformation 标志 (0x02)
+        if serialization_control & 0x02:
+            # EOverriddenPropertyOperation (u8) — 仅读取用于位置同步
+            overridden_operation = archive.read_u8()
+            # 注意：具体语义不解析，仅跳过字节
+
+    # 计算属性数据边界
+    # ScriptSerializationStartOffset 和 EndOffset 都是相对于 SerialOffset
+    # 参考: ObjectResource.h 第 280-295 行
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        property_end = export.serial_offset + export.script_serial_size  # EndOffset 也是相对于 SerialOffset
+    else:
+        property_end = export.serial_offset + export.serial_size  # 无 EndOffset，使用 serial_size
+
     properties: List[PropertyValue] = []
     property_count = 0  # D-08: loop counter for SAFE-05
 
@@ -4327,6 +4404,12 @@ def parse_properties_from_export(
         start_pos = None  # Phase 11 D-01: 初始化 start_pos 用于异常处理
 
         try:
+            # 边界检查：当前位置不应超过属性数据范围
+            current_pos = archive.tell()
+            if current_pos >= property_end:
+                # 属性数据已耗尽，中断解析
+                break
+
             tag = read_property_tag(
                 archive,
                 name_map,
@@ -4337,6 +4420,15 @@ def parse_properties_from_export(
             # 终止标记：Name == "None"
             if tag.name == "None":
                 break
+
+            # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
+            if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                remaining_property_data = property_end - archive.tell()
+                if tag.size > remaining_property_data:
+                    # Size 超出属性数据范围，可能数据格式变化
+                    raise ParseError(
+                        f"Property Size {tag.size} exceeds remaining property data {remaining_property_data} bytes"
+                    )
 
             # 记录起始位置用于边界验证
             start_pos = archive.tell()
@@ -4760,6 +4852,97 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     return formatted
 
 
+def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
+    """
+    构建顶层 graphs_summary 字段（D-14-04~06, OUT-02）。
+
+    将 execution_flows 从 graphs[] 内提升至顶层，按图分组。
+    函数调用格式: FunctionName(ParamName:TypeCategory)
+
+    Args:
+        graphs: List[UEdGraph] from ParseResult.graphs
+
+    Returns:
+        List[Dict]: graphs_summary 数组
+    """
+    summary = []
+    for graph in graphs:
+        # 复用现有 build_execution_flows 数据
+        flows = build_execution_flows(graph)
+
+        # 转换为目标格式
+        execution_flows_summary = []
+        for flow in flows:
+            event_name = flow.get("start_event", "Unknown")
+            # 提取函数调用链
+            calls = []
+            for node in flow.get("nodes", []):
+                if node.get("node_type") == "K2Node_CallFunction":
+                    func_name = node.get("function_name", "Unknown")
+                    # D-14-06: 提取参数类型（从 graph.nodes 中查找）
+                    param_str = _extract_function_params(graph, node.get("node_guid"))
+                    calls.append(f"{func_name}({param_str})")
+
+            execution_flows_summary.append({
+                "event": event_name,
+                "calls": calls
+            })
+
+        summary.append({
+            "graph": graph.graph_name,
+            "execution_flows": execution_flows_summary
+        })
+
+    return summary
+
+
+def _extract_function_params(graph: UEdGraph, node_guid: str) -> str:
+    """
+    提取函数参数类型（D-14-06）。
+
+    从节点 pins 中提取非 exec pin 的类型信息。
+    格式: "Param1:Type1, Param2:Type2"
+
+    Args:
+        graph: UEdGraph 对象
+        node_guid: 节点 GUID
+
+    Returns:
+        str: 参数类型字符串
+    """
+    # 查找节点
+    node = None
+    for n in graph.nodes:
+        if n.node_guid == node_guid:
+            node = n
+            break
+
+    if not node:
+        return ""
+
+    # 提取 input pins（非 exec 类型）
+    params = []
+    for pin in node.pins:
+        if pin.direction == 0:  # Input
+            if pin.pin_type and pin.pin_type.pin_category != "exec":
+                pin_type = pin.pin_type.pin_category
+                # 常见类型映射
+                type_map = {
+                    "string": "String",
+                    "float": "Float",
+                    "int": "Int",
+                    "bool": "Bool",
+                    "object": "Object",
+                    "struct": "Struct",
+                    "delegate": "Delegate",
+                    "class": "Class",
+                }
+                type_name = type_map.get(pin_type, pin_type.capitalize())
+                params.append(f"{pin.pin_name}:{type_name}")
+
+    return ", ".join(params[:3])  # 最多显示 3 个参数
+
+
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     """
     构建执行流路径（D-08-07~11）。
@@ -4913,7 +5096,79 @@ def _get_event_name(node: UEdGraphNode) -> str:
     return "Unknown"
 
 
-def format_json_full(result: ParseResult) -> Dict:
+def build_status_info(result: ParseResult) -> StatusInfo:
+    """
+    构建 status 字段（D-14-01, OUT-01）。
+
+    三元分类:
+    - success: is_success=True, errors=[]（解析成功，无错误）
+    - fail: is_success=True, errors non-empty（部分结果可用）
+    - error: is_success=False（严重错误）
+
+    Args:
+        result: ParseResult 对象
+
+    Returns:
+        StatusInfo: status 对象
+    """
+    if result.is_success:
+        if not result.errors:
+            return StatusInfo(status="success")
+        else:
+            # D-14-01: 有错误但部分结果可用 → fail
+            message = result.errors[0] if result.errors else None
+            return StatusInfo(status="fail", message=message, code="PARSE_ERROR")
+    else:
+        # is_success=False → error
+        message = result.errors[0] if result.errors else "Unknown error"
+        return StatusInfo(status="error", message=message, code="PARSE_ERROR")
+
+
+# ============================================================================
+# API Frozen Since Phase 14 (D-14-14~16, OUT-06)
+# ============================================================================
+#
+# 以下输出格式函数自 Phase 14 完成后冻结，后续 Phase 15+ 不修改核心字段结构:
+# - format_json_full(): 顶层字段固定
+# - format_json_summary(): 摘要字段固定（70%+ token 减少）
+# - build_status_info(): status 结构固定
+# - build_graphs_summary(): graphs_summary 结构固定
+#
+# 向后兼容承诺:
+# - 新字段可通过可选参数添加（如 include_schema）
+# - 字段语义不变（parent_class 含义保持）
+# - 底层字段通过注释标记，不删除
+# ============================================================================
+
+
+def build_schema_info() -> Dict[str, str]:
+    """
+    构建字段语义注释（D-14-13, OUT-05）。
+
+    仅在 --verbose 或 --schema 标志时输出。
+
+    Returns:
+        Dict[str, str]: 字段描述映射
+    """
+    return {
+        "status": "解析结果状态（success/fail/error）",
+        "output_version": "输出格式 API 版本标识",
+        "summary": "资产基本信息（版本、包名）",
+        "exports": "导出对象列表（蓝图、组件等）",
+        "blueprint_metadata": "蓝图元数据（父类、变量、图）",
+        "parent_class": "蓝图继承的父类名称",
+        "variables": "蓝图变量列表（名称、类型、默认值、元数据）",
+        "is_component": "变量是否为组件类型（SkeletalMeshComponent 等）",
+        "graphs": "蓝图执行图数据（完整节点/引脚信息）",
+        "graphs_summary": "顶层化的图执行流概览（事件→函数调用链）",
+        "execution_flows": "函数调用链路径",
+        "imports": "ImportMap 依赖列表（外部对象引用）",
+        "soft_references": "SoftObjectPaths 软引用列表",
+        "circular_deps": "检测到的循环依赖路径",
+    }
+
+
+def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     """
     Format full JSON output with complete asset data (OUT-01, OUT-03).
 
@@ -4926,6 +5181,7 @@ def format_json_full(result: ParseResult) -> Dict:
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
         Dict with keys: summary, exports, blueprint_metadata, errors
@@ -4942,17 +5198,26 @@ def format_json_full(result: ParseResult) -> Dict:
             "package_name": result.summary.package_name
         }
 
-    return {
+    output = {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
         "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # Phase 10: 依赖分析字段（D-10-05/08/13）
         "imports": result.imports,                     # D-10-05: ImportMap 依赖列表
         "soft_references": result.soft_references,     # D-10-08: SoftObjectPaths 软引用
         "circular_deps": result.circular_deps,         # D-10-13: 高密度依赖路径
         "errors": result.errors
     }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_exports_list(result: ParseResult) -> List[Dict]:
@@ -5064,19 +5329,29 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     return props_list
 
 
-def format_json_summary(result: ParseResult) -> Dict:
+def format_json_summary(result: ParseResult, include_schema: bool = False) -> Dict:
     """
-    Format compact JSON summary (OUT-03).
+    Format compact JSON summary - 70%+ token reduction（D-14-07~09, OUT-03）。
 
-    Per D-09: Medium detail - export names + types + properties (name+type+value)
-    Per D-10: Skip low-level details - no name_map, import_map, CustomVersions
+    精简策略:
+    - 移除: imports, soft_references, circular_deps, errors
+    - 精简 exports: 仅 name, class, parent_class
+    - 移除 properties 数组
+    - 保留: status, output_version, graphs_summary
+
+    Per D-07: 移除依赖字段
+    Per D-08: 精简 exports
+    Per D-09: 移除 properties 数组
 
     Args:
         result: ParseResult from parse_uasset()
+        include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
-        Dict with keys: version, package_name, exports, blueprint_metadata, errors
+        Dict: 精简摘要
     """
+    from dataclasses import asdict
+
     version_dict = {}
     if result.summary:
         version_dict = {
@@ -5085,25 +5360,44 @@ def format_json_summary(result: ParseResult) -> Dict:
             "legacy": result.summary.legacy_file_version
         }
 
+    # D-14-08: 精简 exports（仅 name, class, parent_class）
     exports_summary = []
-    for exp in result.export_map:
-        export_summary = {
+    for i, exp in enumerate(result.export_map):
+        # 获取 parent_class（仅在蓝图主对象的第一个 export）
+        parent_class = ""
+        if result.blueprint and result.blueprint.is_blueprint and i == 0:
+            parent_class = result.blueprint.parent_class or ""
+
+        exports_summary.append({
             "name": exp.object_name,
             "class": get_asset_class(exp, result.import_map, result.export_map),
-            "properties": [
-                {"name": p.name, "type": p.type, "value": p.value}
-                for p in (exp.properties or [])
-            ]
-        }
-        exports_summary.append(export_summary)
+            "parent_class": parent_class
+        })
 
-    return {
+    output = {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
-        "exports": exports_summary,
-        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
-        "errors": result.errors
+        "exports": exports_summary,  # D-14-08: 精简版本（无 properties/serial_size 等）
+        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
     }
+
+    # D-14-07: 移除 imports/soft_references/circular_deps/errors
+    # errors 数组已移除（status 字段已包含状态信息）
+
+    # blueprint_metadata 精简（仅保留核心字段）
+    if result.blueprint and result.blueprint.is_blueprint:
+        output["blueprint_metadata"] = {
+            "parent_class": result.blueprint.parent_class,
+            "is_blueprint": True,
+        }
+
+    # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
+    if include_schema:
+        output["_schema"] = build_schema_info()
+
+    return output
 
 
 def format_text_full(result: ParseResult) -> str:
@@ -5249,6 +5543,102 @@ def format_text_summary(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+def format_markdown(result: ParseResult) -> str:
+    """
+    格式化 Markdown 输出（D-14-10~12, OUT-04）。
+
+    三节结构 + 表格优先 + Mermaid 流程图。
+
+    Args:
+        result: ParseResult from parse_uasset()
+
+    Returns:
+        str: Markdown 格式文本
+    """
+    lines = []
+
+    # 标题
+    asset_name = result.summary.package_name if result.summary else "Unknown"
+    asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+    lines.append(f"# Asset: {asset_name}")
+    lines.append("")
+
+    # === Asset Overview ===
+    lines.append("## Asset Overview")
+    lines.append("| Field | Value |")
+    lines.append("|-------|-------|")
+    if result.summary:
+        lines.append(f"| Package | {result.summary.package_name} |")
+        ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
+        lines.append(f"| Version | UE {ue_version} |")
+    # Status
+    status_info = build_status_info(result)
+    lines.append(f"| Status | {status_info.status} |")
+    if status_info.message:
+        lines.append(f"| Message | {status_info.message} |")
+    lines.append("")
+
+    # === Blueprint Details ===
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("## Blueprint Details")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Parent Class | {result.blueprint.parent_class or 'Unknown'} |")
+        # Variables 统计
+        var_count = len(result.blueprint.variables) if result.blueprint.variables else 0
+        comp_count = sum(1 for v in result.blueprint.variables if v.is_component) if result.blueprint.variables else 0
+        lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+        lines.append("")
+
+    # === Graph Summary ===
+    graphs_summary = build_graphs_summary(result.graphs)
+    if graphs_summary:
+        lines.append("## Graph Summary")
+        for graph_summary in graphs_summary:
+            graph_name = graph_summary.get("graph", "Unknown")
+            lines.append(f"### {graph_name}")
+
+            # Mermaid 流程图
+            flows = graph_summary.get("execution_flows", [])
+            if flows:
+                lines.append("```mermaid")
+                lines.append("graph LR")
+                for flow in flows:
+                    event = flow.get("event", "Unknown")
+                    calls = flow.get("calls", [])
+                    if calls:
+                        # 第一个节点: event --> first_call
+                        first_func = calls[0].split("(")[0]
+                        lines.append(f"  {event} --> {first_func}")
+                        # 链式连接
+                        for i in range(len(calls) - 1):
+                            fn1 = calls[i].split("(")[0]
+                            fn2 = calls[i+1].split("(")[0]
+                            lines.append(f"  {fn1} --> {fn2}")
+                lines.append("```")
+                lines.append("")
+    else:
+        lines.append("## Graph Summary")
+        lines.append("No graphs in this asset.")
+        lines.append("")
+
+    # === Exports ===
+    if result.export_map:
+        lines.append("## Exports")
+        lines.append("| Name | Class | Parent |")
+        lines.append("|------|-------|--------|")
+        for i, exp in enumerate(result.export_map):
+            name = exp.object_name
+            cls = get_asset_class(exp, result.import_map, result.export_map)
+            parent = ""
+            if result.blueprint and i == 0:
+                parent = result.blueprint.parent_class or ""
+            lines.append(f"| {name} | {cls} | {parent} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
     """
     Format BlueprintMetadata for JSON output (D-04).
@@ -5300,8 +5690,10 @@ def create_parser() -> argparse.ArgumentParser:
     Create argparse parser for CLI (CLI-01 to CLI-04).
 
     Per D-23: Double entry point support
-    Per D-24: Mutually exclusive --json/--text/--summary flags
+    Per D-24: Mutually exclusive --json/--text/--summary/--markdown flags
     Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
+    D-14-17: --markdown flag (OUT-04)
+    D-14-19: --schema flag (OUT-05)
 
     Returns:
         argparse.ArgumentParser: Configured parser
@@ -5314,17 +5706,19 @@ def create_parser() -> argparse.ArgumentParser:
     # Positional: file path (CLI-01)
     parser.add_argument('file', help='Path to .uasset file to parse')
 
-    # Mutually exclusive output flags (D-24)
+    # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure')
     group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
+    group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
 
-    # Optional flags (D-27)
+    # Optional flags (D-27, D-14-19)
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
+    parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
 
     return parser
 
@@ -5373,7 +5767,8 @@ def main():
     if args.graph:
         # D-08-13: --graph + --json/--verbose = full output with graphs
         if args.json or args.verbose:
-            output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+            include_schema = args.schema or args.verbose
+            output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
         elif args.text:
             # --graph --text = text output with Graphs section
             output_str = format_text_full(result)
@@ -5381,10 +5776,15 @@ def main():
             # D-08-13: --graph alone = only graphs in JSON format
             output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
                                     indent=2, ensure_ascii=False)
+    elif args.markdown:
+        # D-14-17: --markdown 标志输出 Markdown 格式
+        output_str = format_markdown(result)
     elif args.json:
-        output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
     elif args.summary:
-        output_str = json.dumps(format_json_summary(result), indent=2, ensure_ascii=False)
+        include_schema = args.schema or args.verbose
+        output_str = json.dumps(format_json_summary(result, include_schema), indent=2, ensure_ascii=False)
     else:
         # Default: --text or no flag
         output_str = format_text_full(result)
@@ -5419,6 +5819,7 @@ __all__ = [
     'PropertyTag',
     'PropertyValue',
     'ParseResult',
+    'StatusInfo',  # Phase 14: JSend 风格 status 字段（OUT-01）
     'FEdGraphPinType',
     'BlueprintVariable',
     'BlueprintMetadata',
@@ -5543,10 +5944,12 @@ __all__ = [
     'format_json_summary',
     'format_text_full',
     'format_text_summary',
+    'format_markdown',  # Phase 14: Markdown 格式（OUT-04）
     'format_exports_list',
     'format_properties_list',
     'format_blueprint_dict',
     'resolve_fpackage_index',
+    'build_schema_info',  # Phase 14: Schema 字段语义注释（OUT-05）
 
     # CLI functions (Phase 4)
     'create_parser',

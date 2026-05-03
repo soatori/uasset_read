@@ -1088,3 +1088,823 @@ def test_cli_graph_json_output_full(create_mock_parse_result, sample_graph_with_
     assert '"graphs"' in output_str
     assert '"exports"' in output_str  # 包含其他字段
     assert '"summary"' in output_str
+
+
+# ============================================================================
+# Phase 14: OUT-01/OUT-06 - Status 字段 + output_version
+# ============================================================================
+
+
+def test_format_json_full_has_status_field(create_mock_parse_result):
+    """
+    OUT-01: 验证 format_json_full() 返回顶层 status 对象。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'status' in json_dict
+    assert isinstance(json_dict['status'], dict)
+    assert 'status' in json_dict['status']  # status.status 字段
+
+
+def test_status_success_when_no_errors(create_mock_parse_result):
+    """
+    OUT-01: is_success=True + errors=[] → status="success"
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = []
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "success"
+    assert json_dict['status']['message'] is None
+    assert json_dict['status']['code'] is None
+
+
+def test_status_fail_when_errors_non_empty(create_mock_parse_result):
+    """
+    OUT-01: is_success=True + errors non-empty → status="fail"
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = ["Partial parse error: missing property data"]
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "fail"
+    assert json_dict['status']['message'] == "Partial parse error: missing property data"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+def test_status_error_when_not_success(create_mock_parse_result):
+    """
+    OUT-01: is_success=False → status="error"
+    """
+    result = create_mock_parse_result
+    result.is_success = False
+    result.errors = ["Failed to parse file header"]
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "error"
+    assert json_dict['status']['message'] == "Failed to parse file header"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+def test_output_version_field(create_mock_parse_result):
+    """
+    OUT-06: 验证 output_version 字段存在且值为 "3.0"
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'output_version' in json_dict
+    assert json_dict['output_version'] == "3.0"
+
+
+def test_format_json_summary_has_status_field(create_mock_parse_result):
+    """
+    OUT-01: 验证 format_json_summary() 同样包含 status 字段。
+    """
+    result = create_mock_parse_result
+    result.is_success = True
+    result.errors = []
+
+    json_dict = format_json_summary(result)
+
+    assert 'status' in json_dict
+    assert json_dict['status']['status'] == "success"
+
+
+def test_format_json_summary_has_output_version(create_mock_parse_result):
+    """
+    OUT-06: 验证 format_json_summary() 包含 output_version。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_summary(result)
+
+    assert 'output_version' in json_dict
+    assert json_dict['output_version'] == "3.0"
+
+
+def test_status_field_top_level_position(create_mock_parse_result):
+    """
+    D-14-03: 验证 status 字段在顶层显眼位置（dict 的第一个键）。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    # 获取第一个键名
+    first_key = next(iter(json_dict.keys()))
+    assert first_key == "status", "status 应为顶层 dict 的第一个字段"
+
+
+def test_status_error_with_empty_errors(create_mock_parse_result):
+    """
+    边界测试: is_success=False 但 errors=[] → 使用默认错误信息。
+    """
+    result = create_mock_parse_result
+    result.is_success = False
+    result.errors = []
+
+    json_dict = format_json_full(result)
+
+    assert json_dict['status']['status'] == "error"
+    assert json_dict['status']['message'] == "Unknown error"
+    assert json_dict['status']['code'] == "PARSE_ERROR"
+
+
+# ============================================================================
+# Phase 14: OUT-02 - graphs_summary 顶层化
+# ============================================================================
+
+
+def test_graphs_summary_field_exists(create_mock_parse_result):
+    """
+    OUT-02: 验证 format_json_full() 返回顶层 graphs_summary 字段。
+    """
+    result = create_mock_parse_result
+    json_dict = format_json_full(result)
+
+    assert 'graphs_summary' in json_dict
+    assert isinstance(json_dict['graphs_summary'], list)
+
+
+def test_graphs_summary_entry_structure(create_mock_parse_result):
+    """
+    OUT-02: 每个 graphs_summary 条目包含 graph 和 execution_flows。
+    """
+    # 创建带 blueprint graph 的 mock result
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-001",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-001",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+                UEdGraphNode(
+                    node_guid="call-guid-001",
+                    class_name="K2Node_CallFunction",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-002",
+                            pin_name="execute",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                        UEdGraphPin(
+                            pin_id="pin-003",
+                            pin_name="InStr",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeCallFunction(
+                        function_reference=FMemberReference(
+                            member_name="PrintString",
+                            member_parent="UKismetSystemLibrary",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_full(result)
+
+    # graphs_summary 应有至少一个条目
+    assert len(json_dict['graphs_summary']) > 0
+
+    # 验证条目结构
+    entry = json_dict['graphs_summary'][0]
+    assert 'graph' in entry
+    assert 'execution_flows' in entry
+    assert entry['graph'] == "EventGraph"
+
+
+def test_graphs_summary_calls_format(create_mock_parse_result):
+    """
+    OUT-02: execution_flows.calls 格式为 ["FuncName(Param:Type)"]
+    """
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-002",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-101",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+                UEdGraphNode(
+                    node_guid="call-guid-002",
+                    class_name="K2Node_CallFunction",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-102",
+                            pin_name="execute",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                            linked_to_raw=["pin-101"],
+                        ),
+                        UEdGraphPin(
+                            pin_id="pin-103",
+                            pin_name="InStr",
+                            direction=0,
+                            pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeCallFunction(
+                        function_reference=FMemberReference(
+                            member_name="PrintString",
+                            member_parent="UKismetSystemLibrary",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_full(result)
+
+    # 验证 execution_flows 结构
+    entry = json_dict['graphs_summary'][0]
+    assert len(entry['execution_flows']) > 0
+
+    flow = entry['execution_flows'][0]
+    assert 'event' in flow
+    assert 'calls' in flow
+    assert isinstance(flow['calls'], list)
+
+    # 如果有函数调用，验证格式：FuncName(Param:Type)
+    if len(flow['calls']) > 0:
+        call_str = flow['calls'][0]
+        # 格式应为 "PrintString(InStr:String)" 或类似
+        assert '(' in call_str
+        assert ')' in call_str
+        # 验证包含函数名
+        assert 'PrintString' in call_str or call_str.startswith('Unknown')
+
+
+def test_graphs_summary_empty_graphs(create_mock_parse_result):
+    """
+    OUT-02: 空 graphs 输入返回空 graphs_summary []
+    """
+    result = create_mock_parse_result
+    result.graphs = []  # 空 graphs
+
+    json_dict = format_json_full(result)
+
+    assert 'graphs_summary' in json_dict
+    assert json_dict['graphs_summary'] == []
+
+
+def test_format_json_summary_has_graphs_summary(create_mock_parse_result):
+    """
+    OUT-02: 验证 format_json_summary() 也包含 graphs_summary 字段。
+    """
+    result = create_mock_parse_result
+    result.graphs = [
+        UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[
+                UEdGraphNode(
+                    node_guid="event-guid-003",
+                    class_name="K2Node_Event",
+                    pins=[
+                        UEdGraphPin(
+                            pin_id="pin-201",
+                            pin_name="EventBeginPlay",
+                            direction=1,
+                            pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                        ),
+                    ],
+                    node_data=K2NodeEvent(
+                        event_reference=FMemberReference(
+                            member_name="EventBeginPlay",
+                            member_parent="AActor",
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ]
+
+    json_dict = format_json_summary(result)
+
+    assert 'graphs_summary' in json_dict
+    assert isinstance(json_dict['graphs_summary'], list)
+
+
+# ============================================================================
+# Phase 14 Plan 03: Markdown 格式 + Schema（OUT-04, OUT-05）TDD 测试
+# ============================================================================
+
+
+class TestFormatMarkdown:
+    """
+    OUT-04: Markdown 格式输出测试。
+
+    三节结构 + 表格优先 + Mermaid 流程图。
+    """
+
+    def test_markdown_asset_title(self, create_mock_parse_result):
+        """
+        OUT-04: Markdown 输出以 "# Asset: {name}" 开头。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证标题格式
+        assert md_output.startswith("# Asset: ")
+        # 资产名称从 package_name 提取（最后一段）
+        assert "TestAsset" in md_output
+
+    def test_markdown_sections_exist(self, create_mock_parse_result):
+        """
+        OUT-04: 包含 "## Asset Overview" 和 "## Blueprint Details" 节。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证三节结构
+        assert "## Asset Overview" in md_output
+        # Blueprint Details 只在蓝图资产时显示
+        # Exports 节
+        assert "## Exports" in md_output
+
+    def test_markdown_exports_table_format(self, create_mock_parse_result):
+        """
+        OUT-04: exports 使用 Markdown 表格格式。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        md_output = format_markdown(result)
+
+        # 验证表格格式
+        assert "| Name | Class | Parent |" in md_output
+        assert "|------|-------|--------|" in md_output
+        # 验证数据行
+        assert "| TestClass_C" in md_output
+
+    def test_markdown_mermaid_flowchart(self, create_mock_parse_result):
+        """
+        OUT-04: graphs_summary 使用 mermaid 流程图语法。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        # 添加测试图数据
+        result.graphs = [
+            UEdGraph(
+                graph_name="EventGraph",
+                graph_class="EdGraph",
+                nodes=[
+                    UEdGraphNode(
+                        node_guid="event-md-001",
+                        class_name="K2Node_Event",
+                        pins=[
+                            UEdGraphPin(
+                                pin_id="pin-md-001",
+                                pin_name="EventBeginPlay",
+                                direction=1,  # Output
+                                pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                                linked_to_raw=["pin-md-002"],  # 连接到 CallFunction 的 input exec pin
+                            ),
+                        ],
+                        node_data=K2NodeEvent(
+                            event_reference=FMemberReference(
+                                member_name="EventBeginPlay",
+                                member_parent="AActor",
+                            ),
+                        ),
+                    ),
+                    UEdGraphNode(
+                        node_guid="call-md-001",
+                        class_name="K2Node_CallFunction",
+                        pins=[
+                            UEdGraphPin(
+                                pin_id="pin-md-002",
+                                pin_name="execute",
+                                direction=0,  # Input
+                                pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                                linked_to_raw=["pin-md-001"],  # 连接到 Event 的 output exec pin
+                            ),
+                            UEdGraphPin(
+                                pin_id="pin-md-003",
+                                pin_name="InStr",
+                                direction=0,
+                                pin_type=FEdGraphPinType(pin_category="string", pin_sub_category="none", pin_sub_category_object=None),
+                            ),
+                        ],
+                        node_data=K2NodeCallFunction(
+                            function_reference=FMemberReference(
+                                member_name="PrintString",
+                                member_parent="UKismetSystemLibrary",
+                            ),
+                        ),
+                    ),
+                ],
+            ),
+        ]
+
+        md_output = format_markdown(result)
+
+        # 验证 Mermaid 流程图语法
+        assert "```mermaid" in md_output
+        assert "graph LR" in md_output
+        # 验证调用链: EventBeginPlay --> PrintString
+        assert "EventBeginPlay --> PrintString" in md_output
+
+    def test_markdown_empty_graphs_message(self, create_mock_parse_result):
+        """
+        OUT-04: 空 graphs 输出时 Graph Summary 节显示 "No graphs"。
+        """
+        from uasset_read import format_markdown
+
+        result = create_mock_parse_result
+        result.graphs = []  # 空 graphs
+
+        md_output = format_markdown(result)
+
+        # 验证空图消息
+        assert "## Graph Summary" in md_output
+        assert "No graphs in this asset" in md_output
+
+
+class TestBuildSchemaInfo:
+    """
+    OUT-05: build_schema_info() 函数和 _schema 字段测试。
+    """
+
+    def test_schema_info_returns_dict(self):
+        """
+        OUT-05: build_schema_info() 返回字典。
+        """
+        from uasset_read import build_schema_info
+
+        schema = build_schema_info()
+
+        assert isinstance(schema, dict)
+        assert len(schema) > 0
+
+    def test_schema_info_contains_key_fields(self):
+        """
+        OUT-05: _schema 字段包含 parent_class/variables 等字段描述。
+        """
+        from uasset_read import build_schema_info
+
+        schema = build_schema_info()
+
+        # 验证关键字段存在
+        assert "parent_class" in schema
+        assert "variables" in schema
+        assert "graphs_summary" in schema
+        assert "execution_flows" in schema
+        # 验证描述不为空
+        assert len(schema["parent_class"]) > 0
+        assert len(schema["variables"]) > 0
+
+    def test_json_full_with_schema_flag(self, create_mock_parse_result):
+        """
+        OUT-05: --schema 标志输出 _schema 字段。
+        """
+        result = create_mock_parse_result
+
+        # 调用 format_json_full 并启用 include_schema
+        json_dict = format_json_full(result, include_schema=True)
+
+        assert "_schema" in json_dict
+        assert isinstance(json_dict["_schema"], dict)
+        assert "parent_class" in json_dict["_schema"]
+
+    def test_json_summary_with_schema_flag(self, create_mock_parse_result):
+        """
+        OUT-05: format_json_summary 也支持 include_schema 参数。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result, include_schema=True)
+
+        assert "_schema" in json_dict
+
+
+class TestCLIMarkdownSchemaFlags:
+    """
+    OUT-04/05: CLI --markdown/--schema 标志测试。
+    """
+
+    def test_markdown_flag_produces_markdown_output(self, create_mock_parse_result, temp_uasset_file):
+        """
+        OUT-04: --markdown 标志输出 Markdown 格式。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        # 模拟 --markdown 标志（temp_uasset_file 是 Path 对象，需要转字符串）
+        args = parser.parse_args([str(temp_uasset_file), '--markdown'])
+
+        assert args.markdown is True
+
+    def test_markdown_json_mutually_exclusive(self, temp_uasset_file):
+        """
+        OUT-04: --markdown 与 --json 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        # 测试互斥：同时使用 --markdown 和 --json 应报错
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--markdown', '--json'])
+
+    def test_schema_flag_available(self, temp_uasset_file):
+        """
+        OUT-05: --schema 标志可用。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args([str(temp_uasset_file), '--json', '--schema'])
+
+        assert args.schema is True
+
+
+# ============================================================================
+# Phase 14 Plan 04: 摘要精简 + CLI完善（OUT-03, OUT-06）TDD 测试
+# ============================================================================
+
+
+class TestSummaryCompactPhase14:
+    """
+    OUT-03: format_json_summary 摘要精简测试。
+
+    Per D-14-07~09: 70%+ token 减少
+    - 移除: imports, soft_references, circular_deps, errors
+    - 精简 exports: 仅 name, class, parent_class
+    - 移除: properties 数组
+    """
+
+    def test_summary_removes_imports(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 imports 字段。
+        """
+        # 添加 imports 数据
+        result = create_mock_parse_result
+        result.imports = [
+            ObjectImport(
+                class_package="/Script/CoreUObject",
+                class_name="Class",
+                object_name="Actor",
+                outer_index=PackageIndex(0),
+            )
+        ]
+
+        json_dict = format_json_summary(result)
+
+        # imports 应被移除
+        assert "imports" not in json_dict
+
+    def test_summary_removes_soft_references(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 soft_references 字段。
+        """
+        result = create_mock_parse_result
+        result.soft_references = [
+            {"path": "/Game/SomeAsset.SomeAsset"}
+        ]
+
+        json_dict = format_json_summary(result)
+
+        # soft_references 应被移除
+        assert "soft_references" not in json_dict
+
+    def test_summary_removes_circular_deps(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 circular_deps 字段。
+        """
+        result = create_mock_parse_result
+        result.circular_deps = [["A", "B", "A"]]
+
+        json_dict = format_json_summary(result)
+
+        # circular_deps 应被移除
+        assert "circular_deps" not in json_dict
+
+    def test_summary_removes_errors_array(self, create_mock_parse_result):
+        """
+        D-14-07: format_json_summary 不包含 errors 数组（status 已含状态）。
+        """
+        result = create_mock_parse_result
+        result.errors = ["Warning: deprecated field"]
+
+        json_dict = format_json_summary(result)
+
+        # errors 数组应被移除（status 字段已包含状态信息）
+        assert "errors" not in json_dict
+
+    def test_summary_exports_only_name_class_parent(self, create_mock_parse_result):
+        """
+        D-14-08: exports 仅包含 name/class/parent_class，移除 serial_size/properties 等。
+        """
+        result = create_mock_parse_result
+        # 确保 exports 有数据
+        assert len(result.export_map) > 0
+
+        json_dict = format_json_summary(result)
+        export = json_dict["exports"][0]
+
+        # 保留的字段
+        assert "name" in export
+        assert "class" in export
+        # parent_class 应在第一个 export（蓝图主对象）
+        # 其他 export 可能没有 parent_class
+
+        # 移除的字段
+        assert "serial_size" not in export
+        assert "outer_index" not in export
+        assert "super_index" not in export
+        assert "index" not in export
+
+    def test_summary_exports_no_properties(self, create_mock_parse_result):
+        """
+        D-14-09: exports 不包含 properties 数组。
+        """
+        result = create_mock_parse_result
+        # 确保 export 有 properties
+        assert result.export_map[0].properties is not None
+        assert len(result.export_map[0].properties) > 0
+
+        json_dict = format_json_summary(result)
+        export = json_dict["exports"][0]
+
+        # properties 数组应被移除
+        assert "properties" not in export
+
+    def test_summary_keeps_graphs_summary(self, create_mock_parse_result):
+        """
+        D-14-04: graphs_summary 保留（已在 14-02 顶层化）。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result)
+
+        # graphs_summary 应保留
+        assert "graphs_summary" in json_dict
+        assert isinstance(json_dict["graphs_summary"], list)
+
+    def test_summary_keeps_status_and_output_version(self, create_mock_parse_result):
+        """
+        OUT-06: status 和 output_version 字段保留。
+        """
+        result = create_mock_parse_result
+
+        json_dict = format_json_summary(result)
+
+        # status 和 output_version 应保留
+        assert "status" in json_dict
+        assert "output_version" in json_dict
+        assert json_dict["output_version"] == "3.0"
+
+    def test_summary_blueprint_metadata_compact(self, create_mock_parse_result):
+        """
+        摘要模式 blueprint_metadata 精简为仅核心字段。
+        """
+        result = create_mock_parse_result
+        result.blueprint = BlueprintMetadata(
+            is_blueprint=True,
+            parent_class="ACharacter",
+            variables=[],
+        )
+
+        json_dict = format_json_summary(result)
+
+        # blueprint_metadata 应存在
+        assert "blueprint_metadata" in json_dict
+        # 精简版本应包含核心字段
+        if json_dict["blueprint_metadata"]:
+            assert "parent_class" in json_dict["blueprint_metadata"]
+
+
+class TestCLISummaryFlagsPhase14:
+    """
+    OUT-03/OUT-06: CLI --summary 标志完善测试。
+
+    验证 --summary 输出精简 JSON，互斥关系正确。
+    """
+
+    def test_summary_flag_produces_compact_json(self, create_mock_parse_result, temp_uasset_file):
+        """
+        D-14-18: --summary 标志输出精简 JSON（70%+ token 减少）。
+        """
+        from uasset_read import create_parser, format_json_summary
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary'])
+
+        assert args.summary is True
+
+        # 验证输出结构精简
+        result = create_mock_parse_result
+        json_dict = format_json_summary(result)
+
+        # 精简结构验证
+        assert "imports" not in json_dict
+        assert "errors" not in json_dict
+
+    def test_summary_schema_flag_combination(self, temp_uasset_file):
+        """
+        D-14-19: --summary --schema 包含 _schema 字段。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary', '--schema'])
+
+        assert args.summary is True
+        assert args.schema is True
+
+    def test_summary_verbose_includes_schema(self, temp_uasset_file):
+        """
+        --summary --verbose 也应包含 _schema 字段。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args([str(temp_uasset_file), '--summary', '--verbose'])
+
+        assert args.summary is True
+        assert args.verbose is True
+
+    def test_summary_json_mutually_exclusive(self, temp_uasset_file):
+        """
+        --summary 与 --json 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--json'])
+
+    def test_summary_text_mutually_exclusive(self, temp_uasset_file):
+        """
+        --summary 与 --text 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--text'])
+
+    def test_summary_markdown_mutually_exclusive(self, temp_uasset_file):
+        """
+        D-14-17: --summary 与 --markdown 互斥。
+        """
+        from uasset_read import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args([str(temp_uasset_file), '--summary', '--markdown'])

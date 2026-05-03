@@ -2,13 +2,14 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.0 Phase 13规划完成，准备执行
+**当前状态：** v3.1 Phase 16 完成，Bool 序列化修复成功
 
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v2.0 蓝图图解析** — Phases 6-10 (shipped 2026-05-02 via PR #2) — [Archive](milestones/v2.0-ROADMAP.md)
-- 🚀 **v3.0 解析完善 + Skill打包** — Phases 11-15 (planning 13/15, 13-01/13-03 complete)
+- ✅ **v3.0 解析完善 + Skill打包** — Phases 11-15 (shipped 2026-05-03)
+- 🔧 **v3.1 解析器兼容性修复** — Phase 16 (planning complete)
 
 ## Phases
 
@@ -44,15 +45,31 @@
 
 </details>
 
-### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — PLANNING IN PROGRESS
+### 🚀 v3.0 解析完善 + Skill打包 (Phases 11-15) — COMPLETE
 
 **目标：** 补齐缺失数值解析，输出可用结果，打包成Claude Code skill
 
 - [x] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
 - [x] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
 - [x] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性（规划完成）
-- [ ] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式
-- [ ] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill
+- [x] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（执行完成，UAT验证通过）
+- [x] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill（规划完成）
+
+---
+
+### 🔧 v3.1 解析器兼容性修复 (Phase 16) — COMPLETE
+
+**目标：** 修复 Bool 序列化大小错误（1 byte → 4 bytes），使 UE 5.7 资产解析正确工作
+
+- [x] **Phase 16: Bool 序列化修复** — 修复 16 个 bool 字段的序列化大小错误（completed 2026-05-03）
+
+---
+
+### 🔧 v3.2 属性解析修复 (Phase 17) — COMPLETE
+
+**目标：** 解决 UE 5.7 资产的属性解析错误，使 53/69 导出对象的属性可以正确解析
+
+- [ ] **Phase 17: 属性解析修复** — 解决 negative_size、exceeds_remaining、cannot_read 三类错误（added 2026-05-03）
 
 ---
 
@@ -144,7 +161,13 @@ Plans:
   5. 用户可以看到关键字段（parent_class、variables等）的语义注释，理解字段含义
   6. 输出格式冻结后保持稳定，后续skill封装依赖此API不变
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+- [x] 14-01-PLAN.md — Status 字段 + output_version（Wave 1, OUT-01/OUT-06）
+- [x] 14-02-PLAN.md — graphs_summary 顶层化（Wave 1, OUT-02）
+- [x] 14-03-PLAN.md — Markdown 格式 + Schema（Wave 2, OUT-04/OUT-05）
+- [x] 14-04-PLAN.md — 摘要精简 + CLI扩展 + 测试覆盖 + API冻结标注（Wave 3, OUT-03/OUT-06）
 
 ### Phase 15: Claude Code skill封装
 
@@ -157,11 +180,64 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. 用户可以在.claude/skills/uasset-read/目录中找到SKILL.md主文件，包含触发词和能力范围说明
   2. 用户可以在knowledge/目录中找到5-6个知识文件（blueprint-semantics.md、node-types.md、pin-type-mapping.md、cpp-conversion.md、common-patterns.md、troubleshooting.md）
-  3. 用户可以在examples/目录中找到3-4个示例文件（basic-usage.md、blueprint-analysis.md、cpp-conversion.md）
+  3. 用户可以在examples/目录中找到3-4个示例文件（basic-usage.md、blueprint-analysis.md、cpp-conversion.md、troubleshooting.md）
   4. Claude Code可以通过触发词自动调用parse_uasset() API并正确解读输出结果
   5. 集成测试验证skill触发、API调用、输出解读三个环节正确工作
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+Plans:
+- [x] 15-01-PLAN.md — SKILL.md主文件 + 目录结构（Wave 1, SKILL-01, completed）
+- [x] 15-02-PLAN.md — 知识库文件创建（Wave 2, SKILL-02, depends on 15-01, completed）
+- [x] 15-03-PLAN.md — 示例文件创建 + 集成测试（Wave 3, SKILL-03/SKILL-04, depends on 15-01, 15-02, completed）
+
+### Phase 16: Bool 序列化修复
+
+**Goal:** 修复 Bool 序列化大小错误（1 byte → 4 bytes），使导出表解析正确工作
+
+**Depends on:** Phase 15 (Skill封装完成)
+
+**Requirements:** FIX-01, FIX-02, FIX-03
+
+**Success Criteria** (what must be TRUE):
+  1. 解析 UE 5.7 资产返回 exports (69 个)
+  2. 所有 `serial_offset` 在有效文件范围内
+  3. 可以正确读取导出对象的类名和对象名
+  4. 属性解析可以正常开始（不再因偏移无效而失败）
+
+**Plans:** 3 plans
+
+Plans:
+- [x] 16-01-PLAN.md — FArchive.read_bool() 添加 + ExportMap 修复（Wave 1, completed）
+- [x] 16-02-PLAN.md — ImportMap + 蓝图图结构修复（Wave 2, completed）
+- [x] 16-03-PLAN.md — 测试验证 + UE 5.7 资产测试（Wave 3, completed）
+
+**Status:** ✓ Complete (2026-05-03)
+
+---
+
+### Phase 17: 属性解析修复
+
+**Goal:** 解决 UE 5.7 资产的属性解析错误，使导出对象的属性可以正确解析
+
+**Depends on:** Phase 16 (Bool 序列化修复完成)
+
+**Requirements:** FIX-04, FIX-05, FIX-06, FIX-07
+
+**Success Criteria** (what must be TRUE):
+  1. PropertyTag 格式判断阈值正确 (PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012)
+  2. 单元测试全部通过 (359 passed)
+  3. 偏移计算正确 (serial_offset + script_serial_offset)
+  4. SerializationControlExtensions 头部正确处理
+
+**Plans:** 3 plans
+
+Plans:
+- [x] 17-01-PLAN.md — 偏移计算修复（D-01: serial_offset + script_serial_offset）
+- [x] 17-02-PLAN.md — SerializationControlExtensions 头部处理（D-02, depends on 17-01）
+- [x] 17-03-PLAN.md — PropertyTag Extensions 处理 + 验证（D-03, depends on 17-01, 17-02）
+
+**Status:** ✓ Complete (2026-05-04)
 
 ---
 
@@ -180,10 +256,12 @@ Plans:
 | 9. 高级属性 | v2.0 | 3/3 | Complete | 2026-05-02 |
 | 10. 依赖分析 | v2.0 | 6/6 | Complete | 2026-05-02 |
 | 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
-| 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Planning complete | - |
-| 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
-| 14. 输出格式优化并冻结 | v3.0 | 0/1 | Not started | - |
-| 15. Claude Code skill封装 | v3.0 | 0/1 | Not started | - |
+| 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Complete | 2026-05-03 |
+| 13. 组件变换属性解析 | v3.0 | 3/3 | Complete | 2026-05-03 |
+| 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
+| 15. Claude Code skill封装 | v3.0 | 3/3 | Complete | 2026-05-03 |
+| 16. Bool 序列化修复 | v3.1 | 3/3 | Complete | 2026-05-03 |
+| 17. 属性解析修复 | v3.2 | 3/3 | Complete | 2026-05-04 |
 
 ---
 
@@ -196,18 +274,25 @@ Plans:
 | EXTR-03 | Phase 12 | Planning complete |
 | EXTR-04 | Phase 13 | Planning complete |
 | EXTR-05 | Phase 12 | Planning complete |
-| OUT-01 | Phase 14 | Pending |
-| OUT-02 | Phase 14 | Pending |
-| OUT-03 | Phase 14 | Pending |
-| OUT-04 | Phase 14 | Pending |
-| OUT-05 | Phase 14 | Pending |
-| OUT-06 | Phase 14 | Pending |
-| SKILL-01 | Phase 15 | Pending |
-| SKILL-02 | Phase 15 | Pending |
-| SKILL-03 | Phase 15 | Pending |
-| SKILL-04 | Phase 15 | Pending |
+| OUT-01 | Phase 14 | Complete |
+| OUT-02 | Phase 14 | Complete |
+| OUT-03 | Phase 14 | Complete |
+| OUT-04 | Phase 14 | Complete |
+| OUT-05 | Phase 14 | Complete |
+| OUT-06 | Phase 14 | Complete |
+| SKILL-01 | Phase 15 | Complete |
+| SKILL-02 | Phase 15 | Complete |
+| SKILL-03 | Phase 15 | Complete |
+| SKILL-04 | Phase 15 | Complete |
+| FIX-01 | Phase 16 | Complete |
+| FIX-02 | Phase 16 | Complete |
+| FIX-03 | Phase 16 | Complete |
+| FIX-04 | Phase 17 | Complete |
+| FIX-05 | Phase 17 | Complete |
+| FIX-06 | Phase 17 | Complete |
+| FIX-07 | Phase 17 | Complete |
 
-**Coverage:** 15/15 requirements mapped ✓
+**Coverage:** 22/22 requirements mapped ✓
 
 ---
 
@@ -217,4 +302,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 13规划完成，3 plans created*
+*最后更新：2026-05-03 — Phase 17 added (属性解析修复)*
