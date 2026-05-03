@@ -1086,6 +1086,49 @@ def parse_scale_value(struct_value: StructValue) -> ScaleValue:
     return ScaleValue(x=x, y=y, z=z)
 
 
+def extract_component_transforms(
+    export_properties: List[PropertyValue],
+    component_name: str = None
+) -> Dict[str, Any]:
+    """
+    从组件 export 的 properties 中提取变换属性（per D-01, D-01a）。
+
+    筛选 RelativeLocation/RelativeRotation/RelativeScale3D 属性，
+    分派到对应解析函数转换为 VectorValue/RotatorValue/ScaleValue。
+
+    Args:
+        export_properties: PropertyValue 列表（来自 parse_properties_from_export）
+        component_name: 组件名称（可选，用于日志）
+
+    Returns:
+        Dict[str, Any]: 包含 relative_location/relative_rotation/relative_scale 键
+                       值为 VectorValue/RotatorValue/ScaleValue 或 None
+
+    来自 CONTEXT.md D-01, D-01a。
+    """
+    transforms = {}
+
+    for prop in export_properties:
+        if prop.type != "StructProperty" or not prop.value:
+            continue
+
+        struct_val = prop.value
+        if not isinstance(struct_val, StructValue):
+            continue
+
+        prop_name = prop.name
+
+        # D-01: 筛选 RelativeLocation/RelativeRotation/RelativeScale3D
+        if prop_name == "RelativeLocation" and struct_val.struct_type == "Vector":
+            transforms["relative_location"] = parse_vector_value(struct_val, 'location')
+        elif prop_name == "RelativeRotation" and struct_val.struct_type == "Rotator":
+            transforms["relative_rotation"] = parse_rotator_value(struct_val)
+        elif prop_name == "RelativeScale3D" and struct_val.struct_type == "Vector":
+            transforms["relative_scale"] = parse_scale_value(struct_val)
+
+    return transforms
+
+
 @dataclass
 class FEdGraphPinType:
     """
@@ -5400,6 +5443,7 @@ __all__ = [
     'parse_vector_value',
     'parse_rotator_value',
     'parse_scale_value',
+    'extract_component_transforms',
 
     # FArchive
     'FArchive',
