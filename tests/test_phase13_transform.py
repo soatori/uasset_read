@@ -179,3 +179,118 @@ class TestPrecisionHandling:
         assert result.x == 10  # int
         assert result.y == 1.235  # 3 decimals
         assert result.z == 101.0  # rounds to 101.0
+
+
+class TestComponentTransforms:
+    """Test component transform extraction from ExportMap (per 13-02, D-01, D-01a)"""
+
+    def test_extract_component_transforms_empty(self):
+        """extract_component_transforms should return empty dict for empty props"""
+        result = extract_component_transforms([])
+        assert result == {}
+
+    def test_extract_component_transforms_relative_location(self):
+        """Should extract RelativeLocation property"""
+        props = [
+            PropertyValue(
+                name="RelativeLocation",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Vector",
+                    fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
+                )
+            )
+        ]
+        result = extract_component_transforms(props)
+        assert "relative_location" in result
+        assert result["relative_location"].x == 100
+
+    def test_extract_component_transforms_relative_rotation(self):
+        """Should extract RelativeRotation property"""
+        props = [
+            PropertyValue(
+                name="RelativeRotation",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Rotator",
+                    fields={"Roll": 0.0, "Pitch": 0.0, "Yaw": 90.0}
+                )
+            )
+        ]
+        result = extract_component_transforms(props)
+        assert "relative_rotation" in result
+        assert result["relative_rotation"].yaw == 90.0
+
+    def test_extract_component_transforms_relative_scale(self):
+        """Should extract RelativeScale3D property"""
+        props = [
+            PropertyValue(
+                name="RelativeScale3D",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Vector",
+                    fields={"X": 1.5, "Y": 1.5, "Z": 1.5}
+                )
+            )
+        ]
+        result = extract_component_transforms(props)
+        assert "relative_scale" in result
+        assert result["relative_scale"].x == 1.5
+
+    def test_extract_component_transforms_all_three(self):
+        """Should extract all three transform properties"""
+        props = [
+            PropertyValue(
+                name="RelativeLocation",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Vector",
+                    fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
+                )
+            ),
+            PropertyValue(
+                name="RelativeRotation",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Rotator",
+                    fields={"Roll": 0.0, "Pitch": 0.0, "Yaw": 90.0}
+                )
+            ),
+            PropertyValue(
+                name="RelativeScale3D",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Vector",
+                    fields={"X": 1.5, "Y": 1.5, "Z": 1.5}
+                )
+            )
+        ]
+        result = extract_component_transforms(props)
+        assert len(result) == 3
+        assert "relative_location" in result
+        assert "relative_rotation" in result
+        assert "relative_scale" in result
+
+    def test_extract_component_transforms_ignores_other_properties(self):
+        """Should ignore non-transform properties"""
+        props = [
+            PropertyValue(name="SomeOtherProp", type="IntProperty", value=42),
+            PropertyValue(
+                name="RelativeLocation",
+                type="StructProperty",
+                value=StructValue(
+                    property_type="StructProperty",
+                    struct_type="Vector",
+                    fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
+                )
+            )
+        ]
+        result = extract_component_transforms(props)
+        assert "relative_location" in result
+        assert len(result) == 1
