@@ -2,7 +2,7 @@
 
 **项目：** uasset_read — Unreal Engine .uasset 解析工具
 **创建日期：** 2026-04-27
-**当前状态：** v3.1 Phase 16 规划完成，准备执行
+**当前状态：** v3.1 Phase 16 完成，Bool 序列化修复成功
 
 ## Milestones
 
@@ -57,11 +57,11 @@
 
 ---
 
-### 🔧 v3.1 解析器兼容性修复 (Phase 16) — PLANNING COMPLETE
+### 🔧 v3.1 解析器兼容性修复 (Phase 16) — COMPLETE
 
 **目标：** 修复 Bool 序列化大小错误（1 byte → 4 bytes），使 UE 5.7 资产解析正确工作
 
-- [ ] **Phase 16: Bool 序列化修复** — 修复 16 个 bool 字段的序列化大小错误
+- [x] **Phase 16: Bool 序列化修复** — 修复 16 个 bool 字段的序列化大小错误（completed 2026-05-03）
 
 ---
 
@@ -192,7 +192,7 @@ Plans:
 **Requirements:** FIX-01, FIX-02, FIX-03
 
 **Success Criteria** (what must be TRUE):
-  1. 解析 UE 5.7 资产返回 `status: success`
+  1. 解析 UE 5.7 资产返回 exports (69 个)
   2. 所有 `serial_offset` 在有效文件范围内
   3. 可以正确读取导出对象的类名和对象名
   4. 属性解析可以正常开始（不再因偏移无效而失败）
@@ -200,11 +200,11 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 16-01-PLAN.md — FArchive.read_bool() 添加 + ExportMap 修复（Wave 1, FIX-01/FIX-02）
-- [ ] 16-02-PLAN.md — ImportMap + 蓝图图结构修复（Wave 2, FIX-02, depends on 16-01）
-- [ ] 16-03-PLAN.md — 测试验证 + UE 5.7 资产测试（Wave 3, FIX-03, depends on 16-01, 16-02）
+- [x] 16-01-PLAN.md — FArchive.read_bool() 添加 + ExportMap 修复（Wave 1, completed）
+- [x] 16-02-PLAN.md — ImportMap + 蓝图图结构修复（Wave 2, completed）
+- [x] 16-03-PLAN.md — 测试验证 + UE 5.7 资产测试（Wave 3, completed）
 
-**Status:** Planning complete
+**Status:** ✓ Complete (2026-05-03)
 
 ---
 
@@ -223,11 +223,11 @@ Plans:
 | 9. 高级属性 | v2.0 | 3/3 | Complete | 2026-05-02 |
 | 10. 依赖分析 | v2.0 | 6/6 | Complete | 2026-05-02 |
 | 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
-| 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Planning complete | - |
-| 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
+| 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Complete | 2026-05-03 |
+| 13. 组件变换属性解析 | v3.0 | 3/3 | Complete | 2026-05-03 |
 | 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
 | 15. Claude Code skill封装 | v3.0 | 3/3 | Complete | 2026-05-03 |
-| 16. Bool 序列化修复 | v3.1 | 3/3 | Planning complete | - |
+| 16. Bool 序列化修复 | v3.1 | 3/3 | Complete | 2026-05-03 |
 
 ---
 
@@ -250,9 +250,9 @@ Plans:
 | SKILL-02 | Phase 15 | Complete |
 | SKILL-03 | Phase 15 | Complete |
 | SKILL-04 | Phase 15 | Complete |
-| FIX-01 | Phase 16 | Planning complete |
-| FIX-02 | Phase 16 | Planning complete |
-| FIX-03 | Phase 16 | Planning complete |
+| FIX-01 | Phase 16 | Complete |
+| FIX-02 | Phase 16 | Complete |
+| FIX-03 | Phase 16 | Complete |
 
 **Coverage:** 18/18 requirements mapped ✓
 
@@ -264,4 +264,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-03 — Phase 16 planning complete*
+*最后更新：2026-05-03 — Phase 16 complete (Bool serialization fix)*
