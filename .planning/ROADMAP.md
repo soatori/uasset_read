@@ -51,7 +51,7 @@
 - [x] **Phase 11: ExportMap属性值提取** — 从ExportMap提取组件属性值、变量默认值、输入动作引用（gap closure已完成）
 - [x] **Phase 12: BlueprintVariables完整提取** — 提取蓝图变量完整信息，区分组件变量和普通变量（规划完成）
 - [x] **Phase 13: 组件变换属性解析** — 解析组件的Location/Rotation/Scale变换属性（规划完成）
-- [ ] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（规划完成）
+- [x] **Phase 14: 输出格式优化并冻结** — 优化JSON输出格式，添加status字段、摘要模式、Markdown格式（执行完成，待验证）
 - [ ] **Phase 15: Claude Code skill封装** — 创建SKILL.md、知识库、示例文件，封装成Claude Code skill
 
 ---
@@ -147,10 +147,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — Status 字段 + output_version（Wave 1, OUT-01/OUT-06部分）
-- [ ] 14-02-PLAN.md — graphs_summary 顶层化（Wave 1, OUT-02）
-- [ ] 14-03-PLAN.md — Markdown 格式 + Schema（Wave 2, OUT-04/OUT-05）
-- [ ] 14-04-PLAN.md — 摘要精简 + CLI扩展 + 测试覆盖 + API冻结标注（Wave 3, OUT-03/OUT-06）
+- [x] 14-01-PLAN.md — Status 字段 + output_version（Wave 1, OUT-01/OUT-06）
+- [x] 14-02-PLAN.md — graphs_summary 顶层化（Wave 1, OUT-02）
+- [x] 14-03-PLAN.md — Markdown 格式 + Schema（Wave 2, OUT-04/OUT-05）
+- [x] 14-04-PLAN.md — 摘要精简 + CLI扩展 + 测试覆盖 + API冻结标注（Wave 3, OUT-03/OUT-06）
 
 ### Phase 15: Claude Code skill封装
 
@@ -188,7 +188,7 @@ Plans:
 | 11. ExportMap属性值提取 | v3.0 | 6/6 | Complete | 2026-05-03 |
 | 12. BlueprintVariables完整提取 | v3.0 | 3/3 | Planning complete | - |
 | 13. 组件变换属性解析 | v3.0 | 3/3 | Planning complete | - |
-| 14. 输出格式优化并冻结 | v3.0 | 4/4 | Planning complete | - |
+| 14. 输出格式优化并冻结 | v3.0 | 4/4 | Executed | 2026-05-03 |
 | 15. Claude Code skill封装 | v3.0 | 0/1 | Not started | - |
 
 ---
