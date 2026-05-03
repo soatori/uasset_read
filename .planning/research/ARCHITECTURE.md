@@ -1,738 +1,682 @@
-# 架构模式
+# Skill集成架构
 
-**领域：** Unreal Engine .uasset 文件二进制解析器
-**研究日期：** 2026-04-27
+**领域：** Claude Code skill 与 Python uasset_read 工具集成
+**研究日期：** 2026-05-03
+**里程碑：** v3.0 解析完善 + Skill打包
+
+---
+
+## 执行摘要
+
+**核心问题：** 如何将现有单文件Python解析器（uasset_read.py）封装成Claude Code skill，使AI agent能高效理解和使用蓝图解析能力？
+
+**推荐架构：** 双层架构 —— Python工具层（执行解析）+ Skill知识层（指导使用）。
+
+**关键发现：**
+
+1. **skill不是代码封装，而是知识封装** —— skill提供"如何使用"指导，Python工具提供"实际能力"
+2. **现有架构无需大改** —— FArchive管道模式已足够灵活，skill作为独立消费者层
+3. **集成点明确** —— `parse_uasset()` API是唯一入口，skill通过标准调用消费结果
+4. **构建顺序关键** —— 先完善API输出质量（v3.0 Phase 11-14），再封装skill（Phase 15）
+
+---
 
 ## 推荐架构
 
-推荐架构遵循 **分层管道** 模式，镜像 Unreal Engine 自身序列化架构，同时适配 Python 习惯。
+### 总体架构图
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              输出层                                         │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
-│  │   TextOutput    │  │   JsonOutput    │  │      SummaryOutput         │  │
-│  │  (人类可读)     │  │ (Agent 可解析)  │  │  (精简概览)                │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ▲
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              模型层                                         │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
-│  │   UObject       │  │   UBlueprint    │  │      FProperty             │  │
-│  │   (基类)        │  │   (蓝图)        │  │   (属性类型)               │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘  │
-│                                                                             │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
-│  │   FPackageIndex │  │   NameTable     │  │      ExportMap/ImportMap   │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ▲
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           反序列化层                                        │
+│                           Claude Code Agent                                 │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                         AssetDeserializer                            │   │
-│  │  - 读取 NameTable、ImportMap、ExportMap                            │   │
-│  │  - 分发到类型特定处理器                                             │   │
-│  │  - 解析交叉引用（FPackageIndex）                                    │   │
+│  │  用户查询： "分析 BP_Character 的移动逻辑"                            │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
-│  │ BlueprintHandler  │  │  TextureHandler   │  │    ...其他类型        │   │
-│  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ▲
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              读取层                                         │
+│                                    ↓                                        │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                           BinaryReader                               │   │
-│  │  - 低级字节操作（read_u8、read_u32、read_f32 等）                   │   │
-│  │  - 字节序处理                                                        │   │
-│  │  - 流位置管理                                                        │   │
-│  │  - 内存映射文件支持                                                  │   │
+│  │                       Skill 层（知识指导）                            │   │
+│  │  .claude/skills/uasset-read/SKILL.md                                 │   │
+│  │  - 触发词匹配：uasset、蓝图解析、蓝图转C++                            │   │
+│  │  - 能力定义：能做什么、不能做什么                                     │   │
+│  │  - 使用指导：如何调用parse_uasset()、如何解读结果                     │   │
+│  │  - 知识库：knowledge/*.md（蓝图语义、节点类型、转换模式）             │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌───────────────────┐  ┌───────────────────┐  ┌───────────────────────┐   │
-│  │   FileReader      │  │   MemoryReader    │  │    PakReader          │   │
-│  │  (文件流)         │  │  (字节缓冲)       │  │   (pak 归档)          │   │
-│  └───────────────────┘  └───────────────────┘  └───────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ▲
-                                    │
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            输入层                                           │
+│                                    ↓                                        │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                           .uasset 文件                               │   │
-│  │  [PackageFileSummary][NameTable][ImportMap][ExportMap][Payload]     │   │
+│  │                    Python 工具层（执行解析）                          │   │
+│  │  uasset_read.py                                                       │   │
+│  │  - parse_uasset(path) → ParseResult                                   │   │
+│  │  - FArchive 管道模式                                                   │   │
+│  │  - 分层解析器（Header/NameMap/ImportMap/ExportMap）                   │   │
+│  │  - 扩展组件（GraphParser/AdvancedPropParser/DependencyAnalyzer）      │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                         输出层                                        │   │
+│  │  ParseResult → JSON/Text                                              │   │
+│  │  - graphs: 蓝图图结构                                                  │   │
+│  │  - blueprint: 元数据                                                   │   │
+│  │  - exports: 导出对象                                                   │   │
+│  │  - dependencies: 依赖图                                               │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    Skill 解读层（语义增强）                           │   │
+│  │  knowledge/blueprint-semantics.md                                     │   │
+│  │  - 节点语义：K2Node_CallFunction = 函数调用                           │   │
+│  │  - 执行流：Event → CallFunction 链路                                  │   │
+│  │  - 转换模式：蓝图节点 → C++ 等价代码                                  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                    ↓                                        │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                         用户响应                                      │   │
+│  │  "BP_Character 的移动逻辑：                                           │   │
+│  │   - 输入事件：IA_Move（EnhancedInput）                                │   │
+│  │   - 处理函数：Move(Vector2D ActionValue)                             │   │
+│  │   - 等价C++：void Move(FVector2D ActionValue) {...}"                 │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 组件边界
+---
+
+## 组件边界
+
+### Python 工具层组件（现有）
 
 | 组件 | 职责 | 与谁通信 |
 |------|------|----------|
-| **BinaryReader** | 低级字节读取、字节序、定位 | 输入层（读取）、反序列化器（服务） |
-| **AssetDeserializer** | 协调解析、类型分发、引用解析 | Reader（读取）、模型（创建）、处理器（分发） |
-| **TypeHandlers** | 类型特定解析逻辑（Blueprint、Texture 等） | 反序列化器（接收上下文）、模型（创建） |
-| **Models** | 结构化数据表示 | 反序列化器（创建）、输出（服务） |
-| **OutputFormatters** | 将模型转换为文本/JSON/概要 | 模型（读取） |
+| **FArchive** | 二进制读取、字节序、边界验证 | 文件输入、所有解析器 |
+| **ParseResult** | 解析结果容器、错误聚合 | 所有解析器、输出格式化 |
+| **read_package_summary** | 文件头解析 | FArchive |
+| **read_name_table** | 名称表解析 | FArchive、Summary |
+| **read_import_map** | 导入表解析（依赖） | FArchive、Summary、NameMap |
+| **read_export_map** | 导出表解析（对象） | FArchive、Summary、NameMap |
+| **GraphParser** | 蓝图图解析（Phase 7） | FArchive、ExportMap |
+| **AdvancedPropParser** | 高级属性解析（Phase 9） | FArchive、PropertyTag |
+| **DependencyAnalyzer** | 依赖图构建（Phase 10） | ImportMap、SoftObjectPaths |
+| **OutputFormatter** | JSON/Text输出 | ParseResult |
+| **CLI (main)** | 命令行入口 | parse_uasset、OutputFormatter |
 
-### 数据流
+### Skill 层组件（新增）
+
+| 组件 | 职责 | 与谁通信 |
+|------|------|----------|
+| **SKILL.md** | Skill元信息定义、触发词、能力范围 | Claude Code（匹配） |
+| **knowledge/blueprint-semantics.md** | 蓝图节点语义解释 | Claude Code（解读） |
+| **knowledge/node-types.md** | K2Node类型详解 | Claude Code（解读） |
+| **knowledge/cpp-conversion.md** | 蓝图→C++转换模式 | Claude Code（生成建议） |
+| **knowledge/common-patterns.md** | Lyra/UE常见蓝图模式 | Claude Code（模式识别） |
+| **examples/usage.md** | skill调用示例 | Claude Code（学习） |
+
+---
+
+## 数据流详解
+
+### 流程 1：蓝图分析请求
 
 ```
-.uasset 文件
-    │
-    ▼
-BinaryReader.open(path)
-    │
-    ├─► read_package_summary() ─► PackageSummary 模型
-    │
-    ├─► read_name_table() ─► List[str] (NameMap)
-    │
-    ├─► read_import_map() ─► List[ObjectImport]
-    │
-    ├─► read_export_map() ─► List[ObjectExport]
-    │
-    ▼
-AssetDeserializer.parse_exports()
-    │
-    ├─► resolve_export_type() ─► "Blueprint"、"Texture" 等
-    │
-    ├─► dispatch_to_handler(export_type)
-    │       │
-    │       └─► BlueprintHandler.parse(reader, context)
-    │               │
-    │               └─► Blueprint 模型（带节点、属性等）
-    │
-    ▼
-OutputFormatter.format(model, format="text"|"json"|"summary")
-    │
-    ▼
-结构化输出（text/JSON/概要）
+用户查询："分析 BP_FirstPersonCharacter 的射击逻辑"
+    ↓
+Claude Code 匹配 skill（触发词：蓝图、uasset）
+    ↓
+skill 提供：
+    - 调用指导：parse_uasset('BP_FirstPersonCharacter.uasset')
+    - 解读指导：关注 graphs[].nodes 中 EventGraph
+    - 转换指导：K2Node_EnhancedInputAction → InputAction 映射
+    ↓
+Agent 调用 Python：
+    from uasset_read import parse_uasset
+    result = parse_uasset('path/to/BP_FirstPersonCharacter.uasset')
+    ↓
+Python 返回 ParseResult：
+    {
+      "graphs": [
+        {
+          "graph_name": "EventGraph",
+          "nodes": [
+            {"class_name": "K2Node_EnhancedInputAction", "input_action": "IA_Fire"},
+            {"class_name": "K2Node_CallFunction", "function_name": "Fire"}
+          ]
+        }
+      ]
+    }
+    ↓
+skill 解读结果：
+    - IA_Fire 是射击输入动作
+    - Fire 函数在 EventGraph 中被调用
+    - 等价C++：绑定 IA_Fire 到 Fire()
+    ↓
+Agent 输出：
+    "射击逻辑：
+     - 输入：IA_Fire（EnhancedInput Action）
+     - 处理：Fire() 函数调用
+     - C++参考：在 SetupPlayerInputComponent 中绑定 IA_Fire → Fire"
 ```
 
-## 遵循的模式
+### 流程 2：蓝图转C++请求
 
-### 模式 1：Archive/Reader 抽象（源于 UE FArchive）
+```
+用户查询："将 BP_Move 转换为C++代码"
+    ↓
+skill 提供：
+    - 转换模式：从 knowledge/cpp-conversion.md
+    - 关键步骤：识别 Event → 提取函数调用 → 映射类型 → 生成C++
+    ↓
+Agent 执行：
+    1. parse_uasset('BP_Move.uasset')
+    2. 提取 EventGraph nodes
+    3. 按 knowledge/cpp-conversion.md 模式转换
+    ↓
+skill 知识应用：
+    - K2Node_Event → 重写函数
+    - K2Node_CallFunction → 方法调用
+    - K2Node_VariableGet → 成员变量访问
+    - FEdGraphPinType → C++类型映射
+    ↓
+Agent 输出：
+    "// C++ 等价代码（参考级别）
+    void AMyCharacter::Move(FVector2D ActionValue)
+    {
+        AddMovementInput(FVector(ActionValue.X, 0.0f, ActionValue.Y));
+    }"
+```
 
-**概念：** 二进制读取操作的抽象基类，灵感来自 UE 的 `FArchive` 模式。
+---
 
-**时机：** 整个解析系统的基础。
+## 集成点详解
 
-**示例：**
+### 集成点 1：API调用
 
+**位置：** `parse_uasset()` 函数
+
+**现状：**
 ```python
-from abc import ABC, abstractmethod
-from typing import BinaryIO, Optional
-from dataclasses import dataclass
-
-@dataclass
-class ArchiveState:
-    """跟踪解析状态，镜像 UE 的 FArchiveState。"""
-    position: int = 0
-    is_error: bool = False
-    engine_version: int = 0
-    custom_versions: dict[int, int] = None
-
-class FArchive(ABC):
-    """
-    二进制读取抽象基类，镜像 UE 的 FArchive 模式。
-    提供序列化无关接口。
-    """
-    def __init__(self):
-        self._state = ArchiveState(custom_versions={})
-
-    @abstractmethod
-    def read(self, size: int) -> bytes: ...
-    @abstractmethod
-    def seek(self, pos: int) -> None: ...
-    @abstractmethod
-    def tell(self) -> int: ...
-    @abstractmethod
-    def total_size(self) -> int: ...
-
-    # 类型读取便捷方法
-    def read_u8(self) -> int:
-        return int.from_bytes(self.read(1), 'little')
-
-    def read_u32(self) -> int:
-        return int.from_bytes(self.read(4), 'little')
-
-    def read_u64(self) -> int:
-        return int.from_bytes(self.read(8), 'little')
-
-    def read_f32(self) -> float:
-        return struct.unpack('<f', self.read(4))[0]
-
-    def read_fstring(self) -> str:
-        """读取 UE FString（带长度前缀的 UTF-16 或 UTF-8）。"""
-        length = self.read_i32()
-        if length == 0:
-            return ""
-        if length < 0:
-            # UTF-16 编码
-            data = self.read(-length * 2)
-            return data.decode('utf-16-le').rstrip('\x00')
-        else:
-            # UTF-8 编码
-            data = self.read(length)
-            return data.decode('utf-8').rstrip('\x00')
-
-    def read_name(self, name_map: list[str]) -> str:
-        """读取 FName（名称表索引）。"""
-        index = self.read_u32()
-        number = self.read_u32()  # 实例编号
-        if 0 <= index < len(name_map):
-            base = name_map[index]
-            return f"{base}_{number}" if number > 0 else base
-        return "None"
-
-class FFileArchive(FArchive):
-    """文件后端归档实现。"""
-
-    def __init__(self, path: str):
-        super().__init__()
-        self._file = open(path, 'rb')
-
-    def read(self, size: int) -> bytes:
-        return self._file.read(size)
-
-    def seek(self, pos: int) -> None:
-        self._file.seek(pos)
-
-    def tell(self) -> int:
-        return self._file.tell()
-
-    def total_size(self) -> int:
-        pos = self._file.tell()
-        self._file.seek(0, 2)
-        size = self._file.tell()
-        self._file.seek(pos)
-        return size
-
-class FMemoryArchive(FArchive):
-    """内存后端归档，用于测试和嵌套归档。"""
-
-    def __init__(self, data: bytes):
-        super().__init__()
-        self._data = data
-        self._pos = 0
-
-    def read(self, size: int) -> bytes:
-        result = self._data[self._pos:self._pos + size]
-        self._pos += size
-        return result
-
-    def seek(self, pos: int) -> None:
-        self._pos = pos
-
-    def tell(self) -> int:
-        return self._pos
-
-    def total_size(self) -> int:
-        return len(self._data)
+# uasset_read.py (line 3864)
+def parse_uasset(path: str) -> ParseResult:
+    """主入口：解析 .uasset 文件"""
+    result = ParseResult()
+    archive = FArchive(path)
+    result.summary = read_package_summary(archive)
+    result.name_map = read_name_table(archive, result.summary)
+    result.import_map = read_import_map(archive, result.summary, result.name_map)
+    result.export_map = read_export_map(archive, result.summary, result.name_map)
+    # ... 蓝图检测、图解析、依赖分析
+    return result
 ```
 
-### 模式 2：模型优先使用 Dataclasses
-
-**概念：** 使用 Python dataclasses 表示结构化数据。
-
-**时机：** 所有模型类（PackageSummary、ObjectImport、ObjectExport 等）。
-
-**示例：**
-
+**skill调用模式：**
 ```python
-from dataclasses import dataclass, field
-from typing import Optional
+# skill 示例调用（不修改现有代码）
+from uasset_read import parse_uasset
 
-@dataclass
-class FPackageFileSummary:
-    """镜像 UE 的 FPackageFileSummary —— 包文件头。"""
-    tag: int  # PACKAGE_FILE_TAG = 0x9E2A83C1
-    file_version_ue: int
-    file_version_licensee: int
-    custom_versions: dict[int, int]
-    package_flags: int
-    name_count: int
-    name_offset: int
-    export_count: int
-    export_offset: int
-    import_count: int
-    import_offset: int
-    total_header_size: int
-    # ... 其他字段
+# 基本用法
+result = parse_uasset('path/to/blueprint.uasset')
 
-@dataclass
-class FObjectImport:
-    """镜像 UE 的 FObjectImport —— 外部引用。"""
-    class_package: str  # 包名
-    class_name: str     # 类名
-    outer_index: int    # FPackageIndex 到 outer
-    object_name: str    # 对象名
+# 检查解析成功
+if result.is_success:
+    # 获取蓝图图
+    for graph in result.graphs:
+        print(f"图：{graph.graph_name}")
+        for node in graph.nodes:
+            print(f"  节点：{node.node_name} ({node.class_name})")
 
-@dataclass
-class FObjectExport:
-    """镜像 UE 的 FObjectExport —— 包内对象定义。"""
-    class_index: int       # FPackageIndex 到类
-    super_index: int       # FPackageIndex 到超类
-    outer_index: int       # FPackageIndex 到 outer
-    object_name: str       # 对象名
-    object_flags: int      # EObjectFlags
-    serial_size: int       # 序列化数据大小
-    serial_offset: int     # 序列化数据偏移
+    # 获取蓝图元数据
+    if result.blueprint:
+        print(f"父类：{result.blueprint.parent_class}")
+        print(f"变量：{result.blueprint.variables}")
 
-@dataclass
-class FPackageIndex:
-    """
-    镜像 UE 的 FPackageIndex。
-    Index > 0: ExportMap[index - 1]
-    Index < 0: ImportMap[-index - 1]
-    Index = 0: null
-    """
-    index: int
-
-    @property
-    def is_import(self) -> bool:
-        return self.index < 0
-
-    @property
-    def is_export(self) -> bool:
-        return self.index > 0
-
-    @property
-    def is_null(self) -> bool:
-        return self.index == 0
-
-    def to_import_index(self) -> int:
-        return -self.index - 1
-
-    def to_export_index(self) -> int:
-        return self.index - 1
+# 错误处理
+else:
+    for error in result.errors:
+        print(f"错误：{error}")
 ```
 
-### 模式 3：处理器/插件注册
+**无需修改原因：**
+- API已足够清晰（ParseResult容器）
+- 输出已结构化（graphs、blueprint、exports）
+- 错误处理已内置（is_success、errors）
+- JSON输出已支持（format_json_full）
 
-**概念：** 类型特定反序列化器的注册表模式。
+### 集成点 2：输出格式
 
-**时机：** 扩展支持新资产类型。
+**位置：** `format_json_full()` 函数
 
-**示例：**
-
+**现状：**
 ```python
-from typing import Protocol, TypeVar, Callable
-from dataclasses import dataclass
-
-T = TypeVar('T')
-
-@dataclass
-class ParseContext:
-    """解析时传递给所有处理器的上下文。"""
-    archive: FArchive
-    name_map: list[str]
-    import_map: list[FObjectImport]
-    export_map: list[FObjectExport]
-    summary: FPackageFileSummary
-
-class TypeHandler(Protocol[T]):
-    """类型特定处理器协议。"""
-
-    @staticmethod
-    def can_handle(class_name: str, package_path: str) -> bool: ...
-
-    def parse(self, ctx: ParseContext, export: FObjectExport) -> T: ...
-
-# 全局注册表
-_handler_registry: dict[str, type[TypeHandler]] = {}
-
-def register_handler(asset_type: str):
-    """装饰器：为资产类型注册处理器。"""
-    def decorator(cls: type[TypeHandler]) -> type[TypeHandler]:
-        _handler_registry[asset_type] = cls
-        return cls
-    return decorator
-
-def get_handler(class_name: str) -> Optional[type[TypeHandler]]:
-    """根据类名获取处理器。"""
-    # 直接匹配
-    if class_name in _handler_registry:
-        return _handler_registry[class_name]
-    # 模式匹配（如 "BlueprintGeneratedClass" -> "Blueprint"）
-    for pattern, handler in _handler_registry.items():
-        if pattern.lower() in class_name.lower():
-            return handler
-    return None
-
-# 处理器实现示例
-@register_handler("Blueprint")
-class BlueprintHandler:
-    """处理蓝图资产反序列化。"""
-
-    @staticmethod
-    def can_handle(class_name: str, package_path: str) -> bool:
-        return "Blueprint" in class_name or package_path.endswith("_BP.uasset")
-
-    def parse(self, ctx: ParseContext, export: FObjectExport) -> 'Blueprint':
-        ctx.archive.seek(export.serial_offset)
-        # 解析蓝图特定数据
-        return Blueprint(...)
+# uasset_read.py (line 4269)
+def format_json_full(result: ParseResult) -> Dict:
+    """完整JSON输出"""
+    return {
+        "file": result.summary.file_path,
+        "name_map": result.name_map[:50],  # 截断避免过长
+        "imports": format_exports_list(result),
+        "exports": format_exports_list(result),
+        "blueprint": format_blueprint_dict(result.blueprint),
+        "graphs": format_graphs_json(result.graphs),  # v2.0 新增
+        "dependencies": result.dependencies,  # v2.0 新增
+    }
 ```
 
-### 模式 4：大文件流式处理
-
-**概念：** 内存映射文件访问和大文件分块读取。
-
-**时机：** 文件 > 100MB 或处理多个文件。
-
-**示例：**
-
-```python
-import mmap
-from contextlib import contextmanager
-
-class FMappedArchive(FArchive):
-    """大文件内存映射归档。"""
-
-    def __init__(self, path: str):
-        super().__init__()
-        self._file = open(path, 'rb')
-        self._mmap = mmap.mmap(
-            self._file.fileno(),
-            0,
-            access=mmap.ACCESS_READ
-        )
-
-    def read(self, size: int) -> bytes:
-        result = self._mmap[self._pos:self._pos + size]
-        self._pos += size
-        return result
-
-    def seek(self, pos: int) -> None:
-        self._pos = pos
-
-    def tell(self) -> int:
-        return self._pos
-
-    def total_size(self) -> int:
-        return len(self._mmap)
-
-    def read_at(self, offset: int, size: int) -> bytes:
-        """随机访问不影响位置。"""
-        return self._mmap[offset:offset + size]
-
-    def close(self):
-        self._mmap.close()
-        self._file.close()
-
-# 工厂函数
-def create_archive(path: str, use_mmap: bool = True) -> FArchive:
-    """根据文件大小创建合适归档。"""
-    import os
-    file_size = os.path.getsize(path)
-    if use_mmap and file_size > 50 * 1024 * 1024:  # > 50MB
-        return FMappedArchive(path)
-    return FFileArchive(path)
-```
-
-### 模式 5：版本感知反序列化
-
-**概念：** 处理多个 UE 版本，使用版本特定解析分支。
-
-**时机：** 解析不同 UE 版本的 .uasset。
-
-**示例：**
-
-```python
-from enum import IntEnum
-from typing import Callable
-
-class UEVersion(IntEnum):
-    """关键 UE 版本里程碑，对应序列化变更。"""
-    VER_4_0 = 400
-    VER_4_14 = 414
-    VER_4_22 = 422
-    VER_4_25 = 425
-    VER_4_27 = 427
-    VER_5_0 = 500
-    VER_5_1 = 510
-    VER_5_2 = 520
-    VER_5_3 = 530
-    VER_5_4 = 540
-    VER_5_5 = 550
-
-# 自定义版本（UE 用于特定子系统）
-CUSTOM_VERSIONS = {
-    0x7E7A3F3E: "CoreObjectVersion",
-    0x12E8C3E4: "BlueprintVersion",
-    0x4B4B2E28: "NiagaraVersion",
-    # ... 来自 UE 源码
+**skill消费模式：**
+```json
+{
+  "graphs": [
+    {
+      "graph_name": "EventGraph",
+      "nodes": [
+        {
+          "node_name": "K2Node_EnhancedInputAction_2",
+          "class_name": "K2Node_EnhancedInputAction",
+          "node_pos": {"x": 2368, "y": -1600},
+          "pins": [
+            {"pin_name": "Triggered", "pin_type": {"pin_category": "exec"}},
+            {"pin_name": "ActionValue", "pin_type": {"pin_category": "struct"}}
+          ]
+        }
+      ]
+    }
+  ]
 }
+```
 
-class VersionedParser:
-    """处理版本特定解析逻辑。"""
+**skill解读关键：**
+- `class_name` → 节点类型语义（knowledge/node-types.md）
+- `pins[].pin_type` → C++类型映射（knowledge/cpp-conversion.md）
+- `node_pos` → 逻辑分组（注释框位置）
+- `linked_to` → 执行流追踪
 
-    def __init__(self, engine_version: int, custom_versions: dict[int, int]):
-        self.engine_version = engine_version
-        self.custom_versions = custom_versions
+### 集成点 3：错误处理
 
-    def should_read_fstring_as_utf8(self) -> bool:
-        """UE 5.0+ 默认使用 UTF-8。"""
-        return self.engine_version >= UEVersion.VER_5_0
+**位置：** `ParseResult.errors` 字段
 
-    def should_use_new_guid_format(self) -> bool:
-        """5.1 GUID 序列化变更。"""
-        return self.engine_version >= UEVersion.VER_5_1
+**现状：**
+```python
+# uasset_read.py (line 1045)
+class ParseResult:
+    errors: List[str] = field(default_factory=list)
+    is_success: bool = False
+```
 
-    def get_custom_version(self, version_key: int) -> int:
-        """获取子系统自定义版本。"""
-        return self.custom_versions.get(version_key, 0)
-
-# 解析器中使用
-def parse_property(ctx: ParseContext) -> Property:
-    parser = VersionedParser(
-        ctx.summary.file_version_ue,
-        ctx.summary.custom_versions
-    )
-
-    # 版本特定逻辑
-    if parser.should_read_fstring_as_utf8():
-        value = ctx.archive.read_utf8_string()
+**skill处理模式：**
+```python
+# skill指导错误处理
+if not result.is_success:
+    # 优雅降级
+    if result.partial_result:
+        # 使用部分结果
+        print("警告：解析不完整，但可使用部分数据")
+        print(f"已解析：{len(result.name_map)} 名称")
     else:
-        value = ctx.archive.read_utf16_string()
+        # 完全失败
+        print("错误：无法解析文件")
+        for err in result.errors:
+            print(f"  - {err}")
 ```
 
-## 需避免的反模式
+---
 
-### 反模式 1：全量加载文件到内存
+## 新组件组织
 
-**概念：** `data = open(path, 'rb').read()` 在多 GB 文件上。
+### 目录结构
 
-**为何不好：** 内存耗尽、启动慢、大文件崩溃。
+```
+.claude/skills/uasset-read/
+├── SKILL.md                      # Skill主定义（必需）
+├── knowledge/                    # 知识库目录
+│   ├── blueprint-semantics.md    # 蓝图语义解释
+│   ├── node-types.md             # K2Node类型详解
+│   ├── pin-type-mapping.md       # PinType → C++类型映射
+│   ├── cpp-conversion.md         # 蓝图→C++转换模式
+│   ├── common-patterns.md        # UE/Lyra常见蓝图模式
+│   └── troubleshooting.md        # 常见问题排查
+├── examples/                     # 示例目录
+│   ├── basic-usage.md            # 基本用法示例
+│   ├── blueprint-analysis.md     # 蓝图分析示例
+│   └── cpp-conversion.md         # C++转换示例
+└── templates/                    # 模板目录（可选）
+    └── cpp-template.md           # C++代码生成模板
+```
 
-**替代：** 使用流式或内存映射文件。
+### SKILL.md 结构（参考 lyra-course）
 
+```markdown
+# uasset-read
+
+| 字段 | 值 |
+|------|-----|
+| Skill 名称 | uasset-read |
+| 版本 | v3.0 |
+| 分类 | Unreal Engine 蓝图解析 |
+| 触发词 | uasset、蓝图解析、蓝图转C++、蓝图分析 |
+
+---
+
+## Skill 说明
+
+### 能做什么
+
+- 解析未烘焙的 .uasset 蓝图文件（无需UE编辑器）
+- 提取蓝图图结构（EventGraph、函数图）
+- 分析节点执行流（Event → CallFunction 链路）
+- 解析蓝图元数据（父类、变量、组件）
+- 生成C++转换参考代码（非自动生成，需人工审查）
+
+### 不能做什么
+
+- **不解析cooked资产** —— cooked资产已剥离图数据
+- **不修改.uasset文件** —— 仅支持只读解析
+- **不自动生成C++代码** —— 输出为参考级别，需人工审查
+- **不解析蓝图字节码** —— 仅支持编辑器保存的资产
+- **不保证100%转换准确** —— 某些节点需游戏特定知识
+
+---
+
+## Python API
+
+### 主入口
+
+\`\`\`python
+from uasset_read import parse_uasset, ParseResult
+
+result = parse_uasset('path/to/blueprint.uasset')
+\`\`\`
+
+### 结果结构
+
+\`\`\`python
+class ParseResult:
+    is_success: bool          # 解析成功标志
+    errors: List[str]         # 错误列表
+    summary: PackageFileSummary  # 文件头
+    name_map: List[str]       # 名称表
+    import_map: List[ObjectImport]  # 导入表
+    export_map: List[ObjectExport]  # 导出表
+    blueprint: BlueprintMetadata    # 蓝图元数据
+    graphs: List[UEdGraph]    # 蓝图图（v2.0+）
+    dependencies: Dict        # 依赖图（v2.0+）
+\`\`\`
+
+### 使用示例
+
+\`\`\`python
+# 解析蓝图
+result = parse_uasset('BP_Character.uasset')
+
+if result.is_success:
+    # 分析EventGraph
+    event_graph = next((g for g in result.graphs if g.graph_name == "EventGraph"), None)
+    if event_graph:
+        for node in event_graph.nodes:
+            if node.class_name == "K2Node_CallFunction":
+                print(f"调用函数：{node.function_name}")
+
+    # 获取父类
+    if result.blueprint:
+        print(f"父类：{result.blueprint.parent_class}")
+\`\`\`
+
+---
+
+## 知识库索引
+
+| 文档 | 内容 |
+|------|------|
+| [blueprint-semantics.md](knowledge/blueprint-semantics.md) | 蓝图节点语义解释 |
+| [node-types.md](knowledge/node-types.md) | K2Node类型详解 |
+| [cpp-conversion.md](knowledge/cpp-conversion.md) | 蓝图→C++转换模式 |
+| [common-patterns.md](knowledge/common-patterns.md) | UE常见蓝图模式 |
+
+---
+
+## 使用示例
+
+### 示例1：分析蓝图执行流
+
+> 问：分析 BP_FirstPersonCharacter 的射击逻辑
+>
+> 步骤：
+> 1. 调用 parse_uasset('BP_FirstPersonCharacter.uasset')
+> 2. 定位 EventGraph
+> 3. 查找 K2Node_EnhancedInputAction（输入动作）
+> 4. 追踪 LinkedTo 连接找到函数调用
+> 5. 解读节点语义（参考 node-types.md）
+
+### 示例2：生成C++转换参考
+
+> 问：将 BP_Move 转换为C++
+>
+> 步骤：
+> 1. 解析蓝图获取函数图
+> 2. 按 cpp-conversion.md 模式转换
+> 3. 映射 PinType → C++类型
+> 4. 输出参考代码（需人工审查）
+```
+
+---
+
+## 构建顺序建议
+
+### Phase依赖图
+
+```
+[Phase 11-14: Python工具完善] ──────┐
+  ↓                                  │
+  Phase 11: ExportMap属性值提取      │
+  ↓                                  │
+  Phase 12: BlueprintVariables完整   │
+  ↓                                  │
+  Phase 13: 组件变换属性解析          │
+  ↓                                  │
+  Phase 14: 输出格式优化             │
+  ↓                                  │
+[Phase 15: Skill封装] ──────────────┘
+  ↓
+  Phase 15-A: SKILL.md定义
+  ↓
+  Phase 15-B: knowledge/知识库编写
+  ↓
+  Phase 15-C: examples/示例编写
+  ↓
+  Phase 15-D: 测试skill触发
+```
+
+### 为什么这个顺序？
+
+**原因 1：API稳定性**
+- skill依赖稳定API输出格式
+- Phase 14优化输出格式后再封装skill
+- 避免 skill → API → skill 反复调整
+
+**原因 2：知识库依赖实际能力**
+- knowledge/cpp-conversion.md 需验证转换模式实际可行
+- Phase 12-13完善变量/组件解析后才能编写转换知识
+- 避免"理论转换模式"与"实际解析能力"脱节
+
+**原因 3：示例依赖完整功能**
+- examples/ 需展示完整能力
+- Phase 11-14完成后才能编写真实示例
+- 避免"示例无法运行"问题
+
+### Phase 15 子阶段建议
+
+| 子阶段 | 任务 | 依赖 | 输出 |
+|--------|------|------|------|
+| **15-A** | SKILL.md定义 | Phase 14输出格式 | .claude/skills/uasset-read/SKILL.md |
+| **15-B** | knowledge知识库 | Phase 12-13解析能力 | knowledge/*.md（5-6文件） |
+| **15-C** | examples示例 | Phase 11-14完整功能 | examples/*.md（3-4文件） |
+| **15-D** | skill测试 | 15-A/B/C完成 | 触发词测试、调用测试 |
+
+---
+
+## 组件修改 vs 新增
+
+### 无需修改的现有组件
+
+| 组件 | 原因 |
+|------|------|
+| **FArchive** | skill不直接调用，API足够 |
+| **ParseResult** | 已是良好容器，无需扩展 |
+| **parse_uasset()** | 主入口稳定，skill仅消费 |
+| **format_json_full()** | 输出格式足够，skill可解读 |
+| **GraphParser** | 已实现，skill仅消费结果 |
+| **CLI (main)** | skill通过Python API调用，不通过CLI |
+
+### 可能需要微调的组件
+
+| 组件 | 调整 | 原因 |
+|------|------|------|
+| **__all__ exports** | 确认API导出完整 | skill需导入关键函数 |
+| **ParseResult文档** | 增强docstring | skill需理解字段含义 |
+| **输出格式文档** | 增加JSON结构说明 | skill需解读输出 |
+
+### 新增组件
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| **SKILL.md** | .claude/skills/uasset-read/ | Skill主定义 |
+| **knowledge/** | .claude/skills/uasset-read/knowledge/ | 知识库（5-6文件） |
+| **examples/** | .claude/skills/uasset-read/examples/ | 示例（3-4文件） |
+
+---
+
+## 风险与缓解
+
+### 风险 1：skill与Python能力脱节
+
+**问题：** skill声称能力超出Python实际解析范围
+
+**缓解：**
+- Phase 15-B 在 Phase 11-14 完成后开始
+- 每个knowledge文件验证实际可解析案例
+- SKILL.md明确"不能做什么"
+
+### 风险 2：输出格式变化导致skill失效
+
+**问题：** Phase 14调整JSON格式，skill解读规则失效
+
+**缓解：**
+- Phase 14冻结输出格式后再启动Phase 15
+- 输出格式变更需更新knowledge文档
+- 使用 `--json` 输出而非依赖内部结构
+
+### 风险 3：skill知识库过于庞大
+
+**问题：** 知识库文件过多，维护困难
+
+**缓解：**
+- 初始仅5-6核心knowledge文件
+- 按实际使用频率扩展
+- 避免覆盖所有UE节点类型（仅核心节点）
+
+### 风险 4：C++转换模式不准确
+
+**问题：** 转换建议与实际C++不等价
+
+**缓解：**
+- knowledge/cpp-conversion.md标注"参考级别"
+- 强调"需人工审查"
+- 提供验证方法（对比蓝图和C++行为）
+
+---
+
+## 关键设计决策
+
+### 决策 1：skill不调用CLI
+
+**选择：** skill通过Python API调用，不通过命令行
+
+**理由：**
+- API更灵活（返回ParseResult对象）
+- CLI需要解析stdout文本
+- API支持程序化消费结果
+- 测试中可直接调用API
+
+**替代方案（未选）：**
+```bash
+# CLI调用方式（未选）
+python uasset_read.py file.uasset --json
+# 需解析stdout，不如API直接
+```
+
+### 决策 2：knowledge独立于Python代码
+
+**选择：** 知识库以markdown文件形式，不嵌入Python
+
+**理由：**
+- Claude Code skill标准格式（参考lyra-course）
+- 知识库易于更新（修改markdown）
+- 知识库可跨项目复用
+- 避免Python代码膨胀
+
+**替代方案（未选）：**
 ```python
-# 错误做法
-with open(path, 'rb') as f:
-    data = f.read()  # 加载整个文件
-    process(data)
-
-# 正确做法
-with FMappedArchive(path) as archive:
-    process_streaming(archive)  # 按需读取
+# 嵌入Python方式（未选）
+NODE_TYPE_MAPPING = {
+    "K2Node_CallFunction": "函数调用...",
+}
+# 不符合skill标准格式
 ```
 
-### 反模式 2：硬编码偏移
+### 决策 3：skill聚焦蓝图解析
 
-**概念：** `archive.seek(0x1234)` 不先读取文件头。
+**选择：** skill能力范围限定为蓝图解析和C++参考
 
-**为何不好：** UE 格式随版本变化；偏移会失效。
+**理由：**
+- uasset_read.py核心能力是蓝图
+- 避免"全能skill"维护困难
+- 其他资产类型可后续扩展
 
-**替代：** 先解析 PackageFileSummary，使用其偏移。
+**超出范围：**
+- 材质解析（非蓝图）
+- 纹理解析（非蓝图）
+- 动画解析（非蓝图）
 
-```python
-# 错误做法
-archive.seek(0x1234)  # 魔术数字 —— 不同文件会崩溃
-
-# 正确做法
-summary = read_package_summary(archive)
-archive.seek(summary.export_offset)  # 来自实际文件头
-```
-
-### 反模式 3：单体解析器
-
-**概念：** 单个 2000 行 `parse_uasset()` 函数。
-
-**为何不好：** 不可维护、难测试、难扩展。
-
-**替代：** 分离关注点到 Reader、Deserializer、Model、Output 层。
-
-```python
-# 错误做法
-def parse_uasset(path):
-    with open(path, 'rb') as f:
-        # 2000 行所有内容混在一起
-        pass
-
-# 正确做法
-def parse_uasset(path):
-    with FFileArchive(path) as archive:
-        summary = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        imports = read_import_map(archive, summary, name_map)
-        exports = read_export_map(archive, summary, name_map)
-
-        ctx = ParseContext(archive, name_map, imports, exports, summary)
-
-        for export in exports:
-            handler = get_handler(export.class_name)
-            if handler:
-                yield handler.parse(ctx, export)
-```
-
-### 反模式 4：忽略导入解析
-
-**概念：** 只解析导出而不解析导入引用。
-
-**为何不好：** 蓝图引用父类、接口、其他包的类型。不解析则数据不完整。
-
-**替代：** 将导入解析纳入架构。
-
-```python
-# 正确做法 —— 内置导入解析
-@dataclass
-class ResolvedExport:
-    export: FObjectExport
-    resolved_class: Optional[str]  # 来自 ImportMap 或 ExportMap
-    resolved_super: Optional[str]  # 父类
-    resolved_outer: Optional[str]  # 包含对象
-
-def resolve_reference(
-    index: FPackageIndex,
-    imports: list[FObjectImport],
-    exports: list[FObjectExport]
-) -> Optional[str]:
-    if index.is_import:
-        imp = imports[index.to_import_index()]
-        return f"{imp.class_package}.{imp.object_name}"
-    elif index.is_export:
-        exp = exports[index.to_export_index()]
-        return exp.object_name
-    return None
-```
-
-### 反模式 5：紧密耦合输出格式
-
-**概念：** 解析器直接返回格式化字符串。
-
-**为何不好：** 无法生成 JSON、无法过滤、无法测试结构。
-
-**替代：** 返回结构化模型，单独格式化。
-
-```python
-# 错误做法
-def parse_blueprint(archive) -> str:
-    return f"蓝图: {name}\n节点: {nodes}"
-
-# 正确做法
-def parse_blueprint(archive) -> Blueprint:
-    return Blueprint(name=name, nodes=nodes, ...)
-
-# 然后格式化：
-class JsonOutput:
-    def format(self, blueprint: Blueprint) -> str:
-        return json.dumps(asdict(blueprint))
-
-class TextOutput:
-    def format(self, blueprint: Blueprint) -> str:
-        return f"蓝图: {blueprint.name}\n节点: {len(blueprint.nodes)}"
-```
-
-## 可扩展性考量
-
-| 关注点 | 100 导出时 | 10K 导出时 | 100K 导出时 |
-|--------|------------|------------|-------------|
-| **内存** | 全量加载 | 流式导出 | mmap + 延迟解析 |
-| **启动** | 解析所有文件头 | 仅解析 Summary | Summary + 延迟导入 |
-| **输出** | 全量序列化 | 分页输出 | 流式写入文件 |
-| **解析** | 全量导入解析 | 缓存已解析名称 | 按需延迟解析 |
-
-### 延迟解析策略
-
-超大包（如带大量 Actor 的大地图）：
-
-```python
-class LazyExportIterator:
-    """迭代导出而不一次性全部解析。"""
-
-    def __init__(self, ctx: ParseContext, exports: list[FObjectExport]):
-        self.ctx = ctx
-        self.exports = exports
-        self._parsed: dict[int, Any] = {}
-
-    def get(self, index: int) -> Any:
-        """首次访问时解析导出。"""
-        if index not in self._parsed:
-            export = self.exports[index]
-            handler = get_handler(export.class_name)
-            if handler:
-                self._parsed[index] = handler.parse(self.ctx, export)
-        return self._parsed.get(index)
-
-    def __iter__(self):
-        for i, export in enumerate(self.exports):
-            yield self.get(i)
-```
+---
 
 ## 来源
 
-- **Unreal Engine 源码**：`D:/Program Files/Epic Games/Engine/UE_5.7/Engine/Source/Runtime/CoreUObject/`
-  - `Private/UObject/Package.cpp` —— 包处理
-  - `Private/Serialization/AsyncLoading.cpp` —— 加载架构
-  - `Public/UObject/Linker.h` —— Linker 结构
-  - `Public/UObject/LinkerLoad.h` —— 包加载
-  - `Public/UObject/PackageFileSummary.h` —— 文件头结构
-  - `Public/UObject/ObjectResource.h` —— 导入/导出结构
-  - `Public/Serialization/Archive.h` —— Archive 抽象
+- **现有架构**：.planning/research/ARCHITECTURE.md（v2.0）
+- **skill示例**：.claude/skills/lyra-course/SKILL.md
+- **Python源码**：uasset_read.py（4901行）
+- **Claude Code文档**：[docs.anthropic.com](https://docs.anthropic.com/en/docs/claude-code)
+- **PROJECT.md**：项目上下文、v3.0需求
 
-- **CUE4Parse 架构**：[https://github.com/Fabian-Creostone/CUE4Parse](https://github.com/Fabian-Creostone/CUE4Parse)
-  - C# FArchive 模式实现
-  - 类型特定处理器注册
-  - 版本感知反序列化
+---
 
-- **FModel 架构**：[https://github.com/4sval/FModel](https://github.com/4sval/FModel)
-  - 分层架构（Reader -> Deserializer -> Model -> Output）
-  - CUE4Parse 集成模式
+## 置信度评估
 
-- **Python 二进制解析**：
-  - `struct` 模块用于低级解析（内置）
-  - `dataclasses` 用于模型表示（内置）
-  - `mmap` 用于高效大文件处理（内置）
-  - 生成器模式用于流式处理
+| 区域 | 水平 | 原因 |
+|------|------|------|
+| 双层架构合理性 | 高 | 参考lyra-course成功模式 |
+| 集成点识别 | 高 | 现有API已足够清晰 |
+| 组件边界划分 | 高 | skill知识层 vs Python执行层分明 |
+| 构建顺序建议 | 高 | 依赖关系明确 |
+| knowledge文件列表 | 中 | 初始建议5-6文件，实际可能调整 |
+| C++转换准确性 | 中 | 需Phase 11-14验证后确认 |
 
-## 构建顺序启示
+---
 
-基于架构，推荐构建顺序：
+## 下一步行动
 
-1. **阶段 1：读取层**
-   - `FArchive` 基类
-   - `FFileArchive` 实现
-   - `FMemoryArchive` 用于测试
-   - 低级读取方法（u8、u32、fstring、fname）
+### Phase 15启动前检查清单
 
-2. **阶段 2：模型层（核心）**
-   - `FPackageFileSummary`
-   - `FPackageIndex`
-   - `FObjectImport` / `FObjectExport`
-   - 名称表结构
+- [ ] Phase 11 完成：ExportMap属性值提取
+- [ ] Phase 12 完成：BlueprintVariables完整提取
+- [ ] Phase 13 完成：组件变换属性解析
+- [ ] Phase 14 完成：输出格式优化并冻结
+- [ ] 验证：至少3个蓝图解析成功案例
+- [ ] 验证：C++转换参考至少1个案例可用
 
-3. **阶段 3：反序列化层（核心）**
-   - `read_package_summary()`
-   - `read_name_table()`
-   - `read_import_map()`
-   - `read_export_map()`
-   - `ParseContext`
+### Phase 15实施步骤
 
-4. **阶段 4：模型层（类型）**
-   - 基础 `UObject` 模型
-   - `Blueprint` 模型
-   - 属性类型（`FProperty`、`FArrayProperty` 等）
+1. **创建目录**：`.claude/skills/uasset-read/`
+2. **编写SKILL.md**：基于本文架构建议
+3. **编写knowledge**：5-6核心文件（先node-types.md）
+4. **编写examples**：3-4示例文件
+5. **测试触发**：验证skill被正确匹配
+6. **测试调用**：验证API调用成功
+7. **测试解读**：验证输出正确解读
 
-5. **阶段 5：处理器层**
-   - 处理器注册表
-   - `BlueprintHandler`
-   - 其他类型处理器按需添加
+---
 
-6. **阶段 6：输出层**
-   - `TextOutput`
-   - `JsonOutput`
-   - `SummaryOutput`
-
-7. **阶段 7：性能与优化**
-   - `FMappedArchive` 用于大文件
-   - 延迟解析
-   - 版本处理
-   - 错误恢复
+*最后更新：2026-05-03 — v3.0 skill集成架构研究*
