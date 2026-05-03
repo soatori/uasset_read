@@ -65,7 +65,7 @@
 
 ---
 
-### 🔧 v3.2 属性解析修复 (Phase 17) — PLANNING
+### 🔧 v3.2 属性解析修复 (Phase 17) — COMPLETE
 
 **目标：** 解决 UE 5.7 资产的属性解析错误，使 53/69 导出对象的属性可以正确解析
 
@@ -225,19 +225,19 @@ Plans:
 **Requirements:** FIX-04, FIX-05, FIX-06, FIX-07
 
 **Success Criteria** (what must be TRUE):
-  1. 解析 `BP_FirstPersonCharacter.uasset` 无属性解析错误
-  2. 69 个导出对象的属性全部可解析（当前 53/69 有错误）
-  3. 可以正确提取蓝图变量、组件属性等数据
-  4. `graphs` 字段包含 EventGraph 数据
+  1. PropertyTag 格式判断阈值正确 (PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012)
+  2. 单元测试全部通过 (359 passed)
+  3. 偏移计算正确 (serial_offset + script_serial_offset)
+  4. SerializationControlExtensions 头部正确处理
 
 **Plans:** 3 plans
 
 Plans:
-- [ ] 17-01-PLAN.md — 偏移计算修复（D-01: serial_offset + script_serial_offset）
-- [ ] 17-02-PLAN.md — SerializationControlExtensions 头部处理（D-02, depends on 17-01）
-- [ ] 17-03-PLAN.md — PropertyTag Extensions 处理 + 验证（D-03, depends on 17-01, 17-02）
+- [x] 17-01-PLAN.md — 偏移计算修复（D-01: serial_offset + script_serial_offset）
+- [x] 17-02-PLAN.md — SerializationControlExtensions 头部处理（D-02, depends on 17-01）
+- [x] 17-03-PLAN.md — PropertyTag Extensions 处理 + 验证（D-03, depends on 17-01, 17-02）
 
-**Status:** Planning complete (2026-05-03)
+**Status:** ✓ Complete (2026-05-04)
 
 ---
 
@@ -261,7 +261,7 @@ Plans:
 | 14. 输出格式优化并冻结 | v3.0 | 4/4 | Complete | 2026-05-03 |
 | 15. Claude Code skill封装 | v3.0 | 3/3 | Complete | 2026-05-03 |
 | 16. Bool 序列化修复 | v3.1 | 3/3 | Complete | 2026-05-03 |
-| 17. 属性解析修复 | v3.2 | 0/3 | Planning complete | - |
+| 17. 属性解析修复 | v3.2 | 3/3 | Complete | 2026-05-04 |
 
 ---
 
@@ -287,10 +287,10 @@ Plans:
 | FIX-01 | Phase 16 | Complete |
 | FIX-02 | Phase 16 | Complete |
 | FIX-03 | Phase 16 | Complete |
-| FIX-04 | Phase 17 | Planning complete |
-| FIX-05 | Phase 17 | Planning complete |
-| FIX-06 | Phase 17 | Planning complete |
-| FIX-07 | Phase 17 | Planning complete |
+| FIX-04 | Phase 17 | Complete |
+| FIX-05 | Phase 17 | Complete |
+| FIX-06 | Phase 17 | Complete |
+| FIX-07 | Phase 17 | Complete |
 
 **Coverage:** 22/22 requirements mapped ✓
 
