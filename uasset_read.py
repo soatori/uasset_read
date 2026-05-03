@@ -1365,6 +1365,23 @@ class ParseResult:
     circular_deps: List[List[str]] = field(default_factory=list) # D-10-13: 循环依赖路径
 
 
+@dataclass
+class StatusInfo:
+    """
+    JSend 风格 status 字段（D-14-02, OUT-01）。
+
+    三元分类:
+    - success: 解析成功，无错误（可有警告）
+    - fail: 有解析错误但部分结果可用
+    - error: 无法解析，严重错误
+
+    Per D-14-02: JSend 结构 - status + message + code
+    """
+    status: str      # "success" | "fail" | "error"
+    message: Optional[str] = None
+    code: Optional[str] = None
+
+
 # ============================================================================
 # 解析函数
 # ============================================================================
@@ -4913,6 +4930,34 @@ def _get_event_name(node: UEdGraphNode) -> str:
     return "Unknown"
 
 
+def build_status_info(result: ParseResult) -> StatusInfo:
+    """
+    构建 status 字段（D-14-01, OUT-01）。
+
+    三元分类:
+    - success: is_success=True, errors=[]（解析成功，无错误）
+    - fail: is_success=True, errors non-empty（部分结果可用）
+    - error: is_success=False（严重错误）
+
+    Args:
+        result: ParseResult 对象
+
+    Returns:
+        StatusInfo: status 对象
+    """
+    if result.is_success:
+        if not result.errors:
+            return StatusInfo(status="success")
+        else:
+            # D-14-01: 有错误但部分结果可用 → fail
+            message = result.errors[0] if result.errors else None
+            return StatusInfo(status="fail", message=message, code="PARSE_ERROR")
+    else:
+        # is_success=False → error
+        message = result.errors[0] if result.errors else "Unknown error"
+        return StatusInfo(status="error", message=message, code="PARSE_ERROR")
+
+
 def format_json_full(result: ParseResult) -> Dict:
     """
     Format full JSON output with complete asset data (OUT-01, OUT-03).
@@ -4943,6 +4988,8 @@ def format_json_full(result: ParseResult) -> Dict:
         }
 
     return {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
@@ -5077,6 +5124,8 @@ def format_json_summary(result: ParseResult) -> Dict:
     Returns:
         Dict with keys: version, package_name, exports, blueprint_metadata, errors
     """
+    from dataclasses import asdict
+
     version_dict = {}
     if result.summary:
         version_dict = {
@@ -5098,6 +5147,8 @@ def format_json_summary(result: ParseResult) -> Dict:
         exports_summary.append(export_summary)
 
     return {
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
+        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,
@@ -5419,6 +5470,7 @@ __all__ = [
     'PropertyTag',
     'PropertyValue',
     'ParseResult',
+    'StatusInfo',  # Phase 14: JSend 风格 status 字段（OUT-01）
     'FEdGraphPinType',
     'BlueprintVariable',
     'BlueprintMetadata',
