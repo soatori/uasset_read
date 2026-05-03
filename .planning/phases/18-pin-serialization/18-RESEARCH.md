@@ -908,22 +908,25 @@ def read_ed_graph_pin_type(archive: FArchive, name_map: List[str], summary: Pack
 - A2: UE 5.7 源码阈值已确认，旧版本需实际资产测试
 - A3: FPackageIndex 解析已在 Phase 6 实现，需验证 Pin 引用场景
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **FText 序列化格式**
+1. **FText 序列化格式 — RESOLVED**
    - What we know: FText 有复杂的序列化格式（LocalizedStringId + text string）
    - What's unclear: 当前是否有 FText 解析实现
    - Recommendation: 检查 Phase 3 是否已实现 FText，若未实现，简化为 FString（仅读取文本内容）
+   - **Resolution**: 18-03-PLAN 采用简化处理，跳过 FText 读取（default_text_value = None），标记为 TODO
 
-2. **is_cooked 判断方式**
+2. **is_cooked 判断方式 — RESOLVED**
    - What we know: Cooked 资产跳过 EditorOnly 字段
    - What's unclear: PackageFileSummary 是否有 is_cooked 标志
    - Recommendation: 检查 PackageFileSummary 结构，若无标志，假设测试资产均为 Editor 保存
+   - **Resolution**: 18-03-PLAN 假设测试资产均为 Editor 保存（未 cooked），读取 EditorOnly 字段
 
-3. **CustomVersion 获取方式**
+3. **CustomVersion 获取方式 — RESOLVED**
    - What we know: CustomVersion 存储在 PackageFileSummary
    - What's unclear: summary.custom_version 字典格式
    - Recommendation: 检查 PackageFileSummary.custom_version 实现，添加缺失的版本 GUID 常量
+   - **Resolution**: 18-01-PLAN 定义 CustomVersion GUID 常量，18-03-PLAN 通过 summary.custom_version.get() 获取版本值
 
 ## Environment Availability
 
