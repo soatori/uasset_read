@@ -22,7 +22,7 @@ import argparse
 import mmap
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, BinaryIO, Tuple, Any
+from typing import Optional, List, Dict, BinaryIO, Tuple, Any, Union
 
 
 # ============================================================================
@@ -924,6 +924,56 @@ class DelegateValue(AdvancedPropertyValue):
     """
     object_ref: int               # FPackageIndex 原始值
     function_name: str            # 函数名（FName）
+
+
+# ============================================================================
+# Phase 13: 变换属性类型 dataclass 定义
+# ============================================================================
+
+@dataclass
+class VectorValue(AdvancedPropertyValue):
+    """
+    Vector struct property value (Phase 13)。
+
+    X/Y/Z 坐标值，用于 RelativeLocation 等位置属性。
+    继承 AdvancedPropertyValue 基类保持一致性（per D-04）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    x: float
+    y: float
+    z: float
+
+
+@dataclass
+class RotatorValue(AdvancedPropertyValue):
+    """
+    Rotator struct property value (Phase 13)。
+
+    Roll/Pitch/Yaw 角度值，UE 使用度数格式（per D-02）。
+    unit 字段标注单位为度数，防止误用弧度计算（per D-02a）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    roll: float    # UE FRotator.Roll (degrees)
+    pitch: float   # UE FRotator.Pitch (degrees)
+    yaw: float     # UE FRotator.Yaw (degrees)
+    unit: str = 'degrees'  # D-02a: 单位标注
+
+
+@dataclass
+class ScaleValue(AdvancedPropertyValue):
+    """
+    Scale3D struct property value (Phase 13)。
+
+    X/Y/Z 缩放因子，用于 RelativeScale3D 属性。
+    继承 AdvancedPropertyValue 基类保持一致性（per D-04）。
+
+    来自 CONTEXT.md D-04a。
+    """
+    x: float
+    y: float
+    z: float
 
 
 @dataclass
