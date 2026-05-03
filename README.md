@@ -83,7 +83,3 @@ python -m pytest tests/ --tb=short
 ## 限制
 
 专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。烘焙后的资产仅包含烘焙数据，无蓝图源码。
-
-## 许可证
-
-MIT License
