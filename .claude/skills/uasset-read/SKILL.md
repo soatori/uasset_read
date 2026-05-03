@@ -6,6 +6,24 @@
 | 版本 | v3.0 |
 | 分类 | Unreal Engine 资产解析 |
 | 触发词 | uasset、.uasset、蓝图解析、蓝图图、parse_uasset、uasset_read |
+| 自包含 | ✓ 可移动到其他项目独立使用 |
+
+---
+
+## 安装
+
+将此skill目录复制到目标项目的 `.claude/skills/` 下即可使用：
+
+```bash
+# 复制整个skill目录
+cp -r .claude/skills/uasset-read /path/to/target-project/.claude/skills/
+
+# 或在目标项目中手动创建
+mkdir -p /path/to/target-project/.claude/skills/uasset-read/scripts
+cp scripts/uasset_read.py /path/to/target-project/.claude/skills/uasset-read/scripts/
+```
+
+脚本位置：`scripts/uasset_read.py`（约5900行，零外部依赖）
 
 ---
 
@@ -32,7 +50,13 @@
 ## 快速开始
 
 ```python
+# 从skill内置脚本导入
+import sys
+sys.path.insert(0, ".claude/skills/uasset-read/scripts")
 from uasset_read import parse_uasset
+
+# 或将脚本复制到项目根目录后直接导入
+# from uasset_read import parse_uasset
 
 # 解析蓝图文件
 result = parse_uasset("path/to/BP_MyBlueprint.uasset")
