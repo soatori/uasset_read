@@ -2554,28 +2554,29 @@ def read_ed_graph_pin_type(
     summary: PackageFileSummary
 ) -> FEdGraphPinType:
     """
-    Parse FEdGraphPinType from export data (BLUE-05).
+    Parse FEdGraphPinType with version checks.
 
-    Serialization order from EdGraphPin.cpp lines 163-346 [VERIFIED]:
-    1. PinCategory (FName)
-    2. PinSubCategory (FName)
-    3. PinSubCategoryObject (FPackageIndex / int32)
-    4. ContainerType (uint8)
-    5. PinValueType (FEdGraphTerminalType) - if ContainerType == 3 (Map)
-    6. bIsReference (bool - uint8)
-    7. bIsWeakPointer (bool - uint8)
-    8. PinSubCategoryMemberReference (FSimpleMemberReference) - skip for Phase 3
-    9. bIsConst (bool - uint8)
-    10. bIsUObjectWrapper (bool - uint8)
+    序列化顺序（UE源码 EdGraphPin.cpp L163-346 验证）：
+    1. PinCategory (FName/FString) - 版本依赖
+    2. PinSubCategory (FName/FString) - 版本依赖
+    3. PinSubCategoryObject (FPackageIndex)
+    4. ContainerType (uint8) - 版本依赖
+    5. PinValueType (if ContainerType==Map) - 版本依赖
+    6. bIsReference (bool)
+    7. bIsWeakPointer (bool)
+    8. PinSubCategoryMemberReference - 版本依赖
+    9. bIsConst (bool) - 版本依赖
+    10. bIsUObjectWrapper (bool) - 版本依赖
 
-    Per D-08: parse all fields, not just format for display.
-    Per D-06/D-07: full structure needed for ContainerType + object reference.
-    Per RESEARCH.md Pitfall 1: version-aware serialization with FFrameworkObjectVersion checks.
-
-    Version dependencies:
-    - ContainerType field added in FFrameworkObjectVersion::EdGraphPinContainerType
-    - bIsConst added in VER_UE4_SERIALIZE_PINTYPE_CONST
-    - bIsUObjectWrapper added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
+    Version dependencies (UE 5.7 source):
+    - PinCategory/PinSubCategory: FFrameworkObjectVersion >= PinsStoreFName (20)
+      - >= 20: FName format
+      - < 20: FString format (legacy)
+    - ContainerType: FFrameworkObjectVersion >= EdGraphPinContainerType (15)
+      - >= 15: uint8 EPinContainerType
+      - < 15: legacy bool flags (bIsMap, bIsSet, bIsArray)
+    - bIsConst: VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version)
+    - bIsUObjectWrapper: FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (10)
 
     Args:
         archive: FArchive positioned at start of FEdGraphPinType
@@ -2587,43 +2588,70 @@ def read_ed_graph_pin_type(
     """
     pin_type = FEdGraphPinType()
 
-    # Step 1-2: PinCategory and PinSubCategory (FName)
-    pin_type.pin_category = archive.read_name(name_map)
-    pin_type.pin_sub_category = archive.read_name(name_map)
+    # 版本获取（使用18-01定义的常量）
+    framework_version = summary.custom_version.get(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
+    release_version = summary.custom_version.get(FRELEASE_OBJECT_VERSION_GUID, 0)
+    ue4_version = summary.file_version_ue4
 
-    # Step 3: PinSubCategoryObject (FPackageIndex as int32)
+    # 1-2. PinCategory and PinSubCategory (version dependent)
+    # Per EdGraphPin.cpp L174-188
+    if framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
+        pin_type.pin_category = archive.read_name(name_map)
+        pin_type.pin_sub_category = archive.read_name(name_map)
+    else:
+        # Legacy FString format
+        pin_type.pin_category = archive.read_fstring()
+        pin_type.pin_sub_category = archive.read_fstring()
+
+    # 3. PinSubCategoryObject (FPackageIndex)
     pin_type.pin_sub_category_object = archive.read_i32()
 
-    # Step 4: ContainerType (uint8)
-    # Per EdGraphPin.cpp line 216: FFrameworkObjectVersion >= EdGraphPinContainerType
-    # For Phase 3, we always read ContainerType as it's standard in modern UE files
-    pin_type.container_type = archive.read_u8()
+    # 4-5. ContainerType (version dependent)
+    # Per EdGraphPin.cpp L215-246
+    if framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE:
+        pin_type.container_type = archive.read_u8()
+        if pin_type.container_type == 3:  # Map
+            # PinValueType (FEdGraphTerminalType)
+            # Per EdGraphPin.cpp L220: Ar << PinValueType
+            archive.read_name(name_map)  # TerminalCategory
+            archive.read_name(name_map)  # TerminalSubCategory
+            archive.read_i32()           # TerminalSubCategoryObject
+    else:
+        # Legacy bool flags (EdGraphPin.cpp L224-240)
+        # FBlueprintsObjectVersion check for advanced container support
+        # Simplified: read legacy bool flags and convert to ContainerType
+        b_is_map = archive.read_bool()
+        b_is_set = archive.read_bool()
+        b_is_array = archive.read_bool()
+        # Convert to ContainerType
+        if b_is_map:
+            pin_type.container_type = 3
+        elif b_is_set:
+            pin_type.container_type = 2
+        elif b_is_array:
+            pin_type.container_type = 1
+        else:
+            pin_type.container_type = 0
 
-    # Step 5: PinValueType for Map containers (skip for Phase 3)
-    if pin_type.container_type == 3:  # Map
-        # FEdGraphTerminalType: TerminalCategory + TerminalSubCategory + TerminalSubCategoryObject
-        archive.read_name(name_map)  # TerminalCategory
-        archive.read_name(name_map)  # TerminalSubCategory
-        archive.read_i32()           # TerminalSubCategoryObject
-
-    # Step 6-7: bIsReference and bIsWeakPointer
+    # 6-7. bIsReference and bIsWeakPointer
     pin_type.is_reference = archive.read_bool()
     pin_type.is_weak_pointer = archive.read_bool()
 
-    # Step 8: PinSubCategoryMemberReference (skip for Phase 3)
-    # FSimpleMemberReference: MemberParent (i32) + MemberName (FName) + MemberGuid (16)
+    # 8. PinSubCategoryMemberReference (version dependent)
+    # Per EdGraphPin.cpp L254-269: VER_UE4_MEMBERREFERENCE_IN_PINTYPE
+    # 现代资产通常有此字段，简化处理：始终读取
     archive.read_i32()  # MemberParent (FPackageIndex)
     archive.read_name(name_map)  # MemberName
     archive.read(16)  # MemberGuid
 
-    # Step 9: bIsConst
-    # Added in VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version check)
-    # Always read in Phase 3 as modern assets have this field
+    # 9. bIsConst (version dependent)
+    # Per EdGraphPin.cpp L271-276: VER_UE4_SERIALIZE_PINTYPE_CONST
+    # 现代资产通常有此字段，简化处理：始终读取
     pin_type.is_const = archive.read_bool()
 
-    # Step 10: bIsUObjectWrapper
-    # Added in FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag
-    # Always read in Phase 3 as modern assets have this field
+    # 10. bIsUObjectWrapper (version dependent)
+    # Per EdGraphPin.cpp L278-283: FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag
+    # 现代资产通常有此字段，简化处理：始终读取
     pin_type.is_uobject_wrapper = archive.read_bool()
 
     return pin_type
