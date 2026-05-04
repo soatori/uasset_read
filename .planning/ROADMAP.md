@@ -146,11 +146,12 @@ Plans:
   2. data_flows 包含 ActionValue_X/Y 连接 ✓
   3. function_reference.MemberName 正确提取 ✓
   4. node_guid 非空（非 fallback 值） ✓
-**Plans**: 2 plans (Wave 1: 22-01 partial, Wave 2: 22-02 planned)
+**Plans**: 3 plans (Wave 1: 22-01 partial, Wave 2: 22-02 partial, Wave 3: 22-03 planned)
 
 Plans:
 - [x] 22-01-PLAN.md — 修复 read_ue_graph_node 跳过 UObject tagged properties (partial: ISSUE-02/03 remaining)
-- [ ] 22-02-PLAN.md — 修复 PinFriendlyName (FText) 跳过逻辑，解决 PinToolTip 解析偏移
+- [x] 22-02-PLAN.md — PinFriendlyName FText 跳过逻辑研究（发现：不适用于当前资产）
+- [ ] 22-03-PLAN.md — 深入修复 SerializePin 格式和 pins offset 计算
 
 ---
 
@@ -165,7 +166,7 @@ Plans:
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
 | 20 | 整合输出 | 2 | Planned | - |
 | 21 | 验证测试 | 1 | Planned | - |
-| 22 | 节点序列化修复 | 1 | Planned | - |
+| 22 | 节点序列化修复 | 3 | Planned | - |
 
 **Total:** 22 phases (19 complete, 3 planned)
 
@@ -177,4 +178,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-04 — Phase 22 规划完成（节点序列化修复）*
+*最后更新：2026-05-05 — Phase 22-03 规划完成（pins offset 修复）*

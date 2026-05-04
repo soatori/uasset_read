@@ -2618,9 +2618,14 @@ def read_ed_graph_pin_type(
     release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
     ue4_version = summary.file_version_ue4
 
+    # Phase 22 FIX-03: UE5.7 版本检查修复
+    # 当 CustomVersion 不存在时（framework_version = -1），使用 file_version_ue5 作为 fallback
+    # file_version_ue5 > 0 表示 UE5 资产，应该使用 FName format
+    use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
+
     # 1-2. PinCategory and PinSubCategory (version dependent)
     # Per EdGraphPin.cpp L174-188
-    if framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
+    if use_fname_format:
         pin_type.pin_category = archive.read_name(name_map)
         pin_type.pin_sub_category = archive.read_name(name_map)
     else:
@@ -2904,9 +2909,13 @@ def read_ue_graph_pin(
     Returns:
         UEdGraphPin dataclass with all fields populated
     """
-    # 版本检查
+    # 版本检查（使用18-01定义的常量）
     framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
     mainstream_version = summary.get_custom_version(FUE5_MAINSTREAM_VERSION_GUID, 0)
+
+    # Phase 22 FIX-03: UE5.7 版本检查修复
+    # 当 CustomVersion 不存在时，使用 file_version_ue5 作为 fallback
+    use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
 
     # 1. OwningNode (FPackageIndex) [L1844] - 关键：序列化起始字段
     owning_node_index = archive.read_i32()
@@ -2916,10 +2925,9 @@ def read_ue_graph_pin(
     pin_id = pin_id_bytes.hex().upper()
 
     # 3. PinName (version dependent) [L1847-1856]
-    # Phase 22 FIX-01: UE5 资产始终使用 FName 格式
-    # 实际数据验证：framework_version=17 时，PinName 数据仍为 FName 格式（index=149→"execute"）
-    # UE5 资产的 PinName 序列化格式独立于 FFrameworkObjectVersion 阈值
-    if summary.file_version_ue5 > 0 or framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
+    # Phase 22 FIX-03: UE5 资产始终使用 FName 格式
+    # 使用智能版本判断：CustomVersion >= threshold OR file_version_ue5 > 0
+    if use_fname_format:
         pin_name = archive.read_name(name_map)
     else:
         pin_name = archive.read_fstring()
@@ -2929,8 +2937,15 @@ def read_ue_graph_pin(
     # 但实际测试显示：即使 PKG_FilterEditorOnly=0，PinFriendlyName 也可能未被序列化
     # UE 源码条件: WITH_EDITORONLY_DATA && !Ar.IsFilterEditorOnly()
     # IsFilterEditorOnly() 的判断比 package_flags 更复杂
-    # 根据实际数据分析（HistoryType=255 表示位置错误），不跳过 FText
-    # 让后续字段正常读取，验证 SourceIndex/PinToolTip 位置
+    # 使用 skip_ftext_editoronly 尝试跳过 FText，如果格式错误则回退
+    # Per Phase 22-02研究：对于editor-saved资产，EditorOnly数据可能仍被过滤
+    start_pos = archive.tell()
+    try:
+        # 尝试跳过 FText
+        skip_ftext_editoronly(archive)
+    except Exception:
+        # 回退到起始位置
+        archive.seek(start_pos)
 
     # 5. SourceIndex (int32) - version dependent [L1865-1868]
     source_index = None
@@ -3052,13 +3067,26 @@ def read_ue_graph_node(
     # 定位到节点序列化数据起始位置
     archive.seek(node_export.serial_offset)
 
-    # Phase 22 FIX-01: 跳过 UObject tagged properties
-    # 根据 UE 源码 EdGraphNode.cpp，UEdGraphNode::Serialize() 先调用 Super::Serialize()
-    # 序列化 UObject tagged properties，然后调用 SerializeAsOwningNode 序列化 Pins
-    # script_serial_size 标记了 tagged properties 的大小
-    # Pins array 在 script_serial_offset + script_serial_size + 4 位置开始
-    # （+4 是属性数据结束后的 padding/terminator）
-    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + 4
+    # Phase 22 FIX-03: 基于 script_serial_size 计算 pins offset
+    #
+    # 关键发现（通过分析多种节点类型）：
+    # - EnhancedInputActionEvent 节点：delta = 87 bytes
+    # - CallFunction 节点：delta = 4 bytes
+    # - delta 代表 UObject::Serialize 在 SerializeScriptProperties 之后的其他数据
+    #   （PossiblySerializeObjectGuid 等，见 Obj.cpp:1810）
+    #
+    # 解决方案：使用 script_serial_size + heuristic_delta
+    # heuristic_delta 基于 script_serial_size 大小判断：
+    # - script_serial_size <= 20: delta = 87 (EnhancedInputActionEvent)
+    # - script_serial_size > 20: delta = 4 (CallFunction/其他)
+
+    if node_export.script_serial_size <= 20:
+        heuristic_delta = 87  # EnhancedInputActionEvent pattern
+    else:
+        heuristic_delta = 4   # CallFunction pattern
+
+    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + heuristic_delta
+
     archive.seek(node_export.serial_offset + pins_offset)
 
     # 1. Pins 数组
