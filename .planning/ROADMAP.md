@@ -66,7 +66,7 @@
 - [x] Phase 18: Pin序列化解析 (4 plans) — completed 2026-05-04
 - [x] Phase 19: 连接关系重建 (3 plans) — completed 2026-05-04
 - [ ] Phase 20: 整合输出 (2 plans planned)
-- [ ] Phase 21: 验证测试
+- [ ] Phase 21: 验证测试 (1 plan planned)
 
 </details>
 
@@ -132,7 +132,10 @@ Plans:
   2. 测试可以验证Jump执行流程（IA_Jump → Jump → StopJumping）正确构建
   3. 测试可以验证数据流（ActionValue_X/Y → 参数）正确解析
   4. 测试可以验证节点属性（FunctionReference.MemberName、NodeGuid）正确提取
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 21-01-PLAN.md — TEST-01~04 验证测试实现（节点数量、执行流程、数据流、节点属性，使用真实资产集成测试）
 
 ---
 
@@ -146,9 +149,9 @@ Plans:
 | 18 | Pin序列化解析 | 4 | Complete | 2026-05-04 |
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
 | 20 | 整合输出 | 2 | Planned | - |
-| 21 | 验证测试 | TBD | Not started | - |
+| 21 | 验证测试 | 1 | Planned | - |
 
-**Total:** 21 phases (19 complete, 2 active)
+**Total:** 21 phases (19 complete, 2 planned)
 
 ---
 
@@ -158,4 +161,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-04 — Phase 20 规划完成（OUT-01~03）*
+*最后更新：2026-05-04 — Phase 21 规划完成（TEST-01~04）*
