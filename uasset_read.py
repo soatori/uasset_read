@@ -5141,14 +5141,90 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     return connections, warnings
 
 
+# ============================================================================
+# Phase 20: OUT-01 - 节点输出格式化
+# ============================================================================
+
+# D-20-07: Graph类型语义化映射
+GRAPH_TYPE_MAP = {
+    "EdGraph": "event",
+    "UberEdGraph": "uber",
+}
+
+
+def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
+    """
+    格式化单个节点为 OUT-01 规范 JSON 结构。
+
+    Per D-20-01: node_name 使用 _derive_node_name() 派生
+    Per D-20-02: 字段名规范化（node_type, position:{x,y})
+    Per D-20-03: function_reference/event_reference 提升到顶层
+
+    Args:
+        node: UEdGraphNode 节点对象
+        idx: 节点在图中的索引
+
+    Returns:
+        Dict: OUT-01 规范节点结构
+    """
+    from dataclasses import asdict
+
+    # D-20-01: 派生 node_name
+    node_name = _derive_node_name(node, idx)
+
+    # D-20-02: 字段名规范化
+    result = {
+        "node_name": node_name,
+        "node_type": node.class_name,
+        "node_guid": node.node_guid,
+        "position": {"x": node.node_pos_x, "y": node.node_pos_y},
+        "node_comment": node.node_comment,
+        "pins": [asdict(pin) for pin in node.pins]  # Pin格式保持Phase 18规范
+    }
+
+    # D-20-03: 嵌套结构展开
+    if node.node_data is not None:
+        if isinstance(node.node_data, K2NodeCallFunction):
+            # CallFunction: 提取 function_reference 到顶层
+            fr = node.node_data.function_reference
+            result["function_reference"] = {
+                "member_name": fr.member_name,
+                "member_parent": fr.member_parent,
+                "self_context": fr.b_self_context
+            }
+        elif isinstance(node.node_data, K2NodeEvent):
+            # Event: 提取 event_reference 到顶层
+            er = node.node_data.event_reference
+            result["event_reference"] = {
+                "member_name": er.member_name,
+                "member_parent": er.member_parent,
+                "member_guid": er.member_guid
+            }
+        elif isinstance(node.node_data, K2NodeKnot):
+            # Knot节点无额外顶层字段
+            pass
+        elif isinstance(node.node_data, EdGraphNodeComment):
+            # Comment节点保持 node_data 嵌套
+            result["node_data"] = asdict(node.node_data)
+        elif isinstance(node.node_data, K2NodeEnhancedInputAction):
+            # EnhancedInputAction保持 node_data 嵌套
+            result["node_data"] = asdict(node.node_data)
+        else:
+            # 其他类型：保持 node_data 嵌套
+            result["node_data"] = asdict(node.node_data)
+
+    return result
+
+
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     """
-    格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT2-01）。
+    格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02）。
 
     Per D-08-03: connections 放在 graph 层级
-    Per D-04: graphs 与 blueprint_metadata 同级
     Per D-08-09: execution_flows 数组
     Per D-19-09: data_flows 数组（LINK-03）
+    Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
+    Per OUT-01: nodes 使用 format_node_dict 格式化
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -5171,8 +5247,8 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
         graph_dict = {
             "graph_name": graph.graph_name,
-            "graph_class": graph.graph_class,
-            "nodes": [asdict(node) for node in graph.nodes],
+            "graph_type": GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class),  # D-20-07
+            "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01
             "connections": connections,
             "execution_flows": execution_flows,  # D-08-09: execution_flows 数组
             "data_flows": data_flows,  # D-19-09: data_flows 数组（LINK-03）
