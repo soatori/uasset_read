@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: 节点属性深度解析
-status: Phase 20 context gathered
-last_updated: "2026-05-04T16:00:00.000Z"
-last_activity: 2026-05-04 — Phase 20 context gathered (7 decisions captured)
+status: Phase 20 planned
+last_updated: "2026-05-04T17:00:00.000Z"
+last_activity: 2026-05-04 — Phase 20 planned (2 plans in 2 waves, OUT-01~03 covered)
 status:
   phase: "Phase 20: 整合输出"
-  plan: "not started"
+  plan: "ready to execute"
   progress:
     total_phases: 4
     completed_phases: 2
-    planned_phases: 0
+    planned_phases: 1
     total_plans: 7
     completed_plans: 7
     percent: 100
@@ -27,9 +27,9 @@ status:
 ## Current Position
 
 Phase: 20 - 整合输出
-Plan: not started — Phase 20 context gathered, awaiting planning
-Status: Ready to plan
-Last activity: 2026-05-04 — Phase 20 context gathered (D-20-01~07)
+Plan: ready to execute — 2 plans in 2 waves (OUT-01~03 covered)
+Status: Ready to execute
+Last activity: 2026-05-04 — Phase 20 planned (D-20-01~07 implemented)
 
 ## Progress
 
@@ -86,9 +86,14 @@ Last activity: 2026-05-04 — Phase 20 context gathered (D-20-01~07)
 ## 下一步
 
 **启动 Phase 20: 整合输出**
-- 节点完整信息输出（node_name、node_type、node_guid、position、pins、function_reference）
-- Graph完整信息输出（graph_name、graph_type、nodes、execution_flows、data_flows）
-- 蓝图完整信息输出（blueprint_name、parent_class、graphs、variables）
+- Wave 1: 20-01 节点和Graph输出结构重组 (format_node_dict, GRAPH_TYPE_MAP)
+- Wave 2: 20-02 蓝图结构重组 + 版本升级 (blueprint对象, output_version 4.0)
+
+**执行命令:**
+```
+/clear
+/gsd-execute-phase 20
+```
 
 ---
 
