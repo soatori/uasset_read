@@ -2173,3 +2173,153 @@ def test_build_execution_flows_custom_event_start():
     # 验证CustomEvent为起点
     assert len(flows) >= 1
     assert "CustomEvent" in flows[0]["start_event"]
+
+
+def test_trace_execution_branch_type_output():
+    """
+    验证控制流节点输出branch_type字段（D-19-14）。
+
+    LINK-02: 控制流节点分支类型映射
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeEvent, FMemberReference,
+    )
+
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event节点
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_if",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["if_in_123"],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_if_guid",
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="SomeEvent"),
+            b_override_function=False,
+        ),
+    )
+
+    # IfThenElse节点（控制流节点）
+    if_input_pin = UEdGraphPin(
+        pin_id="if_in_123",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    if_node = UEdGraphNode(
+        node_guid="if_node_guid",
+        pins=[if_input_pin],
+        class_name="K2Node_IfThenElse",  # 控制流节点！
+        node_data=None,
+    )
+
+    graph = UEdGraph(
+        graph_name="BranchGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, if_node],
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 验证branch_type字段
+    nodes = flows[0]["nodes"]
+    # 查找控制流节点（应该有stopped_at标记）
+    control_flow_entries = [n for n in nodes if n.get("stopped_at") == "control_flow_node"]
+    assert len(control_flow_entries) >= 1
+
+    # 查找IfThenElse节点
+    if_node_entries = [n for n in nodes if n.get("node_guid") == "if_node_guid"]
+    assert len(if_node_entries) >= 1
+
+    # 验证branch_type字段
+    if_entry = if_node_entries[0]
+    assert "branch_type" in if_entry
+    assert if_entry["branch_type"] == "if_then_else"
+
+
+def test_trace_execution_switch_enum_branch_type():
+    """
+    验证SwitchEnum节点输出正确的branch_type（D-19-14）。
+
+    LINK-02: 控制流节点分支类型映射
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeEvent, FMemberReference,
+    )
+
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # Event节点
+    event_output_pin = UEdGraphPin(
+        pin_id="event_out_switch",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["switch_in"],
+    )
+
+    event_node = UEdGraphNode(
+        node_guid="event_switch_guid",
+        pins=[event_output_pin],
+        class_name="K2Node_Event",
+        node_data=K2NodeEvent(
+            event_reference=FMemberReference(member_name="TestEvent"),
+            b_override_function=False,
+        ),
+    )
+
+    # SwitchEnum节点（控制流节点）
+    switch_input_pin = UEdGraphPin(
+        pin_id="switch_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+
+    switch_node = UEdGraphNode(
+        node_guid="switch_enum_guid",
+        pins=[switch_input_pin],
+        class_name="K2Node_SwitchEnum",  # 控制流节点！
+        node_data=None,
+    )
+
+    graph = UEdGraph(
+        graph_name="SwitchGraph",
+        graph_class="EdGraph",
+        nodes=[event_node, switch_node],
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 验证branch_type字段
+    nodes = flows[0]["nodes"]
+    switch_entries = [n for n in nodes if n.get("node_guid") == "switch_enum_guid"]
+    assert len(switch_entries) >= 1
+
+    switch_entry = switch_entries[0]
+    assert "branch_type" in switch_entry
+    assert switch_entry["branch_type"] == "switch_enum"
