@@ -689,6 +689,27 @@ class PackageFileSummary:
     saved_hash: bytes = field(default_factory=lambda: b'')  # FIoHash (20 bytes) for UE5 >= 1016
     total_header_size: int = 0          # 文件头总大小
     custom_versions: List[CustomVersion] = field(default_factory=list)  # D-05
+
+    def get_custom_version(self, guid: str, default: int = 0) -> int:
+        """
+        查找 CustomVersion 版本值。
+
+        GUID 格式兼容：接受带分隔符的大写格式（如 "CFFC743F-43B04480-939114DF-171D2073"）
+        或无分隔符的小写格式（如 "cffc743f43b04480939114df171d2073"）。
+
+        Args:
+            guid: CustomVersion GUID 字符串
+            default: 未找到时的默认值
+
+        Returns:
+            版本号或默认值
+        """
+        # Normalize GUID: remove dashes, convert to lowercase
+        normalized_guid = guid.replace("-", "").lower()
+        for cv in self.custom_versions:
+            if cv.guid == normalized_guid:
+                return cv.version
+        return default
     package_name: str = ""              # PackageName FString
     package_flags: int = 0              # D-12 仅存储
 
@@ -2589,8 +2610,8 @@ def read_ed_graph_pin_type(
     pin_type = FEdGraphPinType()
 
     # 版本获取（使用18-01定义的常量）
-    framework_version = summary.custom_version.get(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
-    release_version = summary.custom_version.get(FRELEASE_OBJECT_VERSION_GUID, 0)
+    framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
+    release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
     ue4_version = summary.file_version_ue4
 
     # 1-2. PinCategory and PinSubCategory (version dependent)
@@ -2799,8 +2820,8 @@ def read_ue_graph_pin(
         UEdGraphPin dataclass with all fields populated
     """
     # 版本检查
-    framework_version = summary.custom_version.get(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
-    mainstream_version = summary.custom_version.get(FUE5_MAINSTREAM_VERSION_GUID, 0)
+    framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
+    mainstream_version = summary.get_custom_version(FUE5_MAINSTREAM_VERSION_GUID, 0)
 
     # 1. OwningNode (FPackageIndex) [L1844] - 关键：序列化起始字段
     owning_node_index = archive.read_i32()
