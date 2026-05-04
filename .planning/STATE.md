@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: 节点属性深度解析
-status: Phase 20 complete
-last_updated: "2026-05-04T18:00:00.000Z"
-last_activity: 2026-05-04 — Phase 20 executed (2 plans, OUT-01~03 complete)
+status: Phase 21 context gathered
+last_updated: "2026-05-04T19:00:00.000Z"
+last_activity: 2026-05-04 — Phase 21 context gathered (验证测试)
 status:
-  phase: "Phase 20: 整合输出"
-  plan: "complete"
+  phase: "Phase 21: 验证测试"
+  plan: "context_gathered"
   progress:
     total_phases: 4
     completed_phases: 3
-    planned_phases: 0
+    planned_phases: 1
     total_plans: 9
     completed_plans: 9
     percent: 100
@@ -22,14 +22,14 @@ status:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v4.0 节点属性深度解析
-**状态：** Phase 20 完成，准备 Phase 21 验证测试
+**状态：** Phase 21 context gathered，准备规划验证测试
 
 ## Current Position
 
-Phase: 20 - 整合输出 ✓ Complete
-Next: Phase 21 - 验证测试
-Status: Ready to verify
-Last activity: 2026-05-04 — Phase 20 executed (OUT-01~03 complete, 391 tests passed)
+Phase: 21 - 验证测试 (Context gathered)
+Next: /gsd-plan-phase 21
+Status: Ready to plan
+Last activity: 2026-05-04 — Phase 21 context gathered (集成测试验证)
 
 ## Progress
 
@@ -38,7 +38,7 @@ Last activity: 2026-05-04 — Phase 20 executed (OUT-01~03 complete, 391 tests p
 | v1.0 MVP | 5 | 25 | ✓ Complete |
 | v2.0 蓝图图解析 | 5 | 20 | ✓ Complete |
 | v3.x 解析完善+Skill | 7 | 23 | ✓ Complete |
-| **v4.0 节点属性深度解析** | **4** | **9** | **3/4 Complete** |
+| **v4.0 节点属性深度解析** | **4** | **9** | **3/4 Complete, 1 Context gathered** |
 
 **Total Progress:** 20/21 phases (95%)
 
@@ -53,37 +53,31 @@ Last activity: 2026-05-04 — Phase 20 executed (OUT-01~03 complete, 391 tests p
 | 18 | Pin序列化解析 | PIN-01~05 | 5 criteria ✓ Complete |
 | 19 | 连接关系重建 | LINK-01~03 | 3 criteria ✓ Complete |
 | 20 | 整合输出 | OUT-01~03 | 3 criteria ✓ Complete |
-| 21 | 验证测试 | TEST-01~04 | 4 criteria (Next) |
+| 21 | 验证测试 | TEST-01~04 | 4 criteria (Context gathered) |
 
 ### Key Deliverables
 
 - **Phase 18:** ✓ Pin完整信息提取（pin_id、pin_type、default_value、linked_to、显示属性）
 - **Phase 19:** ✓ 连接关系构建（connections、execution_flows、data_flows）
 - **Phase 20:** ✓ 整合JSON输出（节点、图、蓝图三层结构）
-- **Phase 21:** 测试验证（节点数量、执行流程、数据流、属性正确性）
+- **Phase 21:** 测试验证（节点数量、执行流程、数据流、属性正确性）— Context gathered
 
-## Phase 20 完成详情
+## Phase 21 Context Summary
 
-### OUT-01: 节点输出结构规范化
-- format_node_dict() 创建完成
-- node_name 使用 _derive_node_name() 派生
-- node_type 字段替代 class_name
-- position: {x, y} 结构替代 node_pos_x/node_pos_y
-- function_reference/event_reference 提升到顶层
+### 验证方法
+- 集成测试（真实资产） — 使用BP_FirstPersonCharacter.uasset
+- 精确匹配标准 — 节点数量、执行流程、数据流必须完全匹配
 
-### OUT-02: Graph类型语义化映射
-- GRAPH_TYPE_MAP: EdGraph→event, UberEdGraph→uber
-- format_graphs_json() 使用 graph_type 字段
+### Expected数据来源
+- C++源码对照 — FirstPersonCCharacter.h/cpp
+- 关键函数映射：DoJumpStart→Jump, DoJumpEnd→StopJumping, MoveInput→DoMove
 
-### OUT-03: Blueprint对象结构重组
-- format_json_full() 输出单一 blueprint 对象
-- graphs 移入 blueprint 内部
-- output_version 升级到 4.0
-- blueprint_name 字段添加
+### 测试组织
+- 新建test_phase21_verification.py专用文件
 
 ## 下一步
 
-**启动 Phase 21: 验证测试**
+**启动 Phase 21 规划:**
 - TEST-01: 节点数量验证
 - TEST-02: 执行流程验证
 - TEST-03: 数据流验证
@@ -100,6 +94,13 @@ Last activity: 2026-05-04 — Phase 20 executed (OUT-01~03 complete, 391 tests p
 ## Accumulated Context
 
 ### Key Decisions
+
+- **2026-05-04:** Phase 21 context gathered
+  - 验证方法：集成测试（真实资产）
+  - 测试资产：BP_FirstPersonCharacter.uasset（UE 5.7）
+  - 验证标准：精确匹配
+  - 测试文件：新建test_phase21_verification.py
+  - Expected数据来源：C++源码对照（FirstPersonCCharacter.h/cpp）
 
 - **2026-05-04:** Phase 20执行完成
   - 2 plans in 2 waves (Wave 1: 20-01, Wave 2: 20-02)
@@ -132,4 +133,4 @@ Last activity: 2026-05-04 — Phase 20 executed (OUT-01~03 complete, 391 tests p
 
 ---
 
-*最后更新：2026-05-04 — Phase 20 完成（391 tests passed）*
+*最后更新：2026-05-04 — Phase 21 context gathered*
