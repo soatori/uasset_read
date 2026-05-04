@@ -65,7 +65,7 @@
 
 - [x] Phase 18: Pin序列化解析 (4 plans) — completed 2026-05-04
 - [x] Phase 19: 连接关系重建 (3 plans) — completed 2026-05-04
-- [ ] Phase 20: 整合输出
+- [ ] Phase 20: 整合输出 (2 plans planned)
 - [ ] Phase 21: 验证测试
 
 </details>
@@ -117,7 +117,11 @@ Plans:
   1. 用户可以在JSON中看到每个节点的完整信息（node_name、node_type、node_guid、position、pins、function_reference等）
   2. 用户可以在JSON中看到每个Graph的完整信息（graph_name、graph_type、nodes、execution_flows、data_flows）
   3. 用户可以在JSON中看到蓝图的完整信息（blueprint_name、parent_class、graphs、variables）
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 20-01-PLAN.md — OUT-01/02 节点和Graph输出结构重组（node_name派生、position嵌套、graph_type语义化映射）
+- [ ] 20-02-PLAN.md — OUT-03 蓝图结构重组（单一blueprint对象、graphs移入内部、output_version升级到4.0）
 
 ### Phase 21: 验证测试
 **Goal**: 验证JSON输出与UE编辑器信息一致，确保正确性
@@ -141,7 +145,7 @@ Plans:
 | 11-17 | v3.x 解析完善+Skill | 23 | Complete | 2026-05-04 |
 | 18 | Pin序列化解析 | 4 | Complete | 2026-05-04 |
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
-| 20 | 整合输出 | TBD | Not started | - |
+| 20 | 整合输出 | 2 | Planned | - |
 | 21 | 验证测试 | TBD | Not started | - |
 
 **Total:** 21 phases (19 complete, 2 active)
@@ -154,4 +158,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-04 — Phase 19 完成（LINK-01~03 全部实现）*
+*最后更新：2026-05-04 — Phase 20 规划完成（OUT-01~03）*
