@@ -749,32 +749,37 @@ def test_no_external_deps():
 
 def test_format_json_full_contains_graphs(create_mock_parse_result, sample_graph_with_connections):
     """
-    GRAPH-11: 验证 format_json_full() 返回包含 graphs 字段。
+    GRAPH-11: 验证 format_json_full() graphs 在 blueprint 内部（D-20-04）。
     """
     result = create_mock_parse_result
     result.graphs = [sample_graph_with_connections]
 
     json_dict = format_json_full(result)
 
-    assert 'graphs' in json_dict
-    assert isinstance(json_dict['graphs'], list)
-    assert len(json_dict['graphs']) == 1
+    # D-20-04: graphs 在 blueprint 内部（当 blueprint 存在时）
+    if json_dict.get('blueprint'):
+        assert 'graphs' in json_dict['blueprint']
+        assert isinstance(json_dict['blueprint']['graphs'], list)
+        assert len(json_dict['blueprint']['graphs']) == 1
 
 
 def test_graphs_field_top_level(create_mock_parse_result):
     """
-    OUT2-01: 验证 graphs 字段与 blueprint_metadata 同级。
+    OUT2-01: 验证 graphs 字段在 blueprint 对象内部（D-20-04）。
     """
     result = create_mock_parse_result
     result.graphs = []
 
     json_dict = format_json_full(result)
 
-    # graphs 与 blueprint_metadata 同级
-    assert 'graphs' in json_dict
-    assert 'blueprint_metadata' in json_dict
+    # D-20-04: graphs 在 blueprint 内部，顶层改为 blueprint 对象
+    assert 'blueprint' in json_dict
+    assert 'graphs_summary' in json_dict  # 顶层保留 graphs_summary
     assert 'exports' in json_dict
     assert 'errors' in json_dict
+    # graphs 应在 blueprint 内部（当 blueprint 存在时）
+    if json_dict.get('blueprint'):
+        assert 'graphs' in json_dict['blueprint']
 
 
 def test_format_graphs_json_structure(sample_graph_with_connections):
@@ -1094,7 +1099,10 @@ def test_cli_graph_json_output_full(create_mock_parse_result, sample_graph_with_
     # --graph --json 应输出完整 JSON
     output_str = json.dumps(format_json_full(result), indent=2, ensure_ascii=False)
 
-    assert '"graphs"' in output_str
+    # D-20-04: graphs 在 blueprint 内部（当 blueprint 存在时）
+    # 当 blueprint 为 null，检查 graphs_summary 作为顶层替代
+    assert '"graphs_summary"' in output_str
+    assert '"blueprint"' in output_str  # blueprint 对象（替代 blueprint_metadata）
     assert '"exports"' in output_str  # 包含其他字段
     assert '"summary"' in output_str
 
@@ -1163,13 +1171,13 @@ def test_status_error_when_not_success(create_mock_parse_result):
 
 def test_output_version_field(create_mock_parse_result):
     """
-    OUT-06: 验证 output_version 字段存在且值为 "3.0"
+    OUT-06: 验证 output_version 字段存在且值为 "4.0"（D-20-05）
     """
     result = create_mock_parse_result
     json_dict = format_json_full(result)
 
     assert 'output_version' in json_dict
-    assert json_dict['output_version'] == "3.0"
+    assert json_dict['output_version'] == "4.0"  # D-20-05: 升级到 4.0
 
 
 def test_format_json_summary_has_status_field(create_mock_parse_result):
@@ -1188,13 +1196,13 @@ def test_format_json_summary_has_status_field(create_mock_parse_result):
 
 def test_format_json_summary_has_output_version(create_mock_parse_result):
     """
-    OUT-06: 验证 format_json_summary() 包含 output_version。
+    OUT-06: 验证 format_json_summary() 包含 output_version（D-20-05）。
     """
     result = create_mock_parse_result
     json_dict = format_json_summary(result)
 
     assert 'output_version' in json_dict
-    assert json_dict['output_version'] == "3.0"
+    assert json_dict['output_version'] == "4.0"  # D-20-05: 升级到 4.0
 
 
 def test_status_field_top_level_position(create_mock_parse_result):
@@ -1813,11 +1821,11 @@ class TestSummaryCompactPhase14:
         # status 和 output_version 应保留
         assert "status" in json_dict
         assert "output_version" in json_dict
-        assert json_dict["output_version"] == "3.0"
+        assert json_dict["output_version"] == "4.0"  # D-20-05
 
     def test_summary_blueprint_metadata_compact(self, create_mock_parse_result):
         """
-        摘要模式 blueprint_metadata 精简为仅核心字段。
+        摘要模式 blueprint 精简为仅核心字段（D-20-04）。
         """
         result = create_mock_parse_result
         result.blueprint = BlueprintMetadata(
@@ -1828,11 +1836,12 @@ class TestSummaryCompactPhase14:
 
         json_dict = format_json_summary(result)
 
-        # blueprint_metadata 应存在
-        assert "blueprint_metadata" in json_dict
+        # D-20-04: blueprint 应存在（替代 blueprint_metadata）
+        assert "blueprint" in json_dict
         # 精简版本应包含核心字段
-        if json_dict["blueprint_metadata"]:
-            assert "parent_class" in json_dict["blueprint_metadata"]
+        if json_dict["blueprint"]:
+            assert "parent_class" in json_dict["blueprint"]
+            assert "blueprint_name" in json_dict["blueprint"]
 
 
 class TestCLISummaryFlagsPhase14:

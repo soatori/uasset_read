@@ -5714,21 +5714,24 @@ def build_schema_info() -> Dict[str, str]:
 
 def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     """
-    Format full JSON output with complete asset data (OUT-01, OUT-03).
+    Format full JSON output with complete asset data (OUT-03).
 
     Per D-01: Tiered output (full detail)
     Per D-02: Package → Exports → Properties hierarchy
     Per D-03: Top-level errors field
-    Per D-04: Top-level blueprint_metadata (None for non-blueprint)
+    Per D-04: 单一 blueprint 对象结构（D-20-04: graphs 移入 blueprint 内部）
     Per D-05: Raw FPackageIndex values preserved where unresolved
     Per D-06: name_map excluded (already parsed to object names)
+    Per D-20-04: 单一 blueprint 对象结构（graphs 移入 blueprint 内部）
+    Per D-20-05: output_version 升级到 "4.0"
+    Per D-20-06: blueprint_name 从 package_name 提取
 
     Args:
         result: ParseResult from parse_uasset()
         include_schema: bool, whether to include _schema field (OUT-05)
 
     Returns:
-        Dict with keys: summary, exports, blueprint_metadata, errors
+        Dict with keys: status, output_version, summary, exports, blueprint, graphs_summary, imports, soft_references, circular_deps, errors
     """
     from dataclasses import asdict
 
@@ -5742,13 +5745,21 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
             "package_name": result.summary.package_name
         }
 
+    # D-20-04: 构建单一 blueprint 对象（包含 graphs）
+    blueprint_obj = None
+    if result.blueprint:
+        blueprint_obj = format_blueprint_dict(
+            result.blueprint,
+            blueprint_name=result.summary.package_name if result.summary else None
+        )
+        blueprint_obj["graphs"] = format_graphs_json(result.graphs)  # D-20-04: graphs 移入 blueprint
+
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
-        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
+        "output_version": "4.0",  # D-20-05: 反映输出结构重大变化
         "summary": summary_dict,
         "exports": format_exports_list(result),
-        "blueprint_metadata": format_blueprint_dict(result.blueprint) if result.blueprint else None,
-        "graphs": format_graphs_json(result.graphs),  # Phase 8: OUT2-01
+        "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # Phase 10: 依赖分析字段（D-10-05/08/13）
         "imports": result.imports,                     # D-10-05: ImportMap 依赖列表
@@ -5920,7 +5931,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
 
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
-        "output_version": "3.0",  # D-14-15: API 版本标识（OUT-06）
+        "output_version": "4.0",  # D-20-05: API 版本标识（与 format_json_full 保持一致）
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,  # D-14-08: 精简版本（无 properties/serial_size 等）
@@ -5930,11 +5941,11 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     # D-14-07: 移除 imports/soft_references/circular_deps/errors
     # errors 数组已移除（status 字段已包含状态信息）
 
-    # blueprint_metadata 精简（仅保留核心字段）
+    # D-20-04: blueprint 精简（仅保留核心字段）
     if result.blueprint and result.blueprint.is_blueprint:
-        output["blueprint_metadata"] = {
+        output["blueprint"] = {
+            "blueprint_name": result.summary.package_name if result.summary else None,
             "parent_class": result.blueprint.parent_class,
-            "is_blueprint": True,
         }
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
@@ -6183,15 +6194,18 @@ def format_markdown(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
-def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
+def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = None) -> Dict:
     """
-    Format BlueprintMetadata for JSON output (D-04).
+    Format BlueprintMetadata for JSON output (D-04, D-20-06).
+
+    Per D-20-06: blueprint_name 从 package_name 或导出名提取
 
     Args:
         blueprint: BlueprintMetadata object
+        blueprint_name: 资产名称（可选）
 
     Returns:
-        Dict with keys: parent_class, variables, detection_warning
+        Dict with keys: blueprint_name, parent_class, variables, detection_warning
     """
     variables_list = []
     for v in blueprint.variables:
@@ -6212,6 +6226,7 @@ def format_blueprint_dict(blueprint: BlueprintMetadata) -> Dict:
         variables_list.append(var_dict)
 
     return {
+        "blueprint_name": blueprint_name,  # D-20-06
         "parent_class": blueprint.parent_class,  # None if not resolved
         "variables": variables_list,
         "detection_warning": blueprint.detection_warning  # None if no warning
