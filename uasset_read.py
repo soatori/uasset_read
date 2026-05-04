@@ -113,6 +113,37 @@ UE5_TRACK_OBJECT_EXPORT_IS_INHERITED = 1006     # EUnrealEngineObjectUE5Version:
 UE5_OPTIONAL_RESOURCES = 1003                   # EUnrealEngineObjectUE5Version::OPTIONAL_RESOURCES (line 56)
 UE5_SCRIPT_SERIALIZATION_OFFSET = 1010          # EUnrealEngineObjectUE5Version::SCRIPT_SERIALIZATION_OFFSET (line 77)
 
+# ============================================================
+# CustomVersion GUIDs (Phase 18: Pin序列化解析)
+# 来源：UE 5.7 源码 DevObjectVersion.cpp, EngineVersion.cpp
+# ============================================================
+
+# FrameworkObjectVersion GUID (DevObjectVersion.cpp L194)
+FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
+
+# UE5MainStreamObjectVersion GUID (DevObjectVersion.cpp L332)
+FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
+
+# ReleaseObjectVersion GUID (EngineVersion.cpp L266)
+FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
+
+# ============================================================
+# Version Thresholds (Phase 18: Pin序列化版本检查)
+# 枚举值从0开始计数，值 = 枚举位置
+# ============================================================
+
+# FFrameworkObjectVersion thresholds (FrameworkObjectVersion.h)
+# 枚举从0开始计数
+FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE = 15  # 第16个枚举值 (EdGraphPinContainerType)
+FFRAMEWORK_VERSION_PINS_STORE_FNAME = 20             # 第21个枚举值 (PinsStoreFName)
+
+# FUE5MainStreamObjectVersion thresholds (UE5MainStreamObjectVersions.inl L161)
+FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX = 50  # EdGraphPinSourceIndex
+
+# FReleaseObjectVersion thresholds (ReleaseObjectVersion.h)
+# 枚举从0开始计数
+FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10  # 第11个枚举值 (PinTypeIncludesUObjectWrapperFlag)
+
 
 # ============================================================================
 # 自定义异常（D-15 优雅降级）
@@ -1207,22 +1238,46 @@ class BlueprintMetadata:
 @dataclass
 class UEdGraphPin:
     """
-    UEdGraphPin 蓝图引脚完整结构（GRAPH-04）。
+    UEdGraphPin 蓝图引脚完整结构（Phase 18 扩展）。
 
-    来自 UE 源码 EdGraphPin.h 第 76-225 行。
+    来自 UE 源码 EdGraphPin.cpp L1838-1964 序列化顺序验证。
 
     Per D-01/D-01a: LinkedTo 存储为原始数据列表，Phase 8 构建连接映射。
+    Per PIN-01~05: 完整字段支持，包含版本依赖字段和显示属性。
     """
-    pin_id: str                          # FGuid hex（16 bytes）
-    pin_name: str                        # FName 解析结果
-    direction: int                       # uint8: 0=Input, 1=Output, 2=None (EGPD_Input/Output/None)
-    pin_type: "FEdGraphPinType"          # Phase 3 已实现的引脚类型结构
-    default_value: Optional[str] = None  # FString - 默认值
-    auto_default_value: Optional[str] = None  # FString - 自动生成的默认值
-    linked_to_raw: List[str] = field(default_factory=list)  # D-01a: 原始连接数据列表
-    sub_pins: List[str] = field(default_factory=list)       # SubPin PinIds（GUID hex）
-    parent_pin: Optional[str] = None                        # ParentPin PinId（GUID hex）
-    flags: int = 0                                          # uint8 bitfield
+    # PIN-01: 基础信息
+    pin_id: str                              # FGuid hex（16 bytes）
+    pin_name: str                            # FName 解析结果
+    pin_tooltip: str = ""                    # FString - PinToolTip (Phase 18)
+    direction: int = 0                       # uint8: 0=Input, 1=Output, 2=None
+
+    # PIN-02: PinType
+    pin_type: "FEdGraphPinType" = None       # FEdGraphPinType结构
+
+    # PIN-03: 默认值
+    default_value: Optional[str] = None      # FString
+    auto_default_value: Optional[str] = None  # FString
+    default_object: Optional[int] = None     # FPackageIndex (Phase 18)
+    default_text_value: Optional[str] = None  # FText简化 (Phase 18)
+
+    # PIN-04: 连接引用（Phase 18: 改为dict格式）
+    linked_to_raw: List[dict] = field(default_factory=list)  # D-01a改为dict格式
+    sub_pins: List[dict] = field(default_factory=list)       # 同linked_to格式
+    parent_pin: Optional[dict] = None                        # 同linked_to格式
+
+    # PIN-05: 显示属性（BitField解析）
+    hidden: bool = False                     # bit 0
+    not_connectable: bool = False            # bit 1
+    advanced_view: bool = False              # bit 4
+    orphaned_pin: bool = False               # bit 5
+
+    # EditorOnly/版本依赖字段（内部使用，不输出到JSON）
+    owning_node_index: int = 0               # FPackageIndex (序列化起始)
+    source_index: Optional[int] = None      # int32 - 版本依赖
+    persistent_guid: Optional[str] = None   # FGuid hex - EditorOnly
+
+    # Legacy字段（保持兼容）
+    flags: int = 0                           # uint8 bitfield (deprecated)
 
 
 @dataclass
