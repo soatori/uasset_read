@@ -127,12 +127,12 @@ class TestOutputInterpretation:
         else:
             pytest.skip("测试资产不可用")
 
-    def test_output_version_is_3_0(self):
-        """验证output_version为'3.0'"""
+    def test_output_version_is_4_0(self):
+        """验证output_version为'4.0'（D-20-05）"""
         if TEST_ASSET_PATH.exists():
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
-            assert output["output_version"] == "3.0", \
+            assert output["output_version"] == "4.0", \
                 f"output_version不正确: {output['output_version']}"
         else:
             pytest.skip("测试资产不可用")

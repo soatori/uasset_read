@@ -97,7 +97,7 @@ class TestStatusField:
         output = format_json_full(result)
         assert "status" in output
         assert output["status"]["status"] == "success"
-        assert output["output_version"] == "3.0"
+        assert output["output_version"] == "4.0"  # D-20-05
 
     def test_status_is_first_key(self):
         """D-14-03: status 为第一个顶层键"""
@@ -221,7 +221,7 @@ class TestSummaryCompact:
         output = format_json_summary(result)
         assert "status" in output
         assert "output_version" in output
-        assert output["output_version"] == "3.0"
+        assert output["output_version"] == "4.0"  # D-20-05
 
 
 # ============================================================================
@@ -340,7 +340,7 @@ class TestAPIFrozen:
             export_map=[]
         )
         output = format_json_full(result)
-        assert output["output_version"] == "3.0"
+        assert output["output_version"] == "4.0"  # D-20-05
 
     def test_output_version_in_summary(self):
         """摘要模式也包含 output_version"""
@@ -350,7 +350,7 @@ class TestAPIFrozen:
             export_map=[]
         )
         output = format_json_summary(result)
-        assert output["output_version"] == "3.0"
+        assert output["output_version"] == "4.0"  # D-20-05
 
     def test_api_frozen_comment_exists(self):
         """D-14-14~16: API 冻结注释存在"""
@@ -385,7 +385,7 @@ class TestPhase14Integration:
 
         # 验证所有 OUT-01~06 功能
         assert output["status"]["status"] == "success"  # OUT-01
-        assert output["output_version"] == "3.0"  # OUT-06
+        assert output["output_version"] == "4.0"  # D-20-05  # OUT-06
         assert "graphs_summary" in output  # OUT-02
         assert "_schema" in output  # OUT-05
 
@@ -403,5 +403,5 @@ class TestPhase14Integration:
         # 验证精简功能
         assert "imports" not in output  # OUT-03
         assert "errors" not in output  # OUT-03
-        assert output["output_version"] == "3.0"  # OUT-06
+        assert output["output_version"] == "4.0"  # D-20-05  # OUT-06
         assert "_schema" in output  # OUT-05
