@@ -2,17 +2,18 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: 节点属性深度解析
-status: Phase 21 context gathered
-last_updated: "2026-05-04T19:00:00.000Z"
-last_activity: 2026-05-04 — Phase 21 context gathered (验证测试)
+status: gaps_found
+last_updated: "2026-05-04T21:00:00.000Z"
+last_activity: 2026-05-04 — Phase 21 执行完成，发现节点序列化问题
 status:
   phase: "Phase 21: 验证测试"
-  plan: "context_gathered"
+  plan: "partial"
+  issues: 1 critical (节点序列化)
   progress:
     total_phases: 4
     completed_phases: 3
-    planned_phases: 1
-    total_plans: 9
+    partial_phases: 1
+    total_plans: 10
     completed_plans: 9
     percent: 100
 ---
@@ -22,14 +23,13 @@ status:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v4.0 节点属性深度解析
-**状态：** Phase 21 context gathered，准备规划验证测试
+**状态：** Phase 21 部分完成，发现关键问题
 
 ## Current Position
 
-Phase: 21 - 验证测试 (Context gathered)
-Next: /gsd-plan-phase 21
-Status: Ready to plan
-Last activity: 2026-05-04 — Phase 21 context gathered (集成测试验证)
+Phase: 21 - 验证测试 (Partial)
+Status: gaps_found — 需要修复节点序列化解析
+Last activity: 2026-05-04 — 执行验证测试，发现 ISSUE-01
 
 ## Progress
 
@@ -38,9 +38,9 @@ Last activity: 2026-05-04 — Phase 21 context gathered (集成测试验证)
 | v1.0 MVP | 5 | 25 | ✓ Complete |
 | v2.0 蓝图图解析 | 5 | 20 | ✓ Complete |
 | v3.x 解析完善+Skill | 7 | 23 | ✓ Complete |
-| **v4.0 节点属性深度解析** | **4** | **9** | **3/4 Complete, 1 Context gathered** |
+| **v4.0 节点属性深度解析** | **4** | **10** | **3 Complete, 1 Partial** |
 
-**Total Progress:** 20/21 phases (95%)
+**Total Progress:** 21 phases (20 complete, 1 partial)
 
 ## v4.0 Scope
 
@@ -53,40 +53,39 @@ Last activity: 2026-05-04 — Phase 21 context gathered (集成测试验证)
 | 18 | Pin序列化解析 | PIN-01~05 | 5 criteria ✓ Complete |
 | 19 | 连接关系重建 | LINK-01~03 | 3 criteria ✓ Complete |
 | 20 | 整合输出 | OUT-01~03 | 3 criteria ✓ Complete |
-| 21 | 验证测试 | TEST-01~04 | 4 criteria (Context gathered) |
+| 21 | 验证测试 | TEST-01~04 | 2/4 verified, 1 critical issue |
 
-### Key Deliverables
+### Critical Issue Found
 
-- **Phase 18:** ✓ Pin完整信息提取（pin_id、pin_type、default_value、linked_to、显示属性）
-- **Phase 19:** ✓ 连接关系构建（connections、execution_flows、data_flows）
-- **Phase 20:** ✓ 整合JSON输出（节点、图、蓝图三层结构）
-- **Phase 21:** 测试验证（节点数量、执行流程、数据流、属性正确性）— Context gathered
+**ISSUE-01: 节点序列化解析问题**
 
-## Phase 21 Context Summary
+- **描述**: `read_ue_graph_node` 未正确跳过 UObject 基类序列化数据
+- **影响**: execution_flows/data_flows/function_reference 无法正确构建
+- **建议**: 创建 Phase 22 修复节点序列化逻辑
 
-### 验证方法
-- 集成测试（真实资产） — 使用BP_FirstPersonCharacter.uasset
-- 精确匹配标准 — 节点数量、执行流程、数据流必须完全匹配
+## Phase 21 Results
 
-### Expected数据来源
-- C++源码对照 — FirstPersonCCharacter.h/cpp
-- 关键函数映射：DoJumpStart→Jump, DoJumpEnd→StopJumping, MoveInput→DoMove
+| Test Class | Passed | Failed | Status |
+|------------|--------|--------|--------|
+| TestNodeCount | 2 | 0 | ✓ Verified |
+| TestExecutionFlow | 0 | 3 | ✗ Need node fix |
+| TestDataFlow | 1 | 2 | ✗ Need node fix |
+| TestNodeProperties | 1 | 1 | Partial |
 
-### 测试组织
-- 新建test_phase21_verification.py专用文件
+**Core Tests**: 394 passed, 8 failed
+
+## Key Fixes Applied
+
+1. **get_asset_class Bug**: 返回 object_name 而非 class_name（修复图检测）
+2. **outer_index Node Collection**: 当 nodes_count=0 时通过 outer_index 收集节点
 
 ## 下一步
 
-**启动 Phase 21 规划:**
-- TEST-01: 节点数量验证
-- TEST-02: 执行流程验证
-- TEST-03: 数据流验证
-- TEST-04: 属性正确性验证
+**修复节点序列化问题:**
 
-**执行命令:**
 ```
 /clear
-/gsd-plan-phase 21
+/gsd-plan-phase 22 --gaps  # 修复 read_ue_graph_node
 ```
 
 ---
@@ -95,42 +94,20 @@ Last activity: 2026-05-04 — Phase 21 context gathered (集成测试验证)
 
 ### Key Decisions
 
-- **2026-05-04:** Phase 21 context gathered
+- **2026-05-04:** Phase 21 部分完成
+  - 发现节点序列化关键问题
+  - 修复 get_asset_class bug + outer_index 逻辑
+  - 4/11 测试通过，execution_flows/data_flows 待修复
+
+- **2026-05-04:** Phase 21 执行
+  - 修复图检测 bug（graphs 从 None 变为 11 个）
+  - 通过 outer_index 收集节点（EventGraph: 18 nodes）
+  - 发现 ISSUE-01: UObject 基类数据跳过问题
+
+- **2026-05-04:** Phase 21 规划
+  - 1 plan covering TEST-01~04
   - 验证方法：集成测试（真实资产）
-  - 测试资产：BP_FirstPersonCharacter.uasset（UE 5.7）
-  - 验证标准：精确匹配
-  - 测试文件：新建test_phase21_verification.py
-  - Expected数据来源：C++源码对照（FirstPersonCCharacter.h/cpp）
-
-- **2026-05-04:** Phase 20执行完成
-  - 2 plans in 2 waves (Wave 1: 20-01, Wave 2: 20-02)
-  - OUT-01: format_node_dict() + function_reference/event_reference 提升到顶层
-  - OUT-02: GRAPH_TYPE_MAP + graph_type 字段
-  - OUT-03: blueprint 对象结构 + output_version 4.0
-  - 391 tests passed, 49 skipped
-  - VERIFICATION.md: 9/9 must-haves verified
-
-- **2026-05-04:** Phase 19执行完成
-  - 3 plans in 2 waves (Wave 1: 19-01/19-02并行, Wave 2: 19-03)
-  - LINK-01: connections数组构建（format_pin_ref name模式）
-  - LINK-02: execution_flows起点扩展（START_EVENT_TYPES 4种 + BRANCH_TYPE_MAP）
-  - LINK-03: data_flows构建（非exec pins扁平数组）
-  - 391 tests passed, 49 skipped
-  - VERIFICATION.md: 9/9 must-haves verified
-
-- **2026-05-04:** Phase 18完成
-  - CustomVersion常量定义（三个GUID + 四个版本阈值）
-  - UEdGraphPin dataclass扩展（pin_tooltip、default_object、hidden等）
-  - read_ue_graph_pin()重写（从OwningNode开始读取）
-  - read_pin_reference()/read_pin_array()辅助函数
-  - read_ed_graph_pin_type()版本检查修复
-  - 代码审查发现CR-01/CR-02，已修复（get_custom_version()方法）
-
-- **2026-05-04:** v4.0路线图创建
-  - 4阶段（Phase 18-21）
-  - 15个需求（PIN-01~05, LINK-01~03, OUT-01~03, TEST-01~04）
-  - 设计原则：不暴露字节细节，输出整理后的JSON
+  - 精确匹配标准：节点数量、执行流程、数据流
 
 ---
-
-*最后更新：2026-05-04 — Phase 21 context gathered*
+*最后更新：2026-05-04 — Phase 21 partial, ISSUE-01 found*
