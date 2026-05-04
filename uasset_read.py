@@ -4986,6 +4986,24 @@ CONTROL_FLOW_NODES = frozenset({
     "K2Node_MacroInstance",  # 宏实例可能包含循环
 })
 
+# D-19-10: 执行流起点类型扩展（LINK-02）
+START_EVENT_TYPES = frozenset({
+    "K2Node_Event",
+    "K2Node_EnhancedInputAction",
+    "K2Node_VariableSet",
+    "K2Node_CustomEvent"
+})
+
+# D-19-14: 控制流节点分支类型映射（LINK-02）
+BRANCH_TYPE_MAP = {
+    "K2Node_IfThenElse": "if_then_else",
+    "K2Node_Switch": "switch",
+    "K2Node_SwitchString": "switch_string",
+    "K2Node_SwitchEnum": "switch_enum",
+    "K2Node_SwitchInteger": "switch_integer",
+    "K2Node_MacroInstance": "macro_instance",
+}
+
 
 # ============================================================================
 # Phase 19: LINK-01 - 连接输出格式化
@@ -5263,16 +5281,17 @@ def _extract_function_params(graph: UEdGraph, node_guid: str) -> str:
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     """
-    构建执行流路径（D-08-07~11）。
+    构建执行流路径（D-08-07~11, D-19-10~12）。
 
-    从 K2Node_Event 开始，沿 exec pin 连接追踪到 CallFunction 链路。
+    从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
 
     算法：
-    1. 找到所有 K2Node_Event 节点（执行流起点）
-    2. 对每个 Event，沿 exec pin 连接追踪
-    3. 记录节点信息：{node_guid, node_type, function_name}
-    4. 检测控制流节点 → 停止
-    5. 检测已访问节点 → 停止并标记循环
+    1. 找到所有 START_EVENT_TYPES 节点（执行流起点）
+    2. 对每个起点，沿 exec pin 连接追踪
+    3. EnhancedInputAction各触发时机分别追踪
+    4. 记录节点信息：{node_guid, node_type, function_name}
+    5. 检测控制流节点 → 停止
+    6. 检测已访问节点 → 停止并标记循环
 
     Args:
         graph: UEdGraph 对象
@@ -5291,20 +5310,29 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
 
     execution_flows: List[Dict] = []
 
-    # Step 1: 找到所有 Event 节点
-    event_nodes = [n for n in graph.nodes if n.class_name == "K2Node_Event"]
+    # Step 1: 找到所有起点节点（D-19-10）
+    start_nodes = [n for n in graph.nodes if n.class_name in START_EVENT_TYPES]
 
-    for event_node in event_nodes:
-        flow = _trace_execution_from_event(
-            event_node, pin_lookup, node_lookup
-        )
-
-        # 构建执行流记录
-        start_event_name = _get_event_name(event_node)
-        execution_flows.append({
-            "start_event": start_event_name,
-            "nodes": flow
-        })
+    for start_node in start_nodes:
+        # D-19-12: EnhancedInputAction各触发时机分别追踪
+        if start_node.class_name == "K2Node_EnhancedInputAction":
+            # 遍历output exec pins，为每个触发时机构建执行流
+            for pin in start_node.pins:
+                if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category == "exec":
+                    # pin.pin_name即为触发时机（Started/Triggered/Completed）
+                    flow = _trace_execution_from_pin(start_node, pin, pin_lookup, node_lookup)
+                    execution_flows.append({
+                        "start_event": f"{start_node.class_name}.{pin.pin_name}",  # D-19-11
+                        "nodes": flow
+                    })
+        else:
+            # 其他起点类型：标准追踪
+            flow = _trace_execution_from_event(start_node, pin_lookup, node_lookup)
+            start_event_name = _get_start_event_name(start_node)  # 重命名函数
+            execution_flows.append({
+                "start_event": start_event_name,  # D-19-11
+                "nodes": flow
+            })
 
     return execution_flows
 
@@ -5315,10 +5343,10 @@ def _trace_execution_from_event(
     node_lookup: Dict[str, UEdGraphNode]
 ) -> List[Dict]:
     """
-    追踪单条执行流（D-08-07~11）。
+    追踪单条执行流（D-08-07~11, D-19-13~14）。
 
     Args:
-        start_node: K2Node_Event 起点
+        start_node: K2Node_Event 起点（或其他START_EVENT_TYPES起点）
         pin_lookup: pin_id → (node_guid, pin_name) 查找表
         node_lookup: node_guid → node 查找表
 
@@ -5330,7 +5358,7 @@ def _trace_execution_from_event(
     current_node = start_node
 
     while current_node:
-        # 循环检测（D-08-11）
+        # 循环检测（D-08-11, D-19-15）
         if current_node.node_guid in visited:
             flow.append({
                 "node_guid": current_node.node_guid,
@@ -5357,12 +5385,15 @@ def _trace_execution_from_event(
             if current_node.node_data and hasattr(current_node.node_data, 'event_reference'):
                 node_info["event_name"] = current_node.node_data.event_reference.member_name
 
-        flow.append(node_info)
-
-        # D-08-10: 控制流节点停止
+        # D-19-13/14: 控制流节点标记停止 + 输出branch_type
         if current_node.class_name in CONTROL_FLOW_NODES:
-            flow.append({"stopped_at": "control_flow_node"})
+            branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
+            node_info["branch_type"] = branch_type  # D-19-14
+            node_info["stopped_at"] = "control_flow_node"  # 保留现有标记（移到节点层级）
+            flow.append(node_info)
             break
+
+        flow.append(node_info)
 
         # 查找下一个节点（沿 exec output pin）
         current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
@@ -5399,18 +5430,70 @@ def _find_next_exec_node(
     return None
 
 
-def _get_event_name(node: UEdGraphNode) -> str:
+def _trace_execution_from_pin(
+    start_node: UEdGraphNode,
+    start_pin: UEdGraphPin,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, UEdGraphNode]
+) -> List[Dict]:
     """
-    获取 Event 节点的事件名称。
+    从特定Pin开始追踪执行流（D-19-12）。
+
+    用于EnhancedInputAction多触发时机追踪。
 
     Args:
-        node: K2Node_Event 节点
+        start_node: 起点节点
+        start_pin: 起点output exec pin
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表
+        node_lookup: node_guid → node 查找表
 
     Returns:
-        str: 事件名称，或 "Unknown"
+        List[Dict]: 节点信息序列
     """
-    if node.node_data and hasattr(node.node_data, 'event_reference'):
-        return node.node_data.event_reference.member_name
+    # 从start_pin的linked_to_raw查找下一节点
+    for linked_pin_id in start_pin.linked_to_raw:
+        if linked_pin_id in pin_lookup:
+            target_node_guid, _ = pin_lookup[linked_pin_id]
+            next_node = node_lookup.get(target_node_guid)
+            if next_node:
+                # 从下一节点开始标准追踪
+                return _trace_execution_from_event(next_node, pin_lookup, node_lookup)
+
+    return []  # 无连接
+
+
+def _get_start_event_name(node: UEdGraphNode) -> str:
+    """
+    获取起点节点的事件名称（D-19-11）。
+
+    支持4种起点类型：
+    - K2Node_Event: event_reference.member_name
+    - K2Node_EnhancedInputAction: input_action_path或class_name
+    - K2Node_VariableSet: "VariableSet"
+    - K2Node_CustomEvent: "CustomEvent"
+
+    Args:
+        node: 起点节点
+
+    Returns:
+        str: 事件名称
+    """
+    if node.class_name == "K2Node_Event":
+        if node.node_data and hasattr(node.node_data, 'event_reference'):
+            return node.node_data.event_reference.member_name
+    elif node.class_name == "K2Node_EnhancedInputAction":
+        # 返回input_action_path路径名（如果有）或class_name
+        if node.node_data and hasattr(node.node_data, 'input_action_path'):
+            # 提取动作名称（路径最后一部分）
+            path = node.node_data.input_action_path
+            if path:
+                return path.split('/')[-1] if '/' in path else path
+        return node.class_name
+    elif node.class_name == "K2Node_VariableSet":
+        return "VariableSet"
+    elif node.class_name == "K2Node_CustomEvent":
+        return "CustomEvent"
+
     return "Unknown"
 
 
