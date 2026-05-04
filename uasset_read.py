@@ -2344,10 +2344,10 @@ def get_asset_class(
         类名字符串或 None（若无法解析）
     """
     if export.class_index.is_import:
-        # 从导入表获取类名
+        # 从导入表获取类名（object_name 是实际类名，如 EdGraph）
         import_idx = export.class_index.to_import_index()
         if 0 <= import_idx < len(import_map):
-            return import_map[import_idx].class_name
+            return import_map[import_idx].object_name
     elif export.class_index.is_export:
         # 从导出表获取类名
         export_idx = export.class_index.to_export_index()
@@ -2508,16 +2508,17 @@ def extract_blueprint_graphs(
         return []
 
     # 遍历 ExportMap 寻找 EdGraph 类型导出
-    for export in export_map:
+    for export_idx, export in enumerate(export_map):
         # D-03a: ClassIndex 解析为类名
         class_name = get_asset_class(export, import_map, export_map)
 
         if class_name and ("EdGraph" in class_name or "UberEdGraph" in class_name):
             # D-03b/D-03c: 完整解析 Graph→Node→Pin 三层结构
+            # export_idx + 1 = 1-based FPackageIndex for export
             graph = read_ue_graph(
                 archive, name_map, summary,
                 export_map, import_map,
-                export, class_name
+                export, class_name, export_idx + 1
             )
             graphs.append(graph)
 
@@ -3257,7 +3258,8 @@ def read_ue_graph(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     graph_export: ObjectExport,
-    graph_class: str
+    graph_class: str,
+    graph_export_idx: int = 0
 ) -> UEdGraph:
     """
     读取 UEdGraph（GRAPH-02/03）。
@@ -3268,6 +3270,9 @@ def read_ue_graph(
        — 需从 FPackageIndex 找到对应导出并调用 read_ue_graph_node
     3. GraphGuid (FGuid 16 bytes)
     4. bEditable (uint8)
+
+    **当 nodes_count = 0 时**（UE 5.x 新格式）：
+    节点通过 outer_index 关联到图，需要遍历 export_map 收集。
 
     安全边界（T-07-02-03）：
     - nodes_count <= MAX_NODES_PER_GRAPH (5000)
@@ -3280,6 +3285,7 @@ def read_ue_graph(
         import_map: 导入表
         graph_export: 图导出条目
         graph_class: 已解析的类名
+        graph_export_idx: 图在 export_map 中的索引（1-based）
 
     Returns:
         UEdGraph with nodes populated
@@ -3315,11 +3321,41 @@ def read_ue_graph(
         node_index = archive.read_i32()  # FPackageIndex
         if node_index > 0 and node_index <= len(export_map):
             node_export = export_map[node_index - 1]
-            node = read_ue_graph_node(
-                archive, name_map, summary,
-                export_map, import_map, node_export
-            )
-            nodes.append(node)
+            try:
+                node = read_ue_graph_node(
+                    archive, name_map, summary,
+                    export_map, import_map, node_export
+                )
+                nodes.append(node)
+            except ParseError:
+                # 节点解析失败时跳过，继续处理其他节点
+                pass
+
+    # 当 nodes_count = 0 时，通过 outer_index 收集节点（UE 5.x 新格式）
+    if nodes_count == 0 and graph_export_idx > 0:
+        for node_export in export_map:
+            # 节点的 outer_index 应指向该图（export_idx 是 1-based）
+            if node_export.outer_index.index == graph_export_idx:
+                # 检查是否是节点类型（K2Node 或 EdGraphNode）
+                node_class = get_asset_class(node_export, import_map, export_map)
+                if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+                    try:
+                        node = read_ue_graph_node(
+                            archive, name_map, summary,
+                            export_map, import_map, node_export
+                        )
+                        nodes.append(node)
+                    except ParseError:
+                        # 节点解析失败时创建基本节点信息
+                        nodes.append(UEdGraphNode(
+                            node_guid="",
+                            node_pos_x=0,
+                            node_pos_y=0,
+                            node_comment="",
+                            pins=[],
+                            class_name=node_class or "",
+                            node_data={"node_name": node_export.object_name}
+                        ))
 
     # 3. GraphGuid
     graph_guid_bytes = archive.read_bytes(16)
@@ -5203,15 +5239,15 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         elif isinstance(node.node_data, K2NodeKnot):
             # Knot节点无额外顶层字段
             pass
-        elif isinstance(node.node_data, EdGraphNodeComment):
-            # Comment节点保持 node_data 嵌套
-            result["node_data"] = asdict(node.node_data)
-        elif isinstance(node.node_data, K2NodeEnhancedInputAction):
-            # EnhancedInputAction保持 node_data 嵌套
+        elif isinstance(node.node_data, dict):
+            # 普通字典（如 fallback 节点）直接使用
+            result["node_data"] = node.node_data
+        elif hasattr(node.node_data, '__dataclass_fields__'):
+            # Dataclass 实例
             result["node_data"] = asdict(node.node_data)
         else:
-            # 其他类型：保持 node_data 嵌套
-            result["node_data"] = asdict(node.node_data)
+            # 其他类型：尝试转换为字典
+            result["node_data"] = {"raw": str(node.node_data)}
 
     return result
 
