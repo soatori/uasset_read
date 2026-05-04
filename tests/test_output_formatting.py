@@ -2781,3 +2781,648 @@ def test_trace_execution_switch_enum_branch_type():
 
     switch_entry = switch_entries[0]
     assert "branch_type" in switch_entry
+
+
+# ============================================================================
+# Phase 19: LINK-03 - 数据流构建
+# ============================================================================
+
+
+class TestBuildDataFlows:
+    """
+    D-19-06~09: build_data_flows() 数据流构建测试。
+
+    LINK-03: 非exec pins数据传递关系
+    """
+
+    def test_build_data_flows_filters_exec_pins(self):
+        """
+        D-19-06: 验证build_data_flows过滤exec类型pins。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        exec_pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Node 1: 包含exec和data output pins
+        node1 = UEdGraphNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-exec",
+                    pin_name="execute",
+                    direction=1,  # Output
+                    pin_type=exec_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-2"}],
+                ),
+                UEdGraphPin(
+                    pin_id="pin-data",
+                    pin_name="ActionValue_X",
+                    direction=1,  # Output
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-3"}],
+                ),
+            ],
+        )
+
+        # Node 2: 目标节点
+        node2 = UEdGraphNode(
+            node_guid="guid-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-2",
+                    pin_name="then",
+                    direction=0,  # Input
+                    pin_type=exec_pin_type,
+                    linked_to_raw=[],
+                ),
+                UEdGraphPin(
+                    pin_id="pin-3",
+                    pin_name="Left",
+                    direction=0,  # Input
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            nodes=[node1, node2],
+        )
+
+        data_flows = build_data_flows(graph)
+
+        # 验证仅包含data flow，排除exec flow
+        assert len(data_flows) == 1
+        assert data_flows[0]["source"]["pin"] == "ActionValue_X"
+        assert data_flows[0]["target"]["pin"] == "Left"
+        # 不包含execute → then的exec连接
+
+    def test_build_data_flows_name_mode_format(self):
+        """
+        D-19-07: 验证build_data_flows使用name模式格式化。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Node 1: 输出节点
+        node1 = UEdGraphNode(
+            node_guid="guid-src",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-src",
+                    pin_name="Value",
+                    direction=1,  # Output
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-dst"}],
+                ),
+            ],
+        )
+
+        # Node 2: 输入节点
+        node2 = UEdGraphNode(
+            node_guid="guid-dst",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-dst",
+                    pin_name="Input",
+                    direction=0,  # Input
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2],
+        )
+
+        data_flows = build_data_flows(graph, mode="name")
+
+        # 验证name模式格式
+        assert len(data_flows) == 1
+        assert "node" in data_flows[0]["source"]
+        assert "pin" in data_flows[0]["source"]
+        assert "node_guid" not in data_flows[0]["source"]  # name模式不包含guid
+
+    def test_build_data_flows_guid_mode_format(self):
+        """
+        验证build_data_flows使用guid模式格式化。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node1 = UEdGraphNode(
+            node_guid="guid-src-2",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-src-2",
+                    pin_name="Value",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-dst-2"}],
+                ),
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-dst-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-dst-2",
+                    pin_name="Input",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2],
+        )
+
+        data_flows = build_data_flows(graph, mode="guid")
+
+        # 验证guid模式格式
+        assert len(data_flows) == 1
+        assert "node_guid" in data_flows[0]["source"]
+        assert "pin_name" in data_flows[0]["source"]
+
+    def test_build_data_flows_flat_array(self):
+        """
+        D-19-08: 验证build_data_flows输出扁平数组结构。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # 构造多个数据流的graph
+        node1 = UEdGraphNode(
+            node_guid="guid-multi-1",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-m1",
+                    pin_name="ValueA",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-m2"}],
+                ),
+                UEdGraphPin(
+                    pin_id="pin-m3",
+                    pin_name="ValueB",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-m4"}],
+                ),
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-multi-2",
+            class_name="K2Node_CallFunction_A",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-m2",
+                    pin_name="InputA",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        node3 = UEdGraphNode(
+            node_guid="guid-multi-3",
+            class_name="K2Node_CallFunction_B",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-m4",
+                    pin_name="InputB",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2, node3],
+        )
+
+        data_flows = build_data_flows(graph)
+
+        # 验证扁平数组结构
+        assert isinstance(data_flows, list)
+        assert len(data_flows) == 2
+        for flow in data_flows:
+            assert "source" in flow
+            assert "target" in flow
+            # 无嵌套结构
+
+    def test_build_data_flows_linked_to_raw_dict(self):
+        """
+        验证build_data_flows处理linked_to_raw dict格式（Phase 18兼容）。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # linked_to_raw为dict格式：{"pin_guid": str, "owning_node": str}
+        node1 = UEdGraphNode(
+            node_guid="guid-dict-1",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-dict-1",
+                    pin_name="Value",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-dict-2", "owning_node": "guid-dict-2"}],
+                ),
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-dict-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-dict-2",
+                    pin_name="Input",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="TestGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2],
+        )
+
+        data_flows = build_data_flows(graph)
+
+        # 验证正确提取pin_guid字段
+        assert len(data_flows) == 1
+        assert data_flows[0]["source"]["pin"] == "Value"
+        assert data_flows[0]["target"]["pin"] == "Input"
+
+    def test_build_data_flows_empty_graph(self):
+        """
+        验证空图返回空数组。
+        """
+        from uasset_read import build_data_flows, UEdGraph
+
+        graph = UEdGraph(
+            graph_name="EmptyGraph",
+            graph_class="EdGraph",
+            nodes=[],
+        )
+
+        data_flows = build_data_flows(graph)
+
+        assert data_flows == []
+
+    def test_build_data_flows_no_data_pins(self):
+        """
+        验证仅有exec pins时返回空数组。
+        """
+        from uasset_read import (
+            build_data_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        exec_pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node = UEdGraphNode(
+            node_guid="guid-exec-only",
+            class_name="K2Node_Event",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-exec-only",
+                    pin_name="then",
+                    direction=1,
+                    pin_type=exec_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-other"}],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="ExecOnlyGraph",
+            graph_class="EdGraph",
+            nodes=[node],
+        )
+
+        data_flows = build_data_flows(graph)
+
+        # 无数据pin，返回空数组
+        assert data_flows == []
+
+
+class TestFormatGraphsJsonDataFlows:
+    """
+    D-19-09: format_graphs_json() data_flows字段测试。
+
+    LINK-03: 数据流与执行流独立分离
+    """
+
+    def test_format_graphs_json_contains_data_flows(self):
+        """
+        验证format_graphs_json输出包含data_flows字段。
+        """
+        from uasset_read import (
+            format_graphs_json, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node1 = UEdGraphNode(
+            node_guid="guid-json-1",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-json-1",
+                    pin_name="Value",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-json-2"}],
+                ),
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-json-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-json-2",
+                    pin_name="Input",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            nodes=[node1, node2],
+        )
+
+        formatted = format_graphs_json([graph])
+
+        # 验证data_flows字段存在
+        assert len(formatted) == 1
+        assert "data_flows" in formatted[0]
+        assert isinstance(formatted[0]["data_flows"], list)
+
+    def test_format_graphs_json_data_flows_separate_from_execution(self):
+        """
+        D-19-09: 验证数据流与执行流独立分离。
+        """
+        from uasset_read import (
+            format_graphs_json, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType, K2NodeEvent, FMemberReference,
+        )
+
+        exec_pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Event节点
+        event_output = UEdGraphPin(
+            pin_id="event-out",
+            pin_name="then",
+            direction=1,
+            pin_type=exec_pin_type,
+            linked_to_raw=[{"pin_guid": "call-exec-in"}],
+        )
+
+        event_node = UEdGraphNode(
+            node_guid="event-guid-sep",
+            class_name="K2Node_Event",
+            pins=[event_output],
+            node_data=K2NodeEvent(
+                event_reference=FMemberReference(member_name="BeginPlay"),
+            ),
+        )
+
+        # CallFunction节点（有exec和data pins）
+        call_exec_in = UEdGraphPin(
+            pin_id="call-exec-in",
+            pin_name="execute",
+            direction=0,
+            pin_type=exec_pin_type,
+            linked_to_raw=[],
+        )
+
+        call_data_in = UEdGraphPin(
+            pin_id="call-data-in",
+            pin_name="InputValue",
+            direction=0,
+            pin_type=float_pin_type,
+            linked_to_raw=[],
+        )
+
+        call_node = UEdGraphNode(
+            node_guid="call-guid-sep",
+            class_name="K2Node_CallFunction",
+            pins=[call_exec_in, call_data_in],
+        )
+
+        # VariableGet节点（数据源）
+        var_get_out = UEdGraphPin(
+            pin_id="var-get-out",
+            pin_name="Value",
+            direction=1,
+            pin_type=float_pin_type,
+            linked_to_raw=[{"pin_guid": "call-data-in"}],
+        )
+
+        var_get_node = UEdGraphNode(
+            node_guid="var-get-guid-sep",
+            class_name="K2Node_VariableGet",
+            pins=[var_get_out],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            nodes=[event_node, call_node, var_get_node],
+        )
+
+        formatted = format_graphs_json([graph])
+
+        # 验证独立分离
+        assert "execution_flows" in formatted[0]
+        assert "data_flows" in formatted[0]
+
+        # execution_flows应包含Event → CallFunction链路
+        assert len(formatted[0]["execution_flows"]) >= 1
+
+        # data_flows应包含VariableGet → CallFunction数据流
+        assert len(formatted[0]["data_flows"]) >= 1
+
+        # 无关联关系字段
+        assert "flow_relation" not in formatted[0]
+
+    def test_format_graphs_json_full_structure(self):
+        """
+        验证完整JSON结构包含所有字段。
+        """
+        from uasset_read import (
+            format_graphs_json, UEdGraph, UEdGraphNode, UEdGraphPin,
+            FEdGraphPinType,
+        )
+
+        float_pin_type = FEdGraphPinType(
+            pin_category="float",
+            pin_sub_category="float",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node1 = UEdGraphNode(
+            node_guid="guid-full-1",
+            class_name="K2Node_VariableGet",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-full-1",
+                    pin_name="Value",
+                    direction=1,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-full-2"}],
+                ),
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-full-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-full-2",
+                    pin_name="Input",
+                    direction=0,
+                    pin_type=float_pin_type,
+                    linked_to_raw=[],
+                ),
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            graph_guid="graph-guid-full",
+            nodes=[node1, node2],
+        )
+
+        formatted = format_graphs_json([graph])
+
+        # 验证完整结构
+        graph_dict = formatted[0]
+        assert "graph_name" in graph_dict
+        assert "nodes" in graph_dict
+        assert "connections" in graph_dict
+        assert "execution_flows" in graph_dict
+        assert "data_flows" in graph_dict
