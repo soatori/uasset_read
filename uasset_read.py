@@ -2855,12 +2855,20 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
             if "--debug-ftext" in sys.argv:
                 print(f"  Type {history_type}: read up to {max_strings} FStrings")
         else:
-            # 未知的 HistoryType
-            # 可能 FText 数据不存在或位置错误
-            # 回退：不跳过，回退到起始位置
-            if "--debug-ftext" in sys.argv:
-                print(f"  Unknown HistoryType {history_type} - skipping FText skip")
-            archive.seek(start_pos)  # 回退
+            # Phase 22 FIX-06: 处理特殊的 history_type 值
+            # 实测数据显示 UE5 资产中存在 history_type=255 的固定 pattern
+            # Pattern: flags=0, history_type=255, 后续 12 bytes 固定数据
+            # 总共 17 bytes: flags(4) + historyType(1) + 12 bytes
+            if history_type == 255 and flags == 0:
+                # 跳过固定 12 bytes
+                archive.read_bytes(12)
+                if "--debug-ftext" in sys.argv:
+                    print(f"  history_type=255: skipped 12 bytes")
+            else:
+                # 其他未知 HistoryType，回退
+                if "--debug-ftext" in sys.argv:
+                    print(f"  Unknown HistoryType {history_type} - skipping FText skip")
+                archive.seek(start_pos)
     except Exception as e:
         # T-22-02-01: 异常处理防止解析崩溃
         # 回退到起始位置
@@ -3067,25 +3075,52 @@ def read_ue_graph_node(
     # 定位到节点序列化数据起始位置
     archive.seek(node_export.serial_offset)
 
-    # Phase 22 FIX-03: 基于 script_serial_size 计算 pins offset
+    # Phase 22 FIX-06: 动态扫描定位 pins offset
     #
-    # 关键发现（通过分析多种节点类型）：
-    # - EnhancedInputActionEvent 节点：delta = 87 bytes
-    # - CallFunction 节点：delta = 4 bytes
-    # - delta 代表 UObject::Serialize 在 SerializeScriptProperties 之后的其他数据
-    #   （PossiblySerializeObjectGuid 等，见 Obj.cpp:1810）
-    #
-    # 解决方案：使用 script_serial_size + heuristic_delta
-    # heuristic_delta 基于 script_serial_size 大小判断：
-    # - script_serial_size <= 20: delta = 87 (EnhancedInputActionEvent)
-    # - script_serial_size > 20: delta = 4 (CallFunction/其他)
+    # 替代 heuristic_delta 方案，通过扫描找到正确的 pins 起始位置
+    # Pattern: pins_count (1-20) + bNullPtr (0) + OwningNode + PinGuid
 
-    if node_export.script_serial_size <= 20:
-        heuristic_delta = 87  # EnhancedInputActionEvent pattern
-    else:
-        heuristic_delta = 4   # CallFunction pattern
+    # 安全扫描范围：从 script_serial_size 结束位置开始，最多扫描 200 bytes
+    scan_start = node_export.script_serial_offset + node_export.script_serial_size
+    scan_end = min(scan_start + 200, node_export.serial_size)
 
-    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + heuristic_delta
+    archive.seek(node_export.serial_offset + scan_start)
+    pins_found = False
+    pins_offset = scan_start
+
+    while archive.tell() < node_export.serial_offset + scan_end:
+        try:
+            test_pos = archive.tell()
+            test_count = archive.read_i32()
+
+            # 验证 pins_count 合理范围
+            if 1 <= test_count <= 20:  # 合理的 pins 数量
+                # 验证后续数据符合 SerializePin 格式
+                test_null = archive.read_i32()  # bNullPtr
+
+                if test_null == 0:  # bNullPtr == 0 表示有效 pin
+                    # 验证 OwningNode 是合理的 FPackageIndex
+                    test_owning = archive.read_i32()
+                    # OwningNode 应该指向自身或合理的 import/export 引用
+                    if test_owning == 0 or (test_owning < 0 and test_owning >= -1000) or (test_owning > 0 and test_owning <= 1000):
+                        # 验证通过，这是 pins 的起始位置
+                        pins_offset = test_pos - node_export.serial_offset
+                        pins_found = True
+                        break
+
+            # 继续扫描下一个位置
+            archive.seek(test_pos + 4)
+
+        except Exception:
+            archive.seek(test_pos + 4)
+            continue
+
+    if not pins_found:
+        # 扫描失败，使用 fallback heuristic
+        if node_export.script_serial_size <= 20:
+            pins_offset = scan_start + 87
+        else:
+            pins_offset = scan_start + 4
 
     archive.seek(node_export.serial_offset + pins_offset)
 
