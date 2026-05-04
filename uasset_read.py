@@ -2379,10 +2379,10 @@ def resolve_class_name(
         类名字符串或 None（若无法解析）
     """
     if class_index.is_import:
-        # 从导入表获取类名
+        # 从导入表获取对象名（而非类型名 class_name）
         import_idx = class_index.to_import_index()
         if 0 <= import_idx < len(import_map):
-            return import_map[import_idx].class_name
+            return import_map[import_idx].object_name
     elif class_index.is_export:
         # 从导出表获取类名
         export_idx = class_index.to_export_index()
@@ -2515,7 +2515,7 @@ def extract_blueprint_graphs(
         # D-03a: ClassIndex 解析为类名
         class_name = get_asset_class(export, import_map, export_map)
 
-        if class_name and ("EdGraph" in class_name or "UberEdGraph" in class_name):
+        if class_name and class_name in ['EdGraph', 'UberEdGraph']:
             # D-03b/D-03c: 完整解析 Graph→Node→Pin 三层结构
             # export_idx + 1 = 1-based FPackageIndex for export
             graph = read_ue_graph(
