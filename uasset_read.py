@@ -5005,18 +5005,92 @@ BRANCH_TYPE_MAP = {
 }
 
 
+# ============================================================================
+# Phase 19: LINK-01 - 连接输出格式化
+# ============================================================================
+
+# D-19-03: 连接输出格式全局可选配置
+FORMAT_CONFIG = {
+    "pin_reference_mode": "name",  # D-19-04: 默认 name 模式
+}
+
+
+def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
+    """
+    从节点派生用户友好的节点名（D-19-02）。
+
+    策略：使用 f"{class_name}_{idx}" 格式，避免同名节点冲突。
+
+    Args:
+        node: UEdGraphNode 节点对象
+        idx: 节点在图中的索引（用于区分同名节点）
+
+    Returns:
+        str: 用户友好的节点名
+    """
+    # 使用 class_name + idx 后缀，避免冲突
+    return f"{node.class_name}_{idx}"
+
+
+def format_pin_ref(
+    node_guid: str,
+    pin_name: str,
+    node_name_lookup: Dict[str, str],
+    mode: str = "name"
+) -> Dict:
+    """
+    格式化 Pin 引用（D-19-02, D-19-05）。
+
+    Args:
+        node_guid: 节点 GUID
+        pin_name: Pin 名称
+        node_name_lookup: node_guid → node_name 查找表
+        mode: "name" 或 "guid" 模式（默认 name）
+
+    Returns:
+        Dict: 格式化后的 Pin 引用对象
+        - name 模式: {"node": "K2Node_CallFunction_10", "pin": "execute"}
+        - guid 模式: {"node_guid": "...", "pin_name": "execute"}
+
+    查找失败时（D-19-05）：
+        返回 {"node_guid": ..., "pin": ..., "warning": "node_name lookup failed"}
+    """
+    if mode == "name":
+        # D-19-02: 使用 pin_name 格式
+        if node_guid in node_name_lookup:
+            return {
+                "node": node_name_lookup[node_guid],
+                "pin": pin_name
+            }
+        else:
+            # D-19-05: 查找失败 fallback
+            return {
+                "node_guid": node_guid,  # fallback 原始 guid
+                "pin": pin_name,
+                "warning": "node_name lookup failed"
+            }
+    else:
+        # guid 模式：保留原始格式
+        return {
+            "node_guid": node_guid,
+            "pin_name": pin_name
+        }
+
+
 def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     """
-    构建引脚连接映射（D-08-01~06）。
+    构建引脚连接映射（D-08-01~06, LINK-01, D-19-01~05）。
 
-    将 linked_to_raw（PinId GUID hex）转换为 {node_guid, pin_name} 表示。
+    将 linked_to_raw（PinId GUID hex）转换为用户友好的节点引用格式。
+    默认使用 name 模式（D-19-04），可选 guid 模式（兼容性）。
 
     算法：
-    1. 构建 PinId → (node_guid, pin_name) 查找表
-    2. 遍历所有 Output pins (direction=1)
-    3. 对每个 linked_to_raw 中的 PinId，查找目标 pin
-    4. 构建 {from, to} 连接对象
-    5. 处理查找失败（warning + 原始数据）
+    1. 构建 node_guid → node_name 查找表（D-19-02）
+    2. 构建 PinId → (node_guid, pin_name) 查找表
+    3. 遍历所有 Output pins (direction=1)
+    4. 对每个 linked_to_raw 中的 PinId，查找目标 pin
+    5. 使用 format_pin_ref 转换格式（D-19-02）
+    6. 处理查找失败（warning + 原始数据）
 
     Args:
         graph: UEdGraph 对象
@@ -5024,33 +5098,43 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     Returns:
         Tuple[List[Dict], List[str]]: (connections 列表, warnings 列表)
     """
-    # Step 1: Build pin_lookup: pin_id → (node_guid, pin_name)
+    # Step 1a: Build node_name_lookup for name mode (D-19-02)
+    node_name_lookup: Dict[str, str] = {}
+    for idx, node in enumerate(graph.nodes):
+        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
+
+    # Step 1b: Build pin_lookup: pin_id → (node_guid, pin_name)
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     for node in graph.nodes:
         for pin in node.pins:
             pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
 
-    # Step 2-4: Build connections (only from Output pins, D-08-05)
+    # Step 2-4: Build connections (支持 name 模式)
+    mode = FORMAT_CONFIG["pin_reference_mode"]  # D-19-04
     connections: List[Dict] = []
     warnings: List[str] = []
 
     for node in graph.nodes:
         for pin in node.pins:
             if pin.direction == 1:  # EGPD_Output
-                for linked_pin_id in pin.linked_to_raw:
-                    if linked_pin_id in pin_lookup:
-                        target_node_guid, target_pin_name = pin_lookup[linked_pin_id]
-                        # D-08-06: {from, to} 对象结构
+                for linked_pin_ref in pin.linked_to_raw:
+                    # Phase 18: linked_to_raw 为 dict 格式 {"pin_guid": str}
+                    # 需提取 pin_guid 字段
+                    target_pin_guid = linked_pin_ref.get("pin_guid") if isinstance(linked_pin_ref, dict) else linked_pin_ref
+
+                    if target_pin_guid in pin_lookup:
+                        target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
+                        # 使用 format_pin_ref 转换格式（D-19-02）
                         connections.append({
-                            "from": {"node_guid": node.node_guid, "pin_name": pin.pin_name},
-                            "to": {"node_guid": target_node_guid, "pin_name": target_pin_name}
+                            "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
+                            "to": format_pin_ref(target_node_guid, target_pin_name, node_name_lookup, mode)
                         })
                     else:
-                        # D-08-04: Warning + raw data
-                        warnings.append(f"PinId {linked_pin_id} not found in graph")
+                        # D-08-04/D-19-05: Warning + raw data
+                        warnings.append(f"PinId {target_pin_guid} not found in graph")
                         connections.append({
-                            "from": {"node_guid": node.node_guid, "pin_name": pin.pin_name},
-                            "to": {"raw_pin_id": linked_pin_id},
+                            "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
+                            "to": {"raw_pin_id": target_pin_guid},
                             "warning": "target pin not found"
                         })
 
@@ -6195,6 +6279,8 @@ __all__ = [
     'MAX_PINS_PER_NODE',
     'MAX_NODES_PER_GRAPH',
     'MAX_LINKEDTO_PER_PIN',
+    # Phase 19: 连接输出格式配置（LINK-01）
+    'FORMAT_CONFIG',
 
     # Phase 5: Boundary validation functions
     'validate_package_index',
@@ -6267,6 +6353,14 @@ __all__ = [
     'format_blueprint_dict',
     'resolve_fpackage_index',
     'build_schema_info',  # Phase 14: Schema 字段语义注释（OUT-05）
+    # Phase 8: Graph Output Functions
+    'build_connections_map',
+    'format_graphs_json',
+    'build_execution_flows',
+    'CONTROL_FLOW_NODES',
+    # Phase 19: 连接输出格式化函数（LINK-01）
+    '_derive_node_name',
+    'format_pin_ref',
 
     # CLI functions (Phase 4)
     'create_parser',
