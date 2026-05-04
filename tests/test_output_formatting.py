@@ -1944,3 +1944,232 @@ def test_branch_type_map_complete():
     # 验证枚举值命名
     assert BRANCH_TYPE_MAP["K2Node_IfThenElse"] == "if_then_else"
     assert BRANCH_TYPE_MAP["K2Node_SwitchEnum"] == "switch_enum"
+
+
+def test_build_execution_flows_enhanced_input_action():
+    """
+    验证EnhancedInputAction多触发时机追踪（D-19-12）。
+
+    LINK-02: EnhancedInputAction各触发时机分别追踪
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeEnhancedInputAction,
+    )
+
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # EnhancedInputAction节点（多个output exec pins）
+    started_pin = UEdGraphPin(
+        pin_id="ia_started_out",
+        pin_name="Started",
+        direction=1,  # Output
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_started_in"],
+    )
+    triggered_pin = UEdGraphPin(
+        pin_id="ia_triggered_out",
+        pin_name="Triggered",
+        direction=1,  # Output
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_triggered_in"],
+    )
+    completed_pin = UEdGraphPin(
+        pin_id="ia_completed_out",
+        pin_name="Completed",
+        direction=1,  # Output
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_completed_in"],
+    )
+
+    ia_node = UEdGraphNode(
+        node_guid="ia_node_guid",
+        node_pos_x=0,
+        node_pos_y=0,
+        pins=[started_pin, triggered_pin, completed_pin],
+        class_name="K2Node_EnhancedInputAction",
+        node_data=K2NodeEnhancedInputAction(
+            input_action_path="/Game/Input/Actions/IA_Jump",
+        ),
+    )
+
+    # 目标节点（每个触发时机对应一个）
+    started_call_input = UEdGraphPin(
+        pin_id="call_started_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    started_call_node = UEdGraphNode(
+        node_guid="started_call_guid",
+        pins=[started_call_input],
+        class_name="K2Node_CallFunction",
+    )
+
+    triggered_call_input = UEdGraphPin(
+        pin_id="call_triggered_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    triggered_call_node = UEdGraphNode(
+        node_guid="triggered_call_guid",
+        pins=[triggered_call_input],
+        class_name="K2Node_CallFunction",
+    )
+
+    completed_call_input = UEdGraphPin(
+        pin_id="call_completed_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    completed_call_node = UEdGraphNode(
+        node_guid="completed_call_guid",
+        pins=[completed_call_input],
+        class_name="K2Node_CallFunction",
+    )
+
+    graph = UEdGraph(
+        graph_name="EventGraph",
+        graph_class="UberEdGraph",
+        nodes=[ia_node, started_call_node, triggered_call_node, completed_call_node],
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 验证3个触发时机都有独立执行流
+    assert len(flows) == 3
+    start_events = [flow["start_event"] for flow in flows]
+    assert any("Started" in event for event in start_events)
+    assert any("Triggered" in event for event in start_events)
+    assert any("Completed" in event for event in start_events)
+
+
+def test_build_execution_flows_variable_set_start():
+    """
+    验证VariableSet节点识别为起点（D-19-10）。
+
+    LINK-02: 执行流起点类型扩展
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType,
+    )
+
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # VariableSet节点
+    vs_output_pin = UEdGraphPin(
+        pin_id="vs_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_vs_in"],
+    )
+    vs_node = UEdGraphNode(
+        node_guid="vs_node_guid",
+        pins=[vs_output_pin],
+        class_name="K2Node_VariableSet",
+    )
+
+    # 目标CallFunction节点
+    call_input = UEdGraphPin(
+        pin_id="call_vs_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    call_node = UEdGraphNode(
+        node_guid="call_vs_guid",
+        pins=[call_input],
+        class_name="K2Node_CallFunction",
+    )
+
+    graph = UEdGraph(
+        graph_name="EventGraph",
+        graph_class="EdGraph",
+        nodes=[vs_node, call_node],
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 验证VariableSet为起点
+    assert len(flows) >= 1
+    assert "VariableSet" in flows[0]["start_event"]
+
+
+def test_build_execution_flows_custom_event_start():
+    """
+    验证CustomEvent节点识别为起点（D-19-10）。
+
+    LINK-02: 执行流起点类型扩展
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType,
+    )
+
+    exec_pin_type = FEdGraphPinType(
+        pin_category="exec",
+        pin_sub_category="exec",
+        container_type="None",
+        is_reference=False,
+        is_const=False,
+    )
+
+    # CustomEvent节点
+    ce_output_pin = UEdGraphPin(
+        pin_id="ce_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=["call_ce_in"],
+    )
+    ce_node = UEdGraphNode(
+        node_guid="ce_node_guid",
+        pins=[ce_output_pin],
+        class_name="K2Node_CustomEvent",
+    )
+
+    # 目标CallFunction节点
+    call_input = UEdGraphPin(
+        pin_id="call_ce_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[],
+    )
+    call_node = UEdGraphNode(
+        node_guid="call_ce_guid",
+        pins=[call_input],
+        class_name="K2Node_CallFunction",
+    )
+
+    graph = UEdGraph(
+        graph_name="EventGraph",
+        graph_class="EdGraph",
+        nodes=[ce_node, call_node],
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 验证CustomEvent为起点
+    assert len(flows) >= 1
+    assert "CustomEvent" in flows[0]["start_event"]
