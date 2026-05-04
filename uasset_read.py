@@ -2783,6 +2783,87 @@ def read_pin_array(
     return pins
 
 
+def skip_ftext_editoronly(archive: FArchive) -> None:
+    """
+    跳过 EditorOnly FText 字段（如 PinFriendlyName）。
+
+    FText 序列化格式（UE 源码 Text.cpp:850-1043）：
+    1. Flags (int32)
+    2. HistoryType (int8) - ETextHistoryType 枚举
+    3. 根据 HistoryType 类型：
+       - None (0): bHasCultureInvariantString (uint8) + [CultureInvariantString (FString)]
+       - Base (1): Namespace (FString) + Key (FString) + SourceString (FString)
+       - NamedFormat/OrderedFormat/ArgumentFormat 等类型有各自格式
+       - 对于简单跳过，只需处理常见类型
+
+    安全边界（T-22-02-01）：添加异常处理防止解析崩溃
+    安全边界（T-22-02-02）：添加最大循环限制防止 DoS
+
+    Args:
+        archive: FArchive positioned at FText start
+    """
+    start_pos = archive.tell()
+    try:
+        # 1. Flags (int32)
+        flags = archive.read_i32()
+
+        # 2. HistoryType (int8/uint8)
+        history_type = archive.read_u8()
+
+        # 调试输出（可通过 --debug-ftext 启用）
+        if "--debug-ftext" in sys.argv:
+            print(f"DEBUG FText: pos={start_pos}, flags={flags}, history_type={history_type}")
+
+        # 3. 根据 HistoryType 跳过后续数据
+        # ETextHistoryType 枚举值：
+        # None = 0, Base = 1, NamedFormat = 2, OrderedFormat = 3,
+        # ArgumentFormat = 4, AsNumber = 5, AsPercent = 6, AsCurrency = 7,
+        # AsDate = 8, AsTime = 9, AsDateTime = 10, Transform = 11, StringTableEntry = 12
+
+        if history_type == 0:  # None
+            # bHasCultureInvariantString (bool 序列化为 uint8)
+            b_has_culture_invariant = archive.read_u8()
+            if "--debug-ftext" in sys.argv:
+                print(f"  None: bHasCultureInvariant={b_has_culture_invariant}")
+            if b_has_culture_invariant != 0:
+                # CultureInvariantString (FString)
+                archive.read_fstring()
+        elif history_type == 1:  # Base
+            # Namespace (FString) + Key (FString) + SourceString (FString)
+            archive.read_fstring()  # Namespace
+            archive.read_fstring()  # Key
+            archive.read_fstring()  # SourceString
+            if "--debug-ftext" in sys.argv:
+                print(f"  Base: read 3 FStrings")
+        elif history_type >= 2 and history_type <= 12:
+            # 其他类型的通用跳过策略（T-22-02-02：限制循环）
+            # NamedFormat: SourceFmt + Arguments map
+            # OrderedFormat: SourceFmt + Arguments array
+            # 简化处理：读取最多 5 个 FString（覆盖大多数类型）
+            max_strings = 5
+            for _ in range(max_strings):
+                try:
+                    archive.read_fstring()
+                except Exception:
+                    # FString 读取失败意味着该类型不需要更多数据
+                    break
+            if "--debug-ftext" in sys.argv:
+                print(f"  Type {history_type}: read up to {max_strings} FStrings")
+        else:
+            # 未知的 HistoryType
+            # 可能 FText 数据不存在或位置错误
+            # 回退：不跳过，回退到起始位置
+            if "--debug-ftext" in sys.argv:
+                print(f"  Unknown HistoryType {history_type} - skipping FText skip")
+            archive.seek(start_pos)  # 回退
+    except Exception as e:
+        # T-22-02-01: 异常处理防止解析崩溃
+        # 回退到起始位置
+        if "--debug-ftext" in sys.argv:
+            print(f"  Exception: {e} - seeking back to {start_pos}")
+        archive.seek(start_pos)
+
+
 def read_ue_graph_pin(
     archive: FArchive,
     name_map: List[str],
@@ -2844,7 +2925,12 @@ def read_ue_graph_pin(
         pin_name = archive.read_fstring()
 
     # 4. PinFriendlyName (FText) - EditorOnly [L1858-1863]
-    # 跳过EditorOnly字段（uncooked资产可能有，但当前假设不读取）
+    # Phase 22 FIX-02 (修正): 仅当 PKG_FilterEditorOnly 标志未设置时才可能有 EditorOnly 数据
+    # 但实际测试显示：即使 PKG_FilterEditorOnly=0，PinFriendlyName 也可能未被序列化
+    # UE 源码条件: WITH_EDITORONLY_DATA && !Ar.IsFilterEditorOnly()
+    # IsFilterEditorOnly() 的判断比 package_flags 更复杂
+    # 根据实际数据分析（HistoryType=255 表示位置错误），不跳过 FText
+    # 让后续字段正常读取，验证 SourceIndex/PinToolTip 位置
 
     # 5. SourceIndex (int32) - version dependent [L1865-1868]
     source_index = None
@@ -3343,6 +3429,7 @@ def read_ue_graph(
         )
 
     nodes: List[UEdGraphNode] = []
+    failed_nodes: List[str] = []  # Phase 22 FIX-03: 记录失败节点名称
 
     # Nodes 是导出索引数组（FPackageIndex > 0）
     for _ in range(nodes_count):
@@ -3355,9 +3442,15 @@ def read_ue_graph(
                     export_map, import_map, node_export
                 )
                 nodes.append(node)
-            except ParseError:
+            except ParseError as e:
+                # Phase 22 FIX-03: 记录失败节点名称，便于调试
+                failed_nodes.append(node_export.object_name)
                 # 节点解析失败时跳过，继续处理其他节点
                 pass
+
+    # Phase 22 FIX-03: 调试模式下输出失败节点信息
+    if failed_nodes and "--debug-graph" in sys.argv:
+        print(f"DEBUG: Failed nodes ({len(failed_nodes)}): {failed_nodes}")
 
     # 当 nodes_count = 0 时，通过 outer_index 收集节点（UE 5.x 新格式）
     if nodes_count == 0 and graph_export_idx > 0:
