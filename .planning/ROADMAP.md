@@ -140,18 +140,19 @@ Plans:
 ### Phase 22: 节点序列化修复
 **Goal**: 修复 Phase 21 发现的节点序列化问题，使 TEST-02/03/04 通过
 **Depends on**: Phase 21 (gap closure)
-**Requirements**: FIX-01 (修复 read_ue_graph_node 跳过 UObject properties), NODE-FIX-02 (PinFriendlyName FText 跳过), NODE-FIX-03 (K2Node 数量验证)
+**Requirements**: FIX-01 (修复 read_ue_graph_node 跳过 UObject properties), NODE-FIX-02 (PinFriendlyName FText 跳过), NODE-FIX-03 (K2Node 数量验证), FIX-04 (extract_blueprint_graphs 精确匹配), FIX-05 (resolve_class_name object_name)
 **Success Criteria** (what must be TRUE):
   1. execution_flows 包含 IA_Jump → Jump → StopJumping 链路 ✓
   2. data_flows 包含 ActionValue_X/Y 连接 ✓
   3. function_reference.MemberName 正确提取 ✓
   4. node_guid 非空（非 fallback 值） ✓
-**Plans**: 3 plans (Wave 1: 22-01 partial, Wave 2: 22-02 partial, Wave 3: 22-03 planned)
+**Plans**: 4 plans (Wave 1: 22-01 partial, Wave 2: 22-02 partial, Wave 3: 22-03 partial, Wave 4: 22-04 planned)
 
 Plans:
 - [x] 22-01-PLAN.md — 修复 read_ue_graph_node 跳过 UObject tagged properties (partial: ISSUE-02/03 remaining)
 - [x] 22-02-PLAN.md — PinFriendlyName FText 跳过逻辑研究（发现：不适用于当前资产）
-- [ ] 22-03-PLAN.md — 深入修复 SerializePin 格式和 pins offset 计算
+- [x] 22-03-PLAN.md — 深入修复 SerializePin 格式和 pins offset 计算 (partial: ISSUE-04/05 remaining)
+- [ ] 22-04-PLAN.md — 修复图判断和类名解析逻辑（extract_blueprint_graphs 精确匹配 + resolve_class_name object_name）
 
 ---
 
@@ -166,7 +167,7 @@ Plans:
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
 | 20 | 整合输出 | 2 | Planned | - |
 | 21 | 验证测试 | 1 | Planned | - |
-| 22 | 节点序列化修复 | 3 | Planned | - |
+| 22 | 节点序列化修复 | 4 | Planned | - |
 
 **Total:** 22 phases (19 complete, 3 planned)
 
@@ -178,4 +179,4 @@ Plans:
 
 ---
 
-*最后更新：2026-05-05 — Phase 22-03 规划完成（pins offset 修复）*
+*最后更新：2026-05-05 — Phase 22-04 规划完成（图判断和类名解析修复）*
