@@ -780,6 +780,7 @@ def test_graphs_field_top_level(create_mock_parse_result):
 def test_format_graphs_json_structure(sample_graph_with_connections):
     """
     GRAPH-11: 验证 format_graphs_json() 返回正确的 graph 结构。
+    Per OUT-02: graph_type 语义化映射（D-20-07）
     """
     graph = sample_graph_with_connections
     formatted = format_graphs_json([graph])
@@ -788,12 +789,12 @@ def test_format_graphs_json_structure(sample_graph_with_connections):
     graph_dict = formatted[0]
 
     assert 'graph_name' in graph_dict
-    assert 'graph_class' in graph_dict
+    assert 'graph_type' in graph_dict  # D-20-07: graph_type 替代 graph_class
     assert 'nodes' in graph_dict
     assert 'connections' in graph_dict
 
     assert graph_dict['graph_name'] == "EventGraph"
-    assert graph_dict['graph_class'] == "UberEdGraph"
+    assert graph_dict['graph_type'] == "uber"  # D-20-07: UberEdGraph → uber
 
 
 def test_build_connections_map_basic(sample_graph_with_connections):
