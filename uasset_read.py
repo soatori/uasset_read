@@ -135,7 +135,10 @@ FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
 # FFrameworkObjectVersion thresholds (FrameworkObjectVersion.h)
 # 枚举从0开始计数
 FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE = 15  # 第16个枚举值 (EdGraphPinContainerType)
-FFRAMEWORK_VERSION_PINS_STORE_FNAME = 20             # 第21个枚举值 (PinsStoreFName)
+# Phase 22 FIX-01: 修正阈值 - PinsStoreFName 是第20个枚举值（=19），而非21个
+# 实际数据验证：framework_version=17 时，PinName 仍为 FName 格式
+# 可能是因为 UE5 资产始终使用 FName，阈值检查仅针对旧版资产
+FFRAMEWORK_VERSION_PINS_STORE_FNAME = 19             # 第20个枚举值 (PinsStoreFName)
 
 # FUE5MainStreamObjectVersion thresholds (UE5MainStreamObjectVersions.inl L161)
 FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX = 50  # EdGraphPinSourceIndex
@@ -2832,7 +2835,10 @@ def read_ue_graph_pin(
     pin_id = pin_id_bytes.hex().upper()
 
     # 3. PinName (version dependent) [L1847-1856]
-    if framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
+    # Phase 22 FIX-01: UE5 资产始终使用 FName 格式
+    # 实际数据验证：framework_version=17 时，PinName 数据仍为 FName 格式（index=149→"execute"）
+    # UE5 资产的 PinName 序列化格式独立于 FFrameworkObjectVersion 阈值
+    if summary.file_version_ue5 > 0 or framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
         pin_name = archive.read_name(name_map)
     else:
         pin_name = archive.read_fstring()
@@ -2960,6 +2966,15 @@ def read_ue_graph_node(
     # 定位到节点序列化数据起始位置
     archive.seek(node_export.serial_offset)
 
+    # Phase 22 FIX-01: 跳过 UObject tagged properties
+    # 根据 UE 源码 EdGraphNode.cpp，UEdGraphNode::Serialize() 先调用 Super::Serialize()
+    # 序列化 UObject tagged properties，然后调用 SerializeAsOwningNode 序列化 Pins
+    # script_serial_size 标记了 tagged properties 的大小
+    # Pins array 在 script_serial_offset + script_serial_size + 4 位置开始
+    # （+4 是属性数据结束后的 padding/terminator）
+    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + 4
+    archive.seek(node_export.serial_offset + pins_offset)
+
     # 1. Pins 数组
     pins_count = archive.read_i32()
     if pins_count < 0:
@@ -2974,6 +2989,19 @@ def read_ue_graph_node(
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
+        # Phase 22 FIX-01: 处理 SerializePin 前置字段
+        # SerializePin 先序列化: bNullPtr + OwningNode + PinGuid
+        # 然后 UEdGraphPin::Serialize 再次序列化 OwningNode + PinId + ...
+        b_null_ptr = archive.read_i32()  # bool 序列化为 i32
+        if b_null_ptr != 0:
+            # null pin，跳过
+            continue
+
+        # SerializePin 前置字段：OwningNode_1 + PinGuid_1（跳过）
+        _owning_node_1 = archive.read_i32()  # OwningNode（SerializePin 部分）
+        _pin_guid_1 = archive.read_bytes(16)  # PinGuid（SerializePin 部分）
+
+        # 然后调用 read_ue_graph_pin 读取 UEdGraphPin::Serialize 部分
         pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
         pins.append(pin)
 
