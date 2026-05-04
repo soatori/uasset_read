@@ -5148,6 +5148,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     Per D-08-03: connections 放在 graph 层级
     Per D-04: graphs 与 blueprint_metadata 同级
     Per D-08-09: execution_flows 数组
+    Per D-19-09: data_flows 数组（LINK-03）
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -5165,12 +5166,16 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建执行流（Phase 8 Wave 2）
         execution_flows = build_execution_flows(graph)
 
+        # 构建数据流（Phase 19 Wave 2, D-19-09, LINK-03）
+        data_flows = build_data_flows(graph)
+
         graph_dict = {
             "graph_name": graph.graph_name,
             "graph_class": graph.graph_class,
             "nodes": [asdict(node) for node in graph.nodes],
             "connections": connections,
             "execution_flows": execution_flows,  # D-08-09: execution_flows 数组
+            "data_flows": data_flows,  # D-19-09: data_flows 数组（LINK-03）
         }
 
         # D-08-04: 添加 warnings（如果有）
@@ -5337,6 +5342,64 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     return execution_flows
 
 
+def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
+    """
+    构建数据流图（D-19-06~09, LINK-03）。
+
+    从非exec pins提取数据传递关系，构建data_flows数组。
+
+    算法：
+    1. 构建pin_lookup查找表（pin_id → (node_guid, pin_name)）
+    2. 构建node_name_lookup查找表（node_guid → node_name）
+    3. 遍历所有output pins（direction=1）
+    4. 过滤exec类型pins（pin_type.category != "exec"）
+    5. 对每个linked_to_raw中的目标pin，构建数据流关系
+    6. 使用format_pin_ref()格式化输出（name或guid模式）
+
+    Args:
+        graph: UEdGraph对象
+        mode: 输出格式模式（"name"或"guid"，默认"name"）
+
+    Returns:
+        List[Dict]: data_flows数组
+        - 格式: [{"source": {"node": "...", "pin": "..."}, "target": {...}}]
+    """
+    # Step 1: Build pin_lookup
+    pin_lookup: Dict[str, Tuple[str, str]] = {}
+    for node in graph.nodes:
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # Step 2: Build node_name_lookup（复用19-01逻辑）
+    node_name_lookup: Dict[str, str] = {}
+    for idx, node in enumerate(graph.nodes):
+        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
+
+    # Step 3-5: Build data flows（D-19-06/07/08）
+    data_flows: List[Dict] = []
+
+    for node in graph.nodes:
+        for pin in node.pins:
+            # D-19-06: 仅处理output pins，排除exec类型
+            if pin.direction == 1:  # Output
+                if pin.pin_type and pin.pin_type.pin_category != "exec":
+                    # 构建数据流关系
+                    for linked_pin_id in pin.linked_to_raw:
+                        # Phase 18: linked_to_raw为dict格式 {"pin_guid": str}
+                        target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
+
+                        if target_pin_guid in pin_lookup:
+                            target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
+                            # D-19-07: 使用format_pin_ref格式化（依赖19-01）
+                            data_flows.append({
+                                "source": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
+                                "target": format_pin_ref(target_node_guid, target_pin_name, node_name_lookup, mode)
+                            })
+
+    # D-19-08: 返回扁平数组
+    return data_flows
+
+
 def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
@@ -5424,8 +5487,10 @@ def _find_next_exec_node(
             if pin.pin_type and pin.pin_type.pin_category == "exec":
                 # 查找连接的目标 pin
                 for linked_pin_id in pin.linked_to_raw:
-                    if linked_pin_id in pin_lookup:
-                        target_node_guid, _ = pin_lookup[linked_pin_id]
+                    # Phase 18兼容: linked_to_raw为dict格式 {"pin_guid": str}
+                    target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
+                    if target_pin_guid in pin_lookup:
+                        target_node_guid, _ = pin_lookup[target_pin_guid]
                         return node_lookup.get(target_node_guid)
     return None
 
@@ -5452,8 +5517,10 @@ def _trace_execution_from_pin(
     """
     # 从start_pin的linked_to_raw查找下一节点
     for linked_pin_id in start_pin.linked_to_raw:
-        if linked_pin_id in pin_lookup:
-            target_node_guid, _ = pin_lookup[linked_pin_id]
+        # Phase 18兼容: linked_to_raw为dict格式 {"pin_guid": str}
+        target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
+        if target_pin_guid in pin_lookup:
+            target_node_guid, _ = pin_lookup[target_pin_guid]
             next_node = node_lookup.get(target_node_guid)
             if next_node:
                 # 从下一节点开始标准追踪
