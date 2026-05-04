@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: 节点属性深度解析
-status: planning
-last_updated: "2026-05-05T16:00:00.000Z"
-last_activity: 2026-05-05 — Phase 22-05 规划完成，动态扫描方案
+status: partial
+last_updated: "2026-05-05T18:00:00.000Z"
+last_activity: 2026-05-05 — Phase 22-05 执行完成（partial progress）
 status:
   phase: "Phase 22: 节点序列化修复"
-  plan: "22-05 created"
-  issues: TEST-02/03 待修复（pins_offset 计算问题）
+  plan: "22-05 partial"
+  issues: TEST-02/03 待修复（Pin 解析位置问题）
   progress:
     total_phases: 5
     completed_phases: 3
