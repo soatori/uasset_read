@@ -5259,10 +5259,10 @@ def _trace_execution_from_event(
     node_lookup: Dict[str, UEdGraphNode]
 ) -> List[Dict]:
     """
-    追踪单条执行流（D-08-07~11）。
+    追踪单条执行流（D-08-07~11, D-19-13~14）。
 
     Args:
-        start_node: K2Node_Event 起点
+        start_node: K2Node_Event 起点（或其他START_EVENT_TYPES起点）
         pin_lookup: pin_id → (node_guid, pin_name) 查找表
         node_lookup: node_guid → node 查找表
 
@@ -5274,7 +5274,7 @@ def _trace_execution_from_event(
     current_node = start_node
 
     while current_node:
-        # 循环检测（D-08-11）
+        # 循环检测（D-08-11, D-19-15）
         if current_node.node_guid in visited:
             flow.append({
                 "node_guid": current_node.node_guid,
@@ -5301,12 +5301,15 @@ def _trace_execution_from_event(
             if current_node.node_data and hasattr(current_node.node_data, 'event_reference'):
                 node_info["event_name"] = current_node.node_data.event_reference.member_name
 
-        flow.append(node_info)
-
-        # D-08-10: 控制流节点停止
+        # D-19-13/14: 控制流节点标记停止 + 输出branch_type
         if current_node.class_name in CONTROL_FLOW_NODES:
-            flow.append({"stopped_at": "control_flow_node"})
+            branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
+            node_info["branch_type"] = branch_type  # D-19-14
+            node_info["stopped_at"] = "control_flow_node"  # 保留现有标记（移到节点层级）
+            flow.append(node_info)
             break
+
+        flow.append(node_info)
 
         # 查找下一个节点（沿 exec output pin）
         current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
