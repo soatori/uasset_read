@@ -4986,6 +4986,24 @@ CONTROL_FLOW_NODES = frozenset({
     "K2Node_MacroInstance",  # 宏实例可能包含循环
 })
 
+# D-19-10: 执行流起点类型扩展（LINK-02）
+START_EVENT_TYPES = frozenset({
+    "K2Node_Event",
+    "K2Node_EnhancedInputAction",
+    "K2Node_VariableSet",
+    "K2Node_CustomEvent"
+})
+
+# D-19-14: 控制流节点分支类型映射（LINK-02）
+BRANCH_TYPE_MAP = {
+    "K2Node_IfThenElse": "if_then_else",
+    "K2Node_Switch": "switch",
+    "K2Node_SwitchString": "switch_string",
+    "K2Node_SwitchEnum": "switch_enum",
+    "K2Node_SwitchInteger": "switch_integer",
+    "K2Node_MacroInstance": "macro_instance",
+}
+
 
 def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     """
