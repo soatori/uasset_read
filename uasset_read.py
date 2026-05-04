@@ -2629,6 +2629,107 @@ def read_ed_graph_pin_type(
     return pin_type
 
 
+def read_pin_reference(
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport]
+) -> Optional[dict]:
+    """
+    读取单个Pin引用（SerializePin格式）。
+
+    用于LinkedTo/SubPins/ParentPin字段，格式来自UE源码EdGraphPin.cpp L2132-2296：
+    1. bNullPtr (bool/uint8)
+    2. OwningNode (FPackageIndex/int32)
+    3. PinGuid (FGuid 16 bytes)
+
+    Args:
+        archive: FArchive positioned at pin reference start
+        name_map: NameMap for FName resolution
+        export_map: ExportMap for FPackageIndex resolution
+        import_map: ImportMap for FPackageIndex resolution
+
+    Returns:
+        dict with "owning_node" (str) and "pin_guid" (str), or None if null
+    """
+    # 1. bNullPtr flag
+    b_null_ptr = archive.read_bool()
+    if b_null_ptr:
+        return None
+
+    # 2. OwningNode (FPackageIndex)
+    owning_node_index = archive.read_i32()
+
+    # 3. PinGuid (FGuid 16 bytes)
+    pin_guid_bytes = archive.read_bytes(16)
+    pin_guid = pin_guid_bytes.hex().upper()
+
+    # Resolve OwningNode FPackageIndex to node name
+    # FPackageIndex: >0 = ExportMap, <0 = ImportMap (negated index)
+    owning_node_name = ""
+    if owning_node_index > 0:
+        node_idx = owning_node_index - 1  # FPackageIndex is 1-indexed
+        if node_idx < len(export_map):
+            owning_node_name = export_map[node_idx].object_name
+    elif owning_node_index < 0:
+        import_idx = -owning_node_index - 1
+        if import_idx < len(import_map):
+            owning_node_name = import_map[import_idx].object_name
+
+    return {
+        "owning_node": owning_node_name,
+        "pin_guid": pin_guid
+    }
+
+
+def read_pin_array(
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport]
+) -> List[dict]:
+    """
+    读取Pin引用数组（SerializePinArray格式）。
+
+    用于LinkedTo/SubPins字段，格式来自UE源码EdGraphPin.cpp L2063-2098：
+    1. ArrayNum (int32)
+    2. For each: read_pin_reference()
+
+    安全边界：count <= MAX_LINKEDTO_PER_PIN (100)
+
+    Args:
+        archive: FArchive positioned at array start
+        name_map: NameMap for FName resolution
+        export_map: ExportMap for FPackageIndex resolution
+        import_map: ImportMap for FPackageIndex resolution
+
+    Returns:
+        List of dict pin references (empty list if count=0)
+
+    Raises:
+        ParseError: if count exceeds MAX_LINKEDTO_PER_PIN or negative
+    """
+    # 1. ArrayNum (int32)
+    array_count = archive.read_i32()
+
+    if array_count < 0:
+        raise ParseError(f"Invalid pin array count: {array_count} (negative)")
+    if array_count > MAX_LINKEDTO_PER_PIN:
+        raise ParseError(
+            f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN "
+            f"{MAX_LINKEDTO_PER_PIN}"
+        )
+
+    # 2. For each element
+    pins: List[dict] = []
+    for _ in range(array_count):
+        pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
+        if pin_ref is not None:
+            pins.append(pin_ref)
+
+    return pins
+
+
 def read_ue_graph_pin(
     archive: FArchive,
     name_map: List[str],
