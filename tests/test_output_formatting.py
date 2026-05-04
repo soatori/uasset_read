@@ -40,6 +40,10 @@ from uasset_read import (
     FMemberReference,
     build_execution_flows,
     CONTROL_FLOW_NODES,
+    # Phase 19 imports (LINK-01)
+    FORMAT_CONFIG,
+    _derive_node_name,
+    format_pin_ref,
 )
 import struct
 
@@ -795,6 +799,8 @@ def test_format_graphs_json_structure(sample_graph_with_connections):
 def test_build_connections_map_basic(sample_graph_with_connections):
     """
     验证 build_connections_map() 正确构建连接。
+
+    Phase 19: 默认输出为 name 模式（D-19-04）。
     """
     graph = sample_graph_with_connections
     connections, warnings = build_connections_map(graph)
@@ -806,10 +812,12 @@ def test_build_connections_map_basic(sample_graph_with_connections):
     assert 'from' in conn
     assert 'to' in conn
 
-    # D-08-06: {from, to} 对象结构
-    assert 'node_guid' in conn['from']
-    assert 'pin_name' in conn['from']
-    assert conn['from']['pin_name'] == "then"
+    # Phase 19: name 模式输出结构（D-19-04）
+    assert 'node' in conn['from']
+    assert 'pin' in conn['from']
+    assert conn['from']['pin'] == "then"
+    # 节点名应为 class_name + idx 格式
+    assert conn['from']['node'] == "K2Node_Event_0"
 
 
 def test_build_connections_map_warning(sample_graph_with_missing_pin):
@@ -1908,3 +1916,458 @@ class TestCLISummaryFlagsPhase14:
 
         with pytest.raises(SystemExit):
             parser.parse_args([str(temp_uasset_file), '--summary', '--markdown'])
+
+
+# ============================================================================
+# Phase 19: LINK-01 - connections 数组 name 模式输出
+# ============================================================================
+
+
+class TestFormatConfig:
+    """
+    D-19-03/D-19-04: FORMAT_CONFIG 全局配置测试。
+    """
+
+    def test_format_config_default_mode(self):
+        """
+        D-19-04: 验证 FORMAT_CONFIG 默认为 name 模式。
+        """
+        assert FORMAT_CONFIG["pin_reference_mode"] == "name"
+
+    def test_format_config_has_pin_reference_mode_field(self):
+        """
+        D-19-03: 验证 FORMAT_CONFIG 包含 pin_reference_mode 字段。
+        """
+        assert "pin_reference_mode" in FORMAT_CONFIG
+
+
+class TestDeriveNodeName:
+    """
+    D-19-02: _derive_node_name() 节点名派生测试。
+    """
+
+    def test_derive_node_name_basic(self):
+        """
+        验证基本节点名派生：使用 class_name + idx 格式。
+        """
+        node = UEdGraphNode(
+            node_guid="guid-123",
+            class_name="K2Node_CallFunction",
+            pins=[],
+        )
+
+        name = _derive_node_name(node, 10)
+
+        assert name == "K2Node_CallFunction_10"
+
+    def test_derive_node_name_with_conflict(self):
+        """
+        D-19-02: 验证同名节点使用 idx 后缀区分，避免冲突。
+        """
+        node1 = UEdGraphNode(
+            node_guid="guid-1",
+            class_name="K2Node_CallFunction",
+            pins=[],
+        )
+        node2 = UEdGraphNode(
+            node_guid="guid-2",
+            class_name="K2Node_CallFunction",
+            pins=[],
+        )
+
+        name1 = _derive_node_name(node1, 10)
+        name2 = _derive_node_name(node2, 20)
+
+        assert name1 == "K2Node_CallFunction_10"
+        assert name2 == "K2Node_CallFunction_20"
+        assert name1 != name2  # 无冲突
+
+    def test_derive_node_name_different_classes(self):
+        """
+        不同 class_name 生成不同的节点名。
+        """
+        node1 = UEdGraphNode(
+            node_guid="guid-a",
+            class_name="K2Node_Event",
+            pins=[],
+        )
+        node2 = UEdGraphNode(
+            node_guid="guid-b",
+            class_name="K2Node_CallFunction",
+            pins=[],
+        )
+
+        name1 = _derive_node_name(node1, 0)
+        name2 = _derive_node_name(node2, 1)
+
+        assert name1 == "K2Node_Event_0"
+        assert name2 == "K2Node_CallFunction_1"
+        assert name1 != name2
+
+
+class TestFormatPinRef:
+    """
+    D-19-02/D-19-05: format_pin_ref() 格式转换函数测试。
+    """
+
+    def test_format_pin_ref_name_mode(self):
+        """
+        D-19-02: 验证 name 模式输出格式。
+        """
+        node_name_lookup = {"guid-123": "K2Node_CallFunction_10"}
+
+        result = format_pin_ref("guid-123", "execute", node_name_lookup, "name")
+
+        assert result == {"node": "K2Node_CallFunction_10", "pin": "execute"}
+
+    def test_format_pin_ref_guid_mode(self):
+        """
+        验证 guid 模式输出格式。
+        """
+        result = format_pin_ref("guid-123", "execute", {}, "guid")
+
+        assert result == {"node_guid": "guid-123", "pin_name": "execute"}
+
+    def test_format_pin_ref_lookup_failure(self):
+        """
+        D-19-05: 验证查找失败时保留 guid fallback 并添加 warning。
+        """
+        result = format_pin_ref("guid-unknown", "execute", {}, "name")
+
+        assert result["node_guid"] == "guid-unknown"
+        assert result["pin"] == "execute"
+        assert result["warning"] == "node_name lookup failed"
+
+    def test_format_pin_ref_default_mode_is_name(self):
+        """
+        D-19-04: 默认 mode 参数为 name。
+        """
+        node_name_lookup = {"guid-abc": "K2Node_Event_0"}
+
+        # 不传 mode 参数，应使用默认 name 模式
+        result = format_pin_ref("guid-abc", "then", node_name_lookup)
+
+        assert result == {"node": "K2Node_Event_0", "pin": "then"}
+
+    def test_format_pin_ref_preserves_pin_name(self):
+        """
+        验证 pin_name 在两种模式下都正确传递。
+        """
+        node_name_lookup = {"guid-xyz": "TestNode_5"}
+
+        # name 模式
+        result_name = format_pin_ref("guid-xyz", "Started", node_name_lookup, "name")
+        assert result_name["pin"] == "Started"
+
+        # guid 模式
+        result_guid = format_pin_ref("guid-xyz", "Started", {}, "guid")
+        assert result_guid["pin_name"] == "Started"
+
+
+class TestBuildConnectionsMapNameMode:
+    """
+    LINK-01: build_connections_map() name 模式输出测试。
+    """
+
+    def test_build_connections_map_name_mode(self):
+        """
+        LINK-01: 验证 name 模式输出符合 REQUIREMENTS 格式。
+        """
+        pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Node 1: K2Node_EnhancedInputAction with output pin
+        node1 = UEdGraphNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-1",
+                    pin_name="Started",
+                    direction=1,  # Output
+                    pin_type=pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-2"}],
+                )
+            ],
+        )
+
+        # Node 2: K2Node_CallFunction with input pin
+        node2 = UEdGraphNode(
+            node_guid="guid-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-2",
+                    pin_name="execute",
+                    direction=0,  # Input
+                    pin_type=pin_type,
+                    linked_to_raw=[],
+                )
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            nodes=[node1, node2],
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        # 验证 name 模式格式
+        assert len(connections) == 1
+        assert len(warnings) == 0
+
+        conn = connections[0]
+        # D-19-04: name 模式输出
+        assert conn["from"]["node"] == "K2Node_EnhancedInputAction_0"
+        assert conn["from"]["pin"] == "Started"
+        assert conn["to"]["node"] == "K2Node_CallFunction_1"
+        assert conn["to"]["pin"] == "execute"
+
+    def test_build_connections_map_guid_mode(self):
+        """
+        验证 guid 模式保持现有格式（兼容性）。
+        """
+        # 临时切换为 guid 模式
+        original_mode = FORMAT_CONFIG["pin_reference_mode"]
+        FORMAT_CONFIG["pin_reference_mode"] = "guid"
+
+        pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node1 = UEdGraphNode(
+            node_guid="guid-1",
+            class_name="K2Node_Event",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-1",
+                    pin_name="then",
+                    direction=1,
+                    pin_type=pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-2"}],
+                )
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-2",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-2",
+                    pin_name="execute",
+                    direction=0,
+                    pin_type=pin_type,
+                    linked_to_raw=[],
+                )
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="EventGraph",
+            graph_class="UberEdGraph",
+            nodes=[node1, node2],
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        # 验证 guid 模式格式
+        assert len(connections) == 1
+        conn = connections[0]
+        assert conn["from"]["node_guid"] == "guid-1"
+        assert conn["from"]["pin_name"] == "then"
+        assert conn["to"]["node_guid"] == "guid-2"
+        assert conn["to"]["pin_name"] == "execute"
+
+        # 恢复 name 模式
+        FORMAT_CONFIG["pin_reference_mode"] = original_mode
+
+    def test_build_connections_map_handles_dict_linked_to_raw(self):
+        """
+        Phase 18 兼容性: 验证 linked_to_raw dict 格式正确处理（提取 pin_guid 字段）。
+        """
+        pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        node1 = UEdGraphNode(
+            node_guid="guid-a",
+            class_name="K2Node_Event",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-a",
+                    pin_name="then",
+                    direction=1,
+                    pin_type=pin_type,
+                    # Phase 18: linked_to_raw 为 dict 格式
+                    linked_to_raw=[{"pin_guid": "pin-b"}],
+                )
+            ],
+        )
+
+        node2 = UEdGraphNode(
+            node_guid="guid-b",
+            class_name="K2Node_CallFunction",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-b",
+                    pin_name="execute",
+                    direction=0,
+                    pin_type=pin_type,
+                    linked_to_raw=[],
+                )
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="TestGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2],
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        # 验证正确解析 dict 格式的 linked_to_raw
+        assert len(connections) == 1
+        assert len(warnings) == 0
+        assert connections[0]["to"]["node"] == "K2Node_CallFunction_1"
+
+    def test_build_connections_map_missing_pin_warning(self):
+        """
+        D-19-05: 验证查找失败时保留 warning 和 raw_pin_id fallback。
+        """
+        pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Output pin 指向不存在的 pin
+        node = UEdGraphNode(
+            node_guid="guid-x",
+            class_name="K2Node_Event",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-x",
+                    pin_name="then",
+                    direction=1,
+                    pin_type=pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-missing"}],
+                )
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="TestGraph",
+            graph_class="EdGraph",
+            nodes=[node],
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        # 验证 warning
+        assert len(connections) == 1
+        assert len(warnings) == 1
+        conn = connections[0]
+        assert "warning" in conn
+        assert conn["warning"] == "target pin not found"
+        assert "raw_pin_id" in conn["to"]
+        assert conn["to"]["raw_pin_id"] == "pin-missing"
+
+    def test_build_connections_map_multiple_connections(self):
+        """
+        验证多连接输出正确。
+        """
+        pin_type = FEdGraphPinType(
+            pin_category="exec",
+            pin_sub_category="exec",
+            container_type="None",
+            is_reference=False,
+            is_const=False,
+        )
+
+        # Node 1 with two output pins
+        node1 = UEdGraphNode(
+            node_guid="guid-1",
+            class_name="K2Node_Event",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-1a",
+                    pin_name="then",
+                    direction=1,
+                    pin_type=pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-2"}],
+                ),
+                UEdGraphPin(
+                    pin_id="pin-1b",
+                    pin_name="else",
+                    direction=1,
+                    pin_type=pin_type,
+                    linked_to_raw=[{"pin_guid": "pin-3"}],
+                ),
+            ],
+        )
+
+        # Node 2
+        node2 = UEdGraphNode(
+            node_guid="guid-2",
+            class_name="K2Node_CallFunction_A",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-2",
+                    pin_name="execute",
+                    direction=0,
+                    pin_type=pin_type,
+                    linked_to_raw=[],
+                )
+            ],
+        )
+
+        # Node 3
+        node3 = UEdGraphNode(
+            node_guid="guid-3",
+            class_name="K2Node_CallFunction_B",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-3",
+                    pin_name="execute",
+                    direction=0,
+                    pin_type=pin_type,
+                    linked_to_raw=[],
+                )
+            ],
+        )
+
+        graph = UEdGraph(
+            graph_name="TestGraph",
+            graph_class="EdGraph",
+            nodes=[node1, node2, node3],
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        # 验证两个连接
+        assert len(connections) == 2
+        assert len(warnings) == 0
+
+        # 检查连接内容
+        nodes_in_connections = [c["to"]["node"] for c in connections]
+        assert "K2Node_CallFunction_A_1" in nodes_in_connections
+        assert "K2Node_CallFunction_B_2" in nodes_in_connections
