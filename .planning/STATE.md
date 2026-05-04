@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: 节点属性深度解析
-status: Ready to execute
-last_updated: "2026-05-04T12:00:00.000Z"
-last_activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
+status: Phase complete
+last_updated: "2026-05-04T07:00:00.000Z"
+last_activity: 2026-05-04 — Phase 18 completed (4/4 plans, 5/5 verified)
 status:
-  phase: "Phase 18: Pin序列化解析"
-  plan: "18-01"
+  phase: "Phase 19: 连接关系重建"
+  plan: "pending"
   progress:
     total_phases: 4
-    completed_phases: 0
+    completed_phases: 1
     total_plans: 4
-    completed_plans: 0
-    percent: 0
+    completed_plans: 4
+    percent: 100
 ---
 
 # 项目状态
@@ -21,14 +21,14 @@ status:
 **项目：** uasset_read
 **初始化：** 2026-04-27
 **当前里程碑：** v4.0 节点属性深度解析
-**状态：** 路线图已创建，准备开始Phase 18
+**状态：** Phase 18完成，准备Phase 19
 
 ## Current Position
 
-Phase: 18 - Pin序列化解析
-Plan: 18-01 — CustomVersion常量 + UEdGraphPin dataclass扩展
-Status: Ready to execute
-Last activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
+Phase: 19 - 连接关系重建
+Plan: pending — Phase 19尚未规划
+Status: Ready to plan
+Last activity: 2026-05-04 — Phase 18 completed (4/4 plans executed, 5/5 verified)
 
 ## Progress
 
@@ -37,9 +37,9 @@ Last activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
 | v1.0 MVP | 5 | 25 | ✓ Complete |
 | v2.0 蓝图图解析 | 5 | 20 | ✓ Complete |
 | v3.x 解析完善+Skill | 7 | 23 | ✓ Complete |
-| **v4.0 节点属性深度解析** | **4** | **4** | **Active** |
+| **v4.0 节点属性深度解析** | **4** | **4** | **1/4 Complete** |
 
-**Total Progress:** 17/21 phases (81%)
+**Total Progress:** 18/21 phases (86%)
 
 ## v4.0 Scope
 
@@ -49,14 +49,14 @@ Last activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
 
 | Phase | Name | Requirements | Success Criteria |
 |-------|------|--------------|------------------|
-| 18 | Pin序列化解析 | PIN-01~05 | 5 criteria |
+| 18 | Pin序列化解析 | PIN-01~05 | 5 criteria ✓ Complete |
 | 19 | 连接关系重建 | LINK-01~03 | 3 criteria |
 | 20 | 整合输出 | OUT-01~03 | 3 criteria |
 | 21 | 验证测试 | TEST-01~04 | 4 criteria |
 
 ### Key Deliverables
 
-- **Phase 18:** Pin完整信息提取（pin_id、pin_type、default_value、linked_to、显示属性）
+- **Phase 18:** ✓ Pin完整信息提取（pin_id、pin_type、default_value、linked_to、显示属性）
 - **Phase 19:** 连接关系构建（connections、execution_flows、data_flows）
 - **Phase 20:** 整合JSON输出（节点、图、蓝图三层结构）
 - **Phase 21:** 测试验证（节点数量、执行流程、数据流、属性正确性）
@@ -84,11 +84,10 @@ Last activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
 
 ## 下一步
 
-**启动 Phase 18: Pin序列化解析**
-- 解析Pin基础信息（pin_id、pin_name、direction）
-- 解析PinType结构（category、sub_category、container_type、is_reference、is_const）
-- 解析默认值、连接引用、显示属性
-- 输出不包含字节细节的JSON结构
+**启动 Phase 19: 连接关系重建**
+- 构建 connections 数组（from/to节点+Pin）
+- 构建 execution_flows（执行链路）
+- 构建 data_flows（数据传递关系）
 
 ---
 
@@ -96,10 +95,13 @@ Last activity: 2026-05-04 — Phase 18 planned (4 plans in 4 waves)
 
 ### Key Decisions
 
-- **2026-05-04:** v4.0里程碑启动
-  - 目标：修复JSON vs UE文本格式差异
-  - 核心问题：属性Size阈值、Pin信息缺失、连接关系缺失
-  - 解决方案：Pin序列化解析 + 连接关系重建
+- **2026-05-04:** Phase 18完成
+  - CustomVersion常量定义（三个GUID + 四个版本阈值）
+  - UEdGraphPin dataclass扩展（pin_tooltip、default_object、hidden等）
+  - read_ue_graph_pin()重写（从OwningNode开始读取）
+  - read_pin_reference()/read_pin_array()辅助函数
+  - read_ed_graph_pin_type()版本检查修复
+  - 代码审查发现CR-01/CR-02，已修复（get_custom_version()方法）
 
 - **2026-05-04:** v4.0路线图创建
   - 4阶段（Phase 18-21）
