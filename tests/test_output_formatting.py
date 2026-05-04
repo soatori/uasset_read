@@ -1908,3 +1908,39 @@ class TestCLISummaryFlagsPhase14:
 
         with pytest.raises(SystemExit):
             parser.parse_args([str(temp_uasset_file), '--summary', '--markdown'])
+
+
+# ============================================================================
+# Phase 19: LINK-02 - 执行流起点类型扩展
+# ============================================================================
+
+def test_start_event_types_contains_four_types():
+    """
+    验证START_EVENT_TYPES包含4种起点类型（D-19-10）。
+
+    LINK-02: 执行流起点类型扩展
+    """
+    from uasset_read import START_EVENT_TYPES
+
+    assert "K2Node_Event" in START_EVENT_TYPES
+    assert "K2Node_EnhancedInputAction" in START_EVENT_TYPES
+    assert "K2Node_VariableSet" in START_EVENT_TYPES
+    assert "K2Node_CustomEvent" in START_EVENT_TYPES
+    assert len(START_EVENT_TYPES) == 4
+
+
+def test_branch_type_map_complete():
+    """
+    验证BRANCH_TYPE_MAP覆盖所有CONTROL_FLOW_NODES（D-19-14）。
+
+    LINK-02: 控制流节点分支类型映射
+    """
+    from uasset_read import BRANCH_TYPE_MAP, CONTROL_FLOW_NODES
+
+    # 每个CONTROL_FLOW_NODES都有对应的branch_type
+    for node_type in CONTROL_FLOW_NODES:
+        assert node_type in BRANCH_TYPE_MAP
+
+    # 验证枚举值命名
+    assert BRANCH_TYPE_MAP["K2Node_IfThenElse"] == "if_then_else"
+    assert BRANCH_TYPE_MAP["K2Node_SwitchEnum"] == "switch_enum"
