@@ -69,6 +69,9 @@ MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数（T-07-02-02�
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数（T-07-02-03）
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数（T-07-02-04）
 
+# Phase 22 Debug Flags
+DEBUG_PIN_PARSING = "--debug-pin" in sys.argv or "--debug-pins" in sys.argv
+
 # UE5 Version Constants (EUnrealEngineObjectUE5Version)
 UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001  # NAMES_REFERENCED_FROM_EXPORT_DATA
 UE5_PAYLOAD_TOC = 1002                        # PAYLOAD_TOC
@@ -2770,6 +2773,9 @@ def read_pin_array(
     # 1. ArrayNum (int32)
     array_count = archive.read_i32()
 
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN ARRAY] Reading {array_count} pins at offset: {archive.tell():#x}")
+
     if array_count < 0:
         raise ParseError(f"Invalid pin array count: {array_count} (negative)")
     if array_count > MAX_LINKEDTO_PER_PIN:
@@ -2780,10 +2786,15 @@ def read_pin_array(
 
     # 2. For each element
     pins: List[dict] = []
-    for _ in range(array_count):
+    for i in range(array_count):
         pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN ARRAY]   [{i}] {pin_ref}")
         if pin_ref is not None:
             pins.append(pin_ref)
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN ARRAY] Total {len(pins)} pins read, offset now: {archive.tell():#x}")
 
     return pins
 
@@ -2925,12 +2936,24 @@ def read_ue_graph_pin(
     # 当 CustomVersion 不存在时，使用 file_version_ue5 作为 fallback
     use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
 
+    pin_start_pos = archive.tell()
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] ========================================")
+        print(f"[DEBUG PIN] Pin parsing started at offset: {pin_start_pos:#x}")
+        print(f"[DEBUG PIN] framework_version: {framework_version}, mainstream_version: {mainstream_version}")
+        print(f"[DEBUG PIN] use_fname_format: {use_fname_format}")
+
     # 1. OwningNode (FPackageIndex) [L1844] - 关键：序列化起始字段
     owning_node_index = archive.read_i32()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 1. OwningNode: {owning_node_index}, offset now: {archive.tell():#x}")
 
     # 2. PinId (FGuid 16 bytes) [L1845]
     pin_id_bytes = archive.read_bytes(16)
     pin_id = pin_id_bytes.hex().upper()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 2. PinId: {pin_id}, offset now: {archive.tell():#x}")
 
     # 3. PinName (version dependent) [L1847-1856]
     # Phase 22 FIX-03: UE5 资产始终使用 FName 格式
@@ -2939,6 +2962,8 @@ def read_ue_graph_pin(
         pin_name = archive.read_name(name_map)
     else:
         pin_name = archive.read_fstring()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 3. PinName: {pin_name}, offset now: {archive.tell():#x}")
 
     # 4. PinFriendlyName (FText) - EditorOnly [L1858-1863]
     # Phase 22 FIX-02 (修正): 仅当 PKG_FilterEditorOnly 标志未设置时才可能有 EditorOnly 数据
@@ -2947,51 +2972,91 @@ def read_ue_graph_pin(
     # IsFilterEditorOnly() 的判断比 package_flags 更复杂
     # 使用 skip_ftext_editoronly 尝试跳过 FText，如果格式错误则回退
     # Per Phase 22-02研究：对于editor-saved资产，EditorOnly数据可能仍被过滤
-    start_pos = archive.tell()
+    ftext_start_pos = archive.tell()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 4. PinFriendlyName (FText) attempt at offset: {ftext_start_pos:#x}")
     try:
         # 尝试跳过 FText
         skip_ftext_editoronly(archive)
-    except Exception:
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN]    FText skipped successfully, offset now: {archive.tell():#x}")
+    except Exception as e:
         # 回退到起始位置
-        archive.seek(start_pos)
+        archive.seek(ftext_start_pos)
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN]    FText skip failed: {e}, seeking back to {ftext_start_pos:#x}")
 
     # 5. SourceIndex (int32) - version dependent [L1865-1868]
     source_index = None
     if mainstream_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX:
         source_index = archive.read_i32()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 5. SourceIndex: {source_index}, offset now: {archive.tell():#x}")
+    else:
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 5. SourceIndex not read (version {mainstream_version} < {FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX}), offset: {archive.tell():#x}")
 
     # 6. PinToolTip (FString) [L1870]
+    tooltip_start = archive.tell()
     pin_tooltip = archive.read_fstring()
+    if DEBUG_PIN_PARSING:
+        tooltip_bytes = archive.tell() - tooltip_start
+        print(f"[DEBUG PIN] 6. PinToolTip: '{pin_tooltip}', {tooltip_bytes} bytes, offset now: {archive.tell():#x}")
 
     # 7. Direction (uint8) [L1871]
     direction = archive.read_u8()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 7. Direction: {direction}, offset now: {archive.tell():#x}")
 
     # 8. PinType (FEdGraphPinType) [L1872]
+    pintype_start = archive.tell()
     pin_type = read_ed_graph_pin_type(archive, name_map, summary)
+    if DEBUG_PIN_PARSING:
+        pintype_bytes = archive.tell() - pintype_start
+        print(f"[DEBUG PIN] 8. PinType: {pin_type.pin_category}, {pintype_bytes} bytes, offset now: {archive.tell():#x}")
 
     # 9-10. DefaultValue strings [L1873-1874]
     default_value = archive.read_fstring()
     autogenerated_default_value = archive.read_fstring()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 9. DefaultValue: '{default_value}', offset now: {archive.tell():#x}")
+        print(f"[DEBUG PIN] 10. AutogeneratedDefaultValue: '{autogenerated_default_value}', offset now: {archive.tell():#x}")
 
     # 11. DefaultObject (FPackageIndex) [L1875]
     default_object_index = archive.read_i32()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 11. DefaultObject: {default_object_index}, offset now: {archive.tell():#x}")
 
     # 12. DefaultTextValue (FText) [L1876]
     # FText简化处理：暂不实现完整FText解析
     default_text_value = None  # TODO: Phase后续实现FText
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 12. DefaultTextValue: None (skipped), offset now: {archive.tell():#x}")
 
     # 13. LinkedTo (SerializePinArray) [L1886]
+    linkedto_start = archive.tell()
     linked_to = read_pin_array(archive, name_map, export_map, import_map)
+    if DEBUG_PIN_PARSING:
+        linkedto_bytes = archive.tell() - linkedto_start
+        print(f"[DEBUG PIN] 13. LinkedTo: {len(linked_to)} pins, {linkedto_bytes} bytes, offset now: {archive.tell():#x}")
 
     # 14. SubPins (SerializePinArray) [L1889]
+    subpins_start = archive.tell()
     sub_pins = read_pin_array(archive, name_map, export_map, import_map)
+    if DEBUG_PIN_PARSING:
+        subpins_bytes = archive.tell() - subpins_start
+        print(f"[DEBUG PIN] 14. SubPins: {len(sub_pins)} pins, {subpins_bytes} bytes, offset now: {archive.tell():#x}")
 
     # 15. ParentPin (SerializePin) [L1891]
     parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 15. ParentPin: {parent_pin}, offset now: {archive.tell():#x}")
 
     # 16. ReferencePassThroughConnection (SerializePin) [L1892]
     # 不在需求范围，仅读取用于位置同步
     ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 16. ReferencePassThroughConnection: {ref_pass_through}, offset now: {archive.tell():#x}")
 
     # 17-18. EditorOnly fields [L1894-1948]
     persistent_guid = None
@@ -3010,9 +3075,19 @@ def read_ue_graph_pin(
         not_connectable = bool(bitfield & (1 << 1))
         advanced_view = bool(bitfield & (1 << 4))
         orphaned_pin = bool(bitfield & (1 << 5))
-    except Exception:
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 18. BitField: {bitfield:#010x}, hidden={hidden}, not_connectable={not_connectable}, offset now: {archive.tell():#x}")
+    except Exception as e:
         # cooked资产可能没有BitField，保持默认值
-        pass
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 18. BitField read failed: {e}, using defaults")
+
+    pin_end_pos = archive.tell()
+    if DEBUG_PIN_PARSING:
+        total_bytes = pin_end_pos - pin_start_pos
+        print(f"[DEBUG PIN] Pin parsing complete: {total_bytes} bytes total")
+        print(f"[DEBUG PIN] Final offset: {pin_end_pos:#x}")
+        print(f"[DEBUG PIN] ========================================")
 
     return UEdGraphPin(
         pin_id=pin_id,
@@ -3075,6 +3150,17 @@ def read_ue_graph_node(
     # 定位到节点序列化数据起始位置
     archive.seek(node_export.serial_offset)
 
+    node_name = node_export.object_name
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] ========================================")
+        print(f"[DEBUG NODE] Node: {node_name}")
+        print(f"[DEBUG NODE] Class: {node_export.class_name}")
+        print(f"[DEBUG NODE] serial_offset: {node_export.serial_offset:#x}")
+        print(f"[DEBUG NODE] serial_size: {node_export.serial_size}")
+        print(f"[DEBUG NODE] script_serial_offset: {node_export.script_serial_offset:#x}")
+        print(f"[DEBUG NODE] script_serial_size: {node_export.script_serial_size}")
+
     # Phase 22 FIX-06: 动态扫描定位 pins offset
     #
     # 替代 heuristic_delta 方案，通过扫描找到正确的 pins 起始位置
@@ -3087,6 +3173,9 @@ def read_ue_graph_node(
     archive.seek(node_export.serial_offset + scan_start)
     pins_found = False
     pins_offset = scan_start
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] Scanning for pins_offset from {scan_start:#x} to {scan_end:#x}")
 
     while archive.tell() < node_export.serial_offset + scan_end:
         try:
@@ -3106,6 +3195,8 @@ def read_ue_graph_node(
                         # 验证通过，这是 pins 的起始位置
                         pins_offset = test_pos - node_export.serial_offset
                         pins_found = True
+                        if DEBUG_PIN_PARSING:
+                            print(f"[DEBUG NODE] Found pins_offset at {pins_offset:#x} (absolute: {test_pos:#x}), pins_count={test_count}")
                         break
 
             # 继续扫描下一个位置
@@ -3121,38 +3212,57 @@ def read_ue_graph_node(
             pins_offset = scan_start + 87
         else:
             pins_offset = scan_start + 4
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG NODE] Scan failed, using fallback pins_offset: {pins_offset:#x}")
 
     archive.seek(node_export.serial_offset + pins_offset)
 
     # 1. Pins 数组
     pins_count = archive.read_i32()
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] Reading pins_count: {pins_count} at offset {archive.tell():#x}")
+
     if pins_count < 0:
         raise ParseError(
-            f"Invalid pins_count {pins_count} (negative) at node {node_export.object_name}"
+            f"Invalid pins_count {pins_count} (negative) at node {node_name}"
         )
     if pins_count > MAX_PINS_PER_NODE:
         raise ParseError(
             f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} "
-            f"at node {node_export.object_name}"
+            f"at node {node_name}"
         )
 
     pins: List[UEdGraphPin] = []
-    for _ in range(pins_count):
+    for i in range(pins_count):
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG NODE] Reading pin #{i} at offset {archive.tell():#x}")
+
         # Phase 22 FIX-01: 处理 SerializePin 前置字段
         # SerializePin 先序列化: bNullPtr + OwningNode + PinGuid
         # 然后 UEdGraphPin::Serialize 再次序列化 OwningNode + PinId + ...
         b_null_ptr = archive.read_i32()  # bool 序列化为 i32
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG NODE]   bNullPtr: {b_null_ptr}")
+
         if b_null_ptr != 0:
             # null pin，跳过
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG NODE]   Skipping null pin")
             continue
 
         # SerializePin 前置字段：OwningNode_1 + PinGuid_1（跳过）
         _owning_node_1 = archive.read_i32()  # OwningNode（SerializePin 部分）
         _pin_guid_1 = archive.read_bytes(16)  # PinGuid（SerializePin 部分）
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG NODE]   OwningNode_1: {_owning_node_1}, PinGuid_1: {_pin_guid_1.hex()}")
 
         # 然后调用 read_ue_graph_pin 读取 UEdGraphPin::Serialize 部分
         pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
         pins.append(pin)
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] Successfully read {len(pins)}/{pins_count} pins")
+        print(f"[DEBUG NODE] ========================================")
 
     # 2-3. NodePos
     node_pos_x = archive.read_i32()
