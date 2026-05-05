@@ -4,11 +4,11 @@ milestone: v4.0
 milestone_name: 节点属性深度解析
 status: partial
 last_updated: "2026-05-05T20:00:00.000Z"
-last_activity: 2026-05-05 — Phase 22-08 规划完成（回滚 22-06 修改并添加调试输出）
+last_activity: 2026-05-05 — Phase 22-08 部分完成（DEBUG_PIN_PARSING 添加，TEST-04 通过，TEST-02/03 仍失败）
 status:
   phase: "Phase 22: 节点序列化修复"
-  plan: "22-08 planned"
-  issues: Pin 解析失败（22-06 修改导致），22-08 规划完成，待执行
+  plan: "22-08 partial complete"
+  issues: Pin 解析失败（22-06 修改导致），22-08 部分完成，TEST-04 通过但 TEST-02/03 仍失败
   progress:
     total_phases: 5
     completed_phases: 3
@@ -16,8 +16,8 @@ status:
     planned_phases: 1
     total_plans: 13
     completed_plans: 9
-    partial_plans: 3
-    planned_plans: 1
+    partial_plans: 4
+    planned_plans: 0
     percent: 100
 ---
 

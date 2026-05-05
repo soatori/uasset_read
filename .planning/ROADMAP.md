@@ -156,7 +156,7 @@ Plans:
 - [ ] 22-05-PLAN.md — 动态扫描定位 pins_offset（解决 TEST-02/03 失败）
 - [x] 22-06-PLAN.md — 正确定位 pins_offset（FText 枚举值修正 + SourceIndex 位置修正）
 - [x] 22-07-PLAN.md — Direction 和 PinType 序列化格式修复
-- [x] 22-08-PLAN.md — 回滚 22-06 修改并添加调试输出，找出 Pin 解析失败根因
+- [x] 22-08-PLAN.md — 回滚 22-06 修改并添加调试输出，找出 Pin 解析失败根因 (partial: TEST-02/03 仍失败)
 
 ---
 
@@ -171,9 +171,9 @@ Plans:
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
 | 20 | 整合输出 | 2 | Planned | - |
 | 21 | 验证测试 | 1 | Planned | - |
-| 22 | 节点序列化修复 | 8 | Partial (7/8) | - |
+| 22 | 节点序列化修复 | 8 | Partial (8/8) | 2026-05-05 |
 
-**Total:** 22 phases (19 complete, 1 partial, 2 planned)
+**Total:** 22 phases (19 complete, 3 partial, 0 planned)
 
 ---
 
