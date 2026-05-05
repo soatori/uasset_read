@@ -2866,19 +2866,17 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
             if "--debug-ftext" in sys.argv:
                 print(f"  Type {history_type}: read up to {max_strings} FStrings")
         else:
-            # Phase 22 FIX-06: 处理特殊的 history_type 值
-            # 实测数据显示 UE5 资产中存在 history_type=255 的固定 pattern
-            # Pattern: flags=0, history_type=255, 后续 12 bytes 固定数据
-            # 总共 17 bytes: flags(4) + historyType(1) + 12 bytes
-            if history_type == 255 and flags == 0:
-                # 跳过固定 12 bytes
-                archive.read_bytes(12)
+            # Phase 22 FIX-08: 处理特殊的 history_type 值
+            # history_type=255 可能表示空FText或未初始化的FText
+            # 在这种情况下，不应该跳过任何额外的字节（只跳过flags和history_type本身）
+            if history_type == 255:
+                # 不跳过额外的字节，只跳过了flags(4) + historyType(1) = 5字节
                 if "--debug-ftext" in sys.argv:
-                    print(f"  history_type=255: skipped 12 bytes")
+                    print(f"  history_type=255: treating as empty FText, no extra bytes skipped")
             else:
                 # 其他未知 HistoryType，回退
                 if "--debug-ftext" in sys.argv:
-                    print(f"  Unknown HistoryType {history_type} - skipping FText skip")
+                    print(f"  Unknown HistoryType {history_type} - seeking back to start")
                 archive.seek(start_pos)
     except Exception as e:
         # T-22-02-01: 异常处理防止解析崩溃
@@ -2966,22 +2964,72 @@ def read_ue_graph_pin(
         print(f"[DEBUG PIN] 3. PinName: {pin_name}, offset now: {archive.tell():#x}")
 
     # 4. PinFriendlyName (FText) - EditorOnly [L1858-1863]
-    # Phase 22 FIX-02 (修正): 仅当 PKG_FilterEditorOnly 标志未设置时才可能有 EditorOnly 数据
-    # 但实际测试显示：即使 PKG_FilterEditorOnly=0，PinFriendlyName 也可能未被序列化
-    # UE 源码条件: WITH_EDITORONLY_DATA && !Ar.IsFilterEditorOnly()
-    # IsFilterEditorOnly() 的判断比 package_flags 更复杂
-    # 使用 skip_ftext_editoronly 尝试跳过 FText，如果格式错误则回退
-    # Per Phase 22-02研究：对于editor-saved资产，EditorOnly数据可能仍被过滤
+    # Phase 22 FIX-08: 修复FText history_type=255的处理
+    # 根据调试分析，history_type=255应该跳过固定字节
+    # 但之前的12字节跳过导致后续字段位置错误
+    # 新策略：根据实际字节数调整，使用动态检测
     ftext_start_pos = archive.tell()
+
     if DEBUG_PIN_PARSING:
         print(f"[DEBUG PIN] 4. PinFriendlyName (FText) attempt at offset: {ftext_start_pos:#x}")
+
+    # 尝试读取FText并检测实际大小
     try:
-        # 尝试跳过 FText
-        skip_ftext_editoronly(archive)
+        flags = archive.read_i32()
+        history_type = archive.read_u8()
+
         if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN]    FText skipped successfully, offset now: {archive.tell():#x}")
+            print(f"[DEBUG PIN]    FText: flags={flags}, history_type={history_type}")
+
+        # 根据history_type决定跳过多少字节
+        if history_type == 0:  # None
+            b_has_culture_invariant = archive.read_u8()
+            if b_has_culture_invariant != 0:
+                archive.read_fstring()  # CultureInvariantString
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN]    FText type 0: skipped, offset now: {archive.tell():#x}")
+        elif history_type == 1:  # Base
+            archive.read_fstring()  # Namespace
+            archive.read_fstring()  # Key
+            archive.read_fstring()  # SourceString
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN]    FText type 1: skipped, offset now: {archive.tell():#x}")
+        elif history_type == 255 and flags == 0:
+            # history_type=255, flags=0: 可能是空FText
+            # 尝试跳过0字节（已经读取了5字节：flags+history_type）
+            # 但需要验证后续字段是否正确
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN]    FText type 255: treating as empty, offset now: {archive.tell():#x}")
+
+            # 尝试读取PinToolTip验证
+            test_tooltip_pos = archive.tell()
+            test_tooltip = archive.read_fstring()
+            test_direction = archive.read_u8()
+
+            # 如果Direction是有效值（0-3），则说明我们的跳过是正确的
+            if test_direction in (0, 1, 2, 3):
+                # 回退，重新读取
+                archive.seek(test_tooltip_pos)
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN]    Direction验证通过: {test_direction}")
+            else:
+                # Direction无效，说明跳过不对，回退到起始位置
+                archive.seek(ftext_start_pos)
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN]    Direction验证失败: {test_direction}, seeking back")
+        else:
+            # 其他类型，跳过最多5个FString
+            max_strings = 5
+            for _ in range(max_strings):
+                try:
+                    archive.read_fstring()
+                except Exception:
+                    break
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN]    FText type {history_type}: skipped up to {max_strings} strings, offset now: {archive.tell():#x}")
+
     except Exception as e:
-        # 回退到起始位置
+        # FText读取失败，回退到起始位置
         archive.seek(ftext_start_pos)
         if DEBUG_PIN_PARSING:
             print(f"[DEBUG PIN]    FText skip failed: {e}, seeking back to {ftext_start_pos:#x}")
