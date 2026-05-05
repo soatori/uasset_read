@@ -3151,11 +3151,12 @@ def read_ue_graph_node(
     archive.seek(node_export.serial_offset)
 
     node_name = node_export.object_name
+    node_class = get_asset_class(node_export, import_map, export_map)
 
     if DEBUG_PIN_PARSING:
         print(f"[DEBUG NODE] ========================================")
         print(f"[DEBUG NODE] Node: {node_name}")
-        print(f"[DEBUG NODE] Class: {node_export.class_name}")
+        print(f"[DEBUG NODE] Class: {node_class}")
         print(f"[DEBUG NODE] serial_offset: {node_export.serial_offset:#x}")
         print(f"[DEBUG NODE] serial_size: {node_export.serial_size}")
         print(f"[DEBUG NODE] script_serial_offset: {node_export.script_serial_offset:#x}")
