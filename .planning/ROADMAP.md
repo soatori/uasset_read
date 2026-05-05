@@ -146,7 +146,7 @@ Plans:
   2. data_flows 包含 ActionValue_X/Y 连接 ✓
   3. function_reference.MemberName 正确提取 ✓
   4. node_guid 非空（非 fallback 值） ✓
-**Plans**: 8 plans (Wave 1: 22-01 partial, Wave 2: 22-02 partial, Wave 3: 22-03 partial, Wave 4: 22-04 complete, Wave 5: 22-05 planned, Wave 6: 22-06 partial, Wave 7: 22-07 partial, Wave 8: 22-08 planned)
+**Plans**: 9 plans (Wave 1: 22-01 partial, Wave 2: 22-02 partial, Wave 3: 22-03 partial, Wave 4: 22-04 complete, Wave 5: 22-05 planned, Wave 6: 22-06 partial, Wave 7: 22-07 partial, Wave 8: 22-08 partial, Wave 9: 22-09 planned)
 
 Plans:
 - [x] 22-01-PLAN.md — 修复 read_ue_graph_node 跳过 UObject tagged properties (partial: ISSUE-02/03 remaining)
@@ -157,6 +157,7 @@ Plans:
 - [x] 22-06-PLAN.md — 正确定位 pins_offset（FText 枚举值修正 + SourceIndex 位置修正）
 - [x] 22-07-PLAN.md — Direction 和 PinType 序列化格式修复
 - [x] 22-08-PLAN.md — 回滚 22-06 修改并添加调试输出，找出 Pin 解析失败根因 (partial: TEST-02/03 仍失败)
+- [x] 22-09-PLAN.md — 修复 Pin 连接读取失败问题（pins_offset 动态扫描 + LinkedTo 数组读取）
 
 ---
 
@@ -171,9 +172,9 @@ Plans:
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
 | 20 | 整合输出 | 2 | Planned | - |
 | 21 | 验证测试 | 1 | Planned | - |
-| 22 | 节点序列化修复 | 8 | Partial (8/8) | 2026-05-05 |
+| 22 | 节点序列化修复 | 9 | Planned | - |
 
-**Total:** 22 phases (19 complete, 3 partial, 0 planned)
+**Total:** 22 phases (19 complete, 0 partial, 3 planned)
 
 ---
 
@@ -182,4 +183,4 @@ Plans:
 暂无backlog阶段。
 
 ---
-*最后更新：2026-05-05 — Phase 22-08 规划完成（回滚 22-06 修改并添加调试输出）*
+*最后更新：2026-05-06 — Phase 22-09 规划完成（修复 Pin 连接读取失败问题）*
