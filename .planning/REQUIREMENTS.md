@@ -15,12 +15,12 @@
   - 包含: FArchive类及其所有方法（read_i32, seek, tell等）
   - 零依赖: 仅使用Python标准库（struct, mmap）
 
-- [ ] **MOD-02**: 定义常量和阈值到独立模块
+- [x] **MOD-02**: 定义常量和阈值到独立模块 ✓ (Phase 27-02)
   - 文件: `src/uasset_read/constants.py`
   - 包含: 版本号常量、属性类型阈值、边界常量
   - 示例: PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012
 
-- [ ] **MOD-03**: 定义异常类到独立模块
+- [x] **MOD-03**: 定义异常类到独立模块 ✓ (Phase 27-02)
   - 文件: `src/uasset_read/exceptions.py`
   - 包含: UAssetError, VersionError, ParseError, ErrorContext
 
@@ -84,12 +84,12 @@
 
 ### STRUCT - 项目结构
 
-- [ ] **STRUCT-01**: 创建src目录结构
+- [x] **STRUCT-01**: 创建src目录结构 ✓ (Phase 27-01)
   - 目录: `src/uasset_read/`
   - 包含: `__init__.py` 导出公共API
   - 符合: Python Packaging User Guide src layout
 
-- [ ] **STRUCT-02**: 配置pyproject.toml
+- [x] **STRUCT-02**: 配置pyproject.toml ✓ (Phase 27-01)
   - 文件: `pyproject.toml`
   - 配置: dependencies = [], src layout, 项目元数据
   - 验证: 零依赖安装
@@ -122,14 +122,26 @@
 
 ## Requirements Traceability
 
-| REQ-ID | Phase | Status |
-|--------|-------|--------|
-| MOD-01~09 | Phase 27 | Pending |
-| SCHEMA-01~03 | Phase 28 | Pending |
-| TEST-01~02 | Phase 29 | Pending |
-| STRUCT-01~02 | Phase 27 | Pending |
+| REQ-ID | Phase | Status | Description |
+|--------|-------|--------|-------------|
+| MOD-01 | Phase 28 | Pending | 拆分FArchive二进制读取器到独立模块 |
+| MOD-02 | Phase 27 | Pending | 定义常量和阈值到独立模块 |
+| MOD-03 | Phase 27 | Pending | 定义异常类到独立模块 |
+| MOD-04 | Phase 28 | Pending | 拆分PackageFileSummary序列化到独立模块 |
+| MOD-05 | Phase 28 | Pending | 拆分ImportMap/ExportMap到独立模块 |
+| MOD-06 | Phase 29 | Pending | 拆分PropertyTag到独立模块 |
+| MOD-07 | Phase 29 | Pending | 拆分属性解析器到独立模块 |
+| MOD-08 | Phase 29 | Pending | 定义核心数据模型 |
+| MOD-09 | Phase 30 | Pending | 避免循环导入 |
+| SCHEMA-01 | Phase 31 | Pending | 定义JSON Schema结构 |
+| SCHEMA-02 | Phase 31 | Pending | Schema验证功能 |
+| SCHEMA-03 | Phase 31 | Pending | Schema文档 |
+| TEST-01 | Phase 30 | Pending | 所有现有测试通过 |
+| TEST-02 | Phase 32 | Pending | 新模块单元测试 |
+| STRUCT-01 | Phase 27 | Pending | 创建src目录结构 |
+| STRUCT-02 | Phase 27 | Pending | 配置pyproject.toml |
 
-*待路线图创建后更新Phase映射*
+**Coverage:** 16/16 requirements mapped to Phase 27-32 ✓
 
 ---
 
@@ -156,4 +168,4 @@
 
 ---
 
-*最后更新: 2026-05-06*
+*最后更新: 2026-05-06 — 路线图创建完成，Phase映射更新*
