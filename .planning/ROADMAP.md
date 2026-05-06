@@ -102,7 +102,7 @@
 <details>
 <summary>🔵 v5.1 模块化重构与C++代码生成准备 (Phases 27-32) — IN PROGRESS</summary>
 
-- [ ] Phase 27: 项目结构初始化 (4 requirements) — TBD
+- [ ] Phase 27: 项目结构初始化 (4 requirements) — 2 plans
 - [ ] Phase 28: 核心模块拆分 (3 requirements) — TBD
 - [ ] Phase 29: 属性解析模块拆分 (3 requirements) — TBD
 - [ ] Phase 30: 架构验证 (2 requirements) — TBD
@@ -127,8 +127,10 @@
   2. pyproject.toml配置完成，dependencies = []确保零依赖
   3. 常量模块包含所有版本号、属性类型阈值、边界常量（如PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012）
   4. 异常模块包含所有异常类（UAssetError, VersionError, ParseError, ErrorContext）
-**Plans**: TBD
+**Plans**:
 
+- [x] 27-01-PLAN.md — 创建src目录结构和pyproject.toml ✓
+- [x] 27-02-PLAN.md — 提取常量和异常到独立模块 ✓
 ### Phase 28: 核心模块拆分
 **目标**: 拆分FArchive、PackageFileSummary、ImportMap/ExportMap到独立模块
 **依赖**: Phase 27
@@ -137,8 +139,7 @@
   1. FArchive类及其所有方法（read_i32, seek, tell等）在archive.py中完整实现
   2. PackageFileSummary及相关类在serializers/package_summary.py中完整实现
   3. ObjectImport、ObjectExport、PackageIndex在serializers/object_resources.py中完整实现
-**Plans**: TBD
-
+**Plans**:
 ### Phase 29: 属性解析模块拆分
 **目标**: 拆分PropertyTag、属性解析器、核心数据模型到独立模块
 **依赖**: Phase 28
@@ -147,8 +148,7 @@
   1. PropertyTag和parse_property_tag在serializers/property_tags.py中完整实现
   2. 属性解析器（parse_property及所有parse_*_property函数）在parsers/property_parser.py中完整实现
   3. ParseResult、StatusInfo在models/core.py中使用dataclass完整实现
-**Plans**: TBD
-
+**Plans**:
 ### Phase 30: 架构验证
 **目标**: 验证分层架构，避免循环导入，确保所有现有测试通过
 **依赖**: Phase 29
@@ -156,9 +156,7 @@
 **Success Criteria** (what must be TRUE):
   1. 所有模块依赖单向（Output → Models → Parsers → Serializers → FArchive），无循环导入
   2. 所有359+现有测试用例通过，功能性零变更
-  3. 使用延迟导入、TYPE_CHECKING、字符串类型注解等策略避免循环依赖
 **Plans**: TBD
-
 ### Phase 31: JSON Schema定义
 **目标**: 定义JSON Schema结构和验证功能，为C++代码生成准备
 **依赖**: 无（可并行）
@@ -166,9 +164,7 @@
 **Success Criteria** (what must be TRUE):
   1. JSON Schema定义ParseResult顶层结构、蓝图图结构、节点类型定义
   2. Schema验证功能可以验证输出JSON是否符合Schema定义（使用Python标准库json模块）
-  3. Schema文档说明Schema结构、字段语义、C++映射关系
 **Plans**: TBD
-
 ### Phase 32: 新模块单元测试
 **目标**: 为新模块创建单元测试，验证模块接口正确性
 **依赖**: Phase 30
@@ -176,11 +172,8 @@
 **Success Criteria** (what must be TRUE):
   1. 为每个新模块创建独立的测试文件（如tests/test_archive.py、tests/test_constants.py等）
   2. 所有新模块单元测试通过
-  3. 测试覆盖模块的核心功能和边界情况
 **Plans**: TBD
-
 ## Progress
-
 | Phase | Milestone | Requirements | Plans Complete | Status | Completed |
 |-------|-----------|--------------|----------------|--------|-----------|
 | 1-5 | v1.0 MVP | 25 | 25 | Complete | 2026-05-02 |
@@ -188,7 +181,7 @@
 | 11-17 | v3.x 解析完善+Skill | 23 | 23 | Complete | 2026-05-04 |
 | 18-22 | v4.0 节点属性深度解析 | 14 | 14 | Complete | 2026-05-05 |
 | 23-26 | v5.0 原功能完善 | 16 | 8 | Complete | 2026-05-06 |
-| 27 | v5.1 模块化重构 | 4 | 0 | Not started | - |
+| 27 | v5.1 模块化重构 | 4 | 2 | In Progress | - |
 | 28 | v5.1 模块化重构 | 3 | 0 | Not started | - |
 | 29 | v5.1 模块化重构 | 3 | 0 | Not started | - |
 | 30 | v5.1 模块化重构 | 2 | 0 | Not started | - |
@@ -202,3 +195,4 @@
 ---
 
 *最后更新：2026-05-06 — v5.1 里程碑开始*
+
