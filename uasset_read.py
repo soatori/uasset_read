@@ -483,6 +483,37 @@ class FArchive:
 
         return "None"
 
+    def _parse_property_flags(self, property_flags: int) -> dict:
+        """
+        Phase 26: 解析属性标志。
+
+        Args:
+            property_flags: 原始属性标志值 (uint64)
+
+        Returns:
+            包含解析后标志的字典
+        """
+        return {
+            'is_edit_anywhere': bool(property_flags & CPF_EditAnywhere),
+            'is_edit_instance_only': bool(property_flags & CPF_EditInstanceOnly),
+            'is_blueprint_read_only': bool(property_flags & CPF_BlueprintReadOnly),
+            'is_blueprint_readable': bool(property_flags & CPF_BlueprintReadWrite),
+            'is_blueprint_writable': bool(property_flags & CPF_BlueprintReadWrite),
+            'is_transient': bool(property_flags & CPF_Transient),
+            'is_duplicate_transient': bool(property_flags & CPF_DuplicateTransient),
+            'is_save_game': bool(property_flags & CPF_SaveGame),
+            'is_no_clear': bool(property_flags & CPF_NoClear),
+            'is_reference_only': bool(property_flags & CPF_ReferenceOnly),
+            'is_blueprint_assignable': bool(property_flags & CPF_BlueprintAssignable),
+            'is_blueprint_callable': bool(property_flags & CPF_BlueprintCallable),
+            'is_rep_notify': bool(property_flags & CPF_RepNotify),
+            'is_interp': bool(property_flags & CPF_Interp),
+            'is_expose_on_spawn': bool(property_flags & CPF_ExposeOnSpawn),
+            'is_net': bool(property_flags & CPF_Net),
+            'is_replicated': bool(property_flags & CPF_Replicated),
+            'is_non_pi_ed_duplicate_transient': bool(property_flags & CPF_NonPIEDuplicateTransient),
+        }
+
 
 # ============================================================================
 # Dataclass 模型（D-06 使用 dataclasses）
@@ -1232,6 +1263,7 @@ class BlueprintVariable:
 
     Per D-05/D-06: use UE original names with container prefix.
     Phase 12: enhanced with is_component, metadata, flags_labels (per D-02/D-03).
+    Phase 26: 增强变量元数据解析，提取默认值和属性修饰符。
     """
     var_name: str                    # FName
     var_type: "FEdGraphPinType"      # Full type structure (defined next)
@@ -1242,6 +1274,47 @@ class BlueprintVariable:
     is_component: bool = False       # Phase 12: component variable flag (per D-02)
     metadata: Dict[str, str] = field(default_factory=dict)  # Phase 12: MetaDataArray (per D-03)
     flags_labels: List[str] = field(default_factory=list)   # Phase 12: PropertyFlags labels (per D-03)
+
+    # Phase 26: 增强字段
+    edit_condition: str = ""         # EditCondition 表达式
+    meta_class: str = ""             # MetaClass
+
+    # 可见性标志
+    is_edit_anywhere: bool = False
+    is_edit_instance_only: bool = False
+    is_visible_anywhere: bool = False
+    is_blueprint_read_only: bool = False
+
+    # 完整标志位
+    is_blueprint_readable: bool = False
+    is_blueprint_writable: bool = False
+    is_transient: bool = False
+    is_duplicate_transient: bool = False
+    is_text_export_transient: bool = False
+    is_non_transient: bool = False
+    is_export_object: bool = False
+    is_save_game: bool = False
+    is_no_clear: bool = False
+    is_reference_only: bool = False
+    is_blueprint_assignable: bool = False
+    is_blueprint_callable: bool = False
+    is_net: bool = False
+    is_replicated: bool = False
+    is_rep_notify: bool = False
+    is_interp: bool = False
+    is_non_pi_ed_duplicate_transient: bool = False
+    is_expose_on_spawn: bool = False
+
+    # 编辑器相关
+    edit_category: str = ""
+    edit_widget: str = ""            # SpinBox、Slider 等
+
+    # 元数据（备用字段）
+    meta_data: dict = None
+
+    def __post_init__(self):
+        if self.meta_data is None:
+            self.meta_data = {}
 
 
 @dataclass
@@ -2995,28 +3068,46 @@ def read_ue_graph_pin(
             if DEBUG_PIN_PARSING:
                 print(f"[DEBUG PIN]    FText type 1: skipped, offset now: {archive.tell():#x}")
         elif history_type == 255 and flags == 0:
-            # history_type=255, flags=0: 可能是空FText
-            # 尝试跳过0字节（已经读取了5字节：flags+history_type）
-            # 但需要验证后续字段是否正确
+            # Phase 22-09 Task 3: 修复 FText history_type=255 处理
+            # history_type=255, flags=0: 空FText 或特殊格式
+            # 尝试找到正确的跳过字节数
             if DEBUG_PIN_PARSING:
-                print(f"[DEBUG PIN]    FText type 255: treating as empty, offset now: {archive.tell():#x}")
+                print(f"[DEBUG PIN]    FText type 255: attempting to find correct skip")
 
-            # 尝试读取PinToolTip验证
-            test_tooltip_pos = archive.tell()
-            test_tooltip = archive.read_fstring()
-            test_direction = archive.read_u8()
+            # 动态扫描：尝试跳过 0-20 字节，寻找有效的 Direction
+            found_valid_skip = False
+            for skip_bytes in range(0, 20):
+                test_pos = archive.tell()
+                # 跳过 skip_bytes 字节
+                archive.seek(test_pos + skip_bytes)
+                # 尝试读取 PinToolTip 和 Direction 验证
+                try:
+                    test_tooltip = archive.read_fstring()
+                    test_direction = archive.read_u8()
+                    if test_direction in (0, 1, 2, 3):
+                        # 找到有效 Direction
+                        found_valid_skip = True
+                        # 回退到 test_pos + skip_bytes，重新读取
+                        archive.seek(test_pos + skip_bytes)
+                        if DEBUG_PIN_PARSING:
+                            print(f"[DEBUG PIN]    FText type 255: skipped {skip_bytes} bytes, Direction={test_direction} (valid)")
+                        break
+                except Exception:
+                    pass
+                # 回退到测试位置
+                archive.seek(test_pos)
 
-            # 如果Direction是有效值（0-3），则说明我们的跳过是正确的
-            if test_direction in (0, 1, 2, 3):
-                # 回退，重新读取
-                archive.seek(test_tooltip_pos)
-                if DEBUG_PIN_PARSING:
-                    print(f"[DEBUG PIN]    Direction验证通过: {test_direction}")
+            if found_valid_skip:
+                # 已在正确位置，继续
+                pass
             else:
-                # Direction无效，说明跳过不对，回退到起始位置
+                # 无法找到有效 skip，回退到 FText 起始位置并跳过固定字节数
                 archive.seek(ftext_start_pos)
+                archive.read_bytes(5)  # 跳过 flags + history_type
+                # 尝试跳过额外的 12 字节（FString 长度 + 数据）
+                archive.read_bytes(12)
                 if DEBUG_PIN_PARSING:
-                    print(f"[DEBUG PIN]    Direction验证失败: {test_direction}, seeking back")
+                    print(f"[DEBUG PIN]    FText type 255: unable to find valid Direction, using 17-byte skip (5+12)")
         else:
             # 其他类型，跳过最多5个FString
             max_strings = 5
@@ -3064,16 +3155,34 @@ def read_ue_graph_pin(
         print(f"[DEBUG PIN] 8. PinType: {pin_type.pin_category}, {pintype_bytes} bytes, offset now: {archive.tell():#x}")
 
     # 9-10. DefaultValue strings [L1873-1874]
-    default_value = archive.read_fstring()
-    autogenerated_default_value = archive.read_fstring()
-    if DEBUG_PIN_PARSING:
-        print(f"[DEBUG PIN] 9. DefaultValue: '{default_value}', offset now: {archive.tell():#x}")
-        print(f"[DEBUG PIN] 10. AutogeneratedDefaultValue: '{autogenerated_default_value}', offset now: {archive.tell():#x}")
+    # Phase 22-09 Task 3: 添加异常处理，防止解析崩溃
+    try:
+        default_value = archive.read_fstring()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 9. DefaultValue: '{default_value}', offset now: {archive.tell():#x}")
+    except Exception as e:
+        default_value = ""
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 9. DefaultValue: ERROR ({e}), using empty string, offset now: {archive.tell():#x}")
+
+    try:
+        autogenerated_default_value = archive.read_fstring()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 10. AutogeneratedDefaultValue: '{autogenerated_default_value}', offset now: {archive.tell():#x}")
+    except Exception as e:
+        autogenerated_default_value = ""
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 10. AutogeneratedDefaultValue: ERROR ({e}), using empty string, offset now: {archive.tell():#x}")
 
     # 11. DefaultObject (FPackageIndex) [L1875]
-    default_object_index = archive.read_i32()
-    if DEBUG_PIN_PARSING:
-        print(f"[DEBUG PIN] 11. DefaultObject: {default_object_index}, offset now: {archive.tell():#x}")
+    try:
+        default_object_index = archive.read_i32()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 11. DefaultObject: {default_object_index}, offset now: {archive.tell():#x}")
+    except Exception as e:
+        default_object_index = 0
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 11. DefaultObject: ERROR ({e}), using 0, offset now: {archive.tell():#x}")
 
     # 12. DefaultTextValue (FText) [L1876]
     # FText简化处理：暂不实现完整FText解析
@@ -3083,17 +3192,27 @@ def read_ue_graph_pin(
 
     # 13. LinkedTo (SerializePinArray) [L1886]
     linkedto_start = archive.tell()
-    linked_to = read_pin_array(archive, name_map, export_map, import_map)
-    if DEBUG_PIN_PARSING:
-        linkedto_bytes = archive.tell() - linkedto_start
-        print(f"[DEBUG PIN] 13. LinkedTo: {len(linked_to)} pins, {linkedto_bytes} bytes, offset now: {archive.tell():#x}")
+    try:
+        linked_to = read_pin_array(archive, name_map, export_map, import_map)
+        if DEBUG_PIN_PARSING:
+            linkedto_bytes = archive.tell() - linkedto_start
+            print(f"[DEBUG PIN] 13. LinkedTo: {len(linked_to)} pins, {linkedto_bytes} bytes, offset now: {archive.tell():#x}")
+    except Exception as e:
+        linked_to = []
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 13. LinkedTo: ERROR ({e}), using empty list, offset now: {archive.tell():#x}")
 
     # 14. SubPins (SerializePinArray) [L1889]
     subpins_start = archive.tell()
-    sub_pins = read_pin_array(archive, name_map, export_map, import_map)
-    if DEBUG_PIN_PARSING:
-        subpins_bytes = archive.tell() - subpins_start
-        print(f"[DEBUG PIN] 14. SubPins: {len(sub_pins)} pins, {subpins_bytes} bytes, offset now: {archive.tell():#x}")
+    try:
+        sub_pins = read_pin_array(archive, name_map, export_map, import_map)
+        if DEBUG_PIN_PARSING:
+            subpins_bytes = archive.tell() - subpins_start
+            print(f"[DEBUG PIN] 14. SubPins: {len(sub_pins)} pins, {subpins_bytes} bytes, offset now: {archive.tell():#x}")
+    except Exception as e:
+        sub_pins = []
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 14. SubPins: ERROR ({e}), using empty list, offset now: {archive.tell():#x}")
 
     # 15. ParentPin (SerializePin) [L1891]
     parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
@@ -3224,34 +3343,85 @@ def read_ue_graph_node(
     pins_offset = scan_start
 
     if DEBUG_PIN_PARSING:
-        print(f"[DEBUG NODE] Scanning for pins_offset from {scan_start:#x} to {scan_end:#x}")
+        print(f"[DEBUG SCAN] Scanning for pins_offset from {scan_start:#x} to {scan_end:#x}")
+        print(f"[DEBUG SCAN] Node: {node_export.object_name}, serial_offset={node_export.serial_offset:#x}")
 
     while archive.tell() < node_export.serial_offset + scan_end:
         try:
             test_pos = archive.tell()
             test_count = archive.read_i32()
 
+            # Phase 22-09 Task 1: 添加详细诊断输出
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG SCAN] Position {test_pos:#x}: count={test_count}")
+
             # 验证 pins_count 合理范围
             if 1 <= test_count <= 20:  # 合理的 pins 数量
                 # 验证后续数据符合 SerializePin 格式
                 test_null = archive.read_i32()  # bNullPtr
 
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG SCAN]   null={test_null}")
+
                 if test_null == 0:  # bNullPtr == 0 表示有效 pin
                     # 验证 OwningNode 是合理的 FPackageIndex
                     test_owning = archive.read_i32()
+
+                    if DEBUG_PIN_PARSING:
+                        print(f"[DEBUG SCAN]   owning={test_owning}")
+
                     # OwningNode 应该指向自身或合理的 import/export 引用
                     if test_owning == 0 or (test_owning < 0 and test_owning >= -1000) or (test_owning > 0 and test_owning <= 1000):
-                        # 验证通过，这是 pins 的起始位置
-                        pins_offset = test_pos - node_export.serial_offset
-                        pins_found = True
-                        if DEBUG_PIN_PARSING:
-                            print(f"[DEBUG NODE] Found pins_offset at {pins_offset:#x} (absolute: {test_pos:#x}), pins_count={test_count}")
-                        break
+                        # 验证通过，读取后续字段进行更严格的验证
+                        # 尝试读取 PinId 和 PinName 来确认这是正确的 pins 起始位置
+                        test_save_pos = archive.tell()
+
+                        # 尝试读取第一个 Pin 的 PinId (16字节)
+                        try:
+                            pin_id_bytes = archive.read_bytes(16)
+                            if DEBUG_PIN_PARSING:
+                                print(f"[DEBUG SCAN]   PinId bytes: {pin_id_bytes.hex()}")
+
+                            # 尝试读取第一个 Pin 的 PinName
+                            pin_name_idx = archive.read_i32()
+                            if DEBUG_PIN_PARSING:
+                                pin_name_str = name_map[pin_name_idx] if 0 <= pin_name_idx < len(name_map) else "OUT OF RANGE"
+                                print(f"[DEBUG SCAN]   PinName index: {pin_name_idx} -> '{pin_name_str}'")
+
+                            # 验证 PinName 索引在范围内
+                            if not (0 <= pin_name_idx < len(name_map)):
+                                if DEBUG_PIN_PARSING:
+                                    print(f"[DEBUG SCAN]   REJECTED: PinName out of range")
+                            else:
+                                pin_name = name_map[pin_name_idx]
+                                # Phase 22-09: 放宽验证条件，允许更多节点通过
+                                # PinId 全零检查过于严格，某些节点可能有全零 PinId
+                                # PinName = "None" 可能是有效的 PinName
+                                # 只验证 PinName 非空即可
+                                if not pin_name:
+                                    if DEBUG_PIN_PARSING:
+                                        print(f"[DEBUG SCAN]   REJECTED: PinName is empty")
+                                else:
+                                    # 所有验证通过，这是正确的 pins 起始位置
+                                    pins_offset = test_pos - node_export.serial_offset
+                                    pins_found = True
+                                    if DEBUG_PIN_PARSING:
+                                        print(f"[DEBUG SCAN] ✓ ACCEPTED: Found valid pins_offset at {pins_offset:#x}")
+                                        print(f"[DEBUG SCAN]   pins_count={test_count}, PinId={pin_id_bytes.hex()}, PinName='{pin_name}'")
+                                    break
+                        except Exception as e:
+                            if DEBUG_PIN_PARSING:
+                                print(f"[DEBUG SCAN]   REJECTED: Exception during validation: {e}")
+                        finally:
+                            # 恢复位置继续扫描
+                            archive.seek(test_save_pos)
 
             # 继续扫描下一个位置
             archive.seek(test_pos + 4)
 
-        except Exception:
+        except Exception as e:
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG SCAN] Exception at position {archive.tell():#x}: {e}")
             archive.seek(test_pos + 4)
             continue
 
@@ -3262,7 +3432,7 @@ def read_ue_graph_node(
         else:
             pins_offset = scan_start + 4
         if DEBUG_PIN_PARSING:
-            print(f"[DEBUG NODE] Scan failed, using fallback pins_offset: {pins_offset:#x}")
+            print(f"[DEBUG SCAN] Scan failed, using fallback pins_offset: {pins_offset:#x}")
 
     archive.seek(node_export.serial_offset + pins_offset)
 
@@ -3294,9 +3464,11 @@ def read_ue_graph_node(
             print(f"[DEBUG NODE]   bNullPtr: {b_null_ptr}")
 
         if b_null_ptr != 0:
-            # null pin，跳过
+            # null pin，跳过 OwningNode_1 + PinGuid_1（20字节）
+            archive.read_i32()  # OwningNode_1（4字节）
+            archive.read_bytes(16)  # PinGuid_1（16字节）
             if DEBUG_PIN_PARSING:
-                print(f"[DEBUG NODE]   Skipping null pin")
+                print(f"[DEBUG NODE]   Skipping null pin (20 bytes)")
             continue
 
         # SerializePin 前置字段：OwningNode_1 + PinGuid_1（跳过）
@@ -3792,6 +3964,21 @@ CPF_Protected = 0x0000080000000000          # Protected
 CPF_AdvancedDisplay = 0x0000040000000000    # AdvancedDisplay
 CPF_ExposeOnSpawn = 0x0001000000000000      # ExposeOnSpawn
 
+# Phase 26: Additional property flags
+CPF_EditAnywhere = 0x02000000               # EditAnywhere
+CPF_EditInstanceOnly = 0x04000000           # EditInstanceOnly
+CPF_BlueprintReadWrite = 0x00000100         # BlueprintReadWrite
+CPF_DuplicateTransient = 0x00008000         # DuplicateTransient
+CPF_NoClear = 0x00080000                    # NoClear
+CPF_ReferenceOnly = 0x00100000              # ReferenceOnly
+CPF_BlueprintAssignable = 0x80000000        # BlueprintAssignable
+CPF_BlueprintCallable = 0x00004000          # BlueprintCallable
+CPF_RepNotify = 0x10000000                  # RepNotify
+CPF_Interp = 0x20000000                    # Interp
+CPF_Net = 0x00000020                       # Net
+CPF_Replicated = 0x00100000                 # Replicated
+CPF_NonPIEDuplicateTransient = 0x00800000  # NonPIEDuplicateTransient
+
 
 def parse_property_flags_to_labels(flags: int) -> List[str]:
     """
@@ -3996,6 +4183,36 @@ def read_blueprint_variable(
 
     # Phase 12: Parse PropertyFlags to readable labels (per D-03)
     var.flags_labels = parse_property_flags_to_labels(var.property_flags)
+
+    # Phase 26: Parse property flags to boolean fields
+    flags = archive._parse_property_flags(var.property_flags)
+    var.is_edit_anywhere = flags['is_edit_anywhere']
+    var.is_edit_instance_only = flags['is_edit_instance_only']
+    var.is_blueprint_read_only = flags['is_blueprint_read_only']
+    var.is_blueprint_readable = flags['is_blueprint_readable']
+    var.is_blueprint_writable = flags['is_blueprint_writable']
+    var.is_transient = flags['is_transient']
+    var.is_duplicate_transient = flags['is_duplicate_transient']
+    var.is_save_game = flags['is_save_game']
+    var.is_no_clear = flags['is_no_clear']
+    var.is_reference_only = flags['is_reference_only']
+    var.is_blueprint_assignable = flags['is_blueprint_assignable']
+    var.is_blueprint_callable = flags['is_blueprint_callable']
+    var.is_rep_notify = flags['is_rep_notify']
+    var.is_interp = flags['is_interp']
+    var.is_expose_on_spawn = flags['is_expose_on_spawn']
+    var.is_net = flags['is_net']
+    var.is_replicated = flags['is_replicated']
+    var.is_non_pi_ed_duplicate_transient = flags['is_non_pi_ed_duplicate_transient']
+
+    # Phase 26: Extract metadata fields
+    var.edit_condition = var.metadata.get('EditCondition', '')
+    var.meta_class = var.metadata.get('MetaClass', '')
+    var.edit_category = var.metadata.get('Category', '')
+    var.edit_widget = var.metadata.get('EditWidget', '')
+
+    # Phase 26: Copy metadata to meta_data field (备用字段)
+    var.meta_data = var.metadata.copy()
 
     # DefaultValue (FString) - parse per D-13/D-14/D-15
     default_str = archive.read_fstring()
