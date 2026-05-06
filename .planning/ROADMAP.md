@@ -9,7 +9,8 @@
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-05-02) — [Archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v2.0 蓝图图解析** — Phases 6-10 (shipped 2026-05-02 via PR #2) — [Archive](milestones/v2.0-ROADMAP.md)
 - ✅ **v3.x 解析完善+Skill+兼容性** — Phases 11-17 (shipped 2026-05-04 via PR #4) — [Archive](milestones/v3.x-ROADMAP.md)
-- 🔵 **v4.0 节点属性深度解析** — Phases 18-21 (active)
+- ✅ **v4.0 节点属性深度解析** — Phases 18-22 (shipped 2026-05-05)
+- 🔵 **v5.0 架构重构与蓝图编译研究** — Phases 23-26 (active)
 
 ## Phases
 
@@ -61,12 +62,59 @@
 </details>
 
 <details>
-<summary>🔵 v4.0 节点属性深度解析 (Phases 18-21) — ACTIVE</summary>
+<summary>✅ v4.0 节点属性深度解析 (Phases 18-22) — SHIPPED 2026-05-05</summary>
 
 - [x] Phase 18: Pin序列化解析 (4 plans) — completed 2026-05-04
 - [x] Phase 19: 连接关系重建 (3 plans) — completed 2026-05-04
-- [ ] Phase 20: 整合输出 (2 plans planned)
-- [ ] Phase 21: 验证测试 (1 plan planned)
+- [x] Phase 20: 整合输出 (2 plans) — completed 2026-05-05
+- [x] Phase 21: 验证测试 (1 plan) — completed 2026-05-05
+- [x] Phase 22: 节点序列化修复 (9 plans including gap closure) — completed 2026-05-05
+
+详见：[milestones/v4.0-ROADMAP.md](milestones/v4.0-ROADMAP.md)
+
+**关键成就：**
+- Pin序列化解析（pin_id、pin_name、direction、pin_type、default_value、linked_to）
+- 连接关系重建（connections、execution_flows、data_flows）
+- 节点序列化修复（UObject tagged properties 跳过、pins_offset 动态扫描）
+- 验证测试通过（节点数量、执行流程、数据流、节点属性）
+
+</details>
+
+<details>
+<summary>🔵 v5.0 架构重构与蓝图编译研究 (Phases 23-26) — ACTIVE</summary>
+
+- [x] Phase 23: 模块化重构 (4 plans) — completed 2026-05-06
+- [x] Phase 24: JSON 输出规范化 (4 plans) — completed 2026-05-06
+- [x] Phase 25: 蓝图编译流程研究 (4 plans) — completed 2026-05-06
+- [~] Phase 26: 蓝图元数据增强 (4 plans) — in progress
+  - [ ] 26-01: 增强变量解析（默认值、属性）
+  - [ ] 26-02: 增强函数解析（参数、返回值、属性）
+  - [x] 26-03: 增强事件解析（自定义、多播、接口） — completed 2026-05-06
+  - [ ] 26-04: 添加到 JSON 输出
+
+**关键成就：**
+- 模块化重构（src/ 目录结构、核心解析模块、蓝图解析模块）
+- JSON 输出规范化（统一 Schema、输出格式化模块、Schema 验证）
+- 蓝图编译流程研究（KismetCompiler.cpp 源码分析、蓝图虚拟机、节点到 C++ 映射）
+- 事件元数据解析（FunctionParameter、MulticastDelegate、BlueprintEvent 类、函数标志位解析）
+
+</details>
+
+<details>
+<summary>📅 v5.1 UnrealBridge 扩展集成 (Phases 27-29) — PLANNED</summary>
+
+- [ ] Phase 27: UnrealBridge 可移植功能分析 (4 plans)
+- [ ] Phase 28: 资产查询扩展 (4 plans)
+- [ ] Phase 29: DataTable 解析扩展 (4 plans)
+
+</details>
+
+<details>
+<summary>📅 v5.2 C++ 代码生成框架 (Phases 30-32) — PLANNED</summary>
+
+- [ ] Phase 30: C++ 代码生成架构设计 (4 plans)
+- [ ] Phase 31: 头文件生成 (4 plans)
+- [ ] Phase 32: 实现文件生成 (4 plans)
 
 </details>
 
@@ -153,11 +201,80 @@ Plans:
 - [x] 22-02-PLAN.md — PinFriendlyName FText 跳过逻辑研究（发现：不适用于当前资产）
 - [x] 22-03-PLAN.md — 深入修复 SerializePin 格式和 pins offset 计算 (partial: ISSUE-04/05 remaining)
 - [x] 22-04-PLAN.md — 修复图判断和类名解析逻辑（TEST-01/04 通过）
-- [ ] 22-05-PLAN.md — 动态扫描定位 pins_offset（解决 TEST-02/03 失败）
+- [x] 22-05-PLAN.md — 动态扫描定位 pins_offset（解决 TEST-02/03 失败）
 - [x] 22-06-PLAN.md — 正确定位 pins_offset（FText 枚举值修正 + SourceIndex 位置修正）
 - [x] 22-07-PLAN.md — Direction 和 PinType 序列化格式修复
 - [x] 22-08-PLAN.md — 回滚 22-06 修改并添加调试输出，找出 Pin 解析失败根因 (partial: TEST-02/03 仍失败)
 - [x] 22-09-PLAN.md — 修复 Pin 连接读取失败问题（pins_offset 动态扫描 + LinkedTo 数组读取）
+
+### Phase 23: 模块化重构 ✓ COMPLETE
+**Goal**: 将单文件 uasset_read.py 拆分为模块化架构
+**Depends on**: Phase 22
+**Success Criteria** (what must be TRUE):
+  1. src/ 目录结构创建完成 ✓
+  2. 核心解析模块提取完成 (core/) ✓
+  3. 蓝图解析模块提取完成 (blueprint/) ✓
+  4. 所有现有测试通过 ✓
+**Plans**: 4 plans
+**Completed**: 2026-05-06
+
+Plans:
+- [x] 23-01-PLAN.md — 创建项目新结构和 src/__init__.py
+- [x] 23-02-PLAN.md — 提取核心解析模块 (core/archive.py, core/models.py, core/constants.py)
+- [x] 23-03-PLAN.md — 提取蓝图解析模块 (blueprint/graph.py, blueprint/nodes.py, blueprint/metadata.py)
+- [x] 23-04-PLAN.md — 创建兼容性包装和更新导入
+
+### Phase 24: JSON 输出规范化 ✓ COMPLETE
+**Goal**: 规范化 JSON 输出格式，为 C++ 代码生成做准备
+**Depends on**: Phase 23
+**Success Criteria** (what must be TRUE):
+  1. 统一 JSON Schema 设计完成 ✓
+  2. 输出格式化模块实现完成 ✓
+  3. Schema 验证功能实现完成 ✓
+  4. C++ 代码生成映射添加完成 ✓
+**Plans**: 4 plans
+**Completed**: 2026-05-06
+
+Plans:
+- [x] 24-01-PLAN.md — 设计统一 JSON Schema
+- [x] 24-02-PLAN.md — 实现输出格式化模块
+- [x] 24-03-PLAN.md — 更新现有输出接口
+- [x] 24-04-PLAN.md — 添加 JSON Schema 验证
+
+### Phase 25: 蓝图编译流程研究 ✓ COMPLETE
+**Goal**: 深度研究蓝图如何编译为 C++/字节码
+**Depends on**: Phase 24
+**Requirements**: COMP-01, COMP-02, COMP-03, COMP-04
+**Success Criteria** (what must be TRUE):
+  1. 理解蓝图编译器核心流程 ✓
+  2. 理解蓝图虚拟机执行模型 ✓
+  3. 提取节点到 C++ 的映射关系 ✓
+  4. 编写完整研究文档 ✓
+**Plans**: 4 plans
+**Completed**: 2026-05-06
+
+Plans:
+- [x] 25-01-PLAN.md — COMP-01 研究蓝图编译器源码 (KismetCompiler.cpp)
+- [x] 25-02-PLAN.md — COMP-02 研究蓝图虚拟机源码
+- [x] 25-03-PLAN.md — COMP-03 提取节点到 C++ 的映射关系
+- [x] 25-04-PLAN.md — COMP-04 编写研究文档
+
+### Phase 26: 蓝图元数据增强
+**Goal**: 增强蓝图变量、函数、事件的解析能力
+**Depends on**: Phase 25
+**Requirements**: META-01, META-02, META-03, META-04
+**Success Criteria** (what must be TRUE):
+  1. 变量元数据完整（默认值、属性）
+  2. 函数元数据完整（参数、返回值、属性）
+  3. 事件元数据完整（自定义、多播、接口）
+  4. JSON 输出包含增强元数据
+**Plans**: 4 plans
+
+Plans:
+- [ ] 26-01-PLAN.md — META-01 增强变量解析（默认值、属性）
+- [ ] 26-02-PLAN.md — META-02 增强函数解析（参数、返回值、属性）
+- [ ] 26-03-PLAN.md — META-03 增强事件解析（自定义、多播、接口）
+- [ ] 26-04-PLAN.md — META-04 添加到 JSON 输出
 
 ---
 
@@ -170,11 +287,15 @@ Plans:
 | 11-17 | v3.x 解析完善+Skill | 23 | Complete | 2026-05-04 |
 | 18 | Pin序列化解析 | 4 | Complete | 2026-05-04 |
 | 19 | 连接关系重建 | 3 | Complete | 2026-05-04 |
-| 20 | 整合输出 | 2 | Planned | - |
-| 21 | 验证测试 | 1 | Planned | - |
-| 22 | 节点序列化修复 | 9 | Planned | - |
+| 20 | 整合输出 | 2 | Complete | 2026-05-05 |
+| 21 | 验证测试 | 1 | Complete | 2026-05-05 |
+| 22 | 节点序列化修复 | 9 | Complete | 2026-05-05 |
+| 23 | 模块化重构 | 4 | Complete | 2026-05-06 |
+| 24 | JSON 输出规范化 | 4 | Complete | 2026-05-06 |
+| 25 | 蓝图编译流程研究 | 4 | Complete | 2026-05-06 |
+| 26 | 蓝图元数据增强 | 4 | Planned | - |
 
-**Total:** 22 phases (19 complete, 0 partial, 3 planned)
+**Total:** 32 phases (24 complete, 0 partial, 8 planned)
 
 ---
 
@@ -183,4 +304,4 @@ Plans:
 暂无backlog阶段。
 
 ---
-*最后更新：2026-05-06 — Phase 22-09 规划完成（修复 Pin 连接读取失败问题）*
+*最后更新：2026-05-06 — v5.0 Phase 23-24 完成，Phase 25-26 规划中*
