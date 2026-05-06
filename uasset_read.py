@@ -514,6 +514,235 @@ class FArchive:
             'is_non_pi_ed_duplicate_transient': bool(property_flags & CPF_NonPIEDuplicateTransient),
         }
 
+    # ========================================================================
+    # Phase 26: 事件元数据解析函数
+    # ========================================================================
+
+    def _parse_function_flags(self, function_flags: int) -> dict:
+        """
+        Phase 26: 解析函数标志（META-02）。
+
+        Args:
+            function_flags: 原始函数标志值 (uint32)
+
+        Returns:
+            包含解析后标志的字典
+        """
+        return {
+            'is_pure': bool(function_flags & FUNC_BlueprintPure),
+            'is_blueprint_callable': bool(function_flags & FUNC_BlueprintCallable),
+            'is_blueprint_event': bool(function_flags & FUNC_BlueprintEvent),
+            'is_blueprint_implementable_event': bool(function_flags & FUNC_BlueprintEvent),
+            'is_native': bool(function_flags & FUNC_Native),
+            'is_const': bool(function_flags & FUNC_Const),
+            'is_static': bool(function_flags & FUNC_Static),
+            'is_virtual': not bool(function_flags & FUNC_Final),
+            'is_exec': bool(function_flags & FUNC_Exec),
+            'is_net': bool(function_flags & FUNC_Net),
+            'is_net_reliable': bool(function_flags & FUNC_NetReliable),
+            'is_net_server': bool(function_flags & FUNC_NetServer),
+            'is_net_client': bool(function_flags & FUNC_NetClient),
+            'is_net_multicast': bool(function_flags & FUNC_NetMulticast),
+            'is_blueprint_private': bool(function_flags & FUNC_Private),
+            'is_blueprint_protected': bool(function_flags & FUNC_Protected),
+            'is_blueprint_public': bool(function_flags & FUNC_Public),
+            'is_blueprint_cosmetic': bool(function_flags & FUNC_BlueprintCosmetic),
+            'is_editor_only': bool(function_flags & FUNC_EditorOnly),
+            'is_final': bool(function_flags & FUNC_Final),
+            'is_delegate': bool(function_flags & FUNC_Delegate),
+            'is_multicast_delegate': bool(function_flags & FUNC_MulticastDelegate),
+            'is_has_out_parms': bool(function_flags & FUNC_HasOutParms),
+            'is_has_defaults': bool(function_flags & FUNC_HasDefaults),
+        }
+
+    def read_function_parameters(self, func_export) -> List:
+        """
+        读取函数参数列表（Phase 26: META-02）。
+
+        Args:
+            func_export: 函数导出对象
+
+        Returns:
+            FunctionParameter 列表
+        """
+        from .constants import CPF_OutParm, CPF_OptionalParm
+
+        parameters = []
+
+        # 遍历函数的 Children
+        if func_export and hasattr(func_export, 'children'):
+            for child in func_export.children:
+                # 检查是否为 FProperty
+                if self.is_property(child):
+                    # 读取参数名称
+                    param_name = getattr(child, 'name', '')
+
+                    # 读取参数类型
+                    param_type = self.get_property_type(child)
+
+                    # 读取默认值
+                    default_value = self.get_default_value(child)
+
+                    # 读取属性标志
+                    property_flags = getattr(child, 'property_flags', 0)
+
+                    # 判断是否为输出参数
+                    is_output = bool(property_flags & CPF_OutParm)
+                    is_input = not is_output
+
+                    # 判断是否为可选参数
+                    is_optional = bool(property_flags & CPF_OptionalParm)
+
+                    # 读取元数据
+                    meta_data = self.read_metadata(child)
+
+                    parameters.append(FunctionParameter(
+                        name=param_name,
+                        param_type=param_type,
+                        default_value=default_value,
+                        is_input=is_input,
+                        is_output=is_output,
+                        is_optional=is_optional,
+                        property_flags=property_flags,
+                        meta_data=meta_data
+                    ))
+
+        return parameters
+
+    def read_metadata(self, event_export) -> dict:
+        """
+        读取事件元数据（Phase 26）。
+
+        Args:
+            event_export: 事件导出对象
+
+        Returns:
+            元数据字典
+        """
+        meta_data = {}
+
+        # 尝试从事件导出中读取元数据
+        if hasattr(event_export, 'metadata'):
+            for key, value in event_export.metadata.items():
+                meta_data[key] = value
+
+        return meta_data
+
+    def read_blueprint_events(self, blueprint_class: 'ObjectExport', name_map: List[str]) -> List:
+        """
+        读取蓝图事件（Phase 26）。
+
+        Args:
+            blueprint_class: 蓝图类导出对象
+            name_map: 名称表
+
+        Returns:
+            BlueprintEvent 列表
+        """
+        events = []
+
+        # 遍历 Blueprint 的 Events
+        if blueprint_class and hasattr(blueprint_class, 'events'):
+            for event_export in blueprint_class.events:
+                # 读取事件名称
+                event_name = name_map[event_export.name_index] if hasattr(event_export, 'name_index') else getattr(event_export, 'name', '')
+
+                # 读取事件标志
+                function_flags = getattr(event_export, 'function_flags', 0)
+
+                # 解析事件标志
+                flags = self._parse_function_flags(function_flags)
+
+                # 判断事件类型
+                if flags['is_blueprint_event']:
+                    event_type = "CustomEvent"
+                elif flags['is_override']:
+                    event_type = "OverriddenEvent"
+                else:
+                    event_type = "Unknown"
+
+                # 读取参数
+                parameters = self.read_function_parameters(event_export)
+
+                # 读取元数据
+                meta_data = self.read_metadata(event_export)
+
+                # 检查是否为多播委托
+                is_multicast = flags['is_multicast_delegate']
+                multicast_delegate = None
+                if is_multicast:
+                    multicast_delegate = MulticastDelegate(
+                        delegate_name=event_name,
+                        signature_function=meta_data.get('SignatureFunction', ''),
+                        is_callable_in_blueprint=flags['is_blueprint_callable']
+                    )
+
+                # 检查是否为重写事件
+                is_override = meta_data.get('bOverrideFunction', False)
+                override_parent_class = meta_data.get('MemberParent', '')
+                override_parent_event = meta_data.get('MemberName', '')
+
+                # 检查是否为接口事件
+                is_interface_event = meta_data.get('IsInterfaceEvent', False)
+                interface_class = meta_data.get('InterfaceClass', '')
+
+                events.append(BlueprintEvent(
+                    name=event_name,
+                    event_type=event_type,
+                    function_flags=function_flags,
+                    is_blueprint_event=flags['is_blueprint_event'],
+                    is_blueprint_implementable_event=meta_data.get('IsBlueprintImplementableEvent', False),
+                    is_net=flags['is_net'],
+                    is_net_multicast=flags['is_net_multicast'],
+                    is_net_reliable=flags['is_net_reliable'],
+                    is_net_client=flags['is_net_client'],
+                    is_net_server=flags['is_net_server'],
+                    is_replicated=meta_data.get('IsReplicated', False),
+                    is_cosmetic=flags['is_blueprint_cosmetic'],
+                    is_static=flags['is_static'],
+                    is_multicast=is_multicast,
+                    multicast_delegate=multicast_delegate,
+                    is_override=is_override,
+                    override_parent_class=override_parent_class,
+                    override_parent_event=override_parent_event,
+                    is_interface_event=is_interface_event,
+                    interface_class=interface_class,
+                    parameters=parameters,
+                    meta_data=meta_data,
+                ))
+
+        return events
+
+    def read_interface_events(self, blueprint_class: 'ObjectExport', name_map: List[str]) -> List:
+        """
+        读取接口事件（Phase 26）。
+
+        Args:
+            blueprint_class: 蓝图类导出对象
+            name_map: 名称表
+
+        Returns:
+            BlueprintEvent 列表（接口事件）
+        """
+        events = []
+
+        # 遍历 Blueprint 实现的接口
+        if blueprint_class and hasattr(blueprint_class, 'implemented_interfaces'):
+            for interface_export in blueprint_class.implemented_interfaces:
+                # 读取接口名称
+                interface_name = name_map[interface_export.name_index] if hasattr(interface_export, 'name_index') else getattr(interface_export, 'name', '')
+
+                # 获取接口的事件（这里需要实现接口类的事件读取逻辑）
+                # 由于接口事件通常在接口类中定义，这里暂时返回空列表
+                # 实际实现需要递归读取接口类的所有事件
+
+                # 标记为接口事件
+                for event in events:
+                    event.is_interface_event = True
+                    event.interface_class = interface_name
+
+        return events
+
 
 # ============================================================================
 # Dataclass 模型（D-06 使用 dataclasses）
@@ -1329,6 +1558,147 @@ class BlueprintMetadata:
     parent_class: Optional[str] = None  # Per D-09: only direct parent
     variables: List["BlueprintVariable"] = field(default_factory=list)
     detection_warning: Optional[str] = None  # Per D-03
+
+
+# ============================================================================
+# Phase 26: Blueprint 事件元数据增强
+# ============================================================================
+
+@dataclass
+class FunctionParameter:
+    """
+    函数参数（Phase 26: META-02）。
+
+    来自蓝图函数/事件的参数定义。
+    增强函数参数解析，提取详细参数信息和属性标志。
+    """
+    name: str = ""                    # FName - 参数名
+    param_type: str = ""              # 参数类型
+    default_value: any = None         # 默认值
+    is_input: bool = True             # 是否为输入参数
+    is_output: bool = False           # 是否为输出参数
+    is_optional: bool = False         # 是否为可选参数
+    property_flags: int = 0           # EPropertyFlags
+
+    # 元数据
+    meta_data: dict = None
+
+    def __post_init__(self):
+        if self.meta_data is None:
+            self.meta_data = {}
+
+
+@dataclass
+class MulticastDelegate:
+    """多播委托（Phase 26）"""
+    delegate_name: str = ""
+    signature_function: str = ""
+    is_callable_in_blueprint: bool = False
+
+    def __post_init__(self):
+        pass
+
+
+@dataclass
+class BlueprintEvent:
+    """蓝图事件元数据（增强版 - Phase 26）"""
+    name: str = ""
+    event_type: str = ""  # CustomEvent、OverriddenEvent、InterfaceEvent
+
+    # 事件标志
+    function_flags: int = 0
+
+    # 标志位解析
+    is_blueprint_event: bool = False
+    is_blueprint_implementable_event: bool = False
+    is_net: bool = False
+    is_net_multicast: bool = False
+    is_net_reliable: bool = False
+    is_net_client: bool = False
+    is_net_server: bool = False
+    is_replicated: bool = False
+    is_cosmetic: bool = False
+    is_static: bool = False
+
+    # 多播委托
+    is_multicast: bool = False
+    multicast_delegate: MulticastDelegate = None
+
+    # 重写事件
+    is_override: bool = False
+    override_parent_class: str = ""
+    override_parent_event: str = ""
+
+    # 接口事件
+    is_interface_event: bool = False
+    interface_class: str = ""
+
+    # 参数
+    parameters: List[FunctionParameter] = None
+
+    # 元数据
+    meta_data: dict = None
+
+    def __post_init__(self):
+        if self.parameters is None:
+            self.parameters = []
+        if self.meta_data is None:
+            self.meta_data = {}
+
+
+@dataclass
+class BlueprintFunction:
+    """
+    蓝图函数元数据（增强版 - Phase 26: META-02）。
+
+    来自 UFunction 结构。
+    增强函数元数据解析，提取参数详细信息和函数属性。
+    """
+    name: str = ""                    # FName - 函数名
+    return_type: str = ""             # 返回类型
+    parameters: List[FunctionParameter] = None  # 参数列表
+
+    # 函数属性
+    function_flags: int = 0           # EFunctionFlags
+
+    # 标志位解析
+    is_pure: bool = False
+    is_blueprint_callable: bool = False
+    is_blueprint_event: bool = False
+    is_blueprint_implementable_event: bool = False
+    is_native: bool = False
+    is_const: bool = False
+    is_static: bool = False
+    is_virtual: bool = False
+    is_exec: bool = False
+    is_net: bool = False
+    is_net_reliable: bool = False
+    is_net_server: bool = False
+    is_net_client: bool = False
+    is_net_multicast: bool = False
+    is_blueprint_private: bool = False
+    is_blueprint_protected: bool = False
+    is_blueprint_public: bool = False
+    is_blueprint_pure: bool = False
+    is_blueprint_cosmetic: bool = False
+    is_editor_only: bool = False
+    is_final: bool = False
+    is_delegate: bool = False
+    is_multicast_delegate: bool = False
+    is_has_out_parms: bool = False
+    is_has_defaults: bool = False
+
+    # 访问修饰符
+    access_specifier: str = "Public"  # Public, Private, Protected
+
+    # 元数据
+    meta_data: dict = None
+
+    def __post_init__(self):
+        if self.parameters is None:
+            self.parameters = []
+        if self.meta_data is None:
+            self.meta_data = {}
 
 
 # ============================================================================
@@ -3978,6 +4348,40 @@ CPF_Interp = 0x20000000                    # Interp
 CPF_Net = 0x00000020                       # Net
 CPF_Replicated = 0x00100000                 # Replicated
 CPF_NonPIEDuplicateTransient = 0x00800000  # NonPIEDuplicateTransient
+
+
+# Function Flags (Phase 26: META-02)
+FUNC_None                = 0x00000000
+FUNC_Final               = 0x00000001
+FUNC_RequiredAPI          = 0x00000002
+FUNC_BlueprintAuthorityOnly = 0x00000004
+FUNC_BlueprintCosmetic    = 0x00000008
+FUNC_Net                 = 0x00000040
+FUNC_NetReliable         = 0x00000080
+FUNC_NetRequest           = 0x00000100
+FUNC_Exec                = 0x00000200
+FUNC_Native              = 0x00000400
+FUNC_Event               = 0x00000800
+FUNC_NetResponse         = 0x00001000
+FUNC_Static              = 0x00002000
+FUNC_NetMulticast        = 0x00004000
+FUNC_UbergraphFunction   = 0x00008000
+FUNC_MulticastDelegate   = 0x00010000
+FUNC_Public              = 0x00020000
+FUNC_Private             = 0x00040000
+FUNC_Protected           = 0x00080000
+FUNC_Delegate            = 0x00100000
+FUNC_NetServer           = 0x00200000
+FUNC_HasOutParms         = 0x00400000
+FUNC_HasDefaults         = 0x00800000
+FUNC_NetClient           = 0x01000000
+FUNC_DLLImport            = 0x02000000
+FUNC_BlueprintCallable   = 0x04000000
+FUNC_BlueprintEvent      = 0x08000000
+FUNC_BlueprintPure       = 0x10000000
+FUNC_EditorOnly          = 0x20000000
+FUNC_Const               = 0x40000000
+FUNC_NetValidate         = 0x80000000
 
 
 def parse_property_flags_to_labels(flags: int) -> List[str]:
