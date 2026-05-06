@@ -1685,11 +1685,14 @@ class BlueprintMetadata:
 
     Per D-01/D-02/D-03: auto-detect with warning on failure.
     Per D-04: deferred BlueprintType detection (normal:class->ImportExport).
+    Phase 26: 增强蓝图元数据，添加 functions 和 events 字段。
     """
     is_blueprint: bool
     parent_class: Optional[str] = None  # Per D-09: only direct parent
     variables: List["BlueprintVariable"] = field(default_factory=list)
     detection_warning: Optional[str] = None  # Per D-03
+    functions: List["BlueprintFunction"] = field(default_factory=list)  # Phase 26: 函数列表
+    events: List["BlueprintEvent"] = field(default_factory=list)  # Phase 26: 事件列表
 
 
 # ============================================================================
@@ -7326,41 +7329,174 @@ def format_markdown(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+# ============================================================================
+# Phase 26: 增强的 JSON 格式化函数 (META-04)
+# ============================================================================
+
+def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
+    """格式化增强的变量元数据（Phase 26: META-04）"""
+    result = {
+        "name": variable.var_name,
+        "type": {
+            "pin_category": variable.var_type.pin_category,
+            "pin_sub_category": variable.var_type.pin_sub_category,
+            "container_type": variable.var_type.container_type,
+            "is_reference": variable.var_type.is_reference,
+            "is_const": variable.var_type.is_const
+        },
+        "category": variable.category,
+        "default_value": variable.default_value,
+        "friendly_name": variable.friendly_name,
+        "property_flags": variable.property_flags,
+        "edit_condition": variable.edit_condition,
+        "edit_category": variable.edit_category,
+        "edit_widget": variable.edit_widget,
+        "is_edit_anywhere": variable.is_edit_anywhere,
+        "is_edit_instance_only": variable.is_edit_instance_only,
+        "is_visible_anywhere": variable.is_visible_anywhere,
+        "is_blueprint_read_only": variable.is_blueprint_read_only,
+        "is_blueprint_readable": variable.is_blueprint_readable,
+        "is_blueprint_writable": variable.is_blueprint_writable,
+        "is_blueprint_assignable": variable.is_blueprint_assignable,
+        "is_blueprint_callable": variable.is_blueprint_callable,
+        "is_transient": variable.is_transient,
+        "is_duplicate_transient": variable.is_duplicate_transient,
+        "is_text_export_transient": variable.is_text_export_transient,
+        "is_non_transient": variable.is_non_transient,
+        "is_export_object": variable.is_export_object,
+        "is_save_game": variable.is_save_game,
+        "is_no_clear": variable.is_no_clear,
+        "is_reference_only": variable.is_reference_only,
+        "is_rep_notify": variable.is_rep_notify,
+        "is_interp": variable.is_interp,
+        "is_expose_on_spawn": variable.is_expose_on_spawn,
+        "is_net": variable.is_net,
+        "is_replicated": variable.is_replicated,
+        "is_non_pi_ed_duplicate_transient": variable.is_non_pi_ed_duplicate_transient,
+        "is_component": variable.is_component,
+        "meta_data": variable.meta_data
+    }
+    return result
+
+
+def _format_parameter(parameter: FunctionParameter) -> dict:
+    """格式化函数参数（Phase 26: META-04）"""
+    return {
+        "name": parameter.name,
+        "type": parameter.param_type,
+        "default_value": parameter.default_value,
+        "is_input": parameter.is_input,
+        "is_output": parameter.is_output,
+        "is_optional": parameter.is_optional,
+        "property_flags": parameter.property_flags,
+        "meta_data": parameter.meta_data
+    }
+
+
+def _format_function_enhanced(function: BlueprintFunction) -> dict:
+    """格式化增强的函数元数据（Phase 26: META-04）"""
+    result = {
+        "name": function.name,
+        "return_type": function.return_type,
+        "function_flags": function.function_flags,
+        "is_pure": function.is_pure,
+        "is_blueprint_callable": function.is_blueprint_callable,
+        "is_blueprint_event": function.is_blueprint_event,
+        "is_blueprint_implementable_event": function.is_blueprint_implementable_event,
+        "is_native": function.is_native,
+        "is_const": function.is_const,
+        "is_static": function.is_static,
+        "is_virtual": function.is_virtual,
+        "is_exec": function.is_exec,
+        "is_net": function.is_net,
+        "is_net_reliable": function.is_net_reliable,
+        "is_net_server": function.is_net_server,
+        "is_net_client": function.is_net_client,
+        "is_net_multicast": function.is_net_multicast,
+        "is_blueprint_private": function.is_blueprint_private,
+        "is_blueprint_protected": function.is_blueprint_protected,
+        "is_blueprint_public": function.is_blueprint_public,
+        "is_blueprint_pure": function.is_blueprint_pure,
+        "is_blueprint_cosmetic": function.is_blueprint_cosmetic,
+        "is_editor_only": function.is_editor_only,
+        "is_final": function.is_final,
+        "is_delegate": function.is_delegate,
+        "is_multicast_delegate": function.is_multicast_delegate,
+        "is_has_out_parms": function.is_has_out_parms,
+        "is_has_defaults": function.is_has_defaults,
+        "access_specifier": function.access_specifier,
+        "parameters": [_format_parameter(param) for param in function.parameters],
+        "meta_data": function.meta_data
+    }
+    return result
+
+
+def _format_event_enhanced(event: BlueprintEvent) -> dict:
+    """格式化增强的事件元数据（Phase 26: META-04）"""
+    result = {
+        "name": event.name,
+        "event_type": event.event_type,
+        "function_flags": event.function_flags,
+        "is_blueprint_event": event.is_blueprint_event,
+        "is_blueprint_implementable_event": event.is_blueprint_implementable_event,
+        "is_net": event.is_net,
+        "is_net_multicast": event.is_net_multicast,
+        "is_net_reliable": event.is_net_reliable,
+        "is_net_client": event.is_net_client,
+        "is_net_server": event.is_net_server,
+        "is_replicated": event.is_replicated,
+        "is_cosmetic": event.is_cosmetic,
+        "is_static": event.is_static,
+        "is_multicast": event.is_multicast,
+        "is_override": event.is_override,
+        "override_parent_class": event.override_parent_class,
+        "override_parent_event": event.override_parent_event,
+        "is_interface_event": event.is_interface_event,
+        "interface_class": event.interface_class,
+        "parameters": [_format_parameter(param) for param in event.parameters],
+        "meta_data": event.meta_data
+    }
+
+    # 添加多播委托信息
+    if event.multicast_delegate:
+        result["multicast_delegate"] = {
+            "delegate_name": event.multicast_delegate.delegate_name,
+            "signature_function": event.multicast_delegate.signature_function,
+            "is_callable_in_blueprint": event.multicast_delegate.is_callable_in_blueprint
+        }
+
+    return result
+
+
 def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = None) -> Dict:
     """
     Format BlueprintMetadata for JSON output (D-04, D-20-06).
 
     Per D-20-06: blueprint_name 从 package_name 或导出名提取
+    Phase 26: 增强元数据输出（META-04）
 
     Args:
         blueprint: BlueprintMetadata object
         blueprint_name: 资产名称（可选）
 
     Returns:
-        Dict with keys: blueprint_name, parent_class, variables, detection_warning
+        Dict with keys: blueprint_name, parent_class, variables, functions, events, detection_warning
     """
-    variables_list = []
-    for v in blueprint.variables:
-        var_dict = {
-            "name": v.var_name,
-            "type": {
-                "pin_category": v.var_type.pin_category,
-                "pin_sub_category": v.var_type.pin_sub_category,
-                "container_type": v.var_type.container_type,
-                "is_reference": v.var_type.is_reference,
-                "is_const": v.var_type.is_const
-            },
-            "category": v.category,
-            "property_flags": v.property_flags,
-            "default_value": v.default_value,  # None if not set
-            "friendly_name": v.friendly_name
-        }
-        variables_list.append(var_dict)
+    # 增强的变量输出（Phase 26）
+    variables_list = [_format_variable_enhanced(var) for var in blueprint.variables]
+
+    # 增强的函数输出（Phase 26）
+    functions_list = [_format_function_enhanced(func) for func in blueprint.functions]
+
+    # 增强的事件输出（Phase 26）
+    events_list = [_format_event_enhanced(event) for event in blueprint.events]
 
     return {
         "blueprint_name": blueprint_name,  # D-20-06
         "parent_class": blueprint.parent_class,  # None if not resolved
-        "variables": variables_list,
+        "variables": variables_list,  # Phase 26: 增强格式
+        "functions": functions_list,  # Phase 26: 新增
+        "events": events_list,  # Phase 26: 新增
         "detection_warning": blueprint.detection_warning  # None if no warning
     }
 
