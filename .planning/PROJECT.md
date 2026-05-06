@@ -97,6 +97,8 @@ v4.0需求（Phase 18-21）：
 - v1.0 MVP（2026-05-02）：核心解析、基本属性、蓝图元数据
 - v2.0 蓝图图解析（2026-05-02）：完整蓝图图、高级属性、依赖分析
 - v3.x 解析完善+Skill+兼容性（2026-05-04）：属性值提取、输出优化、skill封装、UE 5.7兼容
+- v4.0 节点属性深度解析（2026-05-05）：节点属性、执行流、连接验证
+- v5.0 原功能完善（2026-05-06）：蓝图编译研究、元数据增强（部分完成）
 
 **Tech Stack:**
 - Python 3.10+（match/case，类型提示）
@@ -144,6 +146,32 @@ v4.0需求（Phase 18-21）：
 - **源码依赖**: 需要参考UE源码理解格式（只读）
 - **范围边界**: 仅支持未烘焙/编辑器保存的资产
 
+## Current Milestone: v5.1 模块化重构与C++代码生成准备
+
+**目标:** 以最小化改动实现模块化架构，为蓝图转C++自动化做好准备
+
+**目标功能:**
+- 最小化模块化拆分（保持核心结构清晰）
+- C++代码生成准备的JSON输出结构
+- 完成Phase 23-24的技术债务
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
 
-*最后更新：2026-05-04 after v3.x milestone*
+*最后更新：2026-05-06 — 开始v5.1里程碑*
