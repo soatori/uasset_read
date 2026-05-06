@@ -238,20 +238,22 @@ uasset_read/
 - v5.1 需求定义（16个需求）
 - v5.1 研究完成（STACK.md、FEATURES.md、ARCHITECTURE.md）
 - v5.1 路线图创建（6个阶段）
+- Phase 27 上下文收集（27-CONTEXT.md, 27-DISCUSSION-LOG.md）
 
 ### Current Session Goal
 
-**Goal:** 创建v5.1路线图和项目状态
+**Goal:** 创建 v5.1 路线图和项目状态，完成 Phase 27 上下文收集
 
 **Planned Actions:**
 - [x] 读取规划文件（PROJECT.md、REQUIREMENTS.md、研究文档、config.json、MILESTONES.md）
-- [x] 分析v5.1需求（16个需求）
+- [x] 分析 v5.1 需求（16个需求）
 - [x] 创建6个阶段（Phase 27-32）
 - [x] 派生每个阶段的成功标准
 - [x] 验证100%需求覆盖
 - [x] 立即写入文件（ROADMAP.md、STATE.md）
-- [x] 更新REQUIREMENTS.md的traceability
+- [x] 更新 REQUIREMENTS.md 的 traceability
 - [x] 返回摘要给用户
+- [x] Phase 27 上下文收集（27-CONTEXT.md, 27-DISCUSSION-LOG.md）
 
 ### Next Session Goals
 
