@@ -628,6 +628,85 @@ class FArchive:
 
         return meta_data
 
+    def get_return_type(self, func_export) -> str:
+        """
+        获取函数返回类型（Phase 26: META-02）。
+
+        Args:
+            func_export: 函数导出对象
+
+        Returns:
+            返回类型字符串
+        """
+        # 从函数导出中读取返回类型
+        if hasattr(func_export, 'return_type'):
+            return func_export.return_type
+        elif hasattr(func_export, 'ReturnValue'):
+            # 从 ReturnValue 属性中推断类型
+            return_value = func_export.ReturnValue
+            if hasattr(return_value, 'type'):
+                return return_value.type
+        return ""
+
+    def get_property_type(self, property_export) -> str:
+        """
+        获取属性类型（Phase 26: META-02）。
+
+        Args:
+            property_export: 属性导出对象
+
+        Returns:
+            属性类型字符串
+        """
+        # 从属性导出中读取类型
+        if hasattr(property_export, 'type'):
+            return property_export.type
+        elif hasattr(property_export, 'property_class'):
+            return property_export.property_class
+        elif hasattr(property_export, 'property_type'):
+            return property_export.property_type
+        return ""
+
+    def get_default_value(self, property_export) -> any:
+        """
+        获取属性默认值（Phase 26: META-02）。
+
+        Args:
+            property_export: 属性导出对象
+
+        Returns:
+            默认值
+        """
+        # 从属性导出中读取默认值
+        if hasattr(property_export, 'default_value'):
+            return property_export.default_value
+        elif hasattr(property_export, 'DefaultValue'):
+            return property_export.DefaultValue
+        return None
+
+    def is_property(self, export) -> bool:
+        """
+        判断导出对象是否为属性（Phase 26: META-02）。
+
+        Args:
+            export: 导出对象
+
+        Returns:
+            是否为属性
+        """
+        # 检查对象类型或类名
+        if hasattr(export, 'class_name'):
+            class_name = export.class_name
+            # 检查是否为 FProperty 的子类
+            property_classes = [
+                'BoolProperty', 'IntProperty', 'FloatProperty', 'StrProperty',
+                'StructProperty', 'ArrayProperty', 'MapProperty', 'SetProperty',
+                'ObjectProperty', 'NameProperty', 'ByteProperty', 'EnumProperty',
+                'TextProperty', 'DelegateProperty', 'InterfaceProperty'
+            ]
+            return any(prop_class in class_name for prop_class in property_classes)
+        return False
+
     def read_blueprint_events(self, blueprint_class: 'ObjectExport', name_map: List[str]) -> List:
         """
         读取蓝图事件（Phase 26）。
@@ -712,6 +791,59 @@ class FArchive:
                 ))
 
         return events
+
+    def read_blueprint_functions(self, blueprint_class: 'ObjectExport') -> List:
+        """
+        读取蓝图函数（Phase 26: META-02）。
+
+        Args:
+            blueprint_class: 蓝图类导出对象
+
+        Returns:
+            BlueprintFunction 列表
+        """
+        functions = []
+
+        # 遍历 Blueprint 的 Functions
+        if blueprint_class and hasattr(blueprint_class, 'functions'):
+            for func_export in blueprint_class.functions:
+                # 读取函数名称
+                func_name = getattr(func_export, 'name', '')
+
+                # 读取返回类型
+                return_type = self.get_return_type(func_export)
+
+                # 读取函数标志
+                function_flags = getattr(func_export, 'function_flags', 0)
+
+                # 解析函数标志
+                flags = self._parse_function_flags(function_flags)
+
+                # 读取访问修饰符
+                if flags['is_blueprint_private']:
+                    access_specifier = "Private"
+                elif flags['is_blueprint_protected']:
+                    access_specifier = "Protected"
+                else:
+                    access_specifier = "Public"
+
+                # 读取参数
+                parameters = self.read_function_parameters(func_export)
+
+                # 读取元数据
+                meta_data = self.read_metadata(func_export)
+
+                functions.append(BlueprintFunction(
+                    name=func_name,
+                    return_type=return_type,
+                    parameters=parameters,
+                    function_flags=function_flags,
+                    access_specifier=access_specifier,
+                    meta_data=meta_data,
+                    **flags
+                ))
+
+        return functions
 
     def read_interface_events(self, blueprint_class: 'ObjectExport', name_map: List[str]) -> List:
         """
