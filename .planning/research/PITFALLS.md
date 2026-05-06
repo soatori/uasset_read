@@ -1,911 +1,511 @@
 # Domain Pitfalls
 
-**Domain:** Python工具打包成Claude Code MCP Skill
-**Researched:** 2026-05-02
+**Domain:** Python模块化重构（单文件拆分）
+**Researched:** 2026-05-06
+**Overall confidence:** HIGH
 
 ## Critical Pitfalls
 
-导致项目失败或重大重写的严重错误。
+### Pitfall 1: 循环导入（Circular Imports）
 
-### Pitfall 1: stdio传输污染stdout
-
-**What goes wrong:** 在MCP服务器中使用`print()`语句输出调试信息，污染了stdio传输通道，导致JSON-RPC消息损坏。
+**What goes wrong:**
+当将单文件拆分为多个模块时，原来在同一作用域的类和函数现在分布在不同文件中，容易形成A模块导入B模块、B模块又导入A模块的循环依赖。Python导入系统在模块加载时立即执行导入语句，循环依赖会立即失败，导致`ImportError`。
 
 **Why it happens:**
-- MCP使用stdio传输时，服务器通过stdout发送JSON-RPC消息
-- 开发者习惯使用`print()`进行调试
-- stdout被混用的调试信息污染后，Claude Code无法解析消息
+- 单文件中代码可以相互引用，但拆分后每个文件需要独立导入
+- `from module import Class`语法比`import module`更容易触发循环导入
+- 开发者关注"将代码移到合适的位置"，而忽视导入依赖关系
+- 模块初始化需要在导入完成前完成，循环依赖违反此要求
 
 **Consequences:**
-- Claude Code无法与skill通信
-- 错误消息难以理解（通常是JSON解析错误）
-- 调试困难（因为不能使用print调试）
+- 无法启动应用程序或运行测试
+- 即使代码逻辑正确，导入顺序错误也会导致失败
+- 修复循环导入通常需要重新设计模块边界，成本高昂
 
 **Prevention:**
-```python
-# 错误 ❌
-print(f"Debug: processing {filename}")
-
-# 正确 ✓
-import sys
-print(f"Debug: processing {filename}", file=sys.stderr)
-
-# 推荐 ✓
-import logging
-logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
-logger = logging.getLogger(__name__)
-logger.debug(f"Processing {filename}")
-```
+1. **先绘制依赖图，再拆分模块** - 使用工具或手动分析代码中的导入关系，识别循环风险
+2. **使用`import module`而非`from module import name`** - 延迟解析到运行时，而非导入时
+3. **提取共享代码到第三个模块** - 如果A和B相互引用，将共享部分提取到C，让A和B都导入C
+4. **延迟导入（Lazy Import）** - 将导入语句移到函数内部，只在需要时导入（但应谨慎使用）
+5. **保持单向依赖** - 设计模块层次结构，上层模块可以导入下层，下层绝不能导入上层
 
 **Detection:**
-- 在测试中使用MCP inspector工具验证
-- 检查代码中所有`print()`调用
-- 使用`grep -r "print(" --include="*.py"`扫描
+- 在拆分后立即运行`python -m pytest tests/`，任何`ImportError`都是警告
+- 使用`python -c "import your_package"`测试顶层导入是否成功
+- 注意`ModuleNotFoundError: attempted relative import with no known parent package`
+- IDE或编辑器的导入分析工具可以提前发现循环引用
 
-**阶段建议:** Phase 15（skill封装）应在代码审查阶段专门检查此问题。
+**Phase to address:** Phase 23 - 模块结构设计，必须在代码移动前完成
 
 ---
 
-### Pitfall 2: 阻塞事件循环
+### Pitfall 2: 破坏API兼容性
 
-**What goes wrong:** 在async工具处理器中调用同步阻塞代码（如文件I/O、CPU密集计算），阻塞整个事件循环，导致MCP服务器无响应。
+**What goes wrong:**
+模块化后，外部调用者使用的导入路径失效。例如，原来`from uasset_read import parse_uasset`，拆分后变成`from uasset_read.parser import parse_uasset`，导致所有外部代码需要修改。
 
 **Why it happens:**
-- MCP Python SDK要求工具处理器为async函数
-- uasset_read.py使用同步I/O（`open()`, `struct.unpack()`）
-- 大文件解析（mmap）可能耗时较长
-- 开发者忘记将同步代码包装为异步
+- 开发者认为"内部重组不影响用户"，但导入路径是公共API的一部分
+- 将代码从`__init__.py`移到子模块时，没有重新导出
+- 缺少明确的公共API定义（如`__all__`），不清楚哪些是用户依赖的
 
 **Consequences:**
-- MCP服务器冻结，无法处理其他请求
-- Claude Code超时断开连接
-- 用户体验极差（界面卡死）
+- 所有依赖该库的代码需要修改
+- 破坏用户代码的信任，降低升级意愿
+- 违反零运行时依赖原则（用户需要修改代码）
 
 **Prevention:**
-```python
-# 错误 ❌ - 直接调用同步解析
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = parse_uasset(path)  # 阻塞！
-    return result.asdict()
-
-# 正确 ✓ - 使用线程池
-import asyncio
-from functools import partial
-
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    # 在线程池中运行同步代码
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,  # 使用默认线程池
-        partial(parse_uasset, path)
-    )
-    return result.asdict()
-
-# 推荐 ✓ - 使用asyncio.to_thread（Python 3.9+）
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = await asyncio.to_thread(parse_uasset, path)
-    return result.asdict()
-```
+1. **在`__init__.py`中重新导出所有公共API** - 保持向后兼容
+   ```python
+   # __init__.py
+   from .parser import parse_uasset
+   from .models import ParseResult, PackageFileSummary
+   from .archive import FArchive
+   from .exceptions import UAssetError
+   ```
+2. **使用`__all__`显式定义公共API** - 让用户和工具都知道哪些是稳定的
+   ```python
+   __all__ = ['parse_uasset', 'ParseResult', 'PackageFileSummary', 'FArchive', 'UAssetError']
+   ```
+3. **添加弃用警告** - 如果必须移除某个导出，先发出警告给用户适应时间
+   ```python
+   import warnings
+   warnings.warn("Old import path deprecated, use ... instead", DeprecationWarning, stacklevel=2)
+   ```
+4. **保持导入路径稳定** - 内部重组不应影响顶层导入
+5. **文档化公共API契约** - 在CHANGELOG或文档中明确说明哪些导入路径是稳定的
 
 **Detection:**
-- 性能测试：解析大型.uasset文件时监控响应时间
-- 代码审查：检查async函数中的同步调用
-- 使用`asyncio.all_tasks()`检查任务堆积
+- 运行所有359个测试用例，任何导入错误都是兼容性破坏
+- 检查现有代码中对`from uasset_read import ...`的所有使用
+- 使用`git diff`确认`__init__.py`中保留了所有原来的导出
 
-**阶段建议:** Phase 15应在集成测试中专门测试大文件解析性能。
+**Phase to address:** Phase 23 - API兼容性检查清单，每个模块拆分后必须验证
 
 ---
 
-### Pitfall 3: 类型提示缺失导致JSON Schema生成失败
+### Pitfall 3: 破坏测试导入
 
-**What goes wrong:** FastMCP/MCP工具参数缺少类型提示或类型提示错误，导致JSON Schema生成失败，工具无法注册。
+**What goes wrong:**
+测试文件依赖特定的导入路径，模块化后测试无法运行。例如，测试中`from uasset_read import FArchive`，但`FArchive`现在在`uasset_read.archive`中，且没有在`__init__.py`重新导出。
 
 **Why it happens:**
-- FastMCP依赖类型提示生成JSON Schema
-- Python允许无类型提示的函数，但MCP要求Schema
-- 复杂类型（Union、Optional）处理不当
-- docstring格式不规范
+- 测试使用绝对导入路径，依赖于文件位置
+- 模块级代码在导入时执行，pytest无法在加载前mock
+- conftest.py中的fixture依赖特定的导入结构
+- pytest的import模式（prepend vs importlib）影响导入行为
 
 **Consequences:**
-- 工具注册失败，Claude Code无法调用
-- 运行时Schema验证错误
-- 参数类型不匹配导致解析失败
+- 所有测试失败，失去代码变更的安全网
+- 无法验证重构的正确性
+- 增加回归风险
 
 **Prevention:**
-```python
-# 错误 ❌ - 缺少类型提示
-@mcp.tool()
-def parse_blueprint(path):  # 无类型提示
-    """Parse blueprint."""
-    return parse_uasset(path)
-
-# 错误 ❌ - 复杂类型处理不当
-@mcp.tool()
-def parse_blueprint(path: str, options: dict) -> dict:  # dict太宽泛
-    ...
-
-# 正确 ✓ - 使用完整类型提示
-from typing import Optional
-from pydantic import BaseModel
-
-class ParseOptions(BaseModel):
-    extract_graphs: bool = True
-    max_depth: int = 5
-
-@mcp.tool()
-async def parse_blueprint(
-    path: str,
-    options: Optional[ParseOptions] = None
-) -> dict:
-    """Parse Unreal Engine .uasset blueprint file.
-
-    Args:
-        path: Absolute path to .uasset file
-        options: Parsing options (optional)
-
-    Returns:
-        Parsed blueprint data as dictionary
-    """
-    opts = options or ParseOptions()
-    # ... 实现
-```
+1. **使用`src/`布局** - 防止导入路径依赖于项目根目录
+   ```
+   uasset_read/
+   ├── src/
+   │   └── uasset_read/
+   │       ├── __init__.py
+   │       ├── archive.py
+   │       └── ...
+   └── tests/
+       └── test_archive.py
+   ```
+2. **保持`__init__.py`重新导出** - 测试依赖的导入路径必须继续工作
+3. **使用conftest.py注入模块** - 确保测试导入一致性
+4. **避免模块级代码执行副作用** - 模块加载不应执行可能失败的代码
+5. **使用相对导入（测试内部）** - 测试文件之间使用相对导入避免路径问题
+6. **测试导入验证** - 在拆分每个模块后立即运行相关测试
 
 **Detection:**
-- 使用MCP inspector验证工具Schema
-- 单元测试工具注册
-- 类型检查器（mypy）验证
+- 拆分模块后立即运行`python -m pytest tests/test_<module>.py`
+- 注意`ModuleNotFoundError`和`ImportError`
+- 检查`pytest --collect-only`是否能收集到所有测试
+- 使用`pytest -v`查看导入失败的具体位置
 
-**阶段建议:** Phase 15开发期间使用mypy严格模式检查。
+**Phase to address:** Phase 24 - 每个子阶段拆分后立即运行测试，通过才能继续
 
 ---
 
-### Pitfall 4: 错误处理不兼容MCP协议
+### Pitfall 4: `__init__.py`重组破坏
 
-**What goes wrong:** 异常处理方式不符合MCP JSON-RPC 2.0规范，导致Claude Code收到无法理解的错误响应。
-
-**Why it happens:**
-- uasset_read.py有自己的异常体系（`UAssetError`, `ParseError`）
-- MCP要求特定的JSON-RPC错误格式
-- 开发者习惯raise Python异常，未转换为MCP错误
-- 错误消息不够详细或过于详细
-
-**Consequences:**
-- Claude Code显示通用错误，用户无法定位问题
-- 调试困难，错误信息丢失
-- 可能导致Claude Code断开连接
-
-**Prevention:**
-```python
-# 错误 ❌ - 直接抛出Python异常
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = parse_uasset(path)  # 可能抛出UAssetError
-    return result.asdict()  # 可能抛出AttributeError
-
-# 正确 ✓ - 捕获并转换为结构化错误
-from mcp import McpError
-
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    try:
-        result = parse_uasset(path)
-        return {
-            "success": True,
-            "data": result.asdict()
-        }
-    except FileNotFoundError:
-        raise McpError(
-            code=-32602,  # Invalid params
-            message=f"File not found: {path}"
-        )
-    except UAssetError as e:
-        raise McpError(
-            code=-32603,  # Internal error
-            message=f"Failed to parse .uasset: {str(e)}",
-            data={"error_type": type(e).__name__}
-        )
-    except Exception as e:
-        # 捕获意外错误，记录日志
-        logger.exception("Unexpected error parsing {path}")
-        raise McpError(
-            code=-32603,
-            message="Internal server error"
-        )
-
-# 推荐 ✓ - 使用错误码和详细信息
-class UAssetMcpError:
-    """uasset_read专用错误码"""
-    FILE_NOT_FOUND = -32001
-    PARSE_ERROR = -32002
-    VERSION_ERROR = -32003
-    BOUNDARY_ERROR = -32004
-```
-
-**Detection:**
-- 测试所有错误路径
-- 使用MCP inspector验证错误格式
-- 集成测试：故意触发错误检查响应
-
-**阶段建议:** Phase 15需要编写错误处理专门测试用例。
-
----
-
-### Pitfall 5: 零依赖特性被破坏
-
-**What goes wrong:** 在MCP封装中引入不必要的依赖，破坏uasset_read.py的零依赖特性，增加安装复杂度和环境问题。
+**What goes wrong:**
+将代码从`__init__.py`移动到子模块，但没有保留导入兼容性。原来`from uasset_read import Something`（`Something`定义在`__init__.py`中），拆分后需要改为`from uasset_read.submodule import Something`。
 
 **Why it happens:**
-- MCP Python SDK需要安装（`mcp`包）
-- 开发者可能添加`pydantic`、`aiofiles`等便利库
-- 虚拟环境配置不一致
-- 依赖版本冲突
+- 认为`__init__.py`应该"干净"，只包含导入
+- 忽视`__init__.py`是包的公共接口
+- 不清楚哪些代码被外部调用者依赖
 
 **Consequences:**
-- 安装失败或依赖地狱
-- 跨平台兼容性问题
-- 用户抵触使用（安装门槛高）
-- 与uasset_read.py原有零依赖目标冲突
+- 破坏向后兼容性
+- 所有使用该库的代码需要修改
+- 违反"最小化改动"原则
 
 **Prevention:**
-```python
-# 策略1：最小化MCP依赖
-# pyproject.toml
-[project]
-dependencies = [
-    "mcp>=0.9.0",  # 仅必需依赖
-]
+1. **`__init__.py`作为facade（门面）** - 重新导出所有公共API
+   ```python
+   # uasset_read/__init__.py
+   # 核心API
+   from .parser import parse_uasset
+   from .models import ParseResult
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "mypy>=1.0",
-]
+   # 二进制读取
+   from .archive import FArchive
 
-# 策略2：保持核心解析器零依赖
-# uasset_read.py保持不变（仅标准库）
-# uasset_mcp_server.py引入MCP（独立模块）
+   # 蓝图结构
+   from .blueprint import UEdGraph, UEdGraphNode, UEdGraphPin
 
-# 策略3：使用uv或pipx隔离安装
-# Claude Code可以使用uvx直接运行
-# uvx uasset-mcp-server
-```
+   # 导出所有公共API
+   __all__ = [
+       'parse_uasset',
+       'ParseResult',
+       'FArchive',
+       'UEdGraph',
+       'UEdGraphNode',
+       'UEdGraphPin',
+   ]
+   ```
+2. **保持`__init__.py`作为唯一公共入口** - 外部代码应只从顶层包导入
+3. **分层导入** - `__init__.py`可以按逻辑分组导入
+   ```python
+   # 核心解析
+   from .parser import parse_uasset
+   from .models import ParseResult
 
-**Detection:**
-- 检查`pyproject.toml`的dependencies列表
-- 测试全新环境安装
-- 使用`pipdeptree`检查依赖树
+   # 二进制读取
+   from .archive import FArchive, PackageFileSummary
 
-**阶段建议:** Phase 15应明确区分核心解析器和MCP封装层依赖。
-
----
-
-### Pitfall 6: 大文件内存问题
-
-**What goes wrong:** MCP工具未正确处理大文件解析，导致内存溢出或超时，特别是在处理大型蓝图资产时。
-
-**Why it happens:**
-- uasset_read.py使用mmap处理大文件（>50MB）
-- MCP工具可能在内存中缓存整个结果
-- JSON序列化大型ParseResult可能非常巨大
-- 未设置合理的文件大小限制
-
-**Consequences:**
-- 内存溢出（OOM）
-- Claude Code响应超时
-- 用户体验差，系统变慢
-
-**Prevention:**
-```python
-# 错误 ❌ - 无限制解析
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = parse_uasset(path)  # 可能解析超大文件
-    return result.asdict()  # 可能生成巨大JSON
-
-# 正确 ✓ - 添加大小限制和流式处理
-import os
-
-MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB限制
-MAX_RESULT_SIZE = 10 * 1024 * 1024  # 10MB JSON限制
-
-@mcp.tool()
-async def parse_blueprint(
-    path: str,
-    summary_only: bool = False
-) -> dict:
-    # 检查文件大小
-    file_size = os.path.getsize(path)
-    if file_size > MAX_FILE_SIZE:
-        raise McpError(
-            code=-32004,
-            message=f"File too large: {file_size} bytes (max {MAX_FILE_SIZE})"
-        )
-
-    # 解析
-    result = await asyncio.to_thread(parse_uasset, path)
-
-    # 选择性输出
-    if summary_only or file_size > LARGE_FILE_THRESHOLD:
-        return result.to_summary_dict()  # 仅摘要
-    else:
-        return result.asdict()
-
-# 推荐 ✓ - 提供选项控制输出粒度
-@mcp.tool()
-async def parse_blueprint(
-    path: str,
-    include_graphs: bool = True,
-    include_properties: bool = True,
-    max_depth: int = 5
-) -> dict:
-    """Parse .uasset with output control."""
-    # ... 根据参数控制输出大小
-```
+   # 错误处理
+   from .exceptions import UAssetError, FArchiveError
+   ```
+4. **避免在`__init__.py`中执行复杂逻辑** - 只包含导入和简单的重新导出
 
 **Detection:**
-- 压力测试：解析超大.uasset文件
-- 内存分析：使用`memory_profiler`
-- 性能监控：响应时间和内存使用
+- 检查`__init__.py`是否导出了所有原来单文件中导出的符号
+- 运行`python -c "from uasset_read import *"`（如果使用通配符导入）
+- 对比拆分前后的`dir(uasset_read)`
 
-**阶段建议:** Phase 15应进行大文件压力测试。
+**Phase to address:** Phase 23 - 模块结构设计阶段，确定`__init__.py`的内容
 
 ---
 
 ## Moderate Pitfalls
 
-会导致性能问题或使用困难，但不会导致完全失败。
+### Pitfall 1: dataclass跨模块引用
 
-### Pitfall 7: 参数验证不足
-
-**What goes wrong:** 工具参数未充分验证，导致运行时错误或安全漏洞。
-
-**Prevention:**
-```python
-from pathlib import Path
-import os
-
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    # 验证路径
-    if not path:
-        raise McpError(code=-32602, message="Path is required")
-
-    # 验证路径存在
-    file_path = Path(path)
-    if not file_path.exists():
-        raise McpError(code=-32602, message=f"File not found: {path}")
-
-    # 验证文件扩展名
-    if file_path.suffix.lower() != '.uasset':
-        raise McpError(code=-32602, message="File must be .uasset")
-
-    # 验证可读性
-    if not os.access(path, os.R_OK):
-        raise McpError(code=-32602, message=f"File not readable: {path}")
-
-    # 安全检查：避免路径遍历
-    try:
-        resolved = file_path.resolve()
-        # 可选：限制访问特定目录
-        # allowed_root = Path("/safe/directory")
-        # if not resolved.is_relative_to(allowed_root):
-        #     raise McpError(...)
-    except (OSError, ValueError) as e:
-        raise McpError(code=-32602, message=f"Invalid path: {path}")
-
-    # ... 解析逻辑
-```
-
-**阶段建议:** Phase 15应在所有工具入口添加参数验证。
-
----
-
-### Pitfall 8: JSON序列化问题
-
-**What goes wrong:** ParseResult包含不可JSON序列化的类型（如bytes、datetime、自定义类），导致序列化失败。
+**What goes wrong:**
+拆分模块后，dataclass类型注解引用了其他模块的类，导致导入时`ImportError`或`typing.TYPE_CHECKING`问题。例如，`UEdGraphNode`在`blueprint.py`中，但`FArchive`在`archive.py`中，相互引用。
 
 **Why it happens:**
-- uasset_read.py使用dataclass
-- dataclass.asdict()通常可序列化
-- 但某些字段可能包含bytes或其他不可序列化类型
-- 默认JSON encoder不支持所有类型
+- dataclass的类型注解在模块加载时评估，而非运行时
+- 循环引用导致类型注解无法解析
+- 开发者不注意类型注解的导入时机
+
+**Consequences:**
+- 模块无法导入
+- 类型提示失效
+- `asdict()`序列化失败
 
 **Prevention:**
-```python
-import json
-from dataclasses import asdict
-from typing import Any
+1. **使用`typing.TYPE_CHECKING`延迟类型检查**
+   ```python
+   from typing import TYPE_CHECKING
 
-class UAssetEncoder(json.JSONEncoder):
-    """自定义JSON编码器处理特殊类型"""
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, bytes):
-            return obj.hex()  # 或 base64.b64encode(obj).decode()
-        if hasattr(obj, 'asdict'):
-            return obj.asdict()
-        if hasattr(obj, '__dict__'):
-            return obj.__dict__
-        return super().default(obj)
+   if TYPE_CHECKING:
+       from .blueprint import UEdGraphNode
 
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = await asyncio.to_thread(parse_uasset, path)
+   @dataclass
+   class FArchive:
+       current_graph: Optional['UEdGraphNode'] = None  # 字符串延迟解析
+   ```
+2. **将类型注解保留为字符串** - Python会自动解析字符串形式的类型注解
+   ```python
+   @dataclass
+   class ParseResult:
+       graphs: List['UEdGraph']  # 字符串形式
+   ```
+3. **使用`from __future__ import annotations`** - Python 3.7+特性，所有类型注解变为字符串
+   ```python
+   from __future__ import annotations
+   from typing import List
 
-    # 确保可序列化
-    try:
-        data = result.asdict()
-        # 验证可序列化
-        json.dumps(data, cls=UAssetEncoder)
-        return data
-    except (TypeError, ValueError) as e:
-        logger.error(f"Serialization error: {e}")
-        raise McpError(
-            code=-32603,
-            message="Failed to serialize result"
-        )
-```
+   # 所有类型注解自动变为字符串，无需引号
+   @dataclass
+   class ParseResult:
+       graphs: List[UEdGraph]  # 自动延迟解析
+   ```
+4. **设计清晰的模块层次** - 避免dataclass相互引用，高层可以引用低层
 
-**阶段建议:** Phase 15应在单元测试中验证所有类型的序列化。
+**Detection:**
+- 导入模块时注意`TypeError`或`NameError`
+- 运行`mypy`或`pyright`类型检查器发现循环引用
+- 检查dataclass的`__annotations__`是否正确解析
+
+**Phase to address:** Phase 24 - 在拆分每个模块时检查dataclass引用
 
 ---
 
-### Pitfall 9: 配置管理不当
+### Pitfall 2: 模块级代码执行副作用
 
-**What goes wrong:** API密钥、文件路径等配置硬编码或使用不当方式管理，导致安全和部署问题。
+**What goes wrong:**
+模块导入时执行的代码（模块级别的表达式、函数调用、类实例化）在测试环境中失败。例如，模块级读取配置文件或注册处理器，但测试环境缺少这些资源。
 
 **Why it happens:**
-- 开发时方便硬编码测试值
-- 未使用环境变量
-- 配置文件格式不规范
-- Claude Code配置集成不当
+- 在模块顶层执行初始化代码
+- 假设导入时的环境与运行时相同
+- 忽视pytest在导入时也会执行模块级代码
+
+**Consequences:**
+- 测试收集阶段失败
+- pytest无法运行任何测试
+- 导入模块时副作用不可预测
 
 **Prevention:**
-```python
-import os
-from typing import Optional
+1. **延迟初始化** - 将模块级代码移到函数或类方法中
+   ```python
+   # 错误：模块级执行
+   config = load_config()  # 导入时就执行
 
-# 错误 ❌ - 硬编码配置
-ALLOWED_PATH = "/home/user/unreal_projects"
+   # 正确：延迟初始化
+   _config = None
 
-# 正确 ✓ - 环境变量 + 默认值
-ALLOWED_PATHS = os.getenv(
-    "UASSET_ALLOWED_PATHS",
-    ""
-).split(":") if os.getenv("UASSET_ALLOWED_PATHS") else None
+   def get_config():
+       global _config
+       if _config is None:
+           _config = load_config()
+       return _config
+   ```
+2. **使用`if __name__ == "__main__"`** - 将需要运行的脚本代码放在此块中
+3. **避免模块级副作用** - 模块导入应该是纯函数式的，无副作用
+4. **测试环境隔离** - 使用pytest fixtures提供测试所需的环境
 
-MAX_FILE_SIZE = int(os.getenv("UASSET_MAX_FILE_SIZE", "524288000"))  # 500MB
+**Detection:**
+- pytest收集失败，报告"failed during collection"
+- 注意"import error"而非"test failure"
+- 运行`python -c "import module"`独立测试导入
 
-# 推荐 ✓ - Pydantic配置类
-from pydantic import BaseSettings
-
-class Settings(BaseSettings):
-    allowed_paths: list[str] = []
-    max_file_size: int = 500 * 1024 * 1024
-    debug: bool = False
-
-    class Config:
-        env_prefix = "UASSET_"
-
-settings = Settings()
-
-# Claude Code配置集成
-# claude_desktop_config.json:
-{
-  "mcpServers": {
-    "uasset-read": {
-      "command": "uvx",
-      "args": ["uasset-mcp-server"],
-      "env": {
-        "UASSET_ALLOWED_PATHS": "/path/to/unreal:/path/to/projects",
-        "UASSET_MAX_FILE_SIZE": "524288000"
-      }
-    }
-  }
-}
-```
-
-**阶段建议:** Phase 15应文档化所有配置项和环境变量。
+**Phase to address:** Phase 24 - 拆分模块时确保无模块级副作用
 
 ---
 
-### Pitfall 10: 缺乏测试和调试支持
+### Pitfall 3: 相对导入vs绝对导入混用
 
-**What goes wrong:** MCP skill难以测试和调试，开发效率低，问题定位困难。
+**What goes wrong:**
+在模块中混用`from .sibling import X`（相对导入）和`from package.sibling import X`（绝对导入），导致包重命名或移动后导入失败。
 
 **Why it happens:**
-- MCP依赖stdio，难以直接调试
-- 未提供独立测试模式
-- 缺少详细日志
-- 未使用MCP inspector
+- 开发者习惯于相对导入（认为更简洁）
+- 不同开发者使用不同风格
+- 不清楚Python导入系统的行为差异
+
+**Consequences:**
+- 包结构变化时导入失败
+- 代码可移植性差
+- IDE和工具可能无法正确解析
 
 **Prevention:**
-```python
-# 策略1：添加测试模式
-import sys
+1. **统一使用绝对导入** - 推荐在包内使用绝对导入
+   ```python
+   # 推荐
+   from uasset_read.archive import FArchive
 
-if __name__ == "__main__":
-    if "--test" in sys.argv:
-        # 直接测试，不启动MCP服务器
-        result = parse_uasset(sys.argv[sys.argv.index("--test") + 1])
-        print(json.dumps(result.asdict(), indent=2))
-    else:
-        # 正常启动MCP服务器
-        mcp.run()
+   # 避免（除非测试文件）
+   from .archive import FArchive
+   ```
+2. **测试文件可以使用相对导入** - 测试在tests/目录内，相对导入更清晰
+   ```python
+   # tests/test_archive.py
+   from ..src.uasset_read.archive import FArchive
+   ```
+3. **遵循PEP 8建议** - 绝对导入更明确、更清晰
+4. **使用`isort`或`autopep8`** - 自动化导入排序和规范化
 
-# 策略2：详细日志
-import logging
+**Detection:**
+- 代码审查时检查导入风格一致性
+- 使用`flake8`或`pylint`检查导入规范
+- 注意`Relative imports are not allowed in non-package`错误
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    stream=sys.stderr  # 重要：使用stderr
-)
-
-# 策略3：使用MCP inspector测试
-# npx @anthropic-ai/mcp-inspector uasset-mcp-server
-
-# 策略4：单元测试MCP工具
-import pytest
-from unittest.mock import patch
-
-@pytest.mark.asyncio
-async def test_parse_blueprint_tool():
-    """测试MCP工具独立于服务器"""
-    # 直接导入工具函数测试
-    from uasset_mcp_server import parse_blueprint
-
-    result = await parse_blueprint("test.uasset")
-    assert result["success"]
-    assert "data" in result
-```
-
-**阶段建议:** Phase 15应建立MCP测试基础设施。
+**Phase to address:** Phase 23 - 制定导入规范并统一执行
 
 ---
 
-### Pitfall 11: 文档不足或误导
+## Technical Debt Patterns
 
-**What goes wrong:** 工具文档（docstring）不清晰或不准确，导致Claude Code误用或无法理解工具功能。
+Shortcuts that seem reasonable but create long-term problems.
 
-**Why it happens:**
-- docstring过于简短
-- 未说明参数约束
-- 未提供使用示例
-- 未说明返回格式
-
-**Prevention:**
-```python
-@mcp.tool()
-async def parse_blueprint(
-    path: str,
-    include_graphs: bool = True,
-    include_properties: bool = True,
-    max_depth: int = 5
-) -> dict:
-    """Parse Unreal Engine .uasset blueprint file and extract metadata.
-
-    This tool parses .uasset files to extract blueprint information including
-    class hierarchy, variables, functions, and optionally the full graph structure.
-
-    Args:
-        path: Absolute path to the .uasset file. Must be an existing,
-              readable .uasset file (not cooked).
-        include_graphs: Whether to extract blueprint graph nodes and pins.
-                       Set to False for faster parsing of metadata only.
-                       Default: True
-        include_properties: Whether to parse detailed property values.
-                           Set to False for faster parsing.
-                           Default: True
-        max_depth: Maximum recursion depth for nested property parsing.
-                  Range: 1-10. Default: 5
-
-    Returns:
-        A dictionary containing:
-        - success: bool - Whether parsing succeeded
-        - data: dict - Parsed blueprint data (if success)
-        - error: str - Error message (if failed)
-
-        The data dictionary includes:
-        - name_map: List of names referenced in the file
-        - imports: List of imported packages
-        - exports: List of exported objects
-        - blueprint: Blueprint metadata (parent class, variables)
-        - graphs: Graph structure (if include_graphs=True)
-
-    Raises:
-        McpError: If file not found, invalid format, or parsing fails
-
-    Example:
-        # Parse full blueprint with graphs
-        result = await parse_blueprint("/path/to/BP_Character.uasset")
-
-        # Fast metadata-only parse
-        result = await parse_blueprint(
-            "/path/to/BP_Character.uasset",
-            include_graphs=False,
-            include_properties=False
-        )
-    """
-    # ... 实现
-```
-
-**阶段建议:** Phase 15应为每个MCP工具编写详细docstring。
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| 临时`sys.path.insert()`解决导入问题 | 快速让代码运行 | 破坏打包和安装，增加运行时脆弱性 | NEVER - 使用正确的包结构或`pip install -e .` |
+| 延迟导入修复循环依赖 | 快速避免ImportError | 隐藏设计问题，代码难以理解，性能损失 | 仅在Phase 23-24临时过渡，后续重构 |
+| `from x import *`快速导出大量符号 | 简化`__init__.py` | 命名空间污染，`__all__`失效，IDE无法自动补全 | NEVER - 显式导入每个符号 |
+| 忽略`__all__`定义 | 省略一行代码 | 公共API不明确，意外导出内部符号，未来重构困难 | 仅在单文件MVP阶段，模块化时必须添加 |
+| 绕过类型注解使用`Any` | 避免导入问题 | 失去类型检查，代码可维护性下降 | 仅在循环引用无法避免时，配合TYPE_CHECKING使用 |
+| 将测试和源码放在同一目录 | 简化导入 | 打包困难，部署问题，不符合最佳实践 | NEVER - 使用tests/目录分离 |
 
 ---
 
-## Minor Pitfalls
+## Integration Gotchas
 
-会导致不便，但易于修复。
+Common mistakes when connecting to external services.
 
-### Pitfall 12: 未提供工具列表或使用指南
-
-**What goes wrong:** MCP服务器未提供清晰的工具列表和使用指南，用户不知道有哪些功能。
-
-**Prevention:**
-```python
-# MCP自动从装饰器提取工具信息
-# 但应提供README或文档
-
-# README.md示例
-"""
-# uasset-read MCP Server
-
-MCP server for parsing Unreal Engine .uasset files.
-
-## Available Tools
-
-### parse_blueprint
-Parse .uasset blueprint file and extract metadata.
-
-**Parameters:**
-- `path` (required): Absolute path to .uasset file
-- `include_graphs` (optional): Extract graph structure (default: true)
-- `include_properties` (optional): Parse property values (default: true)
-- `max_depth` (optional): Recursion depth limit (default: 5)
-
-**Returns:** Parsed blueprint data as JSON
-
-## Installation
-
-```bash
-pip install uasset-mcp-server
-```
-
-## Usage with Claude Code
-
-Add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "uasset-read": {
-      "command": "uvx",
-      "args": ["uasset-mcp-server"]
-    }
-  }
-}
-```
-"""
-```
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| pytest | 在测试中直接修改sys.path | 使用conftest.py或`pip install -e .`正确安装包 |
+| 类型检查器（mypy/pyright） | 忽略循环引用导致类型错误 | 使用`TYPE_CHECKING`或字符串类型注解 |
+| IDE自动导入 | 自动使用相对导入 | 配置IDE使用绝对导入（推荐） |
+| 打包（pyproject.toml） | 忘记声明packages | 使用`find_packages()`或显式声明 |
+| 文档生成（Sphinx） | 文档导入路径与实际不符 | 使用`autodoc_mock_imports`或重新设计导入 |
 
 ---
 
-### Pitfall 13: 版本管理和更新不当
+## Performance Traps
 
-**What goes wrong:** 未正确管理MCP服务器版本，导致兼容性问题或功能漂移。
+Patterns that work at small scale but fail as usage grows.
 
-**Prevention:**
-```python
-# pyproject.toml
-[project]
-name = "uasset-mcp-server"
-version = "1.0.0"
-description = "MCP server for parsing Unreal Engine .uasset files"
-requires-python = ">=3.10"
-
-[project.dependencies]
-mcp = ">=0.9.0,<1.0.0"
-
-# 工具中报告版本
-@mcp.tool()
-async def get_version() -> dict:
-    """Get MCP server version information."""
-    return {
-        "version": "1.0.0",
-        "uasset_read_version": "2.0.0",
-        "mcp_sdk_version": "0.9.0"
-    }
-```
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| 延迟导入过度使用 | 首次调用时慢，模块加载延迟，难以缓存 | 优先使用顶层导入，延迟导入仅在必要时 | 高频调用或热路径代码 |
+| `__init__.py`导入过多符号 | 包启动慢，内存占用高 | 按需导入或使用`__getattr__`延迟加载 | 包包含数百个导出符号时 |
+| 循环导入的临时修复 | 导入时间线性增长 | 重构模块消除循环依赖 | 模块数量>20且相互依赖复杂时 |
+| 测试导入副作用 | pytest收集测试慢，内存泄漏 | 避免模块级副作用，使用fixture | 测试数量>500时 |
 
 ---
 
-### Pitfall 14: 未处理并发请求
+## Security Mistakes
 
-**What goes wrong:** MCP服务器可能同时收到多个请求，未正确处理并发导致竞态条件或资源冲突。
+Domain-specific security issues beyond general web security.
 
-**Prevention:**
-```python
-# FastMCP自动处理并发
-# 但需确保共享状态安全
-
-# 错误 ❌ - 全局可变状态
-cache = {}
-
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    cache[path] = result  # 竞态条件！
-    return result
-
-# 正确 ✓ - 无状态或线程安全
-from threading import Lock
-
-cache_lock = Lock()
-cache = {}
-
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    result = await asyncio.to_thread(parse_uasset, path)
-
-    with cache_lock:
-        cache[path] = result
-
-    return result
-
-# 推荐 ✓ - 完全无状态（最佳）
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    # 每次调用独立，无共享状态
-    result = await asyncio.to_thread(parse_uasset, path)
-    return result.asdict()
-```
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| 未经验证的二进制反序列化 | 远程代码执行，DoS攻击 | 验证文件头，限制内存使用，拒绝异常大文件 |
+| 依赖`__init__.py`执行路径 | 路径遍历攻击 | 不依赖导入路径执行操作，显式验证文件位置 |
+| 类型注解作为输入验证 | 错误的安全假设 | 类型注解仅用于提示，不提供运行时验证 |
 
 ---
 
-### Pitfall 15: 日志配置不当
+## UX Pitfalls
 
-**What goes wrong:** 日志配置不正确，导致调试信息丢失或污染stdout。
+Common user experience mistakes in this domain.
 
-**Prevention:**
-```python
-import logging
-import sys
-
-# 配置日志到stderr（绝不使用stdout）
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    stream=sys.stderr,  # 重要：使用stderr
-    handlers=[
-        logging.StreamHandler(stream=sys.stderr)
-    ]
-)
-
-logger = logging.getLogger("uasset_mcp")
-
-# 提供日志级别控制
-LOG_LEVEL = os.getenv("UASSET_LOG_LEVEL", "INFO").upper()
-logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
-```
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| 破坏导入路径无警告 | 用户升级后代码立即失败，措手不及 | 使用DeprecationWarning至少一个版本周期 |
+| 移除API但文档未更新 | 用户查阅文档但API不存在，困惑 | 文档和代码同步更新，使用CHANGELOG记录破坏性变更 |
+| 隐藏循环导入错误 | 用户看到模糊的ImportError，不知如何修复 | 在错误消息中明确说明循环依赖和解决建议 |
+| 测试失败但代码"可用" | 用户怀疑项目质量，不敢使用 | 保证测试100%通过，CI自动运行测试 |
 
 ---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **所有359个测试用例通过** — 运行`pytest tests/ -v`，确保无失败、无跳过
+- [ ] **`__init__.py`导出所有原单文件的公共符号** — 对比`dir(uasset_read)`和原单文件导出
+- [ ] **无循环导入** — 所有模块可以独立导入，`python -m pytest tests/ --collect-only`成功
+- [ ] **`__all__`正确定义** - 文档化公共API，防止意外导出内部符号
+- [ ] **类型注解可解析** - 运行`mypy`或`pyright`无类型错误
+- [ ] **打包可安装** - `pip install -e .`成功，`python -c "import uasset_read"`成功
+- [ ] **文档更新** - 更新所有代码示例和文档中的导入路径
+- [ ] **CHANGELOG记录** - 记录所有破坏性变更和弃用警告
+- [ ] **零依赖验证** - 检查`pyproject.toml`确保无运行时依赖
+- [ ] **兼容性测试** - 测试旧代码使用新导入路径仍能工作
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| 循环导入 | HIGH | 1. 绘制依赖图识别循环 2. 提取共享代码到新模块 3. 重构模块层次为单向 4. 更新所有导入 5. 运行测试验证 |
+| 破坏API兼容性 | MEDIUM | 1. 在`__init__.py`重新导出旧符号 2. 添加DeprecationWarning 3. 更新文档说明新路径 4. 给用户一个版本周期适应 5. 在下一个大版本移除 |
+| 测试破坏 | LOW | 1. 检查失败的测试导入路径 2. 在`__init__.py`补充缺失的导出 3. 运行测试验证 4. 更新测试文档说明导入规范 |
+| `__init__.py`重组破坏 | MEDIUM | 1. 回滚`__init__.py`变更 2. 使用`git diff`对比原导出列表 3. 重新添加所有缺失的导入 4. 添加`__all__`显式列表 5. 测试验证 |
+| dataclass循环引用 | MEDIUM | 1. 使用`TYPE_CHECKING`延迟类型检查 2. 或将类型注解改为字符串 3. 或添加`from __future__ import annotations` 4. 运行类型检查器验证 |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| 循环导入 | Phase 23 - 模块结构设计 | 绘制依赖图，确保无循环；所有模块独立导入成功 |
+| 破坏API兼容性 | Phase 23 - API兼容性检查清单 | 所有359测试通过；`__init__.py`重新导出所有原符号 |
+| 破坏测试导入 | Phase 24 - 每个子阶段拆分后 | 拆分模块后立即运行`pytest tests/test_<module>.py`，通过才能继续 |
+| `__init__.py`重组破坏 | Phase 23 - `__init__.py`设计阶段 | 对比拆分前后导出列表，确保完全一致 |
+| dataclass跨模块引用 | Phase 24 - 拆分模块时检查 | 运行`mypy`类型检查，无循环引用错误 |
+| 模块级代码执行副作用 | Phase 24 - 拆分模块时检查 | `python -c "import module"`无副作用；pytest收集成功 |
+| 相对导入vs绝对导入混用 | Phase 23 - 制定导入规范 | 使用`flake8`检查导入一致性；统一使用绝对导入 |
 
 ## Phase-Specific Warnings
 
-针对v3.0里程碑各阶段的特定陷阱警告。
-
-| 阶段 | 可能陷阱 | 缓解策略 |
-|------|---------|---------|
-| Phase 11: ExportMap属性值提取 | JSON序列化问题（复杂属性类型） | 扩展UAssetEncoder支持所有属性类型 |
-| Phase 12: BlueprintVariables提取 | 输出数据结构过大 | 提供摘要模式，分页输出 |
-| Phase 13: 组件变换属性解析 | 数值精度问题（浮点数） | 使用float精度控制，舍入策略 |
-| Phase 14: 输出格式优化 | 格式变更破坏兼容性 | 版本化输出格式，保持向后兼容 |
-| Phase 15: Claude Code skill封装 | 所有Critical Pitfalls (1-6) | 逐个检查和测试 |
-
----
-
-## uasset_read特定陷阱
-
-针对本项目特性的陷阱。
-
-### Pitfall U1: ParseResult序列化兼容性
-
-**What goes wrong:** ParseResult的某些字段可能包含不可序列化数据。
-
-**Prevention:**
-- 在Phase 15前审计ParseResult所有字段类型
-- 为bytes、自定义类型添加序列化器
-- 单元测试验证所有字段序列化
-
-### Pitfall U2: 版本依赖冲突
-
-**What goes wrong:** uasset_read.py支持的UE版本范围可能与MCP用户资产版本不匹配。
-
-**Prevention:**
-- 在工具文档中明确支持的UE版本
-- 提供版本检查工具
-- 优雅处理版本不兼容错误
-
-### Pitfall U3: mmap文件句柄泄漏
-
-**What goes wrong:** 使用mmap后未正确关闭文件句柄，导致资源泄漏。
-
-**Prevention:**
-```python
-# uasset_read.py应使用context manager
-with mmap.mmap(...) as mm:
-    # 使用mm
-    pass  # 自动关闭
-
-# MCP工具应确保清理
-@mcp.tool()
-async def parse_blueprint(path: str) -> dict:
-    try:
-        result = await asyncio.to_thread(parse_uasset, path)
-        return result.asdict()
-    finally:
-        # 确保资源清理
-        pass  # parse_uasset内部应处理清理
-```
-
----
-
-## 预防策略总结
-
-### 开发阶段
-
-1. **类型提示强制**: 使用mypy strict模式，所有函数必须有类型提示
-2. **文档先行**: 编写详细docstring，说明参数、返回值、错误
-3. **错误处理规范**: 统一使用McpError，定义错误码常量
-4. **日志到stderr**: 所有日志输出到stderr，绝不使用stdout
-
-### 测试阶段
-
-1. **单元测试**: 每个MCP工具独立测试，不依赖服务器
-2. **集成测试**: 使用MCP inspector验证完整流程
-3. **压力测试**: 测试大文件、并发请求、错误路径
-4. **序列化验证**: 验证所有返回数据可JSON序列化
-
-### 部署阶段
-
-1. **依赖最小化**: 仅必需依赖，核心解析器保持零依赖
-2. **配置文档化**: 文档化所有环境变量和配置项
-3. **版本管理**: 语义化版本，提供版本查询工具
-4. **安装简便**: 支持uvx/pipx一键安装
-
-### 运行阶段
-
-1. **监控日志**: 记录关键操作和错误
-2. **资源限制**: 文件大小、超时时间、内存限制
-3. **优雅降级**: 大文件提供摘要模式，错误提供清晰提示
-
----
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Phase 23 - 模块结构设计 | 循环导入、API兼容性 | 先绘制依赖图再设计；使用`__init__.py`重新导出 |
+| Phase 24 - 核心组件拆分 | 测试破坏、dataclass引用 | 每拆分一个模块立即运行测试；使用`TYPE_CHECKING` |
+| Phase 25 - 蓝图模块拆分 | 循环导入（蓝图图结构复杂） | 保持单向依赖；提取共享模型 |
+| Phase 26 - 零依赖验证 | 意外引入外部依赖 | 检查`pyproject.toml`；运行`pip check` |
+| Phase 27 - 测试兼容性验证 | 测试导入路径 | 所有359测试通过；使用conftest.py |
 
 ## Sources
 
-### 官方文档
+### 循环导入（HIGH confidence）
+- [Stack Overflow: How to avoid circular imports in Python?](https://stackoverflow.com/questions/7336802/how-to-avoid-circular-imports-in-python) - 权威问答社区，详细讨论循环导入原因和解决方案
+- [DataCamp: Python Circular Import Tutorial](https://www.datacamp.com/tutorial/python-circular-import) - 结构化教程，涵盖原因、修复和最佳实践
+- [Python Morsels: Fixing circular imports](https://www.pythonmorsels.com/fixing-circular-imports/) - Python专家的实用指南
+- [Rollbar: How to Fix a Circular Import in Python](https://rollbar.com/blog/how-to-fix-circular-import-in-python/) - 工程化视角的解决方案
+- [Medium: So you got a circular import in Python](https://medium.com/@hamana.hadrien/so-you-got-a-circular-import-in-python-e9142fe10591) - 实际案例分析
 
-- [Model Context Protocol Documentation](https://modelcontextprotocol.io/) — MCP协议规范和Python SDK指南 (HIGH confidence)
-- [Claude Code Documentation](https://docs.anthropic.com/claude/docs/claude-code) — Claude Code skill集成指南 (HIGH confidence)
-- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) — 官方Python SDK仓库 (HIGH confidence)
-- [FastMCP](https://github.com/jlowin/fastmcp) — 简化MCP开发的高级库 (HIGH confidence)
+### API兼容性（HIGH confidence）
+- [Stack Overflow: Moving code out of __init__.py but keeping backwards compatibility](https://stackoverflow.com/questions/5427204/moving-code-out-of-init-py-but-keeping-backwards-compatibility) - 关于`__init__.py`重组的权威讨论
+- [Stack Overflow: Refactoring a module and keeping backward compatibility](https://stackoverflow.com/questions/44139641/refactoring-a-module-and-keeping-backward-compatibility-including-for-intersphi) - 重构时保持兼容性的实用技巧
+- [Real Python: Best Practices for Imports](https://realpython.com/ref/best-practices/imports/) - Python导入最佳实践，权威指南
+- [Hacker News: Best practice for Python module imports?](https://news.ycombinator.com/item?id=657528) - 社区讨论，共识观点
+- [Python Documentation: The import system](https://docs.python.org/3/reference/import.html) - 官方文档，导入系统权威说明
 
-### 技术文章
+### 测试兼容性（HIGH confidence）
+- [The Digital Cat: Refactoring with tests in Python - a practical example](https://www.thedigitalcatonline.com/blog/2017/07/21/refactoring-with-test-in-python-a-practical-example/) - 实际案例，展示测试驱动的重构流程
+- [Alan Turing Institute: 7.4 Refactoring](https://alan-turing-institute.github.io/rse-course/html/module07_construction_and_design/07_04_refactoring.html) - 科学软件工程研究机构的重构指南
+- [DEV Community: Testing and Refactoring With pytest and pytest-cov](https://dev.to/cwprogram/testing-and-refactoring-with-pytest-and-pytest-cov-22d6) - pytest最佳实践
+- [Stack Overflow: Pytest import problems when tests import from adjacent directory](https://stackoverflow.com/questions/73726523/pytest-import-problems-when-tests-import-from-adjacent-directory) - pytest导入问题解决方案
+- [Pytest Documentation: Deprecations and Removals](https://docs.pytest.org/en/stable/deprecations.html) - 官方文档，pytest导入系统说明
 
-- [Python Asyncio Best Practices](https://docs.python.org/3/library/asyncio.html) — 异步编程最佳实践 (HIGH confidence)
-- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — JSON-RPC错误码规范 (HIGH confidence)
-- [Python Packaging Guide](https://packaging.python.org/en/latest/) — Python打包和分发指南 (HIGH confidence)
+### 项目结构与零依赖（HIGH confidence）
+- [Medium: Zero-Dependency Python: Building Tools That Avoid External Libraries](https://medium.com/@CodeWithHannan/zero-dependency-python-building-tools-that-avoid-external-libraries-f2a8f5092b57) - 零依赖Python项目实战指南
+- [The Hitchhiker's Guide to Python: Structuring Your Project](https://docs.python-guide.org/writing/structure/) - Python项目结构权威指南
+- [Real Python: Project Layout Best Practices](https://realpython.com/ref/best-practices/project-layout/) - Python项目布局推荐
+- [Reddit: What is the optimal structure for a Python project?](https://www.reddit.com/r/Python/comments/18qkivr/what-is-the-optimal-structure-for-a-python-project/) - 社区讨论最佳实践
+- [Dagster: Best Practices in Structuring Python Projects](https://dagster.io/blog/python-project-best-practices) - 工业级Python项目结构经验
 
-### 社区资源
+### dataclass序列化（MEDIUM confidence）
+- [Stack Overflow: How do I make a custom class that's serializable with dataclasses](https://stackoverflow.com/questions/77943054/how-do-i-make-a-custom-class-thats-serializable-with-dataclasses-asdict) - dataclass序列化问题解决方案
+- [Tom Augspurger: Serializing Dataclasses](https://tomaugspurger.net/posts/serializing-dataclasses/) - 深入解析dataclass序列化挑战
+- [Real Python: dataclasses Reference](https://realpython.com/ref/stdlib/dataclasses/) - 标准库官方参考
+- [Python Discussions: dataclasses.asdict(type)](https://discuss.python.org/t/dataclasses-asdicttype-type/103448) - 社区讨论dataclass序列化新特性
 
-- [MCP GitHub Issues](https://github.com/modelcontextprotocol/python-sdk/issues) — 常见问题和解决方案 (MEDIUM confidence)
-- [Claude Code MCP Examples](https://github.com/anthropics/anthropic-cookbook/tree/main/misc/mcp) — 官方示例 (MEDIUM confidence)
+### 导入风格（MEDIUM confidence）
+- [Stack Overflow: What's the correct way to sort Python import statements](https://stackoverflow.com/questions/20762662/whats-the-correct-way-to-sort-python-import-x-and-from-x-import-y-statement) - 导入排序和最佳实践
+- [Reddit: Is there a big difference between using import x vs from x import y?](https://www.reddit.com/r/learnpython/comments/5lggna/is-there-a-big-difference-between-using_import_x/) - 社区讨论导入风格差异
+- [Level Up Coding: Import X VS From Y Import Z](https://levelup.gitconnected.com/import-x-vs-from-y-import-z-58b55c167f65) - 详细对比两种导入方式
+- [Bric-a-brac: From X import Y vs. import X (as Z)](https://matevzkunaver.wordpress.com/2017/02/27/from-x-import-y-vs-import-x-as-z/) - 实用指南
+
+### 弃用与兼容性（MEDIUM confidence）
+- [Python Discuss: Mitigating python deprecation message frustrations](https://discuss.python.org/t/mitigating-python-deprecation-message-frustrations-by-improving-the-design-of-deprecation-message-handling/61985) - Python核心开发者关于弃用消息的讨论
+- [Stack Overflow: Correct way to re-export modules from __init__.py](https://stackoverflow.com/questions/60440945/correct-way-to-re-export-modules-from-init-py) - `__init__.py`重新导出的权威讨论
+- [Python What's New 3.14: Deprecated aliases removed](https://docs.python.org/3/whatsnew/3.14.html) - 官方弃用策略说明
+
+### 延迟导入（MEDIUM confidence）
+- [Python Discuss: PEP 690 - Lazy Imports](https://discuss.python.org/t/pep-690-lazy-imports/15474?page=10) - PEP 690延迟导入提案讨论
+- [Hacker News: PEP 810 – Explicit lazy imports](https://news.ycombinator.com/item?id=45466086) - 社区对延迟导入的看法
 
 ---
 
-**Confidence:** HIGH
-
-基于官方文档、MCP Python SDK源码、FastMCP库文档、社区issue讨论、以及Python异步编程最佳实践的综合研究。所有关键陷阱均有官方文档或社区issue支持，预防策略基于实际代码示例。
-
-**Last Updated:** 2026-05-02
+*Pitfalls research for: Python模块化重构（单文件拆分）*
+*Researched: 2026-05-06*
+*Focus: 零依赖约束下的测试兼容性和API稳定性*
