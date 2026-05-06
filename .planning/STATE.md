@@ -4,15 +4,15 @@ milestone: v5.1
 milestone_name: 模块化重构与C++代码生成准备
 status: executing
 last_updated: "2026-05-07T00:00:00.000Z"
-last_activity: 2026-05-07 — Phase 27执行完成
+last_activity: 2026-05-07 — Phase 27验证完成
 status:
   phase: "27"
   plan: "完成"
   issues: ""
   progress:
     total_phases: 6
-    completed_phases: 0
-    partial_phases: 1
+    completed_phases: 1
+    partial_phases: 0
     planned_phases: 6
     total_plans: 2
     completed_plans: 2

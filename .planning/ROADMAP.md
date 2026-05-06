@@ -102,7 +102,7 @@
 <details>
 <summary>🔵 v5.1 模块化重构与C++代码生成准备 (Phases 27-32) — IN PROGRESS</summary>
 
-- [ ] Phase 27: 项目结构初始化 (4 requirements) — 2 plans
+- [x] Phase 27: 项目结构初始化 (4 requirements) — 2 plans ✓ Complete 2026-05-07
 - [ ] Phase 28: 核心模块拆分 (3 requirements) — TBD
 - [ ] Phase 29: 属性解析模块拆分 (3 requirements) — TBD
 - [ ] Phase 30: 架构验证 (2 requirements) — TBD
@@ -181,7 +181,7 @@
 | 11-17 | v3.x 解析完善+Skill | 23 | 23 | Complete | 2026-05-04 |
 | 18-22 | v4.0 节点属性深度解析 | 14 | 14 | Complete | 2026-05-05 |
 | 23-26 | v5.0 原功能完善 | 16 | 8 | Complete | 2026-05-06 |
-| 27 | v5.1 模块化重构 | 4 | 2 | In Progress | - |
+| 27 | v5.1 模块化重构 | 4 | 2 | Complete | 2026-05-07 |
 | 28 | v5.1 模块化重构 | 3 | 0 | Not started | - |
 | 29 | v5.1 模块化重构 | 3 | 0 | Not started | - |
 | 30 | v5.1 模块化重构 | 2 | 0 | Not started | - |
