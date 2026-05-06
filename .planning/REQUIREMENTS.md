@@ -1,232 +1,159 @@
-# v4.0 Requirements — 节点属性深度解析（最终版）
+# Requirements - v5.1 模块化重构与C++代码生成准备
 
-**Milestone:** v4.0
-**Created:** 2026-05-04
-**Status:** Active
-**依据:** UE源码研究（`.planning/research/UE_TEXT_FORMAT_SOURCE.md`）
-
----
-
-## 设计原则
-
-1. **镜像UE序列化结构** — 按`UEdGraphPin::Serialize`顺序解析二进制
-2. **输出整理后的JSON** — 高层抽象结构，隐藏底层字节细节
-3. **连接关系构建** — 构建清晰的执行流图和数据流图
+**里程碑:** v5.1
+**目标:** 模块化重构 + JSON Schema定义
+**创建日期:** 2026-05-06
 
 ---
 
-## Requirements
+## Active Requirements
 
-### PHASE-18: Pin序列化解析
+### MOD - 模块化重构
 
-**目标**: 解析Pin二进制数据，构建高层JSON结构
+- [ ] **MOD-01**: 拆分FArchive二进制读取器到独立模块
+  - 文件: `src/uasset_read/archive.py`
+  - 包含: FArchive类及其所有方法（read_i32, seek, tell等）
+  - 零依赖: 仅使用Python标准库（struct, mmap）
 
-- [ ] **PIN-01**: 解析Pin基础信息
-  ```json
-  {
-    "pin_id": "13FD260E4EE18FD0AA5F7085F9B509D6",
-    "pin_name": "execute",
-    "direction": "input",
-    "tooltip": ""
-  }
-  ```
+- [ ] **MOD-02**: 定义常量和阈值到独立模块
+  - 文件: `src/uasset_read/constants.py`
+  - 包含: 版本号常量、属性类型阈值、边界常量
+  - 示例: PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012
 
-- [ ] **PIN-02**: 解析PinType结构
-  ```json
-  {
-    "pin_type": {
-      "category": "exec",
-      "sub_category": "",
-      "sub_category_object": null,
-      "container_type": "none",
-      "is_reference": false,
-      "is_const": false
-    }
-  }
-  ```
+- [ ] **MOD-03**: 定义异常类到独立模块
+  - 文件: `src/uasset_read/exceptions.py`
+  - 包含: UAssetError, VersionError, ParseError, ErrorContext
 
-- [ ] **PIN-03**: 解析默认值
-  ```json
-  {
-    "default_value": "",
-    "default_object": null,
-    "default_text": null
-  }
-  ```
+- [ ] **MOD-04**: 拆分PackageFileSummary序列化到独立模块
+  - 文件: `src/uasset_read/serializers/package_summary.py`
+  - 包含: PackageFileSummary, GenerationInfo, EngineVersion, CustomVersion
+  - 依赖: MOD-01, MOD-02
 
-- [ ] **PIN-04**: 解析连接引用
-  ```json
-  {
-    "linked_to": [
-      {"node": "K2Node_EnhancedInputAction_5", "pin_id": "6412140B4E7EF6147A86BA8D2AFE9BA4"}
-    ],
-    "sub_pins": [],
-    "parent_pin": null
-  }
-  ```
+- [ ] **MOD-05**: 拆分ImportMap/ExportMap到独立模块
+  - 文件: `src/uasset_read/serializers/object_resources.py`
+  - 包含: ObjectImport, ObjectExport, PackageIndex, resolve_*
+  - 依赖: MOD-01, MOD-02
 
-- [ ] **PIN-05**: 解析显示属性
-  ```json
-  {
-    "hidden": false,
-    "not_connectable": false,
-    "advanced_view": false,
-    "orphaned": false
-  }
-  ```
+- [ ] **MOD-06**: 拆分PropertyTag到独立模块
+  - 文件: `src/uasset_read/serializers/property_tags.py`
+  - 包含: PropertyTag, parse_property_tag
+  - 依赖: MOD-01
 
-### PHASE-19: 连接关系重建
+- [ ] **MOD-07**: 拆分属性解析器到独立模块
+  - 文件: `src/uasset_read/parsers/property_parser.py`
+  - 包含: parse_property, parse_*_property函数
+  - 依赖: MOD-01, MOD-06
 
-**目标**: 构建节点间连接图，输出清晰的流程结构
+- [ ] **MOD-08**: 定义核心数据模型
+  - 文件: `src/uasset_read/models/core.py`
+  - 包含: ParseResult, StatusInfo
+  - 使用dataclass，零依赖
 
-- [ ] **LINK-01**: 构建节点连接映射
-  ```json
-  {
-    "connections": [
-      {
-        "from": {"node": "K2Node_EnhancedInputAction_5", "pin": "Started"},
-        "to": {"node": "K2Node_CallFunction_1193", "pin": "execute"}
-      }
-    ]
-  }
-  ```
+- [ ] **MOD-09**: 避免循环导入
+  - 使用分层架构：Output → Models → Parsers → Serializers → FArchive
+  - 使用延迟导入、TYPE_CHECKING、字符串类型注解
+  - 所有模块依赖单向
 
-- [ ] **LINK-02**: 构建执行流图
-  ```json
-  {
-    "execution_flows": [
-      {
-        "entry": "K2Node_EnhancedInputAction_5",
-        "chain": ["K2Node_CallFunction_1193", "K2Node_CallFunction_9386"]
-      }
-    ]
-  }
-  ```
+### SCHEMA - JSON Schema定义
 
-- [ ] **LINK-03**: 构建数据流图
-  ```json
-  {
-    "data_flows": [
-      {
-        "source": {"node": "K2Node_EnhancedInputAction_3", "pin": "ActionValue_X"},
-        "target": {"node": "K2Node_CallFunction_5", "pin": "Left / Right"}
-      }
-    ]
-  }
-  ```
+- [ ] **SCHEMA-01**: 定义JSON Schema结构
+  - 文件: `src/uasset_read/schemas/json_schema.py` 或 `schemas/json_schema.json`
+  - 目的: 为C++代码生成准备规范化输出结构
+  - 包含: ParseResult顶层结构、蓝图图结构、节点类型定义
 
-### PHASE-20: 整合输出
+- [ ] **SCHEMA-02**: Schema验证功能
+  - 文件: `src/uasset_read/schemas/validator.py`
+  - 功能: 验证输出JSON符合Schema定义
+  - 使用: Python标准库json模块（零依赖）
 
-**目标**: 输出完整的节点JSON结构，包含所有解析信息
+- [ ] **SCHEMA-03**: Schema文档
+  - 文件: `docs/JSON_SCHEMA.md` 或 `.planning/research/JSON_SCHEMA.md`
+  - 内容: Schema结构说明、字段语义、C++映射关系
 
-- [ ] **OUT-01**: 节点完整JSON结构
-  ```json
-  {
-    "node_name": "K2Node_CallFunction_1193",
-    "node_type": "CallFunction",
-    "node_guid": "F923268743B7B52D669FFB960CA79833",
-    "position": {"x": 3136, "y": -1040},
-    "function_reference": {
-      "member_name": "Jump",
-      "self_context": true
-    },
-    "pins": [
-      {
-        "pin_id": "...",
-        "pin_name": "execute",
-        "pin_type": {...},
-        "linked_to": [...]
-      }
-    ]
-  }
-  ```
+### TEST - 测试兼容性
 
-- [ ] **OUT-02**: Graph完整JSON结构
-  ```json
-  {
-    "graph_name": "EventGraph",
-    "graph_type": "event",
-    "nodes": [...],
-    "execution_flows": [...],
-    "data_flows": [...]
-  }
-  ```
+- [ ] **TEST-01**: 所有现有测试通过
+  - 运行: `pytest tests/`
+  - 要求: 359+ 测试用例通过
+  - 验证: 功能性零变更
 
-- [ ] **OUT-03**: 蓝图完整JSON结构
-  ```json
-  {
-    "blueprint_name": "BP_FirstPersonCharacter",
-    "parent_class": "FirstPersonCharacter",
-    "graphs": [...],
-    "variables": [...]
-  }
-  ```
+- [ ] **TEST-02**: 新模块单元测试
+  - 为每个新模块创建测试文件
+  - 测试模块独立功能
+  - 验证: 模块接口正确
 
-### PHASE-21: 验证测试
+### STRUCT - 项目结构
 
-**目标**: 验证JSON输出与UE编辑器信息一致
+- [ ] **STRUCT-01**: 创建src目录结构
+  - 目录: `src/uasset_read/`
+  - 包含: `__init__.py` 导出公共API
+  - 符合: Python Packaging User Guide src layout
 
-- [ ] **TEST-01**: 节点数量匹配
-  - JSON中节点数与导出表一致
-
-- [ ] **TEST-02**: 连接关系验证
-  - Jump执行流程正确构建
-  - IA_Jump → Jump → StopJumping
-
-- [ ] **TEST-03**: 数据流验证
-  - ActionValue_X → Left/Right 参数
-  - ActionValue_Y → Forward/Backward 参数
-
-- [ ] **TEST-04**: 节点属性验证
-  - FunctionReference.MemberName正确提取
-  - NodeGuid正确解析
+- [ ] **STRUCT-02**: 配置pyproject.toml
+  - 文件: `pyproject.toml`
+  - 配置: dependencies = [], src layout, 项目元数据
+  - 验证: 零依赖安装
 
 ---
 
-## 输出设计原则
+## Future Requirements
 
-1. **不暴露字节细节** — JSON中不出现offset、size、raw_bytes等底层信息
-2. **语义化命名** — 使用`pin_name`而非`PinName_FName_Index`
-3. **结构化引用** — 使用`{"node": "...", "pin": "..."}`而非GUID字符串
-4. **分类清晰** — 区分execution_flows和data_flows
-5. **默认值省略** — 空值/null/false使用JSON null/false而非字符串
+以下需求延后至v5.2或后续里程碑：
+
+- **MOD-10**: 输出模块拆分（JSON/文本格式化器）
+- **MOD-11**: CLI模块拆分（命令行接口）
+- **MOD-12**: 蓝图模块拆分（Graph/Node/Pin组件）
+- **SCHEMA-04**: C++代码生成器实现
+- **SCHEMA-05**: TypeScript类型定义生成
 
 ---
 
 ## Out of Scope
 
-| 功能 | 原因 |
+| 需求 | 原因 |
 |------|------|
-| Cooked资产解析 | 仅支持Editor保存的资产 |
-| 蓝图字节码反编译 | 不同序列化路径 |
-| UE文本格式输出 | 输出整理后的JSON |
-| 自动C++生成 | 仅提供参考JSON |
-| MCP Server封装 | 延后至后续里程碑 |
+| 向后兼容层 | 用户选择"不考虑兼容"，不保留旧入口 |
+| 保留根级别uasset_read.py | 采用新结构，完全模块化 |
+| 测试框架迁移 | pytest可直接运行unittest测试 |
+| MCP Server封装 | 超出v5.1范围，延后 |
+| C++代码生成 | v5.1仅准备JSON Schema，实际生成延后 |
 
 ---
 
-## Traceability
+## Requirements Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| PIN-01 | Phase 18 | Pending |
-| PIN-02 | Phase 18 | Pending |
-| PIN-03 | Phase 18 | Pending |
-| PIN-04 | Phase 18 | Pending |
-| PIN-05 | Phase 18 | Pending |
-| LINK-01 | Phase 19 | Pending |
-| LINK-02 | Phase 19 | Pending |
-| LINK-03 | Phase 19 | Pending |
-| OUT-01 | Phase 20 | Pending |
-| OUT-02 | Phase 20 | Pending |
-| OUT-03 | Phase 20 | Pending |
-| TEST-01 | Phase 21 | Pending |
-| TEST-02 | Phase 21 | Pending |
-| TEST-03 | Phase 21 | Pending |
-| TEST-04 | Phase 21 | Pending |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| MOD-01~09 | Phase 27 | Pending |
+| SCHEMA-01~03 | Phase 28 | Pending |
+| TEST-01~02 | Phase 29 | Pending |
+| STRUCT-01~02 | Phase 27 | Pending |
 
-**Coverage:** 15/15 requirements mapped ✓
+*待路线图创建后更新Phase映射*
 
 ---
 
-*最终版：2026-05-04 — 严格避免字节细节，输出整理后的JSON*
+## Requirements Rationale
+
+### 为什么先实现基础设施和核心模块？
+
+1. **依赖关系**: FArchive和常量/异常是所有其他模块的基础
+2. **风险最小**: 基础模块变更影响可控，测试验证简单
+3. **渐进式**: 先核心后扩展，降低重构复杂度
+
+### 为什么不考虑向后兼容？
+
+用户明确选择新结构，不保留旧入口。这意味着：
+- 导入路径将从 `from uasset_read import *` 变为 `from src.uasset_read import *`
+- CLI入口将从 `python uasset_read.py` 变为 `python -m src.uasset_read.cli`
+- 完全拥抱新架构，不做技术妥协
+
+### 为什么同时做JSON Schema？
+
+1. **C++代码生成准备**: v5.1目标是为蓝图转C++自动化做准备
+2. **模块化并行**: Schema定义不依赖完整模块化
+3. **规范化输出**: 确保JSON输出结构稳定，为后续阶段打下基础
+
+---
+
+*最后更新: 2026-05-06*
