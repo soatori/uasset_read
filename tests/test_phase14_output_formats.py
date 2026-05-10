@@ -129,7 +129,7 @@ class TestGraphsSummary:
         result = ParseResult(graphs=[graph])
         summary = build_graphs_summary(result.graphs)
         assert len(summary) == 1
-        assert summary[0]["graph"] == "EventGraph"
+        assert summary[0]["graph_name"] == "EventGraph"
 
     def test_graphs_summary_empty(self):
         """空 graphs 返回空数组"""

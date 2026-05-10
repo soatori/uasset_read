@@ -413,6 +413,13 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'I', self.read(4))[0]
 
+    def peek_i32(self) -> int:
+        """读取 signed 32-bit integer 但不移动文件指针（支持字节交换）"""
+        current_pos = self.tell()
+        value = self.read_i32()
+        self.seek(current_pos)
+        return value
+
     def read_bool(self) -> bool:
         """
         读取 UE bool 值（序列化为 uint32，4 bytes）。
@@ -3415,10 +3422,17 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
     1. Flags (int32)
     2. HistoryType (int8) - ETextHistoryType 枚举
     3. 根据 HistoryType 类型：
-       - None (0): bHasCultureInvariantString (uint8) + [CultureInvariantString (FString)]
-       - Base (1): Namespace (FString) + Key (FString) + SourceString (FString)
-       - NamedFormat/OrderedFormat/ArgumentFormat 等类型有各自格式
-       - 对于简单跳过，只需处理常见类型
+       - None (-1/255): bHasCultureInvariantString (uint8) + [CultureInvariantString (FString)]
+       - Base (0): Namespace (FString) + Key (FString) + SourceString (FString)
+       - NamedFormat (1): SourceFmt + Arguments map
+       - 其他类型：通用跳过策略
+
+    Per Phase 22-06: ETextHistoryType 枚举值修正（TextHistory.h L23-41）
+    - None = -1 (int8) = 255 (uint8)
+    - Base = 0
+    - NamedFormat = 1
+    - OrderedFormat = 2
+    - ...
 
     安全边界（T-22-02-01）：添加异常处理防止解析崩溃
     安全边界（T-22-02-02）：添加最大循环限制防止 DoS
@@ -3439,12 +3453,14 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
             print(f"DEBUG FText: pos={start_pos}, flags={flags}, history_type={history_type}")
 
         # 3. 根据 HistoryType 跳过后续数据
-        # ETextHistoryType 枚举值：
-        # None = 0, Base = 1, NamedFormat = 2, OrderedFormat = 3,
-        # ArgumentFormat = 4, AsNumber = 5, AsPercent = 6, AsCurrency = 7,
-        # AsDate = 8, AsTime = 9, AsDateTime = 10, Transform = 11, StringTableEntry = 12
+        # ETextHistoryType 枚举值（修正后）：
+        # None = 255 (uint8) = -1 (int8)
+        # Base = 0
+        # NamedFormat = 1
+        # OrderedFormat = 2
+        # ...
 
-        if history_type == 0:  # None
+        if history_type == 255:  # None (int8 = -1)
             # bHasCultureInvariantString (bool 序列化为 uint8)
             b_has_culture_invariant = archive.read_u8()
             if "--debug-ftext" in sys.argv:
@@ -3452,14 +3468,37 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
             if b_has_culture_invariant != 0:
                 # CultureInvariantString (FString)
                 archive.read_fstring()
-        elif history_type == 1:  # Base
-            # Namespace (FString) + Key (FString) + SourceString (FString)
-            archive.read_fstring()  # Namespace
-            archive.read_fstring()  # Key
-            archive.read_fstring()  # SourceString
-            if "--debug-ftext" in sys.argv:
-                print(f"  Base: read 3 FStrings")
-        elif history_type >= 2 and history_type <= 12:
+        elif history_type == 0:  # Base
+            # Phase 22 FIX-10: 检查 FText 是否为空（未被序列化）
+            # 如果 flags=0，这可能是空的 FText（EditorOnly 数据被过滤）
+            # 但也可能是 Base 类型的 FText（需要读取 3 FStrings）
+            # 使用 lookahead 检查：如果下一个 4 bytes 不是合理的字符串长度，假设 FText 未被序列化
+            ftext_data_start = archive.tell()
+            try:
+                # 读取 Namespace 长度（第一个 FString）
+                ns_len = archive.read_u32()
+                # 检查长度是否合理（0-100000）
+                if 0 <= ns_len <= 100000:
+                    # 正常的 Base FText，读取剩余部分
+                    archive.read_bytes(ns_len * 2)  # Namespace content (UTF-16)
+                    key_len = archive.read_u32()
+                    archive.read_bytes(key_len * 2)  # Key content
+                    src_len = archive.read_u32()
+                    archive.read_bytes(src_len * 2)  # Source content
+                    if "--debug-ftext" in sys.argv:
+                        print(f"  Base: read 3 FStrings (ns={ns_len}, key={key_len}, src={src_len})")
+                else:
+                    # 可能是垃圾数据，回退到 FText 起始位置
+                    # 假设 FText 未被序列化
+                    archive.seek(start_pos)  # 回退到 FText 开始位置（flags 之前）
+                    if "--debug-ftext" in sys.argv:
+                        print(f"  Base: Invalid len {ns_len}, assuming FText not serialized")
+                    # 重新抛出异常，让调用者知道 FText 未被跳过
+                    raise ValueError("FText not serialized")
+            except Exception as e:
+                # 回退到起始位置
+                archive.seek(start_pos)
+        elif history_type >= 1 and history_type <= 12:  # NamedFormat 到 StringTableEntry
             # 其他类型的通用跳过策略（T-22-02-02：限制循环）
             # NamedFormat: SourceFmt + Arguments map
             # OrderedFormat: SourceFmt + Arguments array
@@ -3469,12 +3508,11 @@ def skip_ftext_editoronly(archive: FArchive) -> None:
                 try:
                     archive.read_fstring()
                 except Exception:
-                    # FString 读取失败意味着该类型不需要更多数据
                     break
             if "--debug-ftext" in sys.argv:
                 print(f"  Type {history_type}: read up to {max_strings} FStrings")
         else:
-            # Phase 22 FIX-08: 处理特殊的 history_type 值
+# Phase 22 FIX-08: 处理特殊的 history_type 值
             # history_type=255 可能表示空FText或未初始化的FText
             # 在这种情况下，不应该跳过任何额外的字节（只跳过flags和history_type本身）
             if history_type == 255:
@@ -3577,7 +3615,7 @@ def read_ue_graph_pin(
         print(f"[DEBUG PIN] 3. PinName: {pin_name}, offset now: {archive.tell():#x}")
 
     # 4. PinFriendlyName (FText) - EditorOnly [L1858-1863]
-    # Phase 22 FIX-08: 修复FText history_type=255的处理
+# Phase 22 FIX-08: 修复FText history_type=255的处理
     # 根据调试分析，history_type=255应该跳过固定字节
     # 但之前的12字节跳过导致后续字段位置错误
     # 新策略：根据实际字节数调整，使用动态检测
@@ -3637,14 +3675,27 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN]    FText skip failed: {e}, seeking back to {ftext_start_pos:#x}")
 
     # 5. SourceIndex (int32) - version dependent [L1865-1868]
+    # Phase 22 FIX-08: 修复版本检查逻辑 - UE5.7 资产中 SourceIndex 存在
     source_index = None
     if mainstream_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX:
         source_index = archive.read_i32()
         if DEBUG_PIN_PARSING:
             print(f"[DEBUG PIN] 5. SourceIndex: {source_index}, offset now: {archive.tell():#x}")
     else:
-        if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN] 5. SourceIndex not read (version {mainstream_version} < {FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX}), offset: {archive.tell():#x}")
+        # 对于 UE5.7 资产，即使版本检查失败，也尝试读取 SourceIndex
+        start_pos = archive.tell()
+        try:
+            test_source = archive.read_i32()
+            if -100 <= test_source <= 1000000:  # 合理范围
+                source_index = test_source
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN] 5. SourceIndex (fallback): {source_index}, offset now: {archive.tell():#x}")
+            else:
+                archive.seek(start_pos)
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN] 5. SourceIndex not read (version {mainstream_version} < threshold), offset: {archive.tell():#x}")
+        except Exception:
+            archive.seek(start_pos)
 
     # 6. PinToolTip (FString) [L1870]
     tooltip_start = archive.tell()
@@ -4083,8 +4134,19 @@ def read_ue_graph_node(
             print(f"[DEBUG NODE]   OwningNode_1: {_owning_node_1}, PinGuid_1: {_pin_guid_1.hex()}")
 
         # 然后调用 read_ue_graph_pin 读取 UEdGraphPin::Serialize 部分
-        pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
-        pins.append(pin)
+        try:
+            pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
+            pins.append(pin)
+        except Exception as e:
+            # Phase 22 DEBUG: 记录 Pin 读取失败
+            DEBUG_PIN_ERRORS = False  # 设为 True 启用错误日志
+            if DEBUG_PIN_ERRORS:
+                import traceback
+                print(f"DEBUG PIN ERROR: Node {node_export.object_name}, Pin #{len(pins)}: {e}")
+                print(f"  Position: {archive.tell()}")
+                print(traceback.format_exc())
+            # 读取失败，跳过此 pin
+            continue
 
     if DEBUG_PIN_PARSING:
         print(f"[DEBUG NODE] Successfully read {len(pins)}/{pins_count} pins")

@@ -1312,9 +1312,9 @@ def test_graphs_summary_entry_structure(create_mock_parse_result):
 
     # 验证条目结构
     entry = json_dict['graphs_summary'][0]
-    assert 'graph' in entry
+    assert 'graph_name' in entry
     assert 'execution_flows' in entry
-    assert entry['graph'] == "EventGraph"
+    assert entry['graph_name'] == "EventGraph"
 
 
 def test_graphs_summary_calls_format(create_mock_parse_result):
