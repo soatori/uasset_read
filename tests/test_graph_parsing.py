@@ -131,7 +131,7 @@ class TestEdGraphDetection:
     def test_resolve_class_name_from_import(self):
         """ClassIndex < 0 从 ImportMap 解析类名"""
         export_map = []
-        import_map = [MockImport(class_name="ImportedClass")]
+        import_map = [MockImport(object_name="ImportedClass")]
         result = resolve_class_name(PackageIndex(-1), import_map, export_map)
         assert result == "ImportedClass"
 

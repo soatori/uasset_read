@@ -99,29 +99,35 @@ v4.0需求（Phase 18-21）：
 - v3.x 解析完善+Skill+兼容性（2026-05-04）：属性值提取、输出优化、skill封装、UE 5.7兼容
 - v4.0 节点属性深度解析（2026-05-05）：节点属性、执行流、连接验证
 - v5.0 原功能完善（2026-05-06）：蓝图编译研究、元数据增强（部分完成）
+- v5.1 项目结构初始化（2026-05-07）：src layout、constants.py、exceptions.py
+
+**In Progress:**
+- v6.0 模块化重构（2026-05-10起）：Phase 27/28完成，Phase 29进行中
 
 **Tech Stack:**
 - Python 3.10+（match/case，类型提示）
 - 零运行时依赖（仅标准库）
-- 主文件：uasset_read.py（5,100+ lines）
-- 测试：tests/（359 tests passed）
+- 源码结构：`src/uasset_read/`（7个模块，Phase 27/28已完成）
+- 旧版单文件：`uasset_read.py`（待Phase 33删除）
+- 测试：`tests/`
 
 **Architecture:**
-分层管道模式（镜像UE FArchive）：
+分层管道模式（镜像UE FArchive），v6.0模块化结构：
 ```
-.uasset → FArchive → Deserializer → Models → OutputFormatter
-                ↓ v3.x扩展组件
-          PropertyParser (Phase 11)
-          OutputFormatter v3.0 (Phase 14)
-          Skill封装 (Phase 15)
-          BoolFix (Phase 16)
-          PropertyParsingFix (Phase 17)
+.uasset → FArchive (archive.py)
+        → PackageFileSummary (serializers/package_summary.py)
+        → ObjectImport/Export (serializers/object_resources.py)
+        → Constants (constants.py)
+        → Exceptions (exceptions.py)
+        → [待迁移] Models → Parsers → Graph → Formatters
 ```
 
 **Known Issues / Tech Debt:**
 - MCP Server封装延后（SKILL-05/SKILL-06）
 - JSON Schema生成延后（OUT-07/OUT-08）
 - EventGraph测试跳过（Cooked资产情况）
+- Stash中有uasset_read.py和test_phase21_verification.py的待处理修改
+- 7个已知测试失败（前置问题，非Phase 28引起）
 
 ## Key Decisions
 
@@ -146,14 +152,18 @@ v4.0需求（Phase 18-21）：
 - **源码依赖**: 需要参考UE源码理解格式（只读）
 - **范围边界**: 仅支持未烘焙/编辑器保存的资产
 
-## Current Milestone: v5.1 模块化重构与C++代码生成准备
+## Current Milestone: v6.0 模块化重构
 
-**目标:** 以最小化改动实现模块化架构，为蓝图转C++自动化做好准备
+**目标:** 将单文件 uasset_read.py 重构为多模块 Python 包
 
 **目标功能:**
-- 最小化模块化拆分（保持核心结构清晰）
-- C++代码生成准备的JSON输出结构
-- 完成Phase 23-24的技术债务
+- Phase 27: 项目结构初始化 (constants.py, exceptions.py) ✓ Complete
+- Phase 28: 核心序列化模块 (archive.py, serializers/) ✓ Complete
+- Phase 29: 数据模型模块 (models/core.py, models/properties.py, models/graph.py) — 进行中
+- Phase 30: 属性解析模块
+- Phase 31: 蓝图图解析模块
+- Phase 32: 输出格式化模块
+- Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
 
 ## Evolution
 
@@ -174,4 +184,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*最后更新：2026-05-06 — 开始v5.1里程碑*
+*最后更新：2026-05-11 — Phase 28 核心序列化模块完成，v6.0 模块化重构进行中*

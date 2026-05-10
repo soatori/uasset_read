@@ -100,7 +100,8 @@
 **设计原则：** 允许清理旧代码和技术栈，不保留向后兼容层。
 
 - [x] Phase 27: 项目结构初始化 (constants.py, exceptions.py) — Complete
-- [ ] Phase 28: 核心序列化模块 (FArchive, PackageFileSummary, ImportMap/ExportMap)
+- [x] Phase 28: 核心序列化模块 (FArchive, PackageFileSummary, ImportMap/ExportMap) — Complete 2026-05-11
+- [ ] Phase 29: 数据模型模块 (所有 dataclass 模型和属性类型类)
 - [ ] Phase 29: 数据模型模块 (所有 dataclass 模型和属性类型类)
 - [ ] Phase 30: 属性解析模块 (PropertyTag, 属性解析器, 蓝图变量提取)
 - [ ] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建)
@@ -166,7 +167,7 @@
 - [x] 27-01-PLAN.md — 创建src目录结构和pyproject.toml ✓
 - [x] 27-02-PLAN.md — 提取常量和异常到独立模块 ✓
 
-### Phase 28: 核心序列化模块 🔵
+### Phase 28: 核心序列化模块 ✅
 **目标**: 提取 FArchive、PackageFileSummary、ImportMap/ExportMap 到独立模块
 **依赖**: Phase 27
 **需求**: MOD-01, MOD-04, MOD-05
@@ -174,7 +175,7 @@
   1. FArchive类在 archive.py 中完整实现
   2. PackageFileSummary及相关类在 serializers/package_summary.py 中完整实现
   3. ObjectImport、ObjectExport、PackageIndex在 serializers/object_resources.py 中完整实现
-**Plans**: TBD
+**Plans**: 28-01 to 28-04 (UAT 9/9 pass)
 
 ### Phase 29: 数据模型模块 🔵
 **目标**: 提取所有 dataclass 模型和属性类型类到独立模块
@@ -234,7 +235,7 @@
 | 18-22 | v4.0 节点属性深度解析 | 14 | 14 | Complete | 2026-05-05 |
 | 23-26 | v5.0 原功能完善 | 16 | 8 | Complete | 2026-05-06 |
 | 27 | v5.1 项目结构初始化 | 4 | 2 | Complete | 2026-05-07 |
-| 28 | v6.0 模块化重构 | 3 | 0 | Not started | - |
+| 28 | v6.0 模块化重构 | 3 | 4 | Complete | 2026-05-11 |
 | 29 | v6.0 模块化重构 | 3 | 0 | Not started | - |
 | 30 | v6.0 模块化重构 | 3 | 0 | Not started | - |
 | 31 | v6.0 模块化重构 | 3 | 0 | Not started | - |
@@ -244,10 +245,10 @@
 | 39-43 | v8.0 蓝图完整解析 | 15 | 0 | Planned | - |
 | 44-48 | v9.0 全资产+JSON规范化 | 15 | 0 | Planned | - |
 
-**Total:** 48 phases (27 complete, 21 remaining)
+**Total:** 48 phases (28 complete, 20 remaining)
 
 **v6.0 Coverage:** 17/17 requirements mapped (100%)
 
 ---
 
-*最后更新：2026-05-10 — v6.0 里程碑开始，重新规划路线*
+*最后更新：2026-05-11 — Phase 28 核心序列化模块完成，准备开始 Phase 29 数据模型模块*
