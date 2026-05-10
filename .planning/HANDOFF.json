@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-10T11:42:38.753Z",
+  "phase": "28",
+  "phase_name": "核心序列化模块",
+  "phase_dir": ".planning/phases/28-core-serialization",
+  "plan": 28,
+  "task": 3,
+  "total_tasks": 5,
+  "status": "in_progress",
+  "milestone": "v6.0 模块化重构",
+  "completed_tasks": [
+    {"id": 1, "name": "创建 archive.py (FArchive)", "status": "done", "commit": "uncommitted"},
+    {"id": 2, "name": "创建 serializers/package_summary.py", "status": "done", "commit": "uncommitted"},
+    {"id": 3, "name": "创建 serializers/object_resources.py", "status": "done", "commit": "uncommitted"}
+  ],
+  "remaining_tasks": [
+    {"id": 4, "name": "创建 serializers/__init__.py (已完成但未验证导入)", "status": "done_unverified"},
+    {"id": 5, "name": "验证新模块可独立导入且功能正确", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "允许清理旧代码，不保留向后兼容层", "rationale": "用户明确要求，避免技术债务延续", "phase": "28"},
+    {"decision": "模块按 serializers/ 子包组织", "rationale": "FArchive 在顶层 archive.py，PackageFileSummary/ObjectImport/ObjectExport 及读取函数放在 serializers/", "phase": "28"}
+  ],
+  "uncommitted_files": [
+    "src/uasset_read/archive.py",
+    "src/uasset_read/serializers/__init__.py",
+    "src/uasset_read/serializers/package_summary.py",
+    "src/uasset_read/serializers/object_resources.py",
+    ".planning/ROADMAP.md",
+    ".planning/STATE.md"
+  ],
+  "next_action": "验证新模块可独立导入：运行 python -c 'from uasset_read.archive import FArchive; from uasset_read.serializers import *' 确认无导入错误",
+  "context_notes": "Phase 28 已完成文件创建。archive.py 包含 FArchive 完整实现（7690 bytes），package_summary.py 包含 PackageFileSummary + read_package_summary + read_name_table（17067 bytes），object_resources.py 包含 PackageIndex/ObjectImport/ObjectExport + 读取函数（13828 bytes）。Phase 27 的 constants.py 和 exceptions.py 已存在。v6.0 里程碑路线已在 ROADMAP.md 中更新。"
+}
