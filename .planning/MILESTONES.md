@@ -67,4 +67,41 @@
 
 ---
 
-*Last updated: 2026-05-02*
+## v5.1 — 项目结构初始化
+
+**Shipped:** 2026-05-07
+**Phases:** 1 (Phase 27)
+**Timeline:** 1 day (2026-05-06 → 2026-05-07)
+
+**Scope:** Phase 27
+- Phase 27: 项目结构初始化（constants.py, exceptions.py, src layout, pyproject.toml）
+
+**Key Accomplishments:**
+1. 创建 `src/uasset_read/` 目录结构，符合 Python src layout
+2. 配置 pyproject.toml，零依赖安装
+3. 常量模块包含版本号、属性类型阈值、边界常量
+4. 异常模块包含 UAssetError, VersionError, ParseError, ErrorContext
+
+**Archived:**
+- [milestones/v5.1-ROADMAP.md](milestones/v5.1-ROADMAP.md)
+
+---
+
+## v5.0 — 原功能完善及后续重构计划
+
+**Shipped:** 2026-05-06
+**Phases:** 4 (Phase 23-26)
+
+**Scope:** Phase 23-26
+- Phase 23: 模块化重构（未实现，纳入v6.0）
+- Phase 24: JSON输出规范化（未实现，纳入v9.0）
+- Phase 25: 蓝图编译流程研究 ✓
+- Phase 26: 蓝图元数据增强 ⚠️ 部分完成
+
+**Archived:**
+- [milestones/v5.0-ROADMAP.md](milestones/v5.0-ROADMAP.md)
+- [milestones/v5.0-REQUIREMENTS.md](milestones/v5.0-REQUIREMENTS.md)
+
+---
+
+*Last updated: 2026-05-11*

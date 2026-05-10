@@ -3,7 +3,8 @@ status: complete
 phase: 28-core-serialization
 source: [src/uasset_read/archive.py, src/uasset_read/serializers/package_summary.py, src/uasset_read/serializers/object_resources.py, .planning/STATE.md]
 started: "2026-05-10T12:00:00Z"
-updated: "2026-05-10T12:05:00Z"
+completed: "2026-05-11T00:00:00Z"
+updated: "2026-05-11T00:05:00Z"
 ---
 
 ## Current Test

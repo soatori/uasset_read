@@ -1,8 +1,9 @@
-# Requirements - v5.1 模块化重构与C++代码生成准备
+# Requirements - v6.0 模块化重构
 
-**里程碑:** v5.1
-**目标:** 模块化重构 + JSON Schema定义
+**里程碑:** v6.0
+**目标:** 将单文件 uasset_read.py 重构为多模块 Python 包
 **创建日期:** 2026-05-06
+**更新日期:** 2026-05-11
 
 ---
 
@@ -10,7 +11,7 @@
 
 ### MOD - 模块化重构
 
-- [ ] **MOD-01**: 拆分FArchive二进制读取器到独立模块
+- [x] **MOD-01**: 拆分FArchive二进制读取器到独立模块 ✓ (Phase 28)
   - 文件: `src/uasset_read/archive.py`
   - 包含: FArchive类及其所有方法（read_i32, seek, tell等）
   - 零依赖: 仅使用Python标准库（struct, mmap）
@@ -24,12 +25,12 @@
   - 文件: `src/uasset_read/exceptions.py`
   - 包含: UAssetError, VersionError, ParseError, ErrorContext
 
-- [ ] **MOD-04**: 拆分PackageFileSummary序列化到独立模块
+- [x] **MOD-04**: 拆分PackageFileSummary序列化到独立模块 ✓ (Phase 28)
   - 文件: `src/uasset_read/serializers/package_summary.py`
   - 包含: PackageFileSummary, GenerationInfo, EngineVersion, CustomVersion
   - 依赖: MOD-01, MOD-02
 
-- [ ] **MOD-05**: 拆分ImportMap/ExportMap到独立模块
+- [x] **MOD-05**: 拆分ImportMap/ExportMap到独立模块 ✓ (Phase 28)
   - 文件: `src/uasset_read/serializers/object_resources.py`
   - 包含: ObjectImport, ObjectExport, PackageIndex, resolve_*
   - 依赖: MOD-01, MOD-02
@@ -124,11 +125,11 @@
 
 | REQ-ID | Phase | Status | Description |
 |--------|-------|--------|-------------|
-| MOD-01 | Phase 28 | Pending | 拆分FArchive二进制读取器到独立模块 |
-| MOD-02 | Phase 27 | Pending | 定义常量和阈值到独立模块 |
-| MOD-03 | Phase 27 | Pending | 定义异常类到独立模块 |
-| MOD-04 | Phase 28 | Pending | 拆分PackageFileSummary序列化到独立模块 |
-| MOD-05 | Phase 28 | Pending | 拆分ImportMap/ExportMap到独立模块 |
+| MOD-01 | Phase 28 | Complete | 拆分FArchive二进制读取器到独立模块 |
+| MOD-02 | Phase 27 | Complete | 定义常量和阈值到独立模块 |
+| MOD-03 | Phase 27 | Complete | 定义异常类到独立模块 |
+| MOD-04 | Phase 28 | Complete | 拆分PackageFileSummary序列化到独立模块 |
+| MOD-05 | Phase 28 | Complete | 拆分ImportMap/ExportMap到独立模块 |
 | MOD-06 | Phase 29 | Pending | 拆分PropertyTag到独立模块 |
 | MOD-07 | Phase 29 | Pending | 拆分属性解析器到独立模块 |
 | MOD-08 | Phase 29 | Pending | 定义核心数据模型 |

@@ -108,6 +108,8 @@ UE4_ADDED_SEARCHABLE_NAMES = 510               # VER_UE4_ADDED_SEARCHABLE_NAMES 
 VER_UE4_64BIT_EXPORTOFFSETS = 511              # VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (line 717)
 UE4_ADDED_PACKAGE_OWNER = 518                  # VER_UE4_ADDED_PACKAGE_OWNER (line 731)
 UE4_NON_OUTER_PACKAGE_IMPORT = 520             # VER_UE4_NON_OUTER_PACKAGE_IMPORT (line 734)
+# FText History版本阈值（从ObjectVersion.h计算）
+VER_UE4_FTEXT_HISTORY = 528                    # VER_UE4_FTEXT_HISTORY (line 428: ~214+314)
 
 # UE5 Version Constants (EUnrealEngineObjectUE5Version) - 从ObjectVersion.h精确解析
 # Phase 11 GAP修复：UE5版本常量精确值
@@ -388,6 +390,19 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'i', self.read(4))[0]
 
+    def peek_i32(self) -> int:
+        """预读 signed 32-bit integer（不移动位置，Phase 22 FIX-12）"""
+        current_pos = self.tell()
+        try:
+            fmt = '>' if self._byte_swapping else '<'
+            data = self.read(4)
+            result = struct.unpack(fmt + 'i', data)[0]
+            self.seek(current_pos)  # 回退到原位置
+            return result
+        except Exception:
+            self.seek(current_pos)
+            raise
+
     def read_u16(self) -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
         fmt = '>' if self._byte_swapping else '<'
@@ -432,12 +447,12 @@ class FArchive:
 
     def read_fstring(self) -> str:
         """
-        读取 UE FString（带长度前缀的字符串，D-10 仅 UTF-8）。
+        读取 UE FString（带长度前缀的字符串）。
 
-        UE 5.x 格式：
-        - length > 0: UTF-8 编码
-        - length == 0: 空字符串
-        - length < 0: 空字符串（UTF-16 标记，UE5 已弃用）
+        UE 5.x 格式（基于 UE 源码 String.cpp.inl L1779-1876）：
+        - length == 0: 空字符串，仅 4 bytes length，无额外数据
+        - length > 0: UTF-8/ANSI 编码，包含 null terminator
+        - length < 0: UTF-16 编码（已弃用）
 
         Returns:
             解析后的字符串（去除 null 终止符）
@@ -445,19 +460,22 @@ class FArchive:
         length = self.read_i32()
 
         if length == 0:
+            # Empty FString: UE 只写入 4 bytes 的 0，不写入 null terminator
+            # Per String.cpp.inl L1876: if (!SaveNum) { Str.Data.Empty(); }
             return ""
 
         if length < 0:
-            # UE 5.x 不应出现 UTF-16，但作为防御性处理
-            # length < 0 表示 UTF-16 编码，实际长度为 -length * 2
-            # WR-02 fix: Sanity check for overflow prevention
+            # UE FString UTF-16 encoding: length < 0 indicates UTF-16
+            # -length gives character count (including null terminator)
             utf16_len = -length * 2
             if utf16_len > 10_000_000:  # Sanity check for overflow
                 raise ParseError(f"UTF-16 string length {utf16_len} too large")
-            self.read(utf16_len)  # 跳过 UTF-16 数据
-            return ""
+            data = self.read(utf16_len)
+            # Skip null terminator and decode
+            return data.decode('utf-16', errors='replace').rstrip('\x00')
 
-        # UTF-8 编码（UE 5.x 标准）
+        # UTF-8/ANSI 编码（UE 5.x 标准）
+        # length includes null terminator
         data = self.read(length)
         return data.decode('utf-8', errors='replace').rstrip('\x00')
 
@@ -3200,8 +3218,8 @@ def read_ed_graph_pin_type(
     ue4_version = summary.file_version_ue4
 
     # Phase 22 FIX-03: UE5.7 版本检查修复
-    # 当 CustomVersion 不存在时（framework_version = -1），使用 file_version_ue5 作为 fallback
-    # file_version_ue5 > 0 表示 UE5 资产，应该使用 FName format
+    # Per EdGraphPin.cpp L174: Ar.CustomVer(FFrameworkObjectVersion::GUID) >= PinsStoreFName
+    # UE5资产 (file_version_ue5 > 0) 应使用 FName 格式
     use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
 
     # 1-2. PinCategory and PinSubCategory (version dependent)
@@ -3218,8 +3236,10 @@ def read_ed_graph_pin_type(
     pin_type.pin_sub_category_object = archive.read_i32()
 
     # 4-5. ContainerType (version dependent)
-    # Per EdGraphPin.cpp L215-246
-    if framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE:
+    # Per EdGraphPin.cpp L215: Ar.CustomVer(FFrameworkObjectVersion::GUID) >= EdGraphPinContainerType
+    # UE 加载时从注册表获取最新版本，我的解析器用 file_version_ue5 > 0 作为 fallback
+    use_modern_container = framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE or summary.file_version_ue5 > 0
+    if use_modern_container:
         pin_type.container_type = archive.read_u8()
         if pin_type.container_type == 3:  # Map
             # PinValueType (FEdGraphTerminalType)
@@ -3250,10 +3270,20 @@ def read_ed_graph_pin_type(
 
     # 8. PinSubCategoryMemberReference (version dependent)
     # Per EdGraphPin.cpp L254-269: VER_UE4_MEMBERREFERENCE_IN_PINTYPE
-    # 现代资产通常有此字段，简化处理：始终读取
-    archive.read_i32()  # MemberParent (FPackageIndex)
+    # Phase 22-09 FIX: 使用完整的 FMemberReference 序列化格式
+    # FMemberReference 序列化顺序（MemberReference.h L74-95）：
+    #   1. MemberParent (FPackageIndex)
+    #   2. MemberScope (FString) - 漏掉此字段导致后续位置错位
+    #   3. MemberName (FName)
+    #   4. MemberGuid (FGuid 16 bytes)
+    #   5. bSelfContext (bool)
+    #   6. bWasDeprecated (bool)
+    archive.read_i32()       # MemberParent (FPackageIndex)
+    archive.read_fstring()   # MemberScope (FString) - Phase 22-09 FIX
     archive.read_name(name_map)  # MemberName
-    archive.read(16)  # MemberGuid
+    archive.read(16)         # MemberGuid
+    archive.read_bool()      # bSelfContext - Phase 22-09 FIX
+    archive.read_bool()      # bWasDeprecated - Phase 22-09 FIX
 
     # 9. bIsConst (version dependent)
     # Per EdGraphPin.cpp L271-276: VER_UE4_SERIALIZE_PINTYPE_CONST
@@ -3510,6 +3540,11 @@ def read_ue_graph_pin(
 
     # Phase 22 FIX-03: UE5.7 版本检查修复
     # 当 CustomVersion 不存在时，使用 file_version_ue5 作为 fallback
+    # Phase 22 FIX-03: UE5 CustomVersion fallback
+    # Per Archive.cpp L558-567: 加载时用 FCurrentCustomVersions::GetAll() 填充，
+    # 所以即使资产文件中没有存储 GUID，UE 也会从注册表获取最新版本。
+    # 我的解析器没有注册表机制，用 file_version_ue5 > 0 作为 fallback。
+    # UE5 资产（file_version_ue5 > 0）应该使用现代 FName 格式。
     use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
 
     pin_start_pos = archive.tell()
@@ -3560,59 +3595,30 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN]    FText: flags={flags}, history_type={history_type}")
 
         # 根据history_type决定跳过多少字节
-        if history_type == 0:  # None
-            b_has_culture_invariant = archive.read_u8()
-            if b_has_culture_invariant != 0:
-                archive.read_fstring()  # CultureInvariantString
+        # Per UE 源码 Text.cpp L1020-1036 和 TextHistory.h:
+        # ETextHistoryType::None = -1 (int8), Base = 0
+        if history_type == -1 or history_type == 255:  # ETextHistoryType::None (int8: 255 = -1)
+            # Per UE 源码 Text.cpp L1020-1036:
+            # 当 history_type = None 时，检查 bHasCultureInvariantString
             if DEBUG_PIN_PARSING:
-                print(f"[DEBUG PIN]    FText type 0: skipped, offset now: {archive.tell():#x}")
-        elif history_type == 1:  # Base
+                print(f"[DEBUG PIN]    FText type None (-1/255): checking bHasCultureInvariantString")
+
+            # 读取 bHasCultureInvariantString (bool)
+            b_has_culture_invariant = archive.read_bool()
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN]    bHasCultureInvariantString: {b_has_culture_invariant}")
+
+            if b_has_culture_invariant:
+                # 读取 CultureInvariantString (FString)
+                culture_invariant_string = archive.read_fstring()
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN]    CultureInvariantString: '{culture_invariant_string}'")
+        elif history_type == 0:  # ETextHistoryType::Base
             archive.read_fstring()  # Namespace
             archive.read_fstring()  # Key
             archive.read_fstring()  # SourceString
             if DEBUG_PIN_PARSING:
-                print(f"[DEBUG PIN]    FText type 1: skipped, offset now: {archive.tell():#x}")
-        elif history_type == 255 and flags == 0:
-            # Phase 22-09 Task 3: 修复 FText history_type=255 处理
-            # history_type=255, flags=0: 空FText 或特殊格式
-            # 尝试找到正确的跳过字节数
-            if DEBUG_PIN_PARSING:
-                print(f"[DEBUG PIN]    FText type 255: attempting to find correct skip")
-
-            # 动态扫描：尝试跳过 0-20 字节，寻找有效的 Direction
-            found_valid_skip = False
-            for skip_bytes in range(0, 20):
-                test_pos = archive.tell()
-                # 跳过 skip_bytes 字节
-                archive.seek(test_pos + skip_bytes)
-                # 尝试读取 PinToolTip 和 Direction 验证
-                try:
-                    test_tooltip = archive.read_fstring()
-                    test_direction = archive.read_u8()
-                    if test_direction in (0, 1, 2, 3):
-                        # 找到有效 Direction
-                        found_valid_skip = True
-                        # 回退到 test_pos + skip_bytes，重新读取
-                        archive.seek(test_pos + skip_bytes)
-                        if DEBUG_PIN_PARSING:
-                            print(f"[DEBUG PIN]    FText type 255: skipped {skip_bytes} bytes, Direction={test_direction} (valid)")
-                        break
-                except Exception:
-                    pass
-                # 回退到测试位置
-                archive.seek(test_pos)
-
-            if found_valid_skip:
-                # 已在正确位置，继续
-                pass
-            else:
-                # 无法找到有效 skip，回退到 FText 起始位置并跳过固定字节数
-                archive.seek(ftext_start_pos)
-                archive.read_bytes(5)  # 跳过 flags + history_type
-                # 尝试跳过额外的 12 字节（FString 长度 + 数据）
-                archive.read_bytes(12)
-                if DEBUG_PIN_PARSING:
-                    print(f"[DEBUG PIN]    FText type 255: unable to find valid Direction, using 17-byte skip (5+12)")
+                print(f"[DEBUG PIN]    FText type 0 (Base): skipped 3 FStrings, offset now: {archive.tell():#x}")
         else:
             # 其他类型，跳过最多5个FString
             max_strings = 5
@@ -3690,10 +3696,41 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN] 11. DefaultObject: ERROR ({e}), using 0, offset now: {archive.tell():#x}")
 
     # 12. DefaultTextValue (FText) [L1876]
-    # FText简化处理：暂不实现完整FText解析
-    default_text_value = None  # TODO: Phase后续实现FText
-    if DEBUG_PIN_PARSING:
-        print(f"[DEBUG PIN] 12. DefaultTextValue: None (skipped), offset now: {archive.tell():#x}")
+    # Phase 22 FIX-13: 跳过 DefaultTextValue FText 字段
+    # FText 序列化格式：flags (4) + history_type (1) + 可变数据
+    # 尝试读取 FText 并跳过
+    default_text_value = None  # TODO: Phase后续实现FText解析
+    try:
+        # 读取 FText 的 flags 和 history_type
+        text_flags = archive.read_i32()
+        text_history_type = archive.read_u8()
+
+        # 根据 history_type 跳过相应数据
+        # Per Text.cpp L845-1062: FText 序列化格式
+        # Phase 22-09 FIX: 正确处理 history_type=255 (ETextHistoryType::None)
+        if text_history_type == 255 or text_history_type == -1:  # ETextHistoryType::None
+            # 空FText: 读取 bHasCultureInvariantString (bool)
+            b_has_culture_invariant = archive.read_bool()
+            if b_has_culture_invariant:
+                archive.read_fstring()  # CultureInvariantString
+        elif text_history_type == 0:  # ETextHistoryType::Base
+            archive.read_fstring()  # Namespace
+            archive.read_fstring()  # Key
+            archive.read_fstring()  # SourceString
+        else:
+            # 其他类型：尝试跳过最多 5 个 FString
+            for _ in range(5):
+                try:
+                    archive.read_fstring()
+                except Exception:
+                    break
+
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 12. DefaultTextValue: skipped FText (flags={text_flags}, type={text_history_type}), offset now: {archive.tell():#x}")
+    except Exception as e:
+        # 读取失败，跳过
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 12. DefaultTextValue: ERROR ({e}), offset now: {archive.tell():#x}")
 
     # 13. LinkedTo (SerializePinArray) [L1886]
     linkedto_start = archive.tell()
@@ -3704,8 +3741,13 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN] 13. LinkedTo: {len(linked_to)} pins, {linkedto_bytes} bytes, offset now: {archive.tell():#x}")
     except Exception as e:
         linked_to = []
+        # Debug Session Phase 22 Fix: 回退到读取 array_count 之前的位置
+        # read_pin_array 已经读取了 array_count（4 bytes），需要回退
+        archive.seek(linkedto_start)
+        # 读取并跳过 array_count
+        array_count = archive.read_i32()
         if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN] 13. LinkedTo: ERROR ({e}), using empty list, offset now: {archive.tell():#x}")
+            print(f"[DEBUG PIN] 13. LinkedTo: ERROR ({e}), using empty list, skipped array_count={array_count}, offset now: {archive.tell():#x}")
 
     # 14. SubPins (SerializePinArray) [L1889]
     subpins_start = archive.tell()
@@ -3716,8 +3758,13 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN] 14. SubPins: {len(sub_pins)} pins, {subpins_bytes} bytes, offset now: {archive.tell():#x}")
     except Exception as e:
         sub_pins = []
+        # Debug Session Phase 22 Fix: 回退到读取 array_count 之前的位置
+        # read_pin_array 已经读取了 array_count（4 bytes），需要回退
+        archive.seek(subpins_start)
+        # 读取并跳过 array_count
+        array_count = archive.read_i32()
         if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN] 14. SubPins: ERROR ({e}), using empty list, offset now: {archive.tell():#x}")
+            print(f"[DEBUG PIN] 14. SubPins: ERROR ({e}), using empty list, skipped array_count={array_count}, offset now: {archive.tell():#x}")
 
     # 15. ParentPin (SerializePin) [L1891]
     parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
@@ -3731,11 +3778,22 @@ def read_ue_graph_pin(
         print(f"[DEBUG PIN] 16. ReferencePassThroughConnection: {ref_pass_through}, offset now: {archive.tell():#x}")
 
     # 17-18. EditorOnly fields [L1894-1948]
-    persistent_guid = None
     hidden = False
     not_connectable = False
     advanced_view = False
     orphaned_pin = False
+
+    # Phase 22-09 Task 3: 读取 PersistentGuid (16 bytes)
+    # UE 5.x 编辑器保存的资产在 ReferencePassThrough 之后、BitField 之前
+    # 序列化 PersistentGuid 字段（EditorOnly，仅用于位置同步）
+    try:
+        persistent_guid_bytes = archive.read_bytes(16)
+        persistent_guid = persistent_guid_bytes.hex().upper()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 17. PersistentGuid: {persistent_guid}, offset now: {archive.tell():#x}")
+    except Exception as e:
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN] 17. PersistentGuid read failed: {e}")
 
     # 假设cooked资产跳过EditorOnly字段，尝试读取BitField
     # 对于UE5.7 editor保存的资产，可能存在BitField
@@ -3839,19 +3897,22 @@ def read_ue_graph_node(
     # 替代 heuristic_delta 方案，通过扫描找到正确的 pins 起始位置
     # Pattern: pins_count (1-20) + bNullPtr (0) + OwningNode + PinGuid
 
-    # 安全扫描范围：从 script_serial_size 结束位置开始，最多扫描 200 bytes
+    # Phase 22-09: 双向扫描策略
+    # 1. 从 script_serial_size 结束位置向前扫描（正向扫描）
+    # 2. 从 serial_size 结束位置反向扫描（寻找 NodePos/NodeGuid）
+
     scan_start = node_export.script_serial_offset + node_export.script_serial_size
-    scan_end = min(scan_start + 200, node_export.serial_size)
+    scan_end_forward = node_export.serial_size - 200  # 正向扫描到尾部前 200 bytes
 
     archive.seek(node_export.serial_offset + scan_start)
     pins_found = False
     pins_offset = scan_start
 
     if DEBUG_PIN_PARSING:
-        print(f"[DEBUG SCAN] Scanning for pins_offset from {scan_start:#x} to {scan_end:#x}")
+        print(f"[DEBUG SCAN] Scanning for pins_offset from {scan_start:#x} to {scan_end_forward:#x}")
         print(f"[DEBUG SCAN] Node: {node_export.object_name}, serial_offset={node_export.serial_offset:#x}")
 
-    while archive.tell() < node_export.serial_offset + scan_end:
+    while archive.tell() < node_export.serial_offset + scan_end_forward:
         try:
             test_pos = archive.tell()
             test_count = archive.read_i32()
@@ -3862,8 +3923,16 @@ def read_ue_graph_node(
 
             # 验证 pins_count 合理范围
             if 1 <= test_count <= 20:  # 合理的 pins 数量
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG SCAN]   -> Count in range, reading null...")
                 # 验证后续数据符合 SerializePin 格式
-                test_null = archive.read_i32()  # bNullPtr
+                try:
+                    test_null = archive.read_i32()  # bNullPtr
+                except Exception as e:
+                    if DEBUG_PIN_PARSING:
+                        print(f"[DEBUG SCAN]   -> ERROR reading null: {e}")
+                    archive.seek(test_pos + 4)
+                    continue
 
                 if DEBUG_PIN_PARSING:
                     print(f"[DEBUG SCAN]   null={test_null}")
@@ -3878,14 +3947,28 @@ def read_ue_graph_node(
                     # OwningNode 应该指向自身或合理的 import/export 引用
                     if test_owning == 0 or (test_owning < 0 and test_owning >= -1000) or (test_owning > 0 and test_owning <= 1000):
                         # 验证通过，读取后续字段进行更严格的验证
-                        # 尝试读取 PinId 和 PinName 来确认这是正确的 pins 起始位置
-                        test_save_pos = archive.tell()
+                        # Phase 22-09 修复：保存位置在 OwningNode_2 之前
+                        # read_ue_graph_pin 需要从 OwningNode 开始读取
+                        test_save_pos = archive.tell()  # 在 PinGuid_1 之前
 
-                        # 尝试读取第一个 Pin 的 PinId (16字节)
                         try:
+                            # 跳过 SerializePin 的 PinGuid (16 bytes)
+                            pin_guid_1 = archive.read_bytes(16)
+                            if DEBUG_PIN_PARSING:
+                                print(f"[DEBUG SCAN]   PinGuid_1 (SerializePin): {pin_guid_1.hex()}")
+
+                            # UEdGraphPin::Serialize 开始位置 - 用于 read_ue_graph_pin
+                            pin_serialize_start = archive.tell()
+
+                            # 读取 OwningNode_2 (应与 OwningNode_1 相同)
+                            owning_node_2 = archive.read_i32()
+                            if DEBUG_PIN_PARSING:
+                                print(f"[DEBUG SCAN]   OwningNode_2 (UEdGraphPin): {owning_node_2}")
+
+                            # 读取真正的 PinId (16 bytes)
                             pin_id_bytes = archive.read_bytes(16)
                             if DEBUG_PIN_PARSING:
-                                print(f"[DEBUG SCAN]   PinId bytes: {pin_id_bytes.hex()}")
+                                print(f"[DEBUG SCAN]   PinId (UEdGraphPin): {pin_id_bytes.hex()}")
 
                             # 尝试读取第一个 Pin 的 PinName
                             pin_name_idx = archive.read_i32()
@@ -3899,21 +3982,38 @@ def read_ue_graph_node(
                                     print(f"[DEBUG SCAN]   REJECTED: PinName out of range")
                             else:
                                 pin_name = name_map[pin_name_idx]
-                                # Phase 22-09: 放宽验证条件，允许更多节点通过
-                                # PinId 全零检查过于严格，某些节点可能有全零 PinId
-                                # PinName = "None" 可能是有效的 PinName
-                                # 只验证 PinName 非空即可
-                                if not pin_name:
+                                # Phase 22-09: 严格验证 PinName
+                                # 必须是常见的有效 pin name，排除 UObject 属性名
+                                if pin_name not in VALID_PIN_NAMES:
                                     if DEBUG_PIN_PARSING:
-                                        print(f"[DEBUG SCAN]   REJECTED: PinName is empty")
+                                        print(f"[DEBUG SCAN]   REJECTED: PinName '{pin_name}' not in VALID_PIN_NAMES")
                                 else:
-                                    # 所有验证通过，这是正确的 pins 起始位置
-                                    pins_offset = test_pos - node_export.serial_offset
-                                    pins_found = True
-                                    if DEBUG_PIN_PARSING:
-                                        print(f"[DEBUG SCAN] ✓ ACCEPTED: Found valid pins_offset at {pins_offset:#x}")
-                                        print(f"[DEBUG SCAN]   pins_count={test_count}, PinId={pin_id_bytes.hex()}, PinName='{pin_name}'")
-                                    break
+                                    # 尝试读取第一个 pin 并验证 Direction
+                                    # 使用 read_ue_graph_pin 来正确处理所有字段
+                                    # 恢复到 UEdGraphPin::Serialize 开始位置
+                                    archive.seek(pin_serialize_start)
+                                    try:
+                                        pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
+                                        test_direction = pin.direction
+                                        if DEBUG_PIN_PARSING:
+                                            print(f"[DEBUG SCAN]   Pin direction: {test_direction}")
+
+                                        # 验证 Direction 在有效范围 (0-7)
+                                        # Direction: 0=Input, 1=Output, 2=None, 3=Hide, 7=Complex (self pin)
+                                        if test_direction > 7:
+                                            if DEBUG_PIN_PARSING:
+                                                print(f"[DEBUG SCAN]   REJECTED: Direction {test_direction} > 7")
+                                        else:
+                                            # 所有验证通过，这是正确的 pins 起始位置
+                                            pins_offset = test_pos - node_export.serial_offset
+                                            pins_found = True
+                                            if DEBUG_PIN_PARSING:
+                                                print(f"[DEBUG SCAN] ✓ ACCEPTED: Found valid pins_offset at {pins_offset:#x}")
+                                                print(f"[DEBUG SCAN]   pins_count={test_count}, PinName='{pin_name}', Direction={test_direction}")
+                                            break
+                                    except Exception as e:
+                                        if DEBUG_PIN_PARSING:
+                                            print(f"[DEBUG SCAN]   REJECTED: Exception reading pin: {e}")
                         except Exception as e:
                             if DEBUG_PIN_PARSING:
                                 print(f"[DEBUG SCAN]   REJECTED: Exception during validation: {e}")
@@ -4001,10 +4101,17 @@ def read_ue_graph_node(
     # 5. NodeComment
     node_comment = archive.read_fstring()
 
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] After NodeComment: pos={archive.tell():#x}")
+        print(f"[DEBUG NODE] NodeComment value: '{node_comment}'")
+
     # 类型识别（D-02b）
     class_name = resolve_class_name(node_export.class_index, import_map, export_map)
     if class_name is None:
         class_name = ""
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG NODE] Before type dispatch: pos={archive.tell():#x}, class={class_name}")
 
     # 类型分派（D-02b, GRAPH-05~09）
     # Per RESEARCH.md L260-316: match/case 类型分派
@@ -4054,11 +4161,13 @@ def read_fmember_reference(
 
     用于 K2Node_CallFunction 和 K2Node_Event 的函数/事件引用。
 
-    序列化顺序（基于 RESEARCH.md L318-355 推断，编辑器导出验证）：
-    1. MemberParent (FPackageIndex i32)
-    2. MemberName (FName)
-    3. MemberGuid (FGuid 16 bytes)
-    4. bSelfContext (uint8)
+    序列化顺序（基于 UE 源码 MemberReference.h L74-95）：
+    1. MemberParent (TObjectPtr<UObject> -> FPackageIndex i32)
+    2. MemberScope (FString) - 局部变量作用域名称
+    3. MemberName (FName)
+    4. MemberGuid (FGuid 16 bytes)
+    5. bSelfContext (bool)
+    6. bWasDeprecated (bool)
 
     Args:
         archive: FArchive positioned at FMemberReference
@@ -4069,6 +4178,8 @@ def read_fmember_reference(
     Returns:
         FMemberReference 实例
     """
+    start_pos = archive.tell()
+
     # 1. MemberParent (FPackageIndex)
     member_parent_index = archive.read_i32()
     member_parent: Optional[str] = None
@@ -4077,15 +4188,31 @@ def read_fmember_reference(
             PackageIndex(member_parent_index), import_map, export_map
         )
 
-    # 2. MemberName (FName)
+    # 2. MemberScope (FString) - Phase 22-09 FIX: 漏掉此字段导致位置错位
+    member_scope = archive.read_fstring()
+
+    # 3. MemberName (FName)
     member_name = archive.read_name(name_map)
 
-    # 3. MemberGuid (FGuid 16 bytes)
+    # 4. MemberGuid (FGuid 16 bytes)
     member_guid_bytes = archive.read_bytes(16)
     member_guid = member_guid_bytes.hex()
 
-    # 4. bSelfContext (uint8)
+    # 5. bSelfContext (bool)
     b_self_context = archive.read_bool()
+
+    # 6. bWasDeprecated (bool) - Phase 22-09 FIX: 漏掉此字段
+    b_was_deprecated = archive.read_bool()
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG FMEMBER] start_pos={start_pos:#x}")
+        print(f"[DEBUG FMEMBER] member_parent_index={member_parent_index} -> {member_parent}")
+        print(f"[DEBUG FMEMBER] member_scope='{member_scope}'")
+        print(f"[DEBUG FMEMBER] member_name='{member_name}'")
+        print(f"[DEBUG FMEMBER] member_guid={member_guid}")
+        print(f"[DEBUG FMEMBER] b_self_context={b_self_context}")
+        print(f"[DEBUG FMEMBER] b_was_deprecated={b_was_deprecated}")
+        print(f"[DEBUG FMEMBER] end_pos={archive.tell():#x}")
 
     return FMemberReference(
         member_parent=member_parent,
@@ -6129,6 +6256,30 @@ START_EVENT_TYPES = frozenset({
     "K2Node_CustomEvent"
 })
 
+# Phase 22-09: 有效 PinName 列表（用于 pins_offset 扫描验证）
+# 排除常见的 UObject 属性名（BlueprintGuid, BlueprintType 等）
+VALID_PIN_NAMES = frozenset({
+    # Exec pins
+    "execute", "then", "OutputDelegate", "InputDelegate",
+    # Common self/WorldContext pins
+    "self", "WorldContext", "Target",
+    # Common data pins
+    "ReturnValue", "Result", "Value", "Input", "Output",
+    # ActionValue pins (EnhancedInputAction)
+    "ActionValue", "ActionValue_X", "ActionValue_Y", "ActionValue_Z",
+    # Trigger timing pins (EnhancedInputAction)
+    "Triggered", "Started", "Completed", "Canceled", "Ongoing",
+    # Common parameter names
+    "A", "B", "X", "Y", "Z", "Right", "Forward", "Left", "Backward",
+    "Yaw", "Pitch", "Roll",
+    "Index", "Key", "Element", "Item", "Object", "Actor", "Component",
+    "Class", "Name", "Type", "Tag", "Id", "GUID",
+    # Event pins
+    "Entry", "Exit", "Condition", "True", "False",
+    # Common variants
+    "InputPin", "OutputPin", "Input0", "Output0",
+})
+
 # D-19-14: 控制流节点分支类型映射（LINK-02）
 BRANCH_TYPE_MAP = {
     "K2Node_IfThenElse": "if_then_else",
@@ -6435,13 +6586,15 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
                     param_str = _extract_function_params(graph, node.get("node_guid"))
                     calls.append(f"{func_name}({param_str})")
 
+            function_name = calls[0] if calls else ""
             execution_flows_summary.append({
                 "event": event_name,
+                "function_name": function_name,
                 "calls": calls
             })
 
         summary.append({
-            "graph": graph.graph_name,
+            "graph_name": graph.graph_name,
             "execution_flows": execution_flows_summary
         })
 

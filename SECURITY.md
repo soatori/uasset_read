@@ -8,6 +8,13 @@
 
 ---
 
+## 当前状态
+
+安全边界常量已从 `uasset_read.py` 迁移至 `src/uasset_read/constants.py`。
+验证逻辑仍在 `uasset_read.py` 中（旧版单文件），v6.0完成后将迁移至 `src/uasset_read/`。
+
+---
+
 ## 威胁验证结果
 
 **总计:** 31 个威胁
@@ -138,14 +145,16 @@
 
 | 常量 | 值 | 用途 | 位置 |
 |------|----|----|------|
-| MAX_EXPORT_COUNT | 1,000,000 | 导出表大小限制 | uasset_read.py:41 |
-| MAX_PINS_PER_NODE | 1,000 | 单节点引脚数限制 | uasset_read.py:66 |
-| MAX_NODES_PER_GRAPH | 5,000 | 单图节点数限制 | uasset_read.py:67 |
-| MAX_LINKEDTO_PER_PIN | 100 | 单引脚连接数限制 | uasset_read.py:68 |
-| MAX_PROPERTY_COUNT | 10,000 | 属性循环限制 | uasset_read.py:46 |
-| MAX_DEPTH (Struct) | 5 | StructProperty递归深度 | uasset_read.py:3183 |
-| MAX_DEPTH (Array) | 10 | ArrayProperty递归深度 | uasset_read.py:2976 |
-| PKG_Cooked | 0x200 | Cooked资产检测标志 | uasset_read.py:63 |
+| MAX_EXPORT_COUNT | 1,000,000 | 导出表大小限制 | constants.py |
+| MAX_PINS_PER_NODE | 1,000 | 单节点引脚数限制 | constants.py |
+| MAX_NODES_PER_GRAPH | 5,000 | 单图节点数限制 | constants.py |
+| MAX_LINKEDTO_PER_PIN | 100 | 单引脚连接数限制 | constants.py |
+| MAX_PROPERTY_COUNT | 10,000 | 属性循环限制 | constants.py |
+| MAX_DEPTH (Struct) | 5 | StructProperty递归深度 | uasset_read.py |
+| MAX_DEPTH (Array) | 10 | ArrayProperty递归深度 | uasset_read.py |
+| PKG_Cooked | 0x200 | Cooked资产检测标志 | uasset_read.py |
+| MMAP_THRESHOLD | - | mmap大文件阈值 | constants.py |
+| PROPERTY_TAG_COMPLETE_TYPE_NAME | 1012 | UE5格式切换点 | constants.py |
 
 ---
 
