@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **v6.0 (模块化重构): 进行中** — Phase 27/28已完成（archive.py、constants.py、exceptions.py、serializers/），Phase 29数据模型模块待开始。
 
 仓库存在两套代码：
-- `uasset_read.py` — 旧版单文件（~5000行），当前 CLI 入口，包含完整解析管线
+- `uasset_read.py` — 旧版单文件（~7958行），当前 CLI 入口，包含完整解析管线
 - `src/uasset_read/` — 新版模块化包（v6.0重构中），目前仅包含序列化基础模块
 
 ## 常用命令
@@ -25,7 +25,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 安装开发依赖
 pip install -e ".[dev]"
 
-# 解析 .uasset 文件（使用旧版入口）
+# 解析 .uasset 文件（使用旧版单文件入口）
+python uasset_read.py path/to/file.uasset
+
+# 或以模块方式调用
 python -c "from uasset_read import parse_uasset; r = parse_uasset('file.uasset'); print(r)"
 
 # 运行所有测试
@@ -85,12 +88,16 @@ print(json.dumps(r.to_dict(), indent=2))
 - **构建**: setuptools（src layout），pyproject.toml 配置
 - **测试**: pytest（可选 dev 依赖）
 
+## 注意事项
+
+- `pyproject.toml` 中定义了 `uasset-read` CLI 入口（`uasset_read.cli:main`），但该模块尚未实现 — Phase 33 前请使用 `python uasset_read.py` 作为入口
+
 ## 文件组织
 
 ```
 uasset_read.py              # 旧版单文件主入口（待删除）
 src/uasset_read/            # 新版模块化包（v6.0重构中）
-tests/                      # 测试目录（18个测试文件）
+tests/                      # 测试目录（21个测试文件）
 uasset_read_cpp/            # C++移植参考（请勿修改）
 .planning/                  # GSD工作流文件（路线图、状态、需求）
 ```

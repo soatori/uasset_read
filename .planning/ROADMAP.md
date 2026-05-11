@@ -12,10 +12,10 @@
 - ✅ **v4.0 节点属性深度解析** — Phases 18-22 (shipped 2026-05-05) — [Archive](milestones/v4.0-ROADMAP.md)
 - ✅ **v5.0 原功能完善及后续重构计划** — Phases 23-26 (archived 2026-05-06) — [Archive](milestones/v5.0-ROADMAP.md)
 - ✅ **v5.1 项目结构初始化** — Phase 27 only (archived 2026-05-07) — [Archive](milestones/v5.1-ROADMAP.md)
-- 🔵 **v6.0 模块化重构** — Phases 28-33 (active)
-- ⬜ **v7.0 深度序列化解析** — Phases 34-38 (planned)
-- ⬜ **v8.0 蓝图完整解析** — Phases 39-43 (planned)
-- ⬜ **v9.0 全资产覆盖与JSON规范化** — Phases 44-48 (planned)
+- 🔵 **v6.0 模块化重构** — Phases 28-35 (active)
+- ⬜ **v7.0 深度序列化解析** — Phases 36-40 (planned)
+- ⬜ **v8.0 蓝图完整解析** — Phases 41-45 (planned)
+- ⬜ **v9.0 全资产覆盖与JSON规范化** — Phases 46-50 (planned)
 
 ## Phases
 
@@ -95,60 +95,68 @@
 </details>
 
 <details>
-<summary>🔵 v6.0 模块化重构 (Phases 28-33) — IN PROGRESS</summary>
+<summary>🔵 v6.0 模块化重构 (Phases 28-35) — IN PROGRESS</summary>
 
-**设计原则：** 允许清理旧代码和技术栈，不保留向后兼容层。
+**设计原则：** 等价迁移现有 uasset_read.py 功能，不新增能力。零兼容包袱。
 
 - [x] Phase 27: 项目结构初始化 (constants.py, exceptions.py) — Complete
 - [x] Phase 28: 核心序列化模块 (FArchive, PackageFileSummary, ImportMap/ExportMap) — Complete 2026-05-11
-- [ ] Phase 29: 数据模型模块 (所有 dataclass 模型和属性类型类)
-- [ ] Phase 29: 数据模型模块 (所有 dataclass 模型和属性类型类)
+- [ ] Phase 28a: 测试基线修复 (7个已知失败修复 + stash关键bug合并)
+- [ ] Phase 29: 核心数据模型 (UEdGraph, UEdGraphNode, UEdGraphPin, ParseResult dataclasses)
+- [ ] Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接数据结构)
 - [ ] Phase 30: 属性解析模块 (PropertyTag, 属性解析器, 蓝图变量提取)
-- [ ] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建)
-- [ ] Phase 32: 输出格式化模块 (JSON/Text/Markdown 输出)
+- [ ] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建) — 等价迁移 Phase 7/18-22
+- [ ] Phase 32: 输出格式化模块 (JSON/Text/Markdown 输出) — 等价迁移 Phase 14/20
 - [ ] Phase 33: 入口与测试适配 (CLI, __init__.py, 测试更新, 删除旧文件)
+- [ ] Phase 34: 等价验证 (新旧输出逐字段对比，零回归)
 
 **里程碑目标：**
-- 将 7,957 行单文件重写为 ~12 个模块
-- 所有测试更新适配并通过
-- 零兼容包袱，直接清理技术债
+- 将 7,957 行单文件重写为 ~15 个模块
+- 所有测试适配并通过（修复 7 个已知失败）
+- 等价迁移：JSON/Text/Markdown 输出与旧版完全一致
+
+**范围边界（v6.0 不包含）：**
+- ❌ BulkData 内容解析 → v7.0
+- ❌ UberGraph/事件分发图增强 → v8.0
+- ❌ UBlueprintGeneratedClass 字节码反编译 → v8.0
+- ❌ .umap/World 资产解析 → v9.0
 
 </details>
 
 <details>
-<summary>⬜ v7.0 深度序列化解析 (Phases 34-38) — PLANNED</summary>
+<summary>⬜ v7.0 深度序列化解析 (Phases 36-40) — PLANNED</summary>
 
 **UE 对应阶段：** Object Serialization (FLinkerLoad Tick/LoadAllObjects)
 
-- [ ] Phase 34: 导出体数据解析
-- [ ] Phase 35: Preload 数据解析
-- [ ] Phase 36: 对象引用图构建
-- [ ] Phase 37: BulkData 元数据解析
-- [ ] Phase 38: 版本化序列化支持
+- [ ] Phase 36: 导出体数据解析 (ExportBody 完整反序列化)
+- [ ] Phase 37: Preload 数据解析 (Preload 依赖链)
+- [ ] Phase 38: 对象引用图构建 (跨对象引用关系)
+- [ ] Phase 39: BulkData 元数据解析 (批量数据头/偏移/大小)
+- [ ] Phase 40: 版本化序列化支持 (UE 版本兼容性矩阵)
 
 </details>
 
 <details>
-<summary>⬜ v8.0 蓝图完整解析 (Phases 39-43) — PLANNED</summary>
+<summary>⬜ v8.0 蓝图完整解析 (Phases 41-45) — PLANNED</summary>
 
 **UE 对应阶段：** FinalizeCreation + UClass/UBlueprint 生成
 
-- [ ] Phase 39: UBlueprintGeneratedClass 深度解析
-- [ ] Phase 40: UberGraph 解析
-- [ ] Phase 41: 事件分发图解析
-- [ ] Phase 42: 生成类元数据
-- [ ] Phase 43: 蓝图 JSON 输出完整性验证
+- [ ] Phase 41: UBlueprintGeneratedClass 深度解析 (生成类结构)
+- [ ] Phase 42: UberGraph 解析 (完整 UberGraph 数据)
+- [ ] Phase 43: 事件分发图解析 (EventDispatcher 完整链路)
+- [ ] Phase 44: 蓝图字节码反编译 (Kismet bytecode 参考解析)
+- [ ] Phase 45: 蓝图 JSON 输出完整性验证
 
 </details>
 
 <details>
-<summary>⬜ v9.0 全资产覆盖与JSON规范化 (Phases 44-48) — PLANNED</summary>
+<summary>⬜ v9.0 全资产覆盖与JSON规范化 (Phases 46-50) — PLANNED</summary>
 
-- [ ] Phase 44: .umap/World 资产解析
-- [ ] Phase 45: AssetRegistry 标签解析
-- [ ] Phase 46: JSON Schema 定义与验证
-- [ ] Phase 47: 性能优化
-- [ ] Phase 48: 生产级验证
+- [ ] Phase 46: .umap/World 资产解析
+- [ ] Phase 47: AssetRegistry 标签解析
+- [ ] Phase 48: JSON Schema 定义与验证
+- [ ] Phase 49: 性能优化 (mmap, 并行解析, 缓存)
+- [ ] Phase 50: 生产级验证 (压力测试, 边界资产覆盖)
 
 </details>
 
@@ -177,19 +185,51 @@
   3. ObjectImport、ObjectExport、PackageIndex在 serializers/object_resources.py 中完整实现
 **Plans**: 28-01 to 28-04 (UAT 9/9 pass)
 
-### Phase 29: 数据模型模块 🔵
-**目标**: 提取所有 dataclass 模型和属性类型类到独立模块
+### Phase 28a: 测试基线修复 🔵
+**目标**: 修复 7 个已知测试失败 + 合并 stash 中的关键 bug
 **依赖**: Phase 28
-**需求**: MOD-06, MOD-07, MOD-08
 **Success Criteria** (what must be TRUE):
-  1. 所有模型类可从 uasset_read.models 导入
-  2. asdict() 输出格式不变
-  3. JSON 序列化兼容性保持不变
+  1. 修复 `build_graphs_summary()` 返回键名 `"graph_name"` → `"graph"` (2个测试)
+  2. 修复 `build_execution_flows()` function_name 为空的问题 (1个测试)
+  3. 合并 stash: peek_i32() 方法、ETextHistoryType 枚举修复、pin 读取容错 (4个测试)
+  4. 所有 458 个测试中失败数从 7 降至 0，跳过数从 48 降至 ≤48
+
+**已知失败分类：**
+| 测试 | 根因 | 修复方向 |
+|------|------|----------|
+| test_output_formatting.py:1315 | `graph_name` vs `graph` 键名不匹配 | 统一为 `graph` |
+| test_phase14_output_formats.py:132 | 同上 | 同上 |
+| test_phase21_verification.py:130 | Jump 函数调用节点未找到 | stash: pin 读取容错 |
+| test_phase21_verification.py:163 | StopJumping 函数调用节点未找到 | 同上 |
+| test_phase21_verification.py:224 | Move graph 数据流连接缺失 | stash: pin 读取修复 |
+| test_phase21_verification.py:304 | function_reference 为 None | stash: 改进 FText 跳过逻辑 |
+| test_skill_integration.py:186 | function_name 为空字符串 | 修复 execution_flows 提取 |
+
+### Phase 29: 核心数据模型 🔵
+**目标**: 提取 UEdGraph, UEdGraphNode, UEdGraphPin, ParseResult 等 core dataclass 到独立模块
+**依赖**: Phase 28a
+**需求**: MOD-06, MOD-07
+**Success Criteria** (what must be TRUE):
+  1. UEdGraph/Node/Pin dataclass 在 models/core.py 中定义
+  2. ParseResult 在 models/result.py 中定义
+  3. asdict() 输出格式与旧版完全一致
+  4. JSON 序列化兼容性保持不变
+**Plans**: TBD
+
+### Phase 29b: 属性与图数据模型 🔵
+**目标**: 提取 PropertyTag, FunctionReference, 图连接数据结构到独立模块
+**依赖**: Phase 29
+**需求**: MOD-08
+**Success Criteria** (what must be TRUE):
+  1. PropertyTag/PropertyValue dataclass 在 models/properties.py 中定义
+  2. FunctionReference/EventReference 在 models/references.py 中定义
+  3. 图连接数据结构 (ExecutionFlow, DataFlow) 在 models/graph.py 中定义
+  4. 所有模型类可从 uasset_read.models 导入
 **Plans**: TBD
 
 ### Phase 30: 属性解析模块 🔵
 **目标**: 提取所有属性解析逻辑（PropertyTag + 类型解析 + 蓝图变量提取）
-**依赖**: Phase 29
+**依赖**: Phase 29b
 **需求**: MOD-09, MOD-10, MOD-11
 **Success Criteria** (what must be TRUE):
   1. 所有属性类型解析正确
@@ -198,16 +238,17 @@
 **Plans**: TBD
 
 ### Phase 31: 蓝图图解析模块 🔵
-**目标**: 提取图解析、节点读取、连接关系构建到独立模块
+**目标**: 提取图解析、节点读取、连接关系构建到独立模块（等价迁移 Phase 7/18-22 功能）
 **依赖**: Phase 30
 **Success Criteria** (what must be TRUE):
   1. 图解析节点数量、连接数据与旧版一致
   2. 执行流追踪正确
   3. 数据流追踪正确
+  4. ⚠️ 范围：仅等价迁移现有功能，不包含 UberGraph/事件分发图增强
 **Plans**: TBD
 
 ### Phase 32: 输出格式化模块 🔵
-**目标**: 提取所有 JSON/Text/Markdown 输出格式化到独立模块
+**目标**: 提取所有 JSON/Text/Markdown 输出格式化到独立模块（等价迁移 Phase 14/20 功能）
 **依赖**: Phase 31
 **Success Criteria** (what must be TRUE):
   1. JSON 输出格式与旧版一致
@@ -219,10 +260,19 @@
 **目标**: CLI 入口、__init__.py 公共 API、测试更新、删除旧文件
 **依赖**: Phase 28-32
 **Success Criteria** (what must be TRUE):
-  1. `python uasset_read.py file.uasset` 正常工作（通过 pyproject.toml 入口）
+  1. `python -m uasset_read file.uasset` 正常工作（通过 pyproject.toml 入口）
   2. 旧 uasset_read.py 已删除
-  3. 所有测试适配并通过（修复 7 个失败，处理 48 个跳过）
+  3. 所有测试适配并通过
   4. pyproject.toml 配置正确
+**Plans**: TBD
+
+### Phase 34: 等价验证 🔵
+**目标**: 新旧输出逐字段对比，确保零回归
+**依赖**: Phase 33
+**Success Criteria** (what must be TRUE):
+  1. 同一 .uasset 文件，新旧版本 JSON 输出 diff 为空
+  2. 同一 .uasset 文件，新旧版本 Text/Markdown 输出 diff 为空
+  3. 所有测试资产覆盖验证通过
 **Plans**: TBD
 
 ## Progress
@@ -236,19 +286,22 @@
 | 23-26 | v5.0 原功能完善 | 16 | 8 | Complete | 2026-05-06 |
 | 27 | v5.1 项目结构初始化 | 4 | 2 | Complete | 2026-05-07 |
 | 28 | v6.0 模块化重构 | 3 | 4 | Complete | 2026-05-11 |
-| 29 | v6.0 模块化重构 | 3 | 0 | Not started | - |
-| 30 | v6.0 模块化重构 | 3 | 0 | Not started | - |
-| 31 | v6.0 模块化重构 | 3 | 0 | Not started | - |
-| 32 | v6.0 模块化重构 | 3 | 0 | Not started | - |
-| 33 | v6.0 模块化重构 | 2 | 0 | Not started | - |
-| 34-38 | v7.0 深度序列化 | 15 | 0 | Planned | - |
-| 39-43 | v8.0 蓝图完整解析 | 15 | 0 | Planned | - |
-| 44-48 | v9.0 全资产+JSON规范化 | 15 | 0 | Planned | - |
+| 28a | v6.0 测试基线修复 | TBD | 0 | Not started | - |
+| 29 | v6.0 核心数据模型 | 2 | 0 | Not started | - |
+| 29b | v6.0 属性与图数据模型 | 1 | 0 | Not started | - |
+| 30 | v6.0 属性解析 | 3 | 0 | Not started | - |
+| 31 | v6.0 蓝图图解析 | 3 | 0 | Not started | - |
+| 32 | v6.0 输出格式化 | 3 | 0 | Not started | - |
+| 33 | v6.0 入口与测试适配 | 2 | 0 | Not started | - |
+| 34 | v6.0 等价验证 | 2 | 0 | Not started | - |
+| 36-40 | v7.0 深度序列化 | 15 | 0 | Planned | - |
+| 41-45 | v8.0 蓝图完整解析 | 15 | 0 | Planned | - |
+| 46-50 | v9.0 全资产+JSON规范化 | 15 | 0 | Planned | - |
 
-**Total:** 48 phases (28 complete, 20 remaining)
+**Total:** 50 phases (28 complete, 22 remaining)
 
-**v6.0 Coverage:** 17/17 requirements mapped (100%)
+**v6.0 Coverage:** 17/17 requirements mapped (100%) + 3 新增 (测试基线/拆分模型/等价验证)
 
 ---
 
-*最后更新：2026-05-11 — Phase 28 核心序列化模块完成，准备开始 Phase 29 数据模型模块*
+*最后更新：2026-05-11 — Phase 28 完成，规划补齐：Phase 28a 测试基线修复、Phase 29 拆分、Phase 34 等价验证*
