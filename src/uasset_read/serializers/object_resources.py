@@ -366,4 +366,71 @@ def validate_package_index(
         if not (0 <= export_idx < len(export_map)):
             return f"PackageIndex {index.index} export out of range at {context}"
         return None
-    return f"PackageIndex {index.index} invalid at {context}"
+def resolve_package_index_to_reference(
+    pkg_idx: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    name_map: List[str]
+) -> Optional[Dict[str, Any]]:
+    """解析 FPackageIndex 为可读对象引用信息。
+
+    Phase 11-02: 增强 ObjectProperty 解析返回可读对象引用。
+
+    Args:
+        pkg_idx: PackageIndex 对象
+        import_map: ImportMap 列表
+        export_map: ExportMap 列表
+        name_map: NameMap 列表
+
+    Returns:
+        None if pkg_idx.is_null
+        {"type": "import", "class_name": str, "object_name": str, "package": str} if import
+        {"type": "export", "class_name": str, "object_name": str} if export
+    """
+    if pkg_idx.is_null:
+        return None
+
+    if pkg_idx.is_import:
+        imp_idx = pkg_idx.to_import_index()
+        if 0 <= imp_idx < len(import_map):
+            imp = import_map[imp_idx]
+            class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
+            object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
+            package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
+            return {
+                "type": "import",
+                "source": "import_map",
+                "class_name": class_name,
+                "object_name": object_name,
+                "package": package
+            }
+
+    elif pkg_idx.is_export:
+        exp_idx = pkg_idx.to_export_index()
+        if 0 <= exp_idx < len(export_map):
+            exp = export_map[exp_idx]
+            class_name = _resolve_class_name(exp.class_index, import_map, export_map, name_map)
+            object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
+            return {
+                "type": "export",
+                "class_name": class_name,
+                "object_name": object_name
+            }
+
+    return None
+
+
+def _resolve_class_name(
+    class_index: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    name_map: List[str]
+) -> str:
+    """递归解析 class_index 获取类名。"""
+    if class_index.is_null or class_index.index == 0:
+        return "None"
+
+    resolved = resolve_package_index_to_reference(class_index, import_map, export_map, name_map)
+    if resolved:
+        return resolved.get("class_name", "Unknown")
+    return "Unknown"
