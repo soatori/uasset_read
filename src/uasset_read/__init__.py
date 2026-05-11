@@ -34,11 +34,18 @@ from .exceptions import (
 
 # 导出核心数据模型（Phase 29）
 from .models import (
+    # 核心模型
     FEdGraphPinType,
     UEdGraphPin,
     UEdGraphNode,
     UEdGraph,
     FMemberReference,
+    # 节点类型
+    K2NodeCallFunction,
+    K2NodeEvent,
+    K2NodeKnot,
+    EdGraphNodeComment,
+    K2NodeEnhancedInputAction,
 )
 
 # 公共API导出控制（per D-09）
@@ -69,4 +76,10 @@ __all__ = [
     "UEdGraphNode",
     "UEdGraph",
     "FMemberReference",
+    # 节点类型（Phase 29）
+    "K2NodeCallFunction",
+    "K2NodeEvent",
+    "K2NodeKnot",
+    "EdGraphNodeComment",
+    "K2NodeEnhancedInputAction",
 ]
