@@ -49,3 +49,4 @@ VERIFICATION-REPORT.md
 # 测试产物目录
 test/
 
+.claude/*
