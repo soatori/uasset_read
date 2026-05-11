@@ -108,6 +108,9 @@ UE4_ADDED_SEARCHABLE_NAMES = 510               # VER_UE4_ADDED_SEARCHABLE_NAMES 
 VER_UE4_64BIT_EXPORTOFFSETS = 511              # VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (line 717)
 UE4_ADDED_PACKAGE_OWNER = 518                  # VER_UE4_ADDED_PACKAGE_OWNER (line 731)
 UE4_NON_OUTER_PACKAGE_IMPORT = 520             # VER_UE4_NON_OUTER_PACKAGE_IMPORT (line 734)
+# FEdGraphPinType MemberReference 版本阈值（从ObjectVersion.h计算）
+# VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 355 (PinSubCategoryMemberReference added to FEdGraphPinType)
+VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 355       # VER_UE4_MEMBERREFERENCE_IN_PINTYPE (line 400)
 # FText History版本阈值（从ObjectVersion.h计算）
 VER_UE4_FTEXT_HISTORY = 528                    # VER_UE4_FTEXT_HISTORY (line 428: ~214+314)
 
@@ -124,13 +127,19 @@ UE5_SCRIPT_SERIALIZATION_OFFSET = 1010          # EUnrealEngineObjectUE5Version:
 # ============================================================
 
 # FrameworkObjectVersion GUID (DevObjectVersion.cpp L194)
-FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
+# FGuid(0xCFFC743F, 0x43B04480, 0x939114DF, 0x171D2073)
+# Serialized as 4 uint32 in little-endian -> 3F74FCCF8044B043DF14919373201D17
+FFRAMEWORK_OBJECT_VERSION_GUID = "3F74FCCF8044B043DF14919373201D17"
 
 # UE5MainStreamObjectVersion GUID (DevObjectVersion.cpp L332)
-FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
+# FGuid(0x697DD581, 0xE64F41AB, 0xAA4A51EC, 0xBEB7B628)
+# Serialized as 4 uint32 in little-endian -> 81D57D69AB414FE6EC514AAA28B6B7BE
+FUE5_MAINSTREAM_VERSION_GUID = "81D57D69AB414FE6EC514AAA28B6B7BE"
 
 # ReleaseObjectVersion GUID (EngineVersion.cpp L266)
-FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
+# FGuid(0x9C54D522, 0xA8264FBE, 0x94210746, 0x61B482D0)
+# Serialized as 4 uint32 in little-endian -> 22D5549CBE4F26A846072194D082B461
+FRELEASE_OBJECT_VERSION_GUID = "22D5549CBE4F26A846072194D082B461"
 
 # ============================================================
 # Version Thresholds (Phase 18: Pin序列化版本检查)
@@ -3187,27 +3196,15 @@ def read_ed_graph_pin_type(
     """
     Parse FEdGraphPinType with version checks.
 
-    序列化顺序（UE源码 EdGraphPin.cpp L163-346 验证）：
-    1. PinCategory (FName/FString) - 版本依赖
-    2. PinSubCategory (FName/FString) - 版本依赖
-    3. PinSubCategoryObject (FPackageIndex)
-    4. ContainerType (uint8) - 版本依赖
-    5. PinValueType (if ContainerType==Map) - 版本依赖
-    6. bIsReference (bool)
-    7. bIsWeakPointer (bool)
-    8. PinSubCategoryMemberReference - 版本依赖
-    9. bIsConst (bool) - 版本依赖
-    10. bIsUObjectWrapper (bool) - 版本依赖
-
-    Version dependencies (UE 5.7 source):
-    - PinCategory/PinSubCategory: FFrameworkObjectVersion >= PinsStoreFName (20)
-      - >= 20: FName format
-      - < 20: FString format (legacy)
-    - ContainerType: FFrameworkObjectVersion >= EdGraphPinContainerType (15)
-      - >= 15: uint8 EPinContainerType
-      - < 15: legacy bool flags (bIsMap, bIsSet, bIsArray)
-    - bIsConst: VER_UE4_SERIALIZE_PINTYPE_CONST (UE4 version)
-    - bIsUObjectWrapper: FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (10)
+    ROOT CAUSE FIX: FEdGraphPinType 有两种序列化模式：
+    
+    1. 默认反射序列化（UEVer() < VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 324）：
+       - 用于 UE5 资产（FileVersionUE4 = -9）
+       - 序列化所有 UPROPERTY 字段，顺序按 EdGraphPin.h L76-133 声明顺序
+       
+    2. 自定义序列化（UEVer() >= 324）：
+       - 用于 UE4 资产（FileVersionUE4 >= 324）
+       - 序列化顺序来自 EdGraphPin.cpp L163-346
 
     Args:
         archive: FArchive positioned at start of FEdGraphPinType
@@ -3219,91 +3216,147 @@ def read_ed_graph_pin_type(
     """
     pin_type = FEdGraphPinType()
 
-    # 版本获取（使用18-01定义的常量）
+    # 版本获取
     framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
     release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
     ue4_version = summary.file_version_ue4
 
-    # Phase 22 FIX-03: UE5.7 版本检查修复
-    # Per EdGraphPin.cpp L174: Ar.CustomVer(FFrameworkObjectVersion::GUID) >= PinsStoreFName
-    # UE5资产 (file_version_ue5 > 0) 应使用 FName 格式
-    use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
+    # ROOT CAUSE FIX: 判断使用哪种序列化模式
+    # Per EdGraphPin.cpp L163-166: if (Ar.UEVer() < VER_UE4_EDGRAPHPINTYPE_SERIALIZATION) return false
+    # 返回 false 时使用默认反射序列化
+    # VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 324 (从 ObjectVersion.h 计算)
+    VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 324
+    use_custom_serialization = ue4_version >= VER_UE4_EDGRAPHPINTYPE_SERIALIZATION
 
-    # 1-2. PinCategory and PinSubCategory (version dependent)
-    # Per EdGraphPin.cpp L174-188
-    if use_fname_format:
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN_TYPE] ue4_version={ue4_version}, use_custom_serialization={use_custom_serialization}")
+
+    if not use_custom_serialization:
+        # 默认反射序列化模式（UE5 资产）
+        # Per EdGraphPin.h L76-133: UPROPERTY 字段声明顺序
+        # 1. PinCategory (FName)
         pin_type.pin_category = archive.read_name(name_map)
+        # 2. PinSubCategory (FName)
         pin_type.pin_sub_category = archive.read_name(name_map)
-    else:
-        # Legacy FString format
-        pin_type.pin_category = archive.read_fstring()
-        pin_type.pin_sub_category = archive.read_fstring()
-
-    # 3. PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_sub_category_object = archive.read_i32()
-
-    # 4-5. ContainerType (version dependent)
-    # Per EdGraphPin.cpp L215: Ar.CustomVer(FFrameworkObjectVersion::GUID) >= EdGraphPinContainerType
-    # UE 加载时从注册表获取最新版本，我的解析器用 file_version_ue5 > 0 作为 fallback
-    use_modern_container = framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE or summary.file_version_ue5 > 0
-    if use_modern_container:
+        # 3. PinSubCategoryObject (TWeakObjectPtr -> FPackageIndex)
+        pin_type.pin_sub_category_object = archive.read_i32()
+        # 4. PinSubCategoryMemberReference (FSimpleMemberReference - 3 fields)
+        #    MemberParent + MemberName + MemberGuid
+        archive.read_i32()       # MemberParent (FPackageIndex)
+        archive.read_name(name_map)  # MemberName (FName)
+        archive.read(16)         # MemberGuid (FGuid)
+        # 5. PinValueType (FEdGraphTerminalType) - 总是序列化！
+        archive.read_name(name_map)  # TerminalCategory
+        archive.read_name(name_map)  # TerminalSubCategory
+        archive.read_i32()           # TerminalSubCategoryObject
+        # 6. ContainerType (EPinContainerType - uint8)
         pin_type.container_type = archive.read_u8()
-        if pin_type.container_type == 3:  # Map
-            # PinValueType (FEdGraphTerminalType)
-            # Per EdGraphPin.cpp L220: Ar << PinValueType
-            archive.read_name(name_map)  # TerminalCategory
-            archive.read_name(name_map)  # TerminalSubCategory
-            archive.read_i32()           # TerminalSubCategoryObject
+        # 7-12. Bit flags (bIsArray_DEPRECATED + 5 flags as uint8:1)
+        # Per UE 源码，位字段作为单个 uint8 序列化
+        flags_byte = archive.read_u8()
+        pin_type.is_reference = (flags_byte & 0x04) != 0  # bIsReference at bit 2
+        pin_type.is_const = (flags_byte & 0x08) != 0      # bIsConst at bit 3
+        pin_type.is_weak_pointer = (flags_byte & 0x10) != 0  # bIsWeakPointer at bit 4
+        pin_type.is_uobject_wrapper = (flags_byte & 0x20) != 0  # bIsUObjectWrapper at bit 5
+        # bSerializeAsSinglePrecisionFloat at bit 6 (忽略)
+        
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] Default reflection: PinCategory={pin_type.pin_category}, ContainerType={pin_type.container_type}")
     else:
-        # Legacy bool flags (EdGraphPin.cpp L224-240)
-        # FBlueprintsObjectVersion check for advanced container support
-        # Simplified: read legacy bool flags and convert to ContainerType
-        b_is_map = archive.read_bool()
-        b_is_set = archive.read_bool()
-        b_is_array = archive.read_bool()
-        # Convert to ContainerType
-        if b_is_map:
-            pin_type.container_type = 3
-        elif b_is_set:
-            pin_type.container_type = 2
-        elif b_is_array:
-            pin_type.container_type = 1
+        # 自定义序列化模式（UE4 >= 324）
+        # Per EdGraphPin.cpp L163-346
+        # Phase 22 FIX-03: UE5.7 版本检查修复
+        use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
+
+        # 1-2. PinCategory and PinSubCategory (version dependent)
+        cat_start = archive.tell()
+        if use_fname_format:
+            pin_type.pin_category = archive.read_name(name_map)
+            pin_type.pin_sub_category = archive.read_name(name_map)
         else:
-            pin_type.container_type = 0
+            pin_type.pin_category = archive.read_fstring()
+            pin_type.pin_sub_category = archive.read_fstring()
+        cat_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] PinCategory/SubCategory: {cat_end - cat_start} bytes, cat={pin_type.pin_category}")
 
-    # 6-7. bIsReference and bIsWeakPointer
-    pin_type.is_reference = archive.read_bool()
-    pin_type.is_weak_pointer = archive.read_bool()
+        # 3. PinSubCategoryObject (FPackageIndex)
+        obj_start = archive.tell()
+        pin_type.pin_sub_category_object = archive.read_i32()
+        obj_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] PinSubCategoryObject: {obj_end - obj_start} bytes, value={pin_type.pin_sub_category_object}")
 
-    # 8. PinSubCategoryMemberReference (version dependent)
-    # Per EdGraphPin.cpp L254-269: VER_UE4_MEMBERREFERENCE_IN_PINTYPE
-    # Phase 22-09 FIX: 使用完整的 FMemberReference 序列化格式
-    # FMemberReference 序列化顺序（MemberReference.h L74-95）：
-    #   1. MemberParent (FPackageIndex)
-    #   2. MemberScope (FString) - 漏掉此字段导致后续位置错位
-    #   3. MemberName (FName)
-    #   4. MemberGuid (FGuid 16 bytes)
-    #   5. bSelfContext (bool)
-    #   6. bWasDeprecated (bool)
-    archive.read_i32()       # MemberParent (FPackageIndex)
-    archive.read_fstring()   # MemberScope (FString) - Phase 22-09 FIX
-    archive.read_name(name_map)  # MemberName
-    archive.read(16)         # MemberGuid
-    archive.read_bool()      # bSelfContext - Phase 22-09 FIX
-    archive.read_bool()      # bWasDeprecated - Phase 22-09 FIX
+        # 4-5. ContainerType (version dependent)
+        container_start = archive.tell()
+        use_modern_container = framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE or summary.file_version_ue5 > 0
+        if use_modern_container:
+            pin_type.container_type = archive.read_u8()
+            if pin_type.container_type == 3:  # Map
+                archive.read_name(name_map)  # TerminalCategory
+                archive.read_name(name_map)  # TerminalSubCategory
+                archive.read_i32()           # TerminalSubCategoryObject
+        else:
+            b_is_map = archive.read_bool()
+            b_is_set = archive.read_bool()
+            b_is_array = archive.read_bool()
+            if b_is_map:
+                pin_type.container_type = 3
+            elif b_is_set:
+                pin_type.container_type = 2
+            elif b_is_array:
+                pin_type.container_type = 1
+            else:
+                pin_type.container_type = 0
+        container_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] ContainerType: {container_end - container_start} bytes, value={pin_type.container_type}, modern={use_modern_container}")
 
-    # 9. bIsConst (version dependent)
-    # Per EdGraphPin.cpp L271-276: VER_UE4_SERIALIZE_PINTYPE_CONST
-    # 现代资产通常有此字段，简化处理：始终读取
-    pin_type.is_const = archive.read_bool()
+        # 6-7. bIsReference and bIsWeakPointer
+        ref_start = archive.tell()
+        pin_type.is_reference = archive.read_bool()
+        pin_type.is_weak_pointer = archive.read_bool()
+        ref_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] bIsReference/WeakPointer: {ref_end - ref_start} bytes, ref={pin_type.is_reference}, weak={pin_type.is_weak_pointer}")
 
-    # 10. bIsUObjectWrapper (version dependent)
-    # Per EdGraphPin.cpp L278-283: FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag
-    # 现代资产通常有此字段，简化处理：始终读取
-    pin_type.is_uobject_wrapper = archive.read_bool()
+        # 8. PinSubCategoryMemberReference (version dependent)
+        # Per EdGraphPin.cpp L254-269: UEVer() >= VER_UE4_MEMBERREFERENCE_IN_PINTYPE
+        # FSimpleMemberReference (3 fields): MemberParent + MemberName + MemberGuid
+        if ue4_version >= VER_UE4_MEMBERREFERENCE_IN_PINTYPE:
+            ref_start = archive.tell()
+            mp = archive.read_i32()       # MemberParent
+            mn = archive.read_name(name_map)  # MemberName
+            mg = archive.read(16)         # MemberGuid
+            ref_end = archive.tell()
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN_TYPE] FSimpleMemberReference: {ref_end - ref_start} bytes (Parent={mp}, Name={mn})")
+
+        # 9. bIsConst (version dependent)
+        # Per EdGraphPin.cpp L271-276: UEVer() >= VER_UE4_SERIALIZE_PINTYPE_CONST
+        VER_UE4_SERIALIZE_PINTYPE_CONST = 366  # 从 ObjectVersion.h 计算
+        const_start = archive.tell()
+        if ue4_version >= VER_UE4_SERIALIZE_PINTYPE_CONST:
+            pin_type.is_const = archive.read_bool()
+        else:
+            pin_type.is_const = False  # Default value, not serialized
+        const_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] bIsConst: {const_end - const_start} bytes, value={pin_type.is_const}, threshold={VER_UE4_SERIALIZE_PINTYPE_CONST}")
+
+        # 10. bIsUObjectWrapper (version dependent)
+        # Per EdGraphPin.cpp L278-283: CustomVer >= PinTypeIncludesUObjectWrapperFlag
+        FRELEASE_VERSION_PIN_TYPE_INCLUDES_UOBJECT_WRAPPER = 10
+        wrapper_start = archive.tell()
+        if release_version >= FRELEASE_VERSION_PIN_TYPE_INCLUDES_UOBJECT_WRAPPER:
+            pin_type.is_uobject_wrapper = archive.read_bool()
+        else:
+            pin_type.is_uobject_wrapper = False  # Default value
+        wrapper_end = archive.tell()
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG PIN_TYPE] bIsUObjectWrapper: {wrapper_end - wrapper_start} bytes, value={pin_type.is_uobject_wrapper}, rel_ver={release_version}")
 
     return pin_type
-
 
 def read_pin_reference(
     archive: FArchive,
@@ -3747,41 +3800,68 @@ def read_ue_graph_pin(
             print(f"[DEBUG PIN] 11. DefaultObject: ERROR ({e}), using 0, offset now: {archive.tell():#x}")
 
     # 12. DefaultTextValue (FText) [L1876]
-    # Phase 22 FIX-13: 跳过 DefaultTextValue FText 字段
-    # FText 序列化格式：flags (4) + history_type (1) + 可变数据
-    # 尝试读取 FText 并跳过
-    default_text_value = None  # TODO: Phase后续实现FText解析
-    try:
-        # 读取 FText 的 flags 和 history_type
-        text_flags = archive.read_i32()
-        text_history_type = archive.read_u8()
+    # Phase 22 FIX-15: 正确处理 FText 空值序列化
+    # 实际数据验证：当 FText 为空时，序列化格式可能是：
+    # flags(4) + ???(4) + history_type(1, value=255/None) + bHasCulture(4) = 13 bytes
+    # 或：flags(4) = 0 表示完全空的 FText，后续是 LinkedTo
+    default_text_value = None
+    dtv_start_pos = archive.tell()
 
-        # 根据 history_type 跳过相应数据
-        # Per Text.cpp L845-1062: FText 序列化格式
-        # Phase 22-09 FIX: 正确处理 history_type=255 (ETextHistoryType::None)
-        if text_history_type == 255 or text_history_type == -1:  # ETextHistoryType::None
-            # 空FText: 读取 bHasCultureInvariantString (bool)
-            b_has_culture_invariant = archive.read_bool()
-            if b_has_culture_invariant:
-                archive.read_fstring()  # CultureInvariantString
-        elif text_history_type == 0:  # ETextHistoryType::Base
+    # 先读取 flags
+    text_flags = archive.read_i32()
+
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 12. DefaultTextValue: flags={text_flags}, start={dtv_start_pos:#x}")
+
+    if text_flags == 0:
+        # Phase 22 FIX-15: 尝试检测 FText 是否完全为空
+        # 检查后续字节判断序列化模式
+        peek_pos = archive.tell()
+        next_val = archive.peek_i32() if hasattr(archive, 'peek_i32') else archive.read_i32()
+        archive.seek(peek_pos)  # 回退
+
+        if next_val == 0:
+            # 可能是 history_type=0 但后续数据无效
+            # 或者是空的序列化
+            # 尝试读取完整 FText 格式：flags + 4bytes + history_type + bHasCulture
+            archive.read_i32()  # 跳过中间 4 bytes
+            text_history_type = archive.read_u8()
+
+            if text_history_type == 255:  # None
+                b_has_culture = archive.read_i32()
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN] 12. DefaultTextValue: flags=0, middle=0, history=255, bHasCulture={b_has_culture}")
+            else:
+                # 其他 history_type，尝试跳过
+                if DEBUG_PIN_PARSING:
+                    print(f"[DEBUG PIN] 12. DefaultTextValue: flags=0, middle=0, history={text_history_type}")
+                # 回退并跳过 9 bytes (flags + 4 + history_type)
+                archive.seek(dtv_start_pos + 9)
+        else:
+            # next_val != 0，可能是 LinkedTo 开始
+            # FText 只占 flags (4 bytes)
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG PIN] 12. DefaultTextValue: flags=0 only, next={next_val:#x}")
+    else:
+        # flags != 0，正常 FText 序列化
+        text_history_type = archive.read_u8()
+        if text_history_type == 255 or text_history_type == -1:  # None
+            b_has_culture_invariant = archive.read_i32()
+            if b_has_culture_invariant != 0:
+                archive.read_fstring()
+        elif text_history_type == 0:  # Base
             archive.read_fstring()  # Namespace
             archive.read_fstring()  # Key
             archive.read_fstring()  # SourceString
         else:
-            # 其他类型：尝试跳过最多 5 个 FString
             for _ in range(5):
                 try:
                     archive.read_fstring()
                 except Exception:
                     break
 
-        if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN] 12. DefaultTextValue: skipped FText (flags={text_flags}, type={text_history_type}), offset now: {archive.tell():#x}")
-    except Exception as e:
-        # 读取失败，跳过
-        if DEBUG_PIN_PARSING:
-            print(f"[DEBUG PIN] 12. DefaultTextValue: ERROR ({e}), offset now: {archive.tell():#x}")
+    if DEBUG_PIN_PARSING:
+        print(f"[DEBUG PIN] 12. DefaultTextValue: done, offset now: {archive.tell():#x}")
 
     # 13. LinkedTo (SerializePinArray) [L1886]
     linkedto_start = archive.tell()
@@ -3943,155 +4023,27 @@ def read_ue_graph_node(
         print(f"[DEBUG NODE] script_serial_offset: {node_export.script_serial_offset:#x}")
         print(f"[DEBUG NODE] script_serial_size: {node_export.script_serial_size}")
 
-    # Phase 22 FIX-06: 动态扫描定位 pins offset
+    # Phase 22 FIX-11: 使用固定偏移量计算 pins_offset
     #
-    # 替代 heuristic_delta 方案，通过扫描找到正确的 pins 起始位置
-    # Pattern: pins_count (1-20) + bNullPtr (0) + OwningNode + PinGuid
-
-    # Phase 22-09: 双向扫描策略
-    # 1. 从 script_serial_size 结束位置向前扫描（正向扫描）
-    # 2. 从 serial_size 结束位置反向扫描（寻找 NodePos/NodeGuid）
-
-    scan_start = node_export.script_serial_offset + node_export.script_serial_size
-    scan_end_forward = node_export.serial_size - 200  # 正向扫描到尾部前 200 bytes
-
-    archive.seek(node_export.serial_offset + scan_start)
-    pins_found = False
-    pins_offset = scan_start
+    # 根据 UE 源码分析和实际数据验证：
+    # script_serial 包含 UObject::Serialize 数据（UPROPERTY 字段）
+    # script_serial 之后有一个 int32 = 0（可能是结束标记）
+    # Pins 数组在 script_serial + 4 bytes 之后开始
+    #
+    # 公式：pins_offset = script_serial_offset + script_serial_size
+    # 然后跳过第一个 int32（结束标记）
+    
+    pins_offset = node_export.script_serial_offset + node_export.script_serial_size
 
     if DEBUG_PIN_PARSING:
-        print(f"[DEBUG SCAN] Scanning for pins_offset from {scan_start:#x} to {scan_end_forward:#x}")
-        print(f"[DEBUG SCAN] Node: {node_export.object_name}, serial_offset={node_export.serial_offset:#x}")
-
-    while archive.tell() < node_export.serial_offset + scan_end_forward:
-        try:
-            test_pos = archive.tell()
-            test_count = archive.read_i32()
-
-            # Phase 22-09 Task 1: 添加详细诊断输出
-            if DEBUG_PIN_PARSING:
-                print(f"[DEBUG SCAN] Position {test_pos:#x}: count={test_count}")
-
-            # 验证 pins_count 合理范围
-            if 1 <= test_count <= 20:  # 合理的 pins 数量
-                if DEBUG_PIN_PARSING:
-                    print(f"[DEBUG SCAN]   -> Count in range, reading null...")
-                # 验证后续数据符合 SerializePin 格式
-                try:
-                    test_null = archive.read_i32()  # bNullPtr
-                except Exception as e:
-                    if DEBUG_PIN_PARSING:
-                        print(f"[DEBUG SCAN]   -> ERROR reading null: {e}")
-                    archive.seek(test_pos + 4)
-                    continue
-
-                if DEBUG_PIN_PARSING:
-                    print(f"[DEBUG SCAN]   null={test_null}")
-
-                if test_null == 0:  # bNullPtr == 0 表示有效 pin
-                    # 验证 OwningNode 是合理的 FPackageIndex
-                    test_owning = archive.read_i32()
-
-                    if DEBUG_PIN_PARSING:
-                        print(f"[DEBUG SCAN]   owning={test_owning}")
-
-                    # OwningNode 应该指向自身或合理的 import/export 引用
-                    if test_owning == 0 or (test_owning < 0 and test_owning >= -1000) or (test_owning > 0 and test_owning <= 1000):
-                        # 验证通过，读取后续字段进行更严格的验证
-                        # Phase 22-09 修复：保存位置在 OwningNode_2 之前
-                        # read_ue_graph_pin 需要从 OwningNode 开始读取
-                        test_save_pos = archive.tell()  # 在 PinGuid_1 之前
-
-                        try:
-                            # 跳过 SerializePin 的 PinGuid (16 bytes)
-                            pin_guid_1 = archive.read_bytes(16)
-                            if DEBUG_PIN_PARSING:
-                                print(f"[DEBUG SCAN]   PinGuid_1 (SerializePin): {pin_guid_1.hex()}")
-
-                            # UEdGraphPin::Serialize 开始位置 - 用于 read_ue_graph_pin
-                            pin_serialize_start = archive.tell()
-
-                            # 读取 OwningNode_2 (应与 OwningNode_1 相同)
-                            owning_node_2 = archive.read_i32()
-                            if DEBUG_PIN_PARSING:
-                                print(f"[DEBUG SCAN]   OwningNode_2 (UEdGraphPin): {owning_node_2}")
-
-                            # 读取真正的 PinId (16 bytes)
-                            pin_id_bytes = archive.read_bytes(16)
-                            if DEBUG_PIN_PARSING:
-                                print(f"[DEBUG SCAN]   PinId (UEdGraphPin): {pin_id_bytes.hex()}")
-
-                            # 尝试读取第一个 Pin 的 PinName
-                            pin_name_idx = archive.read_i32()
-                            if DEBUG_PIN_PARSING:
-                                pin_name_str = name_map[pin_name_idx] if 0 <= pin_name_idx < len(name_map) else "OUT OF RANGE"
-                                print(f"[DEBUG SCAN]   PinName index: {pin_name_idx} -> '{pin_name_str}'")
-
-                            # 验证 PinName 索引在范围内
-                            if not (0 <= pin_name_idx < len(name_map)):
-                                if DEBUG_PIN_PARSING:
-                                    print(f"[DEBUG SCAN]   REJECTED: PinName out of range")
-                            else:
-                                pin_name = name_map[pin_name_idx]
-                                # Phase 22-09: 严格验证 PinName
-                                # 必须是常见的有效 pin name，排除 UObject 属性名
-                                if pin_name not in VALID_PIN_NAMES:
-                                    if DEBUG_PIN_PARSING:
-                                        print(f"[DEBUG SCAN]   REJECTED: PinName '{pin_name}' not in VALID_PIN_NAMES")
-                                else:
-                                    # 尝试读取第一个 pin 并验证 Direction
-                                    # 使用 read_ue_graph_pin 来正确处理所有字段
-                                    # 恢复到 UEdGraphPin::Serialize 开始位置
-                                    archive.seek(pin_serialize_start)
-                                    try:
-                                        pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
-                                        test_direction = pin.direction
-                                        if DEBUG_PIN_PARSING:
-                                            print(f"[DEBUG SCAN]   Pin direction: {test_direction}")
-
-                                        # 验证 Direction 在有效范围 (0-7)
-                                        # Direction: 0=Input, 1=Output, 2=None, 3=Hide, 7=Complex (self pin)
-                                        if test_direction > 7:
-                                            if DEBUG_PIN_PARSING:
-                                                print(f"[DEBUG SCAN]   REJECTED: Direction {test_direction} > 7")
-                                        else:
-                                            # 所有验证通过，这是正确的 pins 起始位置
-                                            pins_offset = test_pos - node_export.serial_offset
-                                            pins_found = True
-                                            if DEBUG_PIN_PARSING:
-                                                print(f"[DEBUG SCAN] ✓ ACCEPTED: Found valid pins_offset at {pins_offset:#x}")
-                                                print(f"[DEBUG SCAN]   pins_count={test_count}, PinName='{pin_name}', Direction={test_direction}")
-                                            break
-                                    except Exception as e:
-                                        if DEBUG_PIN_PARSING:
-                                            print(f"[DEBUG SCAN]   REJECTED: Exception reading pin: {e}")
-                        except Exception as e:
-                            if DEBUG_PIN_PARSING:
-                                print(f"[DEBUG SCAN]   REJECTED: Exception during validation: {e}")
-                        finally:
-                            # 恢复位置继续扫描
-                            archive.seek(test_save_pos)
-
-            # 继续扫描下一个位置
-            archive.seek(test_pos + 4)
-
-        except Exception as e:
-            if DEBUG_PIN_PARSING:
-                print(f"[DEBUG SCAN] Exception at position {archive.tell():#x}: {e}")
-            archive.seek(test_pos + 4)
-            continue
-
-    if not pins_found:
-        # 扫描失败，使用 fallback heuristic
-        if node_export.script_serial_size <= 20:
-            pins_offset = scan_start + 87
-        else:
-            pins_offset = scan_start + 4
-        if DEBUG_PIN_PARSING:
-            print(f"[DEBUG SCAN] Scan failed, using fallback pins_offset: {pins_offset:#x}")
+        print(f"[DEBUG FIX-11] Using fixed pins_offset: {pins_offset:#x}")
+        print(f"[DEBUG FIX-11] Formula: script_serial_offset({node_export.script_serial_offset:#x}) + "
+              f"script_serial_size({node_export.script_serial_size})")
 
     archive.seek(node_export.serial_offset + pins_offset)
 
+    # 跳过第一个 int32（结束标记）
+    _end_marker = archive.read_i32()
     # 1. Pins 数组
     pins_count = archive.read_i32()
     if DEBUG_PIN_PARSING:

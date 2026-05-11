@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-11T14:30:00.000Z",
+  "timestamp": "2026-05-11T19:30:00.000Z",
   "phase": "28a",
   "phase_name": "测试基线修复",
   "phase_dir": ".planning/phases/28-core-serialization",
@@ -11,27 +11,24 @@
   "completed_tasks": [
     {"id": 1, "name": "Phase 28提交 (UAT 9/9 pass)", "status": "done", "commit": "ce110d2"},
     {"id": 2, "name": "Merge stash pin fixes", "status": "done", "commit": "5ce03dd"},
-    {"id": 3, "name": "Test baseline修复 (9→4 failures)", "status": "in_progress", "progress": "已修复5个，剩4个pin解析问题"}
+    {"id": 3, "name": "Test baseline修复", "status": "in_progress", "progress": "从5失败降到4失败，FText修复完成，FunctionReference位置问题待解决"}
   ],
   "remaining_tasks": [
-    {"id": 4, "name": "Pin解析器深度调试 (UE序列化研究)", "status": "not_started"},
+    {"id": 4, "name": "FunctionReference位置修复 (研究UE tagged property serialization)", "status": "not_started"},
     {"id": 5, "name": "Phase 29规划与启动", "status": "not_started"}
   ],
   "blockers": [
-    {"description": "Pin解析器无法找到正确的pins_offset", "type": "technical", "workaround": "需要研究UE K2Node_CallFunction::Serialize顺序"}
+    {"description": "FunctionReference应在script_serial中读取，需研究UE tagged property serialization格式", "type": "technical"}
   ],
   "human_actions_pending": [],
   "decisions": [
-    {"decision": "先完成测试基线修复再继续Phase 29", "rationale": "确保模块化重构建立在稳定基础上", "phase": "28a"},
-    {"decision": "API键名统一为graph_name", "rationale": "graph_name更常用(8处 vs 2处)", "phase": "28a"}
+    {"decision": "FText bHasCultureInvariantString使用UBOOL(4 bytes)而非uint8", "rationale": "UE源码确认bool序列化为UBOOL", "phase": "28a"},
+    {"decision": "当FText flags=0时特殊处理跳过中间4bytes", "rationale": "实际数据验证序列化格式", "phase": "28a"}
   ],
   "uncommitted_files": [
-    ".planning/PROJECT.md",
-    ".planning/ROADMAP.md",
-    ".planning/STATE.md",
-    "CLAUDE.md",
-    "reference/UnrealEditor_uasset加载流程.md"
+    "uasset_read.py (FText修复)",
+    ".planning/debug/pin-parsing-pins-offset.md"
   ],
-  "next_action": "研究UE源码K2Node_CallFunction::Serialize顺序，确定pins_offset正确位置",
-  "context_notes": "测试从9失败降到4失败。Pin解析根因是扫描器无法定位pins数组起始位置。已检查UE源码发现MemberReference字段有版本条件但当前代码无条件读取。需要深入理解UE节点序列化格式。"
+  "next_action": "研究UE tagged property serialization，定位script_serial中的FunctionReference",
+  "context_notes": "测试从5失败降到4失败。test_actionvalue_x_to_right已通过。剩余4个失败均与FunctionReference相关。"
 }
