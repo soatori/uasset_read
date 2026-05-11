@@ -1,85 +1,148 @@
 # uasset_read
 
-解析 Unreal Engine .uasset 文件的 Python 工具，使 AI 代理能够在不依赖 UE 编辑器的情况下读取蓝图内容。
+A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to read blueprint content without relying on the UE editor. Focuses on unbaked/editor-saved assets (containing full blueprint data).
 
-## 功能
+[中文版](README.zh-CN.md) | [English](README.md)
 
-- **PackageFileSummary** — 文件头解析
-- **NameMap** — 名称表提取
-- **ImportMap** — 依赖映射
-- **ExportMap** — 导出映射
-- **蓝图图解析** — UEdGraph/Node/Pin 结构
-- **高级属性** — Struct/Map/Set/Enum/Text/Delegate
-- **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
-- **循环依赖检测** — ImportMap 相互引用检测
+## Status
 
-## 安装
+| Metric | Value |
+|--------|-------|
+| Version | v6.0 (modular refactoring in progress) |
+| Tests | 411 passed, 47 skipped, 0 failed |
+| New modules | `src/uasset_read/` — 19 files, 50+ public API exports |
+| Legacy entry | `uasset_read.py` — 8100+ line single file, to be removed after Phase 33 |
+
+## Features
+
+- **PackageFileSummary** — file header parsing
+- **NameMap** — name table extraction
+- **ImportMap** — dependency mapping
+- **ExportMap** — export mapping
+- **Blueprint graph parsing** — UEdGraph / Node / Pin structures
+- **Advanced properties** — Struct / Map / Set / Enum / Text / Delegate
+- **Blueprint variable extraction** — variables, functions, events, metadata
+- **Component transform parsing** — Transform / Rotation / Scale
+- **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
+- **Circular dependency detection** — mutual reference detection in ImportMap
+
+## Installation
 
 ```bash
 git clone https://github.com/soatori/uasset_read.git
 cd uasset_read
+pip install -e ".[dev]"
 ```
 
-零运行时依赖，仅需 Python 3.10+。
+Zero runtime dependencies, requires Python 3.10+.
 
-## 使用
+## Usage
 
-### CLI
+### CLI (legacy entry, until Phase 33)
 
 ```bash
-# 解析并输出 JSON
-python -c "from uasset_read import parse_uasset; import json; r = parse_uasset('file.uasset'); print(json.dumps(r.to_dict(), indent=2))"
+python uasset_read.py path/to/file.uasset
 ```
 
 ### Python API
 
 ```python
-from uasset_read import parse_uasset, ParseResult
+from uasset_read import parse_uasset
 
-# 解析 .uasset 文件
+# Parse a .uasset file
 result = parse_uasset('BP_FirstPersonCharacter.uasset')
 
-# 访问解析数据
-print(result.name_map)          # 名称表
-print(result.import_map)        # 导入依赖
-print(result.export_map)        # 导出表
-print(result.blueprint)         # 蓝图信息
-print(result.graphs)            # 蓝图图结构
-print(result.dependencies)      # 依赖图
-print(result.circular_deps)     # 循环依赖
+# Access parsed data
+print(result.name_map)          # Name table
+print(result.import_map)        # Import dependencies
+print(result.export_map)        # Export table
+print(result.blueprint)         # Blueprint info
+print(result.graphs)            # Blueprint graph structures
+print(result.dependencies)      # Dependency graph
 ```
 
-## 测试
+### Modular API (v6.0)
+
+```python
+from uasset_read import (
+    # Data models
+    UEdGraph, UEdGraphNode, UEdGraphPin,
+    ParseResult, BlueprintMetadata, BlueprintVariable,
+    PropertyTag, PropertyValue, StructValue, MapValue, EnumValue,
+
+    # Parsers
+    parse_property_value, parse_properties_from_export,
+    parse_array_property, parse_struct_property, parse_map_property,
+
+    # Blueprint
+    extract_blueprint_variables, extract_blueprint_metadata,
+    parse_component_transform,
+
+    # Constants & exceptions
+    PACKAGE_FILE_TAG, MMAP_THRESHOLD,
+    UAssetError, ParseError,
+)
+```
+
+Full API list: see `src/uasset_read/__init__.py` (`__all__` exports 50+ items).
+
+## Testing
 
 ```bash
-# 运行所有测试
+# Run all tests
 python -m pytest tests/ -v
 
-# 运行测试（简要）
-python -m pytest tests/ --tb=short
+# Run a single test file
+python -m pytest tests/test_graph_parsing.py -v
+
+# Run a single test function
+python -m pytest tests/test_graph_parsing.py::test_blueprint_graph_parsed -v
 ```
 
-测试覆盖：边界验证、蓝图提取、依赖分析、图解析、高级属性等（216+ 测试用例）。
+Test coverage: boundary validation, blueprint extraction, dependency analysis, graph parsing, advanced properties (411 test cases).
 
-## 架构
+## Architecture
 
-采用镜像 UE 的 FArchive 管道模式：
+FArchive pipeline pattern mirroring UE's internal structure:
 
 ```
 .uasset → FArchive → Deserializer → Models → OutputFormatter
-                ↓ 扩展组件
-          GraphParser (蓝图图)
-          AdvancedPropParser (高级属性)
-          DependencyGraphBuilder (依赖分析)
+                ↓  Extension components
+          GraphParser (Phase 7/31)
+          AdvancedPropParser (Phase 9/30)
+          DependencyGraphBuilder (Phase 10)
 ```
 
-## 技术栈
+### New module structure (`src/uasset_read/`)
 
-- **语言**: Python 3.10+
-- **依赖**: 零运行时依赖（仅标准库）
-- **解析**: `struct` 二进制读取 + `mmap` 大文件支持
-- **模型**: `dataclasses` + `asdict()` JSON 输出
+| Module | Path | Description |
+|--------|------|-------------|
+| FArchive | `archive.py` | Binary reader with byte swapping, mmap, bounds checking |
+| Constants | `constants.py` | Version numbers, property type thresholds, MMAP_THRESHOLD |
+| Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
+| Serializers | `serializers/` | PackageFileSummary, ObjectImport/Export, PackageIndex, PropertyTag |
+| Data models | `models/` | UEdGraph/Node/Pin, node type subclasses, ParseResult, blueprint metadata, property data classes |
+| Parsers | `parsers/` | 14 property type parse functions + dispatcher |
+| Blueprint | `blueprint/` | Variable extraction, component transform parsing, metadata extraction |
 
-## 限制
+### Legacy single file (`uasset_read.py`)
 
-专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。烘焙后的资产仅包含烘焙数据，无蓝图源码。
+Complete parsing pipeline with all components. Will be removed after Phase 33 (entry adapter + equivalence verification).
+
+## Tech Stack
+
+- **Language**: Python 3.10+ (match/case, type hints)
+- **Dependencies**: Zero runtime dependencies — standard library only (struct, mmap, dataclasses, json, argparse)
+- **Build**: setuptools (src layout), pyproject.toml configured
+- **Testing**: pytest (optional dev dependency)
+
+## Limitations
+
+Focuses on unbaked/editor-saved assets (containing full blueprint data). Baked assets contain only cooked data with no blueprint source code.
+
+## Planning
+
+- `.planning/ROADMAP.md` — version roadmap (50 phases)
+- `.planning/STATE.md` — current milestone status
+- `.planning/REQUIREMENTS.md` — requirements traceability
+- `.planning/PROJECT.md` — project overview
