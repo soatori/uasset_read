@@ -6,9 +6,9 @@ status: executing
 last_updated: "2026-05-11T17:15:00Z"
 progress:
   total_phases: 10
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 3
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -19,12 +19,13 @@ progress:
 - ~~Phase 27: 项目结构初始化~~ ✓ Complete (constants.py, exceptions.py)
 - ~~Phase 28: 核心序列化模块~~ ✓ Complete (archive.py, serializers/)
 - ~~Phase 28a: 测试基线修复~~ ✓ Complete — 411 passed, 47 skipped
+- ~~Phase 29: 核心数据模型~~ ✓ Complete (models/core.py, node_types.py, blueprint.py, result.py)
 
-## 当前焦点: Phase 29 — 核心数据模型
+## 当前焦点: Phase 30 — 属性解析模块
 
 ### 下一步
 
-1. **Phase 29: 核心数据模型** (UEdGraph, Node, Pin, ParseResult dataclasses)
+1. **Phase 30: 属性解析模块** (PropertyParser, property type handlers)
 2. Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接结构)
 3. Phase 30: 属性解析模块
 4. Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
