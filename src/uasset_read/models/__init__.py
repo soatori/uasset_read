@@ -1,5 +1,5 @@
 """
-核心数据模型 — UE 蓝图图容器、节点、引脚、节点类型。
+核心数据模型 — UE 蓝图图容器、节点、引脚、蓝图元数据及 ParseResult。
 
 通过扁平导出（D-03），调用者使用 from uasset_read.models import UEdGraph 等。
 """
@@ -18,6 +18,18 @@ from .node_types import (
     EdGraphNodeComment,
     K2NodeEnhancedInputAction,
 )
+from .result import (
+    ParseResult,
+    StatusInfo,
+)
+from .blueprint import (
+    BlueprintMetadata,
+    BlueprintVariable,
+    BlueprintFunction,
+    BlueprintEvent,
+    FunctionParameter,
+    MulticastDelegate,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -32,4 +44,14 @@ __all__ = [
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
+    # 结果（result.py）
+    "ParseResult",
+    "StatusInfo",
+    # 蓝图元数据（blueprint.py）
+    "BlueprintMetadata",
+    "BlueprintVariable",
+    "BlueprintFunction",
+    "BlueprintEvent",
+    "FunctionParameter",
+    "MulticastDelegate",
 ]
