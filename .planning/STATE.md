@@ -23,6 +23,10 @@ progress:
 
 ## 当前焦点: Phase 30 — 属性解析模块
 
+### 上下文完成
+
+- ~~Phase 30 CONTEXT.md~~ ✓ Complete — 4 个决策已锁定（模块组织、分派策略、蓝图归属、循环导入）
+
 ### 下一步
 
 1. **Phase 30: 属性解析模块** (PropertyParser, property type handlers)
