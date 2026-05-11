@@ -58,6 +58,19 @@ from .models import (
     MulticastDelegate,
 )
 
+# 属性数据模型（Phase 30）
+from .models import (
+    PropertyTag,
+    PropertyValue,
+    AdvancedPropertyValue,
+    StructValue,
+    MapValue,
+    SetValue,
+    EnumValue,
+    TextValue,
+    DelegateValue,
+)
+
 # 公共API导出控制（per D-09）
 __all__ = [
     # 版本号
@@ -102,4 +115,14 @@ __all__ = [
     "BlueprintEvent",
     "FunctionParameter",
     "MulticastDelegate",
+    # 属性数据模型（Phase 30）
+    "PropertyTag",
+    "PropertyValue",
+    "AdvancedPropertyValue",
+    "StructValue",
+    "MapValue",
+    "SetValue",
+    "EnumValue",
+    "TextValue",
+    "DelegateValue",
 ]
