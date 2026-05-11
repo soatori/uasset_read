@@ -30,6 +30,17 @@ from .blueprint import (
     FunctionParameter,
     MulticastDelegate,
 )
+from .properties import (
+    PropertyTag,
+    PropertyValue,
+    AdvancedPropertyValue,
+    StructValue,
+    MapValue,
+    SetValue,
+    EnumValue,
+    TextValue,
+    DelegateValue,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -54,4 +65,14 @@ __all__ = [
     "BlueprintEvent",
     "FunctionParameter",
     "MulticastDelegate",
+    # 属性数据模型（Phase 30）
+    "PropertyTag",
+    "PropertyValue",
+    "AdvancedPropertyValue",
+    "StructValue",
+    "MapValue",
+    "SetValue",
+    "EnumValue",
+    "TextValue",
+    "DelegateValue",
 ]
