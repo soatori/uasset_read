@@ -7,11 +7,11 @@ completed: "2026-05-11T00:00:00Z"
 updated: "2026-05-11T00:05:00Z"
 ---
 
-## Current Test
+## 当前测试
 
-[testing complete]
+[测试已完成]
 
-## Tests
+## 测试用例
 
 ### 1. FArchive Module Import and Binary Reading
 expected: `from uasset_read.archive import FArchive` imports without error. FArchive can open a .uasset file, read basic types (u8/u16/u32/i32/i64/f32/f64), and read_fstring returns valid strings.

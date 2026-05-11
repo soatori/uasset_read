@@ -1,13 +1,13 @@
-# Phase 29: 核心数据模型 - Context
+# Phase 29: 核心数据模型 - 上下文
 
-**Gathered:** 2026-05-11
-**Status:** Ready for planning
+**收集日期：** 2026-05-11
+**状态：** 已完成 2026-05-11
 
-## Phase Boundary
+## 阶段边界
 
 提取并全新设计 UE 蓝图核心数据模型（UEdGraph、UEdGraphNode、UEdGraphPin、ParseResult 及相关节点类型）到 `src/uasset_read/models/` 目录。等价覆盖旧版 uasset_read.py 中第 1878-2074 行的数据类定义，但采用全新架构设计而非 1:1 提取。
 
-## Implementation Decisions
+## 实现决策
 
 ### 命名约定
 
@@ -44,15 +44,15 @@
 - **D-13 (UEdGraphPin 解析):** UEdGraphPin 的 from_archive 按 UE 源码 EdGraphPin.cpp L1838-1964 序列化顺序读取。
 - **D-14 (UEdGraphNode 解析):** UEdGraphNode 基类的 from_archive 读取公共字段后，由子类重写/扩展读取特有字段。
 
-### Claude's Discretion
+### AI 自行决定
 
 - 具体字段顺序和默认值由规划阶段确定
 - 序列化函数命名（to_dict / format_xxx 等）由规划阶段确定
 - 是否需要基类 Model 或 Serializable mixin 由规划阶段确定
 
-## Canonical References
+## 权威参考
 
-**Downstream agents MUST read these before planning or implementing.**
+**下游智能体在规划或实现前必须阅读以下内容。**
 
 ### 旧版源码参考
 
@@ -85,41 +85,42 @@
 - `.planning/ROADMAP.md` §Phase 29 — Phase 29 目标、成功标准、依赖关系
 - `.planning/REQUIREMENTS.md` — MOD-06, MOD-07 需求定义
 
-## Existing Code Insights
+## 现有代码洞察
 
-### Reusable Assets
+### 可复用资产
 
 - **FArchive (archive.py):** 已实现的 read_u32/read_i32/read_u8/read_fstring/read_bytes/read_guid 等方法可直接用于模型解析
 - **PackageFileSummary/ObjectImport/ObjectExport (serializers/):** 已建立的 dataclass 模式可作为模型类设计参考
 - **常量模块 (constants.py):** 版本号、阈值等常量已就位
 
-### Established Patterns
+### 既定模式
 
 - **dataclass for models:** Phase 27 CONTEXT.md 已锁定 — 使用 Python 标准库 dataclasses
 - **from_archive 模式:** serializers 中已建立 — 独立函数读取二进制流返回 dataclass 实例
 - **分层架构依赖方向:** Output → Models → Parsers → Serializers → FArchive，单向依赖避免循环导入
 - **零运行时依赖:** pyproject.toml 中 `dependencies = []`
 
-### Integration Points
+### 集成点
 
 - **models/__init__.py 需要更新:** 新增所有模型类的导出，替换 Phase 27 的空 `__all__`
-- **Phase 29b 依赖:** PropertyTag、FunctionReference、图连接数据结构将在 Phase 29b 定义，Phase 29 不应包含这些
+- **Phase 29b 依赖:** PropertyTag、FunctionReference、图连接数据结构将在 Phase 29b 定义，Phase 29 不应包含这些 → **注意：Phase 29b 已合并到 Phase 30 一并实现**
 - **Phase 30-33 依赖:** 属性解析、图解析、输出格式化、CLI 入口都依赖这些模型类
 - **测试适配:** 现有测试中使用这些数据类的地方需要更新导入路径
 
-## Specific Ideas
+## 具体想法
 
 无特定要求 — 采用上述讨论的全新设计方案。
 
-## Deferred Ideas
+## 延期想法
 
-- 蓝图变量完整元数据增强 — 属于 Phase 29b 或 Phase 30
-- PropertyTag/PropertyValue 数据模型 — 属于 Phase 29b
-- 图连接数据结构 (ExecutionFlow/DataFlow) — 属于 Phase 29b
+- 蓝图变量完整元数据增强 — Phase 30 已实现
+- PropertyTag/PropertyValue 数据模型 — Phase 30 (30-01) 已实现
+- 图连接数据结构 (ExecutionFlow/DataFlow) — 待 Phase 31 蓝图图解析时补充
+- FunctionReference/EventReference — 待 Phase 31 蓝图图解析时补充
 - MCP Server 封装 — 延后至 v4.x
 - JSON Schema 生成 — 延后至 v9.0
 
 ---
 
-*Phase: 29-核心数据模型*
-*Context gathered: 2026-05-11*
+*阶段：29-核心数据模型 — 已完成 2026-05-11*
+*Phase 29b（属性与图数据模型）已合并到 Phase 30 一并实现*
