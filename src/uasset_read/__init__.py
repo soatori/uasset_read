@@ -32,6 +32,15 @@ from .exceptions import (
     ParseError,
 )
 
+# 导出核心数据模型（Phase 29）
+from .models import (
+    FEdGraphPinType,
+    UEdGraphPin,
+    UEdGraphNode,
+    UEdGraph,
+    FMemberReference,
+)
+
 # 公共API导出控制（per D-09）
 __all__ = [
     # 版本号
@@ -54,4 +63,10 @@ __all__ = [
     "VersionError",
     "ErrorContext",
     "ParseError",
+    # 核心数据模型（Phase 29）
+    "FEdGraphPinType",
+    "UEdGraphPin",
+    "UEdGraphNode",
+    "UEdGraph",
+    "FMemberReference",
 ]
