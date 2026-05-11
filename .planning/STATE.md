@@ -27,11 +27,12 @@ progress:
 
 - ~~Phase 30 Plan 01: Property Dataclasses & PropertyTag Serializer~~ ✓ Complete — 4/4 tasks, 9 dataclasses + serializer
   - Commits: 8f01994, e1a49db, b86892f, 9814e3b
+- ~~Phase 30 Plan 02: Property Type Parsers~~ ✓ Complete — 3/3 tasks, 14 parse functions + dispatcher + export loop
+  - Commits: 3e5fa33, 76f51b2, 9794a16
 
 ### 下一步
 
-1. **Phase 30 Plan 02**: Property value parsers (14 parse_*_property functions)
-2. Phase 30 Plan 03: parse_properties_from_export + blueprint variable extraction
+1. **Phase 30 Plan 03**: parse_properties_from_export + blueprint variable extraction
 3. Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
 4. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
 5. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
