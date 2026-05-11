@@ -100,19 +100,22 @@ def test_use_complete_type_name_ue4_always_old():
 def test_property_tag_ue5_format_basic():
     """测试 UE5 PropertyTag 基本格式解析。"""
     # 构造 UE5 PropertyTag 数据
-    # Name (FName: index=0, number=0) + Type (FString) + Size + Flags
-    name_map = ["TestProperty"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format (not FString)
+    # Format: Name(FName) + TypeName(FPropertyTypeNameNode) + Size + Flags
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
+    name_map = ["TestProperty", "IntProperty"]
 
-    # FName: index (u32=0) + number (u32=0)
-    # FString: length (i32=12) + "IntProperty\0"
+    # FName: index (u32) + number (u32)
+    # FPropertyTypeName: FName(8) + InnerCount(4)
     # Size: i32=4
     # Flags: u8=0
     # Padding: 4 bytes for property value data (D-11 validation requires remaining >= Size)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (TestProperty)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 12) +     # Type string length
-        b"IntProperty\x00" +        # Type string (12 bytes with null)
+        struct.pack('<I', 1) +      # TypeName index (IntProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0 (no inner types)
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', 0) +      # Flags (none)
         b'\x00' * 4                 # Padding for property value
@@ -132,17 +135,19 @@ def test_property_tag_ue5_format_basic():
 
 def test_property_tag_ue5_with_guid():
     """测试 UE5 PropertyTag 带 PropertyGuid。"""
-    name_map = ["MyProperty"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["MyProperty", "FloatProperty"]
 
     # Flags with HasPropertyGuid (0x02)
     guid_bytes = b"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10"
 
-    # FloatProperty = 13 chars + null = 14 bytes
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (MyProperty)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 14) +     # Type string length (13 chars + null)
-        b"FloatProperty\x00" +      # Type string (14 bytes)
+        struct.pack('<I', 1) +      # TypeName index (FloatProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', PROP_TAG_HAS_PROPERTY_GUID) +  # Flags
         guid_bytes +                # PropertyGuid (16 bytes)
@@ -160,14 +165,16 @@ def test_property_tag_ue5_with_guid():
 
 def test_property_tag_ue5_with_array_index():
     """测试 UE5 PropertyTag 带 ArrayIndex。"""
-    name_map = ["ArrayProp"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["ArrayProp", "ArrayProperty"]
 
-    # ArrayProperty = 13 chars + null = 14 bytes
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (ArrayProp)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 14) +     # Type string length (13 chars + null)
-        b"ArrayProperty\x00" +      # Type string (14 bytes)
+        struct.pack('<I', 1) +      # TypeName index (ArrayProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size (reduced for validation)
         struct.pack('<B', PROP_TAG_HAS_ARRAY_INDEX) +  # Flags
         struct.pack('<i', 5) +      # ArrayIndex
@@ -185,14 +192,16 @@ def test_property_tag_ue5_with_array_index():
 
 def test_property_tag_ue5_bool_true_flag():
     """测试 UE5 PropertyTag BoolTrue 标志。"""
-    name_map = ["IsEnabled"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["IsEnabled", "BoolProperty"]
 
-    # BoolProperty = 12 chars + null = 13 bytes
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (IsEnabled)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 13) +     # Type string length (12 chars + null)
-        b"BoolProperty\x00" +       # Type string (13 bytes)
+        struct.pack('<I', 1) +      # TypeName index (BoolProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 0) +      # Size (bool has no data)
         struct.pack('<B', PROP_TAG_BOOL_TRUE)  # Flags with BoolTrue
     )
@@ -393,18 +402,20 @@ def test_parse_property_value_unknown_type():
 
 def test_property_tag_all_flags():
     """测试 PropertyTag 所有标志组合。"""
-    name_map = ["ComplexProp"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["ComplexProp", "BoolProperty"]
 
     # Multiple flags: HasArrayIndex + HasPropertyGuid + BoolTrue
     flags = PROP_TAG_HAS_ARRAY_INDEX | PROP_TAG_HAS_PROPERTY_GUID | PROP_TAG_BOOL_TRUE
     guid = b"\xAA" * 16
 
-    # BoolProperty = 12 chars + null = 13 bytes
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (ComplexProp)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 13) +     # Type string length (12 chars + null)
-        b"BoolProperty\x00" +       # Type string (13 bytes)
+        struct.pack('<I', 1) +      # TypeName index (BoolProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 0) +      # Size
         struct.pack('<B', flags) +  # Combined flags
         struct.pack('<i', 10) +     # ArrayIndex
@@ -519,17 +530,18 @@ def test_property_value_dispatch_array():
 
 def test_property_tag_ue5_complete_type_name():
     """测试 UE5 PropertyTag 完整 TypeName 格式。"""
-    name_map = ["TestProp"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    # The code extracts only the root type name from FPropertyTypeName
+    name_map = ["TestProp", "/Script/CoreUObject.IntProperty"]
 
-    # UE5 format: FName + complete TypeName (FString) + Size + Flags
-    type_name = "/Script/CoreUObject.IntProperty"
-    type_len = len(type_name) + 1  # +1 for null terminator
-
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
+    # For "/Script/CoreUObject.IntProperty", first node is the full path
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (TestProp)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', type_len) +  # Type string length
-        (type_name + "\x00").encode() +  # Complete TypeName
+        struct.pack('<I', 1) +      # TypeName index (/Script/CoreUObject.IntProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', 0) +      # Flags (none)
         b'\x00' * 4                 # Padding for property value
@@ -539,7 +551,7 @@ def test_property_tag_ue5_complete_type_name():
     tag = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
     assert tag.name == "TestProp"
-    assert tag.type == type_name
+    assert tag.type == "/Script/CoreUObject.IntProperty"  # First node name
     assert tag.size == 4
 
 
@@ -568,15 +580,16 @@ def test_property_tag_ue4_short_type_name():
 
 def test_property_tag_ue5_vs_ue4_format_selection():
     """测试版本阈值决定格式选择。"""
-    name_map = ["VersionTest"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["VersionTest", "Bool"]
 
-    # Same test data, different version parameters
-    # For UE5 >= 1012, expect complete TypeName format
+    # For UE5 >= 1012, expect FPropertyTypeName format
     ue5_data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (VersionTest)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 5) +      # Type string length
-        b"Bool\x00" +               # Type string (short for testing)
+        struct.pack('<I', 1) +      # TypeName index (Bool)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 0) +      # Size
         struct.pack('<B', PROP_TAG_BOOL_TRUE)  # Flags
     )
@@ -584,29 +597,28 @@ def test_property_tag_ue5_vs_ue4_format_selection():
     archive = create_mock_archive_with_data(ue5_data)
     tag_ue5 = read_property_tag(archive, name_map, -8, 1012)  # UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
 
-    # UE5 format reads type as FString
+    # UE5 format reads type as FPropertyTypeName (first node name)
     assert tag_ue5.type == "Bool"
     assert tag_ue5.bool_val == 1
 
 
 def test_property_guid_ue5_format():
     """测试 UE5 PropertyGuid 读取（16 bytes）。"""
-    name_map = ["GuidTest"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["GuidTest", "IntProperty"]
     guid = bytes(range(16))  # 0x00-0x0F
 
-    # FString length = actual bytes to read (including null if present)
-    # "IntProperty" = 12 chars, + null = 13 bytes
-    type_str = "IntProperty"
-    type_bytes = (type_str + "\x00").encode()
-
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (GuidTest)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', len(type_bytes)) +  # Type string length (13)
-        type_bytes +                # Type string (13 bytes with null)
+        struct.pack('<I', 1) +      # TypeName index (IntProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', PROP_TAG_HAS_PROPERTY_GUID) +  # Flags
-        guid                        # 16 bytes GUID
+        guid +                      # 16 bytes GUID
+        b'\x00' * 4                 # Padding
     )
 
     archive = create_mock_archive_with_data(data)
@@ -617,19 +629,20 @@ def test_property_guid_ue5_format():
 
 def test_array_index_flag_ue5_format():
     """测试 UE5 HasArrayIndex 标志读取 int32。"""
-    name_map = ["ArrayIdxTest"]
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    name_map = ["ArrayIdxTest", "IntProperty"]
 
-    type_str = "IntProperty"
-    type_bytes = (type_str + "\x00").encode()
-
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     data = (
-        struct.pack('<I', 0) +      # Name index
+        struct.pack('<I', 0) +      # Name index (ArrayIdxTest)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', len(type_bytes)) +  # Type string length (13)
-        type_bytes +                # Type string (13 bytes with null)
+        struct.pack('<I', 1) +      # TypeName index (IntProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', PROP_TAG_HAS_ARRAY_INDEX) +  # Flags
-        struct.pack('<i', 42)       # ArrayIndex value
+        struct.pack('<i', 42) +     # ArrayIndex value
+        b'\x00' * 4                 # Padding
     )
 
     archive = create_mock_archive_with_data(data)
@@ -827,35 +840,31 @@ def test_object_property_export_with_import_class():
 
 def test_object_property_in_parse_properties():
     """测试parse_properties_from_export增强ObjectProperty返回可读引用。"""
-    # 构造测试数据：一个ObjectProperty + 终止标记
-    # name_map需要包含属性名和终止标记名"None"
-    name_map = ["TestProp", "None", "Package", "Class", "Target"]
-
-    # ObjectProperty = 14 chars, FString length = 15 (包括null terminator)
-    type_str_len = 15  # "ObjectProperty\x00" = 15 bytes
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    # name_map需要包含属性名、类型名和终止标记名"None"
+    name_map = ["TestProp", "None", "Package", "Class", "Target", "ObjectProperty"]
 
     # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
     header_data = struct.pack('<B', 0x00)  # NoExtension
 
-    # PropertyTag数据 (UE5格式)
+    # PropertyTag数据 (UE5 FPropertyTypeName格式)
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     prop_data = (
         struct.pack('<I', 0) +      # Name index (TestProp)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', type_str_len) +  # Type string length (15)
-        b"ObjectProperty\x00" +     # Type string (15 bytes)
+        struct.pack('<I', 5) +      # TypeName index (ObjectProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', 0) +      # Flags
         struct.pack('<i', -1)       # Value: FPackageIndex = -1 (import reference)
     )
 
-    # 终止标记 (UE5格式: Name=FName, Type=FString "None")
+    # 终止标记 (UE5格式: Name="None"时只有FName，无Type/Size/Flags)
+    # 参考: PropertyTag.cpp - when Name == "None", serialization ends
     terminator_data = (
         struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
-        struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 5) +      # Type string length (None + null = 5)
-        b"None\x00" +               # Type string
-        struct.pack('<i', 0) +      # Size = 0
-        struct.pack('<B', 0)        # Flags
+        struct.pack('<I', 0)        # Name number
     )
 
     full_data = header_data + prop_data + terminator_data
@@ -916,34 +925,30 @@ def test_object_property_in_parse_properties():
 
 def test_object_property_null_in_parse_properties():
     """测试parse_properties_from_export处理null ObjectProperty引用。"""
-    # name_map需要包含属性名和终止标记名"None"
-    name_map = ["NullProp", "None"]
-
-    # ObjectProperty = 14 chars, FString length = 15
-    type_str_len = 15
+    # Phase 28a FIX: UE5 >= 1012 uses FPropertyTypeName format
+    # name_map需要包含属性名、类型名和终止标记名"None"
+    name_map = ["NullProp", "None", "ObjectProperty"]
 
     # D-02: SerializationControlExtensions 头部 (UE5 >= 1011)
     header_data = struct.pack('<B', 0x00)  # NoExtension
 
-    # PropertyTag数据 (UE5格式) - null引用
+    # PropertyTag数据 (UE5 FPropertyTypeName格式) - null引用
+    # FPropertyTypeNameNode: FName(8) + InnerCount(4)
     prop_data = (
         struct.pack('<I', 0) +      # Name index (NullProp)
         struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', type_str_len) +  # Type string length
-        b"ObjectProperty\x00" +     # Type string
+        struct.pack('<I', 2) +      # TypeName index (ObjectProperty)
+        struct.pack('<I', 0) +      # TypeName number
+        struct.pack('<i', 0) +      # InnerCount = 0
         struct.pack('<i', 4) +      # Size
         struct.pack('<B', 0) +      # Flags
         struct.pack('<i', 0)        # Value: FPackageIndex = 0 (null)
     )
 
-    # 终止标记 (UE5格式)
+    # 终止标记 (UE5格式: Name="None"时只有FName，无Type/Size/Flags)
     terminator_data = (
         struct.pack('<I', 1) +      # Name index (指向name_map[1]="None")
-        struct.pack('<I', 0) +      # Name number
-        struct.pack('<i', 5) +      # Type string length
-        b"None\x00" +               # Type string
-        struct.pack('<i', 0) +      # Size
-        struct.pack('<B', 0)        # Flags
+        struct.pack('<I', 0)        # Name number
     )
 
     full_data = header_data + prop_data + terminator_data

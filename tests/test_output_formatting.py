@@ -1334,8 +1334,9 @@ def test_graphs_summary_calls_format(create_mock_parse_result):
                         UEdGraphPin(
                             pin_id="pin-101",
                             pin_name="EventBeginPlay",
-                            direction=1,
+                            direction=1,  # Output
                             pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
+                            linked_to_raw=[{"pin_guid": "pin-102"}],  # Phase 28a FIX: Output pin should have linked_to_raw
                         ),
                     ],
                     node_data=K2NodeEvent(
@@ -1352,9 +1353,8 @@ def test_graphs_summary_calls_format(create_mock_parse_result):
                         UEdGraphPin(
                             pin_id="pin-102",
                             pin_name="execute",
-                            direction=0,
+                            direction=0,  # Input
                             pin_type=FEdGraphPinType(pin_category="exec", pin_sub_category="none", pin_sub_category_object=None),
-                            linked_to_raw=["pin-101"],
                         ),
                         UEdGraphPin(
                             pin_id="pin-103",

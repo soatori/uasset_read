@@ -4026,8 +4026,13 @@ def read_ue_graph_node(
     # Phase 28a FIX: 解析 script_serial 中的 tagged properties
     # UE 序列化顺序: Super::Serialize (tagged properties) → Pins
     # FunctionReference/EventReference 在 tagged properties 中
+    # UE5: NodePosX/NodePosY/NodeGuid/NodeComment 也在 tagged properties 中
     function_reference: Optional[FMemberReference] = None
     event_reference: Optional[FMemberReference] = None
+    node_pos_x: int = 0
+    node_pos_y: int = 0
+    node_guid: str = ""
+    node_comment: str = ""
 
     if node_export.script_serial_size > 0:
         script_start = node_export.serial_offset + node_export.script_serial_offset
@@ -4142,6 +4147,17 @@ def read_ue_graph_node(
                     member_guid=member_guid,
                     b_self_context=b_self_context
                 )
+            # Phase 28a FIX: UE5 stores NodePosX/NodePosY/NodeGuid/NodeComment as PropertyTags
+            elif tag.name == "NodePosX":
+                node_pos_x = archive.read_i32()
+            elif tag.name == "NodePosY":
+                node_pos_y = archive.read_i32()
+            elif tag.name == "NodeGuid" and tag.size > 0:
+                # StructProperty(FGuid): 16 bytes
+                node_guid = archive.read_bytes(16).hex()
+            elif tag.name == "NodeComment" and tag.size > 0:
+                # StrProperty: FString
+                node_comment = archive.read_fstring()
             elif tag.size > 0:
                 archive.seek(archive.tell() + tag.size)
 
@@ -4226,16 +4242,18 @@ def read_ue_graph_node(
         print(f"[DEBUG NODE] Successfully read {len(pins)}/{pins_count} pins")
         print(f"[DEBUG NODE] ========================================")
 
-    # 2-3. NodePos
-    node_pos_x = archive.read_i32()
-    node_pos_y = archive.read_i32()
-
-    # 4. NodeGuid
-    node_guid_bytes = archive.read_bytes(16)
-    node_guid = node_guid_bytes.hex()
-
-    # 5. NodeComment
-    node_comment = archive.read_fstring()
+    # 2-5. NodePos/NodeGuid/NodeComment
+    # Phase 28a FIX: UE5 stores these as PropertyTags in script_serial
+    # UE4: read as raw data after pins
+    # UE5: skip raw data read if already extracted from PropertyTags
+    if node_guid == "":
+        # UE4 format: read as raw data
+        node_pos_x = archive.read_i32()
+        node_pos_y = archive.read_i32()
+        node_guid_bytes = archive.read_bytes(16)
+        node_guid = node_guid_bytes.hex()
+        node_comment = archive.read_fstring()
+    # else: UE5 format - values already extracted from PropertyTags
 
     if DEBUG_PIN_PARSING:
         print(f"[DEBUG NODE] After NodeComment: pos={archive.tell():#x}")
@@ -6747,6 +6765,11 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
                     # D-14-06: 提取参数类型（从 graph.nodes 中查找）
                     param_str = _extract_function_params(graph, node.get("node_guid"))
                     calls.append(f"{func_name}({param_str})")
+
+            # Phase 28a FIX: Skip empty flows (no CallFunction nodes)
+            # EnhancedInputAction's Started/Ongoing/Canceled/Completed may have no connections
+            if not calls:
+                continue
 
             function_name = calls[0] if calls else ""
             execution_flows_summary.append({
