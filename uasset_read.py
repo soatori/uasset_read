@@ -4023,6 +4023,128 @@ def read_ue_graph_node(
         print(f"[DEBUG NODE] script_serial_offset: {node_export.script_serial_offset:#x}")
         print(f"[DEBUG NODE] script_serial_size: {node_export.script_serial_size}")
 
+    # Phase 28a FIX: 解析 script_serial 中的 tagged properties
+    # UE 序列化顺序: Super::Serialize (tagged properties) → Pins
+    # FunctionReference/EventReference 在 tagged properties 中
+    function_reference: Optional[FMemberReference] = None
+    event_reference: Optional[FMemberReference] = None
+
+    if node_export.script_serial_size > 0:
+        script_start = node_export.serial_offset + node_export.script_serial_offset
+        script_end = script_start + node_export.script_serial_size
+        archive.seek(script_start)
+
+        # UE5 >= 1011: SerializationControlExtensions
+        if summary.file_version_ue5 >= 1011:
+            ctrl = archive.read_u8()
+            if ctrl & 0x02:
+                archive.read_u8()  # skip override_operation
+
+        # Loop through PropertyTags
+        while archive.tell() < script_end:
+            tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+            if tag.name == "None":
+                break
+
+            if tag.name == "FunctionReference" and tag.size > 0:
+                # Phase 28a FIX: StructProperty(MemberReference) value 包含嵌套 PropertyTags
+                # FMemberReference 是 USTRUCT，其 UPROPERTY 字段作为嵌套 PropertyTags 序列化
+                # 参考: Engine/Classes/Engine/MemberReference.h
+                value_start = archive.tell()
+                value_end = value_start + tag.size
+
+                # 解析嵌套 PropertyTags
+                member_parent_idx = 0
+                member_scope = ""
+                member_name = ""
+                member_guid = ""
+                b_self_context = False
+
+                while archive.tell() < value_end:
+                    inner_tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+                    if inner_tag.name == "None":
+                        break
+
+                    # 根据嵌套属性名读取值
+                    if inner_tag.name == "MemberParent" and inner_tag.size > 0:
+                        # ObjectProperty: PackageIndex (i32)
+                        member_parent_idx = archive.read_i32()
+                    elif inner_tag.name == "MemberScope" and inner_tag.size > 0:
+                        # StrProperty: FString
+                        member_scope = archive.read_fstring()
+                    elif inner_tag.name == "MemberName":
+                        # NameProperty: FName (8 bytes: index + number)
+                        # Note: size may be 0 or 8, always read 8 bytes for FName
+                        member_name = archive.read_name(name_map)
+                    elif inner_tag.name == "MemberGuid" and inner_tag.size > 0:
+                        # StructProperty(FGuid): 16 bytes
+                        member_guid = archive.read_bytes(16).hex()
+                    elif inner_tag.name == "bSelfContext":
+                        # BoolProperty: UE5 stores value in tag.bool_val (flags), not as UBOOL
+                        # If size > 0, read UBOOL; else use bool_val from flags
+                        if inner_tag.size > 0:
+                            b_self_context = archive.read_i32() != 0
+                        else:
+                            b_self_context = inner_tag.bool_val != 0
+                    elif inner_tag.name == "bWasDeprecated":
+                        # BoolProperty: same handling
+                        if inner_tag.size > 0:
+                            archive.read_i32()
+                        # else: value stored in bool_val, skip (not needed)
+                    elif inner_tag.size > 0:
+                        # Unknown nested property: skip
+                        archive.seek(archive.tell() + inner_tag.size)
+
+                function_reference = FMemberReference(
+                    member_parent=resolve_class_name(PackageIndex(member_parent_idx), import_map, export_map) if member_parent_idx != 0 else None,
+                    member_name=member_name,
+                    member_guid=member_guid,
+                    b_self_context=b_self_context
+                )
+            elif tag.name == "EventReference" and tag.size > 0:
+                # Phase 28a FIX: Same nested PropertyTags structure
+                value_start = archive.tell()
+                value_end = value_start + tag.size
+
+                member_parent_idx = 0
+                member_scope = ""
+                member_name = ""
+                member_guid = ""
+                b_self_context = False
+
+                while archive.tell() < value_end:
+                    inner_tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+                    if inner_tag.name == "None":
+                        break
+
+                    if inner_tag.name == "MemberParent" and inner_tag.size > 0:
+                        member_parent_idx = archive.read_i32()
+                    elif inner_tag.name == "MemberScope" and inner_tag.size > 0:
+                        member_scope = archive.read_fstring()
+                    elif inner_tag.name == "MemberName":
+                        member_name = archive.read_name(name_map)
+                    elif inner_tag.name == "MemberGuid" and inner_tag.size > 0:
+                        member_guid = archive.read_bytes(16).hex()
+                    elif inner_tag.name == "bSelfContext":
+                        if inner_tag.size > 0:
+                            b_self_context = archive.read_i32() != 0
+                        else:
+                            b_self_context = inner_tag.bool_val != 0
+                    elif inner_tag.name == "bWasDeprecated":
+                        if inner_tag.size > 0:
+                            archive.read_i32()
+                    elif inner_tag.size > 0:
+                        archive.seek(archive.tell() + inner_tag.size)
+
+                event_reference = FMemberReference(
+                    member_parent=resolve_class_name(PackageIndex(member_parent_idx), import_map, export_map) if member_parent_idx != 0 else None,
+                    member_name=member_name,
+                    member_guid=member_guid,
+                    b_self_context=b_self_context
+                )
+            elif tag.size > 0:
+                archive.seek(archive.tell() + tag.size)
+
     # Phase 22 FIX-11: 使用固定偏移量计算 pins_offset
     #
     # 根据 UE 源码分析和实际数据验证：
@@ -4132,12 +4254,16 @@ def read_ue_graph_node(
     node_data: Any = None
     match class_name:
         case "K2Node_CallFunction":
-            node_data = read_k2node_call_function(
-                archive, name_map, import_map, export_map
+            # Phase 28a FIX: Use extracted FunctionReference from script_serial
+            node_data = K2NodeCallFunction(
+                function_reference=function_reference or FMemberReference(),
+                b_defaults_to_pure=False
             )
         case "K2Node_Event":
-            node_data = read_k2node_event(
-                archive, name_map, import_map, export_map
+            # Phase 28a FIX: Use extracted EventReference from script_serial
+            node_data = K2NodeEvent(
+                event_reference=event_reference or FMemberReference(),
+                b_override_function=False
             )
         case "K2Node_Knot":
             node_data = read_k2node_knot(archive)
@@ -5067,9 +5193,31 @@ def read_property_tag(
         size=0
     )
 
+    # Special case: "None" PropertyTag only has Name, no TypeName/Size/Flags
+    # Reference: PropertyTag.cpp - when Name == "None", serialization ends
+    if tag.name == "None":
+        return tag
+
     if use_complete_type_name(legacy_version, ue5_version):
         # UE5 新格式（PropertyTag.cpp lines 436-545）
-        tag.type = archive.read_fstring()  # Complete TypeName string
+        # Phase 28a FIX: TypeName 使用 FPropertyTypeName 格式
+        # 格式: FPropertyTypeNameNode[] - 每个: FName(8) + InnerCount(4)
+        # 参考: PropertyTypeName.cpp line 41-50
+
+        # Read FPropertyTypeName nodes
+        type_parts: List[Tuple[str, int]] = []
+        pending = 1
+        while pending > 0 and len(type_parts) < 20:  # Safety limit
+            node_name = archive.read_name(name_map)
+            inner_count = archive.read_i32()
+            type_parts.append((node_name, inner_count))
+            pending = pending - 1 + inner_count
+
+        # Build type string: just use the first node name (root type)
+        # e.g., "StructProperty(MemberReference)" -> just use "StructProperty"
+        # Full type parsing would require more complex handling
+        if type_parts:
+            tag.type = type_parts[0][0]
         tag.size = archive.read_i32()
         archive.validate_size(tag.size, tag.name)  # D-11: validate PropertyTag.Size
         tag.flags = archive.read_u8()

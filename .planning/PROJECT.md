@@ -102,7 +102,7 @@ v4.0需求（Phase 18-21）：
 - v5.1 项目结构初始化（2026-05-07）：src layout、constants.py、exceptions.py
 
 **In Progress:**
-- v6.0 模块化重构（2026-05-10起）：Phase 27/28完成，Phase 29进行中
+- v6.0 模块化重构（2026-05-10起）：Phase 27/28完成，Phase 28a 测试基线修复进行中
 
 **Tech Stack:**
 - Python 3.10+（match/case，类型提示）
@@ -123,11 +123,11 @@ v4.0需求（Phase 18-21）：
 ```
 
 **Known Issues / Tech Debt:**
+- 7 个已知测试失败（2个键名不匹配 + 1个function_name为空 + 4个pin/解析问题）— Phase 28a 目标
+- Stash@{0} 含关键修复待合并：peek_i32()、ETextHistoryType、FText跳过逻辑、pin读取容错
 - MCP Server封装延后（SKILL-05/SKILL-06）
 - JSON Schema生成延后（OUT-07/OUT-08）
 - EventGraph测试跳过（Cooked资产情况）
-- Stash中有uasset_read.py和test_phase21_verification.py的待处理修改
-- 7个已知测试失败（前置问题，非Phase 28引起）
 
 ## Key Decisions
 
@@ -143,6 +143,8 @@ v4.0需求（Phase 18-21）：
 | 阈值: PROPERTY_TAG_COMPLETE_TYPE_NAME=1012 | UE5格式切换点 | ✓ Good |
 | Status三元分类 | JSend规范，AI友好 | ✓ Good |
 | output_version: "3.0" | API版本锁定 | ✓ Good |
+| v6.0 等价迁移原则 | 先等价再增强，避免范围蔓延 | ✓ Good |
+| 测试基线优先 | 修复 7 个已知失败后再开始 Phase 29 | ✓ Good |
 
 ## Constraints
 
@@ -159,11 +161,14 @@ v4.0需求（Phase 18-21）：
 **目标功能:**
 - Phase 27: 项目结构初始化 (constants.py, exceptions.py) ✓ Complete
 - Phase 28: 核心序列化模块 (archive.py, serializers/) ✓ Complete
-- Phase 29: 数据模型模块 (models/core.py, models/properties.py, models/graph.py) — 进行中
+- Phase 28a: 测试基线修复 (7个已知失败 + stash bug合并) — 进行中
+- Phase 29: 核心数据模型 (UEdGraph, Node, Pin, ParseResult dataclasses)
+- Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接结构)
 - Phase 30: 属性解析模块
-- Phase 31: 蓝图图解析模块
-- Phase 32: 输出格式化模块
+- Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
+- Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
 - Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
+- Phase 34: 等价验证 (新旧输出逐字段对比)
 
 ## Evolution
 
