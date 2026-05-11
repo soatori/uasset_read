@@ -220,10 +220,10 @@ class TestUEdGraphPinComplete:
         """UEdGraphPin 数据类结构验证"""
         pin_type = FEdGraphPinType(
             pin_category="exec",
-            pin_sub_category="",
+            pin_subcategory="",  # Phase 31: 使用 pin_subcategory（无下划线）
             container_type=0,
-            is_reference=False,
-            is_const=False
+            is_map_key=False,
+            is_map_value=False
         )
         pin = UEdGraphPin(
             pin_id="1234567890abcdef1234567890abcdef",
@@ -232,7 +232,7 @@ class TestUEdGraphPinComplete:
             pin_type=pin_type,
             default_value=None,
             auto_default_value=None,
-            linked_to_raw=["target_pin_guid"],
+            linked_to_raw=[{"pin_guid": "target_pin_guid"}],
             sub_pins=[],
             parent_pin=None,
             flags=0
@@ -264,13 +264,16 @@ class TestK2NodeCallFunction:
             member_guid="abcdef1234567890",
             b_self_context=True
         )
+        # Phase 31: K2NodeCallFunction 继承 UEdGraphNode，需要 node_guid
         node_data = K2NodeCallFunction(
+            node_guid="1234567890abcdef1234567890abcdef",
             function_reference=func_ref,
             b_defaults_to_pure=False
         )
         assert node_data.function_reference.member_name == "Jump"
         assert node_data.function_reference.b_self_context == True
         assert node_data.b_defaults_to_pure == False
+        assert node_data.node_guid == "1234567890abcdef1234567890abcdef"
 
     def test_k2node_call_function_parser(self):
         """GRAPH-05: FunctionReference 提取"""
@@ -298,13 +301,16 @@ class TestK2NodeEvent:
             member_guid="abcdef1234567890",
             b_self_context=False
         )
+        # Phase 31: K2NodeEvent 继承 UEdGraphNode，需要 node_guid
         node_data = K2NodeEvent(
+            node_guid="1234567890abcdef1234567890abcdef",
             event_reference=event_ref,
             b_override_function=False
         )
         assert node_data.event_reference.member_name == "ReceiveBeginPlay"
         assert node_data.event_reference.member_parent == "/Script/Engine.BPGenClass"
         assert node_data.b_override_function == False
+        assert node_data.node_guid == "1234567890abcdef1234567890abcdef"
 
     def test_k2node_event_parser(self):
         """GRAPH-06: EventReference 提取"""
@@ -320,9 +326,13 @@ class TestK2NodeKnot:
 
     def test_k2node_knot_dataclass(self):
         """K2NodeKnot 数据类结构验证（无额外字段）"""
-        node_data = K2NodeKnot()
+        # Phase 31: K2NodeKnot 继承 UEdGraphNode，需要 node_guid
+        node_data = K2NodeKnot(
+            node_guid="1234567890abcdef1234567890abcdef"
+        )
         # Knot 节点无额外字段，仅验证实例创建成功
         assert isinstance(node_data, K2NodeKnot)
+        assert node_data.node_guid == "1234567890abcdef1234567890abcdef"
 
     def test_k2node_knot_parser(self):
         """GRAPH-07: Knot 节点（仅基类）"""
@@ -338,7 +348,9 @@ class TestEdGraphNodeComment:
 
     def test_edgraph_node_comment_dataclass(self):
         """EdGraphNodeComment 数据类结构验证"""
+        # Phase 31: EdGraphNodeComment 继承 UEdGraphNode，需要 node_guid
         node_data = EdGraphNodeComment(
+            node_guid="1234567890abcdef1234567890abcdef",
             comment_color=(0.05, 0.05, 0.05, 1.0),
             node_width=1440,
             node_height=544,
@@ -348,6 +360,7 @@ class TestEdGraphNodeComment:
         assert node_data.node_width == 1440
         assert node_data.node_height == 544
         assert node_data.font_size == 14
+        assert node_data.node_guid == "1234567890abcdef1234567890abcdef"
 
     def test_edgraph_node_comment_parser(self):
         """GRAPH-08: Comment 节点文本和尺寸"""
@@ -363,10 +376,13 @@ class TestK2NodeEnhancedInputAction:
 
     def test_k2node_enhanced_input_dataclass(self):
         """K2NodeEnhancedInputAction 数据类结构验证"""
+        # Phase 31: K2NodeEnhancedInputAction 继承 UEdGraphNode，需要 node_guid
         node_data = K2NodeEnhancedInputAction(
+            node_guid="1234567890abcdef1234567890abcdef",
             input_action_path="/Script/EnhancedInput.InputAction'/Game/Input/Actions/IA_Jump.IA_Jump'"
         )
         assert node_data.input_action_path == "/Script/EnhancedInput.InputAction'/Game/Input/Actions/IA_Jump.IA_Jump'"
+        assert node_data.node_guid == "1234567890abcdef1234567890abcdef"
 
     def test_k2node_enhanced_input_parser(self):
         """GRAPH-09: InputAction 路径"""

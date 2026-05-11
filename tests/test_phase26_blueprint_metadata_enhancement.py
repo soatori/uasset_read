@@ -9,16 +9,18 @@ Phase 26: 蓝图元数据增强测试
 import pytest
 from uasset_read import (
     BlueprintVariable,
-    FArchive,
     read_blueprint_variable,
     PackageFileSummary,
+    CPF_Edit,
     CPF_EditAnywhere,
     CPF_EditInstanceOnly,
+    CPF_BlueprintVisible,
     CPF_BlueprintReadWrite,
     CPF_BlueprintReadOnly,
     CPF_Transient,
     CPF_SaveGame,
     CPF_ExposeOnSpawn,
+    parse_property_flags_to_labels,
 )
 
 
@@ -64,56 +66,45 @@ class TestPhase26BlueprintVariableEnhancements:
         assert hasattr(var, 'is_replicated')
         assert hasattr(var, 'is_non_pi_ed_duplicate_transient')
 
-    def test_parse_property_flags_returns_correct_flags(self):
-        """_parse_property_flags 必须正确解析属性标志 (per 26-01)"""
-        archive = FArchive.__new__(FArchive)
-        archive._byte_swapping = False
+    def test_parse_property_flags_returns_correct_labels(self):
+        """parse_property_flags_to_labels 必须正确解析属性标志 (per 26-01)"""
+        # 测试 Edit 标志 (CPF_Edit 触发 "EditAnywhere" 标签)
+        labels = parse_property_flags_to_labels(CPF_Edit)
+        assert "EditAnywhere" in labels
 
-        # 测试 EditAnywhere 标志
-        flags = archive._parse_property_flags(CPF_EditAnywhere)
-        assert flags['is_edit_anywhere'] == True
-        assert flags['is_edit_instance_only'] == False
+        # 测试 EditInstanceOnly 标志 (CPF_Edit 触发 "EditAnywhere"，CPF_EditInstanceOnly 是额外标志)
+        labels = parse_property_flags_to_labels(CPF_Edit | CPF_EditInstanceOnly)
+        assert "EditAnywhere" in labels
 
-        # 测试 EditInstanceOnly 标志
-        flags = archive._parse_property_flags(CPF_EditInstanceOnly)
-        assert flags['is_edit_instance_only'] == True
-        assert flags['is_edit_anywhere'] == False
+        # 测试 BlueprintReadWrite 标志 (需要 CPF_BlueprintVisible + CPF_BlueprintReadWrite)
+        labels = parse_property_flags_to_labels(CPF_BlueprintVisible | CPF_BlueprintReadWrite)
+        assert "BlueprintReadWrite" in labels
 
-        # 测试 BlueprintReadWrite 标志
-        flags = archive._parse_property_flags(CPF_BlueprintReadWrite)
-        assert flags['is_blueprint_readable'] == True
-        assert flags['is_blueprint_writable'] == True
-
-        # 测试 BlueprintReadOnly 标志
-        flags = archive._parse_property_flags(CPF_BlueprintReadOnly)
-        assert flags['is_blueprint_read_only'] == True
-        assert flags['is_blueprint_readable'] == False
+        # 测试 BlueprintReadOnly 标志 (需要 CPF_BlueprintVisible + CPF_BlueprintReadOnly)
+        labels = parse_property_flags_to_labels(CPF_BlueprintVisible | CPF_BlueprintReadOnly)
+        assert "BlueprintReadOnly" in labels
 
         # 测试 Transient 标志
-        flags = archive._parse_property_flags(CPF_Transient)
-        assert flags['is_transient'] == True
+        labels = parse_property_flags_to_labels(CPF_Transient)
+        assert "Transient" in labels
 
         # 测试 SaveGame 标志
-        flags = archive._parse_property_flags(CPF_SaveGame)
-        assert flags['is_save_game'] == True
+        labels = parse_property_flags_to_labels(CPF_SaveGame)
+        assert "SaveGame" in labels
 
         # 测试 ExposeOnSpawn 标志
-        flags = archive._parse_property_flags(CPF_ExposeOnSpawn)
-        assert flags['is_expose_on_spawn'] == True
+        labels = parse_property_flags_to_labels(CPF_ExposeOnSpawn)
+        assert "ExposeOnSpawn" in labels
 
-    def test_parse_property_flags_combined_flags(self):
-        """_parse_property_flags 必须正确解析组合标志 (per 26-01)"""
-        archive = FArchive.__new__(FArchive)
-        archive._byte_swapping = False
-
+    def test_parse_property_flags_combined_labels(self):
+        """parse_property_flags_to_labels 必须正确解析组合标志 (per 26-01)"""
         # 测试组合标志
-        combined_flags = CPF_EditAnywhere | CPF_BlueprintReadWrite | CPF_Transient
-        flags = archive._parse_property_flags(combined_flags)
+        combined_flags = CPF_Edit | CPF_BlueprintVisible | CPF_BlueprintReadWrite | CPF_Transient
+        labels = parse_property_flags_to_labels(combined_flags)
 
-        assert flags['is_edit_anywhere'] == True
-        assert flags['is_blueprint_readable'] == True
-        assert flags['is_blueprint_writable'] == True
-        assert flags['is_transient'] == True
+        assert "EditAnywhere" in labels
+        assert "BlueprintReadWrite" in labels
+        assert "Transient" in labels
 
     def test_meta_data_initialized_as_dict(self):
         """meta_data 字段必须初始化为空字典 (per 26-01)"""

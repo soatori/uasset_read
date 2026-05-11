@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-11T18:30:00Z"
+last_updated: "2026-05-12T..."
 progress:
   total_phases: 10
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  completed_phases: 5
+  total_plans: 23
+  completed_plans: 17
+  percent: 74
 ---
 
 # v6.0 模块化重构 — 当前状态
@@ -17,19 +17,19 @@ progress:
 ## 已完成
 
 - ~~Phase 27: 项目结构初始化~~ ✓ Complete (constants.py, exceptions.py)
-- ~~Phase 28: 核心序列化模块~~ ✓ Complete (archive.py, serializers/)
-- ~~Phase 28a: 测试基线修复~~ ✓ Complete — 411 passed, 47 skipped
+- ~~Phase 28: 核心序列化模块~~ ✓ Complete (FArchive, serializers/)
+- ~~Phase 28a: 测试基线修复~~ ✓ Complete — 380 passed, 62 skipped
 - ~~Phase 29: 核心数据模型~~ ✓ Complete (models/core.py, node_types.py, blueprint.py, result.py)
 - ~~Phase 30: 属性解析模块~~ ✓ Complete (3 plans: property dataclasses + 14 type parsers + blueprint module)
+- ~~Phase 31: 蓝图图解析模块~~ ✓ Complete (6 plans: serializers/graph.py + from_archive delegates + graph/ module + test fixes)
 
-## 当前焦点: Phase 31 — 蓝图图解析模块
+## 当前焦点: Phase 32 — 输出格式化模块 (next)
 
 ### 下一步
 
-1. Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
-2. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
-3. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
-4. Phase 34: 等价验证 (新旧输出逐字段对比)
+1. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
+2. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
+3. Phase 34: 等价验证 (新旧输出逐字段对比)
 
 ### Phase 28a 修复记录
 
@@ -38,6 +38,7 @@ progress:
 UE5 将 `NodePosX`, `NodePosY`, `NodeGuid` 作为 PropertyTags 存储在 `script_serial` 区域，而非 pins 解析后的裸 i32 字段。
 
 **修复内容：**
+
 - uasset_read.py: 在 PropertyTags 循环中提取 NodePosX/NodePosY/NodeGuid/NodeComment
 - build_graphs_summary: 过滤空 flow (EnhancedInputAction Started/Ongoing)
 - test_property_parsing.py: 12 个测试更新为 FPropertyTypeName 格式

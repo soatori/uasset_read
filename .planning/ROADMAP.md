@@ -105,7 +105,7 @@
 - [x] Phase 29: 核心数据模型 (UEdGraph, UEdGraphNode, UEdGraphPin, ParseResult dataclasses) — 已完成 2026-05-11
 - [x] Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接数据结构) — 已合并到 Phase 30 一并实现
 - [x] Phase 30: 属性解析模块 (PropertyTag, 属性解析器, 蓝图变量提取) — 已完成 2026-05-11
-- [ ] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建) — 等价迁移 Phase 7/18-22
+- [x] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建) — 已完成 2026-05-12
 - [ ] Phase 32: 输出格式化模块 (JSON/Text/Markdown 输出) — 等价迁移 Phase 14/20
 - [ ] Phase 33: 入口与测试适配 (CLI, __init__.py, 测试更新, 删除旧文件)
 - [ ] Phase 34: 等价验证 (新旧输出逐字段对比，零回归)
@@ -245,15 +245,22 @@
 - [x] 30-02-PLAN.md — 14 parse_*_property functions + dispatcher + export loop ✓
 - [x] 30-03-PLAN.md — blueprint/ module (variable extraction + component transform) + test verification ✓
 
-### Phase 31: 蓝图图解析模块 🔵
+### Phase 31: 蓝图图解析模块 ✅
 **目标**: 提取图解析、节点读取、连接关系构建到独立模块（等价迁移 Phase 7/18-22 功能）
 **依赖**: Phase 30
+**需求**: MOD-08, MOD-09, TEST-01
 **成功标准**（必须满足）：
   1. 图解析节点数量、连接数据与旧版一致
   2. 执行流追踪正确
   3. 数据流追踪正确
   4. ⚠️ 范围：仅等价迁移现有功能，不包含 UberGraph/事件分发图增强
-**计划**: 待制定
+**计划**: 31-01 至 31-06（6 个计划，全部完成）
+- [x] 31-01-PLAN.md — 图二进制读取函数（serializers/graph.py：read_ue_graph/node/pin、5种节点类型读取器、工厂模式）✓
+- [x] 31-02-PLAN.md — 模型 from_archive 委托实现 + 顶层公共 API 导出 ✓
+- [x] 31-03-PLAN.md — graph/ 模块（extract_blueprint_graphs 入口 + 执行流/数据流/连接映射构建）✓
+- [x] 31-04-PLAN.md — legacy shim compatibility fix (format_variable_type + container_type + parse_object_property) ✓
+- [x] 31-05-PLAN.md — test API alignment (test_phase13 + test_phase26) ✓
+- [x] 31-06-PLAN.md — test structural incompatibilities fix (test_output_formatting + test_phase14) ✓
 
 ### Phase 32: 输出格式化模块 🔵
 **目标**: 提取所有 JSON/Text/Markdown 输出格式化到独立模块（等价迁移 Phase 14/20 功能）
@@ -262,7 +269,10 @@
   1. JSON 输出格式与旧版一致
   2. Markdown/Text 输出正常
   3. 增强元数据输出正常
-**计划**: 待制定
+**计划**: 32-01 至 32-03（3 个计划）
+- [ ] 32-01-PLAN.md — JSON 格式化模块迁移（format_json_full/summary + helpers）
+- [ ] 32-02-PLAN.md — Text 和 Markdown 格式化模块迁移
+- [ ] 32-03-PLAN.md — 测试适配与模块集成
 
 ### Phase 33: 入口与测试适配 🔵
 **目标**: CLI 入口、__init__.py 公共 API、测试更新、删除旧文件
@@ -272,7 +282,10 @@
   2. 旧 uasset_read.py 已删除
   3. 所有测试适配并通过
   4. pyproject.toml 配置正确
-**计划**: 待制定
+**计划**: 33-01 至 33-03（3 个计划）
+- [ ] 33-01-PLAN.md — parse_uasset.py 主解析管线 + 迁移缺口函数补齐（transforms.py, transform_parser.py, find_main_blueprint_generated_class）
+- [ ] 33-02-PLAN.md — CLI 入口模块（cli.py）+ __main__.py + pyproject.toml 版本更新
+- [ ] 33-03-PLAN.md — 测试适配 + 旧文件删除 + CLAUDE.md 更新
 
 ### Phase 34: 等价验证 🔵
 **目标**: 新旧输出逐字段对比，确保零回归
@@ -298,9 +311,9 @@
 | 29 | v6.0 核心数据模型 | 2 | 3 | 已完成 | 2026-05-11 |
 | 29b | v6.0 属性与图数据模型 | 1 | 0 | 已合并→30 | 2026-05-11 |
 | 30 | v6.0 属性解析 | 6 | 3 | 已完成 | 2026-05-11 |
-| 31 | v6.0 蓝图图解析 | 3 | 0 | 未开始 | - |
-| 32 | v6.0 输出格式化 | 3 | 0 | 未开始 | - |
-| 33 | v6.0 入口与测试适配 | 2 | 0 | 未开始 | - |
+| 31 | v6.0 蓝图图解析 | 3 | 6 | 已完成 | 2026-05-12 |
+| 32 | v6.0 输出格式化 | 3 | 3 | 规划完成 | - |
+| 33 | v6.0 入口与测试适配 | 2 | 3 | 规划完成 | - |
 | 34 | v6.0 等价验证 | 2 | 0 | 未开始 | - |
 | 36-40 | v7.0 深度序列化 | 15 | 0 | 已规划 | - |
 | 41-45 | v8.0 蓝图完整解析 | 15 | 0 | 已规划 | - |
@@ -312,4 +325,4 @@
 
 ---
 
-*最后更新：2026-05-12 — Phase 28a 测试基线修复完成，Phase 29 核心数据模型完成（3 个计划），Phase 29b 已合并到 Phase 30*
+*最后更新：2026-05-12 — Phase 31 UAT 验证完成（11/11 passed），380 passed 2 failed（Phase 33 依赖）*

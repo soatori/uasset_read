@@ -1,4 +1,4 @@
-"""序列化模块 — PackageFileSummary, ObjectImport, ObjectExport, PackageIndex"""
+"""序列化模块 — PackageFileSummary, ObjectImport, ObjectExport, PackageIndex, Graph serializers"""
 
 from uasset_read.serializers.package_summary import (
     PackageFileSummary, GenerationInfo, EngineVersion, CustomVersion,
@@ -11,6 +11,17 @@ from uasset_read.serializers.object_resources import (
     resolve_class_name, detect_blueprint, detect_blueprint_generated_class,
     validate_package_index,
 )
+from uasset_read.serializers.graph import (
+    read_ue_graph, read_ue_graph_node, read_ue_graph_pin,
+    read_ed_graph_pin_type, read_fmember_reference,
+    create_node_from_archive,
+    # 节点类型读取器（Phase 31）
+    read_k2node_call_function,
+    read_k2node_event,
+    read_k2node_knot,
+    read_edgraph_node_comment,
+    read_k2node_enhanced_input,
+)
 
 __all__ = [
     'PackageFileSummary', 'GenerationInfo', 'EngineVersion', 'CustomVersion',
@@ -20,4 +31,14 @@ __all__ = [
     'detect_circular_deps', 'read_export_map', 'get_asset_class',
     'resolve_class_name', 'detect_blueprint', 'detect_blueprint_generated_class',
     'validate_package_index',
+    # 图序列化（Phase 31）
+    'read_ue_graph', 'read_ue_graph_node', 'read_ue_graph_pin',
+    'read_ed_graph_pin_type', 'read_fmember_reference',
+    'create_node_from_archive',
+    # 节点类型读取器（Phase 31）
+    'read_k2node_call_function',
+    'read_k2node_event',
+    'read_k2node_knot',
+    'read_edgraph_node_comment',
+    'read_k2node_enhanced_input',
 ]

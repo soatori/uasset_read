@@ -352,11 +352,10 @@ class TestAPIFrozen:
         output = format_json_summary(result)
         assert output["output_version"] == "4.0"  # D-20-05
 
-    def test_api_frozen_comment_exists(self):
-        """D-14-14~16: API 冻结注释存在"""
+    def test_output_version_frozen(self):
+        """OUT-06: __version__ should remain stable (API frozen)."""
         import uasset_read
-        source = open(uasset_read.__file__, 'r', encoding='utf-8').read()
-        assert "API Frozen Since Phase 14" in source
+        assert uasset_read.__version__ == "5.1.0"
 
 
 # ============================================================================
