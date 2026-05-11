@@ -23,19 +23,19 @@ progress:
 
 ## 当前焦点: Phase 30 — 属性解析模块
 
-### 上下文完成
+### 已完成计划
 
-- ~~Phase 30 CONTEXT.md~~ ✓ Complete — 4 个决策已锁定（模块组织、分派策略、蓝图归属、循环导入）
+- ~~Phase 30 Plan 01: Property Dataclasses & PropertyTag Serializer~~ ✓ Complete — 4/4 tasks, 9 dataclasses + serializer
+  - Commits: 8f01994, e1a49db, b86892f, 9814e3b
 
 ### 下一步
 
-1. **Phase 30: 属性解析模块** (PropertyParser, property type handlers)
-2. Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接结构)
-3. Phase 30: 属性解析模块
-4. Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
-5. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
-6. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
-7. Phase 34: 等价验证 (新旧输出逐字段对比)
+1. **Phase 30 Plan 02**: Property value parsers (14 parse_*_property functions)
+2. Phase 30 Plan 03: parse_properties_from_export + blueprint variable extraction
+3. Phase 31: 蓝图图解析模块 (等价迁移 Phase 7/18-22)
+4. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
+5. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
+6. Phase 34: 等价验证 (新旧输出逐字段对比)
 
 ### Phase 28a 修复记录
 
