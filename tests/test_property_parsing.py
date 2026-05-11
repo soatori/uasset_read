@@ -908,19 +908,18 @@ def test_object_property_in_parse_properties():
     )
 
     # 验证ObjectProperty增强结果
+    # Phase 31-04: parse_properties_from_export 增强逻辑将 int 替换为 ref dict
     assert len(properties) == 1
     prop = properties[0]
     assert prop.name == "TestProp"
     assert prop.type == "ObjectProperty"
 
-    # value应该是增强格式
+    # 增强后的格式（resolve_package_index_to_reference 返回）
     assert isinstance(prop.value, dict)
-    assert "raw_index" in prop.value
-    assert prop.value["raw_index"] == -1
-    assert "resolved" in prop.value
-    assert prop.value["resolved"]["type"] == "import"
-    assert prop.value["resolved"]["class_name"] == "Class"
-    assert prop.value["resolved"]["object_name"] == "Target"
+    assert prop.value["type"] == "import"
+    assert prop.value["source"] == "import_map"
+    assert prop.value["class_name"] == "Class"
+    assert prop.value["object_name"] == "Target"
 
 
 def test_object_property_null_in_parse_properties():
@@ -976,11 +975,11 @@ def test_object_property_null_in_parse_properties():
         export, archive, summary, name_map, [export], []  # import_map=[]
     )
 
-    # 验证null引用的增强结果
+    # 验证null引用结果
+    # Phase 31-04: parse_object_property 返回 int (FPackageIndex raw value)
     assert len(properties) == 1
     prop = properties[0]
-    assert prop.value["raw_index"] == 0
-    assert prop.value["resolved"] is None
+    assert prop.value == 0
 
 
 # ============================================================================

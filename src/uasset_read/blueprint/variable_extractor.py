@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
 
 from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata
-from uasset_read.models.properties import PropertyValue
+from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.core import FEdGraphPinType
 
 # CPF_* flag bit constants (inline, do NOT import from constants.py)
@@ -261,22 +261,39 @@ def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]
 
 
 def _extract_vector(value: Any) -> Dict[str, float]:
-    """从属性值中提取 Vector 结构 {X, Y, Z}。"""
-    if isinstance(value, dict):
-        # 直接从字典提取
-        x = value.get("X", value.get("x", 0.0))
-        y = value.get("Y", value.get("y", 0.0))
-        z = value.get("Z", value.get("z", 0.0))
+    """从属性值中提取 Vector 结构 {X, Y, Z}。
+
+    支持 StructValue dataclass 和 dict 类型。
+    """
+    fields: Dict[str, Any] = {}
+    if isinstance(value, StructValue):
+        fields = value.fields
+    elif isinstance(value, dict):
+        fields = value
+
+    if fields:
+        x = fields.get("X", fields.get("x", 0.0))
+        y = fields.get("Y", fields.get("y", 0.0))
+        z = fields.get("Z", fields.get("z", 0.0))
         return {"X": float(x), "Y": float(y), "Z": float(z)}
     return {"X": 0.0, "Y": 0.0, "Z": 0.0}
 
 
 def _extract_rotator(value: Any) -> Dict[str, float]:
-    """从属性值中提取 Rotator 结构 {Pitch, Yaw, Roll}。"""
-    if isinstance(value, dict):
-        pitch = value.get("Pitch", value.get("pitch", 0.0))
-        yaw = value.get("Yaw", value.get("yaw", 0.0))
-        roll = value.get("Roll", value.get("roll", 0.0))
+    """从属性值中提取 Rotator 结构 {Pitch, Yaw, Roll}。
+
+    支持 StructValue dataclass 和 dict 类型。
+    """
+    fields: Dict[str, Any] = {}
+    if isinstance(value, StructValue):
+        fields = value.fields
+    elif isinstance(value, dict):
+        fields = value
+
+    if fields:
+        pitch = fields.get("Pitch", fields.get("pitch", 0.0))
+        yaw = fields.get("Yaw", fields.get("yaw", 0.0))
+        roll = fields.get("Roll", fields.get("roll", 0.0))
         return {"Pitch": float(pitch), "Yaw": float(yaw), "Roll": float(roll)}
     return {"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}
 

@@ -1,55 +1,39 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-11T10:38:27Z",
-  "phase": "28a",
-  "phase_name": "测试基线修复",
-  "phase_dir": ".planning/phases/28-core-serialization",
-  "plan": null,
-  "task": null,
-  "total_tasks": null,
+  "timestamp": "2026-05-11T18:45:19Z",
+  "phase": 31,
+  "phase_name": "graph-parsing",
+  "phase_dir": ".planning/phases/31-graph-parsing",
+  "plan": "UAT Verification + Fix",
+  "task": "Fix test API signatures",
+  "total_tasks": 10,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "UE5 NodePosX 格式修复", "status": "done", "commit": "6d73673"},
-    {"id": 2, "name": "function_name 空 flow 过滤", "status": "done", "commit": "6d73673"},
-    {"id": 3, "name": "test_property_parsing.py 修复 (12 tests)", "status": "done", "commit": "6d73673"},
-    {"id": 4, "name": "test_output_formatting.py linked_to_raw 修复", "status": "done", "commit": "6d73673"}
+    {"id": 1, "name": "Run UAT automated tests", "status": "done", "result": "9 pass, 1 issue (test suite failures)"},
+    {"id": 2, "name": "Diagnose test failures", "status": "done", "result": "API signature mismatch between tests and implementation"},
+    {"id": 3, "name": "Fix FEdGraphPinType test", "status": "done", "progress": "Changed pin_sub_category to pin_subcategory"},
+    {"id": 4, "name": "Fix node type tests (5 classes)", "status": "done", "progress": "Added node_guid param to all constructors"},
+    {"id": 5, "name": "Update serializers/__init__.py exports", "status": "done", "progress": "Added 5 node reader exports"},
+    {"id": 6, "name": "Update __init__.py exports", "status": "in_progress", "progress": "Added imports, removed stubs"}
   ],
   "remaining_tasks": [
-    {"id": 1, "phase": "29", "name": "核心数据模型 (UEdGraph, Node, Pin, ParseResult)", "status": "not_started"},
-    {"id": 2, "phase": "29b", "name": "属性与图数据模型 (PropertyTag, FunctionReference)", "status": "not_started"},
-    {"id": 3, "phase": "30", "name": "属性解析模块", "status": "not_started"},
-    {"id": 4, "phase": "31", "name": "蓝图图解析模块", "status": "not_started"},
-    {"id": 5, "phase": "32", "name": "输出格式化模块", "status": "not_started"},
-    {"id": 6, "phase": "33", "name": "入口与测试适配", "status": "not_started"},
-    {"id": 7, "phase": "34", "name": "等价验证", "status": "not_started"}
+    {"id": 7, "name": "Run tests to verify fixes", "status": "not_started"},
+    {"id": 8, "name": "Update UAT.md with results", "status": "not_started"},
+    {"id": 9, "name": "Complete UAT session", "status": "not_started"},
+    {"id": 10, "name": "Mark Phase 31 complete", "status": "not_started"}
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
-    {
-      "decision": "UE5 stores NodePosX/NodePosY/NodeGuid/NodeComment as PropertyTags in script_serial",
-      "rationale": "UE5 format discovery through checkpoint analysis — avoid reading raw i32 after pins",
-      "phase": "28a"
-    },
-    {
-      "decision": "FPropertyTypeName format is FName(8 bytes) + InnerCount(4 bytes), not FString",
-      "rationale": "Test failures revealed format mismatch — update test data accordingly",
-      "phase": "28a"
-    },
-    {
-      "decision": "Filter empty execution flows (EnhancedInputAction Started/Ongoing with no connections)",
-      "rationale": "Some trigger states have no CallFunction nodes — skip to avoid empty function_name",
-      "phase": "28a"
-    },
-    {
-      "decision": "linked_to_raw format is dict {'pin_guid': str} on output pins",
-      "rationale": "Connection tracking uses pin_guid, not simple string list",
-      "phase": "28a"
-    }
+    {"decision": "Fix test file API signatures to match Phase 31 implementation", "rationale": "Tests used old signatures (pin_sub_category, missing node_guid) that don't match actual dataclass definitions", "phase": 31}
   ],
   "uncommitted_files": [
-    ".planning/STATE.md"
+    "tests/test_graph_parsing.py",
+    "src/uasset_read/__init__.py",
+    "src/uasset_read/serializers/__init__.py",
+    ".planning/phases/31-graph-parsing/31-UAT.md",
+    ".planning/phases/31-graph-parsing/.continue-here.md"
   ],
-  "next_action": "/gsd-plan-phase Phase 29",
-  "context_notes": "Phase 28a completed with all 13 test failures fixed. Ready to start Phase 29 — extract data models from uasset_read.py to src/uasset_read/models/"
+  "next_action": "Run pytest tests/test_graph_parsing.py to verify all fixes work",
+  "context_notes": "Phase 31 UAT verification found test suite API signature mismatches. Fixed 6 test functions and updated module exports. Need to run tests to confirm fixes."
 }

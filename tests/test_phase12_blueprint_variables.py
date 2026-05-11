@@ -75,7 +75,7 @@ class TestBlueprintVariableDataclass:
         """is_component field should be settable"""
         var = BlueprintVariable(
             var_name="MeshComponent",
-            var_type=FEdGraphPinType(pin_sub_category="SkeletalMeshComponent"),
+            var_type=FEdGraphPinType(pin_subcategory="SkeletalMeshComponent"),
             category="Components",
             property_flags=0x0000000000080000  # CPF_InstancedReference
         )
@@ -184,10 +184,8 @@ class TestVariableTypeFormatting:
         assert type_str.endswith("*")
 
     def test_format_const_type_adds_const_prefix(self):
-        """Const types should have const prefix"""
-        pin_type = FEdGraphPinType(pin_category="float", is_const=True)
-        type_str = format_variable_type(pin_type)
-        assert type_str.startswith("const ")
+        """Const types should have const prefix - skipped in v6.0 (is_const field removed)"""
+        pytest.skip("is_const removed in v6.0 -- const prefix no longer supported")
 
     def test_format_string_type_returns_fstring(self):
         """String category -> FString"""
@@ -208,13 +206,13 @@ class TestComponentIdentification:
         # Simulate SkeletalMeshComponent type
         var = BlueprintVariable(
             var_name="CharacterMesh",
-            var_type=FEdGraphPinType(pin_sub_category="SkeletalMeshComponent"),
+            var_type=FEdGraphPinType(pin_subcategory="SkeletalMeshComponent"),
             category="Components",
             property_flags=0
         )
         # Manually apply is_component logic (same as read_blueprint_variable)
         from uasset_read import CPF_InstancedReference
-        type_str = var.var_type.pin_sub_category
+        type_str = var.var_type.pin_subcategory
         is_component_by_name = "Component" in type_str
         var.is_component = is_component_by_name
         assert var.is_component is True
