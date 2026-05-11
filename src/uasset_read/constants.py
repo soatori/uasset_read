@@ -207,3 +207,22 @@ EXIT_SUCCESS = 0
 EXIT_PARSE_ERROR = 1
 EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
+
+
+def use_complete_type_name(legacy_version: int, ue5_version: int) -> bool:
+    """
+    判断是否使用完整 TypeName 格式（PROP-09）。
+
+    UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME (1000) 使用完整 TypeName 字符串。
+    UE4 始终使用旧格式（短名称 + 分离字段）。
+
+    Args:
+        legacy_version: LegacyFileVersion（-2 至 -9）
+        ue5_version: UE5 版本号
+
+    Returns:
+        True 使用 UE5 新格式，False 使用 UE4 旧格式
+    """
+    if legacy_version <= -8 and ue5_version >= PROPERTY_TAG_COMPLETE_TYPE_NAME:
+        return True
+    return False
