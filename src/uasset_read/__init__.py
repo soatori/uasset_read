@@ -46,6 +46,16 @@ from .models import (
     K2NodeKnot,
     EdGraphNodeComment,
     K2NodeEnhancedInputAction,
+    # 结果
+    ParseResult,
+    StatusInfo,
+    # 蓝图元数据
+    BlueprintMetadata,
+    BlueprintVariable,
+    BlueprintFunction,
+    BlueprintEvent,
+    FunctionParameter,
+    MulticastDelegate,
 )
 
 # 公共API导出控制（per D-09）
@@ -82,4 +92,14 @@ __all__ = [
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
+    # 结果（Phase 29）
+    "ParseResult",
+    "StatusInfo",
+    # 蓝图元数据（Phase 29）
+    "BlueprintMetadata",
+    "BlueprintVariable",
+    "BlueprintFunction",
+    "BlueprintEvent",
+    "FunctionParameter",
+    "MulticastDelegate",
 ]
