@@ -1,34 +1,34 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-11T19:30:00.000Z",
+  "timestamp": "2026-05-11T21:30:00.000Z",
   "phase": "28a",
   "phase_name": "测试基线修复",
   "phase_dir": ".planning/phases/28-core-serialization",
   "plan": 1,
-  "task": 3,
+  "task": 4,
   "total_tasks": 5,
   "status": "paused",
   "completed_tasks": [
     {"id": 1, "name": "Phase 28提交 (UAT 9/9 pass)", "status": "done", "commit": "ce110d2"},
     {"id": 2, "name": "Merge stash pin fixes", "status": "done", "commit": "5ce03dd"},
-    {"id": 3, "name": "Test baseline修复", "status": "in_progress", "progress": "从5失败降到4失败，FText修复完成，FunctionReference位置问题待解决"}
+    {"id": 3, "name": "FText修复 (5→4 failures)", "status": "done"},
+    {"id": 4, "name": "FunctionReference嵌套PropertyTags修复", "status": "done", "commit": "1c6b4e8", "progress": "17→13 failures, Jump测试通过"}
   ],
   "remaining_tasks": [
-    {"id": 4, "name": "FunctionReference位置修复 (研究UE tagged property serialization)", "status": "not_started"},
-    {"id": 5, "name": "Phase 29规划与启动", "status": "not_started"}
+    {"id": 5, "name": "Pin/FText解析修复 + PropertyTag测试更新", "status": "not_started"},
+    {"id": 6, "name": "Phase 29规划与启动", "status": "not_started"}
   ],
   "blockers": [
-    {"description": "FunctionReference应在script_serial中读取，需研究UE tagged property serialization格式", "type": "technical"}
+    {"description": "Pin解析时FText UTF-16 string length错误，导致节点fallback", "type": "technical"},
+    {"description": "PropertyTag测试数据使用FString而非FPropertyTypeName nodes格式", "type": "test_data"}
   ],
   "human_actions_pending": [],
   "decisions": [
-    {"decision": "FText bHasCultureInvariantString使用UBOOL(4 bytes)而非uint8", "rationale": "UE源码确认bool序列化为UBOOL", "phase": "28a"},
-    {"decision": "当FText flags=0时特殊处理跳过中间4bytes", "rationale": "实际数据验证序列化格式", "phase": "28a"}
+    {"decision": "FMemberReference作为StructProperty序列化时使用嵌套PropertyTags而非直接struct bytes", "rationale": "UE源码: FMemberReference是USTRUCT，字段为UPROPERTY(SaveGame)", "phase": "28a"},
+    {"decision": "\"None\" PropertyTag仅包含Name(8 bytes)，无TypeName/Size/Flags", "rationale": "PropertyTag.cpp确认特殊格式", "phase": "28a"},
+    {"decision": "BoolProperty size=0时值在flags.bool_val中", "rationale": "UE5格式，PROP_TAG_BOOL_TRUE flag", "phase": "28a"}
   ],
-  "uncommitted_files": [
-    "uasset_read.py (FText修复)",
-    ".planning/debug/pin-parsing-pins-offset.md"
-  ],
-  "next_action": "研究UE tagged property serialization，定位script_serial中的FunctionReference",
-  "context_notes": "测试从5失败降到4失败。test_actionvalue_x_to_right已通过。剩余4个失败均与FunctionReference相关。"
+  "uncommitted_files": [],
+  "next_action": "修复Pin/FText解析位置问题，让更多节点成功解析而非fallback",
+  "context_notes": "测试从17失败降到13失败。Jump/StopJumping节点测试通过。剩余失败主要是Pin解析fallback导致。"
 }
