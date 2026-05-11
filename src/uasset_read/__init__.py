@@ -71,6 +71,33 @@ from .models import (
     DelegateValue,
 )
 
+# 解析器模块（Phase 30）
+from .parsers import (
+    parse_property_value,
+    parse_properties_from_export,
+    parse_bool_property,
+    parse_int_property,
+    parse_float_property,
+    parse_str_property,
+    parse_name_property,
+    parse_object_property,
+    parse_soft_object_property,
+    parse_array_property,
+    parse_struct_property,
+    parse_map_property,
+    parse_set_property,
+    parse_enum_property,
+    parse_text_property,
+    parse_delegate_property,
+)
+
+# 蓝图模块（Phase 30）
+from .blueprint import (
+    extract_blueprint_variables,
+    parse_component_transform,
+    extract_blueprint_metadata,
+)
+
 # 公共API导出控制（per D-09）
 __all__ = [
     # 版本号
@@ -125,4 +152,25 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
+    # 解析器模块（Phase 30）
+    "parse_property_value",
+    "parse_properties_from_export",
+    "parse_bool_property",
+    "parse_int_property",
+    "parse_float_property",
+    "parse_str_property",
+    "parse_name_property",
+    "parse_object_property",
+    "parse_soft_object_property",
+    "parse_array_property",
+    "parse_struct_property",
+    "parse_map_property",
+    "parse_set_property",
+    "parse_enum_property",
+    "parse_text_property",
+    "parse_delegate_property",
+    # 蓝图模块（Phase 30）
+    "extract_blueprint_variables",
+    "parse_component_transform",
+    "extract_blueprint_metadata",
 ]
