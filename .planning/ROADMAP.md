@@ -104,7 +104,7 @@
 - [ ] Phase 28a: 测试基线修复 (7个已知失败修复 + stash关键bug合并)
 - [ ] Phase 29: 核心数据模型 (UEdGraph, UEdGraphNode, UEdGraphPin, ParseResult dataclasses)
 - [ ] Phase 29b: 属性与图数据模型 (PropertyTag, FunctionReference, 图连接数据结构)
-- [ ] Phase 30: 属性解析模块 (PropertyTag, 属性解析器, 蓝图变量提取)
+- [x] Phase 30: 属性解析模块 (PropertyTag, 属性解析器, 蓝图变量提取) — Complete 2026-05-11
 - [ ] Phase 31: 蓝图图解析模块 (图解析, 节点读取, 连接关系构建) — 等价迁移 Phase 7/18-22
 - [ ] Phase 32: 输出格式化模块 (JSON/Text/Markdown 输出) — 等价迁移 Phase 14/20
 - [ ] Phase 33: 入口与测试适配 (CLI, __init__.py, 测试更新, 删除旧文件)
@@ -214,7 +214,10 @@
   2. ParseResult 在 models/result.py 中定义
   3. asdict() 输出格式与旧版完全一致
   4. JSON 序列化兼容性保持不变
-**Plans**: TBD
+**Plans**: 29-01 to 29-03
+- [ ] 29-01-PLAN.md — 核心数据类（FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph, FMemberReference）+ 模块导出
+- [ ] 29-02-PLAN.md — 节点类型子类（K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction）继承 UEdGraphNode
+- [ ] 29-03-PLAN.md — ParseResult, StatusInfo, BlueprintMetadata 辅助类 + 完整导出
 
 ### Phase 29b: 属性与图数据模型 🔵
 **目标**: 提取 PropertyTag, FunctionReference, 图连接数据结构到独立模块
@@ -227,15 +230,18 @@
   4. 所有模型类可从 uasset_read.models 导入
 **Plans**: TBD
 
-### Phase 30: 属性解析模块 🔵
+### Phase 30: 属性解析模块 ✅
 **目标**: 提取所有属性解析逻辑（PropertyTag + 类型解析 + 蓝图变量提取）
 **依赖**: Phase 29b
-**需求**: MOD-09, MOD-10, MOD-11
+**需求**: MOD-06, MOD-07, MOD-09, MOD-10, MOD-11, TEST-01
 **Success Criteria** (what must be TRUE):
   1. 所有属性类型解析正确
   2. 蓝图变量、函数、事件元数据提取正常
   3. 组件变换属性解析正常
-**Plans**: TBD
+**Plans**: 30-01 to 30-03 (3 plans, all complete)
+- [x] 30-01-PLAN.md — PropertyTag/PropertyValue dataclasses + read_property_tag serializer + use_complete_type_name ✓
+- [x] 30-02-PLAN.md — 14 parse_*_property functions + dispatcher + export loop ✓
+- [x] 30-03-PLAN.md — blueprint/ module (variable extraction + component transform) + test verification ✓
 
 ### Phase 31: 蓝图图解析模块 🔵
 **目标**: 提取图解析、节点读取、连接关系构建到独立模块（等价迁移 Phase 7/18-22 功能）
@@ -287,9 +293,9 @@
 | 27 | v5.1 项目结构初始化 | 4 | 2 | Complete | 2026-05-07 |
 | 28 | v6.0 模块化重构 | 3 | 4 | Complete | 2026-05-11 |
 | 28a | v6.0 测试基线修复 | TBD | 0 | Not started | - |
-| 29 | v6.0 核心数据模型 | 2 | 0 | Not started | - |
+| 29 | v6.0 核心数据模型 | 2 | 3 | Planned | - |
 | 29b | v6.0 属性与图数据模型 | 1 | 0 | Not started | - |
-| 30 | v6.0 属性解析 | 3 | 0 | Not started | - |
+| 30 | v6.0 属性解析 | 6 | 3 | Complete | 2026-05-11 |
 | 31 | v6.0 蓝图图解析 | 3 | 0 | Not started | - |
 | 32 | v6.0 输出格式化 | 3 | 0 | Not started | - |
 | 33 | v6.0 入口与测试适配 | 2 | 0 | Not started | - |
@@ -304,4 +310,4 @@
 
 ---
 
-*最后更新：2026-05-11 — Phase 28 完成，规划补齐：Phase 28a 测试基线修复、Phase 29 拆分、Phase 34 等价验证*
+*最后更新：2026-05-11 — Phase 28 完成，Phase 29 规划完成（3 plans）*
