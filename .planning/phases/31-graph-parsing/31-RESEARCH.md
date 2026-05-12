@@ -372,22 +372,13 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
 | A2 | `from_archive` methods in models need additional parameters beyond `archive` (name_map, summary, export_map, import_map) — the stubs only take `archive: FArchive` | Pattern 1 | The current stub signatures are incompatible with actual serializer function signatures |
 | A3 | `read_pin_reference` and `read_pin_array` belong in `serializers/graph.py` (they are graph pin helpers, not standalone utilities) | Project Structure | Misplacement could cause import complexity |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`from_archive` signature mismatch:** The current stubs in `models/core.py` only take `archive: FArchive`. But actual serializers like `read_ue_graph_pin` need `name_map`, `summary`, `export_map`, `import_map`. Should the `from_archive` signatures be extended, or should a separate wrapper be used?
-   - What we know: D-02 says "from_archive stubs call serializers/graph.py independent functions"
-   - What's unclear: Whether the method signature changes are in scope for this phase
-   - Recommendation: Extend `from_archive` signatures to accept the additional context parameters. This is a breaking change but necessary for the delegation pattern.
+1. **`from_archive` signature mismatch:** [RESOLVED by Plan 02] from_archive 签名已扩展为接受额外参数（name_map, summary, export_map, import_map）。5 个数据类的 from_archive 方法签名已在 Plan 02 中更新。
 
-2. **`serializers/graph.py` file size:** The old code's graph functions span ~1500 lines (L3095-4679). Even with FText extraction, `serializers/graph.py` will be large.
-   - What we know: D-03/D-04 lock all binary readers in `serializers/graph.py`
-   - What's unclear: Whether to split into `serializers/graph.py` + `serializers/pin_serializers.py`
-   - Recommendation: Keep single file per D-03/D-04 decisions. If file exceeds 600 lines, the planner can consider splitting.
+2. **`serializers/graph.py` file size:** [RESOLVED by Plan 01] 保持单文件 per D-03/D-04 决策。预期 ~800-1000 行，未超过 600 行阈值可考虑拆分但非必须。
 
-3. **Test binary data synthesis:** Many tests in `test_graph_parsing.py` are skipped with "需要合成二进制数据". Should Phase 31 include synthetic binary data generation, or leave for a separate test phase?
-   - What we know: TEST-01 requires all existing tests to pass. TEST-02 requires new module unit tests.
-   - What's unclear: Whether the planner expects synthetic data as part of Phase 31
-   - Recommendation: Synthetic data generation is out of scope for this phase. Tests should be updated to use real Lyra assets or marked as integration tests.
+3. **Test binary data synthesis:** [RESOLVED — out of scope] Phase 31 不生成合成二进制测试数据。tests/test_graph_parsing.py 的导入兼容性更新在 Plan 02 中，测试执行在等价验证阶段完成。
 
 ## Environment Availability
 

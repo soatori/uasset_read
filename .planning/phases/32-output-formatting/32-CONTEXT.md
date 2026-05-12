@@ -34,8 +34,15 @@
   - `formatters/json_formatter.py` — format_json_full, format_json_summary, format_exports_list, format_properties_list, format_blueprint_dict
   - `formatters/text_formatter.py` — format_text_full, format_text_summary
   - `formatters/markdown_formatter.py` — format_markdown
-  - `formatters/helpers.py` — build_status_info, build_graphs_summary, build_schema_info, _derive_node_name, format_pin_ref, format_variable_type, format_node_dict, format_graphs_json
-  - `formatters/__init__.py` — 扁平导出公共 API
+  - `formatters/helpers.py` — build_status_info, build_schema_info, get_asset_class, resolve_fpackage_index, format_node_dict, format_variable_type, _is_control_flow_node, _get_branch_type
+  - `formatters/__init__.py` — 扁平导出公共 API + re-export Phase 31 函数
+
+- **D-01b (Phase 31 冲突解决):** 以下函数已在 Phase 31 的 `graph/flow_builder.py` 中实现，不从 legacy 迁移，改为 re-export：
+  - `build_graphs_summary` — 已在 graph/flow_builder.py:325-363
+  - `format_graphs_json` — 已在 graph/flow_builder.py:366-375
+  - `_derive_node_name` — 已在 graph/flow_builder.py:21-26
+  - `format_pin_ref` — 已在 graph/flow_builder.py:29-62
+  - 在 formatters/__init__.py 中 import 并 re-export，避免重复实现
 
 ### 输出格式兼容性
 

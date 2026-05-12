@@ -27,6 +27,10 @@ from uasset_read.parsers.property_types import (
     parse_enum_property,
     parse_text_property,
     parse_delegate_property,
+    _extract_struct_type_from_tag,
+    _extract_map_types_from_tag,
+    _extract_set_type_from_tag,
+    _extract_enum_type_from_tag,
 )
 
 __all__ = [
@@ -48,4 +52,9 @@ __all__ = [
     "parse_enum_property",
     "parse_text_property",
     "parse_delegate_property",
+    # 辅助函数（测试依赖）
+    "_extract_struct_type_from_tag",
+    "_extract_map_types_from_tag",
+    "_extract_set_type_from_tag",
+    "_extract_enum_type_from_tag",
 ]

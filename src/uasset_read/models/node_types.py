@@ -12,6 +12,7 @@ from typing import Optional, List, Tuple, Self, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
 
 from .core import UEdGraphNode, FMemberReference
 
@@ -23,8 +24,16 @@ class K2NodeCallFunction(UEdGraphNode):
     b_defaults_to_pure: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_call_function
+        return read_k2node_call_function(archive, name_map, import_map, export_map)
 
 
 @dataclass
@@ -34,8 +43,16 @@ class K2NodeEvent(UEdGraphNode):
     b_override_function: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_event
+        return read_k2node_event(archive, name_map, import_map, export_map)
 
 
 @dataclass
@@ -44,7 +61,9 @@ class K2NodeKnot(UEdGraphNode):
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_knot
+        return read_k2node_knot(archive)
 
 
 @dataclass
@@ -57,7 +76,9 @@ class EdGraphNodeComment(UEdGraphNode):
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_edgraph_node_comment
+        return read_edgraph_node_comment(archive)
 
 
 @dataclass
@@ -66,5 +87,7 @@ class K2NodeEnhancedInputAction(UEdGraphNode):
     input_action_path: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_enhanced_input
+        return read_k2node_enhanced_input(archive, name_map)

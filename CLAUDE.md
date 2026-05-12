@@ -92,6 +92,15 @@ print(json.dumps(r.to_dict(), indent=2))
 - `pyproject.toml` 中定义了 `uasset-read` CLI 入口（`uasset_read.cli:main`），但该模块尚未实现 — Phase 33 前请使用 `python uasset_read.py` 作为入口
 - 新版 `src/uasset_read/` 尚未实现完整解析管线（`parse_uasset` 函数仍在旧版 `uasset_read.py` 中），目前通过 `__init__.py` 从旧版重导出
 
+## gsd-sdk 使用
+
+gsd-sdk v0.1.0 已全局安装（npm），但仅支持以下三个命令：
+- `gsd-sdk run "<prompt>"` — 运行完整里程碑
+- `gsd-sdk auto` — 运行自主生命周期（discover → execute → advance）
+- `gsd-sdk init [input]` — 引导新项目（PRD 或描述文本）
+
+**不支持 `gsd-sdk query`、`gsd-sdk list` 等子命令。** 这些是 AI agent 幻觉出来的语法。如需查询 phase 状态、计划、需求等信息，请直接读取 `.planning/` 目录下的文件，或使用 GSD slash commands（如 `/gsd-progress`）。
+
 ## 文件组织
 
 ```
