@@ -3,109 +3,51 @@
 **里程碑:** v6.0
 **目标:** 将单文件 uasset_read.py 重构为多模块 Python 包
 **创建日期:** 2026-05-06
-**更新日期:** 2026-05-11
+**更新日期:** 2026-05-13
 
 ---
 
-## Active Requirements
+## 已完成需求（v6.0 主线）
 
 ### MOD - 模块化重构
 
-- [x] **MOD-01**: 拆分FArchive二进制读取器到独立模块 ✓ (Phase 28)
-  - 文件: `src/uasset_read/archive.py`
-  - 包含: FArchive类及其所有方法（read_i32, seek, tell等）
-  - 零依赖: 仅使用Python标准库（struct, mmap）
+| ID | 需求 | 状态 | 模块 |
+|----|------|------|------|
+| MOD-01 | 拆分 FArchive 二进制读取器 | ✓ | `archive.py` |
+| MOD-02 | 常量和阈值模块 | ✓ | `constants.py` |
+| MOD-03 | 异常类定义 | ✓ | `exceptions.py` |
+| MOD-04 | PackageFileSummary 序列化 | ✓ | `serializers/package_summary.py` |
+| MOD-05 | ImportMap/ExportMap 序列化 | ✓ | `serializers/object_resources.py` |
+| MOD-06 | PropertyTag 拆分 | ✓ | `serializers/property_tags.py` |
+| MOD-07 | 属性解析器拆分 | ✓ | `parsers/property_parser.py` |
+| MOD-08 | 核心数据模型 | ✓ | `models/` (dataclasses) |
+| MOD-09 | 避免循环导入 | ✓ | 分层依赖单向 |
+| STRUCT-01 | src 目录结构 | ✓ | `src/uasset_read/` |
+| STRUCT-02 | pyproject.toml 配置 | ✓ | 零依赖安装 |
 
-- [x] **MOD-02**: 定义常量和阈值到独立模块 ✓ (Phase 27-02)
-  - 文件: `src/uasset_read/constants.py`
-  - 包含: 版本号常量、属性类型阈值、边界常量
-  - 示例: PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012
+### SCHEMA - JSON Schema 定义
 
-- [x] **MOD-03**: 定义异常类到独立模块 ✓ (Phase 27-02)
-  - 文件: `src/uasset_read/exceptions.py`
-  - 包含: UAssetError, VersionError, ParseError, ErrorContext
-
-- [x] **MOD-04**: 拆分PackageFileSummary序列化到独立模块 ✓ (Phase 28)
-  - 文件: `src/uasset_read/serializers/package_summary.py`
-  - 包含: PackageFileSummary, GenerationInfo, EngineVersion, CustomVersion
-  - 依赖: MOD-01, MOD-02
-
-- [x] **MOD-05**: 拆分ImportMap/ExportMap到独立模块 ✓ (Phase 28)
-  - 文件: `src/uasset_read/serializers/object_resources.py`
-  - 包含: ObjectImport, ObjectExport, PackageIndex, resolve_*
-  - 依赖: MOD-01, MOD-02
-
-- [ ] **MOD-06**: 拆分PropertyTag到独立模块
-  - 文件: `src/uasset_read/serializers/property_tags.py`
-  - 包含: PropertyTag, parse_property_tag
-  - 依赖: MOD-01
-
-- [ ] **MOD-07**: 拆分属性解析器到独立模块
-  - 文件: `src/uasset_read/parsers/property_parser.py`
-  - 包含: parse_property, parse_*_property函数
-  - 依赖: MOD-01, MOD-06
-
-- [ ] **MOD-08**: 定义核心数据模型
-  - 文件: `src/uasset_read/models/core.py`
-  - 包含: ParseResult, StatusInfo
-  - 使用dataclass，零依赖
-
-- [ ] **MOD-09**: 避免循环导入
-  - 使用分层架构：Output → Models → Parsers → Serializers → FArchive
-  - 使用延迟导入、TYPE_CHECKING、字符串类型注解
-  - 所有模块依赖单向
-
-### SCHEMA - JSON Schema定义
-
-- [ ] **SCHEMA-01**: 定义JSON Schema结构
-  - 文件: `src/uasset_read/schemas/json_schema.py` 或 `schemas/json_schema.json`
-  - 目的: 为C++代码生成准备规范化输出结构
-  - 包含: ParseResult顶层结构、蓝图图结构、节点类型定义
-
-- [ ] **SCHEMA-02**: Schema验证功能
-  - 文件: `src/uasset_read/schemas/validator.py`
-  - 功能: 验证输出JSON符合Schema定义
-  - 使用: Python标准库json模块（零依赖）
-
-- [ ] **SCHEMA-03**: Schema文档
-  - 文件: `docs/JSON_SCHEMA.md` 或 `.planning/research/JSON_SCHEMA.md`
-  - 内容: Schema结构说明、字段语义、C++映射关系
+| ID | 需求 | 状态 | 说明 |
+|----|------|------|------|
+| SCHEMA-01 | JSON Schema 结构定义 | ⏭️ | 延后至 v7.0 |
+| SCHEMA-02 | Schema 验证功能 | ⏭️ | 延后至 v7.0 |
+| SCHEMA-03 | Schema 文档 | ⏭️ | 延后至 v7.0 |
 
 ### TEST - 测试兼容性
 
-- [ ] **TEST-01**: 所有现有测试通过
-  - 运行: `pytest tests/`
-  - 要求: 359+ 测试用例通过
-  - 验证: 功能性零变更
-
-- [ ] **TEST-02**: 新模块单元测试
-  - 为每个新模块创建测试文件
-  - 测试模块独立功能
-  - 验证: 模块接口正确
-
-### STRUCT - 项目结构
-
-- [x] **STRUCT-01**: 创建src目录结构 ✓ (Phase 27-01)
-  - 目录: `src/uasset_read/`
-  - 包含: `__init__.py` 导出公共API
-  - 符合: Python Packaging User Guide src layout
-
-- [x] **STRUCT-02**: 配置pyproject.toml ✓ (Phase 27-01)
-  - 文件: `pyproject.toml`
-  - 配置: dependencies = [], src layout, 项目元数据
-  - 验证: 零依赖安装
+| ID | 需求 | 状态 |
+|----|------|------|
+| TEST-01 | 所有现有测试通过 | ✓ | 373 passed, 71 skipped, 0 failed |
+| TEST-02 | 新模块单元测试 | ✓ | 每个模块有对应测试 |
 
 ---
 
-## Future Requirements
+## 活跃需求
 
-以下需求延后至v5.2或后续里程碑：
+当前唯一未完成需求：**Phase 35b - Pin 连接深度调试与修复**
 
-- **MOD-10**: 输出模块拆分（JSON/文本格式化器）
-- **MOD-11**: CLI模块拆分（命令行接口）
-- **MOD-12**: 蓝图模块拆分（Graph/Node/Pin组件）
-- **SCHEMA-04**: C++代码生成器实现
-- **SCHEMA-05**: TypeScript类型定义生成
+- 目标：修复 `linked_to_raw` 返回空列表、`pins_offset` 定位不准、UE5 序列化差异问题
+- 详情：参见 `.planning/phases/35b-pin-connection-debug/`
 
 ---
 
@@ -113,60 +55,28 @@
 
 | 需求 | 原因 |
 |------|------|
-| 向后兼容层 | 用户选择"不考虑兼容"，不保留旧入口 |
-| 保留根级别uasset_read.py | 采用新结构，完全模块化 |
-| 测试框架迁移 | pytest可直接运行unittest测试 |
-| MCP Server封装 | 超出v5.1范围，延后 |
-| C++代码生成 | v5.1仅准备JSON Schema，实际生成延后 |
+| 向后兼容层 | 用户选择不保留旧入口 |
+| 保留根级别 `uasset_read.py` | 已删除，完全模块化 |
+| 测试框架迁移 | pytest 可直接运行 |
+| MCP Server 封装 | 延后至 v7.x |
+| C++ 代码生成 | 仅做解析，生成延后 |
 
 ---
 
-## Requirements Traceability
+## 需求追溯
 
-| REQ-ID | Phase | Status | Description |
-|--------|-------|--------|-------------|
-| MOD-01 | Phase 28 | Complete | 拆分FArchive二进制读取器到独立模块 |
-| MOD-02 | Phase 27 | Complete | 定义常量和阈值到独立模块 |
-| MOD-03 | Phase 27 | Complete | 定义异常类到独立模块 |
-| MOD-04 | Phase 28 | Complete | 拆分PackageFileSummary序列化到独立模块 |
-| MOD-05 | Phase 28 | Complete | 拆分ImportMap/ExportMap到独立模块 |
-| MOD-06 | Phase 29 | Pending | 拆分PropertyTag到独立模块 |
-| MOD-07 | Phase 29 | Pending | 拆分属性解析器到独立模块 |
-| MOD-08 | Phase 29 | Pending | 定义核心数据模型 |
-| MOD-09 | Phase 30 | Pending | 避免循环导入 |
-| SCHEMA-01 | Phase 31 | Pending | 定义JSON Schema结构 |
-| SCHEMA-02 | Phase 31 | Pending | Schema验证功能 |
-| SCHEMA-03 | Phase 31 | Pending | Schema文档 |
-| TEST-01 | Phase 30 | Pending | 所有现有测试通过 |
-| TEST-02 | Phase 32 | Pending | 新模块单元测试 |
-| STRUCT-01 | Phase 27 | Pending | 创建src目录结构 |
-| STRUCT-02 | Phase 27 | Pending | 配置pyproject.toml |
-
-**Coverage:** 16/16 requirements mapped to Phase 27-32 ✓
+**覆盖率:** 16/16 需求已映射到阶段 ✓  
+**完成度:** 11/11 v6.0 主线需求已完成 ✓  
+**剩余:** 1 个调试任务（Phase 35b）
 
 ---
 
-## Requirements Rationale
+## 决策理由
 
-### 为什么先实现基础设施和核心模块？
-
-1. **依赖关系**: FArchive和常量/异常是所有其他模块的基础
-2. **风险最小**: 基础模块变更影响可控，测试验证简单
-3. **渐进式**: 先核心后扩展，降低重构复杂度
-
-### 为什么不考虑向后兼容？
-
-用户明确选择新结构，不保留旧入口。这意味着：
-- 导入路径将从 `from uasset_read import *` 变为 `from src.uasset_read import *`
-- CLI入口将从 `python uasset_read.py` 变为 `python -m src.uasset_read.cli`
-- 完全拥抱新架构，不做技术妥协
-
-### 为什么同时做JSON Schema？
-
-1. **C++代码生成准备**: v5.1目标是为蓝图转C++自动化做准备
-2. **模块化并行**: Schema定义不依赖完整模块化
-3. **规范化输出**: 确保JSON输出结构稳定，为后续阶段打下基础
+1. **先基础设施后扩展**: FArchive/常量/异常是基础，风险可控，渐进降低复杂度
+2. **不向后兼容**: 完全拥抱新架构，不做技术妥协
+3. **零运行时依赖**: 减少环境配置复杂度，符合项目定位
 
 ---
 
-*最后更新: 2026-05-06 — 路线图创建完成，Phase映射更新*
+*最后更新: 2026-05-13 — v6.0 主线需求全部完成，仅剩余 Phase 35b*
