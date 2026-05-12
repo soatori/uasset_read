@@ -12,13 +12,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 当前状态
 
-**v6.0 模块化重构: Phase 28-30 已完成** — 411 个测试通过，47 个跳过，0 个失败。
+**v6.0 模块化重构已完成** — 373 个测试通过，71 个跳过，0 个失败。旧版 `uasset_read.py` 已删除。
 
-仓库存在两套代码：
-- `uasset_read.py` — 旧版单文件（~7958 行），当前 CLI 入口，包含完整解析管线
-- `src/uasset_read/` — 新版模块化包（v6.0 重构中），已实现序列化、数据模型、属性解析、蓝图提取模块
-
-Phase 31-34 待开始（蓝图图解析、输出格式化、入口适配、等价验证）。Phase 33 完成后将删除旧版 `uasset_read.py`。
+代码库结构：
+- `src/uasset_read/` — 完整模块化包（v6.0），包含序列化、数据模型、属性解析、蓝图提取、图解析、格式化输出、CLI 入口
 
 ## 常用命令
 
@@ -26,8 +23,10 @@ Phase 31-34 待开始（蓝图图解析、输出格式化、入口适配、等�
 # 安装开发依赖
 pip install -e ".[dev]"
 
-# 解析 .uasset 文件（使用旧版单文件入口）
-python uasset_read.py path/to/file.uasset
+# 解析 .uasset 文件
+python -m uasset_read path/to/file.uasset
+# 或使用 CLI 入口（pip install -e . 后）
+uasset-read path/to/file.uasset
 
 # 运行所有测试
 python -m pytest tests/ -v
@@ -64,7 +63,7 @@ print(json.dumps(r.to_dict(), indent=2))
           DependencyGraphBuilder (Phase 10)
 ```
 
-### 新版模块结构 (`src/uasset_read/`)
+### 模块结构 (`src/uasset_read/`)
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
@@ -75,10 +74,10 @@ print(json.dumps(r.to_dict(), indent=2))
 | 数据模型 | `models/` | UEdGraph/Node/Pin、节点类型子类、ParseResult、蓝图元数据、属性数据类 |
 | 解析器 | `parsers/` | 14 种属性类型解析函数 + 分派器 |
 | 蓝图 | `blueprint/` | 蓝图变量提取、组件变换解析、元数据提取 |
-
-### 旧版单文件 (`uasset_read.py`)
-
-完整解析管线，包含所有组件（ParseResult、UEdGraph/Node/Pin、PropertyParser、OutputFormatter、CLI 入口等）。Phase 33 完成后将被删除。
+| 图解析 | `graph/` | 蓝图图提取、执行流/数据流构建、连接映射 |
+| 格式化 | `formatters/` | JSON/Text/Markdown 输出格式化、Mermaid 图表 |
+| CLI 入口 | `cli.py` | argparse 参数解析、格式路由、退出码管理 |
+| 主解析管线 | `parse_uasset.py` | 完整解析管线编排函数 |
 
 ## 技术栈
 
@@ -89,8 +88,9 @@ print(json.dumps(r.to_dict(), indent=2))
 
 ## 注意事项
 
-- `pyproject.toml` 中定义了 `uasset-read` CLI 入口（`uasset_read.cli:main`），但该模块尚未实现 — Phase 33 前请使用 `python uasset_read.py` 作为入口
-- 新版 `src/uasset_read/` 尚未实现完整解析管线（`parse_uasset` 函数仍在旧版 `uasset_read.py` 中），目前通过 `__init__.py` 从旧版重导出
+- 使用 `python -m uasset_read` 或 `uasset-read`（pip install -e . 后）作为 CLI 入口
+- 新版 `src/uasset_read/` 包含完整解析管线，`parse_uasset` 函数位于 `parse_uasset.py`
+- 公共 API 通过 `__init__.py` 导出 100+ 项，使用 `from uasset_read import X` 即可
 
 ## gsd-sdk 使用
 
@@ -104,9 +104,8 @@ gsd-sdk v0.1.0 已全局安装（npm），但仅支持以下三个命令：
 ## 文件组织
 
 ```
-uasset_read.py              # 旧版单文件主入口（Phase 33 待删除）
-src/uasset_read/            # 新版模块化包（v6.0 重构中）
-tests/                      # 测试目录（18 个测试文件，411 passed）
+src/uasset_read/            # 完整模块化包（v6.0 已完成）
+tests/                      # 测试目录（18 个测试文件，373 passed）
 uasset_read_cpp/            # C++ 移植参考（请勿修改）
 .planning/                  # GSD 工作流文件（路线图、状态、需求）
 ```
@@ -118,7 +117,7 @@ uasset_read_cpp/            # C++ 移植参考（请勿修改）
 
 ## API 导出
 
-当前公共 API（通过 `src/uasset_read/__init__.py`，50+ 导出项）：
+当前公共 API（通过 `src/uasset_read/__init__.py`，100+ 导出项）：
 
 ```python
 from uasset_read import (
@@ -144,10 +143,16 @@ from uasset_read import (
     parse_array_property, parse_struct_property, parse_map_property, ...
     # 蓝图（Phase 30）
     extract_blueprint_variables, parse_component_transform, extract_blueprint_metadata,
+    # 主解析管线（Phase 33）
+    parse_uasset,
+    # 图解析（Phase 31）
+    extract_blueprint_graphs, build_execution_flows, build_data_flows, build_connections_map,
+    # 格式化（Phase 32）
+    format_json_full, format_json_summary, format_text_full, format_text_summary,
+    format_markdown, format_graphs_json, build_status_info, build_schema_info,
+    # CLI 入口（Phase 33）
+    # 通过 python -m uasset_read 或 uasset-read 使用
 )
-
-# 完整解析入口仍在旧版 uasset_read.py
-from uasset_read import parse_uasset, ParseResult
 ```
 
 ## 规划文档
