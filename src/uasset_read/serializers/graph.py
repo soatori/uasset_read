@@ -5,6 +5,7 @@ Phase 31: 蓝图图解析模块 (per MOD-09)。
 """
 from __future__ import annotations
 
+import logging
 import struct
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
@@ -18,9 +19,11 @@ from uasset_read.constants import (
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
     FFRAMEWORK_OBJECT_VERSION_GUID, FUE5_MAINSTREAM_VERSION_GUID, FRELEASE_OBJECT_VERSION_GUID,
     FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE, FFRAMEWORK_VERSION_PINS_STORE_FNAME,
-    FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX, DEBUG_PIN_PARSING,
+    FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX,
     FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
 )
+
+logger = logging.getLogger(__name__)
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import resolve_class_name, get_asset_class, PackageIndex
 from uasset_read.serializers.property_tags import read_property_tag
@@ -238,8 +241,7 @@ def read_ftext_with_history(
                         raise
     except Exception as e:
         if tolerant:
-            if DEBUG_PIN_PARSING:
-                print(f"[DEBUG FTEXT] Tolerant mode: history_type={history_type}, error={e}")
+            logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)
         else:
             raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
 

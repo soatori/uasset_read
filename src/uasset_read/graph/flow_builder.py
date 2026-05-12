@@ -95,27 +95,31 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "pins": [asdict(pin) for pin in node.pins]  # Pin格式保持Phase 18规范
     }
 
-    # D-20-03: 嵌套结构展开（使用 duck typing 以兼容旧版和新版 node_data）
+    # D-20-03: 嵌套结构展开（兼容 dict 和 dataclass node_data）
     if node.node_data is not None:
-        # CallFunction: 提取 function_reference 到顶层
-        if hasattr(node.node_data, 'function_reference'):
-            fr = node.node_data.function_reference
+        nd = node.node_data
+        # Helper: get value from dict key or object attribute
+        def _get(key):
+            if isinstance(nd, dict):
+                return nd.get(key)
+            return getattr(nd, key, None)
+
+        fr = _get('function_reference')
+        if fr is not None:
             result["function_reference"] = {
                 "member_name": getattr(fr, 'member_name', None),
                 "member_parent": getattr(fr, 'member_parent', None),
                 "self_context": getattr(fr, 'b_self_context', None)
             }
-        # Event: 提取 event_reference 到顶层
-        elif hasattr(node.node_data, 'event_reference'):
-            er = node.node_data.event_reference
+        elif _get('event_reference') is not None:
+            er = _get('event_reference')
             result["event_reference"] = {
                 "member_name": getattr(er, 'member_name', None),
                 "member_parent": getattr(er, 'member_parent', None),
                 "member_guid": getattr(er, 'member_guid', None)
             }
-        # EnhancedInputAction: 提取 input_action_path 到顶层
-        elif hasattr(node.node_data, 'input_action_path'):
-            result["input_action_path"] = node.node_data.input_action_path
+        elif _get('input_action_path') is not None:
+            result["input_action_path"] = _get('input_action_path')
         # Knot/Comment 无额外顶层字段
 
     return result
@@ -125,17 +129,49 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
     """获取起点节点的事件名称（D-19-11）。
 
     支持4种起点类型：
-    - K2Node_Event: event_reference.member_name
+    - K2Node_Event: event_reference.member_name（dict或dataclass）
     - K2Node_EnhancedInputAction: input_action_path或class_name
     - K2Node_VariableSet: "VariableSet"
     - K2Node_CustomEvent: "CustomEvent"
+
+    Fallback: 如果无法提取具体名称，返回 node.class_name 而非 "Unknown"。
     """
+    nd = node.node_data
+
     if node.class_name == "K2Node_Event":
-        if node.node_data and hasattr(node.node_data, 'event_reference'):
-            return node.node_data.event_reference.member_name
+        if not nd:
+            return node.class_name
+        # node_data is a dict from read_k2node_event(), or a K2NodeEvent dataclass
+        if isinstance(nd, dict):
+            er = nd.get("event_reference")
+        else:
+            er = getattr(nd, 'event_reference', None)
+
+        if er is None:
+            return node.class_name
+
+        # er is FMemberReference object
+        if hasattr(er, 'member_name'):
+            mn = er.member_name
+        elif isinstance(er, dict):
+            mn = er.get("member_name")
+        else:
+            mn = None
+
+        if not mn or mn == "None":
+            return node.class_name
+
+        # member_name can be a path like "/Game/.../BP_X_37120"
+        if '/' in mn:
+            return mn.split('/')[-1]
+        return mn
+
     elif node.class_name == "K2Node_EnhancedInputAction":
-        if node.node_data and hasattr(node.node_data, 'input_action_path'):
-            path = node.node_data.input_action_path
+        if nd:
+            if isinstance(nd, dict):
+                path = nd.get("input_action_path", "")
+            else:
+                path = getattr(nd, 'input_action_path', "")
             if path:
                 return path.split('/')[-1] if '/' in path else path
         return node.class_name
@@ -144,7 +180,7 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
     elif node.class_name == "K2Node_CustomEvent":
         return "CustomEvent"
 
-    return "Unknown"
+    return node.class_name
 
 
 def _find_next_exec_node(
@@ -209,12 +245,18 @@ def _trace_execution_from_event(
         }
 
         if current_node.class_name == "K2Node_CallFunction":
-            if current_node.node_data and hasattr(current_node.node_data, 'function_reference'):
-                node_info["function_name"] = current_node.node_data.function_reference.member_name
+            nd = current_node.node_data
+            if nd:
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                if fr:
+                    node_info["function_name"] = getattr(fr, 'member_name', None)
 
         if current_node.class_name == "K2Node_Event":
-            if current_node.node_data and hasattr(current_node.node_data, 'event_reference'):
-                node_info["event_name"] = current_node.node_data.event_reference.member_name
+            nd = current_node.node_data
+            if nd:
+                er = nd.get("event_reference") if isinstance(nd, dict) else getattr(nd, 'event_reference', None)
+                if er:
+                    node_info["event_name"] = getattr(er, 'member_name', None)
 
         if current_node.class_name in CONTROL_FLOW_NODES:
             branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
