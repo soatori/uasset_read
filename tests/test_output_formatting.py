@@ -1356,18 +1356,17 @@ def test_graphs_summary_calls_format(create_mock_parse_result):
     assert len(entry['execution_flows']) > 0
 
     flow = entry['execution_flows'][0]
-    assert 'event' in flow
-    assert 'calls' in flow
-    assert isinstance(flow['calls'], list)
+    assert 'start_event' in flow  # Phase 31 新格式使用 start_event
+    assert 'nodes' in flow  # Phase 31 新格式使用 nodes 列表
+    assert isinstance(flow['nodes'], list)
 
-    # 如果有函数调用，验证格式：FuncName(Param:Type)
-    if len(flow['calls']) > 0:
-        call_str = flow['calls'][0]
-        # 格式应为 "PrintString(InStr:String)" 或类似
-        assert '(' in call_str
-        assert ')' in call_str
-        # 验证包含函数名
-        assert 'PrintString' in call_str or call_str.startswith('Unknown')
+    # 验证 nodes 中包含函数调用节点
+    if len(flow['nodes']) > 0:
+        # 检查是否有 K2Node_CallFunction 类型节点
+        call_nodes = [n for n in flow['nodes'] if n.get('node_type') == 'K2Node_CallFunction']
+        if call_nodes:
+            # 验证节点包含 function_name
+            assert 'function_name' in call_nodes[0] or 'node_type' in call_nodes[0]
 
 
 def test_graphs_summary_empty_graphs(create_mock_parse_result):

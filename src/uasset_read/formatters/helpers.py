@@ -12,9 +12,10 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import PackageIndex
 
 from dataclasses import asdict
+from uasset_read.models.result import StatusInfo
 
 
-def build_status_info(result: ParseResult) -> Dict:
+def build_status_info(result: ParseResult) -> StatusInfo:
     """
     构建 status 字段（D-14-01, OUT-01）。
 
@@ -27,19 +28,19 @@ def build_status_info(result: ParseResult) -> Dict:
         result: ParseResult 对象
 
     Returns:
-        Dict: status 对象（与旧版 StatusInfo dataclass 结构一致）
+        StatusInfo: status 对象
     """
     if result.is_success:
         if not result.errors:
-            return {"status": "success"}
+            return StatusInfo(status="success")
         else:
             # D-14-01: 有错误但部分结果可用 → fail
             message = result.errors[0] if result.errors else None
-            return {"status": "fail", "message": message, "code": "PARSE_ERROR"}
+            return StatusInfo(status="fail", message=message, code="PARSE_ERROR")
     else:
         # is_success=False → error
         message = result.errors[0] if result.errors else "Unknown error"
-        return {"status": "error", "message": message, "code": "PARSE_ERROR"}
+        return StatusInfo(status="error", message=message, code="PARSE_ERROR")
 
 
 def build_schema_info() -> Dict[str, str]:

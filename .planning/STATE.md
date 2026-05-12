@@ -22,14 +22,14 @@ progress:
 - ~~Phase 29: 核心数据模型~~ ✓ Complete (models/core.py, node_types.py, blueprint.py, result.py)
 - ~~Phase 30: 属性解析模块~~ ✓ Complete (3 plans: property dataclasses + 14 type parsers + blueprint module)
 - ~~Phase 31: 蓝图图解析模块~~ ✓ Complete (6 plans: serializers/graph.py + from_archive delegates + graph/ module + test fixes)
+- ~~Phase 32: 输出格式化模块~~ ✓ Complete (3 plans: JSON + Text/Markdown + test adaptation, 107 passed)
 
-## 当前焦点: Phase 32 — 输出格式化模块 (next)
+## 当前焦点: Phase 33 — 入口与测试适配 (next)
 
 ### 下一步
 
-1. Phase 32: 输出格式化模块 (等价迁移 Phase 14/20)
-2. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
-3. Phase 34: 等价验证 (新旧输出逐字段对比)
+1. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
+2. Phase 34: 等价验证 (新旧输出逐字段对比)
 
 ### Phase 28a 修复记录
 
