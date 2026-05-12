@@ -447,16 +447,13 @@ def read_ue_graph_pin(
     except Exception:
         persistent_guid = None
 
-    # 18. BitField (EditorOnly) — UE5: u8, UE4: u32
+    # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
     hidden = False
     not_connectable = False
     advanced_view = False
     orphaned_pin = False
     try:
-        if summary.file_version_ue5 > 0:
-            bitfield = archive.read_u8()
-        else:
-            bitfield = archive.read_u32()
+        bitfield = archive.read_u32()
         hidden = bool(bitfield & (1 << 0))
         not_connectable = bool(bitfield & (1 << 1))
         advanced_view = bool(bitfield & (1 << 4))
