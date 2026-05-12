@@ -189,6 +189,7 @@ def read_ftext_with_history(
     archive: FArchive,
     history_type: int,
     tolerant: bool = True,
+    ue5_mode: bool = False,
 ) -> tuple[str, int]:
     """读取 FText，返回 (值, 消耗字节数)。
 
@@ -196,6 +197,12 @@ def read_ftext_with_history(
     - 0xFF (-1 as unsigned): None（无历史）
     - 0 (Base): Namespace + Key + SourceString
     - 1-254: Custom（最多 5 个 FString 历史）
+
+    Args:
+        archive: FArchive 实例
+        history_type: FText 历史类型
+        tolerant: 是否启用容错模式
+        ue5_mode: 是否为 UE5 资产（影响 b_has_culture 的 bool 读取大小）
 
     容错模式下，对异常长度返回空字符串而非抛出异常。
     """
@@ -205,7 +212,7 @@ def read_ftext_with_history(
     try:
         if history_type == 0xFF:
             # None 类型：仅 flags + 可选 culture
-            b_has_culture = archive.read_bool()
+            b_has_culture = archive.read_bool_ue5() if ue5_mode else archive.read_bool()
             if b_has_culture:
                 culture_start = archive.tell()
                 try:
@@ -342,7 +349,7 @@ def read_ue_graph_pin(
     try:
         flags = archive.read_i32()
         history_type = archive.read_u8()
-        read_ftext_with_history(archive, history_type, tolerant=True)
+        read_ftext_with_history(archive, history_type, tolerant=True, ue5_mode=(summary.file_version_ue5 > 0))
     except Exception:
         archive.seek(ftext_start_pos)
 
