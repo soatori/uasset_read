@@ -139,6 +139,49 @@ def read_ed_graph_pin_type(
 # FText 读取（UE5 多 history_type 支持）
 # ============================================================================
 
+def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
+    """读取 FString，对异常长度进行容错处理。
+
+    如果长度不合理（超过 max_length），尝试读取为 0 字节空字符串。
+    """
+    length = archive.read_i32()
+    if length == 0:
+        return ""
+    if abs(length) > max_length:
+        # 长度异常，回退并返回空字符串
+        archive.seek(archive.tell() - 4)
+        return ""
+    if length < 0:
+        utf16_len = -length * 2
+        if utf16_len > max_length * 2:
+            archive.seek(archive.tell() - 4)
+            return ""
+        data = archive.read(utf16_len)
+        return data.decode('utf-16', errors='replace').rstrip('\x00')
+    data = archive.read(length)
+    return data.decode('utf-8', errors='replace').rstrip('\x00')
+
+
+def _read_ftext_fstring(archive: FArchive) -> str:
+    """读取 FText 内部的 FString，对异常长度不回退（已消费 i32 长度字段）。
+
+    与 _read_fstring_safe 的关键区别：长度异常时不回退 seek，
+    直接返回空字符串，确保 FText 内部每个 FString 即使长度异常，
+    文件位置也不会错位。
+    """
+    length = archive.read_i32()
+    if length == 0:
+        return ""
+    if abs(length) > 10_000:
+        # 异常长度，不回退（已消费 i32），返回空字符串
+        return ""
+    if length < 0:
+        data = archive.read(-length * 2)
+        return data.decode('utf-16', errors='replace').rstrip('\x00')
+    data = archive.read(length)
+    return data.decode('utf-8', errors='replace').rstrip('\x00')
+
+
 def read_ftext_with_history(
     archive: FArchive,
     history_type: int,
@@ -161,30 +204,35 @@ def read_ftext_with_history(
             # None 类型：仅 flags + 可选 culture
             b_has_culture = archive.read_bool()
             if b_has_culture:
+                culture_start = archive.tell()
                 try:
                     archive.read_fstring()  # culture
                 except Exception:
                     if tolerant:
-                        pass
+                        archive.seek(culture_start)
                     else:
                         raise
         elif history_type == 0:
             # Base 类型：3 个 FString
             for _ in range(3):
+                fstring_start = archive.tell()
                 try:
-                    archive.read_fstring()
+                    _read_fstring_safe(archive)
                 except Exception:
                     if tolerant:
+                        archive.seek(fstring_start)
                         break
                     else:
                         raise
         else:
             # Custom 类型：最多 5 个 FString
             for _ in range(5):
+                fstring_start = archive.tell()
                 try:
-                    archive.read_fstring()
+                    _read_fstring_safe(archive)
                 except Exception:
                     if tolerant:
+                        archive.seek(fstring_start)
                         break
                     else:
                         raise
@@ -298,7 +346,9 @@ def read_ue_graph_pin(
 
     # 5. SourceIndex (version dependent)
     source_index = None
-    if mainstream_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX:
+    # UE5 always serializes SourceIndex; the mainstream_version threshold check
+    # is unreliable (mainstream_version=0 for UE5.5 assets)
+    if mainstream_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX or summary.file_version_ue5 > 0:
         source_index = archive.read_i32()
     else:
         start_pos = archive.tell()
@@ -312,9 +362,21 @@ def read_ue_graph_pin(
             archive.seek(start_pos)
 
     # 6. PinToolTip
-    pin_tooltip = archive.read_fstring()
+    # 6. PinToolTip — UE5: len=-1 means empty with no data bytes
+    if summary.file_version_ue5 > 0:
+        _tt_len = archive.read_i32()
+        if _tt_len == -1:
+            pin_tooltip = ""
+        elif _tt_len == 0:
+            pin_tooltip = ""
+        elif _tt_len < 0:
+            pin_tooltip = archive.read(-_tt_len * 2).decode('utf-16', errors='replace').rstrip('\x00')
+        else:
+            pin_tooltip = archive.read(_tt_len).decode('utf-8', errors='replace').rstrip('\x00')
+    else:
+        pin_tooltip = archive.read_fstring()
 
-    # 7. Direction
+    # 7. Direction — u8 for both UE4 and UE5
     direction = archive.read_u8()
 
     # 8. PinType
@@ -334,14 +396,12 @@ def read_ue_graph_pin(
     # 11. DefaultObject (FPackageIndex)
     default_object = archive.read_i32()
 
-    # 12. DefaultTextValue (FText) — 修复：使用 read_ftext_with_history
+    # 12. DefaultTextValue (FText) — UE5 中使用简单 FString 格式（非 FText-with-history）
     try:
-        _dtext_flags = archive.read_i32()
-        _dtext_history = archive.read_u8()
-        read_ftext_with_history(archive, _dtext_history, tolerant=True)
-    except Exception as e:
-        if DEBUG_PIN_PARSING:
-            print(f"[DEBUG FTEXT] DefaultTextValue error: {e}")
+        _read_ftext_fstring(archive)
+    except Exception:
+        # 极端容错：如果连 FString 都失败，跳过
+        pass
 
     # 13. LinkedTo array
     linkedto_start = archive.tell()
@@ -360,11 +420,23 @@ def read_ue_graph_pin(
         # 同上，不尝试恢复
         sub_pins = []
 
-    # 15. ParentPin
-    parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
+    # 15. ParentPin — UE5: always 24 bytes (b_null + owning + guid)
+    if summary.file_version_ue5 > 0:
+        _pp_null = archive.read_i32()
+        _pp_owning = archive.read_i32()
+        _pp_guid = archive.read_bytes(16).hex().upper() if _pp_null == 0 else None
+        parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
+    else:
+        parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
 
-    # 16. ReferencePassThroughConnection
-    ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
+    # 16. ReferencePassThroughConnection — UE5: always 24 bytes
+    if summary.file_version_ue5 > 0:
+        _ref_null = archive.read_i32()
+        _ref_owning = archive.read_i32()
+        _ref_guid = archive.read_bytes(16).hex().upper() if _ref_null == 0 else None
+        ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid} if _ref_null == 0 else None
+    else:
+        ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
 
     # 17. PersistentGuid (EditorOnly)
     try:
@@ -373,13 +445,16 @@ def read_ue_graph_pin(
     except Exception:
         persistent_guid = None
 
-    # 18. BitField (EditorOnly)
+    # 18. BitField (EditorOnly) — UE5: u8, UE4: u32
     hidden = False
     not_connectable = False
     advanced_view = False
     orphaned_pin = False
     try:
-        bitfield = archive.read_u32()
+        if summary.file_version_ue5 > 0:
+            bitfield = archive.read_u8()
+        else:
+            bitfield = archive.read_u32()
         hidden = bool(bitfield & (1 << 0))
         not_connectable = bool(bitfield & (1 << 1))
         advanced_view = bool(bitfield & (1 << 4))
@@ -696,14 +771,19 @@ def read_ue_graph_node(
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
+        # Always read header (24 bytes): b_null + OwningNode_1 + PinGuid_1
         b_null_ptr = archive.read_i32()
-        if b_null_ptr != 0:
-            archive.read_i32()   # OwningNode_1
-            archive.read_bytes(16)  # PinGuid_1
-            continue
+        owning_1 = archive.read_i32()
+        guid_1 = archive.read_bytes(16)
 
-        archive.read_i32()       # OwningNode_1
-        archive.read_bytes(16)   # PinGuid_1
+        if b_null_ptr != 0:
+            # NULL pin reference: body still exists, must consume it to advance position
+            try:
+                read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
+            except Exception:
+                # If body parsing fails, estimate body size (~180 bytes) and skip
+                archive.seek(archive.tell() + 180)
+            continue
 
         try:
             pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
