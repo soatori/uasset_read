@@ -354,7 +354,13 @@ def extract_blueprint_metadata(
     parent_class = None
     for prop in properties:
         if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
-            parent_class = str(prop.value) if prop.value else None
+            # 修复: 不使用 str(prop.value)，而是提取实际值
+            # prop.value 可能是 ObjectProperty 实例 (dict 格式)
+            if prop.value and isinstance(prop.value, dict):
+                # 如果 dict 中有 raw_index，使用它；否则使用 resolved
+                parent_class = prop.value.get('raw_index') or prop.value.get('resolved') or prop.value
+            elif prop.value:
+                parent_class = prop.value
 
     # 推断父类（从 export 的 super_index）
     if not parent_class and hasattr(export, 'super_index'):

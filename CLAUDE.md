@@ -104,16 +104,26 @@ gsd-sdk v0.1.0 已全局安装（npm），但仅支持以下三个命令：
 ## 文件组织
 
 ```
-src/uasset_read/            # 完整模块化包（v6.0 已完成）
-tests/                      # 测试目录（18 个测试文件，373 passed）
-uasset_read_cpp/            # C++ 移植参考（请勿修改）
-.planning/                  # GSD 工作流文件（路线图、状态、需求）
+uasset_read/
+├── src/uasset_read/        # 源代码模块
+├── tests/                  # 测试文件
+├── uasset_read_cpp/        # C++ 移植参考
+├── .planning/              # GSD 规划文档
+├── output/                 # 输出文件（JSON/TXT/MD）
+├── debug/                  # 调试文件
+├── reports/                # 报告文件
+└── test/                   # 测试脚本
 ```
 
-外部目录（Git 排除）：
+外部目录（Git 忽略）：
 - `UnrealEngine/` — UE 引擎源码参考
 - `LyraStarterGame/` — 示例游戏资产
-- `E:\Develop\lib\UnrealEngine\` — UE 5.7 完整源码（只读参考）
+
+**规则：**
+- 源代码 → `src/uasset_read/`
+- 测试 → `tests/`
+- 规划 → `.planning/`
+- 输出产物 → `output/`、`debug/`、`reports/`
 
 ## API 导出
 
