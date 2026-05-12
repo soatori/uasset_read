@@ -112,8 +112,8 @@ def read_ed_graph_pin_type(
                 pin_type.container_type = 0
 
         # bIsReference / bIsWeakPointer
-        pin_type.is_reference = archive.read_bool()
-        pin_type.is_weak_pointer = archive.read_bool()
+        pin_type.is_reference = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
+        pin_type.is_weak_pointer = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
 
         # FSimpleMemberReference (version dependent)
         VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 382
@@ -125,13 +125,13 @@ def read_ed_graph_pin_type(
         # bIsConst (version dependent)
         VER_UE4_SERIALIZE_PINTYPE_CONST = 366
         if ue4_version >= VER_UE4_SERIALIZE_PINTYPE_CONST:
-            pin_type.is_const = archive.read_bool()
+            pin_type.is_const = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
         else:
             pin_type.is_const = False
 
         # bIsUObjectWrapper (version dependent)
         if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER:
-            pin_type.is_uobject_wrapper = archive.read_bool()
+            pin_type.is_uobject_wrapper = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
         else:
             pin_type.is_uobject_wrapper = False
 
