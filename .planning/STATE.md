@@ -5,11 +5,11 @@ milestone_name: milestone
 status: executing
 last_updated: "2026-05-12T..."
 progress:
-  total_phases: 10
+  total_phases: 12
   completed_phases: 5
-  total_plans: 23
+  total_plans: 25
   completed_plans: 17
-  percent: 74
+  percent: 68
 ---
 
 # v6.0 模块化重构 — 当前状态
@@ -24,12 +24,29 @@ progress:
 - ~~Phase 31: 蓝图图解析模块~~ ✓ Complete (6 plans: serializers/graph.py + from_archive delegates + graph/ module + test fixes)
 - ~~Phase 32: 输出格式化模块~~ ✓ Complete (3 plans: JSON + Text/Markdown + test adaptation, 107 passed)
 
-## 当前焦点: Phase 33 — 入口与测试适配 (next)
+## 当前焦点: Phase 34 — 等价验证 (next)
 
 ### 下一步
 
-1. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
-2. Phase 34: 等价验证 (新旧输出逐字段对比)
+1. Phase 34: 等价验证 (新旧输出逐字段对比)
+2. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py (已完成，等待 33a)
+
+### Phase 33a 修复记录
+
+**关键修复：UE5 序列化容错模式**
+
+UE5.0 蓝图文件的 FText 和 PropertyTag 序列化格式与 UE4 存在差异：
+- FText history_type 需要支持 0xFF (None), 0 (Base), 1-254 (Custom)
+- PropertyTag size 可能为负数或超出边界，容错模式下接受
+
+**修复内容：**
+- serializers/graph.py: read_ftext_with_history() 函数 + read_ue_graph_pin 更新
+- archive.py: validate_size() tolerant 参数
+- serializers/property_tags.py: read_property_tag() tolerant 参数
+- parse_uasset.py: tolerant 参数 (默认 True)
+- cli.py: --tolerant/--strict 标志
+
+**测试结果：** 383 passed, 71 skipped, 0 failed
 
 ### Phase 28a 修复记录
 
