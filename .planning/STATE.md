@@ -7,9 +7,9 @@ last_updated: "2026-05-12T..."
 progress:
   total_phases: 12
   completed_phases: 5
-  total_plans: 25
+  total_plans: 27
   completed_plans: 17
-  percent: 68
+  percent: 70
 ---
 
 # v6.0 模块化重构 — 当前状态
