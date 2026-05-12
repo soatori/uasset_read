@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
+
+## Language
+
+请使用中文回复以及编写文档
+
+## 项目概述
+
 Unreal Engine .uasset 文件解析器 — 让 AI 代理在不依赖 UE 编辑器的情况下读取蓝图内容。
 
 ## 快速参考
@@ -40,9 +48,11 @@ python -m pytest tests/ -v        # 测试
 
 ```
 src/uasset_read/  # 源码    tests/          # 测试
-.planning/        # 规划    output/debug/reports/  # 产物
+.planning/        # 规划    temp/            # 缓存/临时生成文件
 uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽略）
 ```
+
+> 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。
 
 ## gsd-sdk 使用
 
@@ -50,17 +60,20 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 **不支持** `query`、`list`、`get` 等子命令（会报错）。查 phase 信息请直接读 `.planning/` 文件或用 GSD slash commands。
 
-## API 导出（通过 `from uasset_read import X`）
+## API 导出（`from uasset_read import X`）
 
-- **常量/异常**：`PACKAGE_FILE_TAG`, `MMAP_THRESHOLD`, `UAssetError`, `VersionError`, `ParseError`, `ErrorContext`
-- **序列化**：`PackageFileSummary`, `PackageIndex`, `ObjectImport`, `ObjectExport`, `read_package_summary`, `read_name_table`, `read_import_map`, `read_export_map`, `detect_blueprint`, `FArchive`, `PropertyTag`
-- **数据模型**：`UEdGraph`, `UEdGraphNode`, `UEdGraphPin`, `FEdGraphPinType`, `FMemberReference`, `K2NodeCallFunction`, `K2NodeEvent`, `K2NodeKnot`, `EdGraphNodeComment`, `K2NodeEnhancedInputAction`, `ParseResult`, `StatusInfo`
-- **蓝图**：`BlueprintMetadata`, `BlueprintVariable`, `BlueprintFunction`, `BlueprintEvent`, `extract_blueprint_variables`, `parse_component_transform`, `extract_blueprint_metadata`
-- **属性**：`PropertyValue`, `StructValue`, `MapValue`, `SetValue`, `EnumValue`, `TextValue`, `DelegateValue`, `parse_property_value`, `parse_properties_from_export`, `parse_bool/int/float/str/array/struct/map_property`
-- **管线**：`parse_uasset`
-- **图解析**：`extract_blueprint_graphs`, `build_execution_flows`, `build_data_flows`, `build_connections_map`
-- **格式化**：`format_json_full/summary`, `format_text_full/summary`, `format_markdown`, `format_graphs_json`, `build_status_info`, `build_schema_info`
-- **CLI**：`python -m uasset_read` 或 `uasset-read`
+按模块分类，具体符号见各模块 `__init__.py`：
+
+| 类别 | 核心符号 |
+|------|---------|
+| 常量/异常 | `PACKAGE_FILE_TAG`, `MMAP_THRESHOLD`, `UAssetError`, `VersionError`, `ParseError` |
+| 序列化 | `PackageFileSummary/Index`, `ObjectImport/Export`, `FArchive`, `PropertyTag` |
+| 数据模型 | `UEdGraph`, `UEdGraphNode`, `UEdGraphPin`, `FEdGraphPinType`, `K2Node*` 系列 |
+| 属性 | `PropertyValue`, `Struct/Map/Set/Enum/Text/DelegateValue`, `parse_*` 系列 |
+| 蓝图 | `BlueprintMetadata/Variable/Function/Event`, `extract_blueprint_*`, `parse_component_transform` |
+| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map` |
+| 格式化 | `format_json/text/markdown/graphs_*`, `build_status/schema_info` |
+| 管线/CLI | `parse_uasset`, `python -m uasset_read` 或 `uasset-read` |
 
 ## 规划文档
 

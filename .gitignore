@@ -68,5 +68,8 @@ tools/*_scan.py
 # Claude memory system (personal notes, not project docs)
 memory/
 
+# Temp directory for cache and generated files
+temp/
+
 # Qwen Code project documentation (IMPORTANT: Do not commit to version control)
 QWEN.md
