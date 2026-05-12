@@ -4,7 +4,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 from uasset_read.archive import FArchive
@@ -434,3 +434,61 @@ def _resolve_class_name(
     if resolved:
         return resolved.get("class_name", "Unknown")
     return "Unknown"
+
+
+def find_main_blueprint_generated_class(
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    asset_name: str,
+) -> Optional[ObjectExport]:
+    """
+    查找主 BlueprintGeneratedClass 导出（等价迁移 uasset_read.py §3063-3092）。
+
+    使用 object_name 匹配 + serial_size 最大原则。
+    主 BPGC 的 object_name 通常为 asset_name + "_C"。
+    """
+    candidates = []
+    for export in export_map:
+        if detect_blueprint_generated_class(export, import_map, export_map):
+            if export.object_name and export.object_name.startswith(asset_name):
+                candidates.append(export)
+    if candidates:
+        return max(candidates, key=lambda e: e.serial_size)
+    return None
+
+
+def resolve_parent_class(
+    super_index: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport]
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve ParentClass FPackageIndex to object name (BLUE-02).
+
+    Per D-09: only direct parent (no inheritance chain).
+    Per D-10: resolve to ImportMap/ExportMap object name.
+    Per D-11: return raw index + warning on resolution failure.
+
+    Returns:
+        Tuple of (resolved_name, warning_if_any)
+        - (class_name, None) on success
+        - (None, warning_string) on failure
+    """
+    if super_index.is_null:
+        return None, None
+
+    if super_index.is_import:
+        import_idx = super_index.to_import_index()
+        if 0 <= import_idx < len(import_map):
+            return import_map[import_idx].object_name, None
+        else:
+            return None, f"Parent import index out of range: {super_index.index}"
+
+    elif super_index.is_export:
+        export_idx = super_index.to_export_index()
+        if 0 <= export_idx < len(export_map):
+            return export_map[export_idx].object_name, None
+        else:
+            return None, f"Parent export index out of range: {super_index.index}"
+
+    return None, f"Unknown parent index type: {super_index.index}"
