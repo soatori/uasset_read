@@ -200,6 +200,37 @@ GRAPH_TYPE_MAP = {
 }
 
 # ============================================================================
+# CPF_* 属性标志位常量（Class Property Flags）
+# 等价迁移 uasset_read.py §4711-4738
+# ============================================================================
+
+CPF_Edit = 0x0000000000000001
+CPF_BlueprintVisible = 0x0000000000000004
+CPF_BlueprintReadOnly = 0x0000000000000010
+CPF_Transient = 0x0000000000002000
+CPF_EditConst = 0x0000000000020000
+CPF_InstancedReference = 0x0000000000080000
+CPF_Config = 0x0000000000004000
+CPF_SaveGame = 0x0000000001000000
+CPF_Deprecated = 0x0000000020000000
+CPF_Protected = 0x0000080000000000
+CPF_AdvancedDisplay = 0x0000040000000000
+CPF_ExposeOnSpawn = 0x0001000000000000
+CPF_EditAnywhere = 0x02000000
+CPF_EditInstanceOnly = 0x04000000
+CPF_BlueprintReadWrite = 0x00000100
+CPF_DuplicateTransient = 0x00008000
+CPF_NoClear = 0x00080000
+CPF_ReferenceOnly = 0x00100000
+CPF_BlueprintAssignable = 0x80000000
+CPF_BlueprintCallable = 0x00004000
+CPF_RepNotify = 0x10000000
+CPF_Interp = 0x20000000
+CPF_Net = 0x00000020
+CPF_Replicated = 0x00100000
+CPF_NonPIEDuplicateTransient = 0x00800000
+
+# ============================================================================
 # CLI退出代码
 # ============================================================================
 

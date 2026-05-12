@@ -15,17 +15,17 @@ if TYPE_CHECKING:
 from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata
 from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.core import FEdGraphPinType
-
-# CPF_* flag bit constants (inline, do NOT import from constants.py)
-CPF_Edit = 0x00000001
-CPF_EditConst = 0x00000002
-CPF_BlueprintVisible = 0x00000004
-CPF_BlueprintReadOnly = 0x00000010
-CPF_Net = 0x00000020
-CPF_Transient = 0x00000040
-CPF_BlueprintAssignable = 0x00000100
-CPF_RepNotify = 0x10000000
-CPF_SaveGame = 0x02000000
+from uasset_read.parsers.property_types import parse_default_value
+from uasset_read.serializers.graph import read_ed_graph_pin_type
+from uasset_read.constants import (
+    CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
+    CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
+    CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
+    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn, CPF_EditAnywhere,
+    CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_DuplicateTransient,
+    CPF_NoClear, CPF_ReferenceOnly, CPF_BlueprintCallable, CPF_Interp,
+    CPF_Replicated, CPF_NonPIEDuplicateTransient,
+)
 
 
 def _map_property_flags(flags: int) -> Dict[str, bool]:
@@ -308,46 +308,226 @@ def _extract_mobility(value: Any) -> str:
 
 
 def extract_blueprint_metadata(
-    properties: List[PropertyValue],
-    export_map: List[Any]
-) -> BlueprintMetadata:
+    export,
+    archive,
+    import_map,
+    export_map,
+    name_map,
+    summary,
+) -> tuple:
     """综合变量提取和通用元数据，构建 BlueprintMetadata 实例。
 
-    检测蓝图标识、提取父类、调用变量提取，函数和事件列表暂为空
-    （由 Phase 31 填充）。
+    等价迁移 uasset_read.py §6100-6220。
+    从指定的 export 读取属性并提取蓝图元数据。
 
     Args:
-        properties: 已解析的属性值列表
-        export_map: 导出表条目列表
+        export: ObjectExport 条目（通常是 BPGC）
+        archive: FArchive 实例
+        import_map: 导入表
+        export_map: 导出表
+        name_map: 名称表
+        summary: PackageFileSummary
 
     Returns:
-        BlueprintMetadata 实例
+        Tuple[BlueprintMetadata | None, str | None] — (元数据, 警告)
     """
-    # 检测是否为蓝图：检查 export_map 中的类名
-    is_blueprint = False
-    parent_class = None
+    from uasset_read.parsers.property_parser import parse_properties_from_export
 
-    for export in export_map:
-        if hasattr(export, "object_name"):
-            obj_name = export.object_name
-            if "BP_" in obj_name or "Blueprint" in obj_name:
-                is_blueprint = True
-        if hasattr(export, "class_index"):
-            # 尝试从 class_index 推断父类
-            pass
+    if export is None or export.serial_size <= 0:
+        return None, None
 
-    # 从属性中提取父类信息
-    for prop in properties:
-        if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
-            parent_class = str(prop.value) if prop.value else None
+    # 解析 export 属性
+    try:
+        properties = parse_properties_from_export(
+            export, archive, summary, name_map, export_map, import_map,
+        )
+    except Exception:
+        return None, None
+
+    if not properties:
+        return None, None
 
     # 提取变量
     variables = extract_blueprint_variables(properties)
 
-    return BlueprintMetadata(
-        is_blueprint=is_blueprint,
+    # 提取父类信息
+    parent_class = None
+    for prop in properties:
+        if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
+            parent_class = str(prop.value) if prop.value else None
+
+    # 推断父类（从 export 的 super_index）
+    if not parent_class and hasattr(export, 'super_index'):
+        from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
+        parent_name, warn = _rpc(export.super_index, import_map, export_map)
+        if parent_name:
+            parent_class = parent_name
+
+    meta = BlueprintMetadata(
+        is_blueprint=True,
         parent_class=parent_class,
         variables=variables,
-        functions=[],   # Phase 31 will populate
-        events=[],      # Phase 31 will populate
+        functions=[],
+        events=[],
     )
+    return meta, None
+
+
+def parse_property_flags_to_labels(flags: int) -> List[str]:
+    """将 CPF_* 位标志转换为可读标签列表（Phase 12）。
+
+    等价迁移 uasset_read.py §4775-4827。
+    包含语义映射：CPF_Edit → EditAnywhere/EditConst,
+    CPF_BlueprintVisible → BlueprintReadWrite/BlueprintReadOnly。
+    """
+    labels = []
+
+    # Edit 标志（互斥模式）
+    if flags & CPF_Edit:
+        if flags & CPF_EditConst:
+            labels.append("EditConst")
+        else:
+            labels.append("EditAnywhere")
+
+    # 蓝图可见性标志（互斥）
+    if flags & CPF_BlueprintVisible:
+        if flags & CPF_BlueprintReadOnly:
+            labels.append("BlueprintReadOnly")
+        else:
+            labels.append("BlueprintReadWrite")
+
+    # 组件引用标志
+    if flags & CPF_InstancedReference:
+        labels.append("InstancedReference")
+
+    # 其他标志
+    if flags & CPF_Protected:
+        labels.append("Protected")
+    if flags & CPF_ExposeOnSpawn:
+        labels.append("ExposeOnSpawn")
+    if flags & CPF_Config:
+        labels.append("Config")
+    if flags & CPF_Transient:
+        labels.append("Transient")
+    if flags & CPF_SaveGame:
+        labels.append("SaveGame")
+    if flags & CPF_Deprecated:
+        labels.append("Deprecated")
+    if flags & CPF_BlueprintAssignable:
+        labels.append("BlueprintAssignable")
+    if flags & CPF_BlueprintCallable:
+        labels.append("BlueprintCallable")
+    if flags & CPF_RepNotify:
+        labels.append("RepNotify")
+    if flags & CPF_Interp:
+        labels.append("Interp")
+    if flags & CPF_Net:
+        labels.append("Net")
+    if flags & CPF_Replicated:
+        labels.append("Replicated")
+
+    return labels
+
+
+def read_blueprint_variable(
+    archive,
+    name_map: List[str],
+    summary,
+) -> BlueprintVariable:
+    """
+    从 blueprint export 读取 FBPVariableDescription（BLUE-03）。
+
+    序列化顺序:
+    1. VarName (FName)
+    2. VarGuid (FGuid - 16 bytes) — 跳过
+    3. VarType (FEdGraphPinType)
+    4. FriendlyName (FString)
+    5. Category (FText — 简化为 FString)
+    6. PropertyFlags (uint64)
+    7. RepNotifyFunc (FName) — 跳过
+    8. ReplicationCondition (uint8) — 跳过
+    9. MetaDataArray (TArray)
+    10. DefaultValue (FString)
+    """
+    var = BlueprintVariable(
+        var_name=archive.read_name(name_map)
+    )
+
+    # VarGuid (16 bytes) — 跳过
+    archive.read(16)
+
+    # VarType (FEdGraphPinType)
+    var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
+
+    # FriendlyName (FString)
+    var.friendly_name = archive.read_fstring()
+
+    # Category (FText) — 简化为 FString
+    var.category = archive.read_fstring()
+
+    # PropertyFlags (uint64)
+    var.property_flags = archive.read_u64()
+
+    # RepNotifyFunc (FName) — 跳过
+    archive.read_name(name_map)
+
+    # ReplicationCondition (uint8) — 跳过
+    archive.read_u8()
+
+    # MetaDataArray
+    meta_count = archive.read_i32()
+    var.metadata = {}
+    for _ in range(meta_count):
+        key = archive.read_name(name_map)
+        value = archive.read_fstring()
+        if key:
+            var.metadata[key] = value
+
+    # 解析 PropertyFlags 为可读标签
+    var.flags_labels = parse_property_flags_to_labels(var.property_flags)
+
+    # 解析属性标志为布尔字段
+    flags = var.property_flags
+    var.is_edit_anywhere = bool(flags & CPF_EditAnywhere)
+    var.is_edit_instance_only = bool(flags & CPF_EditInstanceOnly)
+    var.is_blueprint_read_only = bool(flags & CPF_BlueprintReadOnly)
+    var.is_blueprint_readable = bool(flags & CPF_BlueprintReadWrite)
+    var.is_blueprint_writable = bool(flags & CPF_BlueprintReadWrite) and not bool(flags & CPF_BlueprintReadOnly)
+    var.is_transient = bool(flags & CPF_Transient)
+    var.is_duplicate_transient = bool(flags & CPF_DuplicateTransient)
+    var.is_save_game = bool(flags & CPF_SaveGame)
+    var.is_no_clear = bool(flags & CPF_NoClear)
+    var.is_reference_only = bool(flags & CPF_ReferenceOnly)
+    var.is_blueprint_assignable = bool(flags & CPF_BlueprintAssignable)
+    var.is_blueprint_callable = bool(flags & CPF_BlueprintCallable)
+    var.is_rep_notify = bool(flags & CPF_RepNotify)
+    var.is_interp = bool(flags & CPF_Interp)
+    var.is_expose_on_spawn = bool(flags & CPF_ExposeOnSpawn)
+    var.is_net = bool(flags & CPF_Net)
+    var.is_replicated = bool(flags & CPF_Replicated)
+    var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
+
+    # 提取元数据字段
+    var.edit_condition = var.metadata.get('EditCondition', '')
+    var.meta_class = var.metadata.get('MetaClass', '')
+    var.edit_category = var.metadata.get('Category', '')
+    var.edit_widget = var.metadata.get('EditWidget', '')
+    var.meta_data = var.metadata.copy()
+
+    # DefaultValue — 解析
+    default_str = archive.read_fstring()
+    var.default_value = parse_default_value(default_str, var.var_type)
+
+    # 组件变量识别（双重验证）
+    type_str = ""
+    if var.var_type:
+        if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
+            type_str = var.var_type.pin_subcategory
+        elif var.var_type.pin_category:
+            type_str = var.var_type.pin_category
+
+    is_component_by_name = isinstance(type_str, str) and "Component" in type_str
+    is_component_by_flag = (var.property_flags & CPF_InstancedReference) != 0
+    var.is_component = is_component_by_name or is_component_by_flag
+
+    return var

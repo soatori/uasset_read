@@ -243,6 +243,14 @@ from .blueprint.transform_parser import (
     parse_scale_value,
     format_transform_value as _format_transform_value,
 )
+from .serializers.property_tags import read_property_tag
+from .parsers.property_types import _derive_node_name, parse_default_value, format_variable_type
+from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
+from .constants import (
+    CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
+    CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly,
+    CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
+)
 
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, _derive_node_name, read_blueprint_variable,
@@ -430,6 +438,22 @@ __all__ = [
     "parse_rotator_value",
     "parse_scale_value",
     "format_transform_value",
+    "read_property_tag",
+    "parse_property_flags_to_labels",
+    "parse_default_value",
+    "read_blueprint_variable",
+    "format_variable_type",
+    # CPF 常量（Phase 33）
+    "CPF_Edit",
+    "CPF_BlueprintVisible",
+    "CPF_InstancedReference",
+    "CPF_EditAnywhere",
+    "CPF_EditInstanceOnly",
+    "CPF_BlueprintReadWrite",
+    "CPF_BlueprintReadOnly",
+    "CPF_Transient",
+    "CPF_SaveGame",
+    "CPF_ExposeOnSpawn",
     # 变换数据类（Phase 33）
     "VectorValue",
     "RotatorValue",
