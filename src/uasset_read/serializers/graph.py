@@ -235,17 +235,26 @@ def read_ftext_with_history(
                     else:
                         raise
         else:
-            # Custom 类型：最多 5 个 FString
-            for _ in range(5):
-                fstring_start = archive.tell()
-                try:
+            # Custom 类型：history_type 1-254
+            # UE5 FText EditorOnly 格式可能包含固定 8 字节而非标准 FString 序列
+            # 尝试读取第一个 FString，如果位置未前进则跳过 8 字节
+            fstring_start = archive.tell()
+            _read_fstring_safe(archive)
+            after_first = archive.tell()
+
+            if after_first == fstring_start:
+                # _read_fstring_safe 因长度异常而回退 — UE5 EditorOnly 格式
+                # 跳过固定 8 字节神秘数据
+                archive.seek(fstring_start + 8)
+            else:
+                # 成功读取一个 FString，继续尝试剩余 4 个
+                for _ in range(4):
+                    next_start = archive.tell()
                     _read_fstring_safe(archive)
-                except Exception:
-                    if tolerant:
-                        archive.seek(fstring_start)
+                    if archive.tell() == next_start:
+                        # 长度异常，停止
+                        archive.seek(next_start)
                         break
-                    else:
-                        raise
     except Exception as e:
         if tolerant:
             logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)

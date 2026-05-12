@@ -97,7 +97,6 @@ class TestExecutionFlow:
             pytest.fail("EventGraph 不存在，无法验证执行流程")
 
     @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
-    @pytest.mark.skip(reason="Phase 34: graph parsing functional issue — flow verification")
     def test_jump_started_flow(self):
         """
         验证 IA_Jump(Started) → Jump 执行流程。
@@ -131,7 +130,6 @@ class TestExecutionFlow:
         assert found_jump_flow, "未找到 Jump 函数调用节点"
 
     @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
-    @pytest.mark.skip(reason="Phase 34: graph parsing functional issue — flow verification")
     def test_jump_completed_flow(self):
         """
         验证 IA_Jump(Completed) → StopJumping 执行流程。
@@ -190,7 +188,6 @@ class TestDataFlow:
             assert "data_flows" in move_graph, "data_flows 字段不存在"
 
     @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
-    @pytest.mark.skip(reason="Phase 34: graph parsing functional issue — data flow verification")
     def test_actionvalue_x_to_right(self):
         """
         验证 Move graph 中有数据流连接。
@@ -288,7 +285,6 @@ class TestNodeProperties:
                     break
 
     @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
-    @pytest.mark.skip(reason="Phase 34: graph parsing functional issue — node property verification")
     def test_function_reference_member_name(self):
         """验证 CallFunction 节点包含 function_reference.member_name"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
