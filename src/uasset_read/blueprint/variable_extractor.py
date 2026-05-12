@@ -32,7 +32,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
         "is_edit_anywhere": bool(flags & CPF_Edit),
-        "is_edit_instance_only": bool(flags & CPF_EditConst),
+        "is_edit_instance_only": bool(flags & CPF_EditInstanceOnly),  # 使用正确的 CPF_EditInstanceOnly 常量
         "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
