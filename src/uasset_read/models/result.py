@@ -34,6 +34,20 @@ class ParseResult:
     soft_references: List[Dict] = field(default_factory=list)
     circular_deps: List[List[str]] = field(default_factory=list)
 
+    @property
+    def status(self) -> str:
+        """解析状态（success/fail/error）。
+
+        代理到 build_status_info().status，保持 API 一致性。
+        与 result.is_success 行为一致：
+        - is_success=True, errors=[] → "success"
+        - is_success=True, errors non-empty → "fail"
+        - is_success=False → "error"
+        """
+        # 延迟导入避免循环依赖（result.py 被 helpers.py 导入）
+        from uasset_read.formatters.helpers import build_status_info
+        return build_status_info(self).status
+
 
 @dataclass
 class StatusInfo:
