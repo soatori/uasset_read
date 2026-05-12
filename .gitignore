@@ -54,4 +54,6 @@ output/
 debug/
 reports/
 
+# IDE 和工具配置
 .claude/*
+.qwen/*
