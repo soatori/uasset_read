@@ -28,6 +28,28 @@ from uasset_read.constants import (
 )
 
 
+# Blueprint 资产元数据属性名称（不是用户定义的变量）
+BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
+    "BlueprintDescription",
+    "ParentClass",
+    "ParentClassProperty",
+    "SuperClass",
+    "BlueprintGuid",
+    "BlueprintCategory",
+    "BlueprintType",
+    "IsBlueprintBase",
+    "KismetSchemaDeprecationWarning",
+    "NativeParent",
+    "ObjectArchitecture",
+    "ObjectParentClass",
+    "SupportedClasses",
+    "HiddenCategories",
+    "ModulesToIgnoreInReloadAndBlueprints",
+    "None",  # 终止标记
+    "NoneProperty",
+})
+
+
 def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
@@ -154,8 +176,8 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
         prop_name = prop.name
         prop_value = prop.value
 
-        # 跳过终止标记和系统属性
-        if prop_name in ("None", "NoneProperty"):
+        # 跳过终止标记、系统属性和蓝图元数据属性
+        if prop_name in BLUEPRINT_METADATA_PROPERTY_NAMES:
             continue
 
         # 检测是否为蓝图变量描述属性
