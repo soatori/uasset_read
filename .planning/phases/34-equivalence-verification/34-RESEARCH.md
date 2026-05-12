@@ -456,26 +456,31 @@ def build_verification_report(diff_recorder: 'DiffRecorder', asset_count: int) -
 | A5 | `--json` full format 崩溃是旧版和新版共有的限制，非新引入 | Difference #9 | 如果旧版实际上在某些资产上能成功输出 `--json`，则新版可能有回归 |
 | A6 | `execution_flows` 数量差异 (7→4) 是信息丢失而非有意简化 | Difference #6 | 如果 Phase 31 决策中明确要求精简 flows，则是设计行为 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **ObjectProperty 值格式统一**: 新版使用裸整数（`6`），旧版使用 `{'raw_index': 6, 'resolved': {...}}`。应该回滚到旧版格式以保持一致性，还是接受新版的简化格式？
    - 当前状态：差异 #4, Text 输出中影响 227 行
+   - RESOLVED: Plan 01 Task 1 auto-classification rules 标记为 "needs review"，Plan 02 Task 3 根据审查结果决定是否修复 formatters
    - 推荐：接受简化格式 — 旧版的 `resolved` 字段虽然信息更丰富，但新版的 `raw_index` 省略是有意的设计决策（减少输出冗余）。如果用户要求完全等价，则需在 formatters 中恢复 resolved 输出。
 
 2. **graphs_summary 字段扩展**: 新版比旧版多出 6 个字段。等价验证应该要求"字段完全一致"还是"旧版字段一致即可，允许新版扩展"？
+   - RESOLVED: Plan 01 Task 1 compare_outputs() 中实现宽容模式 — 对 graphs_summary 的新增字段标记为 "improvement" 而非 "diff"
    - 推荐：允许扩展 — 这是 Phase 31 的有意增强，不是 bug。验证测试应对"新增字段"采用宽容模式（允许 extra keys），仅标记为"结构变化"
 
 3. **Markdown mermaid 图表缺失**: 新版没有 mermaid 图表。是否需要修复 `_build_mermaid_flowchart()` 以适配新的 execution_flows 格式？
    - 当前状态：差异 #7 — mermaid 块存在但为空（旧版有 1 个 mermaid 块含 7 条边）
    - root cause: (a) execution_flows format changed from `{event, function_name, calls[]}` to `{start_event, nodes[]}`; (b) nodes 缺少 `function_name` 字段; (c) `_build_mermaid_flowchart()` 未更新以适配新格式
+   - RESOLVED: Plan 02 Task 3 修复 `markdown_formatter.py` 的 `_build_mermaid_flowchart()` 以适配新 execution_flows 格式
    - 推荐：修复 — mermaid 是 Markdown 输出的重要功能。需要两步：(1) 在 graph extraction 中保留 function_name 到 nodes；(2) 更新 `_build_mermaid_flowchart()` 以处理新格式
 
 4. **execution_flows 数量差异 (7→4)**: 新版 EventGraph 只有 4 个 flows，旧版有 7 个。这是信息丢失还是过滤改进？
    - 当前状态：差异 #6 — 3 个 flow 在新版中消失
+   - RESOLVED: Plan 01 Task 1 auto-classification rules 标记为 "needs review"，Plan 02 Task 2 审查时决定是否归类为 improvement
    - 推荐：需调查 — 检查 Phase 31 build_execution_flows() 的过滤逻辑。如果是有意过滤（如去重 EnhancedInputAction Triggered/Ongoing 双事件），应标记为改进。如果是信息丢失，需要修复。
 
 5. **parent_class str(dict) bug**: 新版 `parent_class` 是 `str` 类型，值为 Python dict 的 repr 字符串。这是明确的 bug 还是序列化层的问题？
    - 当前状态：差异 #8 — `variable_extractor.py:357` 调用 `str(prop.value)`, prop.value 是 ObjectProperty 实例
+   - RESOLVED: Plan 02 Task 3 修复 `variable_extractor.py:357` 的 `str(prop.value)` 为适当的提取逻辑
    - 推荐：修复 — 应将 `str(prop.value)` 改为适当的提取逻辑（如 `prop.value.raw_value` 或 `resolve_fpackage_index(prop.value, ...)`）
 
 ## Environment Availability
