@@ -24,12 +24,17 @@ progress:
 - ~~Phase 31: 蓝图图解析模块~~ ✓ Complete (6 plans: serializers/graph.py + from_archive delegates + graph/ module + test fixes)
 - ~~Phase 32: 输出格式化模块~~ ✓ Complete (3 plans: JSON + Text/Markdown + test adaptation, 107 passed)
 
-## 当前焦点: Phase 34 — 等价验证 (next)
+## 当前焦点: Phase 35 — v6.0 里程碑完成 (next)
+
+### 已完成
+
+- ✅ Phase 34: 等价验证 — 397 passed, 71 skipped, 147 差异已分类，0 待修复 bug
+- ✅ Phase 33: 入口与测试适配 + 删除旧 uasset_read.py
+- ✅ Phase 33a: UE5 序列化问题修复
 
 ### 下一步
 
-1. Phase 34: 等价验证 (新旧输出逐字段对比)
-2. Phase 33: 入口与测试适配 + 删除旧 uasset_read.py (已完成，等待 33a)
+1. Phase 35: v6.0 里程碑完成与发布准备
 
 ### Phase 33a 修复记录
 
