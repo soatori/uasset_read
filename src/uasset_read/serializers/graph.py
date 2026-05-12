@@ -300,18 +300,17 @@ def read_ue_graph_pin(
     try:
         linked_to = read_pin_array(archive, name_map, export_map, import_map)
     except Exception:
+        # 不尝试恢复 — 异常可能由数据损坏导致，继续解析可能导致位置不一致
+        # 返回空数组，让调用者处理位置不一致问题
         linked_to = []
-        archive.seek(linkedto_start)
-        _skip_count = archive.read_i32()
 
     # 14. SubPins array
     subpins_start = archive.tell()
     try:
         sub_pins = read_pin_array(archive, name_map, export_map, import_map)
     except Exception:
+        # 同上，不尝试恢复
         sub_pins = []
-        archive.seek(subpins_start)
-        _skip_count = archive.read_i32()
 
     # 15. ParentPin
     parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
