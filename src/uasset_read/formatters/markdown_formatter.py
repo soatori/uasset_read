@@ -123,23 +123,45 @@ def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
             continue
 
         # 从 nodes 提取函数调用链
-        # nodes 格式: [{"node_guid": "..., "node_type": "K2Node_CallFunction", "function_name": "FuncName"}, ...]
+        # nodes 格式 (新版): [{"node_guid": "...", "node_type": "K2Node_Event", ...}, ...]
+        # nodes 格式 (旧版): [{"node_guid": "...", "node_type": "K2Node_CallFunction", "function_name": "FuncName"}, ...]
         calls = []
         for node in nodes:
-            if node.get("node_type") == "K2Node_CallFunction":
-                func_name = node.get("function_name", "Unknown")
+            node_type = node.get("node_type", "")
+            
+            # 适配新版格式: 从 node_type 提取节点名（去掉 K2Node_ 前缀）
+            if node_type:
+                node_name = node_type.replace("K2Node_", "") if node_type.startswith("K2Node_") else node_type
+            else:
+                node_name = "Unknown"
+            
+            # 如果有 function_name（旧格式兼容），优先使用
+            func_name = node.get("function_name")
+            if func_name:
                 # 去掉参数部分
                 calls.append(func_name)
+            else:
+                # 新格式: 使用 node_type 显示节点类型
+                calls.append(node_name)
 
         if calls:
-            # 第一个节点: event --> first_call
-            first_func = calls[0]
-            mermaid_lines.append(f"{start_event} --> {first_func}")
-
-            # 链式连接
-            for i in range(len(calls) - 1):
-                fn1 = calls[i]
-                fn2 = calls[i + 1]
-                mermaid_lines.append(f"{fn1} --> {fn2}")
+            # 如果第一个节点是 Event（与 start_event 重复），跳过它直接连接到后续节点
+            if calls[0] == "Event" and len(calls) > 1:
+                # start_event --> 第二个节点
+                first_func = calls[1]
+                mermaid_lines.append(f"{start_event} --> {first_func}")
+                # 从第二个节点开始链式连接
+                for i in range(1, len(calls) - 1):
+                    fn1 = calls[i]
+                    fn2 = calls[i + 1]
+                    mermaid_lines.append(f"{fn1} --> {fn2}")
+            else:
+                # 正常连接所有节点
+                first_func = calls[0]
+                mermaid_lines.append(f"{start_event} --> {first_func}")
+                for i in range(len(calls) - 1):
+                    fn1 = calls[i]
+                    fn2 = calls[i + 1]
+                    mermaid_lines.append(f"{fn1} --> {fn2}")
 
     return mermaid_lines
