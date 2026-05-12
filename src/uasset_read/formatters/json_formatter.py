@@ -13,8 +13,9 @@ if TYPE_CHECKING:
     from uasset_read.models.properties import PropertyValue
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
 
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 
+from uasset_read.models.properties import StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue
 from uasset_read.serializers.object_resources import get_asset_class
 from .helpers import build_status_info, build_schema_info, resolve_fpackage_index
 
@@ -130,6 +131,65 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
     return exports_list
 
 
+def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) -> Any:
+    """将高级属性值 dataclass 转换为 JSON 兼容 dict。
+
+    处理 StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue。
+    原始 dict/str/int/float/None 等 JSON 原生类型直接返回。
+
+    Args:
+        value: 属性值（任意类型）
+        depth: 当前递归深度（内部使用）
+        max_depth: 最大递归深度，超过此值返回截断标记
+
+    Returns:
+        JSON 兼容的 dict 或原始值
+    """
+    if depth > max_depth:
+        return "[deep nesting truncated]"
+
+    if value is None or isinstance(value, (str, int, float, bool, list, dict)):
+        return value
+
+    if hasattr(value, "struct_type") and hasattr(value, "fields"):  # StructValue
+        return {
+            "struct_type": value.struct_type,
+            "fields": {k: serialize_property_value(v, depth + 1, max_depth) for k, v in value.fields.items()}
+        }
+    if hasattr(value, "entries") and hasattr(value, "key_type"):  # MapValue
+        return {
+            "key_type": value.key_type,
+            "value_type": value.value_type,
+            "entries": value.entries
+        }
+    if hasattr(value, "elements") and hasattr(value, "element_type"):  # SetValue
+        return {
+            "element_type": value.element_type,
+            "elements": value.elements
+        }
+    if hasattr(value, "value_name"):  # EnumValue
+        return {
+            "enum_type": value.enum_type,
+            "value": value.value_name
+        }
+    if hasattr(value, "source_string"):  # TextValue
+        return {
+            "namespace": value.namespace,
+            "key": value.key,
+            "source_string": value.source_string
+        }
+    if hasattr(value, "function_name"):  # DelegateValue
+        return {
+            "object_ref": value.object_ref,
+            "function_name": value.function_name
+        }
+
+    # Fallback: 尝试 asdict 或 str
+    if is_dataclass(value):
+        return asdict(value)
+    return str(value)
+
+
 def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     """
     格式化属性列表用于 JSON 输出。
@@ -148,7 +208,7 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
         prop_dict = {
             "name": prop.name,
             "type": prop.type,
-            "value": prop.value,  # None → JSON null automatically
+            "value": serialize_property_value(prop.value),  # None → JSON null automatically
             "array_index": prop.array_index
         }
         props_list.append(prop_dict)
