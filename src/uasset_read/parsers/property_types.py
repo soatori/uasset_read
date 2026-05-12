@@ -261,8 +261,38 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 def _get_inner_type(array_type: str) -> str:
-    """从 ArrayProperty 类型名推断内部元素类型（简化版）。"""
-    return "IntProperty"
+    """从 ArrayProperty 类型名推断内部元素类型。
+
+    支持基本的类型映射，从 UE5 完整类型名格式（如 ArrayProperty(IntProperty)）
+    或带下划线的类型名推断内部类型。
+    """
+    # 尝试从括号格式提取：ArrayProperty(IntProperty) -> IntProperty
+    if "(" in array_type and ")" in array_type:
+        start = array_type.find("(")
+        end = array_type.find(")")
+        inner = array_type[start + 1:end].strip()
+        # 处理带路径的类型：/Script/CoreUObject.IntProperty -> IntProperty
+        if "." in inner:
+            inner = inner.split(".")[-1]
+        return inner
+
+    # 基本类型映射（用于下划线分隔的类型名）
+    type_mapping = {
+        "ArrayProperty_IntProperty": "IntProperty",
+        "ArrayProperty_FloatProperty": "FloatProperty",
+        "ArrayProperty_StrProperty": "StrProperty",
+        "ArrayProperty_StructProperty": "StructProperty",
+        "ArrayProperty_ObjectProperty": "ObjectProperty",
+        "ArrayProperty_NameProperty": "NameProperty",
+        "ArrayProperty_BoolProperty": "BoolProperty",
+        "ArrayProperty_ByteProperty": "ByteProperty",
+        "ArrayProperty_Int64Property": "Int64Property",
+        "ArrayProperty_DoubleProperty": "DoubleProperty",
+        "ArrayProperty_TextProperty": "TextProperty",
+        "ArrayProperty_SoftObjectProperty": "SoftObjectProperty",
+        "ArrayProperty_EnumProperty": "EnumProperty",
+    }
+    return type_mapping.get(array_type, "IntProperty")
 
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
