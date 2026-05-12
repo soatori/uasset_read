@@ -60,6 +60,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
+    parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
+    parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
 
     return parser
 
@@ -94,7 +96,8 @@ def main():
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     # Parse the file
-    result = parse_uasset(args.file)
+    tolerant = not args.strict
+    result = parse_uasset(args.file, tolerant=tolerant)
 
     # D-26: parse error handling
     if not result.is_success:

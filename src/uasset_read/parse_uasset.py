@@ -23,28 +23,13 @@ from uasset_read.blueprint import (
 from uasset_read.models.result import ParseResult
 
 
-def parse_uasset(path: str) -> ParseResult:
+def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
     """
     主入口：解析 .uasset 文件（D-08 优雅降级）。
 
-    流程：
-    1. 创建 FArchive
-    2. 读取 PackageFileSummary
-    3. 读取 NameMap
-    4. 读取 ImportMap
-    5. 读取 ExportMap
-    6. 对每个 export 解析属性 + 提取组件变换
-    7. 提取 Blueprint 元数据（BPGC 优先 → UBlueprint 回退）
-    8. 提取 Blueprint Graphs（Phase 31）
-    9. 依赖分析（imports, soft_references, circular_deps）
-
-    错误处理：
-    - VersionError: 返回 result.errors, result.is_success = False
-    - ParseError: 返回部分结果 + 错误信息
-    - Exception: 返回 Unexpected error
-
     Args:
         path: .uasset 文件路径
+        tolerant: 是否启用容错模式（默认开启）
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
@@ -53,7 +38,7 @@ def parse_uasset(path: str) -> ParseResult:
     archive = None
 
     try:
-        archive = FArchive(path)
+        archive = FArchive(path, tolerant=tolerant)
 
         # Extract mmap info
         mmap_info = archive.get_mmap_info()

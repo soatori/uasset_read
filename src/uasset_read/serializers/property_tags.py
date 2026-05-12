@@ -22,7 +22,13 @@ from uasset_read.exceptions import ParseError
 from uasset_read.models.properties import PropertyTag
 
 
-def read_property_tag(archive: FArchive, name_map: List[str], legacy_version: int, ue5_version: int) -> PropertyTag:
+def read_property_tag(
+    archive: FArchive,
+    name_map: List[str],
+    legacy_version: int,
+    ue5_version: int,
+    tolerant: bool = False,
+) -> PropertyTag:
     """从 archive 读取 PropertyTag 结构。
 
     Args:
@@ -30,6 +36,7 @@ def read_property_tag(archive: FArchive, name_map: List[str], legacy_version: in
         name_map: 名称映射列表
         legacy_version: LegacyFileVersion
         ue5_version: UE5 版本号
+        tolerant: 是否启用容错模式
 
     Returns:
         PropertyTag 实例
@@ -51,7 +58,7 @@ def read_property_tag(archive: FArchive, name_map: List[str], legacy_version: in
 
         tag.type = type_parts[0][0] if type_parts else ""
         tag.size = archive.read_i32()
-        archive.validate_size(tag.size, tag.name)
+        archive.validate_size(tag.size, tag.name, tolerant=tolerant)
         tag.flags = archive.read_u8()
 
         if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
@@ -72,7 +79,7 @@ def read_property_tag(archive: FArchive, name_map: List[str], legacy_version: in
         # UE4 old format
         tag.type = archive.read_name(name_map)
         tag.size = archive.read_i32()
-        archive.validate_size(tag.size, tag.name)
+        archive.validate_size(tag.size, tag.name, tolerant=tolerant)
         tag.array_index = archive.read_i32()
         if tag.type == "BoolProperty":
             tag.bool_val = archive.read_u8()
