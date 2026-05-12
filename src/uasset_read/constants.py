@@ -142,8 +142,9 @@ FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
 # 调试标志
 # ============================================================================
 
-import sys
-DEBUG_PIN_PARSING = "--debug-pin" in sys.argv or "--debug-pins" in sys.argv
+import os
+# 使用环境变量代替 sys.argv，避免模块导入时受命令行参数影响
+DEBUG_PIN_PARSING = os.environ.get("UASSET_DEBUG_PINS", "0") == "1"
 
 # ============================================================================
 # 控制流节点集合（用于蓝图图解析）
