@@ -11,9 +11,21 @@ from uasset_read.blueprint.variable_extractor import (
     parse_component_transform,
     extract_blueprint_metadata,
 )
+from uasset_read.blueprint.transform_parser import (
+    extract_component_transforms,
+    parse_vector_value,
+    parse_rotator_value,
+    parse_scale_value,
+    format_transform_value,
+)
 
 __all__ = [
     "extract_blueprint_variables",
     "parse_component_transform",
     "extract_blueprint_metadata",
+    "extract_component_transforms",
+    "parse_vector_value",
+    "parse_rotator_value",
+    "parse_scale_value",
+    "format_transform_value",
 ]
