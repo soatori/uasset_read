@@ -528,6 +528,10 @@ def create_node_from_archive(
     """根据 class_name 分派到对应的节点读取函数（D-07/D-08 工厂模式）。"""
     class_name = base_node.class_name
 
+    # 如果 base_node 已经携带 _parse_error 标记，跳过分发保护已有信息
+    if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
+        return base_node
+
     if class_name == "K2Node_CallFunction":
         base_node.node_data = read_k2node_call_function(
             archive, name_map, import_map, export_map
@@ -791,7 +795,7 @@ def read_ue_graph(
                             node_comment="",
                             pins=[],
                             class_name=node_class or "",
-                            node_data={"node_name": node_export.object_name},
+                            node_data={"_parse_error": True, "node_name": node_export.object_name},
                         ))
 
     # 3. GraphGuid
