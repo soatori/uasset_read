@@ -29,7 +29,7 @@ expected: 以下导入全部成功且无副作用：
 - `from uasset_read import parse_uasset, __version__`
 - `from uasset_read import format_json_full, format_text_summary, format_markdown`
 - `from uasset_read.graph import extract_blueprint_graphs, build_execution_flows`
-- `from uasset_read.constants import CPF_Edit, CPF_BlueprintVisible, CPF_ZeroConstructor`
+- `from uasset_read.constants import CPF_Edit, CPF_BlueprintVisible, CPF_Transient, CPF_Config`
 - `__version__`等于"6.0.0"
 result: pass
 
