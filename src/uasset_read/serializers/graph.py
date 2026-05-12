@@ -403,14 +403,14 @@ def read_k2node_call_function(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
-) -> K2NodeCallFunction:
-    """读取 K2Node_CallFunction 特有字段。"""
+) -> Dict[str, Any]:
+    """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。"""
     function_reference = read_fmember_reference(archive, name_map, import_map, export_map)
     b_defaults_to_pure = archive.read_bool()
-    return K2NodeCallFunction(
-        function_reference=function_reference,
-        b_defaults_to_pure=b_defaults_to_pure,
-    )
+    return {
+        "function_reference": function_reference,
+        "b_defaults_to_pure": b_defaults_to_pure,
+    }
 
 
 def read_k2node_event(
@@ -418,23 +418,23 @@ def read_k2node_event(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
-) -> K2NodeEvent:
-    """读取 K2Node_Event 特有字段。"""
+) -> Dict[str, Any]:
+    """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。"""
     event_reference = read_fmember_reference(archive, name_map, import_map, export_map)
     b_override_function = archive.read_bool()
-    return K2NodeEvent(
-        event_reference=event_reference,
-        b_override_function=b_override_function,
-    )
+    return {
+        "event_reference": event_reference,
+        "b_override_function": b_override_function,
+    }
 
 
-def read_k2node_knot(archive: FArchive) -> K2NodeKnot:
+def read_k2node_knot(archive: FArchive) -> Dict[str, Any]:
     """K2Node_Knot 无额外字段。"""
-    return K2NodeKnot()
+    return {}
 
 
-def read_edgraph_node_comment(archive: FArchive) -> EdGraphNodeComment:
-    """读取 EdGraphNode_Comment 特有字段。"""
+def read_edgraph_node_comment(archive: FArchive) -> Dict[str, Any]:
+    """读取 EdGraphNode_Comment 特有字段，返回字典（作为 node_data）。"""
     r = struct.unpack('<f', archive.read(4))[0]
     g = struct.unpack('<f', archive.read(4))[0]
     b = struct.unpack('<f', archive.read(4))[0]
@@ -445,23 +445,23 @@ def read_edgraph_node_comment(archive: FArchive) -> EdGraphNodeComment:
     node_height = archive.read_i32()
     font_size = archive.read_i32()
 
-    return EdGraphNodeComment(
-        comment_color=comment_color,
-        node_width=node_width,
-        node_height=node_height,
-        font_size=font_size,
-    )
+    return {
+        "comment_color": comment_color,
+        "node_width": node_width,
+        "node_height": node_height,
+        "font_size": font_size,
+    }
 
 
 def read_k2node_enhanced_input(
     archive: FArchive,
     name_map: List[str]
-) -> K2NodeEnhancedInputAction:
-    """读取 K2Node_EnhancedInputAction 特有字段。"""
+) -> Dict[str, Any]:
+    """读取 K2Node_EnhancedInputAction 特有字段，返回字典（作为 node_data）。"""
     input_action_path = archive.read_fstring()
-    return K2NodeEnhancedInputAction(
-        input_action_path=input_action_path,
-    )
+    return {
+        "input_action_path": input_action_path,
+    }
 
 
 # ============================================================================
