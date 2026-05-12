@@ -141,8 +141,10 @@ def parse_properties_from_export(
             _overridden_operation = archive.read_u8()  # consume but not used
 
     # 计算属性数据边界
+    # script_serial_offset 是相对于 serial_offset 的偏移量，script_serial_size 是该块的长度
+    # 正确终点 = serial_offset + script_serial_offset + script_serial_size
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_end = export.serial_offset + export.script_serial_size
+        property_end = export.serial_offset + export.script_serial_offset + export.script_serial_size
     else:
         property_end = export.serial_offset + export.serial_size
 
