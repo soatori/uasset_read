@@ -179,6 +179,14 @@ class FArchive:
         """读取 UE bool 值（序列化为 uint32，4 bytes）。"""
         return self.read_u32() != 0
 
+    def read_bool_ue5(self) -> bool:
+        """读取 UE5 bool 值（序列化为 uint8，1 byte）。
+
+        UE5 在部分结构（如 FEdGraphPinType）中使用 1-byte bool 序列化，
+        而非 UE4 的 4-byte uint32 格式。
+        """
+        return self.read_u8() != 0
+
     def read_i64(self) -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
         import struct
