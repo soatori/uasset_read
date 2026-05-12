@@ -49,4 +49,9 @@ VERIFICATION-REPORT.md
 # 测试产物目录
 test/
 
+# 项目输出文件目录
+output/
+debug/
+reports/
+
 .claude/*
