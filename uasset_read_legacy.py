@@ -2047,48 +2047,10 @@ class K2NodeEnhancedInputAction:
     input_action_path: str = ""           # FSoftObjectPath AssetPath 字符串
 
 
-@dataclass
-class ParseResult:
-    """
-    解析结果（D-15 部分结果）。
-
-    包含解析后的所有数据和错误信息。
-
-    Per D-04/D-04b: graphs 字段为顶层字段，与 blueprint 同级。
-    """
-    summary: Optional[PackageFileSummary] = None
-    name_map: List[str] = field(default_factory=list)
-    import_map: List[ObjectImport] = field(default_factory=list)
-    export_map: List[ObjectExport] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)  # 收集所有错误
-    blueprint: Optional["BlueprintMetadata"] = None  # Per D-02: auto-extracted
-    graphs: List["UEdGraph"] = field(default_factory=list)  # Phase 7: 蓝图图数据
-    is_success: bool = False
-    # D-02/D-03: mmap tracking (Phase 5)
-    mmap_used: bool = False
-    mmap_warning: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)  # D-13: for Wave 4
-    # Phase 10: 依赖分析字段（D-10-05/08/13）
-    imports: List[Dict] = field(default_factory=list)           # D-10-05: ImportMap 依赖列表
-    soft_references: List[Dict] = field(default_factory=list)   # D-10-08: SoftObjectPaths 软引用列表
-    circular_deps: List[List[str]] = field(default_factory=list) # D-10-13: 循环依赖路径
-
-
-@dataclass
-class StatusInfo:
-    """
-    JSend 风格 status 字段（D-14-02, OUT-01）。
-
-    三元分类:
-    - success: 解析成功，无错误（可有警告）
-    - fail: 有解析错误但部分结果可用
-    - error: 无法解析，严重错误
-
-    Per D-14-02: JSend 结构 - status + message + code
-    """
-    status: str      # "success" | "fail" | "error"
-    message: Optional[str] = None
-    code: Optional[str] = None
+# ============================================================================
+# 从新版模块复用 ParseResult/StatusInfo（避免测试 isinstance 失败）
+# ============================================================================
+from uasset_read.models.result import ParseResult, StatusInfo
 
 
 # ============================================================================
@@ -4033,6 +3995,7 @@ def read_ue_graph_node(
     node_pos_y: int = 0
     node_guid: str = ""
     node_comment: str = ""
+    raw_properties: Dict[str, Any] = {}  # 收集未知 PropertyTags（用于未知节点类型）
 
     if node_export.script_serial_size > 0:
         script_start = node_export.serial_offset + node_export.script_serial_offset
@@ -4159,6 +4122,9 @@ def read_ue_graph_node(
                 # StrProperty: FString
                 node_comment = archive.read_fstring()
             elif tag.size > 0:
+                # 收集未知 PropertyTag（用于未知节点类型调试和未来扩展）
+                value_start = archive.tell()
+                raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
                 archive.seek(archive.tell() + tag.size)
 
     # Phase 22 FIX-11: 使用固定偏移量计算 pins_offset
@@ -4290,8 +4256,10 @@ def read_ue_graph_node(
         case "K2Node_EnhancedInputAction":
             node_data = read_k2node_enhanced_input(archive, name_map)
         case _:
-            # D-02a: 未知类型 — 记录类型名，继续解析
+            # D-02a: 未知类型 — 记录类型名和原始 PropertyTag 数据
             node_data = {"unknown_type": class_name}
+            if raw_properties:
+                node_data["_raw_properties"] = raw_properties
 
     return UEdGraphNode(
         node_guid=node_guid,
@@ -4870,7 +4838,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
 
     Args:
         pin_type: FEdGraphPinType structure
-        name_map: Optional NameMap for resolving pin_subcategory_object
+        name_map: Optional NameMap for resolving pin_sub_category_object
 
     Returns:
         Complete type string (e.g., "TArray<UObject*>", "const float")
@@ -4886,7 +4854,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
 
     # Base type from PinCategory
     category = pin_type.pin_category.lower()
-    sub_category = getattr(pin_type, 'pin_subcategory', getattr(pin_type, 'pin_sub_category', '')).lower()
+    sub_category = pin_type.pin_sub_category.lower()
 
     # Type mapping
     type_str = ""
@@ -4903,8 +4871,8 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
     elif category in ("text"):
         type_str = "FText"
     elif category in ("object", "class", "interface"):
-        # Try to resolve pin_subcategory_object to class name
-        if getattr(pin_type, 'pin_subcategory_object', None) is not None and name_map:
+        # Try to resolve pin_sub_category_object to class name
+        if pin_type.pin_sub_category_object != 0 and name_map:
             # FPackageIndex resolution would require ImportMap/ExportMap
             # For Phase 12, use sub_category if available
             if sub_category and sub_category != "none":
@@ -4914,7 +4882,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
         else:
             type_str = "UObject"
         # Add reference pointer for object types
-        if not getattr(pin_type, 'is_weak_pointer', False):
+        if not pin_type.is_weak_pointer:
             type_str += "*"
     elif sub_category and sub_category != "none":
         # Use sub_category as type name (more specific)
@@ -4933,7 +4901,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
 
     # Const prefix
     const_prefix = ""
-    if getattr(pin_type, 'is_const', False):
+    if pin_type.is_const:
         const_prefix = "const "
 
     return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"

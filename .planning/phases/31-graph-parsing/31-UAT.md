@@ -3,12 +3,35 @@ status: complete
 phase: 31-graph-parsing
 source: 31-01-SUMMARY.md, 31-02-SUMMARY.md, 31-03-SUMMARY.md, 31-04-SUMMARY.md, 31-05-SUMMARY.md, 31-06-SUMMARY.md
 started: 2026-05-12T02:23:00Z
-updated: 2026-05-12T08:50:00Z
+updated: 2026-05-12T11:45:00Z
 ---
 
 ## Current Test
 
 [testing complete - auto verified]
+
+## Final Validation Run (2026-05-12T11:45:00Z)
+
+**Test Suite Status:**
+- 380 passed, 62 skipped, 2 failed
+- 2 failed tests in `test_exportmap_properties.py` are Phase 33 dependency (parse_uasset管线迁移)
+
+**Runtime Verification Results:**
+- ✓ `from uasset_read import extract_blueprint_graphs` — OK
+- ✓ `from uasset_read.serializers.graph import read_ue_graph` — OK
+- ✓ `from uasset_read.graph import build_execution_flows, build_data_flows` — OK
+- ✓ `import uasset_read; uasset_read.__version__` — "5.1.0"
+- ✓ `test_graph_parsing.py` — 20 passed, 13 skipped, 0 failed
+
+**Phase 31 Summary:**
+- All 6 Plans (31-01 through 31-06) completed successfully
+- All必须-have verification items passed
+- All 必需-artifacts created and verified
+- test_graph_parsing.py covers: graph detection, dataclass structure, parser entries, node types, safety bounds, imports
+
+**Open Issues:**
+- None within Phase 31 scope
+- 2Phase 33 dependency failures documented in 31-VERIFICATION.md
 
 ## Tests
 

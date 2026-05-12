@@ -14,6 +14,8 @@ from typing import Optional, List, Any, Dict, Self, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
 
 
 @dataclass
@@ -27,8 +29,15 @@ class FEdGraphPinType:
     is_map_value: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_ed_graph_pin_type
+        return read_ed_graph_pin_type(archive, name_map, summary)
 
 
 @dataclass
@@ -63,8 +72,17 @@ class UEdGraphPin:
     flags: int = 0
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_ue_graph_pin
+        return read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
 
 
 @dataclass
@@ -79,8 +97,18 @@ class UEdGraphNode:
     node_data: Optional[Any] = None
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport],
+        node_export: ObjectExport
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_ue_graph_node
+        return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
 
 
 @dataclass
@@ -94,8 +122,20 @@ class UEdGraph:
     b_editable: bool = True
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport],
+        graph_export: ObjectExport,
+        graph_class: str,
+        graph_export_idx: int = 0
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_ue_graph
+        return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx)
 
 
 @dataclass
@@ -107,5 +147,13 @@ class FMemberReference:
     b_self_context: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_fmember_reference
+        return read_fmember_reference(archive, name_map, import_map, export_map)
