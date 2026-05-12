@@ -67,3 +67,6 @@ tools/*_scan.py
 
 # Claude memory system (personal notes, not project docs)
 memory/
+
+# Qwen Code project documentation (IMPORTANT: Do not commit to version control)
+QWEN.md
