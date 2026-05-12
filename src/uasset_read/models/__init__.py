@@ -41,6 +41,12 @@ from .properties import (
     TextValue,
     DelegateValue,
 )
+from .transforms import (
+    VectorValue,
+    RotatorValue,
+    ScaleValue,
+    format_transform_value,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -75,4 +81,9 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
+    # 变换数据类（Phase 33）
+    "VectorValue",
+    "RotatorValue",
+    "ScaleValue",
+    "format_transform_value",
 ]
