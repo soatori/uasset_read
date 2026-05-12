@@ -109,15 +109,24 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     count = archive.read_i32()
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
+    remaining_size = tag.size
 
     for i in range(count):
+        # Dynamic inner_size calculation: distribute remaining bytes evenly
+        # Last element gets all remaining size to avoid precision loss
+        remaining_count = count - i
+        inner_size = remaining_size // remaining_count if remaining_count > 1 else remaining_size
         inner_tag = PropertyTag(
             name=f"{tag.name}[{i}]",
             type=_get_inner_type(tag.type),
-            size=tag.size // count if count > 0 else 0
+            size=inner_size
         )
+        element_start = archive.tell()
         inner_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         elements.append(inner_value)
+        # Track bytes consumed to update remaining_size
+        bytes_consumed = archive.tell() - element_start
+        remaining_size -= bytes_consumed
 
     return elements
 
