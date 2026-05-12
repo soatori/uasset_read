@@ -136,6 +136,70 @@ def read_ed_graph_pin_type(
 
 
 # ============================================================================
+# FText 读取（UE5 多 history_type 支持）
+# ============================================================================
+
+def read_ftext_with_history(
+    archive: FArchive,
+    history_type: int,
+    tolerant: bool = True,
+) -> tuple[str, int]:
+    """读取 FText，返回 (值, 消耗字节数)。
+
+    history_type:
+    - 0xFF (-1 as unsigned): None（无历史）
+    - 0 (Base): Namespace + Key + SourceString
+    - 1-254: Custom（最多 5 个 FString 历史）
+
+    容错模式下，对异常长度返回空字符串而非抛出异常。
+    """
+    consumed = 0
+    start_pos = archive.tell()
+
+    try:
+        if history_type == 0xFF:
+            # None 类型：仅 flags + 可选 culture
+            b_has_culture = archive.read_bool()
+            if b_has_culture:
+                try:
+                    archive.read_fstring()  # culture
+                except Exception:
+                    if tolerant:
+                        pass
+                    else:
+                        raise
+        elif history_type == 0:
+            # Base 类型：3 个 FString
+            for _ in range(3):
+                try:
+                    archive.read_fstring()
+                except Exception:
+                    if tolerant:
+                        break
+                    else:
+                        raise
+        else:
+            # Custom 类型：最多 5 个 FString
+            for _ in range(5):
+                try:
+                    archive.read_fstring()
+                except Exception:
+                    if tolerant:
+                        break
+                    else:
+                        raise
+    except Exception as e:
+        if tolerant:
+            if DEBUG_PIN_PARSING:
+                print(f"[DEBUG FTEXT] Tolerant mode: history_type={history_type}, error={e}")
+        else:
+            raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
+
+    consumed = archive.tell() - start_pos
+    return "", consumed
+
+
+# ============================================================================
 # Pin 引用辅助函数
 # ============================================================================
 
@@ -228,21 +292,7 @@ def read_ue_graph_pin(
     try:
         flags = archive.read_i32()
         history_type = archive.read_u8()
-
-        if history_type == 0xFF or history_type == 0xFF:  # None (-1 as unsigned)
-            b_has_culture = archive.read_bool()
-            if b_has_culture:
-                archive.read_fstring()
-        elif history_type == 0:  # Base
-            archive.read_fstring()  # Namespace
-            archive.read_fstring()  # Key
-            archive.read_fstring()  # SourceString
-        else:
-            for _ in range(5):
-                try:
-                    archive.read_fstring()
-                except Exception:
-                    break
+        read_ftext_with_history(archive, history_type, tolerant=True)
     except Exception:
         archive.seek(ftext_start_pos)
 
@@ -284,16 +334,14 @@ def read_ue_graph_pin(
     # 11. DefaultObject (FPackageIndex)
     default_object = archive.read_i32()
 
-    # 12. DefaultTextValue (FText) — 简化跳过
+    # 12. DefaultTextValue (FText) — 修复：使用 read_ftext_with_history
     try:
         _dtext_flags = archive.read_i32()
         _dtext_history = archive.read_u8()
-        if _dtext_history == 0:
-            archive.read_fstring()
-            archive.read_fstring()
-            archive.read_fstring()
-    except Exception:
-        pass
+        read_ftext_with_history(archive, _dtext_history, tolerant=True)
+    except Exception as e:
+        if DEBUG_PIN_PARSING:
+            print(f"[DEBUG FTEXT] DefaultTextValue error: {e}")
 
     # 13. LinkedTo array
     linkedto_start = archive.tell()
@@ -540,7 +588,7 @@ def read_ue_graph_node(
                 archive.read_u8()
 
         while archive.tell() < script_end:
-            tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+            tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5, tolerant=archive._tolerant)
             if tag.name == "None":
                 break
 

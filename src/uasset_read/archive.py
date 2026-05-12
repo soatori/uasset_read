@@ -18,11 +18,12 @@ class FArchive:
     支持字节序检测和交换、边界验证。
     """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, tolerant: bool = False):
         self._path = path
         self._file: BinaryIO = open(path, 'rb')
         self._byte_swapping: bool = False
         self._file_size: int = __import__('os').path.getsize(path)
+        self._tolerant: bool = tolerant
 
         # mmap branch
         self._mmap: Optional[mmap.mmap] = None
@@ -75,18 +76,32 @@ class FArchive:
         if offset > self._file_size:
             raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
 
-    def validate_size(self, size: int, context: str = "") -> None:
-        """PropertyTag.Size 完整验证。"""
+    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None) -> None:
+        """PropertyTag.Size 完整验证，支持容错模式。
+
+        Args:
+            size: 待验证的大小
+            context: 错误上下文
+            tolerant: 是否启用容错模式（None 时使用实例默认值）
+        """
+        if tolerant is None:
+            tolerant = self._tolerant
         if size < 0:
+            if tolerant:
+                return
             raise ParseError(f"Invalid size {size} (negative) at {context}")
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
+            if tolerant:
+                return
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
         min_reasonable = 1024
         max_reasonable_cap = 100 * 1024 * 1024
         max_reasonable = max(min_reasonable, min(self._file_size // 10, max_reasonable_cap))
         if size > max_reasonable:
+            if tolerant:
+                return
             raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
 
     def tell(self) -> int:
