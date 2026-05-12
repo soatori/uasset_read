@@ -3,7 +3,7 @@ uasset-read skill集成测试
 
 验证skill触发、API调用、输出解读三个环节正确工作。
 
-API版本: output_version: "3.0" (Phase 14冻结)
+API版本: output_version: "4.0" (Phase 32更新，移除imports/soft_references/circular_deps)
 """
 
 import pytest
@@ -175,15 +175,22 @@ class TestOutputInterpretation:
             pytest.skip("测试资产不可用")
 
     def test_execution_flows_contains_function_name(self):
-        """验证execution_flows包含function_name"""
+        """验证execution_flows的nodes包含function_name"""
         if TEST_ASSET_PATH.exists():
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
 
             for flow in output["graphs_summary"]:
                 for exec_flow in flow["execution_flows"]:
-                    assert "function_name" in exec_flow, "execution_flow缺少function_name"
-                    assert exec_flow["function_name"] != "", "function_name为空"
+                    # execution_flows 结构: {"start_event": "...", "nodes": [...]}
+                    # function_name 在 nodes 数组内的每个节点
+                    nodes = exec_flow.get("nodes", [])
+                    if nodes:
+                        # 检查 CallFunction 节点有 function_name
+                        for node in nodes:
+                            if node.get("node_type") == "K2Node_CallFunction":
+                                assert "function_name" in node, "CallFunction节点缺少function_name"
+                                assert node["function_name"] != "", "function_name为空"
         else:
             pytest.skip("测试资产不可用")
 
@@ -207,10 +214,22 @@ class TestFormatFunctions:
             full = format_json_full(result)
             summary = format_json_summary(result)
 
-            # summary应移除imports字段
+            # summary应移除imports字段（D-02: Phase 32设计）
             assert "imports" not in summary, "summary包含imports（应移除）"
-            # full应包含imports字段
-            assert "imports" in full, "full缺少imports字段"
+            # full也不包含imports字段（D-02: Phase 32设计 - 依赖分析字段移除）
+            # 精简差异：full有exports完整properties，summary只有name/class
+            assert "blueprint" in full, "full缺少blueprint字段"
+            assert "blueprint" in summary, "summary缺少blueprint字段"
+            # full.blueprint有完整variables/functions/events
+            # summary.blueprint只有blueprint_name和parent_class
+            if full.get("blueprint"):
+                full_bp = full["blueprint"]
+                summary_bp = summary.get("blueprint", {})
+                # full blueprint包含详细字段
+                assert "variables" in full_bp, "full.blueprint缺少variables"
+                assert "functions" in full_bp, "full.blueprint缺少functions"
+                # summary blueprint精简（只有核心字段）
+                assert "variables" not in summary_bp, "summary.blueprint不应包含variables"
         else:
             pytest.skip("测试资产不可用")
 

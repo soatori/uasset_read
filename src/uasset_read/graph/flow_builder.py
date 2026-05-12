@@ -12,6 +12,10 @@ from uasset_read.constants import (
     FORMAT_CONFIG, GRAPH_TYPE_MAP,
 )
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
+from uasset_read.models.node_types import (
+    K2NodeCallFunction, K2NodeEvent, K2NodeKnot,
+    EdGraphNodeComment, K2NodeEnhancedInputAction
+)
 
 
 # ============================================================================
@@ -60,6 +64,61 @@ def format_pin_ref(
             "node_guid": node_guid,
             "pin_name": pin_name
         }
+
+
+def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
+    """格式化单个节点为 OUT-01 规范 JSON 结构（Phase 31 等价迁移）。
+
+    Per D-20-01: node_name 使用 _derive_node_name() 派生
+    Per D-20-02: 字段名规范化（node_type, position:{x,y})
+    Per D-20-03: function_reference/event_reference 提升到顶层
+
+    Args:
+        node: UEdGraphNode 节点对象
+        idx: 节点在图中的索引
+
+    Returns:
+        Dict: OUT-01 规范节点结构
+    """
+    from dataclasses import asdict
+
+    # D-20-01: 派生 node_name
+    node_name = _derive_node_name(node, idx)
+
+    # D-20-02: 字段名规范化
+    result = {
+        "node_name": node_name,
+        "node_type": node.class_name,
+        "node_guid": node.node_guid,
+        "position": {"x": node.node_pos_x, "y": node.node_pos_y},
+        "node_comment": node.node_comment,
+        "pins": [asdict(pin) for pin in node.pins]  # Pin格式保持Phase 18规范
+    }
+
+    # D-20-03: 嵌套结构展开（使用 duck typing 以兼容旧版和新版 node_data）
+    if node.node_data is not None:
+        # CallFunction: 提取 function_reference 到顶层
+        if hasattr(node.node_data, 'function_reference'):
+            fr = node.node_data.function_reference
+            result["function_reference"] = {
+                "member_name": getattr(fr, 'member_name', None),
+                "member_parent": getattr(fr, 'member_parent', None),
+                "self_context": getattr(fr, 'b_self_context', None)
+            }
+        # Event: 提取 event_reference 到顶层
+        elif hasattr(node.node_data, 'event_reference'):
+            er = node.node_data.event_reference
+            result["event_reference"] = {
+                "member_name": getattr(er, 'member_name', None),
+                "member_parent": getattr(er, 'member_parent', None),
+                "member_guid": getattr(er, 'member_guid', None)
+            }
+        # EnhancedInputAction: 提取 input_action_path 到顶层
+        elif hasattr(node.node_data, 'input_action_path'):
+            result["input_action_path"] = node.node_data.input_action_path
+        # Knot/Comment 无额外顶层字段
+
+    return result
 
 
 def _get_start_event_name(node: UEdGraphNode) -> str:
@@ -364,12 +423,56 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
-    """格式化图列表为 JSON 结构（OUT-04）。
+    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
+
+    等价迁移 uasset_read_legacy.py L6685-6735。
+
+    Per D-08-03: connections 放在 graph 层级
+    Per D-08-09: execution_flows 数组
+    Per D-19-09: data_flows 数组（LINK-03）
+    Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
+    Per OUT-01: nodes 使用 format_node_dict 格式化
 
     Args:
-        graphs: List[UEdGraph] 图列表
+        graphs: List[UEdGraph] from ParseResult.graphs
 
     Returns:
-        List[Dict]: graphs_json 数组
+        List[Dict]: 每个 graph 的 JSON 表示
     """
-    return build_graphs_summary(graphs)
+    formatted = []
+    for graph in graphs:
+        # 图类型映射
+        graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
+
+        # 构建连接映射
+        connections, warnings = build_connections_map(graph)
+
+        # 构建执行流
+        execution_flows = build_execution_flows(graph)
+
+        # 构建数据流
+        data_flows = build_data_flows(graph)
+
+        graph_dict = {
+            "graph_name": graph.graph_name,
+            "graph_type": graph_type,
+            "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
+            "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01: 完整节点列表
+            "connections": connections,
+            "execution_flows": execution_flows,
+            "data_flows": data_flows,
+        }
+
+        # D-08-04: 添加 warnings（如果有）
+        if warnings:
+            graph_dict["warnings"] = warnings
+
+        # 可选字段
+        if graph.graph_guid:
+            graph_dict["graph_guid"] = graph.graph_guid
+        if graph.schema:
+            graph_dict["schema"] = graph.schema
+
+        formatted.append(graph_dict)
+
+    return formatted

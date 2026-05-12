@@ -1,14 +1,18 @@
 """Text 格式化 — YAML 风格完整输出、精简输出。
 
 等价迁移 uasset_read_legacy.py L7431-7571。
-Phase 32: 输出格式化模块（Wave 2 实现）。
+Phase 32: 输出格式化模块。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
+    from uasset_read.models.core import UEdGraph
+
+from uasset_read.serializers.object_resources import get_asset_class
+from uasset_read.graph import build_connections_map, build_execution_flows
 
 
 def format_text_full(result: ParseResult) -> str:
@@ -27,8 +31,94 @@ def format_text_full(result: ParseResult) -> str:
     Returns:
         str: YAML 风格文本输出
     """
-    # Wave 2 实现
-    raise NotImplementedError("format_text_full: Wave 2 实现")
+    lines = []
+
+    # Package header
+    if result.summary:
+        package_name = result.summary.package_name or "Unknown"
+        lines.append(f"Package: {package_name}")
+        lines.append(f"  Version: UE4={result.summary.file_version_ue4}, UE5={result.summary.file_version_ue5}")
+        lines.append(f"  Flags: 0x{result.summary.package_flags:08X}")
+        lines.append(f"  Imports: {len(result.import_map)}")
+        lines.append(f"  Exports: {len(result.export_map)}")
+        lines.append("")
+    else:
+        lines.append("Package: Unknown")
+        lines.append("  Version: Unknown")
+        lines.append("  Flags: Unknown")
+        lines.append("  Imports: 0")
+        lines.append("  Exports: 0")
+        lines.append("")
+
+    # Exports section
+    lines.append("Exports:")
+    for i, exp in enumerate(result.export_map):
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - Name: {exp.object_name}")
+        lines.append(f"    Class: {asset_class}")
+        lines.append(f"    SerialSize: {exp.serial_size}")
+
+        if exp.properties:
+            lines.append(f"    Properties:")
+            for prop in exp.properties:
+                lines.append(f"      - Name: {prop.name}")
+                lines.append(f"        Type: {prop.type}")
+                value_str = str(prop.value) if prop.value is not None else "null"
+                lines.append(f"        Value: {value_str}")
+
+        lines.append("")  # Blank line between exports
+
+    # Blueprint section
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  ParentClass: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+        for var in result.blueprint.variables:
+            lines.append(f"  - Name: {var.var_name}")
+            lines.append(f"    Type: {var.var_type.pin_category}")
+            default = var.default_value or "None"
+            lines.append(f"    Default: {default}")
+            category = var.category or "Default"
+            lines.append(f"    Category: {category}")
+
+        lines.append("")  # Blank line after blueprint
+
+    # Phase 8: Graphs section (OUT2-03)
+    if result.graphs:
+        lines.append("Graphs:")
+        for graph in result.graphs:
+            # 获取连接数量
+            connections, _ = build_connections_map(graph)
+
+            # 获取执行流数据
+            execution_flows = build_execution_flows(graph)
+
+            lines.append(f"  - Name: {graph.graph_name}")
+            lines.append(f"    Class: {graph.graph_class}")
+            lines.append(f"    Nodes: {len(graph.nodes)}")
+            lines.append(f"    Connections: {len(connections)}")
+
+            # 执行流概览
+            lines.append(f"    ExecutionFlows: {len(execution_flows)}")
+            for flow in execution_flows:
+                start_event = flow.get("start_event", "Unknown")
+                node_count = len(flow.get("nodes", []))
+                lines.append(f"      - {start_event}: {node_count} nodes")
+
+        lines.append("")  # Graphs 区块后的空行
+
+    # ERRORS block
+    if result.errors:
+        lines.append("ERRORS:")
+        for err in result.errors:
+            lines.append(f"  - {err}")
+    else:
+        lines.append("ERRORS:")
+        lines.append("  (none)")
+
+    return "\n".join(lines)
 
 
 def format_text_summary(result: ParseResult) -> str:
@@ -44,5 +134,25 @@ def format_text_summary(result: ParseResult) -> str:
     Returns:
         str: 精简 YAML 风格摘要
     """
-    # Wave 2 实现
-    raise NotImplementedError("format_text_summary: Wave 2 实现")
+    lines = []
+
+    # Package header
+    package_name = result.summary.package_name if result.summary else "Unknown"
+    lines.append(f"Package: {package_name}")
+    lines.append(f"Exports: {len(result.export_map)}")
+    lines.append("")  # Blank line
+
+    # Exports: one line each
+    for exp in result.export_map:
+        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        lines.append(f"  - {exp.object_name} ({asset_class})")
+
+    # Blueprint summary
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("")
+        lines.append("Blueprint:")
+        parent = result.blueprint.parent_class or "Unknown"
+        lines.append(f"  Parent: {parent}")
+        lines.append(f"  Variables: {len(result.blueprint.variables)}")
+
+    return "\n".join(lines)

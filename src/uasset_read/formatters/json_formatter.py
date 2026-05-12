@@ -66,7 +66,7 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     from uasset_read.graph import build_graphs_summary
 
     output = {
-        "status": build_status_info(result),  # D-14-03: 顶层位置（第一个字段）
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
         "output_version": "4.0",  # D-20-05: 反映输出结构重大变化
         "summary": summary_dict,
         "exports": format_exports_list(result),
@@ -203,7 +203,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     from uasset_read.graph import build_graphs_summary
 
     output = {
-        "status": build_status_info(result),  # D-14-03: 顶层位置
+        "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置
         "output_version": "4.0",  # D-20-05: API 版本标识
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",

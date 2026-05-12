@@ -1,7 +1,7 @@
 """Markdown 格式化 — Markdown 输出 + Mermaid 流程图。
 
 等价迁移 uasset_read_legacy.py L7574-7667。
-Phase 32: 输出格式化模块（Wave 2 实现）。
+Phase 32: 输出格式化模块。
 """
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, List, Dict
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
+
+from uasset_read.serializers.object_resources import get_asset_class
+from uasset_read.graph import build_graphs_summary
+from .helpers import build_status_info
 
 
 def format_markdown(result: ParseResult) -> str:
@@ -23,8 +27,80 @@ def format_markdown(result: ParseResult) -> str:
     Returns:
         str: Markdown 格式文本
     """
-    # Wave 2 实现
-    raise NotImplementedError("format_markdown: Wave 2 实现")
+    lines = []
+
+    # 标题
+    asset_name = result.summary.package_name if result.summary else "Unknown"
+    asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+    lines.append(f"# Asset: {asset_name}")
+    lines.append("")
+
+    # === Asset Overview ===
+    lines.append("## Asset Overview")
+    lines.append("| Field | Value |")
+    lines.append("|-------|-------|")
+    if result.summary:
+        lines.append(f"| Package | {result.summary.package_name} |")
+        ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
+        lines.append(f"| Version | UE {ue_version} |")
+    # Status
+    status_info = build_status_info(result)
+    lines.append(f"| Status | {status_info.status} |")
+    if status_info.message:
+        lines.append(f"| Message | {status_info.message} |")
+    lines.append("")
+
+    # === Blueprint Details ===
+    if result.blueprint and result.blueprint.is_blueprint:
+        lines.append("## Blueprint Details")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
+        lines.append(f"| Parent Class | {result.blueprint.parent_class or 'Unknown'} |")
+        # Variables 统计
+        var_count = len(result.blueprint.variables) if result.blueprint.variables else 0
+        comp_count = sum(1 for v in result.blueprint.variables if v.is_component) if result.blueprint.variables else 0
+        lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+        lines.append("")
+
+    # === Graph Summary ===
+    graphs_summary = build_graphs_summary(result.graphs)
+    if graphs_summary:
+        lines.append("## Graph Summary")
+        for graph_summary in graphs_summary:
+            graph_name = graph_summary.get("graph_name", "Unknown")
+            lines.append(f"### {graph_name}")
+
+            # Mermaid 流程图
+            flows = graph_summary.get("execution_flows", [])
+            if flows:
+                mermaid_lines = _build_mermaid_flowchart(flows)
+                if mermaid_lines:
+                    lines.append("```mermaid")
+                    lines.append("graph LR")
+                    for mermaid_line in mermaid_lines:
+                        lines.append(f"  {mermaid_line}")
+                    lines.append("```")
+                    lines.append("")
+    else:
+        lines.append("## Graph Summary")
+        lines.append("No graphs in this asset.")
+        lines.append("")
+
+    # === Exports ===
+    if result.export_map:
+        lines.append("## Exports")
+        lines.append("| Name | Class | Parent |")
+        lines.append("|------|-------|--------|")
+        for i, exp in enumerate(result.export_map):
+            name = exp.object_name
+            cls = get_asset_class(exp, result.import_map, result.export_map)
+            parent = ""
+            if result.blueprint and i == 0:
+                parent = result.blueprint.parent_class or ""
+            lines.append(f"| {name} | {cls} | {parent} |")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
@@ -35,7 +111,35 @@ def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
         execution_flows: build_execution_flows() 的返回值
 
     Returns:
-        List[str]: Mermaid 行列表（不含 ``` 围栏）
+        List[str]: Mermaid 行列表（不含 ``` 围栏和 graph LR 头）
     """
-    # Wave 2 实现
-    raise NotImplementedError("_build_mermaid_flowchart: Wave 2 实现")
+    mermaid_lines: List[str] = []
+
+    for flow in execution_flows:
+        start_event = flow.get("start_event", "Unknown")
+        nodes = flow.get("nodes", [])
+
+        if not nodes:
+            continue
+
+        # 从 nodes 提取函数调用链
+        # nodes 格式: [{"node_guid": "..., "node_type": "K2Node_CallFunction", "function_name": "FuncName"}, ...]
+        calls = []
+        for node in nodes:
+            if node.get("node_type") == "K2Node_CallFunction":
+                func_name = node.get("function_name", "Unknown")
+                # 去掉参数部分
+                calls.append(func_name)
+
+        if calls:
+            # 第一个节点: event --> first_call
+            first_func = calls[0]
+            mermaid_lines.append(f"{start_event} --> {first_func}")
+
+            # 链式连接
+            for i in range(len(calls) - 1):
+                fn1 = calls[i]
+                fn2 = calls[i + 1]
+                mermaid_lines.append(f"{fn1} --> {fn2}")
+
+    return mermaid_lines
