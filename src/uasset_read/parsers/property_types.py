@@ -163,6 +163,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             break
 
         field_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
+        # 当解析器返回 None（未知类型）且 tag.size > 0 时，主动跳过该属性字节
+        # 防止在同一位置无限循环读取相同的 PropertyTag
+        if field_value is None and inner_tag.size > 0:
+            archive.seek(archive.tell() + inner_tag.size)
         fields[inner_tag.name] = field_value
 
     return StructValue(
