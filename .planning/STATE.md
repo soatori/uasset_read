@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v6.0
-milestone_name: milestone
+milestone_name: 模块化重构（阶段 28-35）— 进行中
 status: executing
-last_updated: "2026-05-12T..."
+last_updated: "2026-05-12T12:40:55.273Z"
 progress:
-  total_phases: 12
-  completed_phases: 5
-  total_plans: 27
-  completed_plans: 17
-  percent: 70
+  total_phases: 31
+  completed_phases: 25
+  total_plans: 98
+  completed_plans: 95
+  percent: 97
 ---
 
 # v6.0 模块化重构 — 当前状态
@@ -41,10 +41,12 @@ progress:
 **关键修复：UE5 序列化容错模式**
 
 UE5.0 蓝图文件的 FText 和 PropertyTag 序列化格式与 UE4 存在差异：
+
 - FText history_type 需要支持 0xFF (None), 0 (Base), 1-254 (Custom)
 - PropertyTag size 可能为负数或超出边界，容错模式下接受
 
 **修复内容：**
+
 - serializers/graph.py: read_ftext_with_history() 函数 + read_ue_graph_pin 更新
 - archive.py: validate_size() tolerant 参数
 - serializers/property_tags.py: read_property_tag() tolerant 参数
