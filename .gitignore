@@ -58,7 +58,12 @@ reports/
 .claude/*
 .qwen/*
 
-# Debug/scratch scripts (not part of test suite)
+# Debug/scratch scripts (not part part of test suite)
 tools/debug_*.py
 tools/test_*.py
 tools/parse_*.py
+tools/*_analysis.py
+tools/*_scan.py
+
+# Claude memory system (personal notes, not project docs)
+memory/
