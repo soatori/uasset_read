@@ -57,3 +57,8 @@ reports/
 # IDE 和工具配置
 .claude/*
 .qwen/*
+
+# Debug/scratch scripts (not part of test suite)
+tools/debug_*.py
+tools/test_*.py
+tools/parse_*.py
