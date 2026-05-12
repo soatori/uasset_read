@@ -271,10 +271,10 @@ def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
         "name": variable.var_name,
         "type": {
             "pin_category": variable.var_type.pin_category,
-            "pin_sub_category": variable.var_type.pin_sub_category,
+            "pin_sub_category": variable.var_type.pin_subcategory,
             "container_type": variable.var_type.container_type,
-            "is_reference": variable.var_type.is_reference,
-            "is_const": variable.var_type.is_const
+            "is_reference": getattr(variable.var_type, 'is_reference', False),
+            "is_const": getattr(variable.var_type, 'is_const', False)
         },
         "category": variable.category,
         "default_value": variable.default_value,
