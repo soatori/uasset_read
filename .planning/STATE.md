@@ -8,7 +8,7 @@ progress:
   total_phases: 33
   completed_phases: 26
   total_plans: 98
-  completed_plans: 97
+  completed_plans: 98
   percent: 95
 ---
 
@@ -41,7 +41,7 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 **状态**: 🟢 执行中  
 **优先级**: P1 - 高  
 **依赖**: Phase 35b  
-**计划**: 8 plans (1 完成)
+**计划**: 8 plans (3 完成)
 
 详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
 
@@ -49,12 +49,12 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 |------|------|------|------|
 | 35c-01 | archive.py | 文件描述符泄漏 (CR-01) | ✅ 完成 |
 | 35c-02 | archive.py | FString OOM (CR-02) | 待执行 |
-| 35c-03a | package_summary.py | 计数验证 (CR-04) | 待执行 |
+| 35c-03a | package_summary.py | 计数验证 (CR-04) | ✅ 完成 |
 | 35c-03b | package_summary.py | 偏移验证 (M4) | 待执行 |
 | 35c-03c | object_resources.py | 计数与偏移验证 (CR-05) | 待执行 |
 | 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) | 待执行 |
 | 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | 待执行 |
-| 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | 待执行 |
+| 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | ✅ 完成 |
 
 ---
 
