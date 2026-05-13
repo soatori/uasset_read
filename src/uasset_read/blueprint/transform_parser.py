@@ -16,27 +16,27 @@ from uasset_read.models.transforms import (
 def parse_vector_value(struct_value: StructValue, precision_type: str = 'location') -> VectorValue:
     """解析 Vector struct property 到 VectorValue。从 fields 提取 X/Y/Z 字段。"""
     fields = struct_value.fields
-    x = format_transform_value(fields["X"], precision_type)
-    y = format_transform_value(fields["Y"], precision_type)
-    z = format_transform_value(fields["Z"], precision_type)
+    x = format_transform_value(fields.get("X", 0.0), precision_type)
+    y = format_transform_value(fields.get("Y", 0.0), precision_type)
+    z = format_transform_value(fields.get("Z", 0.0), precision_type)
     return VectorValue(x=x, y=y, z=z)
 
 
 def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
     """解析 Rotator struct property 到 RotatorValue。从 fields 提取 Roll/Pitch/Yaw 字段。"""
     fields = struct_value.fields
-    roll = format_transform_value(fields["Roll"], 'rotation')
-    pitch = format_transform_value(fields["Pitch"], 'rotation')
-    yaw = format_transform_value(fields["Yaw"], 'rotation')
+    roll = format_transform_value(fields.get("Roll", 0.0), 'rotation')
+    pitch = format_transform_value(fields.get("Pitch", 0.0), 'rotation')
+    yaw = format_transform_value(fields.get("Yaw", 0.0), 'rotation')
     return RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
 
 
 def parse_scale_value(struct_value: StructValue) -> ScaleValue:
     """解析 Scale3D struct property 到 ScaleValue。从 fields 提取 X/Y/Z 字段。"""
     fields = struct_value.fields
-    x = format_transform_value(fields["X"], 'scale')
-    y = format_transform_value(fields["Y"], 'scale')
-    z = format_transform_value(fields["Z"], 'scale')
+    x = format_transform_value(fields.get("X", 0.0), 'scale')
+    y = format_transform_value(fields.get("Y", 0.0), 'scale')
+    z = format_transform_value(fields.get("Z", 0.0), 'scale')
     return ScaleValue(x=x, y=y, z=z)
 
 
