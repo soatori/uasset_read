@@ -63,33 +63,36 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 
 ---
 
-## 部分完成: Phase 35c — 代码审查安全性与健壮性修复
+## 已完成: Phase 35c — 代码审查安全性与健壮性修复
 
-**状态**: 🟡 部分完成
+**状态**: ✅ 已完成
 **优先级**: P1 - 高
 **依赖**: 无（原依赖 Phase 35b 已跳过，不再阻塞）
-**计划**: 8 plans (4 完成)
+**计划**: 8 plans (8 完成)
 
 详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
 
 | Plan | 文件 | 问题 | 状态 |
 |------|------|------|------|
 | 35c-01 | archive.py | 文件描述符泄漏 (CR-01) | ✅ 完成 |
-| 35c-02 | archive.py | FString OOM (CR-02) | 待执行 |
+| 35c-02 | archive.py | FString OOM (CR-02) | ✅ 完成 |
 | 35c-03a | package_summary.py | 计数验证 (CR-04) | ✅ 完成 |
-| 35c-03b | package_summary.py | 偏移验证 (M4) | 待执行 |
+| 35c-03b | package_summary.py | 偏移验证 (M4) | ✅ 完成 |
 | 35c-03c | object_resources.py | 计数与偏移验证 (CR-05) | ✅ 完成 |
 | 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) | ✅ 完成 |
-| 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | 待执行 |
+| 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | ✅ 完成 |
 | 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | ✅ 完成 |
+
+**UAT**: ✅ 20 测试全部通过
+**测试**: 414 passed, 132 skipped (0 regressions)
 
 ---
 
 ## 已完成: Phase 35d — 代码审查逻辑与质量修复
 
-**状态**: ✅ 已完成  
-**优先级**: P1 - 高  
-**依赖**: Phase 35b  
+**状态**: ✅ 已完成
+**优先级**: P1 - 高
+**依赖**: Phase 35b
 **计划**: 6 plans (6 完成)
 
 详情见 [35d-PLAN.md](phases/35d-logic-fixes/35d-PLAN.md)
@@ -102,6 +105,9 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 | 35d-04 | json_formatter/markdown/transform | 递归序列化/转义/KeyError (CR-14/15, HIGH-17/09) | ✅ 完成 |
 | 35d-05 | flow_builder.py | 安全迭代 + GUID 检查 (LOW-06/07) | ✅ 完成 |
 | 35d-06 | constants/property_parser/property_types | 重复常量/死代码/重复函数 (MED-14, HIGH-08) | ✅ 完成 |
+
+**UAT**: ✅ 17 测试全部通过
+**测试**: 401 passed, 67 skipped (no regressions)
 
 ---
 
