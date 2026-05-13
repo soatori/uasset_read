@@ -88,24 +88,23 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 
 ---
 
-## 待执行: Phase 35d — 代码审查逻辑与质量修复
+## 已完成: Phase 35d — 代码审查逻辑与质量修复
 
-**状态**: 🟡 计划中  
+**状态**: ✅ 已完成  
 **优先级**: P1 - 高  
 **依赖**: Phase 35b  
-**计划**: 7 plans
+**计划**: 6 plans (6 完成)
 
 详情见 [35d-PLAN.md](phases/35d-logic-fixes/35d-PLAN.md)
 
-| Plan | 文件 | 问题 |
-|------|------|------|
-| 35d-01 | property_types.py | 数组大小/无限循环/类型提取 (CR-09/10, MED-01~03) |
-| 35d-02 | variable_extractor.py | 标志映射/未定义常量 (CR-11/12) |
-| 35d-03 | models/properties.py, blueprint.py | 模型字段修复 (CR-13) |
-| 35d-04 | json_formatter.py | MapValue/SetValue 递归 (CR-14/15) |
-| 35d-05 | markdown_formatter.py | 表格转义 (HIGH-17) |
-| 35d-06 | transform_parser.py | KeyError 防护 (HIGH-09) |
-| 35d-07 | flow_builder.py | 安全迭代 + GUID 检查 (LOW-06/07) |
+| Plan | 文件 | 问题 | 状态 |
+|------|------|------|------|
+| 35d-01 | property_types.py | 数组大小/Map类型提取/计数验证 (CR-09, MED-01) | ✅ 完成 |
+| 35d-02 | variable_extractor.py | 标志映射/去重/hasattr (CR-11, LOW-04, HIGH-10) | ✅ 完成 |
+| 35d-03 | models/properties.py | 模型字段默认值 (CR-13) | ✅ 完成 |
+| 35d-04 | json_formatter/markdown/transform | 递归序列化/转义/KeyError (CR-14/15, HIGH-17/09) | ✅ 完成 |
+| 35d-05 | flow_builder.py | 安全迭代 + GUID 检查 (LOW-06/07) | ✅ 完成 |
+| 35d-06 | constants/property_parser/property_types | 重复常量/死代码/重复函数 (MED-14, HIGH-08) | ✅ 完成 |
 
 ---
 
