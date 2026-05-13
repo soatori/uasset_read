@@ -113,7 +113,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         )
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
-    remaining_size = tag.size
+    remaining_size = tag.size - 4  # subtract 4-byte count field
 
     for i in range(count):
         # Dynamic inner_size calculation: distribute remaining bytes evenly
