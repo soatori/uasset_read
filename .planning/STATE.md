@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v6.0
 milestone_name: 模块化重构（阶段 28-35）— 进行中
 status: executing
-last_updated: "2026-05-13T00:50:00Z"
+last_updated: "2026-05-13T01:00:00Z"
 progress:
-  total_phases: 31
+  total_phases: 33
   completed_phases: 26
   total_plans: 98
-  completed_plans: 96
-  percent: 98
+  completed_plans: 97
+  percent: 95
 ---
 
 # v6.0 模块化重构 — 当前状态
@@ -27,70 +27,89 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 ## 已完成（Phase 30-35a）
 
 ### Phase 30: 属性解析模块 ✓ Complete
-- 完成: 3 plans (property dataclasses + 14 type parsers + blueprint module)
-
 ### Phase 31: 蓝图图解析模块 ✓ Complete
-- 完成: 6 plans (serializers/graph.py + from_archive delegates + graph/ module + test fixes)
-
 ### Phase 32: 输出格式化模块 ✓ Complete
-- 完成: 3 plans (JSON + Text/Markdown + test adaptation, 107 passed)
-
-### Phase 33: 入口与测试适配 + 删除旧 `uasset_read.py` ✓ Complete
-
+### Phase 33: 入口与测试适配 ✓ Complete
 ### Phase 33a: UE5 序列化问题修复 ✓ Complete
-**关键修复：UE5 序列化容错模式**
-- UE5.0 蓝图文件的 `FText` 和 `PropertyTag` 序列化格式与 UE4 存在差异
-- 添加 `tolerant` 参数到相关函数，CLI 支持 `--tolerant/--strict`
-- **结果**: 383 passed, 71 skipped, 0 failed
-
 ### Phase 34: 等价验证 ✓ Complete
-- 完成: 新旧输出逐字段对比
-- **结果**: 397 passed, 71 skipped, 147 差异已分类，0 待修复 bug
-
 ### Phase 35a: 快速修复 ✓ Complete
-- UAT 收尾项：`start_event` fallback, 脚本清理, `logging` 迁移
-- **结果**: 397 passed, 71 skipped, 0 failed
 
 ---
 
-## 当前焦点: Phase 35b — Pin 连接深度调试与修复
+## 当前焦点: Phase 35c — 代码审查安全性与健壮性修复
 
-**状态**: 🟢 PLAN.md 已创建  
-**创建日期**: 2026-05-13  
-**优先级**: P0 - 阻塞
+**状态**: 🟢 执行中  
+**优先级**: P1 - 高  
+**依赖**: Phase 35b  
+**计划**: 8 plans (1 完成)
 
-**问题来源**:
-- AUDIT-REPORT.md FINDING-2/5
-- Phase 22 VERIFICATION.md
-- Phase 35 UAT Test 3
+详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
 
-**核心问题**:
-- `read_pin_array` 返回空列表 (`array_count=0`)
-- `pins_offset` 动态扫描定位不准确
-- UE5 `UEdGraphPin` 序列化格式版本差异未覆盖
-- `FText` 跳过逻辑影响后续字段位置
+| Plan | 文件 | 问题 | 状态 |
+|------|------|------|------|
+| 35c-01 | archive.py | 文件描述符泄漏 (CR-01) | ✅ 完成 |
+| 35c-02 | archive.py | FString OOM (CR-02) | 待执行 |
+| 35c-03a | package_summary.py | 计数验证 (CR-04) | 待执行 |
+| 35c-03b | package_summary.py | 偏移验证 (M4) | 待执行 |
+| 35c-03c | object_resources.py | 计数与偏移验证 (CR-05) | 待执行 |
+| 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) | 待执行 |
+| 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | 待执行 |
+| 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | 待执行 |
 
-**计划任务**:
-- 35b-01: 调试环境搭建 (二进制分析工具 + DEBUG_PIN_PARSING 增强)
-- 35b-02: `read_bool_ue5()` 修复 (UE5 PinType bool 占 1 byte)
-- 35b-03: `BitField` 读取修复 (UE5 需要 u32，之前错误用 u8)
-- 35b-04: `FText` `b_has_culture` 1-byte bool 修复
-- 35b-05: `execution_flows` / `data_flows` 集成测试验证
+---
 
-**产出文档**:
-- `.planning/phases/35b-pin-connection-debug/35b-PLAN.md` — 完整计划
-- `.planning/phases/35b-pin-connection-debug/35b-CONTEXT.md` — 问题上下文
+## 已完成: Phase 35b — Pin 连接深度调试与修复
 
-**成功标准**:
-- `pin.linked_to_raw` 非空，包含连接引用
-- `execution_flows` 能追踪从 Event 到 CallFunction 的完整链路
-- `data_flows` 能提取非 exec pins 的数据传递关系
-- BP_FirstPersonCharacter.uasset 的 EventGraph 能输出 `IA_Jump → Jump → StopJumping` 执行链路
-- 全部测试通过 (411+ passed, 0 failed)
+**状态**: 🟡 部分完成  
+**优先级**: P0 - 阻塞  
+**核心问题**: linked_to_raw 为空，execution_flows/data_flows 无法构建
+
+详情见 [35b-PLAN.md](phases/35b-pin-connection-debug/35b-PLAN.md)
+
+---
+
+## 待执行: Phase 35c — 代码审查安全性与健壮性修复
+
+**状态**: 🟡 计划中  
+**优先级**: P1 - 高  
+**依赖**: Phase 35b  
+**计划**: 6 plans
+
+详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
+
+| Plan | 文件 | 问题 |
+|------|------|------|
+| 35c-01 | archive.py | 文件描述符泄漏 (CR-01) |
+| 35c-02 | archive.py | FString OOM (CR-02) |
+| 35c-03 | package_summary.py, object_resources.py | 负数计数 (CR-04/05) |
+| 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) |
+| 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) |
+| 35c-06 | property_types.py | 条目计数验证 (HIGH-07) |
+
+---
+
+## 待执行: Phase 35d — 代码审查逻辑与质量修复
+
+**状态**: 🟡 计划中  
+**优先级**: P1 - 高  
+**依赖**: Phase 35b  
+**计划**: 7 plans
+
+详情见 [35d-PLAN.md](phases/35d-logic-fixes/35d-PLAN.md)
+
+| Plan | 文件 | 问题 |
+|------|------|------|
+| 35d-01 | property_types.py | 数组大小/无限循环/类型提取 (CR-09/10, MED-01~03) |
+| 35d-02 | variable_extractor.py | 标志映射/未定义常量 (CR-11/12) |
+| 35d-03 | models/properties.py, blueprint.py | 模型字段修复 (CR-13) |
+| 35d-04 | json_formatter.py | MapValue/SetValue 递归 (CR-14/15) |
+| 35d-05 | markdown_formatter.py | 表格转义 (HIGH-17) |
+| 35d-06 | transform_parser.py | KeyError 防护 (HIGH-09) |
+| 35d-07 | flow_builder.py | 安全迭代 + GUID 检查 (LOW-06/07) |
 
 ---
 
 ## v6.0 范围边界
 
-- **包含**: 等价迁移 `uasset_read.py` 全部功能 (~7,957 行 → ~15 模块)
+- **包含**: 等价迁移 + 代码审查修复
 - **不包含**: BulkData 解析 (v7.0)、UberGraph 增强 (v8.0)、字节码反编译 (v8.0)、.umap 解析 (v9.0)
