@@ -45,7 +45,6 @@ class TestParseComponentTransform:
                 name="RelativeLocation",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Vector",
                     fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
                 )
@@ -64,7 +63,6 @@ class TestParseComponentTransform:
                 name="RelativeRotation",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Rotator",
                     fields={"Roll": 0.0, "Pitch": 0.0, "Yaw": 90.0}
                 )
@@ -83,7 +81,6 @@ class TestParseComponentTransform:
                 name="RelativeScale3D",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Vector",
                     fields={"X": 1.5, "Y": 1.5, "Z": 1.5}
                 )
@@ -102,7 +99,6 @@ class TestParseComponentTransform:
                 name="RelativeLocation",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Vector",
                     fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
                 )
@@ -111,7 +107,6 @@ class TestParseComponentTransform:
                 name="RelativeRotation",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Rotator",
                     fields={"Roll": 0.0, "Pitch": 0.0, "Yaw": 90.0}
                 )
@@ -120,7 +115,6 @@ class TestParseComponentTransform:
                 name="RelativeScale3D",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Vector",
                     fields={"X": 1.5, "Y": 1.5, "Z": 1.5}
                 )
@@ -140,7 +134,6 @@ class TestParseComponentTransform:
                 name="RelativeLocation",
                 type="StructProperty",
                 value=StructValue(
-                    property_type="StructProperty",
                     struct_type="Vector",
                     fields={"X": 100.0, "Y": 200.0, "Z": 0.0}
                 )

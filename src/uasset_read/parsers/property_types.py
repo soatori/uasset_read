@@ -174,7 +174,6 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         fields[inner_tag.name] = field_value
 
     return StructValue(
-        property_type="StructProperty",
         struct_type=struct_type,
         fields=fields
     )
@@ -197,7 +196,6 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         entries.append({"key": key, "value": value})
 
     return MapValue(
-        property_type="MapProperty",
         key_type=key_type,
         value_type=value_type,
         entries=entries
@@ -222,7 +220,6 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         elements.append(element)
 
     return SetValue(
-        property_type="SetProperty",
         element_type=element_type,
         elements=elements
     )
@@ -235,7 +232,6 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
     value_name = f"{enum_type}::{enum_value_name}"
 
     return EnumValue(
-        property_type="EnumProperty",
         enum_type=enum_type,
         value_name=value_name
     )
@@ -249,7 +245,6 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
     source_string = archive.read_fstring()
 
     return TextValue(
-        property_type="TextProperty",
         namespace=namespace or "",
         key=key or "",
         source_string=source_string or ""
@@ -262,7 +257,6 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
     function_name = archive.read_name(name_map)
 
     return DelegateValue(
-        property_type="DelegateProperty",
         object_ref=object_ref,
         function_name=function_name
     )
