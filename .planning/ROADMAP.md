@@ -22,7 +22,7 @@ Plans:
 Plans:
 - [x] 35c-01-PLAN.md — archive.py 文件描述符泄漏修复
 - [ ] 35c-02-PLAN.md — archive.py + constants.py FString 长度验证（OOM 防护）
-- [ ] 35c-03a-PLAN.md — package_summary.py 计数验证（11 个字段）
+- [x] 35c-03a-PLAN.md — package_summary.py 计数验证（11 个字段）
 - [ ] 35c-03b-PLAN.md — package_summary.py 偏移验证（14 个字段）
 - [ ] 35c-03c-PLAN.md — object_resources.py 计数与偏移验证
 - [ ] 35c-04-PLAN.md — parse_uasset.py is_success 标志 + 临时存档 tolerant 模式修复
