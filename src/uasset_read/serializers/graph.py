@@ -21,6 +21,8 @@ from uasset_read.constants import (
     FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE, FFRAMEWORK_VERSION_PINS_STORE_FNAME,
     FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX,
     FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
+    FUE5RELEASESTREAM_OBJECT_VERSION_GUID,
+    FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,8 +131,10 @@ def read_ed_graph_pin_type(
         else:
             pin_type.is_const = False
 
-        # bIsUObjectWrapper (version dependent)
-        if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER:
+        # bIsUObjectWrapper (version dependent, +1 Byte Abweichung Quelle D1)
+        # C++: if Ar.CustomVer(FReleaseObjectVersion::GUID) >= PinTypeIncludesUObjectWrapperFlag
+        # Fallback: UE5 Assets haben immer ReleaseObjectVersion >= 10, auch wenn GUID nicht in custom version table
+        if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER or summary.file_version_ue5 > 0:
             pin_type.is_uobject_wrapper = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
         else:
             pin_type.is_uobject_wrapper = False
@@ -414,11 +418,20 @@ def read_ue_graph_pin(
     # 11. DefaultObject (FPackageIndex)
     default_object = archive.read_i32()
 
-    # 12. DefaultTextValue (FText) — UE5 中使用简单 FString 格式（非 FText-with-history）
+    # 12. DefaultTextValue (FText) — NICHT FString!
+    # UE5 C++: Ar << DefaultTextValue; (EdGraphPin.cpp L1876)
+    # FText Serialisierung: flags(i32,4B) + history_type(u8,1B) + body(variable)
+    # Siehe read_ftext_with_history() fuer history_type Verarbeitung
     try:
-        _read_ftext_fstring(archive)
+        _dtv_flags = archive.read_i32()
+        _dtv_history = archive.read_u8()
+        _dtv_value, _dtv_consumed = read_ftext_with_history(
+            archive, _dtv_history,
+            tolerant=True,
+            ue5_mode=(summary.file_version_ue5 > 0)
+        )
     except Exception:
-        # 极端容错：如果连 FString 都失败，跳过
+        # Extrem tolerant: Falls FText-Lesen fehlschlaegt, DefaultTextValue ignorieren
         pass
 
     # 13. LinkedTo array
