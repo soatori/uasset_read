@@ -178,6 +178,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 6 步：NameCount 和 NameOffset
     name_count = archive.read_i32()
+    if name_count < 0:
+        raise ParseError(f"Negative name count: {name_count}")
     if name_count > MAX_NAME_COUNT:
         raise ParseError(f"Name count exceeds maximum")
     name_offset = archive.read_i32()
@@ -208,6 +210,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 10 步：ExportCount 和 ExportOffset
     export_count = archive.read_i32()
+    if export_count < 0:
+        raise ParseError(f"Negative export count: {export_count}")
     if export_count > MAX_NAME_COUNT:
         raise ParseError(f"Export count exceeds maximum")
     export_offset = archive.read_i32()
@@ -215,6 +219,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 11 步：ImportCount 和 ImportOffset
     import_count = archive.read_i32()
+    if import_count < 0:
+        raise ParseError(f"Negative import count: {import_count}")
     if import_count > MAX_NAME_COUNT:
         raise ParseError(f"Import count exceeds maximum")
     import_offset = archive.read_i32()
@@ -227,8 +233,12 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     cell_import_offset = 0
     if not is_ue4_file and file_version_ue5 >= UE5_VERSE_CELLS:
         cell_export_count = archive.read_i32()
+        if cell_export_count < 0:
+            raise ParseError(f"Negative cell export count: {cell_export_count}")
         cell_export_offset = archive.read_i32()
         cell_import_count = archive.read_i32()
+        if cell_import_count < 0:
+            raise ParseError(f"Negative cell import count: {cell_import_count}")
         cell_import_offset = archive.read_i32()
 
     # 第 13 步：MetaDataOffset（UE5 >= 1014）
@@ -244,6 +254,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     soft_package_references_offset = 0
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
         soft_package_references_count = archive.read_i32()
+        if soft_package_references_count < 0:
+            raise ParseError(f"Negative soft package references count: {soft_package_references_count}")
         soft_package_references_offset = archive.read_i32()
 
     # 第 16 步：SearchableNames（UE4 >= 508）
@@ -259,6 +271,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     import_type_hierarchies_offset = 0
     if not is_ue4_file and file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
         import_type_hierarchies_count = archive.read_i32()
+        if import_type_hierarchies_count < 0:
+            raise ParseError(f"Negative import type hierarchies count: {import_type_hierarchies_count}")
         import_type_hierarchies_offset = archive.read_i32()
 
     # 第 19 步：Legacy Guid
@@ -277,6 +291,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 21 步：Generations
     generations_count = archive.read_i32()
+    if generations_count < 0:
+        raise ParseError(f"Negative generations count: {generations_count}")
     generations = []
     for _ in range(generations_count):
         gen_export_count = archive.read_i32()
@@ -314,6 +330,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 25 步：CompressedChunks（已废弃）
     compressed_chunks_count = archive.read_i32()
+    if compressed_chunks_count < 0:
+        raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
     for _ in range(compressed_chunks_count):
         archive.read(12)
 
@@ -322,6 +340,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 27 步：AdditionalPackagesToCook
     additional_packages_count = archive.read_i32()
+    if additional_packages_count < 0:
+        raise ParseError(f"Negative additional packages count: {additional_packages_count}")
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
@@ -344,6 +364,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     chunk_ids = []
     if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_ARRAY:
         chunk_ids_count = archive.read_i32()
+        if chunk_ids_count < 0:
+            raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
         for _ in range(chunk_ids_count):
             guid_bytes = archive.read(16)
             chunk_ids.append(guid_bytes.hex())
