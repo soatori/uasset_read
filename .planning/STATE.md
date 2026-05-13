@@ -1,65 +1,76 @@
 ---
 gsd_state_version: 1.0
-milestone: v6.0
-milestone_name: failed
-status: archived
+milestone: v7.0
+milestone_name: UE 加载方式对齐 — 对象图重建
+status: planning
 last_updated: "2026-05-14T00:00:00.000Z"
 progress:
-  total_phases: 12
-  completed_phases: 10
-  failed_phases: 2
-  total_plans: 35
-  completed_plans: 31
-  percent: 89
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# v6.0 模块化重构 — 已归档（失败）
+# v7.0 UE 加载方式对齐 — 对象图重建
 
-## 状态: ❌ FAILED
+## 状态: 📋 规划中
 
-**失败日期**: 2026-05-14
-**失败阶段**: Phase 35-35e
-**归档文档**: [v6.0-FAILED-ARCHIVE.md](milestones/v6.0-FAILED-ARCHIVE.md)
-
----
-
-## 已完成阶段 (10/12)
-
-| Phase | 名称 | 状态 |
-|-------|------|------|
-| 27-29 | 项目初始化与核心模块 | ✅ |
-| 30 | 属性解析模块 | ✅ |
-| 31 | 蓝图图解析模块 | ✅ |
-| 32 | 输出格式化模块 | ✅ |
-| 33/33a | 入口与 UE5 修复 | ✅ |
-| 34 | 等价验证 | ✅ |
-| 35a | 快速修复 | ✅ |
-| 35c | 安全性修复 | ✅ |
-| 35d | 逻辑与质量修复 | ✅ |
+**创建日期**: 2026-05-14
+**前置里程碑**: [v6.0 模块化重构](STATE.md) — ✅ 已完成
 
 ---
 
-## 失败阶段 (2/12)
+## 背景
 
-### Phase 35b: Pin 连接深度调试 — ⏭️ 已跳过（合并至 35e）
+v6.0 完成了模块化重构，但解析模式仍是**直接字节读取**：
+- FArchive 顺序 seek/read，序列化器从已知偏移读取字段
+- 对象引用（PackageIndex）仅解析为名字字符串，不是实际对象
+- 无对象图概念，数据扁平化为 dataclass
+- Outer 树（Package → Class → Properties 层级）未构建
 
-### Phase 35e: Pin Offset 根因诊断 — ❌ FAILED
-
-**失败原因**: 执行严重偏离目标，字节对齐问题复杂度高，修复引入新问题
-
-**遗留问题**:
-- `linked_to_raw` 始终为空
-- `data_flows` 无法正确构建
-- PayloadTocOffset 解析错误
+**v6.0 Phase 35e 失败原因**: 试图通过字节级偏移修正解决 linked_to_raw 为空问题，但偏离了根本方向。真正的问题不是"差几个字节"，而是当前架构缺少 UE 编辑器的对象图重建机制。
 
 ---
 
-## 下一里程碑: v7.0 文档整理
+## 目标
 
-**目标**: 压缩并整理项目文档，建立 UE 源码参考库
+参考 UE 编辑器的 **FLinkerLoad 加载方式**，实现对象图重建：
 
-**范围**:
-- 清理 .planning 目录
-- 归档已完成阶段文档
-- 建立 UE C++ 序列化函数参考
-- 重构版本阈值判断框架
+| 当前 | 目标 |
+|------|------|
+| 文件 → FArchive → 扁平数据 | 文件 → FArchive → PackageLinker → UObjectInstance 对象图 |
+| PackageIndex → 名字字符串 | PackageIndex → UObjectInstance 实际对象引用 |
+| 无父子关系 | Outer 树可导航 |
+| 重复解析 | 对象缓存，延迟加载 |
+
+---
+
+## Phase 分解
+
+| Phase | 名称 | 目标 | 依赖 | 工作量 |
+|-------|------|------|------|--------|
+| **Phase 41** | link/ 模块基础设施 | 创建 UObjectInstance、PackageLinker、LinkerParseResult | 无 | 2h |
+| **Phase 42** | 集成入口点 | parse_uasset_with_linker() 新增函数 | Phase 41 | 1h |
+| **Phase 43** | PackageIndex 增强 | resolve_with_linker() 方法 | Phase 41 | 0.5h |
+| **Phase 44** | 模型增强 | UEdGraphPin 新增 UObjectInstance 引用字段 | Phase 41 | 0.5h |
+| **Phase 45** | 图序列化 linker 变体 | read_ue_graph_pin_with_linker() 等 | Phase 41, 44 | 2h |
+| **Phase 46** | 测试与验证 | 单元测试 + 集成测试 + 回归测试 | Phase 42-45 | 3h |
+| **总计** | | | | **~9h** |
+
+---
+
+## 关键设计决策
+
+1. **不修改现有序列化器** — PackageLinker 坐于现有序列化器之上，复用它们读取头信息
+2. **增量采用** — 新增 parse_uasset_with_linker() 作为并行入口点，现有 parse_uasset() 不变
+3. **延迟加载** — preload(index) 按需反序列化属性，不一次性加载全部
+4. **零回归** — 现有 373 个测试必须全部通过
+
+## 验证标准
+
+- [ ] 现有 373 测试全部通过（0 回归）
+- [ ] linked_to_objects 非空且指向正确 Pin 对象
+- [ ] Outer 树可导航：root → EdGraph → Node → Pin
+- [ ] UE4/UE5 资产均正常工作
+- [ ] parse_uasset() 行为完全不变
