@@ -201,7 +201,7 @@ def _find_next_exec_node(
     for pin in node.pins:
         if pin.direction == 1:  # Output
             if pin.pin_type and pin.pin_type.pin_category == "exec":
-                for linked_pin_id in pin.linked_to_raw:
+                for linked_pin_id in (pin.linked_to_raw or []):
                     target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
                     if target_pin_guid in pin_lookup:
                         target_node_guid, _ = pin_lookup[target_pin_guid]
@@ -229,18 +229,29 @@ def _trace_execution_from_event(
     current_node = start_node
 
     while current_node:
-        if current_node.node_guid in visited:
+        # LOW-07: 处理 node_guid 为 None 的情况
+        current_guid = current_node.node_guid
+        if current_guid is None:
+            # node_guid 缺失时仍记录节点但跳过循环检测
             flow.append({
-                "node_guid": current_node.node_guid,
+                "node_type": current_node.class_name,
+                "warning": "missing node_guid"
+            })
+            current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
+            continue
+
+        if current_guid in visited:
+            flow.append({
+                "node_guid": current_guid,
                 "node_type": current_node.class_name,
                 "cycle_detected": True
             })
             break
 
-        visited.add(current_node.node_guid)
+        visited.add(current_guid)
 
         node_info = {
-            "node_guid": current_node.node_guid,
+            "node_guid": current_guid,
             "node_type": current_node.class_name,
         }
 
@@ -281,7 +292,7 @@ def _trace_execution_from_pin(
 
     用于EnhancedInputAction多触发时机追踪。
     """
-    for linked_pin_id in start_pin.linked_to_raw:
+    for linked_pin_id in (start_pin.linked_to_raw or []):
         target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
         if target_pin_guid in pin_lookup:
             target_node_guid, _ = pin_lookup[target_pin_guid]
@@ -323,7 +334,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     for node in graph.nodes:
         for pin in node.pins:
             if pin.direction == 1:  # Output
-                for linked_pin_ref in pin.linked_to_raw:
+                for linked_pin_ref in (pin.linked_to_raw or []):
                     target_pin_guid = linked_pin_ref.get("pin_guid") if isinstance(linked_pin_ref, dict) else linked_pin_ref
 
                     if target_pin_guid in pin_lookup:
@@ -411,7 +422,7 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     for node in graph.nodes:
         for pin in node.pins:
             if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
-                for linked_pin_ref in pin.linked_to_raw:
+                for linked_pin_ref in (pin.linked_to_raw or []):
                     target_pin_guid = linked_pin_ref.get("pin_guid") if isinstance(linked_pin_ref, dict) else linked_pin_ref
                     if target_pin_guid in pin_lookup:
                         target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
