@@ -15,6 +15,11 @@ from uasset_read.graph import build_graphs_summary
 from .helpers import build_status_info
 
 
+def _escape_md_cell(text: str) -> str:
+    """Escape characters that break markdown table formatting."""
+    return str(text).replace("|", "\\|").replace("\n", " ")
+
+
 def format_markdown(result: ParseResult) -> str:
     """
     Markdown 输出（D-14-10~12, OUT-04）。
@@ -40,14 +45,14 @@ def format_markdown(result: ParseResult) -> str:
     lines.append("| Field | Value |")
     lines.append("|-------|-------|")
     if result.summary:
-        lines.append(f"| Package | {result.summary.package_name} |")
+        lines.append(f"| Package | {_escape_md_cell(result.summary.package_name)} |")
         ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
-        lines.append(f"| Version | UE {ue_version} |")
+        lines.append(f"| Version | UE {_escape_md_cell(str(ue_version))} |")
     # Status
     status_info = build_status_info(result)
-    lines.append(f"| Status | {status_info.status} |")
+    lines.append(f"| Status | {_escape_md_cell(status_info.status)} |")
     if status_info.message:
-        lines.append(f"| Message | {status_info.message} |")
+        lines.append(f"| Message | {_escape_md_cell(status_info.message)} |")
     lines.append("")
 
     # === Blueprint Details ===
@@ -55,11 +60,11 @@ def format_markdown(result: ParseResult) -> str:
         lines.append("## Blueprint Details")
         lines.append("| Field | Value |")
         lines.append("|-------|-------|")
-        lines.append(f"| Parent Class | {result.blueprint.parent_class or 'Unknown'} |")
+        lines.append(f"| Parent Class | {_escape_md_cell(result.blueprint.parent_class or 'Unknown')} |")
         # Variables 统计
         var_count = len(result.blueprint.variables) if result.blueprint.variables else 0
         comp_count = sum(1 for v in result.blueprint.variables if v.is_component) if result.blueprint.variables else 0
-        lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+        lines.append(f"| Variables | {_escape_md_cell(f'{var_count} ({comp_count} components, {var_count - comp_count} regular)')} |")
         lines.append("")
 
     # === Graph Summary ===
@@ -92,11 +97,9 @@ def format_markdown(result: ParseResult) -> str:
         lines.append("| Name | Class | Parent |")
         lines.append("|------|-------|--------|")
         for i, exp in enumerate(result.export_map):
-            name = exp.object_name
-            cls = get_asset_class(exp, result.import_map, result.export_map)
-            parent = ""
-            if result.blueprint and i == 0:
-                parent = result.blueprint.parent_class or ""
+            name = _escape_md_cell(exp.object_name)
+            cls = _escape_md_cell(get_asset_class(exp, result.import_map, result.export_map))
+            parent = _escape_md_cell(result.blueprint.parent_class or "") if result.blueprint and i == 0 else ""
             lines.append(f"| {name} | {cls} | {parent} |")
         lines.append("")
 
