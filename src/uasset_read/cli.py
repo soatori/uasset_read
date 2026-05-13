@@ -89,15 +89,23 @@ def main():
         # argparse exits on error, map to EXIT_ARGUMENT_ERROR
         sys.exit(EXIT_ARGUMENT_ERROR)
 
-    # D-26: file not found check
+    # D-26 + HIGH-01: file not found check + verify it's a file, not a directory
     file_path = Path(args.file)
-    if not file_path.exists():
-        print(f"Error: File not found: {args.file}", file=sys.stderr)
+    if not file_path.is_file():
+        if file_path.is_dir():
+            print(f"Error: Not a file: {args.file}", file=sys.stderr)
+        else:
+            print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     # Parse the file
     tolerant = not args.strict
-    result = parse_uasset(args.file, tolerant=tolerant)
+    # HIGH-03: defensive exception handling for parse_uasset
+    try:
+        result = parse_uasset(args.file, tolerant=tolerant)
+    except Exception as e:
+        print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
 
     # D-26: parse error handling
     if not result.is_success:
