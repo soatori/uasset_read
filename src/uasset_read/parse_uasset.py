@@ -73,8 +73,6 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
-        result.is_success = True
-
         # Blueprint 元数据提取
         blueprint_metadata = None
         asset_name = result.name_map[0] if result.name_map else None
@@ -84,7 +82,7 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
                 result.export_map, result.import_map, asset_name
             )
             if main_bpgc:
-                temp_archive = FArchive(path)
+                temp_archive = FArchive(path, tolerant=tolerant)
                 temp_archive.set_byte_swapping(archive._byte_swapping)
                 try:
                     meta, warn = extract_blueprint_metadata(
@@ -104,7 +102,7 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
         if not blueprint_metadata:
             for export in result.export_map:
                 if detect_blueprint(export, result.import_map, result.export_map):
-                    temp_archive = FArchive(path)
+                    temp_archive = FArchive(path, tolerant=tolerant)
                     temp_archive.set_byte_swapping(archive._byte_swapping)
                     try:
                         meta, warn = extract_blueprint_metadata(
@@ -144,6 +142,9 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
             result.circular_deps = detect_circular_deps(result.import_map)
         except ParseError as e:
             result.errors.append(f"dependency analysis error: {e}")
+
+        # 所有步骤完成后，根据错误数设置成功标志
+        result.is_success = len(result.errors) == 0
 
     except VersionError as e:
         result.errors.append(str(e))
