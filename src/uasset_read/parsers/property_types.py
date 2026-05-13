@@ -107,6 +107,10 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         )
 
     count = archive.read_i32()
+    if count < 0 or count > MAX_PROPERTY_COUNT:
+        raise ParseError(
+            f"ArrayProperty count {count} out of range [0, {MAX_PROPERTY_COUNT}]"
+        )
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
     remaining_size = tag.size
@@ -181,6 +185,10 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     key_type, value_type = _extract_map_types_from_tag(tag)
 
     num_entries = archive.read_i32()
+    if num_entries < 0 or num_entries > MAX_PROPERTY_COUNT:
+        raise ParseError(
+            f"MapProperty entries count {num_entries} out of range [0, {MAX_PROPERTY_COUNT}]"
+        )
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
@@ -201,6 +209,10 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     element_type = _extract_set_type_from_tag(tag)
 
     num_elements = archive.read_i32()
+    if num_elements < 0 or num_elements > MAX_PROPERTY_COUNT:
+        raise ParseError(
+            f"SetProperty elements count {num_elements} out of range [0, {MAX_PROPERTY_COUNT}]"
+        )
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
 
