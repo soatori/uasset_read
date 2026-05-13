@@ -89,6 +89,12 @@ def read_import_map(
     name_map: List[str]
 ) -> List[ObjectImport]:
     """读取导入表。"""
+    # CR-05: 验证 import_count 范围
+    if summary.import_count < 0:
+        raise ParseError(f"负数导入计数: {summary.import_count}")
+    if summary.import_count > MAX_IMPORT_COUNT:
+        raise ParseError(f"导入计数 {summary.import_count} 超过最大值 {MAX_IMPORT_COUNT}")
+
     archive.seek(summary.import_offset)
 
     is_ue4_file = summary.legacy_file_version > -8
@@ -192,6 +198,12 @@ def read_export_map(
     name_map: List[str]
 ) -> List[ObjectExport]:
     """读取导出表。"""
+    # CR-05: 验证 export_count 范围
+    if summary.export_count < 0:
+        raise ParseError(f"负数导出计数: {summary.export_count}")
+    if summary.export_count > MAX_EXPORT_COUNT:
+        raise ParseError(f"导出计数 {summary.export_count} 超过最大值 {MAX_EXPORT_COUNT}")
+
     archive.seek(summary.export_offset)
 
     export_map: List[ObjectExport] = []
@@ -220,6 +232,12 @@ def read_export_map(
             else:
                 serial_size = archive.read_i32()
                 serial_offset = archive.read_i32()
+
+            # CR-05: 验证 serial_size/serial_offset 非负
+            if serial_size < 0:
+                raise ParseError(f"导出 #{export_idx} serial_size 为负数: {serial_size}")
+            if serial_offset < 0:
+                raise ParseError(f"导出 #{export_idx} serial_offset 为负数: {serial_offset}")
 
             # bool flags
             b_forced_export = archive.read_bool()
@@ -264,6 +282,11 @@ def read_export_map(
             if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
                 script_serial_offset = archive.read_i64()
                 script_serial_size = archive.read_i64()
+                # CR-05: 验证 script_serial_offset/size 非负
+                if script_serial_offset < 0:
+                    raise ParseError(f"导出 #{export_idx} script_serial_offset 为负数: {script_serial_offset}")
+                if script_serial_size < 0:
+                    raise ParseError(f"导出 #{export_idx} script_serial_size 为负数: {script_serial_size}")
 
             export_map.append(ObjectExport(
                 class_index=class_index, super_index=super_index,
