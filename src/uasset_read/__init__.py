@@ -244,7 +244,7 @@ from .blueprint.transform_parser import (
     format_transform_value as _format_transform_value,
 )
 from .serializers.property_tags import read_property_tag
-from .parsers.property_types import _derive_node_name, parse_default_value, format_variable_type
+from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
 from .constants import (
     CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
@@ -253,7 +253,7 @@ from .constants import (
 )
 
 # 以下函数等待后续 plan 完成后追加：
-# read_property_tag, _derive_node_name, read_blueprint_variable,
+# read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
 # read_k2node_call_function, read_k2node_event, read_k2node_knot,
 # read_edgraph_node_comment, read_k2node_enhanced_input
