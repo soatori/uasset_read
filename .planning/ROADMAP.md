@@ -42,11 +42,11 @@ Plans:
 **目标**: 通过 UE5 C++ 源码参考和二进制跟踪工具，精确定位并修复 UE5 pin 序列化的 4 字节偏移问题，使 linked_to_raw 正确读取  
 **依赖**: 无（继承 Phase 35b 成果）
 **成功标准**: linked_to_raw 非空 + 4 字节偏移修复 + 集成测试全部通过  
-**计划**: 35e-01 UE5 C++ 参考 → 35e-02 二进制跟踪 → 35e-03 Direction/FName 修复 → 35e-04 集成测试  
+**计划**: 35e-01 Binaer-Trace → 35e-02 FText+UObjectWrapper Fix → 35e-03 SinglePrecisionFloat Fix → 35e-04 Integrationstests  
 **Plans:** 4 plans  
   
 Plans:  
-- [ ] 35e-01-PLAN.md - UE5 EdGraphPin.cpp L1838-1964 字段边界分析  
-- [ ] 35e-02-PLAN.md - 二进制跟踪工具增强与 pin body 精确映射  
-- [ ] 35e-03-PLAN.md - Direction/FName 4 字节偏移修复（graph.py）  
-- [ ] 35e-04-PLAN.md - 集成测试验证：linked_to_raw, execution_flows, data_flows 
+- [ ] 35e-01-PLAN.md — Binaer-Trace-Tool erweitern: DefaultTextValue als FText, fehlende PinType-Felder (tools/binary_trace_pin.py)  
+- [ ] 35e-02-PLAN.md — DefaultTextValue FString->FText + bIsUObjectWrapper Fallback + GUID (graph.py, constants.py)  
+- [ ] 35e-03-PLAN.md — bSerializeAsSinglePrecisionFloat + linked_to_raw Verifikation (graph.py)  
+- [ ] 35e-04-PLAN.md — Integrationstests: linked_to_raw, execution_flows, data_flows + Regression (tests/) 
