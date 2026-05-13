@@ -1,16 +1,10 @@
 ### Phase 35b: Pin 连接深度调试与修复
-**目标**: 深入调试修复 pin linked_to_raw 为空的根因，恢复 execution_flows 和 data_flows
+**状态**: ⏭️ 已跳过（合并至 Phase 35e）
+**目标**: 深入调试修复 pin linked_to_raw 为空的根因
 **依赖**: Phase 35
-**成功标准**: linked_to_raw 非空 + execution_flows/data_flows 完整构建 + Phase 22 历史测试通过
-**计划**: 35b-01 read_bool UE5 修复 → 35b-02 BitField 修复 → 35b-03 FText 修复 → 35b-04 二进制诊断工具 → 35b-05 集成测试
-**Plans:** 5 plans
-
-Plans:
-- [ ] 35b-01-PLAN.md — read_bool_ue5() + PinType bool reads (1 byte for UE5)
-- [ ] 35b-02-PLAN.md — BitField read u32 for UE5 (was incorrectly u8)
-- [ ] 35b-03-PLAN.md — FText b_has_culture 1-byte bool for UE5
-- [ ] 35b-04-PLAN.md — Binary trace diagnostic tool for field position verification
-- [ ] 35b-05-PLAN.md — Integration tests: linked_to_raw, execution_flows, data_flows
+**成功标准**: linked_to_raw 非空 + execution_flows/data_flows 完整构建
+**计划**: 5 plans（修复代码已合入，遗留的 4 字节偏移问题由 35e 解决）
+**详情**: 见 [35b-SKIP.md](phases/35b-pin-connection-debug/35b-SKIP.md)
 
 ### Phase 35c: 代码审查安全性与健壮性修复
 **目标**: 修复代码审查发现的 8 个输入验证与资源管理问题（CR-01/02/04/05/16/17 + HIGH-01/03/07）
@@ -46,7 +40,7 @@ Plans:
   
 ### Phase 35e: Pin Offset 根因诊断与 UE5 C++ 参考验证  
 **目标**: 通过 UE5 C++ 源码参考和二进制跟踪工具，精确定位并修复 UE5 pin 序列化的 4 字节偏移问题，使 linked_to_raw 正确读取  
-**依赖**: Phase 35b (阻塞)  
+**依赖**: 无（继承 Phase 35b 成果）
 **成功标准**: linked_to_raw 非空 + 4 字节偏移修复 + 集成测试全部通过  
 **计划**: 35e-01 UE5 C++ 参考 → 35e-02 二进制跟踪 → 35e-03 Direction/FName 修复 → 35e-04 集成测试  
 **Plans:** 4 plans  

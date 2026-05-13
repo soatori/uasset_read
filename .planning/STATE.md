@@ -36,11 +36,38 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 
 ---
 
-## 当前焦点: Phase 35c — 代码审查安全性与健壮性修复
+## 当前焦点: Phase 35e — Pin Offset 根因诊断与 UE5 C++ 参考验证
 
-**状态**: 🟢 执行中
+**状态**: 🟢 活跃
+**优先级**: P0 - 阻塞
+**依赖**: 无（继承 Phase 35b 成果）
+**计划**: 4 plans (0 完成)
+
+详情见 [35e-CONTEXT.md](phases/35e-pin-offset-debug/35e-CONTEXT.md)
+
+| Plan | 文件 | 目标 | 状态 |
+|------|------|------|------|
+| 35e-01 | serializers/graph.py | UE5 EdGraphPin.cpp 字段边界分析 | 待执行 |
+| 35e-02 | tools/binary_trace_pin.py | 二进制跟踪增强与 pin body 映射 | 待执行 |
+| 35e-03 | serializers/graph.py | Direction/FName 4 字节偏移修复 | 待执行 |
+| 35e-04 | tests/ | 集成测试验证 | 待执行 |
+
+---
+
+## 已跳过: Phase 35b — Pin 连接深度调试与修复
+
+**状态**: ⏭️ 已跳过（合并至 Phase 35e）
+**优先级**: P0 - 阻塞（已转移）
+**说明**: 35b-01~35b-03 的修复代码已合入（read_bool_ue5、BitField、FText），但 linked_to_raw 仍为空。遗留的约 4 字节偏移问题由 Phase 35e 继续解决。
+**参考**: [35b-SKIP.md](phases/35b-pin-connection-debug/35b-SKIP.md), [35e-CONTEXT.md](phases/35e-pin-offset-debug/35e-CONTEXT.md)
+
+---
+
+## 部分完成: Phase 35c — 代码审查安全性与健壮性修复
+
+**状态**: 🟡 部分完成
 **优先级**: P1 - 高
-**依赖**: Phase 35b
+**依赖**: 无（原依赖 Phase 35b 已跳过，不再阻塞）
 **计划**: 8 plans (4 完成)
 
 详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
@@ -55,36 +82,6 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 | 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) | ✅ 完成 |
 | 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | 待执行 |
 | 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | ✅ 完成 |
-
----
-
-## 已完成: Phase 35b — Pin 连接深度调试与修复
-
-**状态**: 🟡 部分完成  
-**优先级**: P0 - 阻塞  
-**核心问题**: linked_to_raw 为空，execution_flows/data_flows 无法构建
-
-详情见 [35b-PLAN.md](phases/35b-pin-connection-debug/35b-PLAN.md)
-
----
-
-## 待执行: Phase 35c — 代码审查安全性与健壮性修复
-
-**状态**: 🟡 计划中  
-**优先级**: P1 - 高  
-**依赖**: Phase 35b  
-**计划**: 6 plans
-
-详情见 [35c-PLAN.md](phases/35c-security-fixes/35c-PLAN.md)
-
-| Plan | 文件 | 问题 |
-|------|------|------|
-| 35c-01 | archive.py | 文件描述符泄漏 (CR-01) |
-| 35c-02 | archive.py | FString OOM (CR-02) |
-| 35c-03 | package_summary.py, object_resources.py | 负数计数 (CR-04/05) |
-| 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) |
-| 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) |
-| 35c-06 | property_types.py | 条目计数验证 (HIGH-07) |
 
 ---
 
