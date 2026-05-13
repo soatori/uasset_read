@@ -366,7 +366,7 @@ def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
         "is_replicated": variable.is_replicated,
         "is_non_pi_ed_duplicate_transient": variable.is_non_pi_ed_duplicate_transient,
         "is_component": variable.is_component,
-        "meta_data": variable.meta_data
+        "meta_data": variable.metadata
     }
     return result
 

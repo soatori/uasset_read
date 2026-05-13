@@ -153,7 +153,6 @@ class BlueprintVariable:
     is_expose_on_spawn: bool = False
     edit_category: str = ""
     edit_widget: str = ""
-    meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
