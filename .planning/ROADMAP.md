@@ -27,7 +27,7 @@ Plans:
 - [ ] 35c-03c-PLAN.md — object_resources.py 计数与偏移验证
 - [ ] 35c-04-PLAN.md — parse_uasset.py is_success 标志 + 临时存档 tolerant 模式修复
 - [x] 35c-05-PLAN.md — cli.py 文件类型检查 + 异常捕获
-- [ ] 35c-06-PLAN.md — property_types.py 属性条目计数验证
+- [x] 35c-06-PLAN.md — property_types.py 属性条目计数验证
 
 ### Phase 35d: 代码审查逻辑与质量修复
 **目标**: 修复全量代码审查发现的属性解析 bug、蓝图提取 bug、输出格式问题
