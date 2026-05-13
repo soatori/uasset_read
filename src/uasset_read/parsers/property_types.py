@@ -326,7 +326,7 @@ def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
         end = type_str.find(")")
         if start != -1 and end != -1:
             params = type_str[start + 1:end]
-            parts = params.split(",")
+            parts = params.split(",", 1)  # split on first comma only (type names may contain commas)
             if len(parts) >= 2:
                 return parts[0].strip(), parts[1].strip()
 
