@@ -58,7 +58,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
         "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
-        "is_replicated": bool(flags & CPF_Net),
+        "is_replicated": bool(flags & CPF_Replicated),
         "is_transient": bool(flags & CPF_Transient),
         "is_blueprint_assignable": bool(flags & CPF_BlueprintAssignable),
         "is_rep_notify": bool(flags & CPF_RepNotify),
