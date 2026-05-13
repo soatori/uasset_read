@@ -94,7 +94,6 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     elif tag.type in ("EnumProperty",):
         return handler(tag, archive, name_map, summary)
 
-    return None  # Fallback D-05
 
 
 def parse_properties_from_export(
