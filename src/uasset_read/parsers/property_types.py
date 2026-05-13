@@ -18,7 +18,7 @@ from uasset_read.models.properties import (
 )
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MAX_PROPERTY_COUNT
+from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 
 
 # ============================================================================
@@ -107,9 +107,9 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         )
 
     count = archive.read_i32()
-    if count < 0 or count > MAX_PROPERTY_COUNT:
+    if count < 0 or count > MAX_ARRAY_COUNT:
         raise ParseError(
-            f"ArrayProperty count {count} out of range [0, {MAX_PROPERTY_COUNT}]"
+            f"ArrayProperty count {count} out of range [0, {MAX_ARRAY_COUNT}]"
         )
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
