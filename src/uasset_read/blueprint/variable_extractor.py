@@ -146,7 +146,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         "SoftClassProperty": FEdGraphPinType(pin_category="soft_class"),
     }
 
-    if isinstance(value, str) and prop.type in type_mapping:
+    if isinstance(value, str) and getattr(prop, 'type', None) in type_mapping:
         return type_mapping[prop.type]
 
     return FEdGraphPinType(pin_category=prop.type if hasattr(prop, "type") else "unknown")
