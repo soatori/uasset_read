@@ -79,8 +79,9 @@ Python工具读取 Unreal Engine .uasset 文件，让 AI agent 直接解析蓝�
 - ✓ Phase 35d: 代码审查逻辑与质量修复（6 plans, 34 new tests, 0 regressions）
 
 **当前焦点:**
-- 🔴 **Phase 35b**: Pin 连接深度调试与修复 (`linked_to_raw` 根因修复)
+- ⏭️ **Phase 35b**: 已跳过（合并至 Phase 35e）
 - 🟡 **Phase 35c**: 代码审查安全性与健壮性修复（8 plans, 部分完成）
+- 🔴 **Phase 35e**: Pin Offset 根因诊断与 UE5 C++ 参考验证（4 plans, 活跃）
 
 **架构（v6.0 完成后）:**
 ```
