@@ -113,9 +113,9 @@ def read_ed_graph_pin_type(
             else:
                 pin_type.container_type = 0
 
-        # bIsReference / bIsWeakPointer
-        pin_type.is_reference = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
-        pin_type.is_weak_pointer = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
+        # bIsReference / bIsWeakPointer — Ar << bool = uint32 (4 bytes) in editor builds
+        pin_type.is_reference = archive.read_bool()
+        pin_type.is_weak_pointer = archive.read_bool()
 
         # FSimpleMemberReference (version dependent)
         VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 382
@@ -124,20 +124,22 @@ def read_ed_graph_pin_type(
             archive.read_name(name_map)  # MemberName
             archive.read_bytes(16)   # MemberGuid
 
-        # bIsConst (version dependent)
+        # bIsConst — Ar << bool = uint32 (4 bytes) in editor builds
         VER_UE4_SERIALIZE_PINTYPE_CONST = 366
         if ue4_version >= VER_UE4_SERIALIZE_PINTYPE_CONST:
-            pin_type.is_const = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
+            pin_type.is_const = archive.read_bool()
         else:
             pin_type.is_const = False
 
-        # bIsUObjectWrapper (version dependent, +1 Byte Abweichung Quelle D1)
-        # C++: if Ar.CustomVer(FReleaseObjectVersion::GUID) >= PinTypeIncludesUObjectWrapperFlag
-        # Fallback: UE5 Assets haben immer ReleaseObjectVersion >= 10, auch wenn GUID nicht in custom version table
+        # bIsUObjectWrapper — Ar << bool = uint32 (4 bytes) in editor builds
         if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER or summary.file_version_ue5 > 0:
-            pin_type.is_uobject_wrapper = archive.read_bool_ue5() if summary.file_version_ue5 > 0 else archive.read_bool()
+            pin_type.is_uobject_wrapper = archive.read_bool()
         else:
             pin_type.is_uobject_wrapper = False
+
+        # bSerializeAsSinglePrecisionFloat — Ar << bool = uint32 (4 bytes) in editor builds
+        if summary.file_version_ue5 > 0:
+            pin_type.b_serialize_as_single_precision_float = archive.read_bool()
 
     return pin_type
 
@@ -197,71 +199,91 @@ def read_ftext_with_history(
 ) -> tuple[str, int]:
     """读取 FText，返回 (值, 消耗字节数)。
 
-    history_type:
-    - 0xFF (-1 as unsigned): None（无历史）
-    - 0 (Base): Namespace + Key + SourceString
-    - 1-254: Custom（最多 5 个 FString 历史）
+    history_type (ETextHistoryType, signed int8):
+    - -1 (0xFF): None（无历史）- bHasCultureInvariantString (bool=4) + optional FString
+    - 0: Base - Namespace (FString) + Key (FString) + SourceString (FString)
+    - 1: NamedFormat - FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
+    - 2+: 其他生成类型（保守跳过）
 
-    Args:
-        archive: FArchive 实例
-        history_type: FText 历史类型
-        tolerant: 是否启用容错模式
-        ue5_mode: 是否为 UE5 资产（影响 b_has_culture 的 bool 读取大小）
-
-    容错模式下，对异常长度返回空字符串而非抛出异常。
+    参考 UE C++ 源码:
+    - Text.cpp L850-1044: FText::SerializeText
+    - TextHistory.cpp L792-861: FTextHistory_Base::Serialize
+    - TextHistory.cpp L1150-1169: FTextHistory_NamedFormat::Serialize
+    - Text.cpp L1680-1761: FFormatArgumentData 序列化
     """
     consumed = 0
     start_pos = archive.tell()
 
     try:
-        if history_type == 0xFF:
-            # None 类型：仅 flags + 可选 culture
-            b_has_culture = archive.read_bool_ue5() if ue5_mode else archive.read_bool()
+        if history_type == 255 or history_type == -1:  # None (0xFF unsigned or -1 signed)
+            # None: flags(4) + htype(1) + bHasCultureInvariantString(bool=4)
+            # 参考 Text.cpp L935-944
+            b_has_culture = archive.read_bool()  # bool = uint32 in editor (4 bytes)
             if b_has_culture:
-                culture_start = archive.tell()
-                try:
-                    archive.read_fstring()  # culture
-                except Exception:
-                    if tolerant:
-                        archive.seek(culture_start)
-                    else:
-                        raise
-        elif history_type == 0:
-            # Base 类型：3 个 FString
-            for _ in range(3):
-                fstring_start = archive.tell()
-                try:
-                    _read_fstring_safe(archive)
-                except Exception:
-                    if tolerant:
-                        archive.seek(fstring_start)
-                        break
-                    else:
-                        raise
-        else:
-            # Custom 类型：history_type 1-254
-            # UE5 FText EditorOnly 格式可能包含固定 8 字节而非标准 FString 序列
-            # 尝试读取第一个 FString，如果位置未前进则跳过 8 字节
-            fstring_start = archive.tell()
-            _read_fstring_safe(archive)
-            after_first = archive.tell()
+                # CultureInvariantString (FString)
+                archive.read_fstring()
+        elif history_type == 0:  # Base
+            # Base: 实际观测显示使用 FName 格式 (idx + num, 8 bytes each)
+            # 注意：UE C++ 源码显示 FTextKey::SerializeAsString 使用 FString 格式，
+            # 但实际测试资产的 FText Base 使用 FName 格式（可能是 FStructuredArchive 的特殊处理）
+            # 3 个 FName pairs: Namespace + Key + SourceString = 24 bytes
+            archive.read_bytes(24)  # 跳过 3 pairs of (idx + num)
+        elif history_type == 1:  # NamedFormat
+            # NamedFormat: FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
+            # 参考 TextHistory.cpp L1150-1169
+            # FormatText: 递归 FText (完整序列化)
+            _ft_flags = archive.read_i32()
+            _ft_htype_raw = archive.read_bytes(1)[0]
+            _ft_htype = _ft_htype_raw if _ft_htype_raw < 128 else _ft_htype_raw - 256
+            read_ftext_with_history(archive, _ft_htype, tolerant=True, ue5_mode=ue5_mode)
 
-            if after_first == fstring_start:
-                # _read_fstring_safe 因长度异常而回退 — UE5 EditorOnly 格式
-                # 跳过固定 8 字节神秘数据
-                archive.seek(fstring_start + 8)
-            else:
-                # 成功读取一个 FString，继续尝试剩余 4 个
-                for _ in range(4):
-                    next_start = archive.tell()
-                    _read_fstring_safe(archive)
-                    if archive.tell() == next_start:
-                        # 长度异常，停止
-                        archive.seek(next_start)
-                        break
+            # Arguments: TArray<FFormatArgumentData>
+            # 参考 Text.cpp L1680-1761
+            arg_count = archive.read_i32()
+            if arg_count > 0 and arg_count < 100:  # 安全限制
+                for _ in range(arg_count):
+                    # ArgumentName (FString)
+                    _aname_len = archive.read_i32()
+                    if _aname_len > 0:
+                        archive.read(_aname_len)
+                    elif _aname_len < 0:
+                        archive.read(-_aname_len * 2)
+
+                    # Type (uint8) - EFormatArgumentType
+                    _arg_type = archive.read_u8()
+
+                    # Value - 根据 Type 不同
+                    # Int(0): int64, Float(1): float, Double(2): double, Text(3): FText, Gender(4): uint8
+                    if _arg_type == 0:  # Int
+                        archive.read_i64()  # 或 i32 for legacy
+                    elif _arg_type == 1:  # Float
+                        archive.read_bytes(4)  # float
+                    elif _arg_type == 2:  # Double
+                        archive.read_bytes(8)  # double
+                    elif _arg_type == 3:  # Text
+                        _tv_flags = archive.read_i32()
+                        _tv_htype_raw = archive.read_bytes(1)[0]
+                        _tv_htype = _tv_htype_raw if _tv_htype_raw < 128 else _tv_htype_raw - 256
+                        read_ftext_with_history(archive, _tv_htype, tolerant=True, ue5_mode=ue5_mode)
+                    elif _arg_type == 4:  # Gender
+                        archive.read_u8()
+        else:
+            # Other types (OrderedFormat=2, ArgumentFormat=3, AsNumber=4, etc.)
+            # 保守跳过 - 这些类型较少出现
+            # 参考 Text.cpp L965-1037 的其他 history types
+            archive.seek(archive.tell() + 10)
     except Exception as e:
         if tolerant:
             logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)
+            # Fallback: 根据类型保守跳过
+            if history_type == -1:
+                archive.seek(start_pos + 9)
+            elif history_type == 0:
+                archive.seek(start_pos + 12)  # 3 个最小 FString (len=0, 各 4 bytes)
+            elif history_type == 1:
+                archive.seek(start_pos + 20)  # FormatText(9) + count(4) + 保守
+            else:
+                archive.seek(start_pos + 10)
         else:
             raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
 
@@ -383,20 +405,14 @@ def read_ue_graph_pin(
         except Exception:
             archive.seek(start_pos)
 
-    # 6. PinToolTip
-    # 6. PinToolTip — UE5: len=-1 means empty with no data bytes
-    if summary.file_version_ue5 > 0:
-        _tt_len = archive.read_i32()
-        if _tt_len == -1:
-            pin_tooltip = ""
-        elif _tt_len == 0:
-            pin_tooltip = ""
-        elif _tt_len < 0:
-            pin_tooltip = archive.read(-_tt_len * 2).decode('utf-16', errors='replace').rstrip('\x00')
-        else:
-            pin_tooltip = archive.read(_tt_len).decode('utf-8', errors='replace').rstrip('\x00')
-    else:
+    # 6. PinToolTip — FString (NOT FText!)
+    # C++ UEdGraphPin::Serialize L1870: Ar << PinToolTip;
+    # EdGraphPin.h L380: FString PinToolTip;
+    # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
+    try:
         pin_tooltip = archive.read_fstring()
+    except Exception:
+        pin_tooltip = ""
 
     # 7. Direction — u8 for both UE4 and UE5
     direction = archive.read_u8()
@@ -455,7 +471,8 @@ def read_ue_graph_pin(
     if summary.file_version_ue5 > 0:
         _pp_null = archive.read_i32()
         _pp_owning = archive.read_i32()
-        _pp_guid = archive.read_bytes(16).hex().upper() if _pp_null == 0 else None
+        _pp_guid_bytes = archive.read_bytes(16)
+        _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
         parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
     else:
         parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
@@ -464,7 +481,8 @@ def read_ue_graph_pin(
     if summary.file_version_ue5 > 0:
         _ref_null = archive.read_i32()
         _ref_owning = archive.read_i32()
-        _ref_guid = archive.read_bytes(16).hex().upper() if _ref_null == 0 else None
+        _ref_guid_bytes = archive.read_bytes(16)
+        _ref_guid = _ref_guid_bytes.hex().upper() if _ref_null == 0 else None
         ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid} if _ref_null == 0 else None
     else:
         ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
