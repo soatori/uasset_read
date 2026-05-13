@@ -33,6 +33,7 @@ from uasset_read.constants import (
     FFRAMEWORK_VERSION_PINS_STORE_FNAME, FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE,
     FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX, FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
 )
+from uasset_read.serializers.graph import read_ftext_with_history
 
 
 def trace_field(archive: FArchive, name: str, expected: int, read_func: callable) -> Dict[str, Any]:
@@ -341,13 +342,31 @@ def trace_pin_type(archive: FArchive, name_map: List[str], summary: PackageFileS
             else:
                 traces.append(trace_field(archive, "PinType.bIsConst", 4, lambda: archive.read_bool()))
 
-        # bIsUObjectWrapper (version dependent)
+        # bIsUObjectWrapper (version dependent, +1 Byte Abweichung Quelle D1)
+        # C++: if Ar.CustomVer(FReleaseObjectVersion::GUID) >= PinTypeIncludesUObjectWrapperFlag
+        # Fallback: ue5_version > 0 bedeutet immer ReleaseObjectVersion >= 10
         release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
-        if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER:
+        if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER or summary.file_version_ue5 > 0:
             if summary.file_version_ue5 > 0:
                 traces.append(trace_field(archive, "PinType.bIsUObjectWrapper", 1, lambda: archive.read_u8()))
             else:
                 traces.append(trace_field(archive, "PinType.bIsUObjectWrapper", 4, lambda: archive.read_bool()))
+        else:
+            traces.append({
+                "field": "PinType.bIsUObjectWrapper",
+                "before": 0,
+                "after": 0,
+                "consumed": 0,
+                "expected": 0,
+                "delta": 0,
+                "value": "SKIPPED (release_version=0, no ue5 fallback)",
+                "success": True,
+            })
+
+        # bSerializeAsSinglePrecisionFloat (fehlendes Feld, +1 Byte Abweichung Quelle D2)
+        # C++: WITH_EDITOR && FUE5ReleaseStreamObjectVersion >= SerializeFloatPinDefaultValuesAsSinglePrecision
+        if summary.file_version_ue5 > 0:
+            traces.append(trace_field(archive, "PinType.bSerializeAsSinglePrecisionFloat", 1, lambda: archive.read_u8()))
 
     return traces
 
@@ -461,8 +480,65 @@ def trace_pin_body(
     # 9. DefaultObject (i32)
     traces.append(trace_i32(archive, "DefaultObject"))
 
-    # 10. DefaultTextValue (FString — UE5 simple format)
-    traces.append(trace_fstring(archive, "DefaultTextValue"))
+    # 10. DefaultTextValue (FText — NICHT FString!)
+    # UE5 C++: Ar << DefaultTextValue; (EdGraphPin.cpp L1876)
+    # FText: flags(i32,4B) + history_type(u8,1B) + body(variable)
+    dtv_before = archive.tell()
+    dtv_flags = archive.read_i32()
+    dtv_after_flags = archive.tell()
+    traces.append({
+        "field": "DefaultTextValue.flags",
+        "before": dtv_before,
+        "after": dtv_after_flags,
+        "consumed": 4,
+        "expected": 4,
+        "delta": 0,
+        "value": f"0x{dtv_flags:08X}",
+        "success": True,
+    })
+    dtv_ht_before = archive.tell()
+    dtv_history_type = archive.read_u8()
+    dtv_after_ht = archive.tell()
+    traces.append({
+        "field": "DefaultTextValue.history_type",
+        "before": dtv_ht_before,
+        "after": dtv_after_ht,
+        "consumed": 1,
+        "expected": 1,
+        "delta": 0,
+        "value": dtv_history_type,
+        "success": True,
+    })
+    # FText body entsprechend history_type verfolgen
+    body_before = archive.tell()
+    try:
+        dtv_value, dtv_consumed = read_ftext_with_history(
+            archive, dtv_history_type,
+            tolerant=True,
+            ue5_mode=(summary.file_version_ue5 > 0)
+        )
+        body_after = archive.tell()
+        traces.append({
+            "field": "DefaultTextValue.body",
+            "before": body_before,
+            "after": body_after,
+            "consumed": body_after - body_before,
+            "expected": "variable",
+            "delta": "N/A",
+            "value": f"history_type={dtv_history_type}, consumed={body_after - body_before}",
+            "success": True,
+        })
+    except Exception as e:
+        traces.append({
+            "field": "DefaultTextValue.body",
+            "before": body_before,
+            "after": archive.tell(),
+            "consumed": archive.tell() - body_before,
+            "expected": "variable",
+            "delta": "N/A",
+            "value": f"ERROR: {e}",
+            "success": False,
+        })
 
     # 11. LinkedTo array (CRITICAL)
     traces.extend(trace_linkedto_array(archive, name_map, export_map, import_map))
