@@ -540,7 +540,6 @@ def read_blueprint_variable(
     var.meta_class = var.metadata.get('MetaClass', '')
     var.edit_category = var.metadata.get('Category', '')
     var.edit_widget = var.metadata.get('EditWidget', '')
-    var.meta_data = var.metadata.copy()
 
     # DefaultValue — 解析
     default_str = archive.read_fstring()
