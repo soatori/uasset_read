@@ -30,6 +30,7 @@ MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
+MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
 MAX_FSTRING_LENGTH = 10_000_000   # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================
