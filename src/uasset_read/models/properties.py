@@ -35,10 +35,13 @@ class PropertyValue:
     array_index: int = 0
 
 
-@dataclass
 class AdvancedPropertyValue:
-    """高级属性值基类（D-07a）。所有高级属性 dataclass 继承此基类。"""
-    property_type: str
+    """高级属性值基类（D-07a）。所有高级属性 dataclass 继承此基类。
+
+    Note: 非 dataclass — property_type 字段定义在各子类中，
+    直接设置默认值避免 dataclass 继承时的字段顺序问题（CR-13）。
+    """
+    pass
 
 
 @dataclass
@@ -46,6 +49,7 @@ class StructValue(AdvancedPropertyValue):
     """StructProperty 值容器（D-01a）。"""
     struct_type: str
     fields: Dict[str, Any] = field(default_factory=dict)
+    property_type: str = "StructProperty"
 
 
 @dataclass
@@ -54,6 +58,7 @@ class MapValue(AdvancedPropertyValue):
     key_type: str
     value_type: str
     entries: List[Dict[str, Any]] = field(default_factory=list)
+    property_type: str = "MapProperty"
 
 
 @dataclass
@@ -61,6 +66,7 @@ class SetValue(AdvancedPropertyValue):
     """SetProperty 值容器（D-03a）。"""
     element_type: str
     elements: List[Any] = field(default_factory=list)
+    property_type: str = "SetProperty"
 
 
 @dataclass
@@ -68,6 +74,7 @@ class EnumValue(AdvancedPropertyValue):
     """EnumProperty 值容器（D-04a）。"""
     enum_type: str
     value_name: str
+    property_type: str = "EnumProperty"
 
 
 @dataclass
@@ -76,6 +83,7 @@ class TextValue(AdvancedPropertyValue):
     namespace: str = ""
     key: str = ""
     source_string: str = ""
+    property_type: str = "TextProperty"
 
 
 @dataclass
@@ -83,3 +91,4 @@ class DelegateValue(AdvancedPropertyValue):
     """DelegateProperty 值容器（D-06a）。"""
     object_ref: int
     function_name: str
+    property_type: str = "DelegateProperty"
