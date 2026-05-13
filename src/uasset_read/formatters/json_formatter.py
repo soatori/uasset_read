@@ -160,12 +160,18 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
         return {
             "key_type": value.key_type,
             "value_type": value.value_type,
-            "entries": value.entries
+            "entries": [
+                {
+                    "key": serialize_property_value(entry.get("key"), depth + 1, max_depth),
+                    "value": serialize_property_value(entry.get("value"), depth + 1, max_depth),
+                }
+                for entry in value.entries
+            ]
         }
     if hasattr(value, "elements") and hasattr(value, "element_type"):  # SetValue
         return {
             "element_type": value.element_type,
-            "elements": value.elements
+            "elements": [serialize_property_value(elem, depth + 1, max_depth) for elem in value.elements]
         }
     if hasattr(value, "value_name"):  # EnumValue
         return {
