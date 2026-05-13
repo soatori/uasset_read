@@ -21,26 +21,31 @@ class FArchive:
     def __init__(self, path: str, tolerant: bool = False):
         self._path = path
         self._file: BinaryIO = open(path, 'rb')
+        # Initialize attributes before try block for safe close() on exception
         self._byte_swapping: bool = False
-        self._file_size: int = __import__('os').path.getsize(path)
+        self._file_size: int = 0
         self._tolerant: bool = tolerant
-
-        # mmap branch
         self._mmap: Optional[mmap.mmap] = None
         self._use_mmap: bool = False
         self._mmap_warning: Optional[str] = None
 
-        if self._file_size >= MMAP_THRESHOLD:
-            try:
-                self._mmap = mmap.mmap(
-                    self._file.fileno(),
-                    0,
-                    access=mmap.ACCESS_READ
-                )
-                self._use_mmap = True
-            except (OSError, ValueError, PermissionError) as e:
-                self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
-                self._use_mmap = False
+        try:
+            self._file_size = __import__('os').path.getsize(path)
+
+            if self._file_size >= MMAP_THRESHOLD:
+                try:
+                    self._mmap = mmap.mmap(
+                        self._file.fileno(),
+                        0,
+                        access=mmap.ACCESS_READ
+                    )
+                    self._use_mmap = True
+                except (OSError, ValueError, PermissionError) as e:
+                    self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
+                    self._use_mmap = False
+        except BaseException:
+            self.close()
+            raise
 
     def read(self, size: int) -> bytes:
         """基础读取方法 - 不对原始字节进行交换。"""
