@@ -58,7 +58,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
         "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
-        "is_replicated": bool(flags & CPF_Net),
+        "is_replicated": bool(flags & CPF_Replicated),
         "is_transient": bool(flags & CPF_Transient),
         "is_blueprint_assignable": bool(flags & CPF_BlueprintAssignable),
         "is_rep_notify": bool(flags & CPF_RepNotify),
@@ -146,7 +146,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         "SoftClassProperty": FEdGraphPinType(pin_category="soft_class"),
     }
 
-    if isinstance(value, str) and prop.type in type_mapping:
+    if isinstance(value, str) and getattr(prop, 'type', None) in type_mapping:
         return type_mapping[prop.type]
 
     return FEdGraphPinType(pin_category=prop.type if hasattr(prop, "type") else "unknown")
@@ -540,7 +540,6 @@ def read_blueprint_variable(
     var.meta_class = var.metadata.get('MetaClass', '')
     var.edit_category = var.metadata.get('Category', '')
     var.edit_widget = var.metadata.get('EditWidget', '')
-    var.meta_data = var.metadata.copy()
 
     # DefaultValue — 解析
     default_str = archive.read_fstring()
