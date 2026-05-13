@@ -195,15 +195,14 @@ def read_ftext_with_history(
     archive: FArchive,
     history_type: int,
     tolerant: bool = True,
-    ue5_mode: bool = False,
 ) -> tuple[str, int]:
     """读取 FText，返回 (值, 消耗字节数)。
 
     history_type (ETextHistoryType, signed int8):
-    - -1 (0xFF): None（无历史）- bHasCultureInvariantString (bool=4) + optional FString
+    - -1 (0xFF): None（无历史）- bHasCultureInvariantString (bool=4 bytes) + optional FString
     - 0: Base - Namespace (FString) + Key (FString) + SourceString (FString)
     - 1: NamedFormat - FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
-    - 2+: 其他生成类型（保守跳过）
+    - 2+: 其他生成类型（在 tolerant 模式下不解析）
 
     参考 UE C++ 源码:
     - Text.cpp L850-1044: FText::SerializeText
@@ -216,18 +215,20 @@ def read_ftext_with_history(
 
     try:
         if history_type == 255 or history_type == -1:  # None (0xFF unsigned or -1 signed)
-            # None: flags(4) + htype(1) + bHasCultureInvariantString(bool=4)
-            # 参考 Text.cpp L935-944
-            b_has_culture = archive.read_bool()  # bool = uint32 in editor (4 bytes)
+            # None: flags(4) + htype(1) + bHasCultureInvariantString
+            # UE C++ FArchive::operator<<(bool&) 序列化为 uint32 (4 bytes)
+            # 参考 Text.cpp L935-944: Ar << bHasCultureInvariantString
+            b_has_culture = archive.read_bool()  # 4 bytes (uint32)
             if b_has_culture:
                 # CultureInvariantString (FString)
                 archive.read_fstring()
         elif history_type == 0:  # Base
-            # Base: 实际观测显示使用 FName 格式 (idx + num, 8 bytes each)
-            # 注意：UE C++ 源码显示 FTextKey::SerializeAsString 使用 FString 格式，
-            # 但实际测试资产的 FText Base 使用 FName 格式（可能是 FStructuredArchive 的特殊处理）
-            # 3 个 FName pairs: Namespace + Key + SourceString = 24 bytes
-            archive.read_bytes(24)  # 跳过 3 pairs of (idx + num)
+            # Base: 3 FStrings (Namespace, Key, SourceString)
+            # 参考 TextHistory.cpp L792-861: FTextHistory_Base::Serialize
+            # FTextKey 使用 FString 格式，每个 FString = i32 length + data
+            archive.read_fstring()  # Namespace
+            archive.read_fstring()  # Key
+            archive.read_fstring()  # SourceString
         elif history_type == 1:  # NamedFormat
             # NamedFormat: FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
             # 参考 TextHistory.cpp L1150-1169
@@ -235,7 +236,7 @@ def read_ftext_with_history(
             _ft_flags = archive.read_i32()
             _ft_htype_raw = archive.read_bytes(1)[0]
             _ft_htype = _ft_htype_raw if _ft_htype_raw < 128 else _ft_htype_raw - 256
-            read_ftext_with_history(archive, _ft_htype, tolerant=True, ue5_mode=ue5_mode)
+            read_ftext_with_history(archive, _ft_htype, tolerant=True)
 
             # Arguments: TArray<FFormatArgumentData>
             # 参考 Text.cpp L1680-1761
@@ -269,21 +270,32 @@ def read_ftext_with_history(
                         archive.read_u8()
         else:
             # Other types (OrderedFormat=2, ArgumentFormat=3, AsNumber=4, etc.)
-            # 保守跳过 - 这些类型较少出现
+            # 这些类型有各自的复杂结构，无法简单跳过
             # 参考 Text.cpp L965-1037 的其他 history types
-            archive.seek(archive.tell() + 10)
+            # Tolerant mode: 不尝试跳过，直接返回（由调用者处理）
+            if not tolerant:
+                raise ParseError(f"Unsupported FText history_type={history_type}")
+            # tolerant: 不消费字节，返回当前位置
     except Exception as e:
         if tolerant:
             logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)
-            # Fallback: 根据类型保守跳过
-            if history_type == -1:
-                archive.seek(start_pos + 9)
-            elif history_type == 0:
-                archive.seek(start_pos + 12)  # 3 个最小 FString (len=0, 各 4 bytes)
-            elif history_type == 1:
-                archive.seek(start_pos + 20)  # FormatText(9) + count(4) + 保守
-            else:
-                archive.seek(start_pos + 10)
+            # Fallback: 根据类型保守跳过（带边界检查）
+            try:
+                if history_type == -1:
+                    target_pos = start_pos + 9
+                elif history_type == 0:
+                    target_pos = start_pos + 12  # 3 个最小 FString (len=0, 各 4 bytes)
+                elif history_type == 1:
+                    target_pos = start_pos + 20  # FormatText(9) + count(4) + 保守
+                else:
+                    # 不尝试跳过未知类型，保持当前位置
+                    target_pos = start_pos
+                # 边界检查：确保不超出文件末尾
+                if target_pos <= archive.file_size:
+                    archive.seek(target_pos)
+            except Exception:
+                # 如果 seek 也失败，保持在当前位置
+                pass
         else:
             raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
 
@@ -384,7 +396,7 @@ def read_ue_graph_pin(
     try:
         flags = archive.read_i32()
         history_type = archive.read_u8()
-        read_ftext_with_history(archive, history_type, tolerant=True, ue5_mode=(summary.file_version_ue5 > 0))
+        read_ftext_with_history(archive, history_type, tolerant=True)
     except Exception:
         archive.seek(ftext_start_pos)
 
