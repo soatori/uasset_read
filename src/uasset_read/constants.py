@@ -120,6 +120,7 @@ UE4_NON_OUTER_PACKAGE_IMPORT = 520
 FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
 FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
+FUE5RELEASESTREAM_OBJECT_VERSION_GUID = "D89B5E42-24BD4D46-8412ACA8-DF641779"
 
 # ============================================================================
 # FrameworkObjectVersion阈值
@@ -139,6 +140,12 @@ FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX = 50
 # ============================================================================
 
 FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
+
+# ============================================================================
+# FUE5ReleaseStreamObjectVersion Thresholds
+# ============================================================================
+
+FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION = 36
 
 # ============================================================================
 # 控制流节点集合（用于蓝图图解析）
