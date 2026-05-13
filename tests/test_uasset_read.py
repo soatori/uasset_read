@@ -1489,12 +1489,12 @@ def test_ue4_localization_id_and_gatherable_text_data_fields():
 
 def test_utf16_length_overflow():
     """
-    Test that UTF-16 strings with extreme length raise ParseError (WR-02 fix).
+    Test that UTF-16 strings with extreme length raise ParseError (CR-02 fix).
 
     Validates:
     - Parser rejects UTF-16 strings with length > 10M bytes
     - Prevents integer overflow in -length * 2 calculation
-    - Error message contains "too large"
+    - Error message contains "exceeds maximum"
     """
     fd, path = tempfile.mkstemp(suffix='.uasset')
 
@@ -1518,7 +1518,40 @@ def test_utf16_length_overflow():
     try:
         result = parse_uasset(path)
         assert not result.is_success
-        assert "too large" in result.errors[0]
+        assert "exceeds maximum" in result.errors[0]
+    finally:
+        cleanup_test_file(path)
+
+
+def test_utf8_length_overflow():
+    """
+    Test that UTF-8 strings with extreme length raise ParseError (CR-02 fix).
+
+    Validates:
+    - Parser rejects UTF-8 strings with length > 10M bytes
+    - Error message contains "exceeds maximum"
+    """
+    fd, path = tempfile.mkstemp(suffix='.uasset')
+
+    # Create a file that triggers UTF-8 read with extreme length
+    # UTF-8 is indicated by positive length in FString
+    header = struct.pack('<I', PACKAGE_FILE_TAG)
+    header += struct.pack('<i', -8)  # LegacyFileVersion
+    header += struct.pack('<i', 864)  # LegacyUE3Version
+    header += struct.pack('<i', 0)   # UE4 version
+    header += struct.pack('<i', 500) # UE5 version (< 1004, no SavedHash)
+    header += struct.pack('<i', 0)   # Licensee
+    header += struct.pack('<I', 0)   # CustomVersions count
+    # PackageName FString with positive length (UTF-8) > 10M bytes
+    header += struct.pack('<i', 10_000_001)  # UTF-8 length indicator (> 10M bytes)
+
+    os.write(fd, header)
+    os.close(fd)
+
+    try:
+        result = parse_uasset(path)
+        assert not result.is_success
+        assert "exceeds maximum" in result.errors[0]
     finally:
         cleanup_test_file(path)
 
