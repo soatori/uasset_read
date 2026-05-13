@@ -24,7 +24,7 @@ Plans:
 - [ ] 35c-02-PLAN.md — archive.py + constants.py FString 长度验证（OOM 防护）
 - [x] 35c-03a-PLAN.md — package_summary.py 计数验证（11 个字段）
 - [ ] 35c-03b-PLAN.md — package_summary.py 偏移验证（14 个字段）
-- [ ] 35c-03c-PLAN.md — object_resources.py 计数与偏移验证
+- [x] 35c-03c-PLAN.md — object_resources.py 计数与偏移验证
 - [x] 35c-04-PLAN.md — parse_uasset.py is_success 标志 + 临时存档 tolerant 模式修复
 - [x] 35c-05-PLAN.md — cli.py 文件类型检查 + 异常捕获
 - [x] 35c-06-PLAN.md — property_types.py 属性条目计数验证

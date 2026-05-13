@@ -51,7 +51,7 @@ Phase 27-29 已完成并归档到 `milestones/v6.0-ARCHIVE.md`:
 | 35c-02 | archive.py | FString OOM (CR-02) | 待执行 |
 | 35c-03a | package_summary.py | 计数验证 (CR-04) | ✅ 完成 |
 | 35c-03b | package_summary.py | 偏移验证 (M4) | 待执行 |
-| 35c-03c | object_resources.py | 计数与偏移验证 (CR-05) | 待执行 |
+| 35c-03c | object_resources.py | 计数与偏移验证 (CR-05) | ✅ 完成 |
 | 35c-04 | parse_uasset.py | is_success + tolerant (CR-16/17) | ✅ 完成 |
 | 35c-05 | cli.py | 文件类型+异常 (HIGH-01/03) | 待执行 |
 | 35c-06 | property_types.py | 条目计数验证 (HIGH-07) | ✅ 完成 |
