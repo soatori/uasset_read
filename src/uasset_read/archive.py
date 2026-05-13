@@ -9,7 +9,7 @@ import mmap
 from typing import Optional, Dict, BinaryIO
 
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MMAP_THRESHOLD
+from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH
 
 
 class FArchive:
@@ -223,10 +223,12 @@ class FArchive:
             return ""
         if length < 0:
             utf16_len = -length * 2
-            if utf16_len > 10_000_000:
-                raise ParseError(f"UTF-16 string length {utf16_len} too large")
+            if utf16_len > MAX_FSTRING_LENGTH:
+                raise ParseError(f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(utf16_len)
             return data.decode('utf-16', errors='replace').rstrip('\x00')
+        if length > MAX_FSTRING_LENGTH:
+            raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
         data = self.read(length)
         return data.decode('utf-8', errors='replace').rstrip('\x00')
 
