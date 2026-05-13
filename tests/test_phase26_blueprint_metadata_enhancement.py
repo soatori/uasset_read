@@ -41,7 +41,6 @@ class TestPhase26BlueprintVariableEnhancements:
         assert hasattr(var, 'meta_class')
         assert hasattr(var, 'edit_category')
         assert hasattr(var, 'edit_widget')
-        assert hasattr(var, 'meta_data')
 
         # Phase 26: 可见性标志
         assert hasattr(var, 'is_edit_anywhere')
@@ -107,7 +106,7 @@ class TestPhase26BlueprintVariableEnhancements:
         assert "Transient" in labels
 
     def test_meta_data_initialized_as_dict(self):
-        """meta_data 字段必须初始化为空字典 (per 26-01)"""
+        """metadata 字段（单源）必须初始化为空字典 (per 26-01)"""
         var = BlueprintVariable(
             var_name="TestVar",
             var_type=None,
@@ -115,7 +114,7 @@ class TestPhase26BlueprintVariableEnhancements:
             property_flags=0
         )
 
-        assert var.meta_data == {}
+        assert var.metadata == {}
 
     def test_blueprint_variable_can_set_phase26_fields(self):
         """BlueprintVariable 必须可以设置 Phase 26 字段 (per 26-01)"""
