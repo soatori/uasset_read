@@ -1,129 +1,97 @@
 # CLAUDE.md
 
-本文件为Claude Code (claude.ai/code) 在此仓库中工作时提供指导。
+This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
 
-## 语言设置
+## Language
 
-**请使用中文进行所有回复和编写文件。**
+请使用中文回复以及编写文档
 
 ## 项目概述
 
-解析Unreal Engine .uasset文件的Python工具，使AI代理能够在不依赖UE编辑器的情况下读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
+Unreal Engine .uasset 文件解析器 — 让 AI 代理在不依赖 UE 编辑器的情况下读取蓝图内容。
+
+## 快速参考
+
+```bash
+pip install -e ".[dev]"           # 安装
+uasset-read file.uasset           # 解析文件
+python -m pytest tests/ -v        # 测试
+```
+
+测试资产：`E:\Develop\lib\UnrealEngine\Samples\FirstPerson`（源码参考文件夹，非项目内）
 
 ## 当前状态
 
-**v2.0 (蓝图图解析): 完成** — 10个阶段全部完成，支持蓝图图解析、高级属性、依赖分析。
-
-### 已完成功能
-
-| 阶段 | 功能 | 状态 |
-|------|------|------|
-| 1-5 | v1.0核心 | ✓ 完成 |
-| 6 | 导出表修复 | ✓ 完成 |
-| 7 | 蓝图图核心解析 | ✓ 完成 |
-| 8 | 蓝图图输出增强 | ✓ 完成 |
-| 9 | 高级属性类型 | ✓ 完成 |
-| 10 | 依赖分析 | ✓ 完成 |
-
-### 解析能力
-
-- ✓ PackageFileSummary (文件头)
-- ✓ NameMap (名称表)
-- ✓ ImportMap (依赖映射)
-- ✓ ExportMap (导出映射)
-- ✓ Blueprint检测
-- ✓ UEdGraph/Node/Pin解析
-- ✓ 高级属性 (Struct/Map/Set/Enum/Text/Delegate)
-- ✓ 依赖图构建
-- ✓ 循环依赖检测
-
-## UE 5.7 源码参考
-
-UE 5.7源码位于 `E:\Develop\lib\UnrealEngine` (只读参考)。
-
-.uasset解析的关键文件：
-- `PackageFileSummary.h` — 文件头部结构
-- `ObjectResource.h` — 导入/导出结构
-- `Archive.h` — FArchive模式
-
-## 外部目录 (Git排除)
-
-- `UnrealEngine/` — UE引擎源码参考 (请勿修改)
-- `E:\Develop\lib\UnrealEngine\Samples\FirstPerson` — 示例蓝图测试资产
-- `E:\Develop\lib\UnrealEngine\Samples\FirstPersonC` — C++对照文件
-- `LyraStarterGame/` — 示例游戏资产 (请勿修改)
-
-## 技术栈
-
-- **语言**: Python 3.10+ (支持match/case，更好的类型提示)
-- **依赖**: 零运行时依赖 — 仅使用标准库
-- **解析**: `struct`用于二进制，`mmap`用于大文件
-- **模型**: `dataclasses`配合 `asdict()` → JSON
-- **CLI**: `argparse`
-- **编码**: UTF-8 (UE 5.x标准)
+**v7.0 完成** — 520 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。v8.0 Phase 47-50（BP-to-CPP 翻译）规划中。
 
 ## 架构
 
-采用镜像UE的FArchive管道模式：
+管道：`.uasset → FArchive → Deserializer → Models → OutputFormatter`
 
-```
-.uasset → FArchive → Deserializer → Models → OutputFormatter
-                ↓ 扩展组件
-          GraphParser (Phase 7)
-          AdvancedPropParser (Phase 9)
-          DependencyGraphBuilder (Phase 10)
-```
+扩展：GraphParser → AdvancedPropParser → DependencyGraphBuilder → **PackageLinker（v7.0）**
 
-`uasset_read.py`核心组件：
-- `FArchive`: 二进制读取器，支持字节交换、边界验证
-- `PackageFileSummary`: 文件头，包含各表偏移量
-- `ParseResult`: 解析结果容器，包含所有提取数据
-- `UEdGraph/UEdGraphNode/UEdGraphPin`: 蓝图图结构
+v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/ExportMap 创建 UObjectInstance 外壳 → `preload()` 按需反序列化属性。
+
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| FArchive | `archive.py` | 二进制读取器（字节交换/mmap） |
+| 序列化 | `serializers/` | PackageSummary/Import/Export/PropertyTag |
+| 数据模型 | `models/` | UEdGraph/Node/Pin + 属性数据类 + Transform 值类 |
+| 解析器 | `parsers/` | 14 种属性类型 + 分派器 |
+| 蓝图 | `blueprint/` | 变量/组件变换/元数据提取 |
+| 图解析 | `graph/` | 执行流/数据流/连接映射 |
+| 链接器 | `link/` | PackageLinker / UObjectInstance（UE FLinkerLoad 模式） |
+| 格式化 | `formatters/` | JSON/Text/Markdown/Mermaid |
+| CLI | `cli.py` | argparse 入口 |
+| 管线 | `parse_uasset.py` | 主编排函数（含 `parse_uasset_with_linker`） |
+
+**技术栈**：Python 3.10+，零运行时依赖，setuptools + pytest。
 
 ## 文件组织
 
-- 源码: `uasset_read.py` (单文件，4901行)
-- 测试: `tests/` 目录 (11测试文件，216测试用例)
-- C++移植: `uasset_read_cpp/` 目录
-- 规划: `.planning/` (GSD工作流文件)
-- 测试输出: `test/` (已在.gitignore中)
-
-## 命令
-
-```bash
-# 解析.uasset文件
-python -c "from uasset_read import parse_uasset; r = parse_uasset('file.uasset'); print(r)"
-
-# 运行所有测试
-python -m pytest tests/ -v
-
-# 运行测试（简要）
-python -m pytest tests/ --tb=short
-
-# 查看解析数据
-python -c "
-from uasset_read import parse_uasset
-import json
-r = parse_uasset('BP_FirstPersonCharacter.uasset')
-print(json.dumps(r.name_map[:50], indent=2))
-"
+```
+src/uasset_read/  # 源码    tests/          # 测试
+.planning/        # 规划    temp/            # 缓存/临时生成文件
+uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽略）
 ```
 
-## API导出
+> 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。
 
-```python
-from uasset_read import (
-    parse_uasset,           # 主解析函数
-    ParseResult,            # 解析结果容器
-    PackageFileSummary,     # 文件头
-    FArchive,               # 二进制读取器
-    UAssetError,            # 错误基类
-)
-```
+## gsd-sdk 使用
+
+仅支持 3 个命令：`run "<prompt>"` / `auto` / `init [input]`
+
+**不支持** `query`、`list`、`get` 等子命令（会报错）。查 phase 信息请直接读 `.planning/` 文件或用 GSD slash commands。
+
+## API 导出（`from uasset_read import X`）
+
+按模块分类，具体符号见各模块 `__init__.py`：
+
+| 类别 | 核心符号 |
+|------|---------|
+| 常量/异常 | `PACKAGE_FILE_TAG`, `MMAP_THRESHOLD`, `UAssetError`, `VersionError`, `ParseError` |
+| 序列化 | `PackageFileSummary/Index`, `ObjectImport/Export`, `FArchive`, `PropertyTag` |
+| 数据模型 | `UEdGraph`, `UEdGraphNode`, `UEdGraphPin`, `FEdGraphPinType`, `K2Node*` 系列 |
+| 变换值类 | `VectorValue`, `RotatorValue`, `ScaleValue`, `format_transform_value` |
+| 属性 | `PropertyValue`, `Struct/Map/Set/Enum/Text/DelegateValue`, `parse_*` 系列 |
+| 蓝图 | `BlueprintMetadata/Variable/Function/Event`, `extract_blueprint_*`, `parse_component_transform` |
+| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map` |
+| 链接器 | `PackageLinker`, `UObjectInstance`, `LinkerParseResult`, `parse_uasset_with_linker` |
+| 格式化 | `format_json/text/markdown/graphs_*`, `build_status/schema_info` |
+| CPF 标志 | `CPF_Edit`, `CPF_BlueprintVisible`, `CPF_InstancedReference`, `CPF_EditAnywhere` 等 |
+| 管线/CLI | `parse_uasset`, `parse_uasset_with_linker`, `python -m uasset_read` 或 `uasset-read` |
 
 ## 规划文档
 
-- `.planning/ROADMAP.md` — 版本路线图
-- `.planning/STATE.md` — 当前状态
-- `.planning/REQUIREMENTS.md` — 需求映射
-- `.planning/v3_DRAFT.md` — v3.0草案（蓝图转C++自动化）
+- `.planning/ROADMAP.md` — 50 阶段路线图
+- `.planning/STATE.md` — 当前里程碑状态
+- `.planning/REQUIREMENTS.md` — 需求追溯
+- `.planning/PROJECT.md` — 项目概览
+- `.planning/MILESTONES.md` — 历史里程碑
+
+## 上下文与效率
+
+- 上下文 >70% 时执行 `compact`
+- 独立任务优先并行 subagent，主线程只看结构化摘要
+- **GSD：** wave 或 PLAN 之间互补不干扰时均可并行执行
+- 有依赖或共享状态的任务不可并行；写冲突风险可通过 git 分支管理规避

@@ -49,6 +49,27 @@ VERIFICATION-REPORT.md
 # 测试产物目录
 test/
 
-# src 目录废弃结构
-src/
+# 项目输出文件目录
+output/
+debug/
+reports/
 
+# IDE 和工具配置
+.claude/*
+.qwen/*
+
+# Debug/scratch scripts (not part part of test suite)
+tools/debug_*.py
+tools/test_*.py
+tools/parse_*.py
+tools/*_analysis.py
+tools/*_scan.py
+
+# Claude memory system (personal notes, not project docs)
+memory/
+
+# Temp directory for cache and generated files
+temp/
+
+# Qwen Code project documentation (IMPORTANT: Do not commit to version control)
+QWEN.md
