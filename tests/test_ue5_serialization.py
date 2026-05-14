@@ -11,14 +11,15 @@ from uasset_read.serializers.graph import read_ftext_with_history
 from uasset_read import parse_uasset
 
 
-ASSET_DIR = Path(r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson")
+# 测试资产根目录（UE 源码参考文件夹）
+ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
 
 
 def _find_asset(name: str) -> str:
-    """Find a .uasset file by name in the UE sample project."""
-    for p in ASSET_DIR.rglob(name):
+    """从源码文件夹中查找 .uasset 文件"""
+    for p in ASSET_ROOT.rglob(name):
         return str(p)
-    pytest.skip(f"Test asset {name} not found in {ASSET_DIR}")
+    pytest.skip(f"Test asset {name} not found in {ASSET_ROOT}")
 
 
 class TestFTextWithHistory:

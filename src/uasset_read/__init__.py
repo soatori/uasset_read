@@ -222,7 +222,7 @@ from .formatters import (
 # ============================================================================
 # 主解析管线（Phase 33）
 # ============================================================================
-from .parse_uasset import parse_uasset
+from .parse_uasset import parse_uasset, parse_uasset_with_linker
 
 # 变换数据类（Phase 33）
 from .models.transforms import (

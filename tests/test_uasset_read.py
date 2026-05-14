@@ -1382,13 +1382,16 @@ def test_real_lyra_character_default_file():
 
     This is the definitive test for Phase 1 completion.
     """
-    lyra_path = "UnrealProjects/LyraStarterGame/Content/Characters/Character_Default.uasset"
+    # 从源码文件夹查找 Lyra 资产
+    from pathlib import Path
+    asset_root = Path(r"E:\Develop\lib\UnrealEngine")
+    lyra_path = next(asset_root.rglob("Character_Default.uasset"), None)
 
-    # Skip if file not available
-    if not os.path.exists(lyra_path):
-        pytest.skip(f"Lyra test file not found: {lyra_path}")
+    if lyra_path is None:
+        pytest.skip(f"Lyra test file not found under {asset_root}")
 
-    result = parse_uasset(lyra_path)
+    lyra_path_str = str(lyra_path)
+    result = parse_uasset(lyra_path_str)
 
     assert result.is_success, f"Lyra parse failed: {result.errors}"
     assert result.summary.legacy_file_version == -7
@@ -1399,7 +1402,7 @@ def test_real_lyra_character_default_file():
     assert result.summary.import_offset > 0
     assert result.summary.export_offset > 0
     # Get file size for validation
-    file_size = os.path.getsize(lyra_path)
+    file_size = os.path.getsize(lyra_path_str)
     assert result.summary.name_offset < file_size
     assert result.summary.import_offset < file_size
     assert result.summary.export_offset < file_size

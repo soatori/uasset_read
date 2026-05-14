@@ -12,21 +12,19 @@ tests/test_phase21_verification.py - Phase 21 验证测试
 
 import pytest
 import os
+from pathlib import Path
 from uasset_read import parse_uasset, format_json_full
 
 
-# ============================================================================
-# 测试资产路径
-# ============================================================================
-
-FIRST_PERSON_CHARACTER_PATH = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
+# 测试资产路径（UE 源码参考文件夹）
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+_FIRST_PERSON = next(_ASSET_ROOT.rglob("BP_FirstPersonCharacter.uasset"), None)
+FIRST_PERSON_CHARACTER_PATH = str(_FIRST_PERSON) if _FIRST_PERSON else None
 
 
 def get_test_asset_path():
     """获取可用的测试资产路径"""
-    if os.path.exists(FIRST_PERSON_CHARACTER_PATH):
-        return FIRST_PERSON_CHARACTER_PATH
-    return None
+    return FIRST_PERSON_CHARACTER_PATH
 
 
 # ============================================================================
@@ -36,7 +34,7 @@ def get_test_asset_path():
 class TestNodeCount:
     """TEST-01: 节点数量匹配验证"""
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_graphs_exist(self):
         """验证解析结果包含 graphs 且非空"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -44,7 +42,7 @@ class TestNodeCount:
         assert result.graphs is not None, "graphs 为 None"
         assert len(result.graphs) > 0, "graphs 为空列表"
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_node_count_matches_exports(self):
         """验证节点数量与导出表中 K2Node 条目数量匹配"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -76,7 +74,7 @@ class TestNodeCount:
 class TestExecutionFlow:
     """TEST-02: 执行流程验证（IA_Jump → Jump → StopJumping）"""
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_execution_flows_exist(self):
         """验证 execution_flows 存在"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -96,7 +94,7 @@ class TestExecutionFlow:
         else:
             pytest.fail("EventGraph 不存在，无法验证执行流程")
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_jump_started_flow(self):
         """
         验证 IA_Jump(Started) → Jump 执行流程。
@@ -129,7 +127,7 @@ class TestExecutionFlow:
 
         assert found_jump_flow, "未找到 Jump 函数调用节点"
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_jump_completed_flow(self):
         """
         验证 IA_Jump(Completed) → StopJumping 执行流程。
@@ -170,7 +168,7 @@ class TestExecutionFlow:
 class TestDataFlow:
     """TEST-03: 数据流验证（ActionValue_X/Y → 参数）"""
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_data_flows_exist(self):
         """验证 data_flows 存在"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -187,7 +185,7 @@ class TestDataFlow:
         if move_graph:
             assert "data_flows" in move_graph, "data_flows 字段不存在"
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_actionvalue_x_to_right(self):
         """
         验证 Move graph 中有数据流连接。
@@ -223,7 +221,7 @@ class TestDataFlow:
 
         assert found_flow, "Move graph 中未找到数据流连接"
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_actionvalue_y_to_forward(self):
         """
         验证 Move graph 中有函数调用节点。
@@ -261,7 +259,7 @@ class TestDataFlow:
 class TestNodeProperties:
     """TEST-04: 节点属性验证（FunctionReference.MemberName、NodeGuid）"""
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_node_guid_present(self):
         """验证节点包含 node_guid 字段（非空 GUID 格式）"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -284,7 +282,7 @@ class TestNodeProperties:
                             assert len(node_guid) >= 32, f"node_guid 格式异常: {node_guid}"
                     break
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_function_reference_member_name(self):
         """验证 CallFunction 节点包含 function_reference.member_name"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -319,7 +317,7 @@ class TestNodeProperties:
         if not found_call_function:
             pytest.skip("未找到 CallFunction 节点（可能 graphs 为空）")
 
-    @pytest.mark.skipif(not os.path.exists(FIRST_PERSON_CHARACTER_PATH), reason="Test asset not found")
+    @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_event_reference_present(self):
         """验证 Event 节点包含 event_reference 字段"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)

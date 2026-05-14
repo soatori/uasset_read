@@ -11,6 +11,7 @@ Updated: 2026-05-12 (Phase 31 Wave 2)
 
 import pytest
 import os
+from pathlib import Path
 from uasset_read import (
     StructValue,
     PropertyValue,
@@ -19,15 +20,15 @@ from uasset_read import (
 )
 
 
-# Test asset path
-FIRST_PERSON_CHARACTER_PATH = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
+# Test asset path (UE 源码参考文件夹)
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+_FIRST_PERSON = next(_ASSET_ROOT.rglob("BP_FirstPersonCharacter.uasset"), None)
+FIRST_PERSON_CHARACTER_PATH = str(_FIRST_PERSON) if _FIRST_PERSON else None
 
 
 def get_test_asset_path():
     """Get available test asset path"""
-    if os.path.exists(FIRST_PERSON_CHARACTER_PATH):
-        return FIRST_PERSON_CHARACTER_PATH
-    return None
+    return FIRST_PERSON_CHARACTER_PATH
 
 
 class TestParseComponentTransform:
@@ -162,7 +163,7 @@ class TestIntegration:
 
     def test_parse_uasset_has_transforms_attribute(self):
         """parse_uasset should provide export.transforms attribute (accessible per EXTR-04)"""
-        if not os.path.exists(FIRST_PERSON_CHARACTER_PATH):
+        if FIRST_PERSON_CHARACTER_PATH is None:
             pytest.skip("Test asset not available")
 
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
@@ -174,7 +175,7 @@ class TestIntegration:
 
     def test_transforms_have_expected_fields(self):
         """Extracted transforms should have expected dict keys"""
-        if not os.path.exists(FIRST_PERSON_CHARACTER_PATH):
+        if FIRST_PERSON_CHARACTER_PATH is None:
             pytest.skip("Test asset not available")
 
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
