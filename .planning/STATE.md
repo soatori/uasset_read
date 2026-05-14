@@ -1,108 +1,70 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.2
-milestone_name: 属性解析修复
-status: Complete
-last_updated: "2026-05-04T04:30:00.000Z"
-last_activity: 2026-05-04 — v2.0-dev shipped (PR #4, 114 commits)
-status:
-  phase: "17 shipped — PR #4"
-  milestone: "v3.2 complete"
+milestone: v8.0
+milestone_name: BP-to-CPP 翻译能力
+status: planning
+last_updated: "2026-05-15T00:10:00.000Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# 项目状态
+# v8.0 — BP-to-CPP 翻译能力
 
-**项目：** uasset_read
-**初始化：** 2026-04-27
-**当前里程碑：** v3.2 属性解析修复 ✓ 完成
-**状态：** Phase 17 完成，所有目标达成
+## 问题: v7.0 解析结果无法支撑 BP→C++ 翻译
 
-## Current Position
+对比 `BP_FirstPersonCharacter.uasset` 解析 JSON 与等价 C++ 实现
+(`FirstPersonCCharacter.cpp/h`)，发现 6 个结构性 gap：
 
-Phase: 17 (属性解析修复)
-Status: Complete
-Last activity: 2026-05-04 — Phase 17 完成
+| 当前 | 目标 |
+|------|------|
+| linked_to_raw 全为空 | Pin 连接关系完整可查 |
+| 无组件数值属性 | 组件位置/旋转/缩放/标志可提取 |
+| CallFunction pins 不完整 | 函数签名可推断 |
+| EnhancedInput 触发事件不可见 | BindAction ETriggerEvent 可区分 |
 
-## Phase 17 成果
+## Phase 分解
 
-**修复内容：**
-1. D-01: 偏移计算修复 (serial_offset + script_serial_offset)
-2. D-02: SerializationControlExtensions 头部处理 (UE5 >= 1011)
-3. D-03: PropertyTag Extensions 处理 (HAS_EXTENSIONS 0x04)
-4. 阈值修复: PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012
-5. ObjectExport 序列化顺序修复
+| Phase | 名称 | 状态 |
+|-------|------|------|
+| 47 | Pin LinkedTo 修复 | 🔴 未开始 |
+| 48 | 组件属性递归解析 | 🔴 未开始 |
+| 49 | 函数调用引脚解析 | 🔴 未开始 |
+| 50 | EnhancedInput 语义增强 | 🔴 未开始 |
 
-**验证结果：**
-- 359 单元测试通过
-- 所有 Success Criteria 达成
+## 关键发现
 
-## 阶段状态
+### Gap G1: linked_to_raw 全为空（P0）
 
-| # | 阶段 | 里程碑 | 状态 | 计划 | 验证 | UAT | 进度 |
-|---|------|--------|------|------|------|-----|------|
-| 17 | 属性解析修复 | v3.2 | Complete | 3/3 | ✓ Pass | - | 100% |
+`BP_FirstPersonCharacter.uasset` 的 30 个 pin 全部 `linked_to_raw=[]`。
+导致 `build_connections_map()` 返回 0 连接，`build_execution_flows()`
+虽然识别到 5 个起点但 `nodes=[]`（无法追踪后续节点）。
 
-## 里程碑历史
+根因在 `read_ue_graph()` / `read_ue_graph_pin()` 中的序列化偏移计算。
+UE5 的 UEdGraphNode 使用 `nodes_count == 0` + `outer_index` 收集模式，
+节点 pins 数组的实际二进制读取位置可能与预期不一致。
 
-### v3.2 属性解析修复 ✓ 完成
+### Gap G2: 组件属性值缺失（P0）
 
-- **发布日期：** 2026-05-04
-- **阶段：** Phase 17（属性解析修复）
-- **成就：** PropertyTag 格式阈值修复，D-01/D-02/D-03 三重修复，359 测试通过
+C++ 构造函数中的关键数值在 JSON 中完全不可见：
+- `FirstPersonCameraComponent` 的 RelativeLocation=(-2.8, 5.89, 0.0)
+- `FirstPersonFieldOfView = 70.0f`
+- `AirControl = 0.5f`
+- `BrakingDecelerationFalling = 1500.0f`
 
-### v3.1 解析器兼容性修复 ✓ 完成
+这些值存在于 ExportMap 的 PropertyTag 中，但当前解析器只提取了
+Blueprint 元数据层，没有递归解析组件对象的序列化属性。
 
-- **发布日期：** 2026-05-03
-- **阶段：** Phase 16（Bool序列化修复）
-- **成就：** Bool从1 byte修正为4 bytes，UE 5.7资产导出表可读取
+## 验证标准 — JSON 可翻译性
 
-### v3.0 解析完善 + Skill打包 ✓ 完成
+- Phase 47: connections > 0, execution_flows[].nodes 非空
+- Phase 48: components 数组包含数值属性（位置/旋转/缩放/标志）
+- Phase 49: CallFunction 节点输出 parameters 数组（参数名+类型）
+- Phase 50: input_bindings 数组与 C++ BindAction 对应
 
-- **发布日期：** 2026-05-03
-- **阶段：** Phase 11-15（5阶段，19计划）
-- **成就：** ExportMap属性值提取、BlueprintVariables完整提取、组件变换属性解析、输出格式冻结、Skill封装
+JSON 输出需达到"人工可对照 C++ 头文件/构造函数/函数体逐行翻译"的程度。
 
-### v2.0 蓝图图解析 ✓ 完成
-
-- **发布日期：** 2026-05-02
-- **PR：** #2 MERGED
-- **阶段：** Phase 6-10（5阶段，20计划）
-
-详见：`.planning/milestones/v2.0-ROADMAP.md`
-
-### v1.0 MVP ✓ 完成
-
-- **发布日期：** 2026-05-02
-- **阶段：** Phase 1-5（5阶段，25计划）
-
-## 下一步
-
-**Phase 17 已完成。项目可用于解析 UE 5.7 资产。**
-
----
-
-## Accumulated Context
-
-### Roadmap Evolution
-
-- Phase 17 complete: 属性解析修复 — D-01/D-02/D-03 + 阈值修复
-
-### Key Decisions
-
-- **2026-05-04:** Phase 17 完成
-  - D-01: ScriptSerializationStartOffset 偏移计算修复
-  - D-02: SerializationControlExtensions 头部处理
-  - D-03: PropertyTag Extensions 处理
-  - 阈值修复: PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012 (UE 源码正确值)
-  - ObjectExport 序列化顺序与 UE 源码同步
-  - 359 单元测试通过
-
----
-
-*最后更新：2026-05-04 — Phase 17 complete*
+*Created: 2026-05-15*
