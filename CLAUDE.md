@@ -22,25 +22,28 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v6.0 完成** — 373 passed, 71 skipped, 0 failed。模块化包在 `src/uasset_read/`。
+**v7.0 完成** — 520 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。v8.0 Phase 47-50（BP-to-CPP 翻译）规划中。
 
 ## 架构
 
 管道：`.uasset → FArchive → Deserializer → Models → OutputFormatter`
 
-扩展：GraphParser → AdvancedPropParser → DependencyGraphBuilder
+扩展：GraphParser → AdvancedPropParser → DependencyGraphBuilder → **PackageLinker（v7.0）**
+
+v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/ExportMap 创建 UObjectInstance 外壳 → `preload()` 按需反序列化属性。
 
 | 模块 | 文件 | 说明 |
 |------|------|------|
 | FArchive | `archive.py` | 二进制读取器（字节交换/mmap） |
 | 序列化 | `serializers/` | PackageSummary/Import/Export/PropertyTag |
-| 数据模型 | `models/` | UEdGraph/Node/Pin + 属性数据类 |
+| 数据模型 | `models/` | UEdGraph/Node/Pin + 属性数据类 + Transform 值类 |
 | 解析器 | `parsers/` | 14 种属性类型 + 分派器 |
 | 蓝图 | `blueprint/` | 变量/组件变换/元数据提取 |
 | 图解析 | `graph/` | 执行流/数据流/连接映射 |
+| 链接器 | `link/` | PackageLinker / UObjectInstance（UE FLinkerLoad 模式） |
 | 格式化 | `formatters/` | JSON/Text/Markdown/Mermaid |
 | CLI | `cli.py` | argparse 入口 |
-| 管线 | `parse_uasset.py` | 主编排函数 |
+| 管线 | `parse_uasset.py` | 主编排函数（含 `parse_uasset_with_linker`） |
 
 **技术栈**：Python 3.10+，零运行时依赖，setuptools + pytest。
 
@@ -69,11 +72,14 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 | 常量/异常 | `PACKAGE_FILE_TAG`, `MMAP_THRESHOLD`, `UAssetError`, `VersionError`, `ParseError` |
 | 序列化 | `PackageFileSummary/Index`, `ObjectImport/Export`, `FArchive`, `PropertyTag` |
 | 数据模型 | `UEdGraph`, `UEdGraphNode`, `UEdGraphPin`, `FEdGraphPinType`, `K2Node*` 系列 |
+| 变换值类 | `VectorValue`, `RotatorValue`, `ScaleValue`, `format_transform_value` |
 | 属性 | `PropertyValue`, `Struct/Map/Set/Enum/Text/DelegateValue`, `parse_*` 系列 |
 | 蓝图 | `BlueprintMetadata/Variable/Function/Event`, `extract_blueprint_*`, `parse_component_transform` |
 | 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map` |
+| 链接器 | `PackageLinker`, `UObjectInstance`, `LinkerParseResult`, `parse_uasset_with_linker` |
 | 格式化 | `format_json/text/markdown/graphs_*`, `build_status/schema_info` |
-| 管线/CLI | `parse_uasset`, `python -m uasset_read` 或 `uasset-read` |
+| CPF 标志 | `CPF_Edit`, `CPF_BlueprintVisible`, `CPF_InstancedReference`, `CPF_EditAnywhere` 等 |
+| 管线/CLI | `parse_uasset`, `parse_uasset_with_linker`, `python -m uasset_read` 或 `uasset-read` |
 
 ## 规划文档
 
