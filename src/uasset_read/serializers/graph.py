@@ -6,7 +6,6 @@ Phase 31: 蓝图图解析模块 (per MOD-09)。
 from __future__ import annotations
 
 import logging
-import struct
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 if TYPE_CHECKING:
@@ -57,104 +56,42 @@ def read_ed_graph_pin_type(
     name_map: List[str],
     summary: PackageFileSummary
 ) -> FEdGraphPinType:
-    """解析 FEdGraphPinType（两种序列化模式）。
-
-    自定义序列化：UE4 >= 324
-    默认反射序列化：UE5 资产（UE4 < 324）
-    """
+    """解析 FEdGraphPinType（UE5.7 专用 — 自定义序列化路径）。"""
     pin_type = FEdGraphPinType()
 
-    framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
     release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
-    ue4_version = summary.file_version_ue4
 
-    VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 324
-    use_custom_serialization = ue4_version >= VER_UE4_EDGRAPHPINTYPE_SERIALIZATION
+    # PinCategory / PinSubCategory (UE5 始终使用 FName 格式)
+    pin_type.pin_category = archive.read_name(name_map)
+    pin_type.pin_subcategory = archive.read_name(name_map)
 
-    if not use_custom_serialization:
-        # 默认反射序列化（UE5 资产）— EdGraphPin.h L76-133
-        pin_type.pin_category = archive.read_name(name_map)
-        pin_type.pin_subcategory = archive.read_name(name_map)
-        pin_type.pin_subcategory_object = archive.read_i32()
-        # PinSubCategoryMemberReference: FSimpleMemberReference
-        archive.read_i32()       # MemberParent
-        archive.read_name(name_map)  # MemberName
-        archive.read_bytes(16)   # MemberGuid
-        # PinValueType: FEdGraphTerminalType
+    # PinSubCategoryObject
+    pin_type.pin_subcategory_object = archive.read_i32()
+
+    # ContainerType (UE5 始终使用现代 uint8 格式)
+    pin_type.container_type = archive.read_u8()
+    if pin_type.container_type == 3:  # Map
         archive.read_name(name_map)  # TerminalCategory
         archive.read_name(name_map)  # TerminalSubCategory
         archive.read_i32()           # TerminalSubCategoryObject
-        # ContainerType
-        pin_type.container_type = archive.read_u8()
-        # Bit flags (bIsArray_DEPRECATED + flags as uint8:1)
-        flags_byte = archive.read_u8()
-        pin_type.is_reference = (flags_byte & 0x04) != 0
-        pin_type.is_const = (flags_byte & 0x08) != 0
-        pin_type.is_weak_pointer = (flags_byte & 0x10) != 0
-        pin_type.is_uobject_wrapper = (flags_byte & 0x20) != 0
-    else:
-        # 自定义序列化（UE4 >= 324）— EdGraphPin.cpp L163-346
-        use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
 
-        # PinCategory / PinSubCategory
-        if use_fname_format:
-            pin_type.pin_category = archive.read_name(name_map)
-            pin_type.pin_subcategory = archive.read_name(name_map)
-        else:
-            pin_type.pin_category = archive.read_fstring()
-            pin_type.pin_subcategory = archive.read_fstring()
+    # bIsReference / bIsWeakPointer (UE5 1-byte bool)
+    pin_type.is_reference = archive.read_bool_1byte()
+    pin_type.is_weak_pointer = archive.read_bool_1byte()
 
-        # PinSubCategoryObject
-        pin_type.pin_subcategory_object = archive.read_i32()
+    # FSimpleMemberReference (UE5 始终存在)
+    archive.read_i32()       # MemberParent
+    archive.read_name(name_map)  # MemberName
+    archive.read_bytes(16)   # MemberGuid
 
-        # ContainerType (version dependent)
-        use_modern_container = framework_version >= FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE or summary.file_version_ue5 > 0
-        if use_modern_container:
-            pin_type.container_type = archive.read_u8()
-            if pin_type.container_type == 3:  # Map
-                archive.read_name(name_map)  # TerminalCategory
-                archive.read_name(name_map)  # TerminalSubCategory
-                archive.read_i32()           # TerminalSubCategoryObject
-        else:
-            b_is_map = archive.read_bool()
-            b_is_set = archive.read_bool()
-            b_is_array = archive.read_bool()
-            if b_is_map:
-                pin_type.container_type = 3
-            elif b_is_set:
-                pin_type.container_type = 2
-            elif b_is_array:
-                pin_type.container_type = 1
-            else:
-                pin_type.container_type = 0
+    # bIsConst (UE5 始终存在, 1-byte bool)
+    pin_type.is_const = archive.read_bool_1byte()
 
-        # bIsReference / bIsWeakPointer — Ar << bool = uint32 (4 bytes) in editor builds
-        pin_type.is_reference = archive.read_bool()
-        pin_type.is_weak_pointer = archive.read_bool()
+    # bIsUObjectWrapper (UE5 始终存在, 1-byte bool)
+    pin_type.is_uobject_wrapper = archive.read_bool_1byte()
 
-        # FSimpleMemberReference (version dependent)
-        VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 382
-        if ue4_version >= VER_UE4_MEMBERREFERENCE_IN_PINTYPE:
-            archive.read_i32()       # MemberParent
-            archive.read_name(name_map)  # MemberName
-            archive.read_bytes(16)   # MemberGuid
-
-        # bIsConst — Ar << bool = uint32 (4 bytes) in editor builds
-        VER_UE4_SERIALIZE_PINTYPE_CONST = 366
-        if ue4_version >= VER_UE4_SERIALIZE_PINTYPE_CONST:
-            pin_type.is_const = archive.read_bool()
-        else:
-            pin_type.is_const = False
-
-        # bIsUObjectWrapper — Ar << bool = uint32 (4 bytes) in editor builds
-        if release_version >= FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER or summary.file_version_ue5 > 0:
-            pin_type.is_uobject_wrapper = archive.read_bool()
-        else:
-            pin_type.is_uobject_wrapper = False
-
-        # bSerializeAsSinglePrecisionFloat — Ar << bool = uint32 (4 bytes) in editor builds
-        if summary.file_version_ue5 > 0:
-            pin_type.b_serialize_as_single_precision_float = archive.read_bool()
+    # bSerializeAsSinglePrecisionFloat (UE5 始终存在, 1-byte bool)
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool_1byte()
 
     return pin_type
 
@@ -165,10 +102,14 @@ def read_ed_graph_pin_type(
 
 def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
     """读取 FString，对异常长度进行容错处理。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FArchive& operator<<(FString&) 实现
 
     如果长度不合理（超过 max_length），尝试读取为 0 字节空字符串。
     """
-    length = archive.read_i32()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    length = archive.read_i32()  # TODO: 使用UE编辑器方式读取FString长度
     if length == 0:
         return ""
     if abs(length) > max_length:
@@ -180,29 +121,33 @@ def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
         if utf16_len > max_length * 2:
             archive.seek(archive.tell() - 4)
             return ""
-        data = archive.read(utf16_len)
+        data = archive.read(utf16_len)  # TODO: 使用UE编辑器方式读取UTF-16数据
         return data.decode('utf-16', errors='replace').rstrip('\x00')
-    data = archive.read(length)
+    data = archive.read(length)  # TODO: 使用UE编辑器方式读取UTF-8数据
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
 
 def _read_ftext_fstring(archive: FArchive) -> str:
     """读取 FText 内部的 FString，对异常长度不回退（已消费 i32 长度字段）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FArchive& operator<<(FString&) 实现
 
     与 _read_fstring_safe 的关键区别：长度异常时不回退 seek，
     直接返回空字符串，确保 FText 内部每个 FString 即使长度异常，
     文件位置也不会错位。
     """
-    length = archive.read_i32()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    length = archive.read_i32()  # TODO: 使用UE编辑器方式读取FString长度
     if length == 0:
         return ""
     if abs(length) > 10_000:
         # 异常长度，不回退（已消费 i32），返回空字符串
         return ""
     if length < 0:
-        data = archive.read(-length * 2)
+        data = archive.read(-length * 2)  # TODO: 使用UE编辑器方式读取UTF-16数据
         return data.decode('utf-16', errors='replace').rstrip('\x00')
-    data = archive.read(length)
+    data = archive.read(length)  # TODO: 使用UE编辑器方式读取UTF-8数据
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
 
@@ -245,15 +190,17 @@ def read_ftext_with_history(
             archive.read_fstring()  # Key
             archive.read_fstring()  # SourceString
         elif history_type == 1:  # NamedFormat
+            # TODO: 使用UE编辑器源码的加载方式替换实现代码
             # NamedFormat: FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
             # 参考 TextHistory.cpp L1150-1169
             # FormatText: 递归 FText (完整序列化)
             _ft_flags = archive.read_i32()
-            _ft_htype_raw = archive.read_bytes(1)[0]
+            _ft_htype_raw = archive.read_bytes(1)[0]  # TODO: 使用UE编辑器方式读取FText历史类型
             _ft_htype = _ft_htype_raw if _ft_htype_raw < 128 else _ft_htype_raw - 256
             read_ftext_with_history(archive, _ft_htype, tolerant=True)
 
             # Arguments: TArray<FFormatArgumentData>
+            # TODO: 使用UE编辑器源码的加载方式替换实现代码
             # 参考 Text.cpp L1680-1761
             arg_count = archive.read_i32()
             if arg_count > 0 and arg_count < 100:  # 安全限制
@@ -261,24 +208,25 @@ def read_ftext_with_history(
                     # ArgumentName (FString)
                     _aname_len = archive.read_i32()
                     if _aname_len > 0:
-                        archive.read(_aname_len)
+                        archive.read(_aname_len)  # TODO: 使用UE编辑器方式读取参数名称
                     elif _aname_len < 0:
-                        archive.read(-_aname_len * 2)
+                        archive.read(-_aname_len * 2)  # TODO: 使用UE编辑器方式读取UTF-16参数名称
 
                     # Type (uint8) - EFormatArgumentType
                     _arg_type = archive.read_u8()
 
                     # Value - 根据 Type 不同
+                    # TODO: 使用UE编辑器源码的加载方式替换实现代码
                     # Int(0): int64, Float(1): float, Double(2): double, Text(3): FText, Gender(4): uint8
                     if _arg_type == 0:  # Int
-                        archive.read_i64()  # 或 i32 for legacy
+                        archive.read_i64()  # 或 i32 for legacy  # TODO: 使用UE编辑器方式读取Int64
                     elif _arg_type == 1:  # Float
-                        archive.read_bytes(4)  # float
+                        archive.read_bytes(4)  # float  # TODO: 使用UE编辑器方式读取Float
                     elif _arg_type == 2:  # Double
-                        archive.read_bytes(8)  # double
+                        archive.read_bytes(8)  # double  # TODO: 使用UE编辑器方式读取Double
                     elif _arg_type == 3:  # Text
                         _tv_flags = archive.read_i32()
-                        _tv_htype_raw = archive.read_bytes(1)[0]
+                        _tv_htype_raw = archive.read_bytes(1)[0]  # TODO: 使用UE编辑器方式读取FText历史类型
                         _tv_htype = _tv_htype_raw if _tv_htype_raw < 128 else _tv_htype_raw - 256
                         read_ftext_with_history(archive, _tv_htype, tolerant=True)
                     elif _arg_type == 4:  # Gender
@@ -329,13 +277,17 @@ def read_pin_reference(
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
-    """读取单个 Pin 引用（SerializePin 格式）。"""
+    """读取单个 Pin 引用（SerializePin 格式）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FArchive& operator<<(FBlueprintEditorUtils::FPinReference&) 实现
+    """
     b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
         return None
 
     owning_node_index = archive.read_i32()
-    pin_guid_bytes = archive.read_bytes(16)
+    pin_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取Pin GUID
     pin_guid = pin_guid_bytes.hex().upper()
 
     # 解析 owning node 名称
@@ -398,11 +350,7 @@ def read_ue_graph_pin(
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
 ) -> UEdGraphPin:
-    """读取 UEdGraphPin 完整序列化格式（EdGraphPin.cpp L1838-1964）。"""
-    framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
-    mainstream_version = summary.get_custom_version(FUE5_MAINSTREAM_VERSION_GUID, 0)
-    use_fname_format = framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME or summary.file_version_ue5 > 0
-
+    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。"""
     pin_start_pos = archive.tell()
 
     # 1. OwningNode
@@ -412,11 +360,8 @@ def read_ue_graph_pin(
     pin_id_bytes = archive.read_bytes(16)
     pin_id = pin_id_bytes.hex().upper()
 
-    # 3. PinName (version dependent)
-    if use_fname_format:
-        pin_name = archive.read_name(name_map)
-    else:
-        pin_name = archive.read_fstring()
+    # 3. PinName (UE5 始终使用 FName 格式)
+    pin_name = archive.read_name(name_map)
 
     # 4. PinFriendlyName (FText) — EditorOnly, try/except + seek-back
     ftext_start_pos = archive.tell()
@@ -427,22 +372,8 @@ def read_ue_graph_pin(
     except Exception:
         archive.seek(ftext_start_pos)
 
-    # 5. SourceIndex (version dependent)
-    source_index = None
-    # UE5 always serializes SourceIndex; the mainstream_version threshold check
-    # is unreliable (mainstream_version=0 for UE5.5 assets)
-    if mainstream_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX or summary.file_version_ue5 > 0:
-        source_index = archive.read_i32()
-    else:
-        start_pos = archive.tell()
-        try:
-            test_source = archive.read_i32()
-            if -100 <= test_source <= 1000000:
-                source_index = test_source
-            else:
-                archive.seek(start_pos)
-        except Exception:
-            archive.seek(start_pos)
+    # 5. SourceIndex (UE5 始终存在)
+    source_index = archive.read_i32()
 
     # 6. PinToolTip — FString (NOT FText!)
     # C++ UEdGraphPin::Serialize L1870: Ar << PinToolTip;
@@ -506,38 +437,33 @@ def read_ue_graph_pin(
         sub_pins = []
 
     # 15. ParentPin — UE5: always 24 bytes (b_null + owning + guid)
-    if summary.file_version_ue5 > 0:
-        _pp_null = archive.read_i32()
-        _pp_owning = archive.read_i32()
-        _pp_guid_bytes = archive.read_bytes(16)
-        _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
-        parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
-        if linker is not None and _pp_null == 0 and _pp_owning != 0:
-            pkg_idx = PackageIndex(_pp_owning)
-            if not pkg_idx.is_null:
-                parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
-    else:
-        parent_pin = read_pin_reference(archive, name_map, export_map, import_map, linker)
+    _pp_null = archive.read_i32()
+    _pp_owning = archive.read_i32()
+    _pp_guid_bytes = archive.read_bytes(16)
+    _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
+    parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
+    if linker is not None and _pp_null == 0 and _pp_owning != 0:
+        pkg_idx = PackageIndex(_pp_owning)
+        if not pkg_idx.is_null:
+            parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
 
     # 16. ReferencePassThroughConnection — UE5: always 24 bytes
     ref_pass_through: Optional[dict] = None
-    if summary.file_version_ue5 > 0:
-        _ref_null = archive.read_i32()
-        _ref_owning = archive.read_i32()
-        if _ref_null == 0:
-            _ref_guid_bytes = archive.read_bytes(16)
-            _ref_guid = _ref_guid_bytes.hex().upper()
-            ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid}
-            if linker is not None and _ref_null == 0 and _ref_owning != 0:
-                pkg_idx = PackageIndex(_ref_owning)
-                if not pkg_idx.is_null:
-                    ref_pass_through["owning_node_object"] = linker.resolve_package_index(pkg_idx)
-    else:
-        ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map, linker)
+    _ref_null = archive.read_i32()
+    _ref_owning = archive.read_i32()
+    if _ref_null == 0:
+        _ref_guid_bytes = archive.read_bytes(16)
+        _ref_guid = _ref_guid_bytes.hex().upper()
+        ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid}
+        if linker is not None and _ref_null == 0 and _ref_owning != 0:
+            pkg_idx = PackageIndex(_ref_owning)
+            if not pkg_idx.is_null:
+                ref_pass_through["owning_node_object"] = linker.resolve_package_index(pkg_idx)
 
     # 17. PersistentGuid (EditorOnly)
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
     try:
-        persistent_guid_bytes = archive.read_bytes(16)
+        persistent_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取PersistentGuid
         persistent_guid = persistent_guid_bytes.hex().upper()
     except Exception:
         persistent_guid = None
@@ -600,7 +526,11 @@ def read_fmember_reference(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
-    """读取 FMemberReference（MemberReference.h L74-95）。"""
+    """读取 FMemberReference（MemberReference.h L74-95）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FArchive& operator<<(FMemberReference&) 实现
+    """
     member_parent_index = archive.read_i32()
     member_parent: Optional[str] = None
     if member_parent_index != 0:
@@ -610,7 +540,8 @@ def read_fmember_reference(
 
     member_scope = archive.read_fstring()
     member_name = archive.read_name(name_map)
-    member_guid = archive.read_bytes(16).hex()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    member_guid = archive.read_bytes(16).hex()  # TODO: 使用UE编辑器方式读取MemberGuid
     b_self_context = archive.read_bool()
     _b_was_deprecated = archive.read_bool()
 
@@ -633,7 +564,11 @@ def read_k2node_call_function(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
 ) -> Dict[str, Any]:
-    """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。"""
+    """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FK2Node_CallFunction::Serialize() 实现
+    """
     function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_defaults_to_pure = archive.read_bool()
     return {
@@ -649,7 +584,11 @@ def read_k2node_event(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
 ) -> Dict[str, Any]:
-    """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。"""
+    """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FK2Node_Event::Serialize() 实现
+    """
     event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_override_function = archive.read_bool()
     return {
@@ -665,10 +604,10 @@ def read_k2node_knot(archive: FArchive) -> Dict[str, Any]:
 
 def read_edgraph_node_comment(archive: FArchive) -> Dict[str, Any]:
     """读取 EdGraphNode_Comment 特有字段，返回字典（作为 node_data）。"""
-    r = struct.unpack('<f', archive.read(4))[0]
-    g = struct.unpack('<f', archive.read(4))[0]
-    b = struct.unpack('<f', archive.read(4))[0]
-    a = struct.unpack('<f', archive.read(4))[0]
+    r = archive.read_f32()
+    g = archive.read_f32()
+    b = archive.read_f32()
+    a = archive.read_f32()
     comment_color = (r, g, b, a)
 
     node_width = archive.read_i32()
@@ -777,7 +716,7 @@ def read_ue_graph_node(
                 archive.read_u8()
 
         while archive.tell() < script_end:
-            tag = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5, tolerant=archive._tolerant)
+            tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
             if tag.name == "None":
                 break
 
@@ -790,7 +729,7 @@ def read_ue_graph_node(
                 m_self = False
 
                 while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+                    inner = read_property_tag(archive, name_map)
                     if inner.name == "None":
                         break
                     if inner.name == "MemberParent" and inner.size > 0:
@@ -825,7 +764,7 @@ def read_ue_graph_node(
                 m_self = False
 
                 while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map, summary.legacy_file_version, summary.file_version_ue5)
+                    inner = read_property_tag(archive, name_map)
                     if inner.name == "None":
                         break
                     if inner.name == "MemberParent" and inner.size > 0:
@@ -867,6 +806,7 @@ def read_ue_graph_node(
                 archive.seek(archive.tell() + tag.size)
 
     # 读取 Pins 数组
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
     pins_offset = node_export.script_serial_offset + node_export.script_serial_size
     archive.seek(node_export.serial_offset + pins_offset)
 
@@ -882,9 +822,10 @@ def read_ue_graph_node(
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
         # Always read header (24 bytes): b_null + OwningNode_1 + PinGuid_1
+        # TODO: 使用UE编辑器源码的加载方式替换实现代码
         b_null_ptr = archive.read_i32()
         owning_1 = archive.read_i32()
-        guid_1 = archive.read_bytes(16)
+        guid_1 = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取Pin Guid
 
         if b_null_ptr != 0:
             # NULL pin reference: body still exists, must consume it to advance position
@@ -900,13 +841,6 @@ def read_ue_graph_node(
             pins.append(pin)
         except Exception:
             continue
-
-    # UE4 format: read pos/guid/comment after pins if not already from PropertyTags
-    if node_guid == "":
-        node_pos_x = archive.read_i32()
-        node_pos_y = archive.read_i32()
-        node_guid = archive.read_bytes(16).hex()
-        node_comment = archive.read_fstring()
 
     class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
 
@@ -941,7 +875,11 @@ def read_ue_graph(
     graph_export_idx: int = 0,
     linker: Optional["PackageLinker"] = None,
 ) -> UEdGraph:
-    """读取 UEdGraph 容器（EdGraph.cpp）。"""
+    """读取 UEdGraph 容器（EdGraph.cpp）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ UEdGraph::Serialize() 实现
+    """
     archive.seek(graph_export.serial_offset)
 
     # 1. Schema
@@ -991,7 +929,8 @@ def read_ue_graph(
                         ))
 
     # 3. GraphGuid
-    graph_guid_bytes = archive.read_bytes(16)
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    graph_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取GraphGuid
     graph_guid = graph_guid_bytes.hex()
 
     # 4. bEditable

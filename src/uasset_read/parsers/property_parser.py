@@ -165,11 +165,7 @@ def parse_properties_from_export(
             if current_pos >= property_end:
                 break
 
-            tag = read_property_tag(
-                archive, name_map,
-                summary.legacy_file_version,
-                summary.file_version_ue5
-            )
+            tag = read_property_tag(archive, name_map)
 
             # 终止标记：Name == "None"
             if tag.name == "None":

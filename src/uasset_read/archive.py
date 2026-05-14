@@ -174,6 +174,12 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'H', self.read(2))[0]
 
+    def read_i16(self) -> int:
+        """读取 signed 16-bit integer（支持字节交换）"""
+        import struct
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.unpack(fmt + 'h', self.read(2))[0]
+
     def read_u32(self) -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
         import struct
@@ -181,14 +187,21 @@ class FArchive:
         return struct.unpack(fmt + 'I', self.read(4))[0]
 
     def read_bool(self) -> bool:
-        """读取 UE bool 值（序列化为 uint32，4 bytes）。"""
+        """读取 UE bool 值（序列化为 uint32，4 bytes）。
+
+        UE 标准 FArchive bool 序列化格式。在 UE4 和 UE5 中，
+        FArchive::operator<<(bool&) 都序列化为 uint32（4 bytes）。
+        这适用于大多数场景，包括 FText、ObjectExport 等。
+        """
         return self.read_u32() != 0
 
-    def read_bool_ue5(self) -> bool:
-        """读取 UE5 bool 值（序列化为 uint8，1 byte）。
+    def read_bool_1byte(self) -> bool:
+        """读取 UE5 1-byte bool 值（序列化为 uint8）。
 
-        UE5 在部分结构（如 FEdGraphPinType）中使用 1-byte bool 序列化，
-        而非 UE4 的 4-byte uint32 格式。
+        UE5 在特定结构（如 FEdGraphPinType）中使用 1-byte bool 序列化。
+        与标准 read_bool()（4-byte uint32）不同，这是紧凑格式。
+
+        使用场景：FEdGraphPinType 序列化中的 bool 字段。
         """
         return self.read_u8() != 0
 

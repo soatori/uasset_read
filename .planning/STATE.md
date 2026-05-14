@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: Phase 分解
-status: in_progress
-last_updated: "2026-05-14T16:35:00.000Z"
+status: completed
+last_updated: "2026-05-14T09:17:44.308Z"
 progress:
-  total_phases: 9
-  completed_phases: 5
+  total_phases: 4
+  completed_phases: 1
   total_plans: 1
   completed_plans: 1
-  percent: 55
+  percent: 100
 ---
 
 # v7.0 — 状态: 进行中
@@ -34,25 +34,28 @@ linked_to_raw 为空不是字节偏移问题，而是缺少 UE FLinkerLoad 对�
 | 42 | 集成入口 | ✅ 完成 |
 | 43 | PackageIndex 增强 | ✅ 完成 |
 | 44 | 模型增强 | ✅ 完成 |
-| 44a | 移除旧版本兼容代码 | ⏳ 待执行 |
-| 44b | 替换直接字节读取 | ⏳ 待执行 |
-| 44c | 清理测试工具 | ⏳ 待执行 |
+| 44a | 移除旧版本兼容代码 | ✅ 完成 (VERIFICATION.md) |
+| 44b | 替换直接字节读取 | ✅ 完成 (VERIFICATION.md) |
+| 44c | 清理测试工具 | ✅ 完成 (VERIFICATION.md) |
 | 45 | 图序列化 linker 变体 | ✅ 完成 (UAT passed) |
-| 46 | 测试与验证 | ⏳ 待执行 |
+| 46 | 测试与验证 | ✅ 完成 (VERIFICATION.md) |
 
 ## 技术债清理阶段详情
 
 ### Phase 44a: 移除旧版本/UE4 兼容代码
+
 - **目标**: 删除所有 UE4/旧版本兼容路径，仅保留 UE5 支持
 - **涉及**: constants.py, package_summary.py, object_resources.py, property_tags.py, graph.py, property_parser.py, archive.py, json_formatter.py
 - **验证**: `grep -rn 'is_ue4_file\|UE4_\|legacy_file_version >' src/` 返回 0 结果
 
 ### Phase 44b: 替换直接字节读取
+
 - **目标**: 消除所有绕过 FArchive 的 struct.unpack 调用
 - **涉及**: property_types.py (Int16), graph.py (颜色分量)
 - **验证**: `grep -rn 'struct.unpack' src/` 仅返回 archive.py
 
 ### Phase 44c: 清理测试工具
+
 - **目标**: 清空废弃/调试测试文件
 - **涉及**: tests/test_property_parsing.py, tools/*, temp/*
 - **验证**: tools/ 和 temp/ 目录为空

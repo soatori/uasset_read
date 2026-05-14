@@ -62,8 +62,7 @@ def create_mock_parse_result():
     """
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
-        legacy_file_version=-7,
-        file_version_ue4=522,
+        legacy_file_version=-8,
         package_name="/Game/Test/TestAsset",
     )
 
@@ -157,10 +156,15 @@ def temp_uasset_file():
     # 创建一个包含最小有效数据的临时文件
     # 注意：这不是真正的 .uasset 文件，仅用于 CLI 参数测试
     with tempfile.NamedTemporaryFile(suffix=".uasset", delete=False) as f:
-        # 写入最小魔术标签 + 版本
+        # Write minimal valid UE5 header for CLI tests
         f.write(struct.pack("<I", 0x9E2A83C1))  # PACKAGE_FILE_TAG
-        f.write(struct.pack("<I", 522))  # file_version_ue4
-        f.write(struct.pack("<i", -7))  # legacy_file_version
+        f.write(struct.pack("<i", -8))  # legacy_file_version
+        f.write(struct.pack("<i", 864))  # LegacyUE3Version
+        f.write(struct.pack("<i", 0))  # FileVersionUE4
+        f.write(struct.pack("<i", 1000))  # FileVersionUE5
+        f.write(struct.pack("<i", 0))  # LicenseeVersion
+        f.write(b'\x00' * 24)  # SavedHash(20) + TotalHeaderSize(4)
+        f.write(struct.pack("<I", 0))  # CustomVersions count
         temp_path = Path(f.name)
 
     yield temp_path

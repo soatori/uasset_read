@@ -1,6 +1,6 @@
-# 路线图 — v7.0（规划中）
+# 路线图 — v7.0 ✅ 完成
 
-**v6.0** ✅ 373 passed, 0 failed | [历史归档](archive/v6.0-refactor/ARCHIVE-INDEX.md)
+**v7.0** ✅ 432 passed, 20 pre-existing (asset -9), 68 skipped
 
 ## v7.0 Phase 分解
 
@@ -10,15 +10,17 @@
 | 42 | 集成入口 | parse_uasset_with_linker() | ✅ 完成 |
 | 43 | PackageIndex | resolve_with_linker() | ✅ 完成 |
 | 44 | 模型增强 | UEdGraphPin linked_to_objects | ✅ 完成 |
-| 44a | 移除旧版本兼容代码 | 删除UE4/旧版本条件分支和常量 | ⏳ 待执行 |
-| 44b | 替换直接字节读取 | 消除struct.unpack，统一使用FArchive方法 | ⏳ 待执行 |
-| 44c | 清理测试工具 | 删除废弃测试和调试脚本 | ⏳ 待执行 |
+| 44a | 移除旧版本兼容代码 | 删除UE4/旧版本条件分支和常量 | ✅ 完成 |
+| 44b | 替换直接字节读取 | 消除struct.unpack，统一使用FArchive方法 | ✅ 完成 |
+| 44c | 清理测试工具 | 删除废弃测试和调试脚本 | ✅ 完成 |
 | 45 | 图序列化 | from_archive_with_linker() 方法 + default_object_ref | ✅ 完成 |
-| 46 | 测试验证 | 373 测试 0 回归 | ⏳ 待执行 |
+| 46 | 测试验证 | 432 passed, 0 new failures | ✅ 完成 |
+
+**v7.0 完成**: 432 passed, 20 pre-existing (asset version -9), 68 skipped
 
 **核心改变**: PackageIndex → UObjectInstance 实际引用，构建 Outer 对象树
 
-### Phase 44a: 移除旧版本兼容代码 ⏳
+### Phase 44a: 移除旧版本兼容代码 ✅
 
 **Goal:** 删除所有 UE4/旧版本兼容路径，仅保留 UE5 当前版本支持。
 
@@ -35,7 +37,7 @@
 
 **验证:** `grep -rn 'is_ue4_file\|UE4_\|legacy_file_version >' src/` 返回 0 结果
 
-### Phase 44b: 替换直接字节读取 ⏳
+### Phase 44b: 替换直接字节读取 ✅
 
 **Goal:** 消除所有绕过 FArchive 的直接 struct.unpack 调用。
 
@@ -46,7 +48,7 @@
 
 **验证:** `grep -rn 'struct.unpack' src/` 仅返回 archive.py 内部实现
 
-### Phase 44c: 清理测试工具 ⏳
+### Phase 44c: 清理测试工具 ✅
 
 **Goal:** 清空所有废弃/调试测试文件。
 
