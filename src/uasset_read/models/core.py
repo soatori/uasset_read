@@ -55,6 +55,7 @@ class UEdGraphPin:
     default_value: Optional[str] = None
     auto_default_value: Optional[str] = None
     default_object: Optional[int] = None
+    default_object_ref: Optional["UObjectInstance"] = None  # D-04: linker 解析后的对象引用
     default_text_value: Optional[str] = None
     # PIN-04: 连接引用 — 原始 dict（保留兼容）
     linked_to_raw: List[dict] = field(default_factory=list)
@@ -91,6 +92,28 @@ class UEdGraphPin:
         from uasset_read.serializers.graph import read_ue_graph_pin
         return read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
 
+    @classmethod
+    def from_archive_with_linker(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport],
+        linker: Optional["PackageLinker"] = None,
+    ) -> Self:
+        """带 linker 的读取入口，支持 PackageIndex → UObjectInstance 解析（D-09）。"""
+        from uasset_read.serializers.graph import read_ue_graph_pin
+        from uasset_read.serializers.object_resources import PackageIndex
+        pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
+        # D-04: 解析 default_object 为 UObjectInstance
+        if linker is not None and pin.default_object is not None and pin.default_object != 0:
+            try:
+                pin.default_object_ref = linker.resolve_package_index(PackageIndex(pin.default_object))
+            except Exception:
+                pin.default_object_ref = None  # D-06: 解析失败存 None
+        return pin
+
 
 @dataclass
 class UEdGraphNode:
@@ -116,6 +139,21 @@ class UEdGraphNode:
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ue_graph_node
         return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
+
+    @classmethod
+    def from_archive_with_linker(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport],
+        node_export: ObjectExport,
+        linker: Optional["PackageLinker"] = None,
+    ) -> Self:
+        """带 linker 的读取入口（D-09）。"""
+        from uasset_read.serializers.graph import read_ue_graph_node
+        return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
 
 
 @dataclass
@@ -143,6 +181,23 @@ class UEdGraph:
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ue_graph
         return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx)
+
+    @classmethod
+    def from_archive_with_linker(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        summary: PackageFileSummary,
+        export_map: List[ObjectExport],
+        import_map: List[ObjectImport],
+        graph_export: ObjectExport,
+        graph_class: str,
+        graph_export_idx: int = 0,
+        linker: Optional["PackageLinker"] = None,
+    ) -> Self:
+        """带 linker 的读取入口（D-09）。"""
+        from uasset_read.serializers.graph import read_ue_graph
+        return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx, linker)
 
 
 @dataclass
