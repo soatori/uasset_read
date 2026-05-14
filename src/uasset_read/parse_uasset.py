@@ -197,3 +197,97 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
             archive.close()
 
     return result
+
+
+def parse_uasset_with_linker(
+    path: str,
+    tolerant: bool = True,
+    preload_all: bool = False,
+) -> "LinkerParseResult":
+    """使用 PackageLinker 的并行解析入口（D-01, D-04）。
+
+    Args:
+        path: .uasset 文件路径
+        tolerant: 是否启用容错模式（默认开启）
+        preload_all: 是否预加载所有 exports（默认 False，惰性加载）
+
+    Returns:
+        LinkerParseResult 实例（含对象图和后处理数据）
+    """
+    from uasset_read.link.linker import PackageLinker
+
+    result = LinkerParseResult()
+    archive = None
+
+    try:
+        archive = FArchive(path, tolerant=tolerant)
+
+        # Extract mmap info
+        mmap_info = archive.get_mmap_info()
+        result.mmap_used = mmap_info["used"]
+        result.mmap_warning = mmap_info["warning"]
+
+        # 读取文件头
+        result.summary = read_package_summary(archive)
+        result.name_map = read_name_table(archive, result.summary)
+        result.import_map = read_import_map(archive, result.summary, result.name_map)
+        result.export_map = read_export_map(archive, result.summary, result.name_map)
+
+        # 解析 ExportMap 属性
+        for export in result.export_map:
+            if export.serial_size > 0:
+                try:
+                    export.properties = parse_properties_from_export(
+                        export, archive, result.summary, result.name_map,
+                        result.export_map, result.import_map,
+                    )
+                except Exception as e:
+                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                    export.properties = []
+
+                # 提取组件变换属性
+                if export.properties:
+                    export.transforms = extract_component_transforms(export.properties)
+
+        # 创建并运行 linker
+        linker = PackageLinker(
+            archive, result.summary, result.name_map,
+            result.import_map, result.export_map,
+        )
+        linker.link()
+        result.linker = linker
+        result.all_objects = linker._import_objects + linker._export_objects
+        result.root_objects = linker._root_objects
+
+        # 可选：预加载所有 exports
+        if preload_all:
+            for i in range(len(linker._export_objects)):
+                linker.preload(i)
+
+        # 共享后处理
+        _post_process(
+            path, archive, result.summary, result.name_map,
+            result.import_map, result.export_map, result, tolerant,
+        )
+
+    except VersionError as e:
+        result.errors.append(str(e))
+        result.is_success = False
+
+    except ParseError as e:
+        result.errors.append(str(e))
+        if e.partial_result:
+            for key, value in e.partial_result.items():
+                if hasattr(result, key):
+                    setattr(result, key, value)
+        result.is_success = False
+
+    except Exception as e:
+        result.errors.append(f"Unexpected error: {str(e)}")
+        result.is_success = False
+
+    finally:
+        if archive:
+            archive.close()
+
+    return result
