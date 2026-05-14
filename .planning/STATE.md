@@ -1,79 +1,71 @@
 ---
 gsd_state_version: 1.0
-milestone: v7.0
-milestone_name: Phase 分解
-status: completed
-last_updated: "2026-05-14T09:17:44.308Z"
+milestone: v8.0
+milestone_name: BP-to-CPP 翻译能力
+status: planning
+last_updated: "2026-05-15T00:10:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# v7.0 — 状态: 进行中
+# v8.0 — BP-to-CPP 翻译能力
 
-## 问题: Phase 35e 失败根因
+## 问题: v7.0 解析结果无法支撑 BP→C++ 翻译
 
-linked_to_raw 为空不是字节偏移问题，而是缺少 UE FLinkerLoad 对象图重建机制。
-
-## 目标
+对比 `BP_FirstPersonCharacter.uasset` 解析 JSON 与等价 C++ 实现
+(`FirstPersonCCharacter.cpp/h`)，发现 6 个结构性 gap：
 
 | 当前 | 目标 |
 |------|------|
-| PackageIndex → 名字字符串 | → UObjectInstance 实际引用 |
-| 无对象图 | 构建 Outer 树 |
-| 重复解析 | 对象缓存 |
+| linked_to_raw 全为空 | Pin 连接关系完整可查 |
+| 无组件数值属性 | 组件位置/旋转/缩放/标志可提取 |
+| CallFunction pins 不完整 | 函数签名可推断 |
+| EnhancedInput 触发事件不可见 | BindAction ETriggerEvent 可区分 |
+| 无代码生成能力 | 可输出 .h/.cpp 骨架 |
 
 ## Phase 分解
 
 | Phase | 名称 | 状态 |
 |-------|------|------|
-| 41 | link/ 模块 | ✅ 完成 |
-| 42 | 集成入口 | ✅ 完成 |
-| 43 | PackageIndex 增强 | ✅ 完成 |
-| 44 | 模型增强 | ✅ 完成 |
-| 44a | 移除旧版本兼容代码 | ✅ 完成 (VERIFICATION.md) |
-| 44b | 替换直接字节读取 | ✅ 完成 (VERIFICATION.md) |
-| 44c | 清理测试工具 | ✅ 完成 (VERIFICATION.md) |
-| 45 | 图序列化 linker 变体 | ✅ 完成 (UAT passed) |
-| 46 | 测试与验证 | ✅ 完成 (VERIFICATION.md) |
+| 47 | Pin LinkedTo 修复 | 🔴 未开始 |
+| 48 | 组件属性递归解析 | 🔴 未开始 |
+| 49 | 函数调用引脚解析 | 🔴 未开始 |
+| 50 | EnhancedInput 语义增强 | 🔴 未开始 |
+| 51 | C++ 代码生成器 | 🔴 未开始 |
 
-## 技术债清理阶段详情
+## 关键发现
 
-### Phase 44a: 移除旧版本/UE4 兼容代码
+### Gap G1: linked_to_raw 全为空（P0）
 
-- **目标**: 删除所有 UE4/旧版本兼容路径，仅保留 UE5 支持
-- **涉及**: constants.py, package_summary.py, object_resources.py, property_tags.py, graph.py, property_parser.py, archive.py, json_formatter.py
-- **验证**: `grep -rn 'is_ue4_file\|UE4_\|legacy_file_version >' src/` 返回 0 结果
+`BP_FirstPersonCharacter.uasset` 的 30 个 pin 全部 `linked_to_raw=[]`。
+导致 `build_connections_map()` 返回 0 连接，`build_execution_flows()`
+虽然识别到 5 个起点但 `nodes=[]`（无法追踪后续节点）。
 
-### Phase 44b: 替换直接字节读取
+根因在 `read_ue_graph()` / `read_ue_graph_pin()` 中的序列化偏移计算。
+UE5 的 UEdGraphNode 使用 `nodes_count == 0` + `outer_index` 收集模式，
+节点 pins 数组的实际二进制读取位置可能与预期不一致。
 
-- **目标**: 消除所有绕过 FArchive 的 struct.unpack 调用
-- **涉及**: property_types.py (Int16), graph.py (颜色分量)
-- **验证**: `grep -rn 'struct.unpack' src/` 仅返回 archive.py
+### Gap G2: 组件属性值缺失（P0）
 
-### Phase 44c: 清理测试工具
+C++ 构造函数中的关键数值在 JSON 中完全不可见：
+- `FirstPersonCameraComponent` 的 RelativeLocation=(-2.8, 5.89, 0.0)
+- `FirstPersonFieldOfView = 70.0f`
+- `AirControl = 0.5f`
+- `BrakingDecelerationFalling = 1500.0f`
 
-- **目标**: 清空废弃/调试测试文件
-- **涉及**: tests/test_property_parsing.py, tools/*, temp/*
-- **验证**: tools/ 和 temp/ 目录为空
-
-## 阶段 45 过渡条件
-
-| # | 条件 | 验证方法 |
-|---|------|----------|
-| 1 | 不存在直接字节读取代码 | `grep -r 'struct.unpack' src/` 返回 0 结果（除 archive.py） |
-| 2 | 不存在兼容其他版本的代码 | `grep -r 'is_ue4_file\|UE4_\|legacy_file_version >' src/` 返回 0 结果 |
-| 3 | 清空测试工具 | `tools/` 和 `temp/` 目录为空 |
-| 4 | 可用 BP_FirstPersonCharacter.uasset 完整解析 | `uasset-read` 成功执行并输出结构化结果 |
+这些值存在于 ExportMap 的 PropertyTag 中，但当前解析器只提取了
+Blueprint 元数据层，没有递归解析组件对象的序列化属性。
 
 ## 验证标准
 
-- 373 测试 0 回归 ✅ (450 passed, 10 pre-existing failures)
-- linked_to_objects 非空且正确 ✅ (Phase 44 verified)
-- Outer 树可导航 ✅ (Phase 44 verified)
-- parse_uasset() 行为不变 ✅ (Phase 44 verified)
+- Phase 47: connections > 0, execution_flows[].nodes 非空
+- Phase 48: components 数组包含数值属性
+- Phase 49: CallFunction 节点输出 parameters 数组
+- Phase 50: input_bindings 数组与 C++ BindAction 对应
+- Phase 51: 生成的 .h/.cpp 可编译（需手动补充头文件）
 
-*Updated: 2026-05-14*
+*Created: 2026-05-15*

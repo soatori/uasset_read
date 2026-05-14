@@ -17,7 +17,7 @@ PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
 # ============================================================================
 
 UE5_VERSION_MIN = 0                # UE5 版本最低值
-UE5_LEGACY_VERSION = -8            # UE5 文件的 LegacyFileVersion 固定值
+UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定值
 
 # ============================================================================
 # CustomVersion GUIDs
@@ -93,7 +93,7 @@ UE5_METADATA_SERIALIZATION_OFFSET = 1014
 UE5_VERSE_CELLS = 1015
 UE5_PACKAGE_SAVED_HASH = 1016
 UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017
-UE5_IMPORT_TYPE_HIERARCHIES = 1018
+UE5_IMPORT_TYPE_HIERARCHIES = 1017
 
 # ============================================================================
 # 更多 CustomVersion GUIDs

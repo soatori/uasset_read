@@ -15,7 +15,7 @@ from uasset_read.constants import (
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
-    UE5_IMPORT_TYPE_HIERARCHIES,
+    UE5_IMPORT_TYPE_HIERARCHIES, UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION,
     UE5_NAMES_REFERENCED_FROM_EXPORT_DATA, UE5_PAYLOAD_TOC,
     UE5_DATA_RESOURCES,
     PKG_FilterEditorOnly,
@@ -79,6 +79,7 @@ class PackageFileSummary:
     thumbnail_table_offset: int = 0
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
+    os_sub_object_shadow: int = 0
     persistent_guid: str = ""
     generations: List[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
@@ -212,7 +213,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if cell_import_offset > 0:
         archive.validate_offset(cell_import_offset, "CellImportOffset")
 
-    # 第 12 步：MetaDataOffset（UE5.7 始终存在）
+    # 第 12 步：MetaDataOffset（UE5 始终存在）
     metadata_offset = archive.read_i32()
     if metadata_offset > 0:
         archive.validate_offset(metadata_offset, "MetadataOffset")
@@ -225,13 +226,22 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if thumbnail_table_offset > 0:
         archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
-    # 第 15 步：ImportTypeHierarchies（UE5.7 始终存在）
-    import_type_hierarchies_count = archive.read_i32()
-    if import_type_hierarchies_count < 0:
-        raise ParseError(f"Negative import type hierarchies count: {import_type_hierarchies_count}")
-    import_type_hierarchies_offset = archive.read_i32()
-    if import_type_hierarchies_offset > 0:
-        archive.validate_offset(import_type_hierarchies_offset, "ImportTypeHierarchiesOffset")
+    # 第 15 步：ImportTypeHierarchies
+    if file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
+        import_type_hierarchies_count = archive.read_i32()
+        if import_type_hierarchies_count < 0:
+            raise ParseError(f"Negative import type hierarchies count: {import_type_hierarchies_count}")
+        import_type_hierarchies_offset = archive.read_i32()
+        if import_type_hierarchies_offset > 0:
+            archive.validate_offset(import_type_hierarchies_offset, "ImportTypeHierarchiesOffset")
+    else:
+        import_type_hierarchies_count = 0
+        import_type_hierarchies_offset = 0
+    # 第 15b 步：OsSubObjectShadow（UE5.17+）
+    if file_version_ue5 >= UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION:
+        os_sub_object_shadow = archive.read_i32()
+    else:
+        os_sub_object_shadow = 0
 
     # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件）
     persistent_guid = ""
@@ -341,6 +351,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         thumbnail_table_offset=thumbnail_table_offset,
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
+        os_sub_object_shadow=os_sub_object_shadow,
         persistent_guid=persistent_guid, generations=generations,
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
