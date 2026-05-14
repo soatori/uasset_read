@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
+    from uasset_read.link.object_instance import UObjectInstance
 
 
 @dataclass
@@ -55,10 +56,16 @@ class UEdGraphPin:
     auto_default_value: Optional[str] = None
     default_object: Optional[int] = None
     default_text_value: Optional[str] = None
-    # PIN-04: 连接引用
+    # PIN-04: 连接引用 — 原始 dict（保留兼容）
     linked_to_raw: List[dict] = field(default_factory=list)
     sub_pins: List[dict] = field(default_factory=list)
     parent_pin: Optional[dict] = None
+    ref_pass_through: Optional[dict] = None
+    # PIN-04+: 连接引用 — 解析后的 UObjectInstance（新增，linker 模式）
+    linked_to_objects: List[Optional["UObjectInstance"]] = field(default_factory=list)
+    sub_pins_objects: List[Optional["UObjectInstance"]] = field(default_factory=list)
+    parent_pin_object: Optional["UObjectInstance"] = None
+    ref_pass_through_object: Optional["UObjectInstance"] = None
     # PIN-05: 显示属性
     hidden: bool = False
     not_connectable: bool = False
