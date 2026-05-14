@@ -20,6 +20,34 @@
 
 **核心改变**: PackageIndex → UObjectInstance 实际引用，构建 Outer 对象树
 
+---
+
+## v8.0 🔨 BP-to-CPP 翻译能力
+
+> 对比 `BP_FirstPersonCharacter.uasset` 与等价 C++ 实现 (`FirstPersonCCharacter.cpp/h`)，
+> 识别出 6 个 gap，分 5 个 phase 解决。详见 `.planning/phases/v8.0-roadmap.md`
+
+| Phase | 名称 | 目标 | 状态 |
+|-------|------|------|------|
+| 47 | Pin LinkedTo 修复 | linked_to_raw 非空，connections > 0 | 🔴 未开始 |
+| 48 | 组件属性递归解析 | 输出组件数值型属性 | 🔴 未开始 |
+| 49 | 函数调用引脚解析 | CallFunction 参数引脚完整 | 🔴 未开始 |
+| 50 | EnhancedInput 语义增强 | TriggerEvent 类型可识别 | 🔴 未开始 |
+| 51 | C++ 代码生成器 | 从 JSON 生成 .h/.cpp 骨架 | 🔴 未开始 |
+
+### Gap 追溯
+
+| # | Gap | 解决 Phase | 描述 |
+|---|-----|-----------|------|
+| G1 | `linked_to_raw` 全为空 | 47 | 执行流/数据流/连接全部为 0，无法追踪节点间关系 |
+| G2 | 组件属性值未提取 | 48 | C++ 构造函数中的位置/旋转/缩放/标志不可见 |
+| G3 | CallFunction 引脚参数类型缺失 | 49 | 函数签名（参数名+类型）无法推断 |
+| G4 | EnhancedInput 触发事件不可见 | 50 | BindAction 的 ETriggerEvent 无法区分 |
+| G5 | Knot 节点数据流断裂 | 47+49 | 输入转发逻辑（MoveInput→DoMove）丢失 |
+| G6 | UPROPERTY/UFUNCTION 元数据 | 51 | C++ 宏修饰符需启发式推断 |
+
+*Updated: 2026-05-15*
+
 ### Phase 44a: 移除旧版本兼容代码 ✅
 
 **Goal:** 删除所有 UE4/旧版本兼容路径，仅保留 UE5 当前版本支持。
