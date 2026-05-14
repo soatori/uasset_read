@@ -4,7 +4,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
 
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from uasset_read.archive import FArchive
@@ -21,6 +21,9 @@ from uasset_read.constants import (
     UE5_ADD_SOFTOBJECTPATH_LIST, UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
 )
 from uasset_read.exceptions import ParseError, ErrorContext
+
+if TYPE_CHECKING:
+    from uasset_read.link.linker import PackageLinker
 
 
 @dataclass
@@ -393,74 +396,55 @@ def validate_package_index(
         if not (0 <= export_idx < len(export_map)):
             return f"PackageIndex {index.index} export out of range at {context}"
         return None
-def resolve_package_index_to_reference(
-    pkg_idx: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    name_map: List[str]
-) -> Optional[Dict[str, Any]]:
-    """解析 FPackageIndex 为可读对象引用信息。
 
-    Phase 11-02: 增强 ObjectProperty 解析返回可读对象引用。
 
-    Args:
-        pkg_idx: PackageIndex 对象
-        import_map: ImportMap 列表
-        export_map: ExportMap 列表
-        name_map: NameMap 列表
+def resolve_class_name_with_linker(
+    class_index: PackageIndex,
+    linker: "PackageLinker",
+) -> Optional[str]:
+    """从 PackageIndex 解析类名（通过 linker）。"""
+    if class_index.is_null:
+        return None
+    inst = linker.resolve_package_index(class_index)
+    return inst.object_name if inst else None
+
+
+def get_asset_class_with_linker(
+    export: ObjectExport,
+    linker: "PackageLinker",
+) -> Optional[str]:
+    """从导出条目识别资产类型（通过 linker）。"""
+    inst = linker.resolve_package_index(export.class_index)
+    return inst.object_name if inst else None
+
+
+def detect_blueprint_with_linker(
+    export: ObjectExport,
+    linker: "PackageLinker",
+) -> bool:
+    """检测导出是否为蓝图资产（通过 linker）。"""
+    cls = get_asset_class_with_linker(export, linker)
+    return cls is not None and "Blueprint" in cls
+
+
+def resolve_parent_class_with_linker(
+    super_index: PackageIndex,
+    linker: "PackageLinker",
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve ParentClass FPackageIndex to object name (通过 linker)。
 
     Returns:
-        None if pkg_idx.is_null
-        {"type": "import", "class_name": str, "object_name": str, "package": str} if import
-        {"type": "export", "class_name": str, "object_name": str} if export
+        Tuple of (resolved_name, warning_if_any)
+        - (class_name, None) on success
+        - (None, warning_string) on failure
     """
-    if pkg_idx.is_null:
-        return None
-
-    if pkg_idx.is_import:
-        imp_idx = pkg_idx.to_import_index()
-        if 0 <= imp_idx < len(import_map):
-            imp = import_map[imp_idx]
-            class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
-            object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
-            package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
-            return {
-                "type": "import",
-                "source": "import_map",
-                "class_name": class_name,
-                "object_name": object_name,
-                "package": package
-            }
-
-    elif pkg_idx.is_export:
-        exp_idx = pkg_idx.to_export_index()
-        if 0 <= exp_idx < len(export_map):
-            exp = export_map[exp_idx]
-            class_name = _resolve_class_name(exp.class_index, import_map, export_map, name_map)
-            object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
-            return {
-                "type": "export",
-                "class_name": class_name,
-                "object_name": object_name
-            }
-
-    return None
-
-
-def _resolve_class_name(
-    class_index: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    name_map: List[str]
-) -> str:
-    """递归解析 class_index 获取类名。"""
-    if class_index.is_null or class_index.index == 0:
-        return "None"
-
-    resolved = resolve_package_index_to_reference(class_index, import_map, export_map, name_map)
-    if resolved:
-        return resolved.get("class_name", "Unknown")
-    return "Unknown"
+    if super_index.is_null:
+        return None, None
+    inst = linker.resolve_package_index(super_index)
+    if inst is not None:
+        return inst.object_name, None
+    return None, f"Parent resolution failed for index {super_index.index}"
 
 
 def find_main_blueprint_generated_class(

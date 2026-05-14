@@ -20,7 +20,7 @@ from uasset_read.constants import (
 )
 from uasset_read.serializers.property_tags import read_property_tag
 from uasset_read.serializers.object_resources import (
-    ObjectExport, PackageIndex, resolve_package_index_to_reference,
+    ObjectExport, PackageIndex,
 )
 
 
@@ -202,9 +202,24 @@ def parse_properties_from_export(
             ))
 
             # ObjectProperty 增强：解析为可读对象引用
+            # Phase 43: resolve_package_index_to_reference removed; inlined equivalent
             if import_map is not None and tag.type == "ObjectProperty" and isinstance(value, int):
                 pkg_idx = PackageIndex(value)
-                ref = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+                ref = None
+                if pkg_idx.is_import:
+                    imp_idx = pkg_idx.to_import_index()
+                    if 0 <= imp_idx < len(import_map):
+                        imp = import_map[imp_idx]
+                        class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
+                        object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
+                        package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
+                        ref = {"type": "import", "source": "import_map", "class_name": class_name, "object_name": object_name, "package": package}
+                elif pkg_idx.is_export:
+                    exp_idx = pkg_idx.to_export_index()
+                    if 0 <= exp_idx < len(export_map):
+                        exp = export_map[exp_idx]
+                        object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
+                        ref = {"type": "export", "object_name": object_name}
                 if ref and ref.get("source") == "import_map":
                     properties[-1].value = ref
 
