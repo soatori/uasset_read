@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
     from uasset_read.models.core import UEdGraph
 
-from uasset_read.serializers.object_resources import get_asset_class
+from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from uasset_read.graph import build_connections_map, build_execution_flows
 
 
@@ -52,8 +52,12 @@ def format_text_full(result: ParseResult) -> str:
 
     # Exports section
     lines.append("Exports:")
+
+    # Extract linker for class resolution (may be None for legacy ParseResult)
+    linker = getattr(result, 'linker', None)
+
     for i, exp in enumerate(result.export_map):
-        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
         lines.append(f"  - Name: {exp.object_name}")
         lines.append(f"    Class: {asset_class}")
         lines.append(f"    SerialSize: {exp.serial_size}")
@@ -143,8 +147,11 @@ def format_text_summary(result: ParseResult) -> str:
     lines.append("")  # Blank line
 
     # Exports: one line each
+    # Extract linker for class resolution (may be None for legacy ParseResult)
+    linker = getattr(result, 'linker', None)
+
     for exp in result.export_map:
-        asset_class = get_asset_class(exp, result.import_map, result.export_map)
+        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
         lines.append(f"  - {exp.object_name} ({asset_class})")
 
     # Blueprint summary

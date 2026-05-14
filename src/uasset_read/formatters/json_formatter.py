@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from dataclasses import asdict, is_dataclass
 
 from uasset_read.models.properties import StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue
-from uasset_read.serializers.object_resources import get_asset_class
+from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from .helpers import build_status_info, build_schema_info, resolve_fpackage_index
 
 
@@ -102,6 +102,9 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
     """
     exports_list = []
 
+    # Extract linker for class resolution (may be None for legacy ParseResult)
+    linker = getattr(result, 'linker', None)
+
     for i, exp in enumerate(result.export_map):
         # Resolve ParentClass from Phase 3 extraction
         parent_class = None
@@ -113,7 +116,7 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
         export_dict = {
             "index": i,
             "name": exp.object_name,
-            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map)),
             "serial_size": exp.serial_size,
             "properties": format_properties_list(exp.properties) if exp.properties else [],
             # Per D-12: resolved references
@@ -253,6 +256,10 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
 
     # D-14-08: 精简 exports（仅 name, class, parent_class）
     exports_summary = []
+
+    # Extract linker for class resolution (may be None for legacy ParseResult)
+    linker = getattr(result, 'linker', None)
+
     for i, exp in enumerate(result.export_map):
         # 获取 parent_class（仅在蓝图主对象的第一个 export）
         parent_class = ""
@@ -261,7 +268,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
 
         exports_summary.append({
             "name": exp.object_name,
-            "class": get_asset_class(exp, result.import_map, result.export_map),
+            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map)),
             "parent_class": parent_class
         })
 

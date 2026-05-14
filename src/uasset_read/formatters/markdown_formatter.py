@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, List, Dict
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
 
-from uasset_read.serializers.object_resources import get_asset_class
+from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from uasset_read.graph import build_graphs_summary
 from .helpers import build_status_info
 
@@ -96,9 +96,13 @@ def format_markdown(result: ParseResult) -> str:
         lines.append("## Exports")
         lines.append("| Name | Class | Parent |")
         lines.append("|------|-------|--------|")
+
+        # Extract linker for class resolution (may be None for legacy ParseResult)
+        linker = getattr(result, 'linker', None)
+
         for i, exp in enumerate(result.export_map):
             name = _escape_md_cell(exp.object_name)
-            cls = _escape_md_cell(get_asset_class(exp, result.import_map, result.export_map))
+            cls = _escape_md_cell(get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
             parent = _escape_md_cell(result.blueprint.parent_class or "") if result.blueprint and i == 0 else ""
             lines.append(f"| {name} | {cls} | {parent} |")
         lines.append("")
