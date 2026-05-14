@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: UE 加载方式对齐 — 对象图重建
-status: planning
+status: in_progress
 last_updated: "2026-05-14T00:00:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 17
 ---
 
-# v7.0 — 状态: 规划中
+# v7.0 — 状态: 进行中
 
 ## 问题: Phase 35e 失败根因
 
@@ -28,20 +28,20 @@ linked_to_raw 为空不是字节偏移问题，而是缺少 UE FLinkerLoad 对�
 
 ## Phase 分解
 
-| Phase | 名称 | 工作量 |
-|-------|------|--------|
-| 41 | link/ 模块 | ~2h |
-| 42 | 集成入口 | ~1h |
-| 43 | PackageIndex 增强 | ~0.5h |
-| 44 | 模型增强 | ~0.5h |
-| 45 | 图序列化 linker 变体 | ~2h |
-| 46 | 测试与验证 | ~3h |
+| Phase | 名称 | 状态 |
+|-------|------|------|
+| 41 | link/ 模块 | ✅ 完成 |
+| 42 | 集成入口 | ✅ 完成 |
+| 43 | PackageIndex 增强 | ✅ 完成 |
+| 44 | 模型增强 | ✅ 完成 |
+| 45 | 图序列化 linker 变体 | ✅ 完成 (UAT passed) |
+| 46 | 测试与验证 | ⏳ 待执行 |
 
 ## 验证标准
 
-- 373 测试 0 回归
-- linked_to_objects 非空且正确
-- Outer 树可导航
-- parse_uasset() 行为不变
+- 373 测试 0 回归 ✅ (450 passed, 10 pre-existing failures)
+- linked_to_objects 非空且正确 ✅ (Phase 44 verified)
+- Outer 树可导航 ✅ (Phase 44 verified)
+- parse_uasset() 行为不变 ✅ (Phase 44 verified)
 
 *Updated: 2026-05-14*
