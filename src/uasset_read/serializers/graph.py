@@ -280,7 +280,7 @@ def read_ftext_with_history(
                         _tv_flags = archive.read_i32()
                         _tv_htype_raw = archive.read_bytes(1)[0]
                         _tv_htype = _tv_htype_raw if _tv_htype_raw < 128 else _tv_htype_raw - 256
-                        read_ftext_with_history(archive, _tv_htype, tolerant=True, ue5_mode=ue5_mode)
+                        read_ftext_with_history(archive, _tv_htype, tolerant=True)
                     elif _arg_type == 4:  # Gender
                         archive.read_u8()
         else:
@@ -326,7 +326,8 @@ def read_pin_reference(
     archive: FArchive,
     name_map: List[str],
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport]
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
     """读取单个 Pin 引用（SerializePin 格式）。"""
     b_null_ptr = archive.read_i32()
@@ -348,14 +349,24 @@ def read_pin_reference(
         if import_idx < len(import_map):
             owning_node_name = import_map[import_idx].object_name
 
-    return {"owning_node": owning_node_name, "pin_guid": pin_guid}
+    result = {"owning_node": owning_node_name, "pin_guid": pin_guid}
+
+    # 如果有 linker，解析 owning_node_index 为对象引用
+    if linker is not None and owning_node_index != 0:
+        pkg_idx = PackageIndex(owning_node_index)
+        if not pkg_idx.is_null:
+            obj_ref = linker.resolve_package_index(pkg_idx)
+            result["owning_node_object"] = obj_ref
+
+    return result
 
 
 def read_pin_array(
     archive: FArchive,
     name_map: List[str],
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport]
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"] = None,
 ) -> List[dict]:
     """读取 Pin 引用数组（SerializePinArray 格式）。"""
     array_count = archive.read_i32()
@@ -369,7 +380,7 @@ def read_pin_array(
 
     pins: List[dict] = []
     for _ in range(array_count):
-        pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
+        pin_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
         if pin_ref is not None:
             pins.append(pin_ref)
     return pins
@@ -384,7 +395,8 @@ def read_ue_graph_pin(
     name_map: List[str],
     summary: PackageFileSummary,
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport]
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"] = None,
 ) -> UEdGraphPin:
     """读取 UEdGraphPin 完整序列化格式（EdGraphPin.cpp L1838-1964）。"""
     framework_version = summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0)
@@ -471,7 +483,6 @@ def read_ue_graph_pin(
         _dtv_value, _dtv_consumed = read_ftext_with_history(
             archive, _dtv_history,
             tolerant=True,
-            ue5_mode=(summary.file_version_ue5 > 0)
         )
     except Exception:
         # Extrem tolerant: Falls FText-Lesen fehlschlaegt, DefaultTextValue ignorieren
@@ -480,7 +491,7 @@ def read_ue_graph_pin(
     # 13. LinkedTo array
     linkedto_start = archive.tell()
     try:
-        linked_to = read_pin_array(archive, name_map, export_map, import_map)
+        linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
     except Exception:
         # 不尝试恢复 — 异常可能由数据损坏导致，继续解析可能导致位置不一致
         # 返回空数组，让调用者处理位置不一致问题
@@ -489,7 +500,7 @@ def read_ue_graph_pin(
     # 14. SubPins array
     subpins_start = archive.tell()
     try:
-        sub_pins = read_pin_array(archive, name_map, export_map, import_map)
+        sub_pins = read_pin_array(archive, name_map, export_map, import_map, linker)
     except Exception:
         # 同上，不尝试恢复
         sub_pins = []
@@ -501,18 +512,28 @@ def read_ue_graph_pin(
         _pp_guid_bytes = archive.read_bytes(16)
         _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
         parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
+        if linker is not None and _pp_null == 0 and _pp_owning != 0:
+            pkg_idx = PackageIndex(_pp_owning)
+            if not pkg_idx.is_null:
+                parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
     else:
-        parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
+        parent_pin = read_pin_reference(archive, name_map, export_map, import_map, linker)
 
     # 16. ReferencePassThroughConnection — UE5: always 24 bytes
+    ref_pass_through: Optional[dict] = None
     if summary.file_version_ue5 > 0:
         _ref_null = archive.read_i32()
         _ref_owning = archive.read_i32()
-        _ref_guid_bytes = archive.read_bytes(16)
-        _ref_guid = _ref_guid_bytes.hex().upper() if _ref_null == 0 else None
-        ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid} if _ref_null == 0 else None
+        if _ref_null == 0:
+            _ref_guid_bytes = archive.read_bytes(16)
+            _ref_guid = _ref_guid_bytes.hex().upper()
+            ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid}
+            if linker is not None and _ref_null == 0 and _ref_owning != 0:
+                pkg_idx = PackageIndex(_ref_owning)
+                if not pkg_idx.is_null:
+                    ref_pass_through["owning_node_object"] = linker.resolve_package_index(pkg_idx)
     else:
-        ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
+        ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map, linker)
 
     # 17. PersistentGuid (EditorOnly)
     try:
@@ -535,6 +556,12 @@ def read_ue_graph_pin(
     except Exception:
         pass
 
+    # 从 raw dict 中提取对象引用
+    linked_to_objects = [pin.get("owning_node_object") for pin in linked_to]
+    sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
+    parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
+    ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
+
     return UEdGraphPin(
         pin_id=pin_id,
         pin_name=pin_name,
@@ -547,6 +574,11 @@ def read_ue_graph_pin(
         linked_to_raw=linked_to,
         sub_pins=sub_pins,
         parent_pin=parent_pin,
+        ref_pass_through=ref_pass_through,
+        linked_to_objects=linked_to_objects,
+        sub_pins_objects=sub_pins_objects,
+        parent_pin_object=parent_pin_object,
+        ref_pass_through_object=ref_pass_through_object,
         owning_node_index=owning_node_index,
         source_index=source_index,
         persistent_guid=persistent_guid,
@@ -857,14 +889,14 @@ def read_ue_graph_node(
         if b_null_ptr != 0:
             # NULL pin reference: body still exists, must consume it to advance position
             try:
-                read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
+                read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
             except Exception:
                 # If body parsing fails, estimate body size (~180 bytes) and skip
                 archive.seek(archive.tell() + 180)
             continue
 
         try:
-            pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
+            pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
             pins.append(pin)
         except Exception:
             continue
