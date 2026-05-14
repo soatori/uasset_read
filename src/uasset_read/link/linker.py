@@ -39,6 +39,10 @@ class PackageLinker:
         self._import_map = import_map
         self._export_map = export_map
 
+        # Public aliases (used by UObjectInstance.get_full_name() etc.)
+        self.summary = summary
+        self.name_map = name_map
+
         self._import_objects: List[UObjectInstance] = []
         self._export_objects: List[UObjectInstance] = []
         self._root_objects: List[UObjectInstance] = []
