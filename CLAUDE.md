@@ -18,7 +18,7 @@ uasset-read file.uasset           # 解析文件
 python -m pytest tests/ -v        # 测试
 ```
 
-测试资产：`E:\Develop\lib\UnrealEngine\Samples\FirstPerson`
+测试资产：`E:\Develop\lib\UnrealEngine\Samples\FirstPerson`（源码参考文件夹，非项目内）
 
 ## 当前状态
 
@@ -82,3 +82,10 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 - `.planning/REQUIREMENTS.md` — 需求追溯
 - `.planning/PROJECT.md` — 项目概览
 - `.planning/MILESTONES.md` — 历史里程碑
+
+## 上下文与效率
+
+- 上下文 >70% 时执行 `compact`
+- 独立任务优先并行 subagent，主线程只看结构化摘要
+- **GSD：** wave 或 PLAN 之间互补不干扰时均可并行执行
+- 有依赖或共享状态的任务不可并行；写冲突风险可通过 git 分支管理规避

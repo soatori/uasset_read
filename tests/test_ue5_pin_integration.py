@@ -1,12 +1,15 @@
 """UE5 Pin Integration Tests - Verify linked_to_raw, execution_flows, data_flows."""
+import os
+from pathlib import Path
 import pytest
 from uasset_read import parse_uasset, format_json_full
 
-# Test asset path
-TEST_ASSET = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
+# 测试资产路径（UE 源码参考文件夹）
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+TEST_ASSET = str(next(_ASSET_ROOT.rglob("BP_FirstPersonCharacter.uasset"), None))
 
 
-@pytest.mark.skipif(not __import__('os').path.exists(TEST_ASSET), reason="Test asset not found")
+@pytest.mark.skipif(not TEST_ASSET, reason="Test asset not found")
 class TestUE5PinIntegration:
     """Integration tests for UE5 pin connection parsing."""
 
