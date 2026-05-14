@@ -4,7 +4,10 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
 
-from typing import Optional, List, Dict, Any, Tuple
+from typing import TYPE_CHECKING, Optional, List, Dict, Any, Tuple
+
+if TYPE_CHECKING:
+    from uasset_read.link.linker import PackageLinker
 from dataclasses import dataclass, field
 
 from uasset_read.archive import FArchive
@@ -519,3 +522,30 @@ def resolve_parent_class(
             return None, f"Parent export index out of range: {super_index.index}"
 
     return None, f"Unknown parent index type: {super_index.index}"
+
+
+def resolve_class_name_with_linker(
+    class_index: PackageIndex,
+    linker: "PackageLinker",
+) -> Optional[str]:
+    """从 PackageIndex 解析类名（使用 linker 版本）。
+
+    通过 linker.resolve_package_index() 获取 UObjectInstance，
+    然后返回其 object_class 属性。
+    """
+    obj = linker.resolve_package_index(class_index)
+    if obj is not None:
+        return obj.object_class
+    return None
+
+
+def get_asset_class_with_linker(
+    export: ObjectExport,
+    linker: "PackageLinker",
+) -> Optional[str]:
+    """从导出条目识别资产类型（使用 linker 版本）。
+
+    通过 export.class_index 经 linker 解析为 UObjectInstance，
+    获取其 object_class 属性。
+    """
+    return resolve_class_name_with_linker(export.class_index, linker)
