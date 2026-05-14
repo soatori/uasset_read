@@ -19,9 +19,7 @@ from uasset_read.constants import (
     UE5_PROPERTY_TAG_EXTENSION,
 )
 from uasset_read.serializers.property_tags import read_property_tag
-from uasset_read.serializers.object_resources import (
-    ObjectExport, PackageIndex,
-)
+from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
 
 
 # Lazy imports to avoid circular dependency with property_types.py
@@ -102,7 +100,8 @@ def parse_properties_from_export(
     summary: Any,
     name_map: List[str],
     export_map: List[Any],
-    import_map: Optional[List[ObjectImport]] = None
+    import_map: Optional[List[ObjectImport]] = None,
+    linker: Optional[Any] = None,
 ) -> List[PropertyValue]:
     """从 export 条目读取所有属性（PROP-01）。
 
@@ -118,7 +117,8 @@ def parse_properties_from_export(
         summary: PackageFileSummary 实例（版本信息）
         name_map: 名称表
         export_map: 导出表
-        import_map: 导入表（ObjectProperty 解析需要）
+        import_map: 导入表（ObjectProperty 解析需要，linker 未提供时使用）
+        linker: PackageLinker 实例（可选，优先用于 ObjectProperty 解析）
 
     Returns:
         List[PropertyValue] 属性值列表
@@ -201,27 +201,27 @@ def parse_properties_from_export(
                 array_index=tag.array_index
             ))
 
-            # ObjectProperty 增强：解析为可读对象引用
-            # Phase 43: resolve_package_index_to_reference removed; inlined equivalent
-            if import_map is not None and tag.type == "ObjectProperty" and isinstance(value, int):
-                pkg_idx = PackageIndex(value)
-                ref = None
-                if pkg_idx.is_import:
-                    imp_idx = pkg_idx.to_import_index()
-                    if 0 <= imp_idx < len(import_map):
-                        imp = import_map[imp_idx]
-                        class_name = name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
-                        object_name = name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
-                        package = name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
-                        ref = {"type": "import", "source": "import_map", "class_name": class_name, "object_name": object_name, "package": package}
-                elif pkg_idx.is_export:
-                    exp_idx = pkg_idx.to_export_index()
-                    if 0 <= exp_idx < len(export_map):
-                        exp = export_map[exp_idx]
-                        object_name = name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
-                        ref = {"type": "export", "object_name": object_name}
-                if ref and ref.get("source") == "import_map":
-                    properties[-1].value = ref
+            # ObjectProperty 增强：优先通过 linker 解析，回退到 import_map 解析
+            if tag.type == "ObjectProperty" and isinstance(value, int):
+                resolved = None
+                if linker is not None:
+                    pkg_idx = PackageIndex(value)
+                    inst = linker.resolve_package_index(pkg_idx)
+                    if inst is not None:
+                        resolved = {
+                            "type": "import" if inst.is_import else "export",
+                            "object_name": inst.object_name,
+                            "object_class": inst.object_class,
+                            "full_name": inst.get_full_name(),
+                        }
+                elif import_map is not None:
+                    from uasset_read.serializers.object_resources import resolve_package_index_to_reference
+                    pkg_idx = PackageIndex(value)
+                    ref = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+                    if ref and ref.get("source") == "import_map":
+                        resolved = ref
+                if resolved is not None:
+                    properties[-1].value = resolved
 
         except ParseError as e:
             # D-19: Smart continue - skip damaged property using PropertyTag.Size

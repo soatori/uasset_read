@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, List, Union
 
+if TYPE_CHECKING:
+    from uasset_read.link.linker import PackageLinker
+
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.serializers.package_summary import read_package_summary, read_name_table
@@ -33,6 +36,7 @@ def _post_process(
     export_map: List["ObjectExport"],
     result: "Union[ParseResult, LinkerParseResult]",
     tolerant: bool = True,
+    linker: Optional["PackageLinker"] = None,
 ) -> None:
     """共享后处理：blueprint 元数据、图提取、依赖分析。
 
@@ -53,6 +57,7 @@ def _post_process(
                 meta, warn = extract_blueprint_metadata(
                     main_bpgc, temp_archive, import_map,
                     export_map, name_map, summary,
+                    linker=linker,
                 )
                 if meta:
                     blueprint_metadata = meta
@@ -67,13 +72,19 @@ def _post_process(
     # UBlueprint 回退
     if not blueprint_metadata:
         for export in export_map:
-            if detect_blueprint(export, import_map, export_map):
+            if linker is not None:
+                from uasset_read.serializers.object_resources import detect_blueprint_with_linker
+                is_bp = detect_blueprint_with_linker(export, linker)
+            else:
+                is_bp = detect_blueprint(export, import_map, export_map)
+            if is_bp:
                 temp_archive = FArchive(path, tolerant=tolerant)
                 temp_archive.set_byte_swapping(archive._byte_swapping)
                 try:
                     meta, warn = extract_blueprint_metadata(
                         export, temp_archive, import_map,
                         export_map, name_map, summary,
+                        linker=linker,
                     )
                     if meta:
                         blueprint_metadata = meta
@@ -240,6 +251,7 @@ def parse_uasset_with_linker(
                     export.properties = parse_properties_from_export(
                         export, archive, result.summary, result.name_map,
                         result.export_map, result.import_map,
+                        linker=result.linker,  # None at this point, linker not yet created
                     )
                 except Exception as e:
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
@@ -268,6 +280,7 @@ def parse_uasset_with_linker(
         _post_process(
             path, archive, result.summary, result.name_map,
             result.import_map, result.export_map, result, tolerant,
+            linker=result.linker,
         )
 
     except VersionError as e:
