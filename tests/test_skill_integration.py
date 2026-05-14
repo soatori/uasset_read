@@ -11,10 +11,9 @@ from pathlib import Path
 from uasset_read import parse_uasset, format_json_full, format_json_summary, format_markdown
 
 
-# 测试资产路径（D-15-04锁定）
-TEST_ASSET_PATH = Path(
-    "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
-)
+# 测试资产路径（UE 源码参考文件夹）
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+TEST_ASSET_PATH = next(_ASSET_ROOT.rglob("BP_FirstPersonCharacter.uasset"), None)
 
 
 class TestSkillFilesExist:
@@ -88,7 +87,7 @@ class TestParseUassetApiCall:
     def test_parse_uasset_returns_parse_result(self):
         """验证parse_uasset返回ParseResult类型"""
         # 使用测试资产（如果可用）
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             assert hasattr(result, "is_success"), "返回结果无is_success字段"
             assert hasattr(result, "summary"), "返回结果无summary字段"
@@ -98,7 +97,7 @@ class TestParseUassetApiCall:
 
     def test_parse_uasset_success_on_valid_asset(self):
         """验证有效资产解析成功"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             assert result.is_success, f"解析失败: {result.errors}"
         else:
@@ -106,7 +105,7 @@ class TestParseUassetApiCall:
 
     def test_parse_uasset_returns_package_name(self):
         """验证解析结果包含package_name"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             assert result.summary.package_name != "", "package_name为空"
             assert "FirstPerson" in result.summary.package_name, f"package_name不含FirstPerson: {result.summary.package_name}"
@@ -119,7 +118,7 @@ class TestOutputInterpretation:
 
     def test_status_field_valid(self):
         """验证status字段为有效值"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
             assert output["status"]["status"] in ["success", "fail", "error"], \
@@ -129,7 +128,7 @@ class TestOutputInterpretation:
 
     def test_output_version_is_4_0(self):
         """验证output_version为'4.0'（D-20-05）"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
             assert output["output_version"] == "4.0", \
@@ -139,7 +138,7 @@ class TestOutputInterpretation:
 
     def test_graphs_summary_is_list(self):
         """验证graphs_summary是列表类型"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
             assert "graphs_summary" in output, "缺少graphs_summary字段"
@@ -150,7 +149,7 @@ class TestOutputInterpretation:
 
     def test_exports_is_list(self):
         """验证exports是列表类型"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_full(result)
             assert "exports" in output, "缺少exports字段"
@@ -161,7 +160,7 @@ class TestOutputInterpretation:
 
     def test_graphs_summary_contains_eventgraph(self):
         """验证graphs_summary包含EventGraph（如果测试资产有蓝图数据）"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
 
@@ -176,7 +175,7 @@ class TestOutputInterpretation:
 
     def test_execution_flows_contains_function_name(self):
         """验证execution_flows的nodes包含function_name"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
 
@@ -200,7 +199,7 @@ class TestFormatFunctions:
 
     def test_format_json_full_returns_dict(self):
         """验证format_json_full返回字典"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_full(result)
             assert isinstance(output, dict), f"输出类型不正确: {type(output)}"
@@ -209,7 +208,7 @@ class TestFormatFunctions:
 
     def test_format_json_summary_compact(self):
         """验证format_json_summary比format_json_full更精简"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             full = format_json_full(result)
             summary = format_json_summary(result)
@@ -235,7 +234,7 @@ class TestFormatFunctions:
 
     def test_format_markdown_starts_with_hash(self):
         """验证format_markdown以Markdown标题开头"""
-        if TEST_ASSET_PATH.exists():
+        if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             markdown = format_markdown(result)
             assert markdown.startswith("#"), f"Markdown不以#开头: {markdown[:20]}"

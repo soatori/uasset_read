@@ -13,6 +13,7 @@ import struct
 import os
 import tempfile
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from dataclasses import asdict
 
@@ -36,21 +37,22 @@ from uasset_read import (
 )
 
 
-# ============================================================================
-# 测试资产路径
-# ============================================================================
+# 测试资产路径（UE 源码参考文件夹）
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
 
-FIRST_PERSON_CHARACTER_PATH = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
-SHOOTER_CHARACTER_PATH = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/BP_ShooterCharacter.uasset"
+def _find_asset(name: str) -> str | None:
+    """从源码文件夹中查找 .uasset 文件"""
+    for p in _ASSET_ROOT.rglob(name):
+        return str(p)
+    return None
+
+FIRST_PERSON_CHARACTER_PATH = _find_asset("BP_FirstPersonCharacter.uasset")
+SHOOTER_CHARACTER_PATH = _find_asset("BP_ShooterCharacter.uasset")
 
 
 def get_test_asset_path():
     """获取可用的测试资产路径"""
-    if os.path.exists(FIRST_PERSON_CHARACTER_PATH):
-        return FIRST_PERSON_CHARACTER_PATH
-    if os.path.exists(SHOOTER_CHARACTER_PATH):
-        return SHOOTER_CHARACTER_PATH
-    return None
+    return FIRST_PERSON_CHARACTER_PATH or SHOOTER_CHARACTER_PATH
 
 
 # ============================================================================

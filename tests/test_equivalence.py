@@ -612,17 +612,17 @@ def build_verification_report(
 # 全局 DiffRecorder 实例
 recorder = DiffRecorder()
 
-# 真实资产路径（使用 pathlib.Path.as_posix() 兼容 Windows）
+# 真实资产路径（UE 源码参考文件夹）
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+
+def _resolve(name: str) -> str | None:
+    p = next(_ASSET_ROOT.rglob(name), None)
+    return p.as_posix() if p else None
+
 REAL_ASSETS = {
-    "BP_FirstPersonCharacter": Path(
-        "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
-    ).as_posix(),
-    "BP_FirstPersonCameraManager": Path(
-        "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCameraManager.uasset"
-    ).as_posix(),
-    "BP_FirstPersonGameMode": Path(
-        "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonGameMode.uasset"
-    ).as_posix(),
+    "BP_FirstPersonCharacter": _resolve("BP_FirstPersonCharacter.uasset"),
+    "BP_FirstPersonCameraManager": _resolve("BP_FirstPersonCameraManager.uasset"),
+    "BP_FirstPersonGameMode": _resolve("BP_FirstPersonGameMode.uasset"),
 }
 
 
@@ -735,7 +735,7 @@ def test_json_summary_equivalence(asset_name: str, asset_path: str):
     预期差异: #1 (top_level_keys), #2 (status), #3 (graphs_summary_keys),
               #5 (execution_flows_format), #6 (execution_flows_count)
     """
-    if not os.path.exists(asset_path):
+    if asset_path is None:
         pytest.skip(f"Asset not found: {asset_path}")
 
     old_stdout, old_rc = run_old_cli('--summary', asset_path)
@@ -762,7 +762,7 @@ def test_text_equivalence(asset_name: str, asset_path: str):
     if asset_name == "synthetic":
         asset_path = create_test_uasset()
 
-    if not os.path.exists(asset_path):
+    if asset_path is None:
         if asset_name == "synthetic":
             cleanup_test_file(asset_path)
         pytest.skip(f"Asset not found: {asset_path}")
@@ -793,7 +793,7 @@ def test_markdown_equivalence(asset_name: str, asset_path: str):
     if asset_name == "synthetic":
         asset_path = create_test_uasset()
 
-    if not os.path.exists(asset_path):
+    if asset_path is None:
         if asset_name == "synthetic":
             cleanup_test_file(asset_path)
         pytest.skip(f"Asset not found: {asset_path}")
@@ -841,7 +841,7 @@ def test_real_assets_all_formats():
     """
     asset_path = REAL_ASSETS["BP_FirstPersonCharacter"]
 
-    if not os.path.exists(asset_path):
+    if asset_path is None:
         pytest.skip(f"Asset not found: {asset_path}")
 
     formats = ['--summary', '--text', '--markdown']  # Skip --json due to #9

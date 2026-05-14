@@ -13,6 +13,7 @@ Created: 2026-05-03 (Phase 12 Wave 3)
 
 import pytest
 import os
+from pathlib import Path
 from uasset_read import (
     BlueprintVariable,
     FEdGraphPinType,
@@ -22,15 +23,15 @@ from uasset_read import (
 )
 
 
-# Test asset path
-FIRST_PERSON_CHARACTER_PATH = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
+# Test asset path (UE 源码参考文件夹)
+_ASSET_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+_FIRST_PERSON = next(_ASSET_ROOT.rglob("BP_FirstPersonCharacter.uasset"), None)
+FIRST_PERSON_CHARACTER_PATH = str(_FIRST_PERSON) if _FIRST_PERSON else None
 
 
 def get_test_asset_path():
     """Get available test asset path"""
-    if os.path.exists(FIRST_PERSON_CHARACTER_PATH):
-        return FIRST_PERSON_CHARACTER_PATH
-    return None
+    return FIRST_PERSON_CHARACTER_PATH
 
 
 class TestBlueprintVariableDataclass:
