@@ -5,7 +5,7 @@ milestone_name: BP-to-CPP 翻译能力
 status: planning
 last_updated: "2026-05-15T00:10:00.000Z"
 progress:
-  total_phases: 5
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,7 +25,6 @@ progress:
 | 无组件数值属性 | 组件位置/旋转/缩放/标志可提取 |
 | CallFunction pins 不完整 | 函数签名可推断 |
 | EnhancedInput 触发事件不可见 | BindAction ETriggerEvent 可区分 |
-| 无代码生成能力 | 可输出 .h/.cpp 骨架 |
 
 ## Phase 分解
 
@@ -35,7 +34,6 @@ progress:
 | 48 | 组件属性递归解析 | 🔴 未开始 |
 | 49 | 函数调用引脚解析 | 🔴 未开始 |
 | 50 | EnhancedInput 语义增强 | 🔴 未开始 |
-| 51 | C++ 代码生成器 | 🔴 未开始 |
 
 ## 关键发现
 
@@ -60,12 +58,13 @@ C++ 构造函数中的关键数值在 JSON 中完全不可见：
 这些值存在于 ExportMap 的 PropertyTag 中，但当前解析器只提取了
 Blueprint 元数据层，没有递归解析组件对象的序列化属性。
 
-## 验证标准
+## 验证标准 — JSON 可翻译性
 
 - Phase 47: connections > 0, execution_flows[].nodes 非空
-- Phase 48: components 数组包含数值属性
-- Phase 49: CallFunction 节点输出 parameters 数组
+- Phase 48: components 数组包含数值属性（位置/旋转/缩放/标志）
+- Phase 49: CallFunction 节点输出 parameters 数组（参数名+类型）
 - Phase 50: input_bindings 数组与 C++ BindAction 对应
-- Phase 51: 生成的 .h/.cpp 可编译（需手动补充头文件）
+
+JSON 输出需达到"人工可对照 C++ 头文件/构造函数/函数体逐行翻译"的程度。
 
 *Created: 2026-05-15*
