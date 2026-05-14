@@ -503,3 +503,62 @@ def resolve_parent_class(
             return None, f"Parent export index out of range: {super_index.index}"
 
     return None, f"Unknown parent index type: {super_index.index}"
+
+
+def resolve_package_index_to_reference(
+    pkg_idx: PackageIndex,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    name_map: List[str]
+) -> Optional[Dict[str, Any]]:
+    """Resolve PackageIndex to reference dict using raw maps (no linker).
+
+    This function provides a fallback when linker is not available.
+    It resolves PackageIndex to a reference dict with object metadata.
+
+    Args:
+        pkg_idx: PackageIndex to resolve
+        import_map: List of ObjectImport entries
+        export_map: List of ObjectExport entries
+        name_map: Name map for class name resolution
+
+    Returns:
+        Dict with keys: source, (import_index or export_index), object_name, class_name, outer_name
+        or None if index is null or out of bounds
+    """
+    if pkg_idx.is_null:
+        return None
+
+    if pkg_idx.is_import:
+        idx = pkg_idx.to_import_index()
+        if 0 <= idx < len(import_map):
+            imp = import_map[idx]
+            return {
+                "source": "import_map",
+                "import_index": idx,
+                "object_name": imp.object_name,
+                "class_name": imp.class_name,
+                "outer_name": imp.package_name or imp.class_package,
+            }
+        else:
+            return None
+
+    if pkg_idx.is_export:
+        idx = pkg_idx.to_export_index()
+        if 0 <= idx < len(export_map):
+            exp = export_map[idx]
+            # Use get_asset_class_with_linker for class name resolution
+            class_name = get_asset_class_with_linker(
+                exp, None, import_map, export_map, name_map
+            )
+            return {
+                "source": "export_map",
+                "export_index": idx,
+                "object_name": exp.object_name,
+                "class_name": class_name,
+                "outer_name": exp.outer_index.object_name if exp.outer_index.is_export and exp.outer_index.to_export_index() < len(export_map) else None,
+            }
+        else:
+            return None
+
+    return None
