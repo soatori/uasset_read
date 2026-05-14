@@ -5,10 +5,10 @@ milestone_name: Phase 分解
 status: completed
 last_updated: "2026-05-14T09:17:44.308Z"
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
