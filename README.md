@@ -8,26 +8,22 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v6.0** (modular refactoring complete, Phase 35 in progress) |
-| Tests | **397 passed, 71 skipped, 0 failed** |
-| New modules | `src/uasset_read/` — 15 modules, 50+ public API exports |
-| Legacy entry | `uasset_read.py` — removed after Phase 33 (2026-05-12) |
+| Version | **v7.0** (UE FLinkerLoad 对象图重建完成) |
+| Tests | **432 passed, 20 pre-existing, 68 skipped** |
+| Modules | `src/uasset_read/` — 15+ modules, 50+ public API exports |
+| Next | **v8.0** — BP→C++ JSON 可翻译性 (Phase 47-50 规划中) |
 
-### Current Phase: Phase 35b - Pin Connection Debug & Fix
+### Current Phase: Phase 47 — Pin LinkedTo 修复 (规划中)
 
-**Status**: 🟢 PLAN.md created, P0 priority (blocking)  
-**Goal**: Fix `linked_to_raw` empty root cause, restore execution_flows/data_flows  
-**Timeline**: Created 2026-05-13
+**Status**: 🔴 未开始  
+**Goal**: 修复 `linked_to_raw` 为空，使 Pin 连接关系可追踪  
+**范围**: Phase 47–50 聚焦于补全 JSON 中缺失的结构信息，不生成 C++ 代码
 
-**Key Fixes Completed**:
-- ✅ Phase 35a - Quick fixes (start_event fallback, script cleanup, logging migration)
-- ✅ Phase 34 - Equivalence verification (397 passed, 0 bugs to fix)
-- ✅ Phase 33 - Entry adapter + removal of old uasset_read.py
-- ✅ Phase 33a - UE5 serialization fixes (FText, PropertyTag tolerants)
-
-**Next Tasks**:
-1. Phase 35b - Pin connection deep debugging (35b-01 to 35b-05)
-2. Phase 35c - v6.0 milestone completion & release preparation
+**Recent Work (v7.0 已完成)**:
+- ✅ Phase 46 — UE5.6 资产端到端验证 (12/12 UAT 通过)
+- ✅ Phase 45 — 图序列化 linker 变体 (`from_archive_with_linker()`)
+- ✅ Phase 44a/44b/44c — 技术债清理 (UE4 兼容代码、struct.unpack、测试工具)
+- ✅ Phase 41–44 — UObjectInstance 对象图重建
 
 ## Features
 
@@ -56,37 +52,11 @@ Zero runtime dependencies, requires Python 3.10+.
 
 ## Usage
 
-### CLI (legacy entry, until Phase 33)
+### CLI
 
 ```bash
-python uasset_read.py path/to/file.uasset
-```
-
-### Python API
-
-```python
-from uasset_read import parse_uasset, FORMAT_CONFIG
-
-# Parse a .uasset file
-result = parse_uasset('BP_FirstPersonCharacter.uasset')
-
-# Access parsed data
-print(result.name_map)          # Name table
-print(result.import_map)        # Import dependencies
-print(result.export_map)        # Export table
-print(result.blueprint)         # Blueprint info
-print(result.graphs)            # Blueprint graph structures
-print(result.dependencies)      # Dependency graph
-
-# Output formats
-print(result.format_json())     # Full JSON output
-print(result.format_text())     # Human-readable text
-print(result.format_markdown()) # Markdown with Mermaid flowchart
-
-# Custom output config
-print(result.format_json(summary=True))     # Summary JSON (no properties)
-print(result.format_markdown(graphs_only=True))  # Graphs only Markdown
-```
+uasset-read path/to/file.uasset           # JSON output to stdout
+uasset-read path/to/file.uasset --output output.json   # Save to file
 
 ### Module-level API (v6.0)
 
@@ -144,30 +114,8 @@ uasset-read path/to/file.uasset --debug        # Enable debug logging
 ## Testing
 
 ```bash
-# Run all tests (397 passed, 71 skipped)
+# Run all tests
 python -m pytest tests/ -v
-
-# Run a single test file
-python -m pytest tests/test_graph_parsing.py -v
-
-# Run a single test function
-python -m pytest tests/test_graph_parsing.py::test_blueprint_graph_parsed -v
-
-# Run with coverage
-python -m pytest tests/ --cov=uasset_read --cov-report=html
-```
-
-Test coverage: boundary validation, blueprint extraction, dependency analysis, graph parsing, flow tracing, advanced properties (397 test cases).
-
-### Test Results by Phase
-
-| Phase | Tests | Status | Description |
-|-------|-------|--------|-------------|
-| Phase 35a | 397 | ✅ Complete | UAT fixes, start_event fallback, logging migration |
-| Phase 34 | 397 | ✅ Complete | Equivalence verification (0 bugs to fix) |
-| Phase 33 | 397 | ✅ Complete | Entry adapter + old uasset_read.py removal |
-| Phase 33a | 383 | ✅ Complete | UE5 FText/PropertyTag tolerance fixes |
-| Phase 28a | 411 | ✅ Complete | UE5 NodePosX/NodeGuid extraction fixes |
 
 ## Architecture
 
@@ -183,35 +131,35 @@ FArchive pipeline pattern mirroring UE's internal structure:
 
 ### Module Structure (`src/uasset_read/`)
 
-| Module | Path | Phase | Description |
-|--------|------|-------|-------------|
-| **Core** | | | |
-| FArchive | `archive.py` | 28 | Binary reader with byte swapping, mmap, bounds checking |
-| Constants | `constants.py` | 27 | Version numbers, property type thresholds, MMAP_THRESHOLD |
-| Exceptions | `exceptions.py` | 27 | UAssetError, VersionError, ParseError, ErrorContext |
-| **Serialization** | | | |
-| Serializers | `serializers/` | 28 | PackageFileSummary, ObjectImport/Export, PropertyTag |
-| **Data Models** | | | |
-| Core Models | `models/core.py` | 29 | UEdGraph/Node/Pin, node type subclasses |
-| Blueprint Models | `models/blueprint.py` | 29 | ParseResult, blueprint metadata, property data classes |
-| Transforms | `models/transforms.py` | 33 | VectorValue, RotatorValue, ScaleValue |
-| **Parsers** | | | |
-| Property Parsers | `parsers/` | 30 | 14 property type parse functions + dispatcher |
-| **Blueprint** | | | |
-| Variable Extraction | `blueprint/variable_extractor.py` | 30 | Variables, functions, events extraction |
-| Transform Parser | `blueprint/transform_parser.py` | 33 | Component Transform/Rotation/Scale |
-| Metadata Extraction | `blueprint/metadata_extractor.py` | 30 | Blueprint metadata |
-| **Graph** | | | |
-| From Archive | `graph/from_archive.py` | 31 | UEdGraph/Node/Pin parsing from FArchive |
-| Flow Builder | `graph/flow_builder.py` | 32 | Execution flow & data flow tracing |
-| Summary Builder | `graph/summary_builder.py` | 32 | Graph summary generation |
-| **Formatters** | | | |
-| JSON Formatter | `formatters/json.py` | 32 | Full/summary JSON output |
-| Text Formatter | `formatters/text.py` | 32 | Human-readable text output |
-| Markdown Formatter | `formatters/markdown.py` | 32 | Markdown with Mermaid flowchart |
-| **Main Pipeline** | | | |
-| Main Parser | `parse_uasset.py` | 33 | Top-level parse function |
-| CLI | `cli.py` | 33 | Command-line interface |
+| Module | Path | Description |
+|--------|------|-------------|
+| **Core** | | |
+| FArchive | `archive.py` | Binary reader with byte swapping, mmap, bounds checking |
+| Constants | `constants.py` | Version numbers, property type thresholds, MMAP_THRESHOLD |
+| Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
+| **Serialization** | | |
+| Serializers | `serializers/` | PackageFileSummary, ObjectImport/Export, PropertyTag |
+| **Data Models** | | |
+| Core Models | `models/core.py` | UEdGraph/Node/Pin, node type subclasses |
+| Blueprint Models | `models/blueprint.py` | ParseResult, blueprint metadata, property data classes |
+| Transforms | `models/transforms.py` | VectorValue, RotatorValue, ScaleValue |
+| **Parsers** | | |
+| Property Parsers | `parsers/` | 14 property type parse functions + dispatcher |
+| **Blueprint** | | |
+| Variable Extraction | `blueprint/variable_extractor.py` | Variables, functions, events extraction |
+| Transform Parser | `blueprint/transform_parser.py` | Component Transform/Rotation/Scale |
+| Metadata Extraction | `blueprint/metadata_extractor.py` | Blueprint metadata |
+| **Graph** | | |
+| From Archive | `graph/from_archive.py` | UEdGraph/Node/Pin parsing from FArchive |
+| Flow Builder | `graph/flow_builder.py` | Execution flow & data flow tracing |
+| Summary Builder | `graph/summary_builder.py` | Graph summary generation |
+| **Formatters** | | |
+| JSON Formatter | `formatters/json.py` | Full/summary JSON output |
+| Text Formatter | `formatters/text.py` | Human-readable text output |
+| Markdown Formatter | `formatters/markdown.py` | Markdown with Mermaid flowchart |
+| **Main Pipeline** | | |
+| Main Parser | `parse_uasset.py` | Top-level parse function |
+| CLI | `cli.py` | Command-line interface |
 
 ### Legacy (Removed)
 
@@ -235,8 +183,9 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | v4.0 | 2026-05-05 | ✅ Released | Node property deep parsing, execution flows, connection verification |
 | v5.0 | 2026-05-06 | ✅ Released | Blueprint compilation research, metadata enhancement |
 | v5.1 | 2026-05-07 | ✅ Released | Project structure initialization (constants.py, exceptions.py) |
-| v6.0 | 2026-05-10 | 🟢 In Progress | Modular refactoring (Phase 27-35), 397 tests passing |
-| v6.1 | 📋 Planned | - | Phase 35b completion, v6.0 release |
+| v6.0 | 2026-05-10 | ✅ Released | Modular refactoring, 373 tests passing |
+| v7.0 | 2026-05-14 | ✅ Released | UObjectInstance 对象图重建, UE5.6 适配, 432 tests |
+| v8.0 | 📋 Planned | - | BP→C++ JSON 可翻译性 (Phase 47-50) |
 
 ## Limitations
 
@@ -248,14 +197,15 @@ FArchive pipeline pattern mirroring UE's internal structure:
 
 ## Planning
 
-- `.planning/ROADMAP.md` — version roadmap (50 phases)
-- `.planning/STATE.md` — current milestone status
-- `.planning/REQUIREMENTS.md` — requirements traceability
-- `.planning/PROJECT.md` — project overview
-- `.planning/phases/35b-pin-connection-debug/` — Phase 35b debugging documentation
+- `.planning/ROADMAP.md` — 版本路线图
+- `.planning/STATE.md` — 当前里程碑状态
+- `.planning/MILESTONES.md` — 历史里程碑
+- `.planning/milestones/v8.0.md` — v8.0 详细规划
+- `.planning/research/` — UE 参考研究
+- `.planning/archive/` — 已归档的历史版本文档
 
 ---
 
-**Last Updated**: 2026-05-13  
-**Version**: v6.0 (Phase 35b in progress)  
-**Tests**: 397 passed, 71 skipped, 0 failed
+**Last Updated**: 2026-05-15  
+**Version**: v7.0 (v8.0 Phase 47 planning)  
+**Tests**: 432 passed, 20 pre-existing, 68 skipped
