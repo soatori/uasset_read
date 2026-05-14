@@ -10,9 +10,20 @@
 | 42 | 集成入口 | parse_uasset_with_linker() | Phase 41 |
 | 43 | PackageIndex | resolve_with_linker() | Phase 41 |
 | 44 | 模型增强 | UEdGraphPin linked_to_objects | Phase 41 |
-| 45 | 图序列化 | read_ue_graph_pin_with_linker() 等 | Phase 41, 44 |
+| 45 | 图序列化 | from_archive_with_linker() 方法 + default_object_ref | Phase 41, 44 |
 | 46 | 测试验证 | 373 测试 0 回归 | Phase 42-45 |
 
 **核心改变**: PackageIndex → UObjectInstance 实际引用，构建 Outer 对象树
+
+### Phase 45: 图序列化 linker 变体
+
+**Goal:** 为 UEdGraph/UEdGraphNode/UEdGraphPin 创建 from_archive_with_linker() 入口方法
+
+**Requirements:** LINK-05
+
+**Plans:** 1 plan
+
+Plans:
+- [ ] 045-01-PLAN.md — 创建 from_archive_with_linker() 方法 + default_object_ref 字段 + 基本验证测试
 
 *Updated: 2026-05-14*
