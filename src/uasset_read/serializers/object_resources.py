@@ -5,6 +5,9 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 """
 
 from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from uasset_read.link.linker import PackageLinker
 from dataclasses import dataclass, field
 
 from uasset_read.archive import FArchive
@@ -21,9 +24,6 @@ from uasset_read.constants import (
     UE5_ADD_SOFTOBJECTPATH_LIST, UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
 )
 from uasset_read.exceptions import ParseError, ErrorContext
-
-if TYPE_CHECKING:
-    from uasset_read.link.linker import PackageLinker
 
 
 @dataclass
