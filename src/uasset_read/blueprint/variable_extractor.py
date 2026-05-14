@@ -336,6 +336,7 @@ def extract_blueprint_metadata(
     export_map,
     name_map,
     summary,
+    linker=None,
 ) -> tuple:
     """综合变量提取和通用元数据，构建 BlueprintMetadata 实例。
 
@@ -349,6 +350,7 @@ def extract_blueprint_metadata(
         export_map: 导出表
         name_map: 名称表
         summary: PackageFileSummary
+        linker: PackageLinker 实例（可选，用于更精确的父类解析）
 
     Returns:
         Tuple[BlueprintMetadata | None, str | None] — (元数据, 警告)
@@ -386,8 +388,12 @@ def extract_blueprint_metadata(
 
     # 推断父类（从 export 的 super_index）
     if not parent_class and hasattr(export, 'super_index'):
-        from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
-        parent_name, warn = _rpc(export.super_index, import_map, export_map)
+        if linker is not None:
+            from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
+            parent_name, warn = _rpc(export.super_index, linker)
+        else:
+            from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
+            parent_name, warn = _rpc(export.super_index, import_map, export_map)
         if parent_name:
             parent_class = parent_name
 
