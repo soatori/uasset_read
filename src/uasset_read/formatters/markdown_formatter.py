@@ -46,7 +46,7 @@ def format_markdown(result: ParseResult) -> str:
     lines.append("|-------|-------|")
     if result.summary:
         lines.append(f"| Package | {_escape_md_cell(result.summary.package_name)} |")
-        ue_version = result.summary.file_version_ue5 or result.summary.file_version_ue4
+        ue_version = result.summary.file_version_ue5
         lines.append(f"| Version | UE {_escape_md_cell(str(ue_version))} |")
     # Status
     status_info = build_status_info(result)

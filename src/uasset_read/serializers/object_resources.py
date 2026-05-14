@@ -13,12 +13,8 @@ from dataclasses import dataclass, field
 from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.constants import (
-    PKG_Cooked, PKG_UnversionedProperties,
+    PKG_Cooked, PKG_UnversionedProperties, PKG_FilterEditorOnly,
     MAX_IMPORT_COUNT, MAX_EXPORT_COUNT,
-    UE4_NON_OUTER_PACKAGE_IMPORT, UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
-    UE4_LOAD_FOR_EDITOR_GAME, UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT,
-    VER_UE4_64BIT_EXPORTOFFSETS, VER_UE4_TemplateIndex_IN_COOKED_EXPORTS,
-    UE4_ADDED_SEARCHABLE_NAMES, UE4_ADD_STRING_ASSET_REFERENCES_MAP,
     UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID, UE5_TRACK_OBJECT_EXPORT_IS_INHERITED,
     UE5_OPTIONAL_RESOURCES, UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_ADD_SOFTOBJECTPATH_LIST, UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
@@ -58,7 +54,7 @@ class ObjectImport:
     outer_index: PackageIndex
     object_name: str
     package_name: Optional[str] = None
-    b_import_optional: Optional[bool] = None
+    b_import_optional: bool = False
 
 
 @dataclass
@@ -75,11 +71,11 @@ class ObjectExport:
     b_forced_export: bool = False
     b_not_for_client: bool = False
     b_not_for_server: bool = False
-    b_is_inherited_instance: Optional[bool] = None
+    b_is_inherited_instance: bool = False
     package_flags: int = 0
-    b_not_always_loaded_for_editor_game: Optional[bool] = None
-    b_is_asset: Optional[bool] = None
-    b_generate_public_hash: Optional[bool] = None
+    b_not_always_loaded_for_editor_game: bool = False
+    b_is_asset: bool = False
+    b_generate_public_hash: bool = False
     script_serial_size: int = 0
     script_serial_offset: int = 0
     properties: List[Any] = field(default_factory=list)
@@ -100,8 +96,7 @@ def read_import_map(
 
     archive.seek(summary.import_offset)
 
-    is_ue4_file = summary.legacy_file_version > -8
-    is_filter_editor_only = False
+    is_filter_editor_only = (summary.package_flags & PKG_FilterEditorOnly) != 0
 
     import_map: List[ObjectImport] = []
     for _ in range(summary.import_count):
@@ -110,24 +105,13 @@ def read_import_map(
         outer_index = PackageIndex(archive.read_i32())
         object_name = archive.read_name(name_map)
 
-        # PackageName: UEVer >= 518 && !IsFilterEditorOnly
-        has_package_name = False
-        if not is_filter_editor_only:
-            if is_ue4_file and summary.file_version_ue4 >= UE4_NON_OUTER_PACKAGE_IMPORT:
-                has_package_name = True
-            elif not is_ue4_file:
-                has_package_name = True
-
+        # PackageName: UE5 always has it when !FilterEditorOnly
         package_name: Optional[str] = None
-        if has_package_name:
+        if not is_filter_editor_only:
             package_name = archive.read_name(name_map)
 
-        # bImportOptional: UEVer >= OPTIONAL_RESOURCES (1003)
-        b_import_optional: Optional[bool] = None
-        if is_ue4_file and summary.file_version_ue4 >= UE5_OPTIONAL_RESOURCES:
-            b_import_optional = archive.read_bool()
-        elif not is_ue4_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-            b_import_optional = archive.read_bool()
+        # bImportOptional: UE5 >= 1003 always present
+        b_import_optional = archive.read_bool()
 
         import_map.append(ObjectImport(
             class_package=class_package, class_name=class_name,
@@ -158,24 +142,18 @@ def read_soft_object_paths(
     summary: PackageFileSummary,
     name_map: List[str]
 ) -> List[Dict]:
-    """读取 SoftObjectPaths 数组。"""
-    is_ue5_file = summary.legacy_file_version <= -8
-    if not is_ue5_file or summary.file_version_ue5 < UE5_ADD_SOFTOBJECTPATH_LIST:
-        return []
+    """读取 SoftObjectPaths 数组（UE5.7 专用）。"""
     if summary.soft_object_paths_count <= 0 or summary.soft_object_paths_offset <= 0:
         return []
 
     archive.seek(summary.soft_object_paths_offset)
     soft_refs = []
     for _ in range(summary.soft_object_paths_count):
-        if summary.file_version_ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
-            package_name = archive.read_name(name_map)
-            asset_name = archive.read_name(name_map)
-            asset_path = f"{package_name}.{asset_name}" if asset_name else package_name
-            sub_path = archive.read_fstring()
-        else:
-            asset_path = archive.read_name(name_map)
-            sub_path = archive.read_fstring()
+        # UE5 >= 1007 format: double FName
+        package_name = archive.read_name(name_map)
+        asset_name = archive.read_name(name_map)
+        asset_path = f"{package_name}.{asset_name}" if asset_name else package_name
+        sub_path = archive.read_fstring()
         soft_refs.append({"asset_path": asset_path, "sub_path": sub_path})
     return soft_refs
 
@@ -210,8 +188,6 @@ def read_export_map(
     archive.seek(summary.export_offset)
 
     export_map: List[ObjectExport] = []
-    is_ue5_file = summary.legacy_file_version <= -8
-    effective_ue4_version = summary.file_version_ue4 if not is_ue5_file else 1000
 
     for export_idx in range(summary.export_count):
         object_name = ""
@@ -219,22 +195,16 @@ def read_export_map(
             class_index = PackageIndex(archive.read_i32())
             super_index = PackageIndex(archive.read_i32())
 
-            # TemplateIndex (UE4 >= 508)
-            template_index = PackageIndex(0)
-            if effective_ue4_version >= VER_UE4_TemplateIndex_IN_COOKED_EXPORTS:
-                template_index = PackageIndex(archive.read_i32())
+            # TemplateIndex (UE5 始终存在)
+            template_index = PackageIndex(archive.read_i32())
 
             outer_index = PackageIndex(archive.read_i32())
             object_name = archive.read_name(name_map)
             object_flags = archive.read_u32()
 
-            # SerialSize/Offset
-            if effective_ue4_version >= VER_UE4_64BIT_EXPORTOFFSETS:
-                serial_size = archive.read_i64()
-                serial_offset = archive.read_i64()
-            else:
-                serial_size = archive.read_i32()
-                serial_offset = archive.read_i32()
+            # SerialSize/Offset (UE5 始终为 i64)
+            serial_size = archive.read_i64()
+            serial_offset = archive.read_i64()
 
             # CR-05: 验证 serial_size/serial_offset 非负
             if serial_size < 0:
@@ -247,42 +217,28 @@ def read_export_map(
             b_not_for_client = archive.read_bool()
             b_not_for_server = archive.read_bool()
 
-            # PackageGuid (UE5 < 1005)
-            if is_ue5_file and summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
-                archive.read_bytes(16)
-
-            # bIsInheritedInstance (UE5 >= 1006)
-            b_is_inherited_instance = None
-            if is_ue5_file and summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
-                b_is_inherited_instance = archive.read_bool()
+            # bIsInheritedInstance (UE5 >= 1006 始终存在)
+            b_is_inherited_instance = archive.read_bool()
 
             package_flags = archive.read_u32()
 
-            # Other bool flags
-            b_not_always_loaded_for_editor_game = None
-            b_is_asset = None
-            b_generate_public_hash = None
+            # Other bool flags (UE5 始终存在)
+            b_not_always_loaded_for_editor_game = archive.read_bool()
+            b_is_asset = archive.read_bool()
+            b_generate_public_hash = archive.read_bool()
 
-            if effective_ue4_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = archive.read_bool()
-            if effective_ue4_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
-                b_is_asset = archive.read_bool()
-            if is_ue5_file and summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-                b_generate_public_hash = archive.read_bool()
+            # Dependency arrays (UE5 始终存在)
+            archive.read_i32()  # first_export_dependency
+            archive.read_i32()  # serialization_before_serialization_deps
+            archive.read_i32()  # create_before_serialization_deps
+            archive.read_i32()  # serialization_before_create_deps
+            archive.read_i32()  # create_before_create_deps
 
-            # Dependency arrays (UE4 >= 507)
-            if effective_ue4_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-                archive.read_i32()  # first_export_dependency
-                archive.read_i32()  # serialization_before_serialization_deps
-                archive.read_i32()  # create_before_serialization_deps
-                archive.read_i32()  # serialization_before_create_deps
-                archive.read_i32()  # create_before_create_deps
-
-            # ScriptSerialization offsets
+            # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
             script_serial_offset = 0
             script_serial_size = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
-            if is_ue5_file and not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+            if not uses_unversioned:
                 script_serial_offset = archive.read_i64()
                 script_serial_size = archive.read_i64()
                 # CR-05: 验证 script_serial_offset/size 非负
@@ -547,16 +503,19 @@ def resolve_package_index_to_reference(
         idx = pkg_idx.to_export_index()
         if 0 <= idx < len(export_map):
             exp = export_map[idx]
-            # Use get_asset_class_with_linker for class name resolution
-            class_name = get_asset_class_with_linker(
-                exp, None, import_map, export_map, name_map
-            )
+            # Resolve class_name using get_asset_class (no linker available)
+            class_name = get_asset_class(exp, import_map, export_map)
+            # Resolve outer_name from export_map (no linker available)
+            outer_name = None
+            if exp.outer_index.is_export and exp.outer_index.to_export_index() < len(export_map):
+                outer_exp = export_map[exp.outer_index.to_export_index()]
+                outer_name = outer_exp.object_name
             return {
                 "source": "export_map",
                 "export_index": idx,
                 "object_name": exp.object_name,
                 "class_name": class_name,
-                "outer_name": exp.outer_index.object_name if exp.outer_index.is_export and exp.outer_index.to_export_index() < len(export_map) else None,
+                "outer_name": outer_name,
             }
         else:
             return None

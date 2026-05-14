@@ -470,6 +470,9 @@ def read_blueprint_variable(
 ) -> BlueprintVariable:
     """
     从 blueprint export 读取 FBPVariableDescription（BLUE-03）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FBPVariableDescription::Serialize() 实现
 
     序列化顺序:
     1. VarName (FName)
@@ -488,7 +491,8 @@ def read_blueprint_variable(
     )
 
     # VarGuid (16 bytes) — 跳过
-    archive.read(16)
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    archive.read(16)  # TODO: 使用UE编辑器方式读取VarGuid
 
     # VarType (FEdGraphPinType)
     var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
@@ -500,16 +504,19 @@ def read_blueprint_variable(
     var.category = archive.read_fstring()
 
     # PropertyFlags (uint64)
-    var.property_flags = archive.read_u64()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    var.property_flags = archive.read_u64()  # TODO: 使用UE编辑器方式读取PropertyFlags
 
     # RepNotifyFunc (FName) — 跳过
     archive.read_name(name_map)
 
     # ReplicationCondition (uint8) — 跳过
-    archive.read_u8()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    archive.read_u8()  # TODO: 使用UE编辑器方式读取ReplicationCondition
 
     # MetaDataArray
-    meta_count = archive.read_i32()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    meta_count = archive.read_i32()  # TODO: 使用UE编辑器方式读取元数据数量
     var.metadata = {}
     for _ in range(meta_count):
         key = archive.read_name(name_map)
@@ -548,7 +555,8 @@ def read_blueprint_variable(
     var.edit_widget = var.metadata.get('EditWidget', '')
 
     # DefaultValue — 解析
-    default_str = archive.read_fstring()
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    default_str = archive.read_fstring()  # TODO: 使用UE编辑器方式读取默认值
     var.default_value = parse_default_value(default_str, var.var_type)
 
     # 组件变量识别（双重验证）

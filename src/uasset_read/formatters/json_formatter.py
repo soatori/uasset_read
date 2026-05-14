@@ -45,7 +45,6 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     summary_dict = {}
     if result.summary:
         summary_dict = {
-            "version_ue4": result.summary.file_version_ue4,
             "version_ue5": result.summary.file_version_ue5,
             "legacy_version": result.summary.legacy_file_version,
             "package_flags": result.summary.package_flags,  # D-08: raw u32
@@ -249,8 +248,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     version_dict = {}
     if result.summary:
         version_dict = {
-            "ue4": result.summary.file_version_ue4,
-            "ue5": result.summary.file_version_ue5 or result.summary.legacy_file_version,
+            "ue5": result.summary.file_version_ue5,
             "legacy": result.summary.legacy_file_version
         }
 

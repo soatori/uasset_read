@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
 import re
-import struct
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -47,12 +46,16 @@ def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
 
 
 def parse_int_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty（PROP-02）。"""
+    """解析 IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty（PROP-02）。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FArchive& operator<<(int32&) 等实现
+    """
     type_name = tag.type
     if type_name == "Int64Property":
         return archive.read_i64()
     elif type_name == "Int16Property":
-        return struct.unpack('<h', archive.read(2))[0]
+        return archive.read_i16()
     elif type_name in ("Int8Property", "ByteProperty"):
         return archive.read_u8()
     else:  # IntProperty (default)
@@ -151,17 +154,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
 
-    if summary is None:
-        legacy_version = 0
-        ue5_version = 0
-    else:
-        legacy_version = summary.legacy_file_version
-        ue5_version = summary.file_version_ue5
-
     while property_count < MAX_PROPERTY_COUNT:
         property_count += 1
 
-        inner_tag = read_property_tag(archive, name_map, legacy_version, ue5_version)
+        inner_tag = read_property_tag(archive, name_map)
 
         if inner_tag.name == "None":
             break

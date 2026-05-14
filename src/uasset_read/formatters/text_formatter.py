@@ -37,7 +37,7 @@ def format_text_full(result: ParseResult) -> str:
     if result.summary:
         package_name = result.summary.package_name or "Unknown"
         lines.append(f"Package: {package_name}")
-        lines.append(f"  Version: UE4={result.summary.file_version_ue4}, UE5={result.summary.file_version_ue5}")
+        lines.append(f"  Version: UE5={result.summary.file_version_ue5}")
         lines.append(f"  Flags: 0x{result.summary.package_flags:08X}")
         lines.append(f"  Imports: {len(result.import_map)}")
         lines.append(f"  Exports: {len(result.export_map)}")

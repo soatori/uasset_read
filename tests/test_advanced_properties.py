@@ -79,13 +79,11 @@ def create_mock_archive_with_data(data: bytes) -> MockArchive:
 def create_mock_summary(
     legacy_version: int = -8,
     ue5_version: int = 1012,  # >= PROPERTY_TAG_COMPLETE_TYPE_NAME threshold
-    ue4_version: int = 0
 ) -> PackageFileSummary:
     """创建 Mock PackageFileSummary。"""
     return PackageFileSummary(
         tag=0x9E2A83C1,  # 魔术标签
         legacy_file_version=legacy_version,
-        file_version_ue4=ue4_version,
         file_version_ue5=ue5_version,
         name_count=0,
         name_offset=0,

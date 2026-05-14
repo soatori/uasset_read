@@ -12,8 +12,7 @@ from .constants import (
     PACKAGE_FILE_TAG,
     PACKAGE_FILE_TAG_SWAPPED,
     UE5_VERSION_MIN,
-    LEGACY_FILE_VERSION_MIN,
-    LEGACY_FILE_VERSION_MAX,
+    UE5_LEGACY_VERSION,
     MAX_NAME_COUNT,
     MAX_IMPORT_COUNT,
     MAX_EXPORT_COUNT,
@@ -33,9 +32,6 @@ from .constants import (
     PROP_TAG_HAS_BINARY_OR_NATIVE,
     PROP_TAG_BOOL_TRUE,
     PROP_TAG_SKIPPED_SERIALIZE,
-    # 版本阈值
-    VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG,
-    VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG,
     # 控制流/事件类型集合
     CONTROL_FLOW_NODES,
     START_EVENT_TYPES,
@@ -73,8 +69,6 @@ from .constants import (
     # ReleaseObjectVersion
     FRELEASE_OBJECT_VERSION_GUID,
     FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
-    # 辅助函数
-    use_complete_type_name,
     # 输出配置
     FORMAT_CONFIG,
     # 导出其他常用常量（后续阶段按需添加）
@@ -270,8 +264,7 @@ __all__ = [
     "PACKAGE_FILE_TAG",
     "PACKAGE_FILE_TAG_SWAPPED",
     "UE5_VERSION_MIN",
-    "LEGACY_FILE_VERSION_MIN",
-    "LEGACY_FILE_VERSION_MAX",
+    "UE5_LEGACY_VERSION",
     "MAX_NAME_COUNT",
     "MAX_IMPORT_COUNT",
     "MAX_EXPORT_COUNT",
@@ -291,9 +284,6 @@ __all__ = [
     "PROP_TAG_HAS_BINARY_OR_NATIVE",
     "PROP_TAG_BOOL_TRUE",
     "PROP_TAG_SKIPPED_SERIALIZE",
-    # 常量（版本阈值）
-    "VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG",
-    "VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG",
     # 常量（控制流/事件类型集合）
     "CONTROL_FLOW_NODES",
     "START_EVENT_TYPES",
@@ -329,9 +319,7 @@ __all__ = [
     "FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX",
     "FRELEASE_OBJECT_VERSION_GUID",
     "FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER",
-    # 常量（辅助函数）
-    "use_complete_type_name",
-    # 输出配置
+    # 常量（输出配置）
     "FORMAT_CONFIG",
     # 异常类
     "UAssetError",

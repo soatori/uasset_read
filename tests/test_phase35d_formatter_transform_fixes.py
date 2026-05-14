@@ -188,10 +188,8 @@ def _create_mock_result(
     """Create a minimal ParseResult for markdown formatting tests."""
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
-        legacy_file_version=-7,
-        legacy_ue3_version=0,
-        file_version_ue4=522,
-        file_version_ue5=0,
+        legacy_file_version=-8,
+        file_version_ue5=1018,
         package_flags=0,
         package_name=package_name,
         compression_flags=0,
