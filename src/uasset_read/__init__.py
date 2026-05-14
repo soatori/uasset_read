@@ -233,7 +233,10 @@ from .models.transforms import (
 from .serializers.object_resources import (
     find_main_blueprint_generated_class,
     resolve_parent_class,
-    resolve_package_index_to_reference,
+    resolve_class_name_with_linker,
+    get_asset_class_with_linker,
+    detect_blueprint_with_linker,
+    resolve_parent_class_with_linker,
     read_soft_object_paths,
 )
 from .blueprint.transform_parser import (
@@ -431,7 +434,10 @@ __all__ = [
     # 辅助函数（Phase 33）
     "find_main_blueprint_generated_class",
     "resolve_parent_class",
-    "resolve_package_index_to_reference",
+    "resolve_class_name_with_linker",
+    "get_asset_class_with_linker",
+    "detect_blueprint_with_linker",
+    "resolve_parent_class_with_linker",
     "read_soft_object_paths",
     "extract_component_transforms",
     "parse_vector_value",

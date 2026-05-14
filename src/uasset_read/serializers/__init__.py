@@ -10,7 +10,9 @@ from uasset_read.serializers.object_resources import (
     detect_circular_deps, read_export_map, get_asset_class,
     resolve_class_name, detect_blueprint, detect_blueprint_generated_class,
     validate_package_index, find_main_blueprint_generated_class,
-    resolve_parent_class, resolve_package_index_to_reference,
+    resolve_parent_class,
+    resolve_class_name_with_linker, get_asset_class_with_linker,
+    detect_blueprint_with_linker, resolve_parent_class_with_linker,
 )
 from uasset_read.serializers.graph import (
     read_ue_graph, read_ue_graph_node, read_ue_graph_pin,
@@ -32,7 +34,9 @@ __all__ = [
     'detect_circular_deps', 'read_export_map', 'get_asset_class',
     'resolve_class_name', 'detect_blueprint', 'detect_blueprint_generated_class',
     'validate_package_index', 'find_main_blueprint_generated_class',
-    'resolve_parent_class', 'resolve_package_index_to_reference',
+    'resolve_parent_class',
+    'resolve_class_name_with_linker', 'get_asset_class_with_linker',
+    'detect_blueprint_with_linker', 'resolve_parent_class_with_linker',
     # 图序列化（Phase 31）
     'read_ue_graph', 'read_ue_graph_node', 'read_ue_graph_pin',
     'read_ed_graph_pin_type', 'read_fmember_reference',
