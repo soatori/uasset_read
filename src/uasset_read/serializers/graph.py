@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
+    from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
     MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN,
@@ -27,10 +28,24 @@ from uasset_read.constants import (
 
 logger = logging.getLogger(__name__)
 from uasset_read.exceptions import ParseError
-from uasset_read.serializers.object_resources import resolve_class_name, get_asset_class, PackageIndex
+from uasset_read.serializers.object_resources import (
+    resolve_class_name, resolve_class_name_with_linker,
+    get_asset_class, get_asset_class_with_linker,
+    PackageIndex,
+)
 from uasset_read.serializers.property_tags import read_property_tag
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
 from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction
+
+
+def _rcn(idx, im, em, lk):
+    """Resolve class name - linker version if available."""
+    return (resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em))
+
+
+def _gac(exp, im, em, lk):
+    """Get asset class - linker version if available."""
+    return (get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em))
 
 
 # ============================================================================
@@ -550,14 +565,15 @@ def read_fmember_reference(
     archive: FArchive,
     name_map: List[str],
     import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
     """读取 FMemberReference（MemberReference.h L74-95）。"""
     member_parent_index = archive.read_i32()
     member_parent: Optional[str] = None
     if member_parent_index != 0:
-        member_parent = resolve_class_name(
-            PackageIndex(member_parent_index), import_map, export_map
+        member_parent = _rcn(
+            PackageIndex(member_parent_index), import_map, export_map, linker
         )
 
     member_scope = archive.read_fstring()
@@ -582,10 +598,11 @@ def read_k2node_call_function(
     archive: FArchive,
     name_map: List[str],
     import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。"""
-    function_reference = read_fmember_reference(archive, name_map, import_map, export_map)
+    function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_defaults_to_pure = archive.read_bool()
     return {
         "function_reference": function_reference,
@@ -597,10 +614,11 @@ def read_k2node_event(
     archive: FArchive,
     name_map: List[str],
     import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。"""
-    event_reference = read_fmember_reference(archive, name_map, import_map, export_map)
+    event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_override_function = archive.read_bool()
     return {
         "event_reference": event_reference,
@@ -657,6 +675,7 @@ def create_node_from_archive(
     node_export: ObjectExport,
     base_node: UEdGraphNode,
     raw_properties: Optional[Dict[str, Any]] = None,
+    linker: Optional["PackageLinker"] = None,
 ) -> UEdGraphNode:
     """根据 class_name 分派到对应的节点读取函数（D-07/D-08 工厂模式）。"""
     class_name = base_node.class_name
@@ -667,11 +686,11 @@ def create_node_from_archive(
 
     if class_name == "K2Node_CallFunction":
         base_node.node_data = read_k2node_call_function(
-            archive, name_map, import_map, export_map
+            archive, name_map, import_map, export_map, linker
         )
     elif class_name == "K2Node_Event":
         base_node.node_data = read_k2node_event(
-            archive, name_map, import_map, export_map
+            archive, name_map, import_map, export_map, linker
         )
     elif class_name == "K2Node_Knot":
         base_node.node_data = read_k2node_knot(archive)
@@ -697,12 +716,13 @@ def read_ue_graph_node(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     node_export: ObjectExport,
+    linker: Optional["PackageLinker"] = None,
 ) -> UEdGraphNode:
     """读取 UEdGraphNode 基类字段（含 script_serial PropertyTag 解析）。"""
     archive.seek(node_export.serial_offset)
 
     node_name = node_export.object_name
-    node_class = get_asset_class(node_export, import_map, export_map)
+    node_class = _gac(node_export, import_map, export_map, linker)
 
     function_reference: Optional[FMemberReference] = None
     event_reference: Optional[FMemberReference] = None
@@ -760,7 +780,7 @@ def read_ue_graph_node(
                         archive.seek(archive.tell() + inner.size)
 
                 function_reference = FMemberReference(
-                    member_parent=resolve_class_name(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
+                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
                     member_name=m_name,
                     member_guid=m_guid,
                     b_self_context=m_self,
@@ -795,7 +815,7 @@ def read_ue_graph_node(
                         archive.seek(archive.tell() + inner.size)
 
                 event_reference = FMemberReference(
-                    member_parent=resolve_class_name(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
+                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
                     member_name=m_name,
                     member_guid=m_guid,
                     b_self_context=m_self,
@@ -856,7 +876,7 @@ def read_ue_graph_node(
         node_guid = archive.read_bytes(16).hex()
         node_comment = archive.read_fstring()
 
-    class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
+    class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
 
     base_node = UEdGraphNode(
         node_guid=node_guid,
@@ -870,6 +890,7 @@ def read_ue_graph_node(
     return create_node_from_archive(
         archive, name_map, summary, export_map, import_map, node_export, base_node,
         raw_properties=raw_properties if raw_properties else None,
+        linker=linker,
     )
 
 
@@ -886,6 +907,7 @@ def read_ue_graph(
     graph_export: ObjectExport,
     graph_class: str,
     graph_export_idx: int = 0,
+    linker: Optional["PackageLinker"] = None,
 ) -> UEdGraph:
     """读取 UEdGraph 容器（EdGraph.cpp）。"""
     archive.seek(graph_export.serial_offset)
@@ -894,7 +916,7 @@ def read_ue_graph(
     schema_index = archive.read_i32()
     schema: Optional[str] = None
     if schema_index != 0:
-        schema = resolve_class_name(PackageIndex(schema_index), import_map, export_map)
+        schema = _rcn(PackageIndex(schema_index), import_map, export_map, linker)
 
     # 2. Nodes array
     nodes_count = archive.read_i32()
@@ -911,7 +933,7 @@ def read_ue_graph(
         if node_index > 0 and node_index <= len(export_map):
             node_export = export_map[node_index - 1]
             try:
-                node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
+                node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
                 nodes.append(node)
             except ParseError:
                 failed_nodes.append(node_export.object_name)
@@ -920,10 +942,10 @@ def read_ue_graph(
     if nodes_count == 0 and graph_export_idx > 0:
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
-                node_class = get_asset_class(node_export, import_map, export_map)
+                node_class = _gac(node_export, import_map, export_map, linker)
                 if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
                     try:
-                        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
+                        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
                         nodes.append(node)
                     except ParseError:
                         nodes.append(UEdGraphNode(
