@@ -14,13 +14,19 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 | v2.0 | 蓝图图解析 | 2026-05-02 |
 | v5.1 | src layout + pyproject.toml | 2026-05-07 |
 | v6.0 | ✅ 模块化重构 | 2026-05-13 |
-| **v7.0** | 📋 UE FLinkerLoad 对象图重建 | 规划中 |
+| **v7.0** | 📋 UE FLinkerLoad 对象图重建 + 技术债清理 | 规划中 |
 
 **历史**: [archive/v6.0-refactor/](archive/v6.0-refactor/ARCHIVE-INDEX.md) | **详情**: [ROADMAP.md](ROADMAP.md)
 
 ## Out of Scope
 
 导出纹理/模型 | 修改 .uasset | Cooked 资产 | 蓝图字节码反编译 | C++ 代码生成 | MCP Server
+
+## 技术债
+
+- **Phase 44a**: 移除旧版本/UE4 兼容代码
+- **Phase 44b**: 替换直接字节读取为 FArchive 方法
+- **Phase 44c**: 清理废弃测试工具
 
 ## 关键决策
 
