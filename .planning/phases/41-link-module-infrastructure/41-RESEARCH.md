@@ -336,22 +336,16 @@ return result
 | A3 | No new dependencies needed — all functionality achievable with Python stdlib + existing project code | Standard Stack | LOW — project has zero-dependency policy, all building blocks exist |
 | A4 | `FArchive` can be safely shared between `link()` and `preload()` calls (single instance, no threading) | FArchive Position State Corruption pitfall | LOW — single-threaded context, explicit seek before each read |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `PackageLinker` own the FArchive or receive it as a parameter?**
-   - What we know: D-04 says PackageLinker receives already-parsed summary/import_map/export_map/name_map. The archive is needed for `preload()` which reads serialized properties.
-   - What's unclear: Whether `link()` should also use the archive or rely solely on the pre-parsed data.
-   - Recommendation: Pass FArchive as a constructor parameter (it's needed for preload). The existing serializers have already consumed the header data, so `link()` can work from the parsed data alone.
+   RESOLVED: Pass FArchive as a constructor parameter (it's needed for preload). The existing serializers have already consumed the header data, so `link()` can work from the parsed data alone.
 
 2. **How should `preload()` handle version-specific property parsing?**
-   - What we know: `parse_properties_from_export()` takes `export`, `archive`, `summary`, `name_map`, `export_map`, `import_map`.
-   - What's unclear: Whether the PackageLinker should maintain its own copies of these or access them through the summary/linker.
-   - Recommendation: Store `summary`, `name_map`, `import_map`, `export_map` on `PackageLinker` as instance attributes — they're needed for property parsing and already passed to the constructor.
+   RESOLVED: Store `summary`, `name_map`, `import_map`, `export_map` on `PackageLinker` as instance attributes — they're needed for property parsing and already passed to the constructor.
 
 3. **Should `build_outer_tree()` be a separate method or part of `link()`?**
-   - What we know: `link()` creates shells, `build_outer_tree()` resolves parent references.
-   - What's unclear: Whether these should be one atomic operation or callable separately.
-   - Recommendation: `build_outer_tree()` as a separate method called by `link()` internally. This allows testing the outer tree building independently and matches UE's separation of CreateExport and Outer resolution.
+   RESOLVED: `build_outer_tree()` as a separate method called by `link()` internally. This allows testing the outer tree building independently and matches UE's separation of CreateExport and Outer resolution.
 
 ## Environment Availability
 
