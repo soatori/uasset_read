@@ -13,12 +13,17 @@ PACKAGE_FILE_TAG = 0x9E2A83C1       # 正确字节序魔术标签
 PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
 
 # ============================================================================
-# 版本范围常量
+# 版本常量
 # ============================================================================
 
-UE5_VERSION_MIN = 0                # UE5 版本最低值（接受任何 UE5 文件）
-LEGACY_FILE_VERSION_MIN = -9       # LegacyFileVersion 范围下限
-LEGACY_FILE_VERSION_MAX = -2       # LegacyFileVersion 范围上限
+UE5_VERSION_MIN = 0                # UE5 版本最低值
+UE5_LEGACY_VERSION = -8            # UE5 文件的 LegacyFileVersion 固定值
+
+# ============================================================================
+# CustomVersion GUIDs
+# ============================================================================
+
+FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 
 # ============================================================================
 # 边界验证常量（防御性编程）
@@ -50,8 +55,6 @@ PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 # ============================================================================
 
 PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
-VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 500
-VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 510
 
 # ============================================================================
 # Package Flags
@@ -93,31 +96,8 @@ UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017
 UE5_IMPORT_TYPE_HIERARCHIES = 1018
 
 # ============================================================================
-# UE4版本常量（EUnrealEngineObjectUE4Version）
+# 更多 CustomVersion GUIDs
 # ============================================================================
-
-UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 385
-UE4_SERIALIZE_TEXT_IN_PACKAGES = 401
-UE4_WORLD_LEVEL_INFO = 223
-UE4_ADDED_CHUNKID = 277
-UE4_CHANGED_CHUNKID_TO_ARRAY = 341
-UE4_ENGINE_VERSION_OBJECT = 334
-UE4_ADD_STRING_ASSET_REFERENCES_MAP = 382
-UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 442
-UE4_LOAD_FOR_EDITOR_GAME = 365
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
-VER_UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
-UE4_ADDED_SEARCHABLE_NAMES = 510
-VER_UE4_64BIT_EXPORTOFFSETS = 511
-UE4_ADDED_PACKAGE_OWNER = 518
-UE4_NON_OUTER_PACKAGE_IMPORT = 520
-
-# ============================================================================
-# CustomVersion GUIDs
-# ============================================================================
-
-FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
 FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
 FUE5RELEASESTREAM_OBJECT_VERSION_GUID = "D89B5E42-24BD4D46-8412ACA8-DF641779"
@@ -242,20 +222,3 @@ EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
 
 
-def use_complete_type_name(legacy_version: int, ue5_version: int) -> bool:
-    """
-    判断是否使用完整 TypeName 格式（PROP-09）。
-
-    UE5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME (1000) 使用完整 TypeName 字符串。
-    UE4 始终使用旧格式（短名称 + 分离字段）。
-
-    Args:
-        legacy_version: LegacyFileVersion（-2 至 -9）
-        ue5_version: UE5 版本号
-
-    Returns:
-        True 使用 UE5 新格式，False 使用 UE4 旧格式
-    """
-    if legacy_version <= -8 and ue5_version >= PROPERTY_TAG_COMPLETE_TYPE_NAME:
-        return True
-    return False

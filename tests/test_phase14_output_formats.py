@@ -37,8 +37,8 @@ def make_summary(package_name: str = "/Game/Test") -> PackageFileSummary:
     """Helper: 创建 PackageFileSummary"""
     return PackageFileSummary(
         tag=0x9E2A83C1,
-        legacy_file_version=-7,
-        file_version_ue4=522,
+        legacy_file_version=-8,
+        file_version_ue5=1018,
         package_name=package_name
     )
 

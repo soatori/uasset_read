@@ -88,11 +88,10 @@ def multi_package_imports() -> List[ObjectImport]:
 
 @pytest.fixture
 def ue4_summary() -> PackageFileSummary:
-    """UE4 文件 PackageFileSummary fixture。"""
+    """Legacy summary fixture (UE5.7 compatible)."""
     return PackageFileSummary(
         tag=0x9E2A83C1,
-        legacy_file_version=-3,
-        file_version_ue4=522,
+        legacy_file_version=-8,
         file_version_ue5=0,
         soft_object_paths_count=0,
         soft_object_paths_offset=0
@@ -101,11 +100,10 @@ def ue4_summary() -> PackageFileSummary:
 
 @pytest.fixture
 def ue5_summary_with_soft_refs() -> PackageFileSummary:
-    """UE5 >= 1008 文件 PackageFileSummary fixture（包含 SoftObjectPaths）。"""
+    """UE5 fixture with SoftObjectPaths."""
     return PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
-        file_version_ue4=0,
         file_version_ue5=1016,
         soft_object_paths_count=2,
         soft_object_paths_offset=1024
@@ -114,11 +112,10 @@ def ue5_summary_with_soft_refs() -> PackageFileSummary:
 
 @pytest.fixture
 def ue5_summary_no_soft_refs() -> PackageFileSummary:
-    """UE5 < 1008 文件 PackageFileSummary fixture（无 SoftObjectPaths）。"""
+    """UE5 fixture without SoftObjectPaths."""
     return PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
-        file_version_ue4=0,
         file_version_ue5=500,
         soft_object_paths_count=0,
         soft_object_paths_offset=0
@@ -168,8 +165,9 @@ def test_build_imports_list_preserves_order(single_import):
 
 # === read_soft_object_paths 测试 ===
 
+@pytest.mark.skip(reason="UE4 版本检查已移除，仅保留 UE5.7 支持")
 def test_read_soft_object_paths_ue4_version_check(ue4_summary):
-    """测试 UE4 文件版本判断条件。"""
+    """测试 UE4 文件版本判断条件（已跳过，UE4 不再支持）。"""
     assert ue4_summary.legacy_file_version > -8
     assert ue4_summary.file_version_ue5 == 0
 
@@ -211,7 +209,6 @@ def test_read_soft_object_paths_ue5_1008_ftoplevelassetpath():
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
-        file_version_ue4=0,
         file_version_ue5=1008,  # >= UE5_ADD_SOFTOBJECTPATH_LIST
         soft_object_paths_count=1,
         soft_object_paths_offset=1  # > 0，避免 offset <= 0 检查返回空
@@ -263,8 +260,7 @@ def test_read_soft_object_paths_ue5_1016_format():
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
-        file_version_ue4=0,
-        file_version_ue5=1016,  # 当前常见 UE5 版本
+        file_version_ue5=1016,
         soft_object_paths_count=1,
         soft_object_paths_offset=1
     )
@@ -309,7 +305,6 @@ def test_read_soft_object_paths_ue5_1008_empty_asset_name():
     summary = PackageFileSummary(
         tag=0x9E2A83C1,
         legacy_file_version=-8,
-        file_version_ue4=0,
         file_version_ue5=1008,
         soft_object_paths_count=1,
         soft_object_paths_offset=1

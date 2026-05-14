@@ -2,6 +2,7 @@
 Package Summary 序列化 — PackageFileSummary 及相关读取函数。
 
 从 uasset_read.py 提取（第 901-2543 行）。
+UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 
 from typing import List
@@ -10,22 +11,14 @@ from dataclasses import dataclass, field
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
-    UE5_VERSION_MIN, LEGACY_FILE_VERSION_MIN, LEGACY_FILE_VERSION_MAX,
+    UE5_VERSION_MIN, UE5_LEGACY_VERSION,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
     UE5_IMPORT_TYPE_HIERARCHIES,
-    UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID,
-    UE4_SERIALIZE_TEXT_IN_PACKAGES,
-    UE4_ENGINE_VERSION_OBJECT, UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION,
-    UE4_ADD_STRING_ASSET_REFERENCES_MAP, UE4_ADDED_SEARCHABLE_NAMES,
-    UE4_NON_OUTER_PACKAGE_IMPORT, UE4_WORLD_LEVEL_INFO,
-    UE4_ADDED_CHUNKID, UE4_CHANGED_CHUNKID_TO_ARRAY,
-    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
-    UE4_ADDED_PACKAGE_OWNER,
     UE5_NAMES_REFERENCED_FROM_EXPORT_DATA, UE5_PAYLOAD_TOC,
-    UE5_DATA_RESOURCES, UE5_VERSE_CELLS as UE5_VERSE_CELLS2,
-    PKG_Cooked,
+    UE5_DATA_RESOURCES,
+    PKG_FilterEditorOnly,
 )
 from uasset_read.exceptions import VersionError, ParseError
 
@@ -59,8 +52,6 @@ class PackageFileSummary:
     """PackageFileSummary 文件头。"""
     tag: int
     legacy_file_version: int
-    file_version_ue4: int
-    legacy_ue3_version: int = 0
     file_version_ue5: int = 0
     file_version_licensee: int = 0
     saved_hash: bytes = field(default_factory=lambda: b'')
@@ -85,9 +76,6 @@ class PackageFileSummary:
     cell_import_offset: int = 0
     metadata_offset: int = 0
     depends_offset: int = 0
-    soft_package_references_count: int = 0
-    soft_package_references_offset: int = 0
-    searchable_names_offset: int = 0
     thumbnail_table_offset: int = 0
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
@@ -117,7 +105,7 @@ class PackageFileSummary:
 
 
 def read_package_summary(archive: FArchive) -> PackageFileSummary:
-    """读取 PackageFileSummary 文件头。"""
+    """读取 PackageFileSummary 文件头（UE5.7 专用）。"""
     archive.seek(0)
 
     # 第 1 步：魔数和版本号
@@ -129,34 +117,24 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
     legacy_file_version = archive.read_i32()
-    if legacy_file_version < LEGACY_FILE_VERSION_MIN or legacy_file_version > LEGACY_FILE_VERSION_MAX:
-        raise VersionError(f"Unsupported legacy version: {legacy_file_version}")
+    if legacy_file_version != UE5_LEGACY_VERSION:
+        raise VersionError(
+            f"Only UE5 files (legacy_file_version={UE5_LEGACY_VERSION}) are supported, "
+            f"got {legacy_file_version}"
+        )
 
-    if legacy_file_version != -4:
-        legacy_ue3_version = archive.read_i32()
-    else:
-        legacy_ue3_version = 0
+    legacy_ue3_version = archive.read_i32()
+    file_version_ue4 = archive.read_i32()  # kept for internal reference only
+    file_version_ue5 = archive.read_i32()
 
-    file_version_ue4 = archive.read_i32()
-
-    if legacy_file_version <= -8:
-        file_version_ue5 = archive.read_i32()
-    else:
-        file_version_ue5 = 0
-
-    if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
+    if file_version_ue5 < UE5_VERSION_MIN:
         raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
 
     file_version_licensee = archive.read_i32()
 
-    # 第 2 步：SavedHash（UE5 >= 1016）
-    saved_hash = b''
-    total_header_size = 0
-    is_ue4_file = legacy_file_version > -8
-
-    if legacy_file_version <= -8 and file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
-        saved_hash = archive.read(20)
-        total_header_size = archive.read_i32()
+    # 第 2 步：SavedHash + TotalHeaderSize（UE5.7 始终存在）
+    saved_hash = archive.read(20)
+    total_header_size = archive.read_i32()
 
     # 第 3 步：CustomVersions
     custom_versions_count = archive.read_u32()
@@ -168,15 +146,11 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         version = archive.read_i32()
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
 
-    # 第 4 步：TotalHeaderSize（UE4 文件）
-    if is_ue4_file:
-        total_header_size = archive.read_i32()
-
-    # 第 5 步：PackageName 和 PackageFlags
+    # 第 4 步：PackageName 和 PackageFlags
     package_name = archive.read_fstring()
     package_flags = archive.read_u32()
 
-    # 第 6 步：NameCount 和 NameOffset
+    # 第 5 步：NameCount 和 NameOffset
     name_count = archive.read_i32()
     if name_count < 0:
         raise ParseError(f"Negative name count: {name_count}")
@@ -185,34 +159,28 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     name_offset = archive.read_i32()
     archive.validate_offset(name_offset, "NameOffset")
 
-    # 第 7 步：SoftObjectPaths（UE5 >= 1008）
-    soft_object_paths_count = 0
-    soft_object_paths_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
-        soft_object_paths_count = archive.read_i32()
-        soft_object_paths_offset = archive.read_i32()
-        if soft_object_paths_offset > 0:
-            archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
+    # 第 6 步：SoftObjectPaths（UE5.7 始终存在）
+    soft_object_paths_count = archive.read_i32()
+    soft_object_paths_offset = archive.read_i32()
+    if soft_object_paths_offset > 0:
+        archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
-    # 第 8 步：LocalizationId（未烘焙文件）
+    # 第 7 步：LocalizationId（非 FilterEditorOnly 文件）
     localization_id = ""
-    is_cooked = (package_flags & PKG_Cooked) != 0
-    if not is_cooked:
-        if is_ue4_file and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
-            localization_id = archive.read_fstring()
-        elif not is_ue4_file:
-            localization_id = archive.read_fstring()
+    has_filter_editor_only = (package_flags & PKG_FilterEditorOnly) != 0
+    if not has_filter_editor_only:
+        localization_id = archive.read_fstring()
 
-    # 第 9 步：GatherableTextData
+    # 第 8 步：GatherableTextData（非 FilterEditorOnly 文件）
     gatherable_text_data_count = 0
     gatherable_text_data_offset = 0
-    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES or not is_ue4_file:
+    if not has_filter_editor_only:
         gatherable_text_data_count = archive.read_i32()
         gatherable_text_data_offset = archive.read_i32()
         if gatherable_text_data_offset > 0:
             archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
 
-    # 第 10 步：ExportCount 和 ExportOffset
+    # 第 9 步：ExportCount 和 ExportOffset
     export_count = archive.read_i32()
     if export_count < 0:
         raise ParseError(f"Negative export count: {export_count}")
@@ -221,7 +189,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     export_offset = archive.read_i32()
     archive.validate_offset(export_offset, "ExportOffset")
 
-    # 第 11 步：ImportCount 和 ImportOffset
+    # 第 10 步：ImportCount 和 ImportOffset
     import_count = archive.read_i32()
     if import_count < 0:
         raise ParseError(f"Negative import count: {import_count}")
@@ -230,84 +198,48 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     import_offset = archive.read_i32()
     archive.validate_offset(import_offset, "ImportOffset")
 
-    # 第 12 步：CellExport/CellImport（UE5 >= 1015）
-    cell_export_count = 0
-    cell_export_offset = 0
-    cell_import_count = 0
-    cell_import_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_VERSE_CELLS:
-        cell_export_count = archive.read_i32()
-        if cell_export_count < 0:
-            raise ParseError(f"Negative cell export count: {cell_export_count}")
-        cell_export_offset = archive.read_i32()
-        if cell_export_offset > 0:
-            archive.validate_offset(cell_export_offset, "CellExportOffset")
-        cell_import_count = archive.read_i32()
-        if cell_import_count < 0:
-            raise ParseError(f"Negative cell import count: {cell_import_count}")
-        cell_import_offset = archive.read_i32()
-        if cell_import_offset > 0:
-            archive.validate_offset(cell_import_offset, "CellImportOffset")
+    # 第 11 步：CellExport/CellImport（UE5.7 始终存在）
+    cell_export_count = archive.read_i32()
+    if cell_export_count < 0:
+        raise ParseError(f"Negative cell export count: {cell_export_count}")
+    cell_export_offset = archive.read_i32()
+    if cell_export_offset > 0:
+        archive.validate_offset(cell_export_offset, "CellExportOffset")
+    cell_import_count = archive.read_i32()
+    if cell_import_count < 0:
+        raise ParseError(f"Negative cell import count: {cell_import_count}")
+    cell_import_offset = archive.read_i32()
+    if cell_import_offset > 0:
+        archive.validate_offset(cell_import_offset, "CellImportOffset")
 
-    # 第 13 步：MetaDataOffset（UE5 >= 1014）
-    metadata_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
-        metadata_offset = archive.read_i32()
-        if metadata_offset > 0:
-            archive.validate_offset(metadata_offset, "MetadataOffset")
+    # 第 12 步：MetaDataOffset（UE5.7 始终存在）
+    metadata_offset = archive.read_i32()
+    if metadata_offset > 0:
+        archive.validate_offset(metadata_offset, "MetadataOffset")
 
-    # 第 14 步：DependsOffset
+    # 第 13 步：DependsOffset
     depends_offset = archive.read_i32()
 
-    # 第 15 步：SoftPackageReferences（UE4 >= 382）
-    soft_package_references_count = 0
-    soft_package_references_offset = 0
-    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
-        soft_package_references_count = archive.read_i32()
-        if soft_package_references_count < 0:
-            raise ParseError(f"Negative soft package references count: {soft_package_references_count}")
-        soft_package_references_offset = archive.read_i32()
-        if soft_package_references_offset > 0:
-            archive.validate_offset(soft_package_references_offset, "SoftPackageReferencesOffset")
-
-    # 第 16 步：SearchableNames（UE4 >= 508）
-    searchable_names_offset = 0
-    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
-        searchable_names_offset = archive.read_i32()
-        if searchable_names_offset > 0:
-            archive.validate_offset(searchable_names_offset, "SearchableNamesOffset")
-
-    # 第 17 步：ThumbnailTableOffset
+    # 第 14 步：ThumbnailTableOffset
     thumbnail_table_offset = archive.read_i32()
     if thumbnail_table_offset > 0:
         archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
-    # 第 18 步：ImportTypeHierarchies（UE5 >= 1018）
-    import_type_hierarchies_count = 0
-    import_type_hierarchies_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
-        import_type_hierarchies_count = archive.read_i32()
-        if import_type_hierarchies_count < 0:
-            raise ParseError(f"Negative import type hierarchies count: {import_type_hierarchies_count}")
-        import_type_hierarchies_offset = archive.read_i32()
-        if import_type_hierarchies_offset > 0:
-            archive.validate_offset(import_type_hierarchies_offset, "ImportTypeHierarchiesOffset")
+    # 第 15 步：ImportTypeHierarchies（UE5.7 始终存在）
+    import_type_hierarchies_count = archive.read_i32()
+    if import_type_hierarchies_count < 0:
+        raise ParseError(f"Negative import type hierarchies count: {import_type_hierarchies_count}")
+    import_type_hierarchies_offset = archive.read_i32()
+    if import_type_hierarchies_offset > 0:
+        archive.validate_offset(import_type_hierarchies_offset, "ImportTypeHierarchiesOffset")
 
-    # 第 19 步：Legacy Guid
-    if not is_ue4_file and file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
-        archive.read(16)
-    elif is_ue4_file:
-        archive.read(16)
-
-    # 第 20 步：PersistentGuid
+    # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件）
     persistent_guid = ""
-    if not is_cooked and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
+    if not has_filter_editor_only:
         guid_bytes = archive.read(16)
         persistent_guid = guid_bytes.hex()
-        if file_version_ue4 < UE4_NON_OUTER_PACKAGE_IMPORT:
-            archive.read(16)
 
-    # 第 21 步：Generations
+    # 第 17 步：Generations
     generations_count = archive.read_i32()
     if generations_count < 0:
         raise ParseError(f"Negative generations count: {generations_count}")
@@ -317,128 +249,81 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         gen_name_count = archive.read_i32()
         generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
 
-    # 第 22 步：SavedByEngineVersion
-    saved_by_engine_version = EngineVersion()
-    if file_version_ue4 >= UE4_ENGINE_VERSION_OBJECT:
-        saved_by_engine_version = EngineVersion(
-            major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
-            changelist=archive.read_u32(), branch=archive.read_fstring()
-        )
-    else:
-        engine_changelist = archive.read_i32()
-        if engine_changelist != 0:
-            saved_by_engine_version = EngineVersion(major=4, minor=0, patch=0, changelist=engine_changelist)
+    # 第 18 步：SavedByEngineVersion（UE5.7 始终为 FEngineVersion 结构）
+    saved_by_engine_version = EngineVersion(
+        major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
+        changelist=archive.read_u32(), branch=archive.read_fstring()
+    )
 
-    # 第 23 步：CompatibleWithEngineVersion
-    compatible_with_engine_version = EngineVersion()
-    if file_version_ue4 >= UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION:
-        compatible_with_engine_version = EngineVersion(
-            major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
-            changelist=archive.read_u32(), branch=archive.read_fstring()
-        )
-    else:
-        compatible_with_engine_version = EngineVersion(
-            major=saved_by_engine_version.major, minor=saved_by_engine_version.minor,
-            patch=saved_by_engine_version.patch, changelist=saved_by_engine_version.changelist,
-            branch=saved_by_engine_version.branch
-        )
+    # 第 19 步：CompatibleWithEngineVersion（UE5.7 始终存在）
+    compatible_with_engine_version = EngineVersion(
+        major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
+        changelist=archive.read_u32(), branch=archive.read_fstring()
+    )
 
-    # 第 24 步：CompressionFlags
+    # 第 20 步：CompressionFlags
     compression_flags = archive.read_u32()
 
-    # 第 25 步：CompressedChunks（已废弃）
+    # 第 21 步：CompressedChunks（已废弃）
     compressed_chunks_count = archive.read_i32()
     if compressed_chunks_count < 0:
         raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
     for _ in range(compressed_chunks_count):
         archive.read(12)
 
-    # 第 26 步：PackageSource
+    # 第 22 步：PackageSource
     package_source = archive.read_u32()
 
-    # 第 27 步：AdditionalPackagesToCook
+    # 第 23 步：AdditionalPackagesToCook
     additional_packages_count = archive.read_i32()
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
-    # 第 28 步：NumTextureAllocations
-    if legacy_file_version > -7:
-        archive.read_i32()
-
-    # 第 29 步：AssetRegistryDataOffset
+    # 第 24 步：AssetRegistryDataOffset
     asset_registry_data_offset = archive.read_i32()
     if asset_registry_data_offset > 0:
         archive.validate_offset(asset_registry_data_offset, "AssetRegistryDataOffset")
 
-    # 第 30 步：BulkDataStartOffset
+    # 第 25 步：BulkDataStartOffset
     bulk_data_start_offset = archive.read_i64()
 
-    # 第 31 步：WorldTileInfoDataOffset
-    world_tile_info_data_offset = 0
-    if file_version_ue4 >= UE4_WORLD_LEVEL_INFO:
-        world_tile_info_data_offset = archive.read_i32()
-        if world_tile_info_data_offset > 0:
-            archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
+    # 第 26 步：WorldTileInfoDataOffset
+    world_tile_info_data_offset = archive.read_i32()
+    if world_tile_info_data_offset > 0:
+        archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
 
-    # 第 32 步：ChunkIDs
+    # 第 27 步：ChunkIDs（UE5 始终为数组格式）
     chunk_ids = []
-    if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_ARRAY:
-        chunk_ids_count = archive.read_i32()
-        if chunk_ids_count < 0:
-            raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
-        for _ in range(chunk_ids_count):
-            guid_bytes = archive.read(16)
-            chunk_ids.append(guid_bytes.hex())
-    elif file_version_ue4 >= UE4_ADDED_CHUNKID:
-        chunk_id = archive.read_i32()
-        if chunk_id >= 0:
-            chunk_ids.append(hex(chunk_id))
+    chunk_ids_count = archive.read_i32()
+    if chunk_ids_count < 0:
+        raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
+    for _ in range(chunk_ids_count):
+        guid_bytes = archive.read(16)
+        chunk_ids.append(guid_bytes.hex())
 
-    # 第 33 步：PreloadDependencies
-    preload_dependency_count = 0
-    preload_dependency_offset = 0
-    if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-        preload_dependency_count = archive.read_i32()
-        preload_dependency_offset = archive.read_i32()
-        if preload_dependency_offset > 0:
-            archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
-    else:
-        preload_dependency_count = -1
+    # 第 28 步：PreloadDependencies（UE5.7 始终存在）
+    preload_dependency_count = archive.read_i32()
+    preload_dependency_offset = archive.read_i32()
+    if preload_dependency_offset > 0:
+        archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
 
-    # 第 34 步：NamesReferencedFromExportDataCount
-    names_referenced_from_export_data_count = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
-        names_referenced_from_export_data_count = archive.read_i32()
-    else:
-        names_referenced_from_export_data_count = name_count
+    # 第 29 步：NamesReferencedFromExportData（UE5.7 始终存在）
+    names_referenced_from_export_data_count = archive.read_i32()
 
-    # 第 35 步：PayloadTocOffset
-    payload_toc_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_PAYLOAD_TOC:
-        payload_toc_offset = archive.read_i64()
-        if payload_toc_offset > 0:
-            archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
-    else:
-        payload_toc_offset = -1
+    # 第 30 步：PayloadTocOffset（UE5.7 始终存在）
+    payload_toc_offset = archive.read_i64()
+    if payload_toc_offset > 0:
+        archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
 
-    # 第 36 步：DataResourceOffset
-    data_resource_offset = 0
-    if not is_ue4_file and file_version_ue5 >= UE5_DATA_RESOURCES:
-        data_resource_offset = archive.read_i32()
-        if data_resource_offset > 0:
-            archive.validate_offset(data_resource_offset, "DataResourceOffset")
-    else:
-        data_resource_offset = -1
-
-    # 第 37 步：TotalHeaderSize（UE5 < 1016）
-    if not is_ue4_file and file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
-        total_header_size = archive.read_i32()
+    # 第 31 步：DataResourceOffset（UE5.7 始终存在）
+    data_resource_offset = archive.read_i32()
+    if data_resource_offset > 0:
+        archive.validate_offset(data_resource_offset, "DataResourceOffset")
 
     return PackageFileSummary(
         tag=tag, legacy_file_version=legacy_file_version,
-        file_version_ue4=file_version_ue4, legacy_ue3_version=legacy_ue3_version,
         file_version_ue5=file_version_ue5, file_version_licensee=file_version_licensee,
         saved_hash=saved_hash, total_header_size=total_header_size,
         custom_versions=custom_versions, package_name=package_name,
@@ -453,9 +338,6 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         cell_export_count=cell_export_count, cell_export_offset=cell_export_offset,
         cell_import_count=cell_import_count, cell_import_offset=cell_import_offset,
         metadata_offset=metadata_offset, depends_offset=depends_offset,
-        soft_package_references_count=soft_package_references_count,
-        soft_package_references_offset=soft_package_references_offset,
-        searchable_names_offset=searchable_names_offset,
         thumbnail_table_offset=thumbnail_table_offset,
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
@@ -476,16 +358,13 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
-    """读取名称表。"""
+    """读取名称表（UE5.7 专用）。"""
     archive.seek(summary.name_offset)
-    NAME_HASHES_SERIALIZED_VERSION = 502
-    is_ue4_file = summary.legacy_file_version > -8
-    has_name_hashes = (is_ue4_file and summary.file_version_ue4 >= NAME_HASHES_SERIALIZED_VERSION) or (not is_ue4_file)
 
     name_map = []
     for _ in range(summary.name_count):
         name = archive.read_fstring()
         name_map.append(name)
-        if has_name_hashes:
-            archive.read(4)
+        # UE5 始终有 name hashes (4 bytes)
+        archive.read(4)
     return name_map
