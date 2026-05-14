@@ -5,7 +5,7 @@ Phase 33: 入口与测试适配。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Union
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
@@ -21,6 +21,103 @@ from uasset_read.blueprint import (
     extract_component_transforms,
 )
 from uasset_read.models.result import ParseResult
+from uasset_read.link.result import LinkerParseResult
+
+
+def _post_process(
+    path: str,
+    archive: FArchive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    result: "Union[ParseResult, LinkerParseResult]",
+    tolerant: bool = True,
+) -> None:
+    """共享后处理：blueprint 元数据、图提取、依赖分析。
+
+    通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
+    """
+    # Blueprint 元数据提取
+    blueprint_metadata = None
+    asset_name = name_map[0] if name_map else None
+
+    if asset_name:
+        main_bpgc = find_main_blueprint_generated_class(
+            export_map, import_map, asset_name
+        )
+        if main_bpgc:
+            temp_archive = FArchive(path, tolerant=tolerant)
+            temp_archive.set_byte_swapping(archive._byte_swapping)
+            try:
+                meta, warn = extract_blueprint_metadata(
+                    main_bpgc, temp_archive, import_map,
+                    export_map, name_map, summary,
+                )
+                if meta:
+                    blueprint_metadata = meta
+                    if hasattr(result, 'errors') and warn:
+                        result.errors.append(f"blueprint parent warning: {warn}")
+            except ParseError as e:
+                if hasattr(result, 'errors'):
+                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
+            finally:
+                temp_archive.close()
+
+    # UBlueprint 回退
+    if not blueprint_metadata:
+        for export in export_map:
+            if detect_blueprint(export, import_map, export_map):
+                temp_archive = FArchive(path, tolerant=tolerant)
+                temp_archive.set_byte_swapping(archive._byte_swapping)
+                try:
+                    meta, warn = extract_blueprint_metadata(
+                        export, temp_archive, import_map,
+                        export_map, name_map, summary,
+                    )
+                    if meta:
+                        blueprint_metadata = meta
+                        if hasattr(result, 'errors') and warn:
+                            result.errors.append(f"blueprint parent warning: {warn}")
+                except ParseError as e:
+                    if hasattr(result, 'errors'):
+                        result.errors.append(f"blueprint extraction error: {e}")
+                finally:
+                    temp_archive.close()
+                break
+
+    if hasattr(result, 'blueprint'):
+        result.blueprint = blueprint_metadata
+
+    # Blueprint Graph 提取
+    try:
+        from uasset_read.graph import extract_blueprint_graphs
+        if hasattr(result, 'graphs'):
+            result.graphs = extract_blueprint_graphs(
+                archive, summary, name_map, import_map, export_map,
+            )
+    except ImportError:
+        pass  # graph 模块不存在时静默跳过
+    except ParseError as e:
+        if hasattr(result, 'errors'):
+            result.errors.append(f"graph extraction error: {e}")
+
+    # 依赖分析
+    try:
+        if hasattr(result, 'imports'):
+            result.imports = build_imports_list(import_map)
+        if hasattr(result, 'soft_references'):
+            result.soft_references = read_soft_object_paths(
+                archive, summary, name_map,
+            )
+        if hasattr(result, 'circular_deps'):
+            result.circular_deps = detect_circular_deps(import_map)
+    except ParseError as e:
+        if hasattr(result, 'errors'):
+            result.errors.append(f"dependency analysis error: {e}")
+
+    # 设置成功标志
+    result.is_success = len(result.errors) == 0
 
 
 def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
@@ -73,78 +170,11 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
-        # Blueprint 元数据提取
-        blueprint_metadata = None
-        asset_name = result.name_map[0] if result.name_map else None
-
-        if asset_name:
-            main_bpgc = find_main_blueprint_generated_class(
-                result.export_map, result.import_map, asset_name
-            )
-            if main_bpgc:
-                temp_archive = FArchive(path, tolerant=tolerant)
-                temp_archive.set_byte_swapping(archive._byte_swapping)
-                try:
-                    meta, warn = extract_blueprint_metadata(
-                        main_bpgc, temp_archive, result.import_map,
-                        result.export_map, result.name_map, result.summary,
-                    )
-                    if meta:
-                        blueprint_metadata = meta
-                        if warn:
-                            result.errors.append(f"blueprint parent warning: {warn}")
-                except ParseError as e:
-                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
-                finally:
-                    temp_archive.close()
-
-        # UBlueprint 回退
-        if not blueprint_metadata:
-            for export in result.export_map:
-                if detect_blueprint(export, result.import_map, result.export_map):
-                    temp_archive = FArchive(path, tolerant=tolerant)
-                    temp_archive.set_byte_swapping(archive._byte_swapping)
-                    try:
-                        meta, warn = extract_blueprint_metadata(
-                            export, temp_archive, result.import_map,
-                            result.export_map, result.name_map, result.summary,
-                        )
-                        if meta:
-                            blueprint_metadata = meta
-                            if warn:
-                                result.errors.append(f"blueprint parent warning: {warn}")
-                    except ParseError as e:
-                        result.errors.append(f"blueprint extraction error: {e}")
-                    finally:
-                        temp_archive.close()
-                    break
-
-        result.blueprint = blueprint_metadata
-
-        # Blueprint Graph 提取（Phase 31 产出）
-        try:
-            from uasset_read.graph import extract_blueprint_graphs
-            result.graphs = extract_blueprint_graphs(
-                archive, result.summary, result.name_map,
-                result.import_map, result.export_map,
-            )
-        except ImportError:
-            result.graphs = []  # graph 模块不存在时静默跳过
-        except ParseError as e:
-            result.errors.append(f"graph extraction error: {e}")
-
-        # 依赖分析（Phase 10）
-        try:
-            result.imports = build_imports_list(result.import_map)
-            result.soft_references = read_soft_object_paths(
-                archive, result.summary, result.name_map,
-            )
-            result.circular_deps = detect_circular_deps(result.import_map)
-        except ParseError as e:
-            result.errors.append(f"dependency analysis error: {e}")
-
-        # 所有步骤完成后，根据错误数设置成功标志
-        result.is_success = len(result.errors) == 0
+        # 共享后处理
+        _post_process(
+            path, archive, result.summary, result.name_map,
+            result.import_map, result.export_map, result, tolerant,
+        )
 
     except VersionError as e:
         result.errors.append(str(e))
