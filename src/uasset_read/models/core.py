@@ -24,10 +24,15 @@ class FEdGraphPinType:
     """蓝图引脚类型结构。"""
     pin_category: str = ""
     pin_subcategory: str = ""
-    pin_subcategory_object: Optional[str] = None
+    pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
+    is_reference: bool = False
+    is_weak_pointer: bool = False
+    is_const: bool = False
+    is_uobject_wrapper: bool = False
+    b_serialize_as_single_precision_float: bool = False
 
     @classmethod
     def from_archive(

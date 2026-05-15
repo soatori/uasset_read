@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
 milestone: v8.0
-milestone_name: BP-to-CPP 翻译能力
+milestone_name: 数据准备
 status: planning
 last_updated: "2026-05-15T00:10:00.000Z"
 progress:
@@ -12,7 +12,7 @@ progress:
   percent: 0
 ---
 
-# v8.0 — BP-to-CPP 翻译能力
+# v8.0 — 数据准备
 
 ## 问题: v7.0 解析结果无法支撑 BP→C++ 翻译
 
