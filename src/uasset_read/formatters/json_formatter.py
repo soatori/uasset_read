@@ -74,7 +74,8 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
         # 原因：依赖分析字段不属于格式化模块核心职责
-        "errors": result.errors
+        "errors": result.errors,
+        "components": _format_components(getattr(result, 'components', [])),
     }
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
@@ -280,6 +281,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,  # D-14-08: 精简版本
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化
+        "components_count": len(getattr(result, 'components', [])),
     }
 
     # D-14-07: 移除 imports/soft_references/circular_deps/errors
@@ -468,4 +470,24 @@ def _format_event_enhanced(event: BlueprintEvent) -> dict:
             "is_callable_in_blueprint": event.multicast_delegate.is_callable_in_blueprint
         }
 
+    return result
+
+
+def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """格式化组件列表用于 JSON 输出（D-06, Phase 48）。"""
+    result = []
+    for comp in components:
+        comp_dict = {
+            "name": comp.get("name", ""),
+            "class": comp.get("class", ""),
+            "properties": comp.get("properties", {}),
+            "transforms": {},
+        }
+        transforms = comp.get("transforms", {})
+        for key, value in transforms.items():
+            if is_dataclass(value) and not isinstance(value, type):
+                comp_dict["transforms"][key] = asdict(value)
+            else:
+                comp_dict["transforms"][key] = value
+        result.append(comp_dict)
     return result
