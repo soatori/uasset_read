@@ -3329,3 +3329,65 @@ class TestFormatGraphsJsonDataFlows:
         assert "connections" in graph_dict
         assert "execution_flows" in graph_dict
         assert "data_flows" in graph_dict
+
+
+# ============================================================================
+# Phase 48: REQ-48-07 - JSON 输出包含 components 键
+# ============================================================================
+
+
+class TestComponentJSONFormatting:
+    """Phase 48: 验证 components 字段在 JSON 输出中存在且序列化正确。"""
+
+    def test_json_full_has_components_key(self, create_mock_parse_result):
+        """format_json_full() 输出包含 components 键。"""
+        result = create_mock_parse_result
+        result.components = []
+        json_dict = format_json_full(result)
+        assert "components" in json_dict
+        assert isinstance(json_dict["components"], list)
+
+    def test_json_full_components_empty_when_no_data(self, create_mock_parse_result):
+        """无组件数据时 components 为空列表。"""
+        result = create_mock_parse_result
+        result.components = []
+        json_dict = format_json_full(result)
+        assert json_dict["components"] == []
+
+    def test_json_full_components_serialized(self, create_mock_parse_result):
+        """组件数据被正确序列化。"""
+        from uasset_read.models.transforms import VectorValue
+
+        result = create_mock_parse_result
+        result.components = [
+            {
+                "name": "FirstPersonCameraComponent",
+                "class": "CameraComponent",
+                "properties": {"FieldOfView": 70.0},
+                "transforms": {"relative_location": VectorValue(x=-2.8, y=5.89, z=0.0)},
+            }
+        ]
+        json_dict = format_json_full(result)
+
+        comps = json_dict["components"]
+        assert len(comps) == 1
+        assert comps[0]["name"] == "FirstPersonCameraComponent"
+        assert comps[0]["class"] == "CameraComponent"
+        assert comps[0]["properties"]["FieldOfView"] == 70.0
+        # 变换被序列化为 dict
+        assert comps[0]["transforms"]["relative_location"] == {"x": -2.8, "y": 5.89, "z": 0.0, "property_type": "StructProperty"}
+
+    def test_json_summary_has_components_count(self, create_mock_parse_result):
+        """format_json_summary() 包含 components_count 字段。"""
+        result = create_mock_parse_result
+        result.components = [{"name": "Cam", "class": "CameraComponent", "properties": {}, "transforms": {}}]
+        json_dict = format_json_summary(result)
+        assert "components_count" in json_dict
+        assert json_dict["components_count"] == 1
+
+    def test_json_summary_components_count_zero(self, create_mock_parse_result):
+        """无组件时 components_count 为 0。"""
+        result = create_mock_parse_result
+        result.components = []
+        json_dict = format_json_summary(result)
+        assert json_dict["components_count"] == 0

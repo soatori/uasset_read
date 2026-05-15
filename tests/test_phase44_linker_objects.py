@@ -246,21 +246,21 @@ def _build_minimal_ue5_pin(linked_to_indices=None, sub_pin_indices=None,
     buf.write(struct.pack('<i', 0))
     # container_type (u8)
     buf.write(struct.pack('<B', 0))
-    # is_reference (bool=1 byte)
-    buf.write(struct.pack('<B', 0))
-    # is_weak_pointer (bool=1 byte)
-    buf.write(struct.pack('<B', 0))
+    # is_reference (bool=4 bytes, FArchive bool)
+    buf.write(struct.pack('<I', 0))
+    # is_weak_pointer (bool=4 bytes, FArchive bool)
+    buf.write(struct.pack('<I', 0))
     # MemberReference
     buf.write(struct.pack('<i', 0))  # member_parent
     buf.write(struct.pack('<I', 0))  # member_name index
     buf.write(struct.pack('<I', 0))  # member_name number
     buf.write(b'\x00' * 16)          # member_guid
-    # is_const (bool=1 byte)
-    buf.write(struct.pack('<B', 0))
-    # is_uobject_wrapper (bool=1 byte)
-    buf.write(struct.pack('<B', 0))
-    # b_serialize_as_single_precision_float (bool=1 byte)
-    buf.write(struct.pack('<B', 0))
+    # is_const (bool=4 bytes, FArchive bool)
+    buf.write(struct.pack('<I', 0))
+    # is_uobject_wrapper (bool=4 bytes, FArchive bool)
+    buf.write(struct.pack('<I', 0))
+    # b_serialize_as_single_precision_float (bool=4 bytes, FArchive bool)
+    buf.write(struct.pack('<I', 0))
 
     # 9. DefaultValue (empty FString)
     buf.write(struct.pack('<i', 0))
@@ -483,15 +483,15 @@ class TestGraphPinObjectsFields:
         full_buf.write(struct.pack('<I', 0))  # pin_subcategory number
         full_buf.write(struct.pack('<i', 0))  # pin_subcategory_object
         full_buf.write(struct.pack('<B', 0))  # container_type
-        full_buf.write(struct.pack('<B', 0))  # is_reference (1-byte)
-        full_buf.write(struct.pack('<B', 0))  # is_weak_pointer (1-byte)
+        full_buf.write(struct.pack('<I', 0))  # is_reference (4-byte)
+        full_buf.write(struct.pack('<I', 0))  # is_weak_pointer (4-byte)
         full_buf.write(struct.pack('<i', 0))  # member_parent
         full_buf.write(struct.pack('<I', 0))  # member_name index
         full_buf.write(struct.pack('<I', 0))  # member_name number
         full_buf.write(b'\x00' * 16)          # member_guid
-        full_buf.write(struct.pack('<B', 0))  # is_const (1-byte)
-        full_buf.write(struct.pack('<B', 0))  # is_uobject_wrapper (1-byte)
-        full_buf.write(struct.pack('<B', 0))  # b_serialize_as_single_precision_float (1-byte)
+        full_buf.write(struct.pack('<I', 0))  # is_const (4-byte)
+        full_buf.write(struct.pack('<I', 0))  # is_uobject_wrapper (4-byte)
+        full_buf.write(struct.pack('<I', 0))  # b_serialize_as_single_precision_float (4-byte)
         # DefaultValue strings
         full_buf.write(struct.pack('<i', 0))
         full_buf.write(struct.pack('<i', 0))
