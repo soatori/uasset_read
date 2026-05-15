@@ -75,23 +75,23 @@ def read_ed_graph_pin_type(
         archive.read_name(name_map)  # TerminalSubCategory
         archive.read_i32()           # TerminalSubCategoryObject
 
-    # bIsReference / bIsWeakPointer (UE5 1-byte bool)
-    pin_type.is_reference = archive.read_bool_1byte()
-    pin_type.is_weak_pointer = archive.read_bool_1byte()
+    # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # FSimpleMemberReference (UE5 始终存在)
     archive.read_i32()       # MemberParent
     archive.read_name(name_map)  # MemberName
     archive.read_bytes(16)   # MemberGuid
 
-    # bIsConst (UE5 始终存在, 1-byte bool)
-    pin_type.is_const = archive.read_bool_1byte()
+    # bIsConst (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_const = archive.read_bool()
 
-    # bIsUObjectWrapper (UE5 始终存在, 1-byte bool)
-    pin_type.is_uobject_wrapper = archive.read_bool_1byte()
+    # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
-    # bSerializeAsSinglePrecisionFloat (UE5 始终存在, 1-byte bool)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool_1byte()
+    # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
 
     return pin_type
 
