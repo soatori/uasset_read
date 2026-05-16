@@ -74,8 +74,7 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         # D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
         # 原因：依赖分析字段不属于格式化模块核心职责
-        "errors": result.errors,
-        "components": _format_components(getattr(result, 'components', [])),
+        "errors": result.errors
     }
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
@@ -281,7 +280,6 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,  # D-14-08: 精简版本
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化
-        "components_count": len(getattr(result, 'components', [])),
     }
 
     # D-14-07: 移除 imports/soft_references/circular_deps/errors
@@ -471,6 +469,38 @@ def _format_event_enhanced(event: BlueprintEvent) -> dict:
         }
 
     return result
+
+
+def _extract_call_function_parameters(node: Any) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49）。
+
+    过滤 exec pins，将输入/输出参数分离为结构化数组。
+    """
+    input_params: List[Dict] = []
+    output_params: List[Dict] = []
+
+    for pin in node.pins:
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        param: Dict[str, Any] = {
+            "name": pin.pin_name,
+            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+        }
+        if pin.pin_type:
+            if pin.pin_type.pin_subcategory:
+                param["pin_subcategory"] = pin.pin_type.pin_subcategory
+            if pin.pin_type.is_reference:
+                param["is_reference"] = True
+        if pin.default_value is not None and pin.default_value != "":
+            param["default_value"] = pin.default_value
+
+        if pin.direction == 0:
+            input_params.append(param)
+        else:
+            output_params.append(param)
+
+    return {"input_params": input_params, "output_params": output_params}
 
 
 def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
