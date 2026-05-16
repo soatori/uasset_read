@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v8.0
 milestone_name: BP-to-CPP 翻译能力
-status: planning
-last_updated: "2026-05-15T00:10:00.000Z"
+status: complete
+last_updated: "2026-05-17T00:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # v8.0 — BP-to-CPP 翻译能力
@@ -30,10 +30,11 @@ progress:
 
 | Phase | 名称 | 状态 |
 |-------|------|------|
-| 47 | Pin LinkedTo 修复 | 🔴 未开始 |
-| 48 | 组件属性递归解析 | 🔴 未开始 |
-| 49 | 函数调用引脚解析 | 🔴 未开始 |
-| 50 | EnhancedInput 语义增强 | 🔴 未开始 |
+| 47 | Pin LinkedTo 修复 | ✅ 完成 |
+| 48 | 组件属性递归解析 | ✅ 完成 |
+| 49 | 函数调用引脚解析 | ✅ 完成 |
+| 50 | EnhancedInput 语义增强 | ✅ 完成 |
+| 51 | 二进制输出清理 | ✅ 完成 |
 
 ## 关键发现
 
