@@ -1,19 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 50-enhancedinput-semantic
 source: 50-PLAN.md
 started: 2026-05-16T00:00:00Z
-updated: 2026-05-16T12:00:00Z
+updated: "2026-05-16T17:00:00.000Z"
 ---
 
 ## Current Test
 
-number: 1
-name: 解析测试资产并验证 trigger_events
-expected: |
-  从 K2Node_EnhancedInputAction 节点的 node_data 中提取 trigger_events 字典，其中包含从 pins 提取的触发事件。
-  测试资产应包含至少一个具有非空 trigger_events 的节点。
-awaiting: testing complete
+[testing complete]
 
 ## Tests
 
