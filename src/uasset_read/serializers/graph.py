@@ -172,7 +172,18 @@ def read_ftext_with_history(
     """
     consumed = 0
     start_pos = archive.tell()
+    logger = logging.getLogger(__name__)
 
+    # 新增：验证 history_type 范围
+    valid_history_types = list(range(-1, 11))  # -1, 0, 1, ..., 10
+    if history_type not in valid_history_types:
+        # 无效 history_type：记录 debug 日志并返回空字符串
+        logger.debug(
+            "Invalid FText history_type %d at pos %d — returning empty",
+            history_type, start_pos
+        )
+        return "", archive.tell() - start_pos
+    
     try:
         if history_type == 255 or history_type == -1:  # None (0xFF unsigned or -1 signed)
             # None: flags(4) + htype(1) + bHasCultureInvariantString
@@ -381,6 +392,15 @@ def read_ue_graph_pin(
     # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
     try:
         pin_tooltip = archive.read_fstring()
+        # 额外检查：pin_tooltip 专用二进制数据过滤
+        # 注意：archive._contains_binary_data 不存在，需要从 archive 模块导入
+        from uasset_read.archive import _contains_binary_data
+        if _contains_binary_data(pin_tooltip):
+            archive.logger.debug(
+                "Binary pinTooltip at pos %d for pin '%s' — returning empty",
+                archive.tell() - len(pin_tooltip), pin_name
+            )
+            pin_tooltip = ""
     except Exception:
         pin_tooltip = ""
 
