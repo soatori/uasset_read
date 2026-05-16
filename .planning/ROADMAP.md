@@ -43,8 +43,9 @@
 |-------|------|------|------|
 | 47 | Pin LinkedTo 修复 | linked_to_raw 非空，connections > 0 | ✅ 完成 |
 | 48 | 组件属性递归解析 | 输出组件数值型属性 | ✅ 完成 |
-| 49 | 函数调用引脚解析 | CallFunction 参数引脚完整 | 🔴 未开始 |
+| 49 | 函数调用引脚解析 | CallFunction 参数引脚完整 | ✅ 完成 |
 | 50 | EnhancedInput 语义增强 | TriggerEvent 类型可识别 | ✅ 完成 |
+| 51 | 二进制输出清理 | 消除 JSON 中 binary/null 泄漏 | 🔴 待实施 (UAT 已创建，需实施修复) |
 
 ### 验证标准 — JSON 可翻译性
 
