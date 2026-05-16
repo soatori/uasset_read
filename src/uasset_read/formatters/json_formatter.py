@@ -469,3 +469,55 @@ def _format_event_enhanced(event: BlueprintEvent) -> dict:
         }
 
     return result
+
+
+def _extract_call_function_parameters(node: Any) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49）。
+
+    过滤 exec pins，将输入/输出参数分离为结构化数组。
+    """
+    input_params: List[Dict] = []
+    output_params: List[Dict] = []
+
+    for pin in node.pins:
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        param: Dict[str, Any] = {
+            "name": pin.pin_name,
+            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+        }
+        if pin.pin_type:
+            if pin.pin_type.pin_subcategory:
+                param["pin_subcategory"] = pin.pin_type.pin_subcategory
+            if pin.pin_type.is_reference:
+                param["is_reference"] = True
+        if pin.default_value is not None and pin.default_value != "":
+            param["default_value"] = pin.default_value
+
+        if pin.direction == 0:
+            input_params.append(param)
+        else:
+            output_params.append(param)
+
+    return {"input_params": input_params, "output_params": output_params}
+
+
+def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """格式化组件列表用于 JSON 输出（D-06, Phase 48）。"""
+    result = []
+    for comp in components:
+        comp_dict = {
+            "name": comp.get("name", ""),
+            "class": comp.get("class", ""),
+            "properties": comp.get("properties", {}),
+            "transforms": {},
+        }
+        transforms = comp.get("transforms", {})
+        for key, value in transforms.items():
+            if is_dataclass(value) and not isinstance(value, type):
+                comp_dict["transforms"][key] = asdict(value)
+            else:
+                comp_dict["transforms"][key] = value
+        result.append(comp_dict)
+    return result
