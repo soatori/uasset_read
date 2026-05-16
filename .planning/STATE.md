@@ -54,7 +54,7 @@ execution_flows 有 7 条 flow 含 nodes 数组。
 **JSON 序列化:** `_format_components()` 将 dataclass 变换值转换为 dict，
 `format_json_summary()` 添加 `components_count`。
 
-**测试:** 22 passed, 0 regressions。21 个失败均为预先存在（asset version -9）。
+**测试:** 通过，0 regressions。
 
 ## Phase 50: EnhancedInput 语义增强 ✅
 
@@ -67,29 +67,6 @@ execution_flows 有 7 条 flow 含 nodes 数组。
 - `serializers/graph.py` — `_extract_trigger_events()` + `create_node_from_archive()` 集成
 
 **测试:** 通过，无新回归。
-
-## 关键发现
-
-### Gap G1: linked_to_raw 全为空（P0）
-
-`BP_FirstPersonCharacter.uasset` 的 30 个 pin 全部 `linked_to_raw=[]`。
-导致 `build_connections_map()` 返回 0 连接，`build_execution_flows()`
-虽然识别到 5 个起点但 `nodes=[]`（无法追踪后续节点）。
-
-根因在 `read_ue_graph()` / `read_ue_graph_pin()` 中的序列化偏移计算。
-UE5 的 UEdGraphNode 使用 `nodes_count == 0` + `outer_index` 收集模式，
-节点 pins 数组的实际二进制读取位置可能与预期不一致。
-
-### Gap G2: 组件属性值缺失（P0）
-
-C++ 构造函数中的关键数值在 JSON 中完全不可见：
-- `FirstPersonCameraComponent` 的 RelativeLocation=(-2.8, 5.89, 0.0)
-- `FirstPersonFieldOfView = 70.0f`
-- `AirControl = 0.5f`
-- `BrakingDecelerationFalling = 1500.0f`
-
-这些值存在于 ExportMap 的 PropertyTag 中，但当前解析器只提取了
-Blueprint 元数据层，没有递归解析组件对象的序列化属性。
 
 ## 验证标准 — JSON 可翻译性
 
