@@ -1,16 +1,20 @@
 ---
 
 ---
-status: diagnosed
+status: in_progress
 phase: 51-binary-output-sanitization
 source: [51-PLAN.md]
 started: "2026-05-16T17:00:00.000Z"
-updated: "2026-05-16T17:30:00.000Z"
+updated: "2026-05-16T18:00:00.000Z"
 ---
 
 ## Current Test
 
-[testing complete]
+number: 1
+name: FString 读取 null 字符检测逻辑
+expected: |
+  read_fstring() 在检测到 null 字符比例超过 30% 时返回空字符串并记录警告日志
+awaiting: testing
 
 ## Tests
 
@@ -112,3 +116,20 @@ blocked: 0
     - "添加 _contains_binary_data() 辅助函数"
     - "在 pin_tooltip 读取后应用检测"
   debug_session: ""
+
+## Diagnosis
+
+### 当前状态
+
+Phase 51 修复尚未实施。UAT 验证无法进行，因为：
+1. `read_fstring()` 只有 `rstrip('\x00')`，无 null_ratio 检测
+2. `read_ftext_with_history()` 对无效 history_type 未处理
+3. JSON 格式化器未对 pin 字段进行清理
+4. `pin_tooltip` 无二进制数据过滤
+
+### 预期修复行动
+
+运行 `/gsd-plan-phase 51 --gaps` 生成修复计划，然后：
+- `/gsd-execute-phase 51 --gaps-only` — 执行所有 4 个修复任务
+- 运行/tests/test_phase51_binary_sanitization.py 验证
+- `/gsd-verify-work 51` — 再次 UAT 验证
