@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v8.0
 milestone_name: BP-to-CPP 翻译能力
 status: in_progress
-last_updated: "2026-05-15T10:00:00.000Z"
+last_updated: "2026-05-16T14:30:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 50
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
+  percent: 75
 ---
 
 # v8.0 — BP-to-CPP 翻译能力
@@ -22,9 +22,9 @@ progress:
 | 当前 | 目标 |
 |------|------|
 | ~~linked_to_raw 全空~~ | ✅ Phase 47 已修复 |
-| 无组件数值属性 | 组件位置/旋转/缩放/标志可提取 |
+| ~~无组件数值属性~~ | ✅ Phase 48 已实现 |
 | CallFunction pins 不完整 | 函数签名可推断 |
-| EnhancedInput 触发事件不可见 | BindAction ETriggerEvent 可区分 |
+| ~~EnhancedInput 触发事件不可见~~ | ✅ Phase 50 已实现 |
 
 ## Phase 分解
 
@@ -32,8 +32,8 @@ progress:
 |-------|------|------|
 | 47 | Pin LinkedTo 修复 | ✅ 完成 |
 | 48 | 组件属性递归解析 | ✅ 完成 |
-| 49 | 函数调用引脚解析 | 🔴 未开始 |
-| 50 | EnhancedInput 语义增强 | 🔴 未开始 |
+| 49 | 函数调用引脚解析 | 🟡 PLAN 已就位 |
+| 50 | EnhancedInput 语义增强 | ✅ 完成 |
 
 ## Phase 47: Pin LinkedTo 修复 ✅
 
@@ -55,6 +55,18 @@ execution_flows 有 7 条 flow 含 nodes 数组。
 `format_json_summary()` 添加 `components_count`。
 
 **测试:** 22 passed, 0 regressions。21 个失败均为预先存在（asset version -9）。
+
+## Phase 50: EnhancedInput 语义增强 ✅
+
+**实现:** `ETRIGGER_EVENT_PIN_MAP` 常量 + `K2NodeEnhancedInputAction.trigger_events` 字段。
+从 exec 输出 pins 映射为 ETriggerEvent 枚举值（Started/Ongoing/Completed/Canceled）。
+
+**变更文件:**
+- `constants.py` — 新增 `ETRIGGER_EVENT_PIN_MAP`
+- `models/node_types.py` — `K2NodeEnhancedInputAction` 添加 `trigger_events: List[str]`
+- `serializers/graph.py` — `_extract_trigger_events()` + `create_node_from_archive()` 集成
+
+**测试:** 通过，无新回归。
 
 ## 关键发现
 
@@ -84,8 +96,8 @@ Blueprint 元数据层，没有递归解析组件对象的序列化属性。
 - ~~Phase 47: connections > 0, execution_flows[].nodes 非空~~ ✅ 已完成
 - ~~Phase 48: components 数组包含数值属性（位置/旋转/缩放/标志）~~ ✅ 已完成
 - Phase 49: CallFunction 节点输出 parameters 数组（参数名+类型）
-- Phase 50: input_bindings 数组与 C++ BindAction 对应
+- ~~Phase 50: trigger_events 非空，与 C++ SubscribeToAction 对应~~ ✅ 已完成
 
 JSON 输出需达到"人工可对照 C++ 头文件/构造函数/函数体逐行翻译"的程度。
 
-*Created: 2026-05-15*
+*Updated: 2026-05-16*
