@@ -34,15 +34,15 @@
 
 ---
 
-## v8.0 🔨 数据准备
+## v8.0 🔨 BP-to-CPP 翻译能力
 
-> Phase 47-50 目标：修复 JSON 输出中的结构性 gap，使 `BP_FirstPersonCharacter.uasset`
-> 的解析结果达到"人工可对照 C++ 头文件/构造函数/函数体逐行翻译"的程度。
+> 对比 `BP_FirstPersonCharacter.uasset` 与等价 C++ 实现 (`FirstPersonCCharacter.cpp/h`)，
+> 识别出 4 个 gap，分 4 个 phase 解决。详见 `.planning/milestones/v8.0.md`
 
 | Phase | 名称 | 目标 | 状态 |
 |-------|------|------|------|
 | 47 | Pin LinkedTo 修复 | linked_to_raw 非空，connections > 0 | ✅ 完成 |
-| 48 | 组件属性递归解析 | 输出组件数值型属性 | 🔴 未开始 |
+| 48 | 组件属性递归解析 | 输出组件数值型属性 | ✅ 完成 |
 | 49 | 函数调用引脚解析 | CallFunction 参数引脚完整 | 🔴 未开始 |
 | 50 | EnhancedInput 语义增强 | TriggerEvent 类型可识别 | 🔴 未开始 |
 
