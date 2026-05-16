@@ -122,6 +122,11 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             result["input_action_path"] = _get('input_action_path')
         # Knot/Comment 无额外顶层字段
 
+    # Phase 49: CallFunction 节点提取结构化 parameters
+    if node.class_name == "K2Node_CallFunction":
+        from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+        result["parameters"] = _extract_call_function_parameters(node)
+
     return result
 
 
@@ -261,6 +266,12 @@ def _trace_execution_from_event(
                 fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
                 if fr:
                     node_info["function_name"] = getattr(fr, 'member_name', None)
+            # Phase 49: simplified params for execution flow
+            node_info["params"] = [
+                {"name": pin.pin_name, "type": pin.pin_type.pin_category if pin.pin_type else ""}
+                for pin in current_node.pins
+                if pin.pin_type and pin.pin_type.pin_category != "exec" and pin.direction == 0
+            ]
 
         if current_node.class_name == "K2Node_Event":
             nd = current_node.node_data
