@@ -22,7 +22,7 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v7.0 完成** — 520 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。v8.0 Phase 47-50（BP-to-CPP 翻译）规划中。
+**v8.0 进行中** — Phase 47✅ (Pin LinkedTo 修复), Phase 48/50🟡 (组件属性/EnhancedInput), Phase 49🔴。520 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
 
 ## 架构
 
