@@ -22,6 +22,44 @@ from uasset_read.models.node_types import (
 # 辅助函数
 # ============================================================================
 
+def _sanitize_string(value: str) -> str:
+    """清理字符串中的二进制/null 字符，确保 JSON 安全输出。
+    
+    保留 \n \r \t 等常用控制字符，移除 null 和其他控制字符。
+    """
+    if not value:
+        return value
+    # 移除 null 字符
+    value = value.replace('\x00', '')
+    # 移除其他控制字符（保留 \n \r \t）
+    value = ''.join(c for c in value if c >= ' ' or c in '\n\r\t')
+    return value
+
+
+def _sanitize_pin_dict(pin_dict: dict) -> dict:
+    """清理 pin dict 中所有字符串字段。"""
+    sanitized = {}
+    for key, val in pin_dict.items():
+        if isinstance(val, str):
+            sanitized[key] = _sanitize_string(val)
+        elif isinstance(val, (list, dict)):
+            sanitized[key] = _sanitize_recursive(val)
+        else:
+            sanitized[key] = val
+    return sanitized
+
+
+def _sanitize_recursive(obj):
+    """递归清理列表/字典中的字符串。"""
+    if isinstance(obj, str):
+        return _sanitize_string(obj)
+    elif isinstance(obj, list):
+        return [_sanitize_recursive(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: _sanitize_recursive(v) for k, v in obj.items()}
+    return obj
+
+
 def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     """从节点派生用户友好的节点名（D-19-02）。
 
@@ -92,7 +130,7 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "node_guid": node.node_guid,
         "position": {"x": node.node_pos_x, "y": node.node_pos_y},
         "node_comment": node.node_comment,
-        "pins": [asdict(pin) for pin in node.pins]  # Pin格式保持Phase 18规范
+        "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # 添加字符串清理
     }
 
     # D-20-03: 嵌套结构展开（兼容 dict 和 dataclass node_data）
