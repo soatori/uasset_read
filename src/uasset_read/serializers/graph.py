@@ -622,6 +622,33 @@ def read_edgraph_node_comment(archive: FArchive) -> Dict[str, Any]:
     }
 
 
+def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]:
+    """从 EnhancedInputAction 节点的 pins 提取 trigger_events 映射。
+
+    遍历 exec 方向的输出 pin，将 pin 名称通过 ETRIGGER_EVENT_PIN_MAP
+    映射为 ETriggerEvent 枚举字符串值。
+    """
+    from uasset_read.constants import ETRIGGER_EVENT_PIN_MAP
+
+    trigger_events = {}
+    for pin in pins:
+        pin_category = getattr(pin.pin_type, 'pin_category', '') if pin.pin_type else ''
+        direction = getattr(pin, 'direction', None)
+        pin_name = getattr(pin, 'pin_name', '')
+        
+        # Check if this is an output exec pin or if pin_category matches trigger events
+        is_exec_output = (pin_category == "exec" and direction == 1)
+        is_trigger_pin = (pin_name in ETRIGGER_EVENT_PIN_MAP)
+        is_trigger_category = (pin_category in ETRIGGER_EVENT_PIN_MAP)
+        
+        if is_exec_output or is_trigger_pin or is_trigger_category:
+            # Use pin_name if available and valid, otherwise use pin_category
+            trigger_name = pin_name if pin_name and pin_name in ETRIGGER_EVENT_PIN_MAP else pin_category
+            if trigger_name in ETRIGGER_EVENT_PIN_MAP:
+                trigger_events[trigger_name] = ETRIGGER_EVENT_PIN_MAP[trigger_name]
+    return trigger_events
+
+
 def read_k2node_enhanced_input(
     archive: FArchive,
     name_map: List[str]
@@ -669,6 +696,9 @@ def create_node_from_archive(
         base_node.node_data = read_edgraph_node_comment(archive)
     elif class_name == "K2Node_EnhancedInputAction":
         base_node.node_data = read_k2node_enhanced_input(archive, name_map)
+        # Populate trigger_events from already-parsed pins
+        if isinstance(base_node.node_data, dict):
+            base_node.node_data["trigger_events"] = _build_trigger_events_from_pins(base_node.pins)
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
