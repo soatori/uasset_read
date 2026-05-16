@@ -8,7 +8,7 @@ Per D-06: 数据和序列化解耦。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple, Self, TYPE_CHECKING
+from typing import Optional, List, Tuple, Dict, Self, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -85,6 +85,7 @@ class EdGraphNodeComment(UEdGraphNode):
 class K2NodeEnhancedInputAction(UEdGraphNode):
     """K2Node_EnhancedInputAction 输入动作节点。"""
     input_action_path: str = ""
+    trigger_events: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
