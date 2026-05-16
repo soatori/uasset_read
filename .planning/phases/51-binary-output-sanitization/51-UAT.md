@@ -1,20 +1,16 @@
 ---
 
 ---
-status: in_progress
+status: planned
 phase: 51-binary-output-sanitization
-source: [51-PLAN.md]
+source: [51-PLAN.md, FIXPLAN.md]
 started: "2026-05-16T17:00:00.000Z"
-updated: "2026-05-16T18:00:00.000Z"
+updated: "2026-05-16T18:30:00.000Z"
 ---
 
 ## Current Test
 
-number: 1
-name: FString 读取 null 字符检测逻辑
-expected: |
-  read_fstring() 在检测到 null 字符比例超过 30% 时返回空字符串并记录警告日志
-awaiting: testing
+[testing complete, fix plan created]
 
 ## Tests
 
@@ -121,15 +117,16 @@ blocked: 0
 
 ### 当前状态
 
-Phase 51 修复尚未实施。UAT 验证无法进行，因为：
-1. `read_fstring()` 只有 `rstrip('\x00')`，无 null_ratio 检测
-2. `read_ftext_with_history()` 对无效 history_type 未处理
-3. JSON 格式化器未对 pin 字段进行清理
-4. `pin_tooltip` 无二进制数据过滤
+Phase 51 修复计划已创建 (`FIXPLAN.md`)，包含 4 个修复任务：
+1. ⏳ `read_fstring()` 添加 null_ratio 检测
+2. ⏳ `read_ftext_with_history()` 添加无效 history_type 处理
+3. ⏳ `format_node_dict()` 添加字符串清理
+4. ⏳ `pin_tooltip` 添加二进制数据过滤
 
 ### 预期修复行动
 
-运行 `/gsd-plan-phase 51 --gaps` 生成修复计划，然后：
-- `/gsd-execute-phase 51 --gaps-only` — 执行所有 4 个修复任务
-- 运行/tests/test_phase51_binary_sanitization.py 验证
-- `/gsd-verify-work 51` — 再次 UAT 验证
+运行 `/gsd-execute-phase 51 --gaps-only` 执行所有 4 个修复任务：
+- 修改 `src/uasset_read/archive.py` — Task 1
+- 修改 `src/uasset_read/serializers/graph.py` — Task 2, 4
+- 修改 `src/uasset_read/graph/flow_builder.py` — Task 3
+- 创建 `tests/test_phase51_binary_sanitization.py` — 单元测试
