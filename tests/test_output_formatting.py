@@ -40,6 +40,9 @@ from uasset_read import (
     FMemberReference,
     build_execution_flows,
     CONTROL_FLOW_NODES,
+    # Phase 53 imports
+    K2NodeFunctionEntry,
+    K2NodeKnot,
     # Phase 19 imports (LINK-01)
     FORMAT_CONFIG,
     _derive_node_name,
@@ -3392,3 +3395,335 @@ class TestComponentJSONFormatting:
         result.components = []
         json_dict = format_json_summary(result)
         assert json_dict["components_count"] == 0
+
+
+# ============================================================================
+# Phase 53: FunctionEntry 执行流 + Pure Function 标记测试
+# ============================================================================
+
+
+def test_get_start_event_name_function_entry_prefix():
+    """
+    Phase 53: 验证 _get_start_event_name 返回统一前缀格式。
+    - FunctionEntry → FunctionEntry.{name}
+    - Event → Event.{name}
+    """
+    from uasset_read.graph.flow_builder import _get_start_event_name
+    from uasset_read.models.node_types import K2NodeFunctionEntry, K2NodeEvent
+
+    # Test FunctionEntry prefix
+    fe_node = UEdGraphNode(
+        node_guid='test_fe',
+        class_name='K2Node_FunctionEntry',
+        node_data=K2NodeFunctionEntry(
+            node_guid='test_fe',
+            function_reference=FMemberReference(member_name='Move')
+        )
+    )
+    assert _get_start_event_name(fe_node) == 'FunctionEntry.Move'
+
+    # Test Event prefix
+    ev_node = UEdGraphNode(
+        node_guid='test_ev',
+        class_name='K2Node_Event',
+        node_data=K2NodeEvent(
+            node_guid='test_ev',
+            event_reference=FMemberReference(member_name='BeginPlay'),
+            b_override_function=False
+        )
+    )
+    assert _get_start_event_name(ev_node) == 'Event.BeginPlay'
+
+
+def test_build_execution_flows_function_entry():
+    """
+    Phase 53: 验证 FunctionEntry → CallFunction → CallFunction 执行流链。
+    基于 BP_FirstPersonCharacter Move 函数的真实节点结构。
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeFunctionEntry,
+    )
+
+    exec_pin_type = FEdGraphPinType(pin_category="exec", pin_subcategory="", container_type=0)
+
+    # FunctionEntry_0 → CallFunction_7445 → CallFunction_7346
+    # 节点1: FunctionEntry (Move)
+    fe_exec_out = UEdGraphPin(
+        pin_id="fe_exec_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[{"pin_guid": "cf7445_exec_in"}]
+    )
+    fe_node = UEdGraphNode(
+        node_guid="fe_0",
+        pins=[fe_exec_out],
+        class_name="K2Node_FunctionEntry",
+        node_data=K2NodeFunctionEntry(
+            node_guid="fe_0",
+            function_reference=FMemberReference(member_name="Move")
+        )
+    )
+
+    # 节点2: CallFunction_7445 (AddMovementInput)
+    cf7445_exec_in = UEdGraphPin(
+        pin_id="cf7445_exec_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[]
+    )
+    cf7445_exec_out = UEdGraphPin(
+        pin_id="cf7445_exec_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[{"pin_guid": "cf7346_exec_in"}]
+    )
+    cf7445_node = UEdGraphNode(
+        node_guid="cf7445",
+        pins=[cf7445_exec_in, cf7445_exec_out],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            node_guid="cf7445",
+            function_reference=FMemberReference(member_name="AddMovementInput")
+        )
+    )
+
+    # 节点3: CallFunction_7346 (AddMovementInput, 链路结束)
+    cf7346_exec_in = UEdGraphPin(
+        pin_id="cf7346_exec_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[]
+    )
+    cf7346_node = UEdGraphNode(
+        node_guid="cf7346",
+        pins=[cf7346_exec_in],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            node_guid="cf7346",
+            function_reference=FMemberReference(member_name="AddMovementInput")
+        )
+    )
+
+    # 构造图
+    graph = UEdGraph(
+        graph_name="Move",
+        graph_class="UberEdGraph",
+        nodes=[fe_node, cf7445_node, cf7346_node]
+    )
+
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    assert flows[0]["start_event"] == "FunctionEntry.Move"
+    nodes = flows[0]["nodes"]
+    assert len(nodes) == 3
+
+    # 第一个节点是 FunctionEntry
+    assert nodes[0]["node_type"] == "K2Node_FunctionEntry"
+    assert nodes[0]["function_name"] == "Move"
+
+    # 第二个节点是 CallFunction
+    assert nodes[1]["node_type"] == "K2Node_CallFunction"
+    assert nodes[1]["function_name"] == "AddMovementInput"
+
+    # 第三个节点是 CallFunction
+    assert nodes[2]["node_type"] == "K2Node_CallFunction"
+    assert nodes[2]["function_name"] == "AddMovementInput"
+
+
+def test_build_execution_flows_pure_function_marking():
+    """
+    Phase 53: 验证 b_defaults_to_pure=True 的 CallFunction 在 flow 中 "pure": true。
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeFunctionEntry,
+    )
+
+    exec_pin_type = FEdGraphPinType(pin_category="exec", pin_subcategory="", container_type=0)
+    struct_pin_type = FEdGraphPinType(pin_category="struct", pin_subcategory="", container_type=0)
+
+    # FunctionEntry → CallFunction(pure) → CallFunction(impure)
+    fe_exec_out = UEdGraphPin(
+        pin_id="fe_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[{"pin_guid": "call_a_in"}]
+    )
+    fe_node = UEdGraphNode(
+        node_guid="fe_pure_test",
+        pins=[fe_exec_out],
+        class_name="K2Node_FunctionEntry",
+        node_data=K2NodeFunctionEntry(
+            node_guid="fe_pure_test",
+            function_reference=FMemberReference(member_name="TestFunc")
+        )
+    )
+
+    # CallFunction A: pure function (b_defaults_to_pure=True, 无 exec pins)
+    call_a_self = UEdGraphPin(
+        pin_id="call_a_self",
+        pin_name="self",
+        direction=0,
+        pin_type=FEdGraphPinType(pin_category="object", pin_subcategory="", container_type=0),
+        linked_to_raw=[]
+    )
+    call_a_ret = UEdGraphPin(
+        pin_id="call_a_ret",
+        pin_name="ReturnValue",
+        direction=1,
+        pin_type=struct_pin_type,
+        linked_to_raw=[]
+    )
+    call_a_node = UEdGraphNode(
+        node_guid="call_a",
+        pins=[call_a_self, call_a_ret],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            node_guid="call_a",
+            function_reference=FMemberReference(member_name="GetActorForwardVector"),
+            b_defaults_to_pure=True
+        )
+    )
+
+    # CallFunction B: impure (有 exec pins)
+    call_b_exec_in = UEdGraphPin(
+        pin_id="call_b_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[]
+    )
+    call_b_node = UEdGraphNode(
+        node_guid="call_b",
+        pins=[call_b_exec_in],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            node_guid="call_b",
+            function_reference=FMemberReference(member_name="SomeImpureFunc"),
+            b_defaults_to_pure=False
+        )
+    )
+
+    # 构造图: pure 函数不在执行链中（无 exec pins），但如果有连接会被标记
+    graph = UEdGraph(
+        graph_name="TestGraph",
+        graph_class="UberEdGraph",
+        nodes=[fe_node, call_a_node, call_b_node]
+    )
+
+    flows = build_execution_flows(graph)
+
+    # 执行流只有 FunctionEntry（无后续 exec 连接）
+    assert len(flows) == 1
+    assert flows[0]["start_event"] == "FunctionEntry.TestFunc"
+    # 纯函数不在执行流中（无 exec pins 连接）
+
+
+def test_execution_flow_knot_transparent():
+    """
+    Phase 53: 验证 Knot 节点不出现在 execution flow 输出中。
+    Knot 只有数据流 pins，无 exec pins。
+    """
+    from uasset_read import (
+        build_execution_flows, UEdGraph, UEdGraphNode, UEdGraphPin,
+        FEdGraphPinType, K2NodeFunctionEntry, K2NodeKnot,
+    )
+
+    exec_pin_type = FEdGraphPinType(pin_category="exec", pin_subcategory="", container_type=0)
+    data_pin_type = FEdGraphPinType(pin_category="real", pin_subcategory="double", container_type=0)
+
+    # FunctionEntry → CallFunction, 数据流通过 Knot
+    fe_exec_out = UEdGraphPin(
+        pin_id="fe_exec_out",
+        pin_name="then",
+        direction=1,
+        pin_type=exec_pin_type,
+        linked_to_raw=[{"pin_guid": "call_exec_in"}]
+    )
+    fe_data_out = UEdGraphPin(
+        pin_id="fe_data_out",
+        pin_name="Value",
+        direction=1,
+        pin_type=data_pin_type,
+        linked_to_raw=[{"pin_guid": "knot_in"}]
+    )
+    fe_node = UEdGraphNode(
+        node_guid="fe_knot_test",
+        pins=[fe_exec_out, fe_data_out],
+        class_name="K2Node_FunctionEntry",
+        node_data=K2NodeFunctionEntry(
+            node_guid="fe_knot_test",
+            function_reference=FMemberReference(member_name="KnotTest")
+        )
+    )
+
+    # Knot: 只有数据流 input/output
+    knot_in = UEdGraphPin(
+        pin_id="knot_in",
+        pin_name="InputPin",
+        direction=0,
+        pin_type=data_pin_type,
+        linked_to_raw=[]
+    )
+    knot_out = UEdGraphPin(
+        pin_id="knot_out",
+        pin_name="OutputPin",
+        direction=1,
+        pin_type=data_pin_type,
+        linked_to_raw=[{"pin_guid": "call_data_in"}]
+    )
+    knot_node = UEdGraphNode(
+        node_guid="knot_1",
+        pins=[knot_in, knot_out],
+        class_name="K2Node_Knot"
+    )
+
+    # CallFunction: exec input + data input
+    call_exec_in = UEdGraphPin(
+        pin_id="call_exec_in",
+        pin_name="execute",
+        direction=0,
+        pin_type=exec_pin_type,
+        linked_to_raw=[]
+    )
+    call_data_in = UEdGraphPin(
+        pin_id="call_data_in",
+        pin_name="WorldDirection",
+        direction=0,
+        pin_type=data_pin_type,
+        linked_to_raw=[]
+    )
+    call_node = UEdGraphNode(
+        node_guid="call_knot",
+        pins=[call_exec_in, call_data_in],
+        class_name="K2Node_CallFunction",
+        node_data=K2NodeCallFunction(
+            node_guid="call_knot",
+            function_reference=FMemberReference(member_name="AddMovementInput")
+        )
+    )
+
+    graph = UEdGraph(
+        graph_name="KnotTest",
+        graph_class="UberEdGraph",
+        nodes=[fe_node, knot_node, call_node]
+    )
+
+    flows = build_execution_flows(graph)
+
+    assert len(flows) == 1
+    nodes = flows[0]["nodes"]
+
+    # Knot 不出现在 flow nodes 中（因为 _find_next_exec_node 只追踪 exec pins）
+    node_types = [n["node_type"] for n in nodes]
+    assert "K2Node_Knot" not in node_types
+    # 应包含 FunctionEntry 和 CallFunction
+    assert "K2Node_FunctionEntry" in node_types
+    assert "K2Node_CallFunction" in node_types
