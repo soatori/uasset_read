@@ -2306,7 +2306,7 @@ class TestBuildConnectionsMapNameMode:
 
 def test_start_event_types_contains_four_types():
     """
-    验证START_EVENT_TYPES包含4种起点类型（D-19-10）。
+    验证START_EVENT_TYPES包含5种起点类型（D-19-10，Phase 52 扩展）。
 
     LINK-02: 执行流起点类型扩展
     """
@@ -2316,7 +2316,8 @@ def test_start_event_types_contains_four_types():
     assert "K2Node_EnhancedInputAction" in START_EVENT_TYPES
     assert "K2Node_VariableSet" in START_EVENT_TYPES
     assert "K2Node_CustomEvent" in START_EVENT_TYPES
-    assert len(START_EVENT_TYPES) == 4
+    assert "K2Node_FunctionEntry" in START_EVENT_TYPES
+    assert len(START_EVENT_TYPES) == 5
 
 
 def test_branch_type_map_complete():

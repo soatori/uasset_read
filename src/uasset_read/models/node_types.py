@@ -92,3 +92,23 @@ class K2NodeEnhancedInputAction(UEdGraphNode):
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_enhanced_input
         return read_k2node_enhanced_input(archive, name_map)
+
+
+@dataclass
+class K2NodeFunctionEntry(UEdGraphNode):
+    """K2Node_FunctionEntry 函数入口节点。"""
+    function_reference: Optional[FMemberReference] = None
+    extra_flags: int = 0
+    b_is_editable: bool = False
+
+    @classmethod
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_functionentry
+        return read_k2node_functionentry(archive, name_map, import_map, export_map)

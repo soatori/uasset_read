@@ -10,6 +10,7 @@ from .flow_builder import (
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    is_function_graph,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "build_connections_map",
     "build_graphs_summary",
     "format_graphs_json",
+    "is_function_graph",
 ]
