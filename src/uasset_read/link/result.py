@@ -40,3 +40,4 @@ class LinkerParseResult:
     imports: List[Dict] = field(default_factory=list)
     soft_references: List[Dict] = field(default_factory=list)
     circular_deps: List[List[str]] = field(default_factory=list)
+    components: List[Dict] = field(default_factory=list)
