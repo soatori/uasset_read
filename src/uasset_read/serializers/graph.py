@@ -34,7 +34,7 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction
+from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
 
 
 def _rcn(idx, im, em, lk):
@@ -75,23 +75,23 @@ def read_ed_graph_pin_type(
         archive.read_name(name_map)  # TerminalSubCategory
         archive.read_i32()           # TerminalSubCategoryObject
 
-    # bIsReference / bIsWeakPointer (UE5 1-byte bool)
-    pin_type.is_reference = archive.read_bool_1byte()
-    pin_type.is_weak_pointer = archive.read_bool_1byte()
+    # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # FSimpleMemberReference (UE5 始终存在)
     archive.read_i32()       # MemberParent
     archive.read_name(name_map)  # MemberName
     archive.read_bytes(16)   # MemberGuid
 
-    # bIsConst (UE5 始终存在, 1-byte bool)
-    pin_type.is_const = archive.read_bool_1byte()
+    # bIsConst (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_const = archive.read_bool()
 
-    # bIsUObjectWrapper (UE5 始终存在, 1-byte bool)
-    pin_type.is_uobject_wrapper = archive.read_bool_1byte()
+    # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
-    # bSerializeAsSinglePrecisionFloat (UE5 始终存在, 1-byte bool)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool_1byte()
+    # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
 
     return pin_type
 
@@ -172,7 +172,18 @@ def read_ftext_with_history(
     """
     consumed = 0
     start_pos = archive.tell()
+    logger = logging.getLogger(__name__)
 
+    # 新增：验证 history_type 范围
+    valid_history_types = list(range(-1, 11))  # -1, 0, 1, ..., 10
+    if history_type not in valid_history_types:
+        # 无效 history_type：记录 debug 日志并返回空字符串
+        logger.debug(
+            "Invalid FText history_type %d at pos %d — returning empty",
+            history_type, start_pos
+        )
+        return "", archive.tell() - start_pos
+    
     try:
         if history_type == 255 or history_type == -1:  # None (0xFF unsigned or -1 signed)
             # None: flags(4) + htype(1) + bHasCultureInvariantString
@@ -381,6 +392,15 @@ def read_ue_graph_pin(
     # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
     try:
         pin_tooltip = archive.read_fstring()
+        # 额外检查：pin_tooltip 专用二进制数据过滤
+        # 注意：archive._contains_binary_data 不存在，需要从 archive 模块导入
+        from uasset_read.archive import _contains_binary_data
+        if _contains_binary_data(pin_tooltip):
+            archive.logger.debug(
+                "Binary pinTooltip at pos %d for pin '%s' — returning empty",
+                archive.tell() - len(pin_tooltip), pin_name
+            )
+            pin_tooltip = ""
     except Exception:
         pin_tooltip = ""
 
@@ -622,6 +642,33 @@ def read_edgraph_node_comment(archive: FArchive) -> Dict[str, Any]:
     }
 
 
+def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]:
+    """从 EnhancedInputAction 节点的 pins 提取 trigger_events 映射。
+
+    遍历 exec 方向的输出 pin，将 pin 名称通过 ETRIGGER_EVENT_PIN_MAP
+    映射为 ETriggerEvent 枚举字符串值。
+    """
+    from uasset_read.constants import ETRIGGER_EVENT_PIN_MAP
+
+    trigger_events = {}
+    for pin in pins:
+        pin_category = getattr(pin.pin_type, 'pin_category', '') if pin.pin_type else ''
+        direction = getattr(pin, 'direction', None)
+        pin_name = getattr(pin, 'pin_name', '')
+        
+        # Check if this is an output exec pin or if pin_category matches trigger events
+        is_exec_output = (pin_category == "exec" and direction == 1)
+        is_trigger_pin = (pin_name in ETRIGGER_EVENT_PIN_MAP)
+        is_trigger_category = (pin_category in ETRIGGER_EVENT_PIN_MAP)
+        
+        if is_exec_output or is_trigger_pin or is_trigger_category:
+            # Use pin_name if available and valid, otherwise use pin_category
+            trigger_name = pin_name if pin_name and pin_name in ETRIGGER_EVENT_PIN_MAP else pin_category
+            if trigger_name in ETRIGGER_EVENT_PIN_MAP:
+                trigger_events[trigger_name] = ETRIGGER_EVENT_PIN_MAP[trigger_name]
+    return trigger_events
+
+
 def read_k2node_enhanced_input(
     archive: FArchive,
     name_map: List[str]
@@ -631,6 +678,21 @@ def read_k2node_enhanced_input(
     return {
         "input_action_path": input_action_path,
     }
+
+
+def read_k2node_functionentry(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
+    function_reference: Optional[FMemberReference] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_FunctionEntry 特有字段，返回字典（作为 node_data）。
+
+    FunctionReference 已在 read_ue_graph_node() 中从 PropertyTag 解析。
+    """
+    return {"function_reference": function_reference}
 
 
 # ============================================================================
@@ -647,6 +709,7 @@ def create_node_from_archive(
     base_node: UEdGraphNode,
     raw_properties: Optional[Dict[str, Any]] = None,
     linker: Optional["PackageLinker"] = None,
+    node_refs: Optional[Dict[str, Any]] = None,
 ) -> UEdGraphNode:
     """根据 class_name 分派到对应的节点读取函数（D-07/D-08 工厂模式）。"""
     class_name = base_node.class_name
@@ -669,6 +732,15 @@ def create_node_from_archive(
         base_node.node_data = read_edgraph_node_comment(archive)
     elif class_name == "K2Node_EnhancedInputAction":
         base_node.node_data = read_k2node_enhanced_input(archive, name_map)
+        # Populate trigger_events from already-parsed pins
+        if isinstance(base_node.node_data, dict):
+            base_node.node_data["trigger_events"] = _build_trigger_events_from_pins(base_node.pins)
+    elif class_name == "K2Node_FunctionEntry":
+        fr = node_refs.get('function_reference') if node_refs else None
+        base_node.node_data = read_k2node_functionentry(
+            archive, name_map, import_map, export_map, linker,
+            function_reference=fr,
+        )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
@@ -799,6 +871,8 @@ def read_ue_graph_node(
                 node_guid = archive.read_bytes(16).hex()
             elif tag.name == "NodeComment" and tag.size > 0:
                 node_comment = archive.read_fstring()
+            elif tag.name == "ExtraFlags":
+                raw_properties[tag.name] = archive.read_i32()
             elif tag.size > 0:
                 # 收集未知 PropertyTag（用于未知节点类型调试和未来扩展）
                 value_start = archive.tell()
@@ -853,10 +927,16 @@ def read_ue_graph_node(
         class_name=class_name,
     )
 
+    node_refs = {
+        'function_reference': function_reference,
+        'event_reference': event_reference,
+    }
+
     return create_node_from_archive(
         archive, name_map, summary, export_map, import_map, node_export, base_node,
         raw_properties=raw_properties if raw_properties else None,
         linker=linker,
+        node_refs=node_refs,
     )
 
 

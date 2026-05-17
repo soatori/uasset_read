@@ -60,6 +60,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
+    parser.add_argument('--function-graphs', action='store_true',
+                        help='Include top-level function_graphs array in JSON output (output_version 5.0) (Phase 55)')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
 
@@ -116,11 +118,16 @@ def main():
 
     # Phase 8: --graph flag handling (D-08-12/13)
     # 优先级：--graph 检查在最前
+    # Phase 55: --function-graphs 隐含 --json（如果无其他格式 flag）
+    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown):
+        args.json = True  # 隐含 JSON
+
     if args.graph:
         # D-08-13: --graph + --json/--verbose = full output with graphs
         if args.json or args.verbose:
             include_schema = args.schema or args.verbose
-            output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
+            include_function_graphs = args.function_graphs  # Phase 55
+            output_str = json.dumps(format_json_full(result, include_schema, include_function_graphs), indent=2, ensure_ascii=False)
         elif args.text:
             # --graph --text = text output with Graphs section
             output_str = format_text_full(result)
@@ -133,7 +140,8 @@ def main():
         output_str = format_markdown(result)
     elif args.json:
         include_schema = args.schema or args.verbose
-        output_str = json.dumps(format_json_full(result, include_schema), indent=2, ensure_ascii=False)
+        include_function_graphs = args.function_graphs  # Phase 55
+        output_str = json.dumps(format_json_full(result, include_schema, include_function_graphs), indent=2, ensure_ascii=False)
     elif args.summary:
         include_schema = args.schema or args.verbose
         output_str = json.dumps(format_json_summary(result, include_schema), indent=2, ensure_ascii=False)
