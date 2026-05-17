@@ -262,7 +262,7 @@ def sample_function_graph_with_data_flow():
         pin_name="ReturnValue",
         direction=1,  # output
         pin_type=vector_pin_type,
-        linked_to_raw=[]  # 连接到 CallFunction_7445 WorldDirection
+        linked_to_raw=[{"pin_guid": "F7F1DA6A4A9AD273C811828673CC525C"}]  # → CallFunction_7445 WorldDirection
     )
 
     call8520_node = UEdGraphNode(
@@ -422,7 +422,7 @@ def sample_function_graph_with_data_flow():
         pin_name="ReturnValue",
         direction=1,
         pin_type=vector_pin_type,
-        linked_to_raw=[]
+        linked_to_raw=[{"pin_guid": "375CEFD8460F7D3B99771F9AA623A2B8"}]  # → CallFunction_7346 WorldDirection
     )
 
     call8029_node = UEdGraphNode(
