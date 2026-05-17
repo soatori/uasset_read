@@ -100,6 +100,17 @@ def _post_process(
     if hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
+    # Component property extraction (Phase 48)
+    try:
+        from uasset_read.blueprint.component_extractor import extract_components
+        if hasattr(result, 'components'):
+            result.components = extract_components(export_map, import_map)
+    except ImportError:
+        pass  # component_extractor module does not exist yet
+    except Exception as e:
+        if hasattr(result, 'errors'):
+            result.errors.append(f"component extraction error: {e}")
+
     # Blueprint Graph 提取
     try:
         from uasset_read.graph import extract_blueprint_graphs

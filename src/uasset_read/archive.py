@@ -4,7 +4,7 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 支持字节序检测和交换、mmap 大文件映射、边界验证。
 来自 uasset_read.py 第 204-895 行。
 """
-
+import logging
 import mmap
 from typing import Optional, Dict, BinaryIO
 
@@ -28,6 +28,7 @@ class FArchive:
         self._mmap: Optional[mmap.mmap] = None
         self._use_mmap: bool = False
         self._mmap_warning: Optional[str] = None
+        self._logger = logging.getLogger(__name__)
 
         try:
             self._file_size = __import__('os').path.getsize(path)
@@ -239,11 +240,30 @@ class FArchive:
             if utf16_len > MAX_FSTRING_LENGTH:
                 raise ParseError(f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(utf16_len)
-            return data.decode('utf-16', errors='replace').rstrip('\x00')
-        if length > MAX_FSTRING_LENGTH:
-            raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
-        data = self.read(length)
-        return data.decode('utf-8', errors='replace').rstrip('\x00')
+            # 先检查 null_ratio（在 rstrip 之前）
+            null_ratio = data.count(b'\x00') / max(len(data), 1)
+            if null_ratio > 0.3:
+                self._logger.warning(
+                    "UTF-16 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
+                    self.tell() - length, null_ratio * 100
+                )
+                return ""
+            result = data.decode('utf-16', errors='replace').rstrip('\x00')
+        else:
+            if length > MAX_FSTRING_LENGTH:
+                raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
+            data = self.read(length)
+            # 先检查 null_ratio（在 rstrip 之前）
+            null_ratio = data.count(b'\x00') / max(len(data), 1)
+            if null_ratio > 0.3:
+                self._logger.warning(
+                    "UTF-8 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
+                    self.tell() - length, null_ratio * 100
+                )
+                return ""
+            result = data.decode('utf-8', errors='replace').rstrip('\x00')
+
+        return result
 
     def read_name(self, name_map: list) -> str:
         """读取 FName（名称表索引 + 实例编号）。"""
@@ -255,3 +275,20 @@ class FArchive:
                 return f"{base_name}_{number}"
             return base_name
         return "None"
+
+
+def _contains_binary_data(value: str, threshold: float = 0.3) -> bool:
+    """检查字符串是否包含大量二进制/null 字符。
+    
+    用于 FString/FText 输出的二进制数据检测。
+    
+    Args:
+        value: 待检查的字符串
+        threshold: null 字符比例阈值，默认 0.3 (30%)
+    
+    Returns:
+        True 如果 null 字符比例超过阈值，表示可能包含二进制数据
+    """
+    if not value:
+        return False
+    return value.count('\x00') / len(value) > threshold

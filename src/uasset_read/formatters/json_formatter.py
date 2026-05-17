@@ -20,7 +20,7 @@ from uasset_read.serializers.object_resources import get_asset_class, get_asset_
 from .helpers import build_status_info, build_schema_info, resolve_fpackage_index
 
 
-def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
+def format_json_full(result: ParseResult, include_schema: bool = False, include_function_graphs: bool = False) -> Dict:
     """
     完整 JSON 输出（OUT-03）。
 
@@ -34,13 +34,16 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     Per D-20-05: output_version 升级到 "4.0"
     Per D-20-06: blueprint_name 从 package_name 提取
     Per D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
+    Phase 55: output_version 升级到 "5.0" when include_function_graphs=True
 
     Args:
         result: ParseResult 来自 parse_uasset()
         include_schema: bool，是否包含 _schema 字段（OUT-05）
+        include_function_graphs: bool，是否包含顶层 function_graphs 数组（Phase 55）
 
     Returns:
         Dict: 包含 status, output_version, summary, exports, blueprint, graphs_summary, errors
+        当 include_function_graphs=True 时，额外包含 function_graphs 顶层数组
     """
     summary_dict = {}
     if result.summary:
@@ -65,9 +68,12 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
     # Phase 31 的 build_graphs_summary 用于顶层 graphs_summary
     from uasset_read.graph import build_graphs_summary
 
+    # Phase 55: output_version 条件化
+    output_version = "5.0" if include_function_graphs else "4.0"
+
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
-        "output_version": "4.0",  # D-20-05: 反映输出结构重大变化
+        "output_version": output_version,  # D-20-05: 反映输出结构重大变化（Phase 55: 条件化）
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
@@ -76,6 +82,12 @@ def format_json_full(result: ParseResult, include_schema: bool = False) -> Dict:
         # 原因：依赖分析字段不属于格式化模块核心职责
         "errors": result.errors
     }
+
+    # Phase 55: 添加 function_graphs 顶层数组（仅在 include_function_graphs=True）
+    if include_function_graphs and result.graphs:
+        from uasset_read.graph import build_function_graphs
+        blueprint_functions = result.blueprint.functions if result.blueprint else None
+        output["function_graphs"] = build_function_graphs(result.graphs, blueprint_functions)
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
     if include_schema:
@@ -468,4 +480,81 @@ def _format_event_enhanced(event: BlueprintEvent) -> dict:
             "is_callable_in_blueprint": event.multicast_delegate.is_callable_in_blueprint
         }
 
+    return result
+
+
+def _extract_call_function_parameters(
+    node: Any,
+    pin_lookup: Optional[Dict] = None,
+    node_lookup: Optional[Dict] = None,
+    node_name_lookup: Optional[Dict] = None
+) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49 + Phase 54）。
+
+    过滤 exec pins，将输入/输出参数分离为结构化数组。
+    Phase 54: 增强 input_params 的 data_source 字段（数据来源追踪）。
+
+    Args:
+        node: K2Node_CallFunction 节点
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表（可选，用于 data_source）
+        node_lookup: node_guid → node 查找表（可选，用于 data_source）
+        node_name_lookup: node_guid → node_name 查找表（可选，用于 data_source）
+
+    Returns:
+        Dict: {"input_params": [...], "output_params": [...]}
+    """
+    input_params: List[Dict] = []
+    output_params: List[Dict] = []
+
+    for pin in node.pins:
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        param: Dict[str, Any] = {
+            "name": pin.pin_name,
+            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+        }
+        if pin.pin_type:
+            if pin.pin_type.pin_subcategory:
+                param["pin_subcategory"] = pin.pin_type.pin_subcategory
+            if pin.pin_type.is_reference:
+                param["is_reference"] = True
+        if pin.default_value is not None and pin.default_value != "":
+            param["default_value"] = pin.default_value
+
+        if pin.direction == 0:  # Input
+            # Phase 54: 添加 data_source 字段（仅当 lookup 可用时）
+            if pin_lookup and node_lookup and node_name_lookup:
+                from uasset_read.graph.flow_builder import _trace_data_source
+                try:
+                    data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
+                    if data_source:
+                        param["data_source"] = data_source
+                except Exception:
+                    pass  # 追踪失败时不影响基本参数提取
+
+            input_params.append(param)
+        else:  # Output
+            output_params.append(param)
+
+    return {"input_params": input_params, "output_params": output_params}
+
+
+def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """格式化组件列表用于 JSON 输出（D-06, Phase 48）。"""
+    result = []
+    for comp in components:
+        comp_dict = {
+            "name": comp.get("name", ""),
+            "class": comp.get("class", ""),
+            "properties": comp.get("properties", {}),
+            "transforms": {},
+        }
+        transforms = comp.get("transforms", {})
+        for key, value in transforms.items():
+            if is_dataclass(value) and not isinstance(value, type):
+                comp_dict["transforms"][key] = asdict(value)
+            else:
+                comp_dict["transforms"][key] = value
+        result.append(comp_dict)
     return result
