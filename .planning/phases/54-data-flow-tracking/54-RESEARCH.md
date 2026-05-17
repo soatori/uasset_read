@@ -630,22 +630,27 @@ CallFunction_8520 (GetActorRightVector) [pure]
 | A3 | VariableGet 非边界节点（应继续追踪） | 图边界检测 | 若 VariableGet 应作为边界，需调整 `DATA_BOUNDARY_NODES` |
 | A4 | linked_to_raw 通常只有一个连接 | _trace_data_source | 若有多个连接（合并），返回 `data_sources` 数组支持 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **VariableGet 是否为边界节点**
+以下问题在 STATE.md 和 RESEARCH.md 分析中已确定解决方案：
+
+1. **VariableGet 是否为边界节点** (RESOLVED)
    - What we know: VariableSet 是本地变量定义（边界），VariableGet 是读取
    - What's unclear: VariableGet 是否应继续追踪到 VariableSet，还是作为边界
    - Recommendation: 不作为边界，继续追踪（VariableGet → VariableSet）。但 v9.0 scope 不包含变量追踪，Phase 54 先标记为 `source_type: "local_variable"`（简化）。
+   - **RESOLVED: 采用简化方案，标记为 `source_type: "local_variable"`，不深度追踪到 VariableSet**
 
-2. **data_providers 字段位置**
+2. **data_providers 字段位置** (RESOLVED)
    - What we know: Pure 函数需要在输出参数中标注数据去向
    - What's unclear: 字段放在 execution_flow 的节点级，还是 params.output_params 内
    - Recommendation: 放在节点级 `"data_providers": [...]`（与 data_sources 对称，便于反向查询）。
+   - **RESOLVED: 采用节点级 `data_providers` 字段**
 
-3. **Knot 链断裂处理**
+3. **Knot 链断裂处理** (RESOLVED)
    - What we know: Knot 链可能断裂（最后一个 Knot 的 OutputPin 无连接）
    - What's unclear: 断裂时返回什么
    - Recommendation: 返回 `{"source_type": "knot_chain_broken", "last_pin_guid": ...}`，便于调试。
+   - **RESOLVED: 返回 `source_type: "knot_chain_broken"` 标记**
 
 ## Environment Availability
 
