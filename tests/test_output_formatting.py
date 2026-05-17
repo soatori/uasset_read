@@ -3727,3 +3727,195 @@ def test_execution_flow_knot_transparent():
     # 应包含 FunctionEntry 和 CallFunction
     assert "K2Node_FunctionEntry" in node_types
     assert "K2Node_CallFunction" in node_types
+
+
+# ============================================================================
+# Phase 54: 数据流追踪测试骨架
+# ============================================================================
+
+# Import fixture from separate file
+from tests.fixtures.data_flow_fixture import (
+    sample_function_graph_with_data_flow,
+    sample_graph_with_sub_pins,
+)
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-01")
+def test_trace_data_source_knot_chain(sample_function_graph_with_data_flow):
+    """
+    Phase 54 DATA-01: 验证 Knot 链穿透。
+
+    数据流路径：
+    FunctionEntry_0 "Left / Right" → Knot_2 InputPin → Knot_2 OutputPin →
+    Knot_1 InputPin → Knot_1 OutputPin → CallFunction_7445 "ScaleValue"
+
+    验证点：
+    - 穿透 Knot_1 和 Knot_2 后到达 FunctionEntry_0
+    - source_type == "function_parameter"
+    - source_node == "FunctionEntry_0"
+    - source_pin == "Left / Right"
+    """
+    # Wave 1 实现
+    # graph = sample_function_graph_with_data_flow
+    # from uasset_read import trace_data_source
+    #
+    # # 找到 CallFunction_7445 的 ScaleValue pin
+    # call_node = graph.nodes[3]  # CallFunction_7445
+    # scale_pin = [p for p in call_node.pins if p.pin_name == "ScaleValue"][0]
+    #
+    # result = trace_data_source(graph, scale_pin)
+    #
+    # assert result["source_type"] == "function_parameter"
+    # assert result["source_node"] == "0A89B7514654265DD7C4A0BC3D2433F9"  # FunctionEntry GUID
+    # assert result["source_pin"] == "Left / Right"
+    # assert len(result["trace_path"]) == 3  # Knot_2 → Knot_1 → FunctionEntry
+    pytest.skip("Wave 1 implementation pending")
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-02")
+def test_trace_data_source_function_entry(sample_function_graph_with_data_flow):
+    """
+    Phase 54 DATA-02: 验证 FunctionEntry 参数作为边界。
+
+    FunctionEntry 输出 pin 作为数据流起点，不继续追踪到其他节点。
+
+    验证点：
+    - FunctionEntry 输出 pin 不继续追踪
+    - source_type == "function_parameter"（函数参数）
+    - 到达边界后停止
+    """
+    # Wave 1 实现
+    # graph = sample_function_graph_with_data_flow
+    # from uasset_read import trace_data_source
+    #
+    # # 直接追踪 FunctionEntry 的输出 pin
+    # fe_node = graph.nodes[0]  # FunctionEntry_0
+    # left_right_pin = [p for p in fe_node.pins if p.pin_name == "Left / Right"][0]
+    #
+    # result = trace_data_source(graph, left_right_pin)
+    #
+    # assert result["source_type"] == "function_parameter"
+    # assert result["source_node"] == fe_node.node_guid
+    # assert result["source_pin"] == "Left / Right"
+    # assert len(result["trace_path"]) == 0  # 本身就是边界
+    pytest.skip("Wave 1 implementation pending")
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-03")
+def test_trace_data_source_pure_function(sample_function_graph_with_data_flow):
+    """
+    Phase 54 DATA-03: 验证 Pure 函数 ReturnValue 作为数据源。
+
+    数据流路径：
+    CallFunction_8520 (GetActorRightVector) ReturnValue →
+    CallFunction_7445 WorldDirection
+
+    验证点：
+    - data_source 来自 GetActorRightVector（Pure）
+    - source_type == "pure_function"
+    - Pure 函数输出作为边界（不继续追踪 self pin）
+    """
+    # Wave 1 实现
+    # graph = sample_function_graph_with_data_flow
+    # from uasset_read import trace_data_source
+    #
+    # # 找到 CallFunction_7445 的 WorldDirection pin
+    # call_node = graph.nodes[3]  # CallFunction_7445
+    # world_dir_pin = [p for p in call_node.pins if p.pin_name == "WorldDirection"][0]
+    #
+    # result = trace_data_source(graph, world_dir_pin)
+    #
+    # assert result["source_type"] == "pure_function"
+    # assert result["source_node"] == "1334BFF84CD17534B7DC1082BCEF3841"  # GetActorRightVector GUID
+    # assert result["source_pin"] == "ReturnValue"
+    # assert result["function_name"] == "GetActorRightVector"
+    pytest.skip("Wave 1 implementation pending")
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-04")
+def test_trace_data_source_self_reference(sample_function_graph_with_data_flow):
+    """
+    Phase 54 DATA-04: 验证 self pin 作为边界。
+
+    CallFunction 的 self pin 是 self 引用，不追踪来源。
+
+    验证点：
+    - source_type == "self_reference"
+    - self pin 不继续追踪
+    - source_node == None（无来源节点）
+    """
+    # Wave 1 实现
+    # graph = sample_function_graph_with_data_flow
+    # from uasset_read import trace_data_source
+    #
+    # # 找到 CallFunction_7445 的 self pin
+    # call_node = graph.nodes[3]  # CallFunction_7445
+    # self_pin = [p for p in call_node.pins if p.pin_name == "self"][0]
+    #
+    # result = trace_data_source(graph, self_pin)
+    #
+    # assert result["source_type"] == "self_reference"
+    # assert result.get("source_node") is None
+    # assert len(result["trace_path"]) == 0
+    pytest.skip("Wave 1 implementation pending")
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-05")
+def test_sub_pin_first_level_expand(sample_graph_with_sub_pins):
+    """
+    Phase 54 DATA-05: 验证 SubPin 第一级展开。
+
+    Struct pin（如 Vector）的 sub_pins 仅展开第一级，不递归。
+
+    验证点：
+    - SubPin 展开 X, Y, Z 字段
+    - 仅第一级展开，不递归到 sub-sub-pins
+    - 每个字段有独立的 pin_id 和 pin_name
+    """
+    # Wave 1 实现
+    # graph = sample_graph_with_sub_pins
+    # from uasset_read import expand_sub_pins
+    #
+    # # 找到 Vector pin
+    # vector_node = graph.nodes[0]
+    # vector_pin = vector_node.pins[0]
+    #
+    # expanded = expand_sub_pins(vector_pin, max_depth=1)
+    #
+    # assert len(expanded) == 3  # X, Y, Z
+    # assert all(p["pin_name"] in ["X", "Y", "Z"] for p in expanded)
+    # assert all(p["depth"] == 1 for p in expanded)
+    pytest.skip("Wave 1 implementation pending")
+
+
+@pytest.mark.skip(reason="Wave 1 implementation pending - DATA-06")
+def test_data_providers_pure_function(sample_function_graph_with_data_flow):
+    """
+    Phase 54 DATA-06: 验证 Pure 函数 data_providers 字段（正向标注）。
+
+    Pure 函数节点应标注数据去向（哪些 CallFunction 使用了其输出）。
+
+    验证点：
+    - Pure 函数节点有 data_providers 字段
+    - data_providers 列出数据去向（CallFunction.WorldDirection）
+    - 双向追踪：正向 + 反向
+    """
+    # Wave 1 实现
+    # graph = sample_function_graph_with_data_flow
+    # from uasset_read import annotate_data_providers
+    #
+    # annotate_data_providers(graph)
+    #
+    # # 找到 GetActorRightVector（Pure）节点
+    # pure_node = graph.nodes[4]  # CallFunction_8520
+    # node_data = pure_node.node_data
+    #
+    # # 验证 Pure 函数有 data_providers 标注
+    # if hasattr(node_data, 'data_providers'):
+    #     providers = node_data.data_providers
+    #     assert len(providers) == 1
+    #     provider = providers[0]
+    #     assert provider["target_node"] == "80513E42423F4BFC7026A5AF32A5167B"  # CallFunction_7445
+    #     assert provider["target_pin"] == "WorldDirection"
+    #     assert provider["source_pin"] == "ReturnValue"
+    pytest.skip("Wave 1 implementation pending")
