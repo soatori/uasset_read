@@ -839,3 +839,191 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
+
+
+def build_function_graphs(
+    graphs: List[UEdGraph],
+    blueprint_functions: Optional[List] = None,
+) -> List[Dict]:
+    """构建顶层 function_graphs 数组（Phase 55）。
+
+    每个 FunctionEntry 节点对应一个条目，包含签名、执行流和数据流内嵌标注。
+
+    Args:
+        graphs: UEdGraph 列表
+        blueprint_functions: BlueprintFunction 列表（用于签名提取）
+
+    Returns:
+        List[Dict]: function_graphs 数组
+    """
+    if not graphs:
+        return []
+
+    # 构建 blueprint_functions 查找字典
+    func_lookup: Dict[str, Any] = {}
+    if blueprint_functions:
+        for func in blueprint_functions:
+            name = getattr(func, 'name', None)
+            if name:
+                func_lookup[name] = func
+
+    function_graphs: List[Dict] = []
+
+    for graph in graphs:
+        # 构建 pin_lookup 和 node_lookup
+        pin_lookup: Dict[str, Tuple[str, str]] = {}
+        node_lookup: Dict[str, UEdGraphNode] = {}
+        node_name_lookup: Dict[str, str] = {}
+
+        for idx, node in enumerate(graph.nodes):
+            node_lookup[node.node_guid] = node
+            node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
+            for pin in node.pins:
+                pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+        # 收集所有 FunctionEntry 节点
+        function_entries = [n for n in graph.nodes if n.class_name == "K2Node_FunctionEntry"]
+
+        for fe_node in function_entries:
+            # 提取 function_name
+            function_name = None
+            nd = fe_node.node_data
+            if nd:
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                if fr:
+                    raw_name = getattr(fr, 'member_name', None)
+                    if raw_name and raw_name != "None":
+                        # 处理路径形式 "/Game/.../FunctionName"
+                        if '/' in raw_name:
+                            function_name = raw_name.split('/')[-1]
+                        else:
+                            function_name = raw_name
+
+            if not function_name:
+                function_name = "Unknown"
+
+            # 查找 blueprint_functions 获取签名
+            signature: Dict[str, Any] = {"return_type": "", "parameters": []}
+            func_meta = func_lookup.get(function_name)
+            if func_meta:
+                return_type = getattr(func_meta, 'return_type', '') or ''
+                signature["return_type"] = return_type
+
+                # 提取参数
+                params = getattr(func_meta, 'parameters', []) or []
+                formatted_params: List[Dict] = []
+                for p in params:
+                    p_name = getattr(p, 'name', '') or ''
+                    p_type = getattr(p, 'param_type', '') or ''
+                    is_input = getattr(p, 'is_input', True)
+                    formatted_params.append({
+                        "name": p_name,
+                        "type": p_type,
+                        "direction": "input" if is_input else "output"
+                    })
+                signature["parameters"] = formatted_params
+
+            # 构建执行流
+            execution_flows = _trace_execution_from_event(
+                fe_node, pin_lookup, node_lookup, node_name_lookup
+            )
+
+            # 过滤空执行流
+            if not execution_flows:
+                continue
+
+            # 对每个执行流节点计算 data_providers 和 data_sources
+            # 构建数据流字典用于反向查找
+            data_flows = build_data_flows(graph, mode="name")
+
+            # 创建辅助函数：从 data_flows 中提取节点的数据流标注
+            def _annotate_node_with_data_flow(
+                node_guid: str,
+                node_type: str,
+                node_pins: List[UEdGraphPin],
+                d_flows: List[Dict],
+                n_name_lookup: Dict[str, str],
+                p_lookup: Dict[str, Tuple[str, str]],
+                n_lookup: Dict[str, UEdGraphNode]
+            ) -> Dict[str, List[Dict]]:
+                """从 data_flows 中提取节点的 data_providers 和 data_sources 标注。"""
+                node_name = n_name_lookup.get(node_guid, node_guid)
+                providers: List[Dict] = []
+                sources: List[Dict] = []
+
+                # 遍历节点的 pins
+                for pin in node_pins:
+                    if pin.pin_type and pin.pin_type.pin_category == "exec":
+                        continue
+
+                    # Input pin → data_sources（反向追踪）
+                    if pin.direction == 0:
+                        # 使用 _trace_data_source 进行反向追踪
+                        data_source = _trace_data_source(
+                            pin, p_lookup, n_lookup, n_name_lookup
+                        )
+                        if data_source:
+                            sources.append({
+                                "input_pin": pin.pin_name,
+                                "data_source": data_source
+                            })
+
+                    # Output pin → data_providers（正向追踪）
+                    elif pin.direction == 1:
+                        # 找到 output pin 的连接目标
+                        for linked_ref in (pin.linked_to_raw or []):
+                            target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                            if target_pin_guid in p_lookup:
+                                target_node_guid, target_pin_name = p_lookup[target_pin_guid]
+                                target_node_name = n_name_lookup.get(target_node_guid, target_node_guid)
+                                providers.append({
+                                    "output_pin": pin.pin_name,
+                                    "target_node": target_node_name,
+                                    "target_pin": target_pin_name
+                                })
+
+                return {"data_providers": providers, "data_sources": sources}
+
+            # 遍历执行流节点，添加数据流标注
+            annotated_nodes: List[Dict] = []
+            for node_info in execution_flows:
+                node_guid = node_info.get("node_guid")
+                node_type = node_info.get("node_type", "")
+
+                # 获取原始节点对象
+                original_node = node_lookup.get(node_guid)
+
+                if original_node:
+                    annotation = _annotate_node_with_data_flow(
+                        node_guid,
+                        node_type,
+                        original_node.pins,
+                        data_flows,
+                        node_name_lookup,
+                        pin_lookup,
+                        node_lookup
+                    )
+
+                    # 合并标注到节点信息（仅在非空时添加）
+                    if annotation.get("data_providers"):
+                        node_info["data_providers"] = annotation["data_providers"]
+                    if annotation.get("data_sources"):
+                        node_info["data_sources"] = annotation["data_sources"]
+
+                annotated_nodes.append(node_info)
+
+            # 构建条目
+            entry: Dict = {
+                "function_name": function_name,
+                "graph_source": graph.graph_name,
+                "entry_node_guid": fe_node.node_guid,
+                "signature": signature,
+                "execution_flows": [{
+                    "start_event": f"FunctionEntry.{function_name}",
+                    "nodes": annotated_nodes
+                }]
+            }
+
+            function_graphs.append(entry)
+
+    return function_graphs
