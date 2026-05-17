@@ -9,25 +9,20 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v8.0 in progress** (__version__ = 6.0.0, not yet bumped) |
-| Tests | **554 tests collected** |
-| Modules | `src/uasset_read/` — 38 files, 150+ public API exports |
+| Version | **v9.0 shipped** (__version__ = 6.0.0, not yet bumped) |
+| Tests | **554 tests collected** (43 v9.0-specific) |
+| Modules | `src/uasset_read/` — 39 files, 150+ public API exports |
 | Branch | `v2.8-dev` |
 
-### Current Phase: Phase 49 — 函数调用引脚解析
+### Current Phase: v9.0 已完成
 
-**Status**: 🟡 PLAN 已就位  
-**Goal**: CallFunction 参数引脚完整提取，函数签名可推断  
-**Remaining**: Phase 47/48/50 ✅ 已完成
+**Status**: ✅ SHIPPED 2026-05-17
 
-**Recent Work (v8.0)**:
-- ✅ Phase 50 — EnhancedInput 语义增强 (`ETRIGGER_EVENT_PIN_MAP` + `trigger_events`)
-- ✅ Phase 48 — 组件属性递归解析 (`component_extractor.py`, `ParseResult.components`)
-- ✅ Phase 47 — Pin LinkedTo 修复 (`linked_to_raw` 非空, execution_flows 有 nodes)
-- ✅ Phase 46 — UE5.6 资产端到端验证 (12/12 UAT 通过)
-- ✅ Phase 45 — 图序列化 linker 变体 (`from_archive_with_linker()`)
-
-**v7.0 里程碑**: UObjectInstance 对象图重建, PackageLinker 两阶段加载
+**v9.0 Highlights**:
+- ✅ Phase 55 — JSON 输出增强 (`function_graphs` 顶层数组, `output_version` 5.0)
+- ✅ Phase 54 — 数据流追踪 (Pure 函数返回值 → 参数输入, 24 tests)
+- ✅ Phase 53 — 函数内执行流追踪 (FunctionEntry → CallFunction 链)
+- ✅ Phase 52 — 函数图节点解析 (K2Node_FunctionEntry 模型)
 
 ## Features
 
@@ -42,7 +37,8 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 - **Circular dependency detection** — mutual reference detection in ImportMap
 - **Execution flow tracing** — Event → CallFunction chain tracking
-- **Data flow extraction** — non-exec pin data flow relationships
+- **Function graph analysis** — FunctionEntry identification, execution/data flow tracing
+- **Function graphs output** — Per-function call chains with data flow annotations (v9.0)
 - **EnhancedInput support** — TriggerEvent type recognition (Started/Ongoing/Completed/Canceled)
 
 ## Installation
@@ -206,7 +202,8 @@ python -m pytest tests/ -v --cov=uasset_read
 | v5.1 | 2026-05-07 | ✅ Released | Project structure initialization (constants.py, exceptions.py) |
 | v6.0 | 2026-05-10 | ✅ Released | Modular refactoring, 373 tests passing |
 | v7.0 | 2026-05-14 | ✅ Released | UObjectInstance 对象图重建, PackageLinker, UE5.6 适配, 432 tests |
-| v8.0 | 📋 In progress | Phase 47/48/50 ✅, Phase 49 🟡 | BP→C++ JSON 可翻译性 (Pin LinkedTo, 组件属性, 函数调用引脚, EnhancedInput) |
+| v8.0 | 📋 2026-05-17 | ✅ Released | BP→C++ JSON 可翻译性 (Pin LinkedTo, 组件属性, 函数调用引脚, EnhancedInput, 二进制清理) |
+| v9.0 | 📋 2026-05-17 | ✅ Released | 函数调用链解析 (FunctionEntry 模型, 执行流/数据流追踪, function_graphs 输出) |
 
 ## Limitations
 
@@ -223,13 +220,11 @@ python -m pytest tests/ -v --cov=uasset_read
 - `.planning/REQUIREMENTS.md` — 需求追溯
 - `.planning/PROJECT.md` — 项目概览
 - `.planning/MILESTONES.md` — 历史里程碑
-- `.planning/milestones/v8.0.md` — v8.0 详细规划
-- `.planning/research/` — UE 参考研究
-- `.planning/archive/` — 已归档的历史版本文档
+- `.planning/milestones/` — 已归档的里程碑（v7.0, v8.0, v9.0）
 
 ---
 
-**Last Updated**: 2026-05-16
-**Version**: v8.0 in progress (Phases 47/48/50 completed, Phase 49 planned)
+**Last Updated**: 2026-05-18
+**Version**: v9.0 shipped (Phases 52-55 complete)
 **Tests**: 554 tests collected
-**__version__**: 6.0.0 (not yet bumped)
+**__version__**: 6.0.0 (pending bump)
