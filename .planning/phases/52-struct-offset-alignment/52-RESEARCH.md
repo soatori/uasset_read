@@ -272,10 +272,10 @@ def is_function_graph(graph: UEdGraph) -> bool:
 | A2 | K2Node_FunctionEntry 的 FunctionReference 只存在于 PropertyTag 中（不在直接序列化流中） | Code Examples | 如果 UE 版本不同导致序列化方式变化，需要调整解析逻辑 |
 | A3 | `ExtraFlags=201457664` 在测试资产中是固定值 — 可能包含 FUNC_BlueprintEvent 等标志 | PropertyTag 结构 | 不同函数可能有不同标志，但这不影响 Phase 52 的核心功能 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **ExtraFlags 的具体位含义：** `201457664` (0x0C020000) 包含哪些 FUNC_* 标志？需要查阅 UE 源码中的 UFunction::FunctionFlags 定义来确定。不过这对 Phase 52 不是必需的 — 只需存储原始值即可。
-2. **UserConstructionScript FunctionEntry 的 FunctionReference：** 该节点的 `node_data` 为 `None`（无 raw_properties），需要确认其 script_serial 是否正确解析。可能是该节点的 script_serial_size 为 0。
+1. **ExtraFlags 的具体位含义：** `201457664` (0x0C020000) 包含哪些 FUNC_* 标志？— **[RESOLVED: 无需解决]** Phase 52 只需存储 ExtraFlags 原始值，不需要解析具体位含义。后续 Phase 53/54 如需判断函数类型（Pure/Impure）时可再研究。
+2. **UserConstructionScript FunctionEntry 的 FunctionReference：** 该节点的 `node_data` 为 `None`（无 raw_properties），需要确认其 script_serial 是否正确解析。— **[RESOLVED: 无需解决]** UserConstructionScript 是 Blueprint 构造函数图，不在 v9.0 函数调用链解析范围内（TEST-01~04 仅覆盖 Move/Aim/Jump/StopJumping）。Phase 52 只需确保解析器不崩溃即可。
 
 ## Environment Availability
 
