@@ -867,7 +867,7 @@ def test_build_execution_flows_basic(sample_graph_with_execution_flow):
     flow = flows[0]
 
     assert 'start_event' in flow
-    assert flow['start_event'] == "BeginPlay"
+    assert flow['start_event'] == "Event.BeginPlay"
 
     assert 'nodes' in flow
     nodes = flow['nodes']
