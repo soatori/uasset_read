@@ -471,10 +471,25 @@ def _format_event_enhanced(event: BlueprintEvent) -> dict:
     return result
 
 
-def _extract_call_function_parameters(node: Any) -> Dict[str, List[Dict]]:
-    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49）。
+def _extract_call_function_parameters(
+    node: Any,
+    pin_lookup: Optional[Dict] = None,
+    node_lookup: Optional[Dict] = None,
+    node_name_lookup: Optional[Dict] = None
+) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49 + Phase 54）。
 
     过滤 exec pins，将输入/输出参数分离为结构化数组。
+    Phase 54: 增强 input_params 的 data_source 字段（数据来源追踪）。
+
+    Args:
+        node: K2Node_CallFunction 节点
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表（可选，用于 data_source）
+        node_lookup: node_guid → node 查找表（可选，用于 data_source）
+        node_name_lookup: node_guid → node_name 查找表（可选，用于 data_source）
+
+    Returns:
+        Dict: {"input_params": [...], "output_params": [...]}
     """
     input_params: List[Dict] = []
     output_params: List[Dict] = []
@@ -495,9 +510,19 @@ def _extract_call_function_parameters(node: Any) -> Dict[str, List[Dict]]:
         if pin.default_value is not None and pin.default_value != "":
             param["default_value"] = pin.default_value
 
-        if pin.direction == 0:
+        if pin.direction == 0:  # Input
+            # Phase 54: 添加 data_source 字段（仅当 lookup 可用时）
+            if pin_lookup and node_lookup and node_name_lookup:
+                from uasset_read.graph.flow_builder import _trace_data_source
+                try:
+                    data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
+                    if data_source:
+                        param["data_source"] = data_source
+                except Exception:
+                    pass  # 追踪失败时不影响基本参数提取
+
             input_params.append(param)
-        else:
+        else:  # Output
             output_params.append(param)
 
     return {"input_params": input_params, "output_params": output_params}

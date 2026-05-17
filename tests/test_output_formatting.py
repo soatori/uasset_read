@@ -4247,3 +4247,85 @@ def test_trace_data_source_default_value():
     assert len(data_sources) == 1, "一个数据源"
     assert data_sources[0]["source_type"] == "default_value", "source_type 为 default_value"
     assert data_sources[0]["value"] == "false", "默认值为 false"
+
+
+def test_extract_call_function_parameters_with_data_source(sample_function_graph_with_data_flow):
+    """Phase 54-03: 验证 _extract_call_function_parameters 增强 data_source 字段。
+
+    当传入 lookup 参数时，input_params 应包含 data_source 字段。
+    """
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+    for idx, node in enumerate(graph.nodes):
+        node_lookup[node.node_guid] = node
+        node_name_lookup[node.node_guid] = f"{node.class_name}_{idx}"
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+
+    # 找到 CallFunction_7445 (AddMovementInput)
+    call_func = node_lookup.get("80513E42423F4BFC7026A5AF32A5167B")
+
+    # 提取参数（传入 lookup）
+    params = _extract_call_function_parameters(call_func, pin_lookup, node_lookup, node_name_lookup)
+
+    # 验证 input_params 包含 data_source
+    input_params = params.get("input_params", [])
+    assert len(input_params) > 0, "有输入参数"
+
+    # 验证 WorldDirection 参数有 data_source
+    world_dir_param = next(p for p in input_params if p["name"] == "WorldDirection")
+    assert "data_source" in world_dir_param, "WorldDirection 有 data_source"
+
+    data_sources = world_dir_param["data_source"].get("data_sources", [])
+    assert len(data_sources) > 0, "有数据源列表"
+
+    # 验证数据来自 Pure 函数
+    pure_source = next((s for s in data_sources if s["source_type"] == "pure_function"), None)
+    assert pure_source is not None, "数据来自 Pure 函数"
+    assert pure_source["function_name"] == "GetActorRightVector", "函数名为 GetActorRightVector"
+
+    # 验证 ScaleValue 参数有 data_source（来自 FunctionEntry）
+    scale_param = next(p for p in input_params if p["name"] == "ScaleValue")
+    assert "data_source" in scale_param, "ScaleValue 有 data_source"
+
+    scale_data_sources = scale_param["data_source"].get("data_sources", [])
+    assert len(scale_data_sources) > 0, "有数据源列表"
+
+    func_param_source = next((s for s in scale_data_sources if s["source_type"] == "function_parameter"), None)
+    assert func_param_source is not None, "数据来自 FunctionEntry"
+    assert "FunctionEntry" in func_param_source["node"], "节点为 FunctionEntry"
+
+
+def test_extract_call_function_parameters_backward_compatible():
+    """Phase 54-03: 验证 _extract_call_function_parameters 向后兼容。
+
+    不传入 lookup 参数时，应正常工作且无 data_source 字段。
+    """
+    from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+    from uasset_read import UEdGraphNode, UEdGraphPin, FEdGraphPinType, K2NodeCallFunction, FMemberReference
+
+    # Mock node
+    pin_type = FEdGraphPinType(pin_category="real", pin_subcategory="float", container_type=0)
+    pin = UEdGraphPin(pin_id="test", pin_name="ScaleValue", direction=0, pin_type=pin_type, linked_to_raw=[])
+    node = UEdGraphNode(
+        node_guid="test",
+        class_name="K2Node_CallFunction",
+        pins=[pin],
+        node_data=K2NodeCallFunction(
+            node_guid="test",
+            function_reference=FMemberReference(member_name="TestFunc")
+        )
+    )
+
+    # 不传入 lookup
+    result = _extract_call_function_parameters(node)
+
+    assert "input_params" in result, "有 input_params"
+    assert len(result["input_params"]) > 0, "有参数"
+    assert "data_source" not in result["input_params"][0], "无 lookup 时无 data_source"
