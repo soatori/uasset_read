@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Set, Any
 
 from uasset_read.constants import (
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
-    FORMAT_CONFIG, GRAPH_TYPE_MAP,
+    FORMAT_CONFIG, GRAPH_TYPE_MAP, DATA_BOUNDARY_NODES,
 )
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
 from uasset_read.models.node_types import (
@@ -261,6 +261,23 @@ def is_function_graph(graph: UEdGraph) -> bool:
     if "K2Node_Event" in node_types:
         return False
     return graph.graph_name.lower() != "eventgraph"
+
+
+def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
+    """判断是否为数据流边界节点（Phase 54）。
+
+    Args:
+        node: 目标节点
+        pin_name: pin 名称（用于 self 检测）
+
+    Returns:
+        bool: True=边界（停止追踪），False=继续追踪
+    """
+    if node.class_name in DATA_BOUNDARY_NODES:
+        return True
+    if pin_name.lower() == "self":
+        return True
+    return False
 
 
 def _find_next_exec_node(
