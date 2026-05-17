@@ -213,8 +213,8 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
 
         # member_name can be a path like "/Game/.../BP_X_37120"
         if '/' in mn:
-            return mn.split('/')[-1]
-        return mn
+            return f"Event.{mn.split('/')[-1]}"
+        return f"Event.{mn}"
 
     elif node.class_name == "K2Node_EnhancedInputAction":
         if nd:
@@ -223,8 +223,8 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
             else:
                 path = getattr(nd, 'input_action_path', "")
             if path:
-                return path.split('/')[-1] if '/' in path else path
-        return node.class_name
+                return f"InputAction.{path.split('/')[-1] if '/' in path else path}"
+        return f"InputAction.{node.class_name}"
     elif node.class_name == "K2Node_VariableSet":
         return "VariableSet"
     elif node.class_name == "K2Node_CustomEvent":
@@ -239,7 +239,9 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
         if fr:
             mn = getattr(fr, 'member_name', None) if not isinstance(fr, dict) else fr.get("member_name")
             if mn and mn != "None":
-                return mn
+                if '/' in mn:
+                    return f"FunctionEntry.{mn.split('/')[-1]}"
+                return f"FunctionEntry.{mn}"
         return node.class_name
 
     return node.class_name
@@ -345,6 +347,12 @@ def _trace_execution_from_event(
                 for pin in current_node.pins
                 if pin.pin_type and pin.pin_type.pin_category != "exec" and pin.direction == 0
             ]
+            # Phase 53: mark pure functions with "pure": true in flow
+            has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
+            if not has_exec_pin:
+                node_info["pure"] = True
+            elif nd and hasattr(nd, 'b_defaults_to_pure') and nd.b_defaults_to_pure:
+                node_info["pure"] = True
 
         if current_node.class_name == "K2Node_Event":
             nd = current_node.node_data
