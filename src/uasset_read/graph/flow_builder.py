@@ -472,14 +472,16 @@ def _find_next_exec_node(
 def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
-    node_lookup: Dict[str, UEdGraphNode]
+    node_lookup: Dict[str, UEdGraphNode],
+    node_name_lookup: Dict[str, str] = {}
 ) -> List[Dict]:
-    """追踪单条执行流（D-08-07~11, D-19-13~14）。
+    """追踪单条执行流（D-08-07~11, D-19-13~14, Phase 54）。
 
     Args:
         start_node: K2Node_Event 起点（或其他START_EVENT_TYPES起点）
         pin_lookup: pin_id → (node_guid, pin_name) 查找表
         node_lookup: node_guid → node 查找表
+        node_name_lookup: node_guid → node_name 查找表（Phase 54 新增）
 
     Returns:
         List[Dict]: 节点信息序列
@@ -521,16 +523,37 @@ def _trace_execution_from_event(
                 fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
                 if fr:
                     node_info["function_name"] = getattr(fr, 'member_name', None)
-            # Phase 49: simplified params for execution flow
-            node_info["params"] = [
-                {"name": pin.pin_name, "type": pin.pin_type.pin_category if pin.pin_type else ""}
-                for pin in current_node.pins
-                if pin.pin_type and pin.pin_type.pin_category != "exec" and pin.direction == 0
-            ]
+
+            # Phase 54: 使用增强的 _extract_call_function_parameters（传入 lookup）
+            from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+            node_info["parameters"] = _extract_call_function_parameters(
+                current_node, pin_lookup, node_lookup, node_name_lookup
+            )
+
             # Phase 53: mark pure functions with "pure": true in flow
             has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
             if not has_exec_pin:
                 node_info["pure"] = True
+
+                # Phase 54: Pure 函数 data_providers 标注（正向追踪）
+                data_providers: List[Dict] = []
+                for pin in current_node.pins:
+                    if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
+                        # 找到 output pin 的连接目标
+                        for linked_ref in (pin.linked_to_raw or []):
+                            target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                            if target_pin_guid in pin_lookup:
+                                target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
+                                target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
+                                data_providers.append({
+                                    "output_pin": pin.pin_name,
+                                    "target_node": target_node_name,
+                                    "target_pin": target_pin_name
+                                })
+
+                if data_providers:
+                    node_info["data_providers"] = data_providers
+
             elif nd and hasattr(nd, 'b_defaults_to_pure') and nd.b_defaults_to_pure:
                 node_info["pure"] = True
 
@@ -565,11 +588,13 @@ def _trace_execution_from_pin(
     start_node: UEdGraphNode,
     start_pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
-    node_lookup: Dict[str, UEdGraphNode]
+    node_lookup: Dict[str, UEdGraphNode],
+    node_name_lookup: Dict[str, str] = {}
 ) -> List[Dict]:
-    """从特定Pin开始追踪执行流（D-19-12）。
+    """从特定Pin开始追踪执行流（D-19-12, Phase 54）。
 
     用于EnhancedInputAction多触发时机追踪。
+    Phase 54: 增加 node_name_lookup 参数传递。
     """
     for linked_pin_id in (start_pin.linked_to_raw or []):
         target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
@@ -577,7 +602,7 @@ def _trace_execution_from_pin(
             target_node_guid, _ = pin_lookup[target_pin_guid]
             next_node = node_lookup.get(target_node_guid)
             if next_node:
-                return _trace_execution_from_event(next_node, pin_lookup, node_lookup)
+                return _trace_execution_from_event(next_node, pin_lookup, node_lookup, node_name_lookup)
 
     return []
 
@@ -634,9 +659,10 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12）。
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
+    Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
 
     Args:
         graph: UEdGraph 对象
@@ -646,11 +672,16 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
+    node_name_lookup: Dict[str, str] = {}  # Phase 54: 新增
 
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
             pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # Phase 54: 构建 node_name_lookup
+    for idx, node in enumerate(graph.nodes):
+        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
 
     execution_flows: List[Dict] = []
     start_nodes = [n for n in graph.nodes if n.class_name in START_EVENT_TYPES]
@@ -659,13 +690,13 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
         if start_node.class_name == "K2Node_EnhancedInputAction":
             for pin in start_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category == "exec":
-                    flow = _trace_execution_from_pin(start_node, pin, pin_lookup, node_lookup)
+                    flow = _trace_execution_from_pin(start_node, pin, pin_lookup, node_lookup, node_name_lookup)
                     execution_flows.append({
                         "start_event": f"{start_node.class_name}.{pin.pin_name}",
                         "nodes": flow
                     })
         else:
-            flow = _trace_execution_from_event(start_node, pin_lookup, node_lookup)
+            flow = _trace_execution_from_event(start_node, pin_lookup, node_lookup, node_name_lookup)
             start_event_name = _get_start_event_name(start_node)
             execution_flows.append({
                 "start_event": start_event_name,
