@@ -275,7 +275,9 @@ def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
     """
     if node.class_name in DATA_BOUNDARY_NODES:
         return True
-    if pin_name.lower() == "self":
+    # Self 引用（包括 self 和 Target 别名）
+    pin_lower = pin_name.lower()
+    if pin_lower == "self" or pin_lower == "target":
         return True
     return False
 
@@ -288,8 +290,10 @@ def _resolve_knot_chain(
 ) -> Tuple[str, bool]:
     """递归穿透 Knot 链直到到达非 Knot 节点（Phase 54）。
 
+    用于反向数据流追踪：从目标 pin 开始，穿透 Knot 链找到数据源。
+
     Args:
-        pin_guid: 起始 pin GUID
+        pin_guid: 起始 pin GUID（通常是连接到 Knot OutputPin 的目标 pin）
         pin_lookup: pin_id → (node_guid, pin_name) 查找表
         node_lookup: node_guid → node 查找表
         max_depth: 最大穿透深度（防止无限循环）
@@ -321,10 +325,10 @@ def _resolve_knot_chain(
         if target_node.class_name != "K2Node_Knot":
             return (current_pin_guid, True)  # 到达非 Knot 节点
 
-        # Knot: Find OutputPin
+        # Knot: Find InputPin and follow its linked_to_raw backwards
         for pin in target_node.pins:
-            if pin.pin_name == "OutputPin" and pin.direction == 1:
-                # OutputPin 的 linked_to_raw 是下一个 pin
+            if pin.pin_name == "InputPin" and pin.direction == 0:  # Input
+                # InputPin 的 linked_to_raw 是上一个 pin（数据来源）
                 for linked_ref in (pin.linked_to_raw or []):
                     next_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
                     current_pin_guid = next_pin_guid

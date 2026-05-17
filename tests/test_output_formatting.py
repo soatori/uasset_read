@@ -3772,6 +3772,54 @@ def test_trace_data_source_knot_chain(sample_function_graph_with_data_flow):
     pytest.skip("Wave 1 implementation pending")
 
 
+def test_trace_data_source_knot_chain_direct(sample_function_graph_with_data_flow):
+    """Phase 54-02: 验证 Knot 链穿透（直接测试 _resolve_knot_chain）。
+
+    数据流路径：
+    FunctionEntry_0 "Left / Right" → Knot_2 → Knot_1 → CallFunction_7445.ScaleValue
+    """
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    for node in graph.nodes:
+        node_lookup[node.node_guid] = node
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # 找到 CallFunction_7445 (AddMovementInput) 的 ScaleValue pin
+    # GUID: 80513E42423F4BFC7026A5AF32A5167B
+    call_func = next(
+        (n for n in graph.nodes
+         if n.class_name == "K2Node_CallFunction" and
+         hasattr(n.node_data, 'function_reference') and
+         getattr(n.node_data.function_reference, 'member_name', None) == "AddMovementInput" and
+         n.node_guid == "80513E42423F4BFC7026A5AF32A5167B"),
+        None
+    )
+    if call_func is None:
+        # Fallback: find by GUID directly
+        call_func = node_lookup.get("80513E42423F4BFC7026A5AF32A5167B")
+
+    scale_pin = next(p for p in call_func.pins if p.pin_name == "ScaleValue")
+
+    # 追踪数据源（穿透 Knot 链）
+    from uasset_read.graph.flow_builder import _resolve_knot_chain
+
+    linked_pin = scale_pin.linked_to_raw[0]
+    target_pin_guid = linked_pin.get("pin_guid") if isinstance(linked_pin, dict) else linked_pin
+
+    terminal_pin_guid, success = _resolve_knot_chain(target_pin_guid, pin_lookup, node_lookup)
+
+    assert success == True, "Knot chain穿透成功"
+
+    # 验证终端节点为 FunctionEntry
+    terminal_node_guid, _ = pin_lookup.get(terminal_pin_guid, (None, None))
+    terminal_node = node_lookup.get(terminal_node_guid)
+    assert terminal_node.class_name == "K2Node_FunctionEntry", "终端节点为FunctionEntry"
+
+
 @pytest.mark.skip(reason="Wave 1 implementation pending - DATA-02")
 def test_trace_data_source_function_entry(sample_function_graph_with_data_flow):
     """
@@ -3799,6 +3847,32 @@ def test_trace_data_source_function_entry(sample_function_graph_with_data_flow):
     # assert result["source_pin"] == "Left / Right"
     # assert len(result["trace_path"]) == 0  # 本身就是边界
     pytest.skip("Wave 1 implementation pending")
+
+
+def test_trace_data_source_function_entry_direct(sample_function_graph_with_data_flow):
+    """Phase 54-02: 验证 FunctionEntry 参数作为边界（直接测试 is_boundary_node）。
+
+    FunctionEntry 输出 pin 作为数据流起点，不继续追踪到其他节点。
+    """
+    graph = sample_function_graph_with_data_flow
+
+    from uasset_read.graph.flow_builder import is_boundary_node
+
+    # 找到 FunctionEntry 节点
+    func_entry = next(n for n in graph.nodes if n.class_name == "K2Node_FunctionEntry")
+
+    # 验证边界检测
+    assert is_boundary_node(func_entry, "Left / Right") == True, "FunctionEntry为边界"
+
+    # 验证 CallFunction 不是边界
+    # GUID: 80513E42423F4BFC7026A5AF32A5167B
+    call_func = next(
+        (n for n in graph.nodes
+         if n.class_name == "K2Node_CallFunction" and
+         n.node_guid == "80513E42423F4BFC7026A5AF32A5167B"),
+        None
+    )
+    assert is_boundary_node(call_func, "WorldDirection") == False, "CallFunction非边界"
 
 
 @pytest.mark.skip(reason="Wave 1 implementation pending - DATA-03")
@@ -3919,3 +3993,105 @@ def test_data_providers_pure_function(sample_function_graph_with_data_flow):
     #     assert provider["target_pin"] == "WorldDirection"
     #     assert provider["source_pin"] == "ReturnValue"
     pytest.skip("Wave 1 implementation pending")
+
+
+# ============================================================================
+# Phase 54-02: 核心函数单元测试
+# ============================================================================
+
+
+def test_is_boundary_node_self_reference():
+    """Phase 54-02: 验证 self pin 作为边界（is_boundary_node）。"""
+    from uasset_read.graph.flow_builder import is_boundary_node
+    from uasset_read import UEdGraphNode
+
+    # Mock node
+    node = UEdGraphNode(node_guid="test", class_name="K2Node_CallFunction", pins=[])
+
+    # self pin 应为边界
+    assert is_boundary_node(node, "self") == True
+    assert is_boundary_node(node, "Target") == True  # Target 是 self 别名（大小写不敏感）
+    assert is_boundary_node(node, "WorldDirection") == False
+
+
+def test_is_boundary_node_variable_set():
+    """Phase 54-02: 验证 VariableSet 作为边界（is_boundary_node）。"""
+    from uasset_read.graph.flow_builder import is_boundary_node
+    from uasset_read import UEdGraphNode
+
+    # VariableSet 节点
+    var_set_node = UEdGraphNode(node_guid="test_var_set", class_name="K2Node_VariableSet", pins=[])
+    assert is_boundary_node(var_set_node, "Output") == True, "VariableSet为边界"
+
+    # VariableGet 节点（不是边界）
+    var_get_node = UEdGraphNode(node_guid="test_var_get", class_name="K2Node_VariableGet", pins=[])
+    assert is_boundary_node(var_get_node, "Output") == False, "VariableGet非边界"
+
+
+def test_is_boundary_node_knot():
+    """Phase 54-02: 验证 Knot 不是边界（需穿透）。"""
+    from uasset_read.graph.flow_builder import is_boundary_node
+    from uasset_read import UEdGraphNode
+
+    # Knot 节点（不是边界）
+    knot_node = UEdGraphNode(node_guid="test_knot", class_name="K2Node_Knot", pins=[])
+    assert is_boundary_node(knot_node, "InputPin") == False, "Knot不是边界"
+
+
+def test_resolve_knot_chain_cycle_detection():
+    """Phase 54-02: 验证 Knot 链循环检测（_resolve_knot_chain）。"""
+    from uasset_read.graph.flow_builder import _resolve_knot_chain
+    from uasset_read import UEdGraphNode, UEdGraphPin
+
+    # 构造循环 Knot 链（A → B → A）
+    knot_a = UEdGraphNode(
+        node_guid="knot_a",
+        class_name="K2Node_Knot",
+        pins=[
+            UEdGraphPin(pin_id="input_a", pin_name="InputPin", direction=0, pin_type=None, linked_to_raw=[]),
+            UEdGraphPin(pin_id="output_a", pin_name="OutputPin", direction=1, pin_type=None, linked_to_raw=[{"pin_guid": "input_b"}])
+        ]
+    )
+    knot_b = UEdGraphNode(
+        node_guid="knot_b",
+        class_name="K2Node_Knot",
+        pins=[
+            UEdGraphPin(pin_id="input_b", pin_name="InputPin", direction=0, pin_type=None, linked_to_raw=[{"pin_guid": "output_a"}]),
+            UEdGraphPin(pin_id="output_b", pin_name="OutputPin", direction=1, pin_type=None, linked_to_raw=[{"pin_guid": "input_a"}])
+        ]
+    )
+
+    pin_lookup = {
+        "input_a": ("knot_a", "InputPin"),
+        "output_a": ("knot_a", "OutputPin"),
+        "input_b": ("knot_b", "InputPin"),
+        "output_b": ("knot_b", "OutputPin"),
+    }
+    node_lookup = {"knot_a": knot_a, "knot_b": knot_b}
+
+    # 循环检测应返回 False
+    terminal_guid, success = _resolve_knot_chain("input_a", pin_lookup, node_lookup)
+    assert success == False, "循环Knot链检测成功"
+
+
+def test_resolve_knot_chain_non_knot_terminal():
+    """Phase 54-02: 验证非 Knot 节点直接返回（_resolve_knot_chain）。"""
+    from uasset_read.graph.flow_builder import _resolve_knot_chain
+    from uasset_read import UEdGraphNode, UEdGraphPin
+
+    # 非 Knot 节点（CallFunction）
+    call_func = UEdGraphNode(
+        node_guid="call_func",
+        class_name="K2Node_CallFunction",
+        pins=[
+            UEdGraphPin(pin_id="input_pin", pin_name="WorldDirection", direction=0, pin_type=None, linked_to_raw=[])
+        ]
+    )
+
+    pin_lookup = {"input_pin": ("call_func", "WorldDirection")}
+    node_lookup = {"call_func": call_func}
+
+    # 非 Knot 节点直接返回成功
+    terminal_guid, success = _resolve_knot_chain("input_pin", pin_lookup, node_lookup)
+    assert success == True, "非Knot节点直接返回"
+    assert terminal_guid == "input_pin", "pin_guid 未改变"
