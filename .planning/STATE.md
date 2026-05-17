@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v9.0
 milestone_name: 函数调用链解析
-status: completed
-last_updated: "2026-05-17T15:50:00Z"
+status: shipped — PR #6
+last_updated: "2026-05-18T00:00:00Z"
 progress:
   total_phases: 4
   completed_phases: 4
