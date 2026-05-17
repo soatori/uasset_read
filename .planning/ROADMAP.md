@@ -4,7 +4,7 @@
 
 - ✅ **v7.0** — Phases 41-46 + 44a-c (shipped 2026-05-14)
 - ✅ **v8.0** — Phases 47-51 (shipped 2026-05-17)
-- 🔲 **v9.0** — Phases 52-55 (函数调用链解析)
+- ✅ **v9.0** — Phases 52-55 (函数调用链解析, shipped 2026-05-17)
 
 ## Phases
 
@@ -37,7 +37,7 @@
 </details>
 
 <details>
-<summary>🔲 v9.0 — 函数调用链解析 (IN PROGRESS)</summary>
+<summary>✅ v9.0 — 函数调用链解析 (SHIPPED 2026-05-17)</summary>
 
 - [x] Phase 52: 函数图节点解析 (2 plans) (completed 2026-05-17)
   - [x] 52-01-PLAN.md — K2NodeFunctionEntry 数据模型 + 序列化支持 + function_reference 修复
@@ -49,8 +49,10 @@
   - [x] 54-01-PLAN.md — 测试基础设施（fixture + 6 个测试骨架）
   - [x] 54-02-PLAN.md — 核心追踪函数（DATA_BOUNDARY_NODES + is_boundary_node + _resolve_knot_chain）
   - [x] 54-03-PLAN.md — 数据标注增强（_trace_data_source + _extract_call_function_parameters 增强 + Pure 函数 data_providers）
-- [ ] Phase 55: JSON 输出增强 (function_graphs 数组)
+- [x] Phase 55: JSON 输出增强 (function_graphs 数组) (1/1 plan complete 2026-05-17)
+  - [x] 55-PLAN.md — build_function_graphs + output_version 5.0 + CLI flag + 7 tests
 
+详见 `.planning/milestones/v9.0-ROADMAP.md`
 </details>
 
 ---
