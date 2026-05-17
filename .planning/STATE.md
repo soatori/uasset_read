@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v9.0
 milestone_name: 函数调用链解析
 status: in_progress
-last_updated: "2026-05-17T04:00:00.000Z"
+last_updated: "2026-05-17T14:46:59Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # v9.0 — 函数调用链解析
@@ -20,7 +20,7 @@ progress:
 |-------|------|------|
 | 52 | 函数图节点解析 | 📋 已规划 (2 plans) |
 | 53 | 函数内执行流追踪 | ✅ 已完成 (2026-05-17) |
-| 54 | 数据流追踪 | 🔲 待开始 |
+| 54 | 数据流追踪 | 🔄 进行中 (Wave 0 完成) |
 | 55 | JSON 输出增强 | 🔲 待开始 |
 
 ## 目标
@@ -28,6 +28,11 @@ progress:
 从蓝图函数图中提取完整函数调用链，使 JSON 输出可翻译为等价的 C++ 函数实现。
 
 ## 当前进展
+
+**Phase 54 Wave 0 已完成:**
+- 测试 fixture 创建（Move 函数图 + SubPin）
+- 6 个数据流追踪测试骨架（pytest skip）
+- 双向追踪策略基础已建立
 
 **Phase 54 Context 已捕获:**
 - 双向追踪策略（正向 data_providers + 反向 data_sources）
@@ -42,8 +47,10 @@ progress:
 
 ## 全量测试
 
+121 tests collected (Phase 54-01 added 6 tests)
 488 passed, 37 failed (pre-existing), 68 skipped
 
 ---
 *Started: 2026-05-17*
 *Phase 53 completed: 2026-05-17*
+*Phase 54-01 completed: 2026-05-17*
