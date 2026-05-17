@@ -148,7 +148,8 @@ START_EVENT_TYPES = frozenset({
     "K2Node_Event",
     "K2Node_EnhancedInputAction",
     "K2Node_VariableSet",
-    "K2Node_CustomEvent"
+    "K2Node_CustomEvent",
+    "K2Node_FunctionEntry",  # Phase 52: 函数图执行流起点
 })
 
 # ============================================================================

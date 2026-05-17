@@ -34,7 +34,7 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction
+from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
 
 
 def _rcn(idx, im, em, lk):
@@ -680,6 +680,21 @@ def read_k2node_enhanced_input(
     }
 
 
+def read_k2node_functionentry(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
+    function_reference: Optional[FMemberReference] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_FunctionEntry 特有字段，返回字典（作为 node_data）。
+
+    FunctionReference 已在 read_ue_graph_node() 中从 PropertyTag 解析。
+    """
+    return {"function_reference": function_reference}
+
+
 # ============================================================================
 # 节点工厂
 # ============================================================================
@@ -694,6 +709,7 @@ def create_node_from_archive(
     base_node: UEdGraphNode,
     raw_properties: Optional[Dict[str, Any]] = None,
     linker: Optional["PackageLinker"] = None,
+    node_refs: Optional[Dict[str, Any]] = None,
 ) -> UEdGraphNode:
     """根据 class_name 分派到对应的节点读取函数（D-07/D-08 工厂模式）。"""
     class_name = base_node.class_name
@@ -719,6 +735,12 @@ def create_node_from_archive(
         # Populate trigger_events from already-parsed pins
         if isinstance(base_node.node_data, dict):
             base_node.node_data["trigger_events"] = _build_trigger_events_from_pins(base_node.pins)
+    elif class_name == "K2Node_FunctionEntry":
+        fr = node_refs.get('function_reference') if node_refs else None
+        base_node.node_data = read_k2node_functionentry(
+            archive, name_map, import_map, export_map, linker,
+            function_reference=fr,
+        )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
@@ -849,6 +871,8 @@ def read_ue_graph_node(
                 node_guid = archive.read_bytes(16).hex()
             elif tag.name == "NodeComment" and tag.size > 0:
                 node_comment = archive.read_fstring()
+            elif tag.name == "ExtraFlags":
+                raw_properties[tag.name] = archive.read_i32()
             elif tag.size > 0:
                 # 收集未知 PropertyTag（用于未知节点类型调试和未来扩展）
                 value_start = archive.tell()
@@ -903,10 +927,16 @@ def read_ue_graph_node(
         class_name=class_name,
     )
 
+    node_refs = {
+        'function_reference': function_reference,
+        'event_reference': event_reference,
+    }
+
     return create_node_from_archive(
         archive, name_map, summary, export_map, import_map, node_export, base_node,
         raw_properties=raw_properties if raw_properties else None,
         linker=linker,
+        node_refs=node_refs,
     )
 
 
