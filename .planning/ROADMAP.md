@@ -4,6 +4,7 @@
 
 - ✅ **v7.0** — Phases 41-46 + 44a-c (shipped 2026-05-14)
 - ✅ **v8.0** — Phases 47-51 (shipped 2026-05-17)
+- 🔲 **v9.0** — Phases 52-55 (函数调用链解析)
 
 ## Phases
 
@@ -33,6 +34,16 @@
 - [x] Phase 51: 二进制输出清理 (ZERO \x00 escapes in JSON)
 
 详见 `.planning/milestones/v8.0-ROADMAP.md`
+</details>
+
+<details>
+<summary>🔲 v9.0 — 函数调用链解析 (IN PROGRESS)</summary>
+
+- [ ] Phase 52: 函数图节点解析 (FunctionEntry, Knot 等)
+- [ ] Phase 53: 函数内执行流追踪 (FunctionEntry → CallFunction 链)
+- [ ] Phase 54: 数据流追踪 (Pure 函数返回值 → 参数输入)
+- [ ] Phase 55: JSON 输出增强 (function_graphs 数组)
+
 </details>
 
 ---
