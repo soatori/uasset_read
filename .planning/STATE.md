@@ -21,7 +21,7 @@ progress:
 | 52 | 函数图节点解析 | 📋 已规划 (2 plans) |
 | 53 | 函数内执行流追踪 | ✅ 已完成 (2026-05-17) |
 | 54 | 数据流追踪 | 🔄 进行中 (Wave 0-1 完成) |
-| 55 | JSON 输出增强 | 🔲 待开始 |
+| 55 | JSON 输出增强 | 📋 Context 已捕获 |
 
 ## 目标
 
@@ -40,6 +40,12 @@ progress:
 - 测试 fixture 创建（Move 函数图 + SubPin）
 - 6 个数据流追踪测试骨架（pytest skip）
 - 双向追踪策略基础已建立
+
+**Phase 55 Context 已捕获:**
+- function_graphs 顶层数组（与 graphs_summary 同级）
+- FunctionEntry 级别粒度（每个函数一个条目）
+- 数据流内嵌标注（节点级 data_providers/data_sources）
+- output_version 升级到 5.0 + 配置开关
 
 **Phase 54 Context 已捕获:**
 - 双向追踪策略（正向 data_providers + 反向 data_sources）
