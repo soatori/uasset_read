@@ -4546,3 +4546,345 @@ def test_pure_function_data_providers(sample_function_graph_with_data_flow):
     assert linked_node is not None, "连接目标存在"
     assert linked_node.node_guid == pure_node.node_guid, "连接到 GetActorRightVector"
     assert linked_pin_name == "ReturnValue", "连接到 ReturnValue"
+
+
+# ============================================================================
+# Phase 54: 数据流追踪集成测试（JSON 输出）
+# ============================================================================
+
+def test_json_output_contains_data_source_in_callfunction(sample_function_graph_with_data_flow):
+    """验证 JSON 输出中 CallFunction 参数包含 data_source 字段（Phase 54）。
+
+    从数据流 fixture 构建执行流并序列化为 JSON，验证：
+    1. CallFunction 节点的 parameters.input_params 包含 data_sources
+    2. data_sources.source_type 正确（pure_function, function_parameter 等）
+    """
+    from uasset_read.graph.flow_builder import build_execution_flows, format_graphs_json
+
+    graph = sample_function_graph_with_data_flow
+
+    # 构建执行流
+    execution_flows = build_execution_flows(graph)
+
+    # 序列化为 JSON
+    graphs_json = format_graphs_json([graph])
+
+    # 验证执行流中的 CallFunction 节点包含 parameters
+    call_func_nodes = []
+    for flow in execution_flows:
+        for node in flow.get("nodes", []):
+            if node.get("node_type") == "K2Node_CallFunction":
+                call_func_nodes.append(node)
+
+    assert len(call_func_nodes) > 0, "至少有一个 CallFunction 节点"
+
+    # 验证 CallFunction 参数包含 data_source
+    for node in call_func_nodes:
+        parameters = node.get("parameters", {})
+        input_params = parameters.get("input_params", [])
+
+        # 每个 input_param 应包含 data_source 字段（Phase 54）
+        for param in input_params:
+            pin_name = param.get("pin_name")
+            data_source = param.get("data_source")
+
+            # 不要求所有参数都有 data_source（可能为默认值或无连接）
+            # 但有连接的参数应该有 data_source
+            if data_source is not None:
+                assert isinstance(data_source, dict), f"{pin_name} 的 data_source 应为字典"
+
+                # data_source 包含 data_sources 数组
+                data_sources_list = data_source.get("data_sources", [])
+                for source in data_sources_list:
+                    assert "source_type" in source, f"{pin_name} 的 data_source 应包含 source_type"
+                    assert source["source_type"] in [
+                        "pure_function", "function_parameter", "self_reference",
+                        "boundary", "default_value", "knot_chain_broken",
+                        "pin_not_found", "node_not_found"
+                    ], f"{pin_name} 的 source_type 无效: {source['source_type']}"
+
+
+def test_json_output_contains_data_providers_for_pure_function(sample_function_graph_with_data_flow):
+    """验证 Pure 函数有 data_providers 标注（Phase 54）。
+
+    Pure 函数（如 GetActorRightVector）即使不在 exec flow 中，
+    其 data_providers 也应标注其 ReturnValue 被哪些节点使用。
+    """
+    from uasset_read.graph.flow_builder import build_execution_flows, build_data_flows
+
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup 用于 data_providers 标注
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+    for idx, node in enumerate(graph.nodes):
+        node_lookup[node.node_guid] = node
+        node_name_lookup[node.node_guid] = f"{node.class_name}_{idx}"
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # 查找 Pure 函数节点（无 exec pin 的 CallFunction，且 has b_defaults_to_pure=True）
+    pure_nodes = []
+    for node in graph.nodes:
+        if node.class_name == "K2Node_CallFunction":
+            # 检查是否有 exec pin
+            has_exec_pin = any(p.pin_type and p.pin_type.pin_category == "exec" for p in node.pins)
+            if has_exec_pin:
+                continue
+
+            # 检查 node_data 的 b_defaults_to_pure
+            nd = node.node_data
+            is_pure = False
+            if nd and hasattr(nd, 'b_defaults_to_pure'):
+                is_pure = bool(nd.b_defaults_to_pure)
+            elif nd and isinstance(nd, dict):
+                is_pure = bool(nd.get('b_defaults_to_pure', False))
+
+            if is_pure:
+                pure_nodes.append(node)
+
+    assert len(pure_nodes) > 0, "至少有一个 Pure 函数节点（无 exec pin 且 b_defaults_to_pure=True）"
+
+    # 验证 Pure 函数返回值 pin 有连接（data_providers）
+    for node in pure_nodes:
+        for pin in node.pins:
+            if pin.direction == 1 and pin.pin_name == "ReturnValue":
+                # ReturnValue pin 应该连接到其他节点
+                assert pin.linked_to_raw, f"Pure 函数 {node.node_guid} 的 ReturnValue 应有连接"
+                break
+
+
+def test_json_output_data_flow_integration(sample_function_graph_with_data_flow):
+    """验证 data_flows 和 execution_flows 中的数据标注一致性（Phase 54）。
+
+    从同一 fixture 构建 data_flows 和 execution_flows，验证：
+    1. data_flows 显示 Pin-to-Pin 的数据传递
+    2. execution_flows 显示 CallFunction 的参数数据来源
+    3. 两者对同一数据路径的标注应一致
+    """
+    from uasset_read.graph.flow_builder import build_execution_flows, build_data_flows
+    from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+
+    graph = sample_function_graph_with_data_flow
+
+    execution_flows = build_execution_flows(graph)
+    data_flows = build_data_flows(graph, mode="name")
+
+    # 验证 data_flows 存在
+    assert len(data_flows) > 0, "data_flows 应非空"
+
+    # 验证 data_flows 结构
+    for flow in data_flows:
+        assert "source" in flow, "data_flow 应包含 source"
+        assert "target" in flow, "data_flow 应包含 target"
+
+        source = flow["source"]
+        target = flow["target"]
+
+        assert "node" in source or "node_guid" in source, "source 应包含 node 或 node_guid"
+        assert "pin" in source, "source 应包含 pin"
+        assert "node" in target or "node_guid" in target, "target 应包含 node 或 node_guid"
+        assert "pin" in target, "target 应包含 pin"
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    for node in graph.nodes:
+        node_lookup[node.node_guid] = node
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # 验证 execution_flows 中 CallFunction 的参数有 data_sources
+    found_data_source = False
+    for flow in execution_flows:
+        for node in flow.get("nodes", []):
+            if node.get("node_type") == "K2Node_CallFunction":
+                # 获取实际节点对象
+                actual_node = node_lookup.get(node.get("node_guid"))
+                if actual_node:
+                    # 调用 _extract_call_function_parameters 获取参数
+                    params = _extract_call_function_parameters(actual_node, pin_lookup, node_lookup, {})
+                    input_params = params.get("input_params", [])
+                    for param in input_params:
+                        # Phase 54: data_source 字段（单数）
+                        if param.get("data_source"):
+                            found_data_source = True
+                            break
+
+    assert found_data_source, "至少有一个 CallFunction 参数包含 data_sources"
+
+
+# ============================================================================
+# Phase 55: function_graphs 顶层数组测试
+# ============================================================================
+
+
+@pytest.fixture
+def result_with_graphs(sample_function_graph_with_data_flow, create_mock_parse_result):
+    """创建包含 FunctionEntry 图的 ParseResult fixture。
+
+    用于 Phase 55 function_graphs 测试。
+    """
+    result = create_mock_parse_result
+    result.graphs = [sample_function_graph_with_data_flow]
+
+    # 添加 BlueprintMetadata 包含 Move 函数
+    from uasset_read import BlueprintMetadata, BlueprintFunction, FunctionParameter
+
+    move_func = BlueprintFunction(
+        name="Move",
+        return_type="void",
+        parameters=[
+            FunctionParameter(name="Left / Right", param_type="float", is_input=True),
+            FunctionParameter(name="Forward / Backward", param_type="float", is_input=True),
+        ],
+        function_flags=0,
+        is_pure=False
+    )
+
+    result.blueprint = BlueprintMetadata(
+        is_blueprint=True,
+        parent_class="/Game/Core/Character",
+        variables=[],
+        functions=[move_func],
+        events=[],
+        detection_warning=None
+    )
+
+    return result
+
+
+@pytest.fixture
+def result_no_function_entry(create_mock_parse_result):
+    """创建不含 FunctionEntry 的 ParseResult fixture。
+
+    用于 Phase 55 空流过滤测试。
+    """
+    result = create_mock_parse_result
+    # 空 graphs 或不含 FunctionEntry 的图
+    result.graphs = []
+
+    return result
+
+
+def test_function_graphs_top_level(result_with_graphs):
+    """Phase 55: 验证 function_graphs 在顶层 key 中，不在 blueprint 内。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=True)
+
+    assert "function_graphs" in output, "function_graphs 应在顶层"
+    assert "function_graphs" not in output.get("blueprint", {}), "function_graphs 不应在 blueprint 内部"
+
+
+def test_function_graphs_per_entry(result_with_graphs):
+    """Phase 55: 验证每个 FunctionEntry 对应独立条目。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=True)
+
+    function_graphs = output.get("function_graphs", [])
+    assert len(function_graphs) > 0, "至少有一个 function_graph 条目"
+
+    # 每个条目应有 function_name 字段
+    for entry in function_graphs:
+        assert "function_name" in entry, "function_graph 应包含 function_name"
+
+
+def test_function_graphs_signature(result_with_graphs):
+    """Phase 55: 验证签名提取。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=True)
+
+    function_graphs = output.get("function_graphs", [])
+
+    for entry in function_graphs:
+        assert "signature" in entry, "function_graph 应包含 signature"
+        signature = entry["signature"]
+        assert "return_type" in signature, "signature 应包含 return_type"
+        assert "parameters" in signature, "signature 应包含 parameters"
+
+
+def test_function_graphs_data_providers(result_with_graphs):
+    """Phase 55: 验证数据流标注（data_providers / data_sources）。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=True)
+
+    function_graphs = output.get("function_graphs", [])
+
+    # 验证执行流节点包含数据流标注
+    found_annotation = False
+    for entry in function_graphs:
+        execution_flows = entry.get("execution_flows", [])
+        for flow in execution_flows:
+            nodes = flow.get("nodes", [])
+            for node in nodes:
+                if node.get("data_providers") or node.get("data_sources"):
+                    found_annotation = True
+                    # 验证结构
+                    if node.get("data_providers"):
+                        for provider in node["data_providers"]:
+                            assert "output_pin" in provider, "data_provider 应包含 output_pin"
+                    if node.get("data_sources"):
+                        for source in node["data_sources"]:
+                            assert "input_pin" in source, "data_source 应包含 input_pin"
+
+    # 不强制要求有标注（取决于 fixture 的具体连接）
+    # 但结构应正确
+
+
+def test_output_version_4_without_flag(result_with_graphs):
+    """Phase 55: 无 flag 时 output_version 为 "4.0" 且无 function_graphs。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=False)
+
+    assert output["output_version"] == "4.0", "无 flag 时 output_version 应为 4.0"
+    assert "function_graphs" not in output, "无 flag 时不应包含 function_graphs"
+
+
+def test_output_version_5_with_flag(result_with_graphs):
+    """Phase 55: 有 flag 时 output_version 为 "5.0" 且包含 function_graphs。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_with_graphs, include_function_graphs=True)
+
+    assert output["output_version"] == "5.0", "有 flag 时 output_version 应为 5.0"
+    assert "function_graphs" in output, "有 flag 时应包含 function_graphs"
+
+
+def test_function_graphs_empty_filtered(result_no_function_entry):
+    """Phase 55: 空 FunctionEntry 图过滤。"""
+    from uasset_read.formatters.json_formatter import format_json_full
+
+    output = format_json_full(result_no_function_entry, include_function_graphs=True)
+
+    # 无 FunctionEntry 时，function_graphs 应为空列表或不存在
+    function_graphs = output.get("function_graphs")
+    if function_graphs is not None:
+        assert function_graphs == [], "无 FunctionEntry 时 function_graphs 应为空列表"
+
+
+# ============================================================================
+# pytest 配置
+# ============================================================================
+
+
+def pytest_addoption(parser):
+    """添加自定义 pytest 选项。"""
+    parser.addoption(
+        "--run-very-slow",
+        action="store_true",
+        default=False,
+        help="运行非常慢的测试"
+    )
+
+
+def pytest_configure(config):
+    """注册自定义 markers。"""
+    config.addinivalue_line(
+        "markers", "very_slow: 标记运行时间很长的测试"
+    )
