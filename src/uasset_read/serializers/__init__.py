@@ -26,6 +26,7 @@ from uasset_read.serializers.graph import (
     read_k2node_knot,
     read_edgraph_node_comment,
     read_k2node_enhanced_input,
+    read_k2node_functionentry,
 )
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     'read_k2node_knot',
     'read_edgraph_node_comment',
     'read_k2node_enhanced_input',
+    'read_k2node_functionentry',
 ]

@@ -107,6 +107,7 @@ from .serializers import (
     read_k2node_knot,
     read_edgraph_node_comment,
     read_k2node_enhanced_input,
+    read_k2node_functionentry,
 )
 
 # 导出核心数据模型（Phase 29）
@@ -123,6 +124,7 @@ from .models import (
     K2NodeKnot,
     EdGraphNodeComment,
     K2NodeEnhancedInputAction,
+    K2NodeFunctionEntry,
     # 结果
     ParseResult,
     StatusInfo,
@@ -350,6 +352,7 @@ __all__ = [
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
+    "K2NodeFunctionEntry",
     # 结果（Phase 29）
     "ParseResult",
     "StatusInfo",
@@ -458,4 +461,5 @@ __all__ = [
     "read_k2node_knot",
     "read_edgraph_node_comment",
     "read_k2node_enhanced_input",
+    "read_k2node_functionentry",
 ]

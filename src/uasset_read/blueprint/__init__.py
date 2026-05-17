@@ -20,6 +20,9 @@ from uasset_read.blueprint.transform_parser import (
     parse_scale_value,
     format_transform_value,
 )
+from uasset_read.blueprint.component_extractor import (
+    extract_components,
+)
 
 __all__ = [
     "extract_blueprint_variables",
@@ -32,4 +35,5 @@ __all__ = [
     "parse_rotator_value",
     "parse_scale_value",
     "format_transform_value",
+    "extract_components",
 ]

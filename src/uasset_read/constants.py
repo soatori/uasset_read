@@ -148,8 +148,29 @@ START_EVENT_TYPES = frozenset({
     "K2Node_Event",
     "K2Node_EnhancedInputAction",
     "K2Node_VariableSet",
-    "K2Node_CustomEvent"
+    "K2Node_CustomEvent",
+    "K2Node_FunctionEntry",  # Phase 52: 函数图执行流起点
 })
+
+# ============================================================================
+# 数据流边界节点集合（Phase 54）
+# ============================================================================
+
+DATA_BOUNDARY_NODES = frozenset({
+    "K2Node_FunctionEntry",  # 函数参数输出作为数据流起点
+    "K2Node_VariableSet",    # 本地变量定义（边界）
+})
+
+# ============================================================================
+# EnhancedInput TriggerEvent 引脚映射
+# ============================================================================
+
+ETRIGGER_EVENT_PIN_MAP = {
+    "Started": "Started",
+    "Triggered": "Ongoing",
+    "Completed": "Completed",
+    "Exited": "Exited",
+}
 
 # ============================================================================
 # 分支类型映射
