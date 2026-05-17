@@ -58,11 +58,10 @@ progress:
 
 ## 全量测试
 
-128 tests collected (Phase 54-02 added 7 tests)
-7 passed (new tests), 4 skipped (Wave 0 pending), 117 deselected
+136 tests collected (Phase 54 added 26 tests)
+26 passed (Phase 54 tests), 110 deselected
 
 ---
 *Started: 2026-05-17*
 *Phase 53 completed: 2026-05-17*
-*Phase 54-01 completed: 2026-05-17*
-*Phase 54-02 completed: 2026-05-17*
+*Phase 54 completed: 2026-05-17 (3 waves, 6 commits per wave)*
