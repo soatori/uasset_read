@@ -128,7 +128,7 @@ def sample_function_graph_with_data_flow():
         pin_name="InputPin",
         direction=0,  # input
         pin_type=real_double_pin_type,
-        linked_to_raw=[]  # 从 FunctionEntry 连接过来
+        linked_to_raw=[{"pin_guid": "84E069914221C8BA662D2CACACA212D4"}]  # ← FunctionEntry Left / Right
     )
 
     knot2_output_pin = UEdGraphPin(
@@ -145,7 +145,7 @@ def sample_function_graph_with_data_flow():
         node_pos_y=-784,
         pins=[knot2_input_pin, knot2_output_pin],
         class_name="K2Node_Knot",
-        node_data=K2NodeKnot()
+        node_data=K2NodeKnot(node_guid="837C1E844F7A32FA1487768C3BF61BE9")
     )
 
     # === K2Node_Knot_1 ===
@@ -157,7 +157,7 @@ def sample_function_graph_with_data_flow():
         pin_name="InputPin",
         direction=0,  # input
         pin_type=real_double_pin_type,
-        linked_to_raw=[]  # 从 Knot_2 连接过来
+        linked_to_raw=[{"pin_guid": "AB447120424DFEB51A3916BA20BD4B78"}]  # ← Knot_2 OutputPin
     )
 
     knot1_output_pin = UEdGraphPin(
@@ -174,7 +174,7 @@ def sample_function_graph_with_data_flow():
         node_pos_y=-784,
         pins=[knot1_input_pin, knot1_output_pin],
         class_name="K2Node_Knot",
-        node_data=K2NodeKnot()
+        node_data=K2NodeKnot(node_guid="5DA12B624225F8CD19A59BB18E30848F")
     )
 
     # === K2Node_CallFunction_7445 (AddMovementInput) ===
@@ -218,7 +218,7 @@ def sample_function_graph_with_data_flow():
         pin_name="ScaleValue",
         direction=0,  # input
         pin_type=real_float_pin_type,
-        linked_to_raw=[]  # 从 Knot_1 连接过来
+        linked_to_raw=[{"pin_guid": "5246D4F84ECABD92CC322BBAD7DCD742"}]  # ← Knot_1 OutputPin
     )
 
     call7445_bforce = UEdGraphPin(
@@ -304,7 +304,7 @@ def sample_function_graph_with_data_flow():
         node_pos_y=-720,
         pins=[knot3_input_pin, knot3_output_pin],
         class_name="K2Node_Knot",
-        node_data=K2NodeKnot()
+        node_data=K2NodeKnot(node_guid="A3BB360E4B1C78100DA81BB3F98FAC18")
     )
 
     # === K2Node_Knot_4 ===
@@ -333,7 +333,7 @@ def sample_function_graph_with_data_flow():
         node_pos_y=-720,
         pins=[knot4_input_pin, knot4_output_pin],
         class_name="K2Node_Knot",
-        node_data=K2NodeKnot()
+        node_data=K2NodeKnot(node_guid="A8FE725843242CEF67F51B9921CC1945")
     )
 
     # === K2Node_CallFunction_7346 (AddMovementInput) ===
@@ -378,7 +378,7 @@ def sample_function_graph_with_data_flow():
         pin_name="ScaleValue",
         direction=0,
         pin_type=real_float_pin_type,
-        linked_to_raw=[]
+        linked_to_raw=[{"pin_guid": "30485995480A49A17B2DB8B87C390771"}]  # ← Knot_4 OutputPin
     )
 
     call7346_bforce = UEdGraphPin(
