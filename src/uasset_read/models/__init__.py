@@ -17,6 +17,7 @@ from .node_types import (
     K2NodeKnot,
     EdGraphNodeComment,
     K2NodeEnhancedInputAction,
+    K2NodeFunctionEntry,
 )
 from .result import (
     ParseResult,
@@ -61,6 +62,7 @@ __all__ = [
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
+    "K2NodeFunctionEntry",
     # 结果（result.py）
     "ParseResult",
     "StatusInfo",
