@@ -29,6 +29,12 @@ progress:
 
 ## 当前进展
 
+**Phase 54 Context 已捕获:**
+- 双向追踪策略（正向 data_providers + 反向 data_sources）
+- Knot 透明穿透 + 图边界停止
+- SubPin 字段级展开（第一级）
+- 仅非 exec pin，聚焦 Pure 函数输出和 CallFunction 输入
+
 **Phase 53 已完成:**
 - `_get_start_event_name` 统一前缀格式
 - `_trace_execution_from_event` 添加 pure function 标记
