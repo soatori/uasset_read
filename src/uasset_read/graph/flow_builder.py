@@ -338,6 +338,111 @@ def _resolve_knot_chain(
     return (current_pin_guid, False)  # 超过深度限制
 
 
+def _trace_data_source(
+    pin: UEdGraphPin,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, UEdGraphNode],
+    node_name_lookup: Dict[str, str] = {}
+) -> Optional[Dict]:
+    """追踪单个参数的数据来源（Phase 54）。
+
+    用于反向数据流追踪：从 CallFunction input pin 开始，穿透 Knot 链，
+    找到数据源节点（FunctionEntry 参数、Pure 函数 ReturnValue、self 引用等）。
+
+    Args:
+        pin: 目标 pin（通常是 CallFunction input pin）
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表
+        node_lookup: node_guid → node 查找表
+        node_name_lookup: node_guid → node_name 查找表
+
+    Returns:
+        Optional[Dict]: 数据来源标注，或 None（默认值/无连接）
+        {
+            "data_sources": [
+                {
+                    "source_type": "pure_function" | "function_parameter" | "self_reference" | "boundary" | "default_value" | "knot_chain_broken" | "pin_not_found" | "node_not_found",
+                    "node": str,  # 可选，节点名称
+                    "pin": str,   # 可选，pin 名称
+                    "function_name": str,  # 可选，函数名（Pure 函数）
+                    "value": str  # 可选，默认值
+                }
+            ]
+        }
+    """
+    # 检查是否有连接
+    if not pin.linked_to_raw:
+        # 默认值
+        if pin.default_value is not None and pin.default_value != "":
+            return {"data_sources": [{"source_type": "default_value", "value": pin.default_value}]}
+        return None  # 无数据源
+
+    # 遍历连接（可能有多个，但通常只有一个）
+    sources: List[Dict] = []
+    for linked_ref in pin.linked_to_raw:
+        target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+
+        # Knot 穿透
+        terminal_pin_guid, success = _resolve_knot_chain(target_pin_guid, pin_lookup, node_lookup)
+        if not success:
+            sources.append({"source_type": "knot_chain_broken", "pin_guid": terminal_pin_guid})
+            continue
+
+        # 获取终端节点
+        terminal_node_guid, terminal_pin_name = pin_lookup.get(terminal_pin_guid, (None, None))
+        if not terminal_node_guid:
+            sources.append({"source_type": "pin_not_found", "pin_guid": terminal_pin_guid})
+            continue
+
+        terminal_node = node_lookup.get(terminal_node_guid)
+        if not terminal_node:
+            sources.append({"source_type": "node_not_found", "node_guid": terminal_node_guid})
+            continue
+
+        # 边界检测
+        if is_boundary_node(terminal_node, terminal_pin_name):
+            # FunctionEntry 参数或 self
+            if terminal_node.class_name == "K2Node_FunctionEntry":
+                node_name = node_name_lookup.get(terminal_node_guid, terminal_node_guid)
+                sources.append({
+                    "source_type": "function_parameter",
+                    "node": node_name,
+                    "pin": terminal_pin_name
+                })
+            elif terminal_pin_name.lower() == "self" or terminal_pin_name.lower() == "target":
+                sources.append({"source_type": "self_reference"})
+            else:
+                # 其他边界（如 VariableSet）
+                node_name = node_name_lookup.get(terminal_node_guid, terminal_node_guid)
+                sources.append({
+                    "source_type": "boundary",
+                    "node": node_name,
+                    "pin": terminal_pin_name
+                })
+        else:
+            # 非边界：通常是 Pure 函数输出
+            if terminal_node.class_name == "K2Node_CallFunction":
+                # 检查是否为 Pure（无 exec pin）
+                has_exec_pin = any(p.pin_type and p.pin_type.pin_category == "exec" for p in terminal_node.pins)
+                node_name = node_name_lookup.get(terminal_node_guid, terminal_node_guid)
+
+                # 获取函数名
+                func_name = None
+                nd = terminal_node.node_data
+                if nd:
+                    fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                    if fr:
+                        func_name = getattr(fr, 'member_name', None)
+
+                sources.append({
+                    "source_type": "pure_function" if not has_exec_pin else "function_output",
+                    "node": node_name,
+                    "function_name": func_name,
+                    "pin": terminal_pin_name
+                })
+
+    return {"data_sources": sources} if sources else None
+
+
 def _find_next_exec_node(
     node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
