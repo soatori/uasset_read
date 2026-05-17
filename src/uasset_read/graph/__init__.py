@@ -11,6 +11,7 @@ from .flow_builder import (
     build_graphs_summary,
     format_graphs_json,
     is_function_graph,
+    build_function_graphs,  # Phase 55
 )
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "build_graphs_summary",
     "format_graphs_json",
     "is_function_graph",
+    "build_function_graphs",
 ]
