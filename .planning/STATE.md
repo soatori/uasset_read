@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v9.0
 milestone_name: 函数调用链解析
 status: in_progress
-last_updated: "2026-05-17T15:12:50Z"
+last_updated: "2026-05-17T15:45:00Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 9
+  percent: 100
 ---
 
 # v9.0 — 函数调用链解析
@@ -18,9 +18,9 @@ progress:
 
 | Phase | 名称 | 状态 |
 |-------|------|------|
-| 52 | 函数图节点解析 | 📋 已规划 (2 plans) |
+| 52 | 函数图节点解析 | ✅ 已完成 (2026-05-17, 2 plans) |
 | 53 | 函数内执行流追踪 | ✅ 已完成 (2026-05-17) |
-| 54 | 数据流追踪 | 🔄 进行中 (Wave 0-1 完成) |
+| 54 | 数据流追踪 | ✅ 已完成 (2026-05-17, 3 plans complete) |
 | 55 | JSON 输出增强 | 📋 Context 已捕获 |
 
 ## 目标
@@ -29,17 +29,15 @@ progress:
 
 ## 当前进展
 
-**Phase 54 Wave 1 已完成:**
-- DATA_BOUNDARY_NODES 常量（FunctionEntry + VariableSet）
-- is_boundary_node 函数（边界检测 + self/Target）
-- _resolve_knot_chain 函数（反向 Knot 链穿透）
-- 7 个核心函数单元测试通过
-- 5 个 fixture bug 修复
-
-**Phase 54 Wave 0 已完成:**
-- 测试 fixture 创建（Move 函数图 + SubPin）
-- 6 个数据流追踪测试骨架（pytest skip）
-- 双向追踪策略基础已建立
+**Phase 54 已完成 (2026-05-17):**
+- ✅ DATA_BOUNDARY_NODES 常量（FunctionEntry + VariableSet）
+- ✅ is_boundary_node 函数（边界检测 + self/Target）
+- ✅ _resolve_knot_chain 函数（反向 Knot 链穿透）
+- ✅ _trace_data_source 函数（完整数据源追踪）
+- ✅ _extract_call_function_parameters 增强（data_source 字段）
+- ✅ Pure 函数 data_providers 标注（正向追踪）
+- ✅ 21 个数据流追踪测试通过（Wave 2 完成）
+- ✅ Move 函数完整数据流验证通过
 
 **Phase 55 Context 已捕获:**
 - function_graphs 顶层数组（与 graphs_summary 同级）

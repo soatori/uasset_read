@@ -39,17 +39,20 @@
 <details>
 <summary>🔲 v9.0 — 函数调用链解析 (IN PROGRESS)</summary>
 
-- [ ] Phase 52: 函数图节点解析 (2 plans)
-  - [ ] 52-01-PLAN.md — K2NodeFunctionEntry 数据模型 + 序列化支持 + function_reference 修复
-  - [ ] 52-02-PLAN.md — START_EVENT_TYPES 扩展 + 执行流集成 + is_function_graph 判断
+- [x] Phase 52: 函数图节点解析 (2 plans) (completed 2026-05-17)
+  - [x] 52-01-PLAN.md — K2NodeFunctionEntry 数据模型 + 序列化支持 + function_reference 修复
+  - [x] 52-02-PLAN.md — START_EVENT_TYPES 扩展 + 执行流集成 + is_function_graph 判断
 - [x] Phase 53: 函数内执行流追踪 (FunctionEntry → CallFunction 链) (2/2 plans complete 2026-05-17)
   - [x] 53-01-PLAN.md — _get_start_event_name 前缀统一 + pure function 标记
   - [x] 53-02-PLAN.md — 4 个新测试（FunctionEntry 前缀/执行流/pure/Knot）
-- [ ] Phase 54: 数据流追踪 (Pure 函数返回值 → 参数输入)
+- [x] Phase 54: 数据流追踪 (Pure 函数返回值 → 参数输入) (3/3 plans complete 2026-05-17)
+  - [x] 54-01-PLAN.md — 测试基础设施（fixture + 6 个测试骨架）
+  - [x] 54-02-PLAN.md — 核心追踪函数（DATA_BOUNDARY_NODES + is_boundary_node + _resolve_knot_chain）
+  - [x] 54-03-PLAN.md — 数据标注增强（_trace_data_source + _extract_call_function_parameters 增强 + Pure 函数 data_providers）
 - [ ] Phase 55: JSON 输出增强 (function_graphs 数组)
 
 </details>
 
 ---
 
-*Updated: 2026-05-17*
+*Updated: 2026-05-17 (Phase 54-03 completed, Wave 2 done)*
