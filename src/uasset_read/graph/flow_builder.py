@@ -158,6 +158,13 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             }
         elif _get('input_action_path') is not None:
             result["input_action_path"] = _get('input_action_path')
+        elif _get('function_reference') is not None and node.class_name == "K2Node_FunctionEntry":
+            fr = _get('function_reference')
+            result["function_entry_reference"] = {
+                "member_name": getattr(fr, 'member_name', None),
+                "member_parent": getattr(fr, 'member_parent', None),
+                "self_context": getattr(fr, 'b_self_context', None)
+            }
         # Knot/Comment 无额外顶层字段
 
     # Phase 49: CallFunction 节点提取结构化 parameters
@@ -222,8 +229,36 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
         return "VariableSet"
     elif node.class_name == "K2Node_CustomEvent":
         return "CustomEvent"
+    elif node.class_name == "K2Node_FunctionEntry":
+        if not nd:
+            return node.class_name
+        if isinstance(nd, dict):
+            fr = nd.get("function_reference")
+        else:
+            fr = getattr(nd, 'function_reference', None)
+        if fr:
+            mn = getattr(fr, 'member_name', None) if not isinstance(fr, dict) else fr.get("member_name")
+            if mn and mn != "None":
+                return mn
+        return node.class_name
 
     return node.class_name
+
+
+def is_function_graph(graph: UEdGraph) -> bool:
+    """判断图是否为函数图（非事件图）。
+
+    组合判断（D-01）：
+    1. 含 K2Node_FunctionEntry → Function Graph
+    2. 含 K2Node_Event → EventGraph
+    3. Fallback: graph_name 模式
+    """
+    node_types = {n.class_name for n in graph.nodes}
+    if "K2Node_FunctionEntry" in node_types:
+        return True
+    if "K2Node_Event" in node_types:
+        return False
+    return graph.graph_name.lower() != "eventgraph"
 
 
 def _find_next_exec_node(
@@ -317,6 +352,13 @@ def _trace_execution_from_event(
                 er = nd.get("event_reference") if isinstance(nd, dict) else getattr(nd, 'event_reference', None)
                 if er:
                     node_info["event_name"] = getattr(er, 'member_name', None)
+
+        if current_node.class_name == "K2Node_FunctionEntry":
+            nd = current_node.node_data
+            if nd:
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                if fr:
+                    node_info["function_name"] = getattr(fr, 'member_name', None)
 
         if current_node.class_name in CONTROL_FLOW_NODES:
             branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
