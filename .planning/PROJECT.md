@@ -16,15 +16,15 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 | v6.0 | ✅ 模块化重构 | 2026-05-13 |
 | v7.0 | ✅ UE FLinkerLoad 对象图重建 + 技术债清理 | 2026-05-14 |
 | **v8.0** | ✅ BP-to-CPP JSON 可翻译性 (Phase 47-51) | 2026-05-17 |
-| **v9.0** | 🔲 函数调用链解析 (Phase 52-55) | 2026-05-17 |
+| **v9.0** | ✅ 函数调用链解析 (Phase 52-55) | 2026-05-17 |
 
 **历史**: `.planning/milestones/` | **详情**: `.planning/ROADMAP.md`
 
 ## 当前状态
 
-**已发布**: v8.0 — BP-to-CPP JSON 可翻译性
+**已发布**: v9.0 — 函数调用链解析
 
-**当前开发**: v9.0 — 函数调用链解析
+**当前开发**: 规划下一里程碑
 
 从蓝图函数图中提取完整函数调用链，使 JSON 输出可翻译为等价的 C++ 函数实现。
 
@@ -33,6 +33,8 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 - ✅ 函数签名（参数名+类型+默认值+方向）
 - ✅ 输入绑定（Action→Trigger→函数）
 - ✅ 执行流（BeginPlay→函数链）
+- ✅ 函数粒度调用链（function_graphs 数组，output_version 5.0）
+- ✅ 数据流标注（data_providers + data_sources 内嵌）
 
 **预存在问题**: 26 个测试失败（资产版本 -8 vs -9，pre-existing）
 
@@ -72,4 +74,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-17 after v9.0 milestone started*
+*Last updated: 2026-05-18 after v9.0 milestone shipped*
