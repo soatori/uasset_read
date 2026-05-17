@@ -4095,3 +4095,155 @@ def test_resolve_knot_chain_non_knot_terminal():
     terminal_guid, success = _resolve_knot_chain("input_pin", pin_lookup, node_lookup)
     assert success == True, "非Knot节点直接返回"
     assert terminal_guid == "input_pin", "pin_guid 未改变"
+
+
+# ============================================================================
+# Phase 54-03: _trace_data_source 函数测试
+# ============================================================================
+
+
+def test_trace_data_source_pure_function_direct(sample_function_graph_with_data_flow):
+    """Phase 54-03: 验证 _trace_data_source 追踪 Pure 函数 ReturnValue。
+
+    数据流路径：
+    CallFunction_8520 (GetActorRightVector) ReturnValue → CallFunction_7445 WorldDirection
+
+    验证点：
+    - source_type == "pure_function"
+    - function_name == "GetActorRightVector"
+    - pin == "ReturnValue"
+    """
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+    for idx, node in enumerate(graph.nodes):
+        node_lookup[node.node_guid] = node
+        node_name_lookup[node.node_guid] = f"{node.class_name}_{idx}"
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    from uasset_read.graph.flow_builder import _trace_data_source
+
+    # 找到 CallFunction_7445 (AddMovementInput) 的 WorldDirection pin
+    call_func = node_lookup.get("80513E42423F4BFC7026A5AF32A5167B")
+    world_dir_pin = next(p for p in call_func.pins if p.pin_name == "WorldDirection")
+
+    # 追踪数据源
+    result = _trace_data_source(world_dir_pin, pin_lookup, node_lookup, node_name_lookup)
+
+    assert result is not None, "有数据源"
+    data_sources = result.get("data_sources", [])
+    assert len(data_sources) > 0, "至少一个数据源"
+
+    # 验证来自 Pure 函数
+    pure_source = next(s for s in data_sources if s["source_type"] == "pure_function")
+    assert pure_source["function_name"] == "GetActorRightVector", "数据来自 GetActorRightVector"
+    assert pure_source["pin"] == "ReturnValue", "数据来自 ReturnValue pin"
+
+
+def test_trace_data_source_knot_chain_direct(sample_function_graph_with_data_flow):
+    """Phase 54-03: 验证 _trace_data_source 穿透 Knot 链到达 FunctionEntry。
+
+    数据流路径：
+    FunctionEntry_0 "Left / Right" → Knot_2 → Knot_1 → CallFunction_7445.ScaleValue
+
+    验证点：
+    - Knot 链成功穿透
+    - source_type == "function_parameter"
+    - pin == "Left / Right"
+    """
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+    for idx, node in enumerate(graph.nodes):
+        node_lookup[node.node_guid] = node
+        node_name_lookup[node.node_guid] = f"{node.class_name}_{idx}"
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    from uasset_read.graph.flow_builder import _trace_data_source
+
+    # 找到 CallFunction_7445 的 ScaleValue pin
+    call_func = node_lookup.get("80513E42423F4BFC7026A5AF32A5167B")
+    scale_pin = next(p for p in call_func.pins if p.pin_name == "ScaleValue")
+
+    # 追踪数据源
+    result = _trace_data_source(scale_pin, pin_lookup, node_lookup, node_name_lookup)
+
+    assert result is not None, "有数据源"
+    data_sources = result.get("data_sources", [])
+    assert len(data_sources) > 0, "至少一个数据源"
+
+    # 验证来自 FunctionEntry
+    func_param_source = next(s for s in data_sources if s["source_type"] == "function_parameter")
+    assert "FunctionEntry" in func_param_source["node"], "数据来自 FunctionEntry"
+    assert func_param_source["pin"] == "Left / Right", "数据来自 Left / Right pin"
+
+
+def test_trace_data_source_self_pin_direct(sample_function_graph_with_data_flow):
+    """Phase 54-03: 验证 _trace_data_source 处理 self pin（无连接）。
+
+    self pin 通常无 linked_to_raw，应返回 None 或 default_value 类型。
+    """
+    graph = sample_function_graph_with_data_flow
+
+    # 构建 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+    for idx, node in enumerate(graph.nodes):
+        node_lookup[node.node_guid] = node
+        node_name_lookup[node.node_guid] = f"{node.class_name}_{idx}"
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    from uasset_read.graph.flow_builder import _trace_data_source
+
+    # 找到 CallFunction_7445 的 self pin
+    call_func = node_lookup.get("80513E42423F4BFC7026A5AF32A5167B")
+    self_pin = next(p for p in call_func.pins if p.pin_name == "self")
+
+    # self pin 无连接
+    result = _trace_data_source(self_pin, pin_lookup, node_lookup, node_name_lookup)
+
+    # self pin 无 linked_to_raw，应返回 None
+    assert result is None, "self pin 无连接，返回 None"
+
+
+def test_trace_data_source_default_value():
+    """Phase 54-03: 验证 _trace_data_source 处理默认值 pin。
+
+    有 default_value 但无连接的 pin，应返回 source_type == "default_value"。
+    """
+    from uasset_read.graph.flow_builder import _trace_data_source
+    from uasset_read import UEdGraphPin, FEdGraphPinType
+
+    # Mock pin with default value
+    bool_pin_type = FEdGraphPinType(pin_category="bool", pin_subcategory="", container_type=0)
+    pin_with_default = UEdGraphPin(
+        pin_id="test_pin",
+        pin_name="bForce",
+        direction=0,
+        pin_type=bool_pin_type,
+        linked_to_raw=[],  # 无连接
+        default_value="false"
+    )
+
+    # 空 lookup
+    pin_lookup = {}
+    node_lookup = {}
+    node_name_lookup = {}
+
+    result = _trace_data_source(pin_with_default, pin_lookup, node_lookup, node_name_lookup)
+
+    assert result is not None, "有默认值"
+    data_sources = result.get("data_sources", [])
+    assert len(data_sources) == 1, "一个数据源"
+    assert data_sources[0]["source_type"] == "default_value", "source_type 为 default_value"
+    assert data_sources[0]["value"] == "false", "默认值为 false"
