@@ -280,6 +280,60 @@ def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
     return False
 
 
+def _resolve_knot_chain(
+    pin_guid: str,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, UEdGraphNode],
+    max_depth: int = 20
+) -> Tuple[str, bool]:
+    """递归穿透 Knot 链直到到达非 Knot 节点（Phase 54）。
+
+    Args:
+        pin_guid: 起始 pin GUID
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表
+        node_lookup: node_guid → node 查找表
+        max_depth: 最大穿透深度（防止无限循环）
+
+    Returns:
+        Tuple[str, bool]: (terminal_pin_guid, success)
+        - success=True: 找到非 Knot 终端节点
+        - success=False: 链断裂或循环检测
+    """
+    visited: Set[str] = set()
+    current_pin_guid = pin_guid
+
+    for _ in range(max_depth):
+        if current_pin_guid in visited:
+            return (current_pin_guid, False)  # 循环检测
+
+        visited.add(current_pin_guid)
+
+        # Get target node
+        target_node_guid, _ = pin_lookup.get(current_pin_guid, (None, None))
+        if not target_node_guid:
+            return (current_pin_guid, False)  # Pin 不存在
+
+        target_node = node_lookup.get(target_node_guid)
+        if not target_node:
+            return (current_pin_guid, False)  # Node 不存在
+
+        # Check if Knot
+        if target_node.class_name != "K2Node_Knot":
+            return (current_pin_guid, True)  # 到达非 Knot 节点
+
+        # Knot: Find OutputPin
+        for pin in target_node.pins:
+            if pin.pin_name == "OutputPin" and pin.direction == 1:
+                # OutputPin 的 linked_to_raw 是下一个 pin
+                for linked_ref in (pin.linked_to_raw or []):
+                    next_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                    current_pin_guid = next_pin_guid
+                    break
+                break
+
+    return (current_pin_guid, False)  # 超过深度限制
+
+
 def _find_next_exec_node(
     node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
