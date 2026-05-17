@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v9.0
 milestone_name: 函数调用链解析
-status: planning
-last_updated: "2026-05-17T02:30:00.000Z"
+status: planned
+last_updated: "2026-05-17T03:30:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -18,7 +18,7 @@ progress:
 
 | Phase | 名称 | 状态 |
 |-------|------|------|
-| 52 | 函数图节点解析 | 🔲 待开始 |
+| 52 | 函数图节点解析 | 📋 已规划 (2 plans) |
 | 53 | 函数内执行流追踪 | 🔲 待开始 |
 | 54 | 数据流追踪 | 🔲 待开始 |
 | 55 | JSON 输出增强 | 🔲 待开始 |
