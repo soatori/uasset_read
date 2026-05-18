@@ -19,7 +19,7 @@ progress:
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Completed (4/4) |
-| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Completed (5/5) |
+| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Completed (5/5 + UAT) |
 | 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Not started |
 | 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Not started |
 | 60 | 验证与测试 | 基于真实资产验证端到端 C++ 参考输出 | TEST-01, TEST-02, TEST-03 | Not started |
