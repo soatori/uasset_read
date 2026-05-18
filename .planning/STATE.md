@@ -54,6 +54,7 @@ Phase 59 (组件初始化) ─────────────┘
 - 56-01: C++ Type Mapping Engine (2026-05-18, 1 commit)
 - 56-02: C++ Skeleton Extraction Core (2026-05-18, 2 commits)
 - 56-03: C++ Header Formatter + Golden-path E2E Test (2026-05-18, 2 commits)
+- 56-04: CLI Integration + Real .uasset E2E Tests (2026-05-18, 2 commits)
 
 ## 上下文
 
