@@ -661,3 +661,260 @@ The `ue_path_to_cpp_type()` function handles both string types and path types. F
 
 **Research date:** 2026-05-18
 **Valid until:** 30 days (stable domain — depends only on existing project code, not external libraries)
+
+---
+
+## Phase 56 蓝图节点分析补充
+
+**日期**: 2026-05-18  
+**参考**: `reference/蓝图节点文本参考.md` + `tests/test_cpp_skeleton_e2e.py`
+
+### 蓝图节点类型分布
+
+| 节点类型 | 数量 | 说明 |
+|---------|------|------|
+| `K2Node_CallFunction` | ~15 | 函数调用节点 |
+| `K2Node_EnhancedInputAction` | 4 | 增强输入动作节点 |
+| `K2Node_FunctionEntry` | 1 | 自定义函数入口 (Move) |
+| `EdGraphNode_Comment` | 3 | 注释框节点 |
+| `K2Node_Knot` | 10+ | 连线转接节点 |
+
+### 函数签名实例（来自真实蓝图）
+
+**Move 函数**:
+```
+K2Node_FunctionEntry_0:
+  FunctionReference=(MemberName="Move")
+  Pins:
+    - "then" (exec, Output)
+    - "Left / Right" (real/double, Output)
+    - "Forward / Backward" (real/double, Output)
+```
+→ C++ 声明: `UFUNCTION(BlueprintCallable) void Move(double LeftRight, double ForwardBackward);`
+
+**Aim 函数**:
+```
+K2Node_CallFunction_11:
+  FunctionReference=(MemberName="Aim", bSelfContext=True)
+  Pins:
+    - "execute" (exec, Input, LinkedTo=EnhancedInputAction)
+    - "then" (exec, Output)
+    - "Yaw" (real/float, Input)
+    - "Pitch" (real/double, Input)
+```
+→ C++ 调用: `this->Aim(Yaw, Pitch);`
+
+### 调用语句实例（Phase 57 提取目标）
+
+| 节点 | 调用 | 说明 |
+|-----|------|------|
+| K2Node_CallFunction_1193 | `this->Jump();` | 无参数函数 |
+| K2Node_CallFunction_5/4 | `this->Move(LeftRight, ForwardBackward);` | 带参数函数 |
+| K2Node_CallFunction_11 | `this->Aim(Yaw, Pitch);` | 带参数函数 |
+
+### 执行流连接（用于 Phase 58）
+
+```
+K2Node_EnhancedInputAction_2 (Triggered) → K2Node_CallFunction_11 (Aim)
+K2Node_EnhancedInputAction_3 (Triggered) → K2Node_CallFunction_5 (Move)
+K2Node_EnhancedInputAction_5 (Started) → K2Node_CallFunction_1193 (Jump)
+K2Node_EnhancedInputAction_5 (Completed) → K2Node_CallFunction_9386 (StopJumping)
+```
+
+### 参数数据流（用于 Phase 58）
+
+```
+ActionValue_X (EnhancedInputAction_2) → Pin "Yaw" (CallFunction_11)
+ActionValue_Y (EnhancedInputAction_2) → Pin "Pitch" (CallFunction_11)
+
+ActionValue_X (EnhancedInputAction_3) → Pin "Left / Right" (CallFunction_5)
+ActionValue_Y (EnhancedInputAction_3) → Pin "Forward / Backward" (CallFunction_5)
+```
+
+### 关键观察
+
+1. **Pin 名称包含分隔符**: `"Left / Right"`, `"Forward / Backward"` → 需要sanitize处理
+2. **C++ 类型映射**: `real/double` → `double`, `real/float` → `float`
+3. **单精度处理**: `bSerializeAsSinglePrecisionFloat` 字段在 PinType 中
+4. **没有 UFUNCTION 的函数**: Override methods (`bOverrideFunction=True`)
+5. **增强输入依赖**: `UInputAction`, `UEnhancedInputComponent` 类型需从 Phase 56 扩展
+
+### 建议
+
+- Phase 57 优先处理 `K2Node_FunctionEntry` 和 `K2Node_CallFunction`
+- Event override 函数需要特殊处理（D-57-04）
+- 空参数函数（如 `Jump()`, `StopJumping()`）需要正确识别
+- Pin 名称 sanitize 规则：`"Left / Right"` → `"LeftRight"` 或 `"Left_Right"`
+
+---
+
+## Action 类型补充（Phase 56 发现）
+
+**日期**: 2026-05-18  
+**主题**: InputAction, UInputAction, EnhancedInputComponent 处理
+
+### 问题：Action 类型在蓝图中的表示
+
+**发现**：
+1. 蓝图中有 `InputAction` 资源引用（如 `IA_Jump`, `IA_Move`, `IA_Look`, `IA_MouseLook`）
+2. 这些在 `.uasset` 中表示为 `ObjectProperty`，指向 `/Game/Input/Actions/IA_XXX.IA_XXX`
+3. 在 C++ 中对应 `UInputAction*` 类型变量
+
+### 类型映射（需要 Phase 56 扩展）
+
+| UE 类型路径 | C++ 类型 | 状态 |
+|-------------|---------|------|
+| `/Script/EnhancedInput.InputAction` | `UInputAction*` | ⚠️ 需要添加到 `UE_TO_CPP_TYPE_MAP` |
+| `/Script/EnhancedInput.EnhancedInputComponent` | `UEnhancedInputComponent*` | ⚠️ 需要添加 |
+| `/Script/EnhancedInput.InputActionValue` | `FInputActionValue` | ⚠️ 需要添加 |
+
+### Variable 提取（Phase 57）
+
+**蓝图中的 InputAction 变量**：
+```
+Blueprint.variables:
+  - var_name: "JumpAction"
+    var_type: ObjectProperty (pin_subcategory_object: InputAction)
+    property_flags: CPF_Edit | CPF_BlueprintVisible
+  - var_name: "MoveAction"
+    var_type: ObjectProperty
+  - var_name: "LookAction"
+  - var_name: "MouseLookAction"
+```
+
+**期望 C++ 输出**：
+```cpp
+UPROPERTY(EditAnywhere, BlueprintReadOnly)
+UInputAction* JumpAction;
+
+UPROPERTY(EditAnywhere, BlueprintReadOnly)
+UInputAction* MoveAction;
+
+UPROPERTY(EditAnywhere, BlueprintReadOnly)
+UInputAction* LookAction;
+
+UPROPERTY(EditAnywhere, BlueprintReadOnly)
+UInputAction* MouseLookAction;
+```
+
+### CallFunction 参数（Phase 58）
+
+**EnhancedInputComponent::BindAction 调用**：
+```cpp
+EnhancedInputComponent->BindAction(
+    JumpAction,        // UInputAction*
+    ETriggerEvent::Started,
+    this,
+    &ACharacter::Jump
+);
+```
+
+**参数来源**：
+- `InputAction` → InputAction 变量名（JumpAction）
+- `ETriggerEvent` → 从 EnhancedInputAction 节点的触发器输出推断
+  - `Started` pin → `ETriggerEvent::Started`
+  - `Completed` pin → `ETriggerEvent::Completed`
+  - `Triggered` pin → `ETriggerEvent::Triggered`
+- `this` → self context
+- `&ACharacter::Jump` → 从 CallFunction 的 `FunctionReference.MemberName` 推断
+
+### Action 初始化（Phase 59）
+
+**Expectations**：
+```cpp
+// Option 1: 从资源路径加载（推荐用于 InputAction 资产）
+JumpAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
+MoveAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/Actions/IA_Move.IA_Move"));
+// ...
+
+// Option 2: CreateDefaultSubobject（如果 InputAction 是子对象）
+JumpAction = CreateDefaultSubobject<UInputAction>(TEXT("JumpAction"));
+// 然后从外部配置文件加载
+```
+
+**Phase 59 决策**：
+- 从 `default_value` 字段判断：
+  - 如果是路径字符串 → `LoadObject`
+  - 如果是空值 → 创建但不初始化（需要用户配置）
+
+### 需要处理的节点（Phase 58/59）
+
+| 节点类型 | 处理内容 |
+|---------|---------|
+| `K2Node_EnhancedInputAction` | 仅提取触发器类型（Started/Completed/Triggered），不翻译节点本身 |
+| `EnhancedInputComponent.BindAction` | 翻译 `BindAction(UInputAction*, ETriggerEvent, this, &Function)` |
+
+### 独立模块建议
+
+**`extractors/cpp_input_action_extractor.py`** (Phase 57/58):
+
+```python
+def extract_input_action_bindings(graphs) -> List[CppBindActionStatement]:
+    """从 K2Node_EnhancedInputAction 提取 BindAction 调用"""
+    bindings = []
+    for graph in graphs:
+        for node in graph.nodes:
+            if node.class_name == "K2Node_EnhancedInputAction":
+                # 从 node.data提取 InputAction 资源路径
+                input_action_ref = node.node_data.get("InputAction")
+                # 从 pins 提取触发器类型
+                triggered_pins = [p for p in node.pins if p.pin_name in ("Started", "Completed", "Triggered")]
+                # 从 LinkedTo 提取 CallFunction
+                call_func = find_connected_call_function(node, pin_name="Triggered")
+                if call_func:
+                    bindings.append(CppBindActionStatement(
+                        input_action=input_action_ref,
+                        trigger_event=parse_trigger_event(pins),
+                        function_name=call_func.function_reference.member_name,
+                    ))
+    return bindings
+```
+
+### 数据流总结
+
+```
+EnhancedInputAction (IA_Jump)
+  ↓ (pin "Started")
+  ↓ (LinkedTo)
+K2Node_CallFunction (Jump)
+  ↓
+Extract:
+  - input_action: JumpAction (from EnhancedInputAction.InputAction)
+  - trigger_event: Started
+  - function: Jump (from CallFunction.FunctionReference)
+  ↓
+CppBindActionStatement:
+  BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump)
+  ↓
+Append to constructor.body[] (Phase 59) or SetupPlayerInputComponent (Phase 58)
+```
+
+### Type Mapping Reference (增强 Input)
+
+```python
+# 必须添加到 cpp_type_mapper.py
+UE_TO_CPP_TYPE_MAP = {
+    # ... existing mappings ...
+    "InputAction": "UInputAction*",
+    "EnhancedInputComponent": "UEnhancedInputComponent*",
+    "InputActionValue": "FInputActionValue",
+    "ETriggerEvent": "ETriggerEvent",  # enum
+}
+
+# 从 ObjectProperty 的 pin_subcategory_object 推断
+# "/Script/EnhancedInput.InputAction" → "UInputAction*"
+```
+
+### Assumptions for Action Types
+
+| # | Claim | Risk if Wrong |
+|---|-------|---------------|
+| A1 | InputAction 资源通过 `LoadObject` 加载，不通过 `CreateDefaultSubobject` | 如果需要创建，Phase 59 需要扩展 |
+| A2 | EnhancedInputComponent 在蓝图中隐式存在 | 如果需要显式声明，Phase 57 需要添加到 properties |
+| A3 | TriggerEvent 从 EnhancedInputAction pin 名称推断 | 如果有不同命名，需要额外解析逻辑 |
+| A4 | InputAction 变量名与资源路径中的名称匹配 | 如果不匹配，需要额外映射 |
+
+** Documents linked to Phase 56 analysis:**
+- `.planning/phases/056-cpp-class-skeleton/CPP_GAP_ANALYSIS.md`
+- `.planning/phases/056-cpp-class-skeleton/BLUEPRINT_NODES_VS_CPP.md`
+
