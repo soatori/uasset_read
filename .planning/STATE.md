@@ -1,102 +1,39 @@
 ---
 gsd_state_version: 1.0
-milestone: v10.0
-milestone_name: Blueprint-to-C++ 代码生成参考
-status: in_progress
-last_updated: "2026-05-18T06:00:00Z"
+milestone: v11.0
+milestone_name: Kismet 字节码反编译器
+status: planned
+last_updated: "2026-05-18T06:30:00Z"
 progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 5
+  completed_plans: 0
+  percent: 0
 ---
 
-# v10.0 — Blueprint-to-C++ 代码生成参考
+# v11.0 — Kismet 字节码反编译器
+
+**Started: 2026-05-18**
+**Reference:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Completed (4/4) |
-| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Completed (5/5 + UAT) |
-| 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Completed (2/2) |
-| 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Completed (4/4 + UAT) |
-| 60 | 验证与测试 | 基于真实资产验证端到端 C++ 参考输出 | TEST-01, TEST-02, TEST-03 | Completed (5/5) |
+| 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | Planned (2 plans) |
+| 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | Planned (1 plan) |
+| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Planned (1 plan) |
+| 64 | 集成与验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned (1 plan) |
 
 ## 依赖关系
 
 ```
-Phase 56 (类骨架) ──→ Phase 57 (函数签名) ──→ Phase 58 (函数体逻辑)
-     │                                              │
-     └──────────────────────────────────────────────┘
-                                  │
-Phase 59 (组件初始化) ─────────────┘
-                                  │
-                         Phase 60 (验证与测试)
+Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C++) → Phase 64 (集成验证)
 ```
-
-- Phase 56 是基础，无依赖
-- Phase 57 依赖 Phase 56（类声明完成后才能添加函数声明）
-- Phase 58 依赖 Phase 57（函数签名完成后才能填充函数体）
-- Phase 59 依赖 Phase 56（组件 UPROPERTY 声明完成后才能生成初始化代码）
-- Phase 60 依赖 Phase 58 和 Phase 59（需要完整的类骨架+函数+组件初始化才能端到端验证）
-
-## 目标
-
-从蓝图 JSON 输出提取足够信息，使开发者能直接编写等价的 C++ 类实现。
-
-## 当前状态
-
-**Milestone 状态:** 执行中
-
-**最近完成的计划:**
-- 58-01: CppFunctionBodyExtractor (2026-05-18, 1 commit)
-- 58-02: CppFunctionBodyFormatter (2026-05-18, 1 commit)
-- 57-01: IR Data Models (2026-05-18, 1 commit)
-- 57-02: Function Signature Extraction Core (2026-05-18, 1 commit)
-- 57-03: Call Statement Extraction (2026-05-18, 1 commit)
-- 57-04: Header Formatter Extension (2026-05-18, 1 commit)
-- 57-05: Golden-path Integration Tests (2026-05-18, 1 commit)
 
 ## 上下文
 
-- v9.0 已完成：执行流追踪、数据流追踪、function_graphs 输出
-- 参考数据：`reference/蓝图节点文本参考.md`（BP_FirstPersonCharacter 真实导出）
-- 测试基础：656 passed / 107 skipped（763 total）
-- 技术栈：Python 3.10+，零运行时依赖
-- 架构管道：`.uasset → FArchive → Serializers → Models → Parsers → Graph → Formatters`
-
-## Accumulated Context
-
-### Roadmap Evolution
-
-- Phase 60 directory created: 060-verification-testing (2026-05-18)
-
-## 覆盖验证
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| CPP-01 | Phase 56 | Completed (56-01, 56-02, 56-03) |
-| CPP-02 | Phase 56 | Completed (56-01, 56-02, 56-03) |
-| CPP-03 | Phase 56 | Completed (56-02, 56-03) |
-| FUNC-01 | Phase 57 | Completed (57-01, 57-02, 57-04, 57-05) |
-| FUNC-02 | Phase 57 | Completed (57-01, 57-03, 57-04, 57-05) |
-| FUNC-03 | Phase 57 | Completed (57-02, 57-05) |
-| BODY-01 | Phase 58 | Pending |
-| BODY-02 | Phase 58 | Pending |
-| BODY-03 | Phase 58 | Pending |
-| BODY-04 | Phase 58 | Pending |
-| COMP-01 | Phase 59 | Pending |
-| COMP-02 | Phase 59 | Pending |
-| TEST-01 | Phase 60 | Completed (60-01, 60-02) |
-| TEST-02 | Phase 60 | Completed (60-02, 60-03) |
-| TEST-03 | Phase 60 | Completed (60-03, 60-04) |
-
-**Coverage: 15/15 requirements mapped**
-
----
-*Started: 2026-05-18*
-*ROADMAP created: 2026-05-18*
-*Phase 56 completed: 2026-05-18*
-*Phase 57 completed: 2026-05-18*
+- CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
+- 本项目技术栈：Python 3.10+，零运行时依赖
+- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
