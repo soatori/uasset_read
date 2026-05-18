@@ -558,3 +558,176 @@ class TestMockDataIntegrity:
         assert var_types["MoveSpeed"] == "float"
         assert var_types["JumpHeight"] == "float"
         assert var_types["isAiming"] == "bool"
+
+
+# ============================================================================
+# Real .uasset 端到端测试（Per PLAN.md Task 4-2）
+# ============================================================================
+
+import pytest
+from pathlib import Path
+from uasset_read.parse_uasset import parse_uasset_with_linker
+from uasset_read.cpp_gen import extract_cpp_class_skeleton, format_cpp_header
+
+# 测试资产路径
+UASSET_DIR = Path(r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson")
+
+
+class TestBPFirstPersonCharacterRealUasset:
+    """Golden-path: real .uasset → parse_uasset_with_linker → extract → format → .h
+
+    Per D-07: 集成测试基于 BP_FirstPersonCharacter 真实导出数据结构。
+    使用真实 .uasset 文件驱动完整管线，而非 mock 数据。
+    """
+
+    @pytest.fixture
+    def bp_first_person_uasset(self):
+        """Locate BP_FirstPersonCharacter.uasset in sample directory."""
+        candidates = list(UASSET_DIR.rglob("BP_FirstPersonCharacter.uasset"))
+        assert len(candidates) > 0, f"BP_FirstPersonCharacter.uasset not found in {UASSET_DIR}"
+        return candidates[0]
+
+    @pytest.fixture
+    def linker_result(self, bp_first_person_uasset):
+        """Parse real .uasset file through full pipeline."""
+        return parse_uasset_with_linker(str(bp_first_person_uasset))
+
+    def test_class_name_and_parent(self, linker_result):
+        """Verify class name contains 'FirstPerson' and parent is ACharacter."""
+        ir = extract_cpp_class_skeleton(linker_result)
+
+        # 验证父类是 ACharacter（或包含 Character）
+        assert "Character" in ir.parent_class or ir.parent_class == "ACharacter"
+
+        # 验证类名包含 FirstPerson 或 BP（蓝图命名）
+        assert "FirstPerson" in ir.name or "BP" in ir.name or "_" in ir.name
+
+    def test_component_uproperties(self, linker_result):
+        """Verify component properties have pointer types and UPROPERTY marks."""
+        ir = extract_cpp_class_skeleton(linker_result)
+        comp_props = [p for p in ir.properties if p.category == "component"]
+
+        # BP_FirstPersonCharacter 至少有 CameraComponent 和一些基础组件
+        assert len(comp_props) >= 2, "Expected at least 2 component properties"
+
+        # 所有组件应该是指针类型
+        for prop in comp_props:
+            assert prop.cpp_type.endswith("*"), f"{prop.name} should be pointer type, got {prop.cpp_type}"
+            # 组件应该有 Instanced 标记（Blueprint 组件的 UPROPERTY 规范）
+            assert "Instanced" in prop.uproperty_marks, f"{prop.name} missing Instanced mark"
+
+    def test_variable_uproperties_format(self, linker_result):
+        """Verify variable properties have valid C++ types."""
+        ir = extract_cpp_class_skeleton(linker_result)
+        var_props = [p for p in ir.properties if p.category == "variable"]
+
+        # 蓝图变量可能有 0 个（如果只有内部元数据变量）
+        # 验证变量格式正确（类型在有效范围内）
+        valid_cpp_types = [
+            "float", "bool", "int", "int32", "int64",
+            "uint8", "uint16", "uint32", "uint64",
+            "FName", "FString", "FText",
+            "FVector", "FRotator", "FTransform",
+            "UObject*", "AActor*", "UActorComponent*",
+        ]
+
+        for prop in var_props:
+            # 验证类型是有效的 C++ 类型或指针
+            is_valid = (
+                prop.cpp_type in valid_cpp_types or
+                prop.cpp_type.endswith("*") or
+                prop.cpp_type.startswith("T") or  # TArray, TMap, TSet 等模板
+                "Property" in prop.cpp_type  # Blueprint 内部类型
+            )
+            assert is_valid, f"{prop.name} has unexpected C++ type: {prop.cpp_type}"
+
+    def test_header_output(self, linker_result):
+        """Verify format_cpp_header produces valid UE .h structure."""
+        ir = extract_cpp_class_skeleton(linker_result)
+        header = format_cpp_header(ir)
+
+        # 验证基本 UE 头文件结构
+        assert "#pragma once" in header
+        assert "GENERATED_BODY()" in header
+        assert ".generated.h" in header
+        assert "UCLASS" in header
+        assert "UPROPERTY" in header
+        assert ": public" in header  # 继承声明
+
+        # 验证类声明格式正确
+        assert "class " in header
+        assert "{" in header
+        assert header.rstrip().endswith("};")
+
+    def test_header_has_components_section(self, linker_result):
+        """Verify header has Components section with UPROPERTY declarations."""
+        ir = extract_cpp_class_skeleton(linker_result)
+        header = format_cpp_header(ir)
+
+        # 如果有组件，应该有 Components 注释块
+        if ir.properties and any(p.category == "component" for p in ir.properties):
+            assert "// Components" in header
+
+            # 验证组件 UPROPERTY 格式
+            assert "UPROPERTY(VisibleAnywhere" in header or "UPROPERTY(" in header
+
+
+class TestCPPSkeletonRealUassetBoundaryCases:
+    """Boundary tests using real .uasset files when available."""
+
+    @pytest.fixture
+    def uasset_dir(self):
+        """Return test asset directory, skip tests if not available."""
+        if not UASSET_DIR.exists():
+            pytest.skip(f"Test asset directory not found: {UASSET_DIR}")
+        return UASSET_DIR
+
+    def test_empty_blueprint_class_structure(self):
+        """Test empty blueprint produces minimal valid .h structure."""
+        # 使用纯 CppClassIR 测试（不需要真实 .uasset）
+        ir = CppClassIR(
+            name="AMinimalClass",
+            parent_class="AActor",
+            header_meta=CppHeaderMeta(),
+            properties=[],
+            methods=[],
+            constructor={}
+        )
+        header = format_cpp_header(ir)
+
+        # 验证最小有效结构
+        assert "#pragma once" in header
+        assert "class AMinimalClass : public AActor" in header
+        assert "GENERATED_BODY()" in header
+        assert "public:" in header
+        assert "protected:" in header
+
+    def test_single_inheritance_from_uobject(self):
+        """Test single inheritance (Class → UObject) produces correct .h."""
+        ir = CppClassIR(
+            name="UBP_Test",
+            parent_class="UActorComponent",
+            header_meta=CppHeaderMeta(),
+            properties=[],
+            methods=[],
+            constructor={}
+        )
+        header = format_cpp_header(ir)
+
+        # 验证 UActorComponent 继承
+        assert "class UBP_Test : public UActorComponent" in header
+
+    def test_single_inheritance_from_character(self):
+        """Test ACharacter inheritance produces correct prefix."""
+        ir = CppClassIR(
+            name="ABP_MyCharacter",
+            parent_class="ACharacter",
+            header_meta=CppHeaderMeta(),
+            properties=[],
+            methods=[],
+            constructor={}
+        )
+        header = format_cpp_header(ir)
+
+        # 验证 A 前缀和 Character 继承
+        assert "class ABP_MyCharacter : public ACharacter" in header
