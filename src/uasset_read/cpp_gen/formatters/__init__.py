@@ -22,6 +22,7 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
 )
 from uasset_read.cpp_gen.formatters.cpp_header_formatter import (
     format_cpp_header,
+    format_cpp_call_statements,
 )
 
 __all__ = [
@@ -34,4 +35,6 @@ __all__ = [
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
+    # Call statement formatting (Phase 57)
+    "format_cpp_call_statements",
 ]

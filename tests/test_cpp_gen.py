@@ -3,8 +3,9 @@ import pytest
 from unittest.mock import MagicMock
 from dataclasses import dataclass
 
-from uasset_read.cpp_gen import CppMethodIR, CppCallParameter, CppCallStatement, CppClassIR
-from uasset_read.cpp_gen.formatters import CppMethodIR as FCppMethodIR, CppCallParameter as FCppCallParameter, CppCallStatement as FCppCallStatement
+from uasset_read.cpp_gen import CppMethodIR, CppCallParameter, CppCallStatement, CppClassIR, format_cpp_call_statements
+from uasset_read.cpp_gen.formatters import CppMethodIR as FCppMethodIR, CppCallParameter as FCppCallParameter, CppCallStatement as FCppCallStatement, format_cpp_call_statements as f_format_cpp_call_statements
+from uasset_read.cpp_gen.formatters.cpp_header_formatter import _format_method_declaration, format_cpp_header
 from uasset_read.cpp_gen.extract_cpp_skeleton import (
     _sanitize_identifier,
     _extract_cpp_type_from_pin,
@@ -308,6 +309,85 @@ class TestExtractCallStatementJump:
         graph.nodes = [node]
         result = extract_cpp_call_statements([graph])
         assert result == []
+
+
+# ============================================================================
+# Wave 3: Plan 04 — Formatter Tests
+# ============================================================================
+
+class TestFormatMethodDeclaration:
+    """_format_method_declaration tests."""
+
+    def test_move_method(self):
+        method = CppMethodIR(
+            cpp_name="Move",
+            return_type="void",
+            parameters=[
+                CppCallParameter("LeftRight", "double", "input"),
+                CppCallParameter("ForwardBackward", "double", "input"),
+            ],
+            ufunction_specifiers=["BlueprintCallable"],
+            is_override=False,
+        )
+        lines = _format_method_declaration(method)
+        assert lines == [
+            "    UFUNCTION(BlueprintCallable)",
+            "    void Move(double LeftRight, double ForwardBackward);",
+        ]
+
+    def test_override_method(self):
+        method = CppMethodIR(
+            cpp_name="PrimaryThumbstick",
+            return_type="void",
+            parameters=[
+                CppCallParameter("Axis_X", "double", "input"),
+                CppCallParameter("Axis_Y", "double", "input"),
+            ],
+            ufunction_specifiers=[],
+            is_override=True,
+        )
+        lines = _format_method_declaration(method)
+        assert lines == [
+            "    void PrimaryThumbstick(double Axis_X, double Axis_Y) override;",
+        ]
+
+    def test_const_pure_function(self):
+        method = CppMethodIR(
+            cpp_name="GetVelocity",
+            return_type="FVector",
+            parameters=[],
+            ufunction_specifiers=["BlueprintPure"],
+            is_override=False,
+            is_const=True,
+        )
+        lines = _format_method_declaration(method)
+        assert "const;" in lines[-1]
+        assert "UFUNCTION(BlueprintPure)" in lines[0]
+
+
+class TestFormatCallStatements:
+    """format_cpp_call_statements tests."""
+
+    def test_jump_call(self):
+        stmt = CppCallStatement(method_name="Jump", target="this", args=[])
+        result = format_cpp_call_statements([stmt])
+        assert "this->Jump();" in result
+
+    def test_move_call(self):
+        stmt = CppCallStatement(method_name="Move", target="this", args=["LeftRight", "ForwardBackward"])
+        result = format_cpp_call_statements([stmt])
+        assert "this->Move(LeftRight, ForwardBackward);" in result
+
+    def test_empty_list(self):
+        assert format_cpp_call_statements([]) == ""
+
+    def test_import_from_cpp_gen(self):
+        from uasset_read.cpp_gen import format_cpp_call_statements
+        assert format_cpp_call_statements is not None
+
+    def test_import_from_formatters(self):
+        from uasset_read.cpp_gen.formatters import format_cpp_call_statements
+        assert format_cpp_call_statements is not None
 
 
 class TestCppMethodIR:
