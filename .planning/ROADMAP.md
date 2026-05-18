@@ -65,7 +65,7 @@
   - [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证) ✓ completed 2026-05-18
   - [x] 56-04 (Wave 4) — CLI integration + real .uasset e2e tests (--cpp-skeleton flag + BP_FirstPersonCharacter validation) ✓ completed 2026-05-18
 
-详见下方 Phase Details
+- [x] Phase 58: 函数体逻辑翻译 (2/2 plans complete)
 </details>
 
 ---
@@ -98,7 +98,13 @@ Plans:
   2. 函数调用节点（CallFunction/K2Node_CallFunction）输出为等价 C++ 调用语句格式（如 `Super::Jump();` 或 `Target->SomeFunction(Arg1, Arg2)`），包含 `MemberParent` 推导的类名前缀
   3. 每个函数声明包含正确的 `UFUNCTION` 宏及类别说明符（`BlueprintCallable`, `BlueprintPure`, `BlueprintImplementableEvent`），基于函数图元数据自动推断
   4. 开发者能从输出中直接复制函数声明到 .h 文件、函数调用到 .cpp 文件，无需补充签名信息
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 57-01-PLAN.md — CppMethodIR/CppCallParameter/CppCallStatement data models + exports + unit tests
+- [ ] 57-02-PLAN.md — extract_cpp_functions(): FunctionEntry/Event → CppMethodIR with UFUNCTION inference
+- [ ] 57-03-PLAN.md — extract_cpp_call_statements(): CallFunction → CppCallStatement
+- [ ] 57-04-PLAN.md — Extend cpp_header_formatter: method declarations in .h + call statements in .cpp
+- [ ] 57-05-PLAN.md — Golden-path integration tests + full test suite verification
 
 ### Phase 58: 函数体逻辑翻译
 **Goal**: 从 v9.0 执行流和数据流输出生成等价的 C++ 语句序列，覆盖控制流、赋值、内联表达式
@@ -109,7 +115,10 @@ Plans:
   2. 数据流（pure function 返回值 -> 参数输入）翻译为 C++ 赋值表达式或内联参数传递，变量名和类型正确映射
   3. 控制流节点（Branch/Sequence/ForEach 等）翻译为等价 C++ `if`/`for`/`do...while` 语句块，条件和循环体完整
   4. Pure 函数调用（如 `GetActorRightVector()`, `Multiply_VectorFloat`）翻译为内联 C++ 表达式（如 `GetActorRightVector() * Scale`），而非中间变量赋值
-**Plans**: TBD
+**Plans**: 2 plans ✓ completed 2026-05-18
+Plans:
+- [x] 58-01-PLAN.md — CppFunctionBodyExtractor: execution/data flow → CppStatement IR ✓
+- [x] 58-02-PLAN.md — CppFunctionBodyFormatter: CppStatement IR → .cpp text ✓
 
 ### Phase 59: 组件初始化代码
 **Goal**: 从组件层次结构和属性数据生成构造函数中的组件创建和初始化代码
@@ -137,7 +146,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 56. C++ 类骨架提取 | 3/3 plans complete | Completed | 2026-05-18 |
-| 57. 函数签名映射 | 0/3 | Not started | - |
-| 58. 函数体逻辑翻译 | 0/4 | Not started | - |
+| 57. 函数签名映射 | 5 plans created | Planned | - |
+| 58. 函数体逻辑翻译 | 2/2 plans complete | Completed | 2026-05-18 |
 | 59. 组件初始化代码 | 0/3 | Not started | - |
 | 60. 验证与测试 | 0/3 | Not started | - |
