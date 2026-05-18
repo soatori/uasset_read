@@ -6,6 +6,8 @@ C++ 代码生成模块（Phase 56）。
 模块：
     cpp_type_mapper: UE 类型路径 → C++ 类型名映射
     cpp_uproperty_mapper: CPF 标志 → UPROPERTY 标记映射
+    extract_cpp_skeleton: C++ 类骨架提取
+    formatters: C++ JSON IR 格式化
 
 导出符号：
     类型映射：
@@ -17,6 +19,15 @@ C++ 代码生成模块（Phase 56）。
     属性映射：
         CPF_TO_UPROPERTY_MAP: CPF 标志 → UPROPERTY 标记映射规则
         cpf_flags_to_uproperty_marks: CPF 标志 → UPROPERTY 标记列表转换函数
+
+    骨架提取：
+        extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
+
+    JSON IR 格式化（从 formatters 子模块）：
+        CppProperty: 单个 C++ UPROPERTY 声明数据模型
+        CppHeaderMeta: 头文件元数据模型
+        CppClassIR: 完整 C++ 类骨架 IR 数据模型
+        format_cpp_class_json: JSON IR 格式化函数
 """
 from uasset_read.cpp_gen.cpp_type_mapper import (
     UE_TO_CPP_TYPE_MAP,
@@ -28,6 +39,15 @@ from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     CPF_TO_UPROPERTY_MAP,
     cpf_flags_to_uproperty_marks,
 )
+from uasset_read.cpp_gen.extract_cpp_skeleton import (
+    extract_cpp_class_skeleton,
+)
+from uasset_read.cpp_gen.formatters import (
+    CppProperty,
+    CppHeaderMeta,
+    CppClassIR,
+    format_cpp_class_json,
+)
 
 __all__ = [
     # 类型映射
@@ -38,4 +58,11 @@ __all__ = [
     # 属性映射
     "CPF_TO_UPROPERTY_MAP",
     "cpf_flags_to_uproperty_marks",
+    # 骨架提取
+    "extract_cpp_class_skeleton",
+    # JSON IR 格式化
+    "CppProperty",
+    "CppHeaderMeta",
+    "CppClassIR",
+    "format_cpp_class_json",
 ]
