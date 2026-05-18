@@ -51,6 +51,7 @@ from uasset_read.cpp_gen.formatters import (
     CppClassIR,
     format_cpp_class_json,
     format_cpp_header,
+    format_cpp_call_statements,
     # Method/Call IR (Phase 57)
     CppCallParameter,
     CppMethodIR,
@@ -75,6 +76,8 @@ __all__ = [
     "format_cpp_class_json",
     # .h 头文件生成
     "format_cpp_header",
+    # Call statement formatting (Phase 57)
+    "format_cpp_call_statements",
     # Method/Call IR (Phase 57)
     "CppCallParameter",
     "CppMethodIR",
