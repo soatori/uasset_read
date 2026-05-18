@@ -5,7 +5,7 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "6.0.0"
+__version__ = "9.0.0"
 
 # 导出常量模块
 from .constants import (
@@ -401,9 +401,11 @@ __all__ = [
     "extract_blueprint_metadata",
     # 主解析管线（Phase 33）
     "parse_uasset",
+    "parse_uasset_with_linker",
     # 图解析辅助函数（Phase 33 — 依赖 Phase 31）
     "extract_blueprint_graphs",
     "build_execution_flows",
+    "build_data_flows",
     "build_connections_map",
     "build_graphs_summary",
     # 格式化函数（Phase 33 — 依赖 Phase 32）

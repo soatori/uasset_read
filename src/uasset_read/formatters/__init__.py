@@ -50,6 +50,14 @@ from .helpers import (
     resolve_fpackage_index,
 )
 
+# Phase 56: C++ JSON IR 格式化
+from uasset_read.cpp_gen.formatters import (
+    CppProperty,
+    CppHeaderMeta,
+    CppClassIR,
+    format_cpp_class_json,
+)
+
 __all__ = [
     # Phase 31 re-export
     "build_graphs_summary",
@@ -72,4 +80,9 @@ __all__ = [
     "build_status_info",
     "build_schema_info",
     "resolve_fpackage_index",
+    # Phase 56: C++ JSON IR
+    "CppProperty",
+    "CppHeaderMeta",
+    "CppClassIR",
+    "format_cpp_class_json",
 ]

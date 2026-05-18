@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from uasset_read.parse_uasset import parse_uasset
+from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.formatters import (
     format_json_full,
     format_json_summary,
@@ -64,6 +64,8 @@ def create_parser() -> argparse.ArgumentParser:
                         help='Include top-level function_graphs array in JSON output (output_version 5.0) (Phase 55)')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
+    parser.add_argument('--cpp-skeleton', action='store_true',
+                        help='Output C++ class skeleton (.h header) instead of JSON (requires blueprint)')
 
     return parser
 
@@ -102,6 +104,49 @@ def main():
 
     # Parse the file
     tolerant = not args.strict
+
+    # Phase 56: --cpp-skeleton requires parse_uasset_with_linker
+    if args.cpp_skeleton:
+        try:
+            linker_result = parse_uasset_with_linker(args.file, tolerant=tolerant)
+        except Exception as e:
+            print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+
+        if not linker_result.is_success:
+            print("Parse errors:", file=sys.stderr)
+            for err in linker_result.errors:
+                print(f"  - {err}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+
+        # Verify blueprint exists
+        if linker_result.blueprint is None or not linker_result.blueprint.is_blueprint:
+            print("Error: --cpp-skeleton requires a blueprint file", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+
+        # Extract and format C++ skeleton
+        from uasset_read.cpp_gen import extract_cpp_class_skeleton, format_cpp_header
+        try:
+            ir = extract_cpp_class_skeleton(linker_result)
+            output_str = format_cpp_header(ir)
+        except ValueError as e:
+            print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+
+        # Output routing
+        if args.output:
+            try:
+                with open(args.output, 'w', encoding='utf-8') as f:
+                    f.write(output_str)
+                print(f"Output written to {args.output}", file=sys.stderr)
+            except IOError as e:
+                print(f"Error writing to file: {e}", file=sys.stderr)
+                sys.exit(EXIT_ARGUMENT_ERROR)
+        else:
+            print(output_str)
+
+        sys.exit(EXIT_SUCCESS)
+
     # HIGH-03: defensive exception handling for parse_uasset
     try:
         result = parse_uasset(args.file, tolerant=tolerant)
