@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v10.0
 milestone_name: Blueprint-to-C++ 代码生成参考
 status: in_progress
-last_updated: "2026-05-18T03:00:00Z"
+last_updated: "2026-05-18T03:30:00Z"
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 13
-  completed_plans: 4
-  percent: 31
+  total_plans: 18
+  completed_plans: 9
+  percent: 50
 ---
 
 # v10.0 — Blueprint-to-C++ 代码生成参考
@@ -19,7 +19,7 @@ progress:
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Completed (4/4) |
-| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Not started |
+| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Completed (5/5) |
 | 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Not started |
 | 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Not started |
 | 60 | 验证与测试 | 基于真实资产验证端到端 C++ 参考输出 | TEST-01, TEST-02, TEST-03 | Not started |
@@ -51,10 +51,11 @@ Phase 59 (组件初始化) ─────────────┘
 **Milestone 状态:** 执行中
 
 **最近完成的计划:**
-- 56-01: C++ Type Mapping Engine (2026-05-18, 1 commit)
-- 56-02: C++ Skeleton Extraction Core (2026-05-18, 2 commits)
-- 56-03: C++ Header Formatter + Golden-path E2E Test (2026-05-18, 2 commits)
-- 56-04: CLI Integration + Real .uasset E2E Tests (2026-05-18, 2 commits)
+- 57-01: IR Data Models (2026-05-18, 1 commit)
+- 57-02: Function Signature Extraction Core (2026-05-18, 1 commit)
+- 57-03: Call Statement Extraction (2026-05-18, 1 commit)
+- 57-04: Header Formatter Extension (2026-05-18, 1 commit)
+- 57-05: Golden-path Integration Tests (2026-05-18, 1 commit)
 
 ## 上下文
 
@@ -71,9 +72,9 @@ Phase 59 (组件初始化) ─────────────┘
 | CPP-01 | Phase 56 | Completed (56-01, 56-02, 56-03) |
 | CPP-02 | Phase 56 | Completed (56-01, 56-02, 56-03) |
 | CPP-03 | Phase 56 | Completed (56-02, 56-03) |
-| FUNC-01 | Phase 57 | Pending |
-| FUNC-02 | Phase 57 | Pending |
-| FUNC-03 | Phase 57 | Pending |
+| FUNC-01 | Phase 57 | Completed (57-01, 57-02, 57-04, 57-05) |
+| FUNC-02 | Phase 57 | Completed (57-01, 57-03, 57-04, 57-05) |
+| FUNC-03 | Phase 57 | Completed (57-02, 57-05) |
 | BODY-01 | Phase 58 | Pending |
 | BODY-02 | Phase 58 | Pending |
 | BODY-03 | Phase 58 | Pending |
@@ -90,3 +91,4 @@ Phase 59 (组件初始化) ─────────────┘
 *Started: 2026-05-18*
 *ROADMAP created: 2026-05-18*
 *Phase 56 completed: 2026-05-18*
+*Phase 57 completed: 2026-05-18*
