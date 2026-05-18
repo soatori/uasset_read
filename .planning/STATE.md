@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v11.0
 milestone_name: Kismet 字节码反编译器
 status: planned
-last_updated: "2026-05-18T06:30:00Z"
+last_updated: "2026-05-19T00:00:00Z"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -37,3 +37,9 @@ Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C+
 - CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
 - 本项目技术栈：Python 3.10+，零运行时依赖
 - 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
+
+## 上游里程碑
+
+- v10.0 (P56-60): Blueprint-to-C++ 代码生成参考 — ✅ 已归档 2026-05-19
+  - 提供了 cpp_gen 模块骨架、类型映射、函数签名/体翻译、组件初始化
+  - v11.0 在字节码层（EExprToken → KismetExpression → C++）补充 Phase 58 无法覆盖的 60+ 种表达式类型
