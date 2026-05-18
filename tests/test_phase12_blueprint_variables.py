@@ -114,7 +114,8 @@ class TestPropertyFlagsParsing:
 
     def test_parse_flags_instanced_reference_returns_component_label(self):
         """CPF_InstancedReference -> InstancedReference label"""
-        labels = parse_property_flags_to_labels(0x0000000000080000)
+        # CPF_InstancedReference = 0x800000 (bit 23) — fixed in Phase 56 Wave 1
+        labels = parse_property_flags_to_labels(0x0000000000800000)
         assert "InstancedReference" in labels
 
     def test_parse_flags_edit_returns_editanywhere(self):
@@ -131,7 +132,8 @@ class TestPropertyFlagsParsing:
     def test_parse_flags_combined_returns_multiple_labels(self):
         """Combined flags should return multiple labels"""
         # CPF_Edit + CPF_BlueprintVisible + CPF_InstancedReference
-        flags = 0x0000000000000001 | 0x0000000000000004 | 0x0000000000080000
+        # CPF_InstancedReference = 0x800000 (bit 23) — fixed in Phase 56 Wave 1
+        flags = 0x0000000000000001 | 0x0000000000000004 | 0x0000000000800000
         labels = parse_property_flags_to_labels(flags)
         assert "EditAnywhere" in labels
         assert "BlueprintReadWrite" in labels

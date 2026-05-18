@@ -1,37 +1,38 @@
-# Archive — v6.0 Refactoring Era
+# Archive
 
-归档 Phase 06–35e（v6.0 模块化重构）的规划文档。这些阶段已完成，保留作为历史参考。
+已完成的里程碑归档在此。完整历史文件可通过 git 恢复。
 
-## 目录结构
+## 结构
 
 ```
-archive/v6.0-refactor/
-├── phases/          # Phase 06–35e 所有阶段文档
-├── milestones/      # v1.0–v6.0 里程碑 ROADMAP/REQUIREMENTS
-├── docs/            # 根目录遗留文档（v3_DRAFT, 验证报告等）
-├── debug/           # Phase 35b/35e 调试记录
-└── schemas/         # 旧版 JSON Schema
+archive/
+├── README.md
+├── v1-v7-SUMMARY.md      # v1.0–v7.0 压缩摘要（原 541 文件）
+├── v8.0/                  # BP-to-CPP JSON 可翻译性 (P47-51)
+│   ├── v8.0-MILESTONE.md
+│   ├── v8.0-ROADMAP.md
+│   ├── v8.0-REQUIREMENTS.md
+│   └── phases/            # 47, 49, 50, 51
+├── v9.0/                  # 函数调用链解析 (P52-55)
+│   ├── v9.0-MILESTONE.md
+│   ├── v9.0-ROADMAP.md
+│   ├── v9.0-REQUIREMENTS.md
+│   └── phases/            # 52, 53, 54, 55
+└── v10.0/                 # Blueprint-to-C++ 代码生成参考 (P56-60)
+    ├── v10.0-MILESTONE.md
+    └── phases/            # 56, 57, 58, 59, 60
 ```
 
-## 归档范围
+## 恢复历史文件
 
-| 类别 | 文件数 | 说明 |
-|------|--------|------|
-| 阶段 | 37 dirs | Phase 06–35e（含 33a/35a–e 子阶段） |
-| 里程碑 | 9 | v2.0–v6.0 ROADMAP/REQUIREMENTS/ARCHIVE |
-| 文档 | 12 | 遗留根目录文档、会话工件 |
-| 调试 | 4 | Pin 偏移、方向对齐等 |
-| Schema | 1 | 蓝图 JSON Schema |
+```bash
+# 查看某个 phase 的完整历史
+git log --all -- .planning/archive/v8.0/phases/47-pin-linkedto-fix/
 
-**总计**：约 370+ 文件已归档，`.planning` 加载体积减少 ~85%。
-
-## 访问方式
-
-归档文档保持原有目录结构，可按需查阅：
-- 阶段详情：`archive/v6.0-refactor/phases/XX-phase-name/`
-- 历史里程碑：`archive/v6.0-refactor/milestones/`
-- 调试记录：`archive/v6.0-refactor/debug/`
+# 恢复已删除的 archive 目录
+git checkout <commit> -- .planning/archive/v6.0-refactor/
+```
 
 ---
 
-*Archived: 2026-05-14 — v6.0 完成，v7.0 启动*
+*Archived: 2026-05-18 — v10.0 发布后深度清理*

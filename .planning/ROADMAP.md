@@ -2,59 +2,41 @@
 
 ## 里程碑
 
-- ✅ **v7.0** — Phases 41-46 + 44a-c (shipped 2026-05-14)
-- ✅ **v8.0** — Phases 47-51 (shipped 2026-05-17)
-- ✅ **v9.0** — Phases 52-55 (函数调用链解析, shipped 2026-05-17)
+| 版本 | 范围 | 日期 | 状态 |
+|------|------|------|------|
+| v1.0–v6.0 | MVP → 模块化重构 | 2026-04-28 ~ 05-13 | 已归档 |
+| v7.0 | UE FLinkerLoad 对象图重建 | 2026-05-14 | 已归档 |
+| v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 2026-05-17 | 已归档 |
+| v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
+| v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
+| **v11.0** | **Kismet 字节码反编译器 (P61-64)** | 计划中 | **活跃** |
 
-## Phases
+历史详情：`.planning/archive/`
 
-<details>
-<summary>✅ v7.0 — UE FLinkerLoad 对象图重建 (SHIPPED 2026-05-14)</summary>
+## v11.0 — Kismet 字节码反编译器 (PLANNED)
 
-- [x] Phase 41: link/ 模块 (1/1 plans)
-- [x] Phase 42: 集成入口 (1/1 plans)
-- [x] Phase 43: PackageIndex (1/1 plans)
-- [x] Phase 44: 模型增强 (1/1 plans)
-- [x] Phase 44a: 移除旧版本兼容代码
-- [x] Phase 44b: 替换直接字节读取
-- [x] Phase 44c: 清理测试工具
-- [x] Phase 45: 图序列化 linker 变体
-- [x] Phase 46: 测试验证 (432 passed, 0 new failures)
+**参考设计:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
 
-详见 `.planning/milestones/v7.0-ROADMAP.md`
-</details>
+- [ ] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (2 plans)
+- [ ] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan)
+- [ ] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan)
+- [ ] Phase 64: 集成与验证 — pipeline 集成 + 端到端 golden-path 测试 (1 plan)
 
-<details>
-<summary>✅ v8.0 — BP-to-CPP 翻译能力 (SHIPPED 2026-05-17)</summary>
+**依赖:** 61 → 62 → 63 → 64
 
-- [x] Phase 47: Pin LinkedTo 修复 (linked_to_raw 0/30→16/43 pins)
-- [x] Phase 48: 组件属性递归解析 (components[] 含数值属性)
-- [x] Phase 49: 函数调用引脚解析 (K2Node_CallFunction parameters 数组)
-- [x] Phase 50: EnhancedInput 语义增强 (trigger_events 从 pins 提取)
-- [x] Phase 51: 二进制输出清理 (ZERO \x00 escapes in JSON)
+**与 v10.0 Phase 58 的关系:**
+Phase 58 在 AST 层（UEdGraphNode → C++）工作；v11.0 在字节码层（EExprToken → KismetExpression → C++）工作，覆盖 Phase 58 无法处理的 60+ 种表达式类型、结构化控制流、全类型变量/常量。
 
-详见 `.planning/milestones/v8.0-ROADMAP.md`
-</details>
+## 能力对比
 
-<details>
-<summary>✅ v9.0 — 函数调用链解析 (SHIPPED 2026-05-17)</summary>
-
-- [x] Phase 52: 函数图节点解析 (2 plans) (completed 2026-05-17)
-  - [x] 52-01-PLAN.md — K2NodeFunctionEntry 数据模型 + 序列化支持 + function_reference 修复
-  - [x] 52-02-PLAN.md — START_EVENT_TYPES 扩展 + 执行流集成 + is_function_graph 判断
-- [x] Phase 53: 函数内执行流追踪 (FunctionEntry → CallFunction 链) (2/2 plans complete 2026-05-17)
-  - [x] 53-01-PLAN.md — _get_start_event_name 前缀统一 + pure function 标记
-  - [x] 53-02-PLAN.md — 4 个新测试（FunctionEntry 前缀/执行流/pure/Knot）
-- [x] Phase 54: 数据流追踪 (Pure 函数返回值 → 参数输入) (3/3 plans complete 2026-05-17)
-  - [x] 54-01-PLAN.md — 测试基础设施（fixture + 6 个测试骨架）
-  - [x] 54-02-PLAN.md — 核心追踪函数（DATA_BOUNDARY_NODES + is_boundary_node + _resolve_knot_chain）
-  - [x] 54-03-PLAN.md — 数据标注增强（_trace_data_source + _extract_call_function_parameters 增强 + Pure 函数 data_providers）
-- [x] Phase 55: JSON 输出增强 (function_graphs 数组) (1/1 plan complete 2026-05-17)
-  - [x] 55-PLAN.md — build_function_graphs + output_version 5.0 + CLI flag + 7 tests
-
-详见 `.planning/milestones/v9.0-ROADMAP.md`
-</details>
+| 维度 | Phase 58 (已有) | v11.0 新增 |
+|------|----------------|-----------|
+| 输入 | execution_flows JSON | ScriptBytecode 字节流 |
+| 粒度 | 4 种语句类型 | 60+ 种 EExprToken |
+| 控制流 | K2Node_IfThenElse → if | Jump/Push/Pop → 结构化 if/for/while |
+| 变量/常量 | 缺失 | 全类型支持 |
+| 数学美化 | 缺失 | MathFunctionCleaner |
 
 ---
 
-*Updated: 2026-05-17 (Phase 54-03 completed, Wave 2 done)*
+*Updated: 2026-05-18 (v10.0 shipped, v11.0 planned)*
