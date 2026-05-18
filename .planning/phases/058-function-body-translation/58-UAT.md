@@ -3,7 +3,7 @@ status: complete
 phase: 58-function-body-translation
 source: [58-01-PLAN.md, 58-02-PLAN.md, 58-01-SUMMARY.md, 58-02-SUMMARY.md]
 started: 2026-05-18T00:00:00Z
-updated: 2026-05-18T12:00:00Z
+updated: 2026-05-18T12:30:00Z
 ---
 
 ## Current Test
@@ -55,12 +55,12 @@ platform_note: 41 passed in 0.22s
 ### 9. 完整测试套件无回归
 expected: 所有 853 个测试中 746 通过，107 跳过，0 失败
 result: pass
-platform_note: 746 passed, 107 skipped in 25.35s
+platform_note: 746 passed, 107 skipped in 24.57s
 
 ### 10.真实蓝图资产验证
 expected: 在BP_FirstPersonCharacter等真实蓝图资产上运行--cpp-skeleton相关flag输出的函数体与蓝图实际行为一致
 result: pass
-platform_note: BP_FirstPersonCharacter.uasset (56KB) 成功生成 C++ 骨架文件，包含类声明、组件 UPROPERTY 和变量 UPROPERTY
+platform_note: BP_FirstPersonCharacter.uasset (56KB) 成功生成 C++ 骨架文件，包含类声明、组件 UPROPERTY 和变量 UPROPERTY；组件类型正确映射（UArrowComponent*、UCameraComponent*、UCharacterMovementComponent*、USceneComponent*、USkeletalMeshComponent*）；变量类型正确映射（int32、bool、UObject*、FString）
 
 ## Summary
 
