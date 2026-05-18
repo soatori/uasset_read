@@ -59,10 +59,11 @@
 <details>
 <summary>v10.0 — Blueprint-to-C++ 代码生成参考 (IN PROGRESS)</summary>
 
-- [x] Phase 56: C++ 类骨架提取 (3/3 plans complete)
+- [x] Phase 56: C++ 类骨架提取 (4/4 waves complete)
   - [x] 56-01-PLAN.md — cpp_type_mapper + cpp_uproperty_mapper + unit tests (类型映射引擎) ✓ completed 2026-05-18
   - [x] 56-02-PLAN.md — extract_cpp_skeleton + cpp_json_ir + skeleton extraction tests (核心骨架提取) ✓ completed 2026-05-18
   - [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证) ✓ completed 2026-05-18
+  - [x] 56-04 (Wave 4) — CLI integration + real .uasset e2e tests (--cpp-skeleton flag + BP_FirstPersonCharacter validation) ✓ completed 2026-05-18
 
 详见下方 Phase Details
 </details>
