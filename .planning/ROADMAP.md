@@ -66,11 +66,17 @@
   - [x] 56-04 (Wave 4) — CLI integration + real .uasset e2e tests (--cpp-skeleton flag + BP_FirstPersonCharacter validation) ✓ completed 2026-05-18
 
 - [x] Phase 58: 函数体逻辑翻译 (2/2 plans complete, verified 2026-05-18)
+
+- [x] Phase 59: 组件初始化代码 (4/4 plans complete 2026-05-18)
+  - [x] 59-01-PLAN.md — cpp_constructor_ir_builder + IR data models + 50 tests
+  - [x] 59-02-PLAN.md — cpp_default_value_formatter + C++ literal formatting + 61 tests
+  - [x] 59-03-PLAN.md — cpp_constructor_formatter + constructor text generation + 42 tests
+  - [x] 59-04 (Wave 3) — 59-VALIDATION.md + verification strategy
 </details>
 
 ---
 
-*Updated: 2026-05-18 (v10.0 Phase 56 complete)*
+*Updated: 2026-05-18 (v10.0 Phase 59 plans created)*
 
 ## Phase Details
 
@@ -128,7 +134,12 @@ Plans:
   1. 每个蓝图组件生成对应的 `CreateDefaultSubobject<T>()` 调用，包含正确的模板类型参数和组件名称，放置于构造函数内
   2. 组件变换数据（位置/旋转/缩放）翻译为构造函数中的 `SetRelativeLocation()`/`SetRelativeRotation()`/`SetRelativeScale3D()` 调用，使用正确的 `FVector`/`FRotator` 字面量
   3. 组件属性（如 `CameraBoom->TargetArmLength = 400.0f`）翻译为构造函数中的默认值赋值语句，类型后缀正确（`f` 浮点标记等）
-**Plans**: TBD
+**Plans**: 4 plans ✓ completed 2026-05-18
+Plans:
+- [x] 59-01-PLAN.md — cpp_constructor_ir_builder + IR data models + 50 tests ✓
+- [x] 59-02-PLAN.md — cpp_default_value_formatter + C++ literal formatting + 61 tests ✓
+- [x] 59-03-PLAN.md — cpp_constructor_formatter + constructor text generation + 42 tests ✓
+- [x] 59-04-PLAN.md — 59-VALIDATION.md + verification strategy ✓
 
 ### Phase 60: 验证与测试
 **Goal**: 基于真实蓝图资产（BP_FirstPersonCharacter）验证端到端 C++ 参考输出的正确性
@@ -148,5 +159,5 @@ Plans:
 | 56. C++ 类骨架提取 | 3/3 plans complete | Completed | 2026-05-18 |
 | 57. 函数签名映射 | 5 plans created | Planned | - |
 | 58. 函数体逻辑翻译 | 2/2 plans complete | Completed | 2026-05-18 |
-| 59. 组件初始化代码 | 0/3 | Not started | - |
+| 59. 组件初始化代码 | 4/4 plans complete | Completed | 2026-05-18 |
 | 60. 验证与测试 | 0/3 | Not started | - |
