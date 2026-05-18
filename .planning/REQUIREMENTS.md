@@ -23,9 +23,9 @@
 - [ ] **COMP-02**: 从组件属性导出默认值初始化（如 `CameraBoom->TargetArmLength = 400.0f`）
 
 ### [验证与测试]
-- [ ] **TEST-01**: 基于 `reference/蓝图节点文本参考.md` 编写 golden-path 集成测试
-- [ ] **TEST-02**: 验证 BP_FirstPersonCharacter 的 Move/Aim 函数 JSON 输出与等价 C++ 实现匹配
-- [ ] **TEST-03**: 验证 Jump/StopJumping 事件驱动的函数调用链输出
+- [x] **TEST-01**: 基于 `reference/蓝图节点文本参考.md` 编写 golden-path 集成测试
+- [x] **TEST-02**: 验证 BP_FirstPersonCharacter 的 Move/Aim 函数 JSON 输出与等价 C++ 实现匹配
+- [x] **TEST-03**: 验证 Jump/StopJumping 事件驱动的函数调用链输出
 
 ## 未来需求
 
@@ -55,8 +55,8 @@
 | BODY-04 | Phase 58 | Pending |
 | COMP-01 | Phase 59 | Pending |
 | COMP-02 | Phase 59 | Pending |
-| TEST-01 | Phase 60 | Pending |
-| TEST-02 | Phase 60 | Pending |
-| TEST-03 | Phase 60 | Pending |
+| TEST-01 | Phase 60 | Done |
+| TEST-02 | Phase 60 | Done |
+| TEST-03 | Phase 60 | Done |
 
 **Coverage: 15/15 v1 requirements mapped**
