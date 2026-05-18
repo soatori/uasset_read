@@ -7,7 +7,7 @@ C++ 代码生成模块（Phase 56）。
     cpp_type_mapper: UE 类型路径 → C++ 类型名映射
     cpp_uproperty_mapper: CPF 标志 → UPROPERTY 标记映射
     extract_cpp_skeleton: C++ 类骨架提取
-    formatters: C++ JSON IR 格式化
+    formatters: C++ JSON IR 格式化和 .h 头文件生成
 
 导出符号：
     类型映射：
@@ -28,6 +28,9 @@ C++ 代码生成模块（Phase 56）。
         CppHeaderMeta: 头文件元数据模型
         CppClassIR: 完整 C++ 类骨架 IR 数据模型
         format_cpp_class_json: JSON IR 格式化函数
+
+    .h 头文件生成：
+        format_cpp_header: CppClassIR → .h 文本转换函数
 """
 from uasset_read.cpp_gen.cpp_type_mapper import (
     UE_TO_CPP_TYPE_MAP,
@@ -47,6 +50,7 @@ from uasset_read.cpp_gen.formatters import (
     CppHeaderMeta,
     CppClassIR,
     format_cpp_class_json,
+    format_cpp_header,
 )
 
 __all__ = [
@@ -65,4 +69,6 @@ __all__ = [
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
+    # .h 头文件生成
+    "format_cpp_header",
 ]
