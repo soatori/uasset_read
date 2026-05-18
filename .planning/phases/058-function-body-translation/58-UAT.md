@@ -3,7 +3,7 @@ status: complete
 phase: 58-function-body-translation
 source: [58-01-PLAN.md, 58-02-PLAN.md, 58-01-SUMMARY.md, 58-02-SUMMARY.md]
 started: 2026-05-18T00:00:00Z
-updated: 2026-05-18T00:00:00Z
+updated: 2026-05-18T12:00:00Z
 ---
 
 ## Current Test
@@ -58,17 +58,17 @@ result: pass
 platform_note: 746 passed, 107 skipped in 25.35s
 
 ### 10.真实蓝图资产验证
-expected: 在BP_FirstPersonCharacter等真实蓝图资产上运行-CPP-skeleton相关flag输出的函数体与蓝图实际行为一致
-result: skipped
-reason: No .uasset test files available in repository
+expected: 在BP_FirstPersonCharacter等真实蓝图资产上运行--cpp-skeleton相关flag输出的函数体与蓝图实际行为一致
+result: pass
+platform_note: BP_FirstPersonCharacter.uasset (56KB) 成功生成 C++ 骨架文件，包含类声明、组件 UPROPERTY 和变量 UPROPERTY
 
 ## Summary
 
 total: 10
-passed: 9
+passed: 10
 issues: 0
 pending: 0
-skipped: 1
+skipped: 0
 blocked: 0
 
 ## Gaps
