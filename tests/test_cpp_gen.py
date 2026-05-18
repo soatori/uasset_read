@@ -390,6 +390,143 @@ class TestFormatCallStatements:
         assert format_cpp_call_statements is not None
 
 
+# ============================================================================
+# Wave 4: Plan 05 — Golden-path Integration Tests
+# ============================================================================
+
+class TestFunctionSignatureGoldenPath:
+    """Golden-path integration tests matching BP_FirstPersonCharacter reference data."""
+
+    def _make_function_entry_move(self):
+        """K2Node_FunctionEntry for Move function (reference data)."""
+        node = MagicMock(spec=K2NodeFunctionEntry)
+        node.class_name = "K2Node_FunctionEntry"
+        node.function_reference = FMemberReference(member_name="Move", b_self_context=False)
+        node.pins = [
+            _make_pin("then", category="exec", direction=1),
+            _make_pin("Left / Right", direction=1),
+            _make_pin("Forward / Backward", direction=1),
+        ]
+        node.b_is_editable = True
+        node.extra_flags = 0
+        return node
+
+    def _make_event_primary_thumbstick(self):
+        """K2Node_Event for Primary Thumbstick override."""
+        node = MagicMock(spec=K2NodeEvent)
+        node.class_name = "K2Node_Event"
+        node.event_reference = FMemberReference(member_name="Primary Thumbstick", b_self_context=False)
+        node.b_override_function = True
+        node.pins = [
+            _make_pin("OutputDelegate", category="delegate", direction=1),
+            _make_pin("then", category="exec", direction=1),
+            _make_pin("Axis_X", direction=1),
+            _make_pin("Axis_Y", direction=1),
+        ]
+        return node
+
+    def _make_call_jump(self):
+        """K2Node_CallFunction for Jump."""
+        node = MagicMock(spec=K2NodeCallFunction)
+        node.class_name = "K2Node_CallFunction"
+        node.function_reference = FMemberReference(member_name="Jump", b_self_context=True)
+        node.pins = [
+            _make_pin("execute", category="exec", direction=0),
+            _make_pin("then", category="exec", direction=1),
+            UEdGraphPin(pin_id="self", pin_name="self",
+                        pin_type=FEdGraphPinType(pin_category="object",
+                                                 pin_subcategory="/Script/CoreUObject.Class'/Script/Engine.Character'")),
+        ]
+        return node
+
+    def _make_call_stop_jumping(self):
+        """K2Node_CallFunction for StopJumping."""
+        node = MagicMock(spec=K2NodeCallFunction)
+        node.class_name = "K2Node_CallFunction"
+        node.function_reference = FMemberReference(member_name="StopJumping", b_self_context=True)
+        node.pins = [
+            _make_pin("execute", category="exec", direction=0),
+            _make_pin("then", category="exec", direction=1),
+            UEdGraphPin(pin_id="self", pin_name="self",
+                        pin_type=FEdGraphPinType(pin_category="object",
+                                                 pin_subcategory="/Script/CoreUObject.Class'/Script/Engine.Character'")),
+        ]
+        return node
+
+    def _make_graph_with_all(self):
+        """Mock UEdGraph with all nodes."""
+        graph = MagicMock(spec=UEdGraph)
+        graph.nodes = [
+            self._make_function_entry_move(),
+            self._make_event_primary_thumbstick(),
+            self._make_call_jump(),
+            self._make_call_stop_jumping(),
+        ]
+        return graph
+
+    def test_golden_move_function_signature(self):
+        """Move function: UFUNCTION(BlueprintCallable) void Move(double LeftRight, double ForwardBackward);"""
+        graph = self._make_graph_with_all()
+        methods = extract_cpp_functions([graph])
+        move = [m for m in methods if m.cpp_name == "Move"]
+        assert len(move) == 1
+        m = move[0]
+        assert m.return_type == "void"
+        assert len(m.parameters) == 2
+        assert m.ufunction_specifiers == ["BlueprintCallable"]
+        assert m.is_override is False
+        assert m.source_node_type == "K2Node_FunctionEntry"
+
+    def test_golden_event_override(self):
+        """PrimaryThumbstick: void PrimaryThumbstick(double Axis_X, double Axis_Y) override;"""
+        graph = self._make_graph_with_all()
+        methods = extract_cpp_functions([graph])
+        thumb = [m for m in methods if m.cpp_name == "PrimaryThumbstick"]
+        assert len(thumb) == 1
+        m = thumb[0]
+        assert m.is_override is True
+        assert m.ufunction_specifiers == []
+        assert len(m.parameters) == 2
+        assert m.source_node_type == "K2Node_Event"
+
+    def test_golden_jump_call_statement(self):
+        """Jump call: this->Jump();"""
+        graph = self._make_graph_with_all()
+        calls = extract_cpp_call_statements([graph])
+        jump = [c for c in calls if c.method_name == "Jump"]
+        assert len(jump) == 1
+        assert jump[0].target == "this"
+        assert jump[0].args == []
+
+    def test_golden_full_header_output(self):
+        """Full pipeline: extract → attach to CppClassIR → format_cpp_header."""
+        graph = self._make_graph_with_all()
+        methods = extract_cpp_functions([graph])
+
+        ir = CppClassIR(
+            name="ABP_FirstPersonCharacter",
+            parent_class="ACharacter",
+            methods=methods,
+        )
+        header = format_cpp_header(ir)
+
+        # Verify Move function
+        assert "UFUNCTION(BlueprintCallable)" in header
+        assert "void Move(double LeftRight, double ForwardBackward);" in header
+
+        # Verify PrimaryThumbstick override
+        assert "void PrimaryThumbstick(double Axis_X, double Axis_Y) override;" in header
+
+    def test_golden_call_statements_output(self):
+        """Full pipeline: extract calls → format_cpp_call_statements."""
+        graph = self._make_graph_with_all()
+        calls = extract_cpp_call_statements([graph])
+        output = format_cpp_call_statements(calls)
+
+        assert "this->Jump();" in output
+        assert "this->StopJumping();" in output
+
+
 class TestCppMethodIR:
     """CppMethodIR dataclass field and serialization tests."""
 
