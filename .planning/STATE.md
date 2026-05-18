@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v10.0
 milestone_name: Blueprint-to-C++ 代码生成参考
 status: in_progress
-last_updated: "2026-05-18T02:30:00Z"
+last_updated: "2026-05-18T03:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 13
-  completed_plans: 3
-  percent: 23
+  completed_plans: 4
+  percent: 31
 ---
 
 # v10.0 — Blueprint-to-C++ 代码生成参考
@@ -18,7 +18,7 @@ progress:
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Completed (3/3) |
+| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Completed (4/4) |
 | 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Not started |
 | 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Not started |
 | 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Not started |
@@ -60,7 +60,7 @@ Phase 59 (组件初始化) ─────────────┘
 
 - v9.0 已完成：执行流追踪、数据流追踪、function_graphs 输出
 - 参考数据：`reference/蓝图节点文本参考.md`（BP_FirstPersonCharacter 真实导出）
-- 测试基础：517 passed / 107 skipped（554 total，含 37 pre-existing failures）
+- 测试基础：656 passed / 107 skipped（763 total）
 - 技术栈：Python 3.10+，零运行时依赖
 - 架构管道：`.uasset → FArchive → Serializers → Models → Parsers → Graph → Formatters`
 
