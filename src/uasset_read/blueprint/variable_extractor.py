@@ -381,10 +381,39 @@ def extract_blueprint_metadata(
             # 修复: 不使用 str(prop.value)，而是提取实际值
             # prop.value 可能是 ObjectProperty 实例 (dict 格式)
             if prop.value and isinstance(prop.value, dict):
-                # 如果 dict 中有 raw_index，使用它；否则使用 resolved
-                parent_class = prop.value.get('raw_index') or prop.value.get('resolved') or prop.value
-            elif prop.value:
-                parent_class = prop.value
+                # 如果 dict 中有 raw_index/resolved，使用它
+                if prop.value.get('raw_index'):
+                    parent_class = prop.value.get('raw_index')
+                elif prop.value.get('resolved'):
+                    parent_class = prop.value.get('resolved')
+                elif prop.value.get('object_name'):
+                    # 从 object_name 构建 UE 路径
+                    object_name = prop.value.get('object_name')
+                    # 如果有 class_package，构建完整路径
+                    class_package = prop.value.get('class_package', '')
+                    if class_package:
+                        # 典型格式: /Script/Engine.ClassName
+                        parent_class = f"{class_package}.{object_name}"
+                    else:
+                        # 尝试从 object_name 推断（常见引擎类）
+                        # 对于 Character/Pawn/Actor 等，使用 /Script/Engine 前缀
+                        common_engine_classes = [
+                            "Character", "Pawn", "Actor", "ActorComponent",
+                            "SceneComponent", "Object", "Interface", "UserWidget",
+                            "HUD", "PlayerController", "GameModeBase", "GameMode",
+                            "Controller", "PlayerCameraManager", "PawnMovementComponent",
+                            "CharacterMovementComponent", "SpringArmComponent",
+                            "CameraComponent", "SkeletalMeshComponent", "StaticMeshComponent",
+                            "BoxComponent", "SphereComponent", "CapsuleComponent",
+                            "AudioComponent", "ParticleSystemComponent",
+                            "WidgetComponent", "ChildActorComponent",
+                            "Blueprint", "BlueprintGeneratedClass",
+                        ]
+                        if object_name in common_engine_classes:
+                            parent_class = f"/Script/Engine.{object_name}"
+                        else:
+                            # 未知类，使用 object_name 作为父类名
+                            parent_class = object_name
 
     # 推断父类（从 export 的 super_index）
     if not parent_class and hasattr(export, 'super_index'):
