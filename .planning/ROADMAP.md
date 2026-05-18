@@ -59,17 +59,17 @@
 <details>
 <summary>v10.0 — Blueprint-to-C++ 代码生成参考 (IN PROGRESS)</summary>
 
-- [ ] Phase 56: C++ 类骨架提取 (3/3 plans created, 1/3 complete)
+- [x] Phase 56: C++ 类骨架提取 (3/3 plans complete)
   - [x] 56-01-PLAN.md — cpp_type_mapper + cpp_uproperty_mapper + unit tests (类型映射引擎) ✓ completed 2026-05-18
-  - [x] 56-02-PLAN.md — extract_cpp_skeleton + cpp_json_ir + skeleton extraction tests (核心骨架提取)
-  - [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证)
+  - [x] 56-02-PLAN.md — extract_cpp_skeleton + cpp_json_ir + skeleton extraction tests (核心骨架提取) ✓ completed 2026-05-18
+  - [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证) ✓ completed 2026-05-18
 
 详见下方 Phase Details
 </details>
 
 ---
 
-*Updated: 2026-05-18 (v10.0 Phase 56 plans created)*
+*Updated: 2026-05-18 (v10.0 Phase 56 complete)*
 
 ## Phase Details
 
@@ -85,8 +85,8 @@
 **Plans**: 3 plans
 Plans:
 - [x] 56-01-PLAN.md — cpp_type_mapper + cpp_uproperty_mapper + unit tests (类型映射引擎) ✓
-- [ ] 56-02-PLAN.md — extract_cpp_skeleton + cpp_json_ir + skeleton extraction tests (核心骨架提取)
-- [ ] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证)
+- [x] 56-02-PLAN.md — extract_cpp_skeleton + cpp_json_ir + skeleton extraction tests (核心骨架提取) ✓
+- [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证) ✓
 
 ### Phase 57: 函数签名映射
 **Goal**: 从 v9.0 function_graphs 输出提取完整函数签名，生成等价 C++ 函数声明和调用语句
@@ -135,7 +135,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 56. C++ 类骨架提取 | 1/3 plans complete | In progress | 2026-05-18 |
+| 56. C++ 类骨架提取 | 3/3 plans complete | Completed | 2026-05-18 |
 | 57. 函数签名映射 | 0/3 | Not started | - |
 | 58. 函数体逻辑翻译 | 0/4 | Not started | - |
 | 59. 组件初始化代码 | 0/3 | Not started | - |
