@@ -8,8 +8,8 @@ progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 13
-  completed_plans: 1
-  percent: 7
+  completed_plans: 2
+  percent: 15
 ---
 
 # v10.0 — Blueprint-to-C++ 代码生成参考
@@ -18,7 +18,7 @@ progress:
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | In progress (1/3) |
+| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | In progress (2/3) |
 | 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Not started |
 | 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Not started |
 | 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Not started |
@@ -51,7 +51,8 @@ Phase 59 (组件初始化) ─────────────┘
 **Milestone 状态:** 执行中
 
 **最近完成的计划:**
-- 56-01: C++ Type Mapping Engine (2026-05-18, 2 commits)
+- 56-01: C++ Type Mapping Engine (2026-05-18, 1 commit)
+- 56-02: C++ Skeleton Extraction Core (2026-05-18, 2 commits)
 
 ## 上下文
 
@@ -67,7 +68,7 @@ Phase 59 (组件初始化) ─────────────┘
 |-------------|-------|--------|
 | CPP-01 | Phase 56 | Completed (56-01) |
 | CPP-02 | Phase 56 | Completed (56-01) |
-| CPP-03 | Phase 56 | Pending |
+| CPP-03 | Phase 56 | Completed (56-02) |
 | FUNC-01 | Phase 57 | Pending |
 | FUNC-02 | Phase 57 | Pending |
 | FUNC-03 | Phase 57 | Pending |
