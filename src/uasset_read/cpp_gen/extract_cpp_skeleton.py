@@ -12,13 +12,17 @@ Per D-06: 返回 CppClassIR，methods/constructor 留空。
 """
 from __future__ import annotations
 
+import re
 import logging
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Tuple
 
 from uasset_read.cpp_gen.formatters import (
     CppClassIR,
     CppProperty,
     CppHeaderMeta,
+    CppMethodIR,
+    CppCallParameter,
+    CppCallStatement,
 )
 from uasset_read.cpp_gen.cpp_type_mapper import (
     ue_path_to_cpp_type,
@@ -26,6 +30,15 @@ from uasset_read.cpp_gen.cpp_type_mapper import (
 )
 from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     cpf_flags_to_uproperty_marks,
+)
+from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
+    build_component_creations,
+    build_component_assignments,
+    build_default_values,
+    build_transform_assignments,
+)
+from uasset_read.cpp_gen.cpp_constructor_formatter import (
+    format_cpp_constructor,
 )
 from uasset_read.constants import CPF_InstancedReference
 
@@ -89,8 +102,8 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     # 5. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 
-    # 6. 构建并返回 CppClassIR（Per D-06）
-    return CppClassIR(
+    # 6. 构建 CppClassIR（Per D-06）
+    ir = CppClassIR(
         name=class_name,
         parent_class=parent_class,
         header_meta=header_meta,
@@ -102,6 +115,20 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             "default_values": [],
         },  # Phase 59 填充
     )
+
+    # Phase 59: 填充 constructor 字典
+    components = result.components or []
+    ir.constructor["component_creations"] = build_component_creations(ir)
+    ir.constructor["component_assignments"] = build_component_assignments(components)
+    ir.constructor["default_values"] = build_default_values(ir, blueprint.variables)
+
+    # Blocker 2 fix: transform 数据也流入 default_values
+    ir.constructor["default_values"].extend(build_transform_assignments(ir, components))
+
+    # 生成完整构造函数文本
+    ir.constructor["constructor_text"] = format_cpp_constructor(ir)
+
+    return ir
 
 
 # ============================================================================
@@ -139,7 +166,6 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
     parent_cpp = ue_package_path_to_cpp_class(parent_class_path)
 
     # T-056-04: 清理名称中的非法字符
-    import re
     clean_name = re.sub(r'[^A-Za-z0-9_]', '_', raw_name)
 
     # 确定前缀
@@ -210,8 +236,14 @@ def _extract_component_properties(
         comp_class = comp.get("class", "")
 
         if comp_name and comp_class:
+            # 补全短名称为完整路径（如 "ArrowComponent" → "/Script/Engine.ArrowComponent"）
+            comp_path = comp_class
+            if not comp_path.startswith("/Script/"):
+                # 假设是 Engine 类型，补全路径
+                comp_path = f"/Script/Engine.{comp_class}"
+
             # 构建组件类型（指针）
-            cpp_type = ue_path_to_cpp_type(comp_class)
+            cpp_type = ue_path_to_cpp_type(comp_path)
             if not cpp_type.endswith("*"):
                 cpp_type = f"{cpp_type}*"
 
@@ -334,6 +366,31 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
     category = pin_type.pin_category
     subcategory = pin_type.pin_subcategory
 
+    # 属性类型（Property）→ 映射到对应的 UE 基本类型
+    if category in ("IntProperty",):
+        return "int32"
+    if category in ("FloatProperty", "DoubleProperty"):
+        return "float" if category == "FloatProperty" else "double"
+    if category in ("BoolProperty",):
+        return "bool"
+    if category in ("ObjectProperty", "SoftObjectProperty"):
+        # ObjectProperty 总是指针类型
+        cpp_type = subcategory if subcategory else "UObject"
+        if not cpp_type.endswith("*"):
+            cpp_type = f"{cpp_type}*"
+        return cpp_type
+    if category in ("ArrayProperty", "SetProperty", "MapProperty"):
+        # 对于集合类型，返回元素类型（从 pin_type 中提取）
+        # 如果没有 subcategory，返回基本类型
+        return subcategory if subcategory else "FString"
+    if category in ("StrProperty", "NameProperty", "TextProperty"):
+        cpp_type_map = {
+            "StrProperty": "FString",
+            "NameProperty": "FName",
+            "TextProperty": "FText",
+        }
+        return cpp_type_map.get(category, category)
+
     # 基本类型直接返回
     if category in ("float", "double", "bool", "int", "int32", "int64",
                      "byte", "string", "name", "text"):
@@ -366,9 +423,306 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
 
 
 # ============================================================================
+# Phase 57: 函数签名映射
+# ============================================================================
+
+# --- 辅助函数（Plan 02） ---
+
+def _sanitize_identifier(name: str) -> str:
+    """将 UE 引脚名转换为有效 C++ 标识符。
+
+    "Left / Right" → "LeftRight"
+    "Primary Thumbstick" → "PrimaryThumbstick"
+    "2DValue" → "_2DValue"
+    """
+    if not name:
+        return "unnamed"
+    cleaned = re.sub(r'[^A-Za-z0-9_]', '', name)
+    if cleaned and cleaned[0].isdigit():
+        cleaned = '_' + cleaned
+    return cleaned if cleaned else "unnamed"
+
+
+def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
+    """将单个引脚转换为 C++ 类型字符串。
+
+    返回 None 表示应跳过（exec/delegate 引脚）。
+    """
+    if pin.pin_type is None:
+        return None
+    pt = pin.pin_type
+    if pt.pin_category in ("exec", "delegate"):
+        return None
+
+    # 获取基础类型
+    if pt.pin_category in ("object", "struct"):
+        # 尝试解析 pin_subcategory_object
+        if pt.pin_subcategory_object and isinstance(pt.pin_subcategory_object, int):
+            # 有 linker 时可解析，此处用 pin_subcategory 作为回退
+            raw_path = pt.pin_subcategory
+        else:
+            raw_path = pt.pin_subcategory
+        if not raw_path:
+            raw_path = pt.pin_category
+    else:
+        raw_path = pt.pin_subcategory or pt.pin_category
+
+    cpp_type = ue_path_to_cpp_type(raw_path)
+
+    # 对象类型加指针
+    if pt.pin_category == "object" and not cpp_type.endswith("*"):
+        cpp_type = f"{cpp_type}*"
+
+    # 方向修饰符
+    if pt.is_reference and pt.is_const:
+        cpp_type = f"const {cpp_type}&"
+    elif pt.is_reference:
+        cpp_type = f"{cpp_type}&"
+
+    return cpp_type
+
+
+def _extract_parameters_from_pins(
+    pins: List["UEdGraphPin"],
+    is_event: bool = False
+) -> List[CppCallParameter]:
+    """从引脚列表提取函数参数。"""
+    params: List[CppCallParameter] = []
+    for pin in pins:
+        if pin.pin_type is None:
+            continue
+        pt = pin.pin_type
+        # 跳过 exec / delegate
+        if pt.pin_category in ("exec", "delegate"):
+            continue
+        # 跳过隐藏引脚
+        if pin.hidden:
+            continue
+        # 事件节点跳过 OutputDelegate 和 then
+        if is_event and pin.pin_name in ("OutputDelegate", "then"):
+            continue
+
+        cpp_type = _extract_cpp_type_from_pin(pin)
+        if cpp_type is None:
+            continue
+
+        params.append(CppCallParameter(
+            name=_sanitize_identifier(pin.pin_name),
+            cpp_type=cpp_type,
+            direction="input" if pin.direction == 0 else "output",
+        ))
+    return params
+
+
+def _infer_ufunction_specifiers(
+    pins: List["UEdGraphPin"],
+    node_class_name: str,
+    is_override: bool
+) -> List[str]:
+    """推断 UFUNCTION 修饰符（D-57-03）。"""
+    if is_override:
+        return []
+    has_exec_input = any(
+        p for p in pins
+        if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 0
+    )
+    has_exec_output = any(
+        p for p in pins
+        if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 1
+    )
+    if has_exec_input or has_exec_output:
+        return ["BlueprintCallable"]
+    return ["BlueprintPure"]
+
+
+def _build_cpp_method_from_entry(
+    fe_node: "K2NodeFunctionEntry",
+    blueprint_functions: Dict
+) -> CppMethodIR:
+    """从 K2Node_FunctionEntry 构建 CppMethodIR。"""
+    if fe_node.function_reference is None:
+        return None
+    func_name = fe_node.function_reference.member_name
+    if not func_name or func_name == "None":
+        return None
+
+    # 双源交叉验证（D-57-01）
+    bp_func = blueprint_functions.get(func_name)
+    if bp_func:
+        return_type = bp_func.return_type or "void"
+        parameters = [
+            CppCallParameter(
+                name=_sanitize_identifier(p.name),
+                cpp_type=ue_path_to_cpp_type(p.param_type),
+                direction="input" if p.is_input else "output",
+            )
+            for p in bp_func.parameters
+        ]
+    else:
+        # 从引脚回退
+        parameters = _extract_parameters_from_pins(fe_node.pins)
+        return_type = "void"
+
+    specifiers = _infer_ufunction_specifiers(fe_node.pins, "K2Node_FunctionEntry", is_override=False)
+
+    return CppMethodIR(
+        cpp_name=_sanitize_identifier(func_name),
+        return_type=return_type,
+        parameters=parameters,
+        ufunction_specifiers=specifiers,
+        is_override=False,
+        source_node_type="K2Node_FunctionEntry",
+    )
+
+
+def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
+    """从 K2Node_Event 构建 CppMethodIR（is_override=True）。"""
+    if event_node.event_reference is None:
+        return None
+    event_name = event_node.event_reference.member_name
+    if not event_name or event_name == "None":
+        return None
+
+    parameters = _extract_parameters_from_pins(event_node.pins, is_event=True)
+
+    return CppMethodIR(
+        cpp_name=_sanitize_identifier(event_name),
+        return_type="void",
+        parameters=parameters,
+        ufunction_specifiers=[],
+        is_override=True,
+        source_node_type="K2Node_Event",
+    )
+
+
+# --- 主入口（Plan 02） ---
+
+def extract_cpp_functions(
+    graphs: List["UEdGraph"],
+    blueprint_functions: Optional[List] = None,
+    linker: Optional[Any] = None,
+) -> List[CppMethodIR]:
+    """从函数图节点提取 C++ 方法声明。
+
+    遍历所有图，提取 K2Node_FunctionEntry 和 K2Node_Event(b_override_function=True)。
+    """
+    bp_lookup: Dict = {}
+    if blueprint_functions:
+        for func in blueprint_functions:
+            bp_lookup[func.name] = func
+
+    methods: List[CppMethodIR] = []
+    for graph in graphs:
+        for node in graph.nodes:
+            if node.class_name == "K2Node_FunctionEntry":
+                method = _build_cpp_method_from_entry(node, bp_lookup)
+                if method:
+                    methods.append(method)
+            elif node.class_name == "K2Node_Event":
+                if getattr(node, 'b_override_function', False):
+                    method = _build_cpp_method_from_event(node)
+                    if method:
+                        methods.append(method)
+    return methods
+
+
+# --- 调用语句提取（Plan 03） ---
+
+def _derive_call_target(
+    pins: List["UEdGraphPin"],
+    b_self_context: bool
+) -> Tuple[str, str]:
+    """推导调用目标。
+
+    b_self_context=True → ("this", "this")
+    b_self_context=False → 从 self 引脚推导类型
+    """
+    if b_self_context:
+        return ("this", "this")
+
+    # 查找 self 引脚
+    for pin in pins:
+        if pin.pin_name == "self" and pin.pin_type:
+            pt = pin.pin_type
+            if pt.pin_category == "object":
+                raw_path = pt.pin_subcategory
+                if raw_path:
+                    cpp_type = ue_path_to_cpp_type(raw_path)
+                    return (cpp_type, "pointer")
+    return ("Unknown", "pointer")
+
+
+def extract_cpp_call_statements(
+    graphs: List["UEdGraph"],
+    linker: Optional[Any] = None,
+) -> List[CppCallStatement]:
+    """从 K2Node_CallFunction 节点提取 C++ 调用语句参考。"""
+    statements: List[CppCallStatement] = []
+    for graph in graphs:
+        for node in graph.nodes:
+            if node.class_name != "K2Node_CallFunction":
+                continue
+
+            # 获取 function_reference
+            func_ref = getattr(node, 'function_reference', None)
+            if func_ref is None:
+                continue
+            member_name = getattr(func_ref, 'member_name', None)
+            if not member_name or member_name == "None":
+                continue
+
+            b_self_context = getattr(func_ref, 'b_self_context', True)
+            target, target_type = _derive_call_target(node.pins, b_self_context)
+
+            # 提取参数（跳过 exec/then/self）
+            args = []
+            for pin in node.pins:
+                if pin.pin_type and pin.pin_type.pin_category == "exec":
+                    continue
+                if pin.pin_name in ("self", "then"):
+                    continue
+                args.append(_sanitize_identifier(pin.pin_name))
+
+            statements.append(CppCallStatement(
+                method_name=member_name,
+                target=target,
+                target_type=target_type,
+                args=args,
+                is_self_context=b_self_context,
+            ))
+    return statements
+
+
+# ============================================================================
+# 构造函数提取（Phase 59 Plan 03）
+# ============================================================================
+
+
+def extract_cpp_constructor(ir: "CppClassIR") -> str:
+    """从 CppClassIR 生成完整的 C++ 构造函数文本。
+
+    便捷函数，调用 format_cpp_constructor 生成构造函数代码。
+
+    Args:
+        ir: CppClassIR 实例（constructor 字典已填充）
+
+    Returns:
+        完整的 C++ 构造函数文本
+    """
+    return format_cpp_constructor(ir)
+
+
+# ============================================================================
 # 导出列表
 # ============================================================================
 
 __all__ = [
     "extract_cpp_class_skeleton",
+    # Phase 57
+    "extract_cpp_functions",
+    "extract_cpp_call_statements",
+    # Phase 59
+    "extract_cpp_constructor",
+    "_sanitize_identifier",
+    "_derive_call_target",
 ]

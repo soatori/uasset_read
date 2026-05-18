@@ -150,6 +150,195 @@ class CppHeaderMeta:
         }
 
 
+@dataclass
+class CppCallParameter:
+    """函数/调用中的单个参数。
+
+    Attributes:
+        name:  sanitized C++ 标识符（如 "LeftRight"）
+        cpp_type: C++ 类型（含方向修饰，如 "const FString&", "double"）
+        direction: "input" | "output" | "return"
+    """
+    name: str
+    cpp_type: str
+    direction: str  # "input" | "output" | "return"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "cpp_type": self.cpp_type,
+            "direction": self.direction,
+        }
+
+
+@dataclass
+class CppMethodIR:
+    """蓝图函数 → C++ 方法声明（D-57-02）。
+
+    Attributes:
+        cpp_name: C++ 函数名（已清理，如 "PrimaryThumbstick"）
+        return_type: C++ 返回类型（默认 "void"）
+        parameters: 参数列表
+        ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
+        is_override: True 表示 K2Node_Event 的 bOverrideFunction
+        is_const: const 方法修饰符（Phase 58 上下文，默认 False）
+        source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
+    """
+    cpp_name: str
+    return_type: str
+    parameters: List[CppCallParameter]
+    ufunction_specifiers: List[str]
+    is_override: bool
+    is_const: bool = False
+    source_node_type: str = ""
+    body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "cpp_name": self.cpp_name,
+            "return_type": self.return_type,
+            "parameters": [p.to_dict() for p in self.parameters],
+            "ufunction_specifiers": self.ufunction_specifiers,
+            "is_override": self.is_override,
+            "is_const": self.is_const,
+            "source_node_type": self.source_node_type,
+            "body": [s.to_dict() for s in self.body],
+        }
+
+
+@dataclass
+class CppCallStatement:
+    """K2Node_CallFunction → C++ 调用语句参考（D-57-02）。
+
+    Attributes:
+        method_name: 被调用的方法名
+        target: 调用目标（"this" 或变量名）
+        target_type: "this" | "pointer"（控制 -> 访问符）
+        args: 参数名列表（已清理的标识符）
+        is_self_context: 来自 FMemberReference.b_self_context
+    """
+    method_name: str
+    target: str
+    target_type: str = "pointer"
+    args: List[str] = field(default_factory=list)
+    is_self_context: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "method_name": self.method_name,
+            "target": self.target,
+            "target_type": self.target_type,
+            "args": self.args,
+            "is_self_context": self.is_self_context,
+        }
+
+
+@dataclass
+class CppStatement:
+    """C++ 语句基类（Phase 58）。
+
+    所有具体语句类型继承此类，用于表示函数体中的单条 C++ 语句。
+    """
+    statement_type: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"statement_type": self.statement_type}
+
+
+@dataclass
+class CppCallStmt(CppStatement):
+    """函数调用语句。
+
+    Attributes:
+        target: 调用目标对象（"Super", "this", 或变量名）
+        method_name: 方法名
+        args: 参数列表（字符串）
+        is_pure: 是否为 pure 函数调用
+    """
+    target: str = ""
+    method_name: str = ""
+    args: List[str] = field(default_factory=list)
+    is_pure: bool = False
+    statement_type: str = "call"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "target": self.target,
+            "method_name": self.method_name,
+            "args": self.args,
+            "is_pure": self.is_pure,
+        }
+
+
+@dataclass
+class CppAssignmentStmt(CppStatement):
+    """赋值语句：lhs = rhs;
+
+    Attributes:
+        lhs: 左值变量名
+        rhs: 右值表达式
+        cpp_type: C++ 类型
+    """
+    lhs: str = ""
+    rhs: str = ""
+    cpp_type: str = ""
+    statement_type: str = "assignment"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "lhs": self.lhs,
+            "rhs": self.rhs,
+            "cpp_type": self.cpp_type,
+        }
+
+
+@dataclass
+class CppIfStmt(CppStatement):
+    """条件语句：if (condition) { then_body } [else { else_body }]
+
+    Attributes:
+        condition: 条件表达式
+        then_body: then 分支语句列表
+        else_body: else 分支语句列表（可为空）
+    """
+    condition: str = ""
+    then_body: List["CppStatement"] = field(default_factory=list)
+    else_body: List["CppStatement"] = field(default_factory=list)
+    statement_type: str = "if"
+
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "statement_type": self.statement_type,
+            "condition": self.condition,
+            "then_body": [s.to_dict() for s in self.then_body],
+        }
+        if self.else_body:
+            result["else_body"] = [s.to_dict() for s in self.else_body]
+        return result
+
+
+@dataclass
+class CppInlineExprStmt(CppStatement):
+    """内联表达式语句（不独立成行，仅嵌入到其他语句参数中）。
+
+    Attributes:
+        expression: 内联表达式文本
+    """
+    expression: str = ""
+    statement_type: str = "inline_expr"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "expression": self.expression,
+        }
+
+
+# 为 CppMethodIR 新增 body 字段 — 在现有 dataclass 之后添加兼容处理
+# CppMethodIR.body 通过 asdict 自动序列化，无需修改 to_dict
+
 # ============================================================================
 # C++ 类骨架 IR 数据模型（Per D-01, D-06）
 # ============================================================================
@@ -173,7 +362,7 @@ class CppClassIR:
     parent_class: str
     header_meta: CppHeaderMeta = field(default_factory=CppHeaderMeta)
     properties: List[CppProperty] = field(default_factory=list)
-    methods: List[Any] = field(default_factory=list)  # Phase 57 填充
+    methods: List["CppMethodIR"] = field(default_factory=list)  # Phase 57 填充
     constructor: Dict[str, List] = field(default_factory=lambda: {
         "component_creations": [],
         "component_assignments": [],
@@ -201,7 +390,7 @@ class CppClassIR:
             "parent_class": self.parent_class,
             "header_meta": self.header_meta.to_dict(),
             "properties": [prop.to_dict() for prop in self.properties],
-            "methods": self.methods,  # 空列表（Phase 56）
+            "methods": [m.to_dict() if hasattr(m, "to_dict") else m for m in self.methods],
             "constructor": self.constructor,  # 空字典（Phase 56）
         }
 
@@ -248,4 +437,14 @@ __all__ = [
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
+    # Method/Call IR (Phase 57)
+    "CppCallParameter",
+    "CppMethodIR",
+    "CppCallStatement",
+    # Statement IR (Phase 58)
+    "CppStatement",
+    "CppCallStmt",
+    "CppAssignmentStmt",
+    "CppIfStmt",
+    "CppInlineExprStmt",
 ]

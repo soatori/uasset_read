@@ -2,78 +2,51 @@
 
 Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI agent 直接解析内容。
 
-**技术栈**: Python 3.10+，零运行时依赖 | **架构**: `.uasset → FArchive → 序列化 → 数据模型 → 属性解析 → 蓝图图 → 格式化输出 → PackageLinker`
+**技术栈**: Python 3.10+，零运行时依赖 | **架构**: `.uasset → FArchive → 序列化 → 数据模型 → 属性解析 → 蓝图图 → 格式化输出 → PackageLinker → Kismet 字节码反编译`
 
 **源码参考**: `E:\Develop\lib\UnrealEngine` (UE 5.7，只读)
 
 ## 里程碑
 
-| 版本 | 范围 | 日期 |
+| 版本 | 范围 | 状态 |
 |------|------|------|
-| v1.0 | MVP | 2026-04-28 |
-| v2.0 | 蓝图图解析 | 2026-05-02 |
-| v5.1 | src layout + pyproject.toml | 2026-05-07 |
-| v6.0 | ✅ 模块化重构 | 2026-05-13 |
-| v7.0 | ✅ UE FLinkerLoad 对象图重建 + 技术债清理 | 2026-05-14 |
-| **v8.0** | ✅ BP-to-CPP JSON 可翻译性 (Phase 47-51) | 2026-05-17 |
-| **v9.0** | ✅ 函数调用链解析 (Phase 52-55) | 2026-05-17 |
+| v1.0–v6.0 | MVP → 模块化重构 | 已归档 |
+| v7.0 | UE FLinkerLoad 对象图重建 | 已归档 |
+| v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 已归档 |
+| v9.0 | 函数调用链解析 (P52-55) | 已归档 |
+| **v10.0** | **Blueprint-to-C++ 代码生成参考 (P56-60)** | **已发布** |
+| **v11.0** | 📋 Kismet 字节码反编译器 (P61-64) | 活跃 |
 
-**历史**: `.planning/milestones/` | **详情**: `.planning/ROADMAP.md`
+详情：`.planning/archive/` | 路线图：`.planning/ROADMAP.md`
 
 ## 当前状态
 
-**当前开发**: v10.0 — Blueprint-to-C++ 代码生成参考
+**当前开发**: v11.0 — Kismet 字节码反编译器（活跃）
 
-从蓝图 JSON 输出提取足够信息，使开发者能直接编写等价的 C++ 类实现（函数签名 + 参数 + 函数体内调用链 + 组件声明）。
+参考 CUE4Parse 设计，实现完整的 Kismet 字节码反编译器：从函数体原始字节流构建表达式树，翻译为可读 C++ 伪代码，覆盖变量/常量/函数调用/控制流/类型转换。
 
-**已发布**: v9.0 — 函数调用链解析
+**已归档**: v10.0 — Blueprint-to-C++ 代码生成参考 (2026-05-19)
 
-从蓝图函数图中提取完整函数调用链，使 JSON 输出可翻译为等价的 C++ 函数实现。
-
-`BP_FirstPersonCharacter.uasset` JSON 输出已覆盖 C++ 对照所需：
-- ✅ 组件声明 + 构造函数数值（位置/旋转/缩放/标志）
-- ✅ 函数签名（参数名+类型+默认值+方向）
-- ✅ 输入绑定（Action→Trigger→函数）
-- ✅ 执行流（BeginPlay→函数链）
-- ✅ 函数粒度调用链（function_graphs 数组，output_version 5.0）
-- ✅ 数据流标注（data_providers + data_sources 内嵌）
+从蓝图 JSON 输出提取足够信息，使开发者能直接编写等价的 C++ 类实现：组件声明+构造函数数值、函数签名、输入绑定、执行流、函数调用链、数据流标注、函数体逻辑（AST 层面）、组件初始化代码。1021 tests。
 
 **预存在问题**: 26 个测试失败（资产版本 -8 vs -9，pre-existing）
 
 ## Out of Scope
 
-导出纹理/模型 | 修改 .uasset | Cooked 资产 | 蓝图字节码反编译 | C++ 代码生成 | MCP Server
+导出纹理/模型 | 修改 .uasset | Cooked 资产 | MCP Server
+
+~~蓝图字节码反编译~~ → v11.0 开始实施
+*C++ 代码生成~~ → v10.0 已实现参考级输出
 
 ## 关键决策
 
-零依赖 ✓ | 参考 UE 源码 ✓ | JSON 优先 ✓ | FArchive 管道模式 ✓ | v7.0 增量采用 ✓ | v8.0 按 gap 分 phase ✓
-
-<details>
-<summary>v7.0 已解决技术债</summary>
-
-- **Phase 44a**: 移除旧版本/UE4 兼容代码 ✅
-- **Phase 44b**: 替换直接字节读取为 FArchive 方法 ✅
-- **Phase 44c**: 清理废弃测试工具 ✅
-
-</details>
+零依赖 ✓ | 参考 UE 源码 ✓ | JSON 优先 ✓ | FArchive 管道模式 ✓ | v7.0 增量采用 ✓ | v8.0 按 gap 分 phase ✓ | v11.0 参考 CUE4Parse 设计（Python 化）✓
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone** (via `/gsd:complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+Full update rules in the original template.
 
 ---
 
-*Last updated: 2026-05-18 after v9.0 milestone shipped*
+*Last updated: 2026-05-19 after v10.0 milestone archived, v11.0 active*
