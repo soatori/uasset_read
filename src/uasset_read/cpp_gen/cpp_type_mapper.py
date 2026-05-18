@@ -110,12 +110,18 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "name": "FName",
     "text": "FText",
     "string": "FString",
+    "fstring": "FString",
+    "fname": "FName",
+    "ftext": "FText",
     "vector": "FVector",
     "rotator": "FRotator",
     "transform": "FTransform",
     "linearcolor": "FLinearColor",
     "color": "FColor",
     "guid": "FGuid",
+    "uobject": "UObject",
+    "uobject*": "UObject*",
+    "fstring*": "FString*",
 }
 
 # ============================================================================
@@ -277,6 +283,12 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
         return "FColor"
     if lower_type in ("guid",):
         return "FGuid"
+    # 基本类型直接返回（已在 UE_TO_CPP_TYPE_MAP 中）
+    if lower_type in ("float", "double", "bool", "int", "int32", "int64",
+                       "uint8", "uint16", "uint32", "uint64",
+                       "byte", "char", "string", "fstring", "fname", "ftext",
+                       "uobject", "uobject*", "fstring*"):
+        return UE_TO_CPP_TYPE_MAP.get(lower_type, ue_type)
 
     # 5. 未知类型 - 应用启发式
     logger.warning(f"Unknown UE type path: '{ue_type}', returning as-is")

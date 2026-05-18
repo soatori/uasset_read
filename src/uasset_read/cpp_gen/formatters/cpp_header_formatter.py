@@ -13,9 +13,12 @@ from __future__ import annotations
 import html
 import logging
 import re
-from typing import List
+from typing import List, TYPE_CHECKING
 
-from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppHeaderMeta
+if TYPE_CHECKING:
+    from uasset_read.cpp_gen.formatters import CppCallStatement
+
+from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppHeaderMeta, CppMethodIR, CppCallStatement
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +123,17 @@ def format_cpp_header(ir: CppClassIR) -> str:
         for prop in variables:
             lines.extend(_format_variable_property(prop))
 
-    # 13. 类结束
+    # 13. 方法声明（Phase 57）
+    if ir.methods:
+        lines.append("")
+        lines.append("public:")
+        lines.append("    // Blueprint Functions")
+        for i, method in enumerate(ir.methods):
+            if i > 0:
+                lines.append("")
+            lines.extend(_format_method_declaration(method))
+
+    # 14. 类结束
     lines.append("};")
 
     # 14. 尾随换行
@@ -317,10 +330,65 @@ def _format_default_value(cpp_type: str, value: any) -> str:
     return str(value)
 
 
+def _format_method_declaration(method: CppMethodIR) -> List[str]:
+    """将 CppMethodIR 渲染为 .h 声明行列表。
+
+    Examples:
+        Move → ["    UFUNCTION(BlueprintCallable)", "    void Move(double LeftRight, double ForwardBackward);"]
+        PrimaryThumbstick → ["    void PrimaryThumbstick(double Axis_X, double Axis_Y) override;"]
+    """
+    lines: List[str] = []
+
+    # UFUNCTION 宏
+    if method.ufunction_specifiers:
+        spec_str = ", ".join(method.ufunction_specifiers)
+        lines.append(f"    UFUNCTION({spec_str})")
+
+    # 参数列表
+    param_str = ", ".join(f"{p.cpp_type} {p.name}" for p in method.parameters)
+
+    # 声明
+    decl = f"    {method.return_type} {method.cpp_name}({param_str})"
+
+    # 修饰符
+    modifiers = []
+    if method.is_const:
+        modifiers.append("const")
+    if method.is_override:
+        modifiers.append("override")
+
+    if modifiers:
+        decl += " " + " ".join(modifiers)
+
+    decl += ";"
+    lines.append(decl)
+
+    return lines
+
+
+def format_cpp_call_statements(statements: List["CppCallStatement"]) -> str:
+    """将 CppCallStatement 列表渲染为 .cpp 参考文本。
+
+    Examples:
+        CppCallStatement(method_name="Jump", target="this", args=[]) → "this->Jump();"
+    """
+    if not statements:
+        return ""
+
+    lines = ["// Call Reference"]
+    for stmt in statements:
+        op = "->"  # UE 指针访问符
+        args_str = ", ".join(stmt.args)
+        lines.append(f"{stmt.target}{op}{stmt.method_name}({args_str});")
+
+    return "\n".join(lines) + "\n"
+
+
 # ============================================================================
 # 导出列表
 # ============================================================================
 
 __all__ = [
     "format_cpp_header",
+    "format_cpp_call_statements",
 ]
