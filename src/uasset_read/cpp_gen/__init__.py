@@ -57,6 +57,12 @@ from uasset_read.cpp_gen.formatters import (
     CppMethodIR,
     CppCallStatement,
 )
+from uasset_read.cpp_gen.cpp_default_value_formatter import (
+    format_cpp_default_value,
+    format_cpp_transform,
+    format_cpp_component_init,
+    format_cpp_input_action_load,
+)
 
 __all__ = [
     # 类型映射
@@ -82,4 +88,9 @@ __all__ = [
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
+    # C++ 默认值格式化（Phase 59）
+    "format_cpp_default_value",
+    "format_cpp_transform",
+    "format_cpp_component_init",
+    "format_cpp_input_action_load",
 ]
