@@ -561,17 +561,15 @@ The `ue_path_to_cpp_type()` function handles both string types and path types. F
 | A3 | The `extractors/` subdirectory can be deferred to Phase 58 | Architecture Pattern — module placement | If Phase 57 extraction logic grows complex, splitting into subdirectory earlier may be beneficial |
 | A4 | `UserDefinedPin` data is not required for primary signature extraction — pins themselves are sufficient | Gap Analysis | If pins carry incomplete type information in some cases, UserDefinedPin may be needed as primary source |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **BlueprintImplementableEvent detection:** D-57-03 mentions "ExtraFlags contains event flag" for BlueprintImplementableEvent. Since ExtraFlags is not properly propagated to the node model (Gap: ExtraFlags), how should Phase 57 detect this case?
-   - What we know: Test assets have ExtraFlags=201457664 (0x0C020000) for all custom functions (Move, Aim).
-   - What's unclear: Whether this value encodes BlueprintImplementableEvent, BlueprintCallable, or both.
-   - Recommendation: For Phase 57, default to BlueprintCallable for all custom functions. If BlueprintImplementableEvent detection is needed, fix the serializer to propagate ExtraFlags first (can be a separate small task).
+1. **BlueprintImplementableEvent detection:** ~~D-57-03 mentions "ExtraFlags contains event flag" for BlueprintImplementableEvent. Since ExtraFlags is not properly propagated to the node model (Gap: ExtraFlags), how should Phase 57 detect this case?~~
+   - **Resolution:** For Phase 57, default to BlueprintCallable for all custom functions with exec pins. BlueprintImplementableEvent detection requires ExtraFlags propagation fix — defer to Phase 58 or when a test case requires it.
+   - **Action:** No implementation needed in Phase 57.
 
-2. **Const function detection:** BlueprintFunction model has `is_const: bool`, but there's no corresponding pin indicator for const methods.
-   - What we know: `BlueprintFunction` dataclass has `is_const` field.
-   - What's unclear: How const is determined from the .uasset binary.
-   - Recommendation: Skip const method detection for Phase 57 — add `const` suffix to method declarations in Phase 58 when function body analysis provides more context.
+2. **Const function detection:** ~~BlueprintFunction model has `is_const: bool`, but there's no corresponding pin indicator for const methods.~~
+   - **Resolution:** Skip const method detection for Phase 57. `BlueprintFunction.is_const` can be used if available from upstream, but no pin-based inference is needed.
+   - **Action:** No implementation needed in Phase 57.
 
 ## Environment Availability
 
