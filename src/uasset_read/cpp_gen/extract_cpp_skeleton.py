@@ -31,6 +31,12 @@ from uasset_read.cpp_gen.cpp_type_mapper import (
 from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     cpf_flags_to_uproperty_marks,
 )
+from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
+    build_component_creations,
+    build_component_assignments,
+    build_default_values,
+    build_transform_assignments,
+)
 from uasset_read.constants import CPF_InstancedReference
 
 if TYPE_CHECKING:
@@ -93,8 +99,8 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     # 5. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 
-    # 6. 构建并返回 CppClassIR（Per D-06）
-    return CppClassIR(
+    # 6. 构建 CppClassIR（Per D-06）
+    ir = CppClassIR(
         name=class_name,
         parent_class=parent_class,
         header_meta=header_meta,
@@ -106,6 +112,17 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             "default_values": [],
         },  # Phase 59 填充
     )
+
+    # Phase 59: 填充 constructor 字典
+    components = result.components or []
+    ir.constructor["component_creations"] = build_component_creations(ir)
+    ir.constructor["component_assignments"] = build_component_assignments(components)
+    ir.constructor["default_values"] = build_default_values(ir, blueprint.variables)
+
+    # Blocker 2 fix: transform 数据也流入 default_values
+    ir.constructor["default_values"].extend(build_transform_assignments(ir, components))
+
+    return ir
 
 
 # ============================================================================
