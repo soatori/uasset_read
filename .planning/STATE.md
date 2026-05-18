@@ -1,68 +1,85 @@
 ---
 gsd_state_version: 1.0
-milestone: v9.0
-milestone_name: 函数调用链解析
-status: archived — SHIPPED 2026-05-17
+milestone: v10.0
+milestone_name: Blueprint-to-C++ 代码生成参考
+status: planning
 last_updated: "2026-05-18T00:00:00Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 6
-  completed_plans: 10
-  percent: 100
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# v9.0 — 函数调用链解析
+# v10.0 — Blueprint-to-C++ 代码生成参考
 
 ## Phase 分解
 
-| Phase | 名称 | 状态 |
-|-------|------|------|
-| 52 | 函数图节点解析 | ✅ 已完成 (2026-05-17, 2 plans) |
-| 53 | 函数内执行流追踪 | ✅ 已完成 (2026-05-17) |
-| 54 | 数据流追踪 | ✅ 已完成 (2026-05-17, 3 plans complete) |
-| 55 | JSON 输出增强 | ✅ 已完成 (2026-05-17, 4 tasks, 7 tests) |
+| Phase | Name | Goal | Requirements | Status |
+|-------|------|------|--------------|--------|
+| 56 | C++ 类骨架提取 | 从 PackageSummary/ExportMap/组件列表导出完整 C++ 类声明骨架 | CPP-01, CPP-02, CPP-03 | Not started |
+| 57 | 函数签名映射 | 从函数图节点提取完整函数签名，输出 C++ 函数声明 | FUNC-01, FUNC-02, FUNC-03 | Not started |
+| 58 | 函数体逻辑翻译 | 从执行流+数据流生成等价 C++ 语句序列 | BODY-01, BODY-02, BODY-03, BODY-04 | Not started |
+| 59 | 组件初始化代码 | 从组件层次和属性生成构造函数初始化代码 | COMP-01, COMP-02 | Not started |
+| 60 | 验证与测试 | 基于真实资产验证端到端 C++ 参考输出 | TEST-01, TEST-02, TEST-03 | Not started |
+
+## 依赖关系
+
+```
+Phase 56 (类骨架) ──→ Phase 57 (函数签名) ──→ Phase 58 (函数体逻辑)
+     │                                              │
+     └──────────────────────────────────────────────┘
+                                  │
+Phase 59 (组件初始化) ─────────────┘
+                                  │
+                         Phase 60 (验证与测试)
+```
+
+- Phase 56 是基础，无依赖
+- Phase 57 依赖 Phase 56（类声明完成后才能添加函数声明）
+- Phase 58 依赖 Phase 57（函数签名完成后才能填充函数体）
+- Phase 59 依赖 Phase 56（组件 UPROPERTY 声明完成后才能生成初始化代码）
+- Phase 60 依赖 Phase 58 和 Phase 59（需要完整的类骨架+函数+组件初始化才能端到端验证）
 
 ## 目标
 
-从蓝图函数图中提取完整函数调用链，使 JSON 输出可翻译为等价的 C++ 函数实现。
+从蓝图 JSON 输出提取足够信息，使开发者能直接编写等价的 C++ 类实现。
 
-## 当前进展
+## 当前状态
 
-**Phase 55 已完成 (2026-05-17):**
-- ✅ build_function_graphs() 核心函数（收集 FunctionEntry，构建执行流+数据流标注）
-- ✅ format_json_full() include_function_graphs 参数（output_version 条件化 4.0/5.0）
-- ✅ CLI --function-graphs flag（隐含 --json）
-- ✅ 7 个 function_graphs 测试通过
+**Milestone 状态:** 规划中（ROADMAP 已创建，等待批准）
 
-**Phase 54 已完成 (2026-05-17):**
-- ✅ DATA_BOUNDARY_NODES 常量（FunctionEntry + VariableSet）
-- ✅ is_boundary_node 函数（边界检测 + self/Target）
-- ✅ _resolve_knot_chain 函数（反向 Knot 链穿透）
-- ✅ _trace_data_source 函数（完整数据源追踪）
-- ✅ _extract_call_function_parameters 增强（data_source 字段）
-- ✅ Pure 函数 data_providers 标注（正向追踪）
-- ✅ 21 个数据流追踪测试通过（Wave 2 完成）
-- ✅ Move 函数完整数据流验证通过
+## 上下文
 
-**Phase 53 已完成:**
-- ✅ `_get_start_event_name` 统一前缀格式
-- ✅ `_trace_execution_from_event` 添加 pure function 标记
-- ✅ 4 个新测试覆盖 FunctionEntry 前缀/执行流/pure/Knot 透明性
+- v9.0 已完成：执行流追踪、数据流追踪、function_graphs 输出
+- 参考数据：`reference/蓝图节点文本参考.md`（BP_FirstPersonCharacter 真实导出）
+- 测试基础：517 passed / 107 skipped（554 total，含 37 pre-existing failures）
+- 技术栈：Python 3.10+，零运行时依赖
+- 架构管道：`.uasset → FArchive → Serializers → Models → Parsers → Graph → Formatters`
 
-**Phase 52 已完成:**
-- ✅ K2Node_FunctionEntry 数据类
-- ✅ FMemberReference 解析增强
-- ✅ FunctionEntry 识别策略
+## 覆盖验证
 
-## 全量测试
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CPP-01 | Phase 56 | Pending |
+| CPP-02 | Phase 56 | Pending |
+| CPP-03 | Phase 56 | Pending |
+| FUNC-01 | Phase 57 | Pending |
+| FUNC-02 | Phase 57 | Pending |
+| FUNC-03 | Phase 57 | Pending |
+| BODY-01 | Phase 58 | Pending |
+| BODY-02 | Phase 58 | Pending |
+| BODY-03 | Phase 58 | Pending |
+| BODY-04 | Phase 58 | Pending |
+| COMP-01 | Phase 59 | Pending |
+| COMP-02 | Phase 59 | Pending |
+| TEST-01 | Phase 60 | Pending |
+| TEST-02 | Phase 60 | Pending |
+| TEST-03 | Phase 60 | Pending |
 
-554 tests collected (Phase 55 added 7 tests)
-7 passed (Phase 55 tests)
+**Coverage: 15/15 requirements mapped**
 
 ---
-*Started: 2026-05-17*
-*Phase 52 completed: 2026-05-17*
-*Phase 53 completed: 2026-05-17*
-*Phase 54 completed: 2026-05-17*
-*Phase 55 completed: 2026-05-17 (v9.0 milestone complete)*
+*Started: 2026-05-18*
+*ROADMAP created: 2026-05-18*

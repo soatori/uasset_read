@@ -5,6 +5,7 @@
 - ✅ **v7.0** — Phases 41-46 + 44a-c (shipped 2026-05-14)
 - ✅ **v8.0** — Phases 47-51 (shipped 2026-05-17)
 - ✅ **v9.0** — Phases 52-55 (函数调用链解析, shipped 2026-05-17)
+- 🔄 **v10.0** — Phases 56-60 (Blueprint-to-C++ 代码生成参考)
 
 ## Phases
 
@@ -55,6 +56,79 @@
 详见 `.planning/milestones/v9.0-ROADMAP.md`
 </details>
 
+<details>
+<summary>v10.0 — Blueprint-to-C++ 代码生成参考 (IN PROGRESS)</summary>
+
+详见下方 Phase Details
+</details>
+
 ---
 
-*Updated: 2026-05-18 (v9.0 milestone shipped, Phases 52-55 complete)*
+*Updated: 2026-05-18 (v10.0 ROADMAP created)*
+
+## Phase Details
+
+### Phase 56: C++ 类骨架提取
+**Goal**: 从蓝图 PackageSummary、ExportMap 和组件列表导出完整的 C++ 类声明骨架，包括继承链、组件 UPROPERTY 和变量 UPROPERTY
+**Depends on**: Nothing (first phase of v10.0; builds on v9.0 function_graphs output)
+**Requirements**: CPP-01, CPP-02, CPP-03
+**Success Criteria** (what must be TRUE):
+  1. 运行 CLI 后，输出的 C++ 类声明包含完整父类继承链（如 `class AMyCharacter : public ACharacter`），继承链从蓝图 `GeneratedClass` 追溯至引擎基类
+  2. 输出中所有蓝图组件均生成了 `UPROPERTY` 声明，包含正确的指针类型、变量名和可见性标记（如 `VisibleAnywhere`, `BlueprintReadOnly`, `Instanced`）
+  3. 输出中所有蓝图变量均生成了 `UPROPERTY` 声明，包含正确的 C++ 类型名（如 `FVector`, `float`, `bool`）、默认值和 Blueprint 可见性标记
+  4. 生成的 .h 骨架文件可直接作为 C++ 头文件模板使用，无需手动补遗漏的组件或变量声明
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 57: 函数签名映射
+**Goal**: 从 v9.0 function_graphs 输出提取完整函数签名，生成等价 C++ 函数声明和调用语句
+**Depends on**: Phase 56
+**Requirements**: FUNC-01, FUNC-02, FUNC-03
+**Success Criteria** (what must be TRUE):
+  1. 每个蓝图函数图节点输出为完整的 C++ 函数声明，包含函数名、参数名、参数 C++ 类型、返回值类型、`const` 修饰符和参数方向（值传递/引用/`const&`）推断
+  2. 函数调用节点（CallFunction/K2Node_CallFunction）输出为等价 C++ 调用语句格式（如 `Super::Jump();` 或 `Target->SomeFunction(Arg1, Arg2)`），包含 `MemberParent` 推导的类名前缀
+  3. 每个函数声明包含正确的 `UFUNCTION` 宏及类别说明符（`BlueprintCallable`, `BlueprintPure`, `BlueprintImplementableEvent`），基于函数图元数据自动推断
+  4. 开发者能从输出中直接复制函数声明到 .h 文件、函数调用到 .cpp 文件，无需补充签名信息
+**Plans**: TBD
+
+### Phase 58: 函数体逻辑翻译
+**Goal**: 从 v9.0 执行流和数据流输出生成等价的 C++ 语句序列，覆盖控制流、赋值、内联表达式
+**Depends on**: Phase 57
+**Requirements**: BODY-01, BODY-02, BODY-03, BODY-04
+**Success Criteria** (what must be TRUE):
+  1. 执行流（execution pins + then 链）翻译为顺序 C++ 语句序列，节点执行顺序与流追踪结果一致
+  2. 数据流（pure function 返回值 -> 参数输入）翻译为 C++ 赋值表达式或内联参数传递，变量名和类型正确映射
+  3. 控制流节点（Branch/Sequence/ForEach 等）翻译为等价 C++ `if`/`for`/`do...while` 语句块，条件和循环体完整
+  4. Pure 函数调用（如 `GetActorRightVector()`, `Multiply_VectorFloat`）翻译为内联 C++ 表达式（如 `GetActorRightVector() * Scale`），而非中间变量赋值
+**Plans**: TBD
+
+### Phase 59: 组件初始化代码
+**Goal**: 从组件层次结构和属性数据生成构造函数中的组件创建和初始化代码
+**Depends on**: Phase 56
+**Requirements**: COMP-01, COMP-02
+**Success Criteria** (what must be TRUE):
+  1. 每个蓝图组件生成对应的 `CreateDefaultSubobject<T>()` 调用，包含正确的模板类型参数和组件名称，放置于构造函数内
+  2. 组件变换数据（位置/旋转/缩放）翻译为构造函数中的 `SetRelativeLocation()`/`SetRelativeRotation()`/`SetRelativeScale3D()` 调用，使用正确的 `FVector`/`FRotator` 字面量
+  3. 组件属性（如 `CameraBoom->TargetArmLength = 400.0f`）翻译为构造函数中的默认值赋值语句，类型后缀正确（`f` 浮点标记等）
+**Plans**: TBD
+
+### Phase 60: 验证与测试
+**Goal**: 基于真实蓝图资产（BP_FirstPersonCharacter）验证端到端 C++ 参考输出的正确性
+**Depends on**: Phase 58, Phase 59
+**Requirements**: TEST-01, TEST-02, TEST-03
+**Success Criteria** (what must be TRUE):
+  1. 存在 golden-path 集成测试（基于 `reference/蓝图节点文本参考.md`），运行 `pytest` 后全部通过，验证端到端 JSON 到 C++ 参考输出的映射
+  2. BP_FirstPersonCharacter 的 Move/Aim 函数 JSON 输出经翻译后，生成的 C++ 实现片段与参考实现逐行匹配（函数签名、调用链、赋值语句）
+  3. Jump/StopJumping 事件驱动的函数调用链翻译为正确的 C++ 事件处理代码，包含 `Super::Jump()` 调用和状态变更语句
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 56. C++ 类骨架提取 | 0/3 | Not started | - |
+| 57. 函数签名映射 | 0/3 | Not started | - |
+| 58. 函数体逻辑翻译 | 0/4 | Not started | - |
+| 59. 组件初始化代码 | 0/3 | Not started | - |
+| 60. 验证与测试 | 0/3 | Not started | - |
