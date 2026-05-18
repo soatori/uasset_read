@@ -15,6 +15,10 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppHeaderMeta,
     CppClassIR,
     format_cpp_class_json,
+    # Method/Call IR (Phase 57)
+    CppCallParameter,
+    CppMethodIR,
+    CppCallStatement,
 )
 from uasset_read.cpp_gen.formatters.cpp_header_formatter import (
     format_cpp_header,
@@ -26,4 +30,8 @@ __all__ = [
     "CppClassIR",
     "format_cpp_class_json",
     "format_cpp_header",
+    # Method/Call IR (Phase 57)
+    "CppCallParameter",
+    "CppMethodIR",
+    "CppCallStatement",
 ]

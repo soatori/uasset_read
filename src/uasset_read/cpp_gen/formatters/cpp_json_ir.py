@@ -150,6 +150,87 @@ class CppHeaderMeta:
         }
 
 
+@dataclass
+class CppCallParameter:
+    """函数/调用中的单个参数。
+
+    Attributes:
+        name:  sanitized C++ 标识符（如 "LeftRight"）
+        cpp_type: C++ 类型（含方向修饰，如 "const FString&", "double"）
+        direction: "input" | "output" | "return"
+    """
+    name: str
+    cpp_type: str
+    direction: str  # "input" | "output" | "return"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "cpp_type": self.cpp_type,
+            "direction": self.direction,
+        }
+
+
+@dataclass
+class CppMethodIR:
+    """蓝图函数 → C++ 方法声明（D-57-02）。
+
+    Attributes:
+        cpp_name: C++ 函数名（已清理，如 "PrimaryThumbstick"）
+        return_type: C++ 返回类型（默认 "void"）
+        parameters: 参数列表
+        ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
+        is_override: True 表示 K2Node_Event 的 bOverrideFunction
+        is_const: const 方法修饰符（Phase 58 上下文，默认 False）
+        source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
+    """
+    cpp_name: str
+    return_type: str
+    parameters: List[CppCallParameter]
+    ufunction_specifiers: List[str]
+    is_override: bool
+    is_const: bool = False
+    source_node_type: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "cpp_name": self.cpp_name,
+            "return_type": self.return_type,
+            "parameters": [p.to_dict() for p in self.parameters],
+            "ufunction_specifiers": self.ufunction_specifiers,
+            "is_override": self.is_override,
+            "is_const": self.is_const,
+            "source_node_type": self.source_node_type,
+        }
+
+
+@dataclass
+class CppCallStatement:
+    """K2Node_CallFunction → C++ 调用语句参考（D-57-02）。
+
+    Attributes:
+        method_name: 被调用的方法名
+        target: 调用目标（"this" 或变量名）
+        target_type: "this" | "pointer"（控制 -> 访问符）
+        args: 参数名列表（已清理的标识符）
+        is_self_context: 来自 FMemberReference.b_self_context
+    """
+    method_name: str
+    target: str
+    target_type: str = "pointer"
+    args: List[str] = field(default_factory=list)
+    is_self_context: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "method_name": self.method_name,
+            "target": self.target,
+            "target_type": self.target_type,
+            "args": self.args,
+            "is_self_context": self.is_self_context,
+        }
+
+
 # ============================================================================
 # C++ 类骨架 IR 数据模型（Per D-01, D-06）
 # ============================================================================
@@ -173,7 +254,7 @@ class CppClassIR:
     parent_class: str
     header_meta: CppHeaderMeta = field(default_factory=CppHeaderMeta)
     properties: List[CppProperty] = field(default_factory=list)
-    methods: List[Any] = field(default_factory=list)  # Phase 57 填充
+    methods: List["CppMethodIR"] = field(default_factory=list)  # Phase 57 填充
     constructor: Dict[str, List] = field(default_factory=lambda: {
         "component_creations": [],
         "component_assignments": [],
@@ -201,7 +282,7 @@ class CppClassIR:
             "parent_class": self.parent_class,
             "header_meta": self.header_meta.to_dict(),
             "properties": [prop.to_dict() for prop in self.properties],
-            "methods": self.methods,  # 空列表（Phase 56）
+            "methods": [m.to_dict() if hasattr(m, "to_dict") else m for m in self.methods],
             "constructor": self.constructor,  # 空字典（Phase 56）
         }
 
@@ -248,4 +329,8 @@ __all__ = [
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
+    # Method/Call IR (Phase 57)
+    "CppCallParameter",
+    "CppMethodIR",
+    "CppCallStatement",
 ]
