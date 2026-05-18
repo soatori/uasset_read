@@ -191,6 +191,7 @@ class CppMethodIR:
     is_override: bool
     is_const: bool = False
     source_node_type: str = ""
+    body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -201,6 +202,7 @@ class CppMethodIR:
             "is_override": self.is_override,
             "is_const": self.is_const,
             "source_node_type": self.source_node_type,
+            "body": [s.to_dict() for s in self.body],
         }
 
 
@@ -230,6 +232,112 @@ class CppCallStatement:
             "is_self_context": self.is_self_context,
         }
 
+
+@dataclass
+class CppStatement:
+    """C++ 语句基类（Phase 58）。
+
+    所有具体语句类型继承此类，用于表示函数体中的单条 C++ 语句。
+    """
+    statement_type: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"statement_type": self.statement_type}
+
+
+@dataclass
+class CppCallStmt(CppStatement):
+    """函数调用语句。
+
+    Attributes:
+        target: 调用目标对象（"Super", "this", 或变量名）
+        method_name: 方法名
+        args: 参数列表（字符串）
+        is_pure: 是否为 pure 函数调用
+    """
+    target: str = ""
+    method_name: str = ""
+    args: List[str] = field(default_factory=list)
+    is_pure: bool = False
+    statement_type: str = "call"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "target": self.target,
+            "method_name": self.method_name,
+            "args": self.args,
+            "is_pure": self.is_pure,
+        }
+
+
+@dataclass
+class CppAssignmentStmt(CppStatement):
+    """赋值语句：lhs = rhs;
+
+    Attributes:
+        lhs: 左值变量名
+        rhs: 右值表达式
+        cpp_type: C++ 类型
+    """
+    lhs: str = ""
+    rhs: str = ""
+    cpp_type: str = ""
+    statement_type: str = "assignment"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "lhs": self.lhs,
+            "rhs": self.rhs,
+            "cpp_type": self.cpp_type,
+        }
+
+
+@dataclass
+class CppIfStmt(CppStatement):
+    """条件语句：if (condition) { then_body } [else { else_body }]
+
+    Attributes:
+        condition: 条件表达式
+        then_body: then 分支语句列表
+        else_body: else 分支语句列表（可为空）
+    """
+    condition: str = ""
+    then_body: List["CppStatement"] = field(default_factory=list)
+    else_body: List["CppStatement"] = field(default_factory=list)
+    statement_type: str = "if"
+
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "statement_type": self.statement_type,
+            "condition": self.condition,
+            "then_body": [s.to_dict() for s in self.then_body],
+        }
+        if self.else_body:
+            result["else_body"] = [s.to_dict() for s in self.else_body]
+        return result
+
+
+@dataclass
+class CppInlineExprStmt(CppStatement):
+    """内联表达式语句（不独立成行，仅嵌入到其他语句参数中）。
+
+    Attributes:
+        expression: 内联表达式文本
+    """
+    expression: str = ""
+    statement_type: str = "inline_expr"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "expression": self.expression,
+        }
+
+
+# 为 CppMethodIR 新增 body 字段 — 在现有 dataclass 之后添加兼容处理
+# CppMethodIR.body 通过 asdict 自动序列化，无需修改 to_dict
 
 # ============================================================================
 # C++ 类骨架 IR 数据模型（Per D-01, D-06）
@@ -333,4 +441,10 @@ __all__ = [
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
+    # Statement IR (Phase 58)
+    "CppStatement",
+    "CppCallStmt",
+    "CppAssignmentStmt",
+    "CppIfStmt",
+    "CppInlineExprStmt",
 ]
