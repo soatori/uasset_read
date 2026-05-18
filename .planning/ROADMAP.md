@@ -149,7 +149,7 @@ Plans:
   1. 存在 golden-path 集成测试（基于 `reference/蓝图节点文本参考.md`），运行 `pytest` 后全部通过，验证端到端 JSON 到 C++ 参考输出的映射
   2. BP_FirstPersonCharacter 的 Move/Aim 函数 JSON 输出经翻译后，生成的 C++ 实现片段与参考实现逐行匹配（函数签名、调用链、赋值语句）
   3. Jump/StopJumping 事件驱动的函数调用链翻译为正确的 C++ 事件处理代码，包含 `Super::Jump()` 调用和状态变更语句
-**Plans**: TBD
+**Plans**: 60-PLAN.md (5 tasks)
 **UI hint**: yes
 
 ## Progress Table
@@ -160,6 +160,6 @@ Plans:
 | 57. 函数签名映射 | 5/5 plans complete | Completed | 2026-05-18 |
 | 58. 函数体逻辑翻译 | 2/2 plans complete | Completed | 2026-05-18 |
 | 59. 组件初始化代码 | 4/4 plans complete | Completed | 2026-05-18 |
-| 60. 验证与测试 | 0/3 | Not started | - |
+| 60. 验证与测试 | 5/5 | Completed | 2026-05-18 |
 
-*Updated: 2026-05-18 (Phase 59 completed)*
+*Updated: 2026-05-18 (Phase 60 completed)*
