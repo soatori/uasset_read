@@ -213,8 +213,14 @@ def _extract_component_properties(
         comp_class = comp.get("class", "")
 
         if comp_name and comp_class:
+            # 补全短名称为完整路径（如 "ArrowComponent" → "/Script/Engine.ArrowComponent"）
+            comp_path = comp_class
+            if not comp_path.startswith("/Script/"):
+                # 假设是 Engine 类型，补全路径
+                comp_path = f"/Script/Engine.{comp_class}"
+
             # 构建组件类型（指针）
-            cpp_type = ue_path_to_cpp_type(comp_class)
+            cpp_type = ue_path_to_cpp_type(comp_path)
             if not cpp_type.endswith("*"):
                 cpp_type = f"{cpp_type}*"
 
@@ -336,6 +342,31 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
     """
     category = pin_type.pin_category
     subcategory = pin_type.pin_subcategory
+
+    # 属性类型（Property）→ 映射到对应的 UE 基本类型
+    if category in ("IntProperty",):
+        return "int32"
+    if category in ("FloatProperty", "DoubleProperty"):
+        return "float" if category == "FloatProperty" else "double"
+    if category in ("BoolProperty",):
+        return "bool"
+    if category in ("ObjectProperty", "SoftObjectProperty"):
+        # ObjectProperty 总是指针类型
+        cpp_type = subcategory if subcategory else "UObject"
+        if not cpp_type.endswith("*"):
+            cpp_type = f"{cpp_type}*"
+        return cpp_type
+    if category in ("ArrayProperty", "SetProperty", "MapProperty"):
+        # 对于集合类型，返回元素类型（从 pin_type 中提取）
+        # 如果没有 subcategory，返回基本类型
+        return subcategory if subcategory else "FString"
+    if category in ("StrProperty", "NameProperty", "TextProperty"):
+        cpp_type_map = {
+            "StrProperty": "FString",
+            "NameProperty": "FName",
+            "TextProperty": "FText",
+        }
+        return cpp_type_map.get(category, category)
 
     # 基本类型直接返回
     if category in ("float", "double", "bool", "int", "int32", "int64",

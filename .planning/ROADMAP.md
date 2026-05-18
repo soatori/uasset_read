@@ -65,7 +65,7 @@
   - [x] 56-03-PLAN.md — cpp_header_formatter + golden-path e2e test (头文件输出 + 端到端验证) ✓ completed 2026-05-18
   - [x] 56-04 (Wave 4) — CLI integration + real .uasset e2e tests (--cpp-skeleton flag + BP_FirstPersonCharacter validation) ✓ completed 2026-05-18
 
-- [x] Phase 58: 函数体逻辑翻译 (2/2 plans complete)
+- [x] Phase 58: 函数体逻辑翻译 (2/2 plans complete, verified 2026-05-18)
 </details>
 
 ---
