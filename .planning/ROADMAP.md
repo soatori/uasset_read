@@ -157,7 +157,9 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 56. C++ 类骨架提取 | 3/3 plans complete | Completed | 2026-05-18 |
-| 57. 函数签名映射 | 5 plans created | Planned | - |
+| 57. 函数签名映射 | 5/5 plans complete | Completed | 2026-05-18 |
 | 58. 函数体逻辑翻译 | 2/2 plans complete | Completed | 2026-05-18 |
 | 59. 组件初始化代码 | 4/4 plans complete | Completed | 2026-05-18 |
 | 60. 验证与测试 | 0/3 | Not started | - |
+
+*Updated: 2026-05-18 (Phase 59 completed)*
