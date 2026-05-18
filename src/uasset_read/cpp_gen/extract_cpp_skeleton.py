@@ -37,6 +37,9 @@ from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
     build_default_values,
     build_transform_assignments,
 )
+from uasset_read.cpp_gen.cpp_constructor_formatter import (
+    format_cpp_constructor,
+)
 from uasset_read.constants import CPF_InstancedReference
 
 if TYPE_CHECKING:
@@ -121,6 +124,9 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
 
     # Blocker 2 fix: transform 数据也流入 default_values
     ir.constructor["default_values"].extend(build_transform_assignments(ir, components))
+
+    # 生成完整构造函数文本
+    ir.constructor["constructor_text"] = format_cpp_constructor(ir)
 
     return ir
 
@@ -688,6 +694,25 @@ def extract_cpp_call_statements(
 
 
 # ============================================================================
+# 构造函数提取（Phase 59 Plan 03）
+# ============================================================================
+
+
+def extract_cpp_constructor(ir: "CppClassIR") -> str:
+    """从 CppClassIR 生成完整的 C++ 构造函数文本。
+
+    便捷函数，调用 format_cpp_constructor 生成构造函数代码。
+
+    Args:
+        ir: CppClassIR 实例（constructor 字典已填充）
+
+    Returns:
+        完整的 C++ 构造函数文本
+    """
+    return format_cpp_constructor(ir)
+
+
+# ============================================================================
 # 导出列表
 # ============================================================================
 
@@ -696,6 +721,8 @@ __all__ = [
     # Phase 57
     "extract_cpp_functions",
     "extract_cpp_call_statements",
+    # Phase 59
+    "extract_cpp_constructor",
     "_sanitize_identifier",
     "_derive_call_target",
 ]
