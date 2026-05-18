@@ -63,6 +63,13 @@ from uasset_read.cpp_gen.cpp_default_value_formatter import (
     format_cpp_component_init,
     format_cpp_input_action_load,
 )
+from uasset_read.cpp_gen.cpp_constructor_formatter import (
+    build_constructor_sections,
+    format_cpp_constructor,
+)
+from uasset_read.cpp_gen.extract_cpp_skeleton import (
+    extract_cpp_constructor,
+)
 
 __all__ = [
     # 类型映射
@@ -93,4 +100,8 @@ __all__ = [
     "format_cpp_transform",
     "format_cpp_component_init",
     "format_cpp_input_action_load",
+    # C++ 构造函数格式化（Phase 59 Plan 03）
+    "build_constructor_sections",
+    "format_cpp_constructor",
+    "extract_cpp_constructor",
 ]
