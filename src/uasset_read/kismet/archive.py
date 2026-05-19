@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import io
-from typing import Optional
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
