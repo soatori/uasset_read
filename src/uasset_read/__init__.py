@@ -251,6 +251,15 @@ from .constants import (
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
 )
 
+# Kismet bytecode module (Phase 61)
+from .kismet import (
+    EExprToken, ECastToken, EScriptInstrumentationType,
+    EBlueprintTextLiteralType, EAutoRtfmStopTransactMode,
+    KismetExpression, KismetExpressionT,
+    EXPR_CLASS_MAP,
+    FKismetPropertyPointer, FFieldPath,
+)
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -464,4 +473,15 @@ __all__ = [
     "read_edgraph_node_comment",
     "read_k2node_enhanced_input",
     "read_k2node_functionentry",
+    # Kismet bytecode (Phase 61)
+    "EExprToken",
+    "ECastToken",
+    "EScriptInstrumentationType",
+    "EBlueprintTextLiteralType",
+    "EAutoRtfmStopTransactMode",
+    "KismetExpression",
+    "KismetExpressionT",
+    "EXPR_CLASS_MAP",
+    "FKismetPropertyPointer",
+    "FFieldPath",
 ]
