@@ -167,6 +167,7 @@ class EScriptInstrumentationType(IntEnum):
     脚本插装事件类型（EX_InstrumentationEvent 参数）。
     """
 
+    None_ = -1
     Class = 0
     ClassScope = 1
     Instance = 2
@@ -184,6 +185,10 @@ class EScriptInstrumentationType(IntEnum):
     PopState = 14
     TunnelEndOfThread = 15
     Stop = 16
+    Entry = 17
+    Exit = 18
+    PureEntry = 19
+    PureExit = 20
 
 
 class EBlueprintTextLiteralType(IntEnum):
@@ -210,6 +215,10 @@ class EAutoRtfmStopTransactMode(IntEnum):
     AutoRTFM 停止事务模式（EX_AutoRtfmStopTransact 参数）。
     """
 
+    Commit = 0
+    Abort = 1
+    AbortAndAbortParent = 2
+    # Aliases for compatibility
     GracefulExit = 0
     AbortingExit = 1
     AbortingExitAndAbortParent = 2
