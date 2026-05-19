@@ -9,8 +9,7 @@ from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressi
 from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 from uasset_read.kismet.property_pointer import FKismetPropertyPointer, FFieldPath
 
-# FKismetArchive will be available after Wave 4
-# from uasset_read.kismet.archive import FKismetArchive
+from uasset_read.kismet.archive import FKismetArchive
 
 __all__ = [
     "EExprToken",
@@ -23,5 +22,5 @@ __all__ = [
     "EXPR_CLASS_MAP",
     "FKismetPropertyPointer",
     "FFieldPath",
-    # "FKismetArchive",  # Wave 4
+    "FKismetArchive",
 ]
