@@ -70,13 +70,13 @@ class FKismetArchive(FArchive):
         """Read UTF-16 null-terminated string (does NOT consume the double-null terminator)."""
         current_pos = self.tell()
         data = self._file.read()
-        # Find first double-null (\x00\x00) at even offset
+        # Find first double-null (\x00\x00) at even offset (UTF-16 code unit boundary)
         idx = 0
         while idx + 1 < len(data):
             if data[idx] == 0 and data[idx + 1] == 0:
                 break
-            idx += 1
-        result = data[:idx].decode('utf-16', errors='replace')
+            idx += 2
+        result = data[:idx].decode('utf-16-le', errors='replace')
         self.seek(current_pos + idx)  # position AT double-null
         return result
 
