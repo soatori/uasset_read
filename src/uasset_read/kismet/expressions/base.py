@@ -7,6 +7,7 @@ Kismet 表达式系统 — 基类定义。
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 from uasset_read.kismet.tokens import EExprToken
@@ -44,18 +45,26 @@ class KismetExpression(ABC):
         return f"<{self.__class__.__name__} token={self.Token.name}>"
 
 
+@dataclass(kw_only=True)
 class KismetExpressionT(KismetExpression, Generic[T]):
     """
     携带值的 Kismet 表达式泛型基类。
 
     适用于具有关联数据（常量、变量引用等）的表达式。
+
+    Uses kw_only=True so subclasses can freely pass Value=... from
+    from_archive() without positional-argument conflicts.
     """
 
-    Value: T
+    value: T = field(default=None)  # type: ignore[assignment]
+    Value: T = field(default=None)  # alias accepted by from_archive()
 
-    def __init__(self, value: T, statement_index: int = 0) -> None:
-        super().__init__(statement_index)
-        self.Value = value
+    def __init__(self, *, value: T = None, Value: T = None, statement_index: int = 0) -> None:  # type: ignore[assignment]
+        KismetExpression.__init__(self, statement_index)
+        # Prefer explicit Value= (from_archive convention), fall back to value=
+        resolved = Value if Value is not None else value
+        self.value = resolved
+        self.Value = resolved
 
     def to_dict(self) -> dict:
         result = super().to_dict()
