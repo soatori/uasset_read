@@ -9,38 +9,17 @@
 | v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 2026-05-17 | 已归档 |
 | v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
-| **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 计划中 | **活跃** |
+| **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
 | **v12.0** | **N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-70)** | 计划中 | 待启动 |
 | **v13.0+** | **可选增强：多语言 / 参考注入 / Knot 追踪 / 深度控制** | 待定 | 讨论中 |
 
 历史详情：`.planning/archive/`
 
-## v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (PLANNED)
+## v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (✅ 已归档)
 
-**参考设计:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
-**差距分析:** `.planning/phases/phase-64/64-GAP-REPORT.md`
-
-- [x] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (4 waves)
-- [x] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan, 6 tasks)
-- [x] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan, 131 tests)
-- [x] Phase 64: Kismet 集成验证 — pipeline 集成 + 端到端 golden-path 测试 (64-01/02) ✅ 2026-05-20
-- [x] Phase 65: 图解析器修复 — FMemberReference + Pin 连接 + Struct 映射 + 函数签名 (2 plans) ✅ 2026-05-20
-- ⏭️ Phase 66: Agent 翻译管线 — ~~BP 节点 JSON → C++ 代码生成~~ → 目标合并至 v12.0 中间格式
-
-**依赖:** 61 → 62 → 63 → 64; 65 → 67; 66 ⏭️ 跳过（目标合并至 v12.0）
-
-Plans:
-- [x] 64-01-PLAN.md — KismetDecompiledResult + decompile_uasset() pipeline ✅
-- [x] 64-02-PLAN.md — _post_process integration + golden file tests ✅
-- [x] 65-01-PLAN.md — FMemberReference + Pin 连接修复 (Wave 1: Task 1+2+3) ✅
-- [x] 65-02-PLAN.md — Struct 映射 + 函数签名修复 (Wave 2: Task 4+5+6) ✅
-- [ ] 66-01-PLAN.md — AgentTranslationPipeline integration (Wave 1) 📋
-- [ ] 66-02-PLAN.md — CppFileWriter output formatter (Wave 1) 📋
-- [ ] 66-03-PLAN.md — Golden file integration test (Wave 2) 📋
+详见 [milestones/v11.0-ROADMAP.md](milestones/v11.0-ROADMAP.md)
 
 ## v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构 (NEXT)
-
-**Phase 66 已跳过。** 原始"Agent 翻译管线 C++ 生成"目标调整为"提供 Agent 可理解的中间格式输出"，由本里程碑的 N2CStruct 中间格式直接实现。
 
 **参考设计:** NodeToCode (protospatial) — `N2CNodeTypeRegistry` / `N2CNodeProcessor` 模式 / `N2CStruct` JSON Schema / 执行流链式表达
 
