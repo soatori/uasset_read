@@ -22,6 +22,10 @@ from uasset_read.kismet.translator import (
 from uasset_read.kismet.body_builder import FunctionBodyBuilder, to_function_body
 from uasset_read.kismet.structured_flow import StructuredControlFlow, StructuredBlock
 
+# Phase 64: Decompilation result and pipeline
+from uasset_read.kismet.result import KismetDecompiledResult
+from uasset_read.kismet.pipeline import decompile_uasset, decompile_single_function
+
 __all__ = [
     "EExprToken",
     "ECastToken",
@@ -49,4 +53,8 @@ __all__ = [
     "to_function_body",
     "StructuredControlFlow",
     "StructuredBlock",
+    # Phase 64: Decompilation result and pipeline
+    "KismetDecompiledResult",
+    "decompile_uasset",
+    "decompile_single_function",
 ]
