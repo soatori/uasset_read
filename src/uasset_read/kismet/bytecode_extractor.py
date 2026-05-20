@@ -215,3 +215,102 @@ def extract_and_parse(
         return (expressions, None)
     except ParseError as e:
         return ([], str(e))
+
+
+# ===========================================================================
+# Output formatting (BYTECODE-03)
+# ===========================================================================
+
+
+def _is_kismet_expression(obj: object) -> bool:
+    """Check if obj is a KismetExpression (avoids circular import)."""
+    return isinstance(obj, KismetExpression)
+
+
+def _expr_to_tree_node(expr: KismetExpression) -> dict:
+    """Convert a single KismetExpression to a tree node dict with children."""
+    node_dict = expr.to_dict()
+    result = {
+        "StatementIndex": expr.StatementIndex,
+        "Token": expr.Token.name if hasattr(expr.Token, 'name') else str(expr.Token),
+        "type": type(expr).__name__,
+    }
+
+    children = []
+    # Scan to_dict() values and any extra attributes for nested expressions
+    for key, val in node_dict.items():
+        if _is_kismet_expression(val):
+            children.append({
+                "key": key,
+                **_expr_to_tree_node(val),
+            })
+        elif isinstance(val, list):
+            for i, item in enumerate(val):
+                if _is_kismet_expression(item):
+                    children.append({
+                        "key": key,
+                        "index": i,
+                        **_expr_to_tree_node(item),
+                    })
+
+    # Also scan instance attributes for nested expressions not in to_dict()
+    for key in dir(expr):
+        if key.startswith('_') or key in ('Token', 'StatementIndex', 'to_dict'):
+            continue
+        try:
+            val = getattr(expr, key)
+        except Exception:
+            continue
+        if _is_kismet_expression(val):
+            # Avoid duplicates if already in node_dict
+            if not any(c.get('key') == key for c in children):
+                children.append({
+                    "key": key,
+                    **_expr_to_tree_node(val),
+                })
+        elif isinstance(val, list):
+            for i, item in enumerate(val):
+                if _is_kismet_expression(item):
+                    if not any(c.get('key') == key and c.get('index') == i for c in children):
+                        children.append({
+                            "key": key,
+                            "index": i,
+                            **_expr_to_tree_node(item),
+                        })
+
+    if children:
+        result["children"] = children
+
+    return result
+
+
+def expressions_to_flat_list(expressions: list[KismetExpression]) -> list[dict]:
+    """
+    Convert expression list to flat dict list.
+
+    Each dict contains: StatementIndex, Token (name), type (class name),
+    plus any additional fields from to_dict().
+
+    Does NOT recurse into nested child expressions.
+    """
+    result = []
+    for expr in expressions:
+        item = {
+            "StatementIndex": expr.StatementIndex,
+            "Token": expr.Token.name if hasattr(expr.Token, 'name') else str(expr.Token),
+            "type": type(expr).__name__,
+        }
+        item.update(expr.to_dict())
+        result.append(item)
+    return result
+
+
+def expressions_to_tree(expressions: list[KismetExpression]) -> list[dict]:
+    """
+    Convert expression list to tree structure with children.
+
+    Each dict contains: StatementIndex, Token, type, children (nested
+    sub-expressions). Recursively processes nested KismetExpression
+    instances found as attributes or in to_dict() values.
+    """
+    return [_expr_to_tree_node(expr) for expr in expressions]
