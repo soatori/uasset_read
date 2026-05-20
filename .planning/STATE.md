@@ -6,10 +6,10 @@ status: mid-flight
 last_updated: "2026-05-20T23:30:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 10
-  completed_plans: 5
-  percent: 70
+  completed_plans: 6
+  percent: 80
 ---
 
 # v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
