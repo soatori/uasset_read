@@ -13,11 +13,11 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
-    def __init__(self, data: bytes, name: str, name_map: list[str]):
+    def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
         self._path = name
         self._file = io.BytesIO(data)
         self._file_size = len(data)
-        self._tolerant = False
+        self._tolerant = tolerant
         self._byte_swapping = False
         self._mmap = None
         self._use_mmap = False
@@ -28,23 +28,41 @@ class FKismetArchive(FArchive):
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
-        stmt_index = self.tell()
-        token_byte = self.read_u8()
-        token = EExprToken(token_byte)
+        consecutive_unknown = 0
+        while True:
+            stmt_index = self.tell()
+            token_byte = self.read_u8()
+            token = EExprToken(token_byte)
 
-        expr_class = EXPR_CLASS_MAP.get(token)
-        if expr_class is None:
-            raise ParseError(
-                f"Unknown EExprToken {token.name} (0x{token_byte:02X}) at offset {stmt_index}"
-            )
+            expr_class = EXPR_CLASS_MAP.get(token)
+            if expr_class is None:
+                if self._tolerant:
+                    consecutive_unknown += 1
+                    if consecutive_unknown >= 10:
+                        raise ParseError(
+                            "Too many consecutive unknown tokens in tolerant mode"
+                        )
+                    self._logger.warning(
+                        f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
+                    )
+                    # Skip back: we already consumed 1 byte, so seek to stmt_index + 1
+                    self.seek(stmt_index + 1)
+                    continue
+                else:
+                    raise ParseError(
+                        f"Unknown EExprToken {token.name} (0x{token_byte:02X}) at offset {stmt_index}"
+                    )
 
-        if hasattr(expr_class, 'from_archive'):
-            expr = expr_class.from_archive(self, self._name_map)
-        else:
-            expr = expr_class()
+            # Reset consecutive unknown counter on successful token match
+            consecutive_unknown = 0
 
-        expr.StatementIndex = stmt_index
-        return expr
+            if hasattr(expr_class, 'from_archive'):
+                expr = expr_class.from_archive(self, self._name_map)
+            else:
+                expr = expr_class()
+
+            expr.StatementIndex = stmt_index
+            return expr
 
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
         """Read expressions until end_token is encountered. The end_token expression is NOT included."""
