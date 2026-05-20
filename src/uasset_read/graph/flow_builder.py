@@ -841,6 +841,66 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     return formatted
 
 
+def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
+    """从 FunctionEntry 节点的 Pins 提取签名（GAP-07）。
+
+    当 blueprint_functions 查找失败时，使用 Pin 信息作为 fallback。
+
+    Args:
+        fe_node: K2Node_FunctionEntry 节点
+
+    Returns:
+        Dict: 包含 return_type 和 parameters 的签名字典
+    """
+    from uasset_read.parsers.property_types import format_variable_type
+
+    return_type = ""
+    parameters: List[Dict] = []
+
+    for pin in fe_node.pins:
+        # 跳过 exec pin
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        # 输出 Pin → 返回值（Direction=1, pin_name == "ReturnValue"）
+        if pin.direction == 1 and pin.pin_name and "return" in pin.pin_name.lower():
+            # 提取返回值类型
+            if pin.pin_type:
+                # 使用 format_variable_type 格式化类型
+                return_type = format_variable_type(pin.pin_type)
+                # 如果格式化后为空或 "bool" 等基本类型，尝试使用 pin_subcategory
+                if not return_type or return_type.lower() in ("bool", "int", "float", "string", "name", "text", "uobject"):
+                    sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                    if sub_cat and sub_cat.lower() != "none":
+                        return_type = sub_cat
+
+        # 输入 Pin → 参数（Direction=0）
+        elif pin.direction == 0:
+            pin_name = pin.pin_name or ""
+            # 跳过 self/Target（self 引用）
+            if pin_name.lower() in ("self", "target", "worldcontext"):
+                continue
+
+            # 提取参数类型
+            param_type = ""
+            if pin.pin_type:
+                param_type = format_variable_type(pin.pin_type)
+                sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                if sub_cat and sub_cat.lower() != "none":
+                    param_type = sub_cat
+
+            parameters.append({
+                "name": pin_name,
+                "type": param_type,
+                "direction": "input"
+            })
+
+    return {
+        "return_type": return_type,
+        "parameters": parameters
+    }
+
+
 def build_function_graphs(
     graphs: List[UEdGraph],
     blueprint_functions: Optional[List] = None,
@@ -922,6 +982,9 @@ def build_function_graphs(
                         "direction": "input" if is_input else "output"
                     })
                 signature["parameters"] = formatted_params
+            else:
+                # GAP-07: 如果 blueprint_functions 查找失败，使用 Pin-based 提取作为 fallback
+                signature = _extract_signature_from_pins(fe_node)
 
             # 构建执行流
             execution_flows = _trace_execution_from_event(
