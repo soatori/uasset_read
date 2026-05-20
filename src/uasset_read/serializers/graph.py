@@ -583,13 +583,19 @@ def read_k2node_call_function(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
+    function_reference: Optional[FMemberReference] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FK2Node_CallFunction::Serialize() 实现
+
+    如果 function_reference 已在 PropertyTag 层解析（script_serial），直接使用；
+    否则从 archive 当前位置读取 FMemberReference。
+
+    参考 UE C++ FK2Node_CallFunction::Serialize() 实现。
     """
-    function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+    # D-11: PropertyTag 层已正确解析 FunctionReference，优先使用
+    if function_reference is None:
+        function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+
     b_defaults_to_pure = archive.read_bool()
     return {
         "function_reference": function_reference,
@@ -603,13 +609,19 @@ def read_k2node_event(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
+    event_reference: Optional[FMemberReference] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FK2Node_Event::Serialize() 实现
+
+    如果 event_reference 已在 PropertyTag 层解析（script_serial），直接使用；
+    否则从 archive 当前位置读取 FMemberReference。
+
+    参考 UE C++ FK2Node_Event::Serialize() 实现。
     """
-    event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+    # D-11: PropertyTag 层已正确解析 EventReference，优先使用
+    if event_reference is None:
+        event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+
     b_override_function = archive.read_bool()
     return {
         "event_reference": event_reference,
@@ -718,13 +730,16 @@ def create_node_from_archive(
     if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
         return base_node
 
+    # D-11: 使用 PropertyTag 层已解析的 function_reference/event_reference
     if class_name == "K2Node_CallFunction":
         base_node.node_data = read_k2node_call_function(
-            archive, name_map, import_map, export_map, linker
+            archive, name_map, import_map, export_map, linker,
+            function_reference=node_refs.get('function_reference') if node_refs else None,
         )
     elif class_name == "K2Node_Event":
         base_node.node_data = read_k2node_event(
-            archive, name_map, import_map, export_map, linker
+            archive, name_map, import_map, export_map, linker,
+            event_reference=node_refs.get('event_reference') if node_refs else None,
         )
     elif class_name == "K2Node_Knot":
         base_node.node_data = read_k2node_knot(archive)
