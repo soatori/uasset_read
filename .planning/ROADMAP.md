@@ -13,19 +13,26 @@
 
 历史详情：`.planning/archive/`
 
-## v11.0 — Kismet 字节码反编译器 (PLANNED)
+## v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (PLANNED)
 
 **参考设计:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
+**差距分析:** `.planning/phases/phase-64/64-GAP-REPORT.md`
 
 - [x] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (4 waves)
 - [x] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan, 6 tasks)
 - [x] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan, 131 tests)
-- [ ] Phase 64: 集成与验证 — pipeline 集成 + 端到端 golden-path 测试 (1 plan)
+- [ ] Phase 64: Kismet 集成验证 — pipeline 集成 + 端到端 golden-path 测试 (2 plans)
+- [ ] Phase 65: 图解析器修复 — FMemberReference + Pin 连接 + Struct 映射 + 函数签名 (新增)
+- [ ] Phase 66: Agent 翻译管线 — BP 节点 JSON → C++ 代码生成 + golden 测试 (新增)
 
-**依赖:** 61 → 62 → 63 → 64
+**依赖:** 61 → 62 → 63 → 64; 65 → 66; 64 ∥ 65 (可并行)
 
 **与 v10.0 Phase 58 的关系:**
 Phase 58 在 AST 层（UEdGraphNode → C++）工作；v11.0 在字节码层（EExprToken → KismetExpression → C++）工作，覆盖 Phase 58 无法处理的 60+ 种表达式类型、结构化控制流、全类型变量/常量。
+
+Plans:
+- [ ] 64-01-PLAN.md — KismetDecompiledResult dataclass + decompile_uasset() pipeline function (Wave 1)
+- [ ] 64-02-PLAN.md — _post_process integration + __init__.py exports + golden file tests (Wave 2)
 
 ## 能力对比
 
@@ -39,4 +46,4 @@ Phase 58 在 AST 层（UEdGraphNode → C++）工作；v11.0 在字节码层（E
 
 ---
 
-*Updated: 2026-05-20 (v11.0 Phase 61✅ 62✅ 63✅, Phase 64 planned)*
+*Updated: 2026-05-20 (v11.0 Phase 61✅ 62✅ 63✅, Phase 64/65/66 planned, GAP-REPORT added)*

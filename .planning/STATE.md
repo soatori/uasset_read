@@ -1,21 +1,21 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: 1.1
 milestone: v11.0
-milestone_name: — Kismet 字节码反编译器
+milestone_name: — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 status: mid-flight
-last_updated: "2026-05-20T05:40:00.000Z"
+last_updated: "2026-05-20T20:35:00.000Z"
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 2
   total_plans: 10
   completed_plans: 3
-  percent: 50
+  percent: 33
 ---
 
-# v11.0 — Kismet 字节码反编译器
+# v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 
 **Started: 2026-05-18**
-**Reference:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
+**Updated: 2026-05-20 (BP_FirstPersonCharacter 差距分析 → 新增 Phase 65/66)**
 
 ## Phase 分解
 
@@ -24,17 +24,42 @@ progress:
 | 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | Done (4 waves) |
 | 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | Done (1 plan) |
 | 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Done (1 plan, 131 tests) |
-| 64 | 集成与验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned (1 plan) |
+| 64 | Kismet 集成验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned |
+| **65** | **图解析器修复** | FMemberReference + Pin 连接 + Struct 映射 + 函数签名 | GRAPH-FIX-01/02/03 | **Planned (新增)** |
+| **66** | **Agent 翻译管线** | BP 节点 JSON → C++ 代码生成 + golden 测试 | TRANSLATE-BP-01/02 | **Planned (新增)** |
 
 ## 依赖关系
 
 ```
-Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C++) → Phase 64 (集成验证)
+Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C++) → Phase 64 (Kismet 集成)
+                                                                 ↓
+Phase 65 (图解析修复) ──────────────────────────────────────────→ Phase 66 (Agent 翻译管线)
 ```
+
+Phase 65 与 Phase 64 可并行 — 65 修复图解析器（graph.py），64 集成 Kismet 管道（kismet/）。
+Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
+
+## 新增 Phase 背景（来自 64-GAP-REPORT.md）
+
+对 `BP_FirstPersonCharacter.uasset` 的实际解析发现：
+- **GAP-01:** FMemberReference 解析失败 → 无法获取"调用的是什么函数"（P0）
+- **GAP-02:** Pin 连接全部为空 → 无法获取数据流（P0）
+- **GAP-03:** StructProperty → UnknownStruct → 缺失变量类型信息（P1）
+- **GAP-05:** ExecuteUbergraph 字节码未提取 → 70%+ 逻辑丢失（P1，Phase 64 范围）
+- **GAP-06/07:** 执行流和函数签名全空 → 依赖 GAP-02 修复
+
+Phase 65 修复 GAP-01/02/03/06/07（graph.py 层）。
+Phase 64 修复 GAP-05（kismet 层集成）。
+Phase 66 利用修复后的输出构建 Agent 翻译管线。
 
 ## 上下文
 
 - CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
+- UE 源码参考：`E:\Develop\lib\UnrealEngine\Engine\Source\Editor\UnrealEd\Private\Kismet2\`
+  - `K2Node_CallFunction.cpp` — FK2Node_CallFunction::Serialize()
+  - `EdGraphPin.cpp` — UEdGraphPin::Serialize()
+  - `BlueprintEditorUtils.cpp` — FBlueprintEditorUtils::ReadPinReference()
+- 差距分析：`.planning/phases/phase-64/64-GAP-REPORT.md`
 - 本项目技术栈：Python 3.10+，零运行时依赖
 - 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
 
