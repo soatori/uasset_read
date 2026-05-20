@@ -37,7 +37,7 @@ uasset_read 项目文档分为以下几个部分：
 
 | 文档 | 说明 |
 |------|------|
-| [ROADMAP](../.planning/ROADMAP.md) | 50 阶段路线图 |
+| [ROADMAP](../.planning/ROADMAP.md) | 路线图（v11.0 完成中，v12.0 计划中） |
 | [STATE](../.planning/STATE.md) | 当前里程碑状态 |
 | [PROJECT](../.planning/PROJECT.md) | 项目概述 |
 | [MILESTONES](../.planning/MILESTONES.md) | 版本历史 |

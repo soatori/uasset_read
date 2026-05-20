@@ -4,18 +4,20 @@ milestone: v11.0
 milestone_name: — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 status: mid-flight
 last_updated: "2026-05-20T23:45:00.000Z"
+next_milestone: v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-70, NEXT)
 progress:
-  total_phases: 6
+  total_phases: 10
   completed_phases: 5
+  skipped_phases: 1
   total_plans: 13
   completed_plans: 8
-  percent: 80
+  percent: 50
 ---
 
 # v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 
 **Started: 2026-05-18**
-**Updated: 2026-05-20 (Phase 66 计划已创建 → 准备执行)**
+**Updated: 2026-05-20 (Phase 66 跳过 → v12.0 P67-70 为下一活跃里程碑)**
 
 ## Phase 分解
 
@@ -26,42 +28,55 @@ progress:
 | 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | ✅ Done (1 plan, 131 tests) |
 | 64 | Kismet 集成验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | ✅ Done (2 plans, 24 tests) |
 | 65 | 图解析器修复 | FMemberReference + Pin 连接 + Struct 映射 + 函数签名 | GRAPH-FIX-01/02/03 | ✅ Done (2 plans) — 2026-05-20 |
-| **66** | **Agent 翻译管线** | BP 节点 JSON → C++ 代码生成 + golden 测试 | TRANSLATE-BP-01/02 | 📋 Planned (3 plans) |
+| **66** | **Agent 翻译管线** | ~~BP 节点 JSON → C++ 代码生成 + golden 测试~~ → 提供 Agent 可理解的中间格式输出 | TRANSLATE-BP-01/02 | ⏭️ Skipped (目标调整为 v12.0 中间格式) |
+| **67** | **N2CNodeTypeRegistry** | 100+ K2Node 语义类型注册表 + 继承回退 | REGISTRY-01/02 | 🆕 Planned |
+| **68** | **节点处理器架构** | Processor 模式替代 switch/case | PROCESSOR-01/02 | 🆕 Planned |
+| **69** | **N2CStruct JSON Schema** | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | 🆕 Planned |
+| **70** | **执行流链式表达** | `N1->N2->N3` 格式替代逐对连接 | CHAIN-01/02 | 🆕 Planned |
 
 ## 依赖关系
 
 ```
 Phase 61 → Phase 62 → Phase 63 → Phase 64 (Kismet 集成) ✅
                               ↓
-                      Phase 65 (图解析修复) ✅ → Phase 66 (Agent 翻译管线)
+                      Phase 65 (图解析修复) ✅
+                              ↓
+                    ⏭️ Phase 66 (跳过 → 目标合并至 v12.0)
+                              ↓
+                        Phase 67 (NodeTypeRegistry) 🆕 ← v12.0 起点
+                              ↓
+                        Phase 68 (Processor 架构) 🆕
+                              ↓
+                        Phase 69 (N2CStruct Schema) 🆕
+                              ↓
+                        Phase 70 (执行流链式表达) 🆕
 ```
 
 Phase 64 和 65 已完成 — 64 修 kismet/ 层，65 修 graph.py 层。
-Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
+Phase 66 已跳过 — 原始目标（BP → C++ 代码生成）调整为"提供 Agent 可理解的中间格式输出"，该目标直接由 v12.0（Phase 67-70）的 N2CStruct 中间格式实现。
+Phase 67-70（v12.0）为下一个活跃里程碑，直接承接 Phase 65 修复后的 graph.py 输出。
 
 ## 当前状态
 
-**当前阶段:** Phase 66 — Agent 翻译管线
+**当前阶段:** Phase 65 已完成 ✅ → v12.0 (P67-70) 为下一活跃里程碑
 **上次完成:** Phase 65 (65-01/65-02) — 2026-05-20
-**计划创建:** Phase 66 (66-01/02/03) — 2026-05-20
-**下一步:** `/gsd:execute-phase 66` — 执行 Wave 1 (Task 1+2 并行) + Wave 2
+**Phase 66:** ⏭️ 跳过 — 原始 C++ 生成目标调整为"提供 Agent 可理解的中间格式输出"，由 v12.0 实现
+**下一步:** `/gsd:plan-phase 67` — 开始 v12.0 Phase 67 (N2CNodeTypeRegistry)
 
-## Phase 66 计划详情
+## v12.0 背景（NodeToCode 参考）
 
-| Plan | Wave | Tasks | 预估时长 | 依赖 |
-|------|------|-------|----------|------|
-| 66-01 | 1 | Task 1 (AgentTranslationPipeline integration) + TDD tests | 3-4h | 无 |
-| 66-02 | 1 | Task 2 (CppFileWriter output) + TDD tests | 2-3h | 无 |
-| 66-03 | 2 | Task 3 (Golden file integration test) | 2-3h | 66-01 + 66-02 |
+对 `protospatial/NodeToCode` 项目的差距分析识别出 4 项核心能力（P0）需要在 Phase 65 之后补充：
 
-**Wave 执行顺序:**
-- Wave 1: Task 1 + Task 2 并行执行（无文件冲突，可并行）
-- Wave 2: Task 3 顺序执行（依赖 Wave 1 完成）
+1. **N2CNodeTypeRegistry** — 100+ K2Node 语义类型完整映射（当前仅覆盖有限类型）
+2. **节点处理器架构** — 每类型独立 Processor 替代 switch/case
+3. **N2CStruct JSON Schema** — LLM/Agent 优化中间格式（60-90% token 压缩）
+4. **执行流链式表达** — `N1->N2->N3` 简洁格式替代逐对连接
 
-**Fallback 策略（已知 stub）:**
-- linked_to_raw 空数组 → 使用 function_reference.member_name 生成函数调用
-- decompiled_functions 空数组 → 仅生成类骨架（无函数体）
-- graphs 数据不完整 → 从 blueprint_functions 回退
+这 4 项构成 v12.0 里程碑（Phase 67-70），目标是将 graph.py 的输出转化为 **Agent 可理解的结构化 JSON**，作为后续 LLM 翻译的高质量输入。
+
+Phase 66（AgentTranslationPipeline C++ 生成）已跳过，其"提供 Agent 可理解输出"的目标直接由 v12.0 中间格式实现。
+
+可选增强（v13.0+ 讨论）：结构体/枚举提取、参考代码注入、多语言输出、深度控制、Knot 节点追踪。
 
 ## Phase 65 完成摘要
 
@@ -71,7 +86,7 @@ Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
 - ✅ GAP-03: StructProperty 类型正确识别为 Vector/Rotator
 - ✅ GAP-07: 函数签名提取实现（Pin-based fallback）
 
-**已知 stub:** linked_to_raw 空数组，Phase 66 使用 fallback 策略处理。
+**已知限制:** linked_to_raw 空数组，v12.0 中间格式需要 fallback 策略处理连接数据。
 
 ## 新增 Phase 背景（来自 64-GAP-REPORT.md）
 
@@ -83,7 +98,7 @@ Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
 - **GAP-06/07:** 执行流和函数签名全空 → 依赖 GAP-02 修复（Phase 65 已修复）
 
 Phase 65 修复 GAP-01/02/03/06/07（graph.py 层）。
-Phase 66 利用修复后的输出构建 Agent 翻译管线（含 fallback 策略）。
+v12.0 利用修复后的输出构建 N2C 中间格式，直接作为 Agent 可理解的输入。
 
 ## 上下文
 
@@ -92,9 +107,15 @@ Phase 66 利用修复后的输出构建 Agent 翻译管线（含 fallback 策略
   - `K2Node_CallFunction.cpp` — FK2Node_CallFunction::Serialize()
   - `EdGraphPin.cpp` — UEdGraphPin::Serialize()
   - `BlueprintEditorUtils.cpp` — FBlueprintEditorUtils::ReadPinReference()
+- **NodeToCode 参考**：`E:\Develop\temp_NodeToCode\` — N2CNodeTypeRegistry / N2CNodeProcessor / N2CStruct / N2CSerializer
+  - `N2CNodeTypeRegistry.cpp` — 100+ K2Node 类型映射 + 继承回退
+  - `Utils/Processors/` — N2CFunctionCallProcessor / N2CEventProcessor / N2CFlowControlProcessor
+  - `N2CSerializer.h` — 双向 JSON 序列化（to_n2c_json / from_n2c_json）
+  - `N2CBlueprint.h` — N2CStruct / N2CEnum / N2CGraph 数据模型
+  - `Content/Prompting/CodeGen_CPP.md` — LLM prompt + 输出 JSON Schema
 - 差距分析：`.planning/phases/phase-64/64-GAP-REPORT.md`
 - 本项目技术栈：Python 3.10+，零运行时依赖
-- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
+- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → N2CStruct → Translators → C++`
 
 ## 上游里程碑
 
