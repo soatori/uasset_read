@@ -17,8 +17,8 @@
 
 **参考设计:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
 
-- [ ] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (2 plans)
-- [ ] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan)
+- [x] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (4 waves)
+- [x] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan, 6 tasks)
 - [ ] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan)
 - [ ] Phase 64: 集成与验证 — pipeline 集成 + 端到端 golden-path 测试 (1 plan)
 
