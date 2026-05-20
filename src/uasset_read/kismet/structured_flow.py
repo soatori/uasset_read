@@ -275,3 +275,23 @@ class StructuredControlFlow:
                 result.append(line)
 
         return result
+
+
+# ===========================================================================
+# Module-level convenience exports
+# ===========================================================================
+
+# Re-export dataclass as StructuredBlock for cleaner API
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass
+class StructuredBlock:
+    """A structured control flow block (if/else/for/while)."""
+    kind: str  # "if", "if_else", "for", "while"
+    condition: str | None  # C++ condition expression
+    then_body: list[str]  # indented lines
+    else_body: list[str] | None  # indented lines (None for if-only)
+
+
+__all__ = ["StructuredControlFlow", "StructuredBlock"]
