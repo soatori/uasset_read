@@ -30,7 +30,7 @@
 Plans:
 - [x] 64-01-PLAN.md — KismetDecompiledResult + decompile_uasset() pipeline ✅
 - [x] 64-02-PLAN.md — _post_process integration + golden file tests ✅
-- [ ] 65-01-PLAN.md — FMemberReference + Pin 连接修复 (Wave 1: Task 1+2+3)
+- [x] 65-01-PLAN.md — FMemberReference + Pin 连接修复 (Wave 1: Task 1+2+3) ✅
 - [ ] 65-02-PLAN.md — Struct 映射 + 函数签名修复 (Wave 2: Task 4+5+6)
 - [ ] 66-PLAN.md — Agent translation pipeline: BP JSON → C++ codegen
 
