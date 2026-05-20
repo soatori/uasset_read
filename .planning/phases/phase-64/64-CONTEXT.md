@@ -1,7 +1,8 @@
-# Phase 64: 集成与验证 - Context
+# Phase 64: Kismet 集成验证 - Context
 
 **Gathered:** 2026-05-20
 **Status:** Ready for planning
+**Scope Note:** 聚焦 GAP-05（ExecuteUbergraph 字节码提取 + Kismet 管道集成）。GAP-01/02/03/06/07 已移至 Phase 65。
 
 <domain>
 ## Phase Boundary
@@ -119,11 +120,14 @@
 - CLI 入口（`--decompile` 标志或 `uasset-decompile` 子命令）— 留给后续 phase
 - Markdown 格式反编译报告 — 用户选择了 JSON + 字符串，Markdown 报告暂不实现
 
-None — discussion stayed within phase scope.
+## Related Phases
+- Phase 65: 图解析器修复 (FMemberReference, Pin 连接) — 可并行
+- Phase 66: Agent 翻译管线 — 依赖 Phase 65
 
 </deferred>
 
 ---
 
-*Phase: 64-集成与验证*
+*Phase: 64-Kismet 集成验证*
 *Context gathered: 2026-05-20*
+*Updated: 2026-05-20 (scope narrowed to GAP-05, Phase 65/66 split)*
