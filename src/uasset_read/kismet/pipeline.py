@@ -155,9 +155,9 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
     archive.seek(summary.name_offset)
     name_map = read_name_table(archive, summary)
     archive.seek(summary.import_offset)
-    import_map = read_import_map(archive, summary)
+    import_map = read_import_map(archive, summary, name_map)
     archive.seek(summary.export_offset)
-    export_map = read_export_map(archive, summary)
+    export_map = read_export_map(archive, summary, name_map)
 
     # Collect UStruct exports
     results: list[KismetDecompiledResult] = []
