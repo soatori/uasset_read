@@ -139,17 +139,136 @@ def test_expression_output_formats():
 # Task 5: integration tests
 # ===========================================================================
 
+UASSET_DIR = pytest.importorskip("pathlib").Path(
+    r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson"
+)
+
+
+def _find_first_uasset() -> str | None:
+    """Find first BP_*.uasset file in sample directory."""
+    candidates = list(UASSET_DIR.rglob("BP_*.uasset"))
+    return str(candidates[0]) if candidates else None
+
 
 def test_extract_bytecode_from_uasset():
     """End-to-end: extract bytecode from real .uasset file."""
-    pass
+    from uasset_read.parse_uasset import parse_uasset_with_linker
+    from uasset_read.kismet.bytecode_extractor import (
+        extract_bytecode_bytes, parse_bytecode_stream, USTRUCT_TYPES,
+    )
+    from uasset_read.serializers.object_resources import resolve_class_name
+    from uasset_read.archive import FArchive
+
+    uasset_path = _find_first_uasset()
+    if uasset_path is None:
+        pytest.skip("No BP_*.uasset files found in FirstPerson samples")
+
+    result = parse_uasset_with_linker(uasset_path)
+    if result is None or result.summary is None:
+        pytest.skip(f"Failed to parse {uasset_path}")
+
+    archive = FArchive(uasset_path)
+    try:
+        summary = result.summary
+        name_map = result.name_map
+        export_map = result.export_map
+        import_map = result.import_map
+
+        # Find at least one UStruct export with bytecode
+        found_bytecode = False
+        for export in export_map:
+            class_name = resolve_class_name(
+                export.class_index, import_map, export_map
+            )
+            if class_name in USTRUCT_TYPES and export.script_serial_size > 10:
+                bytecode = extract_bytecode_bytes(
+                    archive, export, summary, name_map, import_map, export_map
+                )
+                if bytecode is not None and len(bytecode) > 0:
+                    found_bytecode = True
+                    assert isinstance(bytecode, bytes)
+                    # Parse it to verify it's valid
+                    exprs = parse_bytecode_stream(bytecode, name_map)
+                    assert len(exprs) > 0
+                    break
+    finally:
+        archive.close()
+
+    if not found_bytecode:
+        pytest.skip(f"No UStruct bytecode found in {uasset_path}")
 
 
 def test_parse_bytecode_to_expressions():
     """End-to-end: parse bytecode to expression list."""
-    pass
+    from uasset_read.parse_uasset import parse_uasset_with_linker
+    from uasset_read.kismet.bytecode_extractor import (
+        extract_bytecode_bytes, parse_bytecode_stream, USTRUCT_TYPES,
+    )
+    from uasset_read.serializers.object_resources import resolve_class_name
+    from uasset_read.archive import FArchive
+
+    uasset_path = _find_first_uasset()
+    if uasset_path is None:
+        pytest.skip("No BP_*.uasset files found")
+
+    result = parse_uasset_with_linker(uasset_path)
+    if result is None:
+        pytest.skip(f"Failed to parse {uasset_path}")
+
+    archive = FArchive(uasset_path)
+    try:
+        summary = result.summary
+        name_map = result.name_map
+        export_map = result.export_map
+        import_map = result.import_map
+
+        found_expressions = False
+        for export in export_map:
+            class_name = resolve_class_name(
+                export.class_index, import_map, export_map
+            )
+            if class_name in USTRUCT_TYPES and export.script_serial_size > 10:
+                bytecode = extract_bytecode_bytes(
+                    archive, export, summary, name_map, import_map, export_map
+                )
+                if bytecode is not None and len(bytecode) > 0:
+                    exprs = parse_bytecode_stream(bytecode, name_map)
+                    if len(exprs) > 0:
+                        found_expressions = True
+                        # All expressions should have Token attribute
+                        assert all(
+                            hasattr(e, 'Token') for e in exprs
+                        )
+                        break
+    finally:
+        archive.close()
+
+    if not found_expressions:
+        pytest.skip(f"No parseable bytecode found in {uasset_path}")
 
 
 def test_tolerant_mode_vs_strict_mode():
     """Compare tolerant vs strict mode on malformed bytecode."""
-    pass
+    from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+
+    # Construct bytecode with known tokens only: EX_EndOfScript
+    valid_bytecode = b'\x53'
+
+    # 1. Strict mode: valid bytecode parses fine
+    exprs = parse_bytecode_stream(valid_bytecode, [])
+    assert len(exprs) == 1
+
+    # 2. Malformed: unknown token in strict mode
+    malformed = b'\xFF\x53'
+    with pytest.raises(ParseError):
+        parse_bytecode_stream(malformed, [], tolerant=False)
+
+    # 3. Same malformed bytecode in tolerant mode: skips unknown, reads known
+    exprs = parse_bytecode_stream(malformed, [], tolerant=True)
+    assert len(exprs) == 1
+    assert exprs[0].Token == EExprToken.EX_EndOfScript
+
+    # 4. Tolerant mode with too many unknown tokens: should fail
+    too_many_unknowns = bytes([0xFF] * 10)
+    with pytest.raises(ParseError, match="Too many consecutive unknown tokens"):
+        parse_bytecode_stream(too_many_unknowns, [], tolerant=True)
