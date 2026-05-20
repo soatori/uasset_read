@@ -11,6 +11,10 @@ from uasset_read.kismet.property_pointer import FKismetPropertyPointer, FFieldPa
 
 from uasset_read.kismet.archive import FKismetArchive
 
+from uasset_read.kismet.bytecode_extractor import (
+    extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES,
+)
+
 __all__ = [
     "EExprToken",
     "ECastToken",
@@ -23,4 +27,9 @@ __all__ = [
     "FKismetPropertyPointer",
     "FFieldPath",
     "FKismetArchive",
+    # Bytecode extractor
+    "extract_bytecode_bytes",
+    "parse_bytecode_stream",
+    "extract_and_parse",
+    "USTRUCT_TYPES",
 ]
