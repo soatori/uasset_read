@@ -360,16 +360,33 @@ def read_ue_graph_pin(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
+    header_owning_node: Optional[int] = None,
+    header_pin_id: Optional[str] = None,
 ) -> UEdGraphPin:
-    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。"""
+    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
+
+    D-12: UE5 Pin array uses PinReference format with external header:
+      - Header: b_null_ptr + owning_node + pin_guid (read by caller)
+      - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
+
+    If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
+    """
     pin_start_pos = archive.tell()
 
-    # 1. OwningNode
-    owning_node_index = archive.read_i32()
+    # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
+    if header_owning_node is not None:
+        archive.read_i32()  # Discard internal duplicate
+        owning_node_index = header_owning_node
+    else:
+        owning_node_index = archive.read_i32()
 
-    # 2. PinId (FGuid 16 bytes)
-    pin_id_bytes = archive.read_bytes(16)
-    pin_id = pin_id_bytes.hex().upper()
+    # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
+    if header_pin_id is not None:
+        archive.read_bytes(16)  # Discard internal duplicate
+        pin_id = header_pin_id
+    else:
+        pin_id_bytes = archive.read_bytes(16)
+        pin_id = pin_id_bytes.hex().upper()
 
     # 3. PinName (UE5 始终使用 FName 格式)
     pin_name = archive.read_name(name_map)
@@ -895,12 +912,13 @@ def read_ue_graph_node(
                 archive.seek(archive.tell() + tag.size)
 
     # 读取 Pins 数组
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    pins_offset = node_export.script_serial_offset + node_export.script_serial_size
+    # D-12: UE5 UEdGraphNode Pins format:
+    #   - End marker (4 bytes, value=0) after script_serial
+    #   - pins_count (i32)
+    #   - TArray<UEdGraphPin> elements with header (b_null_ptr + owning_node + pin_guid)
+    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + 4  # Skip end marker
     archive.seek(node_export.serial_offset + pins_offset)
 
-    # 跳过 end marker
-    _end_marker = archive.read_i32()
     pins_count = archive.read_i32()
 
     if pins_count < 0:
@@ -910,23 +928,29 @@ def read_ue_graph_node(
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
-        # Always read header (24 bytes): b_null + OwningNode_1 + PinGuid_1
-        # TODO: 使用UE编辑器源码的加载方式替换实现代码
+        # D-12: UE5 Pin array uses PinReference format:
+        #   Header: b_null_ptr + owning_node + pin_guid
+        #   Body: Complete UEdGraphPin (duplicates owning_node + pin_guid, then PinName + ...)
         b_null_ptr = archive.read_i32()
-        owning_1 = archive.read_i32()
-        guid_1 = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取Pin Guid
 
         if b_null_ptr != 0:
-            # NULL pin reference: body still exists, must consume it to advance position
-            try:
-                read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
-            except Exception:
-                # If body parsing fails, estimate body size (~180 bytes) and skip
-                archive.seek(archive.tell() + 180)
+            # NULL pin reference: skip remaining header (owning_node + pin_guid)
+            archive.read_i32()  # owning_node (unused)
+            archive.read_bytes(16)  # pin_guid (unused)
             continue
 
+        # Read external header: owning_node and pin_guid
+        header_owning = archive.read_i32()
+        header_guid_bytes = archive.read_bytes(16)
+        header_pin_id = header_guid_bytes.hex().upper()
+
         try:
-            pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
+            # D-12: Pass header values to skip internal duplicates
+            pin = read_ue_graph_pin(
+                archive, name_map, summary, export_map, import_map, linker,
+                header_owning_node=header_owning,
+                header_pin_id=header_pin_id,
+            )
             pins.append(pin)
         except Exception:
             continue
