@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
     from uasset_read.models.core import UEdGraph
     from uasset_read.models.blueprint import BlueprintMetadata
+    from uasset_read.kismet.result import KismetDecompiledResult
 
 
 @dataclass
@@ -34,6 +35,7 @@ class ParseResult:
     soft_references: List[Dict] = field(default_factory=list)
     circular_deps: List[List[str]] = field(default_factory=list)
     components: List[Dict] = field(default_factory=list)
+    decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
 
     @property
     def status(self) -> str:
