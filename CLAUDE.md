@@ -22,7 +22,8 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v9.0 已发布** — Phase 52✅ (函数图节点), Phase 53✅ (执行流追踪), Phase 54✅ (数据流追踪), Phase 55✅ (JSON function_graphs 输出)。554 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+**v11.0 开发中** — Phase 61✅ (Kismet 表达式系统), Phase 62✅ (字节码→AST), Phase 63✅ (AST→C++ 伪代码)。554 tests collected。
+Phase 64 (Kismet 集成)、Phase 65 (图解析修复)、Phase 66 (Agent 翻译管线) 计划中。详见 `.planning/STATE.md`。
 
 ## 架构
 
