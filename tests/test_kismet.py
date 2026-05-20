@@ -102,7 +102,37 @@ def test_bytecode_extractor():
 
 def test_expression_output_formats():
     """Test expressions_to_flat_list and expressions_to_tree."""
-    pass
+    from uasset_read.kismet.bytecode_extractor import (
+        parse_bytecode_stream, expressions_to_flat_list, expressions_to_tree,
+    )
+    import json
+
+    # Create a simple expression list: EX_Return(EX_IntConst(42)) + EX_EndOfScript
+    # EX_Return reads: expression (the return value)
+    # Bytecode for EX_Return(0x04) + EX_IntConst(0x1D) + int32(42) + EX_EndOfScript(0x53)
+    bytecode = b'\x04\x1D' + (42).to_bytes(4, 'little') + b'\x53'
+    exprs = parse_bytecode_stream(bytecode, [])
+
+    # 1. expressions_to_flat_list returns flat dict list
+    flat = expressions_to_flat_list(exprs)
+    assert isinstance(flat, list)
+    assert len(flat) > 0
+    for item in flat:
+        assert 'StatementIndex' in item
+        assert 'Token' in item
+        assert 'type' in item
+
+    # 2. expressions_to_tree returns tree with children
+    tree = expressions_to_tree(exprs)
+    assert isinstance(tree, list)
+    assert len(tree) > 0
+    # EX_Return should have children (its return value expression)
+    return_node = tree[0]
+    assert 'children' in return_node
+
+    # 3. Both outputs are JSON serializable
+    json.dumps(flat)  # should not raise
+    json.dumps(tree)  # should not raise
 
 
 # ===========================================================================
