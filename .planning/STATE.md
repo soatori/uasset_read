@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v11.0
-milestone_name: Kismet 字节码反编译器
+milestone_name: — Kismet 字节码反编译器
 status: mid-flight
-last_updated: "2026-05-20T13:00:00Z"
+last_updated: "2026-05-20T05:36:27.806Z"
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 4
+  completed_phases: 1
+  total_plans: 10
   completed_plans: 2
-  percent: 50
+  percent: 20
 ---
 
 # v11.0 — Kismet 字节码反编译器
