@@ -13,7 +13,7 @@ Phase 66-01: 测试 Agent 翻译管线整合 cpp_gen + Kismet 反编译输出。
 7. Fallback strategy works when decompiled_functions is empty
 """
 import pytest
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 
 
@@ -32,9 +32,18 @@ class MockBlueprintMetadata:
 
 @dataclass
 class MockFEdGraphPinType:
-    """Mock FEdGraphPinType for testing."""
+    """Mock FEdGraphPinType for testing - matches real FEdGraphPinType attributes."""
     pin_category: str = "object"
     pin_subcategory: str = "/Script/Engine.SceneComponent"
+    pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
+    container_type: int = 0
+    is_map_key: bool = False
+    is_map_value: bool = False
+    is_reference: bool = False
+    is_weak_pointer: bool = False
+    is_const: bool = False
+    is_uobject_wrapper: bool = False
+    b_serialize_as_single_precision_float: bool = False
 
 
 @dataclass
@@ -57,18 +66,39 @@ class MockKismetDecompiledResult:
 
 @dataclass
 class MockUEdGraphPin:
-    """Mock UEdGraphPin for testing."""
+    """Mock UEdGraphPin for testing - matches real UEdGraphPin attributes."""
+    pin_id: str = ""
     pin_name: str = ""
-    pin_type: Any = None
+    pin_tooltip: str = ""
     direction: int = 0
+    pin_type: Any = None
+    default_value: Optional[str] = None
+    auto_default_value: Optional[str] = None
+    default_object: Optional[int] = None
+    default_text_value: Optional[str] = None
+    linked_to_raw: List[dict] = field(default_factory=list)
+    sub_pins: List[dict] = field(default_factory=list)
+    parent_pin: Optional[dict] = None
     hidden: bool = False
+    not_connectable: bool = False
+    advanced_view: bool = False
+    orphaned_pin: bool = False
+    owning_node_index: int = 0
+    source_index: Optional[int] = None
+    persistent_guid: Optional[str] = None
+    flags: int = 0
 
 
 @dataclass
 class MockK2NodeFunctionEntry:
-    """Mock K2Node_FunctionEntry for testing."""
+    """Mock K2Node_FunctionEntry for testing - matches real UEdGraphNode attributes."""
+    node_guid: str = ""
+    node_pos_x: int = 0
+    node_pos_y: int = 0
+    node_comment: str = ""
+    pins: List[Any] = field(default_factory=list)
     class_name: str = "K2Node_FunctionEntry"
-    pins: List[MockUEdGraphPin] = field(default_factory=list)
+    node_data: Any = None
 
 
 @dataclass
