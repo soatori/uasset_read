@@ -15,6 +15,13 @@ from uasset_read.kismet.bytecode_extractor import (
     extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES,
 )
 
+# Phase 63: C++ pseudocode translator
+from uasset_read.kismet.translator import (
+    KismetTranslator, MathFunctionCleaner, TypeRegistry,
+)
+from uasset_read.kismet.body_builder import FunctionBodyBuilder
+from uasset_read.kismet.structured_flow import StructuredControlFlow
+
 __all__ = [
     "EExprToken",
     "ECastToken",
@@ -32,4 +39,10 @@ __all__ = [
     "parse_bytecode_stream",
     "extract_and_parse",
     "USTRUCT_TYPES",
+    # Phase 63: C++ translator
+    "KismetTranslator",
+    "MathFunctionCleaner",
+    "TypeRegistry",
+    "FunctionBodyBuilder",
+    "StructuredControlFlow",
 ]
