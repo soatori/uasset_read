@@ -3,7 +3,7 @@ gsd_state_version: 1.2
 milestone: v11.0
 milestone_name: — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 status: mid-flight
-last_updated: "2026-05-20T23:00:00.000Z"
+last_updated: "2026-05-20T23:30:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -15,7 +15,7 @@ progress:
 # v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
 
 **Started: 2026-05-18**
-**Updated: 2026-05-20 (Phase 64 完成 → Phase 65 准备开始)**
+**Updated: 2026-05-20 (Phase 65 计划已创建 → 准备执行)**
 
 ## Phase 分解
 
@@ -25,7 +25,7 @@ progress:
 | 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | ✅ Done (1 plan) |
 | 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | ✅ Done (1 plan, 131 tests) |
 | 64 | Kismet 集成验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | ✅ Done (2 plans, 24 tests) |
-| **65** | **图解析器修复** | FMemberReference + Pin 连接 + Struct 映射 + 函数签名 | GRAPH-FIX-01/02/03 | 📋 Planned |
+| **65** | **图解析器修复** | FMemberReference + Pin 连接 + Struct 映射 + 函数签名 | GRAPH-FIX-01/02/03 | 📋 Planned (2 plans) |
 | **66** | **Agent 翻译管线** | BP 节点 JSON → C++ 代码生成 + golden 测试 | TRANSLATE-BP-01/02 | 📋 Planned |
 
 ## 依赖关系
@@ -43,7 +43,19 @@ Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
 
 **当前阶段:** Phase 65 — 图解析器修复
 **上次完成:** Phase 64 (64-01/64-02) — 2026-05-20
-**下一步:** `/gsd:execute-phase 65` 或 `/gsd:plan-phase 65` (CONTEXT.md 已存在)
+**计划创建:** Phase 65 (65-01/65-02) — 2026-05-20
+**下一步:** `/gsd:execute-phase 65` — 执行 Wave 1 (Task 1+2 并行) + Wave 2
+
+## Phase 65 计划详情
+
+| Plan | Wave | Tasks | 预估时长 | 依赖 |
+|------|------|-------|----------|------|
+| 65-01 | 1 | Task 1 (FMemberReference) + Task 2 (Pin 连接) + Task 3 (测试) | 4-7h | 无 |
+| 65-02 | 2 | Task 4 (Struct 映射) + Task 5 (函数签名) + Task 6 (执行流验证) | 2.5-3.5h | 65-01 |
+
+**Wave 执行顺序:**
+- Wave 1: Task 1 + Task 2 并行执行，Task 3 在完成后验证
+- Wave 2: Task 4+5+6 顺序执行（依赖 Wave 1）
 
 ## 新增 Phase 背景（来自 64-GAP-REPORT.md）
 

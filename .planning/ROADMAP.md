@@ -22,7 +22,7 @@
 - [x] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan, 6 tasks)
 - [x] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan, 131 tests)
 - [x] Phase 64: Kismet 集成验证 — pipeline 集成 + 端到端 golden-path 测试 (64-01/02) ✅ 2026-05-20
-- [ ] Phase 65: 图解析器修复 — FMemberReference + Pin 连接 + Struct 映射 + 函数签名
+- [ ] Phase 65: 图解析器修复 — FMemberReference + Pin 连接 + Struct 映射 + 函数签名 (2 plans)
 - [ ] Phase 66: Agent 翻译管线 — BP 节点 JSON → C++ 代码生成 + golden 测试
 
 **依赖:** 61 → 62 → 63 → 64; 65 → 66; 64 ∥ 65 (可并行)
@@ -30,7 +30,8 @@
 Plans:
 - [x] 64-01-PLAN.md — KismetDecompiledResult + decompile_uasset() pipeline ✅
 - [x] 64-02-PLAN.md — _post_process integration + golden file tests ✅
-- [ ] 65-PLAN.md — graph.py fixes: FMemberReference, Pin connections, Struct mapping
+- [ ] 65-01-PLAN.md — FMemberReference + Pin 连接修复 (Wave 1: Task 1+2+3)
+- [ ] 65-02-PLAN.md — Struct 映射 + 函数签名修复 (Wave 2: Task 4+5+6)
 - [ ] 66-PLAN.md — Agent translation pipeline: BP JSON → C++ codegen
 
 ## 能力对比
@@ -45,4 +46,4 @@ Plans:
 
 ---
 
-*Updated: 2026-05-20 (v11.0 Phase 61✅ 62✅ 63✅ 64✅, Phase 65/66 planned)*
+*Updated: 2026-05-20 (v11.0 Phase 65 plans created)*
