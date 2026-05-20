@@ -616,13 +616,18 @@ class KismetTranslator:
                              EX_LocalOutVariable, EX_ClassSparseDataVariable)):
             # Variable is FKismetPropertyPointer
             var_ptr = expr.Variable
-            if var_ptr and hasattr(var_ptr, 'New') and var_ptr.New and hasattr(var_ptr.New, 'Path'):
-                path = var_ptr.New.Path
-                var_name = path[0] if path else "?"
-            elif var_ptr:
-                var_name = str(var_ptr)
-            else:
+            if var_ptr is None:
                 var_name = "?"
+            elif hasattr(var_ptr, '__str__') and not isinstance(var_ptr, str):
+                # Try FKismetPropertyPointer.__str__ path
+                try:
+                    var_name = str(var_ptr)
+                except Exception:
+                    var_name = "?"
+            elif isinstance(var_ptr, str):
+                var_name = var_ptr
+            else:
+                var_name = str(var_ptr) if var_ptr else "?"
             return var_name
 
         # --- Integer literals ---
