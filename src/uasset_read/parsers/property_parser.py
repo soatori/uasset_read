@@ -56,9 +56,12 @@ def _get_parse_functions():
 
 
 def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> Any:
-    """分派属性值解析（PROP-02 至 PROP-06, ADVP-01 至 ADVP-06）。
+    """分派属性值解析（PROP-02 至 PROP-06, ADVP-01 至 ADVP-06, GAP-03）。
 
     Unknown types return None (per D-05).
+
+    GAP-03: Type strings may contain inner nodes (e.g., "StructProperty(Vector(/Script/CoreUObject))").
+    Parser lookup uses the base type name (e.g., "StructProperty").
 
     Args:
         tag: PropertyTag 实例
@@ -72,24 +75,32 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         解析后的属性值，未知类型返回 None
     """
     parsers = _get_parse_functions()
-    handler = parsers.get(tag.type)
+
+    # GAP-03: Extract base type from potentially nested type string
+    # e.g., "StructProperty(Vector(/Script/CoreUObject))" -> "StructProperty"
+    # e.g., "ArrayProperty(StructProperty(Vector(...)))" -> "ArrayProperty"
+    base_type = tag.type
+    if "(" in base_type:
+        base_type = base_type.split("(")[0]
+
+    handler = parsers.get(base_type)
     if handler is None:
         return None  # D-05: unknown type → None, no exception
 
     # Dispatch based on handler signature
-    if tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
+    if base_type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
                      "Int8Property", "ByteProperty", "FloatProperty", "DoubleProperty",
                      "StrProperty", "ObjectProperty", "TextProperty"):
         return handler(tag, archive)
-    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty"):
+    elif base_type in ("NameProperty", "SoftObjectProperty", "DelegateProperty"):
         return handler(tag, archive, name_map)
-    elif tag.type in ("ArrayProperty",):
+    elif base_type in ("ArrayProperty",):
         return handler(tag, archive, name_map, export_map, summary, depth)
-    elif tag.type in ("StructProperty",):
+    elif base_type in ("StructProperty",):
         return handler(tag, archive, name_map, export_map, summary, depth)
-    elif tag.type in ("MapProperty", "SetProperty"):
+    elif base_type in ("MapProperty", "SetProperty"):
         return handler(tag, archive, name_map, export_map, summary)
-    elif tag.type in ("EnumProperty",):
+    elif base_type in ("EnumProperty",):
         return handler(tag, archive, name_map, summary)
 
 
