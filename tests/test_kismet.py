@@ -66,7 +66,33 @@ def test_fkismet_archive_tolerant_mode():
 
 def test_bytecode_extractor():
     """Test extract_bytecode_bytes and parse_bytecode_stream."""
-    pass
+    from uasset_read.kismet.bytecode_extractor import (
+        extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES
+    )
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    import io
+
+    # 1. parse_bytecode_stream with empty bytes returns empty list
+    assert parse_bytecode_stream(b'', []) == []
+
+    # 2. parse_bytecode_stream with valid bytecode
+    # EX_EndOfScript (0x53) is a valid single-expression stream
+    exprs = parse_bytecode_stream(b'\x53', [])
+    assert len(exprs) == 1
+    assert exprs[0].Token == EExprToken.EX_EndOfScript
+
+    # 3. parse_bytecode_stream with tolerant mode
+    # Unknown token + known token
+    exprs = parse_bytecode_stream(b'\xFF\x53', [], tolerant=True)
+    assert len(exprs) == 1
+    assert exprs[0].Token == EExprToken.EX_EndOfScript
+
+    # 4. USTRUCT_TYPES whitelist check
+    assert "Function" in USTRUCT_TYPES
+    assert "UFunction" in USTRUCT_TYPES
+    assert "K2Node_FunctionEntry" in USTRUCT_TYPES
+    assert "K2Node_FunctionResult" in USTRUCT_TYPES
 
 
 # ===========================================================================
