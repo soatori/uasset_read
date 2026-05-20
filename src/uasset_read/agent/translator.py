@@ -46,9 +46,17 @@ class AgentTranslationPipeline:
             result: LinkerParseResult（来自 parse_uasset_with_linker）
 
         Raises:
-            ValueError: 如果 result.blueprint 为 None 或不是蓝图（Per D-66-01）
+            ValueError: 如果 result 为 None 或 result.blueprint 为 None 或不是蓝图（Per D-66-01）
         """
         # 输入验证（Per T-66-01）
+        if result is None:
+            raise ValueError(
+                "LinkerParseResult is None — cannot translate to C++"
+            )
+        if not hasattr(result, 'blueprint'):
+            raise ValueError(
+                "Input is not a LinkerParseResult — missing blueprint attribute"
+            )
         if result.blueprint is None:
             raise ValueError(
                 "LinkerParseResult.blueprint is None — cannot translate to C++"
