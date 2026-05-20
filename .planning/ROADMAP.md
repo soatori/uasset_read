@@ -19,7 +19,7 @@
 
 - [x] Phase 61: Kismet 表达式系统 — EExprToken + KismetExpression 类族 + FKismetArchive (4 waves)
 - [x] Phase 62: 字节码 → 表达式树 — ScriptBytecode → KismetExpression AST (1 plan, 6 tasks)
-- [ ] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan)
+- [x] Phase 63: 表达式树 → C++ 伪代码 — AST 翻译 + 控制流恢复 + MathFunctionCleaner (1 plan, 131 tests)
 - [ ] Phase 64: 集成与验证 — pipeline 集成 + 端到端 golden-path 测试 (1 plan)
 
 **依赖:** 61 → 62 → 63 → 64
@@ -39,4 +39,4 @@ Phase 58 在 AST 层（UEdGraphNode → C++）工作；v11.0 在字节码层（E
 
 ---
 
-*Updated: 2026-05-18 (v10.0 shipped, v11.0 planned)*
+*Updated: 2026-05-20 (v11.0 Phase 61✅ 62✅ 63✅, Phase 64 planned)*

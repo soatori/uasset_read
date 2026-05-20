@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v11.0
 milestone_name: — Kismet 字节码反编译器
 status: mid-flight
-last_updated: "2026-05-20T05:36:27.806Z"
+last_updated: "2026-05-20T05:40:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 2
-  percent: 20
+  completed_plans: 3
+  percent: 50
 ---
 
 # v11.0 — Kismet 字节码反编译器
@@ -23,7 +23,7 @@ progress:
 |-------|------|------|--------------|--------|
 | 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | Done (4 waves) |
 | 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | Done (1 plan) |
-| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Planned (1 plan) |
+| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Done (1 plan, 131 tests) |
 | 64 | 集成与验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned (1 plan) |
 
 ## 依赖关系
