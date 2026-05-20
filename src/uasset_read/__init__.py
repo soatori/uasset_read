@@ -251,6 +251,39 @@ from .constants import (
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
 )
 
+# Kismet bytecode module (Phase 61)
+from .kismet import (
+    EExprToken, ECastToken, EScriptInstrumentationType,
+    EBlueprintTextLiteralType, EAutoRtfmStopTransactMode,
+    KismetExpression, KismetExpressionT,
+    EXPR_CLASS_MAP,
+    FKismetPropertyPointer, FFieldPath,
+)
+
+# Kismet C++ translator (Phase 63)
+from .kismet import (
+    KismetTranslator,
+    MathFunctionCleaner,
+    TypeRegistry,
+    line_cpp,
+    UE_TYPE_MAP,
+    FunctionBodyBuilder,
+    to_function_body,
+    StructuredControlFlow,
+    StructuredBlock,
+)
+
+# Kismet bytecode extractor (Phase 62)
+from .kismet import (
+    extract_bytecode_bytes,
+    parse_bytecode_stream,
+    extract_and_parse,
+)
+
+# Kismet decompilation pipeline (Phase 64)
+from .kismet.result import KismetDecompiledResult
+from .kismet.pipeline import decompile_uasset
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -464,4 +497,32 @@ __all__ = [
     "read_edgraph_node_comment",
     "read_k2node_enhanced_input",
     "read_k2node_functionentry",
+    # Kismet bytecode (Phase 61)
+    "EExprToken",
+    "ECastToken",
+    "EScriptInstrumentationType",
+    "EBlueprintTextLiteralType",
+    "EAutoRtfmStopTransactMode",
+    "KismetExpression",
+    "KismetExpressionT",
+    "EXPR_CLASS_MAP",
+    "FKismetPropertyPointer",
+    "FFieldPath",
+    # Kismet translator (Phase 63)
+    "KismetTranslator",
+    "MathFunctionCleaner",
+    "TypeRegistry",
+    "line_cpp",
+    "UE_TYPE_MAP",
+    "FunctionBodyBuilder",
+    "to_function_body",
+    "StructuredControlFlow",
+    "StructuredBlock",
+    # Kismet bytecode extractor (Phase 62)
+    "extract_bytecode_bytes",
+    "parse_bytecode_stream",
+    "extract_and_parse",
+    # Kismet decompilation pipeline (Phase 64)
+    "KismetDecompiledResult",
+    "decompile_uasset",
 ]
