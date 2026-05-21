@@ -82,7 +82,15 @@ class CppFileWriter:
 
         Args:
             ir: CppClassIR 数据模型（已填充 properties, methods, constructor）
+
+        Raises:
+            ValueError: 如果 ir 为 None 或无效类型
         """
+        if ir is None:
+            raise ValueError("CppClassIR is None — cannot write files")
+        if not hasattr(ir, 'name'):
+            raise ValueError("Input is not a CppClassIR — missing name attribute")
+
         self.ir = ir
         self._header_text: Optional[str] = None
         self._cpp_text: Optional[str] = None

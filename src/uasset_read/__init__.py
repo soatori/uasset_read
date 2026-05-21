@@ -284,6 +284,10 @@ from .kismet import (
 from .kismet.result import KismetDecompiledResult
 from .kismet.pipeline import decompile_uasset
 
+# Agent translation pipeline (Phase 66)
+from .agent.translator import AgentTranslationPipeline, translate_blueprint_to_cpp
+from .agent.writer import CppFileWriter, write_cpp_class_files
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -525,4 +529,9 @@ __all__ = [
     # Kismet decompilation pipeline (Phase 64)
     "KismetDecompiledResult",
     "decompile_uasset",
+    # Agent translation pipeline (Phase 66)
+    "AgentTranslationPipeline",
+    "translate_blueprint_to_cpp",
+    "CppFileWriter",
+    "write_cpp_class_files",
 ]

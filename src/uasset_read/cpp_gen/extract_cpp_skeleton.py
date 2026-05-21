@@ -540,9 +540,15 @@ def _build_cpp_method_from_entry(
     blueprint_functions: Dict
 ) -> CppMethodIR:
     """从 K2Node_FunctionEntry 构建 CppMethodIR。"""
-    if fe_node.function_reference is None:
+    # 从 node_data 获取 function_reference
+    func_ref = getattr(fe_node, 'function_reference', None)
+    if func_ref is None and fe_node.node_data:
+        func_ref = getattr(fe_node.node_data, 'function_reference', None)
+
+    if func_ref is None:
         return None
-    func_name = fe_node.function_reference.member_name
+
+    func_name = func_ref.member_name
     if not func_name or func_name == "None":
         return None
 
@@ -577,9 +583,15 @@ def _build_cpp_method_from_entry(
 
 def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     """从 K2Node_Event 构建 CppMethodIR（is_override=True）。"""
-    if event_node.event_reference is None:
+    # 从 node_data 获取 event_reference
+    event_ref = getattr(event_node, 'event_reference', None)
+    if event_ref is None and event_node.node_data:
+        event_ref = getattr(event_node.node_data, 'event_reference', None)
+
+    if event_ref is None:
         return None
-    event_name = event_node.event_reference.member_name
+
+    event_name = event_ref.member_name
     if not event_name or event_name == "None":
         return None
 
