@@ -1,103 +1,85 @@
 ---
 gsd_state_version: 1.2
-milestone: v11.0
-milestone_name: — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
-status: mid-flight
-last_updated: "2026-05-20T23:45:00.000Z"
+milestone: v12.0
+milestone_name: — N2C 中间格式 + 节点分类体系 + 处理器架构
+status: in_progress
+last_updated: "2026-05-21T22:00:00.000Z"
+prev_milestone: v11.0 (archived 2026-05-21)
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 8
-  percent: 80
+  total_phases: 5
+  completed_phases: 1
+  skipped_phases: 0
+  total_plans: 4
+  completed_plans: 0
+  percent: 20
 ---
 
-# v11.0 — Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线
+# v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构
 
-**Started: 2026-05-18**
-**Updated: 2026-05-20 (Phase 66 计划已创建 → 准备执行)**
+**Started: 2026-05-21**
+**Status: In Progress — Phase 67 Complete, Phase 69 plans created**
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | ✅ Done (4 waves) |
-| 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | ✅ Done (1 plan) |
-| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | ✅ Done (1 plan, 131 tests) |
-| 64 | Kismet 集成验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | ✅ Done (2 plans, 24 tests) |
-| 65 | 图解析器修复 | FMemberReference + Pin 连接 + Struct 映射 + 函数签名 | GRAPH-FIX-01/02/03 | ✅ Done (2 plans) — 2026-05-20 |
-| **66** | **Agent 翻译管线** | BP 节点 JSON → C++ 代码生成 + golden 测试 | TRANSLATE-BP-01/02 | 📋 Planned (3 plans) |
+| 67 | 序列化格式修复 | UE5.4+ PropertyTag 兼容 + FString 健壮性 | SERIALIZE-01/02 | ✅ Complete |
+| 68 | N2CNodeTypeRegistry | 100+ K2Node 语义类型注册表 + 继承回退 | REGISTRY-01/02 | 🆕 Planned |
+| 69 | 节点处理器架构 | Processor 模式替代 switch/case | PROCESSOR-01/02 | 📝 Plans Created (4 waves) |
+| 70 | N2CStruct JSON Schema | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | 🆕 Planned |
+| 71 | 执行流链式表达 | `N1->N2->N3` 格式替代逐对连接 | CHAIN-01/02 | 🆕 Planned |
 
 ## 依赖关系
 
 ```
-Phase 61 → Phase 62 → Phase 63 → Phase 64 (Kismet 集成) ✅
-                              ↓
-                      Phase 65 (图解析修复) ✅ → Phase 66 (Agent 翻译管线)
+Phase 67 (序列化修复) ← v12.0 起点
+        ↓
+Phase 68 (NodeTypeRegistry)
+        ↓
+Phase 69 (Processor 架构)
+        ↓
+Phase 70 (N2CStruct Schema)
+        ↓
+Phase 71 (执行流链式表达)
 ```
-
-Phase 64 和 65 已完成 — 64 修 kismet/ 层，65 修 graph.py 层。
-Phase 66 依赖 Phase 65（需要正确的函数引用和 Pin 连接）。
 
 ## 当前状态
 
-**当前阶段:** Phase 66 — Agent 翻译管线
-**上次完成:** Phase 65 (65-01/65-02) — 2026-05-20
-**计划创建:** Phase 66 (66-01/02/03) — 2026-05-20
-**下一步:** `/gsd:execute-phase 66` — 执行 Wave 1 (Task 1+2 并行) + Wave 2
+**当前阶段:** Phase 68 (N2CNodeTypeRegistry) — 下一步
+**Phase 67 完成:** 2026-05-21 — 6 类序列化错误全部修复，UAT 6/6 通过，所有单元测试通过（24/24）
+**Phase 69 计划:** 4 个 wave 计划已创建，等待 Phase 68 完成后执行
 
-## Phase 66 计划详情
+## v12.0 完成度
 
-| Plan | Wave | Tasks | 预估时长 | 依赖 |
-|------|------|-------|----------|------|
-| 66-01 | 1 | Task 1 (AgentTranslationPipeline integration) + TDD tests | 3-4h | 无 |
-| 66-02 | 1 | Task 2 (CppFileWriter output) + TDD tests | 2-3h | 无 |
-| 66-03 | 2 | Task 3 (Golden file integration test) | 2-3h | 66-01 + 66-02 |
+| 版本 | 范围 | 日期 | 状态 |
+|------|------|------|------|
+| v1.0–v6.0 | MVP → 模块化重构 | 2026-04-28 ~ 05-13 | 已归档 |
+| v7.0 | UE FLinkerLoad 对象图重建 | 2026-05-14 | 已归档 |
+| v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 2026-05-17 | 已归档 |
+| v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
+| v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | 已归档 |
+| v11.0 | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 2026-05-20 | 已归档 |
+| v12.0 P67 | 序列化修复 ✅ | 2026-05-21 | ✅ Complete |
+| v12.0 P68 | N2CNodeTypeRegistry | 计划中 | 🆕 Planned |
+| v12.0 P69 | 节点处理器架构 | 计划中 | 📝 Plans Created (4 waves) |
+| v12.0 P70 | N2CStruct JSON Schema | 计划中 | 🆕 Planned |
+| v12.0 P71 | 执行流链式表达 | 计划中 | 🆕 Planned |
 
-**Wave 执行顺序:**
-- Wave 1: Task 1 + Task 2 并行执行（无文件冲突，可并行）
-- Wave 2: Task 3 顺序执行（依赖 Wave 1 完成）
+## v12.0 背景（NodeToCode 参考）
 
-**Fallback 策略（已知 stub）:**
-- linked_to_raw 空数组 → 使用 function_reference.member_name 生成函数调用
-- decompiled_functions 空数组 → 仅生成类骨架（无函数体）
-- graphs 数据不完整 → 从 blueprint_functions 回退
+**参考设计:** NodeToCode (protospatial) — N2CNodeTypeRegistry / N2CNodeProcessor / N2CStruct / N2CSerializer
 
-## Phase 65 完成摘要
+目标：将 graph.py 输出转化为 Agent 可理解的结构化 JSON，优化 LLM token 使用（60-90% 压缩）。
 
-**GAP 修复状态:**
-- ✅ GAP-01: FMemberReference.member_name 正确（13/13 CallFunction 节点有效）
-- 🔶 GAP-02: Pin 连接格式理解改进（linked_to_raw 仍为空，需要 fallback）
-- ✅ GAP-03: StructProperty 类型正确识别为 Vector/Rotator
-- ✅ GAP-07: 函数签名提取实现（Pin-based fallback）
-
-**已知 stub:** linked_to_raw 空数组，Phase 66 使用 fallback 策略处理。
-
-## 新增 Phase 背景（来自 64-GAP-REPORT.md）
-
-对 `BP_FirstPersonCharacter.uasset` 的实际解析发现：
-- **GAP-01:** FMemberReference 解析失败 → 无法获取"调用的是什么函数"（P0，已修复）
-- **GAP-02:** Pin 连接全部为空 → 无法获取数据流（P0，部分修复，需 fallback）
-- **GAP-03:** StructProperty → UnknownStruct → 缺失变量类型信息（P1，已修复）
-- **GAP-05:** ExecuteUbergraph 字节码未提取 → 70%+ 逻辑丢失（P1，Phase 64 已修复）
-- **GAP-06/07:** 执行流和函数签名全空 → 依赖 GAP-02 修复（Phase 65 已修复）
-
-Phase 65 修复 GAP-01/02/03/06/07（graph.py 层）。
-Phase 66 利用修复后的输出构建 Agent 翻译管线（含 fallback 策略）。
-
-## 上下文
-
-- CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
-- UE 源码参考：`E:\Develop\lib\UnrealEngine\Engine\Source\Editor\UnrealEd\Private\Kismet2\`
-  - `K2Node_CallFunction.cpp` — FK2Node_CallFunction::Serialize()
-  - `EdGraphPin.cpp` — UEdGraphPin::Serialize()
-  - `BlueprintEditorUtils.cpp` — FBlueprintEditorUtils::ReadPinReference()
-- 差距分析：`.planning/phases/phase-64/64-GAP-REPORT.md`
-- 本项目技术栈：Python 3.10+，零运行时依赖
-- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
+核心能力：
+1. **N2CNodeTypeRegistry** — 100+ K2Node 语义类型完整映射
+2. **节点处理器架构** — 每类型独立 Processor 替代 switch/case
+3. **N2CStruct JSON Schema** — LLM/Agent 优化中间格式
+4. **执行流链式表达** — `N1->N2->N3` 简洁格式
 
 ## 上游里程碑
 
-- v10.0 (P56-60): Blueprint-to-C++ 代码生成参考 — ✅ 已归档 2026-05-19
-  - 提供了 cpp_gen 模块骨架、类型映射、函数签名/体翻译、组件初始化
-  - v11.0 在字节码层（EExprToken → KismetExpression → C++）补充 Phase 58 无法覆盖的 60+ 种表达式类型
+- v11.0 (P61-66): Kismet 字节码反编译器 + Agent 翻译管线 — ✅ 已归档 2026-05-21
+  - 提供了 decompile_uasset() 端到端管线、AgentTranslationPipeline、CppFileWriter
+  - 修复了图解析关键差距（FMemberReference、Pin 连接、Struct 映射）
+  - v12.0 在此基础上构建 N2C 中间格式

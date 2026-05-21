@@ -1,0 +1,11 @@
+"""N2C — Node-to-Code 中间格式模块。
+
+节点处理器架构：将 UEdGraphNode 转换为语义化的 N2CNodeDefinition，
+再通过 Processor 模式分发到具体处理器。
+"""
+from uasset_read.n2c.definitions import N2CNodeDefinition
+from uasset_read.n2c.node_types import N2CNodeType
+from uasset_read.n2c.processor_base import N2CNodeProcessor
+from uasset_read.n2c.processor_registry import N2CProcessorRegistry
+
+__all__ = ["N2CNodeDefinition", "N2CNodeProcessor", "N2CProcessorRegistry", "N2CNodeType"]
