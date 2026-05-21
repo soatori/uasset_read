@@ -7,5 +7,12 @@ from uasset_read.n2c.definitions import N2CNodeDefinition
 from uasset_read.n2c.node_types import N2CNodeType
 from uasset_read.n2c.processor_base import N2CNodeProcessor
 from uasset_read.n2c.processor_registry import N2CProcessorRegistry
+from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
 
-__all__ = ["N2CNodeDefinition", "N2CNodeProcessor", "N2CProcessorRegistry", "N2CNodeType"]
+__all__ = [
+    "N2CNodeDefinition",
+    "N2CNodeProcessor",
+    "N2CProcessorRegistry",
+    "N2CNodeType",
+    "N2CNodeTypeRegistry",  # Phase 68 新增
+]
