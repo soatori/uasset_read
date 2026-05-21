@@ -10,7 +10,7 @@
 | v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
 | **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
-| **v12.0** | **N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-70)** | 计划中 | 待启动 |
+| **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 计划中 | 待启动 |
 | **v13.0+** | **可选增强：多语言 / 参考注入 / Knot 追踪 / 深度控制** | 待定 | 讨论中 |
 
 历史详情：`.planning/archive/`
@@ -19,13 +19,51 @@
 
 详见 [milestones/v11.0-ROADMAP.md](milestones/v11.0-ROADMAP.md)
 
-## v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构 (NEXT)
+## v12.0 — 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (NEXT)
 
 **参考设计:** NodeToCode (protospatial) — `N2CNodeTypeRegistry` / `N2CNodeProcessor` 模式 / `N2CStruct` JSON Schema / 执行流链式表达
+**参考设计:** CUE4Parse — FPropertyTag UE5 格式分支 / FStructFallback 错误恢复 / FString 验证
 
-**目标:** 将 NodeToCode 的核心架构模式移植到 Python 独立解析器，将 graph.py 输出转化为 Agent 可理解的结构化 JSON。
+**目标:** 先修复序列化层问题确保输入数据完整性，再将 NodeToCode 的核心架构模式移植到 Python 独立解析器，将 graph.py 输出转化为 Agent 可理解的结构化 JSON。
 
-### Phase 67: N2CNodeTypeRegistry — K2Node 语义类型注册表
+### Phase 67: 序列化格式修复 — UE5.4+ PropertyTag 兼容 + FString 健壮性
+
+**目标:** 修复解析 `BP_FirstPersonCharacter.uasset` 等 UE5 蓝图时出现的 6 类错误，确保后续 N2C 格式有干净的输入数据。
+
+**参考:** CUE4Parse 的 `FPropertyTag` 构造函数（line 142-173）和 `FScriptStruct` 结构映射（line 70-425）。
+
+**问题清单（6 项）：**
+
+| # | 错误 | 根因 | 修复策略 |
+|---|------|------|----------|
+| 1 | **FString 读到二进制数据**（35处） | `null_ratio > 0.3` 启发式过于激进，将合法短字符串（如单字符枚举名）误判为二进制 | 移除启发式检测，改用 CUE4Parse 的 null termination 验证（读取后检查末尾 null 字节） |
+| 2 | **LastEditedDocuments: Size 16777216** | 缺少 `PROPERTY_TAG_COMPLETE_TYPE_NAME`（UE5.4+）格式分支，FName 对被误读为 size | 添加 UE5 新格式分支：`FPropertyTypeNameNode` 链式读取替代双 FName |
+| 3 | **SCS_Node CategoryName: Cannot read 3328 bytes** | #2 导致的连锁偏移错误 | 修复 #2 后自动修复 |
+| 4 | **BodyInstance: Size 524288** | #2 导致的连锁偏移错误 | 修复 #2 后自动修复 |
+| 5 | **RelativeLocation: Invalid size -1067974656** | #2 导致的连锁偏移错误 | 修复 #2 后自动修复 |
+| 6 | **RelativeRotation 字段错位** | #5 的连锁反应 | 修复 #2 后自动修复 |
+
+**修复内容：**
+
+1. **`serializers/property_tags.py` — `read_property_tag()`**
+   - 添加 `summary.is_ue5_4+` 版本检查
+   - UE5.4+ 分支：读取 `FPropertyTypeNameNode` 链（`FName + int32 InnerCount`，递归直到 remaining==0）
+   - UE5.4+ 分支：读取 `PropertyTagFlags` 字节后解析扩展字段
+   - 参考 CUE4Parse `FPropertyTag(FAssetArchive Ar, bool readData)` 构造函数 line 136-233
+
+2. **`archive.py` — `read_fstring()`**
+   - 移除 `null_ratio > 0.3` 启发式检测
+   - 添加 null termination 验证（UTF-8 检查末尾 `b'\x00'`，UTF-16 检查末尾 `b'\x00\x00'`）
+   - 非 null 终止时记录 warning 但仍返回读取结果（tolerant 模式）
+   - 参考 CUE4Parse `FArchive.ReadFString()` line 449-507
+
+3. **`parsers/property_types.py` — `parse_struct_property()`**
+   - 添加 try/finally 块确保解析失败后 seek 到 `pos + tag.size`
+   - 参考 CUE4Parse `FPropertyTag` line 228-231 的 `finally: Ar.Position = finalPos`
+
+**验证：** 重新解析 `BP_FirstPersonCharacter.uasset`，上述 6 类错误清零（或降级为 warning 不影响后续属性读取）。
+
+### Phase 68: N2CNodeTypeRegistry — K2Node 语义类型注册表
 
 **目标:** 建立完整的 K2Node 类 → 语义类型映射表，覆盖 UE 引擎全部 100+ 种 K2Node。
 
@@ -51,7 +89,7 @@
 
 **来源:** `N2CNodeTypeRegistry.cpp` — 1025 行，100+ 种类型映射，继承回退机制
 
-### Phase 68: 节点处理器架构 — 每个语义类型专门的 Processor
+### Phase 69: 节点处理器架构 — 每个语义类型专门的 Processor
 
 **目标:** 将节点属性提取逻辑从统一的 switch/case 拆分为独立的 Processor 类。
 
@@ -91,7 +129,7 @@ else:
     fallback_process(node, out_def)
 ```
 
-### Phase 69: N2CStruct JSON Schema — Agent 可理解的结构化输出
+### Phase 70: N2CStruct JSON Schema — Agent 可理解的结构化输出
 
 **目标:** 设计专有的序列化格式，针对 LLM/Agent 消费优化，减少 60-90% token 用量。
 
@@ -154,7 +192,7 @@ else:
 
 **双向序列化:** `to_n2c_json()` / `from_n2c_json()` 确保可逆转换
 
-### Phase 70: 执行流链式表达
+### Phase 71: 执行流链式表达
 
 **目标:** 将现有的 `execution_flow` 数组（逐对连接）改为 N2C 风格的链式字符串。
 
@@ -227,4 +265,4 @@ else:
 
 ---
 
-*Updated: 2026-05-20 (v12.0 P67-70 NEXT, Phase 66 跳过合并至中间格式)*
+*Updated: 2026-05-21 (v12.0 P67-71: 序列化修复 + N2C 中间格式，Phase 编号顺延)*
