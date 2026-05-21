@@ -33,6 +33,9 @@ def mock_node(mock_pin):
 @pytest.fixture(autouse=True)
 def reset_registry():
     """每个测试前后重置注册表单例，确保测试隔离。"""
+    from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
     N2CProcessorRegistry.reset()
+    N2CNodeTypeRegistry.reset()
     yield
+    N2CNodeTypeRegistry.reset()
     N2CProcessorRegistry.reset()
