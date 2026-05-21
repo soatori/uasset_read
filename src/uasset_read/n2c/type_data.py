@@ -82,6 +82,7 @@ K2NODE_ENUM_NAMES: dict[str, str] = {
     "K2Node_GetNumEnumEntries": "GetNumEnumEntries",
     "K2Node_GetSequenceBinding": "GetSequenceBinding",
     "K2Node_GetSubsystem": "GetSubsystem",
+    "K2Node_EnhancedInputAction": "EnhancedInputAction",  # UE5.5+
     "K2Node_IfThenElse": "Branch",           # 语义映射
     "K2Node_InputAction": "InputAction",
     "K2Node_InputActionEvent": "InputActionEvent",
