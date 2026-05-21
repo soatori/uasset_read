@@ -6,7 +6,7 @@ status: ready
 last_updated: "2026-05-21T00:15:00.000Z"
 prev_milestone: v11.0 (archived 2026-05-21)
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 0
   skipped_phases: 0
   total_plans: 0
@@ -23,28 +23,31 @@ progress:
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 67 | N2CNodeTypeRegistry | 100+ K2Node 语义类型注册表 + 继承回退 | REGISTRY-01/02 | 🆕 Planned |
-| 68 | 节点处理器架构 | Processor 模式替代 switch/case | PROCESSOR-01/02 | 🆕 Planned |
-| 69 | N2CStruct JSON Schema | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | 🆕 Planned |
-| 70 | 执行流链式表达 | `N1->N2->N3` 格式替代逐对连接 | CHAIN-01/02 | 🆕 Planned |
+| 67 | 序列化格式修复 | UE5.4+ PropertyTag 兼容 + FString 健壮性 | SERIALIZE-01/02 | 🆕 Planned |
+| 68 | N2CNodeTypeRegistry | 100+ K2Node 语义类型注册表 + 继承回退 | REGISTRY-01/02 | 🆕 Planned |
+| 69 | 节点处理器架构 | Processor 模式替代 switch/case | PROCESSOR-01/02 | 🆕 Planned |
+| 70 | N2CStruct JSON Schema | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | 🆕 Planned |
+| 71 | 执行流链式表达 | `N1->N2->N3` 格式替代逐对连接 | CHAIN-01/02 | 🆕 Planned |
 
 ## 依赖关系
 
 ```
-Phase 67 (NodeTypeRegistry) ← v12.0 起点
+Phase 67 (序列化修复) ← v12.0 起点
         ↓
-Phase 68 (Processor 架构)
+Phase 68 (NodeTypeRegistry)
         ↓
-Phase 69 (N2CStruct Schema)
+Phase 69 (Processor 架构)
         ↓
-Phase 70 (执行流链式表达)
+Phase 70 (N2CStruct Schema)
+        ↓
+Phase 71 (执行流链式表达)
 ```
 
 ## 当前状态
 
 **当前阶段:** v12.0 初始化
 **上次归档:** v11.0 (P61-66) — 2026-05-21
-**下一步:** `/gsd:new-milestone` — 创建 v12.0 REQUIREMENTS.md 和详细规划
+**下一步:** `/gsd:new-milestone` — 创建 v12.0 REQUIREMENTS.md 和详细规划（Phase 67 序列化修复先行）
 
 ## v12.0 背景（NodeToCode 参考）
 
