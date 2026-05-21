@@ -1,7 +1,6 @@
-"""K2Node 语义类型枚举（UE5.8 全覆盖）。
+"""N2C 节点语义类型枚举（126 种）。
 
-Phase 68 从 30 种扩展到 122 种（UE5.8 源码实际类型数）。
-原有临时枚举值保持不变（向后兼容）。
+Phase 68 从 30 种扩展到 126 种（UE5.8 全覆盖）。
 数据来源：UE5.8 Engine/Source/Editor/ 全模块扫描。
 """
 from enum import Enum
