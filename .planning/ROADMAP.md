@@ -11,7 +11,7 @@
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
 | **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
 | **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
-| **v13.0+** | **可选增强：多语言 / 参考注入 / Knot 追踪 / 深度控制** | 待定 | 讨论中 |
+| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72)** | 2026-05-23 | 诊断完成 |
 
 历史详情：`.planning/archive/`
 
@@ -19,7 +19,7 @@
 
 详见 [milestones/v11.0-ROADMAP.md](milestones/v11.0-ROADMAP.md)
 
-## v12.0 — 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (NEXT)
+## v12.0 — 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (✅ 已归档)
 
 **参考设计:** NodeToCode (protospatial) — `N2CNodeTypeRegistry` / `N2CNodeProcessor` 模式 / `N2CStruct` JSON Schema / 执行流链式表达
 **参考设计:** CUE4Parse — FPropertyTag UE5 格式分支 / FStructFallback 错误恢复 / FString 验证
@@ -219,11 +219,38 @@ else:
 
 ---
 
-## v13.0+ — 可选增强（待定/讨论中）
+## v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72)
 
-**参考设计:** NodeToCode 高级功能 — 结构体/枚举自动提取、参考代码注入、多语言输出、遍历深度控制、Knot 节点追踪
+**参考设计:** UE 5.7 EdGraphPin.cpp — `UEdGraphPin::Serialize()` / `FEdGraphPinType::Serialize()`
+**诊断日期:** 2026-05-23
+**诊断结果:** 在真实 .uasset 二进制上定位 2 个独立 bug（详见下方 72-A）
 
-> 以下为可选增强，待 v12.0 完成后根据实际需求优先级讨论是否纳入。
+### Phase 72-A: Pin 连接二进制诊断 ✅
+
+**完成日期:** 2026-05-23
+
+| # | Bug | 位置 | 根因 | 修复策略 |
+|---|-----|------|------|---------|
+| 1 | **`history_type` 无符号/有符号不匹配** | `graph.py` L398, L449 | `read_u8()` 返回 255，UE 意图是 -1（None）。`read_ftext_with_history` 检查 `255 in range(-1,11)` → FALSE → 位置不变 → 后续字段全部错位 | 入口处 `if history_type >= 128: history_type -= 256` |
+| 2 | **ParentPin 总是读 24 字节** | `graph.py` L476-479 | `null != 0` 时应只读 8B，代码多读 16B GUID → RefPassThrough/PersistentGuid/BitField 错位 | 条件读取：null != 0 → 8B, null == 0 → 24B |
+
+**二进制证据（K2Node_Knot_1 pin 0, body at 132477）:**
+- 修复 Bug 1 → `LinkedTo count=1, owning=57, valid GUID` ✅
+- 修复 Bug 1+2 → `RefPassThrough null=0, BitField=0x52935405` ✅
+
+### Phase 72-B: Pin 连接修复（NEXT）
+
+**修复内容:** `serializers/graph.py` — L398/L449 history_type signed 转换 + L476-479 ParentPin 条件读取
+
+### Phase 72-C: Kismet 字节码导航
+
+**诊断结果:** BP_FirstPersonCharacter.uasset 无 UFunction 导出，字节码可能存在于 BlueprintGeneratedClass 内部。
+
+### Phase 72-D: FString/FName 区分
+
+**根因:** 属性值中的 FName 索引区域被误作 FString 读取，35 处返回空字符串。
+
+### 可选增强（v13.0 完成后讨论）
 
 ### 结构体/枚举提取（N2CStruct / N2CEnum）
 
@@ -262,4 +289,4 @@ else:
 
 ---
 
-*Updated: 2026-05-21 (v12.0 P67-71: 序列化修复 + N2C 中间格式，Phase 编号顺延)*
+*Updated: 2026-05-23 (v12.0 archived, P72 诊断完成, 2 bugs 定位)*

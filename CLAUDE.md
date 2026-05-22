@@ -22,7 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v9.0 已发布** — Phase 52✅ (函数图节点), Phase 53✅ (执行流追踪), Phase 54✅ (数据流追踪), Phase 55✅ (JSON function_graphs 输出)。554 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+**v12.0 已归档** — Phase 67✅ (序列化修复), Phase 68✅ (N2CNodeTypeRegistry), Phase 69✅ (节点处理器架构), Phase 70✅ (N2CStruct JSON Schema), Phase 71✅ (执行流链式表达)。1290 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+
+**v13.0 活跃** — Phase 72-A✅ (Pin 连接二进制诊断，2 bugs 定位)，Phase 72-B 待执行 (Pin 连接修复)。
 
 ## 架构
 
@@ -85,7 +87,7 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 - `.planning/ROADMAP.md` — 阶段路线图
 - `.planning/STATE.md` — 当前里程碑状态
-- `.planning/milestones/` — 已归档里程碑（v7.0-v9.0）
+- `.planning/milestones/` — 已归档里程碑（v7.0-v12.0）
 - `.planning/MILESTONES.md` — 历史里程碑
 
 ## 上下文与效率
