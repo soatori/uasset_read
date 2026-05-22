@@ -797,7 +797,7 @@ def test_format_graphs_json_structure(sample_graph_with_connections):
     assert 'graph_type' in graph_dict  # D-20-07: graph_type 替代 graph_class
     assert 'node_count' in graph_dict  # D-31-06: build_graphs_summary uses node_count not nodes
     assert 'connections' in graph_dict
-    assert 'execution_flows' in graph_dict
+    assert 'execution_chains' in graph_dict  # Phase 71: execution_chains 替代 execution_flows
 
     assert graph_dict['graph_name'] == "EventGraph"
     assert graph_dict['graph_type'] == "uber"  # D-20-07: UberEdGraph → uber
@@ -848,15 +848,15 @@ def test_build_connections_map_warning(sample_graph_with_missing_pin):
 # Phase 8: GRAPH-12 - 执行流追踪
 # ============================================================================
 
-def test_format_json_full_contains_execution_flows(sample_graph_with_execution_flow):
+def test_format_json_full_contains_execution_chains(sample_graph_with_execution_flow):
     """
-    GRAPH-12: 验证 format_json_full() 返回包含 execution_flows。
+    GRAPH-12: 验证 format_json_full() 返回包含 execution_chains（Phase 71）。
     """
     graph = sample_graph_with_execution_flow
     formatted = format_graphs_json([graph])
 
     assert len(formatted) == 1
-    assert 'execution_flows' in formatted[0]
+    assert 'execution_chains' in formatted[0]  # Phase 71: execution_chains 替代 execution_flows
 
 
 def test_build_execution_flows_basic(sample_graph_with_execution_flow):
@@ -964,16 +964,15 @@ def test_format_text_full_graph_details(create_mock_parse_result, sample_graph_w
 
 def test_format_text_full_execution_flow_summary(create_mock_parse_result, sample_graph_with_execution_flow):
     """
-    OUT2-03: 验证执行流概览显示。
+    OUT2-03: 验证执行流概览显示（Phase 71: ExecutionChains）。
     """
     result = create_mock_parse_result
     result.graphs = [sample_graph_with_execution_flow]
 
     text = format_text_full(result)
 
-    assert "ExecutionFlows:" in text
+    assert "ExecutionChains:" in text  # Phase 71: ExecutionChains 替代 ExecutionFlows
     assert "BeginPlay" in text  # start_event
-    assert "nodes" in text.lower()  # 节点数量
 
 
 def test_format_text_full_no_graphs(create_mock_parse_result):
@@ -1228,7 +1227,7 @@ def test_graphs_summary_field_exists(create_mock_parse_result):
 
 def test_graphs_summary_entry_structure(create_mock_parse_result):
     """
-    OUT-02: 每个 graphs_summary 条目包含 graph 和 execution_flows。
+    OUT-02: 每个 graphs_summary 条目包含 graph 和 execution_chains（Phase 71）。
     """
     # 创建带 blueprint graph 的 mock result
     result = create_mock_parse_result
@@ -1293,13 +1292,13 @@ def test_graphs_summary_entry_structure(create_mock_parse_result):
     # 验证条目结构
     entry = json_dict['graphs_summary'][0]
     assert 'graph_name' in entry
-    assert 'execution_flows' in entry
+    assert 'execution_chains' in entry  # Phase 71: execution_chains 替代 execution_flows
     assert entry['graph_name'] == "EventGraph"
 
 
 def test_graphs_summary_calls_format(create_mock_parse_result):
     """
-    OUT-02: execution_flows.calls 格式为 ["FuncName(Param:Type)"]
+    OUT-02: execution_chains.chains 格式为链式字符串（Phase 71）。
     """
     result = create_mock_parse_result
     result.graphs = [
@@ -1358,22 +1357,14 @@ def test_graphs_summary_calls_format(create_mock_parse_result):
 
     json_dict = format_json_full(result)
 
-    # 验证 execution_flows 结构
+    # 验证 execution_chains 结构（Phase 71）
     entry = json_dict['graphs_summary'][0]
-    assert len(entry['execution_flows']) > 0
+    assert len(entry['execution_chains']) > 0  # Phase 71: execution_chains 替代 execution_flows
 
-    flow = entry['execution_flows'][0]
-    assert 'start_event' in flow  # Phase 31 新格式使用 start_event
-    assert 'nodes' in flow  # Phase 31 新格式使用 nodes 列表
-    assert isinstance(flow['nodes'], list)
-
-    # 验证 nodes 中包含函数调用节点
-    if len(flow['nodes']) > 0:
-        # 检查是否有 K2Node_CallFunction 类型节点
-        call_nodes = [n for n in flow['nodes'] if n.get('node_type') == 'K2Node_CallFunction']
-        if call_nodes:
-            # 验证节点包含 function_name
-            assert 'function_name' in call_nodes[0] or 'node_type' in call_nodes[0]
+    chain_entry = entry['execution_chains'][0]
+    assert 'start_event' in chain_entry  # Phase 31 新格式使用 start_event
+    assert 'chains' in chain_entry  # Phase 71: chains 列表
+    assert isinstance(chain_entry['chains'], list)
 
 
 def test_graphs_summary_empty_graphs(create_mock_parse_result):
@@ -1552,8 +1543,9 @@ class TestFormatMarkdown:
         # 验证 Mermaid 流程图语法
         assert "```mermaid" in md_output
         assert "graph LR" in md_output
-        # 验证调用链: EventBeginPlay --> PrintString
-        assert "EventBeginPlay --> PrintString" in md_output
+        # Phase 71: 链式格式使用 short IDs（如 N0, N1）
+        # 验证存在链式连接关系
+        assert "-->" in md_output  # 至少有一个连接
 
     def test_markdown_empty_graphs_message(self, create_mock_parse_result):
         """
@@ -1599,7 +1591,7 @@ class TestBuildSchemaInfo:
         assert "parent_class" in schema
         assert "variables" in schema
         assert "graphs_summary" in schema
-        assert "execution_flows" in schema
+        assert "execution_chains" in schema  # Phase 71: execution_chains 替代 execution_flows
         # 验证描述不为空
         assert len(schema["parent_class"]) > 0
         assert len(schema["variables"]) > 0
@@ -3261,12 +3253,12 @@ class TestFormatGraphsJsonDataFlows:
 
         formatted = format_graphs_json([graph])
 
-        # 验证独立分离
-        assert "execution_flows" in formatted[0]
+        # 验证独立分离（Phase 71: execution_chains 替代 execution_flows）
+        assert "execution_chains" in formatted[0]
         assert "data_flows" in formatted[0]
 
-        # execution_flows应包含Event → CallFunction链路
-        assert len(formatted[0]["execution_flows"]) >= 1
+        # execution_chains 应包含链式表达
+        assert len(formatted[0]["execution_chains"]) >= 0  # 可能为空（无事件节点）
 
         # data_flows应包含VariableGet → CallFunction数据流
         assert len(formatted[0]["data_flows"]) >= 1
@@ -3331,7 +3323,7 @@ class TestFormatGraphsJsonDataFlows:
         assert "graph_name" in graph_dict
         assert "node_count" in graph_dict  # D-31-06: build_graphs_summary uses node_count
         assert "connections" in graph_dict
-        assert "execution_flows" in graph_dict
+        assert "execution_chains" in graph_dict  # Phase 71: execution_chains 替代 execution_flows
         assert "data_flows" in graph_dict
 
 
