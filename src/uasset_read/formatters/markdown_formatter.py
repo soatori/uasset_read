@@ -2,6 +2,7 @@
 
 等价迁移 uasset_read_legacy.py L7574-7667。
 Phase 32: 输出格式化模块。
+Phase 71: 执行流链式表达适配（Mermaid 从 chains 解析）。
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
 
 from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
-from uasset_read.graph import build_graphs_summary
+from uasset_read.graph import build_graphs_summary, build_execution_chains
 from .helpers import build_status_info
 
 
@@ -22,7 +23,7 @@ def _escape_md_cell(text: str) -> str:
 
 def format_markdown(result: ParseResult) -> str:
     """
-    Markdown 输出（D-14-10~12, OUT-04）。
+    Markdown 输出（D-14-10~12, OUT-04, Phase 71）。
 
     三节结构 + 表格优先 + Mermaid 流程图。
 
@@ -75,10 +76,10 @@ def format_markdown(result: ParseResult) -> str:
             graph_name = graph_summary.get("graph_name", "Unknown")
             lines.append(f"### {graph_name}")
 
-            # Mermaid 流程图
-            flows = graph_summary.get("execution_flows", [])
-            if flows:
-                mermaid_lines = _build_mermaid_flowchart(flows)
+            # Mermaid 流程图（Phase 71: 从 execution_chains 解析）
+            chains = graph_summary.get("execution_chains", [])
+            if chains:
+                mermaid_lines = _build_mermaid_flowchart_from_chains(chains)
                 if mermaid_lines:
                     lines.append("```mermaid")
                     lines.append("graph LR")
@@ -110,9 +111,45 @@ def format_markdown(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+def _build_mermaid_flowchart_from_chains(execution_chains: List[Dict]) -> List[str]:
+    """从 execution_chains 生成 Mermaid graph LR 代码（Phase 71）。
+
+    Args:
+        execution_chains: build_execution_chains() 的返回值
+
+    Returns:
+        List[str]: Mermaid 行列表（不含 ``` 围栏和 graph LR 头）
+    """
+    mermaid_lines: List[str] = []
+
+    for chain_entry in execution_chains:
+        start_event = chain_entry.get("start_event", "Unknown")
+        chains = chain_entry.get("chains", [])
+
+        for chain_str in chains:
+            # Parse chain string: "N1->N2->N3"
+            nodes = chain_str.split("->")
+            if not nodes:
+                continue
+
+            # First node connects from start_event
+            first_node = nodes[0]
+            mermaid_lines.append(f"{start_event} --> {first_node}")
+
+            # Connect remaining nodes
+            for i in range(len(nodes) - 1):
+                n1 = nodes[i]
+                n2 = nodes[i + 1]
+                mermaid_lines.append(f"{n1} --> {n2}")
+
+    return mermaid_lines
+
+
 def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
     """
-    从 execution_flows 生成 Mermaid graph LR 代码（D-06, D-07）。
+    从 execution_flows 生成 Mermaid graph LR 代码（D-06, D-07, deprecated）。
+
+    已弃用，保留向后兼容。Phase 71 使用 _build_mermaid_flowchart_from_chains。
 
     Args:
         execution_flows: build_execution_flows() 的返回值
@@ -135,13 +172,13 @@ def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
         calls = []
         for node in nodes:
             node_type = node.get("node_type", "")
-            
+
             # 适配新版格式: 从 node_type 提取节点名（去掉 K2Node_ 前缀）
             if node_type:
                 node_name = node_type.replace("K2Node_", "") if node_type.startswith("K2Node_") else node_type
             else:
                 node_name = "Unknown"
-            
+
             # 如果有 function_name（旧格式兼容），优先使用
             func_name = node.get("function_name")
             if func_name:

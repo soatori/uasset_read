@@ -675,17 +675,28 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
     Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
+    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
         List[Dict]: execution_flows 数组
+
+    Note:
+        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
     """
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
@@ -764,7 +775,7 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
 
 
 def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
-    """构建所有图的摘要（OUT-03, D-19-09）。
+    """构建所有图的摘要（OUT-03, D-19-09, Phase 71）。
 
     Args:
         graphs: List[UEdGraph] 图列表
@@ -772,14 +783,19 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: graphs_summary 数组
     """
+    from .chain_builder import build_execution_chains
+
     summaries: List[Dict] = []
 
     for graph in graphs:
         # 图类型映射
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
-        # 执行流构建
+        # 执行流构建（用于 chain_builder）
         execution_flows = build_execution_flows(graph)
+
+        # 执行流链式表达（Phase 71）
+        execution_chains = build_execution_chains(graph, execution_flows)
 
         # 连接映射构建
         connections, warnings = build_connections_map(graph)
@@ -787,15 +803,15 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         # 数据流构建（D-19-09）
         data_flows = build_data_flows(graph)
 
-        # 过滤空 flow（EnhancedInputAction Started/Ongoing 可能无实际连接）
-        non_empty_flows = [f for f in execution_flows if f.get("nodes")]
+        # 过滤空 chain（无实际连接的 flow）
+        non_empty_chains = [c for c in execution_chains if c.get("chains")]
 
         summaries.append({
             "graph_name": graph.graph_name,
             "graph_type": graph_type,
             "node_count": len(graph.nodes),
             "schema": graph.schema,
-            "execution_flows": non_empty_flows,
+            "execution_chains": non_empty_chains,  # Phase 71: 链式表达替代 execution_flows
             "connections": connections,
             "data_flows": data_flows,  # D-19-09: 数据流与执行流独立分离
             "warnings": warnings if warnings else None,
@@ -805,15 +821,16 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
-    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
+    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04, Phase 71）。
 
     等价迁移 uasset_read_legacy.py L6685-6735。
 
     Per D-08-03: connections 放在 graph 层级
-    Per D-08-09: execution_flows 数组
+    Per D-08-09: execution_flows 数组（Phase 71: 改为 execution_chains）
     Per D-19-09: data_flows 数组（LINK-03）
     Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
     Per OUT-01: nodes 使用 format_node_dict 格式化
+    Per Phase 71: execution_chains 链式表达替代 execution_flows
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -821,6 +838,8 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: 每个 graph 的 JSON 表示
     """
+    from .chain_builder import build_execution_chains
+
     formatted = []
     for graph in graphs:
         # 图类型映射
@@ -832,6 +851,9 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建执行流
         execution_flows = build_execution_flows(graph)
 
+        # 构建执行流链式表达（Phase 71）
+        execution_chains = build_execution_chains(graph, execution_flows)
+
         # 构建数据流
         data_flows = build_data_flows(graph)
 
@@ -841,7 +863,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
             "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
             "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01: 完整节点列表
             "connections": connections,
-            "execution_flows": execution_flows,
+            "execution_chains": execution_chains,  # Phase 71: 链式表达替代 execution_flows
             "data_flows": data_flows,
         }
 
