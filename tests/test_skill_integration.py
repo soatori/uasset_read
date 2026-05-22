@@ -173,23 +173,20 @@ class TestOutputInterpretation:
         else:
             pytest.skip("测试资产不可用")
 
-    def test_execution_flows_contains_function_name(self):
-        """验证execution_flows的nodes包含function_name"""
+    def test_execution_chains_contains_chain_string(self):
+        """验证execution_chains的chains包含链式字符串（Phase 71）"""
         if TEST_ASSET_PATH is not None:
             result = parse_uasset(str(TEST_ASSET_PATH))
             output = format_json_summary(result)
 
             for flow in output["graphs_summary"]:
-                for exec_flow in flow["execution_flows"]:
-                    # execution_flows 结构: {"start_event": "...", "nodes": [...]}
-                    # function_name 在 nodes 数组内的每个节点
-                    nodes = exec_flow.get("nodes", [])
-                    if nodes:
-                        # 检查 CallFunction 节点有 function_name
-                        for node in nodes:
-                            if node.get("node_type") == "K2Node_CallFunction":
-                                assert "function_name" in node, "CallFunction节点缺少function_name"
-                                assert node["function_name"] != "", "function_name为空"
+                for chain_entry in flow.get("execution_chains", []):
+                    # execution_chains 结构: {"start_event": "...", "chains": [...], "has_cycle": bool}
+                    chains = chain_entry.get("chains", [])
+                    if chains:
+                        # 检查 chains 列表中有链式字符串
+                        for chain_str in chains:
+                            assert "->" in chain_str or chain_str.startswith("N"), f"链式字符串格式错误: {chain_str}"
         else:
             pytest.skip("测试资产不可用")
 
