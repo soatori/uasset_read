@@ -10,6 +10,7 @@ from uasset_read.n2c.processor_base import N2CNodeProcessor
 from uasset_read.n2c.processor_registry import N2CProcessorRegistry
 from uasset_read.n2c.schema import N2CStruct, N2CGraph, N2CNode, N2CPin
 from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
+from uasset_read.n2c.validation import N2C_JSON_SCHEMA, validate_n2c_json
 
 __all__ = [
     "N2CNodeDefinition",
@@ -23,4 +24,6 @@ __all__ = [
     "N2CNode",
     "N2CPin",
     "N2CIdMapper",
+    "N2C_JSON_SCHEMA",
+    "validate_n2c_json",
 ]
