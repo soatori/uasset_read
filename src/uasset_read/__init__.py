@@ -182,7 +182,7 @@ from .blueprint import (
     extract_blueprint_metadata,
 )
 
-# 图解析模块（Phase 31 Wave 3）
+# 图解析模块（Phase 31 Wave 3, Phase 71）
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flows,
@@ -190,6 +190,8 @@ from .graph import (
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    build_execution_chains,  # Phase 71
+    build_execution_chains_from_flows,  # Phase 71 (N2C compat)
 )
 
 # 格式化模块（Phase 32 Wave 1-2）
@@ -446,12 +448,14 @@ __all__ = [
     # 主解析管线（Phase 33）
     "parse_uasset",
     "parse_uasset_with_linker",
-    # 图解析辅助函数（Phase 33 — 依赖 Phase 31）
+    # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
     "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
     "build_graphs_summary",
+    "build_execution_chains",  # Phase 71
+    "build_execution_chains_from_flows",  # Phase 71
     # 格式化函数（Phase 33 — 依赖 Phase 32）
     "format_json_full",
     "format_json_summary",
