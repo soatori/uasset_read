@@ -10,7 +10,7 @@
 | v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
 | **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
-| **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 计划中 | 待启动 |
+| **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
 | **v13.0+** | **可选增强：多语言 / 参考注入 / Knot 追踪 / 深度控制** | 待定 | 讨论中 |
 
 历史详情：`.planning/archive/`
@@ -192,33 +192,30 @@ else:
 
 **双向序列化:** `to_n2c_json()` / `from_n2c_json()` 确保可逆转换
 
-### Phase 71: 执行流链式表达
+### Phase 71: 执行流链式表达 ✅
 
 **目标:** 将现有的 `execution_flow` 数组（逐对连接）改为 N2C 风格的链式字符串。
 
-**现有格式:**
-```json
-"execution_flow": [
-  {"from": "node_uuid_1", "to": "node_uuid_2"},
-  {"from": "node_uuid_2", "to": "node_uuid_3"}
-]
-```
+**完成日期:** 2026-05-22
 
-**N2C 格式:**
-```json
-"execution": ["N1->N2->N3"]
-```
+**交付物:**
+- `build_execution_chains()` API (`graph/chain_builder.py`)
+- JSON 输出 `execution_flows` → `execution_chains` 字段替换
+- 所有 formatters 适配链式格式
+- `build_execution_flows()` deprecated warning
+- 1290 tests passed
+
+**格式对比:**
+
+| 旧格式 | 新格式 |
+|-------|--------|
+| `{"from": "N1", "to": "N2"}, {"from": "N2", "to": "N3"}` | `"N1->N2->N3"` |
 
 **优势:**
 - 完整链路一目了然（人类可读 + LLM 易理解）
 - Token 用量减少 40-60%
 - 天然表达分支合并（`N1->N2, N1->N3`）
 - 与 N2CStruct Schema 兼容
-
-**实现:**
-- 从现有的 execution_flow 图数据中通过 DFS/BFS 提取线性链
-- 分支点拆分为多条链（Branch: `N1->N2`, `N1->N3`）
-- 作为 N2CStruct 输出的一部分，不替代现有格式（向后兼容）
 
 ---
 
