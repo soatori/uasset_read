@@ -292,6 +292,7 @@ from .agent.writer import CppFileWriter, write_cpp_class_files
 from .n2c import (
     N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
     to_n2c_json, from_n2c_json,
+    N2C_JSON_SCHEMA, validate_n2c_json,
 )
 
 # 以下函数等待后续 plan 完成后追加：
@@ -548,4 +549,6 @@ __all__ = [
     "N2CIdMapper",
     "to_n2c_json",
     "from_n2c_json",
+    "N2C_JSON_SCHEMA",
+    "validate_n2c_json",
 ]
