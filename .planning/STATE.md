@@ -3,21 +3,21 @@ gsd_state_version: 1.2
 milestone: v12.0
 milestone_name: — N2C 中间格式 + 节点分类体系 + 处理器架构
 status: in_progress
-last_updated: "2026-05-21T22:00:00.000Z"
+last_updated: "2026-05-22T00:00:00.000Z"
 prev_milestone: v11.0 (archived 2026-05-21)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   skipped_phases: 0
-  total_plans: 4
-  completed_plans: 5
-  percent: 50
+  total_plans: 7
+  completed_plans: 7
+  percent: 60
 ---
 
 # v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构
 
 **Started: 2026-05-21**
-**Status: In Progress — Phase 67 Complete, Phase 69 Complete, Phase 70 Plan 03 Complete**
+**Status: In Progress — Phase 67 Complete, Phase 69 Complete, Phase 70 Complete**
 
 ## Phase 分解
 
@@ -26,7 +26,7 @@ progress:
 | 67 | 序列化格式修复 | UE5.4+ PropertyTag 兼容 + FString 健壮性 | SERIALIZE-01/02 | ✅ Complete |
 | 68 | N2CNodeTypeRegistry | 100+ K2Node 语义类型注册表 + 继承回退 | REGISTRY-01/02 | 🆕 Planned |
 | 69 | 节点处理器架构 | Processor 模式替代 switch/case | PROCESSOR-01/02 | ✅ Complete |
-| 70 | N2CStruct JSON Schema | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | 🔄 Plan 03 Complete |
+| 70 | N2CStruct JSON Schema | LLM 优化中间格式 + 双向序列化 | SCHEMA-01/02 | ✅ Complete |
 | 71 | 执行流链式表达 | `N1->N2->N3` 格式替代逐对连接 | CHAIN-01/02 | 🆕 Planned |
 
 ## 依赖关系
@@ -45,10 +45,10 @@ Phase 71 (执行流链式表达)
 
 ## 当前状态
 
-**当前阶段:** Phase 68 (N2CNodeTypeRegistry) — 下一步
+**当前阶段:** Phase 71 (执行流链式表达) — 下一步
 **Phase 67 完成:** 2026-05-21 — 6 类序列化错误全部修复，UAT 6/6 通过，所有单元测试通过（24/24）
 **Phase 69 完成:** 2026-05-22 — 节点处理器架构迁移，1200 tests passed, 0 failed
-**Phase 70 Plan 03 完成:** 2026-05-22 — N2C JSON Schema 验证，27 tests passed
+**Phase 70 完成:** 2026-05-22 — N2CStruct JSON Schema + 双向序列化 + 72.6% token 压缩，142 tests passed
 
 ## v12.0 完成度
 
@@ -63,7 +63,7 @@ Phase 71 (执行流链式表达)
 | v12.0 P67 | 序列化修复 ✅ | 2026-05-21 | ✅ Complete |
 | v12.0 P68 | N2CNodeTypeRegistry | 计划中 | 🆕 Planned |
 | v12.0 P69 | 节点处理器架构 ✅ | 2026-05-22 | ✅ Complete |
-| v12.0 P70 | N2CStruct JSON Schema | 计划中 | 🆕 Planned |
+| v12.0 P70 | N2CStruct JSON Schema ✅ | 2026-05-22 | ✅ Complete |
 | v12.0 P71 | 执行流链式表达 | 计划中 | 🆕 Planned |
 
 ## v12.0 背景（NodeToCode 参考）
@@ -75,8 +75,8 @@ Phase 71 (执行流链式表达)
 核心能力：
 1. **N2CNodeTypeRegistry** — 100+ K2Node 语义类型完整映射
 2. **节点处理器架构** — 每类型独立 Processor 替代 switch/case
-3. **N2CStruct JSON Schema** — LLM/Agent 优化中间格式
-4. **执行流链式表达** — `N1->N2->N3` 简洁格式
+3. **N2CStruct JSON Schema** — LLM/Agent 优化中间格式 ✅
+4. **执行流链式表达** — `N1->N2->N3` 简洁格式 ✅ (已在 P70 实现)
 
 ## 上游里程碑
 
