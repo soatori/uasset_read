@@ -33,8 +33,10 @@ def to_n2c_json(
     Returns:
         dict: N2CStruct 兼容 dict（version, metadata, graphs, structs, enums）
     """
-    # Ensure registry initialized
-    register_all_processors()
+    # Ensure registry initialized (idempotent)
+    registry = N2CProcessorRegistry.get_instance()
+    if not registry._processors or registry._fallback is None:
+        register_all_processors()
 
     # Resolve graph list
     if graphs is None:

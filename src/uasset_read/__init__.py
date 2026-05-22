@@ -288,6 +288,12 @@ from .kismet.pipeline import decompile_uasset
 from .agent.translator import AgentTranslationPipeline, translate_blueprint_to_cpp
 from .agent.writer import CppFileWriter, write_cpp_class_files
 
+# N2C intermediate format (Phase 70)
+from .n2c import (
+    N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
+    to_n2c_json, from_n2c_json,
+)
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -534,4 +540,12 @@ __all__ = [
     "translate_blueprint_to_cpp",
     "CppFileWriter",
     "write_cpp_class_files",
+    # N2C intermediate format (Phase 70)
+    "N2CStruct",
+    "N2CGraph",
+    "N2CNode",
+    "N2CPin",
+    "N2CIdMapper",
+    "to_n2c_json",
+    "from_n2c_json",
 ]
