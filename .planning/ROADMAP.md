@@ -63,7 +63,7 @@
 
 **验证：** 重新解析 `BP_FirstPersonCharacter.uasset`，上述 6 类错误清零（或降级为 warning 不影响后续属性读取）。
 
-### Phase 68: N2CNodeTypeRegistry — K2Node 语义类型注册表
+### Phase 68: N2CNodeTypeRegistry — 126 种 K2Node 语义类型注册表 ✅
 
 **目标:** 建立完整的 K2Node 类 → 语义类型映射表，覆盖 UE 引擎全部 100+ 种 K2Node。
 
