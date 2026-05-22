@@ -675,17 +675,28 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
     Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
+    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
         List[Dict]: execution_flows 数组
+
+    Note:
+        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
     """
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
