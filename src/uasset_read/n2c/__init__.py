@@ -4,9 +4,11 @@
 再通过 Processor 模式分发到具体处理器。
 """
 from uasset_read.n2c.definitions import N2CNodeDefinition
+from uasset_read.n2c.id_mapper import N2CIdMapper
 from uasset_read.n2c.node_types import N2CNodeType
 from uasset_read.n2c.processor_base import N2CNodeProcessor
 from uasset_read.n2c.processor_registry import N2CProcessorRegistry
+from uasset_read.n2c.schema import N2CStruct, N2CGraph, N2CNode, N2CPin
 from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
 
 __all__ = [
@@ -15,4 +17,10 @@ __all__ = [
     "N2CProcessorRegistry",
     "N2CNodeType",
     "N2CNodeTypeRegistry",  # Phase 68 新增
+    # Phase 70 新增
+    "N2CStruct",
+    "N2CGraph",
+    "N2CNode",
+    "N2CPin",
+    "N2CIdMapper",
 ]
