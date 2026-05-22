@@ -11,6 +11,8 @@ from uasset_read.n2c.processor_registry import N2CProcessorRegistry
 from uasset_read.n2c.schema import N2CStruct, N2CGraph, N2CNode, N2CPin
 from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
 from uasset_read.n2c.validation import N2C_JSON_SCHEMA, validate_n2c_json
+from uasset_read.n2c.serializer import to_n2c_json, from_n2c_json, _estimate_token_count
+from uasset_read.n2c.flow_extractor import extract_chains, extract_data_flow_map
 
 __all__ = [
     "N2CNodeDefinition",
@@ -26,4 +28,9 @@ __all__ = [
     "N2CIdMapper",
     "N2C_JSON_SCHEMA",
     "validate_n2c_json",
+    "to_n2c_json",
+    "from_n2c_json",
+    "extract_chains",
+    "extract_data_flow_map",
+    "_estimate_token_count",
 ]
