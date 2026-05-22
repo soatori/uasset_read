@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class FunctionEntryProcessor(N2CNodeProcessor):
     """处理 FunctionEntry 类型节点。
 
-    提取函数引用（member_name, member_parent）。
+    提取函数引用（member_name, member_parent, b_self_context）。
     """
 
     @property
@@ -41,8 +41,12 @@ class FunctionEntryProcessor(N2CNodeProcessor):
                 definition.extra_data["member_name"] = ref["member_name"]
             if "member_parent" in ref:
                 definition.extra_data["member_parent"] = ref["member_parent"]
+            if "b_self_context" in ref:
+                definition.extra_data["b_self_context"] = ref["b_self_context"]
         else:
             if hasattr(ref, "member_name"):
                 definition.extra_data["member_name"] = ref.member_name
             if hasattr(ref, "member_parent"):
                 definition.extra_data["member_parent"] = ref.member_parent
+            if hasattr(ref, "b_self_context"):
+                definition.extra_data["b_self_context"] = ref.b_self_context

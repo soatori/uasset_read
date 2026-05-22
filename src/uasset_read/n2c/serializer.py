@@ -4,6 +4,7 @@
 以及从 N2CStruct dict 重建 dataclass 实例（from_n2c_json）。
 
 Phase 70 Wave 2 输出。
+Phase 71: 链提取逻辑迁移到 graph/chain_builder。
 """
 from __future__ import annotations
 
@@ -15,7 +16,9 @@ from uasset_read.n2c.id_mapper import N2CIdMapper
 from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
 from uasset_read.n2c.processors import register_all_processors
 from uasset_read.n2c.processor_registry import N2CProcessorRegistry
-from uasset_read.n2c.flow_extractor import extract_chains, extract_data_flow_map
+# Phase 71: 链提取逻辑迁移到 graph/chain_builder
+from uasset_read.graph.chain_builder import build_execution_chains_from_flows
+from uasset_read.n2c.flow_extractor import extract_data_flow_map
 
 
 def to_n2c_json(
@@ -189,7 +192,7 @@ def to_n2c_json(
         data_flows_raw = build_data_flows(graph)
 
         # Convert execution flows to chains
-        exec_chains = extract_chains(execution_flows_raw, id_mapper, {})
+        exec_chains = build_execution_chains_from_flows(execution_flows_raw, id_mapper, {})
 
         # Convert data flows to compact map
         data_map = extract_data_flow_map(
