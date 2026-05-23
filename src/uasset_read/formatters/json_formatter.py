@@ -162,15 +162,21 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
     if depth > max_depth:
         return "[deep nesting truncated]"
 
-    if value is None or isinstance(value, (str, int, float, bool, list, dict)):
+    if value is None or isinstance(value, (str, int, float, bool)):
         return value
 
-    if hasattr(value, "struct_type") and hasattr(value, "fields"):  # StructValue
+    if isinstance(value, dict):
+        return {k: serialize_property_value(v, depth + 1, max_depth) for k, v in value.items()}
+
+    if isinstance(value, list):
+        return [serialize_property_value(item, depth + 1, max_depth) for item in value]
+
+    if isinstance(value, StructValue):
         return {
             "struct_type": value.struct_type,
             "fields": {k: serialize_property_value(v, depth + 1, max_depth) for k, v in value.fields.items()}
         }
-    if hasattr(value, "entries") and hasattr(value, "key_type"):  # MapValue
+    if isinstance(value, MapValue):
         return {
             "key_type": value.key_type,
             "value_type": value.value_type,
@@ -182,23 +188,23 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
                 for entry in value.entries
             ]
         }
-    if hasattr(value, "elements") and hasattr(value, "element_type"):  # SetValue
+    if isinstance(value, SetValue):
         return {
             "element_type": value.element_type,
             "elements": [serialize_property_value(elem, depth + 1, max_depth) for elem in value.elements]
         }
-    if hasattr(value, "value_name"):  # EnumValue
+    if isinstance(value, EnumValue):
         return {
             "enum_type": value.enum_type,
             "value": value.value_name
         }
-    if hasattr(value, "source_string"):  # TextValue
+    if isinstance(value, TextValue):
         return {
             "namespace": value.namespace,
             "key": value.key,
             "source_string": value.source_string
         }
-    if hasattr(value, "function_name"):  # DelegateValue
+    if isinstance(value, DelegateValue):
         return {
             "object_ref": value.object_ref,
             "function_name": value.function_name
