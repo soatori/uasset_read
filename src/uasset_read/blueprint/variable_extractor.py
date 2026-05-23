@@ -334,6 +334,8 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
 
     遍历图列表，查找 K2Node_FunctionEntry 节点，从 node_data 和 pins 提取函数签名。
     """
+    if not graphs:
+        return []
     functions: List[BlueprintFunction] = []
     for graph in graphs:
         for node in getattr(graph, 'nodes', []):
@@ -355,10 +357,10 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                     pin_dir = getattr(pin, 'direction', '')
                     pin_type_obj = getattr(pin, 'pin_type', None)
                     pin_type_name = ""
-                    if pin_type_obj and hasattr(pin_type_obj, 'category'):
-                        pin_type_name = getattr(pin_type_obj, 'category', '') or ""
+                    if pin_type_obj and hasattr(pin_type_obj, 'pin_category'):
+                        pin_type_name = getattr(pin_type_obj, 'pin_category', '') or ""
                     elif isinstance(pin_type_obj, dict):
-                        pin_type_name = pin_type_obj.get("category", "")
+                        pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
 
                     if pin_dir == "EGPD_Output" and pin_type_name:
                         if return_type == "":

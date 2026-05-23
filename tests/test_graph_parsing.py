@@ -593,7 +593,7 @@ class TestPhase72EBlueprintFunctions:
     def test_extract_functions_from_graphs_with_function_entry(self):
         """_extract_functions_from_graphs 能从 K2Node_FunctionEntry 提取函数"""
         from uasset_read.blueprint.variable_extractor import _extract_functions_from_graphs
-        from uasset_read.models.graph import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType
+        from uasset_read import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType
 
         # 创建模拟 FunctionEntry 节点
         func_entry_node = UEdGraphNode(
@@ -605,14 +605,16 @@ class TestPhase72EBlueprintFunctions:
         )
         # 添加一个输出 pin 模拟返回值
         output_pin = UEdGraphPin(
+            pin_id="test_pin_1",
             pin_name="ReturnValue",
             direction="EGPD_Output",
-            pin_type=FEdGraphPinType(category="Float"),
+            pin_type=FEdGraphPinType(pin_category="Float"),
         )
         func_entry_node.pins.append(output_pin)
 
         test_graph = UEdGraph(
             graph_name="TestGraph",
+            graph_class="EdGraph",
             nodes=[func_entry_node],
         )
 
@@ -623,7 +625,7 @@ class TestPhase72EBlueprintFunctions:
     def test_extract_functions_from_graphs_empty_when_no_function_entry(self):
         """_extract_functions_from_graphs 在没有 FunctionEntry 节点时返回空列表"""
         from uasset_read.blueprint.variable_extractor import _extract_functions_from_graphs
-        from uasset_read.models.graph import UEdGraph, UEdGraphNode
+        from uasset_read import UEdGraph, UEdGraphNode
 
         regular_node = UEdGraphNode(
             node_guid="test_guid",
@@ -631,6 +633,7 @@ class TestPhase72EBlueprintFunctions:
         )
         test_graph = UEdGraph(
             graph_name="TestGraph",
+            graph_class="EdGraph",
             nodes=[regular_node],
         )
 
