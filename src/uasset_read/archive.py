@@ -231,7 +231,7 @@ class FArchive:
         return struct.unpack(fmt + 'd', self.read(8))[0]
 
     def read_fstring(self) -> str:
-        """读取 UE FString（带长度前缀的字符串，null-terminated）。"""
+        """读取 UE FString（带长度前缀的字符串）。"""
         length = self.read_i32()
         if length == 0:
             return ""
@@ -240,20 +240,28 @@ class FArchive:
             if utf16_len > MAX_FSTRING_LENGTH:
                 raise ParseError(f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(utf16_len)
+            # 先检查 null_ratio（在 rstrip 之前）
+            null_ratio = data.count(b'\x00') / max(len(data), 1)
+            if null_ratio > 0.3:
+                self._logger.warning(
+                    "UTF-16 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
+                    self.tell() - length, null_ratio * 100
+                )
+                return ""
             result = data.decode('utf-16', errors='replace').rstrip('\x00')
         else:
             if length > MAX_FSTRING_LENGTH:
                 raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(length)
+            # 先检查 null_ratio（在 rstrip 之前）
+            null_ratio = data.count(b'\x00') / max(len(data), 1)
+            if null_ratio > 0.3:
+                self._logger.warning(
+                    "UTF-8 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
+                    self.tell() - length, null_ratio * 100
+                )
+                return ""
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
-
-        # 检查内部 null 字节（末尾 null 已被 rstrip 移除）
-        if '\x00' in result:
-            self._logger.warning(
-                "FString at pos %d contains internal null bytes — likely binary, returning empty",
-                self.tell() - abs(length)
-            )
-            return ""
 
         return result
 
@@ -266,6 +274,12 @@ class FArchive:
             if number > 0:
                 return f"{base_name}_{number}"
             return base_name
+        # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
+        # 添加日志帮助诊断索引越界问题
+        self._logger.debug(
+            "read_name: index %d out of range (name_map len=%d) at pos %d",
+            index, len(name_map), self.tell() - 8
+        )
         return "None"
 
 

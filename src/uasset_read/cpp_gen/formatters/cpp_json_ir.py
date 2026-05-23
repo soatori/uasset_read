@@ -183,8 +183,6 @@ class CppMethodIR:
         is_override: True 表示 K2Node_Event 的 bOverrideFunction
         is_const: const 方法修饰符（Phase 58 上下文，默认 False）
         source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
-        body: Phase 58 函数体语句（结构化 IR）
-        body_text: Phase 66 Kismet 反编译函数体文本（原始 C++ 伪代码）
     """
     cpp_name: str
     return_type: str
@@ -194,10 +192,9 @@ class CppMethodIR:
     is_const: bool = False
     source_node_type: str = ""
     body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
-    body_text: Optional[str] = None  # Phase 66: Kismet 反编译函数体文本 (D-66-03)
 
     def to_dict(self) -> Dict[str, Any]:
-        result = {
+        return {
             "cpp_name": self.cpp_name,
             "return_type": self.return_type,
             "parameters": [p.to_dict() for p in self.parameters],
@@ -207,9 +204,6 @@ class CppMethodIR:
             "source_node_type": self.source_node_type,
             "body": [s.to_dict() for s in self.body],
         }
-        if self.body_text is not None:
-            result["body_text"] = self.body_text
-        return result
 
 
 @dataclass

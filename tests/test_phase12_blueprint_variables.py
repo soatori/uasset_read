@@ -366,13 +366,12 @@ class TestBlueprintGeneratedClassIdentification:
         )
 
         # Create mock import map with BlueprintGeneratedClass
-        # Phase 72-C fix: check object_name, not class_name
         import_map = [
             ObjectImport(
                 class_package="/Script/CoreUObject",
-                class_name="Class",  # BPGC imports have class_name="Class"
+                class_name="BlueprintGeneratedClass",
                 outer_index=PackageIndex(0),
-                object_name="BlueprintGeneratedClass"  # object_name contains "BlueprintGeneratedClass"
+                object_name="Test_C"
             )
         ]
 
@@ -408,9 +407,9 @@ class TestBlueprintGeneratedClassIdentification:
         import_map = [
             ObjectImport(
                 class_package="/Script/CoreUObject",
-                class_name="Class",  # BPGC imports have class_name="Class"
+                class_name="BlueprintGeneratedClass",
                 outer_index=PackageIndex(0),
-                object_name="BlueprintGeneratedClass"  # object_name contains "BlueprintGeneratedClass"
+                object_name="BP_Test_C"
             )
         ]
 
