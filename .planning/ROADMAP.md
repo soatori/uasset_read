@@ -322,13 +322,13 @@ else:
 
 **问题清单:**
 
-| # | 问题 | 严重度 | 历史修复记录 | 当前状态 |
-|---|------|--------|-------------|---------|
-| 1 | **Complex StructProperty 解析失败** | 🔴 High | Phase 67 修复 PropertyTag 格式 → 仍失败 | `RelativeLocation`/`RelativeRotation`/`BodyInstance` 因尺寸异常/偏移错误导致字段无法提取 |
-| 2 | **Pin 连接映射输出为空 (Connections=0)** | 🔴 High | Phase 72-B 修复序列化 bug → 仍未输出 | EventGraph 中节点间的数据流和执行流连接未被提取 |
-| 3 | **Blueprint.functions 列表为空** | ⚠️ Medium | 从未修复 | Move/Aim 等自定义函数未在 Blueprint 元数据中提取 |
-| 4 | **函数参数信息缺失** | ⚠️ Medium | 从未修复 | DoMove(float, float) 等函数的参数类型和默认值无法获取 |
-| 5 | **EnhancedInputComponent BindAction 不可见** | ℹ️ Low | 设计限制 | 运行时绑定逻辑不在未烘焙资产序列化数据中 |
+| ID | # | 问题 | 严重度 | 历史修复记录 | 当前状态 |
+|----|---|------|--------|-------------|---------|
+| **M-01** | 1 | **Complex StructProperty 解析失败** | 🔴 High | Phase 67 修复 PropertyTag 格式 → 仍失败 | `RelativeLocation`/`RelativeRotation`/`BodyInstance` 因尺寸异常/偏移错误导致字段无法提取 |
+| **M-02** | 2 | **Pin 连接映射输出为空 (Connections=0)** | 🔴 High | Phase 72-B 修复序列化 bug → 仍未输出 | EventGraph 中节点间的数据流和执行流连接未被提取 |
+| **M-03** | 3 | **Blueprint.functions 列表为空** | ⚠️ Medium | 从未修复 | Move/Aim 等自定义函数未在 Blueprint 元数据中提取 |
+| **M-04** | 4 | **函数参数信息缺失** | ⚠️ Medium | 从未修复 | DoMove(float, float) 等函数的参数类型和默认值无法获取 |
+| — | 5 | **EnhancedInputComponent BindAction 不可见** | ℹ️ Low | 设计限制 | 运行时绑定逻辑不在未烘焙资产序列化数据中 |
 
 **根因分析:**
 
