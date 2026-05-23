@@ -378,7 +378,8 @@ def read_ue_graph_pin(
     ftext_start_pos = archive.tell()
     try:
         flags = archive.read_i32()
-        history_type = archive.read_u8()
+        history_type_raw = archive.read_u8()
+        history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
         read_ftext_with_history(archive, history_type, tolerant=True)
     except Exception:
         archive.seek(ftext_start_pos)
@@ -430,7 +431,8 @@ def read_ue_graph_pin(
     # Siehe read_ftext_with_history() fuer history_type Verarbeitung
     try:
         _dtv_flags = archive.read_i32()
-        _dtv_history = archive.read_u8()
+        _dtv_history_raw = archive.read_u8()
+        _dtv_history = _dtv_history_raw - 256 if _dtv_history_raw >= 128 else _dtv_history_raw
         _dtv_value, _dtv_consumed = read_ftext_with_history(
             archive, _dtv_history,
             tolerant=True,
@@ -456,26 +458,31 @@ def read_ue_graph_pin(
         # 同上，不尝试恢复
         sub_pins = []
 
-    # 15. ParentPin — UE5: always 24 bytes (b_null + owning + guid)
+    # 15. ParentPin — UE5: null!=0 → 8B (null+owning), null==0 → 24B (+guid)
     _pp_null = archive.read_i32()
     _pp_owning = archive.read_i32()
-    _pp_guid_bytes = archive.read_bytes(16)
-    _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
-    parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
-    if linker is not None and _pp_null == 0 and _pp_owning != 0:
-        pkg_idx = PackageIndex(_pp_owning)
-        if not pkg_idx.is_null:
-            parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
+    if _pp_null != 0:
+        parent_pin = None
+    else:
+        _pp_guid_bytes = archive.read_bytes(16)
+        _pp_guid = _pp_guid_bytes.hex().upper()
+        parent_pin = {"owning_node": None, "pin_guid": _pp_guid}
+        if linker is not None and _pp_owning != 0:
+            pkg_idx = PackageIndex(_pp_owning)
+            if not pkg_idx.is_null:
+                parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
 
-    # 16. ReferencePassThroughConnection — UE5: always 24 bytes
+    # 16. ReferencePassThroughConnection — same conditional pattern as ParentPin
     ref_pass_through: Optional[dict] = None
     _ref_null = archive.read_i32()
     _ref_owning = archive.read_i32()
-    if _ref_null == 0:
+    if _ref_null != 0:
+        pass  # null marker only, no GUID
+    else:
         _ref_guid_bytes = archive.read_bytes(16)
         _ref_guid = _ref_guid_bytes.hex().upper()
         ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid}
-        if linker is not None and _ref_null == 0 and _ref_owning != 0:
+        if linker is not None and _ref_owning != 0:
             pkg_idx = PackageIndex(_ref_owning)
             if not pkg_idx.is_null:
                 ref_pass_through["owning_node_object"] = linker.resolve_package_index(pkg_idx)
