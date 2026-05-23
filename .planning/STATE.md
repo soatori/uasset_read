@@ -3,21 +3,21 @@ gsd_state_version: 1.2
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 status: active
-last_updated: "2026-05-23T19:00:00.000Z"
+last_updated: "2026-05-23T20:00:00.000Z"
 prev_milestone: v12.0 (archived 2026-05-22)
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 4
   skipped_phases: 0
-  total_plans: 4
+  total_plans: 5
   completed_plans: 4
-  percent: 83
+  percent: 75
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G 🔴 插入中
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 🔴 插入中
 
 ## Phase 分解
 
@@ -27,7 +27,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 72-F ✅ → 所有插入修复完成
+**当前阶段:** Phase 72-H 🔴 计划已创建，待执行
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -143,6 +143,22 @@ progress:
 
 **目标:** 解析覆盖率从 ~56% 提升至 >90%
 
+### Phase 72-H: FString 容错 + LinkedTo 恢复 + StructValue JSON 递归序列化 (INSERTED)
+
+**插入日期:** 2026-05-23
+
+**状态:** 🔴 Planned — 计划已创建，待执行
+
+**三个核心问题:**
+
+| # | 问题 | 文件 | 优先级 |
+|---|------|------|--------|
+| 1 | FString 内部 null 字节导致偏移错位 | `archive.py` read_fstring() | P0 |
+| 2 | LinkedTo 数组 count 异常崩溃 | `serializers/graph.py` read_pin_array() | P2 |
+| 3 | StructValue JSON 序列化崩溃 | `formatters/json_formatter.py` serialize_property_value() | P1 |
+
+**执行计划:** `.planning/phases/phase-72h/PLAN.md`
+
 
 ## 测试统计
 
@@ -163,16 +179,18 @@ progress:
 | Phase 72-D FString/FName 区分 | 35 处空字符串误报 (Phase 51 warning only) | Medium — future iteration |
 | Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
 | Phase 72-F BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
+| Phase 72-H FString/LinkedTo/JSON 修复 | BP_FirstPersonCharacter 解析阻断 | High — 本次插入 |
 | Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
 
 ## 下一步行动
 
-1. **Phase 72-UAT 归档:** ✅ 完成 — 报告已创建 `phases/phase-72/72-UAT.md`
-2. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
-3. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
-4. **Phase 72-E (INSERTED):** EventGraph 节点解析修复 — 基于三方对比报告插入的紧急修复
-5. **Phase 72-F (INSERTED):** BPGC 缓存隔离修复 — 审计发现的阻塞级集成缺陷
+1. **Phase 72-H 执行:** 修复 FString 容错、LinkedTo 恢复、StructValue JSON 序列化
+2. **Phase 72-UAT 归档:** ✅ 完成 — 报告已创建 `phases/phase-72/72-UAT.md`
+3. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
+4. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
+5. **Phase 72-E (INSERTED):** EventGraph 节点解析修复 — 基于三方对比报告插入的紧急修复
+6. **Phase 72-F (INSERTED):** BPGC 缓存隔离修复 — 审计发现的阻塞级集成缺陷
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-G inserted: 反复失败的 StructProperty + Pin 连接问题)*
+*Updated: 2026-05-23 (Phase 72-H inserted: FString 容错 + LinkedTo 恢复 + StructValue JSON 递归序列化)*
