@@ -248,30 +248,18 @@ def read_ftext_with_history(
             # Other types (OrderedFormat=2, ArgumentFormat=3, AsNumber=4, etc.)
             # 这些类型有各自的复杂结构，无法简单跳过
             # 参考 Text.cpp L965-1037 的其他 history types
-            # Tolerant mode: 不尝试跳过，直接返回（由调用者处理）
+            # Tolerant mode: 不消费字节，seek 回起点
             if not tolerant:
                 raise ParseError(f"Unsupported FText history_type={history_type}")
-            # tolerant: 不消费字节，返回当前位置
+            # Phase 73 Wave 1: tolerant 模式下不猜测跳过，seek 回起点
+            archive.seek(start_pos)
     except Exception as e:
         if tolerant:
-            logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)
-            # Fallback: 根据类型保守跳过（带边界检查）
-            try:
-                if history_type == -1:
-                    target_pos = start_pos + 9
-                elif history_type == 0:
-                    target_pos = start_pos + 12  # 3 个最小 FString (len=0, 各 4 bytes)
-                elif history_type == 1:
-                    target_pos = start_pos + 20  # FormatText(9) + count(4) + 保守
-                else:
-                    # 不尝试跳过未知类型，保持当前位置
-                    target_pos = start_pos
-                # 边界检查：确保不超出文件末尾
-                if target_pos <= archive.file_size:
-                    archive.seek(target_pos)
-            except Exception:
-                # 如果 seek 也失败，保持在当前位置
-                pass
+            logger.debug("FText tolerant mode: history_type=%s, error=%s, seeking back to %d",
+                         history_type, e, start_pos)
+            # Phase 73 Wave 1: 失败时 seek 回起点，不猜测跳过
+            # 由调用者决定是否跳过或尝试其他恢复策略
+            archive.seek(start_pos)
         else:
             raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
 
@@ -282,6 +270,61 @@ def read_ftext_with_history(
 # ============================================================================
 # Pin 引用辅助函数
 # ============================================================================
+
+def peek_valid_pin_array_count(
+    archive: FArchive,
+    export_map: List[ObjectExport],
+    max_count: int = 20,
+) -> Optional[int]:
+    """Phase 73 Wave 1: 不移动指针，检查当前位置是否是有效的 LinkedTo 数组。
+
+    只读取 i32 count，验证范围 0..max_count，检查后续数据是否符合 PinReference 结构。
+    如果有效返回 count；否则返回 None。
+
+    用途：在 FText 失败后判断当前位置是否已经是 LinkedTo 数组。
+    """
+    import struct
+
+    current_pos = archive.tell()
+
+    # 读取 4 字节 count（不移动指针）
+    if current_pos + 4 > archive._file_size:
+        return None
+
+    archive.seek(current_pos)
+    count_bytes = archive.read(4)
+    count = struct.unpack('<i', count_bytes)[0]
+
+    # 验证 count 范围
+    if count < 0 or count > max_count:
+        archive.seek(current_pos)  # 恢复位置
+        return None
+
+    # 如果 count == 0，检查后续是否有 SubPins 数组结构
+    # (count=0 后面应该是 SubPins count 或其他 Pin 字段)
+    # 简化：count=0 总是有效的
+    if count == 0:
+        archive.seek(current_pos)
+        return 0
+
+    # count > 0：检查第一个 PinReference header
+    # PinReference header: b_null (i32) + owning_node (i32) + pin_guid (16 bytes)
+    if current_pos + 4 + 4 > archive._file_size:
+        archive.seek(current_pos)
+        return None
+
+    b_null_bytes = archive.read(4)
+    b_null = struct.unpack('<i', b_null_bytes)[0]
+
+    archive.seek(current_pos)  # 恢复位置
+
+    # b_null == 0: 正常 PinReference
+    # b_null != 0: 空引用（但 count > 0 意味着有内容，所以 b_null 应该是 0）
+    if b_null == 0:
+        return count
+    else:
+        return None
+
 
 def read_pin_reference(
     archive: FArchive,
@@ -661,15 +704,25 @@ def read_ue_graph_pin(
             archive, _dtv_history,
             tolerant=True,
         )
-        if trace_mode:
-            _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
-                         f"flags={_dtv_flags},htype={_dtv_history}")
+        # Phase 73 Wave 1: 检查是否 seek 回了起点（说明 FText 失败）
+        if archive.tell() == _dtv_start + 5:  # 只消费了 flags + htype，说明 body 失败
+            # FText body 失败，seek 回整个 DefaultTextValue 起点
+            archive.seek(_dtv_start)
+            if trace_mode:
+                _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
+                             is_exception=True, is_fallback=True)
+        else:
+            if trace_mode:
+                _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
+                             f"flags={_dtv_flags},htype={_dtv_history}")
     except Exception as e:
+        # Phase 73 Wave 1: 失败时 seek 回起点
+        archive.seek(_dtv_start)
         if trace_mode:
             _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
-                         is_exception=True)
-        # Extrem tolerant: Falls FText-Lesen fehlschlaegt, DefaultTextValue ignorieren
-        pass
+                         is_exception=True, is_fallback=True)
+        logger.debug("DefaultTextValue read failed at pos %d, seeking back: %s",
+                     _dtv_start, e)
 
     # 13. LinkedTo array — Phase 73 关键诊断点
     linkedto_start = archive.tell()
