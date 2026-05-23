@@ -90,13 +90,15 @@ class TestContainsBinaryData:
         assert _contains_binary_data("a") is False  # 0% null
 
 
-class TestFStringNullRatioDetection:
-    """测试 read_fstring() 的 null-termination 验证（Phase 72-D 更新）。"""
+class TestFStringInternalNullDetection:
+    """测试 read_fstring() 的内部 null 字节检测（Phase 72-D 修复后）。"""
 
     def test_read_fstring_with_nulls(self, tmp_path):
-        """读取包含尾部 null 字符的 FString — 尾部 null 被 strip，返回有效内容。"""
+        """读取包含大量 null 字符的 FString."""
+        # 创建测试文件
         test_file = tmp_path / "test.uasset"
-        # "abc\x00\x00\x00" — 尾部 null 被 rstrip 移除
+        # 写入: length(4) + "abc\x00\x00\x00" (75% null, 6 chars)
+        # length = 6 (positive for UTF-8)
         data = b'\x06\x00\x00\x00abc\x00\x00\x00'
         test_file.write_bytes(data)
 
@@ -104,7 +106,7 @@ class TestFStringNullRatioDetection:
         result = archive.read_fstring()
         archive._file.close()
 
-        # Phase 72-D: 尾部 null 被 strip，返回 "abc"（不再有 null_ratio 误杀）
+        # 末尾 null 被 rstrip 移除，应返回 "abc"（不再误杀短字符串）
         assert result == "abc"
     
     def test_read_fstring_clean(self, tmp_path):
@@ -148,10 +150,13 @@ class TestFStringNullRatioDetection:
         assert result == ""
     
     def test_read_fstring_utf16_with_nulls(self, tmp_path):
-        """读取 UTF-16 FString 包含尾部 null 字节 — 尾部 null 被 strip。"""
+        """读取 UTF-16 FString 包含大量 null 字节."""
         test_file = tmp_path / "test.uasset"
-        # UTF-16: length = -8 (8 chars), 8 * 2 = 16 bytes
-        # 8 UTF-16 chars: 'a', 'b', 'c', 'd', null, null, null, null → "abcd" after rstrip
+        # 写入: length(4) = -8 (UTF-16, 4 chars), "a\x00b\x00c\x00d\x00\x00\x00\x00\x00"
+        # UTF-16 中每个字符占 2 字节，所以 length = -8 意味着 16 bytes data
+        # "a\x00b\x00c\x00d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" = 16 bytes
+        # 其中前8 bytes是4个有效字符 "abcd"，后8 bytes是null填充（二进制数据）
+        # null_ratio = 8/16 = 50% > 30%
         data = b'\xf8\xff\xff\xff' + b'a\x00b\x00c\x00d\x00\x00\x00\x00\x00\x00\x00\x00\x00'
         test_file.write_bytes(data)
 
@@ -159,7 +164,7 @@ class TestFStringNullRatioDetection:
         result = archive.read_fstring()
         archive._file.close()
 
-        # Phase 72-D: 尾部 null 被 strip，返回 "abcd"
+        # 末尾 null 被 rstrip 移除，应返回 "abcd"
         assert result == "abcd"
 
 

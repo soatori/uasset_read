@@ -247,7 +247,7 @@ class FArchive:
             data = self.read(length)
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
 
-        # Check for internal null bytes (trailing nulls already stripped by rstrip)
+        # 检查内部 null 字节（末尾 null 已被 rstrip 移除）
         if '\x00' in result:
             self._logger.warning(
                 "FString at pos %d contains internal null bytes — likely binary, returning empty",
