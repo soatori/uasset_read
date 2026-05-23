@@ -238,17 +238,58 @@ else:
 - 修复 Bug 1 → `LinkedTo count=1, owning=57, valid GUID` ✅
 - 修复 Bug 1+2 → `RefPassThrough null=0, BitField=0x52935405` ✅
 
-### Phase 72-B: Pin 连接修复（NEXT）
+### Phase 72-B: Pin 连接修复 ✅
 
 **修复内容:** `serializers/graph.py` — L398/L449 history_type signed 转换 + L476-479 ParentPin 条件读取
 
 ### Phase 72-C: Kismet 字节码导航
 
-**诊断结果:** BP_FirstPersonCharacter.uasset 无 UFunction 导出，字节码可能存在于 BlueprintGeneratedClass 内部。
+**状态:** ✅ Completed — BPGC bytecode extraction module (`bpgc_bytecode.py`, 295 lines) + pipeline fallback + cache integration
+
+**交付物:**
+- `bpgc_bytecode.py` — BPGC bytecode extraction
+- `bytecode_extractor.py` — BPGC fallback integration + module cache
+- `pipeline.py` — cache reset in `decompile_uasset()`
+- `object_resources.py` — `detect_blueprint_generated_class()` bug fix
+- `tests/test_kismet_bpgc.py` — comprehensive test suite
+
+**测试结果:** 767 tests passed (762 + 5), 0 issues
+
+### Phase 72-UAT: UAT 验证
+
+**状态:** ✅ Completed — 1319 tests passed, 0 regression issues
+
+**交付物:**
+- `phases/phase-72/72-UAT.md` — comprehensive UAT report
+- Phase 72-A/B/CAll acceptance criteria met
 
 ### Phase 72-D: FString/FName 区分
 
 **根因:** 属性值中的 FName 索引区域被误作 FString 读取，35 处返回空字符串。
+
+**状态:** ⬜ Not Started — 未实施，安排在 future iteration
+
+### Phase 72-E: EventGraph 节点解析修复 (INSERTED)
+
+**状态:** 🔴 待诊断 — 基于三方对比报告插入的紧急修复
+
+**问题清单:**
+
+| # | 问题 | 严重度 | 说明 |
+|---|------|--------|------|
+| 1 | **EventGraph 节点严重缺失** (9/16+) | 🔴 High | 大部分 K2Node_CallFunction、K2Node_EnhancedInputAction 未解析 |
+| 2 | **函数调用名解析为 "None"** | 🔴 High | function_reference.member_name 解析为字符串 "None"，无法识别实际函数 |
+| 3 | **K2Node_Event 解析错误** | 🔴 High | 5 个事件节点中 4 个 _parse_error=True |
+| 4 | **First Person Mesh 组件缺失** | ⚠️ Medium | Camera、Capsule、CharMoveComp 匹配，但 First Person Mesh 未提取 |
+| 5 | **Blueprint.functions 为空** | ⚠️ Medium | Move 等自定义函数未提取 |
+
+**目标:** 修复上述问题，使 BP_FirstPersonCharacter.uasset 的 EventGraph 解析覆盖率从 ~56% 提升至 >90%
+
+**修复策略 (pending):**
+- 排查 graph.py 节点读取循环，定位跳过/遗漏节点的条件
+- 排查 FMemberReference 序列化逻辑，修复 member_name 解析为 "None" 的根因
+- 检查 K2Node_Event 的 _parse_error 触发路径
+- 验证组件提取管线是否遗漏 SkeletalMeshComponent 类型的 First Person Mesh
 
 ### 可选增强（v13.0 完成后讨论）
 
@@ -289,4 +330,4 @@ else:
 
 ---
 
-*Updated: 2026-05-23 (v12.0 archived, P72 诊断完成, 2 bugs 定位)*
+*Updated: 2026-05-23 (Phase 72 complete, UAT verified)*

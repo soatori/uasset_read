@@ -73,3 +73,5 @@ temp/
 
 # Qwen Code project documentation (IMPORTANT: Do not commit to version control)
 QWEN.md
+
+references/*

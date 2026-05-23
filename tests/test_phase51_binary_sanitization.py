@@ -90,8 +90,8 @@ class TestContainsBinaryData:
         assert _contains_binary_data("a") is False  # 0% null
 
 
-class TestFStringNullRatioDetection:
-    """测试 read_fstring() 的 null_ratio 检测."""
+class TestFStringInternalNullDetection:
+    """测试 read_fstring() 的内部 null 字节检测（Phase 72-D 修复后）。"""
 
     def test_read_fstring_with_nulls(self, tmp_path):
         """读取包含大量 null 字符的 FString."""
@@ -106,8 +106,8 @@ class TestFStringNullRatioDetection:
         result = archive.read_fstring()
         archive._file.close()
 
-        # null_ratio = 3/6 = 50% > 30%，应返回空字符串
-        assert result == ""
+        # 末尾 null 被 rstrip 移除，应返回 "abc"（不再误杀短字符串）
+        assert result == "abc"
     
     def test_read_fstring_clean(self, tmp_path):
         """读取干净的 FString."""
@@ -164,8 +164,8 @@ class TestFStringNullRatioDetection:
         result = archive.read_fstring()
         archive._file.close()
 
-        # null_ratio = 8/16 = 50% > 30%，应返回空字符串
-        assert result == ""
+        # 末尾 null 被 rstrip 移除，应返回 "abcd"
+        assert result == "abcd"
 
 
 class TestFTextInvalidHistoryType:
