@@ -244,7 +244,24 @@ else:
 
 ### Phase 72-C: Kismet 字节码导航
 
-**诊断结果:** BP_FirstPersonCharacter.uasset 无 UFunction 导出，字节码可能存在于 BlueprintGeneratedClass 内部。
+**状态:** ✅ Completed — BPGC bytecode extraction module (`bpgc_bytecode.py`, 295 lines) + pipeline fallback + cache integration
+
+**交付物:**
+- `bpgc_bytecode.py` — BPGC bytecode extraction
+- `bytecode_extractor.py` — BPGC fallback integration + module cache
+- `pipeline.py` — cache reset in `decompile_uasset()`
+- `object_resources.py` — `detect_blueprint_generated_class()` bug fix
+- `tests/test_kismet_bpgc.py` — comprehensive test suite
+
+**测试结果:** 767 tests passed (762 + 5), 0 issues
+
+### Phase 72-UAT: UAT 验证
+
+**状态:** ✅ Completed — 1319 tests passed, 0 regression issues
+
+**交付物:**
+- `phases/phase-72/72-UAT.md` — comprehensive UAT report
+- Phase 72-A/B/CAll acceptance criteria met
 
 ### Phase 72-D: FString/FName 区分
 
@@ -289,4 +306,4 @@ else:
 
 ---
 
-*Updated: 2026-05-23 (v12.0 archived, P72 诊断完成, 2 bugs 定位)*
+*Updated: 2026-05-23 (Phase 72 complete, UAT verified)*
