@@ -329,6 +329,49 @@ def _extract_mobility(value: Any) -> str:
     return str(value) if value is not None else "Static"
 
 
+def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[BlueprintFunction]:
+    """Primary path: Extract functions from BPGC export properties.
+
+    Looks for UbergraphFunction and FunctionList properties in BPGC exports.
+    These are FPackageIndex references that resolve to function names.
+    """
+    functions: List[BlueprintFunction] = []
+    for prop in properties:
+        prop_name = getattr(prop, 'name', '')
+        if prop_name == "UbergraphFunction":
+            func_name = _resolve_property_to_function_name(prop.value)
+            if func_name:
+                functions.append(BlueprintFunction(name=func_name))
+        elif prop_name == "FunctionList" and isinstance(prop.value, (list, tuple)):
+            for item in prop.value:
+                func_name = _resolve_property_to_function_name(item)
+                if func_name:
+                    functions.append(BlueprintFunction(name=func_name))
+    return functions
+
+
+def _resolve_property_to_function_name(value: Any) -> Optional[str]:
+    """Resolve a property value to a function name string."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value and value != "None":
+        # UE path format: /Game/Path/To/PackageName.ClassName
+        # First extract after last '/', then after last '.'
+        raw = value.split('/')[-1] if '/' in value else value
+        return raw.split('.')[-1] if '.' in raw else raw
+    if isinstance(value, dict):
+        obj_name = value.get('object_name') or value.get('resolved') or value.get('raw_index')
+        if obj_name and obj_name != "None":
+            raw = str(obj_name)
+            return raw.split('.')[-1] if '.' in raw else raw
+    if hasattr(value, 'object_name'):
+        name = getattr(value, 'object_name', None)
+        if name and name != "None":
+            raw = str(name)
+            return raw.split('.')[-1] if '.' in raw else raw
+    return None
+
+
 def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
     """从 EventGraph 的 K2Node_FunctionEntry 节点提取函数元数据（Fallback 路径）。
 
@@ -362,10 +405,17 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                     elif isinstance(pin_type_obj, dict):
                         pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
 
-                    if pin_dir == "EGPD_Output" and pin_type_name:
+                    if isinstance(pin_dir, int):
+                        is_output = pin_dir == 1
+                        is_input = pin_dir == 0
+                    else:
+                        is_output = pin_dir == "EGPD_Output"
+                        is_input = pin_dir == "EGPD_Input"
+
+                    if is_output and pin_type_name:
                         if return_type == "":
                             return_type = pin_type_name
-                    elif pin_dir == "EGPD_Input" and pin_type_name:
+                    elif is_input and pin_type_name:
                         # 跳过执行流 pin（exec）
                         if pin_type_name.lower() == "exec":
                             continue
@@ -485,8 +535,16 @@ def extract_blueprint_metadata(
         if parent_name:
             parent_class = parent_name
 
-    # 从 EventGraph 的 K2Node_FunctionEntry 节点提取函数元数据（fallback 路径）
-    functions = _extract_functions_from_graphs(graphs) if graphs else []
+    # Phase 72g M-03: Merge primary BPGC path + fallback graph path
+    functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
+    functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
+    # Deduplicate by name
+    seen_names = set()
+    functions: List[BlueprintFunction] = []
+    for func in functions_bpgc + functions_graph:
+        if func.name not in seen_names:
+            seen_names.add(func.name)
+            functions.append(func)
     events = [f for f in functions if f.is_blueprint_implementable_event]
 
     meta = BlueprintMetadata(

@@ -231,29 +231,79 @@ class FArchive:
         return struct.unpack(fmt + 'd', self.read(8))[0]
 
     def read_fstring(self) -> str:
-        """读取 UE FString（带长度前缀的字符串，null-terminated）。"""
+        """读取 UE FString（带长度前缀的字符串，null-terminated）。
+
+        Phase 72-I Wave 2: 增加边界防卫和指针回退。失败时 seek 回入口位置，
+        避免偏移错位级联到后续字段。
+        """
+        pos_before = self.tell()
         length = self.read_i32()
         if length == 0:
             return ""
+
         if length < 0:
             utf16_len = -length * 2
             if utf16_len > MAX_FSTRING_LENGTH:
-                raise ParseError(f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}")
+                self.seek(pos_before)
+                raise ParseError(
+                    f"UTF-16 string at pos {pos_before}: length {utf16_len} exceeds "
+                    f"maximum {MAX_FSTRING_LENGTH}"
+                )
+            if pos_before + 4 + utf16_len > self._file_size:
+                self.seek(pos_before)
+                raise ParseError(
+                    f"UTF-16 string at pos {pos_before}: expected {utf16_len} bytes "
+                    f"but only {self._file_size - pos_before - 4} remain"
+                )
             data = self.read(utf16_len)
             result = data.decode('utf-16', errors='replace').rstrip('\x00')
+            # UTF-16 null terminator (\\x00\\x00) is legal — rstrip handles it.
+            # Internal single nulls between valid chars are unusual but not fatal.
         else:
             if length > MAX_FSTRING_LENGTH:
-                raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
+                self.seek(pos_before)
+                raise ParseError(
+                    f"UTF-8 string at pos {pos_before}: length {length} exceeds "
+                    f"maximum {MAX_FSTRING_LENGTH}"
+                )
+            if pos_before + 4 + length > self._file_size:
+                self.seek(pos_before)
+                raise ParseError(
+                    f"UTF-8 string at pos {pos_before}: expected {length} bytes "
+                    f"but only {self._file_size - pos_before - 4} remain"
+                )
             data = self.read(length)
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
 
-        # 检查内部 null 字节（末尾 null 已被 rstrip 移除）
-        if '\x00' in result:
-            self._logger.warning(
-                "FString at pos %d contains internal null bytes — likely binary, returning empty",
-                self.tell() - abs(length)
-            )
-            return ""
+            # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
+            # Phase 72-I Wave 3: Improved handling — truncate at first null rather than
+            # returning empty string, to preserve data and avoid position errors in Pin parsing
+            if '\x00' in result:
+                null_count = result.count('\x00')
+                first_null_idx = result.index('\x00')
+                preview = result[:80] if len(result) > 80 else result
+                
+                if first_null_idx > 0:
+                    # Has real content before first null — truncate and continue
+                    truncated = result[:first_null_idx]
+                    self._logger.warning(
+                        "FString at pos %d: length=%d, encoding=UTF-8, "
+                        "truncated at null (null_at=%d, nulls_total=%d), "
+                        "truncated_value=%r, preview_orig=%r, hex=%s, "
+                        "consumed=%d bytes, end_pos=%d",
+                        pos_before, length, first_null_idx, null_count,
+                        truncated, preview, data[:32].hex(), len(data), self.tell()
+                    )
+                    return truncated
+                else:
+                    # All nulls from start — cannot recover, return empty
+                    self._logger.error(
+                        "FString at pos %d: length=%d, encoding=UTF-8, "
+                        "all nulls (completely corrupted), "
+                        "hex=%s, consumed=%d bytes, end_pos=%d",
+                        pos_before, length, data[:32].hex(), len(data), self.tell()
+                    )
+                    return ""
 
         return result
 

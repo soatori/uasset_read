@@ -45,13 +45,29 @@ def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
     return bool(tag.bool_val)
 
 
-def parse_int_property(tag: PropertyTag, archive: FArchive) -> int:
+def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> Any:
     """解析 IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty（PROP-02）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FArchive& operator<<(int32&) 等实现
+
+    ByteProperty 特殊处理：
+    - 无 enum backing：读取 1 byte
+    - 有 enum backing (tag.enum_type)：读取 FName (8 bytes)，返回 EnumValue
+
+    参考 CUE4Parse ByteProperty/EnumProperty 处理逻辑：
+    ByteProperty with enum_type → EnumProperty → ReadFName()
     """
     type_name = tag.type
+
+    # ByteProperty with enum backing: read FName (8 bytes) per CUE4Parse
+    if type_name == "ByteProperty" and tag.enum_type is not None:
+        if name_map is None:
+            raise ParseError("ByteProperty with enum backing requires name_map")
+        enum_value_name = archive.read_name(name_map)
+        value_name = f"{tag.enum_type}::{enum_value_name}"
+        return EnumValue(
+            enum_type=tag.enum_type,
+            value_name=value_name
+        )
+
     if type_name == "Int64Property":
         return archive.read_i64()
     elif type_name == "Int16Property":
@@ -139,11 +155,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
 
 
 def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
-    """解析 StructProperty（ADVP-01, GAP-03）。
-
-    UE5 format: Struct type is identified from PropertyTag.type string.
-    Format: "StructProperty(/Script/CoreUObject.Vector)" or "StructProperty(Vector)"
-    """
+    """解析 StructProperty（ADVP-01）。"""
     MAX_DEPTH = 5
 
     if depth > MAX_DEPTH:
@@ -152,6 +164,26 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+
+    # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
+    # These structs have no PropertyTags loop — just raw float reads.
+    if struct_type == "Vector":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
+
+    if struct_type == "Rotator":
+        pitch = archive.read_f32()
+        yaw = archive.read_f32()
+        roll = archive.read_f32()
+        return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
+
+    if struct_type == "Vector2D":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
+
     fields: Dict[str, Any] = {}
     property_count = 0
 
@@ -238,11 +270,37 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
 
 
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
-    """解析 TextProperty（ADVP-05）。"""
-    flags = archive.read_i32()  # consume but not used
-    namespace = archive.read_fstring()
-    key = archive.read_fstring()
-    source_string = archive.read_fstring()
+    """解析 TextProperty（ADVP-05）。
+
+    UE FText 序列化格式:
+      - flags: i32 (4 bytes)
+      - history_type: u8 (1 byte) — FTextHistory 类型标识
+      - body: 根据 history_type 不同而不同
+        - history_type == 0 (Base): namespace(FString) + key(FString) + source_string(FString)
+        - history_type == 1 (NamedString): namespace(FString) + key(FString)
+        - 其他: 跳过剩余数据
+    """
+    flags = archive.read_i32()       # FText flags
+    history_type = archive.read_u8() # FTextHistory type
+
+    if history_type == 0:
+        # Base text: namespace + key + source_string
+        namespace = archive.read_fstring()
+        key = archive.read_fstring()
+        source_string = archive.read_fstring()
+    elif history_type == 1:
+        # NamedString: namespace + key (no source_string)
+        namespace = archive.read_fstring()
+        key = archive.read_fstring()
+        source_string = ""
+    else:
+        # Unknown history type: skip remaining data
+        remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
+        if remaining > 0:
+            archive.read(remaining)
+        namespace = ""
+        key = ""
+        source_string = ""
 
     return TextValue(
         namespace=namespace or "",
@@ -267,22 +325,16 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 def _get_inner_type(array_type: str) -> str:
-    """从 ArrayProperty 类型名推断内部元素类型（GAP-03）。
+    """从 ArrayProperty 类型名推断内部元素类型。
 
     支持基本的类型映射，从 UE5 完整类型名格式（如 ArrayProperty(IntProperty)）
     或带下划线的类型名推断内部类型。
-
-    GAP-03: Handles nested type strings like "ArrayProperty(StructProperty(Vector(...)))".
     """
     # 尝试从括号格式提取：ArrayProperty(IntProperty) -> IntProperty
     if "(" in array_type and ")" in array_type:
         start = array_type.find("(")
-        end = array_type.rfind(")")  # 使用 rfind 处理嵌套括号
+        end = array_type.find(")")
         inner = array_type[start + 1:end].strip()
-        # 如果 inner 本身有括号，说明是嵌套类型，提取最外层
-        # 例如: "StructProperty(Vector(/Script/CoreUObject))" -> "StructProperty"
-        if "(" in inner:
-            return inner.split("(")[0]
         # 处理带路径的类型：/Script/CoreUObject.IntProperty -> IntProperty
         if "." in inner:
             inner = inner.split(".")[-1]
@@ -308,117 +360,59 @@ def _get_inner_type(array_type: str) -> str:
 
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取结构体类型名（D-08, GAP-03）。
-
-    UE5 格式（递归构建后）:
-    - "StructProperty(Vector(/Script/CoreUObject))" → "Vector"
-    - "StructProperty(Vector)" → "Vector"
-    - "StructProperty(/Script/CoreUObject.Vector)" → "Vector" (旧格式兼容)
-
-    Args:
-        tag: PropertyTag 实例
-
-    Returns:
-        Struct 类型名（如 "Vector", "Rotator"），或 "UnknownStruct"
-    """
+    """从 PropertyTag 提取结构体类型名（D-08）。"""
     type_str = tag.type
 
-    # 必须以 "StructProperty" 开头
-    if not type_str.startswith("StructProperty"):
-        return "UnknownStruct"
-
-    # 格式: "StructProperty(...)"
-    if "(" in type_str and ")" in type_str:
+    if "(" in type_str:
         start = type_str.find("(")
-        end = type_str.rfind(")")  # 使用 rfind 处理嵌套括号
+        end = type_str.find(")")
         if start != -1 and end != -1:
-            inner = type_str[start + 1:end]
-
-            # 新格式: "Vector(/Script/CoreUObject)" → 提取第一个部分
-            # 格式: TypeName(Namespace) 或 Namespace.TypeName
-            if "(" in inner:
-                # 嵌套格式: "Vector(/Script/CoreUObject)"
-                # 提取第一个节点名（struct 类型名）
-                inner_start = inner.find("(")
-                return inner[:inner_start]
-
-            # 检查是否为路径格式: "/Script/CoreUObject.Vector"
-            if "." in inner:
-                return inner.split(".")[-1]
-
-            # 简单格式: "Vector" 或其他类型名
-            return inner
+            struct_path = type_str[start + 1:end]
+            if "." in struct_path:
+                return struct_path.split(".")[-1]
+            return struct_path
 
     return "UnknownStruct"
 
 
 def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
-    """从 PropertyTag 提取 Map Key/Value 类型（D-08, GAP-03）。
-
-    GAP-03: Handles nested type strings like "MapProperty(IntProperty,StructProperty(Vector(...)))".
-    """
+    """从 PropertyTag 提取 Map Key/Value 类型（D-08）。"""
     type_str = tag.type
 
     if "(" in type_str:
         start = type_str.find("(")
-        end = type_str.rfind(")")  # 使用 rfind 处理嵌套括号
+        end = type_str.find(")")
         if start != -1 and end != -1:
             params = type_str[start + 1:end]
-            # 使用更智能的分割：找到第一个逗号，但要注意嵌套括号
-            # 例如: "IntProperty,StructProperty(Vector(...))" -> ["IntProperty", "StructProperty(Vector(...))"]
-            comma_pos = -1
-            paren_depth = 0
-            for i, c in enumerate(params):
-                if c == "(":
-                    paren_depth += 1
-                elif c == ")":
-                    paren_depth -= 1
-                elif c == "," and paren_depth == 0:
-                    comma_pos = i
-                    break
-
-            if comma_pos != -1:
-                key_type = params[:comma_pos].strip()
-                value_type = params[comma_pos + 1:].strip()
-                # 提取嵌套类型的基类型名
-                if "(" in key_type:
-                    key_type = key_type.split("(")[0]
-                if "(" in value_type:
-                    value_type = value_type.split("(")[0]
-                return key_type, value_type
+            parts = params.split(",", 1)  # split on first comma only (type names may contain commas)
+            if len(parts) >= 2:
+                return parts[0].strip(), parts[1].strip()
 
     return "IntProperty", "IntProperty"
 
 
 def _extract_set_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取 Set 元素类型（D-08, GAP-03）。"""
+    """从 PropertyTag 提取 Set 元素类型（D-08）。"""
     type_str = tag.type
 
     if "(" in type_str:
         start = type_str.find("(")
-        end = type_str.rfind(")")  # 使用 rfind 处理嵌套括号
+        end = type_str.find(")")
         if start != -1 and end != -1:
-            inner = type_str[start + 1:end].strip()
-            # 如果是嵌套类型，提取基类型名
-            if "(" in inner:
-                return inner.split("(")[0]
-            return inner
+            return type_str[start + 1:end].strip()
 
     return "IntProperty"
 
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取枚举类型名（D-08, GAP-03）。"""
+    """从 PropertyTag 提取枚举类型名（D-08）。"""
     type_str = tag.type
 
     if "(" in type_str:
         start = type_str.find("(")
-        end = type_str.rfind(")")  # 使用 rfind 处理嵌套括号
+        end = type_str.find(")")
         if start != -1 and end != -1:
             enum_path = type_str[start + 1:end]
-            # 如果是嵌套格式 "EnumName(/Script/...)" 提取 EnumName
-            if "(" in enum_path:
-                return enum_path.split("(")[0]
             if "." in enum_path:
                 return enum_path.split(".")[-1]
             return enum_path

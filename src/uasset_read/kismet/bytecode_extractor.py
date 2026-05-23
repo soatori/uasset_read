@@ -108,7 +108,7 @@ def extract_bytecode_bytes(
 
     # Skip PropertyTags until "None" (positions us at bytecode header)
     while True:
-        tag = read_property_tag(archive, name_map)
+        tag = read_property_tag(archive, name_map, summary=summary)
         if tag.name == "None":
             break
         archive.skip(tag.size)

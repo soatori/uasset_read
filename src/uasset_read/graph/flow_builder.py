@@ -651,6 +651,15 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     connections: List[Dict] = []
     warnings: List[str] = []
 
+    # Phase 72g M-02: Validate linked_to_raw is populated
+    linked_to_count = sum(
+        len(pin.linked_to_raw or [])
+        for node in graph.nodes
+        for pin in node.pins
+    )
+    if linked_to_count == 0:
+        warnings.append("WARNING: No LinkedTo data found — connections will be empty")
+
     for node in graph.nodes:
         for pin in node.pins:
             if pin.direction == 1:  # Output
