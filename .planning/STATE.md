@@ -17,7 +17,7 @@ progress:
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-UAT ✅, 72-D pending, 72-E inserted
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-UAT ✅, 72-D pending
 
 ## Phase 分解
 
@@ -42,7 +42,6 @@ progress:
 | v13.0 P72-C | Kismet 字节码导航 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-UAT | UAT 验证 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-D | FString/FName 区分 | 待执行 | ⬜ Not Started |
-| v13.0 P72-E | EventGraph 节点解析修复 | 插入中 | 🔴 Inserted |
 
 ## Phase 72 详细进度
 
@@ -101,17 +100,6 @@ progress:
 - 在 property value extractor 中添加 FName 专用解析路径
 - 更新 `serializers/property_types.py` `parse_struct_property()` 以处理 FName indices
 
-### Phase 72-E: EventGraph 节点解析修复
-
-**插入日期:** 2026-05-23
-
-**根因 (待诊断):**
-- EventGraph 节点读取循环存在跳过/遗漏条件
-- FMemberReference 序列化逻辑中 member_name 解析异常
-- K2Node_Event 解析路径存在未处理的边界情况
-
-**目标:** EventGraph 解析覆盖率从 ~56% 提升至 >90%
-
 ## 测试统计
 
 | Category | Count |
@@ -129,7 +117,6 @@ progress:
 | Gap | Impact | Priority |
 |-----|--------|----------|
 | Phase 72-D FString/FName 区分 | 35 处空字符串误报 (Phase 51 warning only) | Medium — future iteration |
-| Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
 | Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
 
 ## 下一步行动
@@ -137,7 +124,6 @@ progress:
 1. **Phase 72-UAT 归档:** ✅ 完成 — 报告已创建 `phases/phase-72/72-UAT.md`
 2. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
 3. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
-4. **Phase 72-E (INSERTED):** EventGraph 节点解析修复 — 基于三方对比报告插入的紧急修复
 
 ---
 
