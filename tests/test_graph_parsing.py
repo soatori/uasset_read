@@ -535,3 +535,111 @@ class TestImports:
         assert read_ue_graph_pin is not None
         assert read_ue_graph_node is not None
         assert read_ue_graph is not None
+
+
+# ============================================================================
+# Phase 72-E: EventGraph 节点解析修复测试
+# ============================================================================
+
+class TestPhase72EReadNameSentinel:
+    """72E-02: read_name() sentinel 值 — 索引越界时返回 "None" 字符串"""
+
+    def test_read_name_returns_none_string_on_invalid_index(self):
+        """read_name 在索引越界时返回字面字符串 "None"（PropertyTag 终止标记依赖）"""
+        import io
+        archive = FArchive.__new__(FArchive)
+        archive._byte_swapping = False
+        archive._file_size = 1000
+        archive._use_mmap = False
+        archive._tolerant = False
+        archive._logger = __import__('logging').getLogger(__name__)
+        archive._file = io.BytesIO(b'\xFF\x00\x00\x00\x00\x00\x00\x00')  # index=255, number=0
+        archive._mmap = None
+
+        name_map = ["ValidName", "AnotherName"]
+        result = archive.read_name(name_map)
+        assert result == "None", f"Expected literal 'None' string, got: {result}"
+
+    def test_read_name_returns_valid_name_on_valid_index(self):
+        """read_name 在有效索引时返回正确名称"""
+        import io
+        archive = FArchive.__new__(FArchive)
+        archive._byte_swapping = False
+        archive._file_size = 1000
+        archive._use_mmap = False
+        archive._tolerant = False
+        archive._logger = __import__('logging').getLogger(__name__)
+        archive._file = io.BytesIO(b'\x00\x00\x00\x00\x00\x00\x00\x00')  # index=0, number=0
+        archive._mmap = None
+
+        name_map = ["ValidName", "AnotherName"]
+        result = archive.read_name(name_map)
+        assert result == "ValidName"
+
+
+class TestPhase72ENodeCollectionFallback:
+    """72E-01: EventGraph 节点收集 fallback 增强"""
+
+    def test_fmember_reference_member_name_not_none_string(self):
+        """FMemberReference 的 member_name 不应是字面字符串 "None"（除非确实无效）"""
+        # FMemberReference 默认 member_name 是空字符串
+        ref = FMemberReference()
+        assert ref.member_name == "", f"Default member_name should be empty string, got: {ref.member_name}"
+
+
+class TestPhase72EBlueprintFunctions:
+    """72E-05: Blueprint.functions 从 EventGraph 提取"""
+
+    def test_extract_functions_from_graphs_with_function_entry(self):
+        """_extract_functions_from_graphs 能从 K2Node_FunctionEntry 提取函数"""
+        from uasset_read.blueprint.variable_extractor import _extract_functions_from_graphs
+        from uasset_read.models.graph import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType
+
+        # 创建模拟 FunctionEntry 节点
+        func_entry_node = UEdGraphNode(
+            node_guid="test_guid",
+            node_pos_x=0,
+            node_pos_y=0,
+            class_name="K2Node_FunctionEntry",
+            node_data={"function_reference": None, "custom_function_name": "TestFunction"},
+        )
+        # 添加一个输出 pin 模拟返回值
+        output_pin = UEdGraphPin(
+            pin_name="ReturnValue",
+            direction="EGPD_Output",
+            pin_type=FEdGraphPinType(category="Float"),
+        )
+        func_entry_node.pins.append(output_pin)
+
+        test_graph = UEdGraph(
+            graph_name="TestGraph",
+            nodes=[func_entry_node],
+        )
+
+        functions = _extract_functions_from_graphs([test_graph])
+        assert len(functions) > 0, "Expected at least one function from FunctionEntry node"
+        assert functions[0].name == "TestFunction"
+
+    def test_extract_functions_from_graphs_empty_when_no_function_entry(self):
+        """_extract_functions_from_graphs 在没有 FunctionEntry 节点时返回空列表"""
+        from uasset_read.blueprint.variable_extractor import _extract_functions_from_graphs
+        from uasset_read.models.graph import UEdGraph, UEdGraphNode
+
+        regular_node = UEdGraphNode(
+            node_guid="test_guid",
+            class_name="K2Node_CallFunction",
+        )
+        test_graph = UEdGraph(
+            graph_name="TestGraph",
+            nodes=[regular_node],
+        )
+
+        functions = _extract_functions_from_graphs([test_graph])
+        assert len(functions) == 0, "Expected no functions when no FunctionEntry nodes exist"
+
+    def test_extract_functions_from_graphs_handles_none_graphs(self):
+        """_extract_functions_from_graphs 能处理 None 输入"""
+        from uasset_read.blueprint.variable_extractor import _extract_functions_from_graphs
+
+        functions = _extract_functions_from_graphs(None)
+        assert functions == [], "Expected empty list for None input"
