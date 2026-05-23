@@ -20,7 +20,7 @@ __all__ = [
 
 
 def register_all_processors() -> None:
-    """批量注册所有处理器到全局注册表。"""
+    """批量注册所有处理器到全局注册表（幂等：跳过已注册的类型）。"""
     from uasset_read.n2c.processor_registry import N2CProcessorRegistry
 
     registry = N2CProcessorRegistry.get_instance()
@@ -32,5 +32,9 @@ def register_all_processors() -> None:
         VariableProcessor,
         CastProcessor,
     ]:
-        registry.register(proc_cls())
-    registry.set_fallback(FallbackProcessor())
+        try:
+            registry.register(proc_cls())
+        except ValueError:
+            pass  # Already registered, skip (idempotent)
+    if registry._fallback is None:
+        registry.set_fallback(FallbackProcessor())

@@ -407,14 +407,21 @@ def test_enum_property_basic():
 # ============================================================================
 
 def test_text_property_basic():
-    """测试 TextProperty 完整结构解析（D-05）。"""
+    """测试 TextProperty 完整结构解析（D-05）。
+
+    UE FText 序列化格式（UE5.7）:
+      - flags: i32 (4 bytes)
+      - history_type: u8 (1 byte) — FTextHistory type (0=Base)
+      - body: namespace(FString) + key(FString) + source_string(FString)
+    """
     tag = PropertyTag(name="DisplayText", type="TextProperty", size=0)
 
-    # 构造 Mock 数据：FText 四字段
-    # Flags + Namespace + Key + SourceString
+    # 构造 Mock 数据：FText 五字段（UE5.7 添加 history_type）
+    # Flags + HistoryType + Namespace + Key + SourceString
     # FString 格式: length (i32) + data + null terminator
     data = (
         struct.pack('<i', 0) +  # Flags
+        struct.pack('<B', 0) +  # HistoryType = 0 (Base)
         struct.pack('<i', 7) + b"GameUI\x00" +  # Namespace (length=7, 包含 null)
         struct.pack('<i', 12) + b"WelcomeText\x00" +  # Key (length=12)
         struct.pack('<i', 17) + b"Welcome to Game!\x00"  # SourceString (length=17)
@@ -432,12 +439,19 @@ def test_text_property_basic():
 
 
 def test_text_property_empty():
-    """测试 TextProperty 空字段处理。"""
+    """测试 TextProperty 空字段处理。
+
+    UE FText 序列化格式（UE5.7）:
+      - flags: i32 (4 bytes)
+      - history_type: u8 (1 byte) — FTextHistory type (0=Base)
+      - body: namespace(FString) + key(FString) + source_string(FString)
+    """
     tag = PropertyTag(name="EmptyText", type="TextProperty", size=0)
 
-    # 空字段
+    # 空字段（UE5.7 添加 history_type）
     data = (
         struct.pack('<i', 0) +  # Flags
+        struct.pack('<B', 0) +  # HistoryType = 0 (Base)
         struct.pack('<i', 0) +  # Namespace (empty)
         struct.pack('<i', 0) +  # Key (empty)
         struct.pack('<i', 0)    # SourceString (empty)
@@ -455,14 +469,22 @@ def test_text_property_empty():
 
 
 def test_text_property_with_flags():
-    """测试 TextProperty 带 Flags。"""
+    """测试 TextProperty 带 Flags。
+
+    UE FText 序列化格式（UE5.7）:
+      - flags: i32 (4 bytes)
+      - history_type: u8 (1 byte) — FTextHistory type (0=Base)
+      - body: namespace(FString) + key(FString) + source_string(FString)
+    """
     tag = PropertyTag(name="LocalizedText", type="TextProperty", size=0)
 
     # Flags = 1（表示本地化文本）
     # FString: length (i32) + data (length bytes, not including null)
     # According to FArchive.read_fstring: reads length, then reads length bytes (excluding null)
+    # UE5.7 添加 history_type byte
     data = (
         struct.pack('<i', 1) +  # Flags
+        struct.pack('<B', 0) +  # HistoryType = 0 (Base)
         struct.pack('<i', 6) + b"UIText" +  # Namespace (length=6, data=UIText)
         struct.pack('<i', 7) + b"Label_1" +  # Key (length=7, data=Label_1)
         struct.pack('<i', 10) + b"Option One"  # SourceString (length=10, data=Option One)

@@ -24,6 +24,7 @@ class PropertyTag:
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
+    enum_type: Optional[str] = None   # ByteProperty/EnumProperty 的枚举类型（从 FPropertyTypeName 提取）
 
 
 @dataclass
