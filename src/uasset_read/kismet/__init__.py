@@ -13,6 +13,7 @@ from uasset_read.kismet.archive import FKismetArchive
 
 from uasset_read.kismet.bytecode_extractor import (
     extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES,
+    reset_bpgc_cache,  # Phase 72-C Wave 2
 )
 
 # Phase 63: C++ pseudocode translator
@@ -43,6 +44,7 @@ __all__ = [
     "parse_bytecode_stream",
     "extract_and_parse",
     "USTRUCT_TYPES",
+    "reset_bpgc_cache",  # Phase 72-C Wave 2
     # Phase 63: C++ translator
     "KismetTranslator",
     "MathFunctionCleaner",
