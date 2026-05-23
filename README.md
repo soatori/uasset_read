@@ -8,20 +8,13 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v11.0 in development** (`__version__` = 9.0.0) |
-| Tests | **1271 tests** |
-| Branch | `2.11-dev` |
+| Version | **v10.0 shipped** (`__version__` = 6.0.0, not yet bumped) |
+| Tests | **554 tests** |
+| Branch | `2.10-dev` |
 
-### Current Phase: v11.0 — Kismet 反编译器 + 图解析修复 + Agent 翻译管线（开发中）
+### Current Phase: v11.0 — Kismet 字节码反编译器（计划中）
 
-- **Phase 61-63 ✅**: Kismet 字节码反编译（EExprToken → AST → C++ 伪代码）
-- **Phase 64 ✅**: Pipeline 集成 + 端到端测试
-- **Phase 65 ✅**: 图解析器修复（FMemberReference + Pin 连接 + Struct 映射）
-- **Phase 66 ⏭️**: Agent 翻译管线 → agent/ 模块已实现（translator + writer），跳过独立 C++ 生成，目标合并至 v12.0 N2CStruct 中间格式
-
-### Next: v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构
-
-参考 NodeToCode 设计，将 graph.py 输出转化为 Agent 可理解的结构化 JSON。详见 `.planning/ROADMAP.md`。
+参考 CUE4Parse 设计，实现从函数体字节码到可读 C++ 伪代码的完整反编译流程。详见 `.planning/STATE.md`。
 
 ### Latest Shipped: v10.0 — Blueprint-to-C++ 代码生成参考
 
@@ -45,10 +38,7 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **EnhancedInput support** — TriggerEvent type recognition
 - **C++ skeleton extraction** — Component declarations, function signatures, transforms (v10.0)
 - **C++ header formatting** — .h/.cpp text output from blueprint (v10.0)
-- **Kismet bytecode decompiler** — EExprToken → KismetExpression AST → C++ pseudo-code (v11.0 P61-63) ✅
-- **Kismet pipeline integration** — decompile_uasset() with golden-path tests (v11.0 P64) ✅
-- **Graph parser fixes** — FMemberReference, Pin connections, Struct mapping (v11.0 P65) ✅
-- **Agent translation pipeline** — AgentTranslationPipeline + CppFileWriter (v11.0 P66, implemented) ✅
+- **Kismet bytecode decompiler** — Planned (v11.0)
 
 ## Installation
 
@@ -111,10 +101,6 @@ from uasset_read import (
     # Constants & exceptions
     PACKAGE_FILE_TAG, MMAP_THRESHOLD,
     UAssetError, ParseError, VersionError,
-
-    # Agent translation (v11.0)
-    AgentTranslationPipeline, translate_blueprint_to_cpp,
-    CppFileWriter, write_cpp_class_files,
 )
 ```
 
@@ -148,10 +134,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Parsers** | `parsers/` | 14 property type parsers + dispatcher |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, function graphs |
-| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → KismetExpression AST, C++ translator (v11.0) |
 | **Linker** | `link/` | PackageLinker, UObjectInstance (v7.0) |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters (v10.0) |
-| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (v11.0 P66) |
 | **Formatters** | `formatters/` | JSON/Text/Markdown output |
 
 ## Testing
@@ -161,7 +144,7 @@ python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ```
 
-**Current**: 1271 tests collected.
+**Current**: 554 tests collected.
 
 ## Tech Stack
 
@@ -183,7 +166,7 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | v8.0 | 2026-05-17 | ✅ | BP→C++ JSON 可翻译性 (P47-51) |
 | v9.0 | 2026-05-17 | ✅ | 函数调用链解析 (P52-55), function_graphs |
 | v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ 代码生成参考 (P56-60) |
-| v11.0 | 2026-05-20 | 🔄 | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
+| v11.0 | — | 📋 | Kismet 字节码反编译器 (P61-64) |
 
 ## Documentation
 
@@ -204,12 +187,12 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ## Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
-- **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types; full coverage in progress
+- **No bytecode decompilation**: Planned for v11.0 (Kismet decompiler)
 - **No resource export**: Binary data too large; metadata only
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
 
 ---
 
-**Last Updated**: 2026-05-21
-**Version**: v11.0 in development | **Tests**: 1271
+**Last Updated**: 2026-05-19
+**Version**: v10.0 shipped | **Tests**: 554

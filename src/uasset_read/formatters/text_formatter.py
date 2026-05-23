@@ -2,7 +2,6 @@
 
 等价迁移 uasset_read_legacy.py L7431-7571。
 Phase 32: 输出格式化模块。
-Phase 71: 执行流链式表达适配。
 """
 from __future__ import annotations
 
@@ -13,19 +12,18 @@ if TYPE_CHECKING:
     from uasset_read.models.core import UEdGraph
 
 from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
-from uasset_read.graph import build_connections_map, build_execution_chains
+from uasset_read.graph import build_connections_map, build_execution_flows
 
 
 def format_text_full(result: ParseResult) -> str:
     """
-    YAML 风格完整文本输出（OUT-02, OUT2-03, Phase 71）。
+    YAML 风格完整文本输出（OUT-02, OUT2-03）。
 
     Per D-17: YAML 风格层级，2 空格缩进
     Per D-19: ERRORS 区块在末尾
     Per D-21: Blueprint 元数据嵌入
     Per D-22: 嵌套 YAML 缩进
     Phase 8: Graphs section with summary（OUT2-03）
-    Phase 71: execution_chains 链式表达
 
     Args:
         result: ParseResult 来自 parse_uasset()
@@ -91,31 +89,27 @@ def format_text_full(result: ParseResult) -> str:
 
         lines.append("")  # Blank line after blueprint
 
-    # Phase 8: Graphs section (OUT2-03, Phase 71)
+    # Phase 8: Graphs section (OUT2-03)
     if result.graphs:
         lines.append("Graphs:")
         for graph in result.graphs:
             # 获取连接数量
             connections, _ = build_connections_map(graph)
 
-            # 获取执行流链式表达（Phase 71）
-            execution_chains = build_execution_chains(graph)
+            # 获取执行流数据
+            execution_flows = build_execution_flows(graph)
 
             lines.append(f"  - Name: {graph.graph_name}")
             lines.append(f"    Class: {graph.graph_class}")
             lines.append(f"    Nodes: {len(graph.nodes)}")
             lines.append(f"    Connections: {len(connections)}")
 
-            # 执行流链式概览（Phase 71）
-            lines.append(f"    ExecutionChains: {len(execution_chains)}")
-            for chain_entry in execution_chains:
-                start_event = chain_entry.get("start_event", "Unknown")
-                chains = chain_entry.get("chains", [])
-                has_cycle = chain_entry.get("has_cycle", False)
-                # 直接展示链式字符串
-                for chain_str in chains:
-                    cycle_marker = " (cycle)" if has_cycle else ""
-                    lines.append(f"      - {start_event}: {chain_str}{cycle_marker}")
+            # 执行流概览
+            lines.append(f"    ExecutionFlows: {len(execution_flows)}")
+            for flow in execution_flows:
+                start_event = flow.get("start_event", "Unknown")
+                node_count = len(flow.get("nodes", []))
+                lines.append(f"      - {start_event}: {node_count} nodes")
 
         lines.append("")  # Graphs 区块后的空行
 
