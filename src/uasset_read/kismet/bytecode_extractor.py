@@ -2,14 +2,16 @@
 Kismet Bytecode Extractor — UStruct ScriptBytecode extraction and parsing.
 
 Phase 62: Bridge between Phase 61 (FKismetArchive) and Phase 63 (AST translation).
+Phase 72-C Wave 2: BPGC fallback for UE5 cooked Blueprints.
 
 Provides:
-- extract_bytecode_bytes: Extract raw ScriptBytecode from a UStruct export
+- extract_bytecode_bytes: Extract raw ScriptBytecode from a UStruct export (with BPGC fallback)
 - parse_bytecode_stream: Parse bytecode bytes into KismetExpression list
 - extract_and_parse: Combined extraction + parsing entry point
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.archive import FKismetArchive
@@ -20,6 +22,13 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
     from uasset_read.serializers.package_summary import PackageFileSummary
+
+
+logger = logging.getLogger(__name__)
+
+# Module-level BPGC bytecode cache (populated on first fallback, keyed by function name)
+# T-72C-04 mitigation: cache is per-module but reset at each decompile_uasset() call context
+_bpgc_bytecode_cache: dict[str, bytes] | None = None
 
 
 # ===========================================================================
@@ -110,7 +119,10 @@ def extract_bytecode_bytes(
 
     # T-62-02: Validate serializedScriptSize bounds
     if serialized_script_size <= 0:
-        return None
+        # BPGC fallback for UE5 cooked Blueprints (Phase 72-C Wave 2)
+        return _bpgc_fallback(
+            archive, export, summary, name_map, import_map, export_map
+        )
 
     if serialized_script_size > export.script_serial_size:
         raise ParseError(
@@ -119,6 +131,111 @@ def extract_bytecode_bytes(
         )
 
     return archive.read_bytes(serialized_script_size)
+
+
+def _bpgc_fallback(
+    archive: FArchive,
+    export: ObjectExport,
+    summary: PackageFileSummary,
+    name_map: list[str],
+    import_map: list,
+    export_map: list,
+) -> bytes | None:
+    """
+    BPGC bytecode fallback for UE5 cooked Blueprints.
+
+    When Function exports have no bytecode in their script_serial_region,
+    fall back to extracting bytecode from the BlueprintGeneratedClass export.
+
+    Uses module-level cache to avoid re-extracting for each function.
+
+    Args:
+        archive: FArchive instance (file-level archive)
+        export: ObjectExport for the Function
+        summary: PackageFileSummary for version info
+        name_map: Name table for PropertyTag parsing
+        import_map: Import table for class resolution
+        export_map: Export table for class resolution
+
+    Returns:
+        Bytecode bytes for the function, or None if not found.
+
+    T-72C-03 mitigation: wrapped in try/except, returns None on failure.
+    """
+    global _bpgc_bytecode_cache
+
+    from uasset_read.kismet.bpgc_bytecode import (
+        extract_bpgc_bytecode,
+        map_bytecode_to_functions,
+    )
+    from uasset_read.serializers.object_resources import find_main_blueprint_generated_class
+    import os
+
+    # Derive asset name from archive filename
+    asset_name = os.path.splitext(os.path.basename(archive._path))[0]
+
+    # Populate cache on first fallback call
+    if _bpgc_bytecode_cache is None:
+        logger.warning(
+            "Falling back to BPGC bytecode extraction for '%s'",
+            export.object_name,
+        )
+
+        try:
+            # Find main BlueprintGeneratedClass export
+            bpgc_export = find_main_blueprint_generated_class(
+                export_map, import_map, asset_name
+            )
+
+            if bpgc_export is None:
+                logger.debug("No BlueprintGeneratedClass found for '%s'", asset_name)
+                _bpgc_bytecode_cache = {}  # Empty cache to prevent re-search
+                return None
+
+            # Extract all bytecode buffers from BPGC
+            bytecode_buffers = extract_bpgc_bytecode(
+                archive, bpgc_export, summary, asset_name, name_map, import_map, export_map
+            )
+
+            if not bytecode_buffers:
+                logger.debug("No bytecode buffers extracted from BPGC '%s'", bpgc_export.object_name)
+                _bpgc_bytecode_cache = {}
+                return None
+
+            # Map buffers to Function exports by name
+            _bpgc_bytecode_cache = map_bytecode_to_functions(
+                bytecode_buffers, export_map, name_map, import_map, export_map
+            )
+
+            logger.info(
+                "BPGC fallback: cached %d function bytecode mappings from '%s'",
+                len(_bpgc_bytecode_cache), bpgc_export.object_name,
+            )
+
+        except Exception as e:
+            # T-72C-03: Return None on failure rather than raising
+            logger.error("BPGC bytecode extraction failed: %s", e)
+            _bpgc_bytecode_cache = {}
+            return None
+
+    # Look up function name in cache
+    func_name = export.object_name
+    if func_name in _bpgc_bytecode_cache:
+        return _bpgc_bytecode_cache[func_name]
+
+    logger.debug("Function '%s' not found in BPGC bytecode cache", func_name)
+    return None
+
+
+def reset_bpgc_cache() -> None:
+    """
+    Reset the BPGC bytecode cache for a new decompile_uasset() call.
+
+    Called by decompile_uasset() at the start of each invocation to ensure
+    fresh cache per file (T-72C-04 mitigation).
+    """
+    global _bpgc_bytecode_cache
+    _bpgc_bytecode_cache = None
 
 
 # ===========================================================================
