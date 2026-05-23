@@ -238,7 +238,7 @@ else:
 - 修复 Bug 1 → `LinkedTo count=1, owning=57, valid GUID` ✅
 - 修复 Bug 1+2 → `RefPassThrough null=0, BitField=0x52935405` ✅
 
-### Phase 72-B: Pin 连接修复（NEXT）
+### Phase 72-B: Pin 连接修复 ✅
 
 **修复内容:** `serializers/graph.py` — L398/L449 history_type signed 转换 + L476-479 ParentPin 条件读取
 
