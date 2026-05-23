@@ -76,7 +76,7 @@ class TestExecutionFlow:
 
     @pytest.mark.skipif(FIRST_PERSON_CHARACTER_PATH is None, reason="Test asset not found")
     def test_execution_flows_exist(self):
-        """验证 execution_flows 存在"""
+        """验证 execution_chains 存在（Phase 71）"""
         result = parse_uasset(FIRST_PERSON_CHARACTER_PATH)
         json_output = format_json_full(result)
 
@@ -89,8 +89,8 @@ class TestExecutionFlow:
                 break
 
         if event_graph:
-            assert "execution_flows" in event_graph, "execution_flows 字段不存在"
-            assert len(event_graph["execution_flows"]) > 0, "execution_flows 为空"
+            assert "execution_chains" in event_graph, "execution_chains 字段不存在"  # Phase 71
+            assert len(event_graph["execution_chains"]) > 0, "execution_chains 为空"
         else:
             pytest.fail("EventGraph 不存在，无法验证执行流程")
 

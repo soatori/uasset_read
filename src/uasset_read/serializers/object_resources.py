@@ -325,11 +325,15 @@ def detect_blueprint_generated_class(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> bool:
-    """检测导出是否为 BlueprintGeneratedClass。"""
+    """检测导出是否为 BlueprintGeneratedClass。
+
+    Phase 72-C Wave 2 修复：检查 import.object_name 而非 class_name，
+    因为 BPGC 的 import.class_name 为 "Class"，object_name 为 "BlueprintGeneratedClass"。
+    """
     if export.class_index.is_import:
         idx = export.class_index.to_import_index()
         if 0 <= idx < len(import_map):
-            return "BlueprintGeneratedClass" in import_map[idx].class_name
+            return "BlueprintGeneratedClass" in import_map[idx].object_name
     return False
 
 

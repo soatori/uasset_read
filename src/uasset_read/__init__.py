@@ -182,7 +182,7 @@ from .blueprint import (
     extract_blueprint_metadata,
 )
 
-# 图解析模块（Phase 31 Wave 3）
+# 图解析模块（Phase 31 Wave 3, Phase 71）
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flows,
@@ -190,6 +190,8 @@ from .graph import (
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    build_execution_chains,  # Phase 71
+    build_execution_chains_from_flows,  # Phase 71 (N2C compat)
 )
 
 # 格式化模块（Phase 32 Wave 1-2）
@@ -249,6 +251,50 @@ from .constants import (
     CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
     CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
+)
+
+# Kismet bytecode module (Phase 61)
+from .kismet import (
+    EExprToken, ECastToken, EScriptInstrumentationType,
+    EBlueprintTextLiteralType, EAutoRtfmStopTransactMode,
+    KismetExpression, KismetExpressionT,
+    EXPR_CLASS_MAP,
+    FKismetPropertyPointer, FFieldPath,
+)
+
+# Kismet C++ translator (Phase 63)
+from .kismet import (
+    KismetTranslator,
+    MathFunctionCleaner,
+    TypeRegistry,
+    line_cpp,
+    UE_TYPE_MAP,
+    FunctionBodyBuilder,
+    to_function_body,
+    StructuredControlFlow,
+    StructuredBlock,
+)
+
+# Kismet bytecode extractor (Phase 62)
+from .kismet import (
+    extract_bytecode_bytes,
+    parse_bytecode_stream,
+    extract_and_parse,
+)
+
+# Kismet decompilation pipeline (Phase 64)
+from .kismet.result import KismetDecompiledResult
+from .kismet.pipeline import decompile_uasset
+
+# Agent translation pipeline (Phase 66)
+from .agent.translator import AgentTranslationPipeline, translate_blueprint_to_cpp
+from .agent.writer import CppFileWriter, write_cpp_class_files
+
+# N2C intermediate format (Phase 70)
+from .n2c import (
+    N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
+    to_n2c_json, from_n2c_json,
+    N2C_JSON_SCHEMA, validate_n2c_json,
 )
 
 # 以下函数等待后续 plan 完成后追加：
@@ -402,12 +448,14 @@ __all__ = [
     # 主解析管线（Phase 33）
     "parse_uasset",
     "parse_uasset_with_linker",
-    # 图解析辅助函数（Phase 33 — 依赖 Phase 31）
+    # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
     "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
     "build_graphs_summary",
+    "build_execution_chains",  # Phase 71
+    "build_execution_chains_from_flows",  # Phase 71
     # 格式化函数（Phase 33 — 依赖 Phase 32）
     "format_json_full",
     "format_json_summary",
@@ -464,4 +512,47 @@ __all__ = [
     "read_edgraph_node_comment",
     "read_k2node_enhanced_input",
     "read_k2node_functionentry",
+    # Kismet bytecode (Phase 61)
+    "EExprToken",
+    "ECastToken",
+    "EScriptInstrumentationType",
+    "EBlueprintTextLiteralType",
+    "EAutoRtfmStopTransactMode",
+    "KismetExpression",
+    "KismetExpressionT",
+    "EXPR_CLASS_MAP",
+    "FKismetPropertyPointer",
+    "FFieldPath",
+    # Kismet translator (Phase 63)
+    "KismetTranslator",
+    "MathFunctionCleaner",
+    "TypeRegistry",
+    "line_cpp",
+    "UE_TYPE_MAP",
+    "FunctionBodyBuilder",
+    "to_function_body",
+    "StructuredControlFlow",
+    "StructuredBlock",
+    # Kismet bytecode extractor (Phase 62)
+    "extract_bytecode_bytes",
+    "parse_bytecode_stream",
+    "extract_and_parse",
+    # Kismet decompilation pipeline (Phase 64)
+    "KismetDecompiledResult",
+    "decompile_uasset",
+    # Agent translation pipeline (Phase 66)
+    "AgentTranslationPipeline",
+    "translate_blueprint_to_cpp",
+    "CppFileWriter",
+    "write_cpp_class_files",
+    # N2C intermediate format (Phase 70)
+    "N2CStruct",
+    "N2CGraph",
+    "N2CNode",
+    "N2CPin",
+    "N2CIdMapper",
+    "to_n2c_json",
+    "from_n2c_json",
+    "N2C_JSON_SCHEMA",
+    "validate_n2c_json",
 ]
