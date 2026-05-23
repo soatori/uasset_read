@@ -2,7 +2,7 @@
 phase: 72g
 plan: 01
 type: execute
-wave: 4
+wave: 1
 depends_on: []
 files_modified:
   - src/uasset_read/serializers/graph.py
