@@ -787,8 +787,29 @@ def read_ue_graph_node(
             if ctrl & 0x02:
                 archive.read_u8()
 
+        # 边界保护：防止 script_serial_size 不正确导致无限循环
+        max_property_iterations = max(1000, node_export.script_serial_size)
+        _property_iterations = 0
+
         while archive.tell() < script_end:
-            tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
+            _property_iterations += 1
+            if _property_iterations > max_property_iterations:
+                logger.warning(
+                    "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
+                    max_property_iterations, node_name
+                )
+                break
+
+            tag_pos = archive.tell()
+            try:
+                tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
+            except ParseError as e:
+                logger.warning(
+                    "read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s",
+                    tag_pos, node_name, e
+                )
+                break
+
             if tag.name == "None":
                 break
 
@@ -984,18 +1005,32 @@ def read_ue_graph(
             node_export = export_map[node_index - 1]
             try:
                 node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                node._export_index = node_index  # tag for dedup
                 nodes.append(node)
             except ParseError:
                 failed_nodes.append(node_export.object_name)
 
-    # UE 5.x: nodes_count == 0, collect by outer_index
-    if nodes_count == 0 and graph_export_idx > 0:
+    # UE 5.x fallback: nodes_count == 0 OR main path collected nothing
+    # Main path may read wrong nodes_count due to UE5 serialization format differences
+    if (nodes_count == 0 or len(nodes) == 0) and graph_export_idx > 0:
+        if len(nodes) > 0:
+            logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
+        collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
                 node_class = _gac(node_export, import_map, export_map, linker)
                 if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+                    # Skip if already collected by main path (same export index)
+                    node_idx = export_map.index(node_export) + 1
+                    already_collected = any(
+                        getattr(n, '_export_index', None) == node_idx
+                        for n in nodes
+                    )
+                    if already_collected:
+                        continue
                     try:
                         node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                        node._export_index = node_idx  # tag for dedup
                         nodes.append(node)
                     except ParseError:
                         nodes.append(UEdGraphNode(
