@@ -1056,9 +1056,10 @@ def read_ue_graph(
             except ParseError:
                 failed_nodes.append(node_export.object_name)
 
-    # UE 5.x fallback: nodes_count == 0 OR main path collected nothing
-    # Main path may read wrong nodes_count due to UE5 serialization format differences
-    if (nodes_count == 0 or len(nodes) == 0) and graph_export_idx > 0:
+    # UE 5.x fallback: always scan export_map for nodes whose outer is this graph.
+    # Main path nodes_count can be incomplete due to UE5 serialization differences;
+    # fallback discovery via outer_index scan catches the rest. Dedup by _export_index.
+    if graph_export_idx > 0:
         if len(nodes) > 0:
             logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
         collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
