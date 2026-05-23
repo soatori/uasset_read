@@ -462,9 +462,9 @@ def read_ue_graph_pin(
     linkedto_start = archive.tell()
     try:
         linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
-    except Exception:
-        # 不尝试恢复 — 异常可能由数据损坏导致，继续解析可能导致位置不一致
-        # 返回空数组，让调用者处理位置不一致问题
+        logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
+    except Exception as e:
+        logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
         linked_to = []
 
     # 14. SubPins array

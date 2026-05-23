@@ -152,6 +152,26 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+
+    # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
+    # These structs have no PropertyTags loop — just raw float reads.
+    if struct_type == "Vector":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
+
+    if struct_type == "Rotator":
+        pitch = archive.read_f32()
+        yaw = archive.read_f32()
+        roll = archive.read_f32()
+        return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
+
+    if struct_type == "Vector2D":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
+
     fields: Dict[str, Any] = {}
     property_count = 0
 
