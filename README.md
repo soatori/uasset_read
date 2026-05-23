@@ -8,24 +8,38 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v11.0 in development** (`__version__` = 9.0.0) |
-| Tests | **1271 tests** |
+| Version | **v13.0 in development** (`__version__` = 9.0.0) |
+| Tests | **1443 tests** (1319 passed, 122 skipped) |
 | Branch | `2.11-dev` |
 
-### Current Phase: v11.0 — Kismet 反编译器 + 图解析修复 + Agent 翻译管线（开发中）
+### Current Phase: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分（开发中）
+
+- **Phase 72-A ✅**: Pin 连接二进制诊断（2 bugs 定位：history_type signed / ParentPin conditional read）
+- **Phase 72-B ✅**: Pin 连接修复 + 回归测试通过（762 tests）
+- **Phase 72-C ✅**: Kismet 字节码导航 — BPGC fallback extraction module（295 lines）
+- **Phase 72-UAT ✅**: UAT 验证（1319 tests passed, 0 regressions）
+- **Phase 72-D ⬜**: FString/FName 区分（pending — 35 处空字符串误报）
+- **Phase 72-E 🔴**: EventGraph 节点解析修复（inserted — 覆盖率 ~56% → 目标 >90%）
+- **Phase 72-F 🔴**: BPGC 缓存隔离修复（inserted — 多文件 parse 缓存串扰）
+
+### Next: v14.0 — EventGraph 解析完善 + FString/FName 精确区分
+
+详见 `.planning/ROADMAP.md`。
+
+### Latest Shipped: v12.0 — 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构
+
+- **Phase 67 ✅**: UE5.4+ PropertyTag 兼容 + FString 健壮性
+- **Phase 68 ✅**: N2CNodeTypeRegistry — 126 种 K2Node 语义类型注册表
+- **Phase 69 ✅**: 节点处理器架构 — Processor 模式拆分
+- **Phase 70 ✅**: N2CStruct JSON Schema — Agent 可理解的结构化输出
+- **Phase 71 ✅**: 执行流链式表达（N2C 风格 `N1->N2->N3`）
+
+### Previously Shipped: v11.0 — Kismet 反编译器 + 图解析修复 + Agent 翻译管线
 
 - **Phase 61-63 ✅**: Kismet 字节码反编译（EExprToken → AST → C++ 伪代码）
 - **Phase 64 ✅**: Pipeline 集成 + 端到端测试
 - **Phase 65 ✅**: 图解析器修复（FMemberReference + Pin 连接 + Struct 映射）
-- **Phase 66 ⏭️**: Agent 翻译管线 → agent/ 模块已实现（translator + writer），跳过独立 C++ 生成，目标合并至 v12.0 N2CStruct 中间格式
-
-### Next: v12.0 — N2C 中间格式 + 节点分类体系 + 处理器架构
-
-参考 NodeToCode 设计，将 graph.py 输出转化为 Agent 可理解的结构化 JSON。详见 `.planning/ROADMAP.md`。
-
-### Latest Shipped: v10.0 — Blueprint-to-C++ 代码生成参考
-
-从蓝图 JSON 输出提取 C++ 类骨架、函数签名、输入绑定、执行流、函数调用链、组件初始化代码。
+- **Phase 66 ✅**: Agent 翻译管线 — AgentTranslationPipeline + CppFileWriter
 
 ## Features
 
@@ -48,7 +62,11 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **Kismet bytecode decompiler** — EExprToken → KismetExpression AST → C++ pseudo-code (v11.0 P61-63) ✅
 - **Kismet pipeline integration** — decompile_uasset() with golden-path tests (v11.0 P64) ✅
 - **Graph parser fixes** — FMemberReference, Pin connections, Struct mapping (v11.0 P65) ✅
-- **Agent translation pipeline** — AgentTranslationPipeline + CppFileWriter (v11.0 P66, implemented) ✅
+- **Agent translation pipeline** — AgentTranslationPipeline + CppFileWriter (v11.0 P66) ✅
+- **N2C intermediate format** — N2CStruct JSON Schema, execution chain format (v12.0 P67-71) ✅
+- **Pin connection fixes** — history_type signed conversion, ParentPin conditional read (v13.0 P72-A/B) ✅
+- **BPGC bytecode navigation** — Cooked blueprint fallback bytecode extraction (v13.0 P72-C) ✅
+- **PackageLinker** — Two-stage object graph reconstruction (v7.0)
 
 ## Installation
 
@@ -100,6 +118,7 @@ from uasset_read import (
 
     # Flow tracing
     build_execution_flows, build_data_flows, build_connections_map,
+    build_execution_chains,  # v12.0 N2C-style chain format
 
     # Formatters
     format_json_full, format_json_summary,
@@ -108,13 +127,20 @@ from uasset_read import (
     # Linker (v7.0)
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
 
-    # Constants & exceptions
-    PACKAGE_FILE_TAG, MMAP_THRESHOLD,
-    UAssetError, ParseError, VersionError,
+    # Kismet (v11.0)
+    decompile_uasset, KismetDecompiledResult,
+    KismetTranslator, to_function_body,
+
+    # N2C intermediate format (v12.0)
+    N2CStruct, N2CGraph, to_n2c_json, from_n2c_json,
 
     # Agent translation (v11.0)
     AgentTranslationPipeline, translate_blueprint_to_cpp,
     CppFileWriter, write_cpp_class_files,
+
+    # Constants & exceptions
+    PACKAGE_FILE_TAG, MMAP_THRESHOLD,
+    UAssetError, ParseError, VersionError,
 )
 ```
 
@@ -131,6 +157,8 @@ FArchive pipeline pattern mirroring UE's internal structure:
           BlueprintParser
           DependencyGraphBuilder
           PackageLinker (v7.0: two-stage object graph reconstruction)
+          KismetDecompiler (v11.0: bytecode → AST → C++)
+          N2C Format (v12.0: Agent-optimized JSON schema)
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -147,12 +175,13 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 14 property type parsers + dispatcher |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
-| **Graph** | `graph/` | Execution/data flow tracing, function graphs |
-| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → KismetExpression AST, C++ translator (v11.0) |
+| **Graph** | `graph/` | Execution/data flow tracing, chain builder (v12.0) |
+| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback (v11.0/v13.0) |
 | **Linker** | `link/` | PackageLinker, UObjectInstance (v7.0) |
 | **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters (v10.0) |
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (v11.0 P66) |
-| **Formatters** | `formatters/` | JSON/Text/Markdown output |
+| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators (v12.0) |
+| **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid output |
 
 ## Testing
 
@@ -161,7 +190,7 @@ python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ```
 
-**Current**: 1271 tests collected.
+**Current**: 1443 tests collected.
 
 ## Tech Stack
 
@@ -183,7 +212,9 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | v8.0 | 2026-05-17 | ✅ | BP→C++ JSON 可翻译性 (P47-51) |
 | v9.0 | 2026-05-17 | ✅ | 函数调用链解析 (P52-55), function_graphs |
 | v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ 代码生成参考 (P56-60) |
-| v11.0 | 2026-05-20 | 🔄 | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
+| v11.0 | 2026-05-20 | ✅ | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
+| v12.0 | 2026-05-21~22 | ✅ | 序列化修复 + N2C 中间格式 + 节点分类 + 执行流链式 (P67-71) |
+| v13.0 | 2026-05-23 | 🔄 | Pin 连接修复 + Kismet 字节码导航 (P72-A/B/C) |
 
 ## Documentation
 
@@ -211,5 +242,5 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 
 ---
 
-**Last Updated**: 2026-05-21
-**Version**: v11.0 in development | **Tests**: 1271
+**Last Updated**: 2026-05-23
+**Version**: v13.0 in development | **Tests**: 1443
