@@ -6,7 +6,7 @@ status: active
 last_updated: "2026-05-23T19:00:00.000Z"
 prev_milestone: v12.0 (archived 2026-05-22)
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 4
   skipped_phases: 0
   total_plans: 4
@@ -17,7 +17,7 @@ progress:
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G 🔴 插入中
 
 ## Phase 分解
 
@@ -126,6 +126,24 @@ progress:
 
 **验收:** `72f-01-SUMMARY.md` — 所有标准满足
 
+### Phase 72-G: 复杂 StructProperty 解析 + Pin 连接映射修复 (INSERTED)
+
+**插入日期:** 2026-05-23
+
+**状态:** 🔴 待规划 — 基于三方对照分析发现的反复失败问题
+
+**反复失败问题清单:**
+
+| # | 问题 | 反复失败历史 |
+|---|------|-------------|
+| 1 | Complex StructProperty 解析失败 | Phase 67 修复 → 仍失败 |
+| 2 | Pin 连接映射输出为空 (Connections=0) | Phase 72-B 修复 → 仍未输出 |
+| 3 | Blueprint.functions 列表为空 | 从未修复 |
+| 4 | 函数参数信息缺失 | 从未修复 |
+
+**目标:** 解析覆盖率从 ~56% 提升至 >90%
+
+
 ## 测试统计
 
 | Category | Count |
@@ -157,4 +175,4 @@ progress:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-F complete, all inserted fixes done)*
+*Updated: 2026-05-23 (Phase 72-G inserted: 反复失败的 StructProperty + Pin 连接问题)*
