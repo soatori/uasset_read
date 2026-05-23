@@ -1058,6 +1058,10 @@ def read_ue_graph_node(
                 node_guid = archive.read_bytes(16).hex()
             elif tag.name == "NodeComment" and tag.size > 0:
                 node_comment = archive.read_fstring()
+            elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
+                raw_properties[tag.name] = tag.bool_val != 0
+            elif tag.name == "CommentDepth":
+                raw_properties[tag.name] = archive.read_i32()
             elif tag.name == "ExtraFlags":
                 raw_properties[tag.name] = archive.read_i32()
             elif tag.size > 0:

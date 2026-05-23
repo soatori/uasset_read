@@ -405,10 +405,17 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                     elif isinstance(pin_type_obj, dict):
                         pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
 
-                    if pin_dir == "EGPD_Output" and pin_type_name:
+                    if isinstance(pin_dir, int):
+                        is_output = pin_dir == 1
+                        is_input = pin_dir == 0
+                    else:
+                        is_output = pin_dir == "EGPD_Output"
+                        is_input = pin_dir == "EGPD_Input"
+
+                    if is_output and pin_type_name:
                         if return_type == "":
                             return_type = pin_type_name
-                    elif pin_dir == "EGPD_Input" and pin_type_name:
+                    elif is_input and pin_type_name:
                         # 跳过执行流 pin（exec）
                         if pin_type_name.lower() == "exec":
                             continue

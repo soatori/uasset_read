@@ -144,7 +144,16 @@ def read_property_tag(
     # Format: "ArrayProperty(IntProperty)" for arrays
     tag.type = _build_complete_type_string(type_parts)
     tag.size = archive.read_i32()
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+    try:
+        archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+    except ParseError:
+        # Size overflow safety net: seek past the bad size to avoid cascading errors.
+        # Clamp skip to a reasonable maximum to prevent runaway seeks.
+        _safe_skip = min(max(tag.size, 0), 64 * 1024)
+        _recovery_pos = archive.tell() + _safe_skip
+        if _recovery_pos <= archive._file_size:
+            archive.seek(_recovery_pos)
+        raise
     tag.flags = archive.read_u8()
 
     if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
