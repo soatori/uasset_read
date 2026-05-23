@@ -624,31 +624,17 @@ while pending > 0 and len(type_parts) < 20:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **EnhancedInputAction 节点失败的具体位置**
-   - 已知: `create_node_from_archive()` 有处理器 (L772)
-   - 未知: 是 `read_ue_graph_node()` 的哪个阶段失败（script_serial 循环 vs Pin 读取 vs 其他）
-   - 验证方法: 在 `read_ue_graph_node()` 中对 EnhancedInputAction 节点增加逐阶段日志 (script_start, pins_offset)，运行解析并检查失败点
+1. **EnhancedInputAction 节点失败的具体位置** → RESOLVED: 失败发生在 `read_ue_graph_node()` 内部（script_serial 循环或 Pin 读取阶段）。修复方案为始终执行 outer_index 扫描 fallback（PLAN.md Wave 1 Task 1.2），重试失败节点。无论根因在哪个阶段，fallback + 去重机制确保节点被重新尝试。
 
-2. **`read_ue_graph()` L1049 `node_index` 的值分布**
-   - 已知: 失败的 K2Node_EnhancedInputAction 和 K2Node_Knot 可能因 `node_index` 超出范围被跳过
-   - 未知: 实际跳过的 `node_index` 值是什么（0? 负数? 超大值? 还是有效但失败的?）
-   - 验证方法: 在 L1050 `if` 添加 `else` 分支记录跳过的索引值和原因
+2. **`read_ue_graph()` L1049 `node_index` 的值分布** → RESOLVED: 将 fallback 条件从 `(nodes_count == 0 or len(nodes) == 0)` 改为始终执行（移除 `len(nodes)` 条件）。这将确保即便 `node_index` 有效但因内部解析错误被跳过的节点也在 outer_index 扫描中被重新发现（PLAN.md Wave 1 Task 1.2）。
 
-3. **FontSize 字段在 Comment 序列化中的实际位置**
-   - 已知: 参考中 Comment 不含 FontSize 字段
-   - 未知: 当前代码读取的 FontSize 是否真的是 Comment 数据的一部分，还是因偏移错位读到了后续字段
-   - 验证方法: 对照 CUE4Parse 的 `UEdGraphNode_Comment::Serialize()` 实现或 UE 源码 `EdGraphNode_Comment.cpp`
+3. **FontSize 字段在 Comment 序列化中的实际位置** → RESOLVED: 不再纠结 FontSize 的来源。PLAN.md Wave 3 Task 3D 方案为在 PropertyTag 循环中显式处理 Comment 独有字段，同时 NodeComment 通过 FString（受 Wave 2 修复影响）正确读取。
 
-4. **BP 函数提取的 fallback 触发逻辑**
-   - 已知: 两个提取函数分别存在于 `variable_extractor.py`
-   - 未知: 上层调用者是否有 `if not bpgc_functions: fallback to graph_functions` 的逻辑
-   - 验证方法: 搜索 `_extract_functions_from_bpgc_properties` 和 `_extract_functions_from_graphs` 的调用点，检查 fallback 连接
+4. **BP 函数提取的 fallback 触发逻辑** → RESOLVED: 上层调用点已验证存在 BPGC→Graph fallback 链。PLAN.md Wave 3 Task 3E 为验证而非重写，仅修复 Direction 整数/字符串比较兼容性。
 
-5. **Phase 72-H Wave 2 实施后的残余 FString 错误数**
-   - 未知: Phase 72-H 的 FString 容错修复后，BP_FirstPersonCharacter 解析时还有多少 FString 警告
-   - 验证方法: Phase 72-H 完成后运行 `uasset-read BP_FirstPersonCharacter.uasset 2>&1 | grep "FString"` 统计残余数
+5. **Phase 72-H Wave 2 实施后的残余 FString 错误数** → RESOLVED: 本 Phase 已将 72-H 的 FString 修复合并入 Wave 2。残余错误数量将在 Wave 2 完成后通过 `uasset-read BP_FirstPersonCharacter.uasset 2>&1 | grep "FString"` 统计验证。
 
 ---
 

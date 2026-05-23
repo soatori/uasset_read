@@ -11,7 +11,7 @@
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
 | **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
 | **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
-| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72)** | 2026-05-23 | 诊断完成 |
+| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-73)** | 2026-05-23 ~ 05-24 | 执行中 |
 
 历史详情：`.planning/archive/`
 
@@ -353,6 +353,112 @@ else:
 - [ ] `Blueprint.functions` 包含 DoMove/DoAim/DoJumpStart/DoJumpEnd
 - [ ] 每个函数输出包含参数名 + 参数类型
 
+### Phase 72-I: BP_FirstPersonCharacter 全量对比修复 (INSERTED)
+
+**插入日期:** 2026-05-24
+
+**来源:** `BP_FirstPersonCharacter.uasset` 解析输出 vs `蓝图节点文本参考.md` + `FirstPersonCCharacter.h/cpp` 三方系统化对比
+
+**对比基线:**
+- 蓝图节点文本参考 — UE 编辑器导出的 EventGraph 全部 17 个节点的完整序列化文本（含 Pin 定义、LinkedTo、PinType 等）
+- FirstPersonCCharacter.h/cpp — C++ 等价实现（DoMove/DoAim/DoJumpStart/DoJumpEnd 签名 + 组件属性）
+
+**问题清单（按严重度排序）:**
+
+| ID | 问题 | 严重度 | 参考值 | 当前解析输出 | 根因 |
+|----|------|--------|--------|-------------|------|
+| **I-01** | **Pin 连接完全丢失 (Connections=0)** | 🔴 P0 | 9 条 exec 连接 + 多条 data 连接 | 0 connections | LinkedTo 数组 count 异常（越界/负数），graph.py `read_pin_array()` 解析失败后跳过 |
+| **I-02** | **K2Node_EnhancedInputAction 节点缺失** | 🔴 P0 | 4 个（IA_Look/IA_Move/IA_Jump/IA_MouseLook） | 0 个 | 该节点类型未被识别，序列化数据可能被错位读取或归类为其他类型 |
+| **I-03** | **K2Node_Knot 节点缺失** | 🔴 P1 | 4 个（Move 函数内数据流转发） | 0 个 | Knot 节点解析路径不存在或被跳过 |
+| **I-04** | **EventGraph 节点总数不足** | 🔴 P1 | 17 个（含 Comment×3, Knot×4, EnhancedInputAction×4, Event×3, CallFunction×2, FunctionEntry×1） | 9 个 | EnhancedInputAction 和 Knot 缺失，Comment 部分缺失 |
+| **I-05** | **Camera RelativeRotation 全零** | 🔴 P1 | `(Pitch=0, Yaw=90, Roll=-90)` | `(Pitch=0, Yaw=0, Roll=0)` | StructProperty FRotator 内部字节被误读，可能受上游属性偏移错误影响 |
+| **I-06** | **3 个属性 Size 越界导致解析失败** | 🔴 P1 | LastEditedDocuments/CategoryName/BodyInstance 应正常解析 | Size 1224736768/12605056/2048 越界 | PropertyTag 中 PropertyTypeNameNode 链式读取偏移错误，size 字段读到了相邻数据 |
+| **I-07** | **CharacterMovement 属性缺失** | ⚠️ P2 | BrakingDecelerationFalling=1500, AirControl=0.5 | 未提取 | BodyInstance 解析失败后偏移错误，导致后续 NavAgentProps 之后的属性丢失 |
+| **I-08** | **Camera RelativeLocation 不完整** | ⚠️ P2 | `(-2.8, 5.89, 0.0)` | `(X=0, Y=-2.8125, Z=0)` | FVector 的 X 分量被上游偏移错误吞掉，Y 为近似值 |
+| **I-09** | **EdGraphNode_Comment 字段缺失** | ⚠️ P2 | CommentDepth/NodeWidth/NodeHeight/NodeComment | 仅 CommentColor + bCommentBubbleVisible | Comment 节点序列化路径不完整，缺少可视化元数据字段 |
+| **I-10** | **Blueprint.functions 列表为空** | ⚠️ P2 | DoMove/DoAim/DoJumpStart/DoJumpEnd | 空 | UbergraphFunction 引用未转换为 functions 列表（同 M-03） |
+| **I-11** | **函数参数信息缺失** | ⚠️ P3 | DoMove(float Right, float Forward) 等 | 仅 MemberName + bSelfContext | Function 导出对象的参数表未在蓝图元数据层关联（同 M-04） |
+| **I-12** | **FString 偏移错误连锁** | ⚠️ P3 | 无 suspicious length | 15+ 处 suspicious length / internal nulls | FName index 区域被误作 FString 读取（Phase 72-D 修复了启发式，但 FName 专用路径仍未实现） |
+
+**与已有 Phase 的关系:**
+
+| 问题 | 已有 Phase | 72-I 侧重 |
+|------|-----------|----------|
+| Pin 连接 (I-01) | 72-B(序列化修复), 72-G(输出映射) | **端到端验证**：序列化→映射→输出全链路打通 |
+| StructProperty (I-05/06/07/08) | 67(PropertyTag), 72-G(深度解析) | **实测验证**：用参考文档精确值对比 |
+| EnhancedInputAction (I-02) | 72-E(节点解析) | **新节点类型识别**：K2Node_EnhancedInputAction 序列化路径 |
+| Blueprint.functions (I-10) | 72-G(M-03) | 同一问题，72-I 提供验收基准 |
+| FString (I-12) | 72-D(启发式修复), 72-H(容错) | **FName 专用解析路径** |
+
+**修复策略:**
+
+1. **I-01 Pin 连接端到端修复:** 修复 `serializers/graph.py` LinkedTo 读取（count 越界保护 + 偏移回退），打通 `build_connections()` 输出映射，确保 9 条 exec 连接全部输出
+2. **I-02 K2Node_EnhancedInputAction 识别:** 在 `serializers/graph.py` 节点分发中添加该类型的序列化路径，InputAction 属性提取
+3. **I-03 K2Node_Knot 识别:** 添加 Knot 节点解析，保留 InputPin/OutputPin 连接信息用于数据流穿透
+4. **I-06 PropertyTag Size 修复:** 修复 PropertyTypeNameNode 链式读取偏移，使 LastEditedDocuments/CategoryName/BodyInstance 的 Size 字段正确
+5. **I-05/I-08 FVector/FRotator 修复:** 在 Size 修复后验证 StructProperty 内部字段读取，确保 Rotation/Location 精确值
+6. **I-09 Comment 字段补全:** 补充 CommentDepth/NodeWidth/NodeHeight/NodeComment 序列化路径
+
+**验收标准（对照参考文档精确值）:**
+
+- [ ] EventGraph `connections` 数组 ≥ 9（匹配参考文档中 9 条 exec 连接）
+- [ ] EventGraph 节点数 ≥ 13（覆盖 EnhancedInputAction×4 + Event×3 + CallFunction×2 + Comment×3 + FunctionEntry×1）
+- [ ] `K2Node_EnhancedInputAction` 节点 ≥ 4，每个包含 InputAction 属性
+- [ ] `Camera RelativeRotation` = `(Pitch=0, Yaw=90, Roll=-90)`（匹配 C++ `FRotator(0, 90, -90)`）
+- [ ] `Camera RelativeLocation` = `(X≈-2.8, Y≈5.89, Z=0)`（匹配 C++ `FVector(-2.8f, 5.89f, 0.0f)`）
+- [ ] `LastEditedDocuments` / `CategoryName` / `BodyInstance` 无 ParseError
+- [ ] `CharacterMovement` 包含 BrakingDecelerationFalling 和 AirControl 属性
+- [ ] `EdGraphNode_Comment` 包含 NodeComment 字段
+- [ ] `Blueprint.functions` 包含 DoMove/DoAim/DoJumpStart/DoJumpEnd
+- [ ] 无 FString `suspicious length` 警告（或降级为 < 3 处）
+
+### Phase 73: BP_FirstPersonCharacter Pin 序列化边界对齐修复 (INSERTED)
+
+**插入日期:** 2026-05-24
+
+**状态:** 📋 规划完成 — `phases/phase-73/CONTEXT.md`, `PLAN.md`, `VERIFICATION.md`
+
+**来源:** Phase 72-I 诊断复核。当前 LinkedTo 已从 0 提升至 24 条引用，但仍有大量 Pin 在 LinkedTo 前错位。旧结论“FString 内部 null 返回空字符串导致位置偏移”已修正：返回值不会额外移动指针，真正问题是更早字段边界错位后把二进制误读为 FString，并按错误 length 消费。
+
+**当前基线:**
+
+| 指标 | 值 |
+|------|----|
+| Graphs | 4 |
+| Nodes | 37 |
+| Pins | 62 |
+| Pins with LinkedTo | 22 (35.5%) |
+| Total LinkedTo refs | 24 |
+| EventGraph LinkedTo refs | 12 |
+
+**核心问题:**
+
+| ID | 问题 | 优先级 | 修复方向 |
+|----|------|--------|----------|
+| P73-01 | Pin 字段边界不可观测 | P0 | 建立字段级 offset/消费字节诊断脚本 |
+| P73-02 | DefaultTextValue/FText 容错不回退 | P0 | 失败时回退到字段起点，避免半消费后读 LinkedTo |
+| P73-03 | LinkedTo 恢复候选过宽 | P0 | count=0 不再单独视为成功，PinReference 强校验 |
+| P73-04 | PinReference 格式验证不足 | P1 | 校验 null marker、owning_node、GUID、后续字段衔接 |
+| P73-05 | PropertyTag 级联错位仍存在 | P1 | 分流 NodeComment/Transform/Movement 属性问题 |
+| P73-06 | 连接输出缺少质量门禁 | P1 | 对照关键 EventGraph/Move/Aim 连接做 E2E 验收 |
+
+**执行波次:**
+
+1. **Wave 0:** 新增 `temp/phase73_pin_trace.py`，建立 Pin 字段级反馈回路。
+2. **Wave 1:** 修复 `read_ftext_with_history()` / DefaultTextValue 的消费与回退语义。
+3. **Wave 2:** 强化 `read_pin_array()`、`_recover_pin_array_count()`、`_try_recover_to_subpins()` 的候选校验。
+4. **Wave 3:** 基于 trace 证据修正第一个真实 Pin 布局错位字段。
+5. **Wave 4:** 分流 PropertyTag 级联问题，避免继续和 Pin 问题混合诊断。
+6. **Wave 5:** 端到端验证 `linked_to_raw -> connections -> execution/data flows`。
+
+**验收标准:**
+
+- [ ] 诊断脚本能解释每个 LinkedTo 失败点的第一个错位字段
+- [ ] `read_pin_array()` 不再依赖弱 count=0 候选恢复
+- [ ] Total LinkedTo refs 从 24 提升到 >= 40，或缺口逐项解释
+- [ ] EventGraph connections >= 9
+- [ ] 新增 Phase 73 专项测试覆盖 FText 回退、PinReference 校验、LinkedTo 恢复误判
+
 ### 可选增强（v13.0 完成后讨论）
 
 ### 结构体/枚举提取（N2CStruct / N2CEnum）
@@ -392,4 +498,4 @@ else:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-G inserted: 复杂 StructProperty 解析 + Pin 连接映射修复)*
+*Updated: 2026-05-24 (Phase 73 inserted: BP_FirstPersonCharacter Pin 序列化边界对齐修复)*
