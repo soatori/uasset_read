@@ -302,7 +302,7 @@ else:
 
 ### Phase 72-F: BPGC 缓存隔离修复 (INSERTED)
 
-**状态:** 🔴 待规划 — 审计 v13.0 发现的阻塞级集成缺陷
+**状态:** 📋 规划完成 — PLAN.md 已创建
 
 **根因 (M-01):** `_extract_kismet_decompiled()` 直接调用 `decompile_single_function()`，绕过了 `decompile_uasset()` 中的 `reset_bpgc_cache()`。
 
@@ -311,6 +311,47 @@ else:
 **修复:** 在 `_extract_kismet_decompiled()` 开头添加 `reset_bpgc_cache()` 调用。
 
 **验收:** 多文件解析无缓存串扰；回归测试通过。
+
+### Phase 72-G: 复杂 StructProperty 解析 + Pin 连接映射修复 (INSERTED)
+
+**插入日期:** 2026-05-23
+
+**来源:** BP_FirstPersonCharacter.uasset vs FirstPersonCCharacter.h/cpp 三方对照分析
+
+**背景:** 以下问题是反复出现、多次修复仍未彻底解决的顽固问题。Phase 67/72-B/72-E 的修复缓解了部分症状，但未根治根因。
+
+**问题清单:**
+
+| # | 问题 | 严重度 | 历史修复记录 | 当前状态 |
+|---|------|--------|-------------|---------|
+| 1 | **Complex StructProperty 解析失败** | 🔴 High | Phase 67 修复 PropertyTag 格式 → 仍失败 | `RelativeLocation`/`RelativeRotation`/`BodyInstance` 因尺寸异常/偏移错误导致字段无法提取 |
+| 2 | **Pin 连接映射输出为空 (Connections=0)** | 🔴 High | Phase 72-B 修复序列化 bug → 仍未输出 | EventGraph 中节点间的数据流和执行流连接未被提取 |
+| 3 | **Blueprint.functions 列表为空** | ⚠️ Medium | 从未修复 | Move/Aim 等自定义函数未在 Blueprint 元数据中提取 |
+| 4 | **函数参数信息缺失** | ⚠️ Medium | 从未修复 | DoMove(float, float) 等函数的参数类型和默认值无法获取 |
+| 5 | **EnhancedInputComponent BindAction 不可见** | ℹ️ Low | 设计限制 | 运行时绑定逻辑不在未烘焙资产序列化数据中 |
+
+**根因分析:**
+
+- **问题 1 (StructProperty — 反复失败):** Phase 67 修复了 PropertyTag 层格式，但结构体**内部字段**序列化仍依赖旧逻辑。`BodyInstance` (FCollisionResponseContainer 嵌套)、`RelativeLocation` (FVector with metadata) 等复杂结构在 UE5 中有额外的序列化头信息，每次读取嵌套字段时偏移计算错误。
+- **问题 2 (Pin 连接 — 反复失败):** Phase 72-B 修复了二进制序列化 bug (history_type signed / ParentPin 条件读取)，但 graph.py 的 `build_connections()` 函数**未将修复后的 LinkedTo 数据映射为输出格式**。修复了"能读到"，但没做到"能输出"。
+- **问题 3 (Blueprint.functions):** Blueprint 导出对象的属性解析中，`UbergraphFunction` 引用未被转换为 functions 列表。
+- **问题 4 (函数参数):** Function 导出对象的序列化区域包含参数表，但当前仅在 Kismet 层提取，未在蓝图元数据层关联。
+
+**修复策略:**
+
+1. **StructProperty 深度解析:** 在 `parsers/property_types.py` 中为 FVector/FRotator/FBodyInstance 添加专用解析器，处理 UE5 序列化头，**增加偏移追踪日志**确保每次嵌套读取后可验证
+2. **Pin 连接输出:** 在 `serializers/graph.py` 中将 LinkedTo 数据映射到输出 `connections` 数组，**增加输出验证测试**确保非空
+3. **Blueprint.functions 提取:** 在 `blueprint/` 模块中添加从 Blueprint 导出对象提取 UbergraphFunction 引用链
+4. **函数参数关联:** 将 Function 导出对象的参数表与 Kismet 反编译结果关联
+
+**目标:** BP_FirstPersonCharacter.uasset 解析覆盖率从 ~56% 提升至 >90%，Connections 输出非空，StructProperty 字段完整提取。
+
+**验收标准:**
+- [ ] `RelativeLocation`/`RelativeRotation` 提取为结构化数据（x/y/z 或 Pitch/Yaw/Roll）
+- [ ] `BodyInstance` 至少提取 CapsuleHalfHeight / CapsuleRadius
+- [ ] EventGraph `connections` 数组 > 0
+- [ ] `Blueprint.functions` 包含 DoMove/DoAim/DoJumpStart/DoJumpEnd
+- [ ] 每个函数输出包含参数名 + 参数类型
 
 ### 可选增强（v13.0 完成后讨论）
 
@@ -351,4 +392,4 @@ else:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-D complete, 1339 tests pass)*
+*Updated: 2026-05-23 (Phase 72-G inserted: 复杂 StructProperty 解析 + Pin 连接映射修复)*
