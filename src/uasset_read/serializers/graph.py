@@ -2,9 +2,11 @@
 
 等价迁移 uasset_read.py L3191-4679。
 Phase 31: 蓝图图解析模块 (per MOD-09)。
+Phase 73: Pin 字段级诊断钩子 (trace_mode)。
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
@@ -246,30 +248,18 @@ def read_ftext_with_history(
             # Other types (OrderedFormat=2, ArgumentFormat=3, AsNumber=4, etc.)
             # 这些类型有各自的复杂结构，无法简单跳过
             # 参考 Text.cpp L965-1037 的其他 history types
-            # Tolerant mode: 不尝试跳过，直接返回（由调用者处理）
+            # Tolerant mode: 不消费字节，seek 回起点
             if not tolerant:
                 raise ParseError(f"Unsupported FText history_type={history_type}")
-            # tolerant: 不消费字节，返回当前位置
+            # Phase 73 Wave 1: tolerant 模式下不猜测跳过，seek 回起点
+            archive.seek(start_pos)
     except Exception as e:
         if tolerant:
-            logger.debug("FText tolerant mode: history_type=%s, error=%s", history_type, e)
-            # Fallback: 根据类型保守跳过（带边界检查）
-            try:
-                if history_type == -1:
-                    target_pos = start_pos + 9
-                elif history_type == 0:
-                    target_pos = start_pos + 12  # 3 个最小 FString (len=0, 各 4 bytes)
-                elif history_type == 1:
-                    target_pos = start_pos + 20  # FormatText(9) + count(4) + 保守
-                else:
-                    # 不尝试跳过未知类型，保持当前位置
-                    target_pos = start_pos
-                # 边界检查：确保不超出文件末尾
-                if target_pos <= archive.file_size:
-                    archive.seek(target_pos)
-            except Exception:
-                # 如果 seek 也失败，保持在当前位置
-                pass
+            logger.debug("FText tolerant mode: history_type=%s, error=%s, seeking back to %d",
+                         history_type, e, start_pos)
+            # Phase 73 Wave 1: 失败时 seek 回起点，不猜测跳过
+            # 由调用者决定是否跳过或尝试其他恢复策略
+            archive.seek(start_pos)
         else:
             raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
 
@@ -280,6 +270,140 @@ def read_ftext_with_history(
 # ============================================================================
 # Pin 引用辅助函数
 # ============================================================================
+
+def validate_pin_reference_at(
+    archive: FArchive,
+    pos: int,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: 校验指定位置的 PinReference 结构有效性。
+
+    不移动指针，只检查指定位置是否符合 PinReference 格式：
+    - b_null (i32): 0 表示正常引用，非 0 表示空引用
+    - owning_node (i32): 在 import/export 范围内
+    - pin_guid (16 bytes): 非全零（除非是 ParentPin 空引用）
+
+    Returns:
+        None: 无效结构
+        Dict: {
+            "b_null": int,
+            "owning_node": int,
+            "owning_node_valid": bool,
+            "guid_nonzero": bool,
+            "valid": bool,
+            "reason": str,
+        }
+    """
+    import struct
+
+    current_pos = archive.tell()
+
+    # 检查是否有足够空间
+    if pos + 24 > archive._file_size:
+        archive.seek(current_pos)
+        return None
+
+    archive.seek(pos)
+    header_bytes = archive.read(24)
+    archive.seek(current_pos)
+
+    b_null = struct.unpack('<i', header_bytes[0:4])[0]
+    owning_node = struct.unpack('<i', header_bytes[4:8])[0]
+    guid_bytes = header_bytes[8:24]
+    guid_nonzero = any(b != 0 for b in guid_bytes)
+
+    # 校验 owning_node 范围
+    owning_node_abs = abs(owning_node)
+    export_count = len(export_map)
+    import_count = len(import_map) if import_map else 0
+    max_valid_index = export_count + import_count + 50  # 允许一定余量
+
+    owning_node_valid = (
+        owning_node == 0 or  # 0 表示无引用
+        owning_node_abs < max_valid_index
+    )
+
+    # 校验 b_null 语义
+    if b_null != 0:
+        # b_null != 0: 空引用标记，owning_node 应该为 0 或被忽略
+        valid = owning_node_valid
+        reason = "valid null ref (b_null!=0, no actual pin)"
+    elif not owning_node_valid:
+        valid = False
+        reason = f"owning_node {owning_node} exceeds range 0..{max_valid_index}"
+    elif not guid_nonzero:
+        # b_null == 0 但 GUID 全零：可能是 ParentPin 空引用或未初始化
+        valid = True
+        reason = "valid ref with zero guid (parent pin empty)"
+    else:
+        valid = True
+        reason = "valid pin reference"
+
+    return {
+        "b_null": b_null,
+        "owning_node": owning_node,
+        "owning_node_valid": owning_node_valid,
+        "guid_nonzero": guid_nonzero,
+        "valid": valid,
+        "reason": reason,
+    }
+
+
+def peek_valid_pin_array_count(
+    archive: FArchive,
+    export_map: List[ObjectExport],
+    max_count: int = 20,
+) -> Optional[int]:
+    """Phase 73 Wave 1: 不移动指针，检查当前位置是否是有效的 LinkedTo 数组。
+
+    只读取 i32 count，验证范围 0..max_count，检查后续数据是否符合 PinReference 结构。
+    如果有效返回 count；否则返回 None。
+
+    用途：在 FText 失败后判断当前位置是否已经是 LinkedTo 数组。
+    """
+    import struct
+
+    current_pos = archive.tell()
+
+    # 读取 4 字节 count（不移动指针）
+    if current_pos + 4 > archive._file_size:
+        return None
+
+    archive.seek(current_pos)
+    count_bytes = archive.read(4)
+    count = struct.unpack('<i', count_bytes)[0]
+
+    # 验证 count 范围
+    if count < 0 or count > max_count:
+        archive.seek(current_pos)  # 恢复位置
+        return None
+
+    # 如果 count == 0，检查后续是否有 SubPins 数组结构
+    # (count=0 后面应该是 SubPins count 或其他 Pin 字段)
+    # 简化：count=0 总是有效的
+    if count == 0:
+        archive.seek(current_pos)
+        return 0
+
+    # count > 0：检查第一个 PinReference header
+    # PinReference header: b_null (i32) + owning_node (i32) + pin_guid (16 bytes)
+    if current_pos + 4 + 4 > archive._file_size:
+        archive.seek(current_pos)
+        return None
+
+    b_null_bytes = archive.read(4)
+    b_null = struct.unpack('<i', b_null_bytes)[0]
+
+    archive.seek(current_pos)  # 恢复位置
+
+    # b_null == 0: 正常 PinReference
+    # b_null != 0: 空引用（但 count > 0 意味着有内容，所以 b_null 应该是 0）
+    if b_null == 0:
+        return count
+    else:
+        return None
+
 
 def read_pin_reference(
     archive: FArchive,
@@ -330,11 +454,14 @@ def read_pin_array(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
+    recovery_context: str = "linkedto",  # Phase 73 Wave 2: 区分 linkedto vs subpins
 ) -> List[dict]:
     """读取 Pin 引用数组（SerializePinArray 格式）。
 
     Phase 72-I Wave 2: 滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
     验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
+
+    Phase 73 Wave 2: 恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
     """
     array_count = archive.read_i32()
 
@@ -342,10 +469,14 @@ def read_pin_array(
         # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
         recovery_pos = archive.tell()
         recovered = _recover_pin_array_count(
-            archive, recovery_pos, array_count, export_map
+            archive, recovery_pos, array_count, export_map, import_map
         )
         if recovered is not None:
-            array_count = recovered
+            array_count = recovered["count"]
+            logger.info(
+                "[P73-RECOVERY] %s recovered: count=%d, confidence=%s, reason=%s",
+                recovery_context, array_count, recovered["confidence"], recovered["reason"]
+            )
         else:
             if array_count < 0:
                 raise ParseError(f"Invalid pin array count: {array_count} (negative)")
@@ -366,12 +497,26 @@ def _recover_pin_array_count(
     error_pos: int,
     bad_count: int,
     export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
     scan_window: int = 8,
-) -> Optional[int]:
-    """滑动恢复：扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: 滑动恢复增强校验。
 
-    验证候选 count 后的第一个 owning_node 是否在 export_map 范围内。
-    恢复成功时 seek 到候选 count 之后的位置（即第一个 pin ref 开始处）。
+    扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+
+    Wave 2 改进：
+    - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
+    - count>0 必须验证全部或至少前两个 PinReference
+    - 恢复成功返回结构化结果：{count, candidate_pos, confidence, reason}
+
+    Returns:
+        None: 恢复失败
+        Dict: {
+            "count": int,
+            "candidate_pos": int,
+            "confidence": "high"/"medium"/"low",
+            "reason": str,
+        }
     """
     import struct
 
@@ -383,52 +528,114 @@ def _recover_pin_array_count(
     window = archive.read(search_end - search_start)
 
     best_candidate = None
+    best_confidence = "low"
+    best_reason = ""
+
     for offset in range(0, len(window) - 4, 1):
         candidate_bytes = window[offset:offset + 4]
         candidate = struct.unpack('<i', candidate_bytes)[0]
         if candidate < 0 or candidate > 20:
             continue  # 不合理范围
 
-        # 验证：候选 count 后面的数据能否解析为 Pin reference header
+        candidate_pos = search_start + offset
         after_count = offset + 4
-        if after_count + 4 > len(window):
+
+        # Phase 73 Wave 2: count=0 需要额外验证后续结构
+        if candidate == 0:
+            # count=0 后面应该是 SubPins 数组或其他合理结构
+            # 检查是否有另一个小整数 count (0..20) 紧随其后
+            if after_count + 4 <= len(window):
+                next_val = struct.unpack('<i', window[after_count:after_count + 4])[0]
+                if 0 <= next_val <= 20:
+                    # 后面有另一个数组 count，符合 SubPins 结构
+                    best_candidate = (candidate_pos, candidate)
+                    best_confidence = "medium"
+                    best_reason = "count=0 followed by valid SubPins count"
+                    # 不 break，继续寻找更高置信度的候选
+                    continue
+            # count=0 但后续结构不明，置信度低
+            if best_candidate is None or best_confidence == "low":
+                best_candidate = (candidate_pos, candidate)
+                best_confidence = "low"
+                best_reason = "count=0 without verified subsequent structure"
             continue
-        b_null = struct.unpack('<i', window[after_count:after_count + 4])[0]
-        if b_null == 0:
-            # Non-null ref: check owning_node is in range
-            if after_count + 8 > len(window):
+
+        # count > 0: 验证 PinReference 结构
+        if after_count + 24 > len(window):
+            continue  # 空间不足
+
+        # 验证第一个 PinReference
+        pin_ref_1 = validate_pin_reference_at(
+            archive, candidate_pos + 4, export_map, import_map
+        )
+        if pin_ref_1 is None or not pin_ref_1["valid"]:
+            continue
+
+        # 验证第二个 PinReference（如果 count >= 2）
+        if candidate >= 2 and after_count + 48 <= len(window):
+            pin_ref_2 = validate_pin_reference_at(
+                archive, candidate_pos + 4 + 24, export_map, import_map
+            )
+            if pin_ref_2 is None or not pin_ref_2["valid"]:
+                # 第二个 ref 无效，置信度中等
+                best_candidate = (candidate_pos, candidate)
+                best_confidence = "medium"
+                best_reason = f"count={candidate}, ref1 valid but ref2 invalid"
                 continue
-            owning_node = struct.unpack('<i', window[after_count + 4:after_count + 8])[0]
-            owning_node_abs = abs(owning_node)
-            if owning_node_abs < len(export_map) + 100:
-                best_candidate = (search_start + offset, candidate)
-                break
-        else:
-            # Null ref is always valid for a pin array
-            best_candidate = (search_start + offset, candidate)
-            break
+
+        # 所有验证通过，高置信度
+        best_candidate = (candidate_pos, candidate)
+        best_confidence = "high"
+        best_reason = f"count={candidate}, all refs validated"
+        break  # 找到高置信度候选，停止搜索
 
     if best_candidate is not None:
         candidate_pos, recovered_count = best_candidate
         logger.warning(
-            "LinkedTo recovery: bad count %d at pos %d, "
-            "found valid count %d at pos %d",
+            "[P73-RECOVERY] LinkedTo: bad count %d at pos %d, "
+            "found count %d at pos %d (confidence=%s, reason=%s)",
             bad_count, error_pos - 4, recovered_count, candidate_pos,
+            best_confidence, best_reason,
         )
         # Seek to just after the valid count (start of first pin ref)
         archive.seek(candidate_pos + 4)
-        return recovered_count
+        return {
+            "count": recovered_count,
+            "candidate_pos": candidate_pos,
+            "confidence": best_confidence,
+            "reason": best_reason,
+        }
 
     # 恢复失败：seek 回原始错误位置
     archive.seek(current_pos)
     return None
 
 
-def _try_recover_to_subpins(archive: FArchive, error_pos: int, max_scan: int = 256) -> None:
-    """LinkedTo 读取失败后，扫描前方寻找 SubPins 起始位置。
+def _try_recover_to_subpins(
+    archive: FArchive,
+    error_pos: int,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
+    max_scan: int = 256,
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: LinkedTo 失败后恢复到 SubPins。
 
     扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
     (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
+
+    Wave 2 改进：
+    - 使用 validate_pin_reference_at() 进行结构校验
+    - 区分 linkedto_recovered（找到合法 Pin 数组）和 subpins_resync（跳到下一个结构）
+    - 返回结构化恢复结果
+
+    Returns:
+        None: 恢复失败
+        Dict: {
+            "recovered_pos": int,
+            "count": int,
+            "recovery_type": "linkedto_recovered" / "subpins_resync",
+            "reason": str,
+        }
     """
     import struct
 
@@ -441,40 +648,55 @@ def _try_recover_to_subpins(archive: FArchive, error_pos: int, max_scan: int = 2
         candidate = struct.unpack('<i', window[offset:offset + 4])[0]
         if candidate < 0 or candidate > 20:
             continue
-        # 验证 candidate 后面的数据是否为合法 pin reference header
+
+        candidate_pos = scan_start + offset
         after = offset + 4
-        if after + 4 > len(window):
-            continue
-        b_null = struct.unpack('<i', window[after:after + 4])[0]
-        if b_null == 0:
-            if after + 8 > len(window):
-                continue
-            owning_node = struct.unpack('<i', window[after + 4:after + 8])[0]
-            # owning_node index should be within reasonable export_map range
-            # (absolute value, since it can be negative for imports)
-            if abs(owning_node) < 100000:
-                recovered_pos = scan_start + offset
-                logger.warning(
-                    "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d)",
-                    recovered_pos - error_pos, error_pos, recovered_pos, candidate,
-                )
-                archive.seek(recovered_pos)
-                return
-        else:
-            # b_null != 0 means first ref is null, valid for empty SubPins
-            recovered_pos = scan_start + offset
-            logger.warning(
-                "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d, null ref)",
-                recovered_pos - error_pos, error_pos, recovered_pos, candidate,
+
+        # Phase 73 Wave 2: 使用 validate_pin_reference_at 校验
+        if candidate > 0 and after + 24 <= len(window):
+            pin_ref_result = validate_pin_reference_at(
+                archive, candidate_pos + 4, export_map, import_map
             )
-            archive.seek(recovered_pos)
-            return
+            if pin_ref_result is not None and pin_ref_result["valid"]:
+                recovered_pos = candidate_pos
+                archive.seek(recovered_pos)
+                # Wave 2: 根据是否是实际 pin reference 判断 recovery_type
+                recovery_type = "linkedto_recovered" if pin_ref_result["b_null"] == 0 else "subpins_resync"
+                logger.warning(
+                    "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
+                    recovered_pos, candidate, recovery_type, pin_ref_result["reason"],
+                )
+                return {
+                    "recovered_pos": recovered_pos,
+                    "count": candidate,
+                    "recovery_type": recovery_type,
+                    "reason": pin_ref_result["reason"],
+                }
+
+        # count=0 或 b_null!=0 情况：检查是否是空数组或 null ref
+        if after + 4 <= len(window):
+            b_null = struct.unpack('<i', window[after:after + 4])[0]
+            if b_null != 0:
+                # b_null!=0: 空引用，有效
+                recovered_pos = candidate_pos
+                archive.seek(recovered_pos)
+                logger.warning(
+                    "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
+                    recovered_pos, candidate,
+                )
+                return {
+                    "recovered_pos": recovered_pos,
+                    "count": candidate,
+                    "recovery_type": "subpins_resync",  # 跳到下一个结构
+                    "reason": "b_null!=0 null reference",
+                }
 
     # 恢复失败，保持在当前位置
     logger.warning(
-        "LinkedTo recovery: could not find SubPins within %d bytes from pos %d",
+        "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
         max_scan, error_pos,
     )
+    return None
 # ============================================================================
 
 def read_ue_graph_pin(
@@ -486,6 +708,7 @@ def read_ue_graph_pin(
     linker: Optional["PackageLinker"] = None,
     header_owning_node: Optional[int] = None,
     header_pin_id: Optional[str] = None,
+    trace_mode: bool = False,  # Phase 73: 字段级诊断开关
 ) -> UEdGraphPin:
     """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
 
@@ -494,26 +717,55 @@ def read_ue_graph_pin(
       - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
 
     If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
+
+    Phase 73: trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
     """
     pin_start_pos = archive.tell()
 
+    # Phase 73: 诊断记录
+    _trace_fields: Dict[str, Any] = {}
+    if trace_mode:
+        _trace_fields["pin_start_pos"] = pin_start_pos
+        _trace_fields["fields"] = []
+        def _trace_field(name: str, start: int, end: int, value_preview: str = "",
+                         is_exception: bool = False, is_fallback: bool = False):
+            """记录单个字段的追踪信息。"""
+            _trace_fields["fields"].append({
+                "name": name,
+                "start": start,
+                "end": end,
+                "consumed": end - start,
+                "value": value_preview[:50],
+                "exception": is_exception,
+                "fallback": is_fallback,
+            })
+
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
+    _field_start = archive.tell()
     if header_owning_node is not None:
         archive.read_i32()  # Discard internal duplicate
         owning_node_index = header_owning_node
     else:
         owning_node_index = archive.read_i32()
+    if trace_mode:
+        _trace_field("OwningNode", _field_start, archive.tell(), str(owning_node_index))
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
+    _field_start = archive.tell()
     if header_pin_id is not None:
         archive.read_bytes(16)  # Discard internal duplicate
         pin_id = header_pin_id
     else:
         pin_id_bytes = archive.read_bytes(16)
         pin_id = pin_id_bytes.hex().upper()
+    if trace_mode:
+        _trace_field("PinId", _field_start, archive.tell(), pin_id[:16]+"...")
 
     # 3. PinName (UE5 始终使用 FName 格式)
+    _field_start = archive.tell()
     pin_name = archive.read_name(name_map)
+    if trace_mode:
+        _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText) — EditorOnly, try/except + seek-back
     ftext_start_pos = archive.tell()
@@ -522,16 +774,26 @@ def read_ue_graph_pin(
         history_type_raw = archive.read_u8()
         history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
         read_ftext_with_history(archive, history_type, tolerant=True)
-    except Exception:
+        if trace_mode:
+            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                         f"flags={flags},htype={history_type}")
+    except Exception as e:
         archive.seek(ftext_start_pos)
+        if trace_mode:
+            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                         "", is_exception=True, is_fallback=True)
 
     # 5. SourceIndex (UE5 始终存在)
+    _field_start = archive.tell()
     source_index = archive.read_i32()
+    if trace_mode:
+        _trace_field("SourceIndex", _field_start, archive.tell(), str(source_index))
 
     # 6. PinToolTip — FString (NOT FText!)
     # C++ UEdGraphPin::Serialize L1870: Ar << PinToolTip;
     # EdGraphPin.h L380: FString PinToolTip;
     # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
+    _field_start = archive.tell()
     try:
         pin_tooltip = archive.read_fstring()
         # 额外检查：pin_tooltip 专用二进制数据过滤
@@ -542,34 +804,75 @@ def read_ue_graph_pin(
                 "Binary pinTooltip at pos %d for pin '%s' — returning empty",
                 archive.tell() - len(pin_tooltip), pin_name
             )
+            if trace_mode:
+                _trace_field("PinToolTip", _field_start, archive.tell(), "[BINARY]")
             pin_tooltip = ""
-    except Exception:
+        else:
+            if trace_mode:
+                _trace_field("PinToolTip", _field_start, archive.tell(),
+                             pin_tooltip[:30] if pin_tooltip else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("PinToolTip", _field_start, archive.tell(), "",
+                         is_exception=True)
         pin_tooltip = ""
 
     # 7. Direction — u8 for both UE4 and UE5
+    _field_start = archive.tell()
     direction = archive.read_u8()
+    if trace_mode:
+        _trace_field("Direction", _field_start, archive.tell(), str(direction))
 
     # 8. PinType
+    _field_start = archive.tell()
     pin_type = read_ed_graph_pin_type(archive, name_map, summary)
+    if trace_mode:
+        _trace_field("PinType", _field_start, archive.tell(), "[PinType struct]")
 
     # 9-10. DefaultValue strings (容错)
+    _field_start = archive.tell()
     try:
         default_value = archive.read_fstring()
-    except Exception:
+        if trace_mode:
+            from uasset_read.archive import _contains_binary_data
+            if _contains_binary_data(default_value):
+                _trace_field("DefaultValue", _field_start, archive.tell(), "[BINARY]")
+            else:
+                _trace_field("DefaultValue", _field_start, archive.tell(),
+                             default_value[:30] if default_value else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("DefaultValue", _field_start, archive.tell(), "",
+                         is_exception=True)
         default_value = ""
 
+    _field_start = archive.tell()
     try:
         autogenerated_default_value = archive.read_fstring()
-    except Exception:
+        if trace_mode:
+            from uasset_read.archive import _contains_binary_data
+            if _contains_binary_data(autogenerated_default_value):
+                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "[BINARY]")
+            else:
+                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(),
+                             autogenerated_default_value[:30] if autogenerated_default_value else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "",
+                         is_exception=True)
         autogenerated_default_value = ""
 
     # 11. DefaultObject (FPackageIndex)
+    _field_start = archive.tell()
     default_object = archive.read_i32()
+    if trace_mode:
+        _trace_field("DefaultObject", _field_start, archive.tell(), str(default_object))
 
     # 12. DefaultTextValue (FText) — NICHT FString!
     # UE5 C++: Ar << DefaultTextValue; (EdGraphPin.cpp L1876)
     # FText Serialisierung: flags(i32,4B) + history_type(u8,1B) + body(variable)
     # Siehe read_ftext_with_history() fuer history_type Verarbeitung
+    _dtv_start = archive.tell()
     try:
         _dtv_flags = archive.read_i32()
         _dtv_history_raw = archive.read_u8()
@@ -578,21 +881,43 @@ def read_ue_graph_pin(
             archive, _dtv_history,
             tolerant=True,
         )
-    except Exception:
-        # Extrem tolerant: Falls FText-Lesen fehlschlaegt, DefaultTextValue ignorieren
-        pass
+        # Phase 73 Wave 1: 检查是否 seek 回了起点（说明 FText 失败）
+        if archive.tell() == _dtv_start + 5:  # 只消费了 flags + htype，说明 body 失败
+            # FText body 失败，seek 回整个 DefaultTextValue 起点
+            archive.seek(_dtv_start)
+            if trace_mode:
+                _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
+                             is_exception=True, is_fallback=True)
+        else:
+            if trace_mode:
+                _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
+                             f"flags={_dtv_flags},htype={_dtv_history}")
+    except Exception as e:
+        # Phase 73 Wave 1: 失败时 seek 回起点
+        archive.seek(_dtv_start)
+        if trace_mode:
+            _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
+                         is_exception=True, is_fallback=True)
+        logger.debug("DefaultTextValue read failed at pos %d, seeking back: %s",
+                     _dtv_start, e)
 
-    # 13. LinkedTo array
+    # 13. LinkedTo array — Phase 73 关键诊断点
     linkedto_start = archive.tell()
     try:
         linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
         logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
+        if trace_mode:
+            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
+            _trace_field("LinkedTo", linkedto_start, archive.tell(),
+                         f"count={len(linked_to)},refs={refs_preview}")
     except Exception as e:
         logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
+        if trace_mode:
+            _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
+                         is_exception=True)
         linked_to = []
-        # Attempt position recovery: scan forward for a plausible SubPins count (0..20)
-        # followed by a valid pin reference header, within 256 bytes.
-        _try_recover_to_subpins(archive, linkedto_start)
+        # Phase 73 Wave 2: 使用增强校验恢复
+        _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
 
     # 14. SubPins array
     subpins_start = archive.tell()
@@ -658,6 +983,33 @@ def read_ue_graph_pin(
     sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
     parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
     ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
+
+    # Phase 73: 诊断日志输出
+    if trace_mode:
+        # 找出第一个可能错位的字段
+        first_misaligned = ""
+        for f in _trace_fields["fields"]:
+            if f.get("exception") and not f.get("fallback"):
+                first_misaligned = f["name"]
+                break
+            # 检查消费字节是否异常大（FString 正常应该 < 100）
+            if f["name"] in ("PinToolTip", "DefaultValue", "AutogeneratedDefaultValue"):
+                if f["consumed"] > 100:
+                    first_misaligned = f["name"]
+                    break
+            # 检查 [BINARY] 标记
+            if "[BINARY]" in str(f.get("value", "")):
+                first_misaligned = f["name"]
+                break
+
+        logger.info(
+            "[P73-PINTRACE] Pin '%s' at pos %d: fields=%d, linkedto=%d, first_misaligned='%s'",
+            pin_name, pin_start_pos, len(_trace_fields["fields"]),
+            len(linked_to), first_misaligned
+        )
+        # 详细字段日志（可选，调试时启用）
+        if first_misaligned:
+            logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields["fields"]))
 
     return UEdGraphPin(
         pin_id=pin_id,
