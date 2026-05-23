@@ -45,7 +45,7 @@ def build_status_info(result: ParseResult) -> StatusInfo:
 
 def build_schema_info() -> Dict[str, str]:
     """
-    构建字段语义注释（D-14-13, OUT-05, Phase 71）。
+    构建字段语义注释（D-14-13, OUT-05）。
 
     仅在 --verbose 或 --schema 标志时输出。
 
@@ -63,10 +63,7 @@ def build_schema_info() -> Dict[str, str]:
         "is_component": "变量是否为组件类型（SkeletalMeshComponent 等）",
         "graphs": "蓝图执行图数据（完整节点/引脚信息）",
         "graphs_summary": "顶层化的图执行流概览（事件→函数调用链）",
-        "execution_chains": "执行流链式表达（N1->N2->N3 格式，Phase 71）",
-        "chains": "链式字符串列表（如 ['N1->N2->N3']）",
-        "has_cycle": "是否检测到执行流环",
-        "chain_metadata": "链元数据（branch_count 等）",
+        "execution_flows": "函数调用链路径",
     }
 
 

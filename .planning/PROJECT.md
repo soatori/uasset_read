@@ -2,7 +2,7 @@
 
 Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI agent 直接解析内容。
 
-**技术栈**: Python 3.10+，零运行时依赖 | **架构**: `.uasset → FArchive → 序列化 → 数据模型 → 属性解析 → 蓝图图 → 格式化输出 → PackageLinker → Kismet 字节码反编译 → Agent 翻译管线`
+**技术栈**: Python 3.10+，零运行时依赖 | **架构**: `.uasset → FArchive → 序列化 → 数据模型 → 属性解析 → 蓝图图 → 格式化输出 → PackageLinker → Kismet 字节码反编译`
 
 **源码参考**: `E:\Develop\lib\UnrealEngine` (UE 5.7，只读)
 
@@ -14,21 +14,20 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 | v7.0 | UE FLinkerLoad 对象图重建 | 已归档 |
 | v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 已归档 |
 | v9.0 | 函数调用链解析 (P52-55) | 已归档 |
-| v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 已归档 |
-| **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | **已归档** |
-| **v12.0** | 📋 N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-70) | 活跃 |
+| **v10.0** | **Blueprint-to-C++ 代码生成参考 (P56-60)** | **已发布** |
+| **v11.0** | 📋 Kismet 字节码反编译器 (P61-64) | 活跃 |
 
-详情：`.planning/milestones/` | 路线图：`.planning/ROADMAP.md`
+详情：`.planning/archive/` | 路线图：`.planning/ROADMAP.md`
 
 ## 当前状态
 
-**当前开发**: v12.0 — N2C 中间格式（活跃）
+**当前开发**: v11.0 — Kismet 字节码反编译器（活跃）
 
-将 NodeToCode 的核心架构模式移植到 Python：N2CNodeTypeRegistry（100+ K2Node 类型映射）、节点处理器架构（Processor 模式）、N2CStruct JSON Schema（LLM 优化中间格式）、执行流链式表达。
+参考 CUE4Parse 设计，实现完整的 Kismet 字节码反编译器：从函数体原始字节流构建表达式树，翻译为可读 C++ 伪代码，覆盖变量/常量/函数调用/控制流/类型转换。
 
-**已归档**: v11.0 — Kismet 字节码反编译器 (2026-05-20)
+**已归档**: v10.0 — Blueprint-to-C++ 代码生成参考 (2026-05-19)
 
-实现完整字节码反编译管线：EExprToken → KismetExpression AST → C++ 伪代码，集成到 Agent 翻译管线输出 .h/.cpp 文件。修复图解析关键差距（FMemberReference、Pin 连接、Struct 映射）。1271 tests。
+从蓝图 JSON 输出提取足够信息，使开发者能直接编写等价的 C++ 类实现：组件声明+构造函数数值、函数签名、输入绑定、执行流、函数调用链、数据流标注、函数体逻辑（AST 层面）、组件初始化代码。1021 tests。
 
 **预存在问题**: 26 个测试失败（资产版本 -8 vs -9，pre-existing）
 
@@ -36,9 +35,8 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 
 导出纹理/模型 | 修改 .uasset | Cooked 资产 | MCP Server
 
-~~蓝图字节码反编译~~ → v11.0 已实现（KismetExpression → C++）
-~~Agent 翻译管线~~ → v11.0 已实现（AgentTranslationPipeline + CppFileWriter）
-~~C++ 代码生成~~ → v10.0 已实现参考级输出
+~~蓝图字节码反编译~~ → v11.0 开始实施
+*C++ 代码生成~~ → v10.0 已实现参考级输出
 
 ## 关键决策
 

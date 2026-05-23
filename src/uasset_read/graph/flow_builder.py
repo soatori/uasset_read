@@ -17,21 +17,6 @@ from uasset_read.models.node_types import (
     EdGraphNodeComment, K2NodeEnhancedInputAction
 )
 
-# N2C Processor Registry integration (Phase 69)
-from uasset_read.n2c.node_types import N2CNodeType
-from uasset_read.n2c.definitions import N2CNodeDefinition
-from uasset_read.n2c.processor_registry import N2CProcessorRegistry
-from uasset_read.n2c.compat import definition_to_node_dict, definition_to_trace_node_info
-from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
-
-
-def _ensure_registry():
-    """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
-    from uasset_read.n2c.processors import register_all_processors
-    registry = N2CProcessorRegistry.get_instance()
-    if not registry._processors or registry._fallback is None:
-        register_all_processors()
-
 
 # ============================================================================
 # 辅助函数
@@ -81,11 +66,6 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     策略：使用 f"{class_name}_{idx}" 格式，避免同名节点冲突。
     """
     return f"{node.class_name}_{idx}"
-
-
-def _resolve_node_type(class_name: str) -> N2CNodeType:
-    """使用 N2CNodeTypeRegistry 解析节点类型（Phase 68）。"""
-    return N2CNodeTypeRegistry.get_instance().resolve(class_name)
 
 
 def format_pin_ref(
@@ -140,9 +120,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """
     from dataclasses import asdict
 
-    # Phase 69: ensure registry initialized (conftest-reset-safe)
-    _ensure_registry()
-
     # D-20-01: 派生 node_name
     node_name = _derive_node_name(node, idx)
 
@@ -156,29 +133,39 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # 添加字符串清理
     }
 
-    # Phase 69: 使用 Processor Registry 替代 if/elif 链
-    node_type = _resolve_node_type(node.class_name)
-    definition = N2CNodeDefinition(
-        node_id=node.node_guid or f"no-guid-{idx}",
-        node_type=node_type,
-        position=(node.node_pos_x, node.node_pos_y),
-        comment=node.node_comment or "",
-    )
-    N2CProcessorRegistry.get_instance().process_node(node, node_type, definition)
+    # D-20-03: 嵌套结构展开（兼容 dict 和 dataclass node_data）
+    if node.node_data is not None:
+        nd = node.node_data
+        # Helper: get value from dict key or object attribute
+        def _get(key):
+            if isinstance(nd, dict):
+                return nd.get(key)
+            return getattr(nd, key, None)
 
-    # 通过 compat 层转换回 OUT-01 格式
-    compat_result = definition_to_node_dict(
-        definition,
-        node_name=node_name,
-        node_guid=node.node_guid or "",
-        original_class_name=node.class_name,
-        pins=result["pins"],
-    )
-    # 合并 position/node_comment（compat 可能移除了 None 值）
-    if "node_comment" not in compat_result and node.node_comment:
-        compat_result["node_comment"] = node.node_comment
-
-    result = compat_result
+        fr = _get('function_reference')
+        if fr is not None:
+            result["function_reference"] = {
+                "member_name": getattr(fr, 'member_name', None),
+                "member_parent": getattr(fr, 'member_parent', None),
+                "self_context": getattr(fr, 'b_self_context', None)
+            }
+        elif _get('event_reference') is not None:
+            er = _get('event_reference')
+            result["event_reference"] = {
+                "member_name": getattr(er, 'member_name', None),
+                "member_parent": getattr(er, 'member_parent', None),
+                "member_guid": getattr(er, 'member_guid', None)
+            }
+        elif _get('input_action_path') is not None:
+            result["input_action_path"] = _get('input_action_path')
+        elif _get('function_reference') is not None and node.class_name == "K2Node_FunctionEntry":
+            fr = _get('function_reference')
+            result["function_entry_reference"] = {
+                "member_name": getattr(fr, 'member_name', None),
+                "member_parent": getattr(fr, 'member_parent', None),
+                "self_context": getattr(fr, 'b_self_context', None)
+            }
+        # Knot/Comment 无额外顶层字段
 
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
@@ -530,67 +517,64 @@ def _trace_execution_from_event(
             "node_type": current_node.class_name,
         }
 
-        # Phase 69: 使用 Processor Registry 调度语义提取
-        node_type = _resolve_node_type(current_node.class_name)
-        definition = N2CNodeDefinition(
-            node_id=current_guid,
-            node_type=node_type,
-            position=(current_node.node_pos_x, current_node.node_pos_y),
-            comment=current_node.node_comment or "",
-        )
-        N2CProcessorRegistry.get_instance().process_node(current_node, node_type, definition)
-
-        # 通过 compat 层映射回 node_info
-        semantic_info = definition_to_trace_node_info(
-            definition, current_guid, current_node.class_name
-        )
-        # 合并 semantic 字段（不覆盖已有字段）
-        for k, v in semantic_info.items():
-            if k not in node_info:
-                node_info[k] = v
-
-        # --- 保留：CallFunction 的 parameters 提取（数据流追踪，非语义提取）---
         if current_node.class_name == "K2Node_CallFunction":
+            nd = current_node.node_data
+            if nd:
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                if fr:
+                    node_info["function_name"] = getattr(fr, 'member_name', None)
+
+            # Phase 54: 使用增强的 _extract_call_function_parameters（传入 lookup）
             from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
 
-        # Phase 53: mark pure functions with "pure": true in flow
-        has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
-        if not has_exec_pin:
-            node_info["pure"] = True
+            # Phase 53: mark pure functions with "pure": true in flow
+            has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
+            if not has_exec_pin:
+                node_info["pure"] = True
 
-            # Phase 54: Pure 函数 data_providers 标注（正向追踪）
-            data_providers: List[Dict] = []
-            for pin in current_node.pins:
-                if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
-                    # 找到 output pin 的连接目标
-                    for linked_ref in (pin.linked_to_raw or []):
-                        target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
-                        if target_pin_guid in pin_lookup:
-                            target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
-                            target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
-                            data_providers.append({
-                                "output_pin": pin.pin_name,
-                                "target_node": target_node_name,
-                                "target_pin": target_pin_name
-                            })
+                # Phase 54: Pure 函数 data_providers 标注（正向追踪）
+                data_providers: List[Dict] = []
+                for pin in current_node.pins:
+                    if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
+                        # 找到 output pin 的连接目标
+                        for linked_ref in (pin.linked_to_raw or []):
+                            target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                            if target_pin_guid in pin_lookup:
+                                target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
+                                target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
+                                data_providers.append({
+                                    "output_pin": pin.pin_name,
+                                    "target_node": target_node_name,
+                                    "target_pin": target_pin_name
+                                })
 
-            if data_providers:
-                node_info["data_providers"] = data_providers
+                if data_providers:
+                    node_info["data_providers"] = data_providers
 
-        elif current_node.node_data and hasattr(current_node.node_data, 'b_defaults_to_pure') and current_node.node_data.b_defaults_to_pure:
-            node_info["pure"] = True
+            elif nd and hasattr(nd, 'b_defaults_to_pure') and nd.b_defaults_to_pure:
+                node_info["pure"] = True
 
-        # 控制流节点终止执行（stopped_at 已由 compat 层设置）
+        if current_node.class_name == "K2Node_Event":
+            nd = current_node.node_data
+            if nd:
+                er = nd.get("event_reference") if isinstance(nd, dict) else getattr(nd, 'event_reference', None)
+                if er:
+                    node_info["event_name"] = getattr(er, 'member_name', None)
+
+        if current_node.class_name == "K2Node_FunctionEntry":
+            nd = current_node.node_data
+            if nd:
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                if fr:
+                    node_info["function_name"] = getattr(fr, 'member_name', None)
+
         if current_node.class_name in CONTROL_FLOW_NODES:
-            # 确保 branch_type 设置正确（如果 Processor 未覆盖）
-            if "branch_type" not in node_info:
-                branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
-                node_info["branch_type"] = branch_type
-            if "stopped_at" not in node_info:
-                node_info["stopped_at"] = "control_flow_node"
+            branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
+            node_info["branch_type"] = branch_type
+            node_info["stopped_at"] = "control_flow_node"
             flow.append(node_info)
             break
 
@@ -675,31 +659,17 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
     Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
-    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
         List[Dict]: execution_flows 数组
-
-    Note:
-        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
     """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
-    # Phase 69: ensure registry initialized
-    _ensure_registry()
-
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
     node_name_lookup: Dict[str, str] = {}  # Phase 54: 新增
@@ -775,7 +745,7 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
 
 
 def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
-    """构建所有图的摘要（OUT-03, D-19-09, Phase 71）。
+    """构建所有图的摘要（OUT-03, D-19-09）。
 
     Args:
         graphs: List[UEdGraph] 图列表
@@ -783,19 +753,14 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: graphs_summary 数组
     """
-    from .chain_builder import build_execution_chains
-
     summaries: List[Dict] = []
 
     for graph in graphs:
         # 图类型映射
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
-        # 执行流构建（用于 chain_builder）
+        # 执行流构建
         execution_flows = build_execution_flows(graph)
-
-        # 执行流链式表达（Phase 71）
-        execution_chains = build_execution_chains(graph, execution_flows)
 
         # 连接映射构建
         connections, warnings = build_connections_map(graph)
@@ -803,15 +768,15 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         # 数据流构建（D-19-09）
         data_flows = build_data_flows(graph)
 
-        # 过滤空 chain（无实际连接的 flow）
-        non_empty_chains = [c for c in execution_chains if c.get("chains")]
+        # 过滤空 flow（EnhancedInputAction Started/Ongoing 可能无实际连接）
+        non_empty_flows = [f for f in execution_flows if f.get("nodes")]
 
         summaries.append({
             "graph_name": graph.graph_name,
             "graph_type": graph_type,
             "node_count": len(graph.nodes),
             "schema": graph.schema,
-            "execution_chains": non_empty_chains,  # Phase 71: 链式表达替代 execution_flows
+            "execution_flows": non_empty_flows,
             "connections": connections,
             "data_flows": data_flows,  # D-19-09: 数据流与执行流独立分离
             "warnings": warnings if warnings else None,
@@ -821,16 +786,15 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
-    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04, Phase 71）。
+    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
 
     等价迁移 uasset_read_legacy.py L6685-6735。
 
     Per D-08-03: connections 放在 graph 层级
-    Per D-08-09: execution_flows 数组（Phase 71: 改为 execution_chains）
+    Per D-08-09: execution_flows 数组
     Per D-19-09: data_flows 数组（LINK-03）
     Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
     Per OUT-01: nodes 使用 format_node_dict 格式化
-    Per Phase 71: execution_chains 链式表达替代 execution_flows
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -838,8 +802,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: 每个 graph 的 JSON 表示
     """
-    from .chain_builder import build_execution_chains
-
     formatted = []
     for graph in graphs:
         # 图类型映射
@@ -851,9 +813,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建执行流
         execution_flows = build_execution_flows(graph)
 
-        # 构建执行流链式表达（Phase 71）
-        execution_chains = build_execution_chains(graph, execution_flows)
-
         # 构建数据流
         data_flows = build_data_flows(graph)
 
@@ -863,7 +822,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
             "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
             "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01: 完整节点列表
             "connections": connections,
-            "execution_chains": execution_chains,  # Phase 71: 链式表达替代 execution_flows
+            "execution_flows": execution_flows,
             "data_flows": data_flows,
         }
 
@@ -880,66 +839,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
-
-
-def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
-    """从 FunctionEntry 节点的 Pins 提取签名（GAP-07）。
-
-    当 blueprint_functions 查找失败时，使用 Pin 信息作为 fallback。
-
-    Args:
-        fe_node: K2Node_FunctionEntry 节点
-
-    Returns:
-        Dict: 包含 return_type 和 parameters 的签名字典
-    """
-    from uasset_read.parsers.property_types import format_variable_type
-
-    return_type = ""
-    parameters: List[Dict] = []
-
-    for pin in fe_node.pins:
-        # 跳过 exec pin
-        if pin.pin_type and pin.pin_type.pin_category == "exec":
-            continue
-
-        # 输出 Pin → 返回值（Direction=1, pin_name == "ReturnValue"）
-        if pin.direction == 1 and pin.pin_name and "return" in pin.pin_name.lower():
-            # 提取返回值类型
-            if pin.pin_type:
-                # 使用 format_variable_type 格式化类型
-                return_type = format_variable_type(pin.pin_type)
-                # 如果格式化后为空或 "bool" 等基本类型，尝试使用 pin_subcategory
-                if not return_type or return_type.lower() in ("bool", "int", "float", "string", "name", "text", "uobject"):
-                    sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
-                    if sub_cat and sub_cat.lower() != "none":
-                        return_type = sub_cat
-
-        # 输入 Pin → 参数（Direction=0）
-        elif pin.direction == 0:
-            pin_name = pin.pin_name or ""
-            # 跳过 self/Target（self 引用）
-            if pin_name.lower() in ("self", "target", "worldcontext"):
-                continue
-
-            # 提取参数类型
-            param_type = ""
-            if pin.pin_type:
-                param_type = format_variable_type(pin.pin_type)
-                sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
-                if sub_cat and sub_cat.lower() != "none":
-                    param_type = sub_cat
-
-            parameters.append({
-                "name": pin_name,
-                "type": param_type,
-                "direction": "input"
-            })
-
-    return {
-        "return_type": return_type,
-        "parameters": parameters
-    }
 
 
 def build_function_graphs(
@@ -1023,9 +922,6 @@ def build_function_graphs(
                         "direction": "input" if is_input else "output"
                     })
                 signature["parameters"] = formatted_params
-            else:
-                # GAP-07: 如果 blueprint_functions 查找失败，使用 Pin-based 提取作为 fallback
-                signature = _extract_signature_from_pins(fe_node)
 
             # 构建执行流
             execution_flows = _trace_execution_from_event(
