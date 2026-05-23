@@ -266,6 +266,12 @@ class FArchive:
             if number > 0:
                 return f"{base_name}_{number}"
             return base_name
+        # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
+        # 添加日志帮助诊断索引越界问题
+        self._logger.debug(
+            "read_name: index %d out of range (name_map len=%d) at pos %d",
+            index, len(name_map), self.tell() - 8
+        )
         return "None"
 
 
