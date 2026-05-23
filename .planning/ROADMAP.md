@@ -267,30 +267,6 @@ else:
 
 **根因:** 属性值中的 FName 索引区域被误作 FString 读取，35 处返回空字符串。
 
-**状态:** ⬜ Not Started — 未实施，安排在 future iteration
-
-### Phase 72-E: EventGraph 节点解析修复 (INSERTED)
-
-**状态:** 🔴 待诊断 — 基于三方对比报告插入的紧急修复
-
-**问题清单:**
-
-| # | 问题 | 严重度 | 说明 |
-|---|------|--------|------|
-| 1 | **EventGraph 节点严重缺失** (9/16+) | 🔴 High | 大部分 K2Node_CallFunction、K2Node_EnhancedInputAction 未解析 |
-| 2 | **函数调用名解析为 "None"** | 🔴 High | function_reference.member_name 解析为字符串 "None"，无法识别实际函数 |
-| 3 | **K2Node_Event 解析错误** | 🔴 High | 5 个事件节点中 4 个 _parse_error=True |
-| 4 | **First Person Mesh 组件缺失** | ⚠️ Medium | Camera、Capsule、CharMoveComp 匹配，但 First Person Mesh 未提取 |
-| 5 | **Blueprint.functions 为空** | ⚠️ Medium | Move 等自定义函数未提取 |
-
-**目标:** 修复上述问题，使 BP_FirstPersonCharacter.uasset 的 EventGraph 解析覆盖率从 ~56% 提升至 >90%
-
-**修复策略 (pending):**
-- 排查 graph.py 节点读取循环，定位跳过/遗漏节点的条件
-- 排查 FMemberReference 序列化逻辑，修复 member_name 解析为 "None" 的根因
-- 检查 K2Node_Event 的 _parse_error 触发路径
-- 验证组件提取管线是否遗漏 SkeletalMeshComponent 类型的 First Person Mesh
-
 ### 可选增强（v13.0 完成后讨论）
 
 ### 结构体/枚举提取（N2CStruct / N2CEnum）
