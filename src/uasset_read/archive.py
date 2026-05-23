@@ -231,7 +231,7 @@ class FArchive:
         return struct.unpack(fmt + 'd', self.read(8))[0]
 
     def read_fstring(self) -> str:
-        """读取 UE FString（带长度前缀的字符串）。"""
+        """读取 UE FString（带长度前缀的字符串，null-terminated）。"""
         length = self.read_i32()
         if length == 0:
             return ""
@@ -240,28 +240,20 @@ class FArchive:
             if utf16_len > MAX_FSTRING_LENGTH:
                 raise ParseError(f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(utf16_len)
-            # 先检查 null_ratio（在 rstrip 之前）
-            null_ratio = data.count(b'\x00') / max(len(data), 1)
-            if null_ratio > 0.3:
-                self._logger.warning(
-                    "UTF-16 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
-                    self.tell() - length, null_ratio * 100
-                )
-                return ""
             result = data.decode('utf-16', errors='replace').rstrip('\x00')
         else:
             if length > MAX_FSTRING_LENGTH:
                 raise ParseError(f"UTF-8 string length {length} exceeds maximum {MAX_FSTRING_LENGTH}")
             data = self.read(length)
-            # 先检查 null_ratio（在 rstrip 之前）
-            null_ratio = data.count(b'\x00') / max(len(data), 1)
-            if null_ratio > 0.3:
-                self._logger.warning(
-                    "UTF-8 FString at pos %d contains %.1f%% null bytes — likely binary, returning empty",
-                    self.tell() - length, null_ratio * 100
-                )
-                return ""
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
+
+        # Check for internal null bytes (trailing nulls already stripped by rstrip)
+        if '\x00' in result:
+            self._logger.warning(
+                "FString at pos %d contains internal null bytes — likely binary, returning empty",
+                self.tell() - abs(length)
+            )
+            return ""
 
         return result
 
