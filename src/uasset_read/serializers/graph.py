@@ -360,33 +360,16 @@ def read_ue_graph_pin(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
-    header_owning_node: Optional[int] = None,
-    header_pin_id: Optional[str] = None,
 ) -> UEdGraphPin:
-    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
-
-    D-12: UE5 Pin array uses PinReference format with external header:
-      - Header: b_null_ptr + owning_node + pin_guid (read by caller)
-      - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
-
-    If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
-    """
+    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。"""
     pin_start_pos = archive.tell()
 
-    # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
-    if header_owning_node is not None:
-        archive.read_i32()  # Discard internal duplicate
-        owning_node_index = header_owning_node
-    else:
-        owning_node_index = archive.read_i32()
+    # 1. OwningNode
+    owning_node_index = archive.read_i32()
 
-    # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
-    if header_pin_id is not None:
-        archive.read_bytes(16)  # Discard internal duplicate
-        pin_id = header_pin_id
-    else:
-        pin_id_bytes = archive.read_bytes(16)
-        pin_id = pin_id_bytes.hex().upper()
+    # 2. PinId (FGuid 16 bytes)
+    pin_id_bytes = archive.read_bytes(16)
+    pin_id = pin_id_bytes.hex().upper()
 
     # 3. PinName (UE5 始终使用 FName 格式)
     pin_name = archive.read_name(name_map)
@@ -395,8 +378,7 @@ def read_ue_graph_pin(
     ftext_start_pos = archive.tell()
     try:
         flags = archive.read_i32()
-        history_type_raw = archive.read_u8()
-        history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
+        history_type = archive.read_u8()
         read_ftext_with_history(archive, history_type, tolerant=True)
     except Exception:
         archive.seek(ftext_start_pos)
@@ -448,8 +430,7 @@ def read_ue_graph_pin(
     # Siehe read_ftext_with_history() fuer history_type Verarbeitung
     try:
         _dtv_flags = archive.read_i32()
-        _dtv_history_raw = archive.read_u8()
-        _dtv_history = _dtv_history_raw - 256 if _dtv_history_raw >= 128 else _dtv_history_raw
+        _dtv_history = archive.read_u8()
         _dtv_value, _dtv_consumed = read_ftext_with_history(
             archive, _dtv_history,
             tolerant=True,
@@ -475,31 +456,26 @@ def read_ue_graph_pin(
         # 同上，不尝试恢复
         sub_pins = []
 
-    # 15. ParentPin — UE5: null!=0 → 8B (null+owning), null==0 → 24B (+guid)
+    # 15. ParentPin — UE5: always 24 bytes (b_null + owning + guid)
     _pp_null = archive.read_i32()
     _pp_owning = archive.read_i32()
-    if _pp_null != 0:
-        parent_pin = None
-    else:
-        _pp_guid_bytes = archive.read_bytes(16)
-        _pp_guid = _pp_guid_bytes.hex().upper()
-        parent_pin = {"owning_node": None, "pin_guid": _pp_guid}
-        if linker is not None and _pp_owning != 0:
-            pkg_idx = PackageIndex(_pp_owning)
-            if not pkg_idx.is_null:
-                parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
+    _pp_guid_bytes = archive.read_bytes(16)
+    _pp_guid = _pp_guid_bytes.hex().upper() if _pp_null == 0 else None
+    parent_pin = {"owning_node": None, "pin_guid": _pp_guid} if _pp_null == 0 else None
+    if linker is not None and _pp_null == 0 and _pp_owning != 0:
+        pkg_idx = PackageIndex(_pp_owning)
+        if not pkg_idx.is_null:
+            parent_pin["owning_node_object"] = linker.resolve_package_index(pkg_idx)
 
-    # 16. ReferencePassThroughConnection — same conditional pattern as ParentPin
+    # 16. ReferencePassThroughConnection — UE5: always 24 bytes
     ref_pass_through: Optional[dict] = None
     _ref_null = archive.read_i32()
     _ref_owning = archive.read_i32()
-    if _ref_null != 0:
-        pass  # null marker only, no GUID
-    else:
+    if _ref_null == 0:
         _ref_guid_bytes = archive.read_bytes(16)
         _ref_guid = _ref_guid_bytes.hex().upper()
         ref_pass_through = {"owning_node": None, "pin_guid": _ref_guid}
-        if linker is not None and _ref_owning != 0:
+        if linker is not None and _ref_null == 0 and _ref_owning != 0:
             pkg_idx = PackageIndex(_ref_owning)
             if not pkg_idx.is_null:
                 ref_pass_through["owning_node_object"] = linker.resolve_package_index(pkg_idx)
@@ -607,19 +583,13 @@ def read_k2node_call_function(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
-    function_reference: Optional[FMemberReference] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。
-
-    如果 function_reference 已在 PropertyTag 层解析（script_serial），直接使用；
-    否则从 archive 当前位置读取 FMemberReference。
-
-    参考 UE C++ FK2Node_CallFunction::Serialize() 实现。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FK2Node_CallFunction::Serialize() 实现
     """
-    # D-11: PropertyTag 层已正确解析 FunctionReference，优先使用
-    if function_reference is None:
-        function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
-
+    function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_defaults_to_pure = archive.read_bool()
     return {
         "function_reference": function_reference,
@@ -633,19 +603,13 @@ def read_k2node_event(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
-    event_reference: Optional[FMemberReference] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
-
-    如果 event_reference 已在 PropertyTag 层解析（script_serial），直接使用；
-    否则从 archive 当前位置读取 FMemberReference。
-
-    参考 UE C++ FK2Node_Event::Serialize() 实现。
+    
+    TODO: 使用UE编辑器源码的加载方式替换实现代码
+    参考 UE C++ FK2Node_Event::Serialize() 实现
     """
-    # D-11: PropertyTag 层已正确解析 EventReference，优先使用
-    if event_reference is None:
-        event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
-
+    event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
     b_override_function = archive.read_bool()
     return {
         "event_reference": event_reference,
@@ -754,16 +718,13 @@ def create_node_from_archive(
     if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
         return base_node
 
-    # D-11: 使用 PropertyTag 层已解析的 function_reference/event_reference
     if class_name == "K2Node_CallFunction":
         base_node.node_data = read_k2node_call_function(
-            archive, name_map, import_map, export_map, linker,
-            function_reference=node_refs.get('function_reference') if node_refs else None,
+            archive, name_map, import_map, export_map, linker
         )
     elif class_name == "K2Node_Event":
         base_node.node_data = read_k2node_event(
-            archive, name_map, import_map, export_map, linker,
-            event_reference=node_refs.get('event_reference') if node_refs else None,
+            archive, name_map, import_map, export_map, linker
         )
     elif class_name == "K2Node_Knot":
         base_node.node_data = read_k2node_knot(archive)
@@ -826,8 +787,29 @@ def read_ue_graph_node(
             if ctrl & 0x02:
                 archive.read_u8()
 
+        # 边界保护：防止 script_serial_size 不正确导致无限循环
+        max_property_iterations = max(1000, node_export.script_serial_size)
+        _property_iterations = 0
+
         while archive.tell() < script_end:
-            tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
+            _property_iterations += 1
+            if _property_iterations > max_property_iterations:
+                logger.warning(
+                    "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
+                    max_property_iterations, node_name
+                )
+                break
+
+            tag_pos = archive.tell()
+            try:
+                tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
+            except ParseError as e:
+                logger.warning(
+                    "read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s",
+                    tag_pos, node_name, e
+                )
+                break
+
             if tag.name == "None":
                 break
 
@@ -919,13 +901,12 @@ def read_ue_graph_node(
                 archive.seek(archive.tell() + tag.size)
 
     # 读取 Pins 数组
-    # D-12: UE5 UEdGraphNode Pins format:
-    #   - End marker (4 bytes, value=0) after script_serial
-    #   - pins_count (i32)
-    #   - TArray<UEdGraphPin> elements with header (b_null_ptr + owning_node + pin_guid)
-    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + 4  # Skip end marker
+    # TODO: 使用UE编辑器源码的加载方式替换实现代码
+    pins_offset = node_export.script_serial_offset + node_export.script_serial_size
     archive.seek(node_export.serial_offset + pins_offset)
 
+    # 跳过 end marker
+    _end_marker = archive.read_i32()
     pins_count = archive.read_i32()
 
     if pins_count < 0:
@@ -935,29 +916,23 @@ def read_ue_graph_node(
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
-        # D-12: UE5 Pin array uses PinReference format:
-        #   Header: b_null_ptr + owning_node + pin_guid
-        #   Body: Complete UEdGraphPin (duplicates owning_node + pin_guid, then PinName + ...)
+        # Always read header (24 bytes): b_null + OwningNode_1 + PinGuid_1
+        # TODO: 使用UE编辑器源码的加载方式替换实现代码
         b_null_ptr = archive.read_i32()
+        owning_1 = archive.read_i32()
+        guid_1 = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取Pin Guid
 
         if b_null_ptr != 0:
-            # NULL pin reference: skip remaining header (owning_node + pin_guid)
-            archive.read_i32()  # owning_node (unused)
-            archive.read_bytes(16)  # pin_guid (unused)
+            # NULL pin reference: body still exists, must consume it to advance position
+            try:
+                read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
+            except Exception:
+                # If body parsing fails, estimate body size (~180 bytes) and skip
+                archive.seek(archive.tell() + 180)
             continue
 
-        # Read external header: owning_node and pin_guid
-        header_owning = archive.read_i32()
-        header_guid_bytes = archive.read_bytes(16)
-        header_pin_id = header_guid_bytes.hex().upper()
-
         try:
-            # D-12: Pass header values to skip internal duplicates
-            pin = read_ue_graph_pin(
-                archive, name_map, summary, export_map, import_map, linker,
-                header_owning_node=header_owning,
-                header_pin_id=header_pin_id,
-            )
+            pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
             pins.append(pin)
         except Exception:
             continue
@@ -1030,18 +1005,32 @@ def read_ue_graph(
             node_export = export_map[node_index - 1]
             try:
                 node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                node._export_index = node_index  # tag for dedup
                 nodes.append(node)
             except ParseError:
                 failed_nodes.append(node_export.object_name)
 
-    # UE 5.x: nodes_count == 0, collect by outer_index
-    if nodes_count == 0 and graph_export_idx > 0:
+    # UE 5.x fallback: nodes_count == 0 OR main path collected nothing
+    # Main path may read wrong nodes_count due to UE5 serialization format differences
+    if (nodes_count == 0 or len(nodes) == 0) and graph_export_idx > 0:
+        if len(nodes) > 0:
+            logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
+        collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
                 node_class = _gac(node_export, import_map, export_map, linker)
                 if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+                    # Skip if already collected by main path (same export index)
+                    node_idx = export_map.index(node_export) + 1
+                    already_collected = any(
+                        getattr(n, '_export_index', None) == node_idx
+                        for n in nodes
+                    )
+                    if already_collected:
+                        continue
                     try:
                         node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                        node._export_index = node_idx  # tag for dedup
                         nodes.append(node)
                     except ParseError:
                         nodes.append(UEdGraphNode(
