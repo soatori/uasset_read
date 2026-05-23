@@ -271,6 +271,85 @@ def read_ftext_with_history(
 # Pin 引用辅助函数
 # ============================================================================
 
+def validate_pin_reference_at(
+    archive: FArchive,
+    pos: int,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: 校验指定位置的 PinReference 结构有效性。
+
+    不移动指针，只检查指定位置是否符合 PinReference 格式：
+    - b_null (i32): 0 表示正常引用，非 0 表示空引用
+    - owning_node (i32): 在 import/export 范围内
+    - pin_guid (16 bytes): 非全零（除非是 ParentPin 空引用）
+
+    Returns:
+        None: 无效结构
+        Dict: {
+            "b_null": int,
+            "owning_node": int,
+            "owning_node_valid": bool,
+            "guid_nonzero": bool,
+            "valid": bool,
+            "reason": str,
+        }
+    """
+    import struct
+
+    current_pos = archive.tell()
+
+    # 检查是否有足够空间
+    if pos + 24 > archive._file_size:
+        archive.seek(current_pos)
+        return None
+
+    archive.seek(pos)
+    header_bytes = archive.read(24)
+    archive.seek(current_pos)
+
+    b_null = struct.unpack('<i', header_bytes[0:4])[0]
+    owning_node = struct.unpack('<i', header_bytes[4:8])[0]
+    guid_bytes = header_bytes[8:24]
+    guid_nonzero = any(b != 0 for b in guid_bytes)
+
+    # 校验 owning_node 范围
+    owning_node_abs = abs(owning_node)
+    export_count = len(export_map)
+    import_count = len(import_map) if import_map else 0
+    max_valid_index = export_count + import_count + 50  # 允许一定余量
+
+    owning_node_valid = (
+        owning_node == 0 or  # 0 表示无引用
+        owning_node_abs < max_valid_index
+    )
+
+    # 校验 b_null 语义
+    if b_null != 0:
+        # b_null != 0: 空引用标记，owning_node 应该为 0 或被忽略
+        valid = owning_node_valid
+        reason = "valid null ref (b_null!=0, no actual pin)"
+    elif not owning_node_valid:
+        valid = False
+        reason = f"owning_node {owning_node} exceeds range 0..{max_valid_index}"
+    elif not guid_nonzero:
+        # b_null == 0 但 GUID 全零：可能是 ParentPin 空引用或未初始化
+        valid = True
+        reason = "valid ref with zero guid (parent pin empty)"
+    else:
+        valid = True
+        reason = "valid pin reference"
+
+    return {
+        "b_null": b_null,
+        "owning_node": owning_node,
+        "owning_node_valid": owning_node_valid,
+        "guid_nonzero": guid_nonzero,
+        "valid": valid,
+        "reason": reason,
+    }
+
+
 def peek_valid_pin_array_count(
     archive: FArchive,
     export_map: List[ObjectExport],
@@ -375,11 +454,14 @@ def read_pin_array(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
+    recovery_context: str = "linkedto",  # Phase 73 Wave 2: 区分 linkedto vs subpins
 ) -> List[dict]:
     """读取 Pin 引用数组（SerializePinArray 格式）。
 
     Phase 72-I Wave 2: 滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
     验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
+
+    Phase 73 Wave 2: 恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
     """
     array_count = archive.read_i32()
 
@@ -387,10 +469,14 @@ def read_pin_array(
         # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
         recovery_pos = archive.tell()
         recovered = _recover_pin_array_count(
-            archive, recovery_pos, array_count, export_map
+            archive, recovery_pos, array_count, export_map, import_map
         )
         if recovered is not None:
-            array_count = recovered
+            array_count = recovered["count"]
+            logger.info(
+                "[P73-RECOVERY] %s recovered: count=%d, confidence=%s, reason=%s",
+                recovery_context, array_count, recovered["confidence"], recovered["reason"]
+            )
         else:
             if array_count < 0:
                 raise ParseError(f"Invalid pin array count: {array_count} (negative)")
@@ -411,12 +497,26 @@ def _recover_pin_array_count(
     error_pos: int,
     bad_count: int,
     export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
     scan_window: int = 8,
-) -> Optional[int]:
-    """滑动恢复：扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: 滑动恢复增强校验。
 
-    验证候选 count 后的第一个 owning_node 是否在 export_map 范围内。
-    恢复成功时 seek 到候选 count 之后的位置（即第一个 pin ref 开始处）。
+    扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+
+    Wave 2 改进：
+    - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
+    - count>0 必须验证全部或至少前两个 PinReference
+    - 恢复成功返回结构化结果：{count, candidate_pos, confidence, reason}
+
+    Returns:
+        None: 恢复失败
+        Dict: {
+            "count": int,
+            "candidate_pos": int,
+            "confidence": "high"/"medium"/"low",
+            "reason": str,
+        }
     """
     import struct
 
@@ -428,52 +528,114 @@ def _recover_pin_array_count(
     window = archive.read(search_end - search_start)
 
     best_candidate = None
+    best_confidence = "low"
+    best_reason = ""
+
     for offset in range(0, len(window) - 4, 1):
         candidate_bytes = window[offset:offset + 4]
         candidate = struct.unpack('<i', candidate_bytes)[0]
         if candidate < 0 or candidate > 20:
             continue  # 不合理范围
 
-        # 验证：候选 count 后面的数据能否解析为 Pin reference header
+        candidate_pos = search_start + offset
         after_count = offset + 4
-        if after_count + 4 > len(window):
+
+        # Phase 73 Wave 2: count=0 需要额外验证后续结构
+        if candidate == 0:
+            # count=0 后面应该是 SubPins 数组或其他合理结构
+            # 检查是否有另一个小整数 count (0..20) 紧随其后
+            if after_count + 4 <= len(window):
+                next_val = struct.unpack('<i', window[after_count:after_count + 4])[0]
+                if 0 <= next_val <= 20:
+                    # 后面有另一个数组 count，符合 SubPins 结构
+                    best_candidate = (candidate_pos, candidate)
+                    best_confidence = "medium"
+                    best_reason = "count=0 followed by valid SubPins count"
+                    # 不 break，继续寻找更高置信度的候选
+                    continue
+            # count=0 但后续结构不明，置信度低
+            if best_candidate is None or best_confidence == "low":
+                best_candidate = (candidate_pos, candidate)
+                best_confidence = "low"
+                best_reason = "count=0 without verified subsequent structure"
             continue
-        b_null = struct.unpack('<i', window[after_count:after_count + 4])[0]
-        if b_null == 0:
-            # Non-null ref: check owning_node is in range
-            if after_count + 8 > len(window):
+
+        # count > 0: 验证 PinReference 结构
+        if after_count + 24 > len(window):
+            continue  # 空间不足
+
+        # 验证第一个 PinReference
+        pin_ref_1 = validate_pin_reference_at(
+            archive, candidate_pos + 4, export_map, import_map
+        )
+        if pin_ref_1 is None or not pin_ref_1["valid"]:
+            continue
+
+        # 验证第二个 PinReference（如果 count >= 2）
+        if candidate >= 2 and after_count + 48 <= len(window):
+            pin_ref_2 = validate_pin_reference_at(
+                archive, candidate_pos + 4 + 24, export_map, import_map
+            )
+            if pin_ref_2 is None or not pin_ref_2["valid"]:
+                # 第二个 ref 无效，置信度中等
+                best_candidate = (candidate_pos, candidate)
+                best_confidence = "medium"
+                best_reason = f"count={candidate}, ref1 valid but ref2 invalid"
                 continue
-            owning_node = struct.unpack('<i', window[after_count + 4:after_count + 8])[0]
-            owning_node_abs = abs(owning_node)
-            if owning_node_abs < len(export_map) + 100:
-                best_candidate = (search_start + offset, candidate)
-                break
-        else:
-            # Null ref is always valid for a pin array
-            best_candidate = (search_start + offset, candidate)
-            break
+
+        # 所有验证通过，高置信度
+        best_candidate = (candidate_pos, candidate)
+        best_confidence = "high"
+        best_reason = f"count={candidate}, all refs validated"
+        break  # 找到高置信度候选，停止搜索
 
     if best_candidate is not None:
         candidate_pos, recovered_count = best_candidate
         logger.warning(
-            "LinkedTo recovery: bad count %d at pos %d, "
-            "found valid count %d at pos %d",
+            "[P73-RECOVERY] LinkedTo: bad count %d at pos %d, "
+            "found count %d at pos %d (confidence=%s, reason=%s)",
             bad_count, error_pos - 4, recovered_count, candidate_pos,
+            best_confidence, best_reason,
         )
         # Seek to just after the valid count (start of first pin ref)
         archive.seek(candidate_pos + 4)
-        return recovered_count
+        return {
+            "count": recovered_count,
+            "candidate_pos": candidate_pos,
+            "confidence": best_confidence,
+            "reason": best_reason,
+        }
 
     # 恢复失败：seek 回原始错误位置
     archive.seek(current_pos)
     return None
 
 
-def _try_recover_to_subpins(archive: FArchive, error_pos: int, max_scan: int = 256) -> None:
-    """LinkedTo 读取失败后，扫描前方寻找 SubPins 起始位置。
+def _try_recover_to_subpins(
+    archive: FArchive,
+    error_pos: int,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport] = None,
+    max_scan: int = 256,
+) -> Optional[Dict[str, Any]]:
+    """Phase 73 Wave 2: LinkedTo 失败后恢复到 SubPins。
 
     扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
     (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
+
+    Wave 2 改进：
+    - 使用 validate_pin_reference_at() 进行结构校验
+    - 区分 linkedto_recovered（找到合法 Pin 数组）和 subpins_resync（跳到下一个结构）
+    - 返回结构化恢复结果
+
+    Returns:
+        None: 恢复失败
+        Dict: {
+            "recovered_pos": int,
+            "count": int,
+            "recovery_type": "linkedto_recovered" / "subpins_resync",
+            "reason": str,
+        }
     """
     import struct
 
@@ -486,40 +648,55 @@ def _try_recover_to_subpins(archive: FArchive, error_pos: int, max_scan: int = 2
         candidate = struct.unpack('<i', window[offset:offset + 4])[0]
         if candidate < 0 or candidate > 20:
             continue
-        # 验证 candidate 后面的数据是否为合法 pin reference header
+
+        candidate_pos = scan_start + offset
         after = offset + 4
-        if after + 4 > len(window):
-            continue
-        b_null = struct.unpack('<i', window[after:after + 4])[0]
-        if b_null == 0:
-            if after + 8 > len(window):
-                continue
-            owning_node = struct.unpack('<i', window[after + 4:after + 8])[0]
-            # owning_node index should be within reasonable export_map range
-            # (absolute value, since it can be negative for imports)
-            if abs(owning_node) < 100000:
-                recovered_pos = scan_start + offset
-                logger.warning(
-                    "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d)",
-                    recovered_pos - error_pos, error_pos, recovered_pos, candidate,
-                )
-                archive.seek(recovered_pos)
-                return
-        else:
-            # b_null != 0 means first ref is null, valid for empty SubPins
-            recovered_pos = scan_start + offset
-            logger.warning(
-                "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d, null ref)",
-                recovered_pos - error_pos, error_pos, recovered_pos, candidate,
+
+        # Phase 73 Wave 2: 使用 validate_pin_reference_at 校验
+        if candidate > 0 and after + 24 <= len(window):
+            pin_ref_result = validate_pin_reference_at(
+                archive, candidate_pos + 4, export_map, import_map
             )
-            archive.seek(recovered_pos)
-            return
+            if pin_ref_result is not None and pin_ref_result["valid"]:
+                recovered_pos = candidate_pos
+                archive.seek(recovered_pos)
+                # Wave 2: 根据是否是实际 pin reference 判断 recovery_type
+                recovery_type = "linkedto_recovered" if pin_ref_result["b_null"] == 0 else "subpins_resync"
+                logger.warning(
+                    "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
+                    recovered_pos, candidate, recovery_type, pin_ref_result["reason"],
+                )
+                return {
+                    "recovered_pos": recovered_pos,
+                    "count": candidate,
+                    "recovery_type": recovery_type,
+                    "reason": pin_ref_result["reason"],
+                }
+
+        # count=0 或 b_null!=0 情况：检查是否是空数组或 null ref
+        if after + 4 <= len(window):
+            b_null = struct.unpack('<i', window[after:after + 4])[0]
+            if b_null != 0:
+                # b_null!=0: 空引用，有效
+                recovered_pos = candidate_pos
+                archive.seek(recovered_pos)
+                logger.warning(
+                    "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
+                    recovered_pos, candidate,
+                )
+                return {
+                    "recovered_pos": recovered_pos,
+                    "count": candidate,
+                    "recovery_type": "subpins_resync",  # 跳到下一个结构
+                    "reason": "b_null!=0 null reference",
+                }
 
     # 恢复失败，保持在当前位置
     logger.warning(
-        "LinkedTo recovery: could not find SubPins within %d bytes from pos %d",
+        "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
         max_scan, error_pos,
     )
+    return None
 # ============================================================================
 
 def read_ue_graph_pin(
@@ -739,9 +916,8 @@ def read_ue_graph_pin(
             _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
                          is_exception=True)
         linked_to = []
-        # Attempt position recovery: scan forward for a plausible SubPins count (0..20)
-        # followed by a valid pin reference header, within 256 bytes.
-        _try_recover_to_subpins(archive, linkedto_start)
+        # Phase 73 Wave 2: 使用增强校验恢复
+        _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
 
     # 14. SubPins array
     subpins_start = archive.tell()
