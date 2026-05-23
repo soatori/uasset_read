@@ -3,21 +3,21 @@ gsd_state_version: 1.2
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 status: active
-last_updated: "2026-05-23T18:30:00.000Z"
+last_updated: "2026-05-23T19:00:00.000Z"
 prev_milestone: v12.0 (archived 2026-05-22)
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   skipped_phases: 0
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 83
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F inserted
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅
 
 ## Phase 分解
 
@@ -27,7 +27,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 72-E ✅ → Phase 72-F (待执行)
+**当前阶段:** Phase 72-F ✅ → 所有插入修复完成
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -43,8 +43,8 @@ progress:
 | v13.0 P72-C | Kismet 字节码导航 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-UAT | UAT 验证 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-D | FString/FName 区分 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-E | EventGraph 节点解析修复 | 插入中 | 🔴 Inserted |
-| v13.0 P72-F | BPGC 缓存隔离修复 | 插入中 | 🔴 Inserted |
+| v13.0 P72-E | EventGraph 节点解析修复 | 已完成 | ✅ Complete |
+| v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
 
 ## Phase 72 详细进度
 
@@ -114,6 +114,18 @@ progress:
 
 **目标:** EventGraph 解析覆盖率从 ~56% 提升至 >90%
 
+### Phase 72-F: BPGC 缓存隔离修复 ✅
+
+**完成日期:** 2026-05-23
+
+**修复内容:** `parse_uasset.py` — `_extract_kismet_decompiled()` 添加 `reset_bpgc_cache()` 调用
+
+**根因:** 连续 `parse_uasset(file_A)` + `parse_uasset(file_B)` 共享 `_bpgc_bytecode_cache` 全局状态，导致 file_B 读取 file_A 的缓存数据。
+
+**测试:** 2 新增测试 passed, 5 现有 BPGC 测试无回归
+
+**验收:** `72f-01-SUMMARY.md` — 所有标准满足
+
 ## 测试统计
 
 | Category | Count |
@@ -145,4 +157,4 @@ progress:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-D complete, 1339 tests pass)*
+*Updated: 2026-05-23 (Phase 72-F complete, all inserted fixes done)*
