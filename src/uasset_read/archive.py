@@ -276,17 +276,34 @@ class FArchive:
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
 
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
+            # Phase 72-I Wave 3: Improved handling — truncate at first null rather than
+            # returning empty string, to preserve data and avoid position errors in Pin parsing
             if '\x00' in result:
                 null_count = result.count('\x00')
+                first_null_idx = result.index('\x00')
                 preview = result[:80] if len(result) > 80 else result
-                self._logger.warning(
-                    "FString at pos %d: length=%d, encoding=UTF-8, "
-                    "%d internal nulls, preview=%r, hex=%s, "
-                    "consumed=%d bytes, end_pos=%d",
-                    pos_before, length, null_count, preview,
-                    data[:32].hex(), len(data), self.tell()
-                )
-                return ""
+                
+                if first_null_idx > 0:
+                    # Has real content before first null — truncate and continue
+                    truncated = result[:first_null_idx]
+                    self._logger.warning(
+                        "FString at pos %d: length=%d, encoding=UTF-8, "
+                        "truncated at null (null_at=%d, nulls_total=%d), "
+                        "truncated_value=%r, preview_orig=%r, hex=%s, "
+                        "consumed=%d bytes, end_pos=%d",
+                        pos_before, length, first_null_idx, null_count,
+                        truncated, preview, data[:32].hex(), len(data), self.tell()
+                    )
+                    return truncated
+                else:
+                    # All nulls from start — cannot recover, return empty
+                    self._logger.error(
+                        "FString at pos %d: length=%d, encoding=UTF-8, "
+                        "all nulls (completely corrupted), "
+                        "hex=%s, consumed=%d bytes, end_pos=%d",
+                        pos_before, length, data[:32].hex(), len(data), self.tell()
+                    )
+                    return ""
 
         return result
 
