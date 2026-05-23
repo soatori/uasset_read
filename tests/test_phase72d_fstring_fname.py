@@ -123,7 +123,7 @@ class TestInternalNullDetected:
         try:
             with caplog.at_level(logging.WARNING, logger='uasset_read.archive'):
                 arch.read_fstring()
-            assert "internal null bytes" in caplog.text
+            assert "internal nulls" in caplog.text
         finally:
             arch.close()
 

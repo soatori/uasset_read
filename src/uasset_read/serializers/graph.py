@@ -331,15 +331,27 @@ def read_pin_array(
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
 ) -> List[dict]:
-    """读取 Pin 引用数组（SerializePinArray 格式）。"""
+    """读取 Pin 引用数组（SerializePinArray 格式）。
+
+    Phase 72-I Wave 2: 滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
+    验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
+    """
     array_count = archive.read_i32()
 
-    if array_count < 0:
-        raise ParseError(f"Invalid pin array count: {array_count} (negative)")
-    if array_count > MAX_LINKEDTO_PER_PIN:
-        raise ParseError(
-            f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}"
+    if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
+        # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
+        recovery_pos = archive.tell()
+        recovered = _recover_pin_array_count(
+            archive, recovery_pos, array_count, export_map
         )
+        if recovered is not None:
+            array_count = recovered
+        else:
+            if array_count < 0:
+                raise ParseError(f"Invalid pin array count: {array_count} (negative)")
+            raise ParseError(
+                f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}"
+            )
 
     pins: List[dict] = []
     for _ in range(array_count):
@@ -349,8 +361,120 @@ def read_pin_array(
     return pins
 
 
-# ============================================================================
-# UEdGraphPin 读取
+def _recover_pin_array_count(
+    archive: FArchive,
+    error_pos: int,
+    bad_count: int,
+    export_map: List[ObjectExport],
+    scan_window: int = 8,
+) -> Optional[int]:
+    """滑动恢复：扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+
+    验证候选 count 后的第一个 owning_node 是否在 export_map 范围内。
+    恢复成功时 seek 到候选 count 之后的位置（即第一个 pin ref 开始处）。
+    """
+    import struct
+
+    current_pos = archive.tell()
+    search_start = max(0, error_pos - scan_window)
+    search_end = min(archive._file_size, error_pos + scan_window)
+
+    archive.seek(search_start)
+    window = archive.read(search_end - search_start)
+
+    best_candidate = None
+    for offset in range(0, len(window) - 4, 1):
+        candidate_bytes = window[offset:offset + 4]
+        candidate = struct.unpack('<i', candidate_bytes)[0]
+        if candidate < 0 or candidate > 20:
+            continue  # 不合理范围
+
+        # 验证：候选 count 后面的数据能否解析为 Pin reference header
+        after_count = offset + 4
+        if after_count + 4 > len(window):
+            continue
+        b_null = struct.unpack('<i', window[after_count:after_count + 4])[0]
+        if b_null == 0:
+            # Non-null ref: check owning_node is in range
+            if after_count + 8 > len(window):
+                continue
+            owning_node = struct.unpack('<i', window[after_count + 4:after_count + 8])[0]
+            owning_node_abs = abs(owning_node)
+            if owning_node_abs < len(export_map) + 100:
+                best_candidate = (search_start + offset, candidate)
+                break
+        else:
+            # Null ref is always valid for a pin array
+            best_candidate = (search_start + offset, candidate)
+            break
+
+    if best_candidate is not None:
+        candidate_pos, recovered_count = best_candidate
+        logger.warning(
+            "LinkedTo recovery: bad count %d at pos %d, "
+            "found valid count %d at pos %d",
+            bad_count, error_pos - 4, recovered_count, candidate_pos,
+        )
+        # Seek to just after the valid count (start of first pin ref)
+        archive.seek(candidate_pos + 4)
+        return recovered_count
+
+    # 恢复失败：seek 回原始错误位置
+    archive.seek(current_pos)
+    return None
+
+
+def _try_recover_to_subpins(archive: FArchive, error_pos: int, max_scan: int = 256) -> None:
+    """LinkedTo 读取失败后，扫描前方寻找 SubPins 起始位置。
+
+    扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
+    (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
+    """
+    import struct
+
+    scan_start = archive.tell()
+    scan_end = min(archive._file_size, scan_start + max_scan)
+    archive.seek(scan_start)
+    window = archive.read(scan_end - scan_start)
+
+    for offset in range(0, len(window) - 4, 1):
+        candidate = struct.unpack('<i', window[offset:offset + 4])[0]
+        if candidate < 0 or candidate > 20:
+            continue
+        # 验证 candidate 后面的数据是否为合法 pin reference header
+        after = offset + 4
+        if after + 4 > len(window):
+            continue
+        b_null = struct.unpack('<i', window[after:after + 4])[0]
+        if b_null == 0:
+            if after + 8 > len(window):
+                continue
+            owning_node = struct.unpack('<i', window[after + 4:after + 8])[0]
+            # owning_node index should be within reasonable export_map range
+            # (absolute value, since it can be negative for imports)
+            if abs(owning_node) < 100000:
+                recovered_pos = scan_start + offset
+                logger.warning(
+                    "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d)",
+                    recovered_pos - error_pos, error_pos, recovered_pos, candidate,
+                )
+                archive.seek(recovered_pos)
+                return
+        else:
+            # b_null != 0 means first ref is null, valid for empty SubPins
+            recovered_pos = scan_start + offset
+            logger.warning(
+                "LinkedTo recovery: skipping %d bytes from pos %d to SubPins at pos %d (count=%d, null ref)",
+                recovered_pos - error_pos, error_pos, recovered_pos, candidate,
+            )
+            archive.seek(recovered_pos)
+            return
+
+    # 恢复失败，保持在当前位置
+    logger.warning(
+        "LinkedTo recovery: could not find SubPins within %d bytes from pos %d",
+        max_scan, error_pos,
+    )
 # ============================================================================
 
 def read_ue_graph_pin(
@@ -462,10 +586,13 @@ def read_ue_graph_pin(
     linkedto_start = archive.tell()
     try:
         linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
-    except Exception:
-        # 不尝试恢复 — 异常可能由数据损坏导致，继续解析可能导致位置不一致
-        # 返回空数组，让调用者处理位置不一致问题
+        logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
+    except Exception as e:
+        logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
         linked_to = []
+        # Attempt position recovery: scan forward for a plausible SubPins count (0..20)
+        # followed by a valid pin reference header, within 256 bytes.
+        _try_recover_to_subpins(archive, linkedto_start)
 
     # 14. SubPins array
     subpins_start = archive.tell()
@@ -931,6 +1058,10 @@ def read_ue_graph_node(
                 node_guid = archive.read_bytes(16).hex()
             elif tag.name == "NodeComment" and tag.size > 0:
                 node_comment = archive.read_fstring()
+            elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
+                raw_properties[tag.name] = tag.bool_val != 0
+            elif tag.name == "CommentDepth":
+                raw_properties[tag.name] = archive.read_i32()
             elif tag.name == "ExtraFlags":
                 raw_properties[tag.name] = archive.read_i32()
             elif tag.size > 0:
@@ -1056,9 +1187,10 @@ def read_ue_graph(
             except ParseError:
                 failed_nodes.append(node_export.object_name)
 
-    # UE 5.x fallback: nodes_count == 0 OR main path collected nothing
-    # Main path may read wrong nodes_count due to UE5 serialization format differences
-    if (nodes_count == 0 or len(nodes) == 0) and graph_export_idx > 0:
+    # UE 5.x fallback: always scan export_map for nodes whose outer is this graph.
+    # Main path nodes_count can be incomplete due to UE5 serialization differences;
+    # fallback discovery via outer_index scan catches the rest. Dedup by _export_index.
+    if graph_export_idx > 0:
         if len(nodes) > 0:
             logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
         collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
