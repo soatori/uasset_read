@@ -6,18 +6,18 @@ status: active
 last_updated: "2026-05-23T15:00:00.000Z"
 prev_milestone: v12.0 (archived 2026-05-22)
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 3
   skipped_phases: 0
   total_plans: 4
   completed_plans: 3
-  percent: 92
+  percent: 75
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-UAT ✅, 72-D pending, 72-E inserted
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-UAT ✅, 72-D pending, 72-E inserted, 72.1 inserted
 
 ## Phase 分解
 
@@ -43,6 +43,7 @@ progress:
 | v13.0 P72-UAT | UAT 验证 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-D | FString/FName 区分 | 待执行 | ⬜ Not Started |
 | v13.0 P72-E | EventGraph 节点解析修复 | 插入中 | 🔴 Inserted |
+| v13.0 P72-F | BPGC 缓存隔离修复 | 插入中 | 🔴 Inserted |
 
 ## Phase 72 详细进度
 
@@ -130,6 +131,7 @@ progress:
 |-----|--------|----------|
 | Phase 72-D FString/FName 区分 | 35 处空字符串误报 (Phase 51 warning only) | Medium — future iteration |
 | Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
+| Phase 72.1 BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
 | Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
 
 ## 下一步行动
@@ -138,6 +140,7 @@ progress:
 2. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
 3. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
 4. **Phase 72-E (INSERTED):** EventGraph 节点解析修复 — 基于三方对比报告插入的紧急修复
+5. **Phase 72-F (INSERTED):** BPGC 缓存隔离修复 — 审计发现的阻塞级集成缺陷
 
 ---
 

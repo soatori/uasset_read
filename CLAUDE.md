@@ -22,9 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v12.0 已归档** — Phase 67✅ (序列化修复), Phase 68✅ (N2CNodeTypeRegistry), Phase 69✅ (节点处理器架构), Phase 70✅ (N2CStruct JSON Schema), Phase 71✅ (执行流链式表达)。1290 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+**v12.0 已归档** — Phase 67✅ (序列化修复), Phase 68✅ (N2CNodeTypeRegistry), Phase 69✅ (节点处理器架构), Phase 70✅ (N2CStruct JSON Schema), Phase 71✅ (执行流链式表达)。1290 tests collected。`__version__` 仍为 `9.0.0`（尚未 bump）。
 
-**v13.0 活跃** — Phase 72-A✅ (Pin 连接二进制诊断，2 bugs 定位)，Phase 72-B 待执行 (Pin 连接修复)。
+**v13.0 活跃** — Phase 72-A✅ (Pin 连接二进制诊断，2 bugs 定位)，Phase 72-B✅ (Pin 连接修复)，Phase 72-C✅ (BPGC 字节码提取)，Phase 72-UAT✅ (1319 tests passed)，Phase 72-D⬜ (FString/FName 区分待执行)，Phase 72-E🔴 (EventGraph 节点解析修复插入中)，Phase 72-F🔴 (BPGC 缓存隔离修复插入中)。
 
 ## 架构
 
@@ -41,8 +41,12 @@ v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/Expor
 | 数据模型 | `models/` | UEdGraph/Node/Pin + 属性数据类 + Transform 值类 |
 | 解析器 | `parsers/` | 14 种属性类型 + 分派器 |
 | 蓝图 | `blueprint/` | 变量/组件变换/元数据提取 |
-| 图解析 | `graph/` | 执行流/数据流/连接映射/function_graphs |
+| 图解析 | `graph/` | 执行流/数据流/连接映射/链式表达（Phase 71） |
 | 链接器 | `link/` | PackageLinker / UObjectInstance（UE FLinkerLoad 模式） |
+| Kismet | `kismet/` | 字节码提取/反编译/C++翻译/BPGC fallback（Phase 61-64, 72-C） |
+| N2C | `n2c/` | N2CStruct/Graph/Node/Pin 中间格式 JSON Schema（Phase 70） |
+| Agent | `agent/` | AgentTranslationPipeline + CppFileWriter（Phase 66） |
+| CPP Gen | `cpp_gen/` | C++ 骨架提取/IR formatter（Phase 56-60） |
 | 格式化 | `formatters/` | JSON/Text/Markdown/Mermaid |
 | CLI | `cli.py` | argparse 入口 |
 | 管线 | `parse_uasset.py` | 主编排函数（含 `parse_uasset_with_linker`） |
@@ -77,8 +81,11 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 | 变换值类 | `VectorValue`, `RotatorValue`, `ScaleValue`, `format_transform_value` |
 | 属性 | `PropertyValue`, `Struct/Map/Set/Enum/Text/DelegateValue`, `parse_*` 系列 |
 | 蓝图 | `BlueprintMetadata/Variable/Function/Event`, `extract_blueprint_*`, `parse_component_transform` |
-| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map`, `build_function_graphs` |
+| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map`, `build_execution_chains` |
 | 链接器 | `PackageLinker`, `UObjectInstance`, `LinkerParseResult`, `parse_uasset_with_linker` |
+| Kismet | `EExprToken`, `KismetExpression`, `KismetTranslator`, `to_function_body`, `decompile_uasset` |
+| N2C | `N2CStruct`, `N2CGraph`, `N2CNode`, `N2CPin`, `to_n2c_json`, `from_n2c_json` |
+| Agent | `AgentTranslationPipeline`, `translate_blueprint_to_cpp`, `CppFileWriter`, `write_cpp_class_files` |
 | 格式化 | `format_json/text/markdown/graphs_*`, `build_status/schema_info` |
 | CPF 标志 | `CPF_Edit`, `CPF_BlueprintVisible`, `CPF_InstancedReference`, `CPF_EditAnywhere` 等 |
 | 管线/CLI | `parse_uasset`, `parse_uasset_with_linker`, `python -m uasset_read` 或 `uasset-read` |
@@ -96,14 +103,3 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 - 独立任务优先并行 subagent，主线程只看结构化摘要
 - **GSD：** wave 或 PLAN 之间互补不干扰时均可并行执行
 - 有依赖或共享状态的任务不可并行；写冲突风险可通过 git 分支管理规避
-
-## 开发者偏好（cbsjz）
-
-- **沟通**：按上下文切换——bug 修复 terse-direct，架构讨论 detailed-structured；中文为主，技术术语英文
-- **决策**：让 Claude 给出明确建议，不要罗列选项让用户选
-- **解释深度**：简洁——标注关键决策，不要长篇解释；代码本身说明行为时不要加注释
-- **调试**：复杂 bug 提供诊断上下文，简单 bug 直接修复——由 Claude 判断
-- **架构**：FArchive 流式解析 STRICT，禁止裸字节读取；零运行时依赖；源码对齐
-- **库选择**：保守——优先成熟、广泛使用的方案
-- **主要触发点**：避免冗长解释；精确执行指令；不超出请求范围添加功能
-- **学习**：文档优先——引入新概念时附上官方文档链接，UE 相关引用引擎源码位置

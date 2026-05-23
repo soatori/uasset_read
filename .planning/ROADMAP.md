@@ -291,6 +291,18 @@ else:
 - 检查 K2Node_Event 的 _parse_error 触发路径
 - 验证组件提取管线是否遗漏 SkeletalMeshComponent 类型的 First Person Mesh
 
+### Phase 72-F: BPGC 缓存隔离修复 (INSERTED)
+
+**状态:** 🔴 待规划 — 审计 v13.0 发现的阻塞级集成缺陷
+
+**根因 (M-01):** `_extract_kismet_decompiled()` 直接调用 `decompile_single_function()`，绕过了 `decompile_uasset()` 中的 `reset_bpgc_cache()`。
+
+**影响:** 连续调用 `parse_uasset(file_A)` + `parse_uasset(file_B)` 时，file B 会使用 file A 的 BPGC 缓存字节码映射，导致静默数据损坏。
+
+**修复:** 在 `_extract_kismet_decompiled()` 开头添加 `reset_bpgc_cache()` 调用。
+
+**验收:** 多文件解析无缓存串扰；回归测试通过。
+
 ### 可选增强（v13.0 完成后讨论）
 
 ### 结构体/枚举提取（N2CStruct / N2CEnum）
