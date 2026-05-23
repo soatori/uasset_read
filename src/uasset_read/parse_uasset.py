@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional, List, Union
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
+    from uasset_read.kismet.result import KismetDecompiledResult
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
@@ -25,6 +26,43 @@ from uasset_read.blueprint import (
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.link.result import LinkerParseResult
+
+
+def _extract_kismet_decompiled(
+    path: str,
+    archive: FArchive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    tolerant: bool = True,
+) -> List["KismetDecompiledResult"]:
+    """Extract and decompile Kismet bytecode from Blueprint UStruct exports.
+
+    Tolerant mode: failures return empty list for that function, never crash.
+    Per D-10: Kismet decompilation failure does NOT block the main pipeline.
+    """
+    from uasset_read.kismet.bytecode_extractor import USTRUCT_TYPES
+    from uasset_read.serializers.object_resources import resolve_class_name
+    from uasset_read.kismet.pipeline import decompile_single_function
+
+    results: List["KismetDecompiledResult"] = []
+    for export in export_map:
+        class_name = resolve_class_name(export.class_index, import_map, export_map)
+        if class_name not in USTRUCT_TYPES:
+            continue
+        try:
+            result = decompile_single_function(
+                archive, export, summary, name_map, import_map, export_map,
+                tolerant=tolerant,
+            )
+            if result is not None:
+                results.append(result)
+        except Exception:
+            # Per D-10: failure does NOT block pipeline
+            # Error logged to caller's warnings list
+            pass
+    return results
 
 
 def _post_process(
@@ -116,6 +154,26 @@ def _post_process(
 
     if hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
+
+    # Kismet decompilation (Phase 64, per D-02, D-10)
+    try:
+        from uasset_read.kismet.pipeline import decompile_single_function
+        if hasattr(result, 'decompiled_functions'):
+            decompiled = _extract_kismet_decompiled(
+                path, archive, summary, name_map,
+                import_map, export_map, tolerant,
+            )
+            result.decompiled_functions = decompiled
+            # If extraction produced errors that were caught internally,
+            # and result has no decompiled functions but blueprint was found,
+            # add a warning so the user knows decompilation was attempted
+            if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
+                result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
+    except ImportError:
+        pass  # kismet/pipeline.py does not exist yet — silent skip
+    except Exception as e:
+        if hasattr(result, 'warnings'):
+            result.warnings.append(f"Kismet decompilation error: {e}")
 
     # Component property extraction (Phase 48)
     try:
