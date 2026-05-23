@@ -2,9 +2,11 @@
 
 等价迁移 uasset_read.py L3191-4679。
 Phase 31: 蓝图图解析模块 (per MOD-09)。
+Phase 73: Pin 字段级诊断钩子 (trace_mode)。
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
@@ -486,6 +488,7 @@ def read_ue_graph_pin(
     linker: Optional["PackageLinker"] = None,
     header_owning_node: Optional[int] = None,
     header_pin_id: Optional[str] = None,
+    trace_mode: bool = False,  # Phase 73: 字段级诊断开关
 ) -> UEdGraphPin:
     """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
 
@@ -494,26 +497,55 @@ def read_ue_graph_pin(
       - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
 
     If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
+
+    Phase 73: trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
     """
     pin_start_pos = archive.tell()
 
+    # Phase 73: 诊断记录
+    _trace_fields: Dict[str, Any] = {}
+    if trace_mode:
+        _trace_fields["pin_start_pos"] = pin_start_pos
+        _trace_fields["fields"] = []
+        def _trace_field(name: str, start: int, end: int, value_preview: str = "",
+                         is_exception: bool = False, is_fallback: bool = False):
+            """记录单个字段的追踪信息。"""
+            _trace_fields["fields"].append({
+                "name": name,
+                "start": start,
+                "end": end,
+                "consumed": end - start,
+                "value": value_preview[:50],
+                "exception": is_exception,
+                "fallback": is_fallback,
+            })
+
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
+    _field_start = archive.tell()
     if header_owning_node is not None:
         archive.read_i32()  # Discard internal duplicate
         owning_node_index = header_owning_node
     else:
         owning_node_index = archive.read_i32()
+    if trace_mode:
+        _trace_field("OwningNode", _field_start, archive.tell(), str(owning_node_index))
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
+    _field_start = archive.tell()
     if header_pin_id is not None:
         archive.read_bytes(16)  # Discard internal duplicate
         pin_id = header_pin_id
     else:
         pin_id_bytes = archive.read_bytes(16)
         pin_id = pin_id_bytes.hex().upper()
+    if trace_mode:
+        _trace_field("PinId", _field_start, archive.tell(), pin_id[:16]+"...")
 
     # 3. PinName (UE5 始终使用 FName 格式)
+    _field_start = archive.tell()
     pin_name = archive.read_name(name_map)
+    if trace_mode:
+        _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText) — EditorOnly, try/except + seek-back
     ftext_start_pos = archive.tell()
@@ -522,16 +554,26 @@ def read_ue_graph_pin(
         history_type_raw = archive.read_u8()
         history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
         read_ftext_with_history(archive, history_type, tolerant=True)
-    except Exception:
+        if trace_mode:
+            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                         f"flags={flags},htype={history_type}")
+    except Exception as e:
         archive.seek(ftext_start_pos)
+        if trace_mode:
+            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                         "", is_exception=True, is_fallback=True)
 
     # 5. SourceIndex (UE5 始终存在)
+    _field_start = archive.tell()
     source_index = archive.read_i32()
+    if trace_mode:
+        _trace_field("SourceIndex", _field_start, archive.tell(), str(source_index))
 
     # 6. PinToolTip — FString (NOT FText!)
     # C++ UEdGraphPin::Serialize L1870: Ar << PinToolTip;
     # EdGraphPin.h L380: FString PinToolTip;
     # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
+    _field_start = archive.tell()
     try:
         pin_tooltip = archive.read_fstring()
         # 额外检查：pin_tooltip 专用二进制数据过滤
@@ -542,34 +584,75 @@ def read_ue_graph_pin(
                 "Binary pinTooltip at pos %d for pin '%s' — returning empty",
                 archive.tell() - len(pin_tooltip), pin_name
             )
+            if trace_mode:
+                _trace_field("PinToolTip", _field_start, archive.tell(), "[BINARY]")
             pin_tooltip = ""
-    except Exception:
+        else:
+            if trace_mode:
+                _trace_field("PinToolTip", _field_start, archive.tell(),
+                             pin_tooltip[:30] if pin_tooltip else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("PinToolTip", _field_start, archive.tell(), "",
+                         is_exception=True)
         pin_tooltip = ""
 
     # 7. Direction — u8 for both UE4 and UE5
+    _field_start = archive.tell()
     direction = archive.read_u8()
+    if trace_mode:
+        _trace_field("Direction", _field_start, archive.tell(), str(direction))
 
     # 8. PinType
+    _field_start = archive.tell()
     pin_type = read_ed_graph_pin_type(archive, name_map, summary)
+    if trace_mode:
+        _trace_field("PinType", _field_start, archive.tell(), "[PinType struct]")
 
     # 9-10. DefaultValue strings (容错)
+    _field_start = archive.tell()
     try:
         default_value = archive.read_fstring()
-    except Exception:
+        if trace_mode:
+            from uasset_read.archive import _contains_binary_data
+            if _contains_binary_data(default_value):
+                _trace_field("DefaultValue", _field_start, archive.tell(), "[BINARY]")
+            else:
+                _trace_field("DefaultValue", _field_start, archive.tell(),
+                             default_value[:30] if default_value else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("DefaultValue", _field_start, archive.tell(), "",
+                         is_exception=True)
         default_value = ""
 
+    _field_start = archive.tell()
     try:
         autogenerated_default_value = archive.read_fstring()
-    except Exception:
+        if trace_mode:
+            from uasset_read.archive import _contains_binary_data
+            if _contains_binary_data(autogenerated_default_value):
+                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "[BINARY]")
+            else:
+                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(),
+                             autogenerated_default_value[:30] if autogenerated_default_value else "[empty]")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "",
+                         is_exception=True)
         autogenerated_default_value = ""
 
     # 11. DefaultObject (FPackageIndex)
+    _field_start = archive.tell()
     default_object = archive.read_i32()
+    if trace_mode:
+        _trace_field("DefaultObject", _field_start, archive.tell(), str(default_object))
 
     # 12. DefaultTextValue (FText) — NICHT FString!
     # UE5 C++: Ar << DefaultTextValue; (EdGraphPin.cpp L1876)
     # FText Serialisierung: flags(i32,4B) + history_type(u8,1B) + body(variable)
     # Siehe read_ftext_with_history() fuer history_type Verarbeitung
+    _dtv_start = archive.tell()
     try:
         _dtv_flags = archive.read_i32()
         _dtv_history_raw = archive.read_u8()
@@ -578,17 +661,30 @@ def read_ue_graph_pin(
             archive, _dtv_history,
             tolerant=True,
         )
-    except Exception:
+        if trace_mode:
+            _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
+                         f"flags={_dtv_flags},htype={_dtv_history}")
+    except Exception as e:
+        if trace_mode:
+            _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
+                         is_exception=True)
         # Extrem tolerant: Falls FText-Lesen fehlschlaegt, DefaultTextValue ignorieren
         pass
 
-    # 13. LinkedTo array
+    # 13. LinkedTo array — Phase 73 关键诊断点
     linkedto_start = archive.tell()
     try:
         linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
         logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
+        if trace_mode:
+            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
+            _trace_field("LinkedTo", linkedto_start, archive.tell(),
+                         f"count={len(linked_to)},refs={refs_preview}")
     except Exception as e:
         logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
+        if trace_mode:
+            _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
+                         is_exception=True)
         linked_to = []
         # Attempt position recovery: scan forward for a plausible SubPins count (0..20)
         # followed by a valid pin reference header, within 256 bytes.
@@ -658,6 +754,33 @@ def read_ue_graph_pin(
     sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
     parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
     ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
+
+    # Phase 73: 诊断日志输出
+    if trace_mode:
+        # 找出第一个可能错位的字段
+        first_misaligned = ""
+        for f in _trace_fields["fields"]:
+            if f.get("exception") and not f.get("fallback"):
+                first_misaligned = f["name"]
+                break
+            # 检查消费字节是否异常大（FString 正常应该 < 100）
+            if f["name"] in ("PinToolTip", "DefaultValue", "AutogeneratedDefaultValue"):
+                if f["consumed"] > 100:
+                    first_misaligned = f["name"]
+                    break
+            # 检查 [BINARY] 标记
+            if "[BINARY]" in str(f.get("value", "")):
+                first_misaligned = f["name"]
+                break
+
+        logger.info(
+            "[P73-PINTRACE] Pin '%s' at pos %d: fields=%d, linkedto=%d, first_misaligned='%s'",
+            pin_name, pin_start_pos, len(_trace_fields["fields"]),
+            len(linked_to), first_misaligned
+        )
+        # 详细字段日志（可选，调试时启用）
+        if first_misaligned:
+            logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields["fields"]))
 
     return UEdGraphPin(
         pin_id=pin_id,
