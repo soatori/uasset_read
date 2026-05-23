@@ -17,7 +17,7 @@ progress:
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-UAT ✅, 72-D pending, 72-E inserted, 72.1 inserted
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E inserted, 72-F inserted
 
 ## Phase 分解
 
@@ -27,11 +27,12 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 72-C ✅ → Phase 72-UAT ✅ → Phase 72-D (FName/FString 区分待执行)
+**当前阶段:** Phase 72-D ✅ → Phase 72-E/72-F (待执行)
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
-**Phase 72-UAT 完成:** 2026-05-23 — 1319 tests passed, 0 issues found
+**Phase 72-D 完成:** 2026-05-23 — null_ratio 启发式替换为 null-termination 验证 + 20 tests
+**Phase 72-UAT 完成:** 2026-05-23 — 1339 tests passed, 0 issues found
 
 ## v13.0 完成度
 
@@ -41,7 +42,7 @@ progress:
 | v13.0 P72-B | Pin 连接修复 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-C | Kismet 字节码导航 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-UAT | UAT 验证 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-D | FString/FName 区分 | 待执行 | ⬜ Not Started |
+| v13.0 P72-D | FString/FName 区分 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-E | EventGraph 节点解析修复 | 插入中 | 🔴 Inserted |
 | v13.0 P72-F | BPGC 缓存隔离修复 | 插入中 | 🔴 Inserted |
 
@@ -117,13 +118,13 @@ progress:
 
 | Category | Count |
 |----------|-------|
-| Total tests collected | 1443 |
-| Passed | 1319 |
+| Total tests collected | 1463 |
+| Passed | 1339 |
 | Skipped | 122 |
 | XPassed (unexpected pass) | 2 |
 | Warnings | 107 |
 
-**Phase 72-specific:** 767 tests (762 from 72-B + 5 from 72-C)
+**Phase 72-specific:** 787 tests (762 from 72-B + 5 from 72-C + 20 from 72-D)
 
 ## Gaps
 
@@ -131,7 +132,7 @@ progress:
 |-----|--------|----------|
 | Phase 72-D FString/FName 区分 | 35 处空字符串误报 (Phase 51 warning only) | Medium — future iteration |
 | Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
-| Phase 72.1 BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
+| Phase 72-F BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
 | Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
 
 ## 下一步行动
@@ -144,4 +145,4 @@ progress:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72 complete, UAT verified, 1319 tests pass)*
+*Updated: 2026-05-23 (Phase 72-D complete, 1339 tests pass)*

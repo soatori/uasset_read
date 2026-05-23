@@ -263,11 +263,20 @@ else:
 - `phases/phase-72/72-UAT.md` — comprehensive UAT report
 - Phase 72-A/B/CAll acceptance criteria met
 
-### Phase 72-D: FString/FName 区分
+### Phase 72-D: FString/FName 区分 ✅
 
-**根因:** 属性值中的 FName 索引区域被误作 FString 读取，35 处返回空字符串。
+**完成日期:** 2026-05-23
 
-**状态:** ⬜ Not Started — 未实施，安排在 future iteration
+**根因:** `null_ratio > 0.3` 启发式检测误杀短字符串（如 `"A"`, `"Byte"`），导致 35 处 FString 返回空。
+
+**修复内容:** `archive.py` — `read_fstring()` 重构
+- **移除** `null_ratio > 0.3` 启发式检测
+- **替换为** 解码后 `' ' in result` 内部 null 字节检测
+- UTF-8 和 UTF-16 路径统一使用 `rstrip(' ')` 后检测
+
+**测试:** 20 new tests (test_phase72d_fstring_fname.py) + 1339 total passed, 0 regressions
+
+**验收:** `phases/phase-72d/72d-UAT.md` — 5/5 criteria met
 
 ### Phase 72-E: EventGraph 节点解析修复 (INSERTED)
 
@@ -342,4 +351,4 @@ else:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72 complete, UAT verified)*
+*Updated: 2026-05-23 (Phase 72-D complete, 1339 tests pass)*
