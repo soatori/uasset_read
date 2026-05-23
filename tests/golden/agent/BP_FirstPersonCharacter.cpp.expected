@@ -1,0 +1,12 @@
+#include "BP_FirstPersonCharacter.h"
+
+ABP_FirstPersonCharacter::ABP_FirstPersonCharacter()
+{
+    // Create FirstPersonCameraComponent
+    FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>("FirstPersonCameraComponent");
+    FirstPersonCameraComponent->SetupAttachment(RootComponent);
+
+    // Create FirstPersonMesh
+    FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>("FirstPersonMesh");
+    FirstPersonMesh->SetupAttachment(FirstPersonCameraComponent);
+}

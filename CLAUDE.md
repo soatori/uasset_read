@@ -22,7 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v9.0 已发布** — Phase 52✅ (函数图节点), Phase 53✅ (执行流追踪), Phase 54✅ (数据流追踪), Phase 55✅ (JSON function_graphs 输出)。554 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+**v12.0 已归档** — Phase 67✅ (序列化修复), Phase 68✅ (N2CNodeTypeRegistry), Phase 69✅ (节点处理器架构), Phase 70✅ (N2CStruct JSON Schema), Phase 71✅ (执行流链式表达)。1290 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+
+**v13.0 活跃** — Phase 72-A✅ (Pin 连接二进制诊断，2 bugs 定位)，Phase 72-B 待执行 (Pin 连接修复)。
 
 ## 架构
 
@@ -85,7 +87,7 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 - `.planning/ROADMAP.md` — 阶段路线图
 - `.planning/STATE.md` — 当前里程碑状态
-- `.planning/milestones/` — 已归档里程碑（v7.0-v9.0）
+- `.planning/milestones/` — 已归档里程碑（v7.0-v12.0）
 - `.planning/MILESTONES.md` — 历史里程碑
 
 ## 上下文与效率
@@ -94,3 +96,14 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 - 独立任务优先并行 subagent，主线程只看结构化摘要
 - **GSD：** wave 或 PLAN 之间互补不干扰时均可并行执行
 - 有依赖或共享状态的任务不可并行；写冲突风险可通过 git 分支管理规避
+
+## 开发者偏好（cbsjz）
+
+- **沟通**：按上下文切换——bug 修复 terse-direct，架构讨论 detailed-structured；中文为主，技术术语英文
+- **决策**：让 Claude 给出明确建议，不要罗列选项让用户选
+- **解释深度**：简洁——标注关键决策，不要长篇解释；代码本身说明行为时不要加注释
+- **调试**：复杂 bug 提供诊断上下文，简单 bug 直接修复——由 Claude 判断
+- **架构**：FArchive 流式解析 STRICT，禁止裸字节读取；零运行时依赖；源码对齐
+- **库选择**：保守——优先成熟、广泛使用的方案
+- **主要触发点**：避免冗长解释；精确执行指令；不超出请求范围添加功能
+- **学习**：文档优先——引入新概念时附上官方文档链接，UE 相关引用引擎源码位置

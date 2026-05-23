@@ -243,6 +243,10 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
     if ue_type in UE_TO_CPP_TYPE_MAP:
         return UE_TO_CPP_TYPE_MAP[ue_type]
 
+    # UE 编辑器元数据属性名 — 非真实 C++ 类型，作为 FString 处理
+    if ue_type in ("Warning", "Info", "Details", "Category"):
+        return "FString"
+
     # 2. 处理引用格式 (ScriptStruct'...' 或 Class'...')
     # 格式: Type'SubPath.Name' 或 Type'/Script/Package.Name'
     match = re.match(r"^(ScriptStruct|Class|Enum|Interface)'(.+)'$", ue_type)

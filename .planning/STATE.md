@@ -1,45 +1,40 @@
 ---
-gsd_state_version: 1.0
-milestone: v11.0
-milestone_name: Kismet 字节码反编译器
-status: planned
-last_updated: "2026-05-19T00:00:00Z"
+gsd_state_version: 1.2
+milestone: v13.0
+milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
+status: active
+last_updated: "2026-05-23T12:00:00.000Z"
+prev_milestone: v12.0 (archived 2026-05-22)
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 5
-  completed_plans: 0
-  percent: 0
+  total_phases: 1
+  completed_phases: 1
+  skipped_phases: 0
+  total_plans: 1
+  completed_plans: 1
+  percent: 50
 ---
 
-# v11.0 — Kismet 字节码反编译器
+# v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
-**Started: 2026-05-18**
-**Reference:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
+**Started: 2026-05-23**
+**Status: Active — Phase 72-A complete, 72-B pending**
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | Planned (2 plans) |
-| 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | Planned (1 plan) |
-| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Planned (1 plan) |
-| 64 | 集成与验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned (1 plan) |
+| 72 | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 | 完整 Pin 序列化 + 字节码导航 + 类型区分 | PIN-01/02/03 | 🔄 Active |
 
-## 依赖关系
+## 当前状态
 
-```
-Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C++) → Phase 64 (集成验证)
-```
+**当前阶段:** Phase 72-A ✅ (诊断完成) → Phase 72-B (修复待执行)
+**Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 
-## 上下文
+## v13.0 完成度
 
-- CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
-- 本项目技术栈：Python 3.10+，零运行时依赖
-- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
-
-## 上游里程碑
-
-- v10.0 (P56-60): Blueprint-to-C++ 代码生成参考 — ✅ 已归档 2026-05-19
-  - 提供了 cpp_gen 模块骨架、类型映射、函数签名/体翻译、组件初始化
-  - v11.0 在字节码层（EExprToken → KismetExpression → C++）补充 Phase 58 无法覆盖的 60+ 种表达式类型
+| 版本 | 范围 | 日期 | 状态 |
+|------|------|------|------|
+| v13.0 P72-A | Pin 连接诊断 ✅ | 2026-05-23 | ✅ Complete |
+| v13.0 P72-B | Pin 连接修复 | 待执行 | 🔄 In Progress |
+| v13.0 P72-C | Kismet 字节码导航 | 待执行 | ⬜ Not Started |
+| v13.0 P72-D | FString/FName 区分 | 待执行 | ⬜ Not Started |
