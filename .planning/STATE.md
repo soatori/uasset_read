@@ -3,21 +3,21 @@ gsd_state_version: 1.2
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 status: active
-last_updated: "2026-05-23T20:00:00.000Z"
+last_updated: "2026-05-24T12:00:00.000Z"
 prev_milestone: v12.0 (archived 2026-05-22)
 progress:
-  total_phases: 8
-  completed_phases: 4
+  total_phases: 9
+  completed_phases: 5
   skipped_phases: 0
-  total_plans: 5
-  completed_plans: 4
-  percent: 75
+  total_plans: 6
+  completed_plans: 5
+  percent: 89
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 🔴 插入中
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 🔴 插入中, 72-I ✅
 
 ## Phase 分解
 
@@ -27,7 +27,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 72-H 🔴 计划已创建，待执行
+**当前阶段:** Phase 72-I ✅ (完成于 2026-05-24) | **下一阶段:** Phase 72-H (FString 容错 + LinkedTo 恢复 + StructValue JSON，已部分合并至 72-I)
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -45,6 +45,8 @@ progress:
 | v13.0 P72-D | FString/FName 区分 ✅ | 2026-05-23 | ✅ Complete |
 | v13.0 P72-E | EventGraph 节点解析修复 | 已完成 | ✅ Complete |
 | v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
+| v13.0 P72-G | 复杂 StructProperty + Pin 连接映射修复 | 完成 | ✅ Complete |
+| v13.0 P72-I | BP_FirstPersonCharacter 全量对比修复 | 2026-05-24 | ✅ Complete |
 
 ## Phase 72 详细进度
 
@@ -180,11 +182,12 @@ progress:
 | Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
 | Phase 72-F BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
 | Phase 72-H FString/LinkedTo/JSON 修复 | BP_FirstPersonCharacter 解析阻断 | High — 本次插入 |
+| Phase 72-I BP_FirstPersonCharacter 全量对比修复 | 12 项解析错误（Pin 连接丢失、EnhancedInputAction 缺失、Rotation 全零等） | High — 三方对比驱动 |
 | Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
 
 ## 下一步行动
 
-1. **Phase 72-H 执行:** 修复 FString 容错、LinkedTo 恢复、StructValue JSON 序列化
+1. **Phase 72-I 执行:** BP_FirstPersonCharacter 全量对比修复（12 项解析错误，参考文档精确值验证）
 2. **Phase 72-UAT 归档:** ✅ 完成 — 报告已创建 `phases/phase-72/72-UAT.md`
 3. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
 4. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
@@ -193,4 +196,4 @@ progress:
 
 ---
 
-*Updated: 2026-05-23 (Phase 72-H inserted: FString 容错 + LinkedTo 恢复 + StructValue JSON 递归序列化)*
+*Updated: 2026-05-24 (Phase 72-I inserted: BP_FirstPersonCharacter 全量对比修复)*
