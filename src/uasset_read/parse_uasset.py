@@ -80,7 +80,22 @@ def _post_process(
 
     通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
     """
-    # Blueprint 元数据提取
+    # Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数）
+    graphs_list = None
+    try:
+        from uasset_read.graph import extract_blueprint_graphs
+        if hasattr(result, 'graphs'):
+            result.graphs = extract_blueprint_graphs(
+                archive, summary, name_map, import_map, export_map,
+            )
+            graphs_list = result.graphs
+    except ImportError:
+        pass  # graph 模块不存在时静默跳过
+    except ParseError as e:
+        if hasattr(result, 'errors'):
+            result.errors.append(f"graph extraction error: {e}")
+
+    # Blueprint 元数据提取（使用 graphs 填充 functions）
     blueprint_metadata = None
     asset_name = name_map[0] if name_map else None
 
@@ -96,6 +111,7 @@ def _post_process(
                     main_bpgc, temp_archive, import_map,
                     export_map, name_map, summary,
                     linker=linker,
+                    graphs=graphs_list,
                 )
                 if meta:
                     blueprint_metadata = meta
@@ -123,6 +139,7 @@ def _post_process(
                         export, temp_archive, import_map,
                         export_map, name_map, summary,
                         linker=linker,
+                        graphs=graphs_list,
                     )
                     if meta:
                         blueprint_metadata = meta
@@ -168,19 +185,6 @@ def _post_process(
     except Exception as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"component extraction error: {e}")
-
-    # Blueprint Graph 提取
-    try:
-        from uasset_read.graph import extract_blueprint_graphs
-        if hasattr(result, 'graphs'):
-            result.graphs = extract_blueprint_graphs(
-                archive, summary, name_map, import_map, export_map,
-            )
-    except ImportError:
-        pass  # graph 模块不存在时静默跳过
-    except ParseError as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"graph extraction error: {e}")
 
     # 依赖分析
     try:
