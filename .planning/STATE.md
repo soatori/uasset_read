@@ -1,23 +1,21 @@
 ---
-gsd_state_version: 1.2
+gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: active
-last_updated: "2026-05-24T12:00:00.000Z"
-prev_milestone: v12.0 (archived 2026-05-22)
+status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
+last_updated: "2026-05-24"
 progress:
-  total_phases: 10
-  completed_phases: 9
-  skipped_phases: 0
-  total_plans: 7
-  completed_plans: 6
-  percent: 90
+  total_phases: 15
+  completed_phases: 2
+  total_plans: 12
+  completed_plans: 7
+  percent: 13
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 📋 规划完成
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
 
 ## Phase 分解
 
@@ -28,7 +26,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 73 📋 (规划完成，待执行) | **上一阶段:** Phase 72-I ✅ (完成于 2026-05-24)
+**当前阶段:** Phase 73 Wave 4 ✅ (PropertyTag 级联问题分流) | **上一阶段:** Phase 73 Wave 2 ✅ (完成于 2026-05-24)
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -48,7 +46,7 @@ progress:
 | v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
 | v13.0 P72-G | 复杂 StructProperty + Pin 连接映射修复 | 完成 | ✅ Complete |
 | v13.0 P72-I | BP_FirstPersonCharacter 全量对比修复 | 2026-05-24 | ✅ Complete |
-| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 2026-05-24 | 📋 Planned |
+| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | Wave 0-4 ✅ | 🔄 Active |
 
 ## Phase 72 详细进度
 
@@ -62,6 +60,7 @@ progress:
 | 2 | ParentPin 总是读 24 字节 | `graph.py` L476-479 | `null != 0` 时应只读 8B | 条件读取：null != 0 → 8B, null == 0 → 24B |
 
 **二进制证据（K2Node_Knot_1 pin 0, body at 132477）:**
+
 - 修复 Bug 1 → `LinkedTo count=1, owning=57, valid GUID` ✅
 - 修复 Bug 1+2 → `RefPassThrough null=0, BitField=0x52935405` ✅
 
@@ -80,16 +79,19 @@ progress:
 **新增模块:** `src/uasset_read/kismet/bpgc_bytecode.py` (295 lines)
 
 **新增 API:**
+
 - `extract_bpgc_bytecode()` — 从 BPGC script_serial_region 提取字节码
 - `map_bytecode_to_functions()` — 按 ordinal 映射字节码到 Function 导出
 - `_parse_cooked_bytecode_buffer()` — 纯函数解析烘焙格式缓冲区
 
 **管线集成:**
+
 - `bytecode_extractor.py` — 添加 BPGC fallback + 模块级缓存
 - `pipeline.py` — 添加 cache reset
 - `kismet/__init__.py` — 导出新 API
 
 **Bug 修复:**
+
 - `object_resources.py` — `detect_blueprint_generated_class()` 使用 `object_name` 而非 `class_name`
 
 **测试结果:** 5 passed, 3 skipped (integration), 28 passed (existing kismet tests regression)
@@ -103,6 +105,7 @@ progress:
 **状态:** ⬜ Not Started — 未实施，安排在 future iteration
 
 **修复策略 (pending):**
+
 - 区分 FName index 区域（通常是 NameMap 大小范围内的小整数）
 - 在 property value extractor 中添加 FName 专用解析路径
 - 更新 `serializers/property_types.py` `parse_struct_property()` 以处理 FName indices
@@ -112,6 +115,7 @@ progress:
 **插入日期:** 2026-05-23
 
 **根因 (待诊断):**
+
 - EventGraph 节点读取循环存在跳过/遗漏条件
 - FMemberReference 序列化逻辑中 member_name 解析异常
 - K2Node_Event 解析路径存在未处理的边界情况
@@ -162,7 +166,6 @@ progress:
 | 3 | StructValue JSON 序列化崩溃 | `formatters/json_formatter.py` serialize_property_value() | P1 |
 
 **执行计划:** `.planning/phases/phase-72h/PLAN.md`
-
 
 ## 测试统计
 
