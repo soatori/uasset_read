@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 📋 规划完成
-last_updated: "2026-05-23T20:40:36.774Z"
+status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
+last_updated: "2026-05-24"
 progress:
   total_phases: 15
   completed_phases: 2
@@ -15,7 +15,7 @@ progress:
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 📋 规划完成
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
 
 ## Phase 分解
 
@@ -26,7 +26,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 73 📋 (规划完成，待执行) | **上一阶段:** Phase 72-I ✅ (完成于 2026-05-24)
+**当前阶段:** Phase 73 Wave 4 ✅ (PropertyTag 级联问题分流) | **上一阶段:** Phase 73 Wave 2 ✅ (完成于 2026-05-24)
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -46,7 +46,7 @@ progress:
 | v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
 | v13.0 P72-G | 复杂 StructProperty + Pin 连接映射修复 | 完成 | ✅ Complete |
 | v13.0 P72-I | BP_FirstPersonCharacter 全量对比修复 | 2026-05-24 | ✅ Complete |
-| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 2026-05-24 | 📋 Planned |
+| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | Wave 0-4 ✅ | 🔄 Active |
 
 ## Phase 72 详细进度
 
