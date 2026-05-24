@@ -39,7 +39,10 @@ def read_property_tag(
     Returns:
         PropertyTag 实例
     """
-    tag = PropertyTag(name=archive.read_name(name_map), type="", size=0)
+    # Phase 73 Wave 4: Record tag start position for cascade failure diagnosis
+    tag_start_pos = archive.tell()
+
+    tag = PropertyTag(name=archive.read_name(name_map), type="", size=0, tag_start_offset=tag_start_pos)
 
     if tag.name == "None":
         return tag
@@ -89,5 +92,12 @@ def read_property_tag(
 
     if tag.flags & PROP_TAG_BOOL_TRUE:
         tag.bool_val = 1
+
+    # Phase 73 Wave 4: Record value start position and expected end position
+    tag.value_start_offset = archive.tell()
+    if tag.size > 0:
+        tag.value_end_offset = tag.value_start_offset + tag.size
+    else:
+        tag.value_end_offset = tag.value_start_offset
 
     return tag
