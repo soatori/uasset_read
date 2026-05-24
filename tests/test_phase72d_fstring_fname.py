@@ -93,9 +93,12 @@ class TestShortFStringNotRejected:
 # ============================================================================
 
 class TestInternalNullDetected:
-    """包含内部 null 字节的字符串应返回空。"""
+    """包含内部 null 字节的字符串应截断返回前缀。
 
-    def test_internal_null_returns_empty(self):
+    Phase 72-I Wave 3: 改为截断而非返回空字符串，保留有效数据。
+    """
+
+    def test_internal_null_returns_truncated(self):
         text = "hello\x00world"
         encoded = text.encode('utf-8')
         length = len(encoded)
@@ -106,7 +109,8 @@ class TestInternalNullDetected:
         arch = FArchive(path)
         try:
             result = arch.read_fstring()
-            assert result == ""
+            # Phase 72-I Wave 3: 返回截断后的字符串而非空
+            assert result == "hello"
         finally:
             arch.close()
 
@@ -123,7 +127,8 @@ class TestInternalNullDetected:
         try:
             with caplog.at_level(logging.WARNING, logger='uasset_read.archive'):
                 arch.read_fstring()
-            assert "internal nulls" in caplog.text
+            # Phase 72-I Wave 3: 日志包含 "truncated at null"
+            assert "truncated at null" in caplog.text
         finally:
             arch.close()
 
