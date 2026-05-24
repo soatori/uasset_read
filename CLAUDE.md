@@ -97,6 +97,14 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 - `.planning/milestones/` — 已归档里程碑（v7.0-v12.0）
 - `.planning/MILESTONES.md` — 历史里程碑
 
+## 工作区自动合并
+
+由 `2.11-dev` 分支创建的 worktree 完成任务后，**自动合并回 `2.11-dev`**，不再询问用户：
+1. 提交 worktree 中的改动
+2. push 到 remote
+3. 如有冲突，取 incoming 版本解决
+4. 清理 worktree 目录
+
 ## 上下文与效率
 
 - 上下文 >70% 时执行 `compact`
