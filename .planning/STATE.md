@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 📋 规划完成
+status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 Wave 0 ✅
 last_updated: "2026-05-23T20:40:36.774Z"
 progress:
   total_phases: 15
@@ -26,7 +26,7 @@ progress:
 
 ## 当前状态
 
-**当前阶段:** Phase 73 📋 (规划完成，待执行) | **上一阶段:** Phase 72-I ✅ (完成于 2026-05-24)
+**当前阶段:** Phase 73 Wave 0 ✅ (诊断回路建立) | **上一阶段:** Phase 72-I ✅ (完成于 2026-05-24)
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
