@@ -190,6 +190,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
 
+    # Phase 73 Wave 4: Track expected struct end position for recovery
+    struct_start = archive.tell()
+    struct_end = struct_start + tag.size if tag.size > 0 else None
+
     while property_count < MAX_PROPERTY_COUNT:
         property_count += 1
 
@@ -198,12 +202,33 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         if inner_tag.name == "None":
             break
 
+        # Phase 73 Wave 4: Check if PropertyTag size/type is trustworthy
+        # Suspicious indicators: size > remaining struct bytes, type mismatch
+        if struct_end is not None and inner_tag.size > 0:
+            inner_tag_end = archive.tell() + inner_tag.size
+            if inner_tag_end > struct_end + 16:  # Allow 16 bytes tolerance for alignment
+                # Log suspicious PropertyTag but continue with recovery
+                import logging
+                logger = logging.getLogger('uasset_read.serializers.property_tags')
+                logger.warning(
+                    f"[P73-PROPTRACE] Suspicious PropertyTag '{inner_tag.name}' "
+                    f"size={inner_tag.size} exceeds struct boundary "
+                    f"(tag_end={inner_tag_end}, struct_end={struct_end})"
+                )
+
         field_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         # 当解析器返回 None（未知类型）且 tag.size > 0 时，主动跳过该属性字节
         # 防止在同一位置无限循环读取相同的 PropertyTag
         if field_value is None and inner_tag.size > 0:
             archive.seek(archive.tell() + inner_tag.size)
         fields[inner_tag.name] = field_value
+
+        # Phase 73 Wave 4: Recovery - align to value_end if parsing failed
+        if inner_tag.value_end_offset is not None and inner_tag.size > 0:
+            current_pos = archive.tell()
+            if current_pos != inner_tag.value_end_offset:
+                # Parsing left archive at unexpected position - realign
+                archive.seek(inner_tag.value_end_offset)
 
     return StructValue(
         struct_type=struct_type,
