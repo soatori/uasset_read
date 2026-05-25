@@ -548,20 +548,25 @@ else:
 **UE 源码参考:** `E:\Develop\lib\UnrealEngine` (UE 5.7)
 **里程碑策略:** COR (核心修复) + PAK (Pak/IoStore) + FMT (输出格式)，EXP/GAM/ENH 归入 v15.0
 
-**索引驱动模式:** 每 Phase 以源码对照索引文档开头（CUE4Parse C# ↔ UE C++ ↔ uasset_read Python），后续 agent 直接引用索引执行。
+**索引驱动模式:** 每 Phase 以三方源码对照索引开头：
+- **CUE4Parse (C#)** — 参考实现，逆向工程产物
+- **UE 引擎源码 (C++)** — 权威金标准，`E:\Develop\lib\UnrealEngine` (UE 5.7)
+- **uasset_read (Python)** — 当前实现，待对齐
+
+后续 agent 直接引用索引执行，不再逐行翻源码。
 
 ### 索引文档交付物总览
 
-| 文档 | Phase | CUE4Parse 源 | UE 源码 | 状态 |
-|------|-------|-------------|---------|------|
-| `docs/reference/FArchive-对照详解.md` | 76 | `FArchive.cs` | `FArchive.cpp` | ⬜ |
-| `docs/reference/PackageSummary-对照详解.md` | 76 | `AbstractUePackage.cs` | `PackageFileSummary.cpp` | ⬜ |
-| `docs/reference/FPropertyTag-对照详解.md` | 76 | `FPropertyTag.cs` | `PropertyTag.cpp` | ⬜ |
-| `docs/reference/PakFile-对照详解.md` | 77 | `FPakFileReader.cs` | `FPakFile.cpp` | ⬜ |
-| `docs/reference/UObject-对照详解.md` | 78 | `UObject.cs` | `UObject.cpp` | ⬜ |
-| `docs/reference/PackageLinker-对照详解.md` | 78 | `FLinkerLoad.cs` | `FLinkerLoad.cpp` | ⬜ |
-| `docs/reference/IoStore-对照详解.md` | 79 | `IoStoreReader.cs` | `FIoStoreReader.cpp` | ⬜ |
-| `docs/reference/Kismet-对照详解.md` | 80 | `KismetExpression.cs` | `EExprToken.h` | ⬜ |
+| 文档 | Phase | CUE4Parse 源 | UE 引擎源 (权威基准) | uasset_read 当前 | 状态 |
+|------|-------|-------------|---------------------|------------------|------|
+| `FArchive-对照详解.md` | 76 | `CUE4Parse/UE4/Readers/FArchive.cs` | `Core/Private/Serialization/Archive.cpp` + `Archive.h` | `archive.py` | ⬜ |
+| `PackageSummary-对照详解.md` | 76 | `CUE4Parse/UE4/Assets/Readers/AssetArchive.cs` | `CoreUObject/Private/UObject/PackageFileSummary.cpp` | `serializers/package_summary.py` | ⬜ |
+| `FPropertyTag-对照详解.md` | 76 | `CUE4Parse/UE4/Assets/Objects/FPropertyTag.cs` | `CoreUObject/Private/UObject/PropertyTag.cpp` + `PropertyHelper.h` | `serializers/property_tags.py` + `parsers/property_types.py` | ⬜ |
+| `PakFile-对照详解.md` | 77 | `CUE4Parse/UE4/Pak/PakFileReader.cs` | `PakFile/Private/PakFile.cpp` + `IPlatformFilePak.h` | 缺失 → 新建 `pak/reader.py` | ⬜ |
+| `UObject-对照详解.md` | 78 | `CUE4Parse/UE4/Assets/Exports/UObject.cs` + `UField/` | `CoreUObject/Private/UObject/Class.cpp` + `UObject.h` | `link/object_instance.py` (部分) | ⬜ |
+| `PackageLinker-对照详解.md` | 78 | `CUE4Parse/UE4/Assets/Readers/AssetArchive.cs` | `CoreUObject/Private/UObject/LinkerLoad.cpp` + `Linker.h` | `link/linker.py` | ⬜ |
+| `IoStore-对照详解.md` | 79 | `CUE4Parse/UE4/Assets/IoStoreReader.cs` | `Core/Private/IoStore/IoStoreReader.cpp` + `IoStore.h` | 缺失 → 新建 `iostore/reader.py` | ⬜ |
+| `Kismet-对照详解.md` | 80 | `CUE4Parse/UE4/Kismet/KismetExpression.cs` + `KismetSerializer.cs` | `Engine/Private/KismetCompiler/KismetCompiler.cpp` + `Engine/Classes/EdGraph/EdGraphNode.h` | `kismet/expressions/` (60+ 种) | ⬜ |
 
 ### Phase 76: 核心序列化层源码索引 + FArchive 补齐 (COR-01, COR-02)
 
@@ -572,20 +577,33 @@ else:
 - `docs/reference/PackageSummary-对照详解.md` — 包结构（Summary/NameMap/ImportMap/ExportMap）三方字段映射
 - `docs/reference/FPropertyTag-对照详解.md` — 属性标签 UE4/UE5 分支 + PropertyTypeNameNode + Unversioned 逻辑
 
-**索引文档格式规范:**
+**索引文档格式规范（三方对照）:**
 ```
-## 方法/字段名
-### CUE4Parse (C#)
-[源码片段 + 行号]
-### UE 引擎 (C++)
-[对应源码 + 行号]
-### uasset_read (Python) 
-[当前实现 + 文件/行号]
-### 差异分析
-[字段级差异 + 行为偏差]
-### 修复方向
-[具体: 修改哪个文件/哪个函数/怎么改]
+## 结构体/方法名
+
+### CUE4Parse (C#) — 参考实现
+文件: CUE4Parse/UE4/.../<file>.cs :<line>
+[关键源码片段，标注序列化顺序和字段类型]
+
+### UE 引擎 (C++) — 权威金标准 ⭐
+文件: Engine/Source/Runtime/.../<file>.cpp :<line>
+[UE 官方源码，含 FArchive << 操作符序列化顺序]
+→ 这是"正确答案"，CUE4Parse 也以此为准
+
+### uasset_read (Python) — 当前实现
+文件: src/uasset_read/<file>.py :<line>
+[当前 Python 代码，标注与 UE 源码的偏差]
+
+### 差异矩阵
+| 字段 | UE 源码 | CUE4Parse | uasset_read | 偏差 | 修复 |
+|------|---------|-----------|-------------|------|------|
+| field1 | 类型A | 对齐 ✓ | 类型B ❌ | 偏差描述 | 具体修复 |
+
+### 修复方案
+1. 修改 <file>.py:<line> — <what to change>
+2. 参考 UE 源码 <path>:<line> — <why this is correct>
 ```
+**UE 源码优先级:** UE 源码 > CUE4Parse 源码 > 现有 uasset_read。当 CUE4Parse 和 UE 源码不一致时，以 UE 源码为准。
 
 **实现 (Wave 1-2):**
 | # | 问题 | 位置 | 索引引用 | 修复方向 |
