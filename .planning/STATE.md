@@ -19,7 +19,12 @@ progress:
 
 ## 索引驱动模式
 
-每 Phase 开头先产出 `docs/reference/` 源码对照索引文档（CUE4Parse C# ↔ UE C++ ↔ uasset_read Python），后续 agent 直接引用索引执行。贯穿整个里程碑。
+每 Phase 开头先产出三方源码对照索引（`docs/reference/`）：
+1. **UE 引擎源码 (C++)** — 权威金标准，`E:\Develop\lib\UnrealEngine` (UE 5.7)
+2. **CUE4Parse (C#)** — 参考实现，逆向工程产物
+3. **uasset_read (Python)** — 当前实现，待对齐
+
+后续 agent 直接引用索引执行。UE 源码优先级最高，当 CUE4Parse 与 UE 源码不一致时以 UE 源码为准。
 
 ## Phase 分解
 
