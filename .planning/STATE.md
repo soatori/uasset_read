@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v14.0
 milestone_name: CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
-status: Active — Phase 76-80 planned
+status: Active — Phase 76-80 planned, index-driven execution
 last_updated: "2026-05-26"
 progress:
   total_phases: 5
@@ -15,50 +15,46 @@ progress:
 # v14.0 — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
 
 **Started:** 2026-05-26
-**Status:** Active — Roadmap defined, Phase 76-80 ready to discuss/plan
+**Status:** Active — Roadmap defined, Phase 76 ready to discuss/plan
+
+## 索引驱动模式
+
+每 Phase 开头先产出 `docs/reference/` 源码对照索引文档（CUE4Parse C# ↔ UE C++ ↔ uasset_read Python），后续 agent 直接引用索引执行。贯穿整个里程碑。
 
 ## Phase 分解
 
-| Phase | Name | Goal | Requirements | Status |
-|-------|------|------|--------------|--------|
-| 76 | 对照 Wiki 修复 + FArchive 补齐 | 修复 🔧 标记项 + FCustomVersion + VersionContainer | COR-01, COR-02 | ⬜ Not Started |
-| 77 | Pak 基础 + 压缩 + AES | .pak 解析 → Zlib/LZ4/Zstd/Oodle → AES 解密 | PAK-01, PAK-02, PAK-03 | ⬜ Not Started |
-| 78 | UObject 继承树 + Linker 重构 | UObject hierarchy + FAssetArchive 模式重构 | COR-03, COR-04 | ⬜ Not Started |
-| 79 | IoStore + IFileProvider | .utoc/.ucas 解析 + 文件发现 | PAK-04, PAK-05 | ⬜ Not Started |
-| 80 | 输出格式 CUE4Parse 对齐 | PascalCase JSON + 文本 Schema 化 + BlueprintText 统一 | FMT-01, FMT-02, FMT-03 | ⬜ Not Started |
+| Phase | 索引文档 | 实现目标 | Requirements | Status |
+|-------|---------|---------|--------------|--------|
+| 76 | FArchive + PackageSummary + FPropertyTag | COR-01/02 修复 | COR-01, COR-02 | ⬜ |
+| 77 | PakFile | .pak parser + compression + AES | PAK-01~03 | ⬜ |
+| 78 | UObject + PackageLinker | 继承树 + Linker 重构 | COR-03, COR-04 | ⬜ |
+| 79 | IoStore | .utoc/.ucas + IFileProvider | PAK-04, PAK-05 | ⬜ |
+| 80 | KismetExpression | 输出格式 PascalCase 对齐 | FMT-01~03 | ⬜ |
 
 ## 当前状态
 
-**当前阶段:** Phase 76 — 对照 Wiki 修复 + FArchive 补齐 (待 discuss/plan)
+**当前阶段:** Phase 76 — 核心序列化层源码索引 + FArchive 补齐 (待 discuss/plan)
 **并行机会:** P76 和 P77 可并行（无共享依赖）
-**遗留评估:** v13.0 Phase 75（EventGraph 字段级对齐）将在本里程碑末尾评估是否需要修复
+**遗留评估:** v13.0 Phase 75 里程碑末尾评估
 
-## v14.0 完成度
+## 索引文档清单
 
-| Phase | 范围 | 日期 | 状态 |
-|-------|------|------|------|
-| v14.0 P76 | 对照 Wiki 修复 + FArchive 补齐 | — | ⬜ Not Started |
-| v14.0 P77 | Pak 基础 + 压缩 + AES | — | ⬜ Not Started |
-| v14.0 P78 | UObject 继承树 + Linker 重构 | — | ⬜ Not Started |
-| v14.0 P79 | IoStore + IFileProvider | — | ⬜ Not Started |
-| v14.0 P80 | 输出格式对齐 | — | ⬜ Not Started |
-
-## 交付物清单
-
-| 交付物 | 位置 | 状态 |
-|--------|------|------|
-| 对照 Wiki | `docs/CUE4Parse-对照索引.md` | ✅ Complete |
-| 研究 — Stack | `.planning/research/STACK.md` | ✅ Complete |
-| 研究 — Features | `.planning/research/FEATURES.md` | ✅ Complete |
-| 需求 | `.planning/REQUIREMENTS.md` | ✅ Complete |
-| 路线图 | `.planning/ROADMAP.md` | ✅ Complete |
-| 项目文档 | `.planning/PROJECT.md` | ✅ Updated |
+| 文档 | Phase | 状态 |
+|------|-------|------|
+| `docs/reference/FArchive-对照详解.md` | 76 | ⬜ |
+| `docs/reference/PackageSummary-对照详解.md` | 76 | ⬜ |
+| `docs/reference/FPropertyTag-对照详解.md` | 76 | ⬜ |
+| `docs/reference/PakFile-对照详解.md` | 77 | ⬜ |
+| `docs/reference/UObject-对照详解.md` | 78 | ⬜ |
+| `docs/reference/PackageLinker-对照详解.md` | 78 | ⬜ |
+| `docs/reference/IoStore-对照详解.md` | 79 | ⬜ |
+| `docs/reference/Kismet-对照详解.md` | 80 | ⬜ |
 
 ## 下一步行动
 
-1. **Phase 76 discuss/plan:** `/gsd:discuss-phase 76` — 对照 Wiki 修复 + FArchive 补齐
-2. **Phase 77 parallel discuss/plan:** `/gsd:discuss-phase 77` — Pak 基础 + 压缩 + AES
+1. **Phase 76 discuss:** `/gsd:discuss-phase 76` — 核心序列化层源码索引 + FArchive 补齐
+2. **Phase 77 parallel:** `/gsd:discuss-phase 77` — Pak 文件索引 + 解析 + 压缩 + AES
 
 ---
 
-*Updated: 2026-05-26 (v14.0 milestone initialized)*
+*Updated: 2026-05-26 (v14.0 milestone initialized, index-driven roadmap)*
