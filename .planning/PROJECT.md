@@ -17,19 +17,10 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 已归档 |
 | v11.0 | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 已归档 |
 | **v12.0** | **N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 已归档 |
-| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72)** | 活跃 |
+| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75)** | 归档 |
+| **v14.0** | **CUE4Parse Python 全量对齐** | 活跃 |
 
 详情：`.planning/milestones/` | 路线图：`.planning/ROADMAP.md`
-
-## 当前状态
-
-**当前开发**: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72)
-
-Phase 72-A（Pin 连接二进制诊断）已完成，定位 2 个独立 bug：
-1. `history_type` 无符号/有符号不匹配（`read_u8()` 返回 255，UE 意图是 -1）
-2. ParentPin 条件读取错误（`null != 0` 时多读 16B GUID）
-
-Phase 72-B（Pin 连接修复）待执行。
 
 **已归档**: v12.0 — N2C 中间格式 (2026-05-22)
 
@@ -37,7 +28,12 @@ Phase 72-B（Pin 连接修复）待执行。
 
 ## Out of Scope
 
-导出纹理/模型 | 修改 .uasset | Cooked 资产 | MCP Server
+修改 .uasset | Cooked 资产 | MCP Server
+
+~~导出纹理/模型~~ → v14.0 目标
+~~Pak/IoStore 解析~~ → v14.0 目标
+~~加密/压缩支持~~ → v14.0 目标
+~~游戏特定适配~~ → v14.0 目标
 
 ~~蓝图字节码反编译~~ → v11.0 已实现（KismetExpression → C++）
 ~~Agent 翻译管线~~ → v11.0 已实现（AgentTranslationPipeline + CppFileWriter）
@@ -45,13 +41,25 @@ Phase 72-B（Pin 连接修复）待执行。
 
 ## 关键决策
 
-零依赖 ✓ | 参考 UE 源码 ✓ | JSON 优先 ✓ | FArchive 管道模式 ✓ | v7.0 增量采用 ✓ | v8.0 按 gap 分 phase ✓ | v11.0 参考 CUE4Parse 设计（Python 化）✓ | v12.0 N2C 中间格式架构 ✓
+零依赖 ✓ | 参考 UE 源码 ✓ | JSON 优先 ✓ | FArchive 管道模式 ✓ | v7.0 增量采用 ✓ | v8.0 按 gap 分 phase ✓ | v11.0 参考 CUE4Parse 设计（Python 化）✓ | v12.0 N2C 中间格式架构 ✓ | v14.0 CUE4Parse 一比一对应翻译 ✓
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
-Full update rules in the original template.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
 
-*Last updated: 2026-05-23 after v12.0 milestone archived, v13.0 active*
+*Last updated: 2026-05-26 — v14.0 milestone started: CUE4Parse Python 全量对齐*

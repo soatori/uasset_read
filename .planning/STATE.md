@@ -1,225 +1,64 @@
 ---
 gsd_state_version: 1.0
-milestone: v13.0
-milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8, Phase 74 ✅ Complete
+milestone: v14.0
+milestone_name: CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
+status: Active — Phase 76-80 planned
 last_updated: "2026-05-26"
 progress:
-  total_phases: 15
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 8
-  percent: 20
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-# v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
+# v14.0 — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
 
-**Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8, Phase 74 ✅ Complete
+**Started:** 2026-05-26
+**Status:** Active — Roadmap defined, Phase 76-80 ready to discuss/plan
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 72 | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 | 完整 Pin 序列化 + 字节码导航 + 类型区分 | PIN-01/02/03 | 🔄 Active |
-| 73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 修复 LinkedTo 前字段边界错位，恢复连接并建立字段级诊断回路 | P73-01..06 | ✅ Shipped |
-| 74 | UE/CUE4Parse 对齐的 PinReference 主路径修复 | 按 UE SerializePin 规则修正 null 引用和 owning pin body 起点 | P74-01..04 | ✅ Complete |
+| 76 | 对照 Wiki 修复 + FArchive 补齐 | 修复 🔧 标记项 + FCustomVersion + VersionContainer | COR-01, COR-02 | ⬜ Not Started |
+| 77 | Pak 基础 + 压缩 + AES | .pak 解析 → Zlib/LZ4/Zstd/Oodle → AES 解密 | PAK-01, PAK-02, PAK-03 | ⬜ Not Started |
+| 78 | UObject 继承树 + Linker 重构 | UObject hierarchy + FAssetArchive 模式重构 | COR-03, COR-04 | ⬜ Not Started |
+| 79 | IoStore + IFileProvider | .utoc/.ucas 解析 + 文件发现 | PAK-04, PAK-05 | ⬜ Not Started |
+| 80 | 输出格式 CUE4Parse 对齐 | PascalCase JSON + 文本 Schema 化 + BlueprintText 统一 | FMT-01, FMT-02, FMT-03 | ⬜ Not Started |
 
 ## 当前状态
 
-**当前阶段:** Phase 74 ✅ (UE/CUE4Parse 对齐的 PinReference 主路径修复) | **上一阶段:** Phase 73 ✅ Shipped — PR #8
-**Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
-**Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
-**Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
-**Phase 72-D 完成:** 2026-05-23 — null_ratio 启发式替换为 null-termination 验证 + 20 tests
-**Phase 72-UAT 完成:** 2026-05-23 — 1339 tests passed, 0 issues found
+**当前阶段:** Phase 76 — 对照 Wiki 修复 + FArchive 补齐 (待 discuss/plan)
+**并行机会:** P76 和 P77 可并行（无共享依赖）
+**遗留评估:** v13.0 Phase 75（EventGraph 字段级对齐）将在本里程碑末尾评估是否需要修复
 
-## v13.0 完成度
+## v14.0 完成度
 
-| 版本 | 范围 | 日期 | 状态 |
-|------|------|------|------|
-| v13.0 P72-A | Pin 连接诊断 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-B | Pin 连接修复 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-C | Kismet 字节码导航 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-UAT | UAT 验证 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-D | FString/FName 区分 ✅ | 2026-05-23 | ✅ Complete |
-| v13.0 P72-E | EventGraph 节点解析修复 | 已完成 | ✅ Complete |
-| v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
-| v13.0 P72-G | 复杂 StructProperty + Pin 连接映射修复 | 完成 | ✅ Complete |
-| v13.0 P72-I | BP_FirstPersonCharacter 全量对比修复 | 2026-05-24 | ✅ Complete |
-| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | Wave 0-5 ✅ | ✅ Shipped |
-| v13.0 P74 | UE/CUE4Parse 对齐的 PinReference 主路径修复 | read_pin_reference / validate / read_ue_graph_pin / ParentPin 修复 | ✅ Complete |
+| Phase | 范围 | 日期 | 状态 |
+|-------|------|------|------|
+| v14.0 P76 | 对照 Wiki 修复 + FArchive 补齐 | — | ⬜ Not Started |
+| v14.0 P77 | Pak 基础 + 压缩 + AES | — | ⬜ Not Started |
+| v14.0 P78 | UObject 继承树 + Linker 重构 | — | ⬜ Not Started |
+| v14.0 P79 | IoStore + IFileProvider | — | ⬜ Not Started |
+| v14.0 P80 | 输出格式对齐 | — | ⬜ Not Started |
 
-## Phase 72 详细进度
+## 交付物清单
 
-### Phase 72-A: Pin 连接二进制诊断 ✅
-
-**完成日期:** 2026-05-23
-
-| # | Bug | 位置 | 根因 | 修复策略 |
-|---|-----|------|------|---------|
-| 1 | `history_type` 无符号/有符号不匹配 | `graph.py` L398, L449 | `read_u8()` 返回 255，UE 意图是 -1（None） | 入口处 `if history_type >= 128: history_type -= 256` |
-| 2 | ParentPin 总是读 24 字节 | `graph.py` L476-479 | `null != 0` 时应只读 8B | 条件读取：null != 0 → 8B, null == 0 → 24B |
-
-**二进制证据（K2Node_Knot_1 pin 0, body at 132477）:**
-
-- 修复 Bug 1 → `LinkedTo count=1, owning=57, valid GUID` ✅
-- 修复 Bug 1+2 → `RefPassThrough null=0, BitField=0x52935405` ✅
-
-### Phase 72-B: Pin 连接修复 ✅
-
-**修复内容:** `serializers/graph.py` — L398/L449 history_type signed 转换 + L476-479 ParentPin 条件读取
-
-**测试结果:** 762 passed, 77 skipped, 1 pre-existing failure (Phase 71 deprecation)
-
-**验收:** `72-01-UAT.md` — 4/4 tests pass
-
-### Phase 72-C: Kismet 字节码导航 (BPGC Fallback) ✅
-
-**完成日期:** 2026-05-23
-
-**新增模块:** `src/uasset_read/kismet/bpgc_bytecode.py` (295 lines)
-
-**新增 API:**
-
-- `extract_bpgc_bytecode()` — 从 BPGC script_serial_region 提取字节码
-- `map_bytecode_to_functions()` — 按 ordinal 映射字节码到 Function 导出
-- `_parse_cooked_bytecode_buffer()` — 纯函数解析烘焙格式缓冲区
-
-**管线集成:**
-
-- `bytecode_extractor.py` — 添加 BPGC fallback + 模块级缓存
-- `pipeline.py` — 添加 cache reset
-- `kismet/__init__.py` — 导出新 API
-
-**Bug 修复:**
-
-- `object_resources.py` — `detect_blueprint_generated_class()` 使用 `object_name` 而非 `class_name`
-
-**测试结果:** 5 passed, 3 skipped (integration), 28 passed (existing kismet tests regression)
-
-**验收:** `72c-01-SUMMARY.md`, `72c-02-SUMMARY.md` — 所有标准满足
-
-### Phase 72-D: FString/FName 区分
-
-**根因:** 属性值中的 FName 索引区域被误作 FString 读取，35 处返回空字符串。
-
-**状态:** ⬜ Not Started — 未实施，安排在 future iteration
-
-**修复策略 (pending):**
-
-- 区分 FName index 区域（通常是 NameMap 大小范围内的小整数）
-- 在 property value extractor 中添加 FName 专用解析路径
-- 更新 `serializers/property_types.py` `parse_struct_property()` 以处理 FName indices
-
-### Phase 72-E: EventGraph 节点解析修复
-
-**插入日期:** 2026-05-23
-
-**根因 (待诊断):**
-
-- EventGraph 节点读取循环存在跳过/遗漏条件
-- FMemberReference 序列化逻辑中 member_name 解析异常
-- K2Node_Event 解析路径存在未处理的边界情况
-
-**目标:** EventGraph 解析覆盖率从 ~56% 提升至 >90%
-
-### Phase 72-F: BPGC 缓存隔离修复 ✅
-
-**完成日期:** 2026-05-23
-
-**修复内容:** `parse_uasset.py` — `_extract_kismet_decompiled()` 添加 `reset_bpgc_cache()` 调用
-
-**根因:** 连续 `parse_uasset(file_A)` + `parse_uasset(file_B)` 共享 `_bpgc_bytecode_cache` 全局状态，导致 file_B 读取 file_A 的缓存数据。
-
-**测试:** 2 新增测试 passed, 5 现有 BPGC 测试无回归
-
-**验收:** `72f-01-SUMMARY.md` — 所有标准满足
-
-### Phase 72-G: 复杂 StructProperty 解析 + Pin 连接映射修复 (INSERTED)
-
-**插入日期:** 2026-05-23
-
-**状态:** ✅ 完成 — 4 个 wave 执行，21 新测试，1330 回归通过
-
-**反复失败问题清单:**
-
-| # | 问题 | 反复失败历史 |
-|---|------|-------------|
-| 1 | Complex StructProperty 解析失败 | Phase 67 修复 → 仍失败 |
-| 2 | Pin 连接映射输出为空 (Connections=0) | Phase 72-B 修复 → 仍未输出 |
-| 3 | Blueprint.functions 列表为空 | 从未修复 |
-| 4 | 函数参数信息缺失 | 从未修复 |
-
-**目标:** 解析覆盖率从 ~56% 提升至 >90%
-
-### Phase 72-H: FString 容错 + LinkedTo 恢复 + StructValue JSON 递归序列化 (INSERTED)
-
-**插入日期:** 2026-05-23
-
-**状态:** 🔴 Planned — 计划已创建，待执行
-
-**三个核心问题:**
-
-| # | 问题 | 文件 | 优先级 |
-|---|------|------|--------|
-| 1 | FString 内部 null 字节导致偏移错位 | `archive.py` read_fstring() | P0 |
-| 2 | LinkedTo 数组 count 异常崩溃 | `serializers/graph.py` read_pin_array() | P2 |
-| 3 | StructValue JSON 序列化崩溃 | `formatters/json_formatter.py` serialize_property_value() | P1 |
-
-**执行计划:** `.planning/phases/phase-72h/PLAN.md`
-
-### Phase 74: UE/CUE4Parse 对齐的 PinReference 主路径修复 ✅
-
-**完成日期:** 2026-05-26
-
-**修复内容:** `serializers/graph.py` — 4 处精确修改
-
-| # | 函数 | 修复 | 影响 |
-|---|------|------|------|
-| 1 | `read_pin_reference()` | null 时仅消费 4B (移除此前条件性 read 20B 的兼容代码) | read_pin_array() 循环字节同步 |
-| 2 | `validate_pin_reference_at()` | 支持 4B null ref (serialized_size=4) 和 24B non-null (serialized_size=24) | 前置校验正确识别 null 形状 |
-| 3 | `read_ue_graph_pin()` | `pin_start_pos` 移至 OwningNode+PinId 丢弃之后，对应 PinName 起点 | 诊断日志 pin_start_pos 准确 |
-| 4 | ParentPin / ReferencePassThroughConnection | 复用 `read_pin_reference()` 替代手动 i32+i32+conditional-16B | 代码复用 + 行为对齐 |
-
-**测试修复:** 补充 test data 中缺失的 OwningNode+PinId 内部重复头 + FText bHasCultureInvariantString 字段，移除 xfail 标记。
-
-**测试结果:** 5 passed, 全量回归 1435 passed, 0 regressions.
-
-**提交:** `5351102 feat(phase-74): align PinReference layout with UE source / CUE4Parse`
-
-## 测试统计
-
-| Category | Count |
-|----------|-------|
-| Total tests collected | 1463 |
-| Passed | 1435 |
-| Skipped | 123 |
-| XFailed (expected) | 2 |
-| Warnings | 116 |
-
-**Phase 72-specific:** 787 tests (762 from 72-B + 5 from 72-C + 20 from 72-D)
-
-## Gaps
-
-| Gap | Impact | Priority |
-|-----|--------|----------|
-| Phase 72-D FString/FName 区分 | 35 处空字符串误报 (Phase 51 warning only) | Medium — future iteration |
-| Phase 72-E EventGraph 节点解析 | EventGraph 覆盖率 ~56%，函数名解析为 None | High — urgent insertion |
-| Phase 72-F BPGC 缓存隔离 | 多文件 parse_uasset() 缓存串扰 | High — blocker from audit |
-| Phase 72-H FString/LinkedTo/JSON 修复 | BP_FirstPersonCharacter 解析阻断 | High — 本次插入 |
-| Phase 72-I BP_FirstPersonCharacter 全量对比修复 | 12 项解析错误（Pin 连接丢失、EnhancedInputAction 缺失、Rotation 全零等） | High — 三方对比驱动 |
-| Cooked UE5 Blueprint integration test | BPGC fallback logic verified, real cooked asset testing deferred | Low — production deployment |
+| 交付物 | 位置 | 状态 |
+|--------|------|------|
+| 对照 Wiki | `docs/CUE4Parse-对照索引.md` | ✅ Complete |
+| 研究 — Stack | `.planning/research/STACK.md` | ✅ Complete |
+| 研究 — Features | `.planning/research/FEATURES.md` | ✅ Complete |
+| 需求 | `.planning/REQUIREMENTS.md` | ✅ Complete |
+| 路线图 | `.planning/ROADMAP.md` | ✅ Complete |
+| 项目文档 | `.planning/PROJECT.md` | ✅ Updated |
 
 ## 下一步行动
 
-1. **Phase 72-I 执行:** BP_FirstPersonCharacter 全量对比修复（12 项解析错误，参考文档精确值验证）
-2. **Phase 72-UAT 归档:** ✅ 完成 — 报告已创建 `phases/phase-72/72-UAT.md`
-3. **Phase 72归档:** 准备归档 Phase 72 (v13.0 milestone 完成)
-4. **Phase 72-D:** 实施 FString/FName 区分修复（安排在 future iteration）
-5. **Phase 72-E (INSERTED):** EventGraph 节点解析修复 — 基于三方对比报告插入的紧急修复
-6. **Phase 72-F (INSERTED):** BPGC 缓存隔离修复 — 审计发现的阻塞级集成缺陷
+1. **Phase 76 discuss/plan:** `/gsd:discuss-phase 76` — 对照 Wiki 修复 + FArchive 补齐
+2. **Phase 77 parallel discuss/plan:** `/gsd:discuss-phase 77` — Pak 基础 + 压缩 + AES
 
 ---
 
-*Updated: 2026-05-24 (Phase 72-I inserted: BP_FirstPersonCharacter 全量对比修复)*
+*Updated: 2026-05-26 (v14.0 milestone initialized)*
