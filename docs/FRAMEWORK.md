@@ -2,24 +2,8 @@
 
 > Unreal Engine .uasset 文件解析器 — 让 AI 代理在不依赖 UE 编辑器的情况下读取蓝图内容。
 > Python 3.10+，零运行时依赖，setuptools + pytest。
-
-## 架构总览
-
-```
-.uasset → FArchive → Deserializer → Models → OutputFormatter
-         ↓
-    PackageLinker (两阶段对象图重建)
-         ↓
-    GraphParser → AdvancedPropParser → DependencyGraphBuilder
-```
-
-### 管线入口
-
-| 函数 | 文件 | 说明 |
-|------|------|------|
-| `parse_uasset()` | `parse_uasset.py` | 主入口，单线程解析：读文件头 → 名称表 → Import/Export Map → 属性解析 → 后处理（图提取 / Kismet 反编译 / 组件 / 依赖分析） |
-| `parse_uasset_with_linker()` | `parse_uasset.py` | 带 PackageLinker 的并行解析：在属性解析后运行两阶段 link()，支持 UObjectInstance 惰性加载和 PackageIndex → 对象引用解析 |
-| `main()` | `cli.py` | CLI 入口 (`uasset-read` 命令)，argparse 参数解析 → 调用 parse_uasset → 格式化输出 |
+>
+> 详细英文架构文档见 [ARCHITECTURE.md](ARCHITECTURE.md)（分层架构、设计决策、扩展指南）。
 
 ## 模块索引
 
@@ -194,31 +178,22 @@
 - Agent 翻译与 C++ 生成
 - N2C 中间格式
 
-## 目录组织
+## 目录结构
 
 ```
 src/uasset_read/    # 源码（~100 个 .py 文件）
 tests/              # 测试（~1300+ tests）
 .planning/          # 规划文档（ROADMAP / STATE / phases / milestones）
 temp/               # 缓存 / 临时生成文件（.gitignore 排除）
-uasset_read_cpp/    # C++ 参考代码
-UnrealEngine/       # 外部 UE 源码（Git 忽略）
-LyraStarterGame/    # 外部 Lyra 参考（Git 忽略）
+docs/               # 用户文档
 ```
+
+详细目录结构见 [ARCHITECTURE.md](ARCHITECTURE.md#file-organization)（源码文件级）和 `CLAUDE.md`（顶层概览）。
 
 ## 版本历史
 
-| 版本 | 状态 | 关键 Phase |
-|------|------|-----------|
-| v12.0 | 已归档 | Phase 67-71（序列化修复 / N2C / 节点处理器 / JSON Schema / 执行流链式） |
-| v13.0 | 活跃 | Phase 72-A✅ B✅ C✅ UAT✅, 72-D⬜ E🔴 F🔴, Phase 73-75 进行中 |
-
-## 快速参考
-
-```bash
-pip install -e ".[dev]"           # 安装
-uasset-read file.uasset           # 解析文件
-python -m pytest tests/ -v        # 测试
-```
-
-测试资产路径：`E:\Develop\lib\UnrealEngine\Samples\FirstPerson`
+| 版本 | 结束日期 | 关键 Phase |
+|------|----------|-----------|
+| v12.0 | 2026-05-23 | Phase 67-71（序列化修复 / N2C / 节点处理器 / JSON Schema / 执行流链式） |
+| v13.0 | 2026-05-25 | Phase 72-75（FString/FName 区分 / BPGC 缓存 / Pin 序列化对齐 / 字段级诊断） |
+| v14.0 | 活跃 | CUE4Parse 核心对齐（COR+PAK+FMT），进行中 |
