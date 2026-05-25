@@ -2,31 +2,32 @@
 gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
-last_updated: "2026-05-24"
+status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8, Phase 74 ✅ Complete
+last_updated: "2026-05-26"
 progress:
   total_phases: 15
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 7
-  percent: 13
+  completed_plans: 8
+  percent: 20
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
 **Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8
+**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅ Shipped — PR #8, Phase 74 ✅ Complete
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 72 | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 | 完整 Pin 序列化 + 字节码导航 + 类型区分 | PIN-01/02/03 | 🔄 Active |
-| 73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 修复 LinkedTo 前字段边界错位，恢复连接并建立字段级诊断回路 | P73-01..06 | 📋 Planned |
+| 73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 修复 LinkedTo 前字段边界错位，恢复连接并建立字段级诊断回路 | P73-01..06 | ✅ Shipped |
+| 74 | UE/CUE4Parse 对齐的 PinReference 主路径修复 | 按 UE SerializePin 规则修正 null 引用和 owning pin body 起点 | P74-01..04 | ✅ Complete |
 
 ## 当前状态
 
-**当前阶段:** Phase 73 Wave 4 ✅ (PropertyTag 级联问题分流) | **上一阶段:** Phase 73 Wave 2 ✅ (完成于 2026-05-24)
+**当前阶段:** Phase 74 ✅ (UE/CUE4Parse 对齐的 PinReference 主路径修复) | **上一阶段:** Phase 73 ✅ Shipped — PR #8
 **Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
@@ -46,7 +47,8 @@ progress:
 | v13.0 P72-F | BPGC 缓存隔离修复 | 完成 | ✅ Complete |
 | v13.0 P72-G | 复杂 StructProperty + Pin 连接映射修复 | 完成 | ✅ Complete |
 | v13.0 P72-I | BP_FirstPersonCharacter 全量对比修复 | 2026-05-24 | ✅ Complete |
-| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | Wave 0-4 ✅ | 🔄 Active |
+| v13.0 P73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | Wave 0-5 ✅ | ✅ Shipped |
+| v13.0 P74 | UE/CUE4Parse 对齐的 PinReference 主路径修复 | read_pin_reference / validate / read_ue_graph_pin / ParentPin 修复 | ✅ Complete |
 
 ## Phase 72 详细进度
 
@@ -167,15 +169,34 @@ progress:
 
 **执行计划:** `.planning/phases/phase-72h/PLAN.md`
 
+### Phase 74: UE/CUE4Parse 对齐的 PinReference 主路径修复 ✅
+
+**完成日期:** 2026-05-26
+
+**修复内容:** `serializers/graph.py` — 4 处精确修改
+
+| # | 函数 | 修复 | 影响 |
+|---|------|------|------|
+| 1 | `read_pin_reference()` | null 时仅消费 4B (移除此前条件性 read 20B 的兼容代码) | read_pin_array() 循环字节同步 |
+| 2 | `validate_pin_reference_at()` | 支持 4B null ref (serialized_size=4) 和 24B non-null (serialized_size=24) | 前置校验正确识别 null 形状 |
+| 3 | `read_ue_graph_pin()` | `pin_start_pos` 移至 OwningNode+PinId 丢弃之后，对应 PinName 起点 | 诊断日志 pin_start_pos 准确 |
+| 4 | ParentPin / ReferencePassThroughConnection | 复用 `read_pin_reference()` 替代手动 i32+i32+conditional-16B | 代码复用 + 行为对齐 |
+
+**测试修复:** 补充 test data 中缺失的 OwningNode+PinId 内部重复头 + FText bHasCultureInvariantString 字段，移除 xfail 标记。
+
+**测试结果:** 5 passed, 全量回归 1435 passed, 0 regressions.
+
+**提交:** `5351102 feat(phase-74): align PinReference layout with UE source / CUE4Parse`
+
 ## 测试统计
 
 | Category | Count |
 |----------|-------|
 | Total tests collected | 1463 |
-| Passed | 1339 |
-| Skipped | 122 |
-| XPassed (unexpected pass) | 2 |
-| Warnings | 107 |
+| Passed | 1435 |
+| Skipped | 123 |
+| XFailed (expected) | 2 |
+| Warnings | 116 |
 
 **Phase 72-specific:** 787 tests (762 from 72-B + 5 from 72-C + 20 from 72-D)
 
