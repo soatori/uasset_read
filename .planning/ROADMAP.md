@@ -543,42 +543,77 @@ else:
 
 ## v14.0 — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
 
-**参考设计:** CUE4Parse (C#) — 一比一对应翻译重构
+**参考设计:** CUE4Parse (C#) 源码 — 一比一对应翻译重构
 **对照 Wiki:** `docs/CUE4Parse-对照索引.md`
+**UE 源码参考:** `E:\Develop\lib\UnrealEngine` (UE 5.7)
 **里程碑策略:** COR (核心修复) + PAK (Pak/IoStore) + FMT (输出格式)，EXP/GAM/ENH 归入 v15.0
 
-### Phase 76: 对照 Wiki 修复 + FArchive 补齐 (COR-01, COR-02)
+**索引驱动模式:** 每 Phase 以源码对照索引文档开头（CUE4Parse C# ↔ UE C++ ↔ uasset_read Python），后续 agent 直接引用索引执行。
 
-**Goal:** 修复 docs/CUE4Parse-对照索引.md 中 🔧 标记项，补齐 FCustomVersion + VersionContainer
+### 索引文档交付物总览
+
+| 文档 | Phase | CUE4Parse 源 | UE 源码 | 状态 |
+|------|-------|-------------|---------|------|
+| `docs/reference/FArchive-对照详解.md` | 76 | `FArchive.cs` | `FArchive.cpp` | ⬜ |
+| `docs/reference/PackageSummary-对照详解.md` | 76 | `AbstractUePackage.cs` | `PackageFileSummary.cpp` | ⬜ |
+| `docs/reference/FPropertyTag-对照详解.md` | 76 | `FPropertyTag.cs` | `PropertyTag.cpp` | ⬜ |
+| `docs/reference/PakFile-对照详解.md` | 77 | `FPakFileReader.cs` | `FPakFile.cpp` | ⬜ |
+| `docs/reference/UObject-对照详解.md` | 78 | `UObject.cs` | `UObject.cpp` | ⬜ |
+| `docs/reference/PackageLinker-对照详解.md` | 78 | `FLinkerLoad.cs` | `FLinkerLoad.cpp` | ⬜ |
+| `docs/reference/IoStore-对照详解.md` | 79 | `IoStoreReader.cs` | `FIoStoreReader.cpp` | ⬜ |
+| `docs/reference/Kismet-对照详解.md` | 80 | `KismetExpression.cs` | `EExprToken.h` | ⬜ |
+
+### Phase 76: 核心序列化层源码索引 + FArchive 补齐 (COR-01, COR-02)
+
+**Goal:** 产出 FArchive / PackageSummary / FPropertyTag 三方源码对照索引，驱动修复
+
+**索引交付物 (Wave 0):**
+- `docs/reference/FArchive-对照详解.md` — CUE4Parse FArchive.cs ↔ UE FArchive.cpp ↔ uasset_read archive.py 逐方法对照
+- `docs/reference/PackageSummary-对照详解.md` — 包结构（Summary/NameMap/ImportMap/ExportMap）三方字段映射
+- `docs/reference/FPropertyTag-对照详解.md` — 属性标签 UE4/UE5 分支 + PropertyTypeNameNode + Unversioned 逻辑
+
+**索引文档格式规范:**
+```
+## 方法/字段名
+### CUE4Parse (C#)
+[源码片段 + 行号]
+### UE 引擎 (C++)
+[对应源码 + 行号]
+### uasset_read (Python) 
+[当前实现 + 文件/行号]
+### 差异分析
+[字段级差异 + 行为偏差]
+### 修复方向
+[具体: 修改哪个文件/哪个函数/怎么改]
+```
+
+**实现 (Wave 1-2):**
+| # | 问题 | 位置 | 索引引用 | 修复方向 |
+|---|------|------|---------|---------|
+| 1 | StructProperty 深度解析 | `parsers/property_types.py` | FPropertyTag-对照详解 § StructProperty | 专用解析器 + 偏移追踪 |
+| 2 | FAssetArchive 资产级封装 | 新模块 `serializers/asset_archive.py` | FArchive-对照详解 § FAssetArchive | 包装 FArchive + 类型工厂 |
+| 3 | FCustomVersion GUID 体系 | 新模块 `serializers/custom_version.py` | PackageSummary-对照详解 § CustomVersion | GUID→Version 映射表 |
+| 4 | VersionContainer 统一管理 | `versions/container.py` 独立模块 | PackageSummary-对照详解 § VersionContainer | EGame + FPackageFileVersion + CustomVersions |
 
 **Requirements:** COR-01, COR-02
 
-**修复清单:**
-
-| # | 问题 | 位置 | CUE4Parse 参考 | 修复方向 |
-|---|------|------|---------------|---------|
-| 1 | StructProperty 深度解析 (FVector/FRotator/FBodyInstance) | `parsers/property_types.py` | CUE4Parse FScriptStruct.Serialize | 专用解析器 + 偏移追踪 |
-| 2 | FAssetArchive 资产级封装缺失 | 新模块 `serializers/asset_archive.py` | CUE4Parse FAssetArchive 装饰器 | 包装 FArchive + 类型工厂 |
-| 3 | FCustomVersion GUID 体系缺失 | 新模块 `serializers/custom_version.py` | CUE4Parse FCustomVersion | GUID→Version 映射表 |
-| 4 | VersionContainer 分散 | `constants.py` 集中 → 独立模块 | CUE4Parse VersionContainer | EGame + FPackageFileVersion + CustomVersions |
-
 **Success criteria:**
-1. `RelativeLocation`/`RelativeRotation` 提取为结构化数值 (x/y/z)
-2. `BodyInstance` 至少提取 CapsuleHalfHeight/CapsuleRadius
-3. FAssetArchive 包装器集成到 parse_uasset 管线
+1. 3 份索引文档完成，每份覆盖核心方法 ≥80%
+2. `RelativeLocation`/`RelativeRotation` 提取为结构化数值
+3. FAssetArchive 集成到 parse_uasset 管线
 4. `ar.ver >= EUEVersion.UE5_0` 版本分支可用
 5. CustomVersion 按 GUID 字符串键查询
 
 ---
 
-### Phase 77: Pak 基础 + 压缩 + AES (PAK-01, PAK-02, PAK-03)
+### Phase 77: Pak 文件索引 + 解析 + 压缩 + AES (PAK-01, PAK-02, PAK-03)
 
-**Goal:** 实现 .pak 文件解析基础链路：读取 → 解密 → 解压 → 条目提取
+**Goal:** 产出 PakFile 源码对照索引，实现 .pak 解析基础链路
 
-**Requirements:** PAK-01, PAK-02, PAK-03
+**索引交付物 (Wave 0):**
+- `docs/reference/PakFile-对照详解.md` — FPakInfo 头部 (Magic 0x5A6F12E1) / FPakEntry / FPakDirectoryEntry / AES 解密流 / 压缩分派链
 
-**新增模块:**
-
+**实现 (Wave 1-3):**
 ```
 src/uasset_read/
 ├── pak/
@@ -589,57 +624,53 @@ src/uasset_read/
 ```
 
 **依赖策略:** `pyproject.toml` optional-dependencies 分组 (`pak` extra)
-- Zlib: Python stdlib（零依赖）
-- LZ4: `pip install lz4`
-- Zstd: `pip install zstandard`
-- AES: `pip install pycryptodome`
-- Oodle: 手动安装 `python_oodle`（不可用时降级跳过）
+
+**Requirements:** PAK-01, PAK-02, PAK-03
 
 **Success criteria:**
-1. 解析 1 个真实 .pak 文件，Entry 表和条目二进制正确
-2. FPakInfo Magic `0x5A6F12E1` 检测通过
-3. LZ4/Zstd 压缩条目正确解压
-4. AES-ECB 解密正确（已知密钥验证）
-5. Oodle 不可用时优雅降级（warning + 跳过）
+1. 索引文档覆盖 FPakInfo/FPakEntry/压缩/加密 结构
+2. 解析 1 个真实 .pak 文件，Entry 表正确
+3. LZ4/Zstd 压缩条目正确解压，Oodle 不可用时优雅降级
+4. AES-ECB 解密正确
 
 ---
 
-### Phase 78: UObject 继承树 + PackageLinker CUE4Parse 对齐 (COR-03, COR-04)
+### Phase 78: UObject 索引 + 继承树 + PackageLinker 重构 (COR-03, COR-04)
 
-**Goal:** 建立 UObject→UField→UEnum/UStruct/UClass/UFunction 继承链，重构 Linker 为 FAssetArchive 模式
+**Goal:** 产出 UObject/PackageLinker 源码对照索引，建立继承链，重构 Linker
+
+**索引交付物 (Wave 0):**
+- `docs/reference/UObject-对照详解.md` — CUE4Parse UObject.cs 继承树 ↔ UE UObject/UField/UStruct/UClass ↔ 当前
+- `docs/reference/PackageLinker-对照详解.md` — CUE4Parse FLinkerLoad ↔ UE FLinkerLoad ↔ uasset_read PackageLinker
+
+**实现 (Wave 1-2):**
+```
+src/uasset_read/
+├── models/
+│   └── uobject.py        # UObject 基类 → UField → UEnum/UStruct/UClass/UFunction
+└── link/
+    └── linker.py         # 重构为 FAssetArchive 模式
+```
 
 **Requirements:** COR-03, COR-04
 
-**新增模块:**
-
-```
-src/uasset_read/
-└── models/
-    └── uobject.py        # UObject 基类 → UField → UEnum/UStruct/UClass/UFunction
-```
-
-**PackageLinker 重构要点:**
-- 合并 FArchive + 类型工厂 → FAssetArchive 模式
-- `preload()` 集成到图解析管线（替换手动 seek）
-- `Lazy<UObject>[]` 语义: 首次访问触发反序列化
-- 缓存隔离验证（Phase 72-F 已修复，确认无回归）
-
 **Success criteria:**
-1. `UObject.Class` / `UObject.Outer` / `UObject.Super` 解析正确
-2. BPGC SuperField 链返回完整父类列表
-3. `resolve_package_index()` 无手动 seek 恢复
-4. 连续多文件解析无缓存串扰
+1. 2 份索引文档完成
+2. `UObject.Class` / `.Outer` / `.Super` 解析正确
+3. BPGC SuperField 链返回完整父类列表
+4. `preload()` 集成到管线，无手动 seek 恢复
+5. 连续多文件解析无缓存串扰
 
 ---
 
-### Phase 79: IoStore + IFileProvider (PAK-04, PAK-05)
+### Phase 79: IoStore 索引 + 解析 + IFileProvider (PAK-04, PAK-05)
 
-**Goal:** UE5 新一代包格式 (.utoc/.ucas) 解析 + 统一文件发现
+**Goal:** 产出 IoStore 源码对照索引，实现 UE5 包格式解析 + 文件发现
 
-**Requirements:** PAK-04, PAK-05
+**索引交付物 (Wave 0):**
+- `docs/reference/IoStore-对照详解.md` — FIoStoreTocResource 头部 / Chunk ID 完美哈希 / FIoOffsetAndLength / 容器分区
 
-**新增模块:**
-
+**实现 (Wave 1-2):**
 ```
 src/uasset_read/
 ├── iostore/
@@ -650,72 +681,59 @@ src/uasset_read/
     └── default.py        # DefaultFileProvider — 本地目录扫描
 ```
 
-**IoStore 关键结构:**
-- `.utoc` = FIoStoreTocResource (Chunk ID 表 + 完美哈希查找)
-- `.ucas` = Container 数据块（压缩/未压缩分块）
+**Requirements:** PAK-04, PAK-05
 
 **Success criteria:**
-1. 解析 1 个 .utoc/.ucas 对，TOC Header 正确
-2. Chunk ID 完美哈希 O(1) 查找正确
-3. IFileProvider 发现指定目录下所有 .pak/.utoc/.ucas
+1. 索引文档覆盖 TOC 头部/哈希/压缩容器结构
+2. .utoc/.ucas 对解析正确，TOC Header 完整
+3. Chunk ID 完美哈希 O(1) 查找可用
+4. IFileProvider 发现目录下所有 .pak/.utoc/.ucas
 
 ---
 
-### Phase 80: 输出格式 CUE4Parse 对齐 (FMT-01, FMT-02, FMT-03)
+### Phase 80: Kismet 索引 + 输出格式对齐 (FMT-01, FMT-02, FMT-03)
 
-**Goal:** JSON 输出字段 PascalCase 对齐 CUE4Parse，文本输出 Schema 化，BlueprintText 统一
+**Goal:** 产出 KismetExpression 源码对照索引，完成输出格式 PascalCase 对齐
+
+**索引交付物 (Wave 0):**
+- `docs/reference/Kismet-对照详解.md` — CUE4Parse KismetExpression 100+ 种 ↔ UE EExprToken ↔ uasset_read 60+ 种
+
+**实现 (Wave 1-2):**
+- 新增 `format_json_cue4parse()` PascalCase 模式
+- 重构文本输出为 dict→text renderer
+- 合并 blueprint_text_formatter 到统一 Schema
 
 **Requirements:** FMT-01, FMT-02, FMT-03
 
-**格式化改造:**
-
-| 当前 | 目标 | 说明 |
-|------|------|------|
-| `format_json_full()` | `format_json_cue4parse()` | 新增 PascalCase 模式 |
-| ad-hoc YAML 字符串拼接 | 统一 dict→text renderer | 可配置详细程度 |
-| `blueprint_text_formatter.py` 独立 | 合并到统一 Schema | 字段与 JSON 模式对齐 |
-| snake_case 字段 | PascalCase (ObjectName, Class, Super...) | CUE4Parse 命名 |
-| 无 ExportTypes | `ExportTypes` 数组 | CUE4Parse 结构 |
-
-**PascalCase 字段映射:**
-```
-object_name      → ObjectName
-class            → Class
-super_index      → Super
-outer_index      → Outer
-serial_size      → SerializeSize
-package_name     → Name
-blueprint_name   → Name
-parent_class     → Super
-output_version   → (removed)
-properties       → Serialize
-```
-
 **Success criteria:**
-1. `format_json_cue4parse()` 字段名全部 PascalCase
-2. `ExportTypes` 数组包含所有导出类型信息
+1. 索引文档覆盖 KismetExpression 类型映射
+2. `format_json_cue4parse()` 字段名全部 PascalCase
 3. 文本输出与 JSON 字段一一对应
-4. `format_blueprint_translation_text()` 输出结构与 FMT-01 一致
-5. 现有 `format_json_full()` 保持向后兼容
+4. 现有 `format_json_full()` 保持向后兼容
 
 ---
 
 ## Proposed Roadmap Summary
 
-| Phase | Goal | Requirements | Dependencies | Est. Complexity |
-|-------|------|--------------|--------------|-----------------|
-| **76** | 对照 Wiki 修复 + FArchive 补齐 | COR-01, COR-02 | None | Medium |
-| **77** | Pak 基础 + 压缩 + AES | PAK-01, PAK-02, PAK-03 | None | High |
-| **78** | UObject 继承树 + Linker 重构 | COR-03, COR-04 | P76 | Medium |
-| **79** | IoStore + IFileProvider | PAK-04, PAK-05 | P77 | High |
-| **80** | 输出格式对齐 | FMT-01, FMT-02, FMT-03 | P78 | Medium |
+| Phase | 索引文档 | 实现 | Requirements | 复杂度 |
+|-------|---------|------|--------------|--------|
+| **76** | FArchive + PackageSummary + FPropertyTag | COR-01, COR-02 修复 | COR-01, COR-02 | Medium |
+| **77** | PakFile | PAK reader + compression + AES | PAK-01~03 | High |
+| **78** | UObject + PackageLinker | 继承树 + Linker 重构 | COR-03, COR-04 | Medium |
+| **79** | IoStore | IoStore reader + IFileProvider | PAK-04, PAK-05 | High |
+| **80** | KismetExpression | 输出格式 PascalCase 对齐 | FMT-01~03 | Medium |
 
-**5 phases** | **12 requirements** | 100% coverage ✓
+**5 phases** | **12 requirements** | **8 份索引文档** | 100% coverage ✓
 
 **并行机会:**
-- P76 和 P77 可并行（无共享依赖）
+- P76 和 P77 可并行（各产索引 + 实现，无共享依赖）
 - P79 可在 P77 完成后立即启动（不等待 P78）
 - P80 依赖 P78 的 UObject 模型
+
+**后续里程碑 (v15.0):**
+- 资源导出: 纹理 (BCn/ASTC→PNG) / 网格 (psk/glb) / 音频 (WAV)
+- 游戏适配: VersionContainer 70+ 游戏枚举 + CustomEncryption 框架
+- 增强: Kismet 表达式补齐 (60+→100+) + N2CEnum 枚举提取
 
 ---
 
