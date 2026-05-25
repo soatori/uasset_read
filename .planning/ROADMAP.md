@@ -11,7 +11,8 @@
 | v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
 | **v11.0** | **Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66)** | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
 | **v12.0** | **序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
-| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-73)** | 2026-05-23 ~ 05-24 | 执行中 |
+| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75)** | 2026-05-23 ~ 05-26 | 归档 |
+| **v14.0** | **CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式** | 2026-05-26 ~ | Active |
 
 历史详情：`.planning/archive/`
 
@@ -535,4 +536,187 @@ else:
 
 ---
 
-*Updated: 2026-05-24 (Phase 73 Wave 4 completed: PropertyTag cascade failure recovery)*
+*Updated: 2026-05-26 — v14.0 roadmap: CUE4Parse 核心对齐 (Phase 76-80)*
+
+
+---
+
+## v14.0 — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
+
+**参考设计:** CUE4Parse (C#) — 一比一对应翻译重构
+**对照 Wiki:** `docs/CUE4Parse-对照索引.md`
+**里程碑策略:** COR (核心修复) + PAK (Pak/IoStore) + FMT (输出格式)，EXP/GAM/ENH 归入 v15.0
+
+### Phase 76: 对照 Wiki 修复 + FArchive 补齐 (COR-01, COR-02)
+
+**Goal:** 修复 docs/CUE4Parse-对照索引.md 中 🔧 标记项，补齐 FCustomVersion + VersionContainer
+
+**Requirements:** COR-01, COR-02
+
+**修复清单:**
+
+| # | 问题 | 位置 | CUE4Parse 参考 | 修复方向 |
+|---|------|------|---------------|---------|
+| 1 | StructProperty 深度解析 (FVector/FRotator/FBodyInstance) | `parsers/property_types.py` | CUE4Parse FScriptStruct.Serialize | 专用解析器 + 偏移追踪 |
+| 2 | FAssetArchive 资产级封装缺失 | 新模块 `serializers/asset_archive.py` | CUE4Parse FAssetArchive 装饰器 | 包装 FArchive + 类型工厂 |
+| 3 | FCustomVersion GUID 体系缺失 | 新模块 `serializers/custom_version.py` | CUE4Parse FCustomVersion | GUID→Version 映射表 |
+| 4 | VersionContainer 分散 | `constants.py` 集中 → 独立模块 | CUE4Parse VersionContainer | EGame + FPackageFileVersion + CustomVersions |
+
+**Success criteria:**
+1. `RelativeLocation`/`RelativeRotation` 提取为结构化数值 (x/y/z)
+2. `BodyInstance` 至少提取 CapsuleHalfHeight/CapsuleRadius
+3. FAssetArchive 包装器集成到 parse_uasset 管线
+4. `ar.ver >= EUEVersion.UE5_0` 版本分支可用
+5. CustomVersion 按 GUID 字符串键查询
+
+---
+
+### Phase 77: Pak 基础 + 压缩 + AES (PAK-01, PAK-02, PAK-03)
+
+**Goal:** 实现 .pak 文件解析基础链路：读取 → 解密 → 解压 → 条目提取
+
+**Requirements:** PAK-01, PAK-02, PAK-03
+
+**新增模块:**
+
+```
+src/uasset_read/
+├── pak/
+│   ├── reader.py         # PakFileReader — FPakInfo/Entry Table
+│   └── structures.py     # FPakInfo, FPakEntry, FPakDirectoryEntry
+├── compression.py        # ECompressionFlags → Zlib/LZ4/Zstd/Oodle
+└── encryption.py         # AESKey → ECB/CBC + CustomEncryption 接口
+```
+
+**依赖策略:** `pyproject.toml` optional-dependencies 分组 (`pak` extra)
+- Zlib: Python stdlib（零依赖）
+- LZ4: `pip install lz4`
+- Zstd: `pip install zstandard`
+- AES: `pip install pycryptodome`
+- Oodle: 手动安装 `python_oodle`（不可用时降级跳过）
+
+**Success criteria:**
+1. 解析 1 个真实 .pak 文件，Entry 表和条目二进制正确
+2. FPakInfo Magic `0x5A6F12E1` 检测通过
+3. LZ4/Zstd 压缩条目正确解压
+4. AES-ECB 解密正确（已知密钥验证）
+5. Oodle 不可用时优雅降级（warning + 跳过）
+
+---
+
+### Phase 78: UObject 继承树 + PackageLinker CUE4Parse 对齐 (COR-03, COR-04)
+
+**Goal:** 建立 UObject→UField→UEnum/UStruct/UClass/UFunction 继承链，重构 Linker 为 FAssetArchive 模式
+
+**Requirements:** COR-03, COR-04
+
+**新增模块:**
+
+```
+src/uasset_read/
+└── models/
+    └── uobject.py        # UObject 基类 → UField → UEnum/UStruct/UClass/UFunction
+```
+
+**PackageLinker 重构要点:**
+- 合并 FArchive + 类型工厂 → FAssetArchive 模式
+- `preload()` 集成到图解析管线（替换手动 seek）
+- `Lazy<UObject>[]` 语义: 首次访问触发反序列化
+- 缓存隔离验证（Phase 72-F 已修复，确认无回归）
+
+**Success criteria:**
+1. `UObject.Class` / `UObject.Outer` / `UObject.Super` 解析正确
+2. BPGC SuperField 链返回完整父类列表
+3. `resolve_package_index()` 无手动 seek 恢复
+4. 连续多文件解析无缓存串扰
+
+---
+
+### Phase 79: IoStore + IFileProvider (PAK-04, PAK-05)
+
+**Goal:** UE5 新一代包格式 (.utoc/.ucas) 解析 + 统一文件发现
+
+**Requirements:** PAK-04, PAK-05
+
+**新增模块:**
+
+```
+src/uasset_read/
+├── iostore/
+│   ├── reader.py         # IoStoreReader — TOC 解析 + 数据提取
+│   └── structures.py     # FIoStoreTocResource, FIoChunkHash
+└── file_provider/
+    ├── base.py           # IFileProvider 抽象接口
+    └── default.py        # DefaultFileProvider — 本地目录扫描
+```
+
+**IoStore 关键结构:**
+- `.utoc` = FIoStoreTocResource (Chunk ID 表 + 完美哈希查找)
+- `.ucas` = Container 数据块（压缩/未压缩分块）
+
+**Success criteria:**
+1. 解析 1 个 .utoc/.ucas 对，TOC Header 正确
+2. Chunk ID 完美哈希 O(1) 查找正确
+3. IFileProvider 发现指定目录下所有 .pak/.utoc/.ucas
+
+---
+
+### Phase 80: 输出格式 CUE4Parse 对齐 (FMT-01, FMT-02, FMT-03)
+
+**Goal:** JSON 输出字段 PascalCase 对齐 CUE4Parse，文本输出 Schema 化，BlueprintText 统一
+
+**Requirements:** FMT-01, FMT-02, FMT-03
+
+**格式化改造:**
+
+| 当前 | 目标 | 说明 |
+|------|------|------|
+| `format_json_full()` | `format_json_cue4parse()` | 新增 PascalCase 模式 |
+| ad-hoc YAML 字符串拼接 | 统一 dict→text renderer | 可配置详细程度 |
+| `blueprint_text_formatter.py` 独立 | 合并到统一 Schema | 字段与 JSON 模式对齐 |
+| snake_case 字段 | PascalCase (ObjectName, Class, Super...) | CUE4Parse 命名 |
+| 无 ExportTypes | `ExportTypes` 数组 | CUE4Parse 结构 |
+
+**PascalCase 字段映射:**
+```
+object_name      → ObjectName
+class            → Class
+super_index      → Super
+outer_index      → Outer
+serial_size      → SerializeSize
+package_name     → Name
+blueprint_name   → Name
+parent_class     → Super
+output_version   → (removed)
+properties       → Serialize
+```
+
+**Success criteria:**
+1. `format_json_cue4parse()` 字段名全部 PascalCase
+2. `ExportTypes` 数组包含所有导出类型信息
+3. 文本输出与 JSON 字段一一对应
+4. `format_blueprint_translation_text()` 输出结构与 FMT-01 一致
+5. 现有 `format_json_full()` 保持向后兼容
+
+---
+
+## Proposed Roadmap Summary
+
+| Phase | Goal | Requirements | Dependencies | Est. Complexity |
+|-------|------|--------------|--------------|-----------------|
+| **76** | 对照 Wiki 修复 + FArchive 补齐 | COR-01, COR-02 | None | Medium |
+| **77** | Pak 基础 + 压缩 + AES | PAK-01, PAK-02, PAK-03 | None | High |
+| **78** | UObject 继承树 + Linker 重构 | COR-03, COR-04 | P76 | Medium |
+| **79** | IoStore + IFileProvider | PAK-04, PAK-05 | P77 | High |
+| **80** | 输出格式对齐 | FMT-01, FMT-02, FMT-03 | P78 | Medium |
+
+**5 phases** | **12 requirements** | 100% coverage ✓
+
+**并行机会:**
+- P76 和 P77 可并行（无共享依赖）
+- P79 可在 P77 完成后立即启动（不等待 P78）
+- P80 依赖 P78 的 UObject 模型
+
+---
+
+*Updated: 2026-05-26 — v14.0 roadmap*
