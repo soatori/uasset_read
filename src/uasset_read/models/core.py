@@ -25,6 +25,8 @@ class FEdGraphPinType:
     pin_category: str = ""
     pin_subcategory: str = ""
     pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
+    pin_subcategory_object_name: Optional[str] = None
+    pin_subcategory_object_ref: Optional["UObjectInstance"] = None
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
