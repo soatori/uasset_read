@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v14.0
-milestone_name: CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
-status: Active — Phase 76-80 planned, index-driven execution
-last_updated: "2026-05-26"
+milestone_name: — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
+status: Active — Roadmap defined, Phase 76 ready to discuss/plan
+last_updated: "2026-05-26T09:41:12.208Z"
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 20
+  completed_phases: 1
+  total_plans: 5
+  completed_plans: 3
+  percent: 5
 ---
 
 # v14.0 — CUE4Parse 核心对齐 — 修复 + Pak/IoStore + 输出格式
@@ -20,6 +20,7 @@ progress:
 ## 索引驱动模式
 
 每 Phase 开头先产出三方源码对照索引（`docs/reference/`）：
+
 1. **UE 引擎源码 (C++)** — 权威金标准，`E:\Develop\lib\UnrealEngine` (UE 5.7)
 2. **CUE4Parse (C#)** — 参考实现，逆向工程产物
 3. **uasset_read (Python)** — 当前实现，待对齐
