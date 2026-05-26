@@ -22,9 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v12.0 已归档** — Phase 67✅ (序列化修复), Phase 68✅ (N2CNodeTypeRegistry), Phase 69✅ (节点处理器架构), Phase 70✅ (N2CStruct JSON Schema), Phase 71✅ (执行流链式表达)。1290 tests collected。`__version__` 仍为 `9.0.0`（尚未 bump）。
+**v13.0 已归档** — Phase 72 系列✅ (Pin 连接诊断/修复 + BPGC 字节码 + FString/FName 区分 + EventGraph 字段对齐)，Phase 73✅ (LinkedTo 恢复 + Pin trace)，Phase 74✅ (PinReference null/non-null 主路径对齐)，Phase 75✅ (EventGraph 节点字段级对齐)。`__version__` 已更新为 `14.0.0`。
 
-**v13.0 活跃** — Phase 72-A✅ (Pin 连接二进制诊断，2 bugs 定位)，Phase 72-B✅ (Pin 连接修复)，Phase 72-C✅ (BPGC 字节码提取)，Phase 72-UAT✅ (1319 tests passed)，Phase 72-D⬜ (FString/FName 区分待执行)，Phase 72-E🔴 (EventGraph 节点解析修复插入中)，Phase 72-F🔴 (BPGC 缓存隔离修复插入中)。
+**v14.0 活跃** — CUE4Parse 核心对齐：Phase 76⬜ (FArchive + PackageSummary 源码索引 + COR 修复)，Phase 77⬜ (Pak parser + compression + AES)，Phase 78⬜ (UObject 继承树 + Linker 重构)，Phase 79⬜ (IoStore .utoc/.ucas)，Phase 80⬜ (Kismet 输出格式 PascalCase 对齐)。索引驱动模式，UE 源码为权威金标准。
 
 ## 架构
 
