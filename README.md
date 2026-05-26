@@ -8,31 +8,33 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v13.0 in development** (`__version__` = 9.0.0) |
-| Tests | **1443 tests** (1319 passed, 122 skipped) |
+| Version | **v14.0 in development** (`__version__` = 14.0.0) |
+| Tests | **1646 tests** (1516 passed, 124 skipped) |
 | Branch | `2.11-dev` |
 
-### Current Phase: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分（开发中）
+### Current Phase: v14.0 — CUE4Parse 核心对齐
 
-- **Phase 72-A ✅**: Pin 连接二进制诊断（2 bugs 定位：history_type signed / ParentPin conditional read）
-- **Phase 72-B ✅**: Pin 连接修复 + 回归测试通过（762 tests）
-- **Phase 72-C ✅**: Kismet 字节码导航 — BPGC fallback extraction module（295 lines）
-- **Phase 72-UAT ✅**: UAT 验证（1319 tests passed, 0 regressions）
-- **Phase 72-D ⬜**: FString/FName 区分（pending — 35 处空字符串误报）
-- **Phase 72-E 🔴**: EventGraph 节点解析修复（inserted — 覆盖率 ~56% → 目标 >90%）
-- **Phase 72-F 🔴**: BPGC 缓存隔离修复（inserted — 多文件 parse 缓存串扰）
-
-### Next: v14.0 — EventGraph 解析完善 + FString/FName 精确区分
+- **Phase 74 ✅**: PinReference null/non-null 主路径对齐
+- **Phase 75 ✅**: EventGraph 节点字段级对齐
+- **Phase 77 ✅**: Pak 解析 + 压缩 + AES-ECB（62 tests, UAT 8/8）
+  - `pak/` — FPakInfo/PakEntry/FPakDirectoryEntry 数据结构 + 序列化
+  - `pak/reader.py` — PakFileReader（open/extract/context manager）
+  - `compression/dispatch.py` — Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级
+  - `crypto/aes_ecb.py` — AES-ECB 解密 + CustomEncryption 委托
+  - `pak/index.py` — Legacy flat index + v10+ PathHashIndex/DirectoryIndex
+- **Phase 76 ⬜**: FArchive 补齐 + COR 修复（下一个 — StructProperty 深度解析 + FAssetArchive + FCustomVersion + VersionContainer）
+- **Phase 78 ⬜**: UObject 继承树 + PackageLinker 重构
+- **Phase 79 ⬜**: IoStore (.utoc/.ucas) 解析
+- **Phase 80 ⬜**: 输出格式 PascalCase 对齐
 
 详见 `.planning/ROADMAP.md`。
 
-### Latest Shipped: v12.0 — 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构
+### Latest Shipped: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
-- **Phase 67 ✅**: UE5.4+ PropertyTag 兼容 + FString 健壮性
-- **Phase 68 ✅**: N2CNodeTypeRegistry — 126 种 K2Node 语义类型注册表
-- **Phase 69 ✅**: 节点处理器架构 — Processor 模式拆分
-- **Phase 70 ✅**: N2CStruct JSON Schema — Agent 可理解的结构化输出
-- **Phase 71 ✅**: 执行流链式表达（N2C 风格 `N1->N2->N3`）
+- **Phase 72 ✅**: Pin 连接修复 + BPGC 字节码导航 + FString/FName 区分（P72-A~I）
+- **Phase 73 ✅**: Pin 序列化边界对齐 + PropertyTag 级联恢复 + 端到端连接验收
+- **Phase 74 ✅**: PinReference 主路径对齐
+- **Phase 75 ✅**: EventGraph 节点字段级对齐
 
 ### Previously Shipped: v11.0 — Kismet 反编译器 + 图解析修复 + Agent 翻译管线
 
@@ -66,6 +68,11 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **N2C intermediate format** — N2CStruct JSON Schema, execution chain format (v12.0 P67-71) ✅
 - **Pin connection fixes** — history_type signed conversion, ParentPin conditional read (v13.0 P72-A/B) ✅
 - **BPGC bytecode navigation** — Cooked blueprint fallback bytecode extraction (v13.0 P72-C) ✅
+- **FString/FName distinction** — null-termination validation replacing null_ratio heuristic (v13.0 P72-D) ✅
+- **Pin serialization boundary alignment** — PropertyTag cascade recovery, end-to-end connection验收 (v13.0 P73) ✅
+- **PinReference layout** — null/non-null main path alignment with UE source (v13.0 P74) ✅
+- **EventGraph field-level alignment** — node field alignment with reference assets (v13.0 P75) ✅
+- **Pak file parsing** — FPakInfo/PakEntry, Zlib/LZ4/Zstd/Oodle compression, AES-ECB decryption, index parsing (v14.0 P77) ✅
 - **PackageLinker** — Two-stage object graph reconstruction (v7.0)
 
 ## Installation
@@ -159,6 +166,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
           PackageLinker (v7.0: two-stage object graph reconstruction)
           KismetDecompiler (v11.0: bytecode → AST → C++)
           N2C Format (v12.0: Agent-optimized JSON schema)
+          PakFileReader (v14.0: .pak parsing, compression, AES decryption)
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -181,6 +189,9 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters (v10.0) |
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (v11.0 P66) |
 | **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators (v12.0) |
+| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing (v14.0 P77) |
+| **Compression** | `compression/` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation (v14.0 P77) |
+| **Crypto** | `crypto/` | AES-ECB decryption, CustomEncryption delegate (v14.0 P77) |
 | **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid output |
 
 ## Testing
@@ -190,7 +201,7 @@ python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ```
 
-**Current**: 1443 tests collected.
+**Current**: 1646 tests collected.
 
 ## Tech Stack
 
@@ -214,7 +225,8 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ 代码生成参考 (P56-60) |
 | v11.0 | 2026-05-20 | ✅ | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
 | v12.0 | 2026-05-21~22 | ✅ | 序列化修复 + N2C 中间格式 + 节点分类 + 执行流链式 (P67-71) |
-| v13.0 | 2026-05-23 | 🔄 | Pin 连接修复 + Kismet 字节码导航 (P72-A/B/C) |
+| v13.0 | 2026-05-23~26 | ✅ | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75) |
+| v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse 核心对齐 — Pak 解析 + FArchive 补齐 + 格式对齐 (P76-80) |
 
 ## Documentation
 
@@ -242,5 +254,5 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 
 ---
 
-**Last Updated**: 2026-05-23
-**Version**: v13.0 in development | **Tests**: 1443
+**Last Updated**: 2026-05-26
+**Version**: v14.0 in development | **Tests**: 1646
