@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v13.0
 milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅
-last_updated: "2026-05-23T20:40:36.774Z"
+status: Complete — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅. v13.0 已归档. v14.0 活跃: Phase 74 ✅, 75 ✅, 77 进行中, 78 待启动
+last_updated: "2026-05-26T18:40:00.000Z"
 progress:
-  total_phases: 15
-  completed_phases: 2
-  total_plans: 12
-  completed_plans: 7
-  percent: 13
+  total_phases: 14
+  completed_phases: 11
+  total_plans: 14
+  completed_plans: 12
+  percent: 79
 ---
 
 # v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
