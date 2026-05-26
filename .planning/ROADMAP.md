@@ -40,8 +40,20 @@
 ### Phase 78: UObject 继承树 + PackageLinker 重构
 
 **需求:** COR-03, COR-04
-**范围:** UObject → UField → UEnum/UStruct/UClass/UFunction 层次结构、link/linker.py 重构为 FAssetArchive 模式、preload() 管线集成
-**验收:** 连续 parse_uasset 无缓存串扰，SuperField 链返回完整父类列表
+**范围:** UObject → UField → UEnum/UStruct/UClass/UFunction 层次结构、link/linker.py 重构为 FAssetArchive 模式、preload() 管线集成、Provider/跨包解析接口、graph 解析收敛到 linker-aware 单一路径
+**验收:** 连续 parse_uasset 无缓存串扰，SuperField 链返回完整父类列表，graph/pin/metadata 统一走 linker 主路径，/Script/ import 保持占位符策略
+
+**子计划索引:**
+- `phase-78/78-01-PLAN.md` — COR-03 UObject 层次
+- `phase-78/78-02-PLAN.md` — COR-04 archive 隔离 + preload
+- `phase-78/78-03-PLAN.md` — COR-04 provider + cross-package + graph convergence
+- `phase-78/INDEX.md` — 执行顺序与覆盖矩阵
+**计划:** 3 plans
+
+Plans:
+- [ ] 78-01-PLAN.md — UObject 继承层次模型 + SuperField 链解析 + BPGC 分类集成
+- [ ] 78-02-PLAN.md — 独立 Archive 实例 + 位置安全 preload() + lazy auto-defer 管线集成
+- [ ] 78-03-PLAN.md — Provider / 跨包解析接口 + graph 主路径收敛 + `/Script/` 占位符策略
 
 ### Phase 79: IoStore (.utoc/.ucas) 解析
 

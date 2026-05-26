@@ -26,8 +26,8 @@ COR（核心修复）+ PAK（Pak/IoStore 解析）+ FMT（输出格式对齐）�
   - **Deps:** COR-02 (需要版本感知序列化)
 
 - [ ] **COR-04**: PackageLinker CUE4Parse 对齐
-  - **What:** 重构 `link/linker.py` 为 FAssetArchive 模式：合并 FArchive + 类型工厂，`preload()` 集成到图解析管线（替换手动 seek），Lazy 自动延迟语义
-  - **Verify:** 连续 `parse_uasset(file_A)` + `parse_uasset(file_B)` 无缓存串扰，懒加载与现有图解析管线无缝配合
+  - **What:** 重构 `link/linker.py` 为 CUE4Parse 风格的 Package-centered 模式：独立 archive + 位置安全 `preload()` + graph/linker 单一路径 + provider/resolver 接口；为跨包 import 解析、`/Script/` 占位符、Phase 79 的 `IFileProvider` / IoStore 接入铺路
+  - **Verify:** 连续 `parse_uasset(file_A)` + `parse_uasset(file_B)` 无缓存串扰；graph/pin/blueprint metadata 统一走 linker-aware 主路径；本包 `FPackageIndex` 解析稳定，跨包 import 通过 provider 接口可扩展，`/Script/` import 不触发真实包加载
   - **Deps:** COR-03 (需要 UObject 继承树)
 
 ---
