@@ -178,6 +178,8 @@ class K2NodeMyNewType(UEdGraphNode):
 
 ## 5. 测试策略
 
+> 详细英文测试指南（测试哲学、MockArchive 模式、调试技巧等）见 [TESTING.md](TESTING.md)。
+
 ### 框架与配置
 
 - **pytest >= 7.0**，配置在 `pyproject.toml` 的 `[tool.pytest.ini_options]`

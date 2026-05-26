@@ -78,6 +78,76 @@ def _gac(exp, im, em, lk):
 
 
 # ============================================================================
+# Phase 75-03: PropertyTag helper functions
+# ============================================================================
+
+def _read_tag_bool(archive: FArchive, tag) -> bool:
+    """读取 PropertyTag 中的 bool 值。
+
+    Phase 75-03: 统一处理 inline bool 与 value body 两种形态：
+    - tag.size > 0: 从 value body 读取 i32 (UE5 bool serialization)
+    - tag.size == 0: 使用 tag.bool_val (inline bool)
+
+    Args:
+        archive: FArchive 实例
+        tag: PropertyTag 实例
+
+    Returns:
+        bool 值
+    """
+    if tag.size > 0:
+        # Value body: UE5 bool serialization = i32 (4 bytes)
+        value = archive.read_i32() != 0
+        # Ensure we end at value_end_offset
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+        return value
+    else:
+        # Inline bool: tag.bool_val already set by read_property_tag
+        # PROP_TAG_BOOL_TRUE flag sets bool_val = 1, otherwise 0
+        return tag.bool_val != 0
+
+
+def _read_tag_i32(archive: FArchive, tag) -> int:
+    """读取 PropertyTag 中的 int32 值并确保 seek 到 value_end_offset。
+
+    Phase 75-03: 标准化 int property 读取流程。
+
+    Args:
+        archive: FArchive 实例
+        tag: PropertyTag 实例
+
+    Returns:
+        int32 值
+    """
+    value = archive.read_i32()
+    # Always seek to value_end_offset to ensure correct position
+    if archive.tell() < tag.value_end_offset:
+        archive.seek(tag.value_end_offset)
+    return value
+
+
+def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
+    """读取 PropertyTag 中的 FName 值并确保 seek 到 value_end_offset。
+
+    Phase 75-03: 标准化 FName property 读取流程。
+
+    Args:
+        archive: FArchive 实例
+        tag: PropertyTag 实例
+        name_map: 名称映射列表
+
+    Returns:
+        FName 字符串
+    """
+    value = archive.read_name(name_map)
+    # Always seek to value_end_offset to ensure correct position
+    if archive.tell() < tag.value_end_offset:
+        archive.seek(tag.value_end_offset)
+    return value
+
+
+# ============================================================================
 # FEdGraphPinType 读取
 # ============================================================================
 
@@ -151,28 +221,34 @@ def read_ed_graph_pin_type(
 
 def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
     """读取 FString，对异常长度进行容错处理。
-    
+
     TODO: 使用UE编辑器源码的加载方式替换实现代码
     参考 UE C++ FArchive& operator<<(FString&) 实现
 
-    如果长度不合理（超过 max_length），尝试读取为 0 字节空字符串。
+    FString 序列化格式 (UE C++ Archive.h L209-230):
+    - length == 0: 空字符串（无数据区）
+    - length == -1: 空字符串特殊标记（UE 内部优化，无数据区）
+    - length > 0: ANSI 字符串，读取 length bytes
+    - length < -1: UTF-16 字符串，读取 (-length * 2) bytes
+
+    Phase 75: 修复 length == -1 边界条件（SubPin PinToolTip 常见）。
     """
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    length = archive.read_i32()  # TODO: 使用UE编辑器方式读取FString长度
-    if length == 0:
+    length = archive.read_i32()
+    if length == 0 or length == -1:
+        # Phase 75: length=-1 是 UE 空字符串标记，不读取任何数据
         return ""
     if abs(length) > max_length:
         # 长度异常，回退并返回空字符串
         archive.seek(archive.tell() - 4)
         return ""
-    if length < 0:
+    if length < -1:
         utf16_len = -length * 2
         if utf16_len > max_length * 2:
             archive.seek(archive.tell() - 4)
             return ""
-        data = archive.read(utf16_len)  # TODO: 使用UE编辑器方式读取UTF-16数据
+        data = archive.read(utf16_len)
         return data.decode('utf-16', errors='replace').rstrip('\x00')
-    data = archive.read(length)  # TODO: 使用UE编辑器方式读取UTF-8数据
+    data = archive.read(length)
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
 
@@ -188,12 +264,13 @@ def _read_ftext_fstring(archive: FArchive) -> str:
     """
     # TODO: 使用UE编辑器源码的加载方式替换实现代码
     length = archive.read_i32()  # TODO: 使用UE编辑器方式读取FString长度
-    if length == 0:
+    if length == 0 or length == -1:
+        # Phase 75: length=-1 是 UE 空字符串标记
         return ""
     if abs(length) > 10_000:
         # 异常长度，不回退（已消费 i32），返回空字符串
         return ""
-    if length < 0:
+    if length < -1:
         data = archive.read(-length * 2)  # TODO: 使用UE编辑器方式读取UTF-16数据
         return data.decode('utf-16', errors='replace').rstrip('\x00')
     data = archive.read(length)  # TODO: 使用UE编辑器方式读取UTF-8数据
@@ -1312,11 +1389,24 @@ def read_k2node_event(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
     event_reference: Optional[FMemberReference] = None,
+    b_override_function: Optional[bool] = None,
+    b_internal_event: Optional[bool] = None,
+    custom_function_name: Optional[str] = None,
+    function_flags: Optional[int] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
 
-    如果 event_reference 已在 PropertyTag 层解析（script_serial），直接使用；
-    否则从 archive 当前位置读取 FMemberReference。
+    Phase 75-04: 移除尾部盲读。
+
+    如果 event_reference、b_override_function 等字段已在 PropertyTag 层解析（script_serial），
+    直接使用；fallback 读取必须受 script_serial_size / 字段 trace 验证保护。
+
+    返回字段：
+    - event_reference: FMemberReference
+    - b_override_function: bool
+    - b_internal_event: bool (新增)
+    - custom_function_name: str (新增)
+    - function_flags: int (新增)
 
     参考 UE C++ FK2Node_Event::Serialize() 实现。
     """
@@ -1324,10 +1414,30 @@ def read_k2node_event(
     if event_reference is None:
         event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
-    b_override_function = archive.read_bool()
+    # Phase 75-04: b_override_function 优先使用 PropertyTag 值，不再盲读
+    # 只有 PropertyTag 未提供时才考虑 fallback，且 fallback 必须受验证保护
+    if b_override_function is None:
+        # Legacy fallback: 仅在确认有剩余字节时读取
+        # 标记 source 为 "legacy_fallback"，便于诊断追踪
+        try:
+            b_override_function = archive.read_bool()
+            logger.debug(
+                "K2Node_Event b_override_function read from legacy fallback (bool at pos %d)",
+                archive.tell() - 4
+            )
+        except Exception as e:
+            logger.warning(
+                "K2Node_Event b_override_function fallback failed: %s, defaulting to False",
+                e
+            )
+            b_override_function = False
+
     return {
         "event_reference": event_reference,
         "b_override_function": b_override_function,
+        "b_internal_event": b_internal_event if b_internal_event is not None else False,
+        "custom_function_name": custom_function_name or "",
+        "function_flags": function_flags if function_flags is not None else 0,
     }
 
 
@@ -1445,6 +1555,10 @@ def create_node_from_archive(
         base_node.node_data = read_k2node_event(
             archive, name_map, import_map, export_map, linker,
             event_reference=node_refs.get('event_reference') if node_refs else None,
+            b_override_function=node_refs.get('b_override_function') if node_refs else None,
+            b_internal_event=node_refs.get('b_internal_event') if node_refs else None,
+            custom_function_name=node_refs.get('custom_function_name') if node_refs else None,
+            function_flags=node_refs.get('function_flags') if node_refs else None,
         )
     elif class_name == "K2Node_Knot":
         base_node.node_data = read_k2node_knot(archive)
@@ -1499,6 +1613,11 @@ def read_ue_graph_node(
 
     function_reference: Optional[FMemberReference] = None
     event_reference: Optional[FMemberReference] = None
+    # Phase 75-04: K2Node_Event PropertyTag 字段
+    b_override_function: Optional[bool] = None
+    b_internal_event: Optional[bool] = None
+    custom_function_name: Optional[str] = None
+    function_flags: Optional[int] = None
     node_pos_x: int = 0
     node_pos_y: int = 0
     node_guid: str = ""
@@ -1614,20 +1733,51 @@ def read_ue_graph_node(
                     member_guid=m_guid,
                     b_self_context=m_self,
                 )
+            # Phase 75-04: K2Node_Event PropertyTag 字段
+            elif tag.name == "bOverrideFunction":
+                # Bool PropertyTag: inline bool_val 或 value body
+                if tag.size > 0:
+                    b_override_function = archive.read_i32() != 0
+                else:
+                    b_override_function = tag.bool_val != 0
+            elif tag.name == "bInternalEvent":
+                if tag.size > 0:
+                    b_internal_event = archive.read_i32() != 0
+                else:
+                    b_internal_event = tag.bool_val != 0
+            elif tag.name == "CustomFunctionName":
+                # FName PropertyTag
+                custom_function_name = archive.read_name(name_map)
+            elif tag.name == "FunctionFlags":
+                # Int PropertyTag
+                function_flags = archive.read_i32()
             elif tag.name == "NodePosX":
-                node_pos_x = archive.read_i32()
+                node_pos_x = _read_tag_i32(archive, tag)
             elif tag.name == "NodePosY":
-                node_pos_y = archive.read_i32()
+                node_pos_y = _read_tag_i32(archive, tag)
             elif tag.name == "NodeGuid" and tag.size > 0:
                 node_guid = archive.read_bytes(16).hex()
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
             elif tag.name == "NodeComment" and tag.size > 0:
                 node_comment = archive.read_fstring()
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
             elif tag.name == "InputAction" and tag.size > 0:
                 pkg_idx = archive.read_i32()
-                raw_properties[tag.name] = (
+                input_action_path = (
                     _rcn(PackageIndex(pkg_idx), import_map, export_map, linker)
                     if pkg_idx != 0 else ""
                 )
+                raw_properties[tag.name] = input_action_path
+                # Phase 75-03: 保留短名提取
+                raw_properties["InputActionShortName"] = (
+                    input_action_path.split(".")[-1].split("'")[0]
+                    if input_action_path else ""
+                )
+                raw_properties["InputActionPackageIndex"] = pkg_idx
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
             elif tag.name == "CommentColor" and tag.size >= 16:
                 raw_properties[tag.name] = (
                     archive.read_f32(),
@@ -1638,18 +1788,59 @@ def read_ue_graph_node(
                 if archive.tell() < tag.value_end_offset:
                     archive.seek(tag.value_end_offset)
             elif tag.name in ("NodeWidth", "NodeHeight", "FontSize") and tag.size > 0:
-                raw_properties[tag.name] = archive.read_i32()
+                raw_properties[tag.name] = _read_tag_i32(archive, tag)
             elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
-                raw_properties[tag.name] = tag.bool_val != 0
-            elif tag.name == "CommentDepth":
-                raw_properties[tag.name] = archive.read_i32()
-            elif tag.name == "ExtraFlags":
-                raw_properties[tag.name] = archive.read_i32()
+                raw_properties[tag.name] = _read_tag_bool(archive, tag)
+            elif tag.name == "CommentDepth" and tag.size > 0:
+                raw_properties[tag.name] = _read_tag_i32(archive, tag)
+            elif tag.name == "ExtraFlags" and tag.size > 0:
+                raw_properties[tag.name] = _read_tag_i32(archive, tag)
+            # Phase 75-03: 新增节点字段收集
+            elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
+                raw_val = _read_tag_i32(archive, tag)
+                raw_properties[tag.name] = raw_val
+                # 格式化枚举名映射（EAdvancedPinDisplay）
+                enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
+                raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
+            elif tag.name == "bOverrideFunction":
+                b_override_function = _read_tag_bool(archive, tag)
+                raw_properties[tag.name] = b_override_function
+            elif tag.name == "bInternalEvent":
+                b_internal_event = _read_tag_bool(archive, tag)
+                raw_properties[tag.name] = b_internal_event
+            elif tag.name == "bIsEditable":
+                raw_properties[tag.name] = _read_tag_bool(archive, tag)
+            elif tag.name == "CustomFunctionName":
+                custom_function_name = _read_tag_fname(archive, tag, name_map)
+                raw_properties[tag.name] = custom_function_name
+            elif tag.name == "FunctionFlags" and tag.size > 0:
+                function_flags = _read_tag_i32(archive, tag)
+                raw_properties[tag.name] = function_flags
+            elif tag.name == "CustomGeneratedFunctionName":
+                raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
+            elif tag.name == "MoveMode" and tag.size > 0:
+                # MoveMode 通常为 byte/int
+                raw_val = archive.read_u8() if tag.size >= 1 else 0
+                raw_properties[tag.name] = raw_val
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
+            elif tag.name == "NodeDetails" and tag.size > 0:
+                # NodeDetails 为 FText，尝试读取预览
+                try:
+                    flags = archive.read_i32()
+                    history_type_raw = archive.read_u8()
+                    history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
+                    read_ftext_with_history(archive, history_type, tolerant=True)
+                except Exception:
+                    pass
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
+                raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
             elif tag.size > 0:
                 # 收集未知 PropertyTag（用于未知节点类型调试和未来扩展）
                 value_start = archive.tell()
                 raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
-                archive.seek(archive.tell() + tag.size)
+                archive.seek(tag.value_end_offset)
 
     # 读取 Pins 数组
     # D-12: UE5 UEdGraphNode Pins format:
@@ -1716,6 +1907,11 @@ def read_ue_graph_node(
     node_refs = {
         'function_reference': function_reference,
         'event_reference': event_reference,
+        # Phase 75-04: K2Node_Event PropertyTag 字段
+        'b_override_function': b_override_function,
+        'b_internal_event': b_internal_event,
+        'custom_function_name': custom_function_name,
+        'function_flags': function_flags,
     }
 
     return create_node_from_archive(
