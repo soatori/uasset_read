@@ -15,7 +15,7 @@ class TestLinkedToValidationLogging:
     """测试 graph.py 中 LinkedTo 读取失败的日志记录。"""
 
     def test_linked_to_validation_logs_error(self, caplog):
-        """当 read_pin_array 抛出异常时，logger.error 被调用。"""
+        """LinkedTo 失败日志至少包含首条 error（后续可去重降级）。"""
         # 模拟 read_ue_graph_pin 的关键行为：在 try/except 中调用 read_pin_array
         from uasset_read.serializers.graph import logger as graph_logger
 
@@ -35,6 +35,31 @@ class TestLinkedToValidationLogging:
             f"Expected 'LinkedTo read failed' in error logs, got: {error_messages}"
         assert "12345" in caplog.records[0].message
         assert "mock LinkedTo failure" in caplog.records[0].message
+
+    def test_linked_to_validation_dedup_logs_debug(self, caplog):
+        """重复失败应被去重并降级为 debug。"""
+        from uasset_read.serializers import graph as graph_mod
+        graph_mod._LINKEDTO_FAILURE_SEEN.clear()
+
+        caplog.set_level(logging.DEBUG, logger=graph_mod.logger.name)
+        linkedto_start = 54321
+        err = RuntimeError("mock LinkedTo failure")
+        key = (linkedto_start, type(err).__name__)
+
+        if key not in graph_mod._LINKEDTO_FAILURE_SEEN:
+            graph_mod._LINKEDTO_FAILURE_SEEN.add(key)
+            graph_mod.logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, err)
+        else:
+            graph_mod.logger.debug("LinkedTo read failed (deduped) at pos %d: %s", linkedto_start, err)
+
+        if key not in graph_mod._LINKEDTO_FAILURE_SEEN:
+            graph_mod._LINKEDTO_FAILURE_SEEN.add(key)
+            graph_mod.logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, err)
+        else:
+            graph_mod.logger.debug("LinkedTo read failed (deduped) at pos %d: %s", linkedto_start, err)
+
+        assert any("LinkedTo read failed at pos" in r.message and r.levelno == logging.ERROR for r in caplog.records)
+        assert any("LinkedTo read failed (deduped)" in r.message and r.levelno == logging.DEBUG for r in caplog.records)
 
 
 class TestEmptyLinkedToWarning:
@@ -89,7 +114,7 @@ class TestEmptyLinkedToWarning:
                 direction=1,
                 pin_type=FEdGraphPinType(pin_category="exec"),
                 default_value="",
-                linked_to_raw=[{"pin_guid": "target-guid-001", "owning_node": "TargetNode"}],
+                linked_to_raw=[{"pin_guid": "A1B2C3D4E5F60718293A4B5C6D7E8F90", "owning_node": "TargetNode"}],
             ),
         ]
         # Create target node so pin_lookup resolves
@@ -100,7 +125,7 @@ class TestEmptyLinkedToWarning:
             node_comment="",
             pins=[
                 UEdGraphPin(
-                    pin_id="target-guid-001",
+                    pin_id="A1B2C3D4E5F60718293A4B5C6D7E8F90",
                     pin_name="Then",
                     pin_tooltip="",
                     direction=0,
@@ -132,7 +157,46 @@ class TestEmptyLinkedToWarning:
 
         assert not any("No LinkedTo data found" in w for w in warnings), \
             f"Should NOT have warning when LinkedTo is populated, got: {warnings}"
+        assert not any("Unresolved LinkedTo target refs" in w for w in warnings), \
+            f"Should not report unresolved refs, got: {warnings}"
+        assert not any("Invalid LinkedTo pin_guid refs filtered" in w for w in warnings), \
+            f"Should not report invalid guid refs, got: {warnings}"
         assert len(connections) == 1, "Should have 1 connection"
+
+    def test_invalid_pin_guid_filtered_warning(self):
+        """无效 pin_guid 应被过滤并输出稳定 warning。"""
+        source_node = UEdGraphNode(
+            node_guid="source-node",
+            node_pos_x=0,
+            node_pos_y=0,
+            node_comment="",
+            pins=[
+                UEdGraphPin(
+                    pin_id="pin-001",
+                    pin_name="Exec",
+                    pin_tooltip="",
+                    direction=1,
+                    pin_type=FEdGraphPinType(pin_category="exec"),
+                    default_value="",
+                    linked_to_raw=[{"pin_guid": "BAD_GUID", "owning_node": "TargetNode"}],
+                ),
+            ],
+            class_name="K2Node_Event",
+        )
+        graph = UEdGraph(
+            graph_name="TestGraph",
+            graph_class="EdGraph",
+            schema=None,
+            nodes=[source_node],
+            graph_guid="test-graph-guid",
+            b_editable=True,
+        )
+
+        connections, warnings = build_connections_map(graph)
+
+        assert len(connections) == 0
+        assert any("Invalid LinkedTo pin_guid refs filtered: 1" in w for w in warnings), \
+            f"Expected invalid guid warning, got: {warnings}"
 
 
 class TestLinkedToPopulatedForSampleAsset:

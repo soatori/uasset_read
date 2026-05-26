@@ -192,6 +192,7 @@ from .graph import (
     format_graphs_json,
     build_execution_chains,  # Phase 71
     build_execution_chains_from_flows,  # Phase 71 (N2C compat)
+    write_pin_trace_report,
 )
 
 # 格式化模块（Phase 32 Wave 1-2）
@@ -208,6 +209,8 @@ from .formatters import (
     # Markdown 格式化
     format_markdown,
     _build_mermaid_flowchart,
+    # Blueprint 翻译参考文本
+    format_blueprint_translation_text,
     # 辅助函数
     build_status_info,
     build_schema_info,
@@ -456,6 +459,7 @@ __all__ = [
     "build_graphs_summary",
     "build_execution_chains",  # Phase 71
     "build_execution_chains_from_flows",  # Phase 71
+    "write_pin_trace_report",
     # 格式化函数（Phase 33 — 依赖 Phase 32）
     "format_json_full",
     "format_json_summary",
@@ -465,6 +469,7 @@ __all__ = [
     "format_text_summary",
     "format_text_full",
     "format_markdown",
+    "format_blueprint_translation_text",
     "format_graphs_json",
     "build_schema_info",
     "resolve_fpackage_index",

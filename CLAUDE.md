@@ -22,10 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v13.0 已归档** — Phase 72 系列✅ (Pin 连接诊断/修复 + BPGC 字节码 + FString/FName 区分 + EventGraph 字段对齐)，Phase 73✅ (LinkedTo 恢复 + Pin trace)，Phase 74✅ (PinReference null/non-null 主路径对齐)，Phase 75✅ (EventGraph 节点字段级对齐)。`__version__` 已更新为 `14.0.0`。
+**v13.0 已归档** — Phase 72 系列✅ (Pin 连接诊断/修复 + BPGC 字节码 + FString/FName 区分 + EventGraph 字段对齐)，Phase 73✅ (LinkedTo 恢复 + Pin trace)，Phase 74✅ (PinReference null/non-null 主路径对齐)，Phase 75✅ (EventGraph 节点字段级对齐)。 `__version__` 已更新为 `14.0.0`。
 
 **v14.0 活跃** — CUE4Parse 核心对齐：Phase 76⬜ (FArchive + PackageSummary 源码索引 + COR 修复)，Phase 77⬜ (Pak parser + compression + AES)，Phase 78⬜ (UObject 继承树 + Linker 重构)，Phase 79⬜ (IoStore .utoc/.ucas)，Phase 80⬜ (Kismet 输出格式 PascalCase 对齐)。索引驱动模式，UE 源码为权威金标准。
-
 ## 架构
 
 管道：`.uasset → FArchive → Deserializer → Models → OutputFormatter`
@@ -58,6 +57,9 @@ v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/Expor
 ```
 src/uasset_read/  # 源码    tests/          # 测试
 .planning/        # 规划    temp/            # 缓存/临时生成文件
+docs/             # 用户文档（ARCHITECTURE/DEVELOPMENT/FRAMEWORK 等）
+docs/ref/         # 整合参考文档（蓝图→C++ 转换指南等）
+docs/reference/   # 独立参考资料（解析完整性/节点文本参考/UE 加载流程）
 uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽略）
 ```
 
