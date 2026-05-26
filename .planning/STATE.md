@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v14.0
 milestone_name: CUE4Parse 核心对齐 — FArchive/Pak/IoStore/格式对齐
-status: Active — Phase 74 ✅, 75 ✅, 77 进行中 (Pak parser + AES-ECB + compression), Phase 78 待启动 (空目录已清理)
-last_updated: "2026-05-26T18:53:00.000Z"
+status: Active — Phase 74 ✅, 75 ✅, 77 ✅ (Pak parser + AES-ECB + compression + index 解析), Phase 76/78/79/80 待启动
+last_updated: "2026-05-26T19:00:00.000Z"
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 1
+  percent: 20
 ---
 
 # v14.0 — CUE4Parse 核心对齐 (P76-80)
@@ -24,7 +24,7 @@ progress:
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
 | 76 | FArchive 补齐 + PackageSummary + COR 修复 | FCustomVersion 体系、StructProperty 深度解析、FAssetArchive | COR-01/02 | ⬜ Pending |
-| 77 | Pak 解析 + 压缩 + AES | FPakInfo/Entry、Zlib/LZ4/Zstd/Oodle、AES-ECB/CBC | PAK-01/02/03 | 🔄 Active |
+| 77 | Pak 解析 + 压缩 + AES | FPakInfo/Entry、Zlib/LZ4/Zstd/Oodle、AES-ECB/CBC | PAK-01/02/03 | ✅ Complete |
 | 78 | UObject 继承树 + PackageLinker 重构 | UObject→UField 层次、FAssetArchive 模式 | COR-03/04 | ⬜ Pending |
 | 79 | IoStore (.utoc/.ucas) + 文件发现 | FIoStoreTocResource、DefaultFileProvider | PAK-04/05 | ⬜ Pending |
 | 80 | 输出格式 PascalCase 对齐 | format_json_cue4parse、text_schema 化 | FMT-01/02/03 | ⬜ Pending |
@@ -41,15 +41,19 @@ progress:
 **描述:** v13.0 遗留 phase，EventGraph 节点字段级对齐
 **状态:** ✅ Complete
 
-## Phase 77: Pak 解析 + 压缩 + AES (进行中)
+## Phase 77: Pak 解析 + 压缩 + AES ✅
 
+**完成日期:** 2026-05-26
 **范围:** PAK-01 (PakEntry 解析) + PAK-02 (压缩分派) + PAK-03 (AES 加密)
-**状态:** 🔄 Active — Pak parser + AES-ECB + compression dispatch 已实现
 **交付物:**
-- `src/uasset_read/pak/` — FPakInfo/PakEntry 解析
-- `src/uasset_read/crypto/aes_ecb.py` — AES-ECB 解密
-- `src/uasset_read/compression/dispatch.py` — 压缩算法分派
-- `temp/phase77_pak_reader.py` — 诊断脚本
+- `src/uasset_read/pak/` — FPakInfo/PakEntry/FPakDirectoryEntry 数据结构 + 序列化
+- `src/uasset_read/pak/reader.py` — PakFileReader（open/extract/get_entry/context manager）
+- `src/uasset_read/compression/dispatch.py` — Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级
+- `src/uasset_read/crypto/aes_ecb.py` — AES-ECB 解密 + CustomEncryption 委托
+- `src/uasset_read/pak/index.py` — Legacy flat index + v10+ PathHashIndex/DirectoryIndex 解析
+- `tests/test_pak_*.py` — 62 tests, 1 skipped
+**UAT:** 8/8 通过
+**状态:** ✅ Complete
 
 ## v13.0 归档摘要
 
