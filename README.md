@@ -8,9 +8,9 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **v14.0 in development** (`__version__` = 14.0.0) |
+| Version | **dev-0.3.0** (v14, Phase 76) |
 | Tests | **1646 tests** (1516 passed, 124 skipped) |
-| Branch | `2.11-dev` |
+| Branch | `dev-0.3.0` |
 
 ### Current Phase: v14.0 — CUE4Parse 核心对齐
 

@@ -1,9 +1,10 @@
 ---
 gsd_state_version: 1.0
+version: dev-0.3.0
 milestone: v14.0
 milestone_name: — CUE4Parse 核心对齐
 status: Active — Phase 74 ✅, 75 ✅, 77 ✅ (Pak parser + AES-ECB + compression + index 解析), Phase 76/78/79/80 待启动
-last_updated: "2026-05-26T11:17:09.802Z"
+last_updated: "2026-05-26"
 progress:
   total_phases: 5
   completed_phases: 0

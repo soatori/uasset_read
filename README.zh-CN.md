@@ -8,25 +8,20 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | **v9.0 已发布** (__version__ = 6.0.0, 待更新) |
-| 测试 | **554 tests collected** (43 v9.0 专项测试) |
+| 版本 | **dev-0.3.0** (v14, Phase 76) |
+| 测试 | **1646 tests** (1516 passed, 124 skipped) |
 | 模块 | `src/uasset_read/` — 39 文件, 150+ 公共 API 导出 |
-| 分支 | `v2.8-dev` |
+| 分支 | `dev-0.3.0` |
 
-### 最新里程碑：v9.0 函数调用链解析 ✅
+### 当前里程碑：v14.0 — CUE4Parse 核心对齐
 
-**发布日期**: 2026-05-17
-
-**v9.0 成果**:
-- ✅ Phase 55 — JSON 输出增强 (`function_graphs` 顶层数组, `output_version` 5.0)
-- ✅ Phase 54 — 数据流追踪 (Pure 函数返回值 → 参数输入, 24 tests)
-- ✅ Phase 53 — 函数内执行流追踪 (FunctionEntry → CallFunction 链)
-- ✅ Phase 52 — 函数图节点解析 (K2Node_FunctionEntry 模型)
-
-**历史里程碑**:
-- ✅ v8.0 — BP→C++ JSON 可翻译性 (Phase 47-51)
-- ✅ v7.0 — UE FLinkerLoad 对象图重建 (Phase 41-46)
-- ✅ v6.0 — 模块化重构
+- ✅ Phase 74 — PinReference null/non-null 主路径对齐
+- ✅ Phase 75 — EventGraph 节点字段级对齐
+- ✅ Phase 77 — Pak 解析 + 压缩 + AES-ECB (62 tests)
+- ⬜ Phase 76 — FArchive 补齐 + COR 修复 (下一个)
+- ⬜ Phase 78 — UObject 继承树 + PackageLinker 重构
+- ⬜ Phase 79 — IoStore (.utoc/.ucas) 解析
+- ⬜ Phase 80 — 输出格式 PascalCase 对齐
 
 ## 功能
 
