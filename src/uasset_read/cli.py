@@ -16,6 +16,7 @@ from uasset_read.formatters import (
     format_json_summary,
     format_text_full,
     format_markdown,
+    format_blueprint_translation_text,
     format_graphs_json,
 )
 
@@ -53,6 +54,7 @@ def create_parser() -> argparse.ArgumentParser:
     group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
+    group.add_argument('--blueprint-text', action='store_true', help='Output compact blueprint translation reference text')
 
     # Optional flags (D-27, D-14-19)
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -164,10 +166,12 @@ def main():
     # Phase 8: --graph flag handling (D-08-12/13)
     # 优先级：--graph 检查在最前
     # Phase 55: --function-graphs 隐含 --json（如果无其他格式 flag）
-    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown):
+    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or getattr(args, "blueprint_text", False)):
         args.json = True  # 隐含 JSON
 
-    if args.graph:
+    if args.blueprint_text:
+        output_str = format_blueprint_translation_text(result)
+    elif args.graph:
         # D-08-13: --graph + --json/--verbose = full output with graphs
         if args.json or args.verbose:
             include_schema = args.schema or args.verbose
