@@ -1,5 +1,7 @@
 # uasset_read
 
+**版本:** `dev-0.3.0` (命名规则: `{env}-{major}.{minor}.{patch}`, 详见 `VERSIONING.md`)
+
 Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI agent 直接解析内容。
 
 **技术栈**: Python 3.10+，零运行时依赖 | **架构**: `.uasset → FArchive → 序列化 → 数据模型 → 属性解析 → 蓝图图 → 格式化输出 → PackageLinker → Kismet 字节码反编译 → Agent 翻译管线 → N2C 中间格式`
@@ -8,17 +10,17 @@ Python 工具读取 Unreal Engine .uasset 文件（未烘焙蓝图），让 AI a
 
 ## 里程碑
 
-| 版本 | 范围 | 状态 |
-|------|------|------|
-| v1.0–v6.0 | MVP → 模块化重构 | 已归档 |
-| v7.0 | UE FLinkerLoad 对象图重建 | 已归档 |
-| v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 已归档 |
-| v9.0 | 函数调用链解析 (P52-55) | 已归档 |
-| v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 已归档 |
-| v11.0 | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 已归档 |
-| **v12.0** | **N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 已归档 |
-| **v13.0** | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75)** | 归档 |
-| **v14.0** | **CUE4Parse Python 全量对齐** | 活跃 |
+| 版本 | 语义版本 | 范围 | 状态 |
+|------|---------|------|------|
+| v1.0–v6.0 | — | MVP → 模块化重构 | 已归档 |
+| v7.0 | — | UE FLinkerLoad 对象图重建 | 已归档 |
+| v8.0 | — | BP-to-CPP JSON 可翻译性 (P47-51) | 已归档 |
+| v9.0 | — | 函数调用链解析 (P52-55) | 已归档 |
+| v10.0 | — | Blueprint-to-C++ 代码生成参考 (P56-60) | 已归档 |
+| v11.0 | — | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 已归档 |
+| **v12.0** | — | **N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71)** | 已归档 |
+| **v13.0** | — | **Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75)** | 已归档 |
+| **v14.0** | `dev-0.3.0` | **CUE4Parse Python 全量对齐** | 活跃 |
 
 详情：`.planning/milestones/` | 路线图：`.planning/ROADMAP.md`
 
@@ -62,4 +64,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-26 — v14.0 milestone started: CUE4Parse Python 全量对齐*
+*Last updated: 2026-05-26 — v14.0 milestone, version naming rule `dev-0.3.0` applied*

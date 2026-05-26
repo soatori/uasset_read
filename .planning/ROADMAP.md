@@ -2,17 +2,19 @@
 
 ## 里程碑
 
-| 版本 | 范围 | 日期 | 状态 |
-|------|------|------|------|
-| v1.0–v6.0 | MVP → 模块化重构 | 2026-04-28 ~ 05-13 | 已归档 |
-| v7.0 | UE FLinkerLoad 对象图重建 | 2026-05-14 | 已归档 |
-| v8.0 | BP-to-CPP JSON 可翻译性 (P47-51) | 2026-05-17 | 已归档 |
-| v9.0 | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
-| v10.0 | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
-| v11.0 | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
-| v12.0 | 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71) | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
-| v13.0 | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75) | 2026-05-23 ~ 05-26 | [已归档](archive/v13.0-phases/) |
-| **v14.0** | **CUE4Parse 核心对齐 — FArchive/Pak/IoStore/格式对齐 (P76-80)** | 2026-05-26 ~ | 执行中 |
+版本命名: `{env}-{major}.{minor}.{patch}` — 详见 `VERSIONING.md`
+
+| 版本 | 语义版本 | 范围 | 日期 | 状态 |
+|------|---------|------|------|------|
+| v1.0–v6.0 | — | MVP → 模块化重构 | 2026-04-28 ~ 05-13 | 已归档 |
+| v7.0 | — | UE FLinkerLoad 对象图重建 | 2026-05-14 | 已归档 |
+| v8.0 | — | BP-to-CPP JSON 可翻译性 (P47-51) | 2026-05-17 | 已归档 |
+| v9.0 | — | 函数调用链解析 (P52-55) | 2026-05-17 | 已归档 |
+| v10.0 | — | Blueprint-to-C++ 代码生成参考 (P56-60) | 2026-05-18 | [已归档](milestones/v10.0-ROADMAP.md) |
+| v11.0 | — | Kismet 字节码反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) | 2026-05-20 | [已归档](milestones/v11.0-ROADMAP.md) |
+| v12.0 | — | 序列化修复 + N2C 中间格式 + 节点分类体系 + 处理器架构 (P67-71) | 2026-05-21~22 | [已归档](milestones/v12.0-ROADMAP.md) |
+| v13.0 | — | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75) | 2026-05-23 ~ 05-26 | [已归档](archive/v13.0-phases/) |
+| **v14.0** | `dev-0.3.0` | **CUE4Parse 核心对齐 — FArchive/Pak/IoStore/格式对齐 (P76-80)** | 2026-05-26 ~ | 执行中 |
 
 历史详情：`.planning/archive/`
 
@@ -79,4 +81,4 @@ v13.0 关键修复回顾：
 
 ---
 
-*Updated: 2026-05-26 (v1.0-v13.0 archived, v14.0 active)*
+*Updated: 2026-05-26 (v1.0-v13.0 archived, v14.0 active, version naming rule `dev-0.3.0` applied)*
