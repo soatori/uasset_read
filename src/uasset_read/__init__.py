@@ -300,6 +300,11 @@ from .n2c import (
     N2C_JSON_SCHEMA, validate_n2c_json,
 )
 
+# Version management (Phase 76, COR-02)
+from .versioning import (
+    VersionContainer, build_version_container, EUEVersion,
+)
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -560,4 +565,8 @@ __all__ = [
     "from_n2c_json",
     "N2C_JSON_SCHEMA",
     "validate_n2c_json",
+    # Version management (Phase 76)
+    "VersionContainer",
+    "build_version_container",
+    "EUEVersion",
 ]

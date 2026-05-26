@@ -184,6 +184,173 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         y = archive.read_f32()
         return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
 
+    # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
+    if struct_type == "Vector4":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "LinearColor":
+        r = archive.read_f32()
+        g = archive.read_f32()
+        b = archive.read_f32()
+        a = archive.read_f32()
+        return StructValue(struct_type="LinearColor", fields={"R": r, "G": g, "B": b, "A": a})
+
+    if struct_type == "Color":
+        b = archive.read_u8()
+        g = archive.read_u8()
+        r = archive.read_u8()
+        a = archive.read_u8()
+        return StructValue(struct_type="Color", fields={"B": b, "G": g, "R": r, "A": a})
+
+    if struct_type == "Quat":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Quat", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "Plane":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Plane", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "Guid":
+        a = archive.read_u32()
+        b = archive.read_u32()
+        c = archive.read_u32()
+        d = archive.read_u32()
+        return StructValue(struct_type="Guid", fields={"A": a, "B": b, "C": c, "D": d})
+
+    if struct_type == "IntPoint":
+        x = archive.read_i32()
+        y = archive.read_i32()
+        return StructValue(struct_type="IntPoint", fields={"X": x, "Y": y})
+
+    if struct_type == "IntVector":
+        x = archive.read_i32()
+        y = archive.read_i32()
+        z = archive.read_i32()
+        return StructValue(struct_type="IntVector", fields={"X": x, "Y": y, "Z": z})
+
+    if struct_type == "Box2D":
+        min_x = archive.read_f32()
+        min_y = archive.read_f32()
+        max_x = archive.read_f32()
+        max_y = archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box2D", fields={
+            "Min": {"X": min_x, "Y": min_y},
+            "Max": {"X": max_x, "Y": max_y},
+            "bIsValid": b_valid,
+        })
+
+    if struct_type == "Box":
+        min_x = archive.read_f32()
+        min_y = archive.read_f32()
+        min_z = archive.read_f32()
+        max_x = archive.read_f32()
+        max_y = archive.read_f32()
+        max_z = archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box", fields={
+            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
+            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
+            "bIsValid": b_valid,
+        })
+
+    if struct_type == "Sphere":
+        cx = archive.read_f32()
+        cy = archive.read_f32()
+        cz = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Sphere", fields={
+            "Center": {"X": cx, "Y": cy, "Z": cz},
+            "W": w,
+        })
+
+    if struct_type == "BoxSphereBounds":
+        ox = archive.read_f32()
+        oy = archive.read_f32()
+        oz = archive.read_f32()
+        bx = archive.read_f32()
+        by = archive.read_f32()
+        bz = archive.read_f32()
+        sr = archive.read_f32()
+        return StructValue(struct_type="BoxSphereBounds", fields={
+            "Origin": {"X": ox, "Y": oy, "Z": oz},
+            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
+            "SphereRadius": sr,
+        })
+
+    if struct_type == "Matrix":
+        matrix = []
+        for i in range(4):
+            row = [archive.read_f32() for _ in range(4)]
+            matrix.append(row)
+        return StructValue(struct_type="Matrix", fields={
+            "M": matrix,
+        })
+
+    if struct_type == "TwoVectors":
+        e1_x = archive.read_f32()
+        e1_y = archive.read_f32()
+        e1_z = archive.read_f32()
+        e2_x = archive.read_f32()
+        e2_y = archive.read_f32()
+        e2_z = archive.read_f32()
+        return StructValue(struct_type="TwoVectors", fields={
+            "E1": {"X": e1_x, "Y": e1_y, "Z": e1_z},
+            "E2": {"X": e2_x, "Y": e2_y, "Z": e2_z},
+        })
+
+    if struct_type == "OrientedBox":
+        ax_x = archive.read_f32()
+        ax_y = archive.read_f32()
+        ax_z = archive.read_f32()
+        ay_x = archive.read_f32()
+        ay_y = archive.read_f32()
+        ay_z = archive.read_f32()
+        az_x = archive.read_f32()
+        az_y = archive.read_f32()
+        az_z = archive.read_f32()
+        ex = archive.read_f32()
+        ey = archive.read_f32()
+        ez = archive.read_f32()
+        cx = archive.read_f32()
+        cy = archive.read_f32()
+        cz = archive.read_f32()
+        return StructValue(struct_type="OrientedBox", fields={
+            "AxisX": {"X": ax_x, "Y": ax_y, "Z": ax_z},
+            "AxisY": {"X": ay_x, "Y": ay_y, "Z": ay_z},
+            "AxisZ": {"X": az_x, "Y": az_y, "Z": az_z},
+            "Extent": {"X": ex, "Y": ey, "Z": ez},
+            "Center": {"X": cx, "Y": cy, "Z": cz},
+        })
+
+    # Transform: UE5 LWC uses double for FVector components
+    if struct_type == "Transform":
+        translation_x = archive.read_f64()
+        translation_y = archive.read_f64()
+        translation_z = archive.read_f64()
+        rot_x = archive.read_f32()
+        rot_y = archive.read_f32()
+        rot_z = archive.read_f32()
+        rot_w = archive.read_f32()
+        scale_x = archive.read_f32()
+        scale_y = archive.read_f32()
+        scale_z = archive.read_f32()
+        return StructValue(struct_type="Transform", fields={
+            "Translation": {"X": translation_x, "Y": translation_y, "Z": translation_z},
+            "Rotation": {"X": rot_x, "Y": rot_y, "Z": rot_z, "W": rot_w},
+            "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
+        })
+
     fields: Dict[str, Any] = {}
     property_count = 0
 

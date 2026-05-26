@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
     find_main_blueprint_generated_class, detect_blueprint,
@@ -230,6 +231,7 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
 
         # 读取文件头
         result.summary = read_package_summary(archive)
+        result.version_container = build_version_container(result.summary)
 
         # 读取名称表
         result.name_map = read_name_table(archive, result.summary)
@@ -315,6 +317,7 @@ def parse_uasset_with_linker(
 
         # 读取文件头
         result.summary = read_package_summary(archive)
+        result.version_container = build_version_container(result.summary)
         result.name_map = read_name_table(archive, result.summary)
         result.import_map = read_import_map(archive, result.summary, result.name_map)
         result.export_map = read_export_map(archive, result.summary, result.name_map)
@@ -340,6 +343,7 @@ def parse_uasset_with_linker(
         linker = PackageLinker(
             archive, result.summary, result.name_map,
             result.import_map, result.export_map,
+            version_container=result.version_container,
         )
         linker.link()
         result.linker = linker

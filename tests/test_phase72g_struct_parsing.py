@@ -90,9 +90,10 @@ class TestVectorFastPath:
         data = struct.pack('<II', 0xFFFFFFFF, 0)  # index=0xFFFFFFFF (out of range) → "None"
         archive, path = _make_archive(data)
         try:
-            tag = PropertyTag(name="Color", type="StructProperty(LinearColor)", size=0)
+            # BodyInstance is NOT a fast-path struct — it uses the PropertyTag loop
+            tag = PropertyTag(name="BodyInstance", type="StructProperty(BodyInstance)", size=0)
             result = parse_struct_property(tag, archive, name_map=[], export_map=[])
             assert isinstance(result, StructValue)
-            assert result.struct_type == "LinearColor"
+            assert result.struct_type == "BodyInstance"
         finally:
             _cleanup(archive, path)
