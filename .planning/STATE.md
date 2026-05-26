@@ -1,33 +1,74 @@
 ---
 gsd_state_version: 1.0
-milestone: v13.0
-milestone_name: — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-status: Complete — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅. v13.0 已归档. v14.0 活跃: Phase 74 ✅, 75 ✅, 77 进行中, 78 待启动
-last_updated: "2026-05-26T18:40:00.000Z"
+milestone: v14.0
+milestone_name: CUE4Parse 核心对齐 — FArchive/Pak/IoStore/格式对齐
+status: Active — Phase 74 ✅, 75 ✅, 77 进行中 (Pak parser + AES-ECB + compression), Phase 78 待启动 (空目录已清理)
+last_updated: "2026-05-26T18:53:00.000Z"
 progress:
-  total_phases: 14
-  completed_phases: 11
-  total_plans: 14
-  completed_plans: 12
-  percent: 79
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 1
+  completed_plans: 0
+  percent: 0
 ---
 
-# v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
+# v14.0 — CUE4Parse 核心对齐 (P76-80)
 
-**Started:** 2026-05-23
-**Status:** Active — Phase 72-A ✅, 72-B ✅, 72-C ✅, 72-D ✅, 72-UAT ✅, 72-E ✅, 72-F ✅, 72-G ✅, 72-H 已并入 72-I/73, 72-I ✅, Phase 73 ✅
+**参考设计:** CUE4Parse — FArchive/Pak/IoStore/Compression/Aes.cs/IFileProvider
+**Started:** 2026-05-26
+**Status:** Active — Phase 74 ✅ (v13.0 遗留), 75 ✅ (v13.0 遗留), 77 进行中, 78 待启动
+**Scope:** COR（核心修复）+ PAK（Pak/IoStore）+ FMT（输出格式 PascalCase 对齐）
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 72 | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 | 完整 Pin 序列化 + 字节码导航 + 类型区分 | PIN-01/02/03 | 🔄 Active |
-| 73 | BP_FirstPersonCharacter Pin 序列化边界对齐修复 | 修复 LinkedTo 前字段边界错位，恢复连接并建立字段级诊断回路 | P73-01..06 | ✅ Complete |
+| 76 | FArchive 补齐 + PackageSummary + COR 修复 | FCustomVersion 体系、StructProperty 深度解析、FAssetArchive | COR-01/02 | ⬜ Pending |
+| 77 | Pak 解析 + 压缩 + AES | FPakInfo/Entry、Zlib/LZ4/Zstd/Oodle、AES-ECB/CBC | PAK-01/02/03 | 🔄 Active |
+| 78 | UObject 继承树 + PackageLinker 重构 | UObject→UField 层次、FAssetArchive 模式 | COR-03/04 | ⬜ Pending |
+| 79 | IoStore (.utoc/.ucas) + 文件发现 | FIoStoreTocResource、DefaultFileProvider | PAK-04/05 | ⬜ Pending |
+| 80 | 输出格式 PascalCase 对齐 | format_json_cue4parse、text_schema 化 | FMT-01/02/03 | ⬜ Pending |
 
-## 当前状态
+## Phase 74: PinReference null/non-null 主路径对齐 ✅
 
-**当前阶段:** Phase 73 ✅ (完成) | **上一阶段:** Phase 72-I ✅ (完成于 2026-05-24)
-**Phase 72-A 完成:** 2026-05-23 — 2 bugs 定位 (history_type signed / ParentPin conditional read)
+**完成日期:** 2026-05-26
+**描述:** v13.0 遗留 phase，Pin 序列化主路径对齐
+**状态:** ✅ Complete
+
+## Phase 75: EventGraph 节点字段级对齐 ✅
+
+**完成日期:** 2026-05-26
+**描述:** v13.0 遗留 phase，EventGraph 节点字段级对齐
+**状态:** ✅ Complete
+
+## Phase 77: Pak 解析 + 压缩 + AES (进行中)
+
+**范围:** PAK-01 (PakEntry 解析) + PAK-02 (压缩分派) + PAK-03 (AES 加密)
+**状态:** 🔄 Active — Pak parser + AES-ECB + compression dispatch 已实现
+**交付物:**
+- `src/uasset_read/pak/` — FPakInfo/PakEntry 解析
+- `src/uasset_read/crypto/aes_ecb.py` — AES-ECB 解密
+- `src/uasset_read/compression/dispatch.py` — 压缩算法分派
+- `temp/phase77_pak_reader.py` — 诊断脚本
+
+## v13.0 归档摘要
+
+| 版本 | 范围 | 日期 | 状态 |
+|------|------|------|------|
+| v13.0 P72-A | Pin 连接诊断 ✅ | 2026-05-23 | ✅ |
+| v13.0 P72-B | Pin 连接修复 ✅ | 2026-05-23 | ✅ |
+| v13.0 P72-C | Kismet 字节码导航 ✅ | 2026-05-23 | ✅ |
+| v13.0 P72-D | FString/FName 区分 ✅ | 2026-05-23 | ✅ |
+| v13.0 P72-E/F/G/I | EventGraph/BPGC/Struct 修复 ✅ | 2026-05-24 | ✅ |
+| v13.0 P73 | Pin 序列化边界对齐 ✅ | 2026-05-24 | ✅ |
+| v13.0 P74 | PinReference 主路径对齐 ✅ | 2026-05-26 | ✅ |
+| v13.0 P75 | EventGraph 字段级对齐 ✅ | 2026-05-26 | ✅ |
+
+**测试:** 1339 passed, 1435 collected
+
+---
+
+*Updated: 2026-05-26 (v14.0 active, v13.0 archived)*
 **Phase 72-B 完成:** 2026-05-23 — 2 bugs 修复 + 762 tests passed
 **Phase 72-C 完成:** 2026-05-23 — BPGC bytecode extraction module + pipeline fallback integration
 **Phase 72-D 完成:** 2026-05-23 — null_ratio 启发式替换为 null-termination 验证 + 20 tests
