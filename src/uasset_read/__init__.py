@@ -5,7 +5,7 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "9.0.0"
+__version__ = "14.0.0"
 
 # 导出常量模块
 from .constants import (
