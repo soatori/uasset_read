@@ -1,45 +1,73 @@
 ---
 gsd_state_version: 1.0
-milestone: v11.0
-milestone_name: Kismet 字节码反编译器
-status: planned
-last_updated: "2026-05-19T00:00:00Z"
+milestone: v14.0
+milestone_name: — CUE4Parse 核心对齐
+status: Active — Phase 74 ✅, 75 ✅, 77 ✅ (Pak parser + AES-ECB + compression + index 解析), Phase 76/78/79/80 待启动
+last_updated: "2026-05-26T11:17:09.802Z"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 0
-  total_plans: 5
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
-# v11.0 — Kismet 字节码反编译器
+# v14.0 — CUE4Parse 核心对齐 (P76-80)
 
-**Started: 2026-05-18**
-**Reference:** CUE4Parse — KismetExpression / FKismetArchive / BlueprintDecompilerUtils
+**参考设计:** CUE4Parse — FArchive/Pak/IoStore/Compression/Aes.cs/IFileProvider
+**Started:** 2026-05-26
+**Scope:** COR（核心修复）+ PAK（Pak/IoStore）+ FMT（输出格式 PascalCase 对齐）
 
 ## Phase 分解
 
 | Phase | Name | Goal | Requirements | Status |
 |-------|------|------|--------------|--------|
-| 61 | Kismet 表达式系统 | EExprToken + KismetExpression 类族 + FKismetArchive | KISMET-01/02/03 | Planned (2 plans) |
-| 62 | 字节码 → 表达式树 | ScriptBytecode → KismetExpression AST | BYTECODE-01/02/03 | Planned (1 plan) |
-| 63 | 表达式树 → C++ 伪代码 | AST 翻译 + 控制流恢复 + MathFunctionCleaner | TRANSLATE-01/02/03/04 | Planned (1 plan) |
-| 64 | 集成与验证 | pipeline 集成 + 端到端 golden-path 测试 | INTEGRATE-01/02/03 | Planned (1 plan) |
+| 76 | FArchive 补齐 + PackageSummary + COR 修复 | FCustomVersion 体系、StructProperty 深度解析、FAssetArchive | COR-01/02 | ⬜ Next |
+| 77 | Pak 解析 + 压缩 + AES | FPakInfo/Entry、Zlib/LZ4/Zstd/Oodle、AES-ECB/CBC | PAK-01/02/03 | ✅ Complete |
+| 78 | UObject 继承树 + PackageLinker 重构 | UObject→UField 层次、FAssetArchive 模式 | COR-03/04 | ⬜ Pending |
+| 79 | IoStore (.utoc/.ucas) + 文件发现 | FIoStoreTocResource、DefaultFileProvider | PAK-04/05 | ⬜ Pending |
+| 80 | 输出格式 PascalCase 对齐 | format_json_cue4parse、text_schema 化 | FMT-01/02/03 | ⬜ Pending |
 
-## 依赖关系
+## Phase 74: PinReference null/non-null 主路径对齐 ✅
 
-```
-Phase 61 (表达式系统) → Phase 62 (字节码→AST) → Phase 63 (AST→C++) → Phase 64 (集成验证)
-```
+**完成日期:** 2026-05-26
+**描述:** v13.0 遗留 phase，Pin 序列化主路径对齐
 
-## 上下文
+## Phase 75: EventGraph 节点字段级对齐 ✅
 
-- CUE4Parse 参考：`E:\Develop\CUE4Parse\CUE4Parse\UE4\Kismet\` + `BlueprintDecompilerUtils.cs`
-- 本项目技术栈：Python 3.10+，零运行时依赖
-- 架构管道：`.uasset → FArchive → Serializers → Models → Kismet → Translators → C++`
+**完成日期:** 2026-05-26
+**描述:** v13.0 遗留 phase，EventGraph 节点字段级对齐
 
-## 上游里程碑
+## Phase 77: Pak 解析 + 压缩 + AES ✅
 
-- v10.0 (P56-60): Blueprint-to-C++ 代码生成参考 — ✅ 已归档 2026-05-19
-  - 提供了 cpp_gen 模块骨架、类型映射、函数签名/体翻译、组件初始化
-  - v11.0 在字节码层（EExprToken → KismetExpression → C++）补充 Phase 58 无法覆盖的 60+ 种表达式类型
+**完成日期:** 2026-05-26
+**范围:** PAK-01 (PakEntry 解析) + PAK-02 (压缩分派) + PAK-03 (AES 加密)
+**交付物:**
+
+- `src/uasset_read/pak/` — FPakInfo/PakEntry/FPakDirectoryEntry 数据结构 + 序列化
+- `src/uasset_read/pak/reader.py` — PakFileReader（open/extract/get_entry/context manager）
+- `src/uasset_read/compression/dispatch.py` — Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级
+- `src/uasset_read/crypto/aes_ecb.py` — AES-ECB 解密 + CustomEncryption 委托
+- `src/uasset_read/pak/index.py` — Legacy flat index + v10+ PathHashIndex/DirectoryIndex 解析
+- `tests/test_pak_*.py` — 62 tests, 1 skipped
+
+**UAT:** 8/8 通过
+
+## 历史里程碑归档（v1.0-v13.0）
+
+| 版本 | 范围 | 日期 | 测试 | 归档 |
+|------|------|------|------|------|
+| v1.0–v6.0 | MVP → 模块化重构 | 04-28 ~ 05-13 | — | `.planning/archive/v1-v7-SUMMARY.md` |
+| v7.0 | UE FLinkerLoad 对象图重建 | 05-14 | — | `.planning/archive/v8.0/` |
+| v8.0 | BP→C++ JSON 可翻译性 (P47-51) | 05-17 | — | `.planning/archive/v8.0/` |
+| v9.0 | 函数调用链解析 (P52-55) | 05-17 | — | `.planning/archive/v9.0/` |
+| v10.0 | BP→C++ 代码生成参考 (P56-60) | 05-18 | 1021 | `.planning/milestones/v10.0-ROADMAP.md` |
+| v11.0 | Kismet 反编译器 + Agent 管线 (P61-66) | 05-20 | 1271 | `.planning/milestones/v11.0-ROADMAP.md` |
+| v12.0 | 序列化修复 + N2C + 节点分类 (P67-71) | 05-21~22 | 1435 | `.planning/milestones/v12.0-TEST-REPORT.md` |
+| v13.0 | Pin 修复 + Kismet 导航 (P72-75) | 05-23~26 | 1339 | `.planning/archive/v13.0-phases/` |
+
+**详细记录:** `.planning/MILESTONES.md` + `.planning/ROADMAP.md` 里程碑表
+
+---
+
+*Updated: 2026-05-26 (v14.0 active, v1.0-v13.0 archived)*

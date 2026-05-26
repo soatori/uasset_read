@@ -57,6 +57,7 @@ reports/
 # IDE 和工具配置
 .claude/*
 .qwen/*
+.agents/*
 
 # Debug/scratch scripts (not part part of test suite)
 tools/debug_*.py
@@ -73,3 +74,5 @@ temp/
 
 # Qwen Code project documentation (IMPORTANT: Do not commit to version control)
 QWEN.md
+
+references/*

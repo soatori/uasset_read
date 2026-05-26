@@ -5,11 +5,14 @@ Phase 48: 组件属性递归解析 (D-01, D-02, D-04)。
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.blueprint.transform_parser import extract_component_transforms
 from uasset_read.models.properties import PropertyValue, StructValue, EnumValue
+
+logger = logging.getLogger(__name__)
 
 _TRANSFORM_NAMES = {"RelativeLocation", "RelativeRotation", "RelativeScale3D"}
 
@@ -33,12 +36,18 @@ def extract_components(
         组件字典列表，每个包含 name/class/properties/transforms 键。
     """
     result: List[Dict[str, Any]] = []
+    skipped_no_props = 0
+    skipped_no_class = 0
     for export in export_map:
         if not export.properties:
+            skipped_no_props += 1
+            logger.debug("extract_components: skipping export %s — no properties parsed", export.object_name)
             continue
 
         class_name = resolve_class_name(export.class_index, import_map, export_map)
         if class_name is None or "Component" not in class_name:
+            if class_name and "Component" not in class_name:
+                skipped_no_class += 1
             continue
 
         transforms = extract_component_transforms(export.properties, export.object_name)
@@ -50,6 +59,11 @@ def extract_components(
             "properties": scalar_props,
             "transforms": transforms,
         })
+
+    logger.debug(
+        "extract_components: found %d components, skipped %d (no props) + %d (no Component class)",
+        len(result), skipped_no_props, skipped_no_class,
+    )
     return result
 
 

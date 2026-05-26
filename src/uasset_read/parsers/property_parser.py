@@ -77,7 +77,10 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         return None  # D-05: unknown type → None, no exception
 
     # Dispatch based on handler signature
-    if tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
+    # Special case: ByteProperty with enum backing needs name_map (reads FName)
+    if tag.type == "ByteProperty" and tag.enum_type is not None:
+        return handler(tag, archive, name_map)
+    elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
                      "Int8Property", "ByteProperty", "FloatProperty", "DoubleProperty",
                      "StrProperty", "ObjectProperty", "TextProperty"):
         return handler(tag, archive)

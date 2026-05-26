@@ -45,3 +45,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "integration: 需要外部样本资产或较慢路径的集成测试",
+]

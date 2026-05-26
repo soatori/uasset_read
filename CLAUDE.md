@@ -22,8 +22,9 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v9.0 已发布** — Phase 52✅ (函数图节点), Phase 53✅ (执行流追踪), Phase 54✅ (数据流追踪), Phase 55✅ (JSON function_graphs 输出)。554 tests collected。`__version__` 仍为 `6.0.0`（尚未 bump）。
+**v14.0 活跃** — CUE4Parse 核心对齐：Phase 74✅ 75✅ (v13.0 遗留)，Phase 77✅ (Pak parser + compression + AES, 62 tests)，Phase 76⬜ (FArchive + COR 修复，下一个)，Phase 78⬜ (UObject 继承树 + Linker 重构)，Phase 79⬜ (IoStore .utoc/.ucas)，Phase 80⬜ (Kismet 输出格式 PascalCase 对齐)。索引驱动模式，UE 源码为权威金标准。
 
+> v1.0-v13.0 历史已归档至 `.planning/archive/` 和 `.planning/milestones/`，详见 `.planning/MILESTONES.md`。
 ## 架构
 
 管道：`.uasset → FArchive → Deserializer → Models → OutputFormatter`
@@ -39,8 +40,12 @@ v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/Expor
 | 数据模型 | `models/` | UEdGraph/Node/Pin + 属性数据类 + Transform 值类 |
 | 解析器 | `parsers/` | 14 种属性类型 + 分派器 |
 | 蓝图 | `blueprint/` | 变量/组件变换/元数据提取 |
-| 图解析 | `graph/` | 执行流/数据流/连接映射/function_graphs |
+| 图解析 | `graph/` | 执行流/数据流/连接映射/链式表达（Phase 71） |
 | 链接器 | `link/` | PackageLinker / UObjectInstance（UE FLinkerLoad 模式） |
+| Kismet | `kismet/` | 字节码提取/反编译/C++翻译/BPGC fallback（Phase 61-64, 72-C） |
+| N2C | `n2c/` | N2CStruct/Graph/Node/Pin 中间格式 JSON Schema（Phase 70） |
+| Agent | `agent/` | AgentTranslationPipeline + CppFileWriter（Phase 66） |
+| CPP Gen | `cpp_gen/` | C++ 骨架提取/IR formatter（Phase 56-60） |
 | 格式化 | `formatters/` | JSON/Text/Markdown/Mermaid |
 | CLI | `cli.py` | argparse 入口 |
 | 管线 | `parse_uasset.py` | 主编排函数（含 `parse_uasset_with_linker`） |
@@ -52,6 +57,9 @@ v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/Expor
 ```
 src/uasset_read/  # 源码    tests/          # 测试
 .planning/        # 规划    temp/            # 缓存/临时生成文件
+docs/             # 用户文档（ARCHITECTURE/DEVELOPMENT/FRAMEWORK 等）
+docs/ref/         # 整合参考文档（蓝图→C++ 转换指南等）
+docs/reference/   # 独立参考资料（解析完整性/节点文本参考/UE 加载流程）
 uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽略）
 ```
 
@@ -75,8 +83,11 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 | 变换值类 | `VectorValue`, `RotatorValue`, `ScaleValue`, `format_transform_value` |
 | 属性 | `PropertyValue`, `Struct/Map/Set/Enum/Text/DelegateValue`, `parse_*` 系列 |
 | 蓝图 | `BlueprintMetadata/Variable/Function/Event`, `extract_blueprint_*`, `parse_component_transform` |
-| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map`, `build_function_graphs` |
+| 图解析 | `extract_blueprint_graphs`, `build_execution/data_flows`, `build_connections_map`, `build_execution_chains` |
 | 链接器 | `PackageLinker`, `UObjectInstance`, `LinkerParseResult`, `parse_uasset_with_linker` |
+| Kismet | `EExprToken`, `KismetExpression`, `KismetTranslator`, `to_function_body`, `decompile_uasset` |
+| N2C | `N2CStruct`, `N2CGraph`, `N2CNode`, `N2CPin`, `to_n2c_json`, `from_n2c_json` |
+| Agent | `AgentTranslationPipeline`, `translate_blueprint_to_cpp`, `CppFileWriter`, `write_cpp_class_files` |
 | 格式化 | `format_json/text/markdown/graphs_*`, `build_status/schema_info` |
 | CPF 标志 | `CPF_Edit`, `CPF_BlueprintVisible`, `CPF_InstancedReference`, `CPF_EditAnywhere` 等 |
 | 管线/CLI | `parse_uasset`, `parse_uasset_with_linker`, `python -m uasset_read` 或 `uasset-read` |
@@ -85,8 +96,16 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 - `.planning/ROADMAP.md` — 阶段路线图
 - `.planning/STATE.md` — 当前里程碑状态
-- `.planning/milestones/` — 已归档里程碑（v7.0-v9.0）
+- `.planning/milestones/` — 已归档里程碑（v7.0-v12.0）
 - `.planning/MILESTONES.md` — 历史里程碑
+
+## 工作区自动合并
+
+由 `2.11-dev` 分支创建的 worktree 完成任务后，**自动合并回 `2.11-dev`**，不再询问用户：
+1. 提交 worktree 中的改动
+2. push 到 remote
+3. 如有冲突，取 incoming 版本解决
+4. 清理 worktree 目录
 
 ## 上下文与效率
 

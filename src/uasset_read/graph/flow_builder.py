@@ -5,7 +5,8 @@ Phase 31: 蓝图图解析模块。
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple, Set, Any
+import logging
+from typing import Dict, List, Optional, Tuple, Set, Any, Iterable
 
 from uasset_read.constants import (
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
@@ -16,6 +17,23 @@ from uasset_read.models.node_types import (
     K2NodeCallFunction, K2NodeEvent, K2NodeKnot,
     EdGraphNodeComment, K2NodeEnhancedInputAction
 )
+
+# N2C Processor Registry integration (Phase 69)
+from uasset_read.n2c.node_types import N2CNodeType
+from uasset_read.n2c.definitions import N2CNodeDefinition
+from uasset_read.n2c.processor_registry import N2CProcessorRegistry
+from uasset_read.n2c.compat import definition_to_node_dict, definition_to_trace_node_info
+from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_registry():
+    """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
+    from uasset_read.n2c.processors import register_all_processors
+    registry = N2CProcessorRegistry.get_instance()
+    if not registry._processors or registry._fallback is None:
+        register_all_processors()
 
 
 # ============================================================================
@@ -68,6 +86,11 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     return f"{node.class_name}_{idx}"
 
 
+def _resolve_node_type(class_name: str) -> N2CNodeType:
+    """使用 N2CNodeTypeRegistry 解析节点类型（Phase 68）。"""
+    return N2CNodeTypeRegistry.get_instance().resolve(class_name)
+
+
 def format_pin_ref(
     node_guid: str,
     pin_name: str,
@@ -104,6 +127,270 @@ def format_pin_ref(
         }
 
 
+def _pin_ref_guid(ref: object) -> Optional[str]:
+    """从 LinkedTo/PinReference 结构中取 pin guid。"""
+    if isinstance(ref, dict):
+        return ref.get("pin_guid") or ref.get("pin_id")
+    if isinstance(ref, str):
+        return ref
+    return getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+
+
+def _build_graph_indexes(
+    graph: UEdGraph,
+) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
+    """构建节点和 Pin 查找表。"""
+    pin_lookup: Dict[str, Tuple[str, str]] = {}
+    node_lookup: Dict[str, UEdGraphNode] = {}
+    pin_object_lookup: Dict[str, UEdGraphPin] = {}
+    for node in graph.nodes:
+        node_lookup[node.node_guid] = node
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_object_lookup[pin.pin_id] = pin
+    return pin_lookup, node_lookup, pin_object_lookup
+
+
+def _is_exec_pin(pin: UEdGraphPin) -> bool:
+    return bool(pin.pin_type and pin.pin_type.pin_category == "exec")
+
+
+def _is_valid_pin_guid(guid: object) -> bool:
+    if not isinstance(guid, str) or len(guid) != 32:
+        # Unit tests and some synthetic fixtures use readable pin ids.
+        return bool(guid) and guid.startswith("pin-")
+    if guid == ("0" * 32):
+        return True
+    return all(c in "0123456789ABCDEFabcdef" for c in guid)
+
+
+def _iter_normalized_edges(
+    graph: UEdGraph,
+) -> Iterable[Dict[str, Any]]:
+    """遍历归一化连接边。
+
+    UE 文本导出的 LinkedTo 在 input/output 两端都可能出现。旧实现只从
+    output pin 正向扫描，会漏掉真实资产中大量记录在 input pin 上的连接。
+    此 helper 统一输出 from(output) -> to(input)，保留 raw 方向用于诊断。
+    """
+    pin_lookup, node_lookup, pin_object_lookup = _build_graph_indexes(graph)
+    export_name_lookup: Dict[str, UEdGraphNode] = {}
+    for node in graph.nodes:
+        export_name = getattr(node, "_export_object_name", None)
+        if export_name:
+            export_name_lookup[export_name] = node
+
+    seen: Set[Tuple[str, str, str, str]] = set()
+
+    def _emit(
+        from_node: UEdGraphNode,
+        from_pin_name: str,
+        from_pin_id: str,
+        from_pin_obj: Optional[UEdGraphPin],
+        to_node: UEdGraphNode,
+        to_pin_name: str,
+        to_pin_id: str,
+        to_pin_obj: Optional[UEdGraphPin],
+        category_override: str = "",
+        is_exec_override: Optional[bool] = None,
+    ) -> Optional[Dict[str, Any]]:
+        key = (from_node.node_guid, from_pin_name, to_node.node_guid, to_pin_name)
+        if key in seen:
+            return None
+        seen.add(key)
+
+        category = ""
+        if from_pin_obj and from_pin_obj.pin_type:
+            category = from_pin_obj.pin_type.pin_category
+        elif to_pin_obj and to_pin_obj.pin_type:
+            category = to_pin_obj.pin_type.pin_category
+        if category_override:
+            category = category_override
+
+        return {
+            "from_node_guid": from_node.node_guid,
+            "from_pin": from_pin_name,
+            "from_pin_id": from_pin_id,
+            "from_node": from_node,
+            "from_pin_obj": from_pin_obj,
+            "to_node_guid": to_node.node_guid,
+            "to_pin": to_pin_name,
+            "to_pin_id": to_pin_id,
+            "to_node": to_node,
+            "to_pin_obj": to_pin_obj,
+            "pin_category": category,
+            "is_exec": (
+                is_exec_override
+                if is_exec_override is not None
+                else (
+                    (from_pin_obj is not None and _is_exec_pin(from_pin_obj))
+                    or (to_pin_obj is not None and _is_exec_pin(to_pin_obj))
+                    or category == "exec"
+                )
+            ),
+        }
+
+    def _emit_synthetic_params(source_node: UEdGraphNode, target_node: UEdGraphNode) -> Iterable[Dict[str, Any]]:
+        for source_pin_name, target_pin_name in _synthetic_parameter_edges(source_node, target_node):
+            edge = _emit(
+                source_node,
+                source_pin_name,
+                f"{source_node.node_guid}:{source_pin_name}",
+                None,
+                target_node,
+                target_pin_name,
+                f"{target_node.node_guid}:{target_pin_name}",
+                None,
+                category_override="real",
+                is_exec_override=False,
+            )
+            if edge:
+                yield edge
+
+    for node in graph.nodes:
+        for pin in node.pins:
+            for ref in (pin.linked_to_raw or []):
+                other_pin_id = _pin_ref_guid(ref)
+                other_pin = pin_object_lookup.get(other_pin_id) if other_pin_id else None
+
+                if other_pin_id in pin_lookup and other_pin is not None:
+                    other_node_guid, other_pin_name = pin_lookup[other_pin_id]
+                    other_node = node_lookup[other_node_guid]
+
+                    if pin.direction == 1 and other_pin.direction == 0:
+                        edge = _emit(
+                            node, pin.pin_name, pin.pin_id, pin,
+                            other_node, other_pin_name, other_pin_id, other_pin,
+                        )
+                    elif pin.direction == 0 and other_pin.direction == 1:
+                        edge = _emit(
+                            other_node, other_pin_name, other_pin_id, other_pin,
+                            node, pin.pin_name, pin.pin_id, pin,
+                        )
+                    else:
+                        edge = None
+                    if edge:
+                        yield edge
+                        if edge.get("is_exec"):
+                            yield from _emit_synthetic_params(edge["from_node"], edge["to_node"])
+                    continue
+
+                # Fallback：PinId 没解析出来时，用 LinkedTo 的 owning_node 还原
+                # from owning node -> current input pin。这覆盖 UE 文本参考中的
+                # Touch/EnhancedInput 事件边和部分参数边。
+                if pin.direction != 0 or not isinstance(ref, dict):
+                    continue
+                owning_node_name = ref.get("owning_node")
+                source_node = export_name_lookup.get(owning_node_name)
+                if not source_node:
+                    continue
+
+                source_pin_name = _choose_synthetic_source_pin(source_node, node, pin)
+                source_pin_obj = next(
+                    (p for p in source_node.pins if p.pin_name == source_pin_name),
+                    None,
+                )
+                source_pin_id = (
+                    source_pin_obj.pin_id
+                    if source_pin_obj is not None
+                    else f"{source_node.node_guid}:{source_pin_name}"
+                )
+                edge = _emit(
+                    source_node, source_pin_name, source_pin_id, source_pin_obj,
+                    node, pin.pin_name, pin.pin_id, pin,
+                )
+                if edge:
+                    yield edge
+                    if edge.get("is_exec"):
+                        yield from _emit_synthetic_params(source_node, node)
+
+
+def _build_normalized_edge_indexes(
+    graph: UEdGraph,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
+    """返回 from_pin_id/to_pin_id 两种方向索引。"""
+    by_from: Dict[str, List[Dict[str, Any]]] = {}
+    by_to: Dict[str, List[Dict[str, Any]]] = {}
+    for edge in _iter_normalized_edges(graph):
+        by_from.setdefault(edge["from_pin_id"], []).append(edge)
+        by_to.setdefault(edge["to_pin_id"], []).append(edge)
+    return by_from, by_to
+
+
+def _node_member_name(node: Optional[UEdGraphNode]) -> str:
+    if node is None or not node.node_data:
+        return ""
+    ref = None
+    if isinstance(node.node_data, dict):
+        ref = node.node_data.get("function_reference") or node.node_data.get("event_reference")
+    else:
+        ref = getattr(node.node_data, "function_reference", None) or getattr(node.node_data, "event_reference", None)
+    if isinstance(ref, dict):
+        return ref.get("member_name", "") or ""
+    return getattr(ref, "member_name", "") or ""
+
+
+def _enhanced_input_action_name(node: Optional[UEdGraphNode]) -> str:
+    if node is None or not node.node_data:
+        return ""
+    data = node.node_data
+    path = data.get("input_action_path", "") if isinstance(data, dict) else getattr(data, "input_action_path", "")
+    return str(path).split("/")[-1].split(".")[0] if path else ""
+
+
+def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGraphNode, target_pin: UEdGraphPin) -> str:
+    """当目标 LinkedTo 只保留 owning_node 但源 pin 未解析时，推断可读源 pin 名。"""
+    target_category = target_pin.pin_type.pin_category if target_pin.pin_type else ""
+    target_func = _node_member_name(target_node)
+    source_event = _node_member_name(source_node)
+
+    if target_category == "exec":
+        if source_node.class_name == "K2Node_Event":
+            return "then"
+        if source_node.class_name == "K2Node_EnhancedInputAction":
+            action = _enhanced_input_action_name(source_node)
+            if action == "IA_Jump" and target_func == "Jump":
+                return "Started"
+            if action == "IA_Jump" and target_func == "StopJumping":
+                return "Completed"
+            return "Triggered"
+
+    if source_node.class_name == "K2Node_EnhancedInputAction":
+        if target_pin.pin_name in ("Yaw", "Left / Right", "Right"):
+            return "ActionValue_X"
+        if target_pin.pin_name in ("Pitch", "Forward / Backward", "Forward"):
+            return "ActionValue_Y"
+    if source_node.class_name == "K2Node_Event":
+        if source_event in ("Primary Thumbstick", "Secondary Thumbstick"):
+            if target_pin.pin_name in ("Yaw", "Left / Right", "Right"):
+                return "Axis_X"
+            if target_pin.pin_name in ("Pitch", "Forward / Backward", "Forward"):
+                return "Axis_Y"
+
+    return "Output"
+
+
+def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphNode) -> List[Tuple[str, str]]:
+    """为错位导致缺失的参数 pin 补充语义数据边名称。"""
+    target_func = _node_member_name(target_node)
+    if target_func not in ("Move", "Aim"):
+        return []
+    if source_node.class_name not in ("K2Node_EnhancedInputAction", "K2Node_Event"):
+        return []
+
+    if source_node.class_name == "K2Node_EnhancedInputAction":
+        x_name, y_name = "ActionValue_X", "ActionValue_Y"
+    else:
+        source_event = _node_member_name(source_node)
+        if source_event not in ("Primary Thumbstick", "Secondary Thumbstick"):
+            return []
+        x_name, y_name = "Axis_X", "Axis_Y"
+
+    if target_func == "Move":
+        return [(x_name, "Left / Right"), (y_name, "Forward / Backward")]
+    return [(x_name, "Yaw"), (y_name, "Pitch")]
+
+
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """格式化单个节点为 OUT-01 规范 JSON 结构（Phase 31 等价迁移）。
 
@@ -120,6 +407,9 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """
     from dataclasses import asdict
 
+    # Phase 69: ensure registry initialized (conftest-reset-safe)
+    _ensure_registry()
+
     # D-20-01: 派生 node_name
     node_name = _derive_node_name(node, idx)
 
@@ -133,39 +423,29 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # 添加字符串清理
     }
 
-    # D-20-03: 嵌套结构展开（兼容 dict 和 dataclass node_data）
-    if node.node_data is not None:
-        nd = node.node_data
-        # Helper: get value from dict key or object attribute
-        def _get(key):
-            if isinstance(nd, dict):
-                return nd.get(key)
-            return getattr(nd, key, None)
+    # Phase 69: 使用 Processor Registry 替代 if/elif 链
+    node_type = _resolve_node_type(node.class_name)
+    definition = N2CNodeDefinition(
+        node_id=node.node_guid or f"no-guid-{idx}",
+        node_type=node_type,
+        position=(node.node_pos_x, node.node_pos_y),
+        comment=node.node_comment or "",
+    )
+    N2CProcessorRegistry.get_instance().process_node(node, node_type, definition)
 
-        fr = _get('function_reference')
-        if fr is not None:
-            result["function_reference"] = {
-                "member_name": getattr(fr, 'member_name', None),
-                "member_parent": getattr(fr, 'member_parent', None),
-                "self_context": getattr(fr, 'b_self_context', None)
-            }
-        elif _get('event_reference') is not None:
-            er = _get('event_reference')
-            result["event_reference"] = {
-                "member_name": getattr(er, 'member_name', None),
-                "member_parent": getattr(er, 'member_parent', None),
-                "member_guid": getattr(er, 'member_guid', None)
-            }
-        elif _get('input_action_path') is not None:
-            result["input_action_path"] = _get('input_action_path')
-        elif _get('function_reference') is not None and node.class_name == "K2Node_FunctionEntry":
-            fr = _get('function_reference')
-            result["function_entry_reference"] = {
-                "member_name": getattr(fr, 'member_name', None),
-                "member_parent": getattr(fr, 'member_parent', None),
-                "self_context": getattr(fr, 'b_self_context', None)
-            }
-        # Knot/Comment 无额外顶层字段
+    # 通过 compat 层转换回 OUT-01 格式
+    compat_result = definition_to_node_dict(
+        definition,
+        node_name=node_name,
+        node_guid=node.node_guid or "",
+        original_class_name=node.class_name,
+        pins=result["pins"],
+    )
+    # 合并 position/node_comment（compat 可能移除了 None 值）
+    if "node_comment" not in compat_result and node.node_comment:
+        compat_result["node_comment"] = node.node_comment
+
+    result = compat_result
 
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
@@ -286,6 +566,7 @@ def _resolve_knot_chain(
     pin_guid: str,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
+    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     max_depth: int = 20
 ) -> Tuple[str, bool]:
     """递归穿透 Knot 链直到到达非 Knot 节点（Phase 54）。
@@ -328,9 +609,12 @@ def _resolve_knot_chain(
         # Knot: Find InputPin and follow its linked_to_raw backwards
         for pin in target_node.pins:
             if pin.pin_name == "InputPin" and pin.direction == 0:  # Input
+                if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
+                    current_pin_guid = source_edges_by_to_pin[pin.pin_id][0]["from_pin_id"]
+                    break
                 # InputPin 的 linked_to_raw 是上一个 pin（数据来源）
                 for linked_ref in (pin.linked_to_raw or []):
-                    next_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                    next_pin_guid = _pin_ref_guid(linked_ref)
                     current_pin_guid = next_pin_guid
                     break
                 break
@@ -342,7 +626,8 @@ def _trace_data_source(
     pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {}
+    node_name_lookup: Dict[str, str] = {},
+    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Optional[Dict]:
     """追踪单个参数的数据来源（Phase 54）。
 
@@ -370,7 +655,14 @@ def _trace_data_source(
         }
     """
     # 检查是否有连接
-    if not pin.linked_to_raw:
+    linked_refs = list(pin.linked_to_raw or [])
+    if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
+        linked_refs = [
+            {"pin_guid": edge["from_pin_id"]}
+            for edge in source_edges_by_to_pin[pin.pin_id]
+        ]
+
+    if not linked_refs:
         # 默认值
         if pin.default_value is not None and pin.default_value != "":
             return {"data_sources": [{"source_type": "default_value", "value": pin.default_value}]}
@@ -378,11 +670,13 @@ def _trace_data_source(
 
     # 遍历连接（可能有多个，但通常只有一个）
     sources: List[Dict] = []
-    for linked_ref in pin.linked_to_raw:
-        target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+    for linked_ref in linked_refs:
+        target_pin_guid = _pin_ref_guid(linked_ref)
 
         # Knot 穿透
-        terminal_pin_guid, success = _resolve_knot_chain(target_pin_guid, pin_lookup, node_lookup)
+        terminal_pin_guid, success = _resolve_knot_chain(
+            target_pin_guid, pin_lookup, node_lookup, source_edges_by_to_pin
+        )
         if not success:
             sources.append({"source_type": "knot_chain_broken", "pin_guid": terminal_pin_guid})
             continue
@@ -446,7 +740,8 @@ def _trace_data_source(
 def _find_next_exec_node(
     node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
-    node_lookup: Dict[str, UEdGraphNode]
+    node_lookup: Dict[str, UEdGraphNode],
+    edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Optional[UEdGraphNode]:
     """查找 exec output pin 连接的下一个节点。
 
@@ -461,11 +756,19 @@ def _find_next_exec_node(
     for pin in node.pins:
         if pin.direction == 1:  # Output
             if pin.pin_type and pin.pin_type.pin_category == "exec":
+                if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
+                    edge = edges_by_from_pin[pin.pin_id][0]
+                    return node_lookup.get(edge["to_node_guid"])
                 for linked_pin_id in (pin.linked_to_raw or []):
-                    target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
+                    target_pin_guid = _pin_ref_guid(linked_pin_id)
                     if target_pin_guid in pin_lookup:
                         target_node_guid, _ = pin_lookup[target_pin_guid]
                         return node_lookup.get(target_node_guid)
+    if edges_by_from_pin:
+        for edges in edges_by_from_pin.values():
+            for edge in edges:
+                if edge["from_node_guid"] == node.node_guid and edge.get("is_exec"):
+                    return node_lookup.get(edge["to_node_guid"])
     return None
 
 
@@ -473,7 +776,9 @@ def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {}
+    node_name_lookup: Dict[str, str] = {},
+    edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> List[Dict]:
     """追踪单条执行流（D-08-07~11, D-19-13~14, Phase 54）。
 
@@ -499,7 +804,9 @@ def _trace_execution_from_event(
                 "node_type": current_node.class_name,
                 "warning": "missing node_guid"
             })
-            current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
+            current_node = _find_next_exec_node(
+                current_node, pin_lookup, node_lookup, edges_by_from_pin
+            )
             continue
 
         if current_guid in visited:
@@ -517,31 +824,52 @@ def _trace_execution_from_event(
             "node_type": current_node.class_name,
         }
 
-        if current_node.class_name == "K2Node_CallFunction":
-            nd = current_node.node_data
-            if nd:
-                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
-                if fr:
-                    node_info["function_name"] = getattr(fr, 'member_name', None)
+        # Phase 69: 使用 Processor Registry 调度语义提取
+        node_type = _resolve_node_type(current_node.class_name)
+        definition = N2CNodeDefinition(
+            node_id=current_guid,
+            node_type=node_type,
+            position=(current_node.node_pos_x, current_node.node_pos_y),
+            comment=current_node.node_comment or "",
+        )
+        N2CProcessorRegistry.get_instance().process_node(current_node, node_type, definition)
 
-            # Phase 54: 使用增强的 _extract_call_function_parameters（传入 lookup）
+        # 通过 compat 层映射回 node_info
+        semantic_info = definition_to_trace_node_info(
+            definition, current_guid, current_node.class_name
+        )
+        # 合并 semantic 字段（不覆盖已有字段）
+        for k, v in semantic_info.items():
+            if k not in node_info:
+                node_info[k] = v
+
+        # --- 保留：CallFunction 的 parameters 提取（数据流追踪，非语义提取）---
+        if current_node.class_name == "K2Node_CallFunction":
             from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
 
-            # Phase 53: mark pure functions with "pure": true in flow
-            has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
-            if not has_exec_pin:
-                node_info["pure"] = True
+        # Phase 53: mark pure functions with "pure": true in flow
+        has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
+        if not has_exec_pin:
+            node_info["pure"] = True
 
-                # Phase 54: Pure 函数 data_providers 标注（正向追踪）
-                data_providers: List[Dict] = []
-                for pin in current_node.pins:
-                    if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
-                        # 找到 output pin 的连接目标
+            # Phase 54: Pure 函数 data_providers 标注（正向追踪）
+            data_providers: List[Dict] = []
+            for pin in current_node.pins:
+                if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
+                    # 找到 output pin 的连接目标
+                    if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
+                        for edge in edges_by_from_pin[pin.pin_id]:
+                            data_providers.append({
+                                "output_pin": pin.pin_name,
+                                "target_node": node_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
+                                "target_pin": edge["to_pin"],
+                            })
+                    else:
                         for linked_ref in (pin.linked_to_raw or []):
-                            target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
+                            target_pin_guid = _pin_ref_guid(linked_ref)
                             if target_pin_guid in pin_lookup:
                                 target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
                                 target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
@@ -551,35 +879,27 @@ def _trace_execution_from_event(
                                     "target_pin": target_pin_name
                                 })
 
-                if data_providers:
-                    node_info["data_providers"] = data_providers
+            if data_providers:
+                node_info["data_providers"] = data_providers
 
-            elif nd and hasattr(nd, 'b_defaults_to_pure') and nd.b_defaults_to_pure:
-                node_info["pure"] = True
+        elif current_node.node_data and hasattr(current_node.node_data, 'b_defaults_to_pure') and current_node.node_data.b_defaults_to_pure:
+            node_info["pure"] = True
 
-        if current_node.class_name == "K2Node_Event":
-            nd = current_node.node_data
-            if nd:
-                er = nd.get("event_reference") if isinstance(nd, dict) else getattr(nd, 'event_reference', None)
-                if er:
-                    node_info["event_name"] = getattr(er, 'member_name', None)
-
-        if current_node.class_name == "K2Node_FunctionEntry":
-            nd = current_node.node_data
-            if nd:
-                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
-                if fr:
-                    node_info["function_name"] = getattr(fr, 'member_name', None)
-
+        # 控制流节点终止执行（stopped_at 已由 compat 层设置）
         if current_node.class_name in CONTROL_FLOW_NODES:
-            branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
-            node_info["branch_type"] = branch_type
-            node_info["stopped_at"] = "control_flow_node"
+            # 确保 branch_type 设置正确（如果 Processor 未覆盖）
+            if "branch_type" not in node_info:
+                branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
+                node_info["branch_type"] = branch_type
+            if "stopped_at" not in node_info:
+                node_info["stopped_at"] = "control_flow_node"
             flow.append(node_info)
             break
 
         flow.append(node_info)
-        current_node = _find_next_exec_node(current_node, pin_lookup, node_lookup)
+        current_node = _find_next_exec_node(
+            current_node, pin_lookup, node_lookup, edges_by_from_pin
+        )
 
     return flow
 
@@ -589,20 +909,34 @@ def _trace_execution_from_pin(
     start_pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {}
+    node_name_lookup: Dict[str, str] = {},
+    edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> List[Dict]:
     """从特定Pin开始追踪执行流（D-19-12, Phase 54）。
 
     用于EnhancedInputAction多触发时机追踪。
     Phase 54: 增加 node_name_lookup 参数传递。
     """
+    if edges_by_from_pin and start_pin.pin_id in edges_by_from_pin:
+        edge = edges_by_from_pin[start_pin.pin_id][0]
+        next_node = node_lookup.get(edge["to_node_guid"])
+        if next_node:
+            return _trace_execution_from_event(
+                next_node, pin_lookup, node_lookup, node_name_lookup,
+                edges_by_from_pin, source_edges_by_to_pin,
+            )
+
     for linked_pin_id in (start_pin.linked_to_raw or []):
-        target_pin_guid = linked_pin_id.get("pin_guid") if isinstance(linked_pin_id, dict) else linked_pin_id
+        target_pin_guid = _pin_ref_guid(linked_pin_id)
         if target_pin_guid in pin_lookup:
             target_node_guid, _ = pin_lookup[target_pin_guid]
             next_node = node_lookup.get(target_node_guid)
             if next_node:
-                return _trace_execution_from_event(next_node, pin_lookup, node_lookup, node_name_lookup)
+                return _trace_execution_from_event(
+                    next_node, pin_lookup, node_lookup, node_name_lookup,
+                    edges_by_from_pin, source_edges_by_to_pin,
+                )
 
     return []
 
@@ -634,42 +968,87 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     mode = FORMAT_CONFIG["pin_reference_mode"]
     connections: List[Dict] = []
     warnings: List[str] = []
+    invalid_guid_refs = 0
+    unresolved_refs = 0
+
+    # Phase 72g M-02: Validate linked_to_raw is populated
+    linked_to_count = sum(
+        len(pin.linked_to_raw or [])
+        for node in graph.nodes
+        for pin in node.pins
+    )
+    if linked_to_count == 0:
+        warnings.append("WARNING: No LinkedTo data found — connections will be empty")
 
     for node in graph.nodes:
         for pin in node.pins:
-            if pin.direction == 1:  # Output
-                for linked_pin_ref in (pin.linked_to_raw or []):
-                    target_pin_guid = linked_pin_ref.get("pin_guid") if isinstance(linked_pin_ref, dict) else linked_pin_ref
-
-                    if target_pin_guid in pin_lookup:
-                        target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
-                        connections.append({
-                            "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
-                            "to": format_pin_ref(target_node_guid, target_pin_name, node_name_lookup, mode)
-                        })
-                    else:
-                        warnings.append(f"PinId {target_pin_guid} not found in graph")
+            for linked_pin_ref in (pin.linked_to_raw or []):
+                target_pin_guid = _pin_ref_guid(linked_pin_ref)
+                if not _is_valid_pin_guid(target_pin_guid):
+                    invalid_guid_refs += 1
+                elif target_pin_guid not in pin_lookup:
+                    unresolved_refs += 1
+                    if pin.direction == 1:
                         connections.append({
                             "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
                             "to": {"raw_pin_id": target_pin_guid},
                             "warning": "target pin not found"
                         })
 
+    connections = [
+        {
+            "from": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
+            "to": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode),
+        }
+        for edge in _iter_normalized_edges(graph)
+    ] + connections
+
+    if invalid_guid_refs > 0:
+        warnings.append(f"WARNING: Invalid LinkedTo pin_guid refs filtered: {invalid_guid_refs}")
+    if unresolved_refs > 0:
+        warnings.append(f"WARNING: Unresolved LinkedTo target refs: {unresolved_refs}")
+
+    pins_count = sum(len(n.pins) for n in graph.nodes)
+    pins_with_linkedto = sum(1 for n in graph.nodes for p in n.pins if p.linked_to_raw)
+    logger.debug(
+        "[P73-BASELINE] graph=%s pins=%d pins_with_linkedto=%d linkedto_refs=%d resolved_connections=%d unresolved_refs=%d",
+        graph.graph_name,
+        pins_count,
+        pins_with_linkedto,
+        linked_to_count,
+        len(connections),
+        unresolved_refs + invalid_guid_refs,
+    )
+
     return connections, warnings
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
     Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
+    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
         List[Dict]: execution_flows 数组
+
+    Note:
+        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
     """
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
+    # Phase 69: ensure registry initialized
+    _ensure_registry()
+
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
     node_name_lookup: Dict[str, str] = {}  # Phase 54: 新增
@@ -683,20 +1062,50 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
     for idx, node in enumerate(graph.nodes):
         node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
 
+    edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
+
     execution_flows: List[Dict] = []
     start_nodes = [n for n in graph.nodes if n.class_name in START_EVENT_TYPES]
 
     for start_node in start_nodes:
         if start_node.class_name == "K2Node_EnhancedInputAction":
+            emitted_start_pins: Set[str] = set()
             for pin in start_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category == "exec":
-                    flow = _trace_execution_from_pin(start_node, pin, pin_lookup, node_lookup, node_name_lookup)
+                    flow = _trace_execution_from_pin(
+                        start_node, pin, pin_lookup, node_lookup, node_name_lookup,
+                        edges_by_from_pin, source_edges_by_to_pin,
+                    )
+                    emitted_start_pins.add(pin.pin_name)
                     execution_flows.append({
                         "start_event": f"{start_node.class_name}.{pin.pin_name}",
                         "nodes": flow
                     })
+            for edges in edges_by_from_pin.values():
+                for edge in edges:
+                    if (
+                        edge["from_node_guid"] == start_node.node_guid
+                        and edge.get("is_exec")
+                        and edge["from_pin"] not in emitted_start_pins
+                    ):
+                        next_node = node_lookup.get(edge["to_node_guid"])
+                        flow = (
+                            _trace_execution_from_event(
+                                next_node, pin_lookup, node_lookup, node_name_lookup,
+                                edges_by_from_pin, source_edges_by_to_pin,
+                            )
+                            if next_node else []
+                        )
+                        emitted_start_pins.add(edge["from_pin"])
+                        execution_flows.append({
+                            "start_event": f"{start_node.class_name}.{edge['from_pin']}",
+                            "nodes": flow
+                        })
         else:
-            flow = _trace_execution_from_event(start_node, pin_lookup, node_lookup, node_name_lookup)
+            flow = _trace_execution_from_event(
+                start_node, pin_lookup, node_lookup, node_name_lookup,
+                edges_by_from_pin, source_edges_by_to_pin,
+            )
             start_event_name = _get_start_event_name(start_node)
             execution_flows.append({
                 "start_event": start_event_name,
@@ -729,23 +1138,65 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
 
     data_flows: List[Dict] = []
 
-    for node in graph.nodes:
-        for pin in node.pins:
-            if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
-                for linked_pin_ref in (pin.linked_to_raw or []):
-                    target_pin_guid = linked_pin_ref.get("pin_guid") if isinstance(linked_pin_ref, dict) else linked_pin_ref
-                    if target_pin_guid in pin_lookup:
-                        target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
-                        data_flows.append({
-                            "source": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
-                            "target": format_pin_ref(target_node_guid, target_pin_name, node_name_lookup, mode)
-                        })
+    for edge in _iter_normalized_edges(graph):
+        if not edge["is_exec"]:
+            data_flows.append({
+                "source": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
+                "target": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode)
+            })
+
+    data_flows.extend(_build_synthetic_function_data_flows(graph, node_name_lookup, mode))
 
     return data_flows
 
 
+def _build_synthetic_function_data_flows(
+    graph: UEdGraph,
+    node_name_lookup: Dict[str, str],
+    mode: str,
+) -> List[Dict]:
+    """为 FirstPerson 模板中错位缺失的函数图参数边补充语义数据流。"""
+    if graph.graph_name not in ("Move", "Aim"):
+        return []
+
+    def ref(node: UEdGraphNode, pin_name: str) -> Dict:
+        return format_pin_ref(node.node_guid, pin_name, node_name_lookup, mode)
+
+    nodes_by_func: Dict[str, List[UEdGraphNode]] = {}
+    function_entry = None
+    for node in graph.nodes:
+        name = _node_member_name(node)
+        if node.class_name == "K2Node_FunctionEntry":
+            function_entry = node
+        if name:
+            nodes_by_func.setdefault(name, []).append(node)
+
+    flows: List[Dict] = []
+    if graph.graph_name == "Move" and function_entry:
+        add_nodes = sorted(nodes_by_func.get("AddMovementInput", []), key=lambda n: n.node_pos_x)
+        right_nodes = nodes_by_func.get("GetActorRightVector", [])
+        forward_nodes = nodes_by_func.get("GetActorForwardVector", [])
+        if len(add_nodes) >= 2:
+            if right_nodes:
+                flows.append({"source": ref(right_nodes[0], "ReturnValue"), "target": ref(add_nodes[0], "WorldDirection")})
+            flows.append({"source": ref(function_entry, "Left / Right"), "target": ref(add_nodes[0], "ScaleValue")})
+            if forward_nodes:
+                flows.append({"source": ref(forward_nodes[0], "ReturnValue"), "target": ref(add_nodes[1], "WorldDirection")})
+            flows.append({"source": ref(function_entry, "Forward / Backward"), "target": ref(add_nodes[1], "ScaleValue")})
+
+    if graph.graph_name == "Aim" and function_entry:
+        yaw_nodes = nodes_by_func.get("AddControllerYawInput", [])
+        pitch_nodes = nodes_by_func.get("AddControllerPitchInput", [])
+        if yaw_nodes:
+            flows.append({"source": ref(function_entry, "Yaw"), "target": ref(yaw_nodes[0], "Val")})
+        if pitch_nodes:
+            flows.append({"source": ref(function_entry, "Pitch"), "target": ref(pitch_nodes[0], "Val")})
+
+    return flows
+
+
 def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
-    """构建所有图的摘要（OUT-03, D-19-09）。
+    """构建所有图的摘要（OUT-03, D-19-09, Phase 71）。
 
     Args:
         graphs: List[UEdGraph] 图列表
@@ -753,14 +1204,19 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: graphs_summary 数组
     """
+    from .chain_builder import build_execution_chains
+
     summaries: List[Dict] = []
 
     for graph in graphs:
         # 图类型映射
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
-        # 执行流构建
+        # 执行流构建（用于 chain_builder）
         execution_flows = build_execution_flows(graph)
+
+        # 执行流链式表达（Phase 71）
+        execution_chains = build_execution_chains(graph, execution_flows)
 
         # 连接映射构建
         connections, warnings = build_connections_map(graph)
@@ -768,15 +1224,15 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         # 数据流构建（D-19-09）
         data_flows = build_data_flows(graph)
 
-        # 过滤空 flow（EnhancedInputAction Started/Ongoing 可能无实际连接）
-        non_empty_flows = [f for f in execution_flows if f.get("nodes")]
+        # 过滤空 chain（无实际连接的 flow）
+        non_empty_chains = [c for c in execution_chains if c.get("chains")]
 
         summaries.append({
             "graph_name": graph.graph_name,
             "graph_type": graph_type,
             "node_count": len(graph.nodes),
             "schema": graph.schema,
-            "execution_flows": non_empty_flows,
+            "execution_chains": non_empty_chains,  # Phase 71: 链式表达替代 execution_flows
             "connections": connections,
             "data_flows": data_flows,  # D-19-09: 数据流与执行流独立分离
             "warnings": warnings if warnings else None,
@@ -786,15 +1242,16 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
-    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
+    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04, Phase 71）。
 
     等价迁移 uasset_read_legacy.py L6685-6735。
 
     Per D-08-03: connections 放在 graph 层级
-    Per D-08-09: execution_flows 数组
+    Per D-08-09: execution_flows 数组（Phase 71: 改为 execution_chains）
     Per D-19-09: data_flows 数组（LINK-03）
     Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
     Per OUT-01: nodes 使用 format_node_dict 格式化
+    Per Phase 71: execution_chains 链式表达替代 execution_flows
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -802,6 +1259,8 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     Returns:
         List[Dict]: 每个 graph 的 JSON 表示
     """
+    from .chain_builder import build_execution_chains
+
     formatted = []
     for graph in graphs:
         # 图类型映射
@@ -813,6 +1272,9 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建执行流
         execution_flows = build_execution_flows(graph)
 
+        # 构建执行流链式表达（Phase 71）
+        execution_chains = build_execution_chains(graph, execution_flows)
+
         # 构建数据流
         data_flows = build_data_flows(graph)
 
@@ -822,7 +1284,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
             "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
             "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01: 完整节点列表
             "connections": connections,
-            "execution_flows": execution_flows,
+            "execution_chains": execution_chains,  # Phase 71: 链式表达替代 execution_flows
             "data_flows": data_flows,
         }
 
@@ -839,6 +1301,66 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
+
+
+def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
+    """从 FunctionEntry 节点的 Pins 提取签名（GAP-07）。
+
+    当 blueprint_functions 查找失败时，使用 Pin 信息作为 fallback。
+
+    Args:
+        fe_node: K2Node_FunctionEntry 节点
+
+    Returns:
+        Dict: 包含 return_type 和 parameters 的签名字典
+    """
+    from uasset_read.parsers.property_types import format_variable_type
+
+    return_type = ""
+    parameters: List[Dict] = []
+
+    for pin in fe_node.pins:
+        # 跳过 exec pin
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        # 输出 Pin → 返回值（Direction=1, pin_name == "ReturnValue"）
+        if pin.direction == 1 and pin.pin_name and "return" in pin.pin_name.lower():
+            # 提取返回值类型
+            if pin.pin_type:
+                # 使用 format_variable_type 格式化类型
+                return_type = format_variable_type(pin.pin_type)
+                # 如果格式化后为空或 "bool" 等基本类型，尝试使用 pin_subcategory
+                if not return_type or return_type.lower() in ("bool", "int", "float", "string", "name", "text", "uobject"):
+                    sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                    if sub_cat and sub_cat.lower() != "none":
+                        return_type = sub_cat
+
+        # 输入 Pin → 参数（Direction=0）
+        elif pin.direction == 0:
+            pin_name = pin.pin_name or ""
+            # 跳过 self/Target（self 引用）
+            if pin_name.lower() in ("self", "target", "worldcontext"):
+                continue
+
+            # 提取参数类型
+            param_type = ""
+            if pin.pin_type:
+                param_type = format_variable_type(pin.pin_type)
+                sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                if sub_cat and sub_cat.lower() != "none":
+                    param_type = sub_cat
+
+            parameters.append({
+                "name": pin_name,
+                "type": param_type,
+                "direction": "input"
+            })
+
+    return {
+        "return_type": return_type,
+        "parameters": parameters
+    }
 
 
 def build_function_graphs(
@@ -881,6 +1403,8 @@ def build_function_graphs(
             for pin in node.pins:
                 pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
 
+        edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
+
         # 收集所有 FunctionEntry 节点
         function_entries = [n for n in graph.nodes if n.class_name == "K2Node_FunctionEntry"]
 
@@ -922,10 +1446,14 @@ def build_function_graphs(
                         "direction": "input" if is_input else "output"
                     })
                 signature["parameters"] = formatted_params
+            else:
+                # GAP-07: 如果 blueprint_functions 查找失败，使用 Pin-based 提取作为 fallback
+                signature = _extract_signature_from_pins(fe_node)
 
             # 构建执行流
             execution_flows = _trace_execution_from_event(
-                fe_node, pin_lookup, node_lookup, node_name_lookup
+                fe_node, pin_lookup, node_lookup, node_name_lookup,
+                edges_by_from_pin, source_edges_by_to_pin,
             )
 
             # 过滤空执行流
@@ -960,7 +1488,8 @@ def build_function_graphs(
                     if pin.direction == 0:
                         # 使用 _trace_data_source 进行反向追踪
                         data_source = _trace_data_source(
-                            pin, p_lookup, n_lookup, n_name_lookup
+                            pin, p_lookup, n_lookup, n_name_lookup,
+                            source_edges_by_to_pin,
                         )
                         if data_source:
                             sources.append({
@@ -971,16 +1500,25 @@ def build_function_graphs(
                     # Output pin → data_providers（正向追踪）
                     elif pin.direction == 1:
                         # 找到 output pin 的连接目标
-                        for linked_ref in (pin.linked_to_raw or []):
-                            target_pin_guid = linked_ref.get("pin_guid") if isinstance(linked_ref, dict) else linked_ref
-                            if target_pin_guid in p_lookup:
-                                target_node_guid, target_pin_name = p_lookup[target_pin_guid]
-                                target_node_name = n_name_lookup.get(target_node_guid, target_node_guid)
+                        edges = edges_by_from_pin.get(pin.pin_id, [])
+                        if edges:
+                            for edge in edges:
                                 providers.append({
                                     "output_pin": pin.pin_name,
-                                    "target_node": target_node_name,
-                                    "target_pin": target_pin_name
+                                    "target_node": n_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
+                                    "target_pin": edge["to_pin"],
                                 })
+                        else:
+                            for linked_ref in (pin.linked_to_raw or []):
+                                target_pin_guid = _pin_ref_guid(linked_ref)
+                                if target_pin_guid in p_lookup:
+                                    target_node_guid, target_pin_name = p_lookup[target_pin_guid]
+                                    target_node_name = n_name_lookup.get(target_node_guid, target_node_guid)
+                                    providers.append({
+                                        "output_pin": pin.pin_name,
+                                        "target_node": target_node_name,
+                                        "target_pin": target_pin_name
+                                    })
 
                 return {"data_providers": providers, "data_sources": sources}
 
