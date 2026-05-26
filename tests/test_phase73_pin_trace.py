@@ -7,11 +7,16 @@
 
 import pytest
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from uasset_read import parse_uasset_with_linker
+from uasset_read.graph.pin_trace import write_pin_trace_report
+
+
+SAMPLE_ASSET = r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\FirstPerson\Blueprints\BP_FirstPersonCharacter.uasset"
 
 
 class TestPhase73TraceMode:
@@ -19,7 +24,9 @@ class TestPhase73TraceMode:
 
     def test_trace_mode_off_on_same_result(self):
         """验证 trace_mode 开关不影响解析结果。"""
-        asset_path = r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\FirstPerson\Blueprints\BP_FirstPersonCharacter.uasset"
+        asset_path = SAMPLE_ASSET
+        if not os.path.exists(asset_path):
+            pytest.skip(f"Sample asset not found: {asset_path}")
 
         # 无 trace_mode 解析（默认）
         result_off = parse_uasset_with_linker(asset_path)
@@ -61,7 +68,9 @@ class TestPhase73TraceMode:
 
     def test_linkedto_baseline(self):
         """验证基线 LinkedTo 数量（Wave 0 验收标准）。"""
-        asset_path = r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\FirstPerson\Blueprints\BP_FirstPersonCharacter.uasset"
+        asset_path = SAMPLE_ASSET
+        if not os.path.exists(asset_path):
+            pytest.skip(f"Sample asset not found: {asset_path}")
 
         result = parse_uasset_with_linker(asset_path)
 
@@ -86,6 +95,25 @@ class TestPhase73TraceMode:
         print(f"  Pins: {total_pins}")
         print(f"  Pins with LinkedTo: {pins_with_linkedto} ({100*pins_with_linkedto/max(total_pins,1):.1f}%)")
         print(f"  Total LinkedTo refs: {total_linkedto_refs}")
+
+    def test_pin_trace_report_written_to_temp(self, tmp_path):
+        """诊断入口写出结构化 Pin offset 报告，不改变默认解析入口。"""
+        asset_path = SAMPLE_ASSET
+        if not os.path.exists(asset_path):
+            pytest.skip(f"Sample asset not found: {asset_path}")
+
+        output_path = tmp_path / "pin-trace.json"
+        report = write_pin_trace_report(asset_path, str(output_path))
+
+        assert output_path.exists()
+        assert report["output_path"] == str(output_path)
+        assert report["summary"]["pins_traced"] > 0
+        assert "p73_recovery_events" in report["summary"]
+        assert "p73_subpins_events" in report["summary"]
+        first_pin = report["pins"][0]
+        assert "linkedto_start" in first_pin
+        assert "subpins_start" in first_pin
+        assert any(field["name"] == "LinkedTo" for field in first_pin["fields"])
 
 
 if __name__ == "__main__":

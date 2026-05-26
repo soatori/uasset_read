@@ -965,12 +965,20 @@ def read_ue_graph_pin(
         _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText) — EditorOnly, try/except + seek-back
+    # Phase 75-03: UE 源码 Text.cpp L926: 当 Flags=0 且不是 CultureInvariant 时，
+    # 可能表示空文本或简化格式，HistoryType 后直接进入下一个字段，无需读取历史数据。
     ftext_start_pos = archive.tell()
     try:
         flags = archive.read_i32()
         history_type_raw = archive.read_u8()
         history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-        read_ftext_with_history(archive, history_type, tolerant=True)
+
+        # Phase 75-03: Flags=0 时跳过历史读取（空文本或简化格式）
+        # UE 源码条件: bSerializeHistory = !Value.IsEmpty() && !Value.IsCultureInvariant()
+        # Flags=0 表示无 ETextFlag 设置，可能跳过历史
+        if flags != 0 or history_type == -1:
+            read_ftext_with_history(archive, history_type, tolerant=True)
+
         if trace_mode:
             _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
                          f"flags={flags},htype={history_type}")
@@ -1494,16 +1502,44 @@ def read_k2node_enhanced_input(
     name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """读取 K2Node_EnhancedInputAction 特有字段，返回字典（作为 node_data）。"""
+    """读取 K2Node_EnhancedInputAction 特有字段，返回字典（作为 node_data）。
+
+    Phase 75-05: 从 PropertyTag 层获取 AdvancedPinDisplay、InputAction 短名等字段。
+
+    返回字段：
+    - input_action_path: 完整对象路径
+    - input_action_short_name: 短名（如 "IA_Move"）
+    - input_action_package_index: 原始 FPackageIndex
+    - advanced_pin_display: 格式化枚举名（如 "Hidden"）
+    - advanced_pin_display_raw: 原始 int 值
+    """
     raw_properties = raw_properties or {}
+
+    # InputAction 从 PropertyTag 获取（已在 read_ue_graph_node 中解析）
     input_action_path = raw_properties.get("InputAction") or ""
+    input_action_short_name = raw_properties.get("InputActionShortName") or ""
+    input_action_package_index = raw_properties.get("InputActionPackageIndex", 0)
+
+    # 如果 PropertyTag 未提供，尝试从 archive 读取
     if not input_action_path:
         try:
             input_action_path = archive.read_fstring()
+            # 从路径提取短名
+            if input_action_path:
+                input_action_short_name = input_action_path.split(".")[-1].split("'")[0]
         except Exception:
             input_action_path = ""
+
+    # AdvancedPinDisplay 从 PropertyTag 获取
+    advanced_pin_display_raw = raw_properties.get("AdvancedPinDisplay", 0)
+    advanced_pin_display = raw_properties.get("AdvancedPinDisplayFormatted", "Default")
+
     return {
         "input_action_path": input_action_path,
+        "input_action_short_name": input_action_short_name,
+        "input_action_package_index": input_action_package_index,
+        "advanced_pin_display": advanced_pin_display,
+        "advanced_pin_display_raw": advanced_pin_display_raw,
     }
 
 
@@ -1514,12 +1550,29 @@ def read_k2node_functionentry(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
     function_reference: Optional[FMemberReference] = None,
+    raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_FunctionEntry 特有字段，返回字典（作为 node_data）。
 
+    Phase 75-03: 从 PropertyTag 层获取 ExtraFlags、bIsEditable。
+
     FunctionReference 已在 read_ue_graph_node() 中从 PropertyTag 解析。
+
+    返回字段：
+    - function_reference: FMemberReference
+    - extra_flags: int
+    - b_is_editable: bool
     """
-    return {"function_reference": function_reference}
+    raw_properties = raw_properties or {}
+
+    extra_flags = raw_properties.get("ExtraFlags", 0)
+    b_is_editable = raw_properties.get("bIsEditable", False)
+
+    return {
+        "function_reference": function_reference,
+        "extra_flags": extra_flags,
+        "b_is_editable": b_is_editable,
+    }
 
 
 # ============================================================================
@@ -1584,6 +1637,7 @@ def create_node_from_archive(
         base_node.node_data = read_k2node_functionentry(
             archive, name_map, import_map, export_map, linker,
             function_reference=fr,
+            raw_properties=raw_properties,
         )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
@@ -1733,24 +1787,9 @@ def read_ue_graph_node(
                     member_guid=m_guid,
                     b_self_context=m_self,
                 )
-            # Phase 75-04: K2Node_Event PropertyTag 字段
-            elif tag.name == "bOverrideFunction":
-                # Bool PropertyTag: inline bool_val 或 value body
-                if tag.size > 0:
-                    b_override_function = archive.read_i32() != 0
-                else:
-                    b_override_function = tag.bool_val != 0
-            elif tag.name == "bInternalEvent":
-                if tag.size > 0:
-                    b_internal_event = archive.read_i32() != 0
-                else:
-                    b_internal_event = tag.bool_val != 0
-            elif tag.name == "CustomFunctionName":
-                # FName PropertyTag
-                custom_function_name = archive.read_name(name_map)
-            elif tag.name == "FunctionFlags":
-                # Int PropertyTag
-                function_flags = archive.read_i32()
+            # Phase 75-03: K2Node_Event PropertyTag 字段使用 helper functions
+            # 注意：这些字段会在后面的 elif 分支（使用 helper functions）处理
+            # 这里只是占位注释，实际处理在 lines 1859-1872
             elif tag.name == "NodePosX":
                 node_pos_x = _read_tag_i32(archive, tag)
             elif tag.name == "NodePosY":
