@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v14.0
-milestone_name: CUE4Parse 核心对齐 — FArchive/Pak/IoStore/格式对齐
+milestone_name: — CUE4Parse 核心对齐
 status: Active — Phase 74 ✅, 75 ✅, 77 ✅ (Pak parser + AES-ECB + compression + index 解析), Phase 76/78/79/80 待启动
-last_updated: "2026-05-26T19:05:00.000Z"
+last_updated: "2026-05-26T11:17:09.802Z"
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 4
   completed_plans: 1
-  percent: 20
+  percent: 0
 ---
 
 # v14.0 — CUE4Parse 核心对齐 (P76-80)
@@ -43,12 +43,14 @@ progress:
 **完成日期:** 2026-05-26
 **范围:** PAK-01 (PakEntry 解析) + PAK-02 (压缩分派) + PAK-03 (AES 加密)
 **交付物:**
+
 - `src/uasset_read/pak/` — FPakInfo/PakEntry/FPakDirectoryEntry 数据结构 + 序列化
 - `src/uasset_read/pak/reader.py` — PakFileReader（open/extract/get_entry/context manager）
 - `src/uasset_read/compression/dispatch.py` — Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级
 - `src/uasset_read/crypto/aes_ecb.py` — AES-ECB 解密 + CustomEncryption 委托
 - `src/uasset_read/pak/index.py` — Legacy flat index + v10+ PathHashIndex/DirectoryIndex 解析
 - `tests/test_pak_*.py` — 62 tests, 1 skipped
+
 **UAT:** 8/8 通过
 
 ## 历史里程碑归档（v1.0-v13.0）
