@@ -45,13 +45,29 @@ def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
     return bool(tag.bool_val)
 
 
-def parse_int_property(tag: PropertyTag, archive: FArchive) -> int:
+def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> Any:
     """解析 IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty（PROP-02）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FArchive& operator<<(int32&) 等实现
+
+    ByteProperty 特殊处理：
+    - 无 enum backing：读取 1 byte
+    - 有 enum backing (tag.enum_type)：读取 FName (8 bytes)，返回 EnumValue
+
+    参考 CUE4Parse ByteProperty/EnumProperty 处理逻辑：
+    ByteProperty with enum_type → EnumProperty → ReadFName()
     """
     type_name = tag.type
+
+    # ByteProperty with enum backing: read FName (8 bytes) per CUE4Parse
+    if type_name == "ByteProperty" and tag.enum_type is not None:
+        if name_map is None:
+            raise ParseError("ByteProperty with enum backing requires name_map")
+        enum_value_name = archive.read_name(name_map)
+        value_name = f"{tag.enum_type}::{enum_value_name}"
+        return EnumValue(
+            enum_type=tag.enum_type,
+            value_name=value_name
+        )
+
     if type_name == "Int64Property":
         return archive.read_i64()
     elif type_name == "Int16Property":
@@ -148,11 +164,35 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+
+    # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
+    # These structs have no PropertyTags loop — just raw float reads.
+    if struct_type == "Vector":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
+
+    if struct_type == "Rotator":
+        pitch = archive.read_f32()
+        yaw = archive.read_f32()
+        roll = archive.read_f32()
+        return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
+
+    if struct_type == "Vector2D":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
+
     fields: Dict[str, Any] = {}
     property_count = 0
 
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
+
+    # Phase 73 Wave 4: Track expected struct end position for recovery
+    struct_start = archive.tell()
+    struct_end = struct_start + tag.size if tag.size > 0 else None
 
     while property_count < MAX_PROPERTY_COUNT:
         property_count += 1
@@ -162,12 +202,33 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         if inner_tag.name == "None":
             break
 
+        # Phase 73 Wave 4: Check if PropertyTag size/type is trustworthy
+        # Suspicious indicators: size > remaining struct bytes, type mismatch
+        if struct_end is not None and inner_tag.size > 0:
+            inner_tag_end = archive.tell() + inner_tag.size
+            if inner_tag_end > struct_end + 16:  # Allow 16 bytes tolerance for alignment
+                # Log suspicious PropertyTag but continue with recovery
+                import logging
+                logger = logging.getLogger('uasset_read.serializers.property_tags')
+                logger.warning(
+                    f"[P73-PROPTRACE] Suspicious PropertyTag '{inner_tag.name}' "
+                    f"size={inner_tag.size} exceeds struct boundary "
+                    f"(tag_end={inner_tag_end}, struct_end={struct_end})"
+                )
+
         field_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         # 当解析器返回 None（未知类型）且 tag.size > 0 时，主动跳过该属性字节
         # 防止在同一位置无限循环读取相同的 PropertyTag
         if field_value is None and inner_tag.size > 0:
             archive.seek(archive.tell() + inner_tag.size)
         fields[inner_tag.name] = field_value
+
+        # Phase 73 Wave 4: Recovery - align to value_end if parsing failed
+        if inner_tag.value_end_offset is not None and inner_tag.size > 0:
+            current_pos = archive.tell()
+            if current_pos != inner_tag.value_end_offset:
+                # Parsing left archive at unexpected position - realign
+                archive.seek(inner_tag.value_end_offset)
 
     return StructValue(
         struct_type=struct_type,
@@ -234,11 +295,37 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
 
 
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
-    """解析 TextProperty（ADVP-05）。"""
-    flags = archive.read_i32()  # consume but not used
-    namespace = archive.read_fstring()
-    key = archive.read_fstring()
-    source_string = archive.read_fstring()
+    """解析 TextProperty（ADVP-05）。
+
+    UE FText 序列化格式:
+      - flags: i32 (4 bytes)
+      - history_type: u8 (1 byte) — FTextHistory 类型标识
+      - body: 根据 history_type 不同而不同
+        - history_type == 0 (Base): namespace(FString) + key(FString) + source_string(FString)
+        - history_type == 1 (NamedString): namespace(FString) + key(FString)
+        - 其他: 跳过剩余数据
+    """
+    flags = archive.read_i32()       # FText flags
+    history_type = archive.read_u8() # FTextHistory type
+
+    if history_type == 0:
+        # Base text: namespace + key + source_string
+        namespace = archive.read_fstring()
+        key = archive.read_fstring()
+        source_string = archive.read_fstring()
+    elif history_type == 1:
+        # NamedString: namespace + key (no source_string)
+        namespace = archive.read_fstring()
+        key = archive.read_fstring()
+        source_string = ""
+    else:
+        # Unknown history type: skip remaining data
+        remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
+        if remaining > 0:
+            archive.read(remaining)
+        namespace = ""
+        key = ""
+        source_string = ""
 
     return TextValue(
         namespace=namespace or "",

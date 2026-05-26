@@ -43,6 +43,11 @@ from .markdown_formatter import (
     _build_mermaid_flowchart,
 )
 
+# Blueprint 翻译参考文本（Phase 74）
+from .blueprint_text_formatter import (
+    format_blueprint_translation_text,
+)
+
 # 辅助函数
 from .helpers import (
     build_status_info,
@@ -76,6 +81,8 @@ __all__ = [
     # Markdown 格式化
     "format_markdown",
     "_build_mermaid_flowchart",
+    # Blueprint 翻译参考文本
+    "format_blueprint_translation_text",
     # 辅助函数
     "build_status_info",
     "build_schema_info",
