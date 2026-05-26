@@ -250,7 +250,7 @@ class TestPinCategoryUsesReadName:
     """FEdGraphPinType 的 PinCategory/PinSubCategory 使用 FName 读取。"""
 
     def _build_pin_type_data(self, pin_category_idx: int, pin_sub_idx: int,
-                              name_map: list) -> bytes:
+                              name_map: list, pin_object_index: int = 0) -> bytes:
         """Build minimal FEdGraphPinType binary (UE5 format)."""
         buf = io.BytesIO()
         # PinCategory (FName)
@@ -258,7 +258,7 @@ class TestPinCategoryUsesReadName:
         # PinSubCategory (FName)
         buf.write(struct.pack('<II', pin_sub_idx, 0))
         # PinSubCategoryObject (FPackageIndex, i32)
-        buf.write(struct.pack('<i', 0))
+        buf.write(struct.pack('<i', pin_object_index))
         # ContainerType (u8)
         buf.write(struct.pack('<B', 0))
         # bIsReference (bool = u32)
@@ -297,6 +297,53 @@ class TestPinCategoryUsesReadName:
         arch = FArchiveMock(data)
         pin_type = read_ed_graph_pin_type(arch, name_map, MagicMock(file_version_ue5=0))
         assert pin_type.pin_subcategory == "String"
+
+    def test_pin_subcategory_object_zero_stays_empty(self):
+        name_map = ["exec", "int", "float", "String"]
+        data = self._build_pin_type_data(0, 1, name_map, pin_object_index=0)
+        arch = FArchiveMock(data)
+
+        pin_type = read_ed_graph_pin_type(arch, name_map, MagicMock(file_version_ue5=0))
+
+        assert pin_type.pin_subcategory_object == 0
+        assert pin_type.pin_subcategory_object_name is None
+        assert pin_type.pin_subcategory_object_ref is None
+
+    def test_pin_subcategory_object_preserves_positive_index(self):
+        name_map = ["exec", "int", "float", "String"]
+        data = self._build_pin_type_data(0, 1, name_map, pin_object_index=7)
+        arch = FArchiveMock(data)
+
+        pin_type = read_ed_graph_pin_type(arch, name_map, MagicMock(file_version_ue5=0))
+
+        assert pin_type.pin_subcategory_object == 7
+        assert pin_type.pin_subcategory_object_name is None
+
+    def test_pin_subcategory_object_preserves_negative_index(self):
+        name_map = ["exec", "int", "float", "String"]
+        data = self._build_pin_type_data(0, 1, name_map, pin_object_index=-3)
+        arch = FArchiveMock(data)
+
+        pin_type = read_ed_graph_pin_type(arch, name_map, MagicMock(file_version_ue5=0))
+
+        assert pin_type.pin_subcategory_object == -3
+
+    def test_pin_subcategory_object_linker_resolution_is_additive(self):
+        name_map = ["exec", "int", "float", "String"]
+        data = self._build_pin_type_data(0, 1, name_map, pin_object_index=2)
+        arch = FArchiveMock(data)
+        obj = MagicMock()
+        obj.object_name = "Character"
+        linker = MagicMock()
+        linker.resolve_package_index.return_value = obj
+
+        pin_type = read_ed_graph_pin_type(
+            arch, name_map, MagicMock(file_version_ue5=0), [], [], linker
+        )
+
+        assert pin_type.pin_subcategory_object == 2
+        assert pin_type.pin_subcategory_object_name == "Character"
+        assert pin_type.pin_subcategory_object_ref is obj
 
 
 # ============================================================================

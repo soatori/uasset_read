@@ -3,7 +3,7 @@
 验证目标：
 1. validate_pin_reference_at() 能正确校验 PinReference 结构
 2. _recover_pin_array_count() count=0 不能单独作为成功条件
-3. _try_recover_to_subpins() 区分 linkedto_recovered vs subpins_resync
+3. _try_recover_to_subpins() 始终作为 subpins_resync 通道
 4. 错误恢复后 archive 位置正确
 """
 
@@ -245,8 +245,8 @@ class TestRecoverPinArrayCount:
 class TestTryRecoverToSubpins:
     """测试 _try_recover_to_subpins() 区分恢复类型。"""
 
-    def test_linkedto_recovered_type(self):
-        """验证找到合法 Pin 数组时返回 linkedto_recovered。"""
+    def test_subpins_recovery_path_always_marks_subpins_resync(self):
+        """验证找到合法 Pin 数组时也只标记为 subpins_resync，避免冒充 LinkedTo 成功。"""
         # 构造数据：垃圾数据 + count=2 + 2 个合法 PinReference
         data = b'\xFF\xFF\xFF\xFF' * 10  # garbage
         data += struct.pack('<i', 2)  # count=2
@@ -265,7 +265,7 @@ class TestTryRecoverToSubpins:
             )
 
             if result is not None:
-                assert result["recovery_type"] == "linkedto_recovered"
+                assert result["recovery_type"] == "subpins_resync"
                 assert result["count"] == 2
         finally:
             cleanup_archive(archive)

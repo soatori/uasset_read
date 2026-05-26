@@ -488,8 +488,8 @@ class TestFunctionEntryNodeFieldAlignment:
                 if node.class_name == "K2Node_FunctionEntry":
                     nd = node.node_data or {}
                     fr_name = ""
-                    extra_flags = "N/A"
-                    b_editable = "N/A"
+                    extra_flags_val = "N/A"
+                    b_editable_val = "N/A"
                     if isinstance(nd, dict):
                         fr = nd.get("function_reference")
                         if fr:
@@ -498,8 +498,11 @@ class TestFunctionEntryNodeFieldAlignment:
                                 if not isinstance(fr, dict)
                                 else fr.get("member_name", "")
                             )
+                        # Phase 75-03: 从 node_data 提取 PropertyTag 字段
+                        extra_flags_val = nd.get("extra_flags", "N/A")
+                        b_editable_val = nd.get("b_is_editable", "N/A")
                     print(f"    - {node.class_name}: function='{fr_name}', "
-                          f"extra_flags={extra_flags}, b_editable={b_editable}")
+                          f"extra_flags={extra_flags_val}, b_editable={b_editable_val}")
                     print(f"      pins: {[p.pin_name for p in node.pins]}")
 
         expected_functions = {"Move", "Aim"}
