@@ -76,3 +76,4 @@ temp/
 QWEN.md
 
 references/*
+.playwright-mcp/*
