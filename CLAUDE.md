@@ -69,8 +69,6 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 本项目使用 Superpowers 进行规划和执行。Spec 文档位于 `docs/superpowers/specs/`，实施计划位于 `docs/superpowers/plans/`。
 
-规划历史（v1.0-v13.0）已归档至 `.planning/archive/`，详见 `.planning/MILESTONES.md`。
-
 ## API 导出（`from uasset_read import X`）
 
 按模块分类，具体符号见各模块 `__init__.py`：

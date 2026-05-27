@@ -20,6 +20,17 @@ from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 
 
+# Expected byte sizes for fixed-layout structs (used for fast-path validation)
+_EXPECTED_STRUCT_SIZES: dict[str, int] = {
+    "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
+    "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
+    "Guid": 16, "IntPoint": 8, "IntVector": 12,
+    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
+    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
+    "Transform": 48,
+}
+
+
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)
 # ============================================================================
@@ -164,6 +175,17 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+
+    # Fast-path pre-check: validate tag.size matches expected layout
+    # If mismatch, fall through to PropertyTag loop (generic path)
+    expected_size = _EXPECTED_STRUCT_SIZES.get(struct_type)
+    if expected_size is not None and tag.size != expected_size:
+        import logging
+        logging.getLogger(__name__).warning(
+            "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
+            struct_type, tag.size, expected_size,
+        )
+        struct_type = None  # Skip all fast-path branches
 
     # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
@@ -351,6 +373,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
+    # BodyInstance: complex struct with version-dependent fields, uses generic PropertyTag loop
+    # Consistent with CUE4Parse FStructFallback approach — no dedicated fast-path
     fields: Dict[str, Any] = {}
     property_count = 0
 
