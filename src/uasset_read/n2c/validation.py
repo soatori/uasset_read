@@ -55,6 +55,18 @@ N2C_JSON_SCHEMA: Dict[str, Any] = {
         },
         "structs": {"type": "array"},
         "enums": {"type": "array"},
+        "blueprint": {
+            "type": "object",
+            "properties": {
+                "blueprint_name": {"type": "string"},
+                "parent_class": {"type": "string"},
+                "variables": {"type": "array"},
+                "functions": {"type": "array"},
+                "events": {"type": "array"},
+            },
+        },
+        "properties": {"type": "array"},
+        "decompiled_functions": {"type": "array"},
     },
     "$defs": {
         "n2c_node": {

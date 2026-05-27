@@ -300,6 +300,23 @@ from .n2c import (
     N2C_JSON_SCHEMA, validate_n2c_json,
 )
 
+# Export system (Phase Export)
+from .exporter import (
+    ExportOptions,
+    IExporter,
+    ExportValidationError,
+    ExporterRegistry,
+    export,
+    BatchExporter,
+    BatchExportResult,
+)
+
+# C++ code gen (Phase 56-58)
+from .cpp_gen import (
+    CppProperty, CppHeaderMeta, CppClassIR,
+    format_cpp_class_json, format_cpp_header,
+)
+
 # Version management (Phase 76, COR-02)
 from .versioning import (
     VersionContainer, build_version_container, EUEVersion,
@@ -565,6 +582,20 @@ __all__ = [
     "from_n2c_json",
     "N2C_JSON_SCHEMA",
     "validate_n2c_json",
+    # Export system (Phase Export)
+    "ExportOptions",
+    "IExporter",
+    "ExportValidationError",
+    "ExporterRegistry",
+    "export",
+    "BatchExporter",
+    "BatchExportResult",
+    # C++ code gen
+    "CppProperty",
+    "CppHeaderMeta",
+    "CppClassIR",
+    "format_cpp_class_json",
+    "format_cpp_header",
     # Version management (Phase 76)
     "VersionContainer",
     "build_version_container",
