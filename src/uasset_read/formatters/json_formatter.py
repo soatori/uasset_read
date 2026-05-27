@@ -78,6 +78,14 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         "exports": format_exports_list(result),
         "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
+        "components": _format_components(getattr(result, "components", [])),
+        "decompiled_functions": [
+            fn.to_dict() if hasattr(fn, "to_dict") else serialize_property_value(fn)
+            for fn in getattr(result, "decompiled_functions", [])
+        ],
+        "resolved_parent_assets": getattr(result, "resolved_parent_assets", []),
+        "inherited_blueprint_graphs": getattr(result, "inherited_blueprint_graphs", []),
+        "logic_sources": getattr(result, "logic_sources", []),
         # D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
         # 原因：依赖分析字段不属于格式化模块核心职责
         "errors": result.errors

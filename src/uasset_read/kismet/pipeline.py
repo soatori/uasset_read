@@ -95,6 +95,7 @@ def decompile_single_function(
 
     # Generate C++ code (use structured flow first, fallback to goto)
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
+    warnings = _collect_translation_warnings(cpp_code)
 
     # Extract signature from generated code (first line)
     # Format: "void FuncName(...) {" or similar
@@ -113,8 +114,20 @@ def decompile_single_function(
         expressions=expressions,
         bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
         bytecode_status="parsed",
-        warnings=[],
+        warnings=warnings,
     )
+
+
+def _collect_translation_warnings(cpp_code: str) -> list[str]:
+    """Report low-confidence bytecode translations instead of staying silent."""
+    warnings: list[str] = []
+    if "/* unknown:" in cpp_code:
+        warnings.append("Kismet translation contains unsupported expression tokens")
+    if "/* deprecated */" in cpp_code:
+        warnings.append("Kismet translation contains deprecated/instrumentation tokens")
+    if "Function_" in cpp_code or "LocalFunction_" in cpp_code:
+        warnings.append("Kismet translation contains unresolved function references")
+    return warnings
 
 
 def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledResult]:

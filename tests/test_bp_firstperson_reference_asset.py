@@ -8,7 +8,6 @@ from pathlib import Path
 
 from uasset_read import parse_uasset_with_linker
 from uasset_read.formatters import format_json_full
-from uasset_read.kismet.pipeline import decompile_uasset
 
 
 ASSET = Path(__file__).resolve().parents[1] / "docs" / "references" / "BP_FirstPersonCharacter.uasset"
@@ -66,8 +65,11 @@ def test_reference_asset_graph_json_pin_contract() -> None:
     event_graph = graphs["EventGraph"]
     calls = _call_nodes(event_graph)
     events = _event_nodes(event_graph)
+    comments = [node for node in event_graph["nodes"] if node["node_type"] == "EdGraphNode_Comment"]
     assert set(calls) == {"DoMove", "DoJumpStart", "DoJumpEnd", "DoAim"}
     assert set(events) == {"Primary Thumbstick", "Touch Jump Start", "Touch Jump End", "Secondary Thumbstick"}
+    assert comments[0]["comment_text"] == "Touch Inputs for First Person Character"
+    assert "K2Node_CallFunction_11" in comments[0]["comment"]["enclosed_nodes"]
 
     for node in [*calls.values(), *events.values()]:
         assert "pins" in node
@@ -108,7 +110,8 @@ def test_reference_asset_component_structs_do_not_cascade_parse_errors() -> None
 
 
 def test_reference_asset_kismet_fallback_produces_ir() -> None:
-    results = decompile_uasset(str(ASSET), tolerant=True)
+    result = parse_uasset_with_linker(str(ASSET), tolerant=True)
+    results = result.decompiled_functions
     by_name = {result.function_name: result for result in results}
 
     assert set(by_name) == {
@@ -120,3 +123,31 @@ def test_reference_asset_kismet_fallback_produces_ir() -> None:
     }
     assert all(result.bytecode_status == "parsed" for result in results)
     assert all(result.expressions for result in results)
+    ubergraph = by_name["ExecuteUbergraph_BP_FirstPersonCharacter"]
+    assert "Function_" not in ubergraph.cpp_code
+    assert "DoMove(Right, Forward)" in ubergraph.cpp_code
+    assert "DoAim(Yaw, Pitch)" in ubergraph.cpp_code
+    assert "DoJumpStart()" in ubergraph.cpp_code
+    assert "DoJumpEnd()" in ubergraph.cpp_code
+    assert {call["function_name"] for call in ubergraph.semantic_calls} == {
+        "DoMove",
+        "DoAim",
+        "DoJumpStart",
+        "DoJumpEnd",
+    }
+    assert any("enriched from EventGraph" in warning for warning in ubergraph.warnings)
+    assert any("deprecated/instrumentation" in warning for warning in ubergraph.warnings)
+
+
+def test_reference_asset_parent_resolution_warning_is_non_blocking() -> None:
+    result = parse_uasset_with_linker(
+        str(ASSET),
+        tolerant=True,
+        include_parent_assets=True,
+        asset_roots=[str(ASSET.parent)],
+    )
+
+    assert result.is_success
+    assert result.resolved_parent_assets == []
+    assert any(source["source"] == "native_parent" for source in result.logic_sources)
+    assert any("TP_FirstPersonCharacter.uasset" in warning for warning in result.warnings)

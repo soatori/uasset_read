@@ -64,6 +64,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
     parser.add_argument('--function-graphs', action='store_true',
                         help='Include top-level function_graphs array in JSON output (output_version 5.0) (Phase 55)')
+    parser.add_argument('--asset-root', action='append', default=[],
+                        help='Root directory to search for parent .uasset files (can be repeated)')
+    parser.add_argument('--include-parent-assets', action='store_true',
+                        help='Resolve and parse parent Blueprint assets when available')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
 
@@ -177,7 +181,12 @@ def main():
     # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
     if fmt in {"cpp_skeleton", "blueprint_ue_text", "json", "json_summary"}:
         try:
-            linker_result = parse_uasset_with_linker(args.file, tolerant=tolerant)
+            linker_result = parse_uasset_with_linker(
+                args.file,
+                tolerant=tolerant,
+                include_parent_assets=args.include_parent_assets,
+                asset_roots=args.asset_root,
+            )
         except Exception as e:
             print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
@@ -214,7 +223,12 @@ def main():
 
     # Standard parse
     try:
-        result = parse_uasset(args.file, tolerant=tolerant)
+        result = parse_uasset(
+            args.file,
+            tolerant=tolerant,
+            include_parent_assets=args.include_parent_assets,
+            asset_roots=args.asset_root,
+        )
     except Exception as e:
         print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)

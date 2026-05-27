@@ -36,6 +36,8 @@ class KismetDecompiledResult:
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
     warnings: list[str] = field(default_factory=list)
+    semantic_calls: list[dict[str, Any]] = field(default_factory=list)
+    logic_source: str = "current_asset"
 
     def to_dict(self) -> dict:
         """
@@ -52,6 +54,8 @@ class KismetDecompiledResult:
             "bytecode_source": self.bytecode_source,
             "bytecode_status": self.bytecode_status,
             "warnings": self.warnings,
+            "semantic_calls": self.semantic_calls,
+            "logic_source": self.logic_source,
             "expressions": [
                 e.to_dict() if hasattr(e, "to_dict") else str(e)
                 for e in self.expressions

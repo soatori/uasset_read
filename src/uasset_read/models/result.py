@@ -38,6 +38,9 @@ class ParseResult:
     components: List[Dict] = field(default_factory=list)
     decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
     version_container: Optional["VersionContainer"] = None
+    resolved_parent_assets: List[Dict] = field(default_factory=list)
+    inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
+    logic_sources: List[Dict] = field(default_factory=list)
 
     @property
     def status(self) -> str:

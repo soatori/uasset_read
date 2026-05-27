@@ -456,6 +456,22 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     result = compat_result
 
+    if node.class_name == "EdGraphNode_Comment":
+        data = node.node_data if isinstance(node.node_data, dict) else {}
+        result["comment_text"] = node.node_comment or ""
+        result["comment"] = {
+            "text": node.node_comment or "",
+            "color": _sanitize_recursive(data.get("comment_color")),
+            "width": data.get("node_width"),
+            "height": data.get("node_height"),
+            "font_size": data.get("font_size"),
+            "depth": data.get("comment_depth"),
+        }
+        result["comment"] = {
+            key: value for key, value in result["comment"].items()
+            if value is not None
+        }
+
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
         from uasset_read.formatters.json_formatter import _extract_call_function_parameters
@@ -504,6 +520,27 @@ def _format_graph_node_links(
             })
 
     return links
+
+
+def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List[str]:
+    """Return export names for nodes inside an EdGraph comment rectangle."""
+    data = comment_node.node_data if isinstance(comment_node.node_data, dict) else {}
+    width = data.get("node_width") or getattr(comment_node, "node_width", 0) or 0
+    height = data.get("node_height") or getattr(comment_node, "node_height", 0) or 0
+    if width <= 0 or height <= 0:
+        return []
+
+    left = comment_node.node_pos_x
+    top = comment_node.node_pos_y
+    right = left + width
+    bottom = top + height
+    enclosed: List[str] = []
+    for node in graph.nodes:
+        if node is comment_node or node.class_name == "EdGraphNode_Comment":
+            continue
+        if left <= node.node_pos_x <= right and top <= node.node_pos_y <= bottom:
+            enclosed.append(getattr(node, "_export_object_name", "") or node.node_guid)
+    return enclosed
 
 
 def _get_start_event_name(node: UEdGraphNode) -> str:
@@ -1339,6 +1376,8 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
             node_dict["links"] = _format_graph_node_links(
                 node, node_name_lookup, pin_lookup
             )
+            if node.class_name == "EdGraphNode_Comment":
+                node_dict.setdefault("comment", {})["enclosed_nodes"] = _comment_enclosed_nodes(node, graph)
 
         graph_dict = {
             "graph_name": graph.graph_name,

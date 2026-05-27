@@ -5,7 +5,8 @@ Phase 33: 入口与测试适配。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List, Union
+from typing import TYPE_CHECKING, Optional, List, Union, Sequence
+from pathlib import Path
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
@@ -78,6 +79,8 @@ def _post_process(
     result: "Union[ParseResult, LinkerParseResult]",
     tolerant: bool = True,
     linker: Optional["PackageLinker"] = None,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
 ) -> None:
     """共享后处理：blueprint 元数据、图提取、依赖分析。
 
@@ -168,6 +171,9 @@ def _post_process(
                 import_map, export_map, tolerant,
             )
             result.decompiled_functions = decompiled
+            if decompiled and getattr(result, "graphs", None):
+                from uasset_read.kismet.semantic import enrich_decompiled_functions
+                enrich_decompiled_functions(decompiled, result.graphs)
             # If extraction produced errors that were caught internally,
             # and result has no decompiled functions but blueprint was found,
             # add a warning so the user knows decompilation was attempted
@@ -178,6 +184,9 @@ def _post_process(
     except Exception as e:
         if hasattr(result, 'warnings'):
             result.warnings.append(f"Kismet decompilation error: {e}")
+
+    if include_parent_assets:
+        _resolve_parent_assets(path, result, tolerant, asset_roots)
 
     # Component property extraction (Phase 48)
     try:
@@ -208,7 +217,104 @@ def _post_process(
     result.is_success = len(result.errors) == 0
 
 
-def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
+def _resolve_parent_assets(
+    path: str,
+    result: "Union[ParseResult, LinkerParseResult]",
+    tolerant: bool,
+    asset_roots: Optional[Sequence[str]],
+) -> None:
+    """Best-effort parent Blueprint lookup used by cross-asset parsing."""
+    if not getattr(result, "blueprint", None):
+        return
+    parent_class = getattr(result.blueprint, "parent_class", None)
+    if not parent_class:
+        return
+
+    result.logic_sources.append({
+        "source": "current_asset",
+        "asset": path,
+        "blueprint": result.summary.package_name if result.summary else None,
+    })
+
+    roots = [Path(root) for root in (asset_roots or [])]
+    roots.append(Path(path).resolve().parent)
+    parent_file = _find_parent_asset_file(parent_class, roots)
+    if parent_file is None:
+        result.logic_sources.append({
+            "source": "native_parent",
+            "class": parent_class,
+            "status": "asset_not_found",
+        })
+        result.warnings.append(
+            f"Parent asset '{parent_class}.uasset' not found in asset roots"
+        )
+        return
+
+    try:
+        parent_result = parse_uasset_with_linker(
+            str(parent_file),
+            tolerant=tolerant,
+            include_parent_assets=False,
+        )
+    except Exception as exc:
+        result.logic_sources.append({
+            "source": "parent_asset",
+            "class": parent_class,
+            "asset": str(parent_file),
+            "status": "parse_error",
+            "error": str(exc),
+        })
+        result.warnings.append(f"Parent asset '{parent_file}' parse failed: {exc}")
+        return
+
+    result.resolved_parent_assets.append({
+        "class": parent_class,
+        "path": str(parent_file),
+        "status": "parsed" if parent_result.is_success else "failed",
+        "warnings": parent_result.warnings,
+        "errors": parent_result.errors,
+    })
+    result.logic_sources.append({
+        "source": "parent_asset",
+        "class": parent_class,
+        "asset": str(parent_file),
+        "status": "parsed" if parent_result.is_success else "failed",
+    })
+    if parent_result.graphs:
+        from uasset_read.graph import format_graphs_json
+        result.inherited_blueprint_graphs.extend(format_graphs_json(parent_result.graphs))
+
+
+def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optional[Path]:
+    target_name = f"{parent_class}.uasset"
+    seen: set[Path] = set()
+    for root in roots:
+        try:
+            root = root.resolve()
+        except OSError:
+            continue
+        if root in seen or not root.exists():
+            continue
+        seen.add(root)
+        direct = root / target_name
+        if direct.is_file():
+            return direct
+        if root.is_dir():
+            try:
+                match = next(root.rglob(target_name), None)
+            except OSError:
+                match = None
+            if match is not None and match.is_file():
+                return match
+    return None
+
+
+def parse_uasset(
+    path: str,
+    tolerant: bool = True,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
+) -> ParseResult:
     """
     主入口：解析 .uasset 文件（D-08 优雅降级）。
 
@@ -263,6 +369,8 @@ def parse_uasset(path: str, tolerant: bool = True) -> ParseResult:
         _post_process(
             path, archive, result.summary, result.name_map,
             result.import_map, result.export_map, result, tolerant,
+            include_parent_assets=include_parent_assets,
+            asset_roots=asset_roots,
         )
 
     except VersionError as e:
@@ -292,6 +400,8 @@ def parse_uasset_with_linker(
     path: str,
     tolerant: bool = True,
     preload_all: bool = False,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -361,6 +471,8 @@ def parse_uasset_with_linker(
             path, archive, result.summary, result.name_map,
             result.import_map, result.export_map, result, tolerant,
             linker=result.linker,
+            include_parent_assets=include_parent_assets,
+            asset_roots=asset_roots,
         )
 
     except VersionError as e:
