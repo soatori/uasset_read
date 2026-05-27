@@ -6,7 +6,7 @@ UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Tuple, Optional, Any
+from typing import TYPE_CHECKING, Callable, List, Tuple, Optional, Any, TypeVar
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -18,8 +18,9 @@ from uasset_read.constants import (
     PROP_TAG_HAS_EXTENSIONS,
     PROP_TAG_BOOL_TRUE,
 )
-from uasset_read.exceptions import ParseError
 from uasset_read.models.properties import PropertyTag
+
+T = TypeVar("T")
 
 
 def read_property_tag(
@@ -57,6 +58,7 @@ def read_property_tag(
         pending = pending - 1 + inner_count
 
     tag.type = type_parts[0][0] if type_parts else ""
+    tag.type_parts = type_parts
 
     # Extract enum_type for ByteProperty/EnumProperty from FPropertyTypeName nodes
     # Per CUE4Parse: ByteProperty with enum backing reads FName (8 bytes), not single byte
@@ -65,17 +67,19 @@ def read_property_tag(
         enum_type_name = type_parts[1][0]
         if enum_type_name and enum_type_name != "None":
             tag.enum_type = enum_type_name
+    if tag.type == "StructProperty" and len(type_parts) >= 2:
+        struct_type_name = type_parts[1][0]
+        if struct_type_name and struct_type_name != "None":
+            tag.struct_type = struct_type_name.split(".")[-1]
+    elif tag.type == "ArrayProperty" and len(type_parts) >= 2:
+        tag.inner_type = type_parts[1][0]
+    elif tag.type == "SetProperty" and len(type_parts) >= 2:
+        tag.inner_type = type_parts[1][0]
+    elif tag.type == "MapProperty" and len(type_parts) >= 3:
+        tag.key_type = type_parts[1][0]
+        tag.value_type = type_parts[2][0]
     tag.size = archive.read_i32()
-    try:
-        archive.validate_size(tag.size, tag.name, tolerant=tolerant)
-    except ParseError:
-        # Size overflow safety net: seek past the bad size to avoid cascading errors.
-        # Clamp skip to a reasonable maximum to prevent runaway seeks.
-        _safe_skip = min(max(tag.size, 0), 64 * 1024)
-        _recovery_pos = archive.tell() + _safe_skip
-        if _recovery_pos <= archive._file_size:
-            archive.seek(_recovery_pos)
-        raise
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
     tag.flags = archive.read_u8()
 
     if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
@@ -101,3 +105,26 @@ def read_property_tag(
         tag.value_end_offset = tag.value_start_offset
 
     return tag
+
+
+def read_tag_value_bounded(
+    archive: FArchive,
+    tag: PropertyTag,
+    reader: Callable[[], T],
+) -> T:
+    """Read a PropertyTag value and always end at value_start + Size.
+
+    This mirrors CUE4Parse's FPropertyTag behavior: value parsers may consume
+    fewer or more bytes, or raise, but the archive is restored to the tag's
+    calculated final position before control returns.
+    """
+    final_pos = tag.value_end_offset
+    if final_pos is None:
+        value_start = tag.value_start_offset if tag.value_start_offset is not None else archive.tell()
+        final_pos = value_start + max(tag.size, 0)
+
+    try:
+        return reader()
+    finally:
+        if archive.tell() != final_pos:
+            archive.seek(final_pos)

@@ -1,12 +1,4 @@
 <!-- generated-by: gsd-doc-writer -->
-# 贡献指南
-
-感谢您对本项目的关注！Unreal Engine `.uasset` 文件解析器是一个开源项目（MIT 许可），欢迎所有开发者参与贡献。
-
-## 行为准则
-
-本项目致力于营造一个开放、尊重他人的社区环境。在参与贡献之前，请确保您理解并遵守基本的开源行为准则——友善交流、尊重他人意见、对事不对人。
-
 ## 开发环境设置
 
 1. **Fork 本仓库**，然后克隆到您的本地机器：
@@ -68,7 +60,7 @@
    ```
    feat(parsers): add MapProperty nested type parsing
    fix(link): correct ImportMap offset calculation for UE5.3
-   docs(roadmap): update Phase 49 status
+   docs(readme): update feature list
    ```
 
 3. **提交 PR**：
@@ -137,31 +129,14 @@
 - 提供相关的 UE C++ 源码引用（如果可能），如 `FObjectExport` 在 UE 源码中的位置。
 - 说明该功能的优先级和使用场景。
 
-## GSD 工作流阶段
-
-本项目采用 GSD（Goal-Driven Software Development）工作流，将开发分解为多个 Phase。了解 Phase 状态有助于避免重复工作：
-
-- **规划文件**：所有 Phase 的规划文档位于 `.planning/` 目录。
-- **ROADMAP.md**：50 阶段的路线图，查看整体进度。
-- **STATE.md**：当前里程碑的详细状态。
-- **当前状态**：v8.0 进行中 — Phase 47 已完成，Phase 48/50 部分完成，Phase 49 待启动。
-
-如果您想参与某个 Phase，请先阅读对应的 PLAN 文件（如 `.planning/phase-49/PLAN.md`），确认该 Phase 尚未被他人认领。
-
 ## 文件组织
 
 ```
 src/uasset_read/    # 源代码
 tests/              # 测试用例
-.planning/          # Phase 规划文档
+docs/superpowers/   # 当前规划（specs + plans）
 temp/               # 缓存和临时文件（已 git 忽略）
-uasset_read_cpp/    # C++ 参考代码（已 git 忽略）
-UnrealEngine/       # UE 源码参考（已 git 忽略）
-LyraStarterGame/    # Lyra 示例资产（已 git 忽略）
 ```
 
 > 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。请勿将临时文件提交到版本库。
 
-## 许可
-
-本项目采用 MIT 许可。提交贡献即表示您同意将您的代码以 MIT 许可发布。

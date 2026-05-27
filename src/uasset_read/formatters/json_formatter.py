@@ -78,6 +78,14 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         "exports": format_exports_list(result),
         "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
         "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
+        "components": _format_components(getattr(result, "components", [])),
+        "decompiled_functions": [
+            fn.to_dict() if hasattr(fn, "to_dict") else serialize_property_value(fn)
+            for fn in getattr(result, "decompiled_functions", [])
+        ],
+        "resolved_parent_assets": getattr(result, "resolved_parent_assets", []),
+        "inherited_blueprint_graphs": getattr(result, "inherited_blueprint_graphs", []),
+        "logic_sources": getattr(result, "logic_sources", []),
         # D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
         # 原因：依赖分析字段不属于格式化模块核心职责
         "errors": result.errors
@@ -172,10 +180,15 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
         return [serialize_property_value(item, depth + 1, max_depth) for item in value]
 
     if isinstance(value, StructValue):
-        return {
+        payload = {
             "struct_type": value.struct_type,
             "fields": {k: serialize_property_value(v, depth + 1, max_depth) for k, v in value.fields.items()}
         }
+        if value.raw_size is not None:
+            payload["raw_size"] = value.raw_size
+        if value.parse_status != "parsed":
+            payload["parse_status"] = value.parse_status
+        return payload
     if isinstance(value, MapValue):
         return {
             "key_type": value.key_type,
@@ -366,7 +379,7 @@ def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
             "is_const": getattr(variable.var_type, 'is_const', False)
         },
         "category": variable.category,
-        "default_value": variable.default_value,
+        "default_value": serialize_property_value(variable.default_value),
         "friendly_name": variable.friendly_name,
         "property_flags": variable.property_flags,
         "edit_condition": variable.edit_condition,
@@ -405,7 +418,7 @@ def _format_parameter(parameter: FunctionParameter) -> dict:
     return {
         "name": parameter.name,
         "type": parameter.param_type,
-        "default_value": parameter.default_value,
+        "default_value": serialize_property_value(parameter.default_value),
         "is_input": parameter.is_input,
         "is_output": parameter.is_output,
         "is_optional": parameter.is_optional,

@@ -269,9 +269,9 @@ Both `FArchive` and the property parser support `tolerant` mode (enabled by defa
 
 This is critical for parsing real-world `.uasset` files that may contain editor-only data or version-specific quirks.
 
-## v7.0 PackageLinker: Two-Stage Object Graph Reconstruction
+## PackageLinker: Two-Stage Object Graph Reconstruction
 
-Phase 34 introduced `PackageLinker`, implementing Unreal Engine's `FLinkerLoad` pattern for reconstructing the object graph from ImportMap and ExportMap entries. This enables cross-object reference resolution that single-pass parsing cannot achieve.
+`PackageLinker` implements Unreal Engine's `FLinkerLoad` pattern for reconstructing the object graph from ImportMap and ExportMap entries. This enables cross-object reference resolution that single-pass parsing cannot achieve.
 
 ### Why Two-Stage?
 

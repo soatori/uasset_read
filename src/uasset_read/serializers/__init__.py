@@ -4,6 +4,9 @@ from uasset_read.serializers.package_summary import (
     PackageFileSummary, GenerationInfo, EngineVersion, CustomVersion,
     read_package_summary, read_name_table,
 )
+from uasset_read.versioning import (
+    VersionContainer, build_version_container, EUEVersion,
+)
 from uasset_read.serializers.object_resources import (
     PackageIndex, ObjectImport, ObjectExport,
     read_import_map, build_imports_list, read_soft_object_paths,
@@ -32,6 +35,7 @@ from uasset_read.serializers.graph import (
 __all__ = [
     'PackageFileSummary', 'GenerationInfo', 'EngineVersion', 'CustomVersion',
     'read_package_summary', 'read_name_table',
+    'VersionContainer', 'build_version_container', 'EUEVersion',
     'PackageIndex', 'ObjectImport', 'ObjectExport',
     'read_import_map', 'build_imports_list', 'read_soft_object_paths',
     'detect_circular_deps', 'read_export_map', 'get_asset_class',

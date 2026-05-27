@@ -38,7 +38,6 @@ pip install -e ".[dev]"
 |-------|-------|
 | Package name | `uasset_read` |
 | Version | `6.0.0` |
-| License | MIT |
 | CLI entry point | `uasset-read = uasset_read.cli:main` |
 
 ## CLI Configuration

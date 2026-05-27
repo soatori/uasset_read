@@ -216,6 +216,10 @@ def to_n2c_json(
 
     # Extract metadata
     metadata: dict[str, str] = {}
+    blueprint_dict: dict | None = None
+    properties_list: list[dict] = []
+    decompiled_list: list[dict] = []
+
     if result is not None:
         if hasattr(result, 'summary') and result.summary:
             summary = result.summary
@@ -228,11 +232,94 @@ def to_n2c_json(
             if hasattr(bp, 'parent_class') and bp.parent_class:
                 metadata["BlueprintClass"] = bp.parent_class
 
+            # v2.0.0: Extract blueprint details
+            blueprint_dict = {}
+            if hasattr(bp, 'blueprint_name') and bp.blueprint_name:
+                blueprint_dict["blueprint_name"] = bp.blueprint_name
+            if hasattr(bp, 'parent_class') and bp.parent_class:
+                blueprint_dict["parent_class"] = bp.parent_class
+            if hasattr(bp, 'variables'):
+                blueprint_dict["variables"] = [
+                    _variable_to_dict(v) for v in bp.variables
+                ] if bp.variables else []
+            if hasattr(bp, 'functions'):
+                blueprint_dict["functions"] = [
+                    _function_to_dict(f) for f in bp.functions
+                ] if bp.functions else []
+            if hasattr(bp, 'events'):
+                blueprint_dict["events"] = [
+                    _event_to_dict(e) for e in bp.events
+                ] if bp.events else []
+
+        # v2.0.0: Extract properties from exports
+        if hasattr(result, 'export_map') and result.export_map:
+            for export in result.export_map:
+                if hasattr(export, 'properties') and export.properties:
+                    for prop in export.properties:
+                        properties_list.append(_property_to_dict(prop))
+
+        # v2.0.0: Extract decompiled functions
+        if hasattr(result, 'decompiled_functions') and result.decompiled_functions:
+            for func in result.decompiled_functions:
+                decompiled_list.append(_decompiled_to_dict(func))
+
     struct = N2CStruct(
         metadata=metadata,
         graphs=n2c_graphs,
+        blueprint=blueprint_dict if blueprint_dict else None,
+        properties=properties_list,
+        decompiled_functions=decompiled_list,
     )
     return struct.to_dict()
+
+
+def _variable_to_dict(var) -> dict:
+    """BlueprintVariable to dict."""
+    d = {}
+    for attr in ("name", "variable_type", "category", "default_value", "is_public", "is_editable"):
+        if hasattr(var, attr):
+            d[attr] = getattr(var, attr)
+    return d
+
+
+def _function_to_dict(func) -> dict:
+    """BlueprintFunction to dict."""
+    d = {}
+    for attr in ("name", "return_type", "parameters", "is_pure", "is_const"):
+        if hasattr(func, attr):
+            d[attr] = getattr(func, attr)
+    return d
+
+
+def _event_to_dict(event) -> dict:
+    """BlueprintEvent to dict."""
+    d = {}
+    for attr in ("name", "event_type", "is_override", "is_multicast"):
+        if hasattr(event, attr):
+            d[attr] = getattr(event, attr)
+    return d
+
+
+def _property_to_dict(prop) -> dict:
+    """PropertyTag/PropertyValue to dict."""
+    if isinstance(prop, dict):
+        return prop
+    d = {}
+    for attr in ("name", "type_name", "array_dim", "flags"):
+        if hasattr(prop, attr):
+            d[attr] = getattr(prop, attr)
+    return d
+
+
+def _decompiled_to_dict(func) -> dict:
+    """KismetDecompiledResult to dict."""
+    if hasattr(func, 'to_dict'):
+        return func.to_dict()
+    d = {}
+    for attr in ("function_name", "signature", "local_variables", "cpp_code"):
+        if hasattr(func, attr):
+            d[attr] = getattr(func, attr)
+    return d
 
 
 def from_n2c_json(data: dict) -> N2CStruct:
@@ -309,6 +396,9 @@ def from_n2c_json(data: dict) -> N2CStruct:
         graphs=n2c_graphs,
         structs=list(data.get("structs", [])),
         enums=list(data.get("enums", [])),
+        blueprint=data.get("blueprint"),
+        properties=list(data.get("properties", [])),
+        decompiled_functions=list(data.get("decompiled_functions", [])),
     )
 
 

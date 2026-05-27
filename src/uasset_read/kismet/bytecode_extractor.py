@@ -30,6 +30,17 @@ logger = logging.getLogger(__name__)
 # T-72C-04 mitigation: cache is per-module but reset at each decompile_uasset() call context
 _bpgc_bytecode_cache: dict[str, bytes] | None = None
 
+_PLAUSIBLE_SCRIPT_START_TOKENS = {
+    0x04,  # EX_Return
+    0x19,  # EX_Context
+    0x1B,  # EX_VirtualFunction
+    0x1C,  # EX_FinalFunction
+    0x1D,  # EX_IntConst
+    0x46,  # EX_LocalFinalFunction
+    0x5A,  # EX_WireTracepoint
+    0x5E,  # EX_Tracepoint
+}
+
 
 # ===========================================================================
 # UStruct type whitelist (per D-01, T-62-01 mitigation)
@@ -120,8 +131,13 @@ def extract_bytecode_bytes(
     # T-62-02: Validate serializedScriptSize bounds
     if serialized_script_size <= 0:
         # BPGC fallback for UE5 cooked Blueprints (Phase 72-C Wave 2)
-        return _bpgc_fallback(
+        fallback = _bpgc_fallback(
             archive, export, summary, name_map, import_map, export_map
+        )
+        if fallback is not None:
+            return fallback
+        return _scan_export_serial_for_bytecode(
+            archive, export, name_map, tolerant=getattr(archive, "_tolerant", False)
         )
 
     if serialized_script_size > export.script_serial_size:
@@ -131,6 +147,60 @@ def extract_bytecode_bytes(
         )
 
     return archive.read_bytes(serialized_script_size)
+
+
+def _scan_export_serial_for_bytecode(
+    archive: FArchive,
+    export: ObjectExport,
+    name_map: list[str],
+    tolerant: bool = True,
+) -> bytes | None:
+    """Best-effort recovery for cooked Function exports with inline bytecode.
+
+    Some UE5 cooked assets report a tiny script_serial_size while the serialized
+    Function body still contains a compact bytecode suffix. When the normal
+    UStruct path and BPGC fallback both fail, scan the export serial bytes for a
+    parseable expression stream ending in EX_EndOfScript.
+    """
+    original_pos = archive.tell()
+    try:
+        archive.seek(export.serial_offset)
+        data = archive.read_bytes(export.serial_size)
+    finally:
+        archive.seek(original_pos)
+
+    best: tuple[int, bytes] | None = None
+    end_positions = [idx for idx, b in enumerate(data) if b == 0x53]
+    for start, first in enumerate(data):
+        if first not in _PLAUSIBLE_SCRIPT_START_TOKENS:
+            continue
+        for end in end_positions:
+            if end < start:
+                continue
+            candidate = data[start:end + 1]
+            if len(candidate) < 2:
+                continue
+            try:
+                expressions = parse_bytecode_stream(candidate, name_map, tolerant=tolerant)
+            except Exception:
+                continue
+            if not expressions:
+                continue
+            last = type(expressions[-1]).__name__
+            if last != "EX_EndOfScript":
+                continue
+            score = len(expressions)
+            if best is None or score > best[0]:
+                best = (score, candidate)
+            break
+
+    if best is None:
+        return None
+    logger.warning(
+        "Recovered bytecode for '%s' by scanning Function serial (%d expressions)",
+        export.object_name, best[0],
+    )
+    return best[1]
 
 
 def _bpgc_fallback(

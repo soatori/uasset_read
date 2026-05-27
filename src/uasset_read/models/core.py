@@ -54,6 +54,7 @@ class UEdGraphPin:
     # PIN-01: 基础信息
     pin_id: str
     pin_name: str
+    pin_friendly_name: Optional[str] = None
     pin_tooltip: str = ""
     direction: int = 0
     # PIN-02: PinType

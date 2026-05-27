@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-模块化重构版本 v6.0 — 完整解析管线，零依赖，分层架构
+版本 dev-0.3.0 — CUE4Parse 核心对齐 (v14, Phase 76)
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "14.0.0"
+__version__ = "dev-0.3.0"
 
 # 导出常量模块
 from .constants import (
@@ -211,6 +211,7 @@ from .formatters import (
     _build_mermaid_flowchart,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,
+    format_blueprint_ue_text,
     # 辅助函数
     build_status_info,
     build_schema_info,
@@ -298,6 +299,28 @@ from .n2c import (
     N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
     to_n2c_json, from_n2c_json,
     N2C_JSON_SCHEMA, validate_n2c_json,
+)
+
+# Export system (Phase Export)
+from .exporter import (
+    ExportOptions,
+    IExporter,
+    ExportValidationError,
+    ExporterRegistry,
+    export,
+    BatchExporter,
+    BatchExportResult,
+)
+
+# C++ code gen (Phase 56-58)
+from .cpp_gen import (
+    CppProperty, CppHeaderMeta, CppClassIR,
+    format_cpp_class_json, format_cpp_header,
+)
+
+# Version management (Phase 76, COR-02)
+from .versioning import (
+    VersionContainer, build_version_container, EUEVersion,
 )
 
 # 以下函数等待后续 plan 完成后追加：
@@ -470,6 +493,7 @@ __all__ = [
     "format_text_full",
     "format_markdown",
     "format_blueprint_translation_text",
+    "format_blueprint_ue_text",
     "format_graphs_json",
     "build_schema_info",
     "resolve_fpackage_index",
@@ -560,4 +584,22 @@ __all__ = [
     "from_n2c_json",
     "N2C_JSON_SCHEMA",
     "validate_n2c_json",
+    # Export system (Phase Export)
+    "ExportOptions",
+    "IExporter",
+    "ExportValidationError",
+    "ExporterRegistry",
+    "export",
+    "BatchExporter",
+    "BatchExportResult",
+    # C++ code gen
+    "CppProperty",
+    "CppHeaderMeta",
+    "CppClassIR",
+    "format_cpp_class_json",
+    "format_cpp_header",
+    # Version management (Phase 76)
+    "VersionContainer",
+    "build_version_container",
+    "EUEVersion",
 ]
