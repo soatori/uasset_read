@@ -144,6 +144,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
     remaining_size = tag.size - 4  # subtract 4-byte count field
+    inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
     for i in range(count):
         # Dynamic inner_size calculation: distribute remaining bytes evenly
@@ -152,7 +153,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         inner_size = remaining_size // remaining_count if remaining_count > 1 else remaining_size
         inner_tag = PropertyTag(
             name=f"{tag.name}[{i}]",
-            type=_get_inner_type(tag.type),
+            type=inner_type,
             size=inner_size
         )
         element_start = archive.tell()
@@ -176,10 +177,16 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     struct_type = _extract_struct_type_from_tag(tag)
 
-    # Fast-path pre-check: validate tag.size matches expected layout
+    # Fast-path pre-check: validate tag.size matches expected layout.
+    # UE5 LWC stores some math structs as doubles, so accept those explicitly.
     # If mismatch, fall through to PropertyTag loop (generic path)
     expected_size = _EXPECTED_STRUCT_SIZES.get(struct_type)
-    if expected_size is not None and tag.size != expected_size:
+    allowed_lwc_sizes = {
+        "Vector": {12, 24},
+        "Rotator": {12, 24},
+        "Vector2D": {8, 16},
+    }
+    if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
         import logging
         logging.getLogger(__name__).warning(
             "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
@@ -190,20 +197,23 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
     if struct_type == "Vector":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        x = reader()
+        y = reader()
+        z = reader()
         return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
 
     if struct_type == "Rotator":
-        pitch = archive.read_f32()
-        yaw = archive.read_f32()
-        roll = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        pitch = reader()
+        yaw = reader()
+        roll = reader()
         return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
 
     if struct_type == "Vector2D":
-        x = archive.read_f32()
-        y = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
+        x = reader()
+        y = reader()
         return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
 
     # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
@@ -421,6 +431,9 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
                 # Parsing left archive at unexpected position - realign
                 archive.seek(inner_tag.value_end_offset)
 
+    if struct_end is not None and archive.tell() != struct_end:
+        archive.seek(struct_end)
+
     return StructValue(
         struct_type=struct_type,
         fields=fields
@@ -429,7 +442,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
 def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:
     """解析 MapProperty（ADVP-02）。"""
-    key_type, value_type = _extract_map_types_from_tag(tag)
+    key_type = getattr(tag, "key_type", None)
+    value_type = getattr(tag, "value_type", None)
+    if not key_type or not value_type:
+        key_type, value_type = _extract_map_types_from_tag(tag)
 
     num_entries = archive.read_i32()
     if num_entries < 0 or num_entries > MAX_PROPERTY_COUNT:
@@ -452,7 +468,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
 
 def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> SetValue:
     """解析 SetProperty（ADVP-03）。"""
-    element_type = _extract_set_type_from_tag(tag)
+    element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
     num_elements = archive.read_i32()
     if num_elements < 0 or num_elements > MAX_PROPERTY_COUNT:
@@ -577,6 +593,9 @@ def _get_inner_type(array_type: str) -> str:
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取结构体类型名（D-08）。"""
+    if getattr(tag, "struct_type", None):
+        return str(tag.struct_type).split(".")[-1]
+
     type_str = tag.type
 
     if "(" in type_str:

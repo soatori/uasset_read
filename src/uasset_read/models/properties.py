@@ -6,7 +6,7 @@ Phase 30: 属性解析模块 (per MOD-06, MOD-09)。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -25,6 +25,11 @@ class PropertyTag:
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
     enum_type: Optional[str] = None   # ByteProperty/EnumProperty 的枚举类型（从 FPropertyTypeName 提取）
+    type_parts: List[Tuple[str, int]] = field(default_factory=list)  # 完整 FPropertyTypeName 节点
+    struct_type: Optional[str] = None  # StructProperty 的结构体类型名
+    inner_type: Optional[str] = None   # Array/Set 内层类型
+    key_type: Optional[str] = None     # Map key 类型
+    value_type: Optional[str] = None   # Map value 类型
     # Phase 73 Wave 4: offset tracking for PropertyTag cascade failure diagnosis
     tag_start_offset: Optional[int] = None  # PropertyTag 开始读取位置（archive.tell()）
     value_start_offset: Optional[int] = None  # Property value 开始位置（tag 读取后）

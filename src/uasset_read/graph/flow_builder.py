@@ -464,6 +464,48 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     return result
 
 
+def _format_graph_node_links(
+    node: UEdGraphNode,
+    node_name_lookup: Dict[str, str],
+    pin_lookup: Dict[str, Tuple[str, str]],
+) -> List[Dict[str, Any]]:
+    """Build stable, normalized link objects for a node's raw Pin references."""
+    links: List[Dict[str, Any]] = []
+    current_node_name = node_name_lookup.get(node.node_guid, node.node_guid)
+
+    for pin in node.pins:
+        for ref in pin.linked_to_raw or []:
+            target_pin_id = _pin_ref_guid(ref)
+            target_node_guid = ""
+            target_pin_name = ""
+            target_node_name = ""
+            if target_pin_id in pin_lookup:
+                target_node_guid, target_pin_name = pin_lookup[target_pin_id]
+                target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
+            elif isinstance(ref, dict):
+                target_node_name = ref.get("owning_node", "") or ""
+
+            links.append({
+                "source": {
+                    "node": current_node_name,
+                    "node_guid": node.node_guid,
+                    "pin": pin.pin_name,
+                    "pin_id": pin.pin_id,
+                    "direction": "output" if pin.direction == 1 else "input",
+                },
+                "target": {
+                    "node": target_node_name,
+                    "node_guid": target_node_guid,
+                    "pin": target_pin_name,
+                    "pin_id": target_pin_id or "",
+                },
+                "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+                "raw": _sanitize_recursive(ref),
+            })
+
+    return links
+
+
 def _get_start_event_name(node: UEdGraphNode) -> str:
     """获取起点节点的事件名称（D-19-11）。
 
@@ -1272,6 +1314,11 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
     formatted = []
     for graph in graphs:
+        pin_lookup, _, _ = _build_graph_indexes(graph)
+        node_name_lookup = {
+            node.node_guid: _derive_node_name(node, idx)
+            for idx, node in enumerate(graph.nodes)
+        }
         # 图类型映射
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
@@ -1287,11 +1334,17 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建数据流
         data_flows = build_data_flows(graph)
 
+        nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
+        for node, node_dict in zip(graph.nodes, nodes):
+            node_dict["links"] = _format_graph_node_links(
+                node, node_name_lookup, pin_lookup
+            )
+
         graph_dict = {
             "graph_name": graph.graph_name,
             "graph_type": graph_type,
             "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
-            "nodes": [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)],  # OUT-01: 完整节点列表
+            "nodes": nodes,  # OUT-01: 完整节点列表
             "connections": connections,
             "execution_chains": execution_chains,  # Phase 71: 链式表达替代 execution_flows
             "data_flows": data_flows,

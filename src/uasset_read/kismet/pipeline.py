@@ -111,6 +111,9 @@ def decompile_single_function(
         local_variables=local_vars,
         cpp_code=cpp_code,
         expressions=expressions,
+        bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
+        bytecode_status="parsed",
+        warnings=[],
     )
 
 

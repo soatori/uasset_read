@@ -33,6 +33,9 @@ class KismetDecompiledResult:
     local_variables: list[dict[str, str]]  # [{name, type}, ...] from TypeRegistry snapshot
     cpp_code: str                          # C++ pseudocode string (multi-line, indented)
     expressions: list[Any] = field(default_factory=list)  # raw KismetExpression list for debugging
+    bytecode_source: str = "unknown"
+    bytecode_status: str = "unknown"
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """
@@ -46,6 +49,9 @@ class KismetDecompiledResult:
             "signature": self.signature,
             "local_variables": self.local_variables,
             "cpp_code": self.cpp_code,
+            "bytecode_source": self.bytecode_source,
+            "bytecode_status": self.bytecode_status,
+            "warnings": self.warnings,
             "expressions": [
                 e.to_dict() if hasattr(e, "to_dict") else str(e)
                 for e in self.expressions

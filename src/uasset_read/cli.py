@@ -175,7 +175,7 @@ def main():
     tolerant = not args.strict
 
     # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
-    if fmt in {"cpp_skeleton", "blueprint_ue_text"}:
+    if fmt in {"cpp_skeleton", "blueprint_ue_text", "json", "json_summary"}:
         try:
             linker_result = parse_uasset_with_linker(args.file, tolerant=tolerant)
         except Exception as e:
@@ -188,8 +188,8 @@ def main():
                 print(f"  - {err}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
-        # Verify blueprint exists
-        if linker_result.blueprint is None or not linker_result.blueprint.is_blueprint:
+        # Verify blueprint exists only for formats that require blueprint metadata.
+        if fmt == "cpp_skeleton" and (linker_result.blueprint is None or not linker_result.blueprint.is_blueprint):
             print("Error: --cpp-skeleton requires a blueprint file", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 

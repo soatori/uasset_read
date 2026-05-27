@@ -57,6 +57,7 @@ def read_property_tag(
         pending = pending - 1 + inner_count
 
     tag.type = type_parts[0][0] if type_parts else ""
+    tag.type_parts = type_parts
 
     # Extract enum_type for ByteProperty/EnumProperty from FPropertyTypeName nodes
     # Per CUE4Parse: ByteProperty with enum backing reads FName (8 bytes), not single byte
@@ -65,6 +66,17 @@ def read_property_tag(
         enum_type_name = type_parts[1][0]
         if enum_type_name and enum_type_name != "None":
             tag.enum_type = enum_type_name
+    if tag.type == "StructProperty" and len(type_parts) >= 2:
+        struct_type_name = type_parts[1][0]
+        if struct_type_name and struct_type_name != "None":
+            tag.struct_type = struct_type_name.split(".")[-1]
+    elif tag.type == "ArrayProperty" and len(type_parts) >= 2:
+        tag.inner_type = type_parts[1][0]
+    elif tag.type == "SetProperty" and len(type_parts) >= 2:
+        tag.inner_type = type_parts[1][0]
+    elif tag.type == "MapProperty" and len(type_parts) >= 3:
+        tag.key_type = type_parts[1][0]
+        tag.value_type = type_parts[2][0]
     tag.size = archive.read_i32()
     try:
         archive.validate_size(tag.size, tag.name, tolerant=tolerant)
