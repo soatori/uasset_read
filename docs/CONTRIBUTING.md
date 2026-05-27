@@ -1,7 +1,7 @@
 <!-- generated-by: gsd-doc-writer -->
 # 贡献指南
 
-感谢您对本项目的关注！Unreal Engine `.uasset` 文件解析器是一个开源项目（MIT 许可），欢迎所有开发者参与贡献。
+感谢您对本项目的关注！Unreal Engine `.uasset` 文件解析器是一个项目，欢迎所有开发者参与贡献。
 
 ## 行为准则
 
@@ -160,6 +160,3 @@ LyraStarterGame/    # Lyra 示例资产（已 git 忽略）
 
 > 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。请勿将临时文件提交到版本库。
 
-## 许可
-
-本项目采用 MIT 许可。提交贡献即表示您同意将您的代码以 MIT 许可发布。
