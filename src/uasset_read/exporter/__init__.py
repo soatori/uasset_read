@@ -24,6 +24,7 @@ from . import json_exporter      # noqa: F401
 from . import text_exporter      # noqa: F401
 from . import markdown_exporter  # noqa: F401
 from . import blueprint_text_exporter  # noqa: F401
+from . import blueprint_ue_text_exporter  # noqa: F401
 from . import n2c_exporter       # noqa: F401
 from . import cpp_skeleton_exporter  # noqa: F401
 from . import cpp_json_ir_exporter   # noqa: F401
@@ -43,6 +44,7 @@ __all__ = [
     "TextExporter",
     "MarkdownExporter",
     "BlueprintTextExporter",
+    "BlueprintUETextExporter",
     "N2CExporter",
     "CppSkeletonExporter",
     "CppJsonIrExporter",
@@ -62,6 +64,9 @@ def __getattr__(name: str):
     elif name == "BlueprintTextExporter":
         from .blueprint_text_exporter import BlueprintTextExporter
         return BlueprintTextExporter
+    elif name == "BlueprintUETextExporter":
+        from .blueprint_ue_text_exporter import BlueprintUETextExporter
+        return BlueprintUETextExporter
     elif name == "N2CExporter":
         from .n2c_exporter import N2CExporter
         return N2CExporter

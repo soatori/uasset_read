@@ -50,6 +50,7 @@ def create_parser() -> argparse.ArgumentParser:
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
     group.add_argument('--blueprint-text', action='store_true', help='Output compact blueprint translation reference text')
+    group.add_argument('--blueprint-ue-text', action='store_true', help='Output UE-style Begin Object blueprint text')
     group.add_argument('--cpp-skeleton', action='store_true',
                        help='Output C++ class skeleton (.h header) instead of JSON (requires blueprint)')
     # Phase Export: new formats
@@ -87,6 +88,8 @@ def resolve_format(args) -> str:
         return "cpp_skeleton"
     if args.blueprint_text:
         return "blueprint_text"
+    if args.blueprint_ue_text:
+        return "blueprint_ue_text"
     if args.markdown:
         return "markdown"
     if args.summary:
@@ -171,8 +174,8 @@ def main():
     fmt = resolve_format(args)
     tolerant = not args.strict
 
-    # cpp_skeleton requires parse_uasset_with_linker
-    if fmt == "cpp_skeleton":
+    # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
+    if fmt in {"cpp_skeleton", "blueprint_ue_text"}:
         try:
             linker_result = parse_uasset_with_linker(args.file, tolerant=tolerant)
         except Exception as e:
@@ -257,7 +260,7 @@ def _handle_graph_mode(args, result):
     from uasset_read.formatters import format_json_full, format_text_full, format_graphs_json
 
     # Phase 55: --function-graphs 隐含 --json
-    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or args.blueprint_text):
+    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or args.blueprint_text or args.blueprint_ue_text):
         args.json = True
 
     if args.json or args.verbose:
