@@ -203,7 +203,10 @@ def main():
             exporter = ExporterRegistry.get(fmt)
             output_str = exporter.export(linker_result, options)
         except ValueError as e:
-            print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            if fmt == "cpp_skeleton":
+                print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            else:
+                print(f"Error: Blueprint UE text export failed: {e}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
         _write_output(output_str, args.output)

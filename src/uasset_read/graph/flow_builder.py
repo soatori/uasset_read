@@ -71,11 +71,20 @@ def _sanitize_recursive(obj):
     """递归清理列表/字典中的字符串。"""
     if isinstance(obj, str):
         return _sanitize_string(obj)
+    elif isinstance(obj, (int, float, bool)) or obj is None:
+        return obj
     elif isinstance(obj, list):
         return [_sanitize_recursive(item) for item in obj]
     elif isinstance(obj, dict):
         return {k: _sanitize_recursive(v) for k, v in obj.items()}
-    return obj
+    elif hasattr(obj, "get_full_name"):
+        try:
+            return obj.get_full_name()
+        except Exception:
+            return str(obj)
+    elif hasattr(obj, "object_name"):
+        return getattr(obj, "object_name", str(obj))
+    return str(obj)
 
 
 def _derive_node_name(node: UEdGraphNode, idx: int) -> str:

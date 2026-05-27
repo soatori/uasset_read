@@ -366,7 +366,7 @@ def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
             "is_const": getattr(variable.var_type, 'is_const', False)
         },
         "category": variable.category,
-        "default_value": variable.default_value,
+        "default_value": serialize_property_value(variable.default_value),
         "friendly_name": variable.friendly_name,
         "property_flags": variable.property_flags,
         "edit_condition": variable.edit_condition,
@@ -405,7 +405,7 @@ def _format_parameter(parameter: FunctionParameter) -> dict:
     return {
         "name": parameter.name,
         "type": parameter.param_type,
-        "default_value": parameter.default_value,
+        "default_value": serialize_property_value(parameter.default_value),
         "is_input": parameter.is_input,
         "is_output": parameter.is_output,
         "is_optional": parameter.is_optional,
