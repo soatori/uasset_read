@@ -8,10 +8,8 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **dev-0.3.0** |
-| Source | 127 Python files, 16 modules |
-| Tests | 21 tests (16 pass / 5 fail — reference asset tests need test fixtures) |
-| Branch | `dev-0.3.0` |
+| Source | Python parser for Unreal Engine .uasset files |
+| Tests | 21 tests |
 
 ## Features
 
@@ -26,11 +24,11 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **Circular dependency detection** — mutual reference detection
 - **Execution / data flow tracing** — Event → CallFunction chain tracking
 - **Function graph analysis** — FunctionEntry identification, per-function call chains
-- **PackageLinker** — Two-stage object graph reconstruction (v7.0)
-- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code (v11.0)
-- **N2C intermediate format** — Agent-optimized JSON schema, execution chains (v12.0)
-- **C++ skeleton extraction** — Component declarations, function signatures (v10.0)
-- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB (v14.0)
+- **PackageLinker** — 两阶段对象图重建
+- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code
+- **N2C intermediate format** — Agent-optimized JSON schema, execution chains
+- **C++ skeleton extraction** — Component declarations, function signatures
+- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB
 - **Multiple output formats** — JSON, Text, Markdown, Mermaid graphs
 
 ## Installation
@@ -90,17 +88,17 @@ from uasset_read import (
     format_json_full, format_json_summary,
     format_text_full, format_markdown,
 
-    # Linker (v7.0)
+    # Linker
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
 
-    # Kismet (v11.0)
+    # Kismet
     decompile_uasset, KismetDecompiledResult,
     KismetTranslator, to_function_body,
 
-    # N2C (v12.0)
+    # N2C
     N2CStruct, N2CGraph, to_n2c_json, from_n2c_json,
 
-    # Agent translation (v11.0)
+    # Agent translation
     AgentTranslationPipeline, translate_blueprint_to_cpp,
     CppFileWriter, write_cpp_class_files,
 
@@ -168,23 +166,6 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 - **Build**: setuptools (src layout), pyproject.toml
 - **Testing**: pytest
 
-## Version History
-
-| Version | Date | Status | Highlights |
-|---------|------|--------|------------|
-| v1.0 | 2026-04-28 | ✅ | Core parsing, basic properties |
-| v2.0 | 2026-05-02 | ✅ | Blueprint graph parsing, advanced properties |
-| v5.1 | 2026-05-07 | ✅ | src layout + pyproject.toml |
-| v6.0 | 2026-05-13 | ✅ | Modular refactoring, 373 tests |
-| v7.0 | 2026-05-14 | ✅ | UObjectInstance object graph reconstruction, PackageLinker |
-| v8.0 | 2026-05-17 | ✅ | BP→C++ JSON translatability (P47-51) |
-| v9.0 | 2026-05-17 | ✅ | Function call chain resolution (P52-55) |
-| v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ code generation reference (P56-60) |
-| v11.0 | 2026-05-20 | ✅ | Kismet decompiler + graph parser fixes + agent translation (P61-66) |
-| v12.0 | 2026-05-21~22 | ✅ | Serialization fixes + N2C intermediate format (P67-71) |
-| v13.0 | 2026-05-23~26 | ✅ | Pin connection fixes + Kismet bytecode navigation + FName/FString distinction (P72-75) |
-| v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse core alignment — Pak parsing + FArchive completion + format alignment (P76-80) |
-
 ## Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
@@ -194,6 +175,3 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 - **UE source reference required**: No official .uasset format documentation
 
 ---
-
-**Last Updated**: 2026-05-27
-**Version**: dev-0.3.0

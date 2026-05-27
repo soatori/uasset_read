@@ -8,10 +8,8 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | **dev-0.3.0** |
-| 源码 | 127 个 Python 文件，16 个模块 |
-| 测试 | 21 tests（16 通过 / 5 失败 — 需要测试资产夹具） |
-| 分支 | `dev-0.3.0` |
+| 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
+| 测试 | 21 个测试 |
 
 ## 功能
 
@@ -26,11 +24,11 @@
 - **循环依赖检测** — ImportMap 相互引用检测
 - **执行流/数据流追踪** — Event → CallFunction 链路追踪
 - **函数图分析** — FunctionEntry 识别、按函数粒度的调用链
-- **PackageLinker** — 两阶段对象图重建（v7.0）
-- **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码（v11.0）
-- **N2C 中间格式** — Agent 优化的 JSON Schema、执行链（v12.0）
-- **C++ 骨架提取** — 组件声明、函数签名（v10.0）
-- **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB（v14.0）
+- **PackageLinker** — 两阶段对象图重建
+- **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码
+- **N2C 中间格式** — Agent 优化的 JSON Schema、执行链
+- **C++ 骨架提取** — 组件声明、函数签名
+- **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB
 - **多种输出格式** — JSON、Text、Markdown、Mermaid 流程图
 
 ## 安装
@@ -91,17 +89,17 @@ from uasset_read import (
     format_json_full, format_json_summary,
     format_text_full, format_markdown,
 
-    # 链接器（v7.0）
+    # 链接器
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
 
-    # Kismet（v11.0）
+    # Kismet
     decompile_uasset, KismetDecompiledResult,
     KismetTranslator, to_function_body,
 
-    # N2C（v12.0）
+    # N2C
     N2CStruct, N2CGraph, to_n2c_json, from_n2c_json,
 
-    # Agent 翻译（v11.0）
+    # Agent 翻译
     AgentTranslationPipeline, translate_blueprint_to_cpp,
     CppFileWriter, write_cpp_class_files,
 
@@ -175,23 +173,6 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 - **构建**: setuptools（src layout），pyproject.toml
 - **测试**: pytest
 
-## 版本历史
-
-| 版本 | 日期 | 状态 | 主要特性 |
-|------|------|------|----------|
-| v1.0 | 2026-04-28 | ✅ | 核心解析、基本属性 |
-| v2.0 | 2026-05-02 | ✅ | 蓝图图解析、高级属性 |
-| v5.1 | 2026-05-07 | ✅ | src layout + pyproject.toml |
-| v6.0 | 2026-05-13 | ✅ | 模块化重构，373 测试 |
-| v7.0 | 2026-05-14 | ✅ | UObjectInstance 对象图重建, PackageLinker |
-| v8.0 | 2026-05-17 | ✅ | BP→C++ JSON 可翻译性 (P47-51) |
-| v9.0 | 2026-05-17 | ✅ | 函数调用链解析 (P52-55) |
-| v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ 代码生成参考 (P56-60) |
-| v11.0 | 2026-05-20 | ✅ | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
-| v12.0 | 2026-05-21~22 | ✅ | 序列化修复 + N2C 中间格式 (P67-71) |
-| v13.0 | 2026-05-23~26 | ✅ | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75) |
-| v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse 核心对齐 — Pak 解析 + FArchive 补齐 (P76-80) |
-
 ## 文档
 
 | 文档 | 路径 |
@@ -210,6 +191,3 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 - **依赖 UE 源码参考**: .uasset 格式无官方文档，需 UE 源码作为参考
 
 ---
-
-**最后更新**: 2026-05-27
-**版本**: dev-0.3.0
