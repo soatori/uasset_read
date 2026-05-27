@@ -68,7 +68,7 @@
    ```
    feat(parsers): add MapProperty nested type parsing
    fix(link): correct ImportMap offset calculation for UE5.3
-   docs(roadmap): update Phase 49 status
+   docs(readme): update feature list
    ```
 
 3. **提交 PR**：
@@ -137,11 +137,9 @@
 - 提供相关的 UE C++ 源码引用（如果可能），如 `FObjectExport` 在 UE 源码中的位置。
 - 说明该功能的优先级和使用场景。
 
-## 规划与 Phase 状态
+## 如何贡献
 
 本项目使用 Superpowers specs + plans 进行规划。当前活跃的 spec 文档位于 `docs/superpowers/specs/`。
-
-v1.0-v13.0 的历史 Phase 规划已归档至 `.planning/archive/`。`.planning/MILESTONES.md` 包含版本历史索引。
 
 如果您想参与某个功能，请查看对应的 spec 文件，确认该功能尚未被他人认领。
 
@@ -150,12 +148,8 @@ v1.0-v13.0 的历史 Phase 规划已归档至 `.planning/archive/`。`.planning/
 ```
 src/uasset_read/    # 源代码
 tests/              # 测试用例
-.planning/          # 规划历史归档（v1.0-v13.0）
 docs/superpowers/   # 当前规划（specs + plans）
 temp/               # 缓存和临时文件（已 git 忽略）
-uasset_read_cpp/    # C++ 参考代码（已 git 忽略）
-UnrealEngine/       # UE 源码参考（已 git 忽略）
-LyraStarterGame/    # Lyra 示例资产（已 git 忽略）
 ```
 
 > 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。请勿将临时文件提交到版本库。

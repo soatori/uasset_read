@@ -42,9 +42,3 @@ uasset_read 项目文档分为以下几个部分：
 |------|------|
 | [CUE4Parse](../external/CUE4Parse/) | CUE4Parse 源码（外部子仓库/参考副本） |
 
-## 规划文档
-
-| 文档 | 说明 |
-|------|------|
-| [MILESTONES](../.planning/MILESTONES.md) | 版本历史 |
-| [归档](../.planning/archive/) | 已归档的里程碑和阶段 |

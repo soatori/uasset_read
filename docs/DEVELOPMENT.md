@@ -58,9 +58,7 @@ uasset_read/
 │   ├── graph/              # 执行流/数据流/连接映射
 │   ├── link/               # PackageLinker / UObjectInstance（两阶段对象图重建）
 │   └── formatters/         # JSON/Text/Markdown 输出格式化
-├── tests/                  # pytest 测试（554 tests）
-├── .planning/              # 规划历史归档（v1.0-v13.0，MILESTONES.md 仍有效）
-├── docs/superpowers/       # 当前规划（specs + plans，Superpowers 工作流）
+├── tests/                  # pytest 测试
 ├── temp/                   # 缓存/临时文件（gitignored）
 ├── pyproject.toml          # 构建配置 + pytest 配置
 └── CLAUDE.md               # 项目上下文（AI 代理参考）
@@ -215,42 +213,32 @@ python -m pytest tests/ --cov=uasset_read --cov-report=term-missing
 
 ### 测试组织
 
-测试文件按功能和 Phase 编号组织：
+测试文件按功能组织：
 
 | 文件模式 | 说明 | 示例 |
 |----------|------|------|
 | `test_uasset_read.py` | 核心功能 | 基础解析、版本检测 |
-| `test_phase{N}_*.py` | 特定 Phase 功能 | `test_phase12_blueprint_variables.py` |
 | `test_link_*.py` | PackageLinker 相关 | `test_link_linker.py`, `test_link_object_instance.py` |
 | `test_ue5_*.py` | UE5 特有行为 | `test_ue5_bool_serialization.py`, `test_ue5_pin_bitfield.py` |
 | `test_*.py` | 按功能分类 | `test_graph_parsing.py`, `test_blueprint_extraction.py` |
 
 ### 编写新测试
 
-- 文件名：`test_{feature}.py` 或 `test_phase{N}_{description}.py`
+- 文件名：`test_{feature}.py`
 - 测试类：`Test{FeatureName}` 前缀
 - 测试函数：`test_{behavior}` 前缀
 - 使用 `pytest.raises()` 验证异常路径
-- 测试资产路径：引用 `E:\Develop\lib\UnrealEngine\Samples\FirstPerson` 下的 `.uasset` 文件，或使用 `pytest.skip()` 跳过缺失资产的测试
+- 测试资产路径：引用真实 `.uasset` 文件，或使用 `pytest.skip()` 跳过缺失资产的测试
 
 ### 已知测试状态
 
-- **554 tests collected**，520 passing
-- Phase 49（函数调用引脚解析）对应的测试尚未通过（功能待实现）
-- 34 tests skipped（通常因测试资产不可用）
+- **21 tests**，16 通过
+- 部分测试因需要测试资产夹具而跳过
 
 ## 6. Superpowers 工作流
 
-本项目使用 Superpowers 进行规划和执行。
-
-### Specs + Plans
-
 Spec 文档位于 `docs/superpowers/specs/`，描述"做什么"和"为什么"。
-实施计划位于 `docs/superpowers/plans/`，描述"怎么做"（由 writing-plans 技能生成）。
-
-### 规划历史
-
-v1.0-v13.0 的 GSD Phase 规划已归档至 `.planning/archive/`。
+实施计划位于 `docs/superpowers/plans/`，描述"怎么做"。
 
 ## 7. 分支策略
 
@@ -259,14 +247,13 @@ v1.0-v13.0 的 GSD Phase 规划已归档至 `.planning/archive/`。
 | 分支 | 用途 |
 |------|------|
 | `master` | 主分支，稳定版本，受保护 |
-| `v{major}-{minor}-dev` | 开发分支（当前 `v2.8-dev`） |
+| `dev-{major}-{minor}` | 开发分支 |
 
 ### 工作流程
 
-1. 从 `master` 创建开发分支（如 `v2.8-dev`）
+1. 从 `master` 创建开发分支
 2. 所有开发工作在该开发分支上进行
-3. Phase 完成后在开发分支上提交
-4. 里程碑完成后通过 PR 合并到 `master`
+3. 功能完成后通过 PR 合并到 `master`
 
 ### 提交信息格式
 
