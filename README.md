@@ -9,8 +9,9 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 | Metric | Value |
 |--------|-------|
 | Version | **dev-0.3.0** (v14, Phase 76) |
-| Tests | **1646 tests** (1516 passed, 124 skipped) |
+| Tests | **1650 tests** |
 | Branch | `dev-0.3.0` |
+| Workflow | **Superpowers** (specs + plans) |
 
 ### Current Phase: v14.0 — CUE4Parse 核心对齐
 
@@ -27,7 +28,7 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **Phase 79 ⬜**: IoStore (.utoc/.ucas) 解析
 - **Phase 80 ⬜**: 输出格式 PascalCase 对齐
 
-详见 `.planning/ROADMAP.md`。
+详见 `docs/superpowers/specs/`。
 
 ### Latest Shipped: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
 
@@ -209,7 +210,7 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 - **Dependencies**: Zero runtime dependencies
 - **Build**: setuptools (src layout), pyproject.toml
 - **Testing**: pytest
-- **Workflow**: GSD (Guided Software Development)
+- **Workflow**: Superpowers (specs + plans)
 
 ## Version History
 
@@ -240,9 +241,10 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | Contributing | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) |
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Reference Docs | [docs/reference/](docs/reference/) |
-| Roadmap | [.planning/ROADMAP.md](.planning/ROADMAP.md) |
-| Project Overview | [.planning/PROJECT.md](.planning/PROJECT.md) |
+| Specs (v14.0) | [docs/superpowers/specs/](docs/superpowers/specs/) |
+| Plans | [docs/superpowers/plans/](docs/superpowers/plans/) |
 | Archive | [.planning/archive/](.planning/archive/) |
+| Milestones | [.planning/MILESTONES.md](.planning/MILESTONES.md) |
 
 ## Limitations
 
@@ -254,5 +256,5 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 
 ---
 
-**Last Updated**: 2026-05-26
-**Version**: v14.0 in development | **Tests**: 1646
+**Last Updated**: 2026-05-27
+**Version**: v14.0 in development | **Tests**: 1650 | **Workflow**: Superpowers
