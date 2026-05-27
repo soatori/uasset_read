@@ -185,15 +185,6 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | v13.0 | 2026-05-23~26 | ✅ | Pin connection fixes + Kismet bytecode navigation + FName/FString distinction (P72-75) |
 | v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse core alignment — Pak parsing + FArchive completion + format alignment (P76-80) |
 
-## Documentation
-
-| Document | Path |
-|----------|------|
-| Getting Started | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
-| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Development | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
-| Reference Docs | [docs/reference/](docs/reference/) |
-
 ## Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
