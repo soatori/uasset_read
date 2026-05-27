@@ -39,7 +39,7 @@ from uasset_read.serializers.object_resources import (
     get_asset_class, get_asset_class_with_linker,
     PackageIndex,
 )
-from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
 from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
 
@@ -96,17 +96,12 @@ def _read_tag_bool(archive: FArchive, tag) -> bool:
     Returns:
         bool 值
     """
-    if tag.size > 0:
-        # Value body: UE5 bool serialization = i32 (4 bytes)
-        value = archive.read_i32() != 0
-        # Ensure we end at value_end_offset
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-        return value
-    else:
-        # Inline bool: tag.bool_val already set by read_property_tag
-        # PROP_TAG_BOOL_TRUE flag sets bool_val = 1, otherwise 0
+    def _reader() -> bool:
+        if tag.size > 0:
+            return archive.read_i32() != 0
         return tag.bool_val != 0
+
+    return read_tag_value_bounded(archive, tag, _reader)
 
 
 def _read_tag_i32(archive: FArchive, tag) -> int:
@@ -121,11 +116,7 @@ def _read_tag_i32(archive: FArchive, tag) -> int:
     Returns:
         int32 值
     """
-    value = archive.read_i32()
-    # Always seek to value_end_offset to ensure correct position
-    if archive.tell() < tag.value_end_offset:
-        archive.seek(tag.value_end_offset)
-    return value
+    return read_tag_value_bounded(archive, tag, archive.read_i32)
 
 
 def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
@@ -141,11 +132,7 @@ def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
     Returns:
         FName 字符串
     """
-    value = archive.read_name(name_map)
-    # Always seek to value_end_offset to ensure correct position
-    if archive.tell() < tag.value_end_offset:
-        archive.seek(tag.value_end_offset)
-    return value
+    return read_tag_value_bounded(archive, tag, lambda: archive.read_name(name_map))
 
 
 # ============================================================================
@@ -1641,76 +1628,107 @@ def read_ue_graph_node(
                 break
 
             if tag.name == "FunctionReference" and tag.size > 0:
-                value_end = archive.tell() + tag.size
-                mp_idx = 0
-                m_scope = ""
-                m_name = ""
-                m_guid = ""
-                m_self = False
+                def _read_function_reference() -> FMemberReference:
+                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
+                    mp_idx = 0
+                    m_name = ""
+                    m_guid = ""
+                    m_self = False
 
-                while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map)
-                    if inner.name == "None":
-                        break
-                    if inner.name == "MemberParent" and inner.size > 0:
-                        mp_idx = archive.read_i32()
-                    elif inner.name == "MemberScope" and inner.size > 0:
-                        m_scope = archive.read_fstring()
-                    elif inner.name == "MemberName":
-                        m_name = archive.read_name(name_map)
-                    elif inner.name == "MemberGuid" and inner.size > 0:
-                        m_guid = archive.read_bytes(16).hex()
-                    elif inner.name == "bSelfContext":
-                        if inner.size > 0:
-                            m_self = archive.read_i32() != 0
-                        else:
-                            m_self = inner.bool_val != 0
-                    elif inner.name == "bWasDeprecated" and inner.size > 0:
-                        archive.read_i32()
-                    elif inner.size > 0:
-                        archive.seek(archive.tell() + inner.size)
+                    while archive.tell() < value_end:
+                        inner = read_property_tag(archive, name_map)
+                        if inner.name == "None":
+                            break
+                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
+                            raise ParseError(
+                                f"FunctionReference field '{inner.name}' exceeds struct boundary"
+                            )
 
-                function_reference = FMemberReference(
-                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                    member_name=m_name,
-                    member_guid=m_guid,
-                    b_self_context=m_self,
-                )
+                        def _read_inner(inner=inner):
+                            if inner.name == "MemberParent" and inner.size > 0:
+                                return archive.read_i32()
+                            if inner.name == "MemberScope" and inner.size > 0:
+                                archive.read_fstring()
+                                return None
+                            if inner.name == "MemberName":
+                                return archive.read_name(name_map)
+                            if inner.name == "MemberGuid" and inner.size > 0:
+                                return archive.read_bytes(16).hex()
+                            if inner.name == "bSelfContext":
+                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
+                            if inner.name == "bWasDeprecated" and inner.size > 0:
+                                archive.read_i32()
+                            return None
+
+                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
+                        if inner.name == "MemberParent":
+                            mp_idx = inner_value or 0
+                        elif inner.name == "MemberName":
+                            m_name = inner_value or ""
+                        elif inner.name == "MemberGuid":
+                            m_guid = inner_value or ""
+                        elif inner.name == "bSelfContext":
+                            m_self = bool(inner_value)
+
+                    return FMemberReference(
+                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+                        member_name=m_name,
+                        member_guid=m_guid,
+                        b_self_context=m_self,
+                    )
+
+                function_reference = read_tag_value_bounded(archive, tag, _read_function_reference)
             elif tag.name == "EventReference" and tag.size > 0:
-                value_end = archive.tell() + tag.size
-                mp_idx = 0
-                m_name = ""
-                m_guid = ""
-                m_self = False
+                def _read_event_reference() -> FMemberReference:
+                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
+                    mp_idx = 0
+                    m_name = ""
+                    m_guid = ""
+                    m_self = False
 
-                while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map)
-                    if inner.name == "None":
-                        break
-                    if inner.name == "MemberParent" and inner.size > 0:
-                        mp_idx = archive.read_i32()
-                    elif inner.name == "MemberScope" and inner.size > 0:
-                        archive.read_fstring()
-                    elif inner.name == "MemberName":
-                        m_name = archive.read_name(name_map)
-                    elif inner.name == "MemberGuid" and inner.size > 0:
-                        m_guid = archive.read_bytes(16).hex()
-                    elif inner.name == "bSelfContext":
-                        if inner.size > 0:
-                            m_self = archive.read_i32() != 0
-                        else:
-                            m_self = inner.bool_val != 0
-                    elif inner.name == "bWasDeprecated" and inner.size > 0:
-                        archive.read_i32()
-                    elif inner.size > 0:
-                        archive.seek(archive.tell() + inner.size)
+                    while archive.tell() < value_end:
+                        inner = read_property_tag(archive, name_map)
+                        if inner.name == "None":
+                            break
+                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
+                            raise ParseError(
+                                f"EventReference field '{inner.name}' exceeds struct boundary"
+                            )
 
-                event_reference = FMemberReference(
-                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                    member_name=m_name,
-                    member_guid=m_guid,
-                    b_self_context=m_self,
-                )
+                        def _read_inner(inner=inner):
+                            if inner.name == "MemberParent" and inner.size > 0:
+                                return archive.read_i32()
+                            if inner.name == "MemberScope" and inner.size > 0:
+                                archive.read_fstring()
+                                return None
+                            if inner.name == "MemberName":
+                                return archive.read_name(name_map)
+                            if inner.name == "MemberGuid" and inner.size > 0:
+                                return archive.read_bytes(16).hex()
+                            if inner.name == "bSelfContext":
+                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
+                            if inner.name == "bWasDeprecated" and inner.size > 0:
+                                archive.read_i32()
+                            return None
+
+                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
+                        if inner.name == "MemberParent":
+                            mp_idx = inner_value or 0
+                        elif inner.name == "MemberName":
+                            m_name = inner_value or ""
+                        elif inner.name == "MemberGuid":
+                            m_guid = inner_value or ""
+                        elif inner.name == "bSelfContext":
+                            m_self = bool(inner_value)
+
+                    return FMemberReference(
+                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+                        member_name=m_name,
+                        member_guid=m_guid,
+                        b_self_context=m_self,
+                    )
+
+                event_reference = read_tag_value_bounded(archive, tag, _read_event_reference)
             # Phase 75-03: K2Node_Event PropertyTag 字段使用 helper functions
             # 注意：这些字段会在后面的 elif 分支（使用 helper functions）处理
             # 这里只是占位注释，实际处理在 lines 1859-1872

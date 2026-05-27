@@ -31,6 +31,12 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
 }
 
 
+_TAGGED_FALLBACK_STRUCTS: set[str] = {
+    "MemberReference",
+    "SimpleMemberReference",
+}
+
+
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)
 # ============================================================================
@@ -45,6 +51,12 @@ def _get_read_property_tag():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_property_tag
     return read_property_tag
+
+
+def _get_read_tag_value_bounded():
+    """Lazy import to avoid circular dependency."""
+    from uasset_read.serializers.property_tags import read_tag_value_bounded
+    return read_tag_value_bounded
 
 
 # ============================================================================
@@ -176,6 +188,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+    declared_struct_type = struct_type
 
     # Fast-path pre-check: validate tag.size matches expected layout.
     # UE5 LWC stores some math structs as doubles, so accept those explicitly.
@@ -383,13 +396,23 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
-    # BodyInstance: complex struct with version-dependent fields, uses generic PropertyTag loop
-    # Consistent with CUE4Parse FStructFallback approach — no dedicated fast-path
+    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS:
+        if tag.size > 0:
+            archive.seek(archive.tell() + tag.size)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
+        )
+
+    # Only known tagged fallback structs use an inner PropertyTag loop.
     fields: Dict[str, Any] = {}
     property_count = 0
 
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
+    read_tag_value_bounded = _get_read_tag_value_bounded()
 
     # Phase 73 Wave 4: Track expected struct end position for recovery
     struct_start = archive.tell()
@@ -403,40 +426,29 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         if inner_tag.name == "None":
             break
 
-        # Phase 73 Wave 4: Check if PropertyTag size/type is trustworthy
-        # Suspicious indicators: size > remaining struct bytes, type mismatch
-        if struct_end is not None and inner_tag.size > 0:
-            inner_tag_end = archive.tell() + inner_tag.size
-            if inner_tag_end > struct_end + 16:  # Allow 16 bytes tolerance for alignment
-                # Log suspicious PropertyTag but continue with recovery
-                import logging
-                logger = logging.getLogger('uasset_read.serializers.property_tags')
-                logger.warning(
-                    f"[P73-PROPTRACE] Suspicious PropertyTag '{inner_tag.name}' "
-                    f"size={inner_tag.size} exceeds struct boundary "
-                    f"(tag_end={inner_tag_end}, struct_end={struct_end})"
-                )
+        if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
+            raise ParseError(
+                f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
+                f"size {inner_tag.size} exceeds struct boundary"
+            )
 
-        field_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
-        # 当解析器返回 None（未知类型）且 tag.size > 0 时，主动跳过该属性字节
-        # 防止在同一位置无限循环读取相同的 PropertyTag
-        if field_value is None and inner_tag.size > 0:
-            archive.seek(archive.tell() + inner_tag.size)
+        field_value = read_tag_value_bounded(
+            archive,
+            inner_tag,
+            lambda inner_tag=inner_tag: parse_property_value(
+                inner_tag, archive, name_map, export_map, summary, depth + 1
+            ),
+        )
         fields[inner_tag.name] = field_value
-
-        # Phase 73 Wave 4: Recovery - align to value_end if parsing failed
-        if inner_tag.value_end_offset is not None and inner_tag.size > 0:
-            current_pos = archive.tell()
-            if current_pos != inner_tag.value_end_offset:
-                # Parsing left archive at unexpected position - realign
-                archive.seek(inner_tag.value_end_offset)
 
     if struct_end is not None and archive.tell() != struct_end:
         archive.seek(struct_end)
 
     return StructValue(
-        struct_type=struct_type,
-        fields=fields
+        struct_type=declared_struct_type,
+        fields=fields,
+        raw_size=tag.size,
+        parse_status="parsed",
     )
 
 

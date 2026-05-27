@@ -2,6 +2,7 @@
 UnrealEngine/
 LyraStarterGame/
 UnrealProjects/
+external/
 
 # Python
 __pycache__/
@@ -75,5 +76,5 @@ temp/
 # Qwen Code project documentation (IMPORTANT: Do not commit to version control)
 QWEN.md
 
-references/*
+reference/*
 .playwright-mcp/*

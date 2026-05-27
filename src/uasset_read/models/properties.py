@@ -59,6 +59,8 @@ class StructValue(AdvancedPropertyValue):
     """StructProperty 值容器（D-01a）。"""
     struct_type: str
     fields: Dict[str, Any] = field(default_factory=dict)
+    raw_size: Optional[int] = None
+    parse_status: str = "parsed"
     property_type: str = "StructProperty"
 
 

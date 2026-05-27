@@ -180,10 +180,15 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
         return [serialize_property_value(item, depth + 1, max_depth) for item in value]
 
     if isinstance(value, StructValue):
-        return {
+        payload = {
             "struct_type": value.struct_type,
             "fields": {k: serialize_property_value(v, depth + 1, max_depth) for k, v in value.fields.items()}
         }
+        if value.raw_size is not None:
+            payload["raw_size"] = value.raw_size
+        if value.parse_status != "parsed":
+            payload["parse_status"] = value.parse_status
+        return payload
     if isinstance(value, MapValue):
         return {
             "key_type": value.key_type,

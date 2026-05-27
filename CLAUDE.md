@@ -58,9 +58,10 @@ v7.0 引入两阶段对象图重建：`PackageLinker.link()` 从 ImportMap/Expor
 src/uasset_read/  # 源码    tests/          # 测试
 .planning/        # 规划    temp/            # 缓存/临时生成文件
 docs/             # 用户文档（ARCHITECTURE/DEVELOPMENT/FRAMEWORK 等）
-docs/ref/         # 整合参考文档（蓝图→C++ 转换指南等）
-docs/reference/   # 独立参考资料（解析完整性/节点文本参考/UE 加载流程）
-uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽略）
+
+docs/reference/   # 独立参考资料（解析完整性/节点文本参考/UE 加载流程/CUE4Parse 索引/uasset 格式等）
+uasset_read_cpp/  # C++参考
+external/         # 外部参考（CUE4Parse 源码等，Git忽略）
 ```
 
 > 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。

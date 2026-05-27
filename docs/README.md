@@ -19,22 +19,32 @@ uasset_read 项目文档分为以下几个部分：
 | [测试策略](TESTING.md) | 测试框架、覆盖率要求、测试资产 |
 | [安全](SECURITY.md) | 安全审计和威胁模型 |
 
-## 参考资料
+## 参考资料（reference/）
 
 | 文档 | 说明 |
 |------|------|
 | [解析完整性](reference/PARSING_COMPLETENESS.md) | 已支持的属性类型和覆盖率分析 |
 | [蓝图节点文本参考](reference/Blueprint_Node_Text_Reference.md) | 蓝图节点输出格式参考 |
 | [UE uasset 加载流程](reference/UE_uasset_Loading_Flow.md) | UE 编辑器加载 .uasset 的内部流程 |
-| [蓝图到 C++ 转换](ref/blueprint-cpp.md) | 合并自 4 份旧文档，含可行性评分/决策树/cpp_gen 模块映射 |
+| [蓝图到 C++ 转换](reference/blueprint-to-cpp-guide.md) | 蓝图转 C++ 可行性分析/决策树/cpp_gen 模块映射 |
+| [CUE4Parse 索引](reference/CUE4Parse-索引.md) | CUE4Parse 库函数/类索引 |
+| [CUE4Parse 对照索引](reference/CUE4Parse-对照索引.md) | CUE4Parse 与本项目模块对照 |
+| [CUE4Parse 集成指南](reference/CUE4Parse_集成指南.md) | CUE4Parse 集成参考 |
+| [重构参考](reference/refactor-reference.md) | 重构决策参考 |
+| [BP 解析对比报告](reference/BP_FirstPersonCharacter_解析对比报告.md) | BP_FirstPersonCharacter 解析对比 |
+| [差异报告](reference/差异报告.md) | 解析差异分析 |
+| [对比分析](reference/对比分析-uasset格式与蓝图节点文本参考.md) | uasset 格式与蓝图节点文本对比 |
+| [uasset 格式参考](reference/uasset-format/) | uasset 二进制格式详细参考 |
+
+## 外部参考（external/）
+
+| 目录 | 说明 |
+|------|------|
+| [CUE4Parse](../external/CUE4Parse/) | CUE4Parse 源码（外部子仓库/参考副本） |
 
 ## 规划文档
 
 | 文档 | 说明 |
 |------|------|
-| [ROADMAP](../.planning/ROADMAP.md) | 路线图（v11.0 完成中，v12.0 计划中） |
-| [STATE](../.planning/STATE.md) | 当前里程碑状态 |
-| [PROJECT](../.planning/PROJECT.md) | 项目概述 |
 | [MILESTONES](../.planning/MILESTONES.md) | 版本历史 |
-| [研究文档](../.planning/research/) | 研究分析文档 |
 | [归档](../.planning/archive/) | 已归档的里程碑和阶段 |
