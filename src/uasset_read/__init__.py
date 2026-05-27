@@ -211,6 +211,7 @@ from .formatters import (
     _build_mermaid_flowchart,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,
+    format_blueprint_ue_text,
     # 辅助函数
     build_status_info,
     build_schema_info,
@@ -492,6 +493,7 @@ __all__ = [
     "format_text_full",
     "format_markdown",
     "format_blueprint_translation_text",
+    "format_blueprint_ue_text",
     "format_graphs_json",
     "build_schema_info",
     "resolve_fpackage_index",

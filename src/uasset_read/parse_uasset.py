@@ -90,6 +90,7 @@ def _post_process(
         if hasattr(result, 'graphs'):
             result.graphs = extract_blueprint_graphs(
                 archive, summary, name_map, import_map, export_map,
+                linker=linker,
             )
             graphs_list = result.graphs
     except ImportError:
