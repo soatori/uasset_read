@@ -109,7 +109,7 @@ uasset-read path/to/file.uasset --summary
 
 Outputs a compact JSON with summary, name map, import/export names — but skips detailed property parsing. Useful for asset inventory scripts.
 
-### Parse with PackageLinker (v7.0+)
+### Parse with PackageLinker
 
 For object graph reconstruction using UE's FLinkerLoad-style two-phase loading:
 

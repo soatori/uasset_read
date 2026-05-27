@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
     from uasset_read.models.core import UEdGraph
     from uasset_read.kismet.result import KismetDecompiledResult
+    from uasset_read.versioning import VersionContainer
 
 
 @dataclass
@@ -43,3 +44,7 @@ class LinkerParseResult:
     circular_deps: List[List[str]] = field(default_factory=list)
     components: List[Dict] = field(default_factory=list)
     decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
+    version_container: Optional["VersionContainer"] = None
+    resolved_parent_assets: List[Dict] = field(default_factory=list)
+    inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
+    logic_sources: List[Dict] = field(default_factory=list)

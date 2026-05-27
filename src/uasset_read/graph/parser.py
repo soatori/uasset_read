@@ -5,12 +5,13 @@ Phase 31: 蓝图图解析模块。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
+    from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import PKG_Cooked
 from uasset_read.serializers.object_resources import get_asset_class
@@ -24,6 +25,7 @@ def extract_blueprint_graphs(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
 ) -> List[UEdGraph]:
     """
     从 ExportMap 提取蓝图图（等价迁移 uasset_read.py L3095-3143）。
@@ -58,7 +60,7 @@ def extract_blueprint_graphs(
             graph = read_ue_graph(
                 archive, name_map, summary,
                 export_map, import_map,
-                export, class_name, export_idx + 1  # 1-based index
+                export, class_name, export_idx + 1, linker  # 1-based index
             )
             graphs.append(graph)
 

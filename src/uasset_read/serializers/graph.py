@@ -26,6 +26,7 @@ from uasset_read.constants import (
     FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
     FUE5RELEASESTREAM_OBJECT_VERSION_GUID,
     FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION,
+    UE5_PROPERTY_TAG_EXTENSION,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ from uasset_read.serializers.object_resources import (
     get_asset_class, get_asset_class_with_linker,
     PackageIndex,
 )
-from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
 from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
 
@@ -95,17 +96,12 @@ def _read_tag_bool(archive: FArchive, tag) -> bool:
     Returns:
         bool 值
     """
-    if tag.size > 0:
-        # Value body: UE5 bool serialization = i32 (4 bytes)
-        value = archive.read_i32() != 0
-        # Ensure we end at value_end_offset
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-        return value
-    else:
-        # Inline bool: tag.bool_val already set by read_property_tag
-        # PROP_TAG_BOOL_TRUE flag sets bool_val = 1, otherwise 0
+    def _reader() -> bool:
+        if tag.size > 0:
+            return archive.read_i32() != 0
         return tag.bool_val != 0
+
+    return read_tag_value_bounded(archive, tag, _reader)
 
 
 def _read_tag_i32(archive: FArchive, tag) -> int:
@@ -120,11 +116,7 @@ def _read_tag_i32(archive: FArchive, tag) -> int:
     Returns:
         int32 值
     """
-    value = archive.read_i32()
-    # Always seek to value_end_offset to ensure correct position
-    if archive.tell() < tag.value_end_offset:
-        archive.seek(tag.value_end_offset)
-    return value
+    return read_tag_value_bounded(archive, tag, archive.read_i32)
 
 
 def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
@@ -140,11 +132,7 @@ def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
     Returns:
         FName 字符串
     """
-    value = archive.read_name(name_map)
-    # Always seek to value_end_offset to ensure correct position
-    if archive.tell() < tag.value_end_offset:
-        archive.seek(tag.value_end_offset)
-    return value
+    return read_tag_value_bounded(archive, tag, lambda: archive.read_name(name_map))
 
 
 # ============================================================================
@@ -253,28 +241,35 @@ def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
 
 
 def _read_ftext_fstring(archive: FArchive) -> str:
-    """读取 FText 内部的 FString，对异常长度不回退（已消费 i32 长度字段）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FArchive& operator<<(FString&) 实现
+    """读取 FText 内部 FString。
 
-    与 _read_fstring_safe 的关键区别：长度异常时不回退 seek，
-    直接返回空字符串，确保 FText 内部每个 FString 即使长度异常，
-    文件位置也不会错位。
+    与 _read_fstring_safe 不同，此函数在长度异常时直接抛错，由上层决定
+    是否整体回退整个 FText。这样可以避免“少读一部分 body 但继续向后走”
+    的隐性错位。
     """
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    length = archive.read_i32()  # TODO: 使用UE编辑器方式读取FString长度
+    length = archive.read_i32()
     if length == 0 or length == -1:
-        # Phase 75: length=-1 是 UE 空字符串标记
         return ""
     if abs(length) > 10_000:
-        # 异常长度，不回退（已消费 i32），返回空字符串
-        return ""
+        raise ParseError(f"Invalid FText FString length: {length}")
     if length < -1:
-        data = archive.read(-length * 2)  # TODO: 使用UE编辑器方式读取UTF-16数据
+        data = archive.read(-length * 2)
         return data.decode('utf-16', errors='replace').rstrip('\x00')
-    data = archive.read(length)  # TODO: 使用UE编辑器方式读取UTF-8数据
+    data = archive.read(length)
     return data.decode('utf-8', errors='replace').rstrip('\x00')
+
+
+def _read_ftext_value(
+    archive: FArchive,
+    tolerant: bool = True,
+) -> tuple[str, int, int, int]:
+    """读取完整 FText，返回 (value, flags, history_type, consumed)。"""
+    start_pos = archive.tell()
+    flags = archive.read_i32()
+    history_type_raw = archive.read_u8()
+    history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
+    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant)
+    return value, flags, history_type, archive.tell() - start_pos
 
 
 def read_ftext_with_history(
@@ -296,99 +291,54 @@ def read_ftext_with_history(
     - TextHistory.cpp L1150-1169: FTextHistory_NamedFormat::Serialize
     - Text.cpp L1680-1761: FFormatArgumentData 序列化
     """
-    consumed = 0
     start_pos = archive.tell()
-    logger = logging.getLogger(__name__)
+    value = ""
 
-    # 新增：验证 history_type 范围
-    valid_history_types = list(range(-1, 11))  # -1, 0, 1, ..., 10
-    if history_type not in valid_history_types:
-        # 无效 history_type：记录 debug 日志并返回空字符串
-        logger.debug(
-            "Invalid FText history_type %d at pos %d — returning empty",
-            history_type, start_pos
-        )
-        return "", archive.tell() - start_pos
-    
-    try:
-        if history_type == 255 or history_type == -1:  # None (0xFF unsigned or -1 signed)
-            # None: flags(4) + htype(1) + bHasCultureInvariantString
-            # UE C++ FArchive::operator<<(bool&) 序列化为 uint32 (4 bytes)
-            # 参考 Text.cpp L935-944: Ar << bHasCultureInvariantString
-            b_has_culture = archive.read_bool()  # 4 bytes (uint32)
-            if b_has_culture:
-                # CultureInvariantString (FString)
-                _read_ftext_fstring(archive)
-        elif history_type == 0:  # Base
-            # Base: 3 FStrings (Namespace, Key, SourceString)
-            # 参考 TextHistory.cpp L792-861: FTextHistory_Base::Serialize
-            # FTextKey 使用 FString 格式，每个 FString = i32 length + data
-            _read_ftext_fstring(archive)  # Namespace
-            _read_ftext_fstring(archive)  # Key
-            _read_ftext_fstring(archive)  # SourceString
-        elif history_type == 1:  # NamedFormat
-            # TODO: 使用UE编辑器源码的加载方式替换实现代码
-            # NamedFormat: FormatText (递归 FText) + Arguments (TArray<FFormatArgumentData>)
-            # 参考 TextHistory.cpp L1150-1169
-            # FormatText: 递归 FText (完整序列化)
-            _ft_flags = archive.read_i32()
-            _ft_htype_raw = archive.read_bytes(1)[0]  # TODO: 使用UE编辑器方式读取FText历史类型
-            _ft_htype = _ft_htype_raw if _ft_htype_raw < 128 else _ft_htype_raw - 256
-            read_ftext_with_history(archive, _ft_htype, tolerant=True)
+    if history_type not in range(-1, 11):
+        raise ParseError(f"Invalid FText history_type={history_type} at pos {start_pos}")
 
-            # Arguments: TArray<FFormatArgumentData>
-            # TODO: 使用UE编辑器源码的加载方式替换实现代码
-            # 参考 Text.cpp L1680-1761
-            arg_count = archive.read_i32()
-            if arg_count > 0 and arg_count < 100:  # 安全限制
-                for _ in range(arg_count):
-                    # ArgumentName (FString)
-                    _aname_len = archive.read_i32()
-                    if _aname_len > 0:
-                        archive.read(_aname_len)  # TODO: 使用UE编辑器方式读取参数名称
-                    elif _aname_len < 0:
-                        archive.read(-_aname_len * 2)  # TODO: 使用UE编辑器方式读取UTF-16参数名称
-
-                    # Type (uint8) - EFormatArgumentType
-                    _arg_type = archive.read_u8()
-
-                    # Value - 根据 Type 不同
-                    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-                    # Int(0): int64, Float(1): float, Double(2): double, Text(3): FText, Gender(4): uint8
-                    if _arg_type == 0:  # Int
-                        archive.read_i64()  # 或 i32 for legacy  # TODO: 使用UE编辑器方式读取Int64
-                    elif _arg_type == 1:  # Float
-                        archive.read_bytes(4)  # float  # TODO: 使用UE编辑器方式读取Float
-                    elif _arg_type == 2:  # Double
-                        archive.read_bytes(8)  # double  # TODO: 使用UE编辑器方式读取Double
-                    elif _arg_type == 3:  # Text
-                        _tv_flags = archive.read_i32()
-                        _tv_htype_raw = archive.read_bytes(1)[0]  # TODO: 使用UE编辑器方式读取FText历史类型
-                        _tv_htype = _tv_htype_raw if _tv_htype_raw < 128 else _tv_htype_raw - 256
-                        read_ftext_with_history(archive, _tv_htype, tolerant=True)
-                    elif _arg_type == 4:  # Gender
-                        archive.read_u8()
-        else:
-            # Other types (OrderedFormat=2, ArgumentFormat=3, AsNumber=4, etc.)
-            # 这些类型有各自的复杂结构，无法简单跳过
-            # 参考 Text.cpp L965-1037 的其他 history types
-            # Tolerant mode: 不消费字节，seek 回起点
-            if not tolerant:
-                raise ParseError(f"Unsupported FText history_type={history_type}")
-            # Phase 73 Wave 1: tolerant 模式下不猜测跳过，seek 回起点
-            archive.seek(start_pos)
-    except Exception as e:
-        if tolerant:
-            logger.debug("FText tolerant mode: history_type=%s, error=%s, seeking back to %d",
-                         history_type, e, start_pos)
-            # Phase 73 Wave 1: 失败时 seek 回起点，不猜测跳过
-            # 由调用者决定是否跳过或尝试其他恢复策略
-            archive.seek(start_pos)
-        else:
-            raise ParseError(f"Failed to read FText with history_type={history_type}: {e}")
+    if history_type in (-1, 255):
+        b_has_culture = archive.read_bool()
+        if b_has_culture:
+            value = _read_ftext_fstring(archive)
+    elif history_type == 0:
+        _namespace = _read_ftext_fstring(archive)
+        _key = _read_ftext_fstring(archive)
+        value = _read_ftext_fstring(archive)
+    elif history_type == 1:
+        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+        arg_count = archive.read_i32()
+        if arg_count < 0 or arg_count > 100:
+            raise ParseError(f"Invalid FText NamedFormat arg_count={arg_count}")
+        format_args: Dict[str, str] = {}
+        for _ in range(arg_count):
+            arg_name = _read_ftext_fstring(archive)
+            arg_type = archive.read_u8()
+            arg_value = ""
+            if arg_type == 0:
+                arg_value = str(archive.read_i64())
+            elif arg_type == 1:
+                arg_value = str(archive.read_u64())
+            elif arg_type == 2:
+                arg_value = str(archive.read_f32())
+            elif arg_type == 3:
+                arg_value = str(archive.read_f64())
+            elif arg_type == 4:
+                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+            elif arg_type == 5:
+                arg_value = str(archive.read_u8())
+            else:
+                raise ParseError(f"Unsupported FFormatArgumentType={arg_type}")
+            format_args[arg_name] = arg_value
+        value = format_text
+        for key, arg in format_args.items():
+            if key:
+                value = value.replace("{" + key + "}", arg)
+    else:
+        raise ParseError(f"Unsupported FText history_type={history_type}")
 
     consumed = archive.tell() - start_pos
-    return "", consumed
+    return value, consumed
 
 
 # ============================================================================
@@ -964,21 +914,13 @@ def read_ue_graph_pin(
     if trace_mode:
         _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
-    # 4. PinFriendlyName (FText) — EditorOnly, try/except + seek-back
-    # Phase 75-03: UE 源码 Text.cpp L926: 当 Flags=0 且不是 CultureInvariant 时，
-    # 可能表示空文本或简化格式，HistoryType 后直接进入下一个字段，无需读取历史数据。
+    # 4. PinFriendlyName (FText)
     ftext_start_pos = archive.tell()
+    pin_friendly_name: Optional[str] = None
     try:
-        flags = archive.read_i32()
-        history_type_raw = archive.read_u8()
-        history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-
-        # Phase 75-03: Flags=0 时跳过历史读取（空文本或简化格式）
-        # UE 源码条件: bSerializeHistory = !Value.IsEmpty() && !Value.IsCultureInvariant()
-        # Flags=0 表示无 ETextFlag 设置，可能跳过历史
-        if flags != 0 or history_type == -1:
-            read_ftext_with_history(archive, history_type, tolerant=True)
-
+        pin_friendly_name, flags, history_type, _ = _read_ftext_value(
+            archive, tolerant=True
+        )
         if trace_mode:
             _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
                          f"flags={flags},htype={history_type}")
@@ -1083,27 +1025,15 @@ def read_ue_graph_pin(
     # FText Serialisierung: flags(i32,4B) + history_type(u8,1B) + body(variable)
     # Siehe read_ftext_with_history() fuer history_type Verarbeitung
     _dtv_start = archive.tell()
+    default_text_value: Optional[str] = None
     try:
-        _dtv_flags = archive.read_i32()
-        _dtv_history_raw = archive.read_u8()
-        _dtv_history = _dtv_history_raw - 256 if _dtv_history_raw >= 128 else _dtv_history_raw
-        _dtv_value, _dtv_consumed = read_ftext_with_history(
-            archive, _dtv_history,
-            tolerant=True,
+        default_text_value, _dtv_flags, _dtv_history, _ = _read_ftext_value(
+            archive, tolerant=True
         )
-        # Phase 73 Wave 1: 检查是否 seek 回了起点（说明 FText 失败）
-        if archive.tell() == _dtv_start + 5:  # 只消费了 flags + htype，说明 body 失败
-            # Phase 73 收敛：保留已消费的 FText header，避免把 flags 误读为 LinkedTo count
-            archive.seek(_dtv_start + 5)
-            if trace_mode:
-                _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
-                             is_exception=True, is_fallback=True)
-        else:
-            if trace_mode:
-                _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
-                             f"flags={_dtv_flags},htype={_dtv_history}")
+        if trace_mode:
+            _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
+                         f"flags={_dtv_flags},htype={_dtv_history}")
     except Exception as e:
-        # Phase 73 收敛：异常时至少跳过 flags+htype，避免回到字段起点造成连锁错位
         archive.seek(_dtv_start + 5)
         if trace_mode:
             _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
@@ -1111,8 +1041,8 @@ def read_ue_graph_pin(
         logger.debug("DefaultTextValue read failed at pos %d, skipping header: %s",
                      _dtv_start, e)
 
-    # Phase 73 收敛：DefaultTextValue 读取后进行 LinkedTo 前向探测。
-    # 若当前位置不像合法 pin array，而 header 后位置更像，则回退到 header 后重对齐。
+    # 严格重对齐：仅当当前位置不可能是合法 pin array，而 header 后位置是合法 pin array
+    # 时，才回退到仅消费 flags+history_type 的位置。
     _linkedto_probe_pos = archive.tell()
     _probe_now = peek_valid_pin_array_count(archive, export_map)
     if _probe_now is None:
@@ -1155,32 +1085,8 @@ def read_ue_graph_pin(
             _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
                          is_exception=True)
         linked_to = []
-        # Phase 73 Wave 2: 使用增强校验恢复
-        recovery = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
-        # Phase 73 收敛：保守二次恢复。
-        # 若重同步位置可用且 count>0，尝试按 LinkedTo 数组再读一次。
-        if recovery is not None and recovery.get("count", 0) > 0:
-            salvage_pos = recovery["recovered_pos"]
-            pos_before_salvage = archive.tell()
-            try:
-                archive.seek(salvage_pos)
-                salvaged = read_pin_array(
-                    archive, name_map, export_map, import_map, linker, recovery_context="linkedto"
-                )
-                if salvaged:
-                    linked_to = salvaged
-                    logger.warning(
-                        "[P73-SALVAGE] LinkedTo recovered via resync: pos=%d, count=%d",
-                        salvage_pos, len(linked_to),
-                    )
-            except Exception as salvage_err:
-                logger.debug(
-                    "[P73-SALVAGE] LinkedTo salvage failed at pos %d: %s",
-                    salvage_pos, salvage_err,
-                )
-            finally:
-                if not linked_to:
-                    archive.seek(pos_before_salvage)
+        # 仅记录重同步信息，不再依赖低置信度 salvage 来构建正式连接结果。
+        _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
 
     # 14. SubPins array
     subpins_start = archive.tell()
@@ -1249,6 +1155,13 @@ def read_ue_graph_pin(
     except Exception:
         pass
 
+    default_object_ref = None
+    if linker is not None and default_object not in (None, 0):
+        try:
+            default_object_ref = linker.resolve_package_index(PackageIndex(default_object))
+        except Exception:
+            default_object_ref = None
+
     # 从 raw dict 中提取对象引用
     linked_to_objects = [pin.get("owning_node_object") for pin in linked_to]
     sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
@@ -1263,11 +1176,6 @@ def read_ue_graph_pin(
             if f.get("exception") and not f.get("fallback"):
                 first_misaligned = f["name"]
                 break
-            # 检查消费字节是否异常大（FString 正常应该 < 100）
-            if f["name"] in ("PinToolTip", "DefaultValue", "AutogeneratedDefaultValue"):
-                if f["consumed"] > 100:
-                    first_misaligned = f["name"]
-                    break
             # 检查 [BINARY] 标记
             if "[BINARY]" in str(f.get("value", "")):
                 first_misaligned = f["name"]
@@ -1298,12 +1206,15 @@ def read_ue_graph_pin(
     return UEdGraphPin(
         pin_id=pin_id,
         pin_name=pin_name,
+        pin_friendly_name=pin_friendly_name,
         pin_tooltip=pin_tooltip,
         direction=direction,
         pin_type=pin_type,
         default_value=default_value,
         auto_default_value=autogenerated_default_value,
         default_object=default_object,
+        default_object_ref=default_object_ref,
+        default_text_value=default_text_value,
         linked_to_raw=linked_to,
         sub_pins=sub_pins,
         parent_pin=parent_pin,
@@ -1717,76 +1628,107 @@ def read_ue_graph_node(
                 break
 
             if tag.name == "FunctionReference" and tag.size > 0:
-                value_end = archive.tell() + tag.size
-                mp_idx = 0
-                m_scope = ""
-                m_name = ""
-                m_guid = ""
-                m_self = False
+                def _read_function_reference() -> FMemberReference:
+                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
+                    mp_idx = 0
+                    m_name = ""
+                    m_guid = ""
+                    m_self = False
 
-                while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map)
-                    if inner.name == "None":
-                        break
-                    if inner.name == "MemberParent" and inner.size > 0:
-                        mp_idx = archive.read_i32()
-                    elif inner.name == "MemberScope" and inner.size > 0:
-                        m_scope = archive.read_fstring()
-                    elif inner.name == "MemberName":
-                        m_name = archive.read_name(name_map)
-                    elif inner.name == "MemberGuid" and inner.size > 0:
-                        m_guid = archive.read_bytes(16).hex()
-                    elif inner.name == "bSelfContext":
-                        if inner.size > 0:
-                            m_self = archive.read_i32() != 0
-                        else:
-                            m_self = inner.bool_val != 0
-                    elif inner.name == "bWasDeprecated" and inner.size > 0:
-                        archive.read_i32()
-                    elif inner.size > 0:
-                        archive.seek(archive.tell() + inner.size)
+                    while archive.tell() < value_end:
+                        inner = read_property_tag(archive, name_map)
+                        if inner.name == "None":
+                            break
+                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
+                            raise ParseError(
+                                f"FunctionReference field '{inner.name}' exceeds struct boundary"
+                            )
 
-                function_reference = FMemberReference(
-                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                    member_name=m_name,
-                    member_guid=m_guid,
-                    b_self_context=m_self,
-                )
+                        def _read_inner(inner=inner):
+                            if inner.name == "MemberParent" and inner.size > 0:
+                                return archive.read_i32()
+                            if inner.name == "MemberScope" and inner.size > 0:
+                                archive.read_fstring()
+                                return None
+                            if inner.name == "MemberName":
+                                return archive.read_name(name_map)
+                            if inner.name == "MemberGuid" and inner.size > 0:
+                                return archive.read_bytes(16).hex()
+                            if inner.name == "bSelfContext":
+                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
+                            if inner.name == "bWasDeprecated" and inner.size > 0:
+                                archive.read_i32()
+                            return None
+
+                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
+                        if inner.name == "MemberParent":
+                            mp_idx = inner_value or 0
+                        elif inner.name == "MemberName":
+                            m_name = inner_value or ""
+                        elif inner.name == "MemberGuid":
+                            m_guid = inner_value or ""
+                        elif inner.name == "bSelfContext":
+                            m_self = bool(inner_value)
+
+                    return FMemberReference(
+                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+                        member_name=m_name,
+                        member_guid=m_guid,
+                        b_self_context=m_self,
+                    )
+
+                function_reference = read_tag_value_bounded(archive, tag, _read_function_reference)
             elif tag.name == "EventReference" and tag.size > 0:
-                value_end = archive.tell() + tag.size
-                mp_idx = 0
-                m_name = ""
-                m_guid = ""
-                m_self = False
+                def _read_event_reference() -> FMemberReference:
+                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
+                    mp_idx = 0
+                    m_name = ""
+                    m_guid = ""
+                    m_self = False
 
-                while archive.tell() < value_end:
-                    inner = read_property_tag(archive, name_map)
-                    if inner.name == "None":
-                        break
-                    if inner.name == "MemberParent" and inner.size > 0:
-                        mp_idx = archive.read_i32()
-                    elif inner.name == "MemberScope" and inner.size > 0:
-                        archive.read_fstring()
-                    elif inner.name == "MemberName":
-                        m_name = archive.read_name(name_map)
-                    elif inner.name == "MemberGuid" and inner.size > 0:
-                        m_guid = archive.read_bytes(16).hex()
-                    elif inner.name == "bSelfContext":
-                        if inner.size > 0:
-                            m_self = archive.read_i32() != 0
-                        else:
-                            m_self = inner.bool_val != 0
-                    elif inner.name == "bWasDeprecated" and inner.size > 0:
-                        archive.read_i32()
-                    elif inner.size > 0:
-                        archive.seek(archive.tell() + inner.size)
+                    while archive.tell() < value_end:
+                        inner = read_property_tag(archive, name_map)
+                        if inner.name == "None":
+                            break
+                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
+                            raise ParseError(
+                                f"EventReference field '{inner.name}' exceeds struct boundary"
+                            )
 
-                event_reference = FMemberReference(
-                    member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                    member_name=m_name,
-                    member_guid=m_guid,
-                    b_self_context=m_self,
-                )
+                        def _read_inner(inner=inner):
+                            if inner.name == "MemberParent" and inner.size > 0:
+                                return archive.read_i32()
+                            if inner.name == "MemberScope" and inner.size > 0:
+                                archive.read_fstring()
+                                return None
+                            if inner.name == "MemberName":
+                                return archive.read_name(name_map)
+                            if inner.name == "MemberGuid" and inner.size > 0:
+                                return archive.read_bytes(16).hex()
+                            if inner.name == "bSelfContext":
+                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
+                            if inner.name == "bWasDeprecated" and inner.size > 0:
+                                archive.read_i32()
+                            return None
+
+                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
+                        if inner.name == "MemberParent":
+                            mp_idx = inner_value or 0
+                        elif inner.name == "MemberName":
+                            m_name = inner_value or ""
+                        elif inner.name == "MemberGuid":
+                            m_guid = inner_value or ""
+                        elif inner.name == "bSelfContext":
+                            m_self = bool(inner_value)
+
+                    return FMemberReference(
+                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+                        member_name=m_name,
+                        member_guid=m_guid,
+                        b_self_context=m_self,
+                    )
+
+                event_reference = read_tag_value_bounded(archive, tag, _read_event_reference)
             # Phase 75-03: K2Node_Event PropertyTag 字段使用 helper functions
             # 注意：这些字段会在后面的 elif 分支（使用 helper functions）处理
             # 这里只是占位注释，实际处理在 lines 1859-1872
