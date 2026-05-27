@@ -8,73 +8,30 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 | Metric | Value |
 |--------|-------|
-| Version | **dev-0.3.0** (v14, Phase 76) |
-| Tests | **1650 tests** |
+| Version | **dev-0.3.0** |
+| Source | 127 Python files, 16 modules |
+| Tests | 21 tests (16 pass / 5 fail — reference asset tests need test fixtures) |
 | Branch | `dev-0.3.0` |
-| Workflow | **Superpowers** (specs + plans) |
-
-### Current Phase: v14.0 — CUE4Parse 核心对齐
-
-- **Phase 74 ✅**: PinReference null/non-null 主路径对齐
-- **Phase 75 ✅**: EventGraph 节点字段级对齐
-- **Phase 77 ✅**: Pak 解析 + 压缩 + AES-ECB（62 tests, UAT 8/8）
-  - `pak/` — FPakInfo/PakEntry/FPakDirectoryEntry 数据结构 + 序列化
-  - `pak/reader.py` — PakFileReader（open/extract/context manager）
-  - `compression/dispatch.py` — Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级
-  - `crypto/aes_ecb.py` — AES-ECB 解密 + CustomEncryption 委托
-  - `pak/index.py` — Legacy flat index + v10+ PathHashIndex/DirectoryIndex
-- **Phase 76 ⬜**: FArchive 补齐 + COR 修复（下一个 — StructProperty 深度解析 + FAssetArchive + FCustomVersion + VersionContainer）
-- **Phase 78 ⬜**: UObject 继承树 + PackageLinker 重构
-- **Phase 79 ⬜**: IoStore (.utoc/.ucas) 解析
-- **Phase 80 ⬜**: 输出格式 PascalCase 对齐
-
-详见 `docs/superpowers/specs/`。
-
-### Latest Shipped: v13.0 — Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分
-
-- **Phase 72 ✅**: Pin 连接修复 + BPGC 字节码导航 + FString/FName 区分（P72-A~I）
-- **Phase 73 ✅**: Pin 序列化边界对齐 + PropertyTag 级联恢复 + 端到端连接验收
-- **Phase 74 ✅**: PinReference 主路径对齐
-- **Phase 75 ✅**: EventGraph 节点字段级对齐
-
-### Previously Shipped: v11.0 — Kismet 反编译器 + 图解析修复 + Agent 翻译管线
-
-- **Phase 61-63 ✅**: Kismet 字节码反编译（EExprToken → AST → C++ 伪代码）
-- **Phase 64 ✅**: Pipeline 集成 + 端到端测试
-- **Phase 65 ✅**: 图解析器修复（FMemberReference + Pin 连接 + Struct 映射）
-- **Phase 66 ✅**: Agent 翻译管线 — AgentTranslationPipeline + CppFileWriter
 
 ## Features
 
 - **PackageFileSummary** — file header parsing
 - **NameMap** — name table extraction
-- **ImportMap** — dependency mapping
-- **ExportMap** — export mapping
+- **ImportMap / ExportMap** — dependency and export mapping
 - **Blueprint graph parsing** — UEdGraph / Node / Pin structures
 - **Advanced properties** — Struct / Map / Set / Enum / Text / Delegate
 - **Blueprint variable extraction** — variables, functions, events, metadata
 - **Component property parsing** — Transform / Rotation / Scale + scalar attributes
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
-- **Circular dependency detection** — mutual reference detection in ImportMap
-- **Execution flow tracing** — Event → CallFunction chain tracking
-- **Function graph analysis** — FunctionEntry identification, execution/data flow tracing
-- **Function graphs output** — Per-function call chains with data flow annotations (v9.0)
-- **EnhancedInput support** — TriggerEvent type recognition
-- **C++ skeleton extraction** — Component declarations, function signatures, transforms (v10.0)
-- **C++ header formatting** — .h/.cpp text output from blueprint (v10.0)
-- **Kismet bytecode decompiler** — EExprToken → KismetExpression AST → C++ pseudo-code (v11.0 P61-63) ✅
-- **Kismet pipeline integration** — decompile_uasset() with golden-path tests (v11.0 P64) ✅
-- **Graph parser fixes** — FMemberReference, Pin connections, Struct mapping (v11.0 P65) ✅
-- **Agent translation pipeline** — AgentTranslationPipeline + CppFileWriter (v11.0 P66) ✅
-- **N2C intermediate format** — N2CStruct JSON Schema, execution chain format (v12.0 P67-71) ✅
-- **Pin connection fixes** — history_type signed conversion, ParentPin conditional read (v13.0 P72-A/B) ✅
-- **BPGC bytecode navigation** — Cooked blueprint fallback bytecode extraction (v13.0 P72-C) ✅
-- **FString/FName distinction** — null-termination validation replacing null_ratio heuristic (v13.0 P72-D) ✅
-- **Pin serialization boundary alignment** — PropertyTag cascade recovery, end-to-end connection验收 (v13.0 P73) ✅
-- **PinReference layout** — null/non-null main path alignment with UE source (v13.0 P74) ✅
-- **EventGraph field-level alignment** — node field alignment with reference assets (v13.0 P75) ✅
-- **Pak file parsing** — FPakInfo/PakEntry, Zlib/LZ4/Zstd/Oodle compression, AES-ECB decryption, index parsing (v14.0 P77) ✅
+- **Circular dependency detection** — mutual reference detection
+- **Execution / data flow tracing** — Event → CallFunction chain tracking
+- **Function graph analysis** — FunctionEntry identification, per-function call chains
 - **PackageLinker** — Two-stage object graph reconstruction (v7.0)
+- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code (v11.0)
+- **N2C intermediate format** — Agent-optimized JSON schema, execution chains (v12.0)
+- **C++ skeleton extraction** — Component declarations, function signatures (v10.0)
+- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB (v14.0)
+- **Multiple output formats** — JSON, Text, Markdown, Mermaid graphs
 
 ## Installation
 
@@ -96,17 +53,18 @@ uasset-read path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
 uasset-read path/to/file.uasset --summary      # Summary only
+uasset-read path/to/file.uasset --text         # Readable text
 uasset-read path/to/file.uasset --markdown     # Markdown output
-
-# C++ skeleton (v10.0)
-uasset-read path/to/file.uasset --cpp-skeleton  # Extract C++ class skeleton
+uasset-read path/to/file.uasset --blueprint-text  # Blueprint node text
+uasset-read path/to/file.uasset --blueprint-ue-text  # UE-format text
+uasset-read path/to/file.uasset --cpp-skeleton  # C++ class skeleton
 
 # Strictness
 uasset-read path/to/file.uasset --strict       # Stop on warnings
 uasset-read path/to/file.uasset --tolerant     # Continue on recoverable errors (default)
 
 # Debug
-uasset-read path/to/file.uasset --debug        # Enable debug logging
+uasset-read path/to/file.uasset --verbose      # Enable verbose logging
 ```
 
 ### Module-level API
@@ -126,7 +84,7 @@ from uasset_read import (
 
     # Flow tracing
     build_execution_flows, build_data_flows, build_connections_map,
-    build_execution_chains,  # v12.0 N2C-style chain format
+    build_execution_chains,
 
     # Formatters
     format_json_full, format_json_summary,
@@ -139,7 +97,7 @@ from uasset_read import (
     decompile_uasset, KismetDecompiledResult,
     KismetTranslator, to_function_body,
 
-    # N2C intermediate format (v12.0)
+    # N2C (v12.0)
     N2CStruct, N2CGraph, to_n2c_json, from_n2c_json,
 
     # Agent translation (v11.0)
@@ -164,10 +122,10 @@ FArchive pipeline pattern mirroring UE's internal structure:
           GraphParser
           BlueprintParser
           DependencyGraphBuilder
-          PackageLinker (v7.0: two-stage object graph reconstruction)
-          KismetDecompiler (v11.0: bytecode → AST → C++)
-          N2C Format (v12.0: Agent-optimized JSON schema)
-          PakFileReader (v14.0: .pak parsing, compression, AES decryption)
+          PackageLinker
+          KismetDecompiler
+          N2C Format
+          PakFileReader
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -180,19 +138,20 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError |
 | Main Parser | `parse_uasset.py` | `parse_uasset()` and `parse_uasset_with_linker()` |
 | CLI | `cli.py` | argparse entry point (`uasset-read`) |
+| Exporter | `exporter/` | IExporter interface and registry |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 14 property type parsers + dispatcher |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
-| **Graph** | `graph/` | Execution/data flow tracing, chain builder (v12.0) |
-| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback (v11.0/v13.0) |
-| **Linker** | `link/` | PackageLinker, UObjectInstance (v7.0) |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters (v10.0) |
-| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (v11.0 P66) |
-| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators (v12.0) |
-| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing (v14.0 P77) |
-| **Compression** | `compression/` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation (v14.0 P77) |
-| **Crypto** | `crypto/` | AES-ECB decryption, CustomEncryption delegate (v14.0 P77) |
+| **Graph** | `graph/` | Execution/data flow tracing, chain builder |
+| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
+| **Linker** | `link/` | PackageLinker, UObjectInstance |
+| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters |
+| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
+| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators |
+| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing |
+| **Compression** | `compression/` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation |
+| **Crypto** | `crypto/` | AES-ECB decryption, CustomEncryption delegate |
 | **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid output |
 
 ## Testing
@@ -202,15 +161,12 @@ python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ```
 
-**Current**: 1646 tests collected.
-
 ## Tech Stack
 
 - **Language**: Python 3.10+ (match/case, type hints)
 - **Dependencies**: Zero runtime dependencies
 - **Build**: setuptools (src layout), pyproject.toml
 - **Testing**: pytest
-- **Workflow**: Superpowers (specs + plans)
 
 ## Version History
 
@@ -220,14 +176,14 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | v2.0 | 2026-05-02 | ✅ | Blueprint graph parsing, advanced properties |
 | v5.1 | 2026-05-07 | ✅ | src layout + pyproject.toml |
 | v6.0 | 2026-05-13 | ✅ | Modular refactoring, 373 tests |
-| v7.0 | 2026-05-14 | ✅ | UObjectInstance 对象图重建, PackageLinker |
-| v8.0 | 2026-05-17 | ✅ | BP→C++ JSON 可翻译性 (P47-51) |
-| v9.0 | 2026-05-17 | ✅ | 函数调用链解析 (P52-55), function_graphs |
-| v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ 代码生成参考 (P56-60) |
-| v11.0 | 2026-05-20 | ✅ | Kismet 反编译器 + 图解析修复 + Agent 翻译管线 (P61-66) |
-| v12.0 | 2026-05-21~22 | ✅ | 序列化修复 + N2C 中间格式 + 节点分类 + 执行流链式 (P67-71) |
-| v13.0 | 2026-05-23~26 | ✅ | Pin 连接修复 + Kismet 字节码导航 + FName/FString 区分 (P72-75) |
-| v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse 核心对齐 — Pak 解析 + FArchive 补齐 + 格式对齐 (P76-80) |
+| v7.0 | 2026-05-14 | ✅ | UObjectInstance object graph reconstruction, PackageLinker |
+| v8.0 | 2026-05-17 | ✅ | BP→C++ JSON translatability (P47-51) |
+| v9.0 | 2026-05-17 | ✅ | Function call chain resolution (P52-55) |
+| v10.0 | 2026-05-18 | ✅ | Blueprint-to-C++ code generation reference (P56-60) |
+| v11.0 | 2026-05-20 | ✅ | Kismet decompiler + graph parser fixes + agent translation (P61-66) |
+| v12.0 | 2026-05-21~22 | ✅ | Serialization fixes + N2C intermediate format (P67-71) |
+| v13.0 | 2026-05-23~26 | ✅ | Pin connection fixes + Kismet bytecode navigation + FName/FString distinction (P72-75) |
+| v14.0 | 2026-05-26 ~ | 🔄 | CUE4Parse core alignment — Pak parsing + FArchive completion + format alignment (P76-80) |
 
 ## Documentation
 
@@ -235,21 +191,13 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 |----------|------|
 | Getting Started | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
 | Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Configuration | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
 | Development | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
-| Testing | [docs/TESTING.md](docs/TESTING.md) |
-| Contributing | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) |
-| Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Reference Docs | [docs/reference/](docs/reference/) |
-| Specs (v14.0) | [docs/superpowers/specs/](docs/superpowers/specs/) |
-| Plans | [docs/superpowers/plans/](docs/superpowers/plans/) |
-| Archive | [.planning/archive/](.planning/archive/) |
-| Milestones | [.planning/MILESTONES.md](.planning/MILESTONES.md) |
 
 ## Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
-- **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types; full coverage in progress
+- **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types
 - **No resource export**: Binary data too large; metadata only
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
@@ -257,4 +205,4 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ---
 
 **Last Updated**: 2026-05-27
-**Version**: v14.0 in development | **Tests**: 1650 | **Workflow**: Superpowers
+**Version**: dev-0.3.0
