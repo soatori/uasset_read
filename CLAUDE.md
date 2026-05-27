@@ -22,7 +22,7 @@ python -m pytest tests/ -v        # 测试
 
 ## 当前状态
 
-**v14.0 活跃** — CUE4Parse 核心对齐：Phase 74✅ 75✅ (v13.0 遗留)，Phase 77✅ (Pak parser + compression + AES, 62 tests)，Phase 76⬜ (FArchive + COR 修复，下一个)，Phase 78⬜ (UObject 继承树 + Linker 重构)，Phase 79⬜ (IoStore .utoc/.ucas)，Phase 80⬜ (Kismet 输出格式 PascalCase 对齐)。索引驱动模式，UE 源码为权威金标准。
+**v14.0 活跃** — CUE4Parse 核心对齐：Phase 74✅ 75✅ (v13.0 遗留)，Phase 77✅ (Pak parser + compression + AES, 62 tests)，Phase 76⬜ (FArchive + COR 修复，下一个)，Phase 78⬜ (UObject 继承树 + Linker 重构)，Phase 79⬜ (IoStore .utoc/.ucas)，Phase 80⬜ (Kismet 输出格式 PascalCase 对齐)。索引驱动模式，UE 源码为权威金标准。规划体系已从 GSD 迁移至 Superpowers specs。
 
 > v1.0-v13.0 历史已归档至 `.planning/archive/` 和 `.planning/milestones/`，详见 `.planning/MILESTONES.md`。
 ## 架构
@@ -65,11 +65,11 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 > 所有缓存、临时性生成文件统一放在 `temp/` 目录，已在 `.gitignore` 中排除。
 
-## gsd-sdk 使用
+## Superpowers 工作流
 
-仅支持 3 个命令：`run "<prompt>"` / `auto` / `init [input]`
+本项目使用 Superpowers 进行规划和执行。Spec 文档位于 `docs/superpowers/specs/`，实施计划位于 `docs/superpowers/plans/`。
 
-**不支持** `query`、`list`、`get` 等子命令（会报错）。查 phase 信息请直接读 `.planning/` 文件或用 GSD slash commands。
+规划历史（v1.0-v13.0）已归档至 `.planning/archive/`，详见 `.planning/MILESTONES.md`。
 
 ## API 导出（`from uasset_read import X`）
 
@@ -94,10 +94,11 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 ## 规划文档
 
-- `.planning/ROADMAP.md` — 阶段路线图
-- `.planning/STATE.md` — 当前里程碑状态
+- `docs/superpowers/specs/` — 当前活跃的设计文档（Superpowers specs）
+- `docs/superpowers/plans/` — 实施计划（由 writing-plans 技能生成）
 - `.planning/milestones/` — 已归档里程碑（v7.0-v12.0）
 - `.planning/MILESTONES.md` — 历史里程碑
+- `.planning/archive/` — v1.0-v13.0 历史归档
 
 ## 工作区自动合并
 
@@ -111,5 +112,5 @@ uasset_read_cpp/  # C++参考 UnrealEngine/ LyraStarterGame/  # 外部（Git忽�
 
 - 上下文 >70% 时执行 `compact`
 - 独立任务优先并行 subagent，主线程只看结构化摘要
-- **GSD：** wave 或 PLAN 之间互补不干扰时均可并行执行
+- 独立 spec/plan 之间互补不干扰时均可并行执行
 - 有依赖或共享状态的任务不可并行；写冲突风险可通过 git 分支管理规避
