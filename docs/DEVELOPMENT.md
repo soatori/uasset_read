@@ -1,7 +1,6 @@
-<!-- generated-by: gsd-doc-writer -->
 # 开发指南
 
-本地开发环境搭建、编码规范、测试策略和 GSD 工作流说明。
+本地开发环境搭建、编码规范、测试策略和 Superpowers 工作流说明。
 
 ## 1. 开发环境搭建
 
@@ -60,7 +59,8 @@ uasset_read/
 │   ├── link/               # PackageLinker / UObjectInstance（两阶段对象图重建）
 │   └── formatters/         # JSON/Text/Markdown 输出格式化
 ├── tests/                  # pytest 测试（554 tests）
-├── .planning/              # GSD 规划文档（ROADMAP/STATE/REQUIREMENTS 等）
+├── .planning/              # 规划历史归档（v1.0-v13.0，MILESTONES.md 仍有效）
+├── docs/superpowers/       # 当前规划（specs + plans，Superpowers 工作流）
 ├── temp/                   # 缓存/临时文件（gitignored）
 ├── pyproject.toml          # 构建配置 + pytest 配置
 └── CLAUDE.md               # 项目上下文（AI 代理参考）
@@ -239,38 +239,18 @@ python -m pytest tests/ --cov=uasset_read --cov-report=term-missing
 - Phase 49（函数调用引脚解析）对应的测试尚未通过（功能待实现）
 - 34 tests skipped（通常因测试资产不可用）
 
-## 6. GSD 工作流
+## 6. Superpowers 工作流
 
-本项目使用 GSD（Guided Software Development）模式迭代开发，以 Phase 为单位推进。
+本项目使用 Superpowers 进行规划和执行。
 
-### Phase 与 Wave
+### Specs + Plans
 
-每个 Phase 包含一个独立的功能增量，存放在 `.planning/phases/` 目录下。多个相关 Phase 组成一个 **Wave**（批次），并行执行互不干扰的 Phase。
+Spec 文档位于 `docs/superpowers/specs/`，描述"做什么"和"为什么"。
+实施计划位于 `docs/superpowers/plans/`，描述"怎么做"（由 writing-plans 技能生成）。
 
-### 规划文档
+### 规划历史
 
-| 文件 | 说明 |
-|------|------|
-| `.planning/ROADMAP.md` | 50 阶段路线图，当前 v8.0 进行中 |
-| `.planning/STATE.md` | 当前里程碑状态与完成度 |
-| `.planning/REQUIREMENTS.md` | 需求追溯矩阵 |
-| `.planning/PROJECT.md` | 项目概览 |
-| `.planning/MILESTONES.md` | 历史里程碑记录 |
-
-### 工作节奏
-
-1. **PLAN** — 在 `.planning/phases/phase{N}.md` 中编写实现计划
-2. **EXECUTE** — 按计划编写代码，编写测试
-3. **UAT** — 使用真实 `.uasset` 资产验证输出
-4. **REVIEW** — 更新 ROADMAP/STATE，归档 Phase 到 `.planning/archive/`
-
-当前进度：**v8.0 进行中**（Phase 47/48/50 已完成，Phase 49 待实现）
-
-### 效率指南
-
-- 独立 Phase 可并行执行（无共享状态修改冲突时）
-- 上下文使用率 >70% 时执行 compact
-- 子任务优先使用 subagent 并行，主线程只看结构化摘要
+v1.0-v13.0 的 GSD Phase 规划已归档至 `.planning/archive/`。
 
 ## 7. 分支策略
 
@@ -309,24 +289,7 @@ docs(50): update STATE.md for Phase 50 completion
 - PR 正文包含 Phase 编号和变更摘要
 - 合并前确保所有测试通过
 
-## 8. gsd-sdk 使用
-
-gsg-sdk 提供 3 个命令用于驱动开发流程：
-
-```bash
-# 初始化（从现有项目生成上下文）
-gsd-sdk init
-
-# 执行单个任务提示
-gsd-sdk run "<prompt>"
-
-# 自动执行当前阶段
-gsd-sdk auto
-```
-
-**重要**：gsg-sdk **不支持** `query`、`list`、`get` 等子命令（会报错）。查询 Phase 信息请直接读取 `.planning/` 目录下的文件，或使用 Claude Code 的 GSD slash commands（`/gsd-status`、`/gsd-plan` 等）。
-
-## 9. 调试技巧
+## 8. 调试技巧
 
 ### CLI --verbose 模式
 
