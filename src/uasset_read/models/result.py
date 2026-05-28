@@ -7,7 +7,7 @@ ParseResult 是聚合结果，不使用 from_archive。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from uasset_read.models.core import UEdGraph
     from uasset_read.models.blueprint import BlueprintMetadata
     from uasset_read.kismet.result import KismetDecompiledResult
+    from uasset_read.versioning import VersionContainer
 
 
 @dataclass
@@ -36,6 +37,11 @@ class ParseResult:
     circular_deps: List[List[str]] = field(default_factory=list)
     components: List[Dict] = field(default_factory=list)
     decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
+    version_container: Optional["VersionContainer"] = None
+    resolved_parent_assets: List[Dict] = field(default_factory=list)
+    inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
+    logic_sources: List[Dict] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def status(self) -> str:

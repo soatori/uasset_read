@@ -2,6 +2,7 @@
 UnrealEngine/
 LyraStarterGame/
 UnrealProjects/
+external/
 # Python
 __pycache__/
 *.py[cod]
@@ -35,31 +36,18 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
-# Temp
-*.tmp
-*.log
-# 校验报告（临时）
-VERIFICATION-REPORT.md
-# 测试产物目录
+# Temp and output
+temp/
 test/
-# 项目输出文件目录
 output/
 debug/
 reports/
-# IDE 和工具配置
-.claude/*
-.qwen/*
-.agents/*
-# Debug/scratch scripts (not part part of test suite)
-tools/debug_*.py
-tools/test_*.py
-tools/parse_*.py
-tools/*_analysis.py
-tools/*_scan.py
-# Claude memory system (personal notes, not project docs)
+# Session-local tool config
+.claude/
+.qwen/
+.agents/
+.playwright-mcp/
 memory/
-# Temp directory for cache and generated files
-temp/
-# Qwen Code project documentation (IMPORTANT: Do not commit to version control)
+# Claude Code skill
 QWEN.md
-references/*
+CLAUDE.md

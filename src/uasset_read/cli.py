@@ -2,6 +2,7 @@
 
 等价迁移 uasset_read_legacy.py §7814-7938。
 Phase 33 Plan 02: 入口与测试适配。
+Phase Export: 重构为使用统一导出系统（保持向后兼容）。
 """
 from __future__ import annotations
 
@@ -11,14 +12,6 @@ import sys
 from pathlib import Path
 
 from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
-from uasset_read.formatters import (
-    format_json_full,
-    format_json_summary,
-    format_text_full,
-    format_markdown,
-    format_blueprint_translation_text,
-    format_graphs_json,
-)
 
 # Exit code constants (D-26)
 EXIT_SUCCESS = 0
@@ -36,6 +29,7 @@ def create_parser() -> argparse.ArgumentParser:
     Per D-27: Optional flags: --verbose, --output FILE, --export INDEX
     D-14-17: --markdown flag (OUT-04)
     D-14-19: --schema flag (OUT-05)
+    Phase Export: --n2c, --validate, --list-formats, --batch, --batch-dir
 
     Returns:
         argparse.ArgumentParser: Configured parser
@@ -45,8 +39,9 @@ def create_parser() -> argparse.ArgumentParser:
         description='Parse Unreal Engine .uasset files and output structured data'
     )
 
-    # Positional: file path (CLI-01)
-    parser.add_argument('file', help='Path to .uasset file to parse')
+    # Positional: file path (CLI-01) or directory (batch mode)
+    parser.add_argument('file', nargs='?', default=None,
+                        help='Path to .uasset file to parse (or directory in --batch mode)')
 
     # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
@@ -55,6 +50,11 @@ def create_parser() -> argparse.ArgumentParser:
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
     group.add_argument('--blueprint-text', action='store_true', help='Output compact blueprint translation reference text')
+    group.add_argument('--blueprint-ue-text', action='store_true', help='Output UE-style Begin Object blueprint text')
+    group.add_argument('--cpp-skeleton', action='store_true',
+                       help='Output C++ class skeleton (.h header) instead of JSON (requires blueprint)')
+    # Phase Export: new formats
+    group.add_argument('--n2c', action='store_true', help='Output N2C intermediate format JSON')
 
     # Optional flags (D-27, D-14-19)
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -64,12 +64,61 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
     parser.add_argument('--function-graphs', action='store_true',
                         help='Include top-level function_graphs array in JSON output (output_version 5.0) (Phase 55)')
+    parser.add_argument('--asset-root', action='append', default=[],
+                        help='Root directory to search for parent .uasset files (can be repeated)')
+    parser.add_argument('--include-parent-assets', action='store_true',
+                        help='Resolve and parse parent Blueprint assets when available')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
-    parser.add_argument('--cpp-skeleton', action='store_true',
-                        help='Output C++ class skeleton (.h header) instead of JSON (requires blueprint)')
+
+    # Phase Export: new flags
+    parser.add_argument('--validate', action='store_true',
+                        help='Validate output against schema (for N2C format)')
+    parser.add_argument('--list-formats', action='store_true',
+                        help='List all available export formats and exit')
+    parser.add_argument('--batch', action='store_true',
+                        help='Enable batch mode: treat positional arg as directory of .uasset files')
+    parser.add_argument('--batch-dir', metavar='DIR',
+                        help='Output directory for batch mode (default: ./output)')
 
     return parser
+
+
+def resolve_format(args) -> str:
+    """从 CLI 参数解析导出格式名。"""
+    if args.n2c:
+        return "n2c"
+    if args.cpp_skeleton:
+        return "cpp_skeleton"
+    if args.blueprint_text:
+        return "blueprint_text"
+    if args.blueprint_ue_text:
+        return "blueprint_ue_text"
+    if args.markdown:
+        return "markdown"
+    if args.summary:
+        return "json_summary"
+    if args.json:
+        return "json"
+    if args.text:
+        return "text"
+    # Default
+    return "text"
+
+
+def _write_output(output_str: str, output_path: str | None) -> None:
+    """统一输出写入。"""
+    if output_path:
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(output_str)
+            print(f"Output written to {output_path}", file=sys.stderr)
+        except IOError as e:
+            print(f"Error writing to file: {e}", file=sys.stderr)
+            sys.exit(EXIT_ARGUMENT_ERROR)
+    else:
+        # stdout for data (D-25)
+        print(output_str)
 
 
 def main():
@@ -92,7 +141,28 @@ def main():
     try:
         args = parser.parse_args()
     except SystemExit as e:
-        # argparse exits on error, map to EXIT_ARGUMENT_ERROR
+        # argparse exits with 0 on --help, preserve that
+        if e.code == 0:
+            sys.exit(EXIT_SUCCESS)
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+    # --list-formats: 列出所有格式并退出
+    if args.list_formats:
+        from uasset_read.exporter import ExporterRegistry
+        formats = ExporterRegistry.list_formats()
+        print("Available export formats:")
+        for fmt in formats:
+            print(f"  --{fmt.replace('_', '-')}")
+        sys.exit(EXIT_SUCCESS)
+
+    # Batch mode
+    if args.batch:
+        _handle_batch(args)
+        return
+
+    # Validate positional arg
+    if args.file is None:
+        print("Error: file argument is required (or use --batch for directory mode)", file=sys.stderr)
         sys.exit(EXIT_ARGUMENT_ERROR)
 
     # D-26 + HIGH-01: file not found check + verify it's a file, not a directory
@@ -104,13 +174,19 @@ def main():
             print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
-    # Parse the file
+    # Resolve format
+    fmt = resolve_format(args)
     tolerant = not args.strict
 
-    # Phase 56: --cpp-skeleton requires parse_uasset_with_linker
-    if args.cpp_skeleton:
+    # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
+    if fmt in {"cpp_skeleton", "blueprint_ue_text", "json", "json_summary"}:
         try:
-            linker_result = parse_uasset_with_linker(args.file, tolerant=tolerant)
+            linker_result = parse_uasset_with_linker(
+                args.file,
+                tolerant=tolerant,
+                include_parent_assets=args.include_parent_assets,
+                asset_roots=args.asset_root,
+            )
         except Exception as e:
             print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
@@ -121,37 +197,38 @@ def main():
                 print(f"  - {err}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
-        # Verify blueprint exists
-        if linker_result.blueprint is None or not linker_result.blueprint.is_blueprint:
+        # Verify blueprint exists only for formats that require blueprint metadata.
+        if fmt == "cpp_skeleton" and (linker_result.blueprint is None or not linker_result.blueprint.is_blueprint):
             print("Error: --cpp-skeleton requires a blueprint file", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
-        # Extract and format C++ skeleton
-        from uasset_read.cpp_gen import extract_cpp_class_skeleton, format_cpp_header
+        # Use exporter
+        from uasset_read.exporter import ExporterRegistry, ExportOptions
+        options = ExportOptions(
+            format=fmt,
+            output_path=args.output,
+        )
         try:
-            ir = extract_cpp_class_skeleton(linker_result)
-            output_str = format_cpp_header(ir)
+            exporter = ExporterRegistry.get(fmt)
+            output_str = exporter.export(linker_result, options)
         except ValueError as e:
-            print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            if fmt == "cpp_skeleton":
+                print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            else:
+                print(f"Error: Blueprint UE text export failed: {e}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
-        # Output routing
-        if args.output:
-            try:
-                with open(args.output, 'w', encoding='utf-8') as f:
-                    f.write(output_str)
-                print(f"Output written to {args.output}", file=sys.stderr)
-            except IOError as e:
-                print(f"Error writing to file: {e}", file=sys.stderr)
-                sys.exit(EXIT_ARGUMENT_ERROR)
-        else:
-            print(output_str)
-
+        _write_output(output_str, args.output)
         sys.exit(EXIT_SUCCESS)
 
-    # HIGH-03: defensive exception handling for parse_uasset
+    # Standard parse
     try:
-        result = parse_uasset(args.file, tolerant=tolerant)
+        result = parse_uasset(
+            args.file,
+            tolerant=tolerant,
+            include_parent_assets=args.include_parent_assets,
+            asset_roots=args.asset_root,
+        )
     except Exception as e:
         print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
@@ -164,51 +241,110 @@ def main():
         sys.exit(EXIT_PARSE_ERROR)
 
     # Phase 8: --graph flag handling (D-08-12/13)
-    # 优先级：--graph 检查在最前
-    # Phase 55: --function-graphs 隐含 --json（如果无其他格式 flag）
-    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or getattr(args, "blueprint_text", False)):
-        args.json = True  # 隐含 JSON
+    # --graph 有特殊逻辑，不经过统一导出器
+    if args.graph:
+        _handle_graph_mode(args, result)
+        sys.exit(EXIT_SUCCESS)
 
-    if args.blueprint_text:
-        output_str = format_blueprint_translation_text(result)
-    elif args.graph:
-        # D-08-13: --graph + --json/--verbose = full output with graphs
-        if args.json or args.verbose:
-            include_schema = args.schema or args.verbose
-            include_function_graphs = args.function_graphs  # Phase 55
-            output_str = json.dumps(format_json_full(result, include_schema, include_function_graphs), indent=2, ensure_ascii=False)
-        elif args.text:
-            # --graph --text = text output with Graphs section
-            output_str = format_text_full(result)
-        else:
-            # D-08-13: --graph alone = only graphs in JSON format
-            output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
-                                    indent=2, ensure_ascii=False)
-    elif args.markdown:
-        # D-14-17: --markdown 标志输出 Markdown 格式
-        output_str = format_markdown(result)
-    elif args.json:
+    # Use unified export system
+    from uasset_read.exporter import ExporterRegistry, ExportOptions, ExportValidationError
+
+    options = ExportOptions(
+        format=fmt,
+        include_schema=args.schema or args.verbose,
+        include_function_graphs=args.function_graphs,
+        verbose=args.verbose,
+        output_path=args.output,
+        validate_output=args.validate,
+    )
+
+    try:
+        exporter = ExporterRegistry.get(fmt)
+        output_str = exporter.export(result, options)
+    except ExportValidationError as e:
+        print(f"Error: Output validation failed: {e}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
+    except ValueError as e:
+        print(f"Error: Export failed: {e}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
+
+    _write_output(output_str, args.output)
+    sys.exit(EXIT_SUCCESS)
+
+
+def _handle_graph_mode(args, result):
+    """处理 --graph 标志的特殊逻辑（向后兼容）。"""
+    from uasset_read.formatters import format_json_full, format_text_full, format_graphs_json
+
+    # Phase 55: --function-graphs 隐含 --json
+    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or args.blueprint_text or args.blueprint_ue_text):
+        args.json = True
+
+    if args.json or args.verbose:
         include_schema = args.schema or args.verbose
-        include_function_graphs = args.function_graphs  # Phase 55
-        output_str = json.dumps(format_json_full(result, include_schema, include_function_graphs), indent=2, ensure_ascii=False)
-    elif args.summary:
-        include_schema = args.schema or args.verbose
-        output_str = json.dumps(format_json_summary(result, include_schema), indent=2, ensure_ascii=False)
-    else:
-        # Default: --text or no flag
+        include_function_graphs = args.function_graphs
+        data = format_json_full(result, include_schema, include_function_graphs)
+        output_str = json.dumps(data, indent=2, ensure_ascii=False)
+    elif args.text:
         output_str = format_text_full(result)
-
-    # D-25/D-28: Output routing with UTF-8
-    if args.output:
-        try:
-            with open(args.output, 'w', encoding='utf-8') as f:
-                f.write(output_str)
-            print(f"Output written to {args.output}", file=sys.stderr)
-        except IOError as e:
-            print(f"Error writing to file: {e}", file=sys.stderr)
-            sys.exit(EXIT_ARGUMENT_ERROR)
     else:
-        # stdout for data (D-25)
-        print(output_str)
+        # --graph alone = only graphs in JSON format
+        output_str = json.dumps({"graphs": format_graphs_json(result.graphs)},
+                                indent=2, ensure_ascii=False)
+
+    _write_output(output_str, args.output)
+
+
+def _handle_batch(args):
+    """处理批量导出模式。"""
+    from uasset_read.exporter import ExportOptions, BatchExporter, ExporterRegistry, ExportValidationError
+
+    # Resolve input directory
+    if args.file is None:
+        print("Error: directory argument is required in --batch mode", file=sys.stderr)
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+    input_dir = Path(args.file)
+    if not input_dir.is_dir():
+        print(f"Error: Not a directory: {args.file}", file=sys.stderr)
+        sys.exit(EXIT_FILE_NOT_FOUND)
+
+    # Collect .uasset files
+    uasset_files = sorted(input_dir.glob("*.uasset"))
+    if not uasset_files:
+        print(f"Error: No .uasset files found in {args.file}", file=sys.stderr)
+        sys.exit(EXIT_FILE_NOT_FOUND)
+
+    # Resolve output directory
+    output_dir = args.batch_dir or str(input_dir / "output")
+
+    # Resolve format
+    fmt = resolve_format(args)
+
+    options = ExportOptions(
+        format=fmt,
+        include_schema=args.schema or args.verbose,
+        include_function_graphs=args.function_graphs,
+        verbose=args.verbose,
+        validate_output=args.validate,
+        output_dir=output_dir,
+    )
+
+    batch_exporter = BatchExporter(output_dir, options)
+    file_paths = [str(f) for f in uasset_files]
+    batch_result = batch_exporter.export_files(file_paths)
+
+    # Report
+    print(f"Batch export complete: {batch_result.total} files", file=sys.stderr)
+    print(f"  Success: {len(batch_result.success)}", file=sys.stderr)
+    if batch_result.skipped:
+        print(f"  Skipped: {len(batch_result.skipped)}", file=sys.stderr)
+        for path, reason in batch_result.skipped:
+            print(f"    - {Path(path).name}: {reason}", file=sys.stderr)
+    if batch_result.failed:
+        print(f"  Failed: {len(batch_result.failed)}", file=sys.stderr)
+        for path, error in batch_result.failed:
+            print(f"    - {Path(path).name}: {error}", file=sys.stderr)
+        sys.exit(EXIT_PARSE_ERROR)
 
     sys.exit(EXIT_SUCCESS)

@@ -18,7 +18,7 @@ from uasset_read.constants import (
     UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_PROPERTY_TAG_EXTENSION,
 )
-from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
 
 
@@ -186,12 +186,11 @@ def parse_properties_from_export(
             start_pos = archive.tell()
 
             # 分派到类型特定解析器
-            value = parse_property_value(tag, archive, name_map, export_map, summary)
-
-            # 边界验证：确保定位到正确位置
-            expected_end = start_pos + tag.size
-            if archive.tell() != expected_end:
-                archive.seek(expected_end)
+            value = read_tag_value_bounded(
+                archive,
+                tag,
+                lambda: parse_property_value(tag, archive, name_map, export_map, summary),
+            )
 
             properties.append(PropertyValue(
                 name=tag.name,

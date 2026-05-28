@@ -92,4 +92,8 @@ def _serialize_scalar_value(value: Any) -> Any:
         return value.value_name
     if isinstance(value, StructValue):
         return {k: _serialize_scalar_value(v) for k, v in value.fields.items()}
+    if isinstance(value, list):
+        return [_serialize_scalar_value(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _serialize_scalar_value(v) for k, v in value.items()}
     return value

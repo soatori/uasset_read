@@ -88,23 +88,39 @@ class N2CGraph:
 class N2CStruct:
     """顶层输出容器。
 
-    version: Schema 版本，初始 1.0.0
+    version: Schema 版本
+      - 1.0.0: 仅 graphs（向后兼容）
+      - 2.0.0: 增加 blueprint / properties / decompiled_functions
     metadata: Blueprint 元数据（Name, BlueprintType, BlueprintClass）
     graphs: 图列表
     structs: 结构体定义占位
     enums: 枚举定义占位
+    blueprint: 蓝图元数据（变量/函数/事件，v2.0.0 新增）
+    properties: 属性列表（v2.0.0 新增）
+    decompiled_functions: Kismet 反编译函数列表（v2.0.0 新增）
     """
     metadata: Dict[str, Any] = field(default_factory=dict)
-    version: str = "1.0.0"
+    version: str = "2.0.0"
     graphs: List[N2CGraph] = field(default_factory=list)
     structs: List[Dict[str, Any]] = field(default_factory=list)
     enums: List[Dict[str, Any]] = field(default_factory=list)
+    blueprint: Dict[str, Any] | None = None
+    properties: List[Dict[str, Any]] = field(default_factory=list)
+    decompiled_functions: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result: Dict[str, Any] = {
             "version": self.version,
             "metadata": dict(self.metadata),
             "graphs": [g.to_dict() for g in self.graphs],
             "structs": list(self.structs),
             "enums": list(self.enums),
         }
+        # v2.0.0 新字段（仅在有值时输出）
+        if self.blueprint is not None:
+            result["blueprint"] = dict(self.blueprint)
+        if self.properties:
+            result["properties"] = list(self.properties)
+        if self.decompiled_functions:
+            result["decompiled_functions"] = list(self.decompiled_functions)
+        return result
