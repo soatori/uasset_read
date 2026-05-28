@@ -20,6 +20,23 @@ from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 
 
+# Expected byte sizes for fixed-layout structs (used for fast-path validation)
+_EXPECTED_STRUCT_SIZES: dict[str, int] = {
+    "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
+    "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
+    "Guid": 16, "IntPoint": 8, "IntVector": 12,
+    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
+    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
+    "Transform": 48,
+}
+
+
+_TAGGED_FALLBACK_STRUCTS: set[str] = {
+    "MemberReference",
+    "SimpleMemberReference",
+}
+
+
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)
 # ============================================================================
@@ -34,6 +51,12 @@ def _get_read_property_tag():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_property_tag
     return read_property_tag
+
+
+def _get_read_tag_value_bounded():
+    """Lazy import to avoid circular dependency."""
+    from uasset_read.serializers.property_tags import read_tag_value_bounded
+    return read_tag_value_bounded
 
 
 # ============================================================================
@@ -133,6 +156,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
     remaining_size = tag.size - 4  # subtract 4-byte count field
+    inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
     for i in range(count):
         # Dynamic inner_size calculation: distribute remaining bytes evenly
@@ -141,7 +165,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         inner_size = remaining_size // remaining_count if remaining_count > 1 else remaining_size
         inner_tag = PropertyTag(
             name=f"{tag.name}[{i}]",
-            type=_get_inner_type(tag.type),
+            type=inner_type,
             size=inner_size
         )
         element_start = archive.tell()
@@ -164,31 +188,231 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
+    declared_struct_type = struct_type
+
+    # Fast-path pre-check: validate tag.size matches expected layout.
+    # UE5 LWC stores some math structs as doubles, so accept those explicitly.
+    # If mismatch, fall through to PropertyTag loop (generic path)
+    expected_size = _EXPECTED_STRUCT_SIZES.get(struct_type)
+    allowed_lwc_sizes = {
+        "Vector": {12, 24},
+        "Rotator": {12, 24},
+        "Vector2D": {8, 16},
+    }
+    if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
+        import logging
+        logging.getLogger(__name__).warning(
+            "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
+            struct_type, tag.size, expected_size,
+        )
+        struct_type = None  # Skip all fast-path branches
 
     # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
     if struct_type == "Vector":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        x = reader()
+        y = reader()
+        z = reader()
         return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
 
     if struct_type == "Rotator":
-        pitch = archive.read_f32()
-        yaw = archive.read_f32()
-        roll = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        pitch = reader()
+        yaw = reader()
+        roll = reader()
         return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
 
     if struct_type == "Vector2D":
-        x = archive.read_f32()
-        y = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
+        x = reader()
+        y = reader()
         return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
 
+    # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
+    if struct_type == "Vector4":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "LinearColor":
+        r = archive.read_f32()
+        g = archive.read_f32()
+        b = archive.read_f32()
+        a = archive.read_f32()
+        return StructValue(struct_type="LinearColor", fields={"R": r, "G": g, "B": b, "A": a})
+
+    if struct_type == "Color":
+        b = archive.read_u8()
+        g = archive.read_u8()
+        r = archive.read_u8()
+        a = archive.read_u8()
+        return StructValue(struct_type="Color", fields={"B": b, "G": g, "R": r, "A": a})
+
+    if struct_type == "Quat":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Quat", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "Plane":
+        x = archive.read_f32()
+        y = archive.read_f32()
+        z = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Plane", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "Guid":
+        a = archive.read_u32()
+        b = archive.read_u32()
+        c = archive.read_u32()
+        d = archive.read_u32()
+        return StructValue(struct_type="Guid", fields={"A": a, "B": b, "C": c, "D": d})
+
+    if struct_type == "IntPoint":
+        x = archive.read_i32()
+        y = archive.read_i32()
+        return StructValue(struct_type="IntPoint", fields={"X": x, "Y": y})
+
+    if struct_type == "IntVector":
+        x = archive.read_i32()
+        y = archive.read_i32()
+        z = archive.read_i32()
+        return StructValue(struct_type="IntVector", fields={"X": x, "Y": y, "Z": z})
+
+    if struct_type == "Box2D":
+        min_x = archive.read_f32()
+        min_y = archive.read_f32()
+        max_x = archive.read_f32()
+        max_y = archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box2D", fields={
+            "Min": {"X": min_x, "Y": min_y},
+            "Max": {"X": max_x, "Y": max_y},
+            "bIsValid": b_valid,
+        })
+
+    if struct_type == "Box":
+        min_x = archive.read_f32()
+        min_y = archive.read_f32()
+        min_z = archive.read_f32()
+        max_x = archive.read_f32()
+        max_y = archive.read_f32()
+        max_z = archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box", fields={
+            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
+            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
+            "bIsValid": b_valid,
+        })
+
+    if struct_type == "Sphere":
+        cx = archive.read_f32()
+        cy = archive.read_f32()
+        cz = archive.read_f32()
+        w = archive.read_f32()
+        return StructValue(struct_type="Sphere", fields={
+            "Center": {"X": cx, "Y": cy, "Z": cz},
+            "W": w,
+        })
+
+    if struct_type == "BoxSphereBounds":
+        ox = archive.read_f32()
+        oy = archive.read_f32()
+        oz = archive.read_f32()
+        bx = archive.read_f32()
+        by = archive.read_f32()
+        bz = archive.read_f32()
+        sr = archive.read_f32()
+        return StructValue(struct_type="BoxSphereBounds", fields={
+            "Origin": {"X": ox, "Y": oy, "Z": oz},
+            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
+            "SphereRadius": sr,
+        })
+
+    if struct_type == "Matrix":
+        matrix = []
+        for i in range(4):
+            row = [archive.read_f32() for _ in range(4)]
+            matrix.append(row)
+        return StructValue(struct_type="Matrix", fields={
+            "M": matrix,
+        })
+
+    if struct_type == "TwoVectors":
+        e1_x = archive.read_f32()
+        e1_y = archive.read_f32()
+        e1_z = archive.read_f32()
+        e2_x = archive.read_f32()
+        e2_y = archive.read_f32()
+        e2_z = archive.read_f32()
+        return StructValue(struct_type="TwoVectors", fields={
+            "E1": {"X": e1_x, "Y": e1_y, "Z": e1_z},
+            "E2": {"X": e2_x, "Y": e2_y, "Z": e2_z},
+        })
+
+    if struct_type == "OrientedBox":
+        ax_x = archive.read_f32()
+        ax_y = archive.read_f32()
+        ax_z = archive.read_f32()
+        ay_x = archive.read_f32()
+        ay_y = archive.read_f32()
+        ay_z = archive.read_f32()
+        az_x = archive.read_f32()
+        az_y = archive.read_f32()
+        az_z = archive.read_f32()
+        ex = archive.read_f32()
+        ey = archive.read_f32()
+        ez = archive.read_f32()
+        cx = archive.read_f32()
+        cy = archive.read_f32()
+        cz = archive.read_f32()
+        return StructValue(struct_type="OrientedBox", fields={
+            "AxisX": {"X": ax_x, "Y": ax_y, "Z": ax_z},
+            "AxisY": {"X": ay_x, "Y": ay_y, "Z": ay_z},
+            "AxisZ": {"X": az_x, "Y": az_y, "Z": az_z},
+            "Extent": {"X": ex, "Y": ey, "Z": ez},
+            "Center": {"X": cx, "Y": cy, "Z": cz},
+        })
+
+    # Transform: UE5 LWC uses double for FVector components
+    if struct_type == "Transform":
+        translation_x = archive.read_f64()
+        translation_y = archive.read_f64()
+        translation_z = archive.read_f64()
+        rot_x = archive.read_f32()
+        rot_y = archive.read_f32()
+        rot_z = archive.read_f32()
+        rot_w = archive.read_f32()
+        scale_x = archive.read_f32()
+        scale_y = archive.read_f32()
+        scale_z = archive.read_f32()
+        return StructValue(struct_type="Transform", fields={
+            "Translation": {"X": translation_x, "Y": translation_y, "Z": translation_z},
+            "Rotation": {"X": rot_x, "Y": rot_y, "Z": rot_z, "W": rot_w},
+            "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
+        })
+
+    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS:
+        if tag.size > 0:
+            archive.seek(archive.tell() + tag.size)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
+        )
+
+    # Only known tagged fallback structs use an inner PropertyTag loop.
     fields: Dict[str, Any] = {}
     property_count = 0
 
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
+    read_tag_value_bounded = _get_read_tag_value_bounded()
 
     # Phase 73 Wave 4: Track expected struct end position for recovery
     struct_start = archive.tell()
@@ -202,43 +426,38 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         if inner_tag.name == "None":
             break
 
-        # Phase 73 Wave 4: Check if PropertyTag size/type is trustworthy
-        # Suspicious indicators: size > remaining struct bytes, type mismatch
-        if struct_end is not None and inner_tag.size > 0:
-            inner_tag_end = archive.tell() + inner_tag.size
-            if inner_tag_end > struct_end + 16:  # Allow 16 bytes tolerance for alignment
-                # Log suspicious PropertyTag but continue with recovery
-                import logging
-                logger = logging.getLogger('uasset_read.serializers.property_tags')
-                logger.warning(
-                    f"[P73-PROPTRACE] Suspicious PropertyTag '{inner_tag.name}' "
-                    f"size={inner_tag.size} exceeds struct boundary "
-                    f"(tag_end={inner_tag_end}, struct_end={struct_end})"
-                )
+        if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
+            raise ParseError(
+                f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
+                f"size {inner_tag.size} exceeds struct boundary"
+            )
 
-        field_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
-        # 当解析器返回 None（未知类型）且 tag.size > 0 时，主动跳过该属性字节
-        # 防止在同一位置无限循环读取相同的 PropertyTag
-        if field_value is None and inner_tag.size > 0:
-            archive.seek(archive.tell() + inner_tag.size)
+        field_value = read_tag_value_bounded(
+            archive,
+            inner_tag,
+            lambda inner_tag=inner_tag: parse_property_value(
+                inner_tag, archive, name_map, export_map, summary, depth + 1
+            ),
+        )
         fields[inner_tag.name] = field_value
 
-        # Phase 73 Wave 4: Recovery - align to value_end if parsing failed
-        if inner_tag.value_end_offset is not None and inner_tag.size > 0:
-            current_pos = archive.tell()
-            if current_pos != inner_tag.value_end_offset:
-                # Parsing left archive at unexpected position - realign
-                archive.seek(inner_tag.value_end_offset)
+    if struct_end is not None and archive.tell() != struct_end:
+        archive.seek(struct_end)
 
     return StructValue(
-        struct_type=struct_type,
-        fields=fields
+        struct_type=declared_struct_type,
+        fields=fields,
+        raw_size=tag.size,
+        parse_status="parsed",
     )
 
 
 def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:
     """解析 MapProperty（ADVP-02）。"""
-    key_type, value_type = _extract_map_types_from_tag(tag)
+    key_type = getattr(tag, "key_type", None)
+    value_type = getattr(tag, "value_type", None)
+    if not key_type or not value_type:
+        key_type, value_type = _extract_map_types_from_tag(tag)
 
     num_entries = archive.read_i32()
     if num_entries < 0 or num_entries > MAX_PROPERTY_COUNT:
@@ -261,7 +480,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
 
 def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> SetValue:
     """解析 SetProperty（ADVP-03）。"""
-    element_type = _extract_set_type_from_tag(tag)
+    element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
     num_elements = archive.read_i32()
     if num_elements < 0 or num_elements > MAX_PROPERTY_COUNT:
@@ -386,6 +605,9 @@ def _get_inner_type(array_type: str) -> str:
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取结构体类型名（D-08）。"""
+    if getattr(tag, "struct_type", None):
+        return str(tag.struct_type).split(".")[-1]
+
     type_str = tag.type
 
     if "(" in type_str:

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import (
         ObjectImport, ObjectExport, PackageIndex,
     )
+    from uasset_read.versioning import VersionContainer
 
 from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
 from uasset_read.link.object_instance import UObjectInstance
@@ -32,16 +33,19 @@ class PackageLinker:
         name_map: List[str],
         import_map: List["ObjectImport"],
         export_map: List["ObjectExport"],
+        version_container: Optional["VersionContainer"] = None,
     ):
         self._archive = archive
         self._summary = summary
         self._name_map = name_map
         self._import_map = import_map
         self._export_map = export_map
+        self._version_container = version_container
 
         # Public aliases (used by UObjectInstance.get_full_name() etc.)
         self.summary = summary
         self.name_map = name_map
+        self.version_container = version_container
 
         self._import_objects: List[UObjectInstance] = []
         self._export_objects: List[UObjectInstance] = []
