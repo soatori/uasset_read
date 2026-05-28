@@ -9,7 +9,7 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 | Metric | Value |
 |--------|-------|
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 21 tests |
+| Tests | 56 tests |
 
 ## Features
 
@@ -29,6 +29,7 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 - **N2C intermediate format** — Agent-optimized JSON schema, execution chains
 - **C++ skeleton extraction** — Component declarations, function signatures
 - **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB
+- **Asset type parsers** — SkeletalMesh, Texture2D, Material, MaterialInstanceConstant attribute extraction
 - **Multiple output formats** — JSON, Text, Markdown, Mermaid graphs
 
 ## Installation
@@ -140,6 +141,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 14 property type parsers + dispatcher |
+| **Asset Types** | `parsers/asset_types/` | SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |

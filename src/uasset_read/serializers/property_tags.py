@@ -153,22 +153,17 @@ def read_tag_value_bounded(
             archive.seek(final_pos)
 
 
-def parse_ctrl_flags(ctrl: int) -> dict:
-    """解析 PropertyTag 控制位标志。
+def parse_ue511_ctrl_flags(ctrl: int) -> dict:
+    """解析 UE5.11+ 序列化控制扩展头的 ctrl 字节。
 
-    用于 UE5.11+ 的序列化控制扩展头：
-    - ctrl & 0x01: 可覆盖序列化标志 (OverridableInformation)
-    - ctrl & 0x02: 序列化控制扩展 (SerializeControl) — 后面跟着 SerialType byte
-    - ctrl & 0x04: 扩展数据 (HasExtensions)
-    - ctrl & 0x08: 二进制/原生序列化标志
-    - ctrl & 0x10: Bool 值为 True
-    - ctrl & 0x20: 跳过序列化标志
+    复用标准常量，保持与 parse_ctrl_flags 一致的键名。
+    0x02 位在 flags 语境下叫 HasPropertyGuid，在 ctrl 语境下叫 SerializeControl。
     """
     return {
-        "has_array_index": bool(ctrl & 0x01),
-        "serialize_control": bool(ctrl & 0x02),
-        "has_extensions": bool(ctrl & 0x04),
-        "has_binary_native": bool(ctrl & 0x08),
-        "bool_true": bool(ctrl & 0x10),
-        "skipped_serialize": bool(ctrl & 0x20),
+        "has_array_index": bool(ctrl & PROP_TAG_HAS_ARRAY_INDEX),
+        "serialize_control": bool(ctrl & PROP_TAG_HAS_PROPERTY_GUID),
+        "has_extensions": bool(ctrl & PROP_TAG_HAS_EXTENSIONS),
+        "has_binary_or_native": bool(ctrl & PROP_TAG_HAS_BINARY_OR_NATIVE),
+        "bool_true": bool(ctrl & PROP_TAG_BOOL_TRUE),
+        "skipped_serialize": bool(ctrl & PROP_TAG_SKIPPED_SERIALIZE),
     }
