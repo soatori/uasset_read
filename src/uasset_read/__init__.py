@@ -5,7 +5,7 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "dev-0.3.1"
+__version__ = "dev-0.3.0"
 
 # 导出常量模块
 from .constants import (
@@ -248,7 +248,7 @@ from .blueprint.transform_parser import (
     parse_scale_value,
     format_transform_value as _format_transform_value,
 )
-from .serializers.property_tags import read_property_tag, parse_ctrl_flags, parse_ue511_ctrl_flags
+from .serializers.property_tags import read_property_tag
 from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
 from .constants import (
@@ -515,8 +515,6 @@ __all__ = [
     "parse_scale_value",
     "format_transform_value",
     "read_property_tag",
-    "parse_ctrl_flags",
-    "parse_ue511_ctrl_flags",
     "parse_property_flags_to_labels",
     "parse_default_value",
     "read_blueprint_variable",

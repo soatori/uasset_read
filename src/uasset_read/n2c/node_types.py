@@ -219,10 +219,6 @@ class N2CNodeType(Enum):
     AnimNodeReference = "AnimNodeReference"
     TransitionRuleGetter = "TransitionRuleGetter"
 
-    # === Comment ===
-
-    Comment = "Comment"  # EdGraphNode_Comment
-
     # === Fallback ===
 
     Unknown = "Unknown"
