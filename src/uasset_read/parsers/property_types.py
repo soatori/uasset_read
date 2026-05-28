@@ -36,6 +36,13 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "SimpleMemberReference",
 }
 
+# Phase 76: StructProperty fallback schemas for PropertyTag-loop path
+# These handle structs that arrive with inner property tags rather than raw binary
+_TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
+    "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+    "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+}
+
 
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)
@@ -396,8 +403,28 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
+    # Phase 76: Handle negative size values gracefully
+    if tag.size is not None and tag.size < 0:
+        import logging
+        logging.getLogger(__name__).warning(
+            "StructProperty '%s': negative size %d, treating as unsigned",
+            declared_struct_type, tag.size,
+        )
+        unsigned_size = tag.size & 0xFFFFFFFF
+        total = archive.total_size()
+        remaining = max(0, total - archive.tell())
+        skip_bytes = min(unsigned_size, remaining) if remaining > 0 else 0
+        if skip_bytes > 0:
+            archive.seek(archive.tell() + skip_bytes)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="negative_size_skipped",
+        )
+
     if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS:
-        if tag.size > 0:
+        if tag.size is not None and tag.size > 0:
             archive.seek(archive.tell() + tag.size)
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
