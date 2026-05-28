@@ -6,6 +6,7 @@ Per D-03: 使用 ue_path_to_cpp_type 进行类型映射。
 Per D-04: 使用 cpf_flags_to_uproperty_marks 获取 UPROPERTY 标记。
 Per D-05: 构建完整的 header_meta。
 Phase 57: 从图节点提取方法声明填充 methods。
+Phase 66: 从 decompiled_functions 注入函数体到 body_text。
 
 导出：
     extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
@@ -109,7 +110,11 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             linker=result.linker,
         )
 
-    # 6. 构建 header_meta（Per D-05）
+    # 6. 注入函数体（从 decompiled_functions）
+    if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
+        _inject_function_bodies(methods, result.decompiled_functions)
+
+    # 7. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 
     # 7. 构建 CppClassIR
@@ -144,6 +149,44 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
 # ============================================================================
 # 辅助函数
 # ============================================================================
+
+def _inject_function_bodies(
+    methods: List[CppMethodIR],
+    decompiled_functions: List[Any],
+) -> None:
+    """将 KismetDecompiledResult 的 cpp_code 注入到 CppMethodIR.body_text。
+
+    匹配逻辑：
+    1. 精确匹配：function_name == cpp_name
+    2. 清理后匹配：function_name 清理后 == cpp_name
+    3. 大小写不敏感匹配
+
+    Args:
+        methods: CppMethodIR 列表（已填充方法声明）
+        decompiled_functions: KismetDecompiledResult 列表（含 cpp_code）
+    """
+    method_index: Dict[str, CppMethodIR] = {m.cpp_name: m for m in methods}
+
+    for decompiled in decompiled_functions:
+        func_name = decompiled.function_name
+
+        # 精确匹配
+        method = method_index.get(func_name)
+
+        # 清理后匹配
+        if method is None:
+            sanitized = _sanitize_identifier(func_name)
+            method = method_index.get(sanitized)
+
+        # 大小写不敏感匹配
+        if method is None:
+            for cpp_name, m in method_index.items():
+                if func_name.lower() == cpp_name.lower():
+                    method = m
+                    break
+
+        if method and decompiled.cpp_code:
+            method.body_text = decompiled.cpp_code
 
 def _extract_class_name(result: "LinkerParseResult") -> str:
     """提取 C++ 类名。
