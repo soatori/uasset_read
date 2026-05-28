@@ -9,7 +9,7 @@
 | 指标 | 值 |
 |------|-----|
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 21 个测试 |
+| 测试 | 56 个测试 |
 
 ## 功能
 
@@ -29,6 +29,7 @@
 - **N2C 中间格式** — Agent 优化的 JSON Schema、执行链
 - **C++ 骨架提取** — 组件声明、函数签名
 - **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB
+- **资产类型解析器** — SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 属性提取
 - **多种输出格式** — JSON、Text、Markdown、Mermaid 流程图
 
 ## 安装
@@ -147,6 +148,7 @@ json_output = format_json_full(result)
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **解析器** | `parsers/` | 14 种属性类型解析器 + 分派器 |
+| **资产类型** | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图** | `graph/` | 执行流/数据流追踪、链构建器 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
