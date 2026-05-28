@@ -128,3 +128,24 @@ def read_tag_value_bounded(
     finally:
         if archive.tell() != final_pos:
             archive.seek(final_pos)
+
+
+def parse_ctrl_flags(ctrl: int) -> dict:
+    """解析 PropertyTag 控制位标志。
+
+    用于 UE5.11+ 的序列化控制扩展头：
+    - ctrl & 0x01: 可覆盖序列化标志 (OverridableInformation)
+    - ctrl & 0x02: 序列化控制扩展 (SerializeControl) — 后面跟着 SerialType byte
+    - ctrl & 0x04: 扩展数据 (HasExtensions)
+    - ctrl & 0x08: 二进制/原生序列化标志
+    - ctrl & 0x10: Bool 值为 True
+    - ctrl & 0x20: 跳过序列化标志
+    """
+    return {
+        "has_array_index": bool(ctrl & 0x01),
+        "serialize_control": bool(ctrl & 0x02),
+        "has_extensions": bool(ctrl & 0x04),
+        "has_binary_native": bool(ctrl & 0x08),
+        "bool_true": bool(ctrl & 0x10),
+        "skipped_serialize": bool(ctrl & 0x20),
+    }

@@ -7,7 +7,7 @@ ParseResult 是聚合结果，不使用 from_archive。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -41,6 +41,7 @@ class ParseResult:
     resolved_parent_assets: List[Dict] = field(default_factory=list)
     inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
     logic_sources: List[Dict] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def status(self) -> str:
