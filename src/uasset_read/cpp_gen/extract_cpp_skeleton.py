@@ -5,7 +5,7 @@ Per D-02: 沿 ClassParent 追溯继承链。
 Per D-03: 使用 ue_path_to_cpp_type 进行类型映射。
 Per D-04: 使用 cpf_flags_to_uproperty_marks 获取 UPROPERTY 标记。
 Per D-05: 构建完整的 header_meta。
-Per D-06: 返回 CppClassIR，methods/constructor 留空。
+Phase 57: 从图节点提取方法声明填充 methods。
 
 导出：
     extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
@@ -67,7 +67,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     Per D-03: 将 UE 类型映射为 C++ 类型名。
     Per D-04: 将 CPF 标志转换为 UPROPERTY 标记。
     Per D-05: 构建 header_meta（includes + generated_include）。
-    Per D-06: 返回 CppClassIR，properties 填充，methods/constructor 留空。
+    Phase 57: 从图节点提取方法声明填充 methods。
 
     Args:
         result: LinkerParseResult（来自 parse_uasset_with_linker）
@@ -99,16 +99,26 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     # 4. 提取变量属性
     properties.extend(_extract_variable_properties(blueprint))
 
-    # 5. 构建 header_meta（Per D-05）
+    # 5. 提取方法声明（Phase 57）
+    methods: List[CppMethodIR] = []
+    if result.graphs:
+        blueprint_functions = getattr(blueprint, 'functions', None)
+        methods = extract_cpp_functions(
+            result.graphs,
+            blueprint_functions=blueprint_functions,
+            linker=result.linker,
+        )
+
+    # 6. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 
-    # 6. 构建 CppClassIR（Per D-06）
+    # 7. 构建 CppClassIR
     ir = CppClassIR(
         name=class_name,
         parent_class=parent_class,
         header_meta=header_meta,
         properties=properties,
-        methods=[],  # Phase 57 填充
+        methods=methods,
         constructor={
             "component_creations": [],
             "component_assignments": [],
@@ -540,10 +550,13 @@ def _build_cpp_method_from_entry(
     blueprint_functions: Dict
 ) -> CppMethodIR:
     """从 K2Node_FunctionEntry 构建 CppMethodIR。"""
-    # 从 node_data 获取 function_reference
+    # 从 node_data 获取 function_reference（可能在 node_data 字典中）
     func_ref = getattr(fe_node, 'function_reference', None)
     if func_ref is None and fe_node.node_data:
-        func_ref = getattr(fe_node.node_data, 'function_reference', None)
+        if isinstance(fe_node.node_data, dict):
+            func_ref = fe_node.node_data.get('function_reference')
+        else:
+            func_ref = getattr(fe_node.node_data, 'function_reference', None)
 
     if func_ref is None:
         return None
