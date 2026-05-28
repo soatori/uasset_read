@@ -628,7 +628,7 @@ def _recover_pin_array_count(
     bad_count: int,
     export_map: List[ObjectExport],
     import_map: List[ObjectImport] = None,
-    scan_window: int = 8,
+    scan_window: int = 16,
 ) -> Optional[Dict[str, Any]]:
     """Phase 73 Wave 2: 滑动恢复增强校验。
 
