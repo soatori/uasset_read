@@ -16,34 +16,11 @@ from uasset_read.constants import (
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
     PROP_TAG_HAS_EXTENSIONS,
-    PROP_TAG_HAS_BINARY_OR_NATIVE,
     PROP_TAG_BOOL_TRUE,
-    PROP_TAG_SKIPPED_SERIALIZE,
 )
 from uasset_read.models.properties import PropertyTag
 
 T = TypeVar("T")
-
-
-def parse_ctrl_flags(flags: int) -> dict:
-    """解析 PropertyTag flags 字节为命名布尔字典。
-
-    EPropertyTagFlags 位定义（UE5 源码 PropertyTag.h）：
-      0x01 HasArrayIndex        — ArrayIndex 字段存在
-      0x02 HasPropertyGuid      — PropertyGuid 字段存在
-      0x04 HasPropertyExtensions — 扩展数据存在
-      0x08 HasBinaryOrNative    — 二进制/原生序列化
-      0x10 BoolTrue             — BoolProperty 值为 true
-      0x20 SkippedSerialize     — 已跳过序列化
-    """
-    return {
-        "has_array_index": bool(flags & PROP_TAG_HAS_ARRAY_INDEX),
-        "has_property_guid": bool(flags & PROP_TAG_HAS_PROPERTY_GUID),
-        "has_extensions": bool(flags & PROP_TAG_HAS_EXTENSIONS),
-        "has_binary_or_native": bool(flags & PROP_TAG_HAS_BINARY_OR_NATIVE),
-        "bool_true": bool(flags & PROP_TAG_BOOL_TRUE),
-        "skipped_serialize": bool(flags & PROP_TAG_SKIPPED_SERIALIZE),
-    }
 
 
 def read_property_tag(
@@ -151,19 +128,3 @@ def read_tag_value_bounded(
     finally:
         if archive.tell() != final_pos:
             archive.seek(final_pos)
-
-
-def parse_ue511_ctrl_flags(ctrl: int) -> dict:
-    """解析 UE5.11+ 序列化控制扩展头的 ctrl 字节。
-
-    复用标准常量，保持与 parse_ctrl_flags 一致的键名。
-    0x02 位在 flags 语境下叫 HasPropertyGuid，在 ctrl 语境下叫 SerializeControl。
-    """
-    return {
-        "has_array_index": bool(ctrl & PROP_TAG_HAS_ARRAY_INDEX),
-        "serialize_control": bool(ctrl & PROP_TAG_HAS_PROPERTY_GUID),
-        "has_extensions": bool(ctrl & PROP_TAG_HAS_EXTENSIONS),
-        "has_binary_or_native": bool(ctrl & PROP_TAG_HAS_BINARY_OR_NATIVE),
-        "bool_true": bool(ctrl & PROP_TAG_BOOL_TRUE),
-        "skipped_serialize": bool(ctrl & PROP_TAG_SKIPPED_SERIALIZE),
-    }
