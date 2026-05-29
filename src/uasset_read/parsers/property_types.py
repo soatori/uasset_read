@@ -1,4 +1,4 @@
-"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
+﻿"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
 
 等价迁移 uasset_read.py 第 5289-6004 行。
 Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04)。
@@ -27,7 +27,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
     "Guid": 16, "IntPoint": 8, "IntVector": 12,
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
-    "Matrix": 64, "TwoVectors": 48, "OrientedBox": 60,
+    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
     # 时间/帧类型
@@ -1057,3 +1057,4 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
         const_prefix = "const "
 
     return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"
+

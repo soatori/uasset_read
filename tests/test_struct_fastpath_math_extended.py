@@ -1,4 +1,4 @@
-"""测试扩展数学类型 Struct fast-path"""
+﻿"""测试扩展数学类型 Struct fast-path"""
 import pytest
 
 
@@ -101,10 +101,11 @@ def test_frame_number_size():
 def test_two_vectors_size():
     """测试 TwoVectors 大小"""
     from uasset_read.parsers.property_types import _EXPECTED_STRUCT_SIZES
-    assert _EXPECTED_STRUCT_SIZES.get("TwoVectors") == 48
+    assert _EXPECTED_STRUCT_SIZES.get("TwoVectors") == 24
 
 
 def test_matrix_size():
     """测试 Matrix 大小"""
     from uasset_read.parsers.property_types import _EXPECTED_STRUCT_SIZES
     assert _EXPECTED_STRUCT_SIZES.get("Matrix") == 64
+
