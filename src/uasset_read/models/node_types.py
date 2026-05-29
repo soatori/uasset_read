@@ -112,3 +112,99 @@ class K2NodeFunctionEntry(UEdGraphNode):
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_functionentry
         return read_k2node_functionentry(archive, name_map, import_map, export_map)
+
+
+@dataclass
+class K2NodeMessage(UEdGraphNode):
+    """K2Node_Message 消息调用节点。"""
+    message_name: str = ""
+    message_target: Optional[FMemberReference] = None
+
+    @classmethod
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_message
+        return read_k2node_message(archive, name_map, import_map, export_map)
+
+
+@dataclass
+class K2NodeCallDelegate(UEdGraphNode):
+    """K2Node_CallDelegate 委托调用节点。"""
+    delegate_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_call_delegate
+        return read_k2node_call_delegate(archive, name_map)
+
+
+@dataclass
+class K2NodeCallArrayFunction(UEdGraphNode):
+    """K2Node_CallArrayFunction 数组操作节点。"""
+    function_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_call_array_function
+        return read_k2node_call_array_function(archive, name_map)
+
+
+@dataclass
+class K2NodeCallParentFunction(UEdGraphNode):
+    """K2Node_CallParentFunction 调用父类函数节点。"""
+    function_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_call_parent_function
+        return read_k2node_call_parent_function(archive, name_map)
+
+
+@dataclass
+class K2NodeFunctionResult(UEdGraphNode):
+    """K2Node_FunctionResult 函数返回值节点。"""
+    function_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_function_result
+        return read_k2node_function_result(archive, name_map)
+
+
+@dataclass
+class K2NodeCreateWidget(UEdGraphNode):
+    """K2Node_CreateWidget 创建 UI 控件节点。"""
+    widget_class: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_create_widget
+        return read_k2node_create_widget(archive, name_map)
+
+
+@dataclass
+class K2NodeAddDelegate(UEdGraphNode):
+    """K2Node_AddDelegate 添加委托绑定节点。"""
+    delegate_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_add_delegate
+        return read_k2node_add_delegate(archive, name_map)
+
+
+@dataclass
+class K2NodeMacroInstance(UEdGraphNode):
+    """K2Node_MacroInstance 宏实例节点。"""
+    macro_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_macro_instance
+        return read_k2node_macro_instance(archive, name_map)

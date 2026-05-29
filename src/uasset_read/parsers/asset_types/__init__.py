@@ -1,1 +1,1 @@
-"""Asset type specific parsers module."""
+"""资产类型解析器模块 — 特定 UE 资产类型的专用解析器。"""

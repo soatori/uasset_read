@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import struct
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 if TYPE_CHECKING:
@@ -41,7 +42,37 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
+from uasset_read.models.node_types import (
+    K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment,
+    K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage,
+    K2NodeCallDelegate, K2NodeCallArrayFunction, K2NodeCallParentFunction,
+    K2NodeFunctionResult, K2NodeCreateWidget, K2NodeAddDelegate, K2NodeMacroInstance,
+)
+
+
+# ---------------------------------------------------------------------------
+# Phase 73 异常 Pin 计数值检测与恢复
+# ---------------------------------------------------------------------------
+
+def _is_abnormal_pin_count(count: int) -> bool:
+    """检测异常的 Pin 计数值。"""
+    if count > 1000:
+        return True
+    if count > 0 and count & 0xFF == 0:
+        return True
+    if count == 0xFF0000 or count == 0x00FF00:
+        return True
+    return False
+
+
+def _recover_pin_count(raw_value: int) -> int:
+    """尝试恢复异常的 Pin 计数值。"""
+    if raw_value == 0xFF0000:
+        return 0
+    if raw_value > 0xFF:
+        swapped = struct.unpack('<H', struct.pack('>H', raw_value & 0xFFFF))[0]
+        return swapped
+    return raw_value
 
 
 def reset_pin_trace_events() -> None:
@@ -1486,6 +1517,71 @@ def read_k2node_functionentry(
     }
 
 
+def read_k2node_message(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_Message 特有字段。"""
+    result = {}
+
+    try:
+        message_name_idx = archive.read_i32()
+        if 0 <= message_name_idx < len(name_map):
+            result["message_name"] = name_map[message_name_idx]
+        else:
+            result["message_name"] = f"Message_{message_name_idx}"
+    except Exception as e:
+        logger.warning("K2Node_Message read failed: %s", e)
+        result["message_name"] = "Unknown"
+
+    return result
+
+
+def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallDelegate 字段。"""
+    result = {}
+    try:
+        delegate_idx = archive.read_i32()
+        if 0 <= delegate_idx < len(name_map):
+            result["delegate_name"] = name_map[delegate_idx]
+    except Exception as e:
+        logger.warning("K2Node_CallDelegate read failed: %s", e)
+    return result
+
+
+def read_k2node_call_array_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallArrayFunction 字段。"""
+    return {}
+
+
+def read_k2node_call_parent_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallParentFunction 字段。"""
+    return {}
+
+
+def read_k2node_function_result(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_FunctionResult 字段。"""
+    return {}
+
+
+def read_k2node_create_widget(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CreateWidget 字段。"""
+    return {}
+
+
+def read_k2node_add_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_AddDelegate 字段。"""
+    return {}
+
+
+def read_k2node_macro_instance(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_MacroInstance 字段。"""
+    return {}
+
+
 # ============================================================================
 # 节点工厂
 # ============================================================================
@@ -1550,6 +1646,24 @@ def create_node_from_archive(
             function_reference=fr,
             raw_properties=raw_properties,
         )
+    elif class_name == "K2Node_Message":
+        base_node.node_data = read_k2node_message(
+            archive, name_map, import_map, export_map, linker,
+        )
+    elif class_name == "K2Node_CallDelegate":
+        base_node.node_data = read_k2node_call_delegate(archive, name_map)
+    elif class_name == "K2Node_CallArrayFunction":
+        base_node.node_data = read_k2node_call_array_function(archive, name_map)
+    elif class_name == "K2Node_CallParentFunction":
+        base_node.node_data = read_k2node_call_parent_function(archive, name_map)
+    elif class_name == "K2Node_FunctionResult":
+        base_node.node_data = read_k2node_function_result(archive, name_map)
+    elif class_name == "K2Node_CreateWidget":
+        base_node.node_data = read_k2node_create_widget(archive, name_map)
+    elif class_name == "K2Node_AddDelegate":
+        base_node.node_data = read_k2node_add_delegate(archive, name_map)
+    elif class_name == "K2Node_MacroInstance":
+        base_node.node_data = read_k2node_macro_instance(archive, name_map)
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
