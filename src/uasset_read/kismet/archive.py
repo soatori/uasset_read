@@ -97,16 +97,30 @@ class FKismetArchive(FArchive):
         self.seek(current_pos + idx)  # position AT double-null
         return result
 
+    def resolve_fname(self, index: int, number: int = 0) -> str:
+        """统一的 FName 解析逻辑
+
+        Args:
+            index: name_map 中的索引
+            number: FName 的 number 后缀
+
+        Returns:
+            格式化后的 FName 字符串 (如 "ClassName_0")
+        """
+        if 0 <= index < len(self._name_map):
+            base_name = self._name_map[index]
+        else:
+            base_name = f"Unknown_{index}"
+
+        if number > 0:
+            return f"{base_name}_{number}"
+        return base_name
+
     def read_fname_kismet(self) -> str:
         """Read FName in Kismet context: index + number → look up in name_map."""
         index = self.read_i32()
         number = self.read_i32()
-        if 0 <= index < len(self._name_map):
-            base = self._name_map[index]
-            if number > 0:
-                return f"{base}_{number}"
-            return base
-        return "None"
+        return self.resolve_fname(index, number)
 
     def skip(self, n: int) -> None:
         """Skip n bytes forward."""
