@@ -77,3 +77,29 @@ def test_pointer_to_uber_graph_frame(tmp_path):
         assert archive.tell() == 8
     finally:
         archive.close()
+
+
+def test_vector4_double_precision(tmp_path):
+    """Vector4 32 bytes: double 精度版本 (UE5.5 LWC)"""
+    data = struct.pack('<dddd', 1.0, 2.0, 3.0, 4.0)
+    archive = _make_archive(tmp_path, data)
+
+    tag = PropertyTag(
+        name="TestVec4",
+        type="StructProperty",
+        size=32,
+        struct_type="Vector4"
+    )
+
+    try:
+        result = parse_struct_property(tag, archive, name_map=[], export_map=[], summary=None)
+
+        assert result.struct_type == "Vector4"
+        assert result.fields["X"] == 1.0
+        assert result.fields["Y"] == 2.0
+        assert result.fields["Z"] == 3.0
+        assert result.fields["W"] == 4.0
+        assert result.parse_status == "parsed"
+        assert archive.tell() == 32
+    finally:
+        archive.close()
