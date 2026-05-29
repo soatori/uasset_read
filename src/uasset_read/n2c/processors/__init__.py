@@ -2,23 +2,27 @@
 from uasset_read.n2c.processors.call_function import CallFunctionProcessor
 from uasset_read.n2c.processors.cast import CastProcessor
 from uasset_read.n2c.processors.comment import CommentProcessor
+from uasset_read.n2c.processors.delegate import DelegateProcessor
 from uasset_read.n2c.processors.enhanced_input import EnhancedInputActionProcessor
 from uasset_read.n2c.processors.event import EventProcessor
 from uasset_read.n2c.processors.fallback import FallbackProcessor
 from uasset_read.n2c.processors.flow_control import FlowControlProcessor
 from uasset_read.n2c.processors.function_entry import FunctionEntryProcessor
 from uasset_read.n2c.processors.variable import VariableProcessor
+from uasset_read.n2c.processors.widget import WidgetProcessor
 
 __all__ = [
     "CallFunctionProcessor",
     "CastProcessor",
     "CommentProcessor",
+    "DelegateProcessor",
     "EnhancedInputActionProcessor",
     "EventProcessor",
     "FallbackProcessor",
     "FlowControlProcessor",
     "FunctionEntryProcessor",
     "VariableProcessor",
+    "WidgetProcessor",
     "register_all_processors",
 ]
 
@@ -31,12 +35,14 @@ def register_all_processors() -> None:
     for proc_cls in [
         CallFunctionProcessor,
         CommentProcessor,
+        DelegateProcessor,
         EnhancedInputActionProcessor,
         EventProcessor,
         FunctionEntryProcessor,
         FlowControlProcessor,
         VariableProcessor,
         CastProcessor,
+        WidgetProcessor,
     ]:
         try:
             registry.register(proc_cls())
