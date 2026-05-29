@@ -27,9 +27,34 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
     "Guid": 16, "IntPoint": 8, "IntVector": 12,
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
-    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
+    "Matrix": 64, "TwoVectors": 48, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
+    # 时间/帧类型
+    "Timespan": 8,           # int64
+    "DateTime": 8,           # uint64
+    "FrameNumber": 4,        # int32
+    # 整数向量类型
+    "IntVector2": 8,         # 2 * int32
+    "Int32Vector2": 8,       # 别名
+    "IntVector4": 16,        # 4 * int32
+    "UintVector": 12,        # 3 * uint32
+    "UintVector2": 8,        # 2 * uint32
+    "Uint32Point": 8,        # 别名
+    "UintVector4": 16,       # 4 * uint32
+    # 64 位整数向量类型
+    "Int64Vector2": 16,      # 2 * int64
+    "Int64Point": 16,        # 别名
+    "Int64Vector": 24,       # 3 * int64
+    "Int64Vector4": 32,      # 4 * int64
+    "UInt64Vector2": 16,     # 2 * uint64
+    "UInt64Point": 16,       # 别名
+    "UInt64Vector": 24,      # 3 * uint64
+    "UInt64Vector4": 32,     # 4 * uint64
+    # 别名类型
+    "DeprecateSlateVector2D": 16,  # 别名 Vector2D
+    "VectorDouble": 24,            # Wuthering Waves 别名 Vector3d
+    "Int32Point": 8,               # 别名 IntPoint
     # UE5 LWC 数学类型
     "Vector2f": 8,           # 2 * float32
     "Vector3f": 12,          # 3 * float32
