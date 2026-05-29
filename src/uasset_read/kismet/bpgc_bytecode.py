@@ -30,6 +30,14 @@ _END_OF_SCRIPT = 0x53        # EX_EndOfScript — standard
 _COOKED_END_SENTINEL = 0xDD  # Cooked format variant seen in some UE5 assets
 
 
+def _find_next_sentinel(data: bytes, start: int) -> int:
+    """在 data 中查找下一个 EX_EndOfScript 或 0xDD 标记。"""
+    for i in range(start, len(data)):
+        if data[i] in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
+            return i
+    return len(data)
+
+
 def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
     """Parse raw BPGC script region bytes into per-function bytecode buffers.
 
@@ -62,8 +70,12 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
         size = int.from_bytes(data[offset:offset + 4], byteorder='little', signed=False)
         offset += 4
 
-        # Stop on invalid size
+        # 容错处理 - 如果 size 不合理，尝试跳过
         if size == 0 or size > (data_len - offset):
+            next_sentinel = _find_next_sentinel(data, offset - 4)
+            if next_sentinel > offset:
+                offset = next_sentinel - 3
+                continue
             break
 
         buf = data[offset:offset + size]
@@ -72,9 +84,8 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
         # Validate buffer ends with expected sentinel (tolerant)
         if buf and buf[-1] not in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
             logger.warning(
-                "Bytecode buffer #%d ends with 0x%02X (expected 0x%02X or 0x%02X), "
-                "accepting in tolerant mode",
-                len(buffers), buf[-1], _END_OF_SCRIPT, _COOKED_END_SENTINEL,
+                "Bytecode buffer #%d ends with 0x%02X, accepting in tolerant mode",
+                len(buffers), buf[-1],
             )
 
         buffers.append(buf)
