@@ -9,7 +9,7 @@ Phase 72-C Wave 2: Added BPGC bytecode fallback with cache reset.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
