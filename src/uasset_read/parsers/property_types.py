@@ -28,6 +28,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
+    "TopLevelAssetPath": 16,
 }
 
 
@@ -36,11 +37,25 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "SimpleMemberReference",
 }
 
-# Phase 76: StructProperty fallback schemas for PropertyTag-loop path
-# These handle structs that arrive with inner property tags rather than raw binary
 _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
     "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+    # Phase 76: 新增 UE5.5 结构体
+    "NewVariables": [
+        ("VarName", "NameProperty"),
+        ("VarGuid", "GuidProperty"),
+        ("VarType", "StructProperty"),  # FEdGraphPinType
+    ],
+    "ImplementedInterfaces": [
+        ("InterfaceName", "NameProperty"),
+        ("InterfaceGuid", "GuidProperty"),
+    ],
+    "LastEditedDocuments": [
+        ("DocumentName", "NameProperty"),
+    ],
+    "CategorySorting": [
+        ("CategoryName", "NameProperty"),
+    ],
 }
 
 
@@ -205,6 +220,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         "Vector": {12, 24},
         "Rotator": {12, 24},
         "Vector2D": {8, 16},
+        "Vector4": {16, 32},
+        "BoxSphereBounds": {40, 114},
     }
     if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
         import logging
@@ -238,10 +255,18 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
     if struct_type == "Vector4":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
-        w = archive.read_f32()
+        if tag.size == 32:
+            # UE5.5 LWC: double 精度
+            x = archive.read_f64()
+            y = archive.read_f64()
+            z = archive.read_f64()
+            w = archive.read_f64()
+        else:
+            # 标准 float 精度
+            x = archive.read_f32()
+            y = archive.read_f32()
+            z = archive.read_f32()
+            w = archive.read_f32()
         return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
 
     if struct_type == "LinearColor":
@@ -326,6 +351,20 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "W": w,
         })
 
+    if struct_type == "TopLevelAssetPath":
+        pkg_name = archive.read_name(name_map)
+        asset_name = archive.read_name(name_map)
+        return StructValue(struct_type="TopLevelAssetPath", fields={
+            "PackageName": pkg_name,
+            "AssetName": asset_name,
+        })
+
+    if struct_type == "PointerToUberGraphFrame":
+        frame_index = archive.read_i64()  # 8 字节 FPackageIndex
+        return StructValue(struct_type="PointerToUberGraphFrame", fields={
+            "FrameIndex": frame_index,
+        })
+
     if struct_type == "BoxSphereBounds":
         ox = archive.read_f32()
         oy = archive.read_f32()
@@ -334,6 +373,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         by = archive.read_f32()
         bz = archive.read_f32()
         sr = archive.read_f32()
+        # UE5.5 扩展格式：标准 28 bytes 后可能有额外 padding
+        remaining = tag.size - 28
+        if remaining > 0:
+            archive.read_bytes(remaining)
         return StructValue(struct_type="BoxSphereBounds", fields={
             "Origin": {"X": ox, "Y": oy, "Z": oz},
             "BoxExtent": {"X": bx, "Y": by, "Z": bz},
@@ -403,28 +446,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
-    # Phase 76: Handle negative size values gracefully
-    if tag.size is not None and tag.size < 0:
-        import logging
-        logging.getLogger(__name__).warning(
-            "StructProperty '%s': negative size %d, treating as unsigned",
-            declared_struct_type, tag.size,
-        )
-        unsigned_size = tag.size & 0xFFFFFFFF
-        total = archive.total_size()
-        remaining = max(0, total - archive.tell())
-        skip_bytes = min(unsigned_size, remaining) if remaining > 0 else 0
-        if skip_bytes > 0:
-            archive.seek(archive.tell() + skip_bytes)
-        return StructValue(
-            struct_type=declared_struct_type or "UnknownStruct",
-            fields={},
-            raw_size=tag.size,
-            parse_status="negative_size_skipped",
-        )
-
     if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS:
-        if tag.size is not None and tag.size > 0:
+        if tag.size > 0:
             archive.seek(archive.tell() + tag.size)
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
@@ -540,22 +563,6 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
     )
 
 
-def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
-    """读取 Base FText: namespace + key + source_string。"""
-    namespace = archive.read_fstring()
-    key = archive.read_fstring()
-    source_string = archive.read_fstring()
-    return namespace, key, source_string
-
-
-def _read_ftext_args(archive: FArchive) -> None:
-    """读取 FText 参数字典并丢弃（仅消耗字节）。"""
-    count = archive.read_i32()
-    for _ in range(count):
-        archive.read_fstring()  # key
-        archive.read_fstring()  # value
-
-
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
     """解析 TextProperty（ADVP-05）。
 
@@ -563,51 +570,23 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
       - flags: i32 (4 bytes)
       - history_type: u8 (1 byte) — FTextHistory 类型标识
       - body: 根据 history_type 不同而不同
-        - history_type == 0 (Base): namespace + key + source_string
-        - history_type == 1 (NamedFormat): namespace + key + args
-        - history_type == 2 (OrderedFormat): namespace + key + source_string + args
-        - history_type == 3 (ArgumentFormat): namespace + key + source_string + args
-        - history_type == 4-9 (AsNumber/AsPercent/AsCurrency/Date/Time/DateTime): namespace + key + source_string + value
-        - history_type == 10 (Transform): namespace + key + source_string + transform_type
+        - history_type == 0 (Base): namespace(FString) + key(FString) + source_string(FString)
+        - history_type == 1 (NamedString): namespace(FString) + key(FString)
+        - 其他: 跳过剩余数据
     """
-    _flags = archive.read_i32()       # FText flags (unused)
+    flags = archive.read_i32()       # FText flags
     history_type = archive.read_u8() # FTextHistory type
 
-    if history_type == 0:  # Base
-        namespace, key, source_string = _read_ftext_base(archive)
-    elif history_type == 1:  # NamedFormat
+    if history_type == 0:
+        # Base text: namespace + key + source_string
         namespace = archive.read_fstring()
         key = archive.read_fstring()
-        _read_ftext_args(archive)
+        source_string = archive.read_fstring()
+    elif history_type == 1:
+        # NamedString: namespace + key (no source_string)
+        namespace = archive.read_fstring()
+        key = archive.read_fstring()
         source_string = ""
-    elif history_type == 2:  # OrderedFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 3:  # ArgumentFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 4:  # AsNumber
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_number
-    elif history_type == 5:  # AsPercent
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_value
-    elif history_type == 6:  # AsCurrency
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # currency_code
-        archive.read_fstring()  # target_amount
-    elif history_type == 7:  # DateString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # date
-    elif history_type == 8:  # TimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # time
-    elif history_type == 9:  # DateTimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # datetime
-    elif history_type == 10:  # Transform
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # transform_type
     else:
         # Unknown history type: skip remaining data
         remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
