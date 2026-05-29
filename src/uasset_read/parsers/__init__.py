@@ -33,6 +33,13 @@ from uasset_read.parsers.property_types import (
     _extract_enum_type_from_tag,
 )
 
+from uasset_read.parsers.utils import (
+    resolve_name_from_index,
+    read_validated_count,
+    make_enum_value,
+    extract_inner_from_tag,
+)
+
 __all__ = [
     # 分派器（property_parser.py）
     "parse_property_value",
@@ -57,4 +64,9 @@ __all__ = [
     "_extract_map_types_from_tag",
     "_extract_set_type_from_tag",
     "_extract_enum_type_from_tag",
+    # 共享辅助函数（parsers/utils.py）
+    "resolve_name_from_index",
+    "read_validated_count",
+    "make_enum_value",
+    "extract_inner_from_tag",
 ]
