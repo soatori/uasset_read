@@ -220,6 +220,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         "Vector": {12, 24},
         "Rotator": {12, 24},
         "Vector2D": {8, 16},
+        "Vector4": {16, 32},
     }
     if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
         import logging
@@ -253,10 +254,18 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
     if struct_type == "Vector4":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
-        w = archive.read_f32()
+        if tag.size == 32:
+            # UE5.5 LWC: double 精度
+            x = archive.read_f64()
+            y = archive.read_f64()
+            z = archive.read_f64()
+            w = archive.read_f64()
+        else:
+            # 标准 float 精度
+            x = archive.read_f32()
+            y = archive.read_f32()
+            z = archive.read_f32()
+            w = archive.read_f32()
         return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
 
     if struct_type == "LinearColor":
