@@ -16,7 +16,11 @@ class TestUE55Integration:
         """验证 StructProperty 解析通过率 > 95%"""
         from uasset_read.parse_uasset import parse_uasset
 
-        uasset_files = list(SAMPLE_DIR.glob("**/*.uasset"))[:10]
+        # 排除 Saved/Autosaves 目录
+        uasset_files = [
+            f for f in SAMPLE_DIR.glob("**/*.uasset")
+            if "Saved" not in f.parts
+        ][:10]
 
         total = 0
         success = 0
@@ -42,7 +46,11 @@ class TestUE55Integration:
         """验证 K2Node fallback 率 < 10%"""
         from uasset_read.parse_uasset import parse_uasset
 
-        uasset_files = list(SAMPLE_DIR.glob("**/*.uasset"))[:10]
+        # 排除 Saved/Autosaves 目录
+        uasset_files = [
+            f for f in SAMPLE_DIR.glob("**/*.uasset")
+            if "Saved" not in f.parts
+        ][:10]
 
         total_nodes = 0
         fallback_nodes = 0
