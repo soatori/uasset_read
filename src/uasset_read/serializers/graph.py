@@ -41,7 +41,12 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage
+from uasset_read.models.node_types import (
+    K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment,
+    K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage,
+    K2NodeCallDelegate, K2NodeCallArrayFunction, K2NodeCallParentFunction,
+    K2NodeFunctionResult, K2NodeCreateWidget, K2NodeAddDelegate, K2NodeMacroInstance,
+)
 
 
 def reset_pin_trace_events() -> None:
@@ -1509,6 +1514,48 @@ def read_k2node_message(
     return result
 
 
+def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallDelegate 字段。"""
+    result = {}
+    try:
+        delegate_idx = archive.read_i32()
+        if 0 <= delegate_idx < len(name_map):
+            result["delegate_name"] = name_map[delegate_idx]
+    except Exception as e:
+        logger.warning("K2Node_CallDelegate read failed: %s", e)
+    return result
+
+
+def read_k2node_call_array_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallArrayFunction 字段。"""
+    return {}
+
+
+def read_k2node_call_parent_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CallParentFunction 字段。"""
+    return {}
+
+
+def read_k2node_function_result(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_FunctionResult 字段。"""
+    return {}
+
+
+def read_k2node_create_widget(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_CreateWidget 字段。"""
+    return {}
+
+
+def read_k2node_add_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_AddDelegate 字段。"""
+    return {}
+
+
+def read_k2node_macro_instance(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
+    """读取 K2Node_MacroInstance 字段。"""
+    return {}
+
+
 # ============================================================================
 # 节点工厂
 # ============================================================================
@@ -1577,6 +1624,20 @@ def create_node_from_archive(
         base_node.node_data = read_k2node_message(
             archive, name_map, import_map, export_map, linker,
         )
+    elif class_name == "K2Node_CallDelegate":
+        base_node.node_data = read_k2node_call_delegate(archive, name_map)
+    elif class_name == "K2Node_CallArrayFunction":
+        base_node.node_data = read_k2node_call_array_function(archive, name_map)
+    elif class_name == "K2Node_CallParentFunction":
+        base_node.node_data = read_k2node_call_parent_function(archive, name_map)
+    elif class_name == "K2Node_FunctionResult":
+        base_node.node_data = read_k2node_function_result(archive, name_map)
+    elif class_name == "K2Node_CreateWidget":
+        base_node.node_data = read_k2node_create_widget(archive, name_map)
+    elif class_name == "K2Node_AddDelegate":
+        base_node.node_data = read_k2node_add_delegate(archive, name_map)
+    elif class_name == "K2Node_MacroInstance":
+        base_node.node_data = read_k2node_macro_instance(archive, name_map)
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
