@@ -1528,32 +1528,32 @@ def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[st
 
 def read_k2node_call_array_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_CallArrayFunction 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 def read_k2node_call_parent_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_CallParentFunction 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 def read_k2node_function_result(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_FunctionResult 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 def read_k2node_create_widget(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_CreateWidget 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 def read_k2node_add_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_AddDelegate 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 def read_k2node_macro_instance(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_MacroInstance 字段。"""
-    return {}
+    return {"_unimplemented": True}
 
 
 # ============================================================================
