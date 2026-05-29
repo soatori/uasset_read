@@ -1,4 +1,12 @@
-"""CallFunction 节点处理器 — 提取函数引用和纯函数检测。"""
+"""CallFunction 节点处理器 — 提取函数引用和纯函数检测。
+
+覆盖 K2Node_CallFunction 及其子类：
+- K2Node_CallParentFunction（调用父类函数）
+- K2Node_CallArrayFunction（数组操作函数）
+- K2Node_GetDataTableRow（数据表行获取）
+- K2Node_LoadAsset（异步资产加载）
+- K2Node_SpawnActorFromClass（Actor 生成）
+"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
@@ -12,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class CallFunctionProcessor(N2CNodeProcessor):
-    """处理 K2Node_CallFunction 类型节点。
+    """处理 K2Node_CallFunction 及其子类节点。
 
     提取函数引用（member_name, member_parent, b_self_context），
     并检测是否为纯函数（无 exec 引脚）。
@@ -20,7 +28,14 @@ class CallFunctionProcessor(N2CNodeProcessor):
 
     @property
     def node_types(self) -> List[N2CNodeType]:
-        return [N2CNodeType.CallFunction]
+        return [
+            N2CNodeType.CallFunction,
+            N2CNodeType.CallParentFunction,
+            N2CNodeType.CallArrayFunction,
+            N2CNodeType.GetDataTableRow,
+            N2CNodeType.LoadAsset,
+            N2CNodeType.SpawnActorFromClass,
+        ]
 
     def process(self, node: UEdGraphNode, definition: N2CNodeDefinition) -> None:
         # Handle node_data=None

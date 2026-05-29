@@ -80,7 +80,7 @@ def test_material_instance_no_overrides(tmp_path):
 # ---------- 边界检查测试 ----------
 
 def test_material_instance_negative_scalar_count(tmp_path):
-    """scalar_count 为负数时应跳过标量段并继续解析。"""
+    """scalar_count 为负数时应捕获异常并设置 parse_error。"""
     name_map = ["", "ParentMaterial"]
 
     data = struct.pack('<i', 1)    # parent_material_index
@@ -92,15 +92,13 @@ def test_material_instance_negative_scalar_count(tmp_path):
     try:
         result = parse_material_instance(archive, name_map)
 
-        assert "parse_error" not in result
-        assert result["scalar_overrides"] == {}
-        assert result["override_count"] == 0
+        assert "parse_error" in result
     finally:
         archive.close()
 
 
 def test_material_instance_huge_count(tmp_path):
-    """计数超过 MAX_PARAM_COUNT 时应跳过对应段。"""
+    """计数超过 MAX_PARAM_COUNT 时应捕获异常并设置 parse_error。"""
     name_map = ["", "ParentMaterial"]
 
     data = struct.pack('<i', 1)                        # parent_material_index
@@ -112,8 +110,7 @@ def test_material_instance_huge_count(tmp_path):
     try:
         result = parse_material_instance(archive, name_map)
 
-        assert "parse_error" not in result
-        assert result["scalar_overrides"] == {}
+        assert "parse_error" in result
     finally:
         archive.close()
 

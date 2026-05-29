@@ -257,12 +257,5 @@ class EX_NameConst(KismetExpressionT[str]):
         # Read FName: index + number
         idx = archive.read_u32()
         num = archive.read_u32()
-        if 0 <= idx < len(name_map):
-            base = name_map[idx]
-            if num > 0:
-                name = f"{base}_{num}"
-            else:
-                name = base
-        else:
-            name = "None"
+        name = archive.resolve_fname(idx, num)
         return cls(Value=name)

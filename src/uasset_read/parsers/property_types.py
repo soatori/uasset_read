@@ -18,6 +18,7 @@ from uasset_read.models.properties import (
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
+from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count
 
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
@@ -25,7 +26,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
     "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
     "Guid": 16, "IntPoint": 8, "IntVector": 12,
-    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
+    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
@@ -107,11 +108,7 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         if name_map is None:
             raise ParseError("ByteProperty with enum backing requires name_map")
         enum_value_name = archive.read_name(name_map)
-        value_name = f"{tag.enum_type}::{enum_value_name}"
-        return EnumValue(
-            enum_type=tag.enum_type,
-            value_name=value_name
-        )
+        return make_enum_value(tag.enum_type, enum_value_name)
 
     if type_name == "Int64Property":
         return archive.read_i64()
@@ -121,6 +118,21 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         return archive.read_u8()
     else:  # IntProperty (default)
         return archive.read_i32()
+
+
+def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt16Property"""
+    return archive.read_u16()
+
+
+def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt32Property"""
+    return archive.read_u32()
+
+
+def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt64Property"""
+    return archive.read_u64()
 
 
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
@@ -157,6 +169,37 @@ def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: Li
     }
 
 
+def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 Utf8StrProperty"""
+    return archive.read_fstring()
+
+
+def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 WeakObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 LazyObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 ClassProperty"""
+    return archive.read_i32()
+
+
+def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
+    """解析 SoftClassProperty"""
+    # 与 SoftObjectProperty 解析方式相同
+    return parse_soft_object_property(tag, archive, name_map)
+
+
+def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 AssetObjectProperty"""
+    return archive.read_fstring()
+
+
 # ============================================================================
 # Complex type parsers (lines 5441-6004 equivalent)
 # ============================================================================
@@ -170,11 +213,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
         )
 
-    count = archive.read_i32()
-    if count < 0 or count > MAX_ARRAY_COUNT:
-        raise ParseError(
-            f"ArrayProperty count {count} out of range [0, {MAX_ARRAY_COUNT}]"
-        )
+    count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
     remaining_size = tag.size - 4  # subtract 4-byte count field
@@ -230,6 +269,26 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             struct_type, tag.size, expected_size,
         )
         struct_type = None  # Skip all fast-path branches
+
+    # Phase 76: Handle negative size values gracefully
+    if tag.size is not None and tag.size < 0:
+        import logging
+        logging.getLogger(__name__).warning(
+            "StructProperty '%s': negative size %d, treating as unsigned",
+            declared_struct_type, tag.size,
+        )
+        unsigned_size = tag.size & 0xFFFFFFFF
+        total = archive.total_size()
+        remaining = max(0, total - archive.tell())
+        skip_bytes = min(unsigned_size, remaining) if remaining > 0 else 0
+        if skip_bytes > 0:
+            archive.seek(archive.tell() + skip_bytes)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
+        )
 
     # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
@@ -509,11 +568,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 
-    num_entries = archive.read_i32()
-    if num_entries < 0 or num_entries > MAX_PROPERTY_COUNT:
-        raise ParseError(
-            f"MapProperty entries count {num_entries} out of range [0, {MAX_PROPERTY_COUNT}]"
-        )
+    num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
@@ -532,11 +587,7 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     """解析 SetProperty（ADVP-03）。"""
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
-    num_elements = archive.read_i32()
-    if num_elements < 0 or num_elements > MAX_PROPERTY_COUNT:
-        raise ParseError(
-            f"SetProperty elements count {num_elements} out of range [0, {MAX_PROPERTY_COUNT}]"
-        )
+    num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
 
@@ -555,13 +606,23 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
     """解析 EnumProperty（ADVP-04）。"""
     enum_type = _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
-    value_name = f"{enum_type}::{enum_value_name}"
+    return make_enum_value(enum_type, enum_value_name)
 
-    return EnumValue(
-        enum_type=enum_type,
-        value_name=value_name
-    )
 
+def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
+    """读取 Base FText: namespace + key + source_string。"""
+    namespace = archive.read_fstring()
+    key = archive.read_fstring()
+    source_string = archive.read_fstring()
+    return namespace, key, source_string
+
+
+def _read_ftext_args(archive: FArchive) -> None:
+    """读取 FText 参数字典并丢弃（仅消耗字节）。"""
+    count = archive.read_i32()
+    for _ in range(count):
+        archive.read_fstring()  # key
+        archive.read_fstring()  # value
 
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
     """解析 TextProperty（ADVP-05）。
@@ -570,23 +631,51 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
       - flags: i32 (4 bytes)
       - history_type: u8 (1 byte) — FTextHistory 类型标识
       - body: 根据 history_type 不同而不同
-        - history_type == 0 (Base): namespace(FString) + key(FString) + source_string(FString)
-        - history_type == 1 (NamedString): namespace(FString) + key(FString)
-        - 其他: 跳过剩余数据
+        - history_type == 0 (Base): namespace + key + source_string
+        - history_type == 1 (NamedFormat): namespace + key + args
+        - history_type == 2 (OrderedFormat): namespace + key + source_string + args
+        - history_type == 3 (ArgumentFormat): namespace + key + source_string + args
+        - history_type == 4-9 (AsNumber/AsPercent/AsCurrency/Date/Time/DateTime): namespace + key + source_string + value
+        - history_type == 10 (Transform): namespace + key + source_string + transform_type
     """
-    flags = archive.read_i32()       # FText flags
+    _flags = archive.read_i32()       # FText flags (unused)
     history_type = archive.read_u8() # FTextHistory type
 
-    if history_type == 0:
-        # Base text: namespace + key + source_string
+    if history_type == 0:  # Base
+        namespace, key, source_string = _read_ftext_base(archive)
+    elif history_type == 1:  # NamedFormat
         namespace = archive.read_fstring()
         key = archive.read_fstring()
-        source_string = archive.read_fstring()
-    elif history_type == 1:
-        # NamedString: namespace + key (no source_string)
-        namespace = archive.read_fstring()
-        key = archive.read_fstring()
+        _read_ftext_args(archive)
         source_string = ""
+    elif history_type == 2:  # OrderedFormat
+        namespace, key, source_string = _read_ftext_base(archive)
+        _read_ftext_args(archive)
+    elif history_type == 3:  # ArgumentFormat
+        namespace, key, source_string = _read_ftext_base(archive)
+        _read_ftext_args(archive)
+    elif history_type == 4:  # AsNumber
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # target_number
+    elif history_type == 5:  # AsPercent
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # target_value
+    elif history_type == 6:  # AsCurrency
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # currency_code
+        archive.read_fstring()  # target_amount
+    elif history_type == 7:  # DateString
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # date
+    elif history_type == 8:  # TimeString
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # time
+    elif history_type == 9:  # DateTimeString
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # datetime
+    elif history_type == 10:  # Transform
+        namespace, key, source_string = _read_ftext_base(archive)
+        archive.read_fstring()  # transform_type
     else:
         # Unknown history type: skip remaining data
         remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
@@ -612,6 +701,83 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
         object_ref=object_ref,
         function_name=function_name
     )
+
+
+# ============================================================================
+# Multicast delegate type parsers
+# ============================================================================
+
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastDelegateProperty"""
+    count = archive.read_i32()
+    delegates = []
+    for _ in range(count):
+        obj_index = archive.read_i32()
+        func_name = archive.read_fstring()
+        delegates.append({"object": obj_index, "function": func_name})
+    return delegates
+
+
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastInlineDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastSparseDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+# ============================================================================
+# Special type parsers
+# ============================================================================
+
+def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 InterfaceProperty"""
+    return archive.read_i32()
+
+
+def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
+    """解析 FieldPathProperty"""
+    count = archive.read_i32()
+    path = []
+    for _ in range(count):
+        path.append(archive.read_fstring())
+    return {"path": path}
+
+
+def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
+    """解析 OptionalProperty"""
+    has_value = archive.read_bool()
+    if has_value:
+        parse_property_value = _get_parse_property_value()
+        inner_value = parse_property_value(tag, archive, name_map or [], export_map or [], summary)
+        return {"has_value": True, "value": inner_value}
+    return {"has_value": False, "value": None}
+
+
+# ============================================================================
+# Verse language type parsers
+# ============================================================================
+
+def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 VerseStringProperty"""
+    return archive.read_fstring()
+
+
+def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseClassProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseFunctionProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseDynamicProperty"""
+    return archive.read_i32()
 
 
 # ============================================================================
@@ -658,61 +824,42 @@ def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     if getattr(tag, "struct_type", None):
         return str(tag.struct_type).split(".")[-1]
 
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            struct_path = type_str[start + 1:end]
-            if "." in struct_path:
-                return struct_path.split(".")[-1]
-            return struct_path
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        if "." in inner:
+            return inner.split(".")[-1]
+        return inner
 
     return "UnknownStruct"
 
 
 def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
     """从 PropertyTag 提取 Map Key/Value 类型（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            params = type_str[start + 1:end]
-            parts = params.split(",", 1)  # split on first comma only (type names may contain commas)
-            if len(parts) >= 2:
-                return parts[0].strip(), parts[1].strip()
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        parts = inner.split(",", 1)  # split on first comma only (type names may contain commas)
+        if len(parts) >= 2:
+            return parts[0].strip(), parts[1].strip()
 
     return "IntProperty", "IntProperty"
 
 
 def _extract_set_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取 Set 元素类型（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            return type_str[start + 1:end].strip()
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        return inner.strip()
 
     return "IntProperty"
 
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取枚举类型名（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            enum_path = type_str[start + 1:end]
-            if "." in enum_path:
-                return enum_path.split(".")[-1]
-            return enum_path
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        if "." in inner:
+            return inner.split(".")[-1]
+        return inner
 
     return "UnknownEnum"
 
@@ -725,7 +872,8 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
     """键类型分派解析（D-02b）。"""
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
-        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty"
+        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
+        "UInt16Property", "UInt32Property", "UInt64Property",
     ]
     if key_type in basic_types:
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)

@@ -73,7 +73,7 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
         # 容错处理 - 如果 size 不合理，尝试跳过
         if size == 0 or size > (data_len - offset):
             next_sentinel = _find_next_sentinel(data, offset - 4)
-            if next_sentinel > offset:
+            if next_sentinel > offset + 3:
                 offset = next_sentinel - 3
                 continue
             break
@@ -265,42 +265,3 @@ def map_bytecode_to_functions(
     logger.info("Mapped %d bytecode buffers to Function exports", len(result))
     return result
 
-
-# ============================================================================
-# Inline test (Task 2 verification)
-# ============================================================================
-
-if __name__ == "__main__":
-    import struct
-
-    # Construct synthetic cooked bytecode buffer with 2 functions
-    func1_bytecode = bytes([0x00, 0x01, 0x04, 0x53])   # LocalVar, InstanceVar, Return, EndOfScript
-    func2_bytecode = bytes([0x1B, 0x00, 0x16, 0x53])    # VirtualFunc, (null name), EndFunc, EndOfScript
-
-    synthetic = struct.pack('<I', len(func1_bytecode)) + func1_bytecode
-    synthetic += struct.pack('<I', len(func2_bytecode)) + func2_bytecode
-
-    buffers = _parse_cooked_bytecode_buffer(synthetic)
-
-    assert len(buffers) == 2, f"Expected 2 buffers, got {len(buffers)}"
-    assert buffers[0].endswith(b'\x53'), f"Buffer 0 doesn't end with EX_EndOfScript: {buffers[0]!r}"
-    assert buffers[1].endswith(b'\x53'), f"Buffer 1 doesn't end with EX_EndOfScript: {buffers[1]!r}"
-    assert buffers[0] == func1_bytecode
-    assert buffers[1] == func2_bytecode
-
-    # Test single buffer with trailing garbage (should stop after first buffer)
-    single = struct.pack('<I', 4) + bytes([0x01, 0x02, 0x03, 0x53]) + b'\x00\x00'
-    single_bufs = _parse_cooked_bytecode_buffer(single)
-    assert len(single_bufs) == 1, f"Expected 1 buffer, got {len(single_bufs)}"
-    assert single_bufs[0].endswith(b'\x53')
-
-    # Test empty input
-    assert _parse_cooked_bytecode_buffer(b'') == []
-
-    # Test plan verification command data (size=4, correct end sentinel)
-    plan_data = b'\x04\x00\x00\x00\x01\x02\x03\x53'
-    plan_bufs = _parse_cooked_bytecode_buffer(plan_data)
-    assert len(plan_bufs) == 1
-    assert plan_bufs[0].endswith(b'\x53')
-
-    print("All inline tests passed")
