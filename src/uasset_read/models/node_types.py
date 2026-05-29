@@ -208,3 +208,48 @@ class K2NodeMacroInstance(UEdGraphNode):
     def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
         from uasset_read.serializers.graph import read_k2node_macro_instance
         return read_k2node_macro_instance(archive, name_map)
+
+
+@dataclass
+class K2NodeAssignDelegate(UEdGraphNode):
+    """K2Node_AssignDelegate 委托赋值节点。"""
+    delegate_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_assign_delegate
+        return read_k2node_assign_delegate(archive, name_map)
+
+
+@dataclass
+class K2NodeGetDataTableRow(UEdGraphNode):
+    """K2Node_GetDataTableRow 数据表行获取节点。"""
+    data_table: Optional[object] = None
+    row_struct_name: str = ""
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_get_data_table_row
+        return read_k2node_get_data_table_row(archive, name_map)
+
+
+@dataclass
+class K2NodeLoadAsset(UEdGraphNode):
+    """K2Node_LoadAsset 异步资产加载节点。"""
+    asset_type: Optional[object] = None
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_load_asset
+        return read_k2node_load_asset(archive, name_map)
+
+
+@dataclass
+class K2NodeSpawnActorFromClass(UEdGraphNode):
+    """K2Node_SpawnActorFromClass Actor 生成节点。"""
+    spawn_class: Optional[object] = None
+
+    @classmethod
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+        from uasset_read.serializers.graph import read_k2node_spawn_actor_from_class
+        return read_k2node_spawn_actor_from_class(archive, name_map)

@@ -26,6 +26,7 @@ class FlowControlProcessor(N2CNodeProcessor):
             N2CNodeType.SwitchInt,
             N2CNodeType.SwitchString,
             N2CNodeType.SwitchEnum,
+            N2CNodeType.Knot,
         ]
 
     def process(self, node: UEdGraphNode, definition: N2CNodeDefinition) -> None:

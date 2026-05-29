@@ -47,6 +47,7 @@ from uasset_read.models.node_types import (
     K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage,
     K2NodeCallDelegate, K2NodeCallArrayFunction, K2NodeCallParentFunction,
     K2NodeFunctionResult, K2NodeCreateWidget, K2NodeAddDelegate, K2NodeMacroInstance,
+    K2NodeAssignDelegate, K2NodeGetDataTableRow, K2NodeLoadAsset, K2NodeSpawnActorFromClass,
 )
 
 
@@ -1526,34 +1527,209 @@ def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[st
     return result
 
 
-def read_k2node_call_array_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_CallArrayFunction 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_call_array_function(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_CallArrayFunction 特有字段。
+
+    继承自 K2Node_CallFunction，特有字段通过 PropertyTag 序列化。
+    从 raw_properties 提取 FunctionReference（已在 PropertyTag 层解析）。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # FunctionReference 从 PropertyTag 获取
+    func_ref = raw_properties.get("FunctionReference")
+    if isinstance(func_ref, dict):
+        result["function_reference"] = func_ref
+    elif func_ref is not None:
+        result["function_reference"] = func_ref
+
+    return result
 
 
-def read_k2node_call_parent_function(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_CallParentFunction 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_call_parent_function(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_CallParentFunction 特有字段。
+
+    继承自 K2Node_CallFunction，调用父类同名函数。
+    特有字段通过 PropertyTag 序列化。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # FunctionReference 从 PropertyTag 获取
+    func_ref = raw_properties.get("FunctionReference")
+    if isinstance(func_ref, dict):
+        result["function_reference"] = func_ref
+    elif func_ref is not None:
+        result["function_reference"] = func_ref
+
+    return result
 
 
-def read_k2node_function_result(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_FunctionResult 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_function_result(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_FunctionResult 特有字段。
+
+    继承自 K2Node_FunctionTerminator，表示函数返回节点。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    func_ref = raw_properties.get("FunctionReference")
+    if isinstance(func_ref, dict):
+        result["function_reference"] = func_ref
+    elif func_ref is not None:
+        result["function_reference"] = func_ref
+
+    return result
 
 
-def read_k2node_create_widget(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_CreateWidget 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_create_widget(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_CreateWidget 特有字段。
+
+    继承自 K2Node_ConstructObjectFromClass，创建 UMG 控件。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # WidgetClass 从 PropertyTag 获取（FPackageIndex → 类名）
+    widget_class = raw_properties.get("WidgetClass")
+    if widget_class is not None:
+        result["widget_class"] = widget_class
+
+    return result
 
 
-def read_k2node_add_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_AddDelegate 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_add_delegate(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_AddDelegate 特有字段。
+
+    继承自 K2Node_BaseMCDelegate，添加多播委托绑定。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    delegate_name = raw_properties.get("DelegateName")
+    if delegate_name is not None:
+        result["delegate_name"] = delegate_name
+
+    return result
 
 
-def read_k2node_macro_instance(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_MacroInstance 字段。"""
-    return {"_unimplemented": True}
+def read_k2node_macro_instance(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_MacroInstance 特有字段。
+
+    继承自 K2Node_Tunnel，表示宏图表实例。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # MacroGraph 从 PropertyTag 获取（FPackageIndex → 宏图表引用）
+    macro_graph = raw_properties.get("MacroGraph")
+    if macro_graph is not None:
+        result["macro_graph"] = macro_graph
+
+    # Macro 从 PropertyTag 获取（FName → 宏名称）
+    macro = raw_properties.get("Macro")
+    if macro is not None:
+        result["macro_name"] = macro
+
+    return result
+
+
+def read_k2node_assign_delegate(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_AssignDelegate 特有字段。
+
+    继承自 K2Node_AddDelegate，赋值委托绑定。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    delegate_name = raw_properties.get("DelegateName")
+    if delegate_name is not None:
+        result["delegate_name"] = delegate_name
+
+    return result
+
+
+def read_k2node_get_data_table_row(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_GetDataTableRow 特有字段。
+
+    从数据表获取行数据。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # DataTable 从 PropertyTag 获取
+    data_table = raw_properties.get("DataTable")
+    if data_table is not None:
+        result["data_table"] = data_table
+
+    # RowStructName 从 PropertyTag 获取
+    row_struct = raw_properties.get("RowStructName")
+    if row_struct is not None:
+        result["row_struct_name"] = row_struct
+
+    return result
+
+
+def read_k2node_load_asset(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_LoadAsset 特有字段。
+
+    异步加载资产节点。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # AssetType 从 PropertyTag 获取
+    asset_type = raw_properties.get("AssetType")
+    if asset_type is not None:
+        result["asset_type"] = asset_type
+
+    return result
+
+
+def read_k2node_spawn_actor_from_class(
+    archive: FArchive, name_map: List[str],
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_SpawnActorFromClass 特有字段。
+
+    继承自 K2Node_ConstructObjectFromClass，生成 Actor。
+    """
+    raw_properties = raw_properties or {}
+    result: Dict[str, Any] = {}
+
+    # Class 从 PropertyTag 获取
+    spawn_class = raw_properties.get("Class")
+    if spawn_class is not None:
+        result["spawn_class"] = spawn_class
+
+    return result
 
 
 # ============================================================================
@@ -1627,17 +1803,45 @@ def create_node_from_archive(
     elif class_name == "K2Node_CallDelegate":
         base_node.node_data = read_k2node_call_delegate(archive, name_map)
     elif class_name == "K2Node_CallArrayFunction":
-        base_node.node_data = read_k2node_call_array_function(archive, name_map)
+        base_node.node_data = read_k2node_call_array_function(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif class_name == "K2Node_CallParentFunction":
-        base_node.node_data = read_k2node_call_parent_function(archive, name_map)
+        base_node.node_data = read_k2node_call_parent_function(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif class_name == "K2Node_FunctionResult":
-        base_node.node_data = read_k2node_function_result(archive, name_map)
+        base_node.node_data = read_k2node_function_result(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif class_name == "K2Node_CreateWidget":
-        base_node.node_data = read_k2node_create_widget(archive, name_map)
+        base_node.node_data = read_k2node_create_widget(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif class_name == "K2Node_AddDelegate":
-        base_node.node_data = read_k2node_add_delegate(archive, name_map)
+        base_node.node_data = read_k2node_add_delegate(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif class_name == "K2Node_MacroInstance":
-        base_node.node_data = read_k2node_macro_instance(archive, name_map)
+        base_node.node_data = read_k2node_macro_instance(
+            archive, name_map, raw_properties=raw_properties,
+        )
+    elif class_name == "K2Node_AssignDelegate":
+        base_node.node_data = read_k2node_assign_delegate(
+            archive, name_map, raw_properties=raw_properties,
+        )
+    elif class_name == "K2Node_GetDataTableRow":
+        base_node.node_data = read_k2node_get_data_table_row(
+            archive, name_map, raw_properties=raw_properties,
+        )
+    elif class_name == "K2Node_LoadAsset":
+        base_node.node_data = read_k2node_load_asset(
+            archive, name_map, raw_properties=raw_properties,
+        )
+    elif class_name == "K2Node_SpawnActorFromClass":
+        base_node.node_data = read_k2node_spawn_actor_from_class(
+            archive, name_map, raw_properties=raw_properties,
+        )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
         base_node.node_data = {"_raw_properties": raw_properties}
