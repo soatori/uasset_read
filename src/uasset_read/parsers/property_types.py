@@ -120,6 +120,21 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         return archive.read_i32()
 
 
+def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt16Property"""
+    return archive.read_u16()
+
+
+def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt32Property"""
+    return archive.read_u32()
+
+
+def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt64Property"""
+    return archive.read_u64()
+
+
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
     """解析 FloatProperty/DoubleProperty（PROP-03）。"""
     type_name = tag.type
@@ -152,6 +167,37 @@ def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: Li
         "asset_path": asset_path,
         "sub_path": sub_path
     }
+
+
+def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 Utf8StrProperty"""
+    return archive.read_fstring()
+
+
+def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 WeakObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 LazyObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 ClassProperty"""
+    return archive.read_i32()
+
+
+def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
+    """解析 SoftClassProperty"""
+    # 与 SoftObjectProperty 解析方式相同
+    return parse_soft_object_property(tag, archive, name_map)
+
+
+def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 AssetObjectProperty"""
+    return archive.read_fstring()
 
 
 # ============================================================================
@@ -658,6 +704,83 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 
 # ============================================================================
+# Multicast delegate type parsers
+# ============================================================================
+
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastDelegateProperty"""
+    count = archive.read_i32()
+    delegates = []
+    for _ in range(count):
+        obj_index = archive.read_i32()
+        func_name = archive.read_fstring()
+        delegates.append({"object": obj_index, "function": func_name})
+    return delegates
+
+
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastInlineDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastSparseDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+# ============================================================================
+# Special type parsers
+# ============================================================================
+
+def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 InterfaceProperty"""
+    return archive.read_i32()
+
+
+def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
+    """解析 FieldPathProperty"""
+    count = archive.read_i32()
+    path = []
+    for _ in range(count):
+        path.append(archive.read_fstring())
+    return {"path": path}
+
+
+def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
+    """解析 OptionalProperty"""
+    has_value = archive.read_bool()
+    if has_value:
+        parse_property_value = _get_parse_property_value()
+        inner_value = parse_property_value(tag, archive, name_map or [], export_map or [], summary)
+        return {"has_value": True, "value": inner_value}
+    return {"has_value": False, "value": None}
+
+
+# ============================================================================
+# Verse language type parsers
+# ============================================================================
+
+def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 VerseStringProperty"""
+    return archive.read_fstring()
+
+
+def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseClassProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseFunctionProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseDynamicProperty"""
+    return archive.read_i32()
+
+
+# ============================================================================
 # TypeName extraction helpers (lines 5517-5641 equivalent)
 # ============================================================================
 
@@ -749,7 +872,8 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
     """键类型分派解析（D-02b）。"""
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
-        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty"
+        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
+        "UInt16Property", "UInt32Property", "UInt64Property",
     ]
     if key_type in basic_types:
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)
