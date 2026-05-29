@@ -704,6 +704,83 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 
 # ============================================================================
+# Multicast delegate type parsers
+# ============================================================================
+
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastDelegateProperty"""
+    count = archive.read_i32()
+    delegates = []
+    for _ in range(count):
+        obj_index = archive.read_i32()
+        func_name = archive.read_fstring()
+        delegates.append({"object": obj_index, "function": func_name})
+    return delegates
+
+
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastInlineDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+    """解析 MulticastSparseDelegateProperty"""
+    return parse_multicast_delegate_property(tag, archive)
+
+
+# ============================================================================
+# Special type parsers
+# ============================================================================
+
+def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 InterfaceProperty"""
+    return archive.read_i32()
+
+
+def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
+    """解析 FieldPathProperty"""
+    count = archive.read_i32()
+    path = []
+    for _ in range(count):
+        path.append(archive.read_fstring())
+    return {"path": path}
+
+
+def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
+    """解析 OptionalProperty"""
+    has_value = archive.read_bool()
+    if has_value:
+        parse_property_value = _get_parse_property_value()
+        inner_value = parse_property_value(tag, archive, name_map or [], export_map or [], summary)
+        return {"has_value": True, "value": inner_value}
+    return {"has_value": False, "value": None}
+
+
+# ============================================================================
+# Verse language type parsers
+# ============================================================================
+
+def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 VerseStringProperty"""
+    return archive.read_fstring()
+
+
+def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseClassProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseFunctionProperty"""
+    return archive.read_i32()
+
+
+def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 VerseDynamicProperty"""
+    return archive.read_i32()
+
+
+# ============================================================================
 # TypeName extraction helpers (lines 5517-5641 equivalent)
 # ============================================================================
 
