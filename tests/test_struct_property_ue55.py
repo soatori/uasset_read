@@ -1,6 +1,7 @@
 """UE5.5 StructProperty 扩展测试"""
+from __future__ import annotations
+
 import struct
-import pytest
 from pathlib import Path
 from uasset_read.archive import FArchive
 from uasset_read.parsers.property_types import parse_struct_property
@@ -23,16 +24,22 @@ def test_toplevel_asset_path(tmp_path):
     # FName 格式: i32 index + i32 number
     data = struct.pack('<ii', 1, 0) + struct.pack('<ii', 2, 0)
     archive = _make_archive(tmp_path, data)
+    try:
+        tag = PropertyTag(
+            name="TestPath",
+            type="StructProperty",
+            size=len(data),
+            struct_type="TopLevelAssetPath"
+        )
 
-    tag = PropertyTag(
-        name="TestPath",
-        type="StructProperty",
-        size=len(data),
-        struct_type="TopLevelAssetPath"
-    )
+        result = parse_struct_property(tag, archive, name_map, [], None)
 
-    result = parse_struct_property(tag, archive, name_map, [], None)
-
-    assert result.struct_type == "TopLevelAssetPath"
-    assert "PackageName" in result.fields
-    assert "AssetName" in result.fields
+        assert result.struct_type == "TopLevelAssetPath"
+        assert "PackageName" in result.fields
+        assert "AssetName" in result.fields
+        assert result.fields["PackageName"] == "/Game/FirstPerson/Blueprints/BP_FirstPerson"
+        assert result.fields["AssetName"] == "BP_FirstPerson"
+        assert archive.tell() == 16  # 2 x 8-byte FName
+        assert result.parse_status == "parsed"
+    finally:
+        archive.close()
