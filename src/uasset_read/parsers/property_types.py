@@ -120,6 +120,21 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         return archive.read_i32()
 
 
+def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt16Property"""
+    return archive.read_u16()
+
+
+def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt32Property"""
+    return archive.read_u32()
+
+
+def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 UInt64Property"""
+    return archive.read_u64()
+
+
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
     """解析 FloatProperty/DoubleProperty（PROP-03）。"""
     type_name = tag.type
@@ -749,7 +764,8 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
     """键类型分派解析（D-02b）。"""
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
-        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty"
+        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
+        "UInt16Property", "UInt32Property", "UInt64Property",
     ]
     if key_type in basic_types:
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)

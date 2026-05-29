@@ -31,6 +31,7 @@ def _get_parse_functions():
         parse_soft_object_property, parse_array_property, parse_struct_property,
         parse_map_property, parse_set_property, parse_enum_property,
         parse_text_property, parse_delegate_property,
+        parse_uint16_property, parse_uint32_property, parse_uint64_property,
     )
     return {
         "BoolProperty": parse_bool_property,
@@ -39,6 +40,9 @@ def _get_parse_functions():
         "Int16Property": parse_int_property,
         "Int8Property": parse_int_property,
         "ByteProperty": parse_int_property,
+        "UInt16Property": parse_uint16_property,
+        "UInt32Property": parse_uint32_property,
+        "UInt64Property": parse_uint64_property,
         "FloatProperty": parse_float_property,
         "DoubleProperty": parse_float_property,
         "StrProperty": parse_str_property,
@@ -81,7 +85,8 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     if tag.type == "ByteProperty" and tag.enum_type is not None:
         return handler(tag, archive, name_map)
     elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
-                     "Int8Property", "ByteProperty", "FloatProperty", "DoubleProperty",
+                     "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
+                     "UInt64Property", "FloatProperty", "DoubleProperty",
                      "StrProperty", "ObjectProperty", "TextProperty"):
         return handler(tag, archive)
     elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty"):
