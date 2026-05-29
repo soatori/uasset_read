@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
-    extract_bytecode_bytes,
-    parse_bytecode_stream,
+    extract_and_parse,
     USTRUCT_TYPES,
     reset_bpgc_cache,  # Phase 72-C Wave 2
 )
@@ -39,11 +38,10 @@ def decompile_single_function(
     Decompile a single UStruct export to KismetDecompiledResult.
 
     Internal helper that:
-    1. Extracts bytecode bytes from the UStruct export
-    2. Parses bytecode into KismetExpression list
-    3. Translates expressions to C++ pseudocode
-    4. Captures local variable types from TypeRegistry
-    5. Returns structured result
+    1. Uses extract_and_parse() to extract and parse bytecode
+    2. Translates expressions to C++ pseudocode
+    3. Captures local variable types from TypeRegistry
+    4. Returns structured result
 
     Args:
         archive: FArchive instance (file-level archive)
@@ -61,29 +59,16 @@ def decompile_single_function(
     On any exception during bytecode extraction/parsing, returns None
     (caller handles error logging via tolerant mode).
     """
-    from uasset_read.serializers.object_resources import resolve_class_name
-
-    # Verify this is a UStruct type
-    class_name = resolve_class_name(export.class_index, import_map, export_map)
-    if class_name not in USTRUCT_TYPES:
-        return None
-
+    # 复用 extract_and_parse() 提取和解析字节码
     try:
-        bytecode_bytes = extract_bytecode_bytes(
-            archive, export, summary, name_map, import_map, export_map
+        expressions, error = extract_and_parse(
+            archive, export, summary, name_map, import_map, export_map,
+            tolerant=tolerant,
         )
     except Exception:
         return None
 
-    if bytecode_bytes is None:
-        return None
-
-    try:
-        expressions = parse_bytecode_stream(bytecode_bytes, name_map, tolerant=tolerant)
-    except Exception:
-        return None
-
-    if not expressions:
+    if error or not expressions:
         return None
 
     # Build C++ pseudocode using FunctionBodyBuilder
