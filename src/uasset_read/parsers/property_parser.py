@@ -31,6 +31,15 @@ def _get_parse_functions():
         parse_soft_object_property, parse_array_property, parse_struct_property,
         parse_map_property, parse_set_property, parse_enum_property,
         parse_text_property, parse_delegate_property,
+        parse_uint16_property, parse_uint32_property, parse_uint64_property,
+        parse_utf8_str_property, parse_weak_object_property,
+        parse_lazy_object_property, parse_class_property,
+        parse_soft_class_property, parse_asset_object_property,
+        parse_multicast_delegate_property, parse_multicast_inline_delegate_property,
+        parse_multicast_sparse_delegate_property,
+        parse_interface_property, parse_field_path_property, parse_optional_property,
+        parse_verse_string_property, parse_verse_class_property,
+        parse_verse_function_property, parse_verse_dynamic_property,
     )
     return {
         "BoolProperty": parse_bool_property,
@@ -39,6 +48,9 @@ def _get_parse_functions():
         "Int16Property": parse_int_property,
         "Int8Property": parse_int_property,
         "ByteProperty": parse_int_property,
+        "UInt16Property": parse_uint16_property,
+        "UInt32Property": parse_uint32_property,
+        "UInt64Property": parse_uint64_property,
         "FloatProperty": parse_float_property,
         "DoubleProperty": parse_float_property,
         "StrProperty": parse_str_property,
@@ -52,6 +64,23 @@ def _get_parse_functions():
         "EnumProperty": parse_enum_property,
         "TextProperty": parse_text_property,
         "DelegateProperty": parse_delegate_property,
+        "Utf8StrProperty": parse_utf8_str_property,
+        "WeakObjectProperty": parse_weak_object_property,
+        "LazyObjectProperty": parse_lazy_object_property,
+        "ClassProperty": parse_class_property,
+        "SoftClassProperty": parse_soft_class_property,
+        "AssetObjectProperty": parse_asset_object_property,
+        "AssetClassProperty": parse_asset_object_property,
+        "MulticastDelegateProperty": parse_multicast_delegate_property,
+        "MulticastInlineDelegateProperty": parse_multicast_inline_delegate_property,
+        "MulticastSparseDelegateProperty": parse_multicast_sparse_delegate_property,
+        "InterfaceProperty": parse_interface_property,
+        "FieldPathProperty": parse_field_path_property,
+        "OptionalProperty": parse_optional_property,
+        "VerseStringProperty": parse_verse_string_property,
+        "VerseClassProperty": parse_verse_class_property,
+        "VerseFunctionProperty": parse_verse_function_property,
+        "VerseDynamicProperty": parse_verse_dynamic_property,
     }
 
 
@@ -81,16 +110,24 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     if tag.type == "ByteProperty" and tag.enum_type is not None:
         return handler(tag, archive, name_map)
     elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
-                     "Int8Property", "ByteProperty", "FloatProperty", "DoubleProperty",
-                     "StrProperty", "ObjectProperty", "TextProperty"):
+                     "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
+                     "UInt64Property", "FloatProperty", "DoubleProperty",
+                     "StrProperty", "ObjectProperty", "TextProperty",
+                     "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
+                     "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
+                     "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+                     "MulticastSparseDelegateProperty",
+                     "InterfaceProperty", "FieldPathProperty",
+                     "VerseStringProperty", "VerseClassProperty",
+                     "VerseFunctionProperty", "VerseDynamicProperty"):
         return handler(tag, archive)
-    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty"):
+    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
         return handler(tag, archive, name_map)
     elif tag.type in ("ArrayProperty",):
         return handler(tag, archive, name_map, export_map, summary, depth)
     elif tag.type in ("StructProperty",):
         return handler(tag, archive, name_map, export_map, summary, depth)
-    elif tag.type in ("MapProperty", "SetProperty"):
+    elif tag.type in ("MapProperty", "SetProperty", "OptionalProperty"):
         return handler(tag, archive, name_map, export_map, summary)
     elif tag.type in ("EnumProperty",):
         return handler(tag, archive, name_map, summary)
