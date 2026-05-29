@@ -30,6 +30,24 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
+    # UE5 LWC 数学类型
+    "Vector2f": 8,           # 2 * float32
+    "Vector3f": 12,          # 3 * float32
+    "Vector3d": 24,          # 3 * float64
+    "Vector4f": 16,          # 4 * float32
+    "Vector4d": 32,          # 4 * float64
+    "Rotator3f": 12,         # 3 * float32
+    "Rotator3d": 24,         # 3 * float64
+    "Quat4f": 16,            # 4 * float32
+    "Quat4d": 32,            # 4 * float64
+    "Plane4f": 16,           # 4 * float32
+    "Plane4d": 32,           # 4 * float64
+    "Sphere3f": 16,          # 4 * float32
+    "Sphere3d": 32,          # 4 * float64
+    "Box2f": 16,             # 2 * Vector2f(8)
+    "Box3f": 24,             # 2 * Vector3f(12)
+    "Matrix44f": 64,         # 4 * Plane4f(16)
+    "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
 }
 
 
