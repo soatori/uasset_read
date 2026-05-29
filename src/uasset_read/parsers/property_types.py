@@ -169,6 +169,37 @@ def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: Li
     }
 
 
+def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 Utf8StrProperty"""
+    return archive.read_fstring()
+
+
+def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 WeakObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 LazyObjectProperty"""
+    return archive.read_i32()
+
+
+def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
+    """解析 ClassProperty"""
+    return archive.read_i32()
+
+
+def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
+    """解析 SoftClassProperty"""
+    # 与 SoftObjectProperty 解析方式相同
+    return parse_soft_object_property(tag, archive, name_map)
+
+
+def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 AssetObjectProperty"""
+    return archive.read_fstring()
+
+
 # ============================================================================
 # Complex type parsers (lines 5441-6004 equivalent)
 # ============================================================================

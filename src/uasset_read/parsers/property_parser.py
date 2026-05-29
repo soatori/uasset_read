@@ -32,6 +32,9 @@ def _get_parse_functions():
         parse_map_property, parse_set_property, parse_enum_property,
         parse_text_property, parse_delegate_property,
         parse_uint16_property, parse_uint32_property, parse_uint64_property,
+        parse_utf8_str_property, parse_weak_object_property,
+        parse_lazy_object_property, parse_class_property,
+        parse_soft_class_property, parse_asset_object_property,
     )
     return {
         "BoolProperty": parse_bool_property,
@@ -56,6 +59,13 @@ def _get_parse_functions():
         "EnumProperty": parse_enum_property,
         "TextProperty": parse_text_property,
         "DelegateProperty": parse_delegate_property,
+        "Utf8StrProperty": parse_utf8_str_property,
+        "WeakObjectProperty": parse_weak_object_property,
+        "LazyObjectProperty": parse_lazy_object_property,
+        "ClassProperty": parse_class_property,
+        "SoftClassProperty": parse_soft_class_property,
+        "AssetObjectProperty": parse_asset_object_property,
+        "AssetClassProperty": parse_asset_object_property,
     }
 
 
@@ -87,9 +97,11 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
                      "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
                      "UInt64Property", "FloatProperty", "DoubleProperty",
-                     "StrProperty", "ObjectProperty", "TextProperty"):
+                     "StrProperty", "ObjectProperty", "TextProperty",
+                     "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
+                     "ClassProperty", "AssetObjectProperty", "AssetClassProperty"):
         return handler(tag, archive)
-    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty"):
+    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
         return handler(tag, archive, name_map)
     elif tag.type in ("ArrayProperty",):
         return handler(tag, archive, name_map, export_map, summary, depth)
