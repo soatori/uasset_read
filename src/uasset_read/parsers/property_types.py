@@ -37,6 +37,27 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "SimpleMemberReference",
 }
 
+_TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
+    "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+    "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+    # Phase 76: 新增 UE5.5 结构体
+    "NewVariables": [
+        ("VarName", "NameProperty"),
+        ("VarGuid", "GuidProperty"),
+        ("VarType", "StructProperty"),  # FEdGraphPinType
+    ],
+    "ImplementedInterfaces": [
+        ("InterfaceName", "NameProperty"),
+        ("InterfaceGuid", "GuidProperty"),
+    ],
+    "LastEditedDocuments": [
+        ("DocumentName", "NameProperty"),
+    ],
+    "CategorySorting": [
+        ("CategoryName", "NameProperty"),
+    ],
+}
+
 
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)

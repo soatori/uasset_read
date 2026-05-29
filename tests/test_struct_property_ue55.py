@@ -45,6 +45,16 @@ def test_toplevel_asset_path(tmp_path):
         archive.close()
 
 
+def test_tagged_fallback_schemas_extended():
+    """验证 _TAGGED_FALLBACK_STRUCT_SCHEMAS 已扩展"""
+    from uasset_read.parsers.property_types import _TAGGED_FALLBACK_STRUCT_SCHEMAS
+
+    assert "NewVariables" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+    assert "ImplementedInterfaces" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+    assert "LastEditedDocuments" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+    assert "CategorySorting" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+
+
 def test_pointer_to_uber_graph_frame(tmp_path):
     """PointerToUberGraphFrame: 8 bytes (FPackageIndex)"""
     data = struct.pack('<q', 42)  # 64-bit index=42
