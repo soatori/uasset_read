@@ -43,3 +43,29 @@ def test_toplevel_asset_path(tmp_path):
         assert result.parse_status == "parsed"
     finally:
         archive.close()
+
+
+def test_pointer_to_uber_graph_frame(tmp_path):
+    """PointerToUberGraphFrame: 8 bytes (FPackageIndex)"""
+    data = struct.pack('<ii', 42, 0)  # index=42, number=0
+    archive = _make_archive(tmp_path, data)
+
+    tag = PropertyTag(
+        name="UberGraphFrame",
+        type="StructProperty",
+        size=8,
+        struct_type="PointerToUberGraphFrame"
+    )
+
+    try:
+        result = parse_struct_property(tag, archive, name_map=[], export_map=[], summary=None)
+
+        assert result.struct_type == "PointerToUberGraphFrame"
+        assert "FrameIndex" in result.fields
+        assert result.fields["FrameIndex"] == 42
+        assert "FrameNumber" in result.fields
+        assert result.fields["FrameNumber"] == 0
+        assert result.parse_status == "parsed"
+        assert archive.tell() == 8
+    finally:
+        archive.close()

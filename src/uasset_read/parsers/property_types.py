@@ -328,6 +328,14 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "AssetName": asset_name,
         })
 
+    if struct_type == "PointerToUberGraphFrame":
+        frame_index = archive.read_i32()
+        frame_number = archive.read_i32()
+        return StructValue(struct_type="PointerToUberGraphFrame", fields={
+            "FrameIndex": frame_index,
+            "FrameNumber": frame_number,
+        })
+
     if struct_type == "BoxSphereBounds":
         ox = archive.read_f32()
         oy = archive.read_f32()
