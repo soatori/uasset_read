@@ -1034,22 +1034,5 @@ def line_cpp(expr: "KismetExpression") -> str:
     return translator.line_cpp(expr)
 
 
-def to_function_body(
-    expressions: list["KismetExpression"],
-    func_name: str | None = None,
-) -> str:
-    """
-    Module-level convenience wrapper for FunctionBodyBuilder.to_function_body().
-
-    Usage:
-        from uasset_read.kismet import to_function_body, TypeRegistry
-
-        expressions = [...]  # list of KismetExpression from Phase 62
-        cpp = to_function_body(expressions, func_name="MyFunction")
-    """
-    builder = FunctionBodyBuilder(TypeRegistry())
-    return builder.to_function_body(expressions, func_name)
-
-
 # Export module-level constants
 UE_TYPE_MAP = _UE_TO_CPP_TYPES
