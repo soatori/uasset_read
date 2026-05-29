@@ -18,6 +18,7 @@ from uasset_read.models.properties import (
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
+from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count
 
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
@@ -107,11 +108,7 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         if name_map is None:
             raise ParseError("ByteProperty with enum backing requires name_map")
         enum_value_name = archive.read_name(name_map)
-        value_name = f"{tag.enum_type}::{enum_value_name}"
-        return EnumValue(
-            enum_type=tag.enum_type,
-            value_name=value_name
-        )
+        return make_enum_value(tag.enum_type, enum_value_name)
 
     if type_name == "Int64Property":
         return archive.read_i64()
@@ -170,11 +167,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
         )
 
-    count = archive.read_i32()
-    if count < 0 or count > MAX_ARRAY_COUNT:
-        raise ParseError(
-            f"ArrayProperty count {count} out of range [0, {MAX_ARRAY_COUNT}]"
-        )
+    count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
     remaining_size = tag.size - 4  # subtract 4-byte count field
@@ -529,11 +522,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 
-    num_entries = archive.read_i32()
-    if num_entries < 0 or num_entries > MAX_PROPERTY_COUNT:
-        raise ParseError(
-            f"MapProperty entries count {num_entries} out of range [0, {MAX_PROPERTY_COUNT}]"
-        )
+    num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
@@ -552,11 +541,7 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     """解析 SetProperty（ADVP-03）。"""
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
-    num_elements = archive.read_i32()
-    if num_elements < 0 or num_elements > MAX_PROPERTY_COUNT:
-        raise ParseError(
-            f"SetProperty elements count {num_elements} out of range [0, {MAX_PROPERTY_COUNT}]"
-        )
+    num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
 
@@ -575,12 +560,7 @@ def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
     """解析 EnumProperty（ADVP-04）。"""
     enum_type = _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
-    value_name = f"{enum_type}::{enum_value_name}"
-
-    return EnumValue(
-        enum_type=enum_type,
-        value_name=value_name
-    )
+    return make_enum_value(enum_type, enum_value_name)
 
 
 def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
@@ -721,61 +701,42 @@ def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     if getattr(tag, "struct_type", None):
         return str(tag.struct_type).split(".")[-1]
 
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            struct_path = type_str[start + 1:end]
-            if "." in struct_path:
-                return struct_path.split(".")[-1]
-            return struct_path
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        if "." in inner:
+            return inner.split(".")[-1]
+        return inner
 
     return "UnknownStruct"
 
 
 def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
     """从 PropertyTag 提取 Map Key/Value 类型（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            params = type_str[start + 1:end]
-            parts = params.split(",", 1)  # split on first comma only (type names may contain commas)
-            if len(parts) >= 2:
-                return parts[0].strip(), parts[1].strip()
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        parts = inner.split(",", 1)  # split on first comma only (type names may contain commas)
+        if len(parts) >= 2:
+            return parts[0].strip(), parts[1].strip()
 
     return "IntProperty", "IntProperty"
 
 
 def _extract_set_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取 Set 元素类型（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            return type_str[start + 1:end].strip()
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        return inner.strip()
 
     return "IntProperty"
 
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取枚举类型名（D-08）。"""
-    type_str = tag.type
-
-    if "(" in type_str:
-        start = type_str.find("(")
-        end = type_str.find(")")
-        if start != -1 and end != -1:
-            enum_path = type_str[start + 1:end]
-            if "." in enum_path:
-                return enum_path.split(".")[-1]
-            return enum_path
+    inner = extract_inner_from_tag(tag.type)
+    if inner is not None:
+        if "." in inner:
+            return inner.split(".")[-1]
+        return inner
 
     return "UnknownEnum"
 

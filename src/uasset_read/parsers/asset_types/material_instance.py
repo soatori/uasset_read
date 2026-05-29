@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from uasset_read.parsers.utils import resolve_name_from_index, read_validated_count
+
 logger = logging.getLogger(__name__)
 
 # 参数数量上限，防止异常数据导致无限循环或内存耗尽
@@ -47,41 +49,23 @@ def parse_material_instance(
         result["parent_material_index"] = parent_idx
 
         # 标量参数覆盖
-        scalar_count = archive.read_i32()
-        if scalar_count < 0 or scalar_count > MAX_PARAM_COUNT:
-            logger.warning(
-                "Invalid scalar_count: %d, skipping scalar overrides",
-                scalar_count,
-            )
-            scalar_count = 0
+        scalar_count = read_validated_count(archive, MAX_PARAM_COUNT, "标量参数数量")
 
         scalar_overrides: Dict[str, float] = {}
         for _ in range(scalar_count):
             param_name_idx = archive.read_i32()
-            if 0 <= param_name_idx < len(name_map):
-                param_name = name_map[param_name_idx]
-            else:
-                param_name = f"param_{param_name_idx}"
+            param_name = resolve_name_from_index(archive, name_map, param_name_idx, "param")
             param_value = archive.read_f32()
             scalar_overrides[param_name] = param_value
         result["scalar_overrides"] = scalar_overrides
 
         # 向量参数覆盖
-        vector_count = archive.read_i32()
-        if vector_count < 0 or vector_count > MAX_PARAM_COUNT:
-            logger.warning(
-                "Invalid vector_count: %d, skipping vector overrides",
-                vector_count,
-            )
-            vector_count = 0
+        vector_count = read_validated_count(archive, MAX_PARAM_COUNT, "向量参数数量")
 
         vector_overrides: Dict[str, tuple] = {}
         for _ in range(vector_count):
             param_name_idx = archive.read_i32()
-            if 0 <= param_name_idx < len(name_map):
-                param_name = name_map[param_name_idx]
-            else:
-                param_name = f"param_{param_name_idx}"
+            param_name = resolve_name_from_index(archive, name_map, param_name_idx, "param")
             r = archive.read_f32()
             g = archive.read_f32()
             b = archive.read_f32()
@@ -90,21 +74,12 @@ def parse_material_instance(
         result["vector_overrides"] = vector_overrides
 
         # 纹理参数覆盖
-        texture_count = archive.read_i32()
-        if texture_count < 0 or texture_count > MAX_PARAM_COUNT:
-            logger.warning(
-                "Invalid texture_count: %d, skipping texture overrides",
-                texture_count,
-            )
-            texture_count = 0
+        texture_count = read_validated_count(archive, MAX_PARAM_COUNT, "纹理参数数量")
 
         texture_overrides: Dict[str, int] = {}
         for _ in range(texture_count):
             param_name_idx = archive.read_i32()
-            if 0 <= param_name_idx < len(name_map):
-                param_name = name_map[param_name_idx]
-            else:
-                param_name = f"param_{param_name_idx}"
+            param_name = resolve_name_from_index(archive, name_map, param_name_idx, "param")
             texture_idx = archive.read_i32()
             texture_overrides[param_name] = texture_idx
         result["texture_overrides"] = texture_overrides
