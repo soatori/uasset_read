@@ -48,10 +48,7 @@ class FFieldPath:
         path: list[str] = []
         for _ in range(count):
             name_index = archive.read_u32()
-            if 0 <= name_index < len(name_map):
-                path.append(name_map[name_index])
-            else:
-                path.append("None")
+            path.append(archive.resolve_fname(name_index))
 
         # 如果第一个元素是 "None"，表示空路径
         if path and path[0] == "None":
