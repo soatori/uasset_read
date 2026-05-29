@@ -41,7 +41,7 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry
+from uasset_read.models.node_types import K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment, K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage
 
 
 def reset_pin_trace_events() -> None:
@@ -1486,6 +1486,29 @@ def read_k2node_functionentry(
     }
 
 
+def read_k2node_message(
+    archive: FArchive,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
+) -> Dict[str, Any]:
+    """读取 K2Node_Message 特有字段。"""
+    result = {}
+
+    try:
+        message_name_idx = archive.read_i32()
+        if 0 <= message_name_idx < len(name_map):
+            result["message_name"] = name_map[message_name_idx]
+        else:
+            result["message_name"] = f"Message_{message_name_idx}"
+    except Exception as e:
+        logger.warning("K2Node_Message read failed: %s", e)
+        result["message_name"] = "Unknown"
+
+    return result
+
+
 # ============================================================================
 # 节点工厂
 # ============================================================================
@@ -1549,6 +1572,10 @@ def create_node_from_archive(
             archive, name_map, import_map, export_map, linker,
             function_reference=fr,
             raw_properties=raw_properties,
+        )
+    elif class_name == "K2Node_Message":
+        base_node.node_data = read_k2node_message(
+            archive, name_map, import_map, export_map, linker,
         )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展

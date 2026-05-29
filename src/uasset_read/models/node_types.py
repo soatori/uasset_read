@@ -112,3 +112,22 @@ class K2NodeFunctionEntry(UEdGraphNode):
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_functionentry
         return read_k2node_functionentry(archive, name_map, import_map, export_map)
+
+
+@dataclass
+class K2NodeMessage(UEdGraphNode):
+    """K2Node_Message 消息调用节点。"""
+    message_name: str = ""
+    message_target: Optional[FMemberReference] = None
+
+    @classmethod
+    def from_archive(
+        cls,
+        archive: FArchive,
+        name_map: List[str],
+        import_map: List[ObjectImport],
+        export_map: List[ObjectExport]
+    ) -> Self:
+        """延迟导入避免循环依赖。"""
+        from uasset_read.serializers.graph import read_k2node_message
+        return read_k2node_message(archive, name_map, import_map, export_map)
