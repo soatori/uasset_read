@@ -54,32 +54,6 @@ from uasset_read.models.node_types import (
 # Phase 73 异常 Pin 计数值检测与恢复
 # ---------------------------------------------------------------------------
 
-def _is_abnormal_pin_count(count: int) -> bool:
-    """检测异常的 Pin 计数值。"""
-    if count > 1000:
-        return True
-    if count > 0 and count & 0xFF == 0:
-        return True
-    if count == 0xFF0000 or count == 0x00FF00:
-        return True
-    return False
-
-
-def _recover_pin_count(raw_value: int) -> int:
-    """尝试恢复异常的 Pin 计数值。"""
-    if raw_value == 0xFF0000:
-        return 0
-    if raw_value > 0xFF:
-        swapped = struct.unpack('<H', struct.pack('>H', raw_value & 0xFFFF))[0]
-        return swapped
-    return raw_value
-
-
-def reset_pin_trace_events() -> None:
-    """清空 Phase 73 Pin 字段级诊断事件。"""
-    _PIN_TRACE_EVENTS.clear()
-    _PIN_RECOVERY_EVENTS.clear()
-
 
 def get_pin_trace_events() -> Dict[str, List[Dict[str, Any]]]:
     """返回 Phase 73 Pin 字段级诊断快照。"""

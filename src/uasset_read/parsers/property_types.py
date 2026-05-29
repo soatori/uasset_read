@@ -25,7 +25,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
     "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
     "Guid": 16, "IntPoint": 8, "IntVector": 12,
-    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
+    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
@@ -230,6 +230,26 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             struct_type, tag.size, expected_size,
         )
         struct_type = None  # Skip all fast-path branches
+
+    # Phase 76: Handle negative size values gracefully
+    if tag.size is not None and tag.size < 0:
+        import logging
+        logging.getLogger(__name__).warning(
+            "StructProperty '%s': negative size %d, treating as unsigned",
+            declared_struct_type, tag.size,
+        )
+        unsigned_size = tag.size & 0xFFFFFFFF
+        total = archive.total_size()
+        remaining = max(0, total - archive.tell())
+        skip_bytes = min(unsigned_size, remaining) if remaining > 0 else 0
+        if skip_bytes > 0:
+            archive.seek(archive.tell() + skip_bytes)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
+        )
 
     # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
