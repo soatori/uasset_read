@@ -42,7 +42,7 @@ def read_validated_count(
     Raises:
         ValueError: 数量无效
     """
-    count = archive.read_int32()
+    count = archive.read_i32()
     if count < 0:
         raise ValueError(f"{label}: 数量不能为负数 ({count})")
     if count > max_count:

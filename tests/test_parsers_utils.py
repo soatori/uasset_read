@@ -18,14 +18,14 @@ def test_resolve_name_from_index_out_of_bounds():
 def test_read_validated_count_ok():
     from uasset_read.parsers.utils import read_validated_count
     archive = MagicMock()
-    archive.read_int32.return_value = 5
+    archive.read_i32.return_value = 5
     assert read_validated_count(archive, 100, "test") == 5
 
 
 def test_read_validated_count_negative():
     from uasset_read.parsers.utils import read_validated_count
     archive = MagicMock()
-    archive.read_int32.return_value = -1
+    archive.read_i32.return_value = -1
     with pytest.raises(ValueError, match="不能为负数"):
         read_validated_count(archive, 100, "test")
 
@@ -33,7 +33,7 @@ def test_read_validated_count_negative():
 def test_read_validated_count_exceeds_max():
     from uasset_read.parsers.utils import read_validated_count
     archive = MagicMock()
-    archive.read_int32.return_value = 200
+    archive.read_i32.return_value = 200
     with pytest.raises(ValueError, match="超过最大值"):
         read_validated_count(archive, 100, "test")
 
