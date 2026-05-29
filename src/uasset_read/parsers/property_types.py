@@ -329,11 +329,9 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         })
 
     if struct_type == "PointerToUberGraphFrame":
-        frame_index = archive.read_i32()
-        frame_number = archive.read_i32()
+        frame_index = archive.read_i64()  # 8 字节 FPackageIndex
         return StructValue(struct_type="PointerToUberGraphFrame", fields={
             "FrameIndex": frame_index,
-            "FrameNumber": frame_number,
         })
 
     if struct_type == "BoxSphereBounds":
