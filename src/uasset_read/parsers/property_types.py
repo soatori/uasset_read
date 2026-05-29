@@ -28,6 +28,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 40,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
+    "TopLevelAssetPath": 16,
 }
 
 
@@ -317,6 +318,14 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         return StructValue(struct_type="Sphere", fields={
             "Center": {"X": cx, "Y": cy, "Z": cz},
             "W": w,
+        })
+
+    if struct_type == "TopLevelAssetPath":
+        pkg_name = archive.read_name(name_map)
+        asset_name = archive.read_name(name_map)
+        return StructValue(struct_type="TopLevelAssetPath", fields={
+            "PackageName": pkg_name,
+            "AssetName": asset_name,
         })
 
     if struct_type == "BoxSphereBounds":
