@@ -73,7 +73,7 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
         # 容错处理 - 如果 size 不合理，尝试跳过
         if size == 0 or size > (data_len - offset):
             next_sentinel = _find_next_sentinel(data, offset - 4)
-            if next_sentinel > offset:
+            if next_sentinel > offset + 3:
                 offset = next_sentinel - 3
                 continue
             break
