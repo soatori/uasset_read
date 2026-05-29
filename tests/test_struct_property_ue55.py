@@ -79,6 +79,32 @@ def test_pointer_to_uber_graph_frame(tmp_path):
         archive.close()
 
 
+def test_box_sphere_bounds_114_bytes(tmp_path):
+    """BoxSphereBounds 114 bytes: UE5.5 扩展格式"""
+    # 28 floats = 112 bytes + 2 bytes padding = 114 bytes
+    data = struct.pack('<28f', *range(28)) + b'\x00\x00'
+    archive = _make_archive(tmp_path, data)
+
+    tag = PropertyTag(
+        name="TestBounds",
+        type="StructProperty",
+        size=114,
+        struct_type="BoxSphereBounds"
+    )
+
+    try:
+        result = parse_struct_property(tag, archive, name_map=[], export_map=[], summary=None)
+
+        assert result.struct_type == "BoxSphereBounds"
+        assert "Origin" in result.fields
+        assert "BoxExtent" in result.fields
+        assert "SphereRadius" in result.fields
+        assert result.parse_status == "parsed"
+        assert archive.tell() == 114  # 消费全部字节
+    finally:
+        archive.close()
+
+
 def test_vector4_double_precision(tmp_path):
     """Vector4 32 bytes: double 精度版本 (UE5.5 LWC)"""
     data = struct.pack('<dddd', 1.0, 2.0, 3.0, 4.0)

@@ -221,6 +221,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         "Rotator": {12, 24},
         "Vector2D": {8, 16},
         "Vector4": {16, 32},
+        "BoxSphereBounds": {40, 114},
     }
     if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
         import logging
@@ -372,6 +373,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         by = archive.read_f32()
         bz = archive.read_f32()
         sr = archive.read_f32()
+        # UE5.5 扩展格式：标准 28 bytes 后可能有额外 padding
+        remaining = tag.size - 28
+        if remaining > 0:
+            archive.read_bytes(remaining)
         return StructValue(struct_type="BoxSphereBounds", fields={
             "Origin": {"X": ox, "Y": oy, "Z": oz},
             "BoxExtent": {"X": bx, "Y": by, "Z": bz},
