@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict
 
+from uasset_read.parsers.utils import resolve_name_from_index
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 
@@ -42,7 +44,7 @@ def _read_reference_skeleton(archive: FArchive, name_map: list[str]) -> dict:
 
     for _ in range(ref_bone_count):
         name_index = archive.read_i32()
-        bone_name = name_map[name_index] if 0 <= name_index < len(name_map) else f"bone_{name_index}"
+        bone_name = resolve_name_from_index(archive, name_map, name_index, "bone")
         bone_names.append(bone_name)
         parent_index = archive.read_i32()
         bone_parents.append(parent_index)

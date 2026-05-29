@@ -14,12 +14,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_VectorConst(KismetExpression):
-    """Vector constant expression (EX_VectorConst, 0x23)."""
+    """向量常量 (X, Y, Z)"""
 
     X: float = 0.0
     Y: float = 0.0
     Z: float = 0.0
-    W: float = 0.0
 
     @property
     def Token(self):
@@ -30,12 +29,11 @@ class EX_VectorConst(KismetExpression):
         x = archive.read_f32()
         y = archive.read_f32()
         z = archive.read_f32()
-        w = archive.read_f32()
-        return cls(X=x, Y=y, Z=z, W=w)
+        return cls(X=x, Y=y, Z=z)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["Value"] = f"({self.X}, {self.Y}, {self.Z}, {self.W})"
+        d["Value"] = f"({self.X}, {self.Y}, {self.Z})"
         return d
 
 

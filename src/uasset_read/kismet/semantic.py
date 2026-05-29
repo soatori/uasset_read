@@ -95,37 +95,6 @@ def _call_args_from_flow(call_info: Dict[str, Any]) -> List[str]:
     return args
 
 
-def _find_exec_target_call(
-    event_node: Dict[str, Any],
-    nodes_by_name: Dict[str, Dict[str, Any]],
-) -> Dict[str, Any] | None:
-    return None
-
-
-def _call_args_from_data_flows(
-    call_node: Dict[str, Any],
-    data_flows: List[Dict[str, Any]],
-) -> List[str]:
-    call_name = call_node.get("node_name")
-    input_order = [
-        pin.get("pin_name")
-        for pin in call_node.get("pins", [])
-        if pin.get("direction") == 0
-        and (pin.get("pin_type") or {}).get("pin_category") != "exec"
-        and pin.get("pin_name") not in ("self", "Target")
-    ]
-    flow_targets = {
-        (flow.get("target") or {}).get("pin"): (flow.get("source") or {}).get("pin")
-        for flow in data_flows
-        if (flow.get("target") or {}).get("node") == call_name
-    }
-    args: List[str] = []
-    for pin_name in input_order:
-        if pin_name in flow_targets:
-            args.append(pin_name)
-    return args
-
-
 def _format_event_semantics(function_name: str, semantic: Dict[str, Any]) -> str:
     call = semantic["call"]
     return f"{function_name}() {{\n    {call};\n}}"
