@@ -40,7 +40,6 @@ from .text_formatter import (
 # Markdown 格式化（Wave 2 placeholder）
 from .markdown_formatter import (
     format_markdown,
-    _build_mermaid_flowchart,
 )
 
 # Blueprint 翻译参考文本（Phase 74）
@@ -83,7 +82,6 @@ __all__ = [
     "format_text_summary",
     # Markdown 格式化
     "format_markdown",
-    "_build_mermaid_flowchart",
     # Blueprint 翻译参考文本
     "format_blueprint_translation_text",
     "format_blueprint_ue_text",

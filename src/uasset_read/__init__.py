@@ -205,11 +205,12 @@ from .blueprint import (
 # 图解析模块（Phase 31 Wave 3, Phase 71）
 from .graph import (
     extract_blueprint_graphs,
-    build_execution_flows,
+    build_execution_flow_entries,
     build_data_flows,
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    build_blueprint_node_index,
     build_execution_chains,  # Phase 71
     build_execution_chains_from_flows,  # Phase 71 (N2C compat)
     write_pin_trace_report,
@@ -228,7 +229,6 @@ from .formatters import (
     format_text_summary,
     # Markdown 格式化
     format_markdown,
-    _build_mermaid_flowchart,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,
     format_blueprint_ue_text,
@@ -526,10 +526,11 @@ __all__ = [
     "parse_uasset_with_linker",
     # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
-    "build_execution_flows",
+    "build_execution_flow_entries",
     "build_data_flows",
     "build_connections_map",
     "build_graphs_summary",
+    "build_blueprint_node_index",
     "build_execution_chains",  # Phase 71
     "build_execution_chains_from_flows",  # Phase 71
     "write_pin_trace_report",
@@ -549,7 +550,6 @@ __all__ = [
     "resolve_fpackage_index",
     "format_pin_ref",
     "_derive_node_name",
-    "_build_mermaid_flowchart",
     "build_status_info",
     # 辅助函数（Phase 33）
     "find_main_blueprint_generated_class",
