@@ -20,8 +20,8 @@ class FArchive:
 
     def __init__(self, path: str, tolerant: bool = False):
         self._path = path
-        self._file: BinaryIO = open(path, 'rb')
-        # Initialize attributes before try block for safe close() on exception
+        # Initialize all attributes before try block for safe close() on exception
+        self._file: Optional[BinaryIO] = None
         self._byte_swapping: bool = False
         self._file_size: int = 0
         self._tolerant: bool = tolerant
@@ -31,6 +31,7 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
 
         try:
+            self._file = open(path, 'rb')
             self._file_size = __import__('os').path.getsize(path)
 
             if self._file_size >= MMAP_THRESHOLD:
