@@ -259,6 +259,15 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
+
+    if tag.size < 4:
+        import logging
+        logging.getLogger(__name__).warning(
+            "ArrayProperty '%s': tag.size=%d < 4, 无法计算剩余数据大小",
+            tag.name, tag.size,
+        )
+        return elements
+
     remaining_size = tag.size - 4  # subtract 4-byte count field
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
