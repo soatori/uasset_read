@@ -67,16 +67,35 @@ def _sanitize_pin_dict(pin_dict: dict) -> dict:
     return sanitized
 
 
-def _sanitize_recursive(obj):
-    """递归清理列表/字典中的字符串。"""
+def _sanitize_recursive(obj, visited=None):
+    """递归清理列表/字典中的字符串。
+
+    Args:
+        obj: 要清理的对象
+        visited: 已访问对象的 id 集合，用于防止循环引用导致的无限递归
+    """
+    # 初始化 visited 集合（仅在顶层调用时）
+    if visited is None:
+        visited = set()
+
+    # 对可变对象检查循环引用
+    if isinstance(obj, (list, dict)):
+        obj_id = id(obj)
+        if obj_id in visited:
+            # 检测到循环引用，返回安全的替代值
+            if isinstance(obj, dict):
+                return {}
+            return []
+        visited.add(obj_id)
+
     if isinstance(obj, str):
         return _sanitize_string(obj)
     elif isinstance(obj, (int, float, bool)) or obj is None:
         return obj
     elif isinstance(obj, list):
-        return [_sanitize_recursive(item) for item in obj]
+        return [_sanitize_recursive(item, visited) for item in obj]
     elif isinstance(obj, dict):
-        return {k: _sanitize_recursive(v) for k, v in obj.items()}
+        return {k: _sanitize_recursive(v, visited) for k, v in obj.items()}
     elif hasattr(obj, "get_full_name"):
         try:
             return obj.get_full_name()
