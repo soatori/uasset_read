@@ -346,6 +346,10 @@ from .versioning import (
 # IoStore 容器系统 (Phase 78)
 from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
 
+# UObject 类型体系
+from .objects import UObject, ObjectTypeRegistry
+from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, UMaterialInstance
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -651,4 +655,12 @@ __all__ = [
     "IoStoreReader",
     "FIoChunkId",
     "FIoOffsetAndSize",
+    # UObject 类型体系
+    "UObject",
+    "ObjectTypeRegistry",
+    "UStaticMesh",
+    "USkeletalMesh",
+    "UTexture2D",
+    "UMaterial",
+    "UMaterialInstance",
 ]
