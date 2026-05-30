@@ -182,6 +182,12 @@ class CppMethodIR:
         ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
         is_override: True 表示 K2Node_Event 的 bOverrideFunction
         is_const: const 方法修饰符（Phase 58 上下文，默认 False）
+        is_static: static 方法修饰符
+        is_virtual: virtual 方法修饰符
+        is_pure: 纯函数（无副作用）
+        is_event: 事件函数
+        is_native: 原生函数
+        access_modifier: 访问修饰符（"public"、"protected"、"private"）
         source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
         body: Phase 58 函数体语句（结构化 IR）
         body_text: Phase 66 Kismet 反编译函数体文本（原始 C++ 伪代码）
@@ -192,6 +198,12 @@ class CppMethodIR:
     ufunction_specifiers: List[str]
     is_override: bool
     is_const: bool = False
+    is_static: bool = False
+    is_virtual: bool = False
+    is_pure: bool = False
+    is_event: bool = False
+    is_native: bool = False
+    access_modifier: str = "protected"  # 默认 protected
     source_node_type: str = ""
     body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
     body_text: Optional[str] = None  # Phase 66: Kismet 反编译函数体文本 (D-66-03)
@@ -204,6 +216,12 @@ class CppMethodIR:
             "ufunction_specifiers": self.ufunction_specifiers,
             "is_override": self.is_override,
             "is_const": self.is_const,
+            "is_static": self.is_static,
+            "is_virtual": self.is_virtual,
+            "is_pure": self.is_pure,
+            "is_event": self.is_event,
+            "is_native": self.is_native,
+            "access_modifier": self.access_modifier,
             "source_node_type": self.source_node_type,
             "body": [s.to_dict() for s in self.body],
         }
