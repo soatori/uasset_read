@@ -20,8 +20,8 @@ class FArchive:
 
     def __init__(self, path: str, tolerant: bool = False):
         self._path = path
-        self._file: BinaryIO = open(path, 'rb')
-        # Initialize attributes before try block for safe close() on exception
+        # Initialize all attributes before try block for safe close() on exception
+        self._file: Optional[BinaryIO] = None
         self._byte_swapping: bool = False
         self._file_size: int = 0
         self._tolerant: bool = tolerant
@@ -31,6 +31,7 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
 
         try:
+            self._file = open(path, 'rb')
             self._file_size = __import__('os').path.getsize(path)
 
             if self._file_size >= MMAP_THRESHOLD:
@@ -325,18 +326,23 @@ class FArchive:
         return "None"
 
 
-def _contains_binary_data(value: str, threshold: float = 0.3) -> bool:
+def _contains_binary_data(
+    value: str, threshold: float = 0.3, max_check_length: int = 256
+) -> bool:
     """检查字符串是否包含大量二进制/null 字符。
-    
+
     用于 FString/FText 输出的二进制数据检测。
-    
+    优化：只检查前 max_check_length 个字符，避免全量扫描。
+
     Args:
         value: 待检查的字符串
         threshold: null 字符比例阈值，默认 0.3 (30%)
-    
+        max_check_length: 最大检查字符数，默认 256
+
     Returns:
         True 如果 null 字符比例超过阈值，表示可能包含二进制数据
     """
     if not value:
         return False
-    return value.count('\x00') / len(value) > threshold
+    check_len = min(len(value), max_check_length)
+    return value.count('\x00', 0, check_len) / check_len > threshold
