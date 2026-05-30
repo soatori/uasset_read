@@ -1,6 +1,8 @@
 """PackageFileSummary 字段解析和常量验证测试。"""
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from uasset_read.constants import (
@@ -65,3 +67,21 @@ class TestMissingFields:
 
     def test_soft_package_references_present(self, result):
         assert result.summary.soft_package_references_count >= 0
+
+
+class TestSkeletalMeshParsing:
+    """验证骨骼网格资产解析（此前因 Negative generations count 失败）。"""
+
+    SAMPLES = [
+        r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Manny_Simple.uasset",
+        r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Quinn_Simple.uasset",
+    ]
+
+    @pytest.mark.parametrize("path", SAMPLES, ids=lambda p: os.path.basename(p))
+    def test_skeletal_mesh_parses(self, path):
+        if not os.path.exists(path):
+            pytest.skip("sample not found")
+        from uasset_read import parse_uasset_with_linker
+        r = parse_uasset_with_linker(path, tolerant=True)
+        assert r.is_success, f"Errors: {r.errors}"
+        assert len(r.summary.generations) > 0
