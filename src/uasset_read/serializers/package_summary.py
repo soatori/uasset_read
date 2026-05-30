@@ -15,10 +15,15 @@ from uasset_read.constants import (
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
-    UE5_IMPORT_TYPE_HIERARCHIES, UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION,
+    UE5_IMPORT_TYPE_HIERARCHIES,
     UE5_NAMES_REFERENCED_FROM_EXPORT_DATA, UE5_PAYLOAD_TOC,
     UE5_DATA_RESOURCES,
     PKG_FilterEditorOnly,
+    UE4_ADD_STRING_ASSET_REFERENCES_MAP,
+    UE4_ADDED_SEARCHABLE_NAMES,
+    UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID,
+    UE4_SERIALIZE_TEXT_IN_PACKAGES,
+    UE4_ADDED_PACKAGE_OWNER,
 )
 from uasset_read.exceptions import VersionError, ParseError
 
@@ -76,10 +81,12 @@ class PackageFileSummary:
     cell_import_offset: int = 0
     metadata_offset: int = 0
     depends_offset: int = 0
+    soft_package_references_count: int = 0
+    soft_package_references_offset: int = 0
+    searchable_names_offset: int = 0
     thumbnail_table_offset: int = 0
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
-    os_sub_object_shadow: int = 0
     persistent_guid: str = ""
     generations: List[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
@@ -221,6 +228,18 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # 第 13 步：DependsOffset
     depends_offset = archive.read_i32()
 
+    # 第 13.5 步：SoftPackageReferences（UE4 516+）
+    soft_package_references_count = 0
+    soft_package_references_offset = 0
+    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
+        soft_package_references_count = archive.read_i32()
+        soft_package_references_offset = archive.read_i32()
+
+    # 第 13.6 步：SearchableNames（UE4 518+）
+    searchable_names_offset = 0
+    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
+        searchable_names_offset = archive.read_i32()
+
     # 第 14 步：ThumbnailTableOffset
     thumbnail_table_offset = archive.read_i32()
     if thumbnail_table_offset > 0:
@@ -237,11 +256,6 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     else:
         import_type_hierarchies_count = 0
         import_type_hierarchies_offset = 0
-    # 第 15b 步：OsSubObjectShadow（UE5.17+）
-    if file_version_ue5 >= UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION:
-        os_sub_object_shadow = archive.read_i32()
-    else:
-        os_sub_object_shadow = 0
 
     # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件）
     persistent_guid = ""
@@ -348,10 +362,12 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         cell_export_count=cell_export_count, cell_export_offset=cell_export_offset,
         cell_import_count=cell_import_count, cell_import_offset=cell_import_offset,
         metadata_offset=metadata_offset, depends_offset=depends_offset,
+        soft_package_references_count=soft_package_references_count,
+        soft_package_references_offset=soft_package_references_offset,
+        searchable_names_offset=searchable_names_offset,
         thumbnail_table_offset=thumbnail_table_offset,
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
-        os_sub_object_shadow=os_sub_object_shadow,
         persistent_guid=persistent_guid, generations=generations,
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
