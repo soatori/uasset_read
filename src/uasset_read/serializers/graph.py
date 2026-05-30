@@ -233,12 +233,14 @@ def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
         return ""
     if abs(length) > max_length:
         # 长度异常，回退并返回空字符串
-        archive.seek(archive.tell() - 4)
+        if archive.tell() >= 4:
+            archive.seek(archive.tell() - 4)
         return ""
     if length < -1:
         utf16_len = -length * 2
         if utf16_len > max_length * 2:
-            archive.seek(archive.tell() - 4)
+            if archive.tell() >= 4:
+                archive.seek(archive.tell() - 4)
             return ""
         data = archive.read(utf16_len)
         return data.decode('utf-16', errors='replace').rstrip('\x00')
