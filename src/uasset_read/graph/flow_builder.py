@@ -18,22 +18,7 @@ from uasset_read.models.node_types import (
     EdGraphNodeComment, K2NodeEnhancedInputAction
 )
 
-# N2C Processor Registry integration (Phase 69)
-from uasset_read.n2c.node_types import N2CNodeType
-from uasset_read.n2c.definitions import N2CNodeDefinition
-from uasset_read.n2c.processor_registry import N2CProcessorRegistry
-from uasset_read.n2c.compat import definition_to_node_dict, definition_to_trace_node_info
-from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
-
 logger = logging.getLogger(__name__)
-
-
-def _ensure_registry():
-    """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
-    from uasset_read.n2c.processors import register_all_processors
-    registry = N2CProcessorRegistry.get_instance()
-    if not registry._processors or registry._fallback is None:
-        register_all_processors()
 
 
 # ============================================================================
@@ -93,11 +78,6 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     策略：使用 f"{class_name}_{idx}" 格式，避免同名节点冲突。
     """
     return f"{node.class_name}_{idx}"
-
-
-def _resolve_node_type(class_name: str) -> N2CNodeType:
-    """使用 N2CNodeTypeRegistry 解析节点类型（Phase 68）。"""
-    return N2CNodeTypeRegistry.get_instance().resolve(class_name)
 
 
 def format_pin_ref(
@@ -416,9 +396,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """
     from dataclasses import asdict
 
-    # Phase 69: ensure registry initialized (conftest-reset-safe)
-    _ensure_registry()
-
     # D-20-01: 派生 node_name
     node_name = _derive_node_name(node, idx)
 
@@ -431,30 +408,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "node_comment": node.node_comment,
         "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # 添加字符串清理
     }
-
-    # Phase 69: 使用 Processor Registry 替代 if/elif 链
-    node_type = _resolve_node_type(node.class_name)
-    definition = N2CNodeDefinition(
-        node_id=node.node_guid or f"no-guid-{idx}",
-        node_type=node_type,
-        position=(node.node_pos_x, node.node_pos_y),
-        comment=node.node_comment or "",
-    )
-    N2CProcessorRegistry.get_instance().process_node(node, node_type, definition)
-
-    # 通过 compat 层转换回 OUT-01 格式
-    compat_result = definition_to_node_dict(
-        definition,
-        node_name=node_name,
-        node_guid=node.node_guid or "",
-        original_class_name=node.class_name,
-        pins=result["pins"],
-    )
-    # 合并 position/node_comment（compat 可能移除了 None 值）
-    if "node_comment" not in compat_result and node.node_comment:
-        compat_result["node_comment"] = node.node_comment
-
-    result = compat_result
 
     if node.class_name == "EdGraphNode_Comment":
         data = node.node_data if isinstance(node.node_data, dict) else {}
@@ -912,26 +865,7 @@ def _trace_execution_from_event(
             "node_type": current_node.class_name,
         }
 
-        # Phase 69: 使用 Processor Registry 调度语义提取
-        node_type = _resolve_node_type(current_node.class_name)
-        definition = N2CNodeDefinition(
-            node_id=current_guid,
-            node_type=node_type,
-            position=(current_node.node_pos_x, current_node.node_pos_y),
-            comment=current_node.node_comment or "",
-        )
-        N2CProcessorRegistry.get_instance().process_node(current_node, node_type, definition)
-
-        # 通过 compat 层映射回 node_info
-        semantic_info = definition_to_trace_node_info(
-            definition, current_guid, current_node.class_name
-        )
-        # 合并 semantic 字段（不覆盖已有字段）
-        for k, v in semantic_info.items():
-            if k not in node_info:
-                node_info[k] = v
-
-        # --- 保留：CallFunction 的 parameters 提取（数据流追踪，非语义提取）---
+        # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
             from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
@@ -1133,9 +1067,6 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
         DeprecationWarning,
         stacklevel=2
     )
-
-    # Phase 69: ensure registry initialized
-    _ensure_registry()
 
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
