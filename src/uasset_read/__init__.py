@@ -188,11 +188,6 @@ from .parsers import (
     parse_verse_class_property,
     parse_verse_function_property,
     parse_verse_dynamic_property,
-    # 辅助函数（测试依赖）
-    _extract_struct_type_from_tag,
-    _extract_map_types_from_tag,
-    _extract_set_type_from_tag,
-    _extract_enum_type_from_tag,
 )
 
 # 蓝图模块（Phase 30）
@@ -228,7 +223,6 @@ from .formatters import (
     format_text_summary,
     # Markdown 格式化
     format_markdown,
-    _build_mermaid_flowchart,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,
     format_blueprint_ue_text,
@@ -238,7 +232,6 @@ from .formatters import (
     resolve_fpackage_index,
     # Phase 31 re-export
     format_pin_ref,
-    _derive_node_name,
 )
 
 # ============================================================================
@@ -501,11 +494,6 @@ __all__ = [
     "parse_verse_class_property",
     "parse_verse_function_property",
     "parse_verse_dynamic_property",
-    # 辅助函数（测试依赖）
-    "_extract_struct_type_from_tag",
-    "_extract_map_types_from_tag",
-    "_extract_set_type_from_tag",
-    "_extract_enum_type_from_tag",
     # 蓝图模块（Phase 30）
     "extract_blueprint_variables",
     "parse_component_transform",
@@ -537,8 +525,6 @@ __all__ = [
     "build_schema_info",
     "resolve_fpackage_index",
     "format_pin_ref",
-    "_derive_node_name",
-    "_build_mermaid_flowchart",
     "build_status_info",
     # 辅助函数（Phase 33）
     "find_main_blueprint_generated_class",
