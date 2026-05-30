@@ -1,4 +1,4 @@
-"""蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
+﻿"""蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
 
 等价迁移 uasset_read.py L3191-4679。
 Phase 31: 蓝图图解析模块 (per MOD-09)。
@@ -391,9 +391,11 @@ def validate_pin_reference_at(
         archive.seek(current_pos)
         return None
 
+    fmt = '>' if getattr(archive, '_byte_swapping', False) else '<'
+
     archive.seek(pos)
     header_bytes = archive.read(4)
-    b_null = struct.unpack('<i', header_bytes[0:4])[0]
+    b_null = struct.unpack(f'{fmt}i', header_bytes[0:4])[0]
 
     if b_null != 0:
         # Null PinReference: 仅消耗 4 字节
@@ -417,7 +419,7 @@ def validate_pin_reference_at(
     header_bytes = archive.read(24)
     archive.seek(current_pos)
 
-    owning_node = struct.unpack('<i', header_bytes[4:8])[0]
+    owning_node = struct.unpack(f'{fmt}i', header_bytes[4:8])[0]
     guid_bytes = header_bytes[8:24]
     guid_nonzero = any(b != 0 for b in guid_bytes)
 
