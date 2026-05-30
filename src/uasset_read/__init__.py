@@ -1,4 +1,4 @@
-﻿"""
+"""
 uasset_read - Unreal Engine .uasset 文件解析器
 
 版本 dev-0.3.0 — CUE4Parse 核心对齐 (v14, Phase 76)
@@ -346,6 +346,9 @@ from .versioning import (
 # IoStore 容器系统 (Phase 78)
 from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
 
+# Bulk Data 系统
+from .bulk import FBulkDataHeader, BulkDataFlags
+
 # UObject 类型体系
 from .objects import UObject, ObjectTypeRegistry
 from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, UMaterialInstance
@@ -655,6 +658,9 @@ __all__ = [
     "IoStoreReader",
     "FIoChunkId",
     "FIoOffsetAndSize",
+    # Bulk Data 系统
+    "FBulkDataHeader",
+    "BulkDataFlags",
     # UObject 类型体系
     "UObject",
     "ObjectTypeRegistry",
