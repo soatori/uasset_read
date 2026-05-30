@@ -77,10 +77,10 @@ def build_execution_chains(
             - has_cycle: bool（True 时 chains 可能不完整）
             - chain_metadata: 可选元数据（branch_count 等）
     """
-    # 如果未提供 execution_flows，调用 build_execution_flows
+    # 如果未提供 execution_flows，调用 build_execution_flow_entries
     if execution_flows is None:
-        from uasset_read.graph.flow_builder import build_execution_flows
-        execution_flows = build_execution_flows(graph)
+        from uasset_read.graph.flow_builder import build_execution_flow_entries
+        execution_flows = build_execution_flow_entries(graph)
 
     # 构建 GUID → 短 ID 映射（基于节点顺序）
     guid_to_short: Dict[str, str] = {}
