@@ -266,7 +266,6 @@ from .blueprint.transform_parser import (
     parse_vector_value,
     parse_rotator_value,
     parse_scale_value,
-    format_transform_value as _format_transform_value,
 )
 from .serializers.property_tags import read_property_tag, parse_ctrl_flags, parse_ue511_ctrl_flags
 from .parsers.property_types import parse_default_value, format_variable_type
