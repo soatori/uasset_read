@@ -173,16 +173,17 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if soft_object_paths_offset > 0:
         archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
-    # 第 7 步：LocalizationId（非 FilterEditorOnly 文件）
+    # 第 7 步：LocalizationId（非 FilterEditorOnly 文件，UE4 516+）
     localization_id = ""
     has_filter_editor_only = (package_flags & PKG_FilterEditorOnly) != 0
     if not has_filter_editor_only:
-        localization_id = archive.read_fstring()
+        if file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
+            localization_id = archive.read_fstring()
 
-    # 第 8 步：GatherableTextData（非 FilterEditorOnly 文件）
+    # 第 8 步：GatherableTextData（UE4 517+，无 filter 检查）
     gatherable_text_data_count = 0
     gatherable_text_data_offset = 0
-    if not has_filter_editor_only:
+    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
         gatherable_text_data_count = archive.read_i32()
         gatherable_text_data_offset = archive.read_i32()
         if gatherable_text_data_offset > 0:
@@ -257,11 +258,15 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         import_type_hierarchies_count = 0
         import_type_hierarchies_offset = 0
 
-    # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件）
+    # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件，UE4 519+）
     persistent_guid = ""
-    if not has_filter_editor_only:
+    if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
         guid_bytes = archive.read(16)
         persistent_guid = guid_bytes.hex()
+
+    # 第 16b 步：OwnerPersistentGuid（仅 UE4 519，后续版本已移除）
+    if not has_filter_editor_only and file_version_ue4 == UE4_ADDED_PACKAGE_OWNER:
+        archive.read(16)  # 跳过 OwnerPersistentGuid
 
     # 第 17 步：Generations
     generations_count = archive.read_i32()
