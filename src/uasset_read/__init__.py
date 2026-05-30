@@ -211,11 +211,14 @@ from .graph import (
     build_graphs_summary,
     format_graphs_json,
     build_execution_chains,  # Phase 71
+    format_pin_ref,
+    _derive_node_name,
     build_execution_chains_from_flows,  # Phase 71 (N2C compat)
     write_pin_trace_report,
 )
 
 # 格式化模块（Phase 32 Wave 1-2）
+# 主解析管线（Phase 33）
 from .formatters import (
     # JSON 格式化
     format_json_full,
@@ -236,13 +239,7 @@ from .formatters import (
     build_status_info,
     build_schema_info,
     resolve_fpackage_index,
-    # Phase 31 re-export
-    format_pin_ref,
-    _derive_node_name,
 )
-
-# ============================================================================
-# 主解析管线（Phase 33）
 # ============================================================================
 from .parse_uasset import parse_uasset, parse_uasset_with_linker
 
