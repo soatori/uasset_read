@@ -1,4 +1,4 @@
-"""
+﻿"""
 uasset_read - Unreal Engine .uasset 文件解析器
 
 版本 dev-0.3.0 — CUE4Parse 核心对齐 (v14, Phase 76)
@@ -343,6 +343,9 @@ from .versioning import (
     VersionContainer, build_version_container, EUEVersion,
 )
 
+# IoStore 容器系统 (Phase 78)
+from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
+
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
 # parse_property_flags_to_labels, parse_default_value,
@@ -644,4 +647,8 @@ __all__ = [
     "VersionContainer",
     "build_version_container",
     "EUEVersion",
+    # IoStore 容器系统 (Phase 78)
+    "IoStoreReader",
+    "FIoChunkId",
+    "FIoOffsetAndSize",
 ]
