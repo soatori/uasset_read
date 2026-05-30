@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 dev-0.3.0 — CUE4Parse 核心对齐 (v14, Phase 76)
+版本 0.3.2-dev — CUE4Parse 输出结构对齐
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "dev-0.3.1"
+__version__ = "0.3.2-dev"
 
 # 导出常量模块
 from .constants import (

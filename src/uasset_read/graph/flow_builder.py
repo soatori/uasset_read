@@ -95,6 +95,58 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     return f"{node.class_name}_{idx}"
 
 
+def _pin_direction_text(direction: int) -> str:
+    """Return CUE4Parse-compatible pin direction text."""
+    return "output" if direction == 1 else "input"
+
+
+def _pin_category(pin: UEdGraphPin) -> str:
+    return pin.pin_type.pin_category if pin.pin_type else ""
+
+
+def _pin_subcategory(pin: UEdGraphPin) -> str:
+    return pin.pin_type.pin_subcategory if pin.pin_type else ""
+
+
+def _pin_container_type(pin: UEdGraphPin) -> str:
+    if not pin.pin_type:
+        return ""
+    return str(getattr(pin.pin_type, "container_type", "") or "")
+
+
+def _format_cue4_pin(
+    pin: UEdGraphPin,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_name_lookup: Dict[str, str],
+) -> Dict[str, Any]:
+    """Format a pin using the compact BPExtractor DTO shape."""
+    linked_to: List[str] = []
+    for ref in pin.linked_to_raw or []:
+        target_pin_id = _pin_ref_guid(ref)
+        if target_pin_id in pin_lookup:
+            target_node_guid, target_pin_name = pin_lookup[target_pin_id]
+            target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
+            linked_to.append(f"{target_node_name}.{target_pin_name}")
+        elif target_pin_id:
+            linked_to.append(str(target_pin_id))
+        elif isinstance(ref, dict) and ref.get("owning_node"):
+            linked_to.append(str(ref["owning_node"]))
+
+    pin_type = pin.pin_type
+    return {
+        "PinId": pin.persistent_guid or pin.pin_id,
+        "PinName": pin.pin_name,
+        "Direction": _pin_direction_text(pin.direction),
+        "PinCategory": _pin_category(pin),
+        "PinSubCategory": _pin_subcategory(pin),
+        "DefaultValue": pin.default_value,
+        "LinkedTo": linked_to,
+        "IsReference": bool(getattr(pin_type, "is_reference", False)) if pin_type else False,
+        "IsConst": bool(getattr(pin_type, "is_const", False)) if pin_type else False,
+        "ContainerType": _pin_container_type(pin),
+    }
+
+
 def _resolve_node_type(class_name: str) -> N2CNodeType:
     """使用 N2CNodeTypeRegistry 解析节点类型（Phase 68）。"""
     return N2CNodeTypeRegistry.get_instance().resolve(class_name)
@@ -401,11 +453,10 @@ def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphN
 
 
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
-    """格式化单个节点为 OUT-01 规范 JSON 结构（Phase 31 等价迁移）。
+    """格式化单个节点为紧凑的 CUE4/BPExtractor 风格 JSON 结构。
 
-    Per D-20-01: node_name 使用 _derive_node_name() 派生
-    Per D-20-02: 字段名规范化（node_type, position:{x,y})
-    Per D-20-03: function_reference/event_reference 提升到顶层
+    图级语义（connections/execution_chains/data_flows）保留在 graph 对象上，
+    节点自身输出更接近 CUE4Parse DTO，便于跨工具对比。
 
     Args:
         node: UEdGraphNode 节点对象
@@ -450,16 +501,30 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         original_class_name=node.class_name,
         pins=result["pins"],
     )
-    # 合并 position/node_comment（compat 可能移除了 None 值）
-    if "node_comment" not in compat_result and node.node_comment:
-        compat_result["node_comment"] = node.node_comment
-
-    result = compat_result
+    compact: Dict[str, Any] = {
+        "type": node.class_name,
+        "name": node_name,
+        "node_pos_x": node.node_pos_x,
+        "node_pos_y": node.node_pos_y,
+        "node_guid": node.node_guid or None,
+        "function_name": _node_member_name(node) or None,
+        "pins": [],
+    }
+    if node.node_comment:
+        compact["note"] = node.node_comment
+    for key in (
+        "node_category",
+        "semantic_type",
+        "function_reference",
+        "event_reference",
+        "input_action",
+    ):
+        if key in compat_result:
+            compact[key] = compat_result[key]
 
     if node.class_name == "EdGraphNode_Comment":
         data = node.node_data if isinstance(node.node_data, dict) else {}
-        result["comment_text"] = node.node_comment or ""
-        result["comment"] = {
+        compact["comment"] = {
             "text": node.node_comment or "",
             "color": _sanitize_recursive(data.get("comment_color")),
             "width": data.get("node_width"),
@@ -467,17 +532,17 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             "font_size": data.get("font_size"),
             "depth": data.get("comment_depth"),
         }
-        result["comment"] = {
-            key: value for key, value in result["comment"].items()
+        compact["comment"] = {
+            key: value for key, value in compact["comment"].items()
             if value is not None
         }
 
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
         from uasset_read.formatters.json_formatter import _extract_call_function_parameters
-        result["parameters"] = _extract_call_function_parameters(node)
+        compact["parameters"] = _extract_call_function_parameters(node)
 
-    return result
+    return compact
 
 
 def _format_graph_node_links(
@@ -1373,9 +1438,10 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
         nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
         for node, node_dict in zip(graph.nodes, nodes):
-            node_dict["links"] = _format_graph_node_links(
-                node, node_name_lookup, pin_lookup
-            )
+            node_dict["pins"] = [
+                _format_cue4_pin(pin, pin_lookup, node_name_lookup)
+                for pin in node.pins
+            ]
             if node.class_name == "EdGraphNode_Comment":
                 node_dict.setdefault("comment", {})["enclosed_nodes"] = _comment_enclosed_nodes(node, graph)
 
@@ -1402,6 +1468,46 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
+
+
+def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
+    """Build a compact CUE4Parse/BPExtractor-style node index.
+
+    The canonical output remains ``blueprint.graphs``. This index keeps the
+    direct PackageName/BlueprintClass/Nodes-style shape useful for diffing with
+    BPExtractor without flattening away graph-level semantic data.
+    """
+    node_items: List[Dict[str, Any]] = []
+    graph_names: List[str] = []
+
+    for graph in graphs:
+        graph_names.append(graph.graph_name)
+        pin_lookup, _, _ = _build_graph_indexes(graph)
+        node_name_lookup = {
+            node.node_guid: _derive_node_name(node, idx)
+            for idx, node in enumerate(graph.nodes)
+        }
+        for idx, node in enumerate(graph.nodes):
+            node_items.append({
+                "graph_name": graph.graph_name,
+                "type": node.class_name,
+                "name": _derive_node_name(node, idx),
+                "node_pos_x": node.node_pos_x,
+                "node_pos_y": node.node_pos_y,
+                "node_guid": node.node_guid or None,
+                "function_name": _node_member_name(node) or None,
+                "pins": [
+                    _format_cue4_pin(pin, pin_lookup, node_name_lookup)
+                    for pin in node.pins
+                ],
+                "note": node.node_comment or None,
+            })
+
+    return {
+        "graphs": graph_names,
+        "node_count": len(node_items),
+        "nodes": node_items,
+    }
 
 
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
