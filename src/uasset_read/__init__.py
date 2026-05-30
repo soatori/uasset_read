@@ -205,6 +205,7 @@ from .blueprint import (
 # 图解析模块（Phase 31 Wave 3, Phase 71）
 from .graph import (
     extract_blueprint_graphs,
+    build_execution_flow_entries,
     build_execution_flows,
     build_data_flows,
     build_connections_map,
@@ -516,6 +517,7 @@ __all__ = [
     "parse_uasset_with_linker",
     # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
+    "build_execution_flow_entries",
     "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
