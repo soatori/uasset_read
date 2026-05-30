@@ -1,4 +1,4 @@
-"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
+﻿"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
 
 等价迁移 uasset_read.py 第 5289-6004 行。
 Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04)。
@@ -30,6 +30,49 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 48,
     "TopLevelAssetPath": 16,
+    # 时间/帧类型
+    "Timespan": 8,           # int64
+    "DateTime": 8,           # uint64
+    "FrameNumber": 4,        # int32
+    # 整数向量类型
+    "IntVector2": 8,         # 2 * int32
+    "Int32Vector2": 8,       # 别名
+    "IntVector4": 16,        # 4 * int32
+    "UintVector": 12,        # 3 * uint32
+    "UintVector2": 8,        # 2 * uint32
+    "Uint32Point": 8,        # 别名
+    "UintVector4": 16,       # 4 * uint32
+    # 64 位整数向量类型
+    "Int64Vector2": 16,      # 2 * int64
+    "Int64Point": 16,        # 别名
+    "Int64Vector": 24,       # 3 * int64
+    "Int64Vector4": 32,      # 4 * int64
+    "UInt64Vector2": 16,     # 2 * uint64
+    "UInt64Point": 16,       # 别名
+    "UInt64Vector": 24,      # 3 * uint64
+    "UInt64Vector4": 32,     # 4 * uint64
+    # 别名类型
+    "DeprecateSlateVector2D": 16,  # 别名 Vector2D
+    "VectorDouble": 24,            # Wuthering Waves 别名 Vector3d
+    "Int32Point": 8,               # 别名 IntPoint
+    # UE5 LWC 数学类型
+    "Vector2f": 8,           # 2 * float32
+    "Vector3f": 12,          # 3 * float32
+    "Vector3d": 24,          # 3 * float64
+    "Vector4f": 16,          # 4 * float32
+    "Vector4d": 32,          # 4 * float64
+    "Rotator3f": 12,         # 3 * float32
+    "Rotator3d": 24,         # 3 * float64
+    "Quat4f": 16,            # 4 * float32
+    "Quat4d": 32,            # 4 * float64
+    "Plane4f": 16,           # 4 * float32
+    "Plane4d": 32,           # 4 * float64
+    "Sphere3f": 16,          # 4 * float32
+    "Sphere3d": 32,          # 4 * float64
+    "Box2f": 16,             # 2 * Vector2f(8)
+    "Box3f": 24,             # 2 * Vector3f(12)
+    "Matrix44f": 64,         # 4 * Plane4f(16)
+    "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
 }
 
 
@@ -1014,3 +1057,4 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
         const_prefix = "const "
 
     return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"
+
