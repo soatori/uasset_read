@@ -6,6 +6,7 @@ Phase 71: 执行流链式表达适配（Mermaid 从 chains 解析）。
 """
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, List, Dict
 
 if TYPE_CHECKING:
@@ -151,12 +152,20 @@ def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
 
     已弃用，保留向后兼容。Phase 71 使用 _build_mermaid_flowchart_from_chains。
 
+    .. deprecated:: 0.3.3
+        请使用 _build_mermaid_flowchart_from_chains() 替代。
+
     Args:
         execution_flows: build_execution_flows() 的返回值
 
     Returns:
         List[str]: Mermaid 行列表（不含 ``` 围栏和 graph LR 头）
     """
+    warnings.warn(
+        "_build_mermaid_flowchart() 已弃用，请使用 _build_mermaid_flowchart_from_chains() 替代。",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     mermaid_lines: List[str] = []
 
     for flow in execution_flows:

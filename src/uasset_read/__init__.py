@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 dev-0.3.0 — CUE4Parse 核心对齐 (v14, Phase 76)
+版本 0.3.3-dev
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "dev-0.3.1"
+__version__ = "0.3.3-dev"
 
 # 导出常量模块
 from .constants import (
@@ -188,11 +188,6 @@ from .parsers import (
     parse_verse_class_property,
     parse_verse_function_property,
     parse_verse_dynamic_property,
-    # 辅助函数（测试依赖）
-    _extract_struct_type_from_tag,
-    _extract_map_types_from_tag,
-    _extract_set_type_from_tag,
-    _extract_enum_type_from_tag,
 )
 
 # 蓝图模块（Phase 30）
@@ -205,6 +200,7 @@ from .blueprint import (
 # 图解析模块（Phase 31 Wave 3, Phase 71）
 from .graph import (
     extract_blueprint_graphs,
+    build_execution_flow_entries,
     build_execution_flows,
     build_data_flows,
     build_connections_map,
@@ -228,7 +224,6 @@ from .formatters import (
     format_text_summary,
     # Markdown 格式化
     format_markdown,
-    _build_mermaid_flowchart,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,
     format_blueprint_ue_text,
@@ -238,7 +233,6 @@ from .formatters import (
     resolve_fpackage_index,
     # Phase 31 re-export
     format_pin_ref,
-    _derive_node_name,
 )
 
 # ============================================================================
@@ -266,7 +260,6 @@ from .blueprint.transform_parser import (
     parse_vector_value,
     parse_rotator_value,
     parse_scale_value,
-    format_transform_value as _format_transform_value,
 )
 from .serializers.property_tags import read_property_tag, parse_ctrl_flags, parse_ue511_ctrl_flags
 from .parsers.property_types import parse_default_value, format_variable_type
@@ -342,16 +335,6 @@ from .cpp_gen import (
 from .versioning import (
     VersionContainer, build_version_container, EUEVersion,
 )
-
-# IoStore 容器系统 (Phase 78)
-from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
-
-# Bulk Data 系统
-from .bulk import FBulkDataHeader, BulkDataFlags
-
-# UObject 类型体系
-from .objects import UObject, ObjectTypeRegistry
-from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, UMaterialInstance
 
 # 以下函数等待后续 plan 完成后追加：
 # read_property_tag, read_blueprint_variable,
@@ -512,11 +495,6 @@ __all__ = [
     "parse_verse_class_property",
     "parse_verse_function_property",
     "parse_verse_dynamic_property",
-    # 辅助函数（测试依赖）
-    "_extract_struct_type_from_tag",
-    "_extract_map_types_from_tag",
-    "_extract_set_type_from_tag",
-    "_extract_enum_type_from_tag",
     # 蓝图模块（Phase 30）
     "extract_blueprint_variables",
     "parse_component_transform",
@@ -526,6 +504,7 @@ __all__ = [
     "parse_uasset_with_linker",
     # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
+    "build_execution_flow_entries",
     "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
@@ -548,8 +527,6 @@ __all__ = [
     "build_schema_info",
     "resolve_fpackage_index",
     "format_pin_ref",
-    "_derive_node_name",
-    "_build_mermaid_flowchart",
     "build_status_info",
     # 辅助函数（Phase 33）
     "find_main_blueprint_generated_class",
@@ -654,19 +631,4 @@ __all__ = [
     "VersionContainer",
     "build_version_container",
     "EUEVersion",
-    # IoStore 容器系统 (Phase 78)
-    "IoStoreReader",
-    "FIoChunkId",
-    "FIoOffsetAndSize",
-    # Bulk Data 系统
-    "FBulkDataHeader",
-    "BulkDataFlags",
-    # UObject 类型体系
-    "UObject",
-    "ObjectTypeRegistry",
-    "UStaticMesh",
-    "USkeletalMesh",
-    "UTexture2D",
-    "UMaterial",
-    "UMaterialInstance",
 ]
