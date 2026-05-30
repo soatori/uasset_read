@@ -6,6 +6,7 @@ Phase 71: 执行流链式表达（build_execution_chains）。
 
 from .parser import extract_blueprint_graphs
 from .flow_builder import (
+    build_execution_flow_entries,
     build_execution_flows,
     build_data_flows,
     build_connections_map,
@@ -22,6 +23,7 @@ from .pin_trace import write_pin_trace_report, write_phase75_diagnostic
 
 __all__ = [
     "extract_blueprint_graphs",
+    "build_execution_flow_entries",
     "build_execution_flows",
     "build_data_flows",
     "build_connections_map",

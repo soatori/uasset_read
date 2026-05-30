@@ -67,16 +67,35 @@ def _sanitize_pin_dict(pin_dict: dict) -> dict:
     return sanitized
 
 
-def _sanitize_recursive(obj):
-    """递归清理列表/字典中的字符串。"""
+def _sanitize_recursive(obj, visited=None):
+    """递归清理列表/字典中的字符串。
+
+    Args:
+        obj: 要清理的对象
+        visited: 已访问对象的 id 集合，用于防止循环引用导致的无限递归
+    """
+    # 初始化 visited 集合（仅在顶层调用时）
+    if visited is None:
+        visited = set()
+
+    # 对可变对象检查循环引用
+    if isinstance(obj, (list, dict)):
+        obj_id = id(obj)
+        if obj_id in visited:
+            # 检测到循环引用，返回安全的替代值
+            if isinstance(obj, dict):
+                return {}
+            return []
+        visited.add(obj_id)
+
     if isinstance(obj, str):
         return _sanitize_string(obj)
     elif isinstance(obj, (int, float, bool)) or obj is None:
         return obj
     elif isinstance(obj, list):
-        return [_sanitize_recursive(item) for item in obj]
+        return [_sanitize_recursive(item, visited) for item in obj]
     elif isinstance(obj, dict):
-        return {k: _sanitize_recursive(v) for k, v in obj.items()}
+        return {k: _sanitize_recursive(v, visited) for k, v in obj.items()}
     elif hasattr(obj, "get_full_name"):
         try:
             return obj.get_full_name()
@@ -1111,29 +1130,21 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     return connections, warnings
 
 
-def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
+def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
+    """构建执行流路径条目（D-08-07~11, D-19-10~12, Phase 54）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
     Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
-    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
+    Phase 72: 重命名为 build_execution_flow_entries()，作为内部规范 API。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
-        List[Dict]: execution_flows 数组
-
-    Note:
-        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
+        List[Dict]: execution_flows 数组，每个 entry 包含:
+            - start_event: 起始事件名称
+            - nodes: 执行流节点列表
     """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
@@ -1201,6 +1212,22 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
             })
 
     return execution_flows
+
+
+def build_execution_flows(graph: UEdGraph) -> List[Dict]:
+    """已弃用：请使用 build_execution_flow_entries()。
+
+    此函数保留用于向后兼容，会发出 DeprecationWarning。
+    """
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. "
+        "Use build_execution_flow_entries() for internal calls, "
+        "or build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return build_execution_flow_entries(graph)
 
 
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
@@ -1301,7 +1328,7 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
         # 执行流构建（用于 chain_builder）
-        execution_flows = build_execution_flows(graph)
+        execution_flows = build_execution_flow_entries(graph)
 
         # 执行流链式表达（Phase 71）
         execution_chains = build_execution_chains(graph, execution_flows)
@@ -1363,7 +1390,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         connections, warnings = build_connections_map(graph)
 
         # 构建执行流
-        execution_flows = build_execution_flows(graph)
+        execution_flows = build_execution_flow_entries(graph)
 
         # 构建执行流链式表达（Phase 71）
         execution_chains = build_execution_chains(graph, execution_flows)

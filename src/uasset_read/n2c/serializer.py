@@ -187,8 +187,8 @@ def to_n2c_json(
             n2c_nodes.append(n2c_node)
 
         # Build flows
-        from uasset_read.graph.flow_builder import build_execution_flows, build_data_flows
-        execution_flows_raw = build_execution_flows(graph)
+        from uasset_read.graph.flow_builder import build_execution_flow_entries, build_data_flows
+        execution_flows_raw = build_execution_flow_entries(graph)
         data_flows_raw = build_data_flows(graph)
 
         # Convert execution flows to chains
