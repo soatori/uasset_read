@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import struct
+import threading
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 if TYPE_CHECKING:
@@ -31,9 +32,18 @@ from uasset_read.constants import (
 )
 
 logger = logging.getLogger(__name__)
-_LINKEDTO_FAILURE_SEEN: set[tuple[int, str]] = set()
-_PIN_TRACE_EVENTS: List[Dict[str, Any]] = []
-_PIN_RECOVERY_EVENTS: List[Dict[str, Any]] = []
+
+_thread_local = threading.local()
+
+
+def _get_thread_local():
+    """返回当前线程的隔离诊断状态，避免全局可变状态竞态。"""
+    if not hasattr(_thread_local, 'linkedto_failure_seen'):
+        _thread_local.linkedto_failure_seen: set[tuple[int, str]] = set()
+        _thread_local.pin_trace_events: List[Dict[str, Any]] = []
+        _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
+    return _thread_local
+
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import (
     resolve_class_name, resolve_class_name_with_linker,
@@ -58,9 +68,10 @@ from uasset_read.models.node_types import (
 
 def get_pin_trace_events() -> Dict[str, List[Dict[str, Any]]]:
     """返回 Phase 73 Pin 字段级诊断快照。"""
+    _local = _get_thread_local()
     return {
-        "pins": [dict(item) for item in _PIN_TRACE_EVENTS],
-        "recoveries": [dict(item) for item in _PIN_RECOVERY_EVENTS],
+        "pins": [dict(item) for item in _local.pin_trace_events],
+        "recoveries": [dict(item) for item in _local.pin_recovery_events],
     }
 
 
@@ -71,7 +82,7 @@ def _pin_trace_enabled(explicit: bool = False) -> bool:
 
 
 def _record_pin_recovery(event: Dict[str, Any]) -> None:
-    _PIN_RECOVERY_EVENTS.append(dict(event))
+    _get_thread_local().pin_recovery_events.append(dict(event))
 
 
 def _rcn(idx, im, em, lk):
@@ -1086,8 +1097,8 @@ def read_ue_graph_pin(
     except Exception as e:
         # 聚合失败日志：同一位置+异常类型仅首次 error，后续降级 debug
         failure_key = (linkedto_start, type(e).__name__)
-        if failure_key not in _LINKEDTO_FAILURE_SEEN:
-            _LINKEDTO_FAILURE_SEEN.add(failure_key)
+        if failure_key not in _get_thread_local().linkedto_failure_seen:
+            _get_thread_local().linkedto_failure_seen.add(failure_key)
             logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
         else:
             logger.debug("LinkedTo read failed (deduped) at pos %d: %s", linkedto_start, e)
@@ -1196,7 +1207,7 @@ def read_ue_graph_pin(
             pin_name, pin_start_pos, len(_trace_fields["fields"]),
             len(linked_to), first_misaligned
         )
-        _PIN_TRACE_EVENTS.append({
+        _get_thread_local().pin_trace_events.append({
             "pin_name": pin_name,
             "pin_id": pin_id,
             "pin_start_pos": pin_start_pos,
@@ -2159,10 +2170,11 @@ def read_ue_graph_node(
                 header_owning_node=header_owning,
                 header_pin_id=header_pin_id,
             )
-            if _PIN_TRACE_EVENTS and _PIN_TRACE_EVENTS[-1].get("pin_id") == pin.pin_id:
-                _PIN_TRACE_EVENTS[-1]["node_name"] = node_export.object_name
-                _PIN_TRACE_EVENTS[-1]["node_guid"] = node_guid
-                _PIN_TRACE_EVENTS[-1]["node_class"] = _rcn(
+            _local_trace = _get_thread_local().pin_trace_events
+            if _local_trace and _local_trace[-1].get("pin_id") == pin.pin_id:
+                _local_trace[-1]["node_name"] = node_export.object_name
+                _local_trace[-1]["node_guid"] = node_guid
+                _local_trace[-1]["node_class"] = _rcn(
                     node_export.class_index, import_map, export_map, linker
                 ) or ""
             pins.append(pin)
