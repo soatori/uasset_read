@@ -42,7 +42,7 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         include_function_graphs: bool，是否包含顶层 function_graphs 数组（Phase 55）
 
     Returns:
-        Dict: 包含 status, output_version, summary, exports, blueprint, graphs_summary, errors
+        Dict: 包含 status, output_version, summary, exports, blueprint, errors
         当 include_function_graphs=True 时，额外包含 function_graphs 顶层数组
     """
     summary_dict = {}
@@ -54,30 +54,10 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
             "package_name": result.summary.package_name
         }
 
-    # D-20-04: 构建单一 blueprint 对象（包含 graphs）
+    # D-20-04: 构建单一 blueprint 对象
     blueprint_obj = None
     if result.blueprint:
-        blueprint_obj = format_blueprint_dict(
-            result.blueprint,
-            blueprint_name=result.summary.package_name if result.summary else None
-        )
-        # graphs 移入 blueprint（使用 Phase 31 的 format_graphs_json）
-        from uasset_read.graph import format_graphs_json, build_blueprint_node_index
-        blueprint_obj["graphs"] = format_graphs_json(result.graphs)
-        node_index = build_blueprint_node_index(result.graphs)
-        blueprint_obj["PackageName"] = result.summary.package_name if result.summary else ""
-        blueprint_obj["BlueprintClass"] = blueprint_obj.get("parent_class")
-        blueprint_obj["Graphs"] = node_index["Graphs"]
-        blueprint_obj["NodeCount"] = node_index["NodeCount"]
-        blueprint_obj["Nodes"] = node_index["Nodes"]
-        blueprint_obj["Warnings"] = [
-            warning
-            for graph in blueprint_obj["graphs"]
-            for warning in graph.get("warnings", [])
-        ]
-
-    # Phase 31 的 build_graphs_summary 用于顶层 graphs_summary
-    from uasset_read.graph import build_graphs_summary
+        blueprint_obj = _format_blueprint_result(result)
 
     # Phase 55: output_version 条件化
     output_version = "5.0" if include_function_graphs else "4.0"
@@ -88,7 +68,6 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         "summary": summary_dict,
         "exports": format_exports_list(result),
         "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
-        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化（OUT-02）
         "components": _format_components(getattr(result, "components", [])),
         "decompiled_functions": [
             fn.to_dict() if hasattr(fn, "to_dict") else serialize_property_value(fn)
@@ -113,6 +92,56 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         output["_schema"] = build_schema_info()
 
     return output
+
+
+def _format_blueprint_result(result: ParseResult) -> Dict[str, Any]:
+    """Build the standard Blueprint DTO result."""
+    from uasset_read.graph import build_blueprint_node_index
+
+    package_name = result.summary.package_name if result.summary else ""
+    metadata = format_blueprint_dict(result.blueprint, blueprint_name=package_name)
+    node_index = build_blueprint_node_index(result.graphs)
+    warnings = _collect_blueprint_warnings(result)
+
+    return {
+        "PackageName": package_name,
+        "BlueprintClass": _resolve_blueprint_class(result),
+        "Graphs": node_index["Graphs"],
+        "NodeCount": node_index["NodeCount"],
+        "Nodes": node_index["Nodes"],
+        "Warnings": warnings,
+        "Extensions": {
+            "Metadata": metadata,
+        },
+    }
+
+
+def _resolve_blueprint_class(result: ParseResult) -> str | None:
+    blueprint = getattr(result, "blueprint", None)
+    parent_class = getattr(blueprint, "parent_class", None) if blueprint else None
+    return parent_class or None
+
+
+def _collect_blueprint_warnings(result: ParseResult) -> List[str]:
+    from uasset_read.graph import build_connections_map
+
+    warnings: List[str] = []
+    blueprint = getattr(result, "blueprint", None)
+    if blueprint and getattr(blueprint, "detection_warning", None):
+        warnings.append(str(blueprint.detection_warning))
+    if blueprint and not getattr(blueprint, "parent_class", None):
+        warnings.append("BlueprintClass could not be resolved from parsed metadata")
+
+    for graph in result.graphs:
+        _, graph_warnings = build_connections_map(graph)
+        warnings.extend(graph_warnings)
+        for node in graph.nodes:
+            if not node.node_guid:
+                warnings.append(f"{graph.graph_name}: node {node.class_name} is missing NodeGuid")
+            if not node.class_name:
+                warnings.append(f"{graph.graph_name}: graph node is missing Type")
+
+    return list(dict.fromkeys(warnings))
 
 
 def format_exports_list(result: ParseResult) -> List[Dict]:
@@ -274,7 +303,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     - 移除: imports, soft_references, circular_deps, errors
     - 精简 exports: 仅 name, class, parent_class
     - 移除 properties 数组
-    - 保留: status, output_version, graphs_summary
+    - 保留: status, output_version
 
     Per D-07: 移除依赖字段
     Per D-08: 精简 exports
@@ -312,16 +341,12 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
             "parent_class": parent_class
         })
 
-    # Phase 31 的 build_graphs_summary
-    from uasset_read.graph import build_graphs_summary
-
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置
         "output_version": "4.0",  # D-20-05: API 版本标识
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
         "exports": exports_summary,  # D-14-08: 精简版本
-        "graphs_summary": build_graphs_summary(result.graphs),  # D-14-04: 顶层化
     }
 
     # D-14-07: 移除 imports/soft_references/circular_deps/errors
@@ -329,10 +354,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
 
     # D-20-04: blueprint 精简（仅保留核心字段）
     if result.blueprint and result.blueprint.is_blueprint:
-        output["blueprint"] = {
-            "blueprint_name": result.summary.package_name if result.summary else None,
-            "parent_class": result.blueprint.parent_class,
-        }
+        output["blueprint"] = _format_blueprint_result(result)
 
     # OUT-05: 添加 _schema 字段（仅在 include_schema=True）
     if include_schema:

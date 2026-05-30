@@ -96,7 +96,7 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
 
 
 def _pin_direction_text(direction: int) -> str:
-    """Return CUE4Parse-compatible pin direction text."""
+    """Return stable pin direction text for Blueprint DTO output."""
     return "output" if direction == 1 else "input"
 
 
@@ -114,12 +114,12 @@ def _pin_container_type(pin: UEdGraphPin) -> str:
     return str(getattr(pin.pin_type, "container_type", "") or "")
 
 
-def _format_cue4_pin(
+def _format_blueprint_pin_dto(
     pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_name_lookup: Dict[str, str],
 ) -> Dict[str, Any]:
-    """Format a pin using the compact BPExtractor DTO shape."""
+    """Format a pin using the compact Blueprint DTO shape."""
     linked_to: List[str] = []
     for ref in pin.linked_to_raw or []:
         target_pin_id = _pin_ref_guid(ref)
@@ -453,10 +453,10 @@ def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphN
 
 
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
-    """格式化单个节点为紧凑的 CUE4/BPExtractor 风格 JSON 结构。
+    """格式化单个节点为紧凑的 Blueprint DTO JSON 结构。
 
     图级语义（connections/execution_chains/data_flows）保留在 graph 对象上，
-    节点自身输出更接近 CUE4Parse DTO，便于跨工具对比。
+    节点自身输出使用稳定 DTO 字段，便于跨工具对比。
 
     Args:
         node: UEdGraphNode 节点对象
@@ -1176,29 +1176,17 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     return connections, warnings
 
 
-def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54, Phase 71 deprecated）。
+def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
+    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
-    Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
-    Phase 71: 已弃用，推荐使用 build_execution_chains() 获取链式表达。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
-        List[Dict]: execution_flows 数组
-
-    Note:
-        此函数已弃用。请使用 build_execution_chains() 获取更简洁的链式表达格式。
+        List[Dict]: execution flow entries used by chain and semantic builders.
     """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
@@ -1266,6 +1254,17 @@ def build_execution_flows(graph: UEdGraph) -> List[Dict]:
             })
 
     return execution_flows
+
+
+def build_execution_flows(graph: UEdGraph) -> List[Dict]:
+    """Deprecated compatibility wrapper for execution flow entries."""
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return build_execution_flow_entries(graph)
 
 
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
@@ -1366,7 +1365,7 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
         # 执行流构建（用于 chain_builder）
-        execution_flows = build_execution_flows(graph)
+        execution_flows = build_execution_flow_entries(graph)
 
         # 执行流链式表达（Phase 71）
         execution_chains = build_execution_chains(graph, execution_flows)
@@ -1428,7 +1427,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         connections, warnings = build_connections_map(graph)
 
         # 构建执行流
-        execution_flows = build_execution_flows(graph)
+        execution_flows = build_execution_flow_entries(graph)
 
         # 构建执行流链式表达（Phase 71）
         execution_chains = build_execution_chains(graph, execution_flows)
@@ -1439,7 +1438,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
         for node, node_dict in zip(graph.nodes, nodes):
             node_dict["Pins"] = [
-                _format_cue4_pin(pin, pin_lookup, node_name_lookup)
+                _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
                 for pin in node.pins
             ]
             if node.class_name == "EdGraphNode_Comment":
@@ -1471,23 +1470,19 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
-    """Build a compact CUE4Parse/BPExtractor-style node index.
-
-    The canonical output remains ``blueprint.graphs``. This index keeps the
-    direct PackageName/BlueprintClass/Nodes-style shape useful for diffing with
-    BPExtractor without flattening away graph-level semantic data.
-    """
+    """Build the standard Blueprint node index used by JSON output."""
     node_items: List[Dict[str, Any]] = []
-    graph_names: List[str] = []
+    graph_names: List[Dict[str, Any]] = []
 
     for graph in graphs:
-        graph_names.append(graph.graph_name)
         pin_lookup, _, _ = _build_graph_indexes(graph)
         node_name_lookup = {
             node.node_guid: _derive_node_name(node, idx)
             for idx, node in enumerate(graph.nodes)
         }
+        graph_node_guids: List[str] = []
         for idx, node in enumerate(graph.nodes):
+            graph_node_guids.append(node.node_guid or "")
             node_items.append({
                 "GraphName": graph.graph_name,
                 "Type": node.class_name,
@@ -1497,11 +1492,17 @@ def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
                 "NodeGuid": node.node_guid or None,
                 "FunctionName": _node_member_name(node) or None,
                 "Pins": [
-                    _format_cue4_pin(pin, pin_lookup, node_name_lookup)
+                    _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
                     for pin in node.pins
                 ],
                 "Note": node.node_comment or None,
             })
+        graph_names.append({
+            "Name": graph.graph_name,
+            "Type": GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class),
+            "NodeCount": len(graph.nodes),
+            "NodeGuids": graph_node_guids,
+        })
 
     return {
         "Graphs": graph_names,
