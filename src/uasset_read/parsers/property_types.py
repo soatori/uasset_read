@@ -235,7 +235,7 @@ def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
 def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
     """解析 SoftClassProperty"""
     # 与 SoftObjectProperty 解析方式相同
-    return parse_soft_object_property(tag, archive, name_map)
+    return parse_soft_object_property(tag, archive, name_map or [])
 
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> str:
