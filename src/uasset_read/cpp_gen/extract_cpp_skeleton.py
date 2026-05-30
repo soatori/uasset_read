@@ -100,7 +100,11 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     # 4. 提取变量属性
     properties.extend(_extract_variable_properties(blueprint))
 
-    # 5. 提取方法声明（Phase 57）
+    # 5. 提取输入动作变量（从图节点）
+    if result.graphs:
+        properties.extend(_extract_input_action_properties(result.graphs))
+
+    # 6. 提取方法声明（Phase 57）
     methods: List[CppMethodIR] = []
     if result.graphs:
         blueprint_functions = getattr(blueprint, 'functions', None)
@@ -144,6 +148,115 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     ir.constructor["constructor_text"] = format_cpp_constructor(ir)
 
     return ir
+
+
+# ============================================================================
+# 蓝图元数据过滤器（P0 改进）
+# ============================================================================
+
+# 蓝图内部元数据属性，不应作为 C++ 成员变量输出
+BLUEPRINT_METADATA_KEYS = frozenset({
+    # 蓝图系统属性
+    'BlueprintSystemVersion',
+    'BlueprintGuid',
+    'bLegacyNeedToPurgeSkelRefs',
+    'bEnforceConstCorrectness',
+    # 构造脚本
+    'SimpleConstructionScript',
+    # 图相关
+    'UbergraphPages',
+    'FunctionGraphs',
+    'NewVariables',
+    'CategorySorting',
+    'LastEditedDocuments',
+    'ImplementedInterfaces',
+    # 缩略图和类引用
+    'ThumbnailInfo',
+    'GeneratedClass',
+    'PropertyGuids',
+    # Ubergraph
+    'UbergraphFunction',
+    'UbergraphFrame',
+})
+
+
+def _is_blueprint_metadata(prop_name: str) -> bool:
+    """判断属性是否为蓝图内部元数据。
+
+    Args:
+        prop_name: 属性名
+
+    Returns:
+        True 如果是蓝图元数据（应过滤掉）
+    """
+    return prop_name in BLUEPRINT_METADATA_KEYS
+
+
+# ============================================================================
+# 组件名称清理（P1 改进）
+# ============================================================================
+
+# 需要移除的组件名称后缀模式
+_COMPONENT_SUFFIX_PATTERNS = [
+    (re.compile(r'_GEN_VARIABLE$'), ''),
+    (re.compile(r'_\d+__[A-F0-9]+$'), ''),  # _0__CCE3C0B4 等哈希后缀
+    (re.compile(r'_\d+$'), ''),  # _0 等数字后缀
+]
+
+
+def _clean_component_name(name: str) -> str:
+    """清理组件名称，移除 UE 内部后缀。
+
+    Examples:
+        CameraComponent_0__CCE3C0B4 -> CameraComponent
+        FirstPersonMesh_GEN_VARIABLE -> FirstPersonMesh
+        Arrow_1 -> Arrow
+
+    Args:
+        name: 原始组件名
+
+    Returns:
+        清理后的名称
+    """
+    cleaned = name
+    for pattern, replacement in _COMPONENT_SUFFIX_PATTERNS:
+        cleaned = pattern.sub(replacement, cleaned)
+    return cleaned if cleaned else name
+
+
+# ============================================================================
+# 类名简化（P0 改进）
+# ============================================================================
+
+def _simplify_class_name(raw_name: str) -> str:
+    """简化类名，从完整包路径提取简洁名称。
+
+    Examples:
+        /Game/FirstPerson/Blueprints/BP_FirstPersonCharacter -> BP_FirstPersonCharacter
+        Game_FirstPerson_Blueprints_BP_FirstPersonCharacter -> BP_FirstPersonCharacter
+
+    Args:
+        raw_name: 原始名称（可能包含路径）
+
+    Returns:
+        简化后的类名
+    """
+    # 移除路径前缀
+    if '/' in raw_name:
+        raw_name = raw_name.rsplit('/', 1)[-1]
+
+    # 移除点号分隔的扩展名
+    if '.' in raw_name:
+        raw_name = raw_name.rsplit('.', 1)[0]
+
+    # 替换非法字符为下划线
+    cleaned = re.sub(r'[^A-Za-z0-9_]', '_', raw_name)
+
+    # 确保以有效字符开头
+    if cleaned and cleaned[0].isdigit():
+        cleaned = '_' + cleaned
+
+    return cleaned
 
 
 # ============================================================================
@@ -197,6 +310,9 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
     - UObject 派生 → U 前缀
     - 其他 → U 前缀（默认）
 
+    P0 改进：使用 _simplify_class_name 提取简洁名称，
+    而非使用完整包路径。
+
     Args:
         result: LinkerParseResult
 
@@ -214,12 +330,12 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
         logger.warning("Could not determine class name from result")
         return "UUnknownClass"
 
+    # P0 改进：简化类名
+    clean_name = _simplify_class_name(raw_name)
+
     # 确定前缀（根据父类类型）
     parent_class_path = result.blueprint.parent_class or ""
     parent_cpp = ue_package_path_to_cpp_class(parent_class_path)
-
-    # T-056-04: 清理名称中的非法字符
-    clean_name = re.sub(r'[^A-Za-z0-9_]', '_', raw_name)
 
     # 确定前缀
     prefix = "U"  # 默认 UObject 前缀
@@ -289,6 +405,9 @@ def _extract_component_properties(
         comp_class = comp.get("class", "")
 
         if comp_name and comp_class:
+            # P1 改进：清理组件名称
+            clean_name = _clean_component_name(comp_name)
+
             # 补全短名称为完整路径（如 "ArrowComponent" → "/Script/Engine.ArrowComponent"）
             comp_path = comp_class
             if not comp_path.startswith("/Script/"):
@@ -305,7 +424,7 @@ def _extract_component_properties(
 
             prop = CppProperty(
                 cpp_type=cpp_type,
-                name=comp_name,
+                name=clean_name,
                 uproperty_marks=marks,
                 category="component",
                 default_value=None,
@@ -318,12 +437,17 @@ def _extract_component_properties(
 def _create_component_property(var: "BlueprintVariable") -> CppProperty:
     """从 BlueprintVariable 创建组件 CppProperty。
 
+    P1 改进：使用 _clean_component_name 清理组件名称。
+
     Args:
         var: BlueprintVariable（is_component=True）
 
     Returns:
         CppProperty
     """
+    # P1 改进：清理组件名称
+    clean_name = _clean_component_name(var.var_name)
+
     # 从 var_type 提取类型路径
     var_type = var.var_type
     ue_type = ""
@@ -348,7 +472,7 @@ def _create_component_property(var: "BlueprintVariable") -> CppProperty:
 
     return CppProperty(
         cpp_type=cpp_type,
-        name=var.var_name,
+        name=clean_name,
         uproperty_marks=marks,
         category="component",
         default_value=None,  # 组件无默认值
@@ -360,6 +484,7 @@ def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProp
     """提取变量属性。
 
     从 blueprint.variables 中筛选 is_component=False 的变量。
+    P0 改进：过滤蓝图内部元数据属性。
 
     Args:
         blueprint: BlueprintMetadata
@@ -371,7 +496,63 @@ def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProp
 
     for var in blueprint.variables:
         if not var.is_component:
+            # P0 改进：过滤蓝图元数据
+            if _is_blueprint_metadata(var.var_name):
+                continue
             prop = _create_variable_property(var)
+            properties.append(prop)
+
+    return properties
+
+
+def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProperty]:
+    """从图节点提取输入动作变量。
+
+    P2 改进：从 K2Node_EnhancedInputAction 节点提取输入动作引用，
+    生成 UInputAction* 成员变量。
+
+    Args:
+        graphs: 图列表
+
+    Returns:
+        CppProperty 列表（category="input"）
+    """
+    properties: List[CppProperty] = []
+    seen_actions: set = set()
+
+    for graph in graphs:
+        for node in graph.nodes:
+            if node.class_name != "K2Node_EnhancedInputAction":
+                continue
+
+            nd = node.node_data
+            if not isinstance(nd, dict):
+                continue
+
+            # 获取输入动作引用
+            action_path = nd.get("input_action_path", "")
+            action_short_name = nd.get("input_action_short_name", "")
+
+            if not action_path or action_path == "None":
+                continue
+
+            # 去重（同一个输入动作可能被多个节点引用）
+            if action_path in seen_actions:
+                continue
+            seen_actions.add(action_path)
+
+            # 生成变量名（使用短名称）
+            var_name = action_short_name if action_short_name else action_path
+
+            # 构建属性
+            prop = CppProperty(
+                cpp_type="UInputAction*",
+                name=var_name,
+                uproperty_marks=["EditAnywhere"],
+                category="input",
+                default_value=None,
+                cpp_comment=f"Input Action: {action_path}",
+            )
             properties.append(prop)
 
     return properties
@@ -567,14 +748,92 @@ def _extract_parameters_from_pins(
     return params
 
 
+# ============================================================================
+# 函数标志位常量（UE5 UFunctionFlags）- 参考 CUE4Parse EFunctionFlags.cs
+# ============================================================================
+
+# 访问修饰符（这些标志不在 extra_flags 中，需要从其他来源推断）
+FUNC_PUBLIC = 0x00000001  # 占位符，实际访问修饰符需要从其他信息推断
+FUNC_PROTECTED = 0x00000002  # 占位符
+FUNC_PRIVATE = 0x00000004  # 占位符
+
+# 函数类型（参考 CUE4Parse EFunctionFlags.cs）
+FUNC_Final = 0x00000001
+FUNC_RequiredAPI = 0x00000002
+FUNC_BlueprintAuthorityOnly = 0x00000004
+FUNC_BlueprintCosmetic = 0x00000008
+FUNC_Net = 0x00000010
+FUNC_NetReliable = 0x00000020
+FUNC_Simulated = 0x00000040
+FUNC_Exec = 0x00000100
+FUNC_Native = 0x00000200
+FUNC_Event = 0x00000400
+FUNC_NetMulticast = 0x00000800
+FUNC_UbergraphFunction = 0x00001000
+FUNC_Static = 0x00002000
+FUNC_MulticastDelegate = 0x00004000
+FUNC_Delegate = 0x00008000
+FUNC_HasDefaults = 0x00010000
+FUNC_HasOutParms = 0x00020000
+FUNC_BlueprintCallable = 0x00040000
+FUNC_BlueprintPure = 0x00080000
+FUNC_EditorOnly = 0x00100000
+FUNC_Const = 0x00200000
+FUNC_NetValidate = 0x00400000
+FUNC_BlueprintEvent = 0x08000000
+
+
+def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
+    """从 extra_flags 提取函数标志位。
+
+    参考 CUE4Parse EFunctionFlags.cs 的定义。
+
+    Args:
+        flags: extra_flags 值
+
+    Returns:
+        函数标志字典
+    """
+    return {
+        # 访问修饰符（需要从其他信息推断）
+        "is_public": False,  # 默认
+        "is_protected": True,  # 默认
+        "is_private": False,
+        # 函数类型
+        "is_blueprint_pure": bool(flags & FUNC_BlueprintPure),
+        "is_blueprint_callable": bool(flags & FUNC_BlueprintCallable),
+        "is_const": bool(flags & FUNC_Const),
+        "is_static": bool(flags & FUNC_Static),
+        "is_event": bool(flags & FUNC_Event),
+        "is_blueprint_event": bool(flags & FUNC_BlueprintEvent),
+        "is_final": bool(flags & FUNC_Final),
+        "is_native": bool(flags & FUNC_Native),
+    }
+
+
 def _infer_ufunction_specifiers(
     pins: List["UEdGraphPin"],
     node_class_name: str,
-    is_override: bool
+    is_override: bool,
+    extra_flags: int = 0
 ) -> List[str]:
-    """推断 UFUNCTION 修饰符（D-57-03）。"""
+    """推断 UFUNCTION 修饰符（D-57-03）。
+
+    改进：从 extra_flags 提取标志位。
+    """
     if is_override:
         return []
+
+    # 从 extra_flags 提取标志
+    flags = _extractFunctionFlags(extra_flags)
+
+    # 如果 extra_flags 已经设置了 BlueprintPure/BlueprintCallable，直接使用
+    if flags["is_blueprint_pure"]:
+        return ["BlueprintPure"]
+    if flags["is_blueprint_callable"]:
+        return ["BlueprintCallable"]
+
+    # 回退到从引脚推断
     has_exec_input = any(
         p for p in pins
         if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 0
@@ -592,14 +851,20 @@ def _build_cpp_method_from_entry(
     fe_node: "K2NodeFunctionEntry",
     blueprint_functions: Dict
 ) -> CppMethodIR:
-    """从 K2Node_FunctionEntry 构建 CppMethodIR。"""
+    """从 K2Node_FunctionEntry 构建 CppMethodIR。
+
+    改进：从 extra_flags 提取函数标志。
+    """
     # 从 node_data 获取 function_reference（可能在 node_data 字典中）
     func_ref = getattr(fe_node, 'function_reference', None)
-    if func_ref is None and fe_node.node_data:
+    extra_flags = 0
+    if fe_node.node_data:
         if isinstance(fe_node.node_data, dict):
-            func_ref = fe_node.node_data.get('function_reference')
+            func_ref = fe_node.node_data.get('function_reference', func_ref)
+            extra_flags = fe_node.node_data.get('extra_flags', 0)
         else:
-            func_ref = getattr(fe_node.node_data, 'function_reference', None)
+            func_ref = getattr(fe_node.node_data, 'function_reference', func_ref)
+            extra_flags = getattr(fe_node.node_data, 'extra_flags', 0)
 
     if func_ref is None:
         return None
@@ -607,6 +872,9 @@ def _build_cpp_method_from_entry(
     func_name = func_ref.member_name
     if not func_name or func_name == "None":
         return None
+
+    # 提取函数标志
+    flags = _extractFunctionFlags(extra_flags)
 
     # 双源交叉验证（D-57-01）
     bp_func = blueprint_functions.get(func_name)
@@ -625,7 +893,19 @@ def _build_cpp_method_from_entry(
         parameters = _extract_parameters_from_pins(fe_node.pins)
         return_type = "void"
 
-    specifiers = _infer_ufunction_specifiers(fe_node.pins, "K2Node_FunctionEntry", is_override=False)
+    specifiers = _infer_ufunction_specifiers(
+        fe_node.pins,
+        "K2Node_FunctionEntry",
+        is_override=False,
+        extra_flags=extra_flags
+    )
+
+    # 确定访问修饰符
+    access_modifier = "protected"  # 默认
+    if flags["is_public"]:
+        access_modifier = "public"
+    elif flags["is_private"]:
+        access_modifier = "private"
 
     return CppMethodIR(
         cpp_name=_sanitize_identifier(func_name),
@@ -633,6 +913,12 @@ def _build_cpp_method_from_entry(
         parameters=parameters,
         ufunction_specifiers=specifiers,
         is_override=False,
+        is_const=flags["is_const"],
+        is_static=flags["is_static"],
+        is_pure=flags["is_blueprint_pure"],
+        is_event=flags["is_event"],
+        is_native=flags["is_native"],
+        access_modifier=access_modifier,
         source_node_type="K2Node_FunctionEntry",
     )
 
@@ -640,14 +926,25 @@ def _build_cpp_method_from_entry(
 def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     """从 K2Node_Event 构建 CppMethodIR（is_override=True）。"""
     # 从 node_data 获取 event_reference
-    event_ref = getattr(event_node, 'event_reference', None)
-    if event_ref is None and event_node.node_data:
-        event_ref = getattr(event_node.node_data, 'event_reference', None)
+    event_ref = None
+    nd = event_node.node_data
+
+    if nd is not None:
+        if isinstance(nd, dict):
+            # 字典格式：直接从字典获取
+            event_ref = nd.get('event_reference')
+        else:
+            # 对象格式：使用 getattr
+            event_ref = getattr(nd, 'event_reference', None)
+
+    # 尝试从节点属性获取
+    if event_ref is None:
+        event_ref = getattr(event_node, 'event_reference', None)
 
     if event_ref is None:
         return None
 
-    event_name = event_ref.member_name
+    event_name = event_ref.member_name if hasattr(event_ref, 'member_name') else None
     if not event_name or event_name == "None":
         return None
 
@@ -687,7 +984,15 @@ def extract_cpp_functions(
                 if method:
                     methods.append(method)
             elif node.class_name == "K2Node_Event":
-                if getattr(node, 'b_override_function', False):
+                # 检查 b_override_function（可能在 node_data 中）
+                b_override = False
+                nd = node.node_data
+                if isinstance(nd, dict):
+                    b_override = nd.get('b_override_function', False)
+                else:
+                    b_override = getattr(node, 'b_override_function', False)
+
+                if b_override:
                     method = _build_cpp_method_from_event(node)
                     if method:
                         methods.append(method)
