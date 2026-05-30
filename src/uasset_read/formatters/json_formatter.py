@@ -65,9 +65,16 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         from uasset_read.graph import format_graphs_json, build_blueprint_node_index
         blueprint_obj["graphs"] = format_graphs_json(result.graphs)
         node_index = build_blueprint_node_index(result.graphs)
-        blueprint_obj["graph_names"] = node_index["graphs"]
-        blueprint_obj["node_count"] = node_index["node_count"]
-        blueprint_obj["nodes"] = node_index["nodes"]
+        blueprint_obj["PackageName"] = result.summary.package_name if result.summary else ""
+        blueprint_obj["BlueprintClass"] = blueprint_obj.get("parent_class")
+        blueprint_obj["Graphs"] = node_index["Graphs"]
+        blueprint_obj["NodeCount"] = node_index["NodeCount"]
+        blueprint_obj["Nodes"] = node_index["Nodes"]
+        blueprint_obj["Warnings"] = [
+            warning
+            for graph in blueprint_obj["graphs"]
+            for warning in graph.get("warnings", [])
+        ]
 
     # Phase 31 的 build_graphs_summary 用于顶层 graphs_summary
     from uasset_read.graph import build_graphs_summary

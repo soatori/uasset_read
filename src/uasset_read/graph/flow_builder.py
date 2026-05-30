@@ -502,16 +502,16 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         pins=result["pins"],
     )
     compact: Dict[str, Any] = {
-        "type": node.class_name,
-        "name": node_name,
-        "node_pos_x": node.node_pos_x,
-        "node_pos_y": node.node_pos_y,
-        "node_guid": node.node_guid or None,
-        "function_name": _node_member_name(node) or None,
-        "pins": [],
+        "Type": node.class_name,
+        "Name": node_name,
+        "NodePosX": node.node_pos_x,
+        "NodePosY": node.node_pos_y,
+        "NodeGuid": node.node_guid or None,
+        "FunctionName": _node_member_name(node) or None,
+        "Pins": [],
     }
     if node.node_comment:
-        compact["note"] = node.node_comment
+        compact["Note"] = node.node_comment
     for key in (
         "node_category",
         "semantic_type",
@@ -1438,7 +1438,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
         nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
         for node, node_dict in zip(graph.nodes, nodes):
-            node_dict["pins"] = [
+            node_dict["Pins"] = [
                 _format_cue4_pin(pin, pin_lookup, node_name_lookup)
                 for pin in node.pins
             ]
@@ -1489,24 +1489,24 @@ def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
         }
         for idx, node in enumerate(graph.nodes):
             node_items.append({
-                "graph_name": graph.graph_name,
-                "type": node.class_name,
-                "name": _derive_node_name(node, idx),
-                "node_pos_x": node.node_pos_x,
-                "node_pos_y": node.node_pos_y,
-                "node_guid": node.node_guid or None,
-                "function_name": _node_member_name(node) or None,
-                "pins": [
+                "GraphName": graph.graph_name,
+                "Type": node.class_name,
+                "Name": _derive_node_name(node, idx),
+                "NodePosX": node.node_pos_x,
+                "NodePosY": node.node_pos_y,
+                "NodeGuid": node.node_guid or None,
+                "FunctionName": _node_member_name(node) or None,
+                "Pins": [
                     _format_cue4_pin(pin, pin_lookup, node_name_lookup)
                     for pin in node.pins
                 ],
-                "note": node.node_comment or None,
+                "Note": node.node_comment or None,
             })
 
     return {
-        "graphs": graph_names,
-        "node_count": len(node_items),
-        "nodes": node_items,
+        "Graphs": graph_names,
+        "NodeCount": len(node_items),
+        "Nodes": node_items,
     }
 
 

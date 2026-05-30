@@ -7,20 +7,23 @@ def test_blueprint_nodes_are_flattened_for_cue4_style_diff(sample_result) -> Non
     data = format_json_full(sample_result)
     blueprint = data["blueprint"]
 
-    assert blueprint["node_count"] == sum(
+    assert blueprint["NodeCount"] == sum(
         len(graph["nodes"]) for graph in blueprint["graphs"]
     )
-    assert blueprint["graph_names"]
-    assert blueprint["nodes"]
+    assert blueprint["PackageName"]
+    assert "BlueprintClass" in blueprint
+    assert blueprint["Graphs"]
+    assert blueprint["Nodes"]
+    assert "Warnings" in blueprint
 
-    first_node = blueprint["nodes"][0]
+    first_node = blueprint["Nodes"][0]
     assert {
-        "graph_name",
-        "type",
-        "name",
-        "node_pos_x",
-        "node_pos_y",
-        "pins",
+        "GraphName",
+        "Type",
+        "Name",
+        "NodePosX",
+        "NodePosY",
+        "Pins",
     } <= set(first_node)
 
 
@@ -31,10 +34,10 @@ def test_graph_nodes_use_cue4_style_node_and_pin_fields(sample_result) -> None:
 
     assert "node_type" not in first_node
     assert "node_name" not in first_node
-    assert {"type", "name", "node_pos_x", "node_pos_y", "pins"} <= set(first_node)
+    assert {"Type", "Name", "NodePosX", "NodePosY", "Pins"} <= set(first_node)
 
-    if first_node["pins"]:
-        first_pin = first_node["pins"][0]
+    if first_node["Pins"]:
+        first_pin = first_node["Pins"][0]
         assert {
             "PinId",
             "PinName",
