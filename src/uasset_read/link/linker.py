@@ -124,6 +124,15 @@ class PackageLinker:
             if parent is not None:
                 inst.outer = parent
 
+        # 解析 super_index（父类引用）
+        for idx, exp in enumerate(self._export_map):
+            if idx < len(self._export_objects):
+                inst = self._export_objects[idx]
+                if hasattr(exp, 'super_index') and exp.super_index and not exp.super_index.is_null:
+                    super_inst = self.resolve_package_index(exp.super_index)
+                    if super_inst is not None:
+                        inst.super_object = super_inst
+
     def resolve_package_index(
         self, pkg_idx: "PackageIndex"
     ) -> Optional[UObjectInstance]:
