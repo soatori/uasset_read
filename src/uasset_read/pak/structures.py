@@ -19,6 +19,7 @@ from uasset_read.pak.constants import (
     Flag_Encrypted,
     Flag_Deleted,
 )
+from uasset_read.pak.game_versions import detect_game_from_magic, get_game_info, EGame
 
 
 # ============================================================================
@@ -279,6 +280,7 @@ class FPakInfo:
     encrypted_index: bool = False     # version >= 7
     compression_methods: list = field(default_factory=list)  # up to 5 names, version >= 8
     index_is_frozen: bool = False   # version 9 only
+    detected_game: int = EGame.UNKNOWN  # 检测到的游戏标识
 
     @classmethod
     def _serialized_size(cls, version: int) -> int:
@@ -341,6 +343,9 @@ class FPakInfo:
             if magic not in PAK_FILE_MAGICS:
                 continue
 
+            # 检测游戏标识
+            detected_game = detect_game_from_magic(magic)
+
             # Magic matched — read version field to determine exact version
             version_field = struct.unpack('<i', stream.read(4))[0]
 
@@ -364,6 +369,7 @@ class FPakInfo:
             stream.seek(pos)
             info = cls()
             info.version = version
+            info.detected_game = detected_game
 
             # New fields (version >= 7): prepended before Magic
             if version >= PakFileVersion.EncryptionKeyGuid:
