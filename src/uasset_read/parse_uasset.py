@@ -327,6 +327,8 @@ def parse_package(
     asset_roots: Optional[Sequence[str]] = None,
     aes_key: Optional[bytes] = None,
     provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -344,6 +346,7 @@ def parse_package(
     result = ParseResult()
     archive = None
     bundle = None
+    mappings_provider = None
 
     try:
         if aes_key is not None:
@@ -351,6 +354,12 @@ def parse_package(
                 "Unsupported argument: aes_key. Pass the key "
                 "when constructing the Pak/IoStore reader and provider"
             )
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
@@ -380,6 +389,8 @@ def parse_package(
                     export.properties = parse_properties_from_export(
                         export, archive, result.summary, result.name_map,
                         result.export_map, result.import_map,
+                        mappings=mappings_provider.mappings if mappings_provider else None,
+                        game=game,
                     )
                 except Exception as e:
                     if not tolerant:
@@ -428,6 +439,8 @@ def parse_uasset(
     tolerant: bool = True,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -440,6 +453,8 @@ def parse_uasset(
         tolerant=tolerant,
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
+        mappings_path=mappings_path,
+        game=game,
     )
 
 
@@ -450,6 +465,8 @@ def parse_uasset_with_linker(
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
     provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -467,8 +484,15 @@ def parse_uasset_with_linker(
     result = LinkerParseResult()
     archive = None
     bundle = None
+    mappings_provider = None
 
     try:
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
@@ -493,6 +517,8 @@ def parse_uasset_with_linker(
                         export, archive, result.summary, result.name_map,
                         result.export_map, result.import_map,
                         linker=result.linker,  # None at this point, linker not yet created
+                        mappings=mappings_provider.mappings if mappings_provider else None,
+                        game=game,
                     )
                 except Exception as e:
                     if not tolerant:

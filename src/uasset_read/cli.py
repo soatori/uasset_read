@@ -71,6 +71,10 @@ def create_parser() -> argparse.ArgumentParser:
                         help='Root directory to search for parent .uasset files (can be repeated)')
     parser.add_argument('--include-parent-assets', action='store_true',
                         help='Resolve and parse parent Blueprint assets when available')
+    parser.add_argument('--mappings', metavar='FILE',
+                        help='Load .usmap/.jmap/.jmap.gz type mappings')
+    parser.add_argument('--game', metavar='NAME',
+                        help='Enable game-specific property readers, e.g. Borderlands4')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode for UE5 serialization (default: on)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode: throw ParseError on serialization issues')
 
@@ -147,6 +151,8 @@ def _build_export_options(args, fmt: str, output_dir: str | None = None):
         tolerant=not args.strict,
         include_parent_assets=args.include_parent_assets,
         asset_roots=list(args.asset_root or []),
+        mappings_path=args.mappings,
+        game=args.game,
     )
 
 
@@ -229,6 +235,8 @@ def main():
                 tolerant=tolerant,
                 include_parent_assets=args.include_parent_assets,
                 asset_roots=args.asset_root,
+                mappings_path=args.mappings,
+                game=args.game,
             )
         except Exception as e:
             print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
@@ -268,6 +276,8 @@ def main():
             tolerant=tolerant,
             include_parent_assets=args.include_parent_assets,
             asset_roots=args.asset_root,
+            mappings_path=args.mappings,
+            game=args.game,
         )
     except Exception as e:
         print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
