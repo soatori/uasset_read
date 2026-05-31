@@ -461,10 +461,11 @@ def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphN
 
 
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
-    """格式化单个节点为紧凑的 Blueprint DTO JSON 结构。
+    """格式化单个节点为 OUT-01 规范 JSON 结构（Phase 31 等价迁移）。
 
-    图级语义（connections/execution_chains/data_flows）保留在 graph 对象上，
-    节点自身输出使用稳定 DTO 字段，便于跨工具对比。
+    Per D-20-01: node_name 使用 _derive_node_name() 派生
+    Per D-20-02: 字段名规范化（node_type, position:{x,y})
+    Per D-20-03: function_reference/event_reference 提升到顶层
 
     Args:
         node: UEdGraphNode 节点对象
@@ -490,7 +491,8 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     if node.class_name == "EdGraphNode_Comment":
         data = node.node_data if isinstance(node.node_data, dict) else {}
-        compact["comment"] = {
+        result["comment_text"] = node.node_comment or ""
+        result["comment"] = {
             "text": node.node_comment or "",
             "color": _sanitize_recursive(data.get("comment_color")),
             "width": data.get("node_width"),
@@ -498,17 +500,17 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             "font_size": data.get("font_size"),
             "depth": data.get("comment_depth"),
         }
-        compact["comment"] = {
-            key: value for key, value in compact["comment"].items()
+        result["comment"] = {
+            key: value for key, value in result["comment"].items()
             if value is not None
         }
 
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
         from uasset_read.formatters.json_formatter import _extract_call_function_parameters
-        compact["parameters"] = _extract_call_function_parameters(node)
+        result["parameters"] = _extract_call_function_parameters(node)
 
-    return compact
+    return result
 
 
 def _format_graph_node_links(
@@ -1399,10 +1401,9 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
         nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
         for node, node_dict in zip(graph.nodes, nodes):
-            node_dict["Pins"] = [
-                _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
-                for pin in node.pins
-            ]
+            node_dict["links"] = _format_graph_node_links(
+                node, node_name_lookup, pin_lookup
+            )
             if node.class_name == "EdGraphNode_Comment":
                 node_dict.setdefault("comment", {})["enclosed_nodes"] = _comment_enclosed_nodes(node, graph)
 
@@ -1429,48 +1430,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
-
-
-def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
-    """Build the standard Blueprint node index used by JSON output."""
-    node_items: List[Dict[str, Any]] = []
-    graph_names: List[Dict[str, Any]] = []
-
-    for graph in graphs:
-        pin_lookup, _, _ = _build_graph_indexes(graph)
-        node_name_lookup = {
-            node.node_guid: _derive_node_name(node, idx)
-            for idx, node in enumerate(graph.nodes)
-        }
-        graph_node_guids: List[str] = []
-        for idx, node in enumerate(graph.nodes):
-            graph_node_guids.append(node.node_guid or "")
-            node_items.append({
-                "GraphName": graph.graph_name,
-                "Type": node.class_name,
-                "Name": _derive_node_name(node, idx),
-                "NodePosX": node.node_pos_x,
-                "NodePosY": node.node_pos_y,
-                "NodeGuid": node.node_guid or None,
-                "FunctionName": _node_member_name(node) or None,
-                "Pins": [
-                    _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
-                    for pin in node.pins
-                ],
-                "Note": node.node_comment or None,
-            })
-        graph_names.append({
-            "Name": graph.graph_name,
-            "Type": GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class),
-            "NodeCount": len(graph.nodes),
-            "NodeGuids": graph_node_guids,
-        })
-
-    return {
-        "Graphs": graph_names,
-        "NodeCount": len(node_items),
-        "Nodes": node_items,
-    }
 
 
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
