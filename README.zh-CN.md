@@ -2,10 +2,6 @@
 
 > **为 AI 代理解锁虚幻引擎蓝图数据** — 解析 `.uasset` 文件、提取变量和图结构、反编译 Kismet 字节码、生成 C++ 类骨架 — 无需启动 UE 编辑器。
 
-[![CI](https://github.com/soatori/uasset_read/actions/workflows/ci.yml/badge.svg)](https://github.com/soatori/uasset_read/actions/workflows/ci.yml)
-[![PyPI - Version](https://img.shields.io/pypi/v/uasset_read.svg)](https://pypi.org/project/uasset-read/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-
 一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。专为需要通过程序**读取、分析和理解蓝图内容**的 AI 代理、Mod 开发者和游戏开发者打造。
 
 [English](README.md) | [中文版](README.zh-CN.md)
