@@ -105,6 +105,8 @@ class PackageFileSummary:
     names_referenced_from_export_data_count: int = 0
     payload_toc_offset: int = 0
     data_resource_offset: int = 0
+    depends_map: List[List[int]] = field(default_factory=list)
+    preload_dependencies: List[int] = field(default_factory=list)
 
     def get_custom_version(self, guid: str, default: int = 0) -> int:
         """查找 CustomVersion 版本值。"""
@@ -452,3 +454,54 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
         # UE5 始终有 name hashes (4 bytes)
         archive.read(4)
     return name_map
+
+
+def read_depends_map(archive: FArchive, summary: PackageFileSummary) -> List[List[int]]:
+    """读取 DependsMap（依赖表）。
+
+    UE 格式：TArray<TArray<FPackageIndex>>
+    每个 Export 对应一个依赖列表，依赖列表中的值是 PackageIndex（int32）。
+
+    Returns:
+        二维列表，第一维是 Export 索引，第二维是依赖的 PackageIndex 列表
+    """
+    if summary.depends_offset <= 0 or summary.export_count <= 0:
+        return []
+
+    archive.seek(summary.depends_offset)
+
+    depends_map: List[List[int]] = []
+    for _ in range(summary.export_count):
+        # 读取每个 Export 的依赖列表
+        dep_count = archive.read_i32()
+        if dep_count < 0 or dep_count > 10000:  # 防御性检查
+            logger.warning("DependsMap: 异常的依赖数量 %d, 跳过", dep_count)
+            depends_map.append([])
+            continue
+        deps = []
+        for _ in range(dep_count):
+            deps.append(archive.read_i32())
+        depends_map.append(deps)
+
+    return depends_map
+
+
+def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
+    """读取 PreloadDependencies（预加载依赖）。
+
+    UE 格式：TArray<FPackageIndex>
+    一维数组，包含所有预加载依赖的 PackageIndex。
+
+    Returns:
+        PackageIndex 列表
+    """
+    if summary.preload_dependency_offset <= 0 or summary.preload_dependency_count <= 0:
+        return []
+
+    archive.seek(summary.preload_dependency_offset)
+
+    dependencies: List[int] = []
+    for _ in range(summary.preload_dependency_count):
+        dependencies.append(archive.read_i32())
+
+    return dependencies

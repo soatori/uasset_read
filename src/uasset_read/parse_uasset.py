@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
-from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+from uasset_read.serializers.package_summary import read_package_summary, read_name_table, read_depends_map, read_preload_dependencies
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
@@ -381,6 +381,12 @@ def parse_package(
 
         # 读取导出表
         result.export_map = read_export_map(archive, result.summary, result.name_map)
+
+        # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
+        if hasattr(result.summary, 'depends_offset'):
+            result.summary.depends_map = read_depends_map(archive, result.summary)
+        if hasattr(result.summary, 'preload_dependency_count'):
+            result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
         # 解析 ExportMap 属性
         for export in result.export_map:
