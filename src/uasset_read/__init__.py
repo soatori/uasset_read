@@ -252,24 +252,7 @@ from .formatters import (
     resolve_fpackage_index,
 )
 # ============================================================================
-from .parse_uasset import parse_package, parse_uasset, parse_uasset_with_linker
-from .package import (
-    PackageBundle,
-    PackageProvider,
-    FileSystemPackageProvider,
-    PakPackageProvider,
-    IoStorePackageProvider,
-    open_package_bundle,
-)
-from .raw import (
-    RawFileResult,
-    parse_raw_file,
-    parse_json_descriptor,
-    parse_ini_file,
-    parse_locres,
-    parse_locmeta,
-    parse_audio_metadata,
-)
+from .parse_uasset import parse_uasset, parse_uasset_with_linker
 
 # 变换数据类（Phase 33）
 from .models.transforms import (
@@ -574,22 +557,8 @@ __all__ = [
     "extract_blueprint_metadata",
     "extract_components",
     # 主解析管线（Phase 33）
-    "parse_package",
     "parse_uasset",
     "parse_uasset_with_linker",
-    "PackageBundle",
-    "PackageProvider",
-    "FileSystemPackageProvider",
-    "PakPackageProvider",
-    "IoStorePackageProvider",
-    "open_package_bundle",
-    "RawFileResult",
-    "parse_raw_file",
-    "parse_json_descriptor",
-    "parse_ini_file",
-    "parse_locres",
-    "parse_locmeta",
-    "parse_audio_metadata",
     # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
     "extract_blueprint_graphs",
     "build_execution_flow_entries",
