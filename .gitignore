@@ -59,7 +59,7 @@ memory/
 .codegraph/
 
 # Test files
-tests/
+tests/*
 
 # Claude Code skill
 QWEN.md
