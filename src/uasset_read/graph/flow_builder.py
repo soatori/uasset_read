@@ -1432,6 +1432,48 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     return formatted
 
 
+def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
+    """Build the standard Blueprint node index used by JSON output."""
+    node_items: List[Dict[str, Any]] = []
+    graph_names: List[Dict[str, Any]] = []
+
+    for graph in graphs:
+        pin_lookup, _, _ = _build_graph_indexes(graph)
+        node_name_lookup = {
+            node.node_guid: _derive_node_name(node, idx)
+            for idx, node in enumerate(graph.nodes)
+        }
+        graph_node_guids: List[str] = []
+        for idx, node in enumerate(graph.nodes):
+            graph_node_guids.append(node.node_guid or "")
+            node_items.append({
+                "GraphName": graph.graph_name,
+                "Type": node.class_name,
+                "Name": _derive_node_name(node, idx),
+                "NodePosX": node.node_pos_x,
+                "NodePosY": node.node_pos_y,
+                "NodeGuid": node.node_guid or None,
+                "FunctionName": _node_member_name(node) or None,
+                "Pins": [
+                    _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
+                    for pin in node.pins
+                ],
+                "Note": node.node_comment or None,
+            })
+        graph_names.append({
+            "Name": graph.graph_name,
+            "Type": GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class),
+            "NodeCount": len(graph.nodes),
+            "NodeGuids": graph_node_guids,
+        })
+
+    return {
+        "Graphs": graph_names,
+        "NodeCount": len(node_items),
+        "Nodes": node_items,
+    }
+
+
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
     """从 FunctionEntry 节点的 Pins 提取签名（GAP-07）。
 
