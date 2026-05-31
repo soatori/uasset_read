@@ -2,7 +2,7 @@
 Kismet 表达式系统 — AutoRTFM 表达式。
 
 包含事务相关的 AutoRTFM 指令，用于软件事务内存（STM）支持。
-对应 CUE4Parse EX_AutoRtfmTransact, EX_AutoRtfmStopTransact, EX_AutoRtfmAbortIfNot。
+对应 EX_AutoRtfmTransact, EX_AutoRtfmStopTransact, EX_AutoRtfmAbortIfNot。
 """
 
 from __future__ import annotations

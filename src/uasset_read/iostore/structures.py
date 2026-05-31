@@ -1,4 +1,4 @@
-﻿"""IoStore 核心数据结构 — 镜像 CUE4Parse IoStore 结构"""
+﻿"""IoStore 核心数据结构 — 镜像 IoStore 结构"""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
@@ -136,7 +136,7 @@ class FIoOffsetAndSize:
 class FIoOffsetAndLength:
     """偏移和长度（10 字节大端编码，5 字节偏移 + 5 字节长度）
 
-    CUE4Parse FIoOffsetAndLength — IoStore 标准格式
+    FIoOffsetAndLength — IoStore 标准格式
     """
     offset: int
     length: int
@@ -204,7 +204,7 @@ TOC_HEADER_SIZE = 144
 class FIoStoreTocHeader:
     """IoStore TOC 头部结构（144 字节）
 
-    镜像 CUE4Parse FIoStoreTocHeader
+    镜像 FIoStoreTocHeader
     """
     toc_magic: bytes  # 16 bytes
     version: int  # uint8

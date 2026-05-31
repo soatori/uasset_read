@@ -141,12 +141,12 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
     - 无 enum backing：读取 1 byte
     - 有 enum backing (tag.enum_type)：读取 FName (8 bytes)，返回 EnumValue
 
-    参考 CUE4Parse ByteProperty/EnumProperty 处理逻辑：
+    参考 ByteProperty/EnumProperty 处理逻辑：
     ByteProperty with enum_type → EnumProperty → ReadFName()
     """
     type_name = tag.type
 
-    # ByteProperty with enum backing: read FName (8 bytes) per CUE4Parse
+    # ByteProperty with enum backing: read FName (8 bytes) per
     if type_name == "ByteProperty" and tag.enum_type is not None:
         if name_map is None:
             raise ParseError("ByteProperty with enum backing requires name_map")
@@ -342,7 +342,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             parse_status="opaque",
         )
 
-    # Phase 72g M-01: Fast-path for simple structs (CUE4Parse FScriptStruct.cs L174-178)
+    # Phase 72g M-01: Fast-path for simple structs (FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
     if struct_type == "Vector":
         reader = archive.read_f64 if tag.size == 24 else archive.read_f32

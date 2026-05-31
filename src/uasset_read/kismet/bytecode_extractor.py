@@ -72,7 +72,7 @@ def extract_bytecode_bytes(
     until "None", then read bytecodeBufferSize + serializedScriptSize header,
     and return the bytecode data.
 
-    Per CUE4Parse UStruct.cs, ScriptBytecode is NOT a PropertyTag value —
+    Per UStruct.cs, ScriptBytecode is NOT a PropertyTag value —
     it is embedded directly in the UStruct serialization stream AFTER the
     PropertyTag loop.
 
@@ -322,7 +322,7 @@ def parse_bytecode_stream(
     Parse raw bytecode bytes into a list of KismetExpression trees.
 
     Uses stream exhaustion (position < length) as loop terminator, matching
-    CUE4Parse UStruct.Deserialize() behavior. EX_EndOfScript will naturally
+    UStruct.Deserialize() behavior. EX_EndOfScript will naturally
     be the last expression read.
 
     Args:

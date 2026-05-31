@@ -1,7 +1,7 @@
 """
 PakFileReader — .pak 文件主读取器
 
-类似 CUE4Parse 的 PakFileReader.cs，提供：
+类似 的 PakFileReader.cs，提供：
 - open/close + 上下文管理器
 - list_files / get_entry / extract
 - 自动处理 FPakInfo 检测、索引解密、条目解析、解压缩

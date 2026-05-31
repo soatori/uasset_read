@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 # TypeRegistry — UE → C++ type mapping (Decision D-06, D-07)
 # ===========================================================================
 
-# UE Property type → C++ type mapping (aligned with CUE4Parse GetPropertyType)
+# UE Property type → C++ type mapping (aligned with GetPropertyType)
 _UE_TO_CPP_TYPES: dict[str, str] = {
     "IntProperty": "int",
     "Int8Property": "int8",
@@ -134,7 +134,7 @@ class MathFunctionCleaner:
     Static cleaner that transforms Kismet library function calls
     into idiomatic C++ operators and expressions.
 
-    Aligned with CUE4Parse BlueprintDecompilerUtils.MathFunctionCleaner
+    Aligned with BlueprintDecompilerUtils.MathFunctionCleaner
     and FinalFunctionCleaner.
     """
 
@@ -567,7 +567,7 @@ class KismetTranslator:
     """
     Translates a single KismetExpression to a one-line C++ pseudocode string.
 
-    Uses match/case dispatch aligned with CUE4Parse GetLineExpression switch.
+    Uses match/case dispatch aligned with GetLineExpression switch.
     """
 
     def __init__(self, type_registry: TypeRegistry | None = None):

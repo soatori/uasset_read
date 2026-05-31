@@ -1,6 +1,6 @@
 ﻿"""IoStore Reader — UE5.3+ IoStore 容器读取器
 
-等价实现 CUE4Parse IoStoreReader.cs
+等价实现 IoStoreReader.cs
 支持 TOC 解析、Chunk 查找、Perfect Hash 优化、压缩块读取
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ class IoStoreInfo:
 class IoStoreReader:
     """IoStore 容器读取器
 
-    等价实现 CUE4Parse IoStoreReader.cs，支持：
+    等价实现 IoStoreReader.cs，支持：
     - TOC 头部解析（所有版本 1-8）
     - ChunkId 和 OffsetAndLength 加载
     - Perfect Hash 优化查找（Version 4+）
@@ -355,7 +355,7 @@ class IoStoreReader:
         return None
 
     def _hash_with_seed(self, chunk_id: FIoChunkId, seed: int) -> int:
-        """CUE4Parse HashWithSeed 实现
+        """HashWithSeed 实现
 
         使用 FNV-1a 哈希变体
         """
