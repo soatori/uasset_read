@@ -23,7 +23,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | Metric | Value |
 |--------|-------|
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 115 tests |
+| Tests | 108 tests across 10 files |
 
 ## Features
 
@@ -94,6 +94,10 @@ uasset-read path/to/file.uasset --markdown     # Markdown output
 uasset-read path/to/file.uasset --blueprint-text  # Blueprint node text
 uasset-read path/to/file.uasset --blueprint-ue-text  # UE-format text
 uasset-read path/to/file.uasset --cpp-skeleton  # C++ class skeleton
+uasset-read path/to/file.uasset --n2c           # N2C intermediate format JSON
+
+# Batch export
+uasset-read --batch-dir path/to/dir/            # Batch export directory
 
 # Strictness
 uasset-read path/to/file.uasset --strict       # Stop on warnings
@@ -178,14 +182,18 @@ FArchive pipeline pattern mirroring UE's internal structure:
 |--------|------|-------------|
 | **Core** | | |
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
-| Constants | `constants.py` | Version numbers, property type thresholds, CPF flags |
-| Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError |
-| Main Parser | `parse_uasset.py` | `parse_uasset()` and `parse_uasset_with_linker()` |
+| Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
+| Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
+| Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
+| Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
 | CLI | `cli.py` | argparse entry point (`uasset-read`) |
-| Exporter | `exporter/` | IExporter interface and registry |
+| Exporter | `exporter/` | IExporter interface, registry, batch export |
+| Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
+| Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **Parsers** | `parsers/` | 14 property type parsers + dispatcher |
+| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
 | **Asset Types** | `parsers/asset_types/` | SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder |

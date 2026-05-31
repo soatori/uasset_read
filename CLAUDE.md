@@ -14,10 +14,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
 
-- **版本**: 0.3.4-dev（分支 `0.3.4-dev`）
+- **版本**: 0.3.5-dev（分支 `0.3.5-dev`）
 - **Python**: 3.10+（使用 `match/case`、类型注解）
 - **运行时依赖**: 零依赖（PAK AES/LZ4/Zstd 为可选依赖）
 - **构建系统**: setuptools（src 布局）
+
+## CodeGraph
+
+本项目使用 CodeGraph MCP 服务器进行代码智能检索。`codegraph_*` 工具提供基于 tree-sitter AST 的结构化查询。
+
+**优先使用 codegraph 而非原生搜索的场景：**
+
+| 问题 | 工具 |
+|------|------|
+| "X 在哪里定义？" | `codegraph_search` |
+| "谁调用了 Y？" | `codegraph_callers` |
+| "Y 调用了什么？" | `codegraph_callees` |
+| "X 如何到达 Y？/ 追踪调用链" | `codegraph_trace` |
+| "改了 Z 会影响什么？" | `codegraph_impact` |
+| "看 Y 的签名/源码" | `codegraph_node` |
+| "一次性看多个相关符号" | `codegraph_explore`（避免循环调用 codegraph_node） |
+| "获取某任务/区域的上下文" | `codegraph_context` |
+
+**使用原则：**
+- 回答结构化问题先用 `codegraph_context`，再用 ONE 次 `codegraph_explore` 获取源码
+- 追踪调用链用 `codegraph_trace`（一次调用返回完整路径，包括动态分发跳转）
+- 不要对已确认的 codegraph 结果再用 grep 验证
+- 索引延迟时读具体文件而非猜测，codegraph 响应中会标注未同步文件
+
+## 测试
+
+- 测试位于 `tests/`（10 个测试文件，108 个测试）
+- 集成测试使用 `@pytest.mark.integration` 标记
+- `pyproject.toml` 中配置了 pytest 选项
 
 ## 开发命令
 
@@ -49,14 +78,11 @@ uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 uasset-read path/to/file.uasset --blueprint-text   # 蓝图节点文本
 uasset-read path/to/file.uasset --blueprint-ue-text  # UE 格式文本
 uasset-read path/to/file.uasset --cpp-skeleton       # C++ 类骨架
+uasset-read path/to/file.uasset --n2c          # N2C 中间格式 JSON
 uasset-read path/to/file.uasset --strict     # 遇到警告时停止
 uasset-read path/to/file.uasset --tolerant   # 容错模式（默认）
 uasset-read path/to/file.uasset --verbose    # 启用调试日志
 ```
-
-## CodeGraph
-
-本项目使用 CodeGraph 进行代码分析和可视化。CodeGraph 能够帮助理解代码结构、依赖关系和调用流程，对于复杂模块的分析和重构非常有用。
 
 ## 架构
 
@@ -75,15 +101,15 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 |------|------|------|
 | **核心** | | |
 | FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
-| 常量 | `constants.py` | 版本号、属性类型阈值、CPF 标志 |
+| 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | `UAssetError`、`VersionError`、`ParseError`、`ErrorContext` |
 | 主解析器 | `parse_uasset.py` | `parse_package()`、`parse_uasset()` 和 `parse_uasset_with_linker()` 入口 |
 | 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 等非 uasset 文件解析 |
-| CLI | `cli.py` | argparse 入口（`uasset-read`） |
+| CLI | `cli.py` | argparse 入口（`uasset-read`），支持 `--n2c`、`--batch`、`--validate` |
 | 导出器 | `exporter/` | `IExporter` 接口、注册表、批量导出 |
 | 版本管理 | `versioning.py` | `VersionContainer`、`build_version_container`、`EUEVersion` |
-| 映射 | `mappings.py` | UE 类型映射 |
+| 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
 | **序列化** | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag`、图序列化器、对象资源 |
 | **数据模型** | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、变换、蓝图模型、节点类型 |
 | **属性解析器** | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 类特定跳过机制 |
@@ -113,11 +139,6 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 - `docs/reference/` — 蓝图节点文本参考、UE 加载流程、CUE4Parse 对照索引、蓝图转 C++ 指南。
 - `docs/asset_type_index.md` — 60+ 种 UE 资产类型综合索引，含命名规范和示例文件路径。
 
-## 测试
-
-- 测试位于 `tests/`（8 个测试文件，115 个测试）
-- 集成测试使用 `@pytest.mark.integration` 标记
-- `pyproject.toml` 中配置了 pytest 选项
 
 ## 关键约束
 

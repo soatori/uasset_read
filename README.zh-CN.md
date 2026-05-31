@@ -23,7 +23,7 @@
 | 指标 | 值 |
 |------|-----|
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 115 个测试 |
+| 测试 | 10 个文件，108 个测试 |
 
 ## 功能特性
 
@@ -95,6 +95,10 @@ uasset-read path/to/file.uasset --markdown         # Markdown 输出
 uasset-read path/to/file.uasset --blueprint-text   # 蓝图节点文本
 uasset-read path/to/file.uasset --blueprint-ue-text # UE 格式文本
 uasset-read path/to/file.uasset --cpp-skeleton     # C++ 类骨架
+uasset-read path/to/file.uasset --n2c              # N2C 中间格式 JSON
+
+# 批量导出
+uasset-read --batch-dir path/to/dir/               # 批量导出目录
 
 # 严格度
 uasset-read path/to/file.uasset --strict           # 遇到警告即停止
@@ -185,14 +189,18 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 |------|------|------|
 | **核心** | | |
 | FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
-| 常量 | `constants.py` | 版本号、属性类型阈值、CPF 标志 |
-| 异常 | `exceptions.py` | UAssetError, VersionError, ParseError |
-| 主解析器 | `parse_uasset.py` | 顶层 `parse_uasset()` 和 `parse_uasset_with_linker()` |
+| 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
+| 异常 | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
+| 主解析器 | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
+| 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
 | CLI | `cli.py` | argparse 入口 (`uasset-read`) |
-| Exporter | `exporter/` | IExporter 接口和注册表 |
+| Exporter | `exporter/` | IExporter 接口、注册表、批量导出 |
+| 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
+| 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **解析器** | `parsers/` | 14 种属性类型解析器 + 分派器 |
+| **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
 | **资产类型** | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图** | `graph/` | 执行流/数据流追踪、链构建器 |
