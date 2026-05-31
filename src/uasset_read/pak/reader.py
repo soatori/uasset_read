@@ -12,8 +12,7 @@ import logging
 from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
-from uasset_read.pak.constants import PakFileVersion
-from uasset_read.pak.structures import FPakInfo, FPakEntry, FPakDirectoryEntry
+from uasset_read.pak.structures import FPakInfo, FPakEntry
 from uasset_read.pak.index import parse_primary_index
 from uasset_read.pak.decompress import decompress_entry
 
@@ -147,12 +146,7 @@ class PakFileReader:
                 f"Entry offset {read_offset} out of bounds (file size: {self._file_size})"
             )
 
-        # Get compression method name
-        compression_method = "None"
-        if self._info and entry.compression_method_index < len(self._info.compression_methods):
-            compression_method = self._info.compression_methods[entry.compression_method_index]
-        elif entry.is_compressed:
-            compression_method = "Zlib"  # fallback for legacy paks
+        compression_method = self._get_compression_method(entry)
 
         self._file.seek(read_offset)
         return decompress_entry(
@@ -160,3 +154,19 @@ class PakFileReader:
             compression_method=compression_method,
             encryption_key=self._aes_key if entry.is_encrypted else None,
         )
+
+    def _get_compression_method(self, entry: FPakEntry) -> str:
+        if entry.compression_method_index == 0:
+            return "None"
+
+        if self._info and self._info.compression_methods:
+            method_index = entry.compression_method_index - 1
+            if 0 <= method_index < len(self._info.compression_methods):
+                return self._info.compression_methods[method_index]
+            raise ParseError(
+                "Compression method index "
+                f"{entry.compression_method_index} out of range "
+                f"(methods: {len(self._info.compression_methods)})"
+            )
+
+        return "Zlib"

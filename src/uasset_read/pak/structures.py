@@ -151,7 +151,8 @@ class FPakEntry:
         entry.compression_method_index = struct.unpack('<I', stream.read(4))[0]
 
         # Timestamp removed in version 2 (PakFile_Version_NoTimestamps)
-        # if version < 2: timestamp = struct.unpack('<q', stream.read(8))[0]
+        if version < PakFileVersion.NoTimestamps:
+            stream.read(8)
 
         if version < PakFileVersion.FNameBasedCompressionMethod:
             entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
