@@ -5,8 +5,11 @@ Package Summary 序列化 — PackageFileSummary 及相关读取函数。
 UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 
+import logging
 from typing import List
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
@@ -364,10 +367,34 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # 第 29 步：NamesReferencedFromExportData（UE5.7 始终存在）
     names_referenced_from_export_data_count = archive.read_i32()
 
-    # 第 30 步：PayloadTocOffset（UE5.7 始终存在）
+    # 第 30 步：PayloadTocOffset（UE5.7 始终存在，但值可能无效）
     payload_toc_offset = archive.read_i64()
-    if payload_toc_offset > 0:
-        archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
+
+    # Tolerant: 检查 payload_toc_offset 是否合理
+    if payload_toc_offset < 0:
+        logger.warning(
+            "PayloadTocOffset 为负数: %d, 设为 0",
+            payload_toc_offset,
+        )
+        payload_toc_offset = 0
+    elif payload_toc_offset > 0:
+        file_size = archive.total_size()
+        # 超过文件大小 10 倍说明值明显无效
+        if file_size > 0 and payload_toc_offset > file_size * 10:
+            logger.warning(
+                "PayloadTocOffset %d 明显越界（文件大小 %d），设为 0",
+                payload_toc_offset, file_size,
+            )
+            payload_toc_offset = 0
+        elif file_size > 0 and payload_toc_offset > file_size:
+            # 在文件大小之外但不极端，可能是 virtualized payload
+            logger.debug(
+                "PayloadTocOffset %d 超过文件大小 %d，可能是 virtualized payload",
+                payload_toc_offset, file_size,
+            )
+            # 不 validate，留给后续逻辑处理
+        else:
+            archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
 
     # 第 31 步：DataResourceOffset
     data_resource_offset = 0

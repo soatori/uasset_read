@@ -84,7 +84,7 @@ def skip_export_payload(
         payload_end = export.serial_offset + export.serial_size
 
     # 确保不超过文件大小
-    file_size = archive.get_file_size()
+    file_size = archive.total_size()
     safe_end = min(payload_end, file_size)
 
     logger.debug(
