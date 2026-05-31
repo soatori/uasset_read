@@ -4,11 +4,14 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
 
+import logging
 from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
@@ -207,10 +210,21 @@ def read_export_map(
             serial_offset = archive.read_i64()
 
             # CR-05: 验证 serial_size/serial_offset 非负
+            # Tolerant: 负数时设为 0 并记录 warning，后续属性解析会因 size=0 被跳过
             if serial_size < 0:
-                raise ParseError(f"导出 #{export_idx} serial_size 为负数: {serial_size}")
+                logger.warning(
+                    "Export #%d serial_size 为负数: %d, 设为 0",
+                    export_idx, serial_size,
+                )
+                serial_size = 0
+
             if serial_offset < 0:
-                raise ParseError(f"导出 #{export_idx} serial_offset 为负数: {serial_offset}")
+                logger.warning(
+                    "Export #%d serial_offset 为负数: %d, 跳过该 export",
+                    export_idx, serial_offset,
+                )
+                serial_offset = 0
+                serial_size = 0
 
             # bool flags
             b_forced_export = archive.read_bool()
@@ -250,10 +264,19 @@ def read_export_map(
                 script_serial_offset = archive.read_i64()
                 script_serial_size = archive.read_i64()
                 # CR-05: 验证 script_serial_offset/size 非负
+                # Tolerant: 负数时设为 0 并记录 warning
                 if script_serial_offset < 0:
-                    raise ParseError(f"导出 #{export_idx} script_serial_offset 为负数: {script_serial_offset}")
+                    logger.warning(
+                        "Export #%d script_serial_offset 为负数: %d, 设为 0",
+                        export_idx, script_serial_offset,
+                    )
+                    script_serial_offset = 0
                 if script_serial_size < 0:
-                    raise ParseError(f"导出 #{export_idx} script_serial_size 为负数: {script_serial_size}")
+                    logger.warning(
+                        "Export #%d script_serial_size 为负数: %d, 设为 0",
+                        export_idx, script_serial_size,
+                    )
+                    script_serial_size = 0
 
             export_map.append(ObjectExport(
                 class_index=class_index, super_index=super_index,
