@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
+from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 
 # Exit code constants (D-26)
 EXIT_SUCCESS = 0
@@ -36,12 +36,12 @@ def create_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog='uasset_read',
-        description='Parse Unreal Engine .uasset files and output structured data'
+        description='Parse Unreal Engine .uasset/.umap files and output structured data'
     )
 
     # Positional: file path (CLI-01) or directory (batch mode)
     parser.add_argument('file', nargs='?', default=None,
-                        help='Path to .uasset file to parse (or directory in --batch mode)')
+                        help='Path to .uasset/.umap file to parse (or directory in --batch mode)')
 
     # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
@@ -80,6 +80,8 @@ def create_parser() -> argparse.ArgumentParser:
                         help='Enable batch mode: treat positional arg as directory of .uasset files')
     parser.add_argument('--batch-dir', metavar='DIR',
                         help='Output directory for batch mode (default: ./output)')
+    parser.add_argument('--list-package-files', action='store_true',
+                        help='List discovered package sidecar/payload files and exit')
 
     return parser
 
@@ -178,6 +180,20 @@ def main():
     fmt = resolve_format(args)
     tolerant = not args.strict
 
+    if args.list_package_files:
+        try:
+            from uasset_read.package import open_package_bundle
+            bundle = open_package_bundle(args.file, tolerant=tolerant)
+        except Exception as e:
+            print(f"Error: Package discovery failed: {e}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+        print(json.dumps({
+            "package_kind": bundle.package_kind,
+            "container": bundle.container,
+            "files": bundle.package_files,
+        }, indent=2, ensure_ascii=False))
+        sys.exit(EXIT_SUCCESS)
+
     # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
     if fmt in {"cpp_skeleton", "blueprint_ue_text", "json", "json_summary"}:
         try:
@@ -223,7 +239,7 @@ def main():
 
     # Standard parse
     try:
-        result = parse_uasset(
+        result = parse_package(
             args.file,
             tolerant=tolerant,
             include_parent_assets=args.include_parent_assets,
@@ -310,10 +326,10 @@ def _handle_batch(args):
         print(f"Error: Not a directory: {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
-    # Collect .uasset files
-    uasset_files = sorted(input_dir.glob("*.uasset"))
-    if not uasset_files:
-        print(f"Error: No .uasset files found in {args.file}", file=sys.stderr)
+    # Collect package files
+    package_files = sorted([*input_dir.glob("*.uasset"), *input_dir.glob("*.umap")])
+    if not package_files:
+        print(f"Error: No .uasset/.umap files found in {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     # Resolve output directory
@@ -332,7 +348,7 @@ def _handle_batch(args):
     )
 
     batch_exporter = BatchExporter(output_dir, options)
-    file_paths = [str(f) for f in uasset_files]
+    file_paths = [str(f) for f in package_files]
     batch_result = batch_exporter.export_files(file_paths)
 
     # Report
