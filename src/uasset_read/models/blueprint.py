@@ -8,7 +8,7 @@ Per D-06: 数据和序列化解耦，from_archive 为 stub。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Self, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -36,7 +36,7 @@ class FunctionParameter:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "FunctionParameter":
         _raise_metadata_from_archive_not_supported()
 
 
@@ -48,7 +48,7 @@ class MulticastDelegate:
     is_callable_in_blueprint: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "MulticastDelegate":
         _raise_metadata_from_archive_not_supported()
 
 
@@ -79,7 +79,7 @@ class BlueprintEvent:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "BlueprintEvent":
         _raise_metadata_from_archive_not_supported()
 
 
@@ -119,7 +119,7 @@ class BlueprintFunction:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "BlueprintFunction":
         _raise_metadata_from_archive_not_supported()
 
 
@@ -166,7 +166,7 @@ class BlueprintVariable:
     edit_widget: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "BlueprintVariable":
         _raise_metadata_from_archive_not_supported()
 
 
@@ -181,5 +181,5 @@ class BlueprintMetadata:
     events: List[BlueprintEvent] = field(default_factory=list)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "BlueprintMetadata":
         _raise_metadata_from_archive_not_supported()

@@ -8,7 +8,7 @@ Per D-06: 数据和序列化解耦。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple, Dict, Self, TYPE_CHECKING
+from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -30,7 +30,7 @@ class K2NodeCallFunction(UEdGraphNode):
         name_map: List[str],
         import_map: List[ObjectImport],
         export_map: List[ObjectExport]
-    ) -> Self:
+    ) -> "K2NodeCallFunction":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_call_function
         return read_k2node_call_function(archive, name_map, import_map, export_map)
@@ -49,7 +49,7 @@ class K2NodeEvent(UEdGraphNode):
         name_map: List[str],
         import_map: List[ObjectImport],
         export_map: List[ObjectExport]
-    ) -> Self:
+    ) -> "K2NodeEvent":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_event
         return read_k2node_event(archive, name_map, import_map, export_map)
@@ -60,7 +60,7 @@ class K2NodeKnot(UEdGraphNode):
     """K2Node_Knot 重定向节点，无额外字段。"""
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "K2NodeKnot":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_knot
         return read_k2node_knot(archive)
@@ -75,7 +75,7 @@ class EdGraphNodeComment(UEdGraphNode):
     font_size: int = 14
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
+    def from_archive(cls, archive: FArchive) -> "EdGraphNodeComment":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_edgraph_node_comment
         return read_edgraph_node_comment(archive)
@@ -88,7 +88,7 @@ class K2NodeEnhancedInputAction(UEdGraphNode):
     trigger_events: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeEnhancedInputAction":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_enhanced_input
         return read_k2node_enhanced_input(archive, name_map)
@@ -108,7 +108,7 @@ class K2NodeFunctionEntry(UEdGraphNode):
         name_map: List[str],
         import_map: List[ObjectImport],
         export_map: List[ObjectExport]
-    ) -> Self:
+    ) -> "K2NodeFunctionEntry":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_functionentry
         return read_k2node_functionentry(archive, name_map, import_map, export_map)
@@ -127,7 +127,7 @@ class K2NodeMessage(UEdGraphNode):
         name_map: List[str],
         import_map: List[ObjectImport],
         export_map: List[ObjectExport]
-    ) -> Self:
+    ) -> "K2NodeMessage":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_k2node_message
         return read_k2node_message(archive, name_map, import_map, export_map)
@@ -139,7 +139,7 @@ class K2NodeCallDelegate(UEdGraphNode):
     delegate_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeCallDelegate":
         from uasset_read.serializers.graph import read_k2node_call_delegate
         return read_k2node_call_delegate(archive, name_map)
 
@@ -150,7 +150,7 @@ class K2NodeCallArrayFunction(UEdGraphNode):
     function_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeCallArrayFunction":
         from uasset_read.serializers.graph import read_k2node_call_array_function
         return read_k2node_call_array_function(archive, name_map)
 
@@ -161,7 +161,7 @@ class K2NodeCallParentFunction(UEdGraphNode):
     function_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeCallParentFunction":
         from uasset_read.serializers.graph import read_k2node_call_parent_function
         return read_k2node_call_parent_function(archive, name_map)
 
@@ -172,7 +172,7 @@ class K2NodeFunctionResult(UEdGraphNode):
     function_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeFunctionResult":
         from uasset_read.serializers.graph import read_k2node_function_result
         return read_k2node_function_result(archive, name_map)
 
@@ -183,7 +183,7 @@ class K2NodeCreateWidget(UEdGraphNode):
     widget_class: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeCreateWidget":
         from uasset_read.serializers.graph import read_k2node_create_widget
         return read_k2node_create_widget(archive, name_map)
 
@@ -194,7 +194,7 @@ class K2NodeAddDelegate(UEdGraphNode):
     delegate_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeAddDelegate":
         from uasset_read.serializers.graph import read_k2node_add_delegate
         return read_k2node_add_delegate(archive, name_map)
 
@@ -205,7 +205,7 @@ class K2NodeMacroInstance(UEdGraphNode):
     macro_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeMacroInstance":
         from uasset_read.serializers.graph import read_k2node_macro_instance
         return read_k2node_macro_instance(archive, name_map)
 
@@ -216,7 +216,7 @@ class K2NodeAssignDelegate(UEdGraphNode):
     delegate_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeAssignDelegate":
         from uasset_read.serializers.graph import read_k2node_assign_delegate
         return read_k2node_assign_delegate(archive, name_map)
 
@@ -228,7 +228,7 @@ class K2NodeGetDataTableRow(UEdGraphNode):
     row_struct_name: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeGetDataTableRow":
         from uasset_read.serializers.graph import read_k2node_get_data_table_row
         return read_k2node_get_data_table_row(archive, name_map)
 
@@ -239,7 +239,7 @@ class K2NodeLoadAsset(UEdGraphNode):
     asset_type: Optional[object] = None
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeLoadAsset":
         from uasset_read.serializers.graph import read_k2node_load_asset
         return read_k2node_load_asset(archive, name_map)
 
@@ -250,6 +250,6 @@ class K2NodeSpawnActorFromClass(UEdGraphNode):
     spawn_class: Optional[object] = None
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: List[str]) -> Self:
+    def from_archive(cls, archive: FArchive, name_map: List[str]) -> "K2NodeSpawnActorFromClass":
         from uasset_read.serializers.graph import read_k2node_spawn_actor_from_class
         return read_k2node_spawn_actor_from_class(archive, name_map)
