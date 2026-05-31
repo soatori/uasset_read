@@ -39,7 +39,7 @@ def enrich_decompiled_functions(
 
 def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, Any]]:
     """Extract readable event -> function call mappings from EventGraph."""
-    from uasset_read.graph import build_execution_flows
+    from uasset_read.graph import build_execution_flow_entries
 
     graph_obj = next((graph for graph in graphs if graph.graph_name == "EventGraph"), None)
     if graph_obj is None:
@@ -47,7 +47,7 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
     results: List[Dict[str, Any]] = []
     node_by_guid = {node.node_guid: node for node in graph_obj.nodes}
 
-    for flow in build_execution_flows(graph_obj):
+    for flow in build_execution_flow_entries(graph_obj):
         nodes = flow.get("nodes", [])
         event_info = next((node for node in nodes if node.get("node_type") == "K2Node_Event"), None)
         call_info = next((node for node in nodes if node.get("node_type") == "K2Node_CallFunction"), None)
