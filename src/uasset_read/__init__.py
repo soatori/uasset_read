@@ -97,6 +97,7 @@ from .serializers import (
     resolve_class_name,
     detect_blueprint_generated_class,
     detect_circular_deps,
+    validate_package_index,
     # 图序列化（Phase 31）
     read_ue_graph, read_ue_graph_node, read_ue_graph_pin,
     read_ed_graph_pin_type, read_fmember_reference,
@@ -188,6 +189,16 @@ from .parsers import (
     parse_verse_class_property,
     parse_verse_function_property,
     parse_verse_dynamic_property,
+    # 辅助函数（测试依赖）
+    _extract_struct_type_from_tag,
+    _extract_map_types_from_tag,
+    _extract_set_type_from_tag,
+    _extract_enum_type_from_tag,
+    # 共享辅助函数（parsers/utils.py）
+    resolve_name_from_index,
+    read_validated_count,
+    make_enum_value,
+    extract_inner_from_tag,
 )
 
 # 蓝图模块（Phase 30）
@@ -195,6 +206,7 @@ from .blueprint import (
     extract_blueprint_variables,
     parse_component_transform,
     extract_blueprint_metadata,
+    extract_components,
 )
 
 # 图解析模块（Phase 31 Wave 3, Phase 71）
@@ -211,6 +223,9 @@ from .graph import (
     _derive_node_name,
     build_execution_chains_from_flows,  # Phase 71 (N2C compat)
     write_pin_trace_report,
+    is_function_graph,
+    build_function_graphs,
+    write_phase75_diagnostic,
 )
 
 # 格式化模块（Phase 32 Wave 1-2）
@@ -277,6 +292,9 @@ from .kismet import (
     KismetExpression, KismetExpressionT,
     EXPR_CLASS_MAP,
     FKismetPropertyPointer, FFieldPath,
+    FKismetArchive,
+    USTRUCT_TYPES,
+    reset_bpgc_cache,
 )
 
 # Kismet C++ translator (Phase 63)
@@ -301,7 +319,7 @@ from .kismet import (
 
 # Kismet decompilation pipeline (Phase 64)
 from .kismet.result import KismetDecompiledResult
-from .kismet.pipeline import decompile_uasset
+from .kismet.pipeline import decompile_uasset, decompile_single_function
 
 # Agent translation pipeline (Phase 66)
 from .agent.translator import AgentTranslationPipeline, translate_blueprint_to_cpp
@@ -312,6 +330,9 @@ from .n2c import (
     N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
     to_n2c_json, from_n2c_json,
     N2C_JSON_SCHEMA, validate_n2c_json,
+    N2CNodeDefinition, N2CNodeType, N2CNodeProcessor,
+    N2CProcessorRegistry, N2CNodeTypeRegistry,
+    extract_data_flow_map,
 )
 
 # Export system (Phase Export)
@@ -329,6 +350,14 @@ from .exporter import (
 from .cpp_gen import (
     CppProperty, CppHeaderMeta, CppClassIR,
     format_cpp_class_json, format_cpp_header,
+    UE_TO_CPP_TYPE_MAP, ENGINE_CLASS_PATHS,
+    ue_path_to_cpp_type, ue_package_path_to_cpp_class,
+    CPF_TO_UPROPERTY_MAP, cpf_flags_to_uproperty_marks,
+    extract_cpp_class_skeleton, extract_cpp_constructor,
+    format_cpp_call_statements, CppCallParameter, CppMethodIR, CppCallStatement,
+    format_cpp_default_value, format_cpp_transform,
+    format_cpp_component_init, format_cpp_input_action_load,
+    build_constructor_sections, format_cpp_constructor,
 )
 
 # Version management (Phase 76, COR-02)
@@ -336,12 +365,19 @@ from .versioning import (
     VersionContainer, build_version_container, EUEVersion,
 )
 
-# 以下函数等待后续 plan 完成后追加：
-# read_property_tag, read_blueprint_variable,
-# parse_property_flags_to_labels, parse_default_value,
-# read_k2node_call_function, read_k2node_event, read_k2node_knot,
-# read_edgraph_node_comment, read_k2node_enhanced_input
-# 注：read_k2node_* 已在 serializers import 中导出
+# Link module -- PackageLinker, UObjectInstance, LinkerParseResult
+from .link import (
+    PackageLinker, UObjectInstance, LinkerParseResult,
+)
+
+# Pak module (Phase 77)
+from .pak import (
+    PAK_FILE_MAGIC, PakFileVersion, ECompressionFlags,
+    Flag_Encrypted, Flag_Deleted, MaxNumCompressionMethods, PAK_INFO_SIZES,
+    FPakCompressedBlock, FPakEntry, FPakInfo, FPakDirectoryEntry, read_fstring,
+    decompress_block, decompress_entry,
+    PakFileReader,
+)
 
 # 公共API导出控制（per D-09）
 __all__ = [
@@ -422,6 +458,7 @@ __all__ = [
     "read_import_map", "read_export_map", "detect_blueprint",
     "build_imports_list", "get_asset_class", "resolve_class_name",
     "detect_blueprint_generated_class", "detect_circular_deps",
+    "validate_package_index",
     # 图序列化（Phase 31）
     "read_ue_graph", "read_ue_graph_node", "read_ue_graph_pin",
     "read_ed_graph_pin_type", "read_fmember_reference", "create_node_from_archive",
@@ -495,10 +532,21 @@ __all__ = [
     "parse_verse_class_property",
     "parse_verse_function_property",
     "parse_verse_dynamic_property",
+    # 辅助函数（测试依赖）
+    "_extract_struct_type_from_tag",
+    "_extract_map_types_from_tag",
+    "_extract_set_type_from_tag",
+    "_extract_enum_type_from_tag",
+    # parsers/utils.py 辅助函数
+    "resolve_name_from_index",
+    "read_validated_count",
+    "make_enum_value",
+    "extract_inner_from_tag",
     # 蓝图模块（Phase 30）
     "extract_blueprint_variables",
     "parse_component_transform",
     "extract_blueprint_metadata",
+    "extract_components",
     # 主解析管线（Phase 33）
     "parse_uasset",
     "parse_uasset_with_linker",
@@ -512,6 +560,9 @@ __all__ = [
     "build_execution_chains",  # Phase 71
     "build_execution_chains_from_flows",  # Phase 71
     "write_pin_trace_report",
+    "is_function_graph",
+    "build_function_graphs",
+    "write_phase75_diagnostic",
     # 格式化函数（Phase 33 — 依赖 Phase 32）
     "format_json_full",
     "format_json_summary",
@@ -581,6 +632,9 @@ __all__ = [
     "EXPR_CLASS_MAP",
     "FKismetPropertyPointer",
     "FFieldPath",
+    "FKismetArchive",
+    "USTRUCT_TYPES",
+    "reset_bpgc_cache",
     # Kismet translator (Phase 63)
     "KismetTranslator",
     "MathFunctionCleaner",
@@ -598,6 +652,7 @@ __all__ = [
     # Kismet decompilation pipeline (Phase 64)
     "KismetDecompiledResult",
     "decompile_uasset",
+    "decompile_single_function",
     # Agent translation pipeline (Phase 66)
     "AgentTranslationPipeline",
     "translate_blueprint_to_cpp",
@@ -613,6 +668,12 @@ __all__ = [
     "from_n2c_json",
     "N2C_JSON_SCHEMA",
     "validate_n2c_json",
+    "N2CNodeDefinition",
+    "N2CNodeType",
+    "N2CNodeProcessor",
+    "N2CProcessorRegistry",
+    "N2CNodeTypeRegistry",
+    "extract_data_flow_map",
     # Export system (Phase Export)
     "ExportOptions",
     "IExporter",
@@ -627,8 +688,46 @@ __all__ = [
     "CppClassIR",
     "format_cpp_class_json",
     "format_cpp_header",
+    "UE_TO_CPP_TYPE_MAP",
+    "ENGINE_CLASS_PATHS",
+    "ue_path_to_cpp_type",
+    "ue_package_path_to_cpp_class",
+    "CPF_TO_UPROPERTY_MAP",
+    "cpf_flags_to_uproperty_marks",
+    "extract_cpp_class_skeleton",
+    "extract_cpp_constructor",
+    "format_cpp_call_statements",
+    "CppCallParameter",
+    "CppMethodIR",
+    "CppCallStatement",
+    "format_cpp_default_value",
+    "format_cpp_transform",
+    "format_cpp_component_init",
+    "format_cpp_input_action_load",
+    "build_constructor_sections",
+    "format_cpp_constructor",
     # Version management (Phase 76)
     "VersionContainer",
     "build_version_container",
     "EUEVersion",
+    # Link module
+    "PackageLinker",
+    "UObjectInstance",
+    "LinkerParseResult",
+    # Pak module (Phase 77)
+    "PAK_FILE_MAGIC",
+    "PakFileVersion",
+    "ECompressionFlags",
+    "Flag_Encrypted",
+    "Flag_Deleted",
+    "MaxNumCompressionMethods",
+    "PAK_INFO_SIZES",
+    "FPakCompressedBlock",
+    "FPakEntry",
+    "FPakInfo",
+    "FPakDirectoryEntry",
+    "read_fstring",
+    "decompress_block",
+    "decompress_entry",
+    "PakFileReader",
 ]
