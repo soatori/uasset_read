@@ -16,6 +16,7 @@ from .flow_builder import (
     _derive_node_name,
     is_function_graph,
     build_function_graphs,  # Phase 55
+    build_blueprint_node_index,
 )
 from .chain_builder import (
     build_execution_chains,  # Phase 71
@@ -35,6 +36,7 @@ __all__ = [
     "_derive_node_name",
     "is_function_graph",
     "build_function_graphs",
+    "build_blueprint_node_index",
     "build_execution_chains",
     "build_execution_chains_from_flows",
     "write_pin_trace_report",
