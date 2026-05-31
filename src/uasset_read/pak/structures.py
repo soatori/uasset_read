@@ -220,6 +220,7 @@ class FPakEntry:
             entry.offset = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
+        # Read UncompressedSize
         if uncompressed_size_fits_32:
             entry.uncompressed_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -227,20 +228,26 @@ class FPakEntry:
             entry.uncompressed_size = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        if size_fits_32:
-            entry.size = struct.unpack_from('<I', data, offset)[0]
-            offset += 4
-        else:
-            entry.size = struct.unpack_from('<q', data, offset)[0]
-            offset += 8
+        # Size defaults to UncompressedSize
+        entry.size = entry.uncompressed_size
+
+        # Read CompressedSize only if entry is compressed
+        if entry.compression_method_index > 0:
+            if size_fits_32:
+                entry.size = struct.unpack_from('<I', data, offset)[0]
+                offset += 4
+            else:
+                entry.size = struct.unpack_from('<q', data, offset)[0]
+                offset += 8
 
         # Block size: 0x3F means read from stream
         if block_size_index == 0x3F:
             entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
         else:
-            # Block size index maps to actual size (implementation-specific)
-            entry.compression_block_size = block_size_index * 1024  # common mapping
+            # Block size index maps to actual size
+            # UE 源码: (bitfield & 0x3f) << 11 = index * 2048
+            entry.compression_block_size = block_size_index << 11
 
         entry.is_compressed = entry.compression_method_index > 0
         entry.flags = Flag_Encrypted if entry.is_encrypted else 0
