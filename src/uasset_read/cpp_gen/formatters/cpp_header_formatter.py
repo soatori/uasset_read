@@ -333,12 +333,9 @@ def _format_default_value(cpp_type: str, value: any) -> str:
 def _format_method_declaration(method: CppMethodIR) -> List[str]:
     """将 CppMethodIR 渲染为 .h 声明行列表。
 
-    改进：支持 is_static、is_virtual、is_pure 等新字段。
-
     Examples:
         Move → ["    UFUNCTION(BlueprintCallable)", "    void Move(double LeftRight, double ForwardBackward);"]
         PrimaryThumbstick → ["    void PrimaryThumbstick(double Axis_X, double Axis_Y) override;"]
-        Aim → ["    UFUNCTION(BlueprintPure)", "    static float GetAimAngle();"]
     """
     lines: List[str] = []
 
@@ -350,19 +347,15 @@ def _format_method_declaration(method: CppMethodIR) -> List[str]:
     # 参数列表
     param_str = ", ".join(f"{p.cpp_type} {p.name}" for p in method.parameters)
 
+    # 声明
+    decl = f"    {method.return_type} {method.cpp_name}({param_str})"
+
     # 修饰符
     modifiers = []
-    if method.is_static:
-        modifiers.append("static")
-    if method.is_virtual and not method.is_override:
-        modifiers.append("virtual")
     if method.is_const:
         modifiers.append("const")
     if method.is_override:
         modifiers.append("override")
-
-    # 构建声明
-    decl = f"    {method.return_type} {method.cpp_name}({param_str})"
 
     if modifiers:
         decl += " " + " ".join(modifiers)
