@@ -10,7 +10,7 @@ Per D-12: 静态 from_archive 方法（Phase 31 实现）。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any, Dict, Self, TYPE_CHECKING
+from typing import Optional, List, Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -42,7 +42,7 @@ class FEdGraphPinType:
         archive: FArchive,
         name_map: List[str],
         summary: PackageFileSummary
-    ) -> Self:
+    ) -> "FEdGraphPinType":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ed_graph_pin_type
         return read_ed_graph_pin_type(archive, name_map, summary)
@@ -95,7 +95,7 @@ class UEdGraphPin:
         summary: PackageFileSummary,
         export_map: List[ObjectExport],
         import_map: List[ObjectImport]
-    ) -> Self:
+    ) -> "UEdGraphPin":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ue_graph_pin
         return read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
@@ -109,7 +109,7 @@ class UEdGraphPin:
         export_map: List[ObjectExport],
         import_map: List[ObjectImport],
         linker: Optional["PackageLinker"] = None,
-    ) -> Self:
+    ) -> "UEdGraphPin":
         """带 linker 的读取入口，支持 PackageIndex → UObjectInstance 解析（D-09）。"""
         from uasset_read.serializers.graph import read_ue_graph_pin
         from uasset_read.serializers.object_resources import PackageIndex
@@ -143,7 +143,7 @@ class UEdGraphNode:
         export_map: List[ObjectExport],
         import_map: List[ObjectImport],
         node_export: ObjectExport
-    ) -> Self:
+    ) -> "UEdGraphNode":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ue_graph_node
         return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
@@ -158,7 +158,7 @@ class UEdGraphNode:
         import_map: List[ObjectImport],
         node_export: ObjectExport,
         linker: Optional["PackageLinker"] = None,
-    ) -> Self:
+    ) -> "UEdGraphNode":
         """带 linker 的读取入口（D-09）。"""
         from uasset_read.serializers.graph import read_ue_graph_node
         return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
@@ -185,7 +185,7 @@ class UEdGraph:
         graph_export: ObjectExport,
         graph_class: str,
         graph_export_idx: int = 0
-    ) -> Self:
+    ) -> "UEdGraph":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_ue_graph
         return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx)
@@ -202,7 +202,7 @@ class UEdGraph:
         graph_class: str,
         graph_export_idx: int = 0,
         linker: Optional["PackageLinker"] = None,
-    ) -> Self:
+    ) -> "UEdGraph":
         """带 linker 的读取入口（D-09）。"""
         from uasset_read.serializers.graph import read_ue_graph
         return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx, linker)
@@ -223,7 +223,7 @@ class FMemberReference:
         name_map: List[str],
         import_map: List[ObjectImport],
         export_map: List[ObjectExport]
-    ) -> Self:
+    ) -> "FMemberReference":
         """延迟导入避免循环依赖。"""
         from uasset_read.serializers.graph import read_fmember_reference
         return read_fmember_reference(archive, name_map, import_map, export_map)
