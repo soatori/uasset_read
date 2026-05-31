@@ -55,5 +55,11 @@ reports/
 .playwright-mcp/
 memory/
 
+# CodeGraph local data
+.codegraph/
+
+# Test files
+tests/
+
 # Claude Code skill
 QWEN.md

@@ -1,4 +1,4 @@
-"""批量导出 — 将多个 .uasset/.umap 文件导出到结构化目录。
+"""批量导出 — 将多个 .uasset 文件导出到结构化目录。
 
 等价于 CUE4Parse 的 TryWriteToDir 模式。
 目录结构：
@@ -37,7 +37,7 @@ class BatchExportResult:
 class BatchExporter:
     """批量导出器。
 
-    将多个 .uasset/.umap 文件解析并导出到指定目录结构。
+    将多个 .uasset 文件解析并导出到指定目录结构。
     """
 
     def __init__(self, output_dir: str, options: "ExportOptions"):
@@ -45,7 +45,7 @@ class BatchExporter:
         self.options = options
 
     def export_files(self, file_paths: list[str]) -> BatchExportResult:
-        """导出多个 .uasset/.umap 文件。
+        """导出多个 .uasset 文件。
 
         Args:
             file_paths: .uasset 文件路径列表
@@ -66,7 +66,7 @@ class BatchExporter:
 
     def _export_single(self, file_path: str, batch_result: BatchExportResult) -> None:
         """导出单个文件。"""
-        from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
+        from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
         from uasset_read.exporter.base import IExporter
 
         # 解析
@@ -75,7 +75,7 @@ class BatchExporter:
             if self.options.format in ("cpp_skeleton", "cpp_json_ir"):
                 parse_result = parse_uasset_with_linker(file_path)
             else:
-                parse_result = parse_package(file_path)
+                parse_result = parse_uasset(file_path)
         except Exception as e:
             batch_result.failed.append((file_path, f"parse error: {e}"))
             return
@@ -102,8 +102,7 @@ class BatchExporter:
             return
 
         try:
-            file_options = self._options
-            file_options.output_path = str(out_path)
+            file_options = self._options._replace(output_path=str(out_path))
             exporter.export_to_file(parse_result, file_options)
             batch_result.success.append(str(out_path))
         except Exception as e:
