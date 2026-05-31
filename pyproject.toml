@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uasset_read"
-version = "0.3.3-dev"
+version = "0.3.3"
 description = "Unreal Engine .uasset file parser for AI agents"
 readme = "README.md"
 requires-python = ">=3.10"

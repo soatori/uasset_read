@@ -63,3 +63,11 @@ tests/
 
 # Claude Code skill
 QWEN.md
+
+# AI agent plans, specs, and reports (keep local only)
+docs/superpowers/plans/
+docs/superpowers/specs/
+docs/firstperson_blueprint_test_report.md
+docs/reference/CUE4Parse-*.md
+docs/reference/refactor-reference.md
+

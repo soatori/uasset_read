@@ -2,7 +2,7 @@
 Kismet 表达式系统 — 特殊表达式。
 
 包含 switch/instrumentation/常量/自引用等特殊表达式类型。
-对应 CUE4Parse EX_Return, EX_Assert, EX_SwitchValue, EX_InstrumentationEvent 等。
+对应 EX_Return, EX_Assert, EX_SwitchValue, EX_InstrumentationEvent 等。
 """
 
 from __future__ import annotations

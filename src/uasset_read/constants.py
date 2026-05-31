@@ -96,7 +96,7 @@ UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017
 UE5_IMPORT_TYPE_HIERARCHIES = 1018
 
 # ============================================================================
-# UE4 版本常量（对应 CUE4Parse EUnrealEngineObjectUE4Version）
+# UE4 版本常量（对应 EUnrealEngineObjectUE4Version）
 # ============================================================================
 
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516

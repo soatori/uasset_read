@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 class UObject:
     """UObject 基类
 
-    等价实现 CUE4Parse UObject.cs
+    等价实现 UObject.cs
     """
     name: str = ""
     flags: int = 0

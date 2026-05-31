@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class ExportOptions:
     """统一导出配置。
 
-    受 CUE4Parse ExporterOptions 启发，但针对蓝图解析场景简化。
+    受 ExporterOptions 启发，但针对蓝图解析场景简化。
     """
     # 输出格式：json / json_summary / text / text_summary / markdown /
     #           blueprint_text / n2c / cpp_skeleton / cpp_json_ir

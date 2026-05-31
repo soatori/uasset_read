@@ -1,6 +1,6 @@
 """Texture2D 资产属性提取器。
 
-参考 CUE4Parse UTexture2D.cs:
+参考 UTexture2D.cs:
   ImportedSize → AddressX/Y → bCooked → PixelFormat → BulkData per MIP
 """
 from __future__ import annotations

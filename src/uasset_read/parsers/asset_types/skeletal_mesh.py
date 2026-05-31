@@ -1,6 +1,6 @@
 """SkeletalMesh 资产属性提取器。
 
-参考 CUE4Parse USkeletalMesh.cs:
+参考 USkeletalMesh.cs:
   bCooked → LODs → FReferenceSkeleton → VertexBufferGPUSkin → Chunks/Sections
 """
 from __future__ import annotations

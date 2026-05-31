@@ -1,6 +1,6 @@
 ﻿"""ObjectTypeRegistry — UObject 类型注册表
 
-等价实现 CUE4Parse ObjectTypeRegistry.cs
+等价实现 ObjectTypeRegistry.cs
 """
 from __future__ import annotations
 from typing import Dict, Type

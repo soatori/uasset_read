@@ -1,6 +1,6 @@
 """导出器注册表 — 格式名到导出器的映射与分发。
 
-等价于 CUE4Parse 的 Exporter 工厂模式。
+等价于 的 Exporter 工厂模式。
 使用类方法注册表，支持自动注册和手动注册。
 """
 from __future__ import annotations

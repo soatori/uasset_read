@@ -1,10 +1,10 @@
 """
 Kismet 表达式系统 — Token 枚举定义。
 
-镜像 CUE4Parse 的 EExprToken / ECastToken / EScriptInstrumentationType /
+镜像 的 EExprToken / ECastToken / EScriptInstrumentationType /
 EBlueprintTextLiteralType / EAutoRtfmStopTransactMode 枚举。
 
-参考：E:\\Develop\\lib\\CUE4Parse\\CUE4Parse\\UE4\\Kismet\\EExprToken.cs
+参考：E:\\Develop\\lib\\参考实现\\参考实现\\UE4\\Kismet\\EExprToken.cs
 """
 
 from enum import IntEnum
@@ -15,7 +15,7 @@ class EExprToken(IntEnum):
     Kismet 字节码 Token 枚举。
 
     值域 0x00-0xFF，对应 UE 蓝图脚本虚拟机指令集。
-    完全对齐 CUE4Parse EExprToken.cs。
+    完全对齐 EExprToken.cs。
     """
 
     # Variable references
