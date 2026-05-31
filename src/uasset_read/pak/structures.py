@@ -13,6 +13,7 @@ from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_FSTRING_LENGTH
 from uasset_read.pak.constants import (
     PAK_FILE_MAGIC,
+    PAK_FILE_MAGICS,
     PakFileVersion,
     PAK_INFO_SIZES,
     Flag_Encrypted,
@@ -336,7 +337,8 @@ class FPakInfo:
                 continue
 
             magic = struct.unpack('<I', raw)[0]
-            if magic != PAK_FILE_MAGIC:
+            # 检查标准魔数和游戏特定魔数
+            if magic not in PAK_FILE_MAGICS:
                 continue
 
             # Magic matched — read version field to determine exact version
