@@ -44,6 +44,8 @@ def _get_parse_functions():
         parse_interface_property, parse_field_path_property, parse_optional_property,
         parse_verse_string_property, parse_verse_class_property,
         parse_verse_function_property, parse_verse_dynamic_property,
+        parse_ansi_str_property, parse_verse_cell_property, parse_verse_value_property,
+        parse_double_property, parse_guid_property,
     )
     return {
         "BoolProperty": parse_bool_property,
@@ -56,7 +58,7 @@ def _get_parse_functions():
         "UInt32Property": parse_uint32_property,
         "UInt64Property": parse_uint64_property,
         "FloatProperty": parse_float_property,
-        "DoubleProperty": parse_float_property,
+        "DoubleProperty": parse_double_property,
         "StrProperty": parse_str_property,
         "NameProperty": parse_name_property,
         "ObjectProperty": parse_object_property,
@@ -85,6 +87,10 @@ def _get_parse_functions():
         "VerseClassProperty": parse_verse_class_property,
         "VerseFunctionProperty": parse_verse_function_property,
         "VerseDynamicProperty": parse_verse_dynamic_property,
+        "VerseCellProperty": parse_verse_cell_property,
+        "VerseValueProperty": parse_verse_value_property,
+        "AnsiStrProperty": parse_ansi_str_property,
+        "GuidProperty": parse_guid_property,
     }
 
 
@@ -104,9 +110,43 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     Returns:
         解析后的属性值，未知类型返回 None
     """
+    mappings = getattr(summary, "_mappings", None)
+    game = getattr(summary, "_game", None)
+
+    if getattr(tag, "serialize_type", "Property") == "Skipped":
+        raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        return {
+            "kind": "skipped_property",
+            "type": tag.type,
+            "size": tag.size,
+            "raw_data": raw_data,
+        }
+    if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
+        raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        return {
+            "kind": "binary_or_native_property",
+            "type": tag.type,
+            "size": tag.size,
+            "raw_data": raw_data,
+        }
+
     parsers = _get_parse_functions()
     handler = parsers.get(tag.type)
     if handler is None:
+        # D-05: 未知类型 — 尝试作为自定义属性处理 (0xFD/0xFE)
+        from uasset_read.parsers.custom_properties import CUSTOM_PROPERTY_HANDLERS, handle_custom_property
+        # 检查 type_parts 的第一个节点是否为自定义属性 ID
+        type_parts = getattr(tag, "type_parts", None)
+        if type_parts:
+            first_node_name = type_parts[0][0] if type_parts else ""
+            # 映射常见自定义属性名到 ID
+            custom_id_map = {"CustomProperty_FD": 0xFD, "CustomProperty_FE": 0xFE}
+            custom_id = custom_id_map.get(first_node_name)
+            if custom_id is not None:
+                return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+        game_key = game.lower() if game else None
+        if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
+            return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
         return None  # D-05: unknown type → None, no exception
 
     # Dispatch based on handler signature
@@ -123,7 +163,8 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
                      "MulticastSparseDelegateProperty",
                      "InterfaceProperty", "FieldPathProperty",
                      "VerseStringProperty", "VerseClassProperty",
-                     "VerseFunctionProperty", "VerseDynamicProperty"):
+                     "VerseFunctionProperty", "VerseDynamicProperty",
+                     "AnsiStrProperty", "GuidProperty"):
         return handler(tag, archive)
     elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
         return handler(tag, archive, name_map)
@@ -135,6 +176,8 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         return handler(tag, archive, name_map, export_map, summary)
     elif tag.type in ("EnumProperty",):
         return handler(tag, archive, name_map, summary)
+    elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
+        return handler(tag, archive)
 
 
 
@@ -146,6 +189,8 @@ def parse_properties_from_export(
     export_map: List[Any],
     import_map: Optional[List[ObjectImport]] = None,
     linker: Optional[Any] = None,
+    mappings: Optional[Any] = None,
+    game: Optional[str] = None,
 ) -> List[PropertyValue]:
     """从 export 条目读取所有属性（PROP-01）。
 
@@ -169,6 +214,10 @@ def parse_properties_from_export(
     """
     properties: List[PropertyValue] = []
     property_count = 0
+    if mappings is not None:
+        setattr(summary, "_mappings", mappings)
+    if game is not None:
+        setattr(summary, "_game", game)
 
     # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
@@ -230,7 +279,14 @@ def parse_properties_from_export(
             if current_pos >= property_end:
                 break
 
-            tag = read_property_tag(archive, name_map)
+            struct_name = None
+            if mappings is not None and import_map is not None:
+                try:
+                    from uasset_read.serializers.object_resources import resolve_class_name
+                    struct_name = resolve_class_name(export.class_index, import_map, export_map)
+                except Exception:
+                    struct_name = export.object_name
+            tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
 
             # 终止标记：Name == "None"
             if tag.name == "None":

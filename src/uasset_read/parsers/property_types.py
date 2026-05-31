@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from uasset_read.models.properties import (
     PropertyTag, PropertyValue,
     StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue,
+    SoftObjectPathValue,
 )
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
@@ -73,6 +74,10 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box3f": 24,             # 2 * Vector3f(12)
     "Matrix44f": 64,         # 4 * Plane4f(16)
     "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
+    # 动画/混合空间高频结构体（Phase 76 报告补充）
+    "FrameRate": 8,          # float Numerator + int32 Denominator
+    "AnimNotifyTrack": 8,    # int64 TrackIndex + float Duration 或类似
+    "GuidProperty": 16,      # FGuid 标准大小
 }
 
 
@@ -202,14 +207,11 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
-def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> Dict[str, str]:
+def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> SoftObjectPathValue:
     """解析 SoftObjectProperty（FSoftObjectPath）。"""
     asset_path = archive.read_fstring()
     sub_path = archive.read_fstring()
-    return {
-        "asset_path": asset_path,
-        "sub_path": sub_path
-    }
+    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
 def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
@@ -222,9 +224,11 @@ def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
-def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> int:
+def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """解析 LazyObjectProperty"""
-    return archive.read_i32()
+    read_size = tag.size if tag.size > 0 else 16
+    raw = archive.read_bytes(read_size)
+    return SoftObjectPathValue(raw_kind=tag.type, guid=raw.hex())
 
 
 def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
@@ -238,9 +242,9 @@ def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: Lis
     return parse_soft_object_property(tag, archive, name_map or [])
 
 
-def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> str:
+def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """解析 AssetObjectProperty"""
-    return archive.read_fstring()
+    return SoftObjectPathValue(raw_kind=tag.type, asset_path=archive.read_fstring())
 
 
 # ============================================================================
@@ -830,6 +834,77 @@ def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
 def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
     """解析 VerseDynamicProperty"""
     return archive.read_i32()
+
+
+def parse_ansi_str_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 AnsiStrProperty — UE4/老版本资产中的 ANSI 字符串。
+
+    与 FString 使用相同的长度前缀格式，但内容以 Latin-1 解码而非 UTF-8/UTF-16。
+    """
+    return archive.read_fstring()  # read_fstring 已经处理长度前缀字符串
+
+
+def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
+    """解析 VerseCellProperty（UE5.6+ Verse 脚本系统）。
+
+    VerseCell 引用指向 Verse 文件中的单元格，序列化格式为 PackageIndex + 名称索引。
+    当前返回原始引用值，完整解析需要 Verse 文件系统。
+    """
+    start = archive.tell()
+    package_index = archive.read_i32() if tag.size >= 4 else 0
+    name_index = archive.read_i32() if tag.size >= 8 else -1
+    consumed = archive.tell() - start
+    raw = archive.read_bytes(tag.size - consumed) if tag.size > consumed else b""
+    return {
+        "kind": "VerseCellProperty",
+        "ref": {"package_index": package_index, "name_index": name_index},
+        "raw": raw,
+    }
+
+
+def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
+    """解析 VerseValueProperty（UE5.6+ Verse 脚本系统）。
+
+    VerseValue 是 Verse 类型系统的运行时值容器，序列化包含类型标签 + 值。
+    当前读取类型标签和原始数据，完整解析需要 Verse 类型系统知识。
+    """
+    start = archive.tell()
+    type_tag = archive.read_u8() if tag.size >= 1 else 0
+    value_data = None
+    try:
+        if tag.size > 1:
+            value_data = archive.read_fstring()
+    except Exception:
+        archive.seek(start + 1)
+    consumed = archive.tell() - start
+    raw = archive.read_bytes(tag.size - consumed) if tag.size > consumed else b""
+    return {
+        "kind": "VerseValueProperty",
+        "type_tag": type_tag,
+        "value": value_data,
+        "raw": raw,
+    }
+
+
+def parse_double_property(tag: PropertyTag, archive: FArchive) -> float:
+    """解析 DoubleProperty（独立解析器）。"""
+    return archive.read_f64()
+
+
+def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
+    """解析 GuidProperty — FGuid 结构体（16 字节）。
+
+    返回标准十六进制字符串格式的 GUID，如 "A1B2C3D4-E5F6-...".
+    """
+    data = archive.read_bytes(16)
+    # 标准 GUID 格式: 8-4-4-4-12 十六进制
+    return (
+        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
+        f"{data[4]:02x}{data[5]:02x}-"
+        f"{data[6]:02x}{data[7]:02x}-"
+        f"{data[8]:02x}{data[9]:02x}-"
+        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
+    )
 
 
 # ============================================================================

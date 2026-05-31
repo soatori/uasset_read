@@ -20,9 +20,89 @@ from uasset_read.constants import (
     PROP_TAG_BOOL_TRUE,
     PROP_TAG_SKIPPED_SERIALIZE,
 )
-from uasset_read.models.properties import PropertyTag
+from uasset_read.models.properties import PropertyTag, PropertyTypeName
 
 T = TypeVar("T")
+
+
+def _read_property_type_name(
+    archive: FArchive,
+    name_map: List[str],
+    max_nodes: int = 20,
+) -> PropertyTypeName:
+    """读取 FPropertyTypeName 前序节点并恢复递归树。
+
+    部分资产的非标准 payload 会让 inner_count 看起来异常大。这里沿用旧实现的
+    20 节点读取上限，避免在 PropertyTag 层直接失败。
+    """
+    parts: List[Tuple[str, int]] = []
+    pending = 1
+    while pending > 0 and len(parts) < max_nodes:
+        node_name = archive.read_name(name_map)
+        inner_count = archive.read_i32()
+        parts.append((node_name, inner_count))
+        pending = pending - 1 + max(inner_count, 0)
+
+    def build(index: int) -> Tuple[PropertyTypeName, int]:
+        name, count = parts[index]
+        index += 1
+        children: List[PropertyTypeName] = []
+        for _ in range(max(count, 0)):
+            if index >= len(parts):
+                break
+            child, index = build(index)
+            children.append(child)
+        return PropertyTypeName(name, children), index
+
+    if not parts:
+        return PropertyTypeName("")
+    return build(0)[0]
+
+
+def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
+    """将递归类型或 mappings.PropertyType 派生到 PropertyTag 兼容字段。"""
+    if prop_type is None:
+        return
+
+    name = getattr(prop_type, "name", None) or getattr(prop_type, "type", None)
+    children = getattr(prop_type, "children", None)
+    if name:
+        tag.type = name
+    if hasattr(prop_type, "struct_type") and getattr(prop_type, "struct_type"):
+        tag.struct_type = getattr(prop_type, "struct_type")
+    if hasattr(prop_type, "enum_name") and getattr(prop_type, "enum_name"):
+        tag.enum_type = getattr(prop_type, "enum_name")
+
+    def child_type(index: int) -> Any:
+        if children is not None:
+            return children[index] if index < len(children) else None
+        if index == 0:
+            return getattr(prop_type, "inner_type", None)
+        if index == 1:
+            return getattr(prop_type, "value_type", None)
+        return None
+
+    if tag.type == "StructProperty":
+        struct_child = child_type(0)
+        if struct_child is not None:
+            tag.struct_type = (getattr(struct_child, "name", None) or getattr(struct_child, "type", None) or "").split(".")[-1]
+    elif tag.type in ("ArrayProperty", "SetProperty", "OptionalProperty"):
+        inner = child_type(0)
+        if inner is not None:
+            tag.inner_type = getattr(inner, "name", None) or getattr(inner, "type", None)
+    elif tag.type == "MapProperty":
+        key = child_type(0)
+        value = child_type(1)
+        if key is not None:
+            tag.key_type = getattr(key, "name", None) or getattr(key, "type", None)
+        if value is not None:
+            tag.value_type = getattr(value, "name", None) or getattr(value, "type", None)
+    elif tag.type in ("ByteProperty", "EnumProperty"):
+        enum_child = child_type(0)
+        if enum_child is not None:
+            enum_name = getattr(enum_child, "name", None) or getattr(enum_child, "type", None)
+            if enum_name and enum_name != "None":
+                tag.enum_type = enum_name
 
 
 def parse_ctrl_flags(flags: int) -> dict:
@@ -51,6 +131,8 @@ def read_property_tag(
     name_map: List[str],
     tolerant: bool = False,
     summary: Optional[Any] = None,  # 向后兼容，接受但不使用
+    mappings: Optional[Any] = None,
+    struct_name: Optional[str] = None,
 ) -> PropertyTag:
     """从 archive 读取 PropertyTag 结构（UE5.7 专用）。
 
@@ -71,39 +153,26 @@ def read_property_tag(
     if tag.name == "None":
         return tag
 
-    # UE5 format: FPropertyTypeName nodes
-    type_parts: List[Tuple[str, int]] = []
-    pending = 1
-    while pending > 0 and len(type_parts) < 20:
-        node_name = archive.read_name(name_map)
-        inner_count = archive.read_i32()
-        type_parts.append((node_name, inner_count))
-        pending = pending - 1 + inner_count
+    tag.type_name = _read_property_type_name(archive, name_map)
+    tag.type_parts = tag.type_name.to_parts()
+    _apply_property_type_to_tag(tag, tag.type_name)
 
-    tag.type = type_parts[0][0] if type_parts else ""
-    tag.type_parts = type_parts
-
-    # Extract enum_type for ByteProperty/EnumProperty from FPropertyTypeName nodes
-    # Per: ByteProperty with enum backing reads FName (8 bytes), not single byte
-    # Format: [('ByteProperty', 1), ('EnumName', 1), ('/Script/Module', 0)]
-    if tag.type in ("ByteProperty", "EnumProperty") and len(type_parts) >= 2:
-        enum_type_name = type_parts[1][0]
-        if enum_type_name and enum_type_name != "None":
-            tag.enum_type = enum_type_name
-    if tag.type == "StructProperty" and len(type_parts) >= 2:
-        struct_type_name = type_parts[1][0]
-        if struct_type_name and struct_type_name != "None":
-            tag.struct_type = struct_type_name.split(".")[-1]
-    elif tag.type == "ArrayProperty" and len(type_parts) >= 2:
-        tag.inner_type = type_parts[1][0]
-    elif tag.type == "SetProperty" and len(type_parts) >= 2:
-        tag.inner_type = type_parts[1][0]
-    elif tag.type == "MapProperty" and len(type_parts) >= 3:
-        tag.key_type = type_parts[1][0]
-        tag.value_type = type_parts[2][0]
+    mapping_container = getattr(mappings, "mappings", mappings)
+    struct_mapping = mapping_container.get_struct(struct_name) if mapping_container is not None and hasattr(mapping_container, "get_struct") else None
+    if struct_mapping is not None:
+        prop_info = struct_mapping.property_by_name(tag.name)
+        if prop_info is not None:
+            tag.tag_data = prop_info.mapping_type
+            _apply_property_type_to_tag(tag, prop_info.mapping_type)
     tag.size = archive.read_i32()
     archive.validate_size(tag.size, tag.name, tolerant=tolerant)
     tag.flags = archive.read_u8()
+    if tag.flags & PROP_TAG_SKIPPED_SERIALIZE:
+        tag.serialize_type = "Skipped"
+    elif tag.flags & PROP_TAG_HAS_BINARY_OR_NATIVE:
+        tag.serialize_type = "BinaryOrNative"
+    else:
+        tag.serialize_type = "Property"
 
     if tag.flags & PROP_TAG_HAS_ARRAY_INDEX:
         tag.array_index = archive.read_i32()
