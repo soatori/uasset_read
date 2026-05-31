@@ -29,14 +29,13 @@ class EGame:
 
 
 # 游戏到 PAK 版本的映射
-# 注意：v3-v6 在 PakFileVersion 中未显式定义，使用数字字面量
 GAME_PAK_VERSION_MAP: Dict[int, int] = {
     EGame.UNKNOWN: PakFileVersion.Utf8PakDirectory,  # 默认最新版本
     EGame.OUTLAST_TRIALS: PakFileVersion.PathHashIndex,
     EGame.TORCHLIGHT_INFINITE: PakFileVersion.PathHashIndex,
     EGame.WILD_ASSAULT: PakFileVersion.PathHashIndex,
     EGame.GAMELOOP_UNDAWN: PakFileVersion.PathHashIndex,
-    EGame.FRIDAY_THE_13TH: 5,  # v5: RelativeChunkOffsets
+    EGame.FRIDAY_THE_13TH: PakFileVersion.RelativeChunkOffsets,
     EGame.DREAM_STAR: PakFileVersion.PathHashIndex,
     EGame.GAME_FOR_PEACE: PakFileVersion.FNameBasedCompressionMethod,
     EGame.KART_RIDER_DRIFT: PakFileVersion.PathHashIndex,

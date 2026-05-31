@@ -28,12 +28,12 @@ T = TypeVar("T")
 def _read_property_type_name(
     archive: FArchive,
     name_map: List[str],
-    max_nodes: int = 20,
+    max_nodes: int = 50,
 ) -> PropertyTypeName:
     """读取 FPropertyTypeName 前序节点并恢复递归树。
 
-    部分资产的非标准 payload 会让 inner_count 看起来异常大。这里沿用旧实现的
-    20 节点读取上限，避免在 PropertyTag 层直接失败。
+    部分资产的非标准 payload 会让 inner_count 看起来异常大。这里使用 50 节点
+    读取上限，平衡复杂类型支持和安全性。
     """
     parts: List[Tuple[str, int]] = []
     pending = 1

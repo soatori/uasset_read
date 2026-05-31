@@ -177,6 +177,12 @@ class IoStoreReader:
             # 读取并验证 TOC 头部
             self._header = FIoStoreTocHeader.from_stream(self._utoc_file)
 
+            # 对齐到 4 字节边界（UE 源码: Ar.Position.Align(4)）
+            current_pos = self._utoc_file.tell()
+            aligned_pos = (current_pos + 3) & ~3
+            if aligned_pos != current_pos:
+                self._utoc_file.seek(aligned_pos)
+
             # Version 3 之前没有分区支持
             if self._header.version < EIoStoreTocVersion.PartitionSize:
                 self._header.partition_count = 1

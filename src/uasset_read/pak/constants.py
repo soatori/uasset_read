@@ -54,25 +54,30 @@ class PakFileVersion(IntEnum):
     """Pak file format version enum.
 
     版本边界说明：
+    - v1: Initial
     - v2: 移除 FPakEntry 中的 Timestamp 字段
-    - v3-4: 添加文件加密支持
+    - v3: CompressionEncryption (legacy)
+    - v4: IndexEncryption (legacy)
     - v5: 压缩块偏移改为相对值 (RelativeChunkOffsets)
     - v6: 添加 Flag_Deleted 支持
     - v7: 添加 EncryptionKeyGuid 和 bEncryptedIndex
     - v8: 添加 CompressionMethods 表 (FName-based)
     - v9: 添加 FrozenIndex 标志 (已废弃)
     - v10: PathHashIndex, DirectoryIndex, bitfield-encoded entries
-    - v11: Frostbite (game-specific variant)
+    - v11: Frostbite (game-specific variant) / Fnv64BugFix
     - v12: FUtf8String directory names (Utf8PakDirectory)
     """
     Initial = 1
     NoTimestamps = 2
-    # v3-4: Encryption (legacy)
+    CompressionEncryption = 3
+    IndexEncryption = 4
+    RelativeChunkOffsets = 5
+    DeleteRecords = 6
     EncryptionKeyGuid = 7
     FNameBasedCompressionMethod = 8
-    # v9: FrozenIndex (deprecated)
+    FrozenIndex = 9  # deprecated
     PathHashIndex = 10
-    Frostbite = 11
+    Fnv64BugFix = 11
     Utf8PakDirectory = 12
 
 
