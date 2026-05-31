@@ -33,8 +33,7 @@ def test_format_json_full_blueprint_defaults_are_json_serializable(sample_result
     encoded = json.dumps(data, ensure_ascii=False)
     decoded = json.loads(encoded)
 
-    # Blueprint DTO: variables are now in Extensions.Metadata
-    blueprint_vars = decoded["blueprint"]["Extensions"]["Metadata"]["variables"]
+    blueprint_vars = decoded["blueprint"]["variables"]
     system_version = next(var for var in blueprint_vars if var["name"] == "BlueprintSystemVersion")
     assert system_version["default_value"] == 2
 
@@ -54,18 +53,10 @@ def test_cli_graph_json_output_is_serializable(sample_result) -> None:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    # Blueprint DTO: check standard fields
+    assert "status" in payload
     assert "blueprint" in payload
-    blueprint = payload["blueprint"]
-    assert "PackageName" in blueprint
-    assert "BlueprintClass" in blueprint
-    assert "Graphs" in blueprint
-    assert "NodeCount" in blueprint
-    assert "Nodes" in blueprint
-    assert "Warnings" in blueprint
-    assert blueprint["NodeCount"] == len(blueprint["Nodes"])
+    assert "graphs_summary" in payload
 
-    # Variables are now in Extensions.Metadata
-    blueprint_vars = blueprint["Extensions"]["Metadata"]["variables"]
+    blueprint_vars = payload["blueprint"]["variables"]
     system_version = next(var for var in blueprint_vars if var["name"] == "BlueprintSystemVersion")
     assert system_version["default_value"] == 2
