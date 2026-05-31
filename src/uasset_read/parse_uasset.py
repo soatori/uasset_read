@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
+from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
 from uasset_read.serializers.package_summary import read_package_summary, read_name_table
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
@@ -81,6 +82,7 @@ def _post_process(
     linker: Optional["PackageLinker"] = None,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    archive_factory=None,
 ) -> None:
     """共享后处理：blueprint 元数据、图提取、依赖分析。
 
@@ -111,7 +113,7 @@ def _post_process(
             export_map, import_map, asset_name
         )
         if main_bpgc:
-            temp_archive = FArchive(path, tolerant=tolerant)
+            temp_archive = archive_factory() if archive_factory else FArchive(path, tolerant=tolerant)
             temp_archive.set_byte_swapping(archive._byte_swapping)
             try:
                 meta, warn = extract_blueprint_metadata(
@@ -139,7 +141,7 @@ def _post_process(
             else:
                 is_bp = detect_blueprint(export, import_map, export_map)
             if is_bp:
-                temp_archive = FArchive(path, tolerant=tolerant)
+                temp_archive = archive_factory() if archive_factory else FArchive(path, tolerant=tolerant)
                 temp_archive.set_byte_swapping(archive._byte_swapping)
                 try:
                     meta, warn = extract_blueprint_metadata(
@@ -309,27 +311,43 @@ def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optiona
     return None
 
 
-def parse_uasset(
+def _package_metadata(bundle: PackageBundle) -> dict:
+    return {
+        "package_kind": bundle.package_kind,
+        "package_files": bundle.package_files,
+        "container": bundle.container,
+        "asset_type_details": {},
+    }
+
+
+def parse_package(
     path: str,
     tolerant: bool = True,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    aes_key: Optional[bytes] = None,
+    provider: Optional[PackageProvider] = None,
 ) -> ParseResult:
     """
-    主入口：解析 .uasset 文件（D-08 优雅降级）。
+    主入口：解析 Unreal package（.uasset 或 .umap）。
 
     Args:
-        path: .uasset 文件路径
+        path: .uasset/.umap 文件路径
         tolerant: 是否启用容错模式（默认开启）
+        aes_key: 预留给容器 provider 的 AES key（filesystem 入口不使用）
+        provider: 可选 package provider（filesystem/pak/iostore）
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
     result = ParseResult()
     archive = None
+    bundle = None
 
     try:
-        archive = FArchive(path, tolerant=tolerant)
+        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+        archive = bundle.open_archive(tolerant=tolerant)
+        result.metadata.update(_package_metadata(bundle))
 
         # Extract mmap info
         mmap_info = archive.get_mmap_info()
@@ -371,6 +389,7 @@ def parse_uasset(
             result.import_map, result.export_map, result, tolerant,
             include_parent_assets=include_parent_assets,
             asset_roots=asset_roots,
+            archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
         )
 
     except VersionError as e:
@@ -396,6 +415,26 @@ def parse_uasset(
     return result
 
 
+def parse_uasset(
+    path: str,
+    tolerant: bool = True,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
+) -> ParseResult:
+    """
+    兼容入口：解析 .uasset 文件。
+
+    Internally delegates to parse_package(), so sidecar payload discovery is
+    shared with .umap/package parsing.
+    """
+    return parse_package(
+        path,
+        tolerant=tolerant,
+        include_parent_assets=include_parent_assets,
+        asset_roots=asset_roots,
+    )
+
+
 def parse_uasset_with_linker(
     path: str,
     tolerant: bool = True,
@@ -417,9 +456,12 @@ def parse_uasset_with_linker(
 
     result = LinkerParseResult()
     archive = None
+    bundle = None
 
     try:
-        archive = FArchive(path, tolerant=tolerant)
+        bundle = open_package_bundle(path, tolerant=tolerant)
+        archive = bundle.open_archive(tolerant=tolerant)
+        result.metadata.update(_package_metadata(bundle))
 
         # Extract mmap info
         mmap_info = archive.get_mmap_info()
@@ -473,6 +515,7 @@ def parse_uasset_with_linker(
             linker=result.linker,
             include_parent_assets=include_parent_assets,
             asset_roots=asset_roots,
+            archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
         )
 
     except VersionError as e:
