@@ -5,11 +5,12 @@ Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04)。
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Union
 import re
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.versioning import VersionContainer
 
 from uasset_read.models.properties import (
     PropertyTag, PropertyValue,
@@ -18,7 +19,7 @@ from uasset_read.models.properties import (
 )
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
+from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT, UE5_LARGE_WORLD_COORDINATES
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count
 
 # FPropertyTypeName 最大节点数（UE 源码限制）
@@ -83,6 +84,90 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
 }
 
 
+# LWC（Large World Coordinates）类型映射
+# UE5 UE5_LARGE_WORLD_COORDINATES(1004) 起，数学向量类型使用 double 精度。
+# _LWC_TYPE_MAP: 基础类型名 → (float_size, double_size)
+# 当 version_container 的 file_version_ue5 >= 1004 时，基础类型使用 double_size。
+_LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
+    "Vector":        (12, 24),   # FVector3f → FVector3d
+    "Rotator":       (12, 24),   # FRotator3f → FRotator3d
+    "Vector2D":      (8, 16),    # FVector2f → FVector2d
+    "Vector4":       (16, 32),   # FVector4f → FVector4d
+    "Quat":          (16, 32),   # FQuat4f → FQuat4d
+    "Plane":         (16, 32),   # FPlane4f → FPlane4d
+    "Sphere":        (16, 32),   # FSphere3f → FSphere3d
+    "Box":           (28, 56),   # 2 * FVector + bool (float → double)
+    "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
+    "Matrix":        (64, 128),  # 4 * FPlane (float → double)
+    "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
+    "Transform":     (48, 48),   # FQuat + FVector + FVector（Transform 始终混用）
+}
+
+# LWC 双精度类型名 → 对应的基础类型名
+# e.g. "Vector3d" → "Vector"，用于 get_struct_size 回退查询
+_LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
+    "Vector3d":    "Vector",
+    "Vector4d":    "Vector4",
+    "Rotator3d":   "Rotator",
+    "Quat4d":      "Quat",
+    "Plane4d":     "Plane",
+    "Sphere3d":    "Sphere",
+}
+
+# LWC 单精度类型名 → 对应的基础类型名
+_LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
+    "Vector3f":    "Vector",
+    "Vector4f":    "Vector4",
+    "Rotator3f":   "Rotator",
+    "Quat4f":      "Quat",
+    "Plane4f":     "Plane",
+    "Sphere3f":    "Sphere",
+    "Vector2f":    "Vector2D",
+}
+
+
+def get_struct_size(
+    struct_type: str,
+    version_container: Optional["VersionContainer"] = None,
+) -> Optional[int]:
+    """返回固定布局结构体的预期字节大小（版本感知）。
+
+    对于 LWC（Large World Coordinates）类型：
+    - 若 version_container 指示 UE5 LWC (file_version_ue5 >= 1004)，返回双精度大小
+    - 否则返回单精度大小
+    - 若 struct_type 是显式双精度变体（如 "Vector3d"），始终返回双精度大小
+
+    Args:
+        struct_type: 结构体类型名（如 "Vector", "Vector3d"）
+        version_container: 版本容器（可选）
+
+    Returns:
+        预期字节大小，未知类型返回 None
+    """
+    # 显式双精度变体：直接返回 double 大小，不看版本
+    base_for_double = _LWC_DOUBLE_TYPE_TO_BASE.get(struct_type)
+    if base_for_double is not None:
+        _, double_size = _LWC_TYPE_MAP[base_for_double]
+        return double_size
+
+    # 显式单精度变体：直接返回 float 大小，不看版本
+    base_for_float = _LWC_FLOAT_TYPE_TO_BASE.get(struct_type)
+    if base_for_float is not None:
+        float_size, _ = _LWC_TYPE_MAP[base_for_float]
+        return float_size
+
+    # LWC 感知的基础类型：根据版本判断
+    if struct_type in _LWC_TYPE_MAP:
+        float_size, double_size = _LWC_TYPE_MAP[struct_type]
+        if version_container is not None and version_container.is_ue5:
+            if version_container.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES:
+                return double_size
+        return float_size
+
+    # 非 LWC 类型：直接查表
+    return _EXPECTED_STRUCT_SIZES.get(struct_type)
+
+
 _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "MemberReference",
     "SimpleMemberReference",
@@ -136,6 +221,27 @@ def _get_read_tag_value_bounded():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_tag_value_bounded
     return read_tag_value_bounded
+
+
+def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
+    """从 summary 构建 VersionContainer（Lazy，避免循环导入）。"""
+    if summary is None:
+        return None
+    # 已缓存则直接返回
+    cached = getattr(summary, "_version_container", None)
+    if cached is not None:
+        return cached
+    try:
+        from uasset_read.versioning import build_version_container
+        vc = build_version_container(summary)
+        # 缓存到 summary 上，避免重复构建
+        try:
+            summary._version_container = vc
+        except AttributeError:
+            pass
+        return vc
+    except Exception:
+        return None
 
 
 # ============================================================================
@@ -316,23 +422,29 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     declared_struct_type = struct_type
 
     # Fast-path pre-check: validate tag.size matches expected layout.
-    # UE5 LWC stores some math structs as doubles, so accept those explicitly.
-    # If mismatch, fall through to PropertyTag loop (generic path)
-    expected_size = _EXPECTED_STRUCT_SIZES.get(struct_type)
-    allowed_lwc_sizes = {
-        "Vector": {12, 24},
-        "Rotator": {12, 24},
-        "Vector2D": {8, 16},
-        "Vector4": {16, 32},
-        "BoxSphereBounds": {40, 114},
-    }
-    if expected_size is not None and tag.size != expected_size and tag.size not in allowed_lwc_sizes.get(struct_type, set()):
-        import logging
-        logging.getLogger(__name__).warning(
-            "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
-            struct_type, tag.size, expected_size,
-        )
-        struct_type = None  # Skip all fast-path branches
+    # 使用 get_struct_size 进行版本感知的尺寸验证（支持 LWC 双精度）。
+    # 对于 LWC 类型，同时接受 float 和 double 尺寸（fast-path 自行按 tag.size 选择读取精度）。
+    version_container = _build_version_container_from_summary(summary)
+    expected_size = get_struct_size(struct_type, version_container)
+    if expected_size is not None and tag.size != expected_size:
+        # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
+        lwc_entry = _LWC_TYPE_MAP.get(struct_type)
+        if lwc_entry is not None:
+            float_size, double_size = lwc_entry
+            if tag.size not in (float_size, double_size):
+                import logging
+                logging.getLogger(__name__).warning(
+                    "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
+                    struct_type, tag.size, float_size, double_size,
+                )
+                struct_type = None  # Skip all fast-path branches
+        else:
+            import logging
+            logging.getLogger(__name__).warning(
+                "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
+                struct_type, tag.size, expected_size,
+            )
+            struct_type = None  # Skip all fast-path branches
 
     # Phase 76: Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
@@ -407,17 +519,19 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         return StructValue(struct_type="Color", fields={"B": b, "G": g, "R": r, "A": a})
 
     if struct_type == "Quat":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
-        w = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        x = reader()
+        y = reader()
+        z = reader()
+        w = reader()
         return StructValue(struct_type="Quat", fields={"X": x, "Y": y, "Z": z, "W": w})
 
     if struct_type == "Plane":
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
-        w = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        x = reader()
+        y = reader()
+        z = reader()
+        w = reader()
         return StructValue(struct_type="Plane", fields={"X": x, "Y": y, "Z": z, "W": w})
 
     if struct_type == "Guid":
@@ -465,10 +579,11 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         })
 
     if struct_type == "Sphere":
-        cx = archive.read_f32()
-        cy = archive.read_f32()
-        cz = archive.read_f32()
-        w = archive.read_f32()
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        cx = reader()
+        cy = reader()
+        cz = reader()
+        w = reader()
         return StructValue(struct_type="Sphere", fields={
             "Center": {"X": cx, "Y": cy, "Z": cz},
             "W": w,

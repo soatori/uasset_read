@@ -216,6 +216,7 @@ from .parsers import (
     register_custom_property,
     handle_custom_property,
     # 辅助函数（测试依赖）
+    get_struct_size,
     _extract_struct_type_from_tag,
     _extract_map_types_from_tag,
     _extract_set_type_from_tag,
@@ -605,6 +606,7 @@ __all__ = [
     "register_custom_property",
     "handle_custom_property",
     # 辅助函数（测试依赖）
+    "get_struct_size",
     "_extract_struct_type_from_tag",
     "_extract_map_types_from_tag",
     "_extract_set_type_from_tag",
