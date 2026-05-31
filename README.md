@@ -2,6 +2,11 @@
 
 > **Unlock Unreal Engine blueprint data for AI agents** — parse `.uasset` files, extract variables and graphs, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
 
+[![CI](https://github.com/soatori/uasset_read/actions/workflows/ci.yml/badge.svg)](https://github.com/soatori/uasset_read/actions/workflows/ci.yml)
+[![PyPI - Version](https://img.shields.io/pypi/v/uasset_read.svg)](https://pypi.org/project/uasset-read/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code. Built for AI agents, modders, and developers who need to **read, analyze, and understand blueprint content programmatically**.
 
 [中文版](README.zh-CN.md) | [English](README.md)
