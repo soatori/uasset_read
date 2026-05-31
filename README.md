@@ -1,8 +1,22 @@
 # uasset_read
 
-A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to read blueprint content without relying on the UE editor. Focuses on unbaked/editor-saved assets (containing full blueprint data).
+> **Unlock Unreal Engine blueprint data for AI agents** — parse `.uasset` files, extract variables and graphs, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
+
+A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code. Built for AI agents, modders, and developers who need to **read, analyze, and understand blueprint content programmatically**.
 
 [中文版](README.zh-CN.md) | [English](README.md)
+
+## Why uasset_read?
+
+Unreal Engine blueprints are stored as binary `.uasset` files — unreadable without the editor. uasset_read bridges this gap by extracting:
+
+- **Blueprint graphs** — nodes, pins, execution flow, data dependencies
+- **Variables & metadata** — types, defaults, categories, tooltips
+- **Kismet bytecode** — decompiled to C++-like pseudo-code
+- **Component properties** — transforms, materials, mesh references
+- **Dependency graphs** — import/export relationships, soft object paths
+
+Whether you're building AI tooling for game development, auditing blueprint dependencies, or extracting class skeletons for C++ migration, uasset_read gives you structured access to blueprint data at the file level.
 
 ## Status
 
@@ -13,24 +27,40 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 
 ## Features
 
+### Core Parsing
 - **PackageFileSummary** — file header parsing
 - **NameMap** — name table extraction
 - **ImportMap / ExportMap** — dependency and export mapping
-- **Blueprint graph parsing** — UEdGraph / Node / Pin structures
 - **Advanced properties** — Struct / Map / Set / Enum / Text / Delegate
-- **Blueprint variable extraction** — variables, functions, events, metadata
-- **Component property parsing** — Transform / Rotation / Scale + scalar attributes
-- **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
-- **Circular dependency detection** — mutual reference detection
+
+### Blueprint Analysis
+- **Blueprint graph parsing** — UEdGraph / Node / Pin structures
+- **Variable extraction** — variables, functions, events, metadata with type inference
+- **Component properties** — Transform / Rotation / Scale + scalar attributes
 - **Execution / data flow tracing** — Event → CallFunction chain tracking
 - **Function graph analysis** — FunctionEntry identification, per-function call chains
-- **PackageLinker** — 两阶段对象图重建
+
+### Advanced Features
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code
-- **N2C intermediate format** — Agent-optimized JSON schema, execution chains
-- **C++ skeleton extraction** — Component declarations, function signatures
-- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB
-- **Asset type parsers** — SkeletalMesh, Texture2D, Material, MaterialInstanceConstant attribute extraction
-- **Multiple output formats** — JSON, Text, Markdown, Mermaid graphs
+- **PackageLinker** — two-phase object graph reconstruction
+- **N2C intermediate format** — Agent-optimized JSON schema with execution chains
+- **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping
+- **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
+- **Circular dependency detection** — mutual reference detection
+
+### File Format Support
+- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB decryption
+- **IoStore container** — Chunk ID, offset/size structures
+- **Asset type parsers** — SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
+- **Bulk Data** — BulkData header parsing
+
+### Multiple Output Formats
+- **JSON** — full structured output or summary
+- **Text** — human-readable format
+- **Markdown** — formatted documentation with tables
+- **Mermaid** — interactive flowcharts and dependency graphs
+- **Blueprint UE Text** — UE-editor-style format
+- **C++ Skeleton** — ready-to-use class boilerplate
 
 ## Installation
 
@@ -182,6 +212,17 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 - **Dependencies**: Zero runtime dependencies
 - **Build**: setuptools (src layout), pyproject.toml
 - **Testing**: pytest
+
+## Use Cases
+
+| Scenario | How uasset_read helps |
+|----------|----------------------|
+| **AI-assisted blueprint editing** | Parse blueprint data → feed to LLM → generate modifications |
+| **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
+| **Dependency auditing** | Build import/export graphs → detect circular references → find orphaned assets |
+| **Mod development** | Read blueprint variables from `.pak` files → understand mod behavior without source |
+| **Asset pipeline automation** | Batch-parse thousands of `.uasset` files → extract metadata → build searchable index |
+| **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
 ## Limitations
 

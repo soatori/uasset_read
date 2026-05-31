@@ -1,8 +1,22 @@
 # uasset_read
 
-解析 Unreal Engine `.uasset` 文件的 Python 工具，使 AI 代理能够在不依赖 UE 编辑器的情况下读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
+> **为 AI 代理解锁虚幻引擎蓝图数据** — 解析 `.uasset` 文件、提取变量和图结构、反编译 Kismet 字节码、生成 C++ 类骨架 — 无需启动 UE 编辑器。
+
+一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。专为需要通过程序**读取、分析和理解蓝图内容**的 AI 代理、Mod 开发者和游戏开发者打造。
 
 [English](README.md) | [中文版](README.zh-CN.md)
+
+## 为什么选择 uasset_read？
+
+虚幻引擎的蓝图以二进制 `.uasset` 文件格式存储 — 离开编辑器就无法阅读。uasset_read 填补了这一空白，能够提取：
+
+- **蓝图图结构** — 节点、引脚、执行流、数据依赖
+- **变量与元数据** — 类型、默认值、分类、提示信息
+- **Kismet 字节码** — 反编译为类 C++ 伪代码
+- **组件属性** — 变换、材质、网格体引用
+- **依赖关系图** — 导入/导出关系、软对象路径
+
+无论你是为游戏开发构建 AI 工具、审计蓝图依赖，还是提取类骨架用于 C++ 迁移，uasset_read 都能让你在文件级别获得对蓝图数据的结构化访问能力。
 
 ## 状态
 
@@ -11,26 +25,42 @@
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
 | 测试 | 115 个测试 |
 
-## 功能
+## 功能特性
 
+### 核心解析
 - **PackageFileSummary** — 文件头解析
 - **NameMap** — 名称表提取
 - **ImportMap / ExportMap** — 依赖和导出映射
-- **蓝图图解析** — UEdGraph / Node / Pin 结构
 - **高级属性** — Struct / Map / Set / Enum / Text / Delegate
-- **蓝图变量提取** — 变量、函数、事件、元数据
-- **组件属性解析** — Transform/Rotation/Scale + 标量属性
-- **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
-- **循环依赖检测** — ImportMap 相互引用检测
+
+### 蓝图分析
+- **蓝图图解析** — UEdGraph / Node / Pin 结构
+- **变量提取** — 变量、函数、事件、元数据，带类型推断
+- **组件属性** — Transform/Rotation/Scale + 标量属性
 - **执行流/数据流追踪** — Event → CallFunction 链路追踪
 - **函数图分析** — FunctionEntry 识别、按函数粒度的调用链
-- **PackageLinker** — 两阶段对象图重建
+
+### 高级功能
 - **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码
+- **PackageLinker** — 两阶段对象图重建
 - **N2C 中间格式** — Agent 优化的 JSON Schema、执行链
-- **C++ 骨架提取** — 组件声明、函数签名
-- **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB
-- **资产类型解析器** — SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 属性提取
-- **多种输出格式** — JSON、Text、Markdown、Mermaid 流程图
+- **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射
+- **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
+- **循环依赖检测** — 导入映射相互引用检测
+
+### 文件格式支持
+- **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB 解密
+- **IoStore 容器** — Chunk ID、偏移/大小结构
+- **资产类型解析器** — SkeletalMesh、Texture2D、Material、MaterialInstanceConstant
+- **Bulk Data** — BulkData 头部解析
+
+### 多种输出格式
+- **JSON** — 完整结构化输出或摘要
+- **Text** — 人类可读格式
+- **Markdown** — 带表格的格式化文档
+- **Mermaid** — 交互式流程图和依赖图
+- **Blueprint UE Text** — UE 编辑器风格格式
+- **C++ Skeleton** — 可直接使用的类骨架代码
 
 ## 安装
 
@@ -198,6 +228,17 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 | 架构设计 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 开发指南 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | 参考资料 | [docs/reference/](docs/reference/) |
+
+## 应用场景
+
+| 场景 | uasset_read 的帮助 |
+|------|-------------------|
+| **AI 辅助蓝图编辑** | 解析蓝图数据 → 输入 LLM → 生成修改建议 |
+| **蓝图 → C++ 迁移** | 提取类结构、变量、函数 → 生成 C++ 骨架代码 |
+| **依赖审计** | 构建导入/导出图 → 检测循环引用 → 发现孤立资产 |
+| **Mod 开发** | 从 `.pak` 文件读取蓝图变量 → 无需源码即可理解 Mod 行为 |
+| **资产管线自动化** | 批量解析数千个 `.uasset` 文件 → 提取元数据 → 构建可搜索索引 |
+| **技术债务分析** | 追踪执行流 → 识别深层嵌套逻辑 → 发现死代码 |
 
 ## 限制
 
