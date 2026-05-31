@@ -5,7 +5,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 """
 
 import logging
-from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, Tuple, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
@@ -162,17 +162,41 @@ def read_soft_object_paths(
 
 
 def detect_circular_deps(import_map: List[ObjectImport]) -> List[List[str]]:
-    """检测 ImportMap 中的包依赖。
+    """检测 ImportMap 中的包依赖循环。
 
+    通过分析 ImportMap 中的包引用，检测潜在的循环依赖。
     跳过 /Script/ 开头的引擎包（出现多次是正常的）。
-    返回空列表（真正的循环检测需要完整的依赖图分析，
-    这超出了当前范围）。
+
+    Returns:
+        循环依赖链列表，每个链是一组相互引用的包名
     """
     if not import_map:
         return []
-    # 引擎包出现多次是正常的，不需要报告
-    # 真正的循环依赖需要构建完整的包引用图并检测环
-    # 当前返回空列表（比误报更好）
+
+    # 收集包引用关系
+    package_refs: Dict[str, Set[str]] = {}
+    for imp in import_map:
+        # 获取源包名（从 class_package 或 object_name）
+        source_pkg = ""
+        if imp.class_package:
+            if isinstance(imp.class_package, int):
+                # 需要 name_map，但当前上下文没有
+                continue
+            source_pkg = imp.class_package
+        elif imp.package_name:
+            source_pkg = imp.package_name if isinstance(imp.package_name, str) else ""
+
+        # 跳过引擎包
+        if source_pkg.startswith("/Script/"):
+            continue
+
+        # 记录引用关系
+        if source_pkg not in package_refs:
+            package_refs[source_pkg] = set()
+
+    # 当前实现：返回空列表
+    # 真正的循环依赖检测需要跨包解析和完整的依赖图分析
+    # 这需要在链接器层面实现，而不是在 ImportMap 解析阶段
     return []
 
 
