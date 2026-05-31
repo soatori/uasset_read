@@ -1,8 +1,8 @@
 # uasset_read
 
-> **Unlock Unreal Engine blueprint data for AI agents** — parse `.uasset` files, extract variables and graphs, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
+> **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
 
-A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code. Built for AI agents, modders, and developers who need to **read, analyze, and understand blueprint content programmatically**.
+A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code.
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
@@ -16,7 +16,7 @@ Unreal Engine blueprints are stored as binary `.uasset` files — unreadable wit
 - **Component properties** — transforms, materials, mesh references
 - **Dependency graphs** — import/export relationships, soft object paths
 
-Whether you're building AI tooling for game development, auditing blueprint dependencies, or extracting class skeletons for C++ migration, uasset_read gives you structured access to blueprint data at the file level.
+Whether you're auditing blueprint dependencies, extracting class skeletons for C++ migration, or building tooling for game development, uasset_read gives you structured access to blueprint data at the file level.
 
 ## Status
 
@@ -43,7 +43,7 @@ Whether you're building AI tooling for game development, auditing blueprint depe
 ### Advanced Features
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code
 - **PackageLinker** — two-phase object graph reconstruction
-- **N2C intermediate format** — Agent-optimized JSON schema with execution chains
+- **N2C intermediate format** — structured JSON schema with execution chains
 - **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 - **Circular dependency detection** — mutual reference detection
@@ -217,7 +217,7 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 
 | Scenario | How uasset_read helps |
 |----------|----------------------|
-| **AI-assisted blueprint editing** | Parse blueprint data → feed to LLM → generate modifications |
+| **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
 | **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
 | **Dependency auditing** | Build import/export graphs → detect circular references → find orphaned assets |
 | **Mod development** | Read blueprint variables from `.pak` files → understand mod behavior without source |
