@@ -5,6 +5,10 @@ Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04, D-05, D-08)。
 """
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from typing import TYPE_CHECKING, List, Optional, Any
 
 if TYPE_CHECKING:
@@ -172,6 +176,22 @@ def parse_properties_from_export(
     else:
         property_start = export.serial_offset
     archive.seek(property_start)
+
+    # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
+    from uasset_read.parsers.class_specific_skip import (
+        should_skip_export_for_tolerant_parsing,
+        skip_export_payload,
+    )
+    if should_skip_export_for_tolerant_parsing(export):
+        logger.debug(
+            "Tolerant skip: class-specific payload '%s', skipping property parsing",
+            export.object_name,
+        )
+        try:
+            skip_export_payload(archive, export, summary)
+        except Exception as e:
+            logger.warning("Failed to skip export '%s' payload: %s", export.object_name, e)
+        return []
 
     # D-02: SerializationControlExtensions 头部处理
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
