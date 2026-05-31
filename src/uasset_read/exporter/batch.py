@@ -71,20 +71,25 @@ class BatchExporter:
 
         # 解析
         try:
+            parse_kwargs = {
+                "tolerant": self.options.tolerant,
+                "include_parent_assets": self.options.include_parent_assets,
+                "asset_roots": self.options.asset_roots,
+            }
+            if self.options.mappings_path is not None:
+                parse_kwargs["mappings_path"] = self.options.mappings_path
+            if self.options.game is not None:
+                parse_kwargs["game"] = self.options.game
             # cpp_skeleton 需要 linker
             if self.options.format in ("cpp_skeleton", "cpp_json_ir"):
                 parse_result = parse_uasset_with_linker(
                     file_path,
-                    tolerant=self.options.tolerant,
-                    include_parent_assets=self.options.include_parent_assets,
-                    asset_roots=self.options.asset_roots,
+                    **parse_kwargs,
                 )
             else:
                 parse_result = parse_package(
                     file_path,
-                    tolerant=self.options.tolerant,
-                    include_parent_assets=self.options.include_parent_assets,
-                    asset_roots=self.options.asset_roots,
+                    **parse_kwargs,
                 )
         except Exception as e:
             batch_result.failed.append((file_path, f"parse error: {e}"))

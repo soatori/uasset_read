@@ -40,6 +40,8 @@ class ExportOptions:
     tolerant: bool = True
     include_parent_assets: bool = False
     asset_roots: list[str] | None = None
+    mappings_path: str | None = None
+    game: str | None = None
 
 
 class ExportValidationError(Exception):
