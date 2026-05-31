@@ -9,7 +9,7 @@ A Python tool for parsing Unreal Engine `.uasset` files, enabling AI agents to r
 | Metric | Value |
 |--------|-------|
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 56 tests |
+| Tests | 115 tests |
 
 ## Features
 
@@ -40,7 +40,14 @@ cd uasset_read
 pip install -e ".[dev]"
 ```
 
-Zero runtime dependencies, requires Python 3.10+.
+Core `.uasset` parsing has zero runtime dependencies and requires Python 3.10+.
+For optional PAK AES/LZ4/Zstd support, install:
+
+```bash
+pip install -e ".[pak]"
+# or, from PyPI:
+pip install "uasset_read[pak]"
+```
 
 ## Usage
 
@@ -68,7 +75,13 @@ uasset-read path/to/file.uasset --verbose      # Enable verbose logging
 
 ### Module-level API
 
+Import parser functions directly from the package root. If you need the
+`uasset_read.parse_uasset` module object, use `importlib.import_module()` to
+avoid the root-level `parse_uasset` function name.
+
 ```python
+import importlib
+
 from uasset_read import (
     # Data models
     UEdGraph, UEdGraphNode, UEdGraphPin,
@@ -82,7 +95,7 @@ from uasset_read import (
     parse_component_transform, extract_component_transforms,
 
     # Flow tracing
-    build_execution_flows, build_data_flows, build_connections_map,
+    build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
 
     # Formatters
@@ -107,6 +120,8 @@ from uasset_read import (
     PACKAGE_FILE_TAG, MMAP_THRESHOLD,
     UAssetError, ParseError, VersionError,
 )
+
+parse_module = importlib.import_module("uasset_read.parse_uasset")
 ```
 
 Full API list: see `src/uasset_read/__init__.py`.
@@ -150,8 +165,8 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
 | **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing |
-| **Compression** | `compression/` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation |
-| **Crypto** | `crypto/` | AES-ECB decryption, CustomEncryption delegate |
+| **Compression** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation |
+| **Crypto** | `pak/crypto.py` | AES-ECB decryption helpers |
 | **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid output |
 
 ## Testing

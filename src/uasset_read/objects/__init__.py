@@ -1,4 +1,4 @@
-﻿"""UObject 类型体系"""
+"""UObject 类型体系"""
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import ObjectTypeRegistry
 

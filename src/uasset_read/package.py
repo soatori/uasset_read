@@ -247,6 +247,10 @@ class FileSystemPackageProvider(PackageProvider):
 
     def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
         main = Path(path)
+        if self.root is not None and not main.is_file() and not main.is_absolute():
+            root_relative = self.root / main
+            if root_relative.is_file():
+                main = root_relative
         if main.suffix.lower() not in PACKAGE_EXTENSIONS:
             for ext in PACKAGE_EXTENSIONS:
                 candidate = main.with_suffix(ext)

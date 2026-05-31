@@ -1,4 +1,4 @@
-﻿"""蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
+"""蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
 
 等价迁移 uasset_read.py L3191-4679。
 Phase 31: 蓝图图解析模块 (per MOD-09)。

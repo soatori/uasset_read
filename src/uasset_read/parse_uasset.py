@@ -334,7 +334,8 @@ def parse_package(
     Args:
         path: .uasset/.umap 文件路径
         tolerant: 是否启用容错模式（默认开启）
-        aes_key: 预留给容器 provider 的 AES key（filesystem 入口不使用）
+        aes_key: Deprecated. Construct encrypted container readers/providers with
+            their AES key instead; the parser no longer accepts an unused key.
         provider: 可选 package provider（filesystem/pak/iostore）
 
     Returns:
@@ -345,6 +346,11 @@ def parse_package(
     bundle = None
 
     try:
+        if aes_key is not None:
+            raise ParseError(
+                "Unsupported argument: aes_key. Pass the key "
+                "when constructing the Pak/IoStore reader and provider"
+            )
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
@@ -376,6 +382,8 @@ def parse_package(
                         result.export_map, result.import_map,
                     )
                 except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
 
@@ -441,6 +449,7 @@ def parse_uasset_with_linker(
     preload_all: bool = False,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    provider: Optional[PackageProvider] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -448,6 +457,7 @@ def parse_uasset_with_linker(
         path: .uasset 文件路径
         tolerant: 是否启用容错模式（默认开启）
         preload_all: 是否预加载所有 exports（默认 False，惰性加载）
+        provider: 可选 package provider（filesystem/pak/iostore）
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
@@ -459,7 +469,7 @@ def parse_uasset_with_linker(
     bundle = None
 
     try:
-        bundle = open_package_bundle(path, tolerant=tolerant)
+        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
 
@@ -485,6 +495,8 @@ def parse_uasset_with_linker(
                         linker=result.linker,  # None at this point, linker not yet created
                     )
                 except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
 

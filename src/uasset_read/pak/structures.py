@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pak 文件数据结构
 
 镜像 UE 引擎 IPlatformFilePak.h 中的 FPakInfo、FPakEntry、FPakDirectoryEntry 等结构。

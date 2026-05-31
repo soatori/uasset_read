@@ -1,4 +1,4 @@
-﻿"""IoStore Reader — UE5.3+ IoStore 容器读取器
+"""IoStore Reader — UE5.3+ IoStore 容器读取器
 
 等价实现 IoStoreReader.cs
 支持 TOC 解析、Chunk 查找、Perfect Hash 优化、压缩块读取
@@ -245,6 +245,11 @@ class IoStoreReader:
 
     def list_files(self) -> List[str]:
         """列出所有文件路径（需要目录索引）"""
+        if self._directory_index_buffer is not None and not self._directory_index:
+            raise NotImplementedError(
+                "IoStore directory index parsing is not implemented yet; "
+                "path-based package lookup is unavailable"
+            )
         return list(self._directory_index.keys())
 
     def does_chunk_exist(self, chunk_id: FIoChunkId) -> bool:
@@ -369,11 +374,15 @@ class IoStoreReader:
     def _read_data(self, offset: int, length: int) -> bytes:
         """从 .ucas 文件读取数据
 
-        当前实现读取原始数据（不处理压缩/加密）。
-        完整的解压/解密逻辑需要 compression 模块支持。
+        当前仅支持未加密、未压缩块。遇到加密/压缩时明确失败，
+        避免返回无法解析的原始压缩或加密数据。
         """
         if not self._ucas_files:
             raise RuntimeError("容器文件未打开")
+        if self._header and self._header.is_encrypted:
+            raise NotImplementedError(
+                "IoStore encrypted chunk extraction is not implemented yet"
+            )
 
         # 确定分区和分区偏移
         partition_index = 0
@@ -395,6 +404,11 @@ class IoStoreReader:
 
         first_block_index = int(offset // compression_block_size)
         last_block_index = int(((offset + length + compression_block_size - 1) // compression_block_size) - 1)
+
+        if not self._compression_blocks:
+            reader = self._ucas_files[partition_index]
+            reader.seek(partition_offset)
+            return reader.read(length)
 
         if first_block_index == last_block_index and self._compression_blocks:
             # 单块读取 — 检查是否压缩
@@ -430,13 +444,10 @@ class IoStoreReader:
                 # 无压缩
                 raw_data = reader.read(block.compressed_size)
             else:
-                # 有压缩 — 读取压缩数据（暂不解压）
-                # TODO: 集成 compression 模块进行解压
-                logger.warning(
-                    "压缩块 %d 使用方法 %d，暂不解压，返回原始压缩数据",
-                    block_index, block.compression_method_index,
+                raise NotImplementedError(
+                    "IoStore compressed chunk extraction is not implemented yet "
+                    f"(block={block_index}, method_index={block.compression_method_index})"
                 )
-                raw_data = reader.read(block.compressed_size)
 
             # 从块中提取所需部分
             size_in_block = min(compression_block_size - offset_in_block, remaining)
@@ -594,6 +605,10 @@ class IoStoreReader:
 
         self._directory_index_buffer = self._utoc_file.read(self._header.directory_index_size)
         logger.debug("加载目录索引: %d 字节", len(self._directory_index_buffer))
+        raise NotImplementedError(
+            "IoStore directory index parsing is not implemented yet; "
+            "path-based package lookup is unavailable"
+        )
 
     def _build_info(self) -> None:
         """构建 TOC 信息摘要"""

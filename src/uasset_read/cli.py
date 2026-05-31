@@ -46,13 +46,16 @@ def create_parser() -> argparse.ArgumentParser:
     # Mutually exclusive output flags (D-24, D-14-17)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure')
+    group.add_argument('--json-summary', action='store_true', help='Output compact JSON summary format')
     group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
+    group.add_argument('--text-summary', action='store_true', help='Output compact text summary format')
     group.add_argument('--summary', action='store_true', help='Output compact summary format')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format (D-14-17)')
     group.add_argument('--blueprint-text', action='store_true', help='Output compact blueprint translation reference text')
     group.add_argument('--blueprint-ue-text', action='store_true', help='Output UE-style Begin Object blueprint text')
     group.add_argument('--cpp-skeleton', action='store_true',
                        help='Output C++ class skeleton (.h header) instead of JSON (requires blueprint)')
+    group.add_argument('--cpp-json-ir', action='store_true', help='Output C++ class skeleton JSON IR')
     # Phase Export: new formats
     group.add_argument('--n2c', action='store_true', help='Output N2C intermediate format JSON')
 
@@ -90,6 +93,8 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.n2c:
         return "n2c"
+    if args.cpp_json_ir:
+        return "cpp_json_ir"
     if args.cpp_skeleton:
         return "cpp_skeleton"
     if args.blueprint_text:
@@ -100,8 +105,12 @@ def resolve_format(args) -> str:
         return "markdown"
     if args.summary:
         return "json_summary"
+    if args.json_summary:
+        return "json_summary"
     if args.json:
         return "json"
+    if args.text_summary:
+        return "text_summary"
     if args.text:
         return "text"
     # Default
@@ -121,6 +130,24 @@ def _write_output(output_str: str, output_path: str | None) -> None:
     else:
         # stdout for data (D-25)
         print(output_str)
+
+
+def _build_export_options(args, fmt: str, output_dir: str | None = None):
+    """Build shared ExportOptions for single-file and batch CLI paths."""
+    from uasset_read.exporter import ExportOptions
+
+    return ExportOptions(
+        format=fmt,
+        include_schema=args.schema or args.verbose,
+        include_function_graphs=args.function_graphs,
+        verbose=args.verbose,
+        output_path=args.output,
+        output_dir=output_dir,
+        validate_output=args.validate,
+        tolerant=not args.strict,
+        include_parent_assets=args.include_parent_assets,
+        asset_roots=list(args.asset_root or []),
+    )
 
 
 def main():
@@ -195,7 +222,7 @@ def main():
         sys.exit(EXIT_SUCCESS)
 
     # 部分格式需要 parse_uasset_with_linker 以输出可读对象路径
-    if fmt in {"cpp_skeleton", "blueprint_ue_text", "json", "json_summary"}:
+    if fmt in {"cpp_skeleton", "cpp_json_ir", "blueprint_ue_text", "json", "json_summary"}:
         try:
             linker_result = parse_uasset_with_linker(
                 args.file,
@@ -214,22 +241,19 @@ def main():
             sys.exit(EXIT_PARSE_ERROR)
 
         # Verify blueprint exists only for formats that require blueprint metadata.
-        if fmt == "cpp_skeleton" and (linker_result.blueprint is None or not linker_result.blueprint.is_blueprint):
-            print("Error: --cpp-skeleton requires a blueprint file", file=sys.stderr)
+        if fmt in {"cpp_skeleton", "cpp_json_ir"} and (linker_result.blueprint is None or not linker_result.blueprint.is_blueprint):
+            print(f"Error: --{fmt.replace('_', '-')} requires a blueprint file", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
 
         # Use exporter
-        from uasset_read.exporter import ExporterRegistry, ExportOptions
-        options = ExportOptions(
-            format=fmt,
-            output_path=args.output,
-        )
+        from uasset_read.exporter import ExporterRegistry
+        options = _build_export_options(args, fmt)
         try:
             exporter = ExporterRegistry.get(fmt)
             output_str = exporter.export(linker_result, options)
         except ValueError as e:
-            if fmt == "cpp_skeleton":
-                print(f"Error: C++ skeleton extraction failed: {e}", file=sys.stderr)
+            if fmt in {"cpp_skeleton", "cpp_json_ir"}:
+                print(f"Error: C++ export failed: {e}", file=sys.stderr)
             else:
                 print(f"Error: Blueprint UE text export failed: {e}", file=sys.stderr)
             sys.exit(EXIT_PARSE_ERROR)
@@ -263,16 +287,9 @@ def main():
         sys.exit(EXIT_SUCCESS)
 
     # Use unified export system
-    from uasset_read.exporter import ExporterRegistry, ExportOptions, ExportValidationError
+    from uasset_read.exporter import ExporterRegistry, ExportValidationError
 
-    options = ExportOptions(
-        format=fmt,
-        include_schema=args.schema or args.verbose,
-        include_function_graphs=args.function_graphs,
-        verbose=args.verbose,
-        output_path=args.output,
-        validate_output=args.validate,
-    )
+    options = _build_export_options(args, fmt)
 
     try:
         exporter = ExporterRegistry.get(fmt)
@@ -290,18 +307,33 @@ def main():
 
 def _handle_graph_mode(args, result):
     """处理 --graph 标志的特殊逻辑（向后兼容）。"""
-    from uasset_read.formatters import format_json_full, format_text_full
+    from uasset_read.formatters import (
+        format_json_full,
+        format_json_summary,
+        format_text_full,
+        format_text_summary,
+    )
     from uasset_read.graph import format_graphs_json
 
     # Phase 55: --function-graphs 隐含 --json
-    if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or args.blueprint_text or args.blueprint_ue_text):
+    if args.function_graphs and not (
+        args.json or args.json_summary or args.text or args.text_summary
+        or args.summary or args.markdown or args.blueprint_text
+        or args.blueprint_ue_text or args.cpp_skeleton or args.cpp_json_ir
+        or args.n2c
+    ):
         args.json = True
 
-    if args.json or args.verbose:
+    if args.json_summary or args.summary:
+        data = format_json_summary(result, include_schema=args.schema or args.verbose)
+        output_str = json.dumps(data, indent=2, ensure_ascii=False)
+    elif args.json or args.verbose:
         include_schema = args.schema or args.verbose
         include_function_graphs = args.function_graphs
         data = format_json_full(result, include_schema, include_function_graphs)
         output_str = json.dumps(data, indent=2, ensure_ascii=False)
+    elif args.text_summary:
+        output_str = format_text_summary(result)
     elif args.text:
         output_str = format_text_full(result)
     else:
@@ -314,7 +346,7 @@ def _handle_graph_mode(args, result):
 
 def _handle_batch(args):
     """处理批量导出模式。"""
-    from uasset_read.exporter import ExportOptions, BatchExporter, ExporterRegistry, ExportValidationError
+    from uasset_read.exporter import BatchExporter
 
     # Resolve input directory
     if args.file is None:
@@ -338,14 +370,7 @@ def _handle_batch(args):
     # Resolve format
     fmt = resolve_format(args)
 
-    options = ExportOptions(
-        format=fmt,
-        include_schema=args.schema or args.verbose,
-        include_function_graphs=args.function_graphs,
-        verbose=args.verbose,
-        validate_output=args.validate,
-        output_dir=output_dir,
-    )
+    options = _build_export_options(args, fmt, output_dir=output_dir)
 
     batch_exporter = BatchExporter(output_dir, options)
     file_paths = [str(f) for f in package_files]

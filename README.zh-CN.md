@@ -9,7 +9,7 @@
 | 指标 | 值 |
 |------|-----|
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 56 个测试 |
+| 测试 | 115 个测试 |
 
 ## 功能
 
@@ -40,7 +40,14 @@ cd uasset_read
 pip install -e ".[dev]"
 ```
 
-零运行时依赖，仅需 Python 3.10+。
+核心 `.uasset` 解析零运行时依赖，仅需 Python 3.10+。
+如需 PAK 的 AES/LZ4/Zstd 可选支持，请安装：
+
+```bash
+pip install -e ".[pak]"
+# 或从 PyPI 安装：
+pip install "uasset_read[pak]"
+```
 
 ## 使用
 
@@ -69,7 +76,13 @@ uasset-read path/to/file.uasset --verbose          # 启用详细日志
 
 ### Python API
 
+解析函数建议直接从包根导入。如果需要 `uasset_read.parse_uasset`
+模块对象，请使用 `importlib.import_module()`，避免与包根同名
+`parse_uasset` 函数混淆。
+
 ```python
+import importlib
+
 from uasset_read import (
     # 数据模型
     UEdGraph, UEdGraphNode, UEdGraphPin,
@@ -83,7 +96,7 @@ from uasset_read import (
     parse_component_transform, extract_component_transforms,
 
     # 流追踪
-    build_execution_flows, build_data_flows, build_connections_map,
+    build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
 
     # 格式化
@@ -114,6 +127,8 @@ result = parse_uasset('BP_FirstPersonCharacter.uasset')
 
 # 输出 JSON
 json_output = format_json_full(result)
+
+parse_module = importlib.import_module("uasset_read.parse_uasset")
 ```
 
 完整 API 列表见 `src/uasset_read/__init__.py`。
@@ -157,8 +172,8 @@ json_output = format_json_full(result)
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
 | **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin 模型, JSON Schema |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
-| **压缩** | `compression/` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
-| **加密** | `crypto/` | AES-ECB 解密, CustomEncryption 委托 |
+| **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
+| **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
 | **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid 输出 |
 
 ## 测试

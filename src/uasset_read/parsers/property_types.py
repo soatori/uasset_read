@@ -1,4 +1,4 @@
-﻿"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
+"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
 
 等价迁移 uasset_read.py 第 5289-6004 行。
 Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04)。
