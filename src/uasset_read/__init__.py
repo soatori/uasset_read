@@ -249,8 +249,6 @@ from .formatters import (
     build_status_info,
     build_schema_info,
     resolve_fpackage_index,
-    # Phase 31 re-export
-    format_pin_ref,
 )
 # ============================================================================
 from .parse_uasset import parse_uasset, parse_uasset_with_linker

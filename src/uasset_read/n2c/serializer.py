@@ -202,7 +202,6 @@ def to_n2c_json(
         else:
             from uasset_read.graph.flow_builder import build_data_flows
             data_flows_raw = build_data_flows(graph)
->>>>>>> worktree-wf_8106e21e-b09-16
 
         # Convert execution flows to chains
         exec_chains = build_execution_chains_from_flows(execution_flows_raw, id_mapper, {})
