@@ -67,6 +67,18 @@ class UObjectInstance:
     )
     """ObjectProperty values resolved to UObjectInstance references."""
 
+    template_object: Optional["UObjectInstance"] = None
+    """Resolved template (CDO) object from template_index."""
+
+    dependencies: List["UObjectInstance"] = field(default_factory=list)
+    """Resolved dependencies from DependsMap."""
+
+    super_object: Optional["UObjectInstance"] = None
+    """Resolved super (parent class) object from super_index."""
+
+    script_serialization_start_offset: int = 0
+    """UE5 蓝图脚本序列化起始偏移。"""
+
     # ---- Internal state ----
     _preloaded: bool = False
     """Whether properties have been loaded."""

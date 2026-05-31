@@ -1,4 +1,4 @@
-﻿"""ObjectTypeRegistry — UObject 类型注册表
+"""ObjectTypeRegistry — UObject 类型注册表
 
 等价实现 ObjectTypeRegistry.cs
 """

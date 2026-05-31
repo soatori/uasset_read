@@ -1,4 +1,4 @@
-﻿"""UObject 基类 — 所有 UE 资产类型的根"""
+"""UObject 基类 — 所有 UE 资产类型的根"""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional

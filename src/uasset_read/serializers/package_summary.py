@@ -5,13 +5,16 @@ Package Summary 序列化 — PackageFileSummary 及相关读取函数。
 UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 
+import logging
 from typing import List
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
-    UE5_VERSION_MIN, UE5_LEGACY_VERSION,
+    UE5_VERSION_MIN, UE5_LEGACY_VERSIONS,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
@@ -102,6 +105,8 @@ class PackageFileSummary:
     names_referenced_from_export_data_count: int = 0
     payload_toc_offset: int = 0
     data_resource_offset: int = 0
+    depends_map: List[List[int]] = field(default_factory=list)
+    preload_dependencies: List[int] = field(default_factory=list)
 
     def get_custom_version(self, guid: str, default: int = 0) -> int:
         """查找 CustomVersion 版本值。"""
@@ -125,9 +130,10 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
     legacy_file_version = archive.read_i32()
-    if legacy_file_version != UE5_LEGACY_VERSION:
+    if legacy_file_version not in UE5_LEGACY_VERSIONS:
+        supported_versions = ", ".join(str(v) for v in sorted(UE5_LEGACY_VERSIONS))
         raise VersionError(
-            f"Only UE5 files (legacy_file_version={UE5_LEGACY_VERSION}) are supported, "
+            f"Only UE5 files with legacy_file_version in {{{supported_versions}}} are supported, "
             f"got {legacy_file_version}"
         )
 
@@ -140,9 +146,12 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     file_version_licensee = archive.read_i32()
 
-    # 第 2 步：SavedHash + TotalHeaderSize（UE5.7 始终存在）
-    saved_hash = archive.read(20)
-    total_header_size = archive.read_i32()
+    if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
+        saved_hash = archive.read(20)
+        total_header_size = archive.read_i32()
+    else:
+        saved_hash = b""
+        total_header_size = 0
 
     # 第 3 步：CustomVersions
     custom_versions_count = archive.read_u32()
@@ -153,6 +162,9 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         guid_bytes = archive.read(16)
         version = archive.read_i32()
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
+
+    if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
+        total_header_size = archive.read_i32()
 
     # 第 4 步：PackageName 和 PackageFlags
     package_name = archive.read_fstring()
@@ -167,11 +179,14 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     name_offset = archive.read_i32()
     archive.validate_offset(name_offset, "NameOffset")
 
-    # 第 6 步：SoftObjectPaths（UE5.7 始终存在）
-    soft_object_paths_count = archive.read_i32()
-    soft_object_paths_offset = archive.read_i32()
-    if soft_object_paths_offset > 0:
-        archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
+    # 第 6 步：SoftObjectPaths
+    soft_object_paths_count = 0
+    soft_object_paths_offset = 0
+    if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+        soft_object_paths_count = archive.read_i32()
+        soft_object_paths_offset = archive.read_i32()
+        if soft_object_paths_offset > 0:
+            archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
     # 第 7 步：LocalizationId（非 FilterEditorOnly 文件，UE4 516+）
     localization_id = ""
@@ -207,24 +222,31 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     import_offset = archive.read_i32()
     archive.validate_offset(import_offset, "ImportOffset")
 
-    # 第 11 步：CellExport/CellImport（UE5.7 始终存在）
-    cell_export_count = archive.read_i32()
-    if cell_export_count < 0:
-        raise ParseError(f"Negative cell export count: {cell_export_count}")
-    cell_export_offset = archive.read_i32()
-    if cell_export_offset > 0:
-        archive.validate_offset(cell_export_offset, "CellExportOffset")
-    cell_import_count = archive.read_i32()
-    if cell_import_count < 0:
-        raise ParseError(f"Negative cell import count: {cell_import_count}")
-    cell_import_offset = archive.read_i32()
-    if cell_import_offset > 0:
-        archive.validate_offset(cell_import_offset, "CellImportOffset")
+    # 第 11 步：CellExport/CellImport
+    cell_export_count = 0
+    cell_export_offset = 0
+    cell_import_count = 0
+    cell_import_offset = 0
+    if file_version_ue5 >= UE5_VERSE_CELLS:
+        cell_export_count = archive.read_i32()
+        if cell_export_count < 0:
+            raise ParseError(f"Negative cell export count: {cell_export_count}")
+        cell_export_offset = archive.read_i32()
+        if cell_export_offset > 0:
+            archive.validate_offset(cell_export_offset, "CellExportOffset")
+        cell_import_count = archive.read_i32()
+        if cell_import_count < 0:
+            raise ParseError(f"Negative cell import count: {cell_import_count}")
+        cell_import_offset = archive.read_i32()
+        if cell_import_offset > 0:
+            archive.validate_offset(cell_import_offset, "CellImportOffset")
 
-    # 第 12 步：MetaDataOffset（UE5 始终存在）
-    metadata_offset = archive.read_i32()
-    if metadata_offset > 0:
-        archive.validate_offset(metadata_offset, "MetadataOffset")
+    # 第 12 步：MetaDataOffset
+    metadata_offset = 0
+    if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
+        metadata_offset = archive.read_i32()
+        if metadata_offset > 0:
+            archive.validate_offset(metadata_offset, "MetadataOffset")
 
     # 第 13 步：DependsOffset
     depends_offset = archive.read_i32()
@@ -264,8 +286,14 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         guid_bytes = archive.read(16)
         persistent_guid = guid_bytes.hex()
 
-    # 第 16b 步：OwnerPersistentGuid（仅 UE4 519，后续版本已移除）
-    if not has_filter_editor_only and file_version_ue4 == UE4_ADDED_PACKAGE_OWNER:
+    # 第 16b 步：OwnerPersistentGuid
+    if (
+        not has_filter_editor_only
+        and (
+            file_version_ue4 == UE4_ADDED_PACKAGE_OWNER
+            or legacy_file_version == -8
+        )
+    ):
         archive.read(16)  # 跳过 OwnerPersistentGuid
 
     # 第 17 步：Generations
@@ -341,15 +369,41 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # 第 29 步：NamesReferencedFromExportData（UE5.7 始终存在）
     names_referenced_from_export_data_count = archive.read_i32()
 
-    # 第 30 步：PayloadTocOffset（UE5.7 始终存在）
+    # 第 30 步：PayloadTocOffset（UE5.7 始终存在，但值可能无效）
     payload_toc_offset = archive.read_i64()
-    if payload_toc_offset > 0:
-        archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
 
-    # 第 31 步：DataResourceOffset（UE5.7 始终存在）
-    data_resource_offset = archive.read_i32()
-    if data_resource_offset > 0:
-        archive.validate_offset(data_resource_offset, "DataResourceOffset")
+    # Tolerant: 检查 payload_toc_offset 是否合理
+    if payload_toc_offset < 0:
+        logger.warning(
+            "PayloadTocOffset 为负数: %d, 设为 0",
+            payload_toc_offset,
+        )
+        payload_toc_offset = 0
+    elif payload_toc_offset > 0:
+        file_size = archive.total_size()
+        # 超过文件大小 10 倍说明值明显无效
+        if file_size > 0 and payload_toc_offset > file_size * 10:
+            logger.warning(
+                "PayloadTocOffset %d 明显越界（文件大小 %d），设为 0",
+                payload_toc_offset, file_size,
+            )
+            payload_toc_offset = 0
+        elif file_size > 0 and payload_toc_offset > file_size:
+            # 在文件大小之外但不极端，可能是 virtualized payload
+            logger.debug(
+                "PayloadTocOffset %d 超过文件大小 %d，可能是 virtualized payload",
+                payload_toc_offset, file_size,
+            )
+            # 不 validate，留给后续逻辑处理
+        else:
+            archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
+
+    # 第 31 步：DataResourceOffset
+    data_resource_offset = 0
+    if file_version_ue5 >= UE5_DATA_RESOURCES:
+        data_resource_offset = archive.read_i32()
+        if data_resource_offset > 0:
+            archive.validate_offset(data_resource_offset, "DataResourceOffset")
 
     return PackageFileSummary(
         tag=tag, legacy_file_version=legacy_file_version,
@@ -400,3 +454,54 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
         # UE5 始终有 name hashes (4 bytes)
         archive.read(4)
     return name_map
+
+
+def read_depends_map(archive: FArchive, summary: PackageFileSummary) -> List[List[int]]:
+    """读取 DependsMap（依赖表）。
+
+    UE 格式：TArray<TArray<FPackageIndex>>
+    每个 Export 对应一个依赖列表，依赖列表中的值是 PackageIndex（int32）。
+
+    Returns:
+        二维列表，第一维是 Export 索引，第二维是依赖的 PackageIndex 列表
+    """
+    if summary.depends_offset <= 0 or summary.export_count <= 0:
+        return []
+
+    archive.seek(summary.depends_offset)
+
+    depends_map: List[List[int]] = []
+    for _ in range(summary.export_count):
+        # 读取每个 Export 的依赖列表
+        dep_count = archive.read_i32()
+        if dep_count < 0 or dep_count > 10000:  # 防御性检查
+            logger.warning("DependsMap: 异常的依赖数量 %d, 跳过", dep_count)
+            depends_map.append([])
+            continue
+        deps = []
+        for _ in range(dep_count):
+            deps.append(archive.read_i32())
+        depends_map.append(deps)
+
+    return depends_map
+
+
+def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
+    """读取 PreloadDependencies（预加载依赖）。
+
+    UE 格式：TArray<FPackageIndex>
+    一维数组，包含所有预加载依赖的 PackageIndex。
+
+    Returns:
+        PackageIndex 列表
+    """
+    if summary.preload_dependency_offset <= 0 or summary.preload_dependency_count <= 0:
+        return []
+
+    archive.seek(summary.preload_dependency_offset)
+
+    dependencies: List[int] = []
+    for _ in range(summary.preload_dependency_count):
+        dependencies.append(archive.read_i32())
+
+    return dependencies

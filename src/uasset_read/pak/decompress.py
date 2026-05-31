@@ -8,16 +8,44 @@ Pak 文件解压缩模块
 
 Phase 77 — PAK-02.
 """
-import logging
+import gzip
+import zlib
 from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.pak.structures import FPakEntry
 
-logger = logging.getLogger(__name__)
+
+def normalize_compression_method(method: str | int | None) -> str:
+    """Return the canonical compression method name used by readers."""
+    if method is None:
+        return "None"
+    if isinstance(method, int):
+        return {
+            0: "None",
+            1: "Zlib",
+            2: "Gzip",
+            3: "Oodle",
+            4: "LZ4",
+            5: "Zstd",
+        }.get(method, str(method))
+    normalized = method.strip()
+    if not normalized:
+        return "None"
+    aliases = {
+        "none": "None",
+        "zlib": "Zlib",
+        "gzip": "Gzip",
+        "gz": "Gzip",
+        "lz4": "LZ4",
+        "oodle": "Oodle",
+        "zstd": "Zstd",
+        "zstandard": "Zstd",
+    }
+    return aliases.get(normalized.lower(), normalized)
 
 
-def decompress_block(data: bytes, uncompressed_size: int, method: str) -> bytes:
+def decompress_block(data: bytes, uncompressed_size: int, method: str | int | None) -> bytes:
     """解压单个压缩块。
 
     Args:
@@ -33,11 +61,16 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str) -> bytes:
         ValueError: 未知的压缩方法
         ImportError: 缺少必需的包（lz4/zstandard）
     """
-    if method == "None" or method == "":
+    method = normalize_compression_method(method)
+    if method == "None":
         return data[:uncompressed_size]
     elif method == "Zlib":
-        import zlib
-        return zlib.decompress(data, wbits=-15)  # raw deflate, no header
+        try:
+            return zlib.decompress(data, wbits=-15)  # raw deflate, no header
+        except zlib.error:
+            return zlib.decompress(data)
+    elif method == "Gzip":
+        return gzip.decompress(data)
     elif method == "LZ4":
         try:
             import lz4.block
@@ -55,7 +88,7 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str) -> bytes:
                 "Zstd decompression requires 'zstandard' package. "
                 "Install with: pip install uasset_read[pak]"
             )
-        return zstandard.decompress(data, max_output_size=uncompressed_size)
+        return zstandard.ZstdDecompressor().decompress(data, max_output_size=uncompressed_size)
     elif method == "Oodle":
         raise NotImplementedError(
             "Oodle decompression requires oo2core library — "
@@ -83,11 +116,19 @@ def decompress_entry(
     Returns:
         解压后的完整数据
     """
+    if entry.is_encrypted and encryption_key is None:
+        raise ParseError("Encrypted pak entry requires AES key")
+
     if not entry.is_compressed:
-        # Uncompressed: read directly
         read_offset = entry.offset
         stream.seek(read_offset)
-        return stream.read(entry.uncompressed_size)
+        raw_size = entry.uncompressed_size
+        if entry.is_encrypted:
+            raw_size = (raw_size + 15) & ~15
+        raw = stream.read(raw_size)
+        if entry.is_encrypted:
+            raw = _decrypt_entry_data(raw, encryption_key)[:entry.uncompressed_size]
+        return raw[:entry.uncompressed_size]
 
     # Compressed: process block by block
     alignment = 16 if entry.is_encrypted else 1
@@ -101,22 +142,23 @@ def decompress_entry(
         aligned_size = (block_size + alignment - 1) & ~(alignment - 1)
         raw = stream.read(aligned_size)
 
-        if entry.is_encrypted and encryption_key:
-            try:
-                from uasset_read.pak.crypto import decrypt_aes_ecb
-                raw = decrypt_aes_ecb(raw, encryption_key)[:block_size]
-            except ImportError:
-                logger.warning(
-                    "Encrypted entry but 'cryptography' package not available. "
-                    "Install with: pip install uasset_read[pak]"
-                )
-                continue
+        if entry.is_encrypted:
+            raw = _decrypt_entry_data(raw, encryption_key)[:block_size]
 
-        try:
-            decompressed = decompress_block(raw[:block_size], entry.compression_block_size, compression_method)
-            result.extend(decompressed)
-        except NotImplementedError as e:
-            logger.warning("Skipping Oodle-compressed block: %s", e)
-            continue
+        decompressed = decompress_block(raw[:block_size], entry.compression_block_size, compression_method)
+        result.extend(decompressed)
 
     return bytes(result)
+
+
+def _decrypt_entry_data(data: bytes, encryption_key: bytes | None) -> bytes:
+    if encryption_key is None:
+        raise ParseError("Encrypted pak entry requires AES key")
+    try:
+        from uasset_read.pak.crypto import decrypt_aes_ecb
+        return decrypt_aes_ecb(data, encryption_key)
+    except ImportError as exc:
+        raise ParseError(
+            "AES decryption requires 'cryptography' package. "
+            "Install with: pip install uasset_read[pak]"
+        ) from exc

@@ -1,9 +1,10 @@
-﻿"""IoStore Reader — UE5.3+ IoStore 容器读取器
+"""IoStore Reader — UE5.3+ IoStore 容器读取器
 
 等价实现 IoStoreReader.cs
 支持 TOC 解析、Chunk 查找、Perfect Hash 优化、压缩块读取
 """
 from __future__ import annotations
+from io import BytesIO
 from typing import BinaryIO, Dict, List, Optional, Tuple
 from pathlib import Path
 import struct
@@ -15,6 +16,8 @@ from uasset_read.iostore.structures import (
     FIoStoreTocHeader,
     FIoStoreTocCompressedBlockEntry,
     FIoStoreTocEntryMeta,
+    FIoDirectoryIndexEntry,
+    FIoFileIndexEntry,
     EIoStoreTocVersion,
     EIoContainerFlags,
     EIoStoreTocReadOptions,
@@ -23,6 +26,8 @@ from uasset_read.iostore.structures import (
     TOC_MAGIC,
     TOC_HEADER_SIZE,
 )
+from uasset_read.pak.decompress import decompress_block
+from uasset_read.pak.crypto import decrypt_aes_ecb
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +177,12 @@ class IoStoreReader:
             # 读取并验证 TOC 头部
             self._header = FIoStoreTocHeader.from_stream(self._utoc_file)
 
+            # 对齐到 4 字节边界（UE 源码: Ar.Position.Align(4)）
+            current_pos = self._utoc_file.tell()
+            aligned_pos = (current_pos + 3) & ~3
+            if aligned_pos != current_pos:
+                self._utoc_file.seek(aligned_pos)
+
             # Version 3 之前没有分区支持
             if self._header.version < EIoStoreTocVersion.PartitionSize:
                 self._header.partition_count = 1
@@ -285,6 +296,25 @@ class IoStoreReader:
         chunk_id = FIoChunkId(bytes=chunk_id_bytes)
         return self.read_chunk(chunk_id)
 
+    def extract_path(self, path: str) -> Optional[bytes]:
+        """Extract a file by directory-index path."""
+        normalized = path.replace("\\", "/").strip("/")
+        candidates = [normalized]
+        if "." not in normalized.rsplit("/", 1)[-1]:
+            candidates.extend(
+                f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap")
+            )
+        chunk_id = self._directory_index.get(path) or self._directory_index.get(normalized)
+        if chunk_id is None:
+            lowered_candidates = [candidate.lower() for candidate in candidates]
+            for candidate, candidate_chunk in self._directory_index.items():
+                lowered = candidate.lower().strip("/")
+                if any(lowered == item or lowered.endswith(f"/{item}") for item in lowered_candidates):
+                    return self.read_chunk(candidate_chunk)
+        if chunk_id is None:
+            return None
+        return self.read_chunk(chunk_id)
+
     def read_chunk(self, chunk_id: FIoChunkId) -> bytes:
         """根据 FIoChunkId 读取数据
 
@@ -357,23 +387,27 @@ class IoStoreReader:
     def _hash_with_seed(self, chunk_id: FIoChunkId, seed: int) -> int:
         """HashWithSeed 实现
 
-        使用 FNV-1a 哈希变体
+        使用 64 位 FNV-1a 哈希算法（与 UE 源码一致）
+        - 初始值: 0xcbf29ce484222325 (FNV offset basis)
+        - 素数: 0x00000100000001B3 (FNV prime)
         """
         data = chunk_id.bytes
-        hash_val = 0x811C9DC5 ^ seed  # FNV offset basis
+        hash_val = 0xcbf29ce484222325 ^ seed  # FNV offset basis (64-bit)
         for byte in data:
             hash_val ^= byte
-            hash_val = (hash_val * 0x01000193) & 0xFFFFFFFF  # FNV prime, 32-bit
+            hash_val = (hash_val * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF  # FNV prime, 64-bit
         return hash_val
 
     def _read_data(self, offset: int, length: int) -> bytes:
         """从 .ucas 文件读取数据
 
-        当前实现读取原始数据（不处理压缩/加密）。
-        完整的解压/解密逻辑需要 compression 模块支持。
+        当前仅支持未加密、未压缩块。遇到加密/压缩时明确失败，
+        避免返回无法解析的原始压缩或加密数据。
         """
         if not self._ucas_files:
             raise RuntimeError("容器文件未打开")
+        if self._header and self._header.is_encrypted and self._aes_key is None:
+            raise ValueError("IoStore encrypted chunk extraction requires AES key")
 
         # 确定分区和分区偏移
         partition_index = 0
@@ -396,6 +430,9 @@ class IoStoreReader:
         first_block_index = int(offset // compression_block_size)
         last_block_index = int(((offset + length + compression_block_size - 1) // compression_block_size) - 1)
 
+        if not self._compression_blocks:
+            return self._read_uncompressed_partitions(partition_index, partition_offset, length)
+
         if first_block_index == last_block_index and self._compression_blocks:
             # 单块读取 — 检查是否压缩
             block = self._compression_blocks[first_block_index] if first_block_index < len(self._compression_blocks) else None
@@ -403,7 +440,10 @@ class IoStoreReader:
                 # 无压缩，直接读取
                 reader = self._ucas_files[partition_index]
                 reader.seek(partition_offset)
-                return reader.read(length)
+                raw = reader.read(length)
+                if self._header and self._header.is_encrypted:
+                    raw = decrypt_aes_ecb(raw, self._aes_key)[:length]
+                return raw
 
         # 多块或压缩数据 — 逐块读取并拼接
         result = bytearray()
@@ -426,17 +466,15 @@ class IoStoreReader:
             reader = self._ucas_files[block_partition_index]
             reader.seek(block_partition_offset)
 
-            if block.compression_method_index == 0:
-                # 无压缩
-                raw_data = reader.read(block.compressed_size)
-            else:
-                # 有压缩 — 读取压缩数据（暂不解压）
-                # TODO: 集成 compression 模块进行解压
-                logger.warning(
-                    "压缩块 %d 使用方法 %d，暂不解压，返回原始压缩数据",
-                    block_index, block.compression_method_index,
-                )
-                raw_data = reader.read(block.compressed_size)
+            raw_data = reader.read(block.compressed_size)
+            if self._header and self._header.is_encrypted:
+                aligned_size = (block.compressed_size + 15) & ~15
+                if len(raw_data) < aligned_size:
+                    raw_data += reader.read(aligned_size - len(raw_data))
+                raw_data = decrypt_aes_ecb(raw_data, self._aes_key)[:block.compressed_size]
+
+            method = self._compression_method_name(block.compression_method_index)
+            raw_data = decompress_block(raw_data, block.uncompressed_size, method)
 
             # 从块中提取所需部分
             size_in_block = min(compression_block_size - offset_in_block, remaining)
@@ -447,6 +485,34 @@ class IoStoreReader:
             offset_in_block = 0
             remaining -= size_in_block
 
+        return bytes(result)
+
+    def _read_uncompressed_partitions(self, partition_index: int, partition_offset: int, length: int) -> bytes:
+        """Read an uncompressed range, crossing UCAS partitions when necessary."""
+        result = bytearray()
+        remaining = length
+        current_partition = partition_index
+        current_offset = partition_offset
+        while remaining > 0:
+            if current_partition >= len(self._ucas_files):
+                raise IndexError(
+                    f"分区索引 {current_partition} 超出范围（共 {len(self._ucas_files)} 个分区）"
+                )
+            reader = self._ucas_files[current_partition]
+            reader.seek(current_offset)
+            if self._header and self._header.partition_size > 0:
+                readable = min(remaining, self._header.partition_size - current_offset)
+            else:
+                readable = remaining
+            raw = reader.read(readable)
+            if self._header and self._header.is_encrypted:
+                raw = decrypt_aes_ecb(raw, self._aes_key)[:readable]
+            result.extend(raw)
+            if len(raw) < readable:
+                break
+            remaining -= readable
+            current_partition += 1
+            current_offset = 0
         return bytes(result)
 
     # ========================================================================
@@ -594,6 +660,111 @@ class IoStoreReader:
 
         self._directory_index_buffer = self._utoc_file.read(self._header.directory_index_size)
         logger.debug("加载目录索引: %d 字节", len(self._directory_index_buffer))
+        self._parse_directory_index()
+
+    def _parse_directory_index(self) -> None:
+        """Parse UE IoStore directory index into path -> chunk id mapping."""
+        if not self._directory_index_buffer:
+            return
+
+        data = self._directory_index_buffer
+        if self._header and self._header.is_encrypted:
+            if self._aes_key is None:
+                raise ValueError("IoStore encrypted directory index requires AES key")
+            data = decrypt_aes_ecb(data, self._aes_key)[:len(data)]
+
+        stream = BytesIO(data)
+        self._mount_point = self._normalize_mount_point(self._read_fstring_from(stream))
+        directory_entries = self._read_array_from(stream, FIoDirectoryIndexEntry.deserialize)
+        file_entries = self._read_array_from(stream, FIoFileIndexEntry.deserialize)
+        string_table = self._read_string_table_from(stream)
+
+        invalid = 0xFFFFFFFF
+        self._directory_index.clear()
+
+        def name_at(index: int) -> str:
+            if index == invalid or index >= len(string_table):
+                return ""
+            return string_table[index]
+
+        def join_path(base: str, name: str, is_file: bool = False) -> str:
+            base = base.replace("\\", "/")
+            if name:
+                if base and not base.endswith("/"):
+                    base += "/"
+                base += name
+            if is_file:
+                return base
+            return base.rstrip("/")
+
+        def read_index(dir_index: int, current_path: str) -> None:
+            while dir_index != invalid and dir_index < len(directory_entries):
+                entry = directory_entries[dir_index]
+                dir_name = name_at(entry.name)
+                dir_path = join_path(current_path, dir_name)
+
+                file_index = entry.first_file_entry
+                while file_index != invalid and file_index < len(file_entries):
+                    file_entry = file_entries[file_index]
+                    full_path = join_path(dir_path, name_at(file_entry.name), is_file=True)
+                    if file_entry.user_data < len(self._chunk_ids):
+                        self._directory_index[full_path] = self._chunk_ids[file_entry.user_data]
+                    file_index = file_entry.next_file_entry
+
+                read_index(entry.first_child_entry, dir_path)
+                dir_index = entry.next_sibling_entry
+
+        read_index(0, self._mount_point)
+        logger.debug("解析目录索引: %d 个文件", len(self._directory_index))
+
+    def _compression_method_name(self, index: int) -> str:
+        if index == 0:
+            return "None"
+        if 0 <= index < len(self._compression_methods):
+            return self._compression_methods[index]
+        raise ValueError(f"IoStore compression method index out of range: {index}")
+
+    @staticmethod
+    def _normalize_mount_point(mount_point: str) -> str:
+        mount = mount_point.replace("\\", "/")
+        while mount.startswith("../"):
+            mount = mount[3:]
+        return mount.strip("/")
+
+    @staticmethod
+    def _read_array_from(stream: BytesIO, item_reader):
+        count_data = stream.read(4)
+        if len(count_data) < 4:
+            raise ValueError("IoStore directory array count is truncated")
+        count = struct.unpack("<i", count_data)[0]
+        if count < 0:
+            raise ValueError(f"IoStore directory array count is invalid: {count}")
+        return [item_reader(stream) for _ in range(count)]
+
+    @staticmethod
+    def _read_string_table_from(stream: BytesIO) -> List[str]:
+        count_data = stream.read(4)
+        if len(count_data) < 4:
+            raise ValueError("IoStore string table count is truncated")
+        count = struct.unpack("<i", count_data)[0]
+        if count < 0:
+            raise ValueError(f"IoStore string table count is invalid: {count}")
+        return [IoStoreReader._read_fstring_from(stream) for _ in range(count)]
+
+    @staticmethod
+    def _read_fstring_from(stream: BytesIO) -> str:
+        length_data = stream.read(4)
+        if len(length_data) < 4:
+            raise ValueError("FString length is truncated")
+        length = struct.unpack("<i", length_data)[0]
+        if length == 0:
+            return ""
+        if length < 0:
+            byte_len = (-length) * 2
+            raw = stream.read(byte_len)
+            return raw[:-2].decode("utf-16-le", errors="replace")
+        raw = stream.read(length)
+        return raw[:-1].decode("utf-8", errors="replace")
 
     def _build_info(self) -> None:
         """构建 TOC 信息摘要"""

@@ -51,7 +51,8 @@ memory/
 # CodeGraph local data
 .codegraph/
 # Test files
-tests/
+tests/*
+!tests/test_pak_handling.py
 # Claude Code skill
 QWEN.md
 # AI agent plans, specs, and reports (keep local only)

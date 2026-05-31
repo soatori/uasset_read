@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
-from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+from uasset_read.serializers.package_summary import read_package_summary, read_name_table, read_depends_map, read_preload_dependencies
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
@@ -327,6 +327,8 @@ def parse_package(
     asset_roots: Optional[Sequence[str]] = None,
     aes_key: Optional[bytes] = None,
     provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -334,7 +336,8 @@ def parse_package(
     Args:
         path: .uasset/.umap 文件路径
         tolerant: 是否启用容错模式（默认开启）
-        aes_key: 预留给容器 provider 的 AES key（filesystem 入口不使用）
+        aes_key: Deprecated. Construct encrypted container readers/providers with
+            their AES key instead; the parser no longer accepts an unused key.
         provider: 可选 package provider（filesystem/pak/iostore）
 
     Returns:
@@ -343,8 +346,20 @@ def parse_package(
     result = ParseResult()
     archive = None
     bundle = None
+    mappings_provider = None
 
     try:
+        if aes_key is not None:
+            raise ParseError(
+                "Unsupported argument: aes_key. Pass the key "
+                "when constructing the Pak/IoStore reader and provider"
+            )
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
@@ -367,6 +382,12 @@ def parse_package(
         # 读取导出表
         result.export_map = read_export_map(archive, result.summary, result.name_map)
 
+        # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
+        if hasattr(result.summary, 'depends_offset'):
+            result.summary.depends_map = read_depends_map(archive, result.summary)
+        if hasattr(result.summary, 'preload_dependency_count'):
+            result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
+
         # 解析 ExportMap 属性
         for export in result.export_map:
             if export.serial_size > 0:
@@ -374,8 +395,12 @@ def parse_package(
                     export.properties = parse_properties_from_export(
                         export, archive, result.summary, result.name_map,
                         result.export_map, result.import_map,
+                        mappings=mappings_provider.mappings if mappings_provider else None,
+                        game=game,
                     )
                 except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
 
@@ -420,6 +445,8 @@ def parse_uasset(
     tolerant: bool = True,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -432,6 +459,8 @@ def parse_uasset(
         tolerant=tolerant,
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
+        mappings_path=mappings_path,
+        game=game,
     )
 
 
@@ -441,6 +470,9 @@ def parse_uasset_with_linker(
     preload_all: bool = False,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
+    provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -448,6 +480,7 @@ def parse_uasset_with_linker(
         path: .uasset 文件路径
         tolerant: 是否启用容错模式（默认开启）
         preload_all: 是否预加载所有 exports（默认 False，惰性加载）
+        provider: 可选 package provider（filesystem/pak/iostore）
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
@@ -457,9 +490,16 @@ def parse_uasset_with_linker(
     result = LinkerParseResult()
     archive = None
     bundle = None
+    mappings_provider = None
 
     try:
-        bundle = open_package_bundle(path, tolerant=tolerant)
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
+        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
 
@@ -483,8 +523,12 @@ def parse_uasset_with_linker(
                         export, archive, result.summary, result.name_map,
                         result.export_map, result.import_map,
                         linker=result.linker,  # None at this point, linker not yet created
+                        mappings=mappings_provider.mappings if mappings_provider else None,
+                        game=game,
                     )
                 except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
 
@@ -507,6 +551,9 @@ def parse_uasset_with_linker(
         if preload_all:
             for i in range(len(linker._export_objects)):
                 linker.preload(i)
+
+        # Stage 4: 后处理（引用修复、导入验证、依赖图构建）
+        linker.post_load()
 
         # 共享后处理
         _post_process(

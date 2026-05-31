@@ -8,11 +8,19 @@ Per D-06: 数据和序列化解耦，from_archive 为 stub。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Self, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.core import FEdGraphPinType
+
+
+def _raise_metadata_from_archive_not_supported() -> None:
+    raise NotImplementedError(
+        "Blueprint metadata models are populated by "
+        "extract_blueprint_metadata(); direct from_archive() parsing is not "
+        "implemented for these DTO classes"
+    )
 
 
 @dataclass
@@ -28,8 +36,8 @@ class FunctionParameter:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "FunctionParameter":
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -40,8 +48,8 @@ class MulticastDelegate:
     is_callable_in_blueprint: bool = False
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "MulticastDelegate":
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -71,8 +79,8 @@ class BlueprintEvent:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "BlueprintEvent":
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -111,17 +119,20 @@ class BlueprintFunction:
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "BlueprintFunction":
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
 class BlueprintVariable:
     """蓝图变量定义（FBPVariableDescription）。"""
     var_name: str
-    var_type: "FEdGraphPinType"
-    category: str
-    property_flags: int
+    var_type: Optional["FEdGraphPinType"] = None
+    category: str = ""
+    property_flags: int = 0
+    var_guid: str = ""
+    rep_notify_func: str = ""
+    replication_condition: int = 0
     default_value: Any = None
     friendly_name: str = ""
     is_component: bool = False
@@ -155,8 +166,8 @@ class BlueprintVariable:
     edit_widget: str = ""
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "BlueprintVariable":
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -170,5 +181,5 @@ class BlueprintMetadata:
     events: List[BlueprintEvent] = field(default_factory=list)
 
     @classmethod
-    def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+    def from_archive(cls, archive: FArchive) -> "BlueprintMetadata":
+        _raise_metadata_from_archive_not_supported()

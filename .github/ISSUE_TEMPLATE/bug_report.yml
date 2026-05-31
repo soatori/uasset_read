@@ -1,0 +1,55 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+  - type: input
+    id: version
+    attributes:
+      label: uasset_read version
+      description: What version are you using? (run `uasset-read --version` or check `pyproject.toml`)
+      placeholder: "0.3.4-dev"
+    validations:
+      required: true
+
+  - type: input
+    id: ue_version
+    attributes:
+      label: Unreal Engine version
+      description: What UE version produced the asset?
+      placeholder: "UE 5.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the issue and how to reproduce it.
+      placeholder: |
+        1. Run `uasset-read BP_MyBlueprint.uasset`
+        2. See error: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Run with `--verbose` and paste the output.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else you'd like to add.
+    validations:
+      required: false

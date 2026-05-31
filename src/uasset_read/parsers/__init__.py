@@ -47,10 +47,23 @@ from uasset_read.parsers.property_types import (
     parse_verse_class_property,
     parse_verse_function_property,
     parse_verse_dynamic_property,
+    parse_verse_cell_property,
+    parse_verse_value_property,
+    parse_ansi_str_property,
+    parse_double_property,
+    parse_guid_property,
+    get_struct_size,
     _extract_struct_type_from_tag,
     _extract_map_types_from_tag,
     _extract_set_type_from_tag,
     _extract_enum_type_from_tag,
+)
+
+from uasset_read.parsers.custom_properties import (
+    CUSTOM_PROPERTY_HANDLERS,
+    CustomPropertyContext,
+    register_custom_property,
+    handle_custom_property,
 )
 
 from uasset_read.parsers.utils import (
@@ -99,7 +112,18 @@ __all__ = [
     "parse_verse_class_property",
     "parse_verse_function_property",
     "parse_verse_dynamic_property",
+    "parse_verse_cell_property",
+    "parse_verse_value_property",
+    "parse_ansi_str_property",
+    "parse_double_property",
+    "parse_guid_property",
+    # CustomProperty 注册表（custom_properties.py）
+    "CUSTOM_PROPERTY_HANDLERS",
+    "CustomPropertyContext",
+    "register_custom_property",
+    "handle_custom_property",
     # 辅助函数（测试依赖）
+    "get_struct_size",
     "_extract_struct_type_from_tag",
     "_extract_map_types_from_tag",
     "_extract_set_type_from_tag",
