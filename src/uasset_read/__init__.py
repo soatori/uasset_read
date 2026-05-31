@@ -218,6 +218,7 @@ from .graph import (
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    build_blueprint_node_index,
     build_execution_chains,  # Phase 71
     format_pin_ref,
     _derive_node_name,
@@ -555,6 +556,7 @@ __all__ = [
     "build_data_flows",
     "build_connections_map",
     "build_graphs_summary",
+    "build_blueprint_node_index",
     "build_execution_chains",  # Phase 71
     "build_execution_chains_from_flows",  # Phase 71
     "write_pin_trace_report",

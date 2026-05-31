@@ -62,7 +62,7 @@ PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
 
 PKG_Cooked = 0x200                     # Package is cooked
 PKG_UnversionedProperties = 0x2000     # Uses unversioned property serialization
-PKG_FilterEditorOnly = 0x00000080      # Filter editor-only objects
+PKG_FilterEditorOnly = 0x80000000      # Filter editor-only objects
 
 # ============================================================================
 # 蓝图图解析安全常量
@@ -93,7 +93,18 @@ UE5_METADATA_SERIALIZATION_OFFSET = 1014
 UE5_VERSE_CELLS = 1015
 UE5_PACKAGE_SAVED_HASH = 1016
 UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017
-UE5_IMPORT_TYPE_HIERARCHIES = 1017
+UE5_IMPORT_TYPE_HIERARCHIES = 1018
+
+# ============================================================================
+# UE4 版本常量（对应 CUE4Parse EUnrealEngineObjectUE4Version）
+# ============================================================================
+
+UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516
+UE4_ADD_STRING_ASSET_REFERENCES_MAP = 516
+UE4_SERIALIZE_TEXT_IN_PACKAGES = 517
+UE4_ADDED_SEARCHABLE_NAMES = 518
+UE4_ADDED_PACKAGE_OWNER = 519
+UE4_NON_OUTER_PACKAGE_IMPORT = 520
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
