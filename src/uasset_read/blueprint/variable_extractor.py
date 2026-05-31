@@ -28,72 +28,6 @@ from uasset_read.constants import (
 )
 
 
-# ============================================================================
-# Pin Category 到 C++ 类型映射
-# ============================================================================
-
-_PIN_CATEGORY_TO_CPP_TYPE = {
-    # 基本类型
-    "real": "float",
-    "double": "double",
-    "float": "float",
-    "int": "int32",
-    "int32": "int32",
-    "int64": "int64",
-    "byte": "uint8",
-    "bool": "bool",
-    "boolean": "bool",
-    # 字符串类型
-    "string": "FString",
-    "name": "FName",
-    "text": "FText",
-    # 结构体类型
-    "struct": "FStruct",
-    "vector": "FVector",
-    "rotator": "FRotator",
-    "transform": "FTransform",
-    "vector2d": "FVector2D",
-    "linearcolor": "FLinearColor",
-    "guid": "FGuid",
-    # 对象类型
-    "object": "UObject*",
-    "class": "UClass*",
-    "widget": "UWidget*",
-    # 特殊类型
-    " wildcard": "Wildcard",
-    "exec": "void",
-    "delegate": "void",
-    "multicastdelegate": "void",
-}
-
-
-def _map_pin_category_to_cpp_type(pin_category: str) -> str:
-    """将 pin_category 映射到 C++ 类型。
-
-    Args:
-        pin_category: Pin 类型名称（如 "real", "object", "struct"）
-
-    Returns:
-        C++ 类型字符串
-    """
-    # 精确匹配
-    if pin_category in _PIN_CATEGORY_TO_CPP_TYPE:
-        return _PIN_CATEGORY_TO_CPP_TYPE[pin_category]
-
-    # 大小写不敏感匹配
-    lower_category = pin_category.lower()
-    for key, value in _PIN_CATEGORY_TO_CPP_TYPE.items():
-        if key.lower() == lower_category:
-            return value
-
-    # 如果是对象类型路径（以 /Script/ 开头），直接返回
-    if pin_category.startswith("/Script/"):
-        return pin_category
-
-    # 默认返回原始类型名
-    return pin_category
-
-
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "BlueprintDescription",
@@ -461,8 +395,6 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 # 从 pins 提取参数和返回值
                 parameters: List[FunctionParameter] = []
                 return_type = ""
-                is_function_entry = getattr(node, 'class_name', '') == "K2Node_FunctionEntry"
-
                 for pin in getattr(node, 'pins', []):
                     pin_dir = getattr(pin, 'direction', '')
                     pin_type_obj = getattr(pin, 'pin_type', None)
@@ -479,32 +411,16 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                         is_output = pin_dir == "EGPD_Output"
                         is_input = pin_dir == "EGPD_Input"
 
-                    # 跳过执行流 pin（exec）和委托 pin
-                    if pin_type_name.lower() in ("exec", "delegate", "multicastdelegate"):
-                        continue
-
                     if is_output and pin_type_name:
-                        if is_function_entry:
-                            # FunctionEntry 节点：输出引脚是函数参数
-                            cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
-                            parameters.append(FunctionParameter(
-                                name=getattr(pin, 'pin_name', ''),
-                                param_type=cpp_type,
-                                is_input=False,
-                                is_output=True,
-                            ))
-                        else:
-                            # 其他节点：第一个非 exec 输出引脚是返回类型
-                            if return_type == "":
-                                return_type = _map_pin_category_to_cpp_type(pin_type_name)
+                        if return_type == "":
+                            return_type = pin_type_name
                     elif is_input and pin_type_name:
-                        # 输入引脚作为参数
-                        cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
+                        # 跳过执行流 pin（exec）
+                        if pin_type_name.lower() == "exec":
+                            continue
                         parameters.append(FunctionParameter(
                             name=getattr(pin, 'pin_name', ''),
-                            param_type=cpp_type,
-                            is_input=True,
-                            is_output=False,
+                            param_type=pin_type_name,
                         ))
 
                 func = BlueprintFunction(
