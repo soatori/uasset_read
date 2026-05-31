@@ -18,19 +18,13 @@ from uasset_read.models.node_types import (
     EdGraphNodeComment, K2NodeEnhancedInputAction
 )
 
-# N2C Processor Registry integration (Phase 69)
-from uasset_read.n2c.node_types import N2CNodeType
-from uasset_read.n2c.definitions import N2CNodeDefinition
-from uasset_read.n2c.processor_registry import N2CProcessorRegistry
-from uasset_read.n2c.compat import definition_to_node_dict, definition_to_trace_node_info
-from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
-
 logger = logging.getLogger(__name__)
 
 
 def _ensure_registry():
     """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
     from uasset_read.n2c.processors import register_all_processors
+    from uasset_read.n2c.processor_registry import N2CProcessorRegistry
     registry = N2CProcessorRegistry.get_instance()
     if not registry._processors or registry._fallback is None:
         register_all_processors()
@@ -67,16 +61,35 @@ def _sanitize_pin_dict(pin_dict: dict) -> dict:
     return sanitized
 
 
-def _sanitize_recursive(obj):
-    """递归清理列表/字典中的字符串。"""
+def _sanitize_recursive(obj, visited=None):
+    """递归清理列表/字典中的字符串。
+
+    Args:
+        obj: 要清理的对象
+        visited: 已访问对象的 id 集合，用于防止循环引用导致的无限递归
+    """
+    # 初始化 visited 集合（仅在顶层调用时）
+    if visited is None:
+        visited = set()
+
+    # 对可变对象检查循环引用
+    if isinstance(obj, (list, dict)):
+        obj_id = id(obj)
+        if obj_id in visited:
+            # 检测到循环引用，返回安全的替代值
+            if isinstance(obj, dict):
+                return {}
+            return []
+        visited.add(obj_id)
+
     if isinstance(obj, str):
         return _sanitize_string(obj)
     elif isinstance(obj, (int, float, bool)) or obj is None:
         return obj
     elif isinstance(obj, list):
-        return [_sanitize_recursive(item) for item in obj]
+        return [_sanitize_recursive(item, visited) for item in obj]
     elif isinstance(obj, dict):
-        return {k: _sanitize_recursive(v) for k, v in obj.items()}
+        return {k: _sanitize_recursive(v, visited) for k, v in obj.items()}
     elif hasattr(obj, "get_full_name"):
         try:
             return obj.get_full_name()
@@ -93,63 +106,6 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     策略：使用 f"{class_name}_{idx}" 格式，避免同名节点冲突。
     """
     return f"{node.class_name}_{idx}"
-
-
-def _pin_direction_text(direction: int) -> str:
-    """Return stable pin direction text for Blueprint DTO output."""
-    return "output" if direction == 1 else "input"
-
-
-def _pin_category(pin: UEdGraphPin) -> str:
-    return pin.pin_type.pin_category if pin.pin_type else ""
-
-
-def _pin_subcategory(pin: UEdGraphPin) -> str:
-    return pin.pin_type.pin_subcategory if pin.pin_type else ""
-
-
-def _pin_container_type(pin: UEdGraphPin) -> str:
-    if not pin.pin_type:
-        return ""
-    return str(getattr(pin.pin_type, "container_type", "") or "")
-
-
-def _format_blueprint_pin_dto(
-    pin: UEdGraphPin,
-    pin_lookup: Dict[str, Tuple[str, str]],
-    node_name_lookup: Dict[str, str],
-) -> Dict[str, Any]:
-    """Format a pin using the compact Blueprint DTO shape."""
-    linked_to: List[str] = []
-    for ref in pin.linked_to_raw or []:
-        target_pin_id = _pin_ref_guid(ref)
-        if target_pin_id in pin_lookup:
-            target_node_guid, target_pin_name = pin_lookup[target_pin_id]
-            target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
-            linked_to.append(f"{target_node_name}.{target_pin_name}")
-        elif target_pin_id:
-            linked_to.append(str(target_pin_id))
-        elif isinstance(ref, dict) and ref.get("owning_node"):
-            linked_to.append(str(ref["owning_node"]))
-
-    pin_type = pin.pin_type
-    return {
-        "PinId": pin.persistent_guid or pin.pin_id,
-        "PinName": pin.pin_name,
-        "Direction": _pin_direction_text(pin.direction),
-        "PinCategory": _pin_category(pin),
-        "PinSubCategory": _pin_subcategory(pin),
-        "DefaultValue": pin.default_value,
-        "LinkedTo": linked_to,
-        "IsReference": bool(getattr(pin_type, "is_reference", False)) if pin_type else False,
-        "IsConst": bool(getattr(pin_type, "is_const", False)) if pin_type else False,
-        "ContainerType": _pin_container_type(pin),
-    }
-
-
-def _resolve_node_type(class_name: str) -> N2CNodeType:
-    """使用 N2CNodeTypeRegistry 解析节点类型（Phase 68）。"""
-    return N2CNodeTypeRegistry.get_instance().resolve(class_name)
 
 
 def format_pin_ref(
@@ -467,9 +423,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """
     from dataclasses import asdict
 
-    # Phase 69: ensure registry initialized (conftest-reset-safe)
-    _ensure_registry()
-
     # D-20-01: 派生 node_name
     node_name = _derive_node_name(node, idx)
 
@@ -482,45 +435,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "node_comment": node.node_comment,
         "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # 添加字符串清理
     }
-
-    # Phase 69: 使用 Processor Registry 替代 if/elif 链
-    node_type = _resolve_node_type(node.class_name)
-    definition = N2CNodeDefinition(
-        node_id=node.node_guid or f"no-guid-{idx}",
-        node_type=node_type,
-        position=(node.node_pos_x, node.node_pos_y),
-        comment=node.node_comment or "",
-    )
-    N2CProcessorRegistry.get_instance().process_node(node, node_type, definition)
-
-    # 通过 compat 层转换回 OUT-01 格式
-    compat_result = definition_to_node_dict(
-        definition,
-        node_name=node_name,
-        node_guid=node.node_guid or "",
-        original_class_name=node.class_name,
-        pins=result["pins"],
-    )
-    compact: Dict[str, Any] = {
-        "Type": node.class_name,
-        "Name": node_name,
-        "NodePosX": node.node_pos_x,
-        "NodePosY": node.node_pos_y,
-        "NodeGuid": node.node_guid or None,
-        "FunctionName": _node_member_name(node) or None,
-        "Pins": [],
-    }
-    if node.node_comment:
-        compact["Note"] = node.node_comment
-    for key in (
-        "node_category",
-        "semantic_type",
-        "function_reference",
-        "event_reference",
-        "input_action",
-    ):
-        if key in compat_result:
-            compact[key] = compat_result[key]
 
     if node.class_name == "EdGraphNode_Comment":
         data = node.node_data if isinstance(node.node_data, dict) else {}
@@ -977,26 +891,7 @@ def _trace_execution_from_event(
             "node_type": current_node.class_name,
         }
 
-        # Phase 69: 使用 Processor Registry 调度语义提取
-        node_type = _resolve_node_type(current_node.class_name)
-        definition = N2CNodeDefinition(
-            node_id=current_guid,
-            node_type=node_type,
-            position=(current_node.node_pos_x, current_node.node_pos_y),
-            comment=current_node.node_comment or "",
-        )
-        N2CProcessorRegistry.get_instance().process_node(current_node, node_type, definition)
-
-        # 通过 compat 层映射回 node_info
-        semantic_info = definition_to_trace_node_info(
-            definition, current_guid, current_node.class_name
-        )
-        # 合并 semantic 字段（不覆盖已有字段）
-        for k, v in semantic_info.items():
-            if k not in node_info:
-                node_info[k] = v
-
-        # --- 保留：CallFunction 的 parameters 提取（数据流追踪，非语义提取）---
+        # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
             from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
@@ -1177,16 +1072,26 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径（D-08-07~11, D-19-10~12, Phase 54）。
+    """构建执行流路径条目（D-08-07~11, D-19-10~12, Phase 54）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
+    Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
+    Phase 72: 重命名为 build_execution_flow_entries()，作为内部规范 API。
 
     Args:
         graph: UEdGraph 对象
 
     Returns:
-        List[Dict]: execution flow entries used by chain and semantic builders.
+        List[Dict]: execution_flows 数组，每个 entry 包含:
+            - start_event: 起始事件名称
+            - nodes: 执行流节点列表
     """
+    import warnings
+    warnings.warn(
+        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
@@ -1257,10 +1162,15 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """Deprecated compatibility wrapper for execution flow entries."""
+    """已弃用：请使用 build_execution_flow_entries()。
+
+    此函数保留用于向后兼容，会发出 DeprecationWarning。
+    """
     import warnings
     warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
+        "build_execution_flows() is deprecated. "
+        "Use build_execution_flow_entries() for internal calls, "
+        "or build_execution_chains() for chain format output.",
         DeprecationWarning,
         stacklevel=2
     )

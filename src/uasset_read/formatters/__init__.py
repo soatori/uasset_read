@@ -9,18 +9,7 @@ Phase 32: 输出格式化模块。
 - markdown_formatter: format_markdown, _build_mermaid_flowchart
 - helpers: build_status_info, build_schema_info, resolve_fpackage_index
 - schemas: 预留目录（D-09）
-
-Re-export Phase 31 函数（D-01b）:
-- build_graphs_summary, format_graphs_json, format_pin_ref, _derive_node_name
 """
-
-# Phase 31 re-export（D-01b）
-from uasset_read.graph.flow_builder import (
-    build_graphs_summary,
-    format_graphs_json,
-    format_pin_ref,
-    _derive_node_name,
-)
 
 # JSON 格式化（Wave 1）
 from .json_formatter import (
@@ -57,20 +46,7 @@ from .helpers import (
     resolve_fpackage_index,
 )
 
-# Phase 56: C++ JSON IR 格式化
-from uasset_read.cpp_gen.formatters import (
-    CppProperty,
-    CppHeaderMeta,
-    CppClassIR,
-    format_cpp_class_json,
-)
-
 __all__ = [
-    # Phase 31 re-export
-    "build_graphs_summary",
-    "format_graphs_json",
-    "format_pin_ref",
-    "_derive_node_name",
     # JSON 格式化
     "format_json_full",
     "format_json_summary",
@@ -89,9 +65,4 @@ __all__ = [
     "build_status_info",
     "build_schema_info",
     "resolve_fpackage_index",
-    # Phase 56: C++ JSON IR
-    "CppProperty",
-    "CppHeaderMeta",
-    "CppClassIR",
-    "format_cpp_class_json",
 ]
