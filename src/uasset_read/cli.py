@@ -274,7 +274,8 @@ def main():
 
 def _handle_graph_mode(args, result):
     """处理 --graph 标志的特殊逻辑（向后兼容）。"""
-    from uasset_read.formatters import format_json_full, format_text_full, format_graphs_json
+    from uasset_read.formatters import format_json_full, format_text_full
+    from uasset_read.graph import format_graphs_json
 
     # Phase 55: --function-graphs 隐含 --json
     if args.function_graphs and not (args.json or args.text or args.summary or args.markdown or args.blueprint_text or args.blueprint_ue_text):

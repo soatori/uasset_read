@@ -24,6 +24,9 @@ from uasset_read.n2c.flow_extractor import extract_data_flow_map
 def to_n2c_json(
     graphs: list | None = None,
     result: Any | None = None,
+    *,
+    execution_flows: list[dict] | None = None,
+    data_flows: list[dict] | None = None,
 ) -> dict:
     """将图数据转换为 N2CStruct 格式 dict。
 
@@ -32,6 +35,8 @@ def to_n2c_json(
     Args:
         graphs: UEdGraph 列表
         result: ParseResult 对象（用于提取 metadata）
+        execution_flows: 可选的预计算执行流（跳过 build_execution_flows 调用）
+        data_flows: 可选的预计算数据流（跳过 build_data_flows 调用）
 
     Returns:
         dict: N2CStruct 兼容 dict（version, metadata, graphs, structs, enums）
@@ -186,10 +191,17 @@ def to_n2c_json(
             )
             n2c_nodes.append(n2c_node)
 
-        # Build flows
-        from uasset_read.graph.flow_builder import build_execution_flows, build_data_flows
-        execution_flows_raw = build_execution_flows(graph)
-        data_flows_raw = build_data_flows(graph)
+        # Build flows（可选：若已预计算则直接使用）
+        if execution_flows is not None:
+            execution_flows_raw = execution_flows
+        else:
+            from uasset_read.graph.flow_builder import build_execution_flow_entries
+            execution_flows_raw = build_execution_flow_entries(graph)
+        if data_flows is not None:
+            data_flows_raw = data_flows
+        else:
+            from uasset_read.graph.flow_builder import build_data_flows
+            data_flows_raw = build_data_flows(graph)
 
         # Convert execution flows to chains
         exec_chains = build_execution_chains_from_flows(execution_flows_raw, id_mapper, {})
