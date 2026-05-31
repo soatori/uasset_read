@@ -13,6 +13,28 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class PropertyTypeName:
+    """递归 FPropertyTypeName 节点。"""
+    name: str
+    children: List["PropertyTypeName"] = field(default_factory=list)
+
+    @property
+    def inner_count(self) -> int:
+        return len(self.children)
+
+    def child(self, index: int) -> Optional["PropertyTypeName"]:
+        if 0 <= index < len(self.children):
+            return self.children[index]
+        return None
+
+    def to_parts(self) -> List[Tuple[str, int]]:
+        parts: List[Tuple[str, int]] = [(self.name, len(self.children))]
+        for child in self.children:
+            parts.extend(child.to_parts())
+        return parts
+
+
+@dataclass
 class PropertyTag:
     """PropertyTag 结构（PROP-01）。来自 PropertyTag.h lines 37-105."""
     name: str                         # 属性名（FName）
@@ -24,6 +46,9 @@ class PropertyTag:
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
+    serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
+    type_name: Optional[PropertyTypeName] = None  # 递归 FPropertyTypeName
+    tag_data: Optional[Any] = None     # 映射系统提供的 PropertyType
     enum_type: Optional[str] = None   # ByteProperty/EnumProperty 的枚举类型（从 FPropertyTypeName 提取）
     type_parts: List[Tuple[str, int]] = field(default_factory=list)  # 完整 FPropertyTypeName 节点
     struct_type: Optional[str] = None  # StructProperty 的结构体类型名
@@ -43,6 +68,17 @@ class PropertyValue:
     type: str
     value: Any = None
     array_index: int = 0
+
+
+@dataclass
+class SoftObjectPathValue:
+    """统一 SoftObject/LazyObject/AssetObject 解析结果。"""
+    raw_kind: str
+    asset_path: str = ""
+    sub_path: str = ""
+    package_index: Optional[int] = None
+    guid: Optional[str] = None
+    property_type: str = "SoftObjectPath"
 
 
 class AdvancedPropertyValue:

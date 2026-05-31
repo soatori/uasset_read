@@ -220,6 +220,19 @@ class PackageProvider:
             candidate = f"{normalized}{ext}"
             if candidate in files:
                 return candidate
+        lowered = normalized.lower()
+        for candidate in files:
+            candidate_normalized = candidate.replace("\\", "/")
+            if candidate_normalized.lower() == lowered:
+                return candidate
+            for ext in PACKAGE_EXTENSIONS:
+                if candidate_normalized.lower() == f"{lowered}{ext}":
+                    return candidate
+            if candidate_normalized.lower().endswith(f"/{lowered}"):
+                return candidate
+            for ext in PACKAGE_EXTENSIONS:
+                if candidate_normalized.lower().endswith(f"/{lowered}{ext}"):
+                    return candidate
         raise FileNotFoundError(path)
 
 
@@ -247,6 +260,10 @@ class FileSystemPackageProvider(PackageProvider):
 
     def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
         main = Path(path)
+        if self.root is not None and not main.is_file() and not main.is_absolute():
+            root_relative = self.root / main
+            if root_relative.is_file():
+                main = root_relative
         if main.suffix.lower() not in PACKAGE_EXTENSIONS:
             for ext in PACKAGE_EXTENSIONS:
                 candidate = main.with_suffix(ext)
@@ -294,6 +311,8 @@ class IoStorePackageProvider(PackageProvider):
         return self.reader.list_files()
 
     def read_file(self, path: str) -> Optional[bytes]:
+        if hasattr(self.reader, "extract_path"):
+            return self.reader.extract_path(path)
         chunk_id = getattr(self.reader, "_directory_index", {}).get(path)
         if chunk_id is None:
             return None

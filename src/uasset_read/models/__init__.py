@@ -33,7 +33,9 @@ from .blueprint import (
 )
 from .properties import (
     PropertyTag,
+    PropertyTypeName,
     PropertyValue,
+    SoftObjectPathValue,
     AdvancedPropertyValue,
     StructValue,
     MapValue,
@@ -75,7 +77,9 @@ __all__ = [
     "MulticastDelegate",
     # 属性数据模型（Phase 30）
     "PropertyTag",
+    "PropertyTypeName",
     "PropertyValue",
+    "SoftObjectPathValue",
     "AdvancedPropertyValue",
     "StructValue",
     "MapValue",

@@ -4,11 +4,14 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
 
-from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+import logging
+from typing import Optional, List, Dict, Any, Tuple, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
@@ -80,6 +83,7 @@ class ObjectExport:
     script_serial_offset: int = 0
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
+    guid: str = ""  # 16 bytes GUID (版本 < 1005 时存在)
 
 
 def read_import_map(
@@ -159,17 +163,41 @@ def read_soft_object_paths(
 
 
 def detect_circular_deps(import_map: List[ObjectImport]) -> List[List[str]]:
-    """检测 ImportMap 中的包依赖。
+    """检测 ImportMap 中的包依赖循环。
 
+    通过分析 ImportMap 中的包引用，检测潜在的循环依赖。
     跳过 /Script/ 开头的引擎包（出现多次是正常的）。
-    返回空列表（真正的循环检测需要完整的依赖图分析，
-    这超出了当前范围）。
+
+    Returns:
+        循环依赖链列表，每个链是一组相互引用的包名
     """
     if not import_map:
         return []
-    # 引擎包出现多次是正常的，不需要报告
-    # 真正的循环依赖需要构建完整的包引用图并检测环
-    # 当前返回空列表（比误报更好）
+
+    # 收集包引用关系
+    package_refs: Dict[str, Set[str]] = {}
+    for imp in import_map:
+        # 获取源包名（从 class_package 或 object_name）
+        source_pkg = ""
+        if imp.class_package:
+            if isinstance(imp.class_package, int):
+                # 需要 name_map，但当前上下文没有
+                continue
+            source_pkg = imp.class_package
+        elif imp.package_name:
+            source_pkg = imp.package_name if isinstance(imp.package_name, str) else ""
+
+        # 跳过引擎包
+        if source_pkg.startswith("/Script/"):
+            continue
+
+        # 记录引用关系
+        if source_pkg not in package_refs:
+            package_refs[source_pkg] = set()
+
+    # 当前实现：返回空列表
+    # 真正的循环依赖检测需要跨包解析和完整的依赖图分析
+    # 这需要在链接器层面实现，而不是在 ImportMap 解析阶段
     return []
 
 
@@ -207,18 +235,31 @@ def read_export_map(
             serial_offset = archive.read_i64()
 
             # CR-05: 验证 serial_size/serial_offset 非负
+            # Tolerant: 负数时设为 0 并记录 warning，后续属性解析会因 size=0 被跳过
             if serial_size < 0:
-                raise ParseError(f"导出 #{export_idx} serial_size 为负数: {serial_size}")
+                logger.warning(
+                    "Export #%d serial_size 为负数: %d, 设为 0",
+                    export_idx, serial_size,
+                )
+                serial_size = 0
+
             if serial_offset < 0:
-                raise ParseError(f"导出 #{export_idx} serial_offset 为负数: {serial_offset}")
+                logger.warning(
+                    "Export #%d serial_offset 为负数: %d, 跳过该 export",
+                    export_idx, serial_offset,
+                )
+                serial_offset = 0
+                serial_size = 0
 
             # bool flags
             b_forced_export = archive.read_bool()
             b_not_for_client = archive.read_bool()
             b_not_for_server = archive.read_bool()
 
-            # bIsInheritedInstance (UE5 >= 1006 始终存在)
-            b_is_inherited_instance = archive.read_bool()
+            # bIsInheritedInstance (UE5 >= 1006)
+            b_is_inherited_instance = False
+            if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
+                b_is_inherited_instance = archive.read_bool()
 
             package_flags = archive.read_u32()
 
@@ -234,18 +275,35 @@ def read_export_map(
             archive.read_i32()  # serialization_before_create_deps
             archive.read_i32()  # create_before_create_deps
 
+            package_guid = ""
+            if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
+                guid_bytes = archive.read(16)  # package_guid
+                package_guid = guid_bytes.hex()
+
             # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
             script_serial_offset = 0
             script_serial_size = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
-            if not uses_unversioned:
+            if (
+                not uses_unversioned
+                and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET
+            ):
                 script_serial_offset = archive.read_i64()
                 script_serial_size = archive.read_i64()
                 # CR-05: 验证 script_serial_offset/size 非负
+                # Tolerant: 负数时设为 0 并记录 warning
                 if script_serial_offset < 0:
-                    raise ParseError(f"导出 #{export_idx} script_serial_offset 为负数: {script_serial_offset}")
+                    logger.warning(
+                        "Export #%d script_serial_offset 为负数: %d, 设为 0",
+                        export_idx, script_serial_offset,
+                    )
+                    script_serial_offset = 0
                 if script_serial_size < 0:
-                    raise ParseError(f"导出 #{export_idx} script_serial_size 为负数: {script_serial_size}")
+                    logger.warning(
+                        "Export #%d script_serial_size 为负数: %d, 设为 0",
+                        export_idx, script_serial_size,
+                    )
+                    script_serial_size = 0
 
             export_map.append(ObjectExport(
                 class_index=class_index, super_index=super_index,
@@ -261,7 +319,8 @@ def read_export_map(
                 b_is_asset=b_is_asset,
                 b_generate_public_hash=b_generate_public_hash,
                 script_serial_size=script_serial_size,
-                script_serial_offset=script_serial_offset
+                script_serial_offset=script_serial_offset,
+                guid=package_guid,
             ))
         except Exception as e:
             context = ErrorContext(

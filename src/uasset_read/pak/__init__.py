@@ -39,32 +39,23 @@ from uasset_read.pak.decompress import (
     decompress_entry,
 )
 
-# Crypto (optional, lazy import)
-try:
-    from uasset_read.pak.crypto import (
-        decrypt_aes_ecb,
-        validate_index_hash,
-        decrypt_index_blob,
-    )
-except ImportError:
-    # cryptography package not installed
-    pass
+# Crypto helpers import without optional dependencies; cryptography is loaded
+# lazily inside decrypt_aes_ecb() when decryption is actually requested.
+from uasset_read.pak.crypto import (
+    decrypt_aes_ecb,
+    validate_index_hash,
+    decrypt_index_blob,
+)
 
 # Index parsing
-try:
-    from uasset_read.pak.index import (
-        parse_primary_index,
-    )
-except ImportError:
-    pass
+from uasset_read.pak.index import (
+    parse_primary_index,
+)
 
 # Reader
-try:
-    from uasset_read.pak.reader import (
-        PakFileReader,
-    )
-except ImportError:
-    pass
+from uasset_read.pak.reader import (
+    PakFileReader,
+)
 
 __all__ = [
     # Constants

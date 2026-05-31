@@ -1,11 +1,15 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.3.3-dev
+版本 0.3.4-dev
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
+
+Compatibility note: the root package still re-exports advanced submodules for
+existing users. New code should prefer focused imports from subpackages such as
+uasset_read.pak, uasset_read.n2c, uasset_read.cpp_gen, and uasset_read.agent.
 """
-__version__ = "0.3.3-dev"
+__version__ = "0.3.4-dev"
 
 # 导出常量模块
 from .constants import (
@@ -138,10 +142,22 @@ from .models import (
     MulticastDelegate,
 )
 
+from .mappings import (
+    TypeMappingsProvider,
+    UsmapParser,
+    JmapParser,
+    TypeMappings,
+    StructMapping,
+    PropertyType,
+    PropertyInfo,
+)
+
 # 属性数据模型（Phase 30）
 from .models import (
     PropertyTag,
+    PropertyTypeName,
     PropertyValue,
+    SoftObjectPathValue,
     AdvancedPropertyValue,
     StructValue,
     MapValue,
@@ -189,7 +205,18 @@ from .parsers import (
     parse_verse_class_property,
     parse_verse_function_property,
     parse_verse_dynamic_property,
+    parse_verse_cell_property,
+    parse_verse_value_property,
+    parse_ansi_str_property,
+    parse_double_property,
+    parse_guid_property,
+    # CustomProperty 注册表
+    CUSTOM_PROPERTY_HANDLERS,
+    CustomPropertyContext,
+    register_custom_property,
+    handle_custom_property,
     # 辅助函数（测试依赖）
+    get_struct_size,
     _extract_struct_type_from_tag,
     _extract_map_types_from_tag,
     _extract_set_type_from_tag,
@@ -213,7 +240,7 @@ from .blueprint import (
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flow_entries,
-    build_execution_flows,
+    build_execution_flows,  # deprecated compatibility wrapper; use build_execution_flow_entries
     build_data_flows,
     build_connections_map,
     build_graphs_summary,
@@ -511,9 +538,19 @@ __all__ = [
     "BlueprintEvent",
     "FunctionParameter",
     "MulticastDelegate",
+    # 映射模型
+    "TypeMappingsProvider",
+    "UsmapParser",
+    "JmapParser",
+    "TypeMappings",
+    "StructMapping",
+    "PropertyType",
+    "PropertyInfo",
     # 属性数据模型（Phase 30）
     "PropertyTag",
+    "PropertyTypeName",
     "PropertyValue",
+    "SoftObjectPathValue",
     "AdvancedPropertyValue",
     "StructValue",
     "MapValue",
@@ -558,7 +595,18 @@ __all__ = [
     "parse_verse_class_property",
     "parse_verse_function_property",
     "parse_verse_dynamic_property",
+    "parse_verse_cell_property",
+    "parse_verse_value_property",
+    "parse_ansi_str_property",
+    "parse_double_property",
+    "parse_guid_property",
+    # CustomProperty 注册表
+    "CUSTOM_PROPERTY_HANDLERS",
+    "CustomPropertyContext",
+    "register_custom_property",
+    "handle_custom_property",
     # 辅助函数（测试依赖）
+    "get_struct_size",
     "_extract_struct_type_from_tag",
     "_extract_map_types_from_tag",
     "_extract_set_type_from_tag",

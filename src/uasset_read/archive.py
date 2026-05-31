@@ -68,6 +68,14 @@ class FArchive:
             return data
         return self._file.read(size)
 
+    @property
+    def is_byte_swapping(self) -> bool:
+        """全局字节序标志 — True 表示大端序。
+
+        UE FArchive 使用此标志判断是否需要字节交换。
+        """
+        return self._byte_swapping
+
     def seek(self, pos: int) -> None:
         """定位到指定位置（带边界验证）。"""
         self.validate_offset(pos, "seek")
@@ -230,6 +238,33 @@ class FArchive:
         import struct
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'd', self.read(8))[0]
+
+    def serialize_int(self, value: int) -> bytes:
+        """序列化 32 位整数（用于 SerializeInt 兼容）。
+
+        UE FArchive::SerializeInt 通常用于将整数写入存档。
+        此方法提供对称的序列化能力。
+        """
+        import struct
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.pack(fmt + 'i', value)
+
+    def serialize_bits(self, value: int, num_bits: int) -> bytes:
+        """序列化指定位数的值（用于 SerializeBits 兼容）。
+
+        UE FArchive::SerializeBits 用于位级别的序列化。
+        此方法将值打包为指定字节数。
+
+        Args:
+            value: 要序列化的值
+            num_bits: 位数（将向上取整到字节）
+
+        Returns:
+            序列化后的字节
+        """
+        import math
+        num_bytes = math.ceil(num_bits / 8)
+        return value.to_bytes(num_bytes, byteorder='big', signed=False)
 
     def read_fstring(self) -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。

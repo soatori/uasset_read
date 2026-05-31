@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pak 文件数据结构
 
 镜像 UE 引擎 IPlatformFilePak.h 中的 FPakInfo、FPakEntry、FPakDirectoryEntry 等结构。
@@ -13,11 +13,13 @@ from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_FSTRING_LENGTH
 from uasset_read.pak.constants import (
     PAK_FILE_MAGIC,
+    PAK_FILE_MAGICS,
     PakFileVersion,
     PAK_INFO_SIZES,
     Flag_Encrypted,
     Flag_Deleted,
 )
+from uasset_read.pak.game_versions import detect_game_from_magic, get_game_info, EGame
 
 
 # ============================================================================
@@ -151,7 +153,8 @@ class FPakEntry:
         entry.compression_method_index = struct.unpack('<I', stream.read(4))[0]
 
         # Timestamp removed in version 2 (PakFile_Version_NoTimestamps)
-        # if version < 2: timestamp = struct.unpack('<q', stream.read(8))[0]
+        if version < PakFileVersion.NoTimestamps:
+            stream.read(8)
 
         if version < PakFileVersion.FNameBasedCompressionMethod:
             entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
@@ -219,6 +222,7 @@ class FPakEntry:
             entry.offset = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
+        # Read UncompressedSize
         if uncompressed_size_fits_32:
             entry.uncompressed_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -226,26 +230,106 @@ class FPakEntry:
             entry.uncompressed_size = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        if size_fits_32:
-            entry.size = struct.unpack_from('<I', data, offset)[0]
-            offset += 4
-        else:
-            entry.size = struct.unpack_from('<q', data, offset)[0]
-            offset += 8
+        # Size defaults to UncompressedSize
+        entry.size = entry.uncompressed_size
+
+        # Read CompressedSize only if entry is compressed
+        if entry.compression_method_index > 0:
+            if size_fits_32:
+                entry.size = struct.unpack_from('<I', data, offset)[0]
+                offset += 4
+            else:
+                entry.size = struct.unpack_from('<q', data, offset)[0]
+                offset += 8
 
         # Block size: 0x3F means read from stream
         if block_size_index == 0x3F:
             entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
         else:
-            # Block size index maps to actual size (implementation-specific)
-            entry.compression_block_size = block_size_index * 1024  # common mapping
+            # Block size index maps to actual size
+            # UE 源码: (bitfield & 0x3f) << 11 = index * 2048
+            entry.compression_block_size = block_size_index << 11
 
         entry.is_compressed = entry.compression_method_index > 0
         entry.flags = Flag_Encrypted if entry.is_encrypted else 0
         entry.serialized_size = offset - start_offset
 
         return entry, entry.serialized_size
+
+    def encode_bitfield(self) -> bytes:
+        """编码 v10+ bitfield 格式的 FPakEntry。
+
+        与 decode_bitfield 对称的编码方法，用于序列化写入。
+
+        Returns:
+            编码后的字节数据
+        """
+        result = bytearray()
+
+        # 构建 bitfield (4 bytes)
+        bitfield = 0
+
+        # 判断是否适合 32 位
+        offset_fits_32 = self.offset <= 0xFFFFFFFF
+        uncompressed_size_fits_32 = self.uncompressed_size <= 0xFFFFFFFF
+        size_fits_32 = self.size <= 0xFFFFFFFF
+
+        if offset_fits_32:
+            bitfield |= (1 << 31)
+        if uncompressed_size_fits_32:
+            bitfield |= (1 << 30)
+        if size_fits_32:
+            bitfield |= (1 << 29)
+
+        # 压缩方法索引 (6 bits)
+        bitfield |= (self.compression_method_index & 0x3F) << 23
+
+        # 加密标志
+        if self.is_encrypted:
+            bitfield |= (1 << 22)
+
+        # 压缩块数量 (16 bits)
+        bitfield |= (self.compression_block_count & 0xFFFF) << 6
+
+        # 压缩块大小索引 (6 bits)
+        # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
+        if self.compression_block_size > 0 and self.compression_block_size % 2048 == 0:
+            block_size_index = self.compression_block_size >> 11
+            if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"
+                bitfield |= block_size_index
+            else:
+                bitfield |= 0x3F
+        else:
+            bitfield |= 0x3F
+
+        result.extend(struct.pack('<I', bitfield))
+
+        # 写入 Offset
+        if offset_fits_32:
+            result.extend(struct.pack('<I', self.offset))
+        else:
+            result.extend(struct.pack('<q', self.offset))
+
+        # 写入 UncompressedSize
+        if uncompressed_size_fits_32:
+            result.extend(struct.pack('<I', self.uncompressed_size))
+        else:
+            result.extend(struct.pack('<q', self.uncompressed_size))
+
+        # 写入 Size（仅压缩时）
+        if self.compression_method_index > 0:
+            if size_fits_32:
+                result.extend(struct.pack('<I', self.size))
+            else:
+                result.extend(struct.pack('<q', self.size))
+
+        # 写入 BlockSize（如果使用 0x3F 标记）
+        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
+            result.extend(struct.pack('<I', self.compression_block_size))
+
+        self.serialized_size = len(result)
+        return bytes(result)
 
 
 # ============================================================================
@@ -270,6 +354,7 @@ class FPakInfo:
     encrypted_index: bool = False     # version >= 7
     compression_methods: list = field(default_factory=list)  # up to 5 names, version >= 8
     index_is_frozen: bool = False   # version 9 only
+    detected_game: int = EGame.UNKNOWN  # 检测到的游戏标识
 
     @classmethod
     def _serialized_size(cls, version: int) -> int:
@@ -328,8 +413,12 @@ class FPakInfo:
                 continue
 
             magic = struct.unpack('<I', raw)[0]
-            if magic != PAK_FILE_MAGIC:
+            # 检查标准魔数和游戏特定魔数
+            if magic not in PAK_FILE_MAGICS:
                 continue
+
+            # 检测游戏标识
+            detected_game = detect_game_from_magic(magic)
 
             # Magic matched — read version field to determine exact version
             version_field = struct.unpack('<i', stream.read(4))[0]
@@ -354,6 +443,7 @@ class FPakInfo:
             stream.seek(pos)
             info = cls()
             info.version = version
+            info.detected_game = detected_game
 
             # New fields (version >= 7): prepended before Magic
             if version >= PakFileVersion.EncryptionKeyGuid:

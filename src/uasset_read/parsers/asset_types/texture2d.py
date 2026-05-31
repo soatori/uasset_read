@@ -14,6 +14,30 @@ if TYPE_CHECKING:
 def parse_texture2d(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
     """解析 Texture2D 资产的核心属性。"""
     result: Dict[str, Any] = {}
+    start = archive.tell()
+
+    if archive.total_size() - start >= 20:
+        magic = archive.read(4)
+        if magic == b"UT2D":
+            result["imported_size_x"] = archive.read_i32()
+            result["imported_size_y"] = archive.read_i32()
+            result["pixel_format"] = archive.read_i32()
+            mip_count = archive.read_i32()
+            result["mip_count"] = mip_count
+            mips = []
+            for _ in range(max(0, mip_count)):
+                mips.append({
+                    "size_x": archive.read_i32(),
+                    "size_y": archive.read_i32(),
+                    "bulk_offset": archive.read_u64(),
+                    "bulk_size": archive.read_u64(),
+                })
+            result["mip_levels"] = mips
+            result["parse_status"] = "metadata"
+            result["raw_offset"] = start
+            result["raw_size"] = archive.tell() - start
+            return result
+        archive.seek(start)
 
     # ImportedSize (FIntPoint)
     result["imported_size_x"] = archive.read_i32()

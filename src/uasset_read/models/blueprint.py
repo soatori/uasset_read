@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from uasset_read.models.core import FEdGraphPinType
 
 
+def _raise_metadata_from_archive_not_supported() -> None:
+    raise NotImplementedError(
+        "Blueprint metadata models are populated by "
+        "extract_blueprint_metadata(); direct from_archive() parsing is not "
+        "implemented for these DTO classes"
+    )
+
+
 @dataclass
 class FunctionParameter:
     """函数参数（META-02）。"""
@@ -29,7 +37,7 @@ class FunctionParameter:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -41,7 +49,7 @@ class MulticastDelegate:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -72,7 +80,7 @@ class BlueprintEvent:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -112,16 +120,19 @@ class BlueprintFunction:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
 class BlueprintVariable:
     """蓝图变量定义（FBPVariableDescription）。"""
     var_name: str
-    var_type: "FEdGraphPinType"
-    category: str
-    property_flags: int
+    var_type: Optional["FEdGraphPinType"] = None
+    category: str = ""
+    property_flags: int = 0
+    var_guid: str = ""
+    rep_notify_func: str = ""
+    replication_condition: int = 0
     default_value: Any = None
     friendly_name: str = ""
     is_component: bool = False
@@ -156,7 +167,7 @@ class BlueprintVariable:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -171,4 +182,4 @@ class BlueprintMetadata:
 
     @classmethod
     def from_archive(cls, archive: FArchive) -> Self:
-        raise NotImplementedError("Phase 31")
+        _raise_metadata_from_archive_not_supported()

@@ -36,6 +36,13 @@ class ExportOptions:
     # 验证
     validate_output: bool = False
 
+    # 解析选项（批量导出时传递给 parse_package/parse_uasset_with_linker）
+    tolerant: bool = True
+    include_parent_assets: bool = False
+    asset_roots: list[str] | None = None
+    mappings_path: str | None = None
+    game: str | None = None
+
 
 class ExportValidationError(Exception):
     """输出验证失败。"""

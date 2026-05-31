@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uasset_read"
-version = "0.3.3"
+version = "0.3.4-dev"
 description = "Unreal Engine .uasset file parser for AI agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,11 @@ classifiers = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+]
+pak = [
+    "cryptography>=41.0",
+    "lz4>=4.0",
+    "zstandard>=0.22",
 ]
 
 [project.scripts]

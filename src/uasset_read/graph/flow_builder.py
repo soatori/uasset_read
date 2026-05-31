@@ -490,7 +490,7 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     if node.class_name == "EdGraphNode_Comment":
         data = node.node_data if isinstance(node.node_data, dict) else {}
-        compact["comment"] = {
+        result["comment"] = {
             "text": node.node_comment or "",
             "color": _sanitize_recursive(data.get("comment_color")),
             "width": data.get("node_width"),
@@ -498,17 +498,17 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             "font_size": data.get("font_size"),
             "depth": data.get("comment_depth"),
         }
-        compact["comment"] = {
-            key: value for key, value in compact["comment"].items()
+        result["comment"] = {
+            key: value for key, value in result["comment"].items()
             if value is not None
         }
 
     # Phase 49: CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
         from uasset_read.formatters.json_formatter import _extract_call_function_parameters
-        compact["parameters"] = _extract_call_function_parameters(node)
+        result["parameters"] = _extract_call_function_parameters(node)
 
-    return compact
+    return result
 
 
 def _format_graph_node_links(
@@ -1138,12 +1138,6 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
             - start_event: 起始事件名称
             - nodes: 执行流节点列表
     """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
     # Phase 69: ensure registry initialized
     _ensure_registry()
 

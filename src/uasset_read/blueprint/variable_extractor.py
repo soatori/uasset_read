@@ -242,6 +242,10 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
         prop_name = prop.name
         prop_value = prop.value
 
+        if prop_name == "NewVariables" and isinstance(prop_value, list):
+            variables.extend(_extract_blueprint_variable_descriptions(prop_value))
+            continue
+
         # 跳过终止标记、系统属性和蓝图元数据属性
         if prop_name in BLUEPRINT_METADATA_PROPERTY_NAMES:
             continue
@@ -309,6 +313,107 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
         variables.append(var)
 
     return variables
+
+
+def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[BlueprintVariable]:
+    """Expand FBPVariableDescription structs from UBlueprint.NewVariables."""
+    variables: List[BlueprintVariable] = []
+    for item in items:
+        fields = item.fields if isinstance(item, StructValue) else item if isinstance(item, dict) else None
+        if not fields:
+            continue
+        var_name = fields.get("VarName") or fields.get("var_name")
+        if not var_name:
+            continue
+        property_flags = int(fields.get("PropertyFlags") or fields.get("property_flags") or 0)
+        flag_mapping = _map_property_flags(property_flags)
+        flags_labels = _flags_to_labels(property_flags)
+        category = _text_or_string(fields.get("Category") or fields.get("category"))
+        default_value = fields.get("DefaultValue", fields.get("default_value"))
+        rep_condition = fields.get("ReplicationCondition", fields.get("replication_condition", 0))
+        var = BlueprintVariable(
+            var_name=str(var_name),
+            var_type=_extract_var_type_from_description(fields.get("VarType")),
+            category=category,
+            property_flags=property_flags,
+            default_value=default_value,
+            metadata=_metadata_from_description(fields.get("MetaDataArray")),
+            flags_labels=flags_labels,
+            **flag_mapping,
+            is_blueprint_writable=flag_mapping.get("is_blueprint_readable", False)
+            and not flag_mapping.get("is_blueprint_read_only", False),
+        )
+        var.var_guid = _guid_from_description(fields.get("VarGuid"))
+        var.friendly_name = str(fields.get("FriendlyName") or fields.get("friendly_name") or "")
+        var.rep_notify_func = str(fields.get("RepNotifyFunc") or fields.get("rep_notify_func") or "")
+        var.replication_condition = _replication_condition_value(rep_condition)
+        variables.append(var)
+    return variables
+
+
+def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
+    if isinstance(value, StructValue):
+        fields = value.fields
+    elif isinstance(value, dict) and value.get("kind") == "binary_or_native_property":
+        return FEdGraphPinType(pin_category=str(value.get("type") or "StructProperty"))
+    elif isinstance(value, dict):
+        fields = value
+    else:
+        return FEdGraphPinType(pin_category="unknown")
+    return FEdGraphPinType(
+        pin_category=str(fields.get("PinCategory") or fields.get("pin_category") or "unknown"),
+        pin_subcategory=str(fields.get("PinSubCategory") or fields.get("PinSubcategory") or fields.get("pin_subcategory") or ""),
+        container_type=int(fields.get("ContainerType") or fields.get("container_type") or 0),
+    )
+
+
+def _guid_from_description(value: Any) -> str:
+    if isinstance(value, dict) and value.get("kind") == "binary_or_native_property":
+        raw = value.get("raw_data")
+        if isinstance(raw, bytes) and len(raw) == 16:
+            return _format_guid_bytes(raw)
+    if isinstance(value, bytes) and len(value) == 16:
+        return _format_guid_bytes(value)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _format_guid_bytes(data: bytes) -> str:
+    return (
+        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
+        f"{data[4]:02x}{data[5]:02x}-"
+        f"{data[6]:02x}{data[7]:02x}-"
+        f"{data[8]:02x}{data[9]:02x}-"
+        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
+    )
+
+
+def _text_or_string(value: Any) -> str:
+    if hasattr(value, "source_string"):
+        return str(value.source_string)
+    return str(value or "")
+
+
+def _metadata_from_description(value: Any) -> Dict[str, str]:
+    metadata: Dict[str, str] = {}
+    if isinstance(value, list):
+        for item in value:
+            fields = item.fields if isinstance(item, StructValue) else item if isinstance(item, dict) else {}
+            key = fields.get("Key") or fields.get("Name") or fields.get("key")
+            if key:
+                metadata[str(key)] = str(fields.get("Value") or fields.get("value") or "")
+    return metadata
+
+
+def _replication_condition_value(value: Any) -> int:
+    if isinstance(value, int):
+        return value
+    if hasattr(value, "value_name"):
+        text = str(value.value_name)
+        if text.endswith("COND_None"):
+            return 0
+    return 0
 
 
 def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]:
@@ -704,7 +809,6 @@ def read_blueprint_variable(
     """
     从 blueprint export 读取 FBPVariableDescription（BLUE-03）。
     
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
     参考 UE C++ FBPVariableDescription::Serialize() 实现
 
     序列化顺序:
@@ -723,9 +827,7 @@ def read_blueprint_variable(
         var_name=archive.read_name(name_map)
     )
 
-    # VarGuid (16 bytes) — 跳过
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    archive.read(16)  # TODO: 使用UE编辑器方式读取VarGuid
+    var.var_guid = _read_guid(archive)
 
     # VarType (FEdGraphPinType)
     var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
@@ -736,20 +838,13 @@ def read_blueprint_variable(
     # Category (FText) — 简化为 FString
     var.category = archive.read_fstring()
 
-    # PropertyFlags (uint64)
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    var.property_flags = archive.read_u64()  # TODO: 使用UE编辑器方式读取PropertyFlags
+    var.property_flags = archive.read_u64()
 
-    # RepNotifyFunc (FName) — 跳过
-    archive.read_name(name_map)
+    var.rep_notify_func = archive.read_name(name_map)
 
-    # ReplicationCondition (uint8) — 跳过
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    archive.read_u8()  # TODO: 使用UE编辑器方式读取ReplicationCondition
+    var.replication_condition = archive.read_u8()
 
-    # MetaDataArray
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    meta_count = archive.read_i32()  # TODO: 使用UE编辑器方式读取元数据数量
+    meta_count = archive.read_i32()
     var.metadata = {}
     for _ in range(meta_count):
         key = archive.read_name(name_map)
@@ -787,9 +882,7 @@ def read_blueprint_variable(
     var.edit_category = var.metadata.get('Category', '')
     var.edit_widget = var.metadata.get('EditWidget', '')
 
-    # DefaultValue — 解析
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    default_str = archive.read_fstring()  # TODO: 使用UE编辑器方式读取默认值
+    default_str = archive.read_fstring()
     var.default_value = parse_default_value(default_str, var.var_type)
 
     # 组件变量识别（双重验证）
@@ -805,3 +898,14 @@ def read_blueprint_variable(
     var.is_component = is_component_by_name or is_component_by_flag
 
     return var
+
+
+def _read_guid(archive) -> str:
+    data = archive.read_bytes(16) if hasattr(archive, "read_bytes") else archive.read(16)
+    return (
+        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
+        f"{data[4]:02x}{data[5]:02x}-"
+        f"{data[6]:02x}{data[7]:02x}-"
+        f"{data[8]:02x}{data[9]:02x}-"
+        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
+    )
