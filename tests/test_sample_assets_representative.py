@@ -237,6 +237,113 @@ def test_supported_asset_type_parsers_can_read_representative_exports(
 
 
 @pytest.mark.integration
+def test_real_blueprint_graph_metadata_has_standard_references(ue_sample_root: Path):
+    asset = STABLE_ASSETS[0]
+    path = _asset_path(ue_sample_root, asset)
+    if not path.exists():
+        pytest.skip(f"sample asset not found: {path}")
+
+    result = _parse_asset(path, tolerant=True)
+
+    assert result.is_success, f"{path} did not parse successfully: {result.errors}"
+    assert result.blueprint is not None
+    assert len(result.blueprint.variables) >= 1
+    assert any(variable.var_guid for variable in result.blueprint.variables)
+    assert len(result.graphs) >= 1
+    event_graph = next((graph for graph in result.graphs if graph.graph_name == "EventGraph"), result.graphs[0])
+    assert event_graph.graph_guid
+    assert len(event_graph.nodes) >= 1
+    assert sum(len(node.pins) for node in event_graph.nodes) >= 1
+    assert any(
+        pin.persistent_guid is not None
+        for node in event_graph.nodes
+        for pin in node.pins
+    )
+    assert sum(
+        len(getattr(pin, "linked_to_raw", []) or [])
+        for graph in result.graphs
+        for node in graph.nodes
+        for pin in node.pins
+    ) >= 1
+    assert any(variable.default_value not in (None, "") for variable in result.blueprint.variables)
+
+
+@pytest.mark.integration
+def test_real_anim_blueprint_graph_metadata_has_standard_references(ue_sample_root: Path):
+    asset = next(item for item in DIAGNOSTIC_ASSETS if item.label == "manny_combat_anim_blueprint")
+    path = _asset_path(ue_sample_root, asset)
+    if not path.exists():
+        pytest.skip(f"sample asset not found: {path}")
+
+    result = _parse_asset(path, tolerant=True)
+
+    assert result.is_success, f"{path} did not parse successfully: {result.errors}"
+    assert result.blueprint is not None
+    assert len(result.blueprint.variables) >= 1
+    assert any(variable.var_guid for variable in result.blueprint.variables)
+    assert any(variable.default_value not in (None, "") for variable in result.blueprint.variables)
+    assert len(result.graphs) >= 1
+    graph = result.graphs[0]
+    assert graph.graph_guid
+    assert len(graph.nodes) >= 1
+    assert sum(len(node.pins) for node in graph.nodes) >= 1
+    assert any(
+        pin.persistent_guid is not None
+        for node in graph.nodes
+        for pin in node.pins
+    )
+    assert sum(
+        len(getattr(pin, "linked_to_raw", []) or [])
+        for node in graph.nodes
+        for pin in node.pins
+    ) >= 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("label", "required_keys"),
+    [
+        ("level_proto_texture", {"imported_size_x", "b_cooked"}),
+        ("manny_material_instance", {"parent_material_index"}),
+        ("level_proto_static_mesh", {"lod_count", "section_count"}),
+    ],
+)
+def test_real_core_asset_metadata_fields_are_present(
+    ue_sample_root: Path,
+    label: str,
+    required_keys: set[str],
+):
+    asset = next(item for item in STABLE_ASSETS if item.label == label)
+    path = _asset_path(ue_sample_root, asset)
+    if not path.exists():
+        pytest.skip(f"sample asset not found: {path}")
+
+    result = _parse_asset(path, tolerant=True)
+    assert result.is_success, f"{path} did not parse successfully: {result.errors}"
+
+    export = next(
+        (
+            export
+            for export in result.export_map
+            if export.object_name == path.stem and export.serial_size > 0
+        ),
+        None,
+    )
+    assert export is not None, f"no primary export found for {path.stem}"
+
+    parsed = _parse_representative_export(path, asset.category, export, result.name_map)
+
+    assert required_keys <= set(parsed)
+    if label == "level_proto_texture":
+        assert parsed["imported_size_x"] > 0
+    elif label == "manny_material_instance":
+        assert parsed["parent_material_index"] != 0
+    elif label == "level_proto_static_mesh":
+        assert parsed["lod_count"] >= 0
+        assert parsed["section_count"] >= 0
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("asset", [_param(asset) for asset in DIAGNOSTIC_ASSETS])
 def test_diagnostic_blueprint_assets_do_not_crash_in_tolerant_mode(
     ue_sample_root: Path,
@@ -274,4 +381,20 @@ def _parser_for_category(category: str) -> Callable:
         from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
 
         return parse_skeletal_mesh
+    if category == "StaticMesh":
+        from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
+
+        return parse_static_mesh
     raise AssertionError(f"no parser configured for category: {category}")
+
+
+def _parse_representative_export(path: Path, category: str, export, name_map: list[str]) -> dict:
+    from uasset_read.archive import FArchive
+
+    parser = _parser_for_category(category)
+    archive = FArchive(str(path), tolerant=True)
+    try:
+        archive.seek(export.serial_offset + export.script_serial_offset)
+        return parser(archive, name_map)
+    finally:
+        archive.close()

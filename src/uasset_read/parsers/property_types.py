@@ -561,9 +561,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
-    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS:
-        if tag.size > 0:
-            archive.seek(archive.tell() + tag.size)
+    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
             fields={},
@@ -571,7 +569,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             parse_status="opaque",
         )
 
-    # Only known tagged fallback structs use an inner PropertyTag loop.
+    # Unknown structs may still be tagged FStructFallback payloads. Try the
+    # standard inner PropertyTag loop first, then fall back to opaque bytes.
     fields: Dict[str, Any] = {}
     property_count = 0
 
@@ -583,28 +582,42 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     struct_start = archive.tell()
     struct_end = struct_start + tag.size if tag.size > 0 else None
 
-    while property_count < MAX_PROPERTY_COUNT:
-        property_count += 1
+    try:
+        while property_count < MAX_PROPERTY_COUNT:
+            property_count += 1
 
-        inner_tag = read_property_tag(archive, name_map)
+            inner_tag = read_property_tag(archive, name_map)
 
-        if inner_tag.name == "None":
-            break
+            if inner_tag.name == "None":
+                break
 
-        if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
-            raise ParseError(
-                f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
-                f"size {inner_tag.size} exceeds struct boundary"
+            if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
+                raise ParseError(
+                    f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
+                    f"size {inner_tag.size} exceeds struct boundary"
+                )
+
+            field_value = read_tag_value_bounded(
+                archive,
+                inner_tag,
+                lambda inner_tag=inner_tag: parse_property_value(
+                    inner_tag, archive, name_map, export_map, summary, depth + 1
+                ),
             )
-
-        field_value = read_tag_value_bounded(
-            archive,
-            inner_tag,
-            lambda inner_tag=inner_tag: parse_property_value(
-                inner_tag, archive, name_map, export_map, summary, depth + 1
-            ),
+            fields[inner_tag.name] = field_value
+    except Exception:
+        if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
+            raise
+        if struct_end is not None:
+            archive.seek(struct_end)
+        elif tag.size > 0:
+            archive.seek(struct_start + tag.size)
+        return StructValue(
+            struct_type=declared_struct_type or "UnknownStruct",
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
         )
-        fields[inner_tag.name] = field_value
 
     if struct_end is not None and archive.tell() != struct_end:
         archive.seek(struct_end)
@@ -807,7 +820,13 @@ def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[
     has_value = archive.read_bool()
     if has_value:
         parse_property_value = _get_parse_property_value()
-        inner_value = parse_property_value(tag, archive, name_map or [], export_map or [], summary)
+        inner_type = getattr(tag, "inner_type", None) or "Unknown"
+        inner_tag = PropertyTag(
+            name=f"{tag.name}.Value",
+            type=inner_type,
+            size=max(0, (tag.size or 0) - 4),
+        )
+        inner_value = parse_property_value(inner_tag, archive, name_map or [], export_map or [], summary)
         return {"has_value": True, "value": inner_value}
     return {"has_value": False, "value": None}
 

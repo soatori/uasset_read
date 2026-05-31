@@ -220,6 +220,19 @@ class PackageProvider:
             candidate = f"{normalized}{ext}"
             if candidate in files:
                 return candidate
+        lowered = normalized.lower()
+        for candidate in files:
+            candidate_normalized = candidate.replace("\\", "/")
+            if candidate_normalized.lower() == lowered:
+                return candidate
+            for ext in PACKAGE_EXTENSIONS:
+                if candidate_normalized.lower() == f"{lowered}{ext}":
+                    return candidate
+            if candidate_normalized.lower().endswith(f"/{lowered}"):
+                return candidate
+            for ext in PACKAGE_EXTENSIONS:
+                if candidate_normalized.lower().endswith(f"/{lowered}{ext}"):
+                    return candidate
         raise FileNotFoundError(path)
 
 
@@ -298,6 +311,8 @@ class IoStorePackageProvider(PackageProvider):
         return self.reader.list_files()
 
     def read_file(self, path: str) -> Optional[bytes]:
+        if hasattr(self.reader, "extract_path"):
+            return self.reader.extract_path(path)
         chunk_id = getattr(self.reader, "_directory_index", {}).get(path)
         if chunk_id is None:
             return None

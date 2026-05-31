@@ -103,6 +103,18 @@ class TypeMappings:
         key = name.split(".")[-1]
         return self.types.get(key) or self.types.get(name)
 
+    def property_by_name(self, struct_name: Optional[str], property_name: str) -> Optional[PropertyInfo]:
+        """Find a mapped property on a struct, walking mapped super structs."""
+        seen: set[str] = set()
+        current = self.get_struct(struct_name)
+        while current is not None and current.name not in seen:
+            seen.add(current.name)
+            found = current.property_by_name(property_name)
+            if found is not None:
+                return found
+            current = self.get_struct(current.super_type)
+        return None
+
 
 class _BytesReader:
     def __init__(self, data: bytes):
@@ -226,7 +238,7 @@ class UsmapParser:
             prop = self._parse_property_info(ar, lut)
             for offset in range(prop.array_size):
                 properties[prop.index + offset] = PropertyInfo(
-                    index=offset,
+                    index=prop.index + offset,
                     name=prop.name,
                     mapping_type=prop.mapping_type,
                     array_size=prop.array_size,
@@ -287,7 +299,7 @@ class JmapParser:
                         continue
                     info = self._parse_property_info(prop, index)
                     for offset in range(info.array_size):
-                        properties[index] = PropertyInfo(offset, info.name, info.mapping_type, info.array_size)
+                        properties[index] = PropertyInfo(index, info.name, info.mapping_type, info.array_size)
                         index += 1
                 mappings.types[short_name] = StructMapping(
                     name=short_name,

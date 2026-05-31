@@ -127,9 +127,12 @@ class BlueprintFunction:
 class BlueprintVariable:
     """蓝图变量定义（FBPVariableDescription）。"""
     var_name: str
-    var_type: "FEdGraphPinType"
-    category: str
-    property_flags: int
+    var_type: Optional["FEdGraphPinType"] = None
+    category: str = ""
+    property_flags: int = 0
+    var_guid: str = ""
+    rep_notify_func: str = ""
+    replication_condition: int = 0
     default_value: Any = None
     friendly_name: str = ""
     is_component: bool = False

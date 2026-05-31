@@ -162,30 +162,46 @@ class FIoOffsetAndLength:
 @dataclass
 class FIoDirectoryIndexEntry:
     """目录索引条目"""
-    name_offset: int
-    next_index: int
-    child_index: int
-    chunk_id_index: int
-    size: int
-    flags: int
+    name: int
+    first_child_entry: int
+    next_sibling_entry: int
+    first_file_entry: int
 
     @staticmethod
     def deserialize(stream: BinaryIO) -> FIoDirectoryIndexEntry:
         """从流反序列化"""
-        data = stream.read(24)
-        if len(data) < 24:
+        data = stream.read(16)
+        if len(data) < 16:
             raise ValueError("Unexpected end of stream")
 
-        name_offset, next_index, child_index, chunk_id_index, size, flags = \
-            struct.unpack('<IIIIII', data)
+        name, first_child_entry, next_sibling_entry, first_file_entry = \
+            struct.unpack('<IIII', data)
 
         return FIoDirectoryIndexEntry(
-            name_offset=name_offset,
-            next_index=next_index,
-            child_index=child_index,
-            chunk_id_index=chunk_id_index,
-            size=size,
-            flags=flags
+            name=name,
+            first_child_entry=first_child_entry,
+            next_sibling_entry=next_sibling_entry,
+            first_file_entry=first_file_entry,
+        )
+
+
+@dataclass
+class FIoFileIndexEntry:
+    """IoStore file index entry."""
+    name: int
+    next_file_entry: int
+    user_data: int
+
+    @staticmethod
+    def deserialize(stream: BinaryIO) -> FIoFileIndexEntry:
+        data = stream.read(12)
+        if len(data) < 12:
+            raise ValueError("Unexpected end of stream")
+        name, next_file_entry, user_data = struct.unpack('<III', data)
+        return FIoFileIndexEntry(
+            name=name,
+            next_file_entry=next_file_entry,
+            user_data=user_data,
         )
 
 

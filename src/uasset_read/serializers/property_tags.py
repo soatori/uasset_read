@@ -160,7 +160,10 @@ def read_property_tag(
     mapping_container = getattr(mappings, "mappings", mappings)
     struct_mapping = mapping_container.get_struct(struct_name) if mapping_container is not None and hasattr(mapping_container, "get_struct") else None
     if struct_mapping is not None:
-        prop_info = struct_mapping.property_by_name(tag.name)
+        if hasattr(mapping_container, "property_by_name"):
+            prop_info = mapping_container.property_by_name(struct_name, tag.name)
+        else:
+            prop_info = struct_mapping.property_by_name(tag.name)
         if prop_info is not None:
             tag.tag_data = prop_info.mapping_type
             _apply_property_type_to_tag(tag, prop_info.mapping_type)

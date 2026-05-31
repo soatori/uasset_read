@@ -60,6 +60,8 @@ memory/
 
 # Test files
 tests/*
+!tests/test_cue4parse_gap_completion.py
+!tests/test_pak_handling.py
 
 # Claude Code skill
 QWEN.md

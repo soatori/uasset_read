@@ -36,6 +36,24 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 
+def _format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
+    """Format 16 raw FGuid bytes as a stable 8-4-4-4-12 string."""
+    if len(data) != 16:
+        raise ParseError(f"FGuid requires 16 bytes, got {len(data)}")
+    text = (
+        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
+        f"{data[4]:02x}{data[5]:02x}-"
+        f"{data[6]:02x}{data[7]:02x}-"
+        f"{data[8]:02x}{data[9]:02x}-"
+        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
+    )
+    return text.upper() if uppercase else text
+
+
+def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
+    return _format_guid_bytes(archive.read_bytes(16), uppercase=uppercase)
+
+
 def _get_thread_local():
     """返回当前线程的隔离诊断状态，避免全局可变状态竞态。"""
     if not hasattr(_thread_local, 'linkedto_failure_seen'):
@@ -227,7 +245,6 @@ def read_ed_graph_pin_type(
 def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
     """读取 FString，对异常长度进行容错处理。
 
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
     参考 UE C++ FArchive& operator<<(FString&) 实现
 
     FString 序列化格式 (UE C++ Archive.h L209-230):
@@ -531,18 +548,13 @@ def read_pin_reference(
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
-    """读取单个 Pin 引用（SerializePin 格式）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FArchive& operator<<(FBlueprintEditorUtils::FPinReference&) 实现
-    """
+    """读取单个 Pin 引用（FBlueprintEditorUtils::FPinReference）。"""
     b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
     owning_node_index = archive.read_i32()
-    pin_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取Pin GUID
-    pin_guid = pin_guid_bytes.hex().upper()
+    pin_guid = _read_guid(archive)
 
     # 解析 owning node 名称
     owning_node_name: Optional[str] = None
@@ -556,8 +568,9 @@ def read_pin_reference(
             owning_node_name = import_map[import_idx].object_name
 
     # Phase 73 收敛：标记 pin_guid 最小有效性，供连接层过滤
-    guid_is_hex = len(pin_guid) == 32 and all(c in "0123456789ABCDEF" for c in pin_guid)
-    guid_is_zero = pin_guid == ("0" * 32)
+    guid_text = pin_guid.replace("-", "")
+    guid_is_hex = len(guid_text) == 32 and all(c in "0123456789ABCDEF" for c in guid_text)
+    guid_is_zero = guid_text == ("0" * 32)
     result = {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
@@ -1148,11 +1161,9 @@ def read_ue_graph_pin(
                      f"null={1 if _ref_ref is None else 0},owning={_ref_ref.get('owning_node') if _ref_ref else 'N/A'}")
 
     # 17. PersistentGuid (EditorOnly)
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
     persistent_start = archive.tell()
     try:
-        persistent_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取PersistentGuid
-        persistent_guid = persistent_guid_bytes.hex().upper()
+        persistent_guid = _read_guid(archive)
     except Exception:
         persistent_guid = None
     if trace_mode:
@@ -1265,11 +1276,7 @@ def read_fmember_reference(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
-    """读取 FMemberReference（MemberReference.h L74-95）。
-    
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
-    参考 UE C++ FArchive& operator<<(FMemberReference&) 实现
-    """
+    """读取 FMemberReference（MemberReference.h L74-95）。"""
     member_parent_index = archive.read_i32()
     member_parent: Optional[str] = None
     if member_parent_index != 0:
@@ -1279,8 +1286,7 @@ def read_fmember_reference(
 
     member_scope = archive.read_fstring()
     member_name = archive.read_name(name_map)
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    member_guid = archive.read_bytes(16).hex()  # TODO: 使用UE编辑器方式读取MemberGuid
+    member_guid = _read_guid(archive, uppercase=False)
     b_self_context = archive.read_bool()
     _b_was_deprecated = archive.read_bool()
 
@@ -2228,7 +2234,6 @@ def read_ue_graph(
 ) -> UEdGraph:
     """读取 UEdGraph 容器（EdGraph.cpp）。
     
-    TODO: 使用UE编辑器源码的加载方式替换实现代码
     参考 UE C++ UEdGraph::Serialize() 实现
     """
     archive.seek(graph_export.serial_offset)
@@ -2296,9 +2301,7 @@ def read_ue_graph(
                         nodes[-1]._export_object_name = node_export.object_name
 
     # 3. GraphGuid
-    # TODO: 使用UE编辑器源码的加载方式替换实现代码
-    graph_guid_bytes = archive.read_bytes(16)  # TODO: 使用UE编辑器方式读取GraphGuid
-    graph_guid = graph_guid_bytes.hex()
+    graph_guid = _read_guid(archive, uppercase=False)
 
     # 4. bEditable
     b_editable = archive.read_u8() != 0

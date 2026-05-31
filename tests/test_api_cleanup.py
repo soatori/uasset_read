@@ -307,12 +307,11 @@ def test_batch_options_from_cli_include_parse_flags():
     assert options.asset_roots == ["Content"]
 
 
-def test_iostore_directory_index_fails_explicitly():
+def test_iostore_directory_index_list_files_is_stable_when_unparsed():
     reader = IoStoreReader("dummy.utoc")
     reader._directory_index_buffer = b"raw-directory-index"
 
-    with pytest.raises(NotImplementedError, match="directory index parsing"):
-        reader.list_files()
+    assert reader.list_files() == []
 
 
 def test_blueprint_metadata_from_archive_error_is_actionable():

@@ -115,7 +115,8 @@ class PakFileReader:
 
     def get_entry(self, path: str) -> FPakEntry | None:
         """获取指定路径的 FPakEntry，找不到返回 None。"""
-        return self._entries.get(path)
+        resolved = self._resolve_entry_path(path)
+        return self._entries.get(resolved) if resolved is not None else None
 
     def extract(self, path: str) -> bytes | None:
         """提取文件条目的字节数据（解压缩）。
@@ -129,12 +130,13 @@ class PakFileReader:
         Raises:
             ParseError: 条目已删除或偏移无效
         """
-        entry = self._entries.get(path)
+        resolved = self._resolve_entry_path(path)
+        entry = self._entries.get(resolved) if resolved is not None else None
         if entry is None:
             return None
 
         if entry.is_deleted:
-            raise ParseError(f"Entry is deleted: {path}")
+            raise ParseError(f"Entry is deleted: {resolved}")
 
         if self._file is None:
             raise ParseError("PakFileReader not opened — call open() first")
@@ -154,6 +156,29 @@ class PakFileReader:
             compression_method=compression_method,
             encryption_key=self._aes_key if entry.is_encrypted else None,
         )
+
+    def _resolve_entry_path(self, path: str) -> str | None:
+        """Resolve full, mount-relative, case-insensitive, and stem paths."""
+        if path in self._entries:
+            return path
+
+        normalized = path.replace("\\", "/").strip("/")
+        if normalized in self._entries:
+            return normalized
+
+        candidates = [normalized]
+        if "." not in normalized.rsplit("/", 1)[-1]:
+            candidates.extend(
+                f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap")
+            )
+
+        lowered_candidates = [candidate.lower() for candidate in candidates]
+        for entry_path in self._entries:
+            lowered = entry_path.lower().strip("/")
+            for candidate in lowered_candidates:
+                if lowered == candidate or lowered.endswith(f"/{candidate}"):
+                    return entry_path
+        return None
 
     def _get_compression_method(self, entry: FPakEntry) -> str:
         if entry.compression_method_index == 0:

@@ -1,1 +1,5 @@
 """资产类型解析器模块 — 特定 UE 资产类型的专用解析器。"""
+
+from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
+
+__all__ = ["parse_static_mesh"]
