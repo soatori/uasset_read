@@ -153,6 +153,58 @@ def _pin_ref_guid(ref: object) -> Optional[str]:
     return getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
 
 
+def _pin_direction_text(direction: int) -> str:
+    """Return stable pin direction text for Blueprint DTO output."""
+    return "output" if direction == 1 else "input"
+
+
+def _pin_category(pin: UEdGraphPin) -> str:
+    return pin.pin_type.pin_category if pin.pin_type else ""
+
+
+def _pin_subcategory(pin: UEdGraphPin) -> str:
+    return pin.pin_type.pin_subcategory if pin.pin_type else ""
+
+
+def _pin_container_type(pin: UEdGraphPin) -> str:
+    if not pin.pin_type:
+        return ""
+    return str(getattr(pin.pin_type, "container_type", "") or "")
+
+
+def _format_blueprint_pin_dto(
+    pin: UEdGraphPin,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_name_lookup: Dict[str, str],
+) -> Dict[str, Any]:
+    """Format a pin using the compact Blueprint DTO shape."""
+    linked_to: List[str] = []
+    for ref in pin.linked_to_raw or []:
+        target_pin_id = _pin_ref_guid(ref)
+        if target_pin_id in pin_lookup:
+            target_node_guid, target_pin_name = pin_lookup[target_pin_id]
+            target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
+            linked_to.append(f"{target_node_name}.{target_pin_name}")
+        elif target_pin_id:
+            linked_to.append(str(target_pin_id))
+        elif isinstance(ref, dict) and ref.get("owning_node"):
+            linked_to.append(str(ref["owning_node"]))
+
+    pin_type = pin.pin_type
+    return {
+        "PinId": pin.persistent_guid or pin.pin_id,
+        "PinName": pin.pin_name,
+        "Direction": _pin_direction_text(pin.direction),
+        "PinCategory": _pin_category(pin),
+        "PinSubCategory": _pin_subcategory(pin),
+        "DefaultValue": pin.default_value,
+        "LinkedTo": linked_to,
+        "IsReference": bool(getattr(pin_type, "is_reference", False)) if pin_type else False,
+        "IsConst": bool(getattr(pin_type, "is_const", False)) if pin_type else False,
+        "ContainerType": _pin_container_type(pin),
+    }
+
+
 def _build_graph_indexes(
     graph: UEdGraph,
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
