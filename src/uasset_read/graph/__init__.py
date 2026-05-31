@@ -12,6 +12,8 @@ from .flow_builder import (
     build_connections_map,
     build_graphs_summary,
     format_graphs_json,
+    format_pin_ref,
+    _derive_node_name,
     is_function_graph,
     build_function_graphs,  # Phase 55
 )
@@ -29,6 +31,8 @@ __all__ = [
     "build_connections_map",
     "build_graphs_summary",
     "format_graphs_json",
+    "format_pin_ref",
+    "_derive_node_name",
     "is_function_graph",
     "build_function_graphs",
     "build_execution_chains",
