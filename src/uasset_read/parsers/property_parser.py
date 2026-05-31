@@ -123,6 +123,14 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
             "raw_data": raw_data,
         }
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
+        # 尝试使用已知类型的解析器
+        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+        handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
+        if handler is not None:
+            try:
+                return handler(tag, archive, name_map, export_map, summary)
+            except Exception:
+                pass  # 解析失败，回退到原始字节
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
             "kind": "binary_or_native_property",

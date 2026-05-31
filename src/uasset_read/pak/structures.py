@@ -257,6 +257,80 @@ class FPakEntry:
 
         return entry, entry.serialized_size
 
+    def encode_bitfield(self) -> bytes:
+        """编码 v10+ bitfield 格式的 FPakEntry。
+
+        与 decode_bitfield 对称的编码方法，用于序列化写入。
+
+        Returns:
+            编码后的字节数据
+        """
+        result = bytearray()
+
+        # 构建 bitfield (4 bytes)
+        bitfield = 0
+
+        # 判断是否适合 32 位
+        offset_fits_32 = self.offset <= 0xFFFFFFFF
+        uncompressed_size_fits_32 = self.uncompressed_size <= 0xFFFFFFFF
+        size_fits_32 = self.size <= 0xFFFFFFFF
+
+        if offset_fits_32:
+            bitfield |= (1 << 31)
+        if uncompressed_size_fits_32:
+            bitfield |= (1 << 30)
+        if size_fits_32:
+            bitfield |= (1 << 29)
+
+        # 压缩方法索引 (6 bits)
+        bitfield |= (self.compression_method_index & 0x3F) << 23
+
+        # 加密标志
+        if self.is_encrypted:
+            bitfield |= (1 << 22)
+
+        # 压缩块数量 (16 bits)
+        bitfield |= (self.compression_block_count & 0xFFFF) << 6
+
+        # 压缩块大小索引 (6 bits)
+        # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
+        if self.compression_block_size > 0 and self.compression_block_size % 2048 == 0:
+            block_size_index = self.compression_block_size >> 11
+            if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"
+                bitfield |= block_size_index
+            else:
+                bitfield |= 0x3F
+        else:
+            bitfield |= 0x3F
+
+        result.extend(struct.pack('<I', bitfield))
+
+        # 写入 Offset
+        if offset_fits_32:
+            result.extend(struct.pack('<I', self.offset))
+        else:
+            result.extend(struct.pack('<q', self.offset))
+
+        # 写入 UncompressedSize
+        if uncompressed_size_fits_32:
+            result.extend(struct.pack('<I', self.uncompressed_size))
+        else:
+            result.extend(struct.pack('<q', self.uncompressed_size))
+
+        # 写入 Size（仅压缩时）
+        if self.compression_method_index > 0:
+            if size_fits_32:
+                result.extend(struct.pack('<I', self.size))
+            else:
+                result.extend(struct.pack('<q', self.size))
+
+        # 写入 BlockSize（如果使用 0x3F 标记）
+        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
+            result.extend(struct.pack('<I', self.compression_block_size))
+
+        self.serialized_size = len(result)
+        return bytes(result)
+
 
 # ============================================================================
 # FPakInfo
