@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.3.3-dev
+版本 0.3.4-dev
 
 公共API通过__all__控制，初始阶段导出常量和异常类。
 """
-__version__ = "0.3.3-dev"
+__version__ = "0.3.4-dev"
 
 # 导出常量模块
 from .constants import (

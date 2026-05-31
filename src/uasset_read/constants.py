@@ -18,6 +18,7 @@ PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
 
 UE5_VERSION_MIN = 0                # UE5 版本最低值
 UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定值
+UE5_LEGACY_VERSIONS = frozenset({-8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
 
 # ============================================================================
 # CustomVersion GUIDs

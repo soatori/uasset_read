@@ -217,8 +217,10 @@ def read_export_map(
             b_not_for_client = archive.read_bool()
             b_not_for_server = archive.read_bool()
 
-            # bIsInheritedInstance (UE5 >= 1006 始终存在)
-            b_is_inherited_instance = archive.read_bool()
+            # bIsInheritedInstance (UE5 >= 1006)
+            b_is_inherited_instance = False
+            if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
+                b_is_inherited_instance = archive.read_bool()
 
             package_flags = archive.read_u32()
 
@@ -234,11 +236,17 @@ def read_export_map(
             archive.read_i32()  # serialization_before_create_deps
             archive.read_i32()  # create_before_create_deps
 
+            if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
+                archive.read(16)  # package_guid
+
             # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
             script_serial_offset = 0
             script_serial_size = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
-            if not uses_unversioned:
+            if (
+                not uses_unversioned
+                and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET
+            ):
                 script_serial_offset = archive.read_i64()
                 script_serial_size = archive.read_i64()
                 # CR-05: 验证 script_serial_offset/size 非负

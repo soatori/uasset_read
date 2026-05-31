@@ -1138,12 +1138,6 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
             - start_event: 起始事件名称
             - nodes: 执行流节点列表
     """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. Use build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
     # Phase 69: ensure registry initialized
     _ensure_registry()
 
