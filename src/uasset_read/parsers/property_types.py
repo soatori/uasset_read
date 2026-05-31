@@ -252,7 +252,13 @@ def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObje
 # ============================================================================
 
 def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> List[Any]:
-    """解析 ArrayProperty（PROP-08, D-16）。"""
+    """解析 ArrayProperty（PROP-08, D-16）。
+
+    UE 序列化格式：
+      - int32 ArrayCount
+      - 对于每个元素，按其类型原生序列化（不是均分 remaining_size）
+      - 对于 StructProperty，每个元素都有完整的 FPropertyTag
+    """
     MAX_DEPTH = 10
 
     if depth > MAX_DEPTH:
@@ -272,25 +278,19 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         )
         return elements
 
-    remaining_size = tag.size - 4  # subtract 4-byte count field
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
+    # 对于 StructProperty 类型的数组元素，UE 使用完整的 PropertyTag 序列化
+    # 对于其他类型，按类型原生序列化（每个元素大小由类型决定）
     for i in range(count):
-        # Dynamic inner_size calculation: distribute remaining bytes evenly
-        # Last element gets all remaining size to avoid precision loss
-        remaining_count = count - i
-        inner_size = remaining_size // remaining_count if remaining_count > 1 else remaining_size
+        # 创建内部标签，size=0 表示由解析函数自行决定读取多少字节
         inner_tag = PropertyTag(
             name=f"{tag.name}[{i}]",
             type=inner_type,
-            size=inner_size
+            size=0  # 让解析函数按类型原生序列化
         )
-        element_start = archive.tell()
         inner_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         elements.append(inner_value)
-        # Track bytes consumed to update remaining_size
-        bytes_consumed = archive.tell() - element_start
-        remaining_size -= bytes_consumed
 
     return elements
 
@@ -631,12 +631,25 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
 
 def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:
-    """解析 MapProperty（ADVP-02）。"""
+    """解析 MapProperty（ADVP-02）。
+
+    UE 序列化格式：
+      - int32 numKeysToRemove（待删除的键数量）
+      - int32 numEntries（实际条目数量）
+      - 循环读取 key-value 对
+    """
     key_type = getattr(tag, "key_type", None)
     value_type = getattr(tag, "value_type", None)
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 
+    # 读取待删除的键数量（UE 源码中用于增量更新）
+    num_keys_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
+    # 跳过待删除的键（按 key_type 序列化）
+    for _ in range(num_keys_to_remove):
+        _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+
+    # 读取实际条目数量
     num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
     entries: List[Dict[str, Any]] = []
 
@@ -653,12 +666,26 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
 
 
 def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> SetValue:
-    """解析 SetProperty（ADVP-03）。"""
+    """解析 SetProperty（ADVP-03）。
+
+    UE 序列化格式：
+      - int32 numElementsToRemove（待删除元素数量）
+      - int32 numElements（实际元素数量）
+      - 循环读取元素
+    """
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
+    # 读取待删除的元素数量（UE 源码中用于增量更新）
+    num_elements_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
+    # 跳过待删除的元素（按 element_type 序列化）
+    parse_property_value = _get_parse_property_value()
+    for _ in range(num_elements_to_remove):
+        dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
+        parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+
+    # 读取实际元素数量
     num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
     elements: List[Any] = []
-    parse_property_value = _get_parse_property_value()
 
     for _ in range(num_elements):
         dummy_tag = PropertyTag(name="Element", type=element_type, size=0)

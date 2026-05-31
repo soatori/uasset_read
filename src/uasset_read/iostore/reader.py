@@ -381,13 +381,15 @@ class IoStoreReader:
     def _hash_with_seed(self, chunk_id: FIoChunkId, seed: int) -> int:
         """HashWithSeed 实现
 
-        使用 FNV-1a 哈希变体
+        使用 64 位 FNV-1a 哈希算法（与 UE 源码一致）
+        - 初始值: 0xcbf29ce484222325 (FNV offset basis)
+        - 素数: 0x00000100000001B3 (FNV prime)
         """
         data = chunk_id.bytes
-        hash_val = 0x811C9DC5 ^ seed  # FNV offset basis
+        hash_val = 0xcbf29ce484222325 ^ seed  # FNV offset basis (64-bit)
         for byte in data:
             hash_val ^= byte
-            hash_val = (hash_val * 0x01000193) & 0xFFFFFFFF  # FNV prime, 32-bit
+            hash_val = (hash_val * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF  # FNV prime, 64-bit
         return hash_val
 
     def _read_data(self, offset: int, length: int) -> bytes:

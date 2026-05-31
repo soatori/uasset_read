@@ -466,7 +466,7 @@ def test_mapping_driven_unversioned_container_properties(tmp_path):
     ar = _archive(
         tmp_path,
         struct.pack("<iii", 2, 11, 12)
-        + struct.pack("<iif", 1, 7, 2.5),
+        + struct.pack("<iiif", 0, 1, 7, 2.5),  # num_keys_to_remove=0, num_entries=1, key=7, value=2.5
     )
 
     props = parse_properties_from_export(export, ar, Summary(), [], [], mappings=mappings)
@@ -511,7 +511,7 @@ def test_mapping_driven_unversioned_set_and_optional(tmp_path):
             property_count=2,
         )
     })
-    ar = _archive(tmp_path, struct.pack("<iiiIf", 2, 4, 8, 1, 9.25))
+    ar = _archive(tmp_path, struct.pack("<iiiiIf", 0, 2, 4, 8, 1, 9.25))  # num_elements_to_remove=0, num_elements=2, elements=[4, 8], OptionalProperty: has_value=1, value=9.25
 
     props = parse_properties_from_export(export, ar, Summary(), [], [], mappings=mappings)
 
