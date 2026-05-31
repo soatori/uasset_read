@@ -12,7 +12,7 @@ from uasset_read.objects.registry import global_registry
 class UTexture2D(UObject):
     """2D 纹理
 
-    等价实现 CUE4Parse UTexture2D.cs
+    等价实现 UTexture2D.cs
     """
     # 纹理属性
     size_x: int = 0

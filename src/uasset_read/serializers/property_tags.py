@@ -84,7 +84,7 @@ def read_property_tag(
     tag.type_parts = type_parts
 
     # Extract enum_type for ByteProperty/EnumProperty from FPropertyTypeName nodes
-    # Per CUE4Parse: ByteProperty with enum backing reads FName (8 bytes), not single byte
+    # Per: ByteProperty with enum backing reads FName (8 bytes), not single byte
     # Format: [('ByteProperty', 1), ('EnumName', 1), ('/Script/Module', 0)]
     if tag.type in ("ByteProperty", "EnumProperty") and len(type_parts) >= 2:
         enum_type_name = type_parts[1][0]
@@ -137,7 +137,7 @@ def read_tag_value_bounded(
 ) -> T:
     """Read a PropertyTag value and always end at value_start + Size.
 
-    This mirrors CUE4Parse's FPropertyTag behavior: value parsers may consume
+    This mirrors's FPropertyTag behavior: value parsers may consume
     fewer or more bytes, or raise, but the archive is restored to the tag's
     calculated final position before control returns.
     """

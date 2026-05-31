@@ -12,7 +12,7 @@ from uasset_read.objects.registry import global_registry
 class UStaticMesh(UObject):
     """静态网格体
 
-    等价实现 CUE4Parse UStaticMesh.cs
+    等价实现 UStaticMesh.cs
     """
     # LOD 数据
     lod_groups: List[Any] = field(default_factory=list)
@@ -34,7 +34,7 @@ class UStaticMesh(UObject):
 class USkeletalMesh(UObject):
     """骨骼网格体
 
-    等价实现 CUE4Parse USkeletalMesh.cs
+    等价实现 USkeletalMesh.cs
     """
     # 骨骼信息
     ref_skeleton: Optional[Dict[str, Any]] = None

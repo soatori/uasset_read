@@ -1,6 +1,6 @@
 """批量导出 — 将多个 .uasset/.umap 文件导出到结构化目录。
 
-等价于 CUE4Parse 的 TryWriteToDir 模式。
+等价于 的 TryWriteToDir 模式。
 目录结构：
     output_dir/
       BP_MyBlueprint/

@@ -1,4 +1,4 @@
-"""Bulk Data 结构 — 镜像 CUE4Parse TBulkData
+"""Bulk Data 结构 — 镜像 TBulkData
 
 用于处理大型数据块（纹理、网格体等）的存储和加载。
 """

@@ -1,6 +1,6 @@
 """Material 资产属性提取器。
 
-参考 CUE4Parse UMaterial.cs:
+参考 UMaterial.cs:
   BlendMode, ShadingModel, MaterialExpressions, Parameters
 """
 from __future__ import annotations

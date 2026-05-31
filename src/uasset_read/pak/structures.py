@@ -402,7 +402,7 @@ class FPakDirectoryEntry:
 def decode_encoded_pak_entry(data: bytes, is_enabled: bool) -> Optional[Dict[str, Any]]:
     """解码 v10+ 编码 Pak 条目
     
-    等价实现 CUE4Parse FPakEntry 的编码条目解码逻辑
+    等价实现 FPakEntry 的编码条目解码逻辑
     
     Args:
         data: 编码的条目数据

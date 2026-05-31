@@ -12,7 +12,7 @@ from uasset_read.objects.registry import global_registry
 class UMaterial(UObject):
     """材质
 
-    等价实现 CUE4Parse UMaterial.cs
+    等价实现 UMaterial.cs
     """
     # 材质属性
     domain: int = 0  # EMaterialDomain

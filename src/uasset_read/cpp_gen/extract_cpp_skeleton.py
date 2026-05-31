@@ -749,7 +749,7 @@ def _extract_parameters_from_pins(
 
 
 # ============================================================================
-# 函数标志位常量（UE5 UFunctionFlags）- 参考 CUE4Parse EFunctionFlags.cs
+# 函数标志位常量（UE5 UFunctionFlags）- 参考 EFunctionFlags.cs
 # ============================================================================
 
 # 访问修饰符（这些标志不在 extra_flags 中，需要从其他来源推断）
@@ -757,7 +757,7 @@ FUNC_PUBLIC = 0x00000001  # 占位符，实际访问修饰符需要从其他信�
 FUNC_PROTECTED = 0x00000002  # 占位符
 FUNC_PRIVATE = 0x00000004  # 占位符
 
-# 函数类型（参考 CUE4Parse EFunctionFlags.cs）
+# 函数类型（参考 EFunctionFlags.cs）
 FUNC_Final = 0x00000001
 FUNC_RequiredAPI = 0x00000002
 FUNC_BlueprintAuthorityOnly = 0x00000004
@@ -786,7 +786,7 @@ FUNC_BlueprintEvent = 0x08000000
 def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
     """从 extra_flags 提取函数标志位。
 
-    参考 CUE4Parse EFunctionFlags.cs 的定义。
+    参考 EFunctionFlags.cs 的定义。
 
     Args:
         flags: extra_flags 值

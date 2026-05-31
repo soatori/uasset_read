@@ -1,6 +1,6 @@
 """导出系统 — 统一接口、注册表、批量导出。
 
-借鉴 CUE4Parse 的 IExporter + ExporterOptions 模式，
+借鉴 的 IExporter + ExporterOptions 模式，
 将分散的 formatter 函数封装为统一的导出管线。
 
 使用示例:
