@@ -378,6 +378,16 @@ from .pak import (
     PakFileReader,
 )
 
+# IoStore 容器系统 (Phase 78)
+from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
+
+# Bulk Data (Phase 79)
+from .bulk import FBulkDataHeader, BulkDataFlags
+
+# UObject 类型体系
+from .objects import UObject, ObjectTypeRegistry
+from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, UMaterialInstance
+
 # 公共API导出控制（per D-09）
 __all__ = [
     # 版本号
@@ -730,4 +740,19 @@ __all__ = [
     "decompress_block",
     "decompress_entry",
     "PakFileReader",
+    # IoStore 容器系统 (Phase 78)
+    "IoStoreReader",
+    "FIoChunkId",
+    "FIoOffsetAndSize",
+    # Bulk Data (Phase 79)
+    "FBulkDataHeader",
+    "BulkDataFlags",
+    # UObject 类型体系
+    "UObject",
+    "ObjectTypeRegistry",
+    "UStaticMesh",
+    "USkeletalMesh",
+    "UTexture2D",
+    "UMaterial",
+    "UMaterialInstance",
 ]
