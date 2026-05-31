@@ -34,12 +34,16 @@ class EUEVersion(IntEnum):
     """关键 UE 版本阈值，用于 is_at_least() 比较。
 
     值对应 file_version_ue5（PackageFileSummary.file_version_ue5）。
+    UE4 版本使用 file_version_ue4（通常 516-520）。
     """
+    # UE4 版本（file_version_ue4 范围）
     UE4_23 = 516     # FFrameworkObjectVersion::Before
     UE4_24 = 517     # FFrameworkObjectVersion::PinTypeContainers
     UE4_25 = 518
     UE4_26 = 519
     UE4_27 = 520
+
+    # UE5 版本（file_version_ue5 范围）
     UE5_0 = 1000     # UE5 initial
     UE5_1 = 1001     # UE5_ADD_SOFTOBJECTPATH_LIST
     UE5_2 = 1005     # UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID

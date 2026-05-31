@@ -36,21 +36,25 @@ class EIoContainerFlags(IntFlag):
 
 
 class EIoChunkType(IntEnum):
-    """IoStore 数据块类型"""
+    """IoStore 数据块类型
+
+    UE5 IoStore 专用类型。UE4 使用不同的存储机制。
+    类型 0-6 在 UE5.0+ 中定义，类型 7+ 在后续版本中添加。
+    """
     Invalid = 0
-    ExportBundleData = 1
-    BulkData = 2
-    OptionalBulkData = 3
-    MemoryMappedBulkData = 4
-    ScriptObjects = 5
-    ContainerHeader = 6
-    ExternalFile = 7
-    ShaderCodeLibrary = 8
-    ShaderCode = 9
-    PackageStoreEntry = 10
-    DerivedData = 11
-    EditorDerivedData = 12
-    PackageResource = 13
+    ExportBundleData = 1       # UE5.0+: 导出包数据
+    BulkData = 2               # UE5.0+: 批量数据
+    OptionalBulkData = 3       # UE5.0+: 可选批量数据
+    MemoryMappedBulkData = 4   # UE5.0+: 内存映射批量数据
+    ScriptObjects = 5          # UE5.0+: 脚本对象
+    ContainerHeader = 6        # UE5.0+: 容器头部
+    ExternalFile = 7           # UE5.1+: 外部文件引用
+    ShaderCodeLibrary = 8      # UE5.1+: 着色器代码库
+    ShaderCode = 9             # UE5.1+: 着色器代码
+    PackageStoreEntry = 10     # UE5.2+: 包存储条目
+    DerivedData = 11           # UE5.3+: 派生数据
+    EditorDerivedData = 12     # UE5.4+: 编辑器派生数据
+    PackageResource = 13       # UE5.5+: 包资源
 
 
 class EIoStoreTocEntryMetaFlags(IntEnum):
@@ -74,7 +78,16 @@ class EIoStoreTocReadOptions(IntFlag):
 
 @dataclass
 class FIoChunkId:
-    """IoStore Chunk 标识符（12 字节）"""
+    """IoStore Chunk 标识符（12 字节）。
+
+    结构布局（UE FIoChunkId）：
+    - 字节 0-7: ChunkId (uint64, little-endian)
+    - 字节 8-9: ChunkIndex (uint16, big-endian)
+    - 字节 10: ChunkGroup (uint8)
+    - 字节 11: ChunkType (uint8, EIoChunkType)
+
+    比较使用完整 12 字节，与 UE 源码一致。
+    """
     bytes: bytes  # 12 bytes
 
     @staticmethod

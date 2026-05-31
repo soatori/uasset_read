@@ -83,6 +83,7 @@ class ObjectExport:
     script_serial_offset: int = 0
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
+    guid: str = ""  # 16 bytes GUID (版本 < 1005 时存在)
 
 
 def read_import_map(
@@ -274,8 +275,10 @@ def read_export_map(
             archive.read_i32()  # serialization_before_create_deps
             archive.read_i32()  # create_before_create_deps
 
+            package_guid = ""
             if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
-                archive.read(16)  # package_guid
+                guid_bytes = archive.read(16)  # package_guid
+                package_guid = guid_bytes.hex()
 
             # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
             script_serial_offset = 0
@@ -316,7 +319,8 @@ def read_export_map(
                 b_is_asset=b_is_asset,
                 b_generate_public_hash=b_generate_public_hash,
                 script_serial_size=script_serial_size,
-                script_serial_offset=script_serial_offset
+                script_serial_offset=script_serial_offset,
+                guid=package_guid,
             ))
         except Exception as e:
             context = ErrorContext(

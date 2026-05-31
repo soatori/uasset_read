@@ -53,7 +53,11 @@ class PackageLinker:
         self._preload_cache: dict[int, bool] = {}
 
     def link(self) -> None:
-        """Phase 1: create UObjectInstance shells from import/export maps."""
+        """Phase 1: create UObjectInstance shells from import/export maps.
+
+        注意：当前实现一次性创建所有实例。
+        对于超大包（>10000 个对象），可考虑延迟创建优化。
+        """
         self._create_import_instances()
         self._create_export_instances()
         self.build_outer_tree()

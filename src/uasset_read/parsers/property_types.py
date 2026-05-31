@@ -21,6 +21,8 @@ from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count
 
+# FPropertyTypeName 最大节点数（UE 源码限制）
+MAX_TYPENODE_NODES = 20
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
 _EXPECTED_STRUCT_SIZES: dict[str, int] = {
@@ -85,6 +87,12 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "MemberReference",
     "SimpleMemberReference",
 }
+"""需要 tagged fallback 解析的结构体名称集合。
+
+当结构体属性使用 tagged 格式（PropertyTag 包含类型信息）但无法通过
+标准 StructProperty 解析时，使用 _TAGGED_FALLBACK_STRUCT_SCHEMAS 中
+定义的字段列表进行回退解析。
+"""
 
 _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
