@@ -9,7 +9,7 @@ Compatibility note: the root package still re-exports advanced submodules for
 existing users. New code should prefer focused imports from subpackages such as
 uasset_read.pak, uasset_read.n2c, uasset_read.cpp_gen, and uasset_read.agent.
 """
-__version__ = "0.3.4-dev"
+__version__ = "0.3.5"
 
 # 导出常量模块
 from .constants import (
