@@ -6,6 +6,8 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
+> ⚠️ **Active development** — This project is still under active development and is not yet complete. Some asset types and features may have limited or partial support, and not all UE assets are guaranteed to parse correctly.
+
 ## Why uasset_read?
 
 Unreal Engine blueprints are stored as binary `.uasset` files — unreadable without the editor. uasset_read bridges this gap by extracting:
