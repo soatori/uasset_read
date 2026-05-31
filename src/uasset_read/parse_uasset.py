@@ -552,6 +552,9 @@ def parse_uasset_with_linker(
             for i in range(len(linker._export_objects)):
                 linker.preload(i)
 
+        # Stage 4: 后处理（引用修复、导入验证、依赖图构建）
+        linker.post_load()
+
         # 共享后处理
         _post_process(
             path, archive, result.summary, result.name_map,

@@ -67,6 +67,12 @@ class UObjectInstance:
     )
     """ObjectProperty values resolved to UObjectInstance references."""
 
+    template_object: Optional["UObjectInstance"] = None
+    """Resolved template (CDO) object from template_index."""
+
+    dependencies: List["UObjectInstance"] = field(default_factory=list)
+    """Resolved dependencies from DependsMap."""
+
     # ---- Internal state ----
     _preloaded: bool = False
     """Whether properties have been loaded."""
