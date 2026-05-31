@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectImport
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     UE5_SCRIPT_SERIALIZATION_OFFSET,
@@ -192,7 +192,12 @@ def parse_properties_from_export(
         if property_count >= MAX_PROPERTY_COUNT:
             raise ParseError(
                 f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})",
-                context={"export": export.object_name}
+                context=ErrorContext(
+                    offset=archive.tell(),
+                    phase="properties",
+                    operation="property_count_check",
+                    context_name=str(export.object_name),
+                )
             )
         property_count += 1
 
@@ -216,7 +221,12 @@ def parse_properties_from_export(
             if tag.size > remaining:
                 raise ParseError(
                     f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'",
-                    context={"export": export.object_name, "pos": archive.tell()}
+                    context=ErrorContext(
+                        offset=archive.tell(),
+                        phase="properties",
+                        operation="property_tag_size_check",
+                        context_name=str(tag.name),
+                    )
                 )
 
             # 记录起始位置用于边界验证

@@ -119,9 +119,9 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
 def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
-        "is_edit_anywhere": bool(flags & CPF_Edit),
-        "is_edit_instance_only": bool(flags & CPF_EditInstanceOnly),  # 使用正确的 CPF_EditInstanceOnly 常量
-        "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
+        "is_edit_anywhere": bool(flags & CPF_EditAnywhere),
+        "is_edit_instance_only": bool(flags & CPF_EditInstanceOnly),
+        "is_blueprint_readable": bool(flags & CPF_BlueprintReadWrite),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
         "is_replicated": bool(flags & CPF_Replicated),
@@ -135,12 +135,12 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
 def _flags_to_labels(flags: int) -> List[str]:
     """将 CPF_* 位标志转换为可读标签列表。"""
     labels = []
-    if flags & CPF_Edit:
+    if flags & CPF_EditAnywhere:
         labels.append("EditAnywhere")
     if flags & CPF_EditConst:
         labels.append("EditConst")
-    if flags & CPF_BlueprintVisible:
-        labels.append("BlueprintVisible")
+    if flags & CPF_BlueprintReadWrite:
+        labels.append("BlueprintReadWrite")
     if flags & CPF_BlueprintReadOnly:
         labels.append("BlueprintReadOnly")
     if flags & CPF_Net:
@@ -250,11 +250,10 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
         # 变量通常带有类型信息和默认值
         var_type = _extract_pin_type_from_property(prop)
 
-        # 从属性名推断分类
+        # 从属性值提取分类
         category = ""
-        if hasattr(prop, "type") and prop.type in ("StructProperty", "ObjectProperty"):
-            if isinstance(prop_value, dict):
-                category = prop_value.get("Category", prop_value.get("category", ""))
+        if isinstance(prop_value, dict):
+            category = prop_value.get("Category", prop_value.get("category", ""))
 
         # 提取属性标志位
         property_flags = 0
