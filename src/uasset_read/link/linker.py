@@ -213,11 +213,13 @@ class PackageLinker:
 
         在所有对象创建和预加载后执行：
         1. 解析 ObjectProperty 引用
-        2. 验证导入对象有效性
-        3. 解析 template_index (CDO) 引用
-        4. 构建依赖图
+        2. 解析 WeakObjectProperty 引用
+        3. 验证导入对象有效性
+        4. 解析 template_index (CDO) 引用
+        5. 构建依赖图
         """
         self._resolve_property_references()
+        self._resolve_weak_references()
         self._verify_imports()
         self._resolve_template_objects()
         self._build_dependency_graph()
@@ -246,6 +248,27 @@ class PackageLinker:
                             if not hasattr(inst, 'property_references'):
                                 inst.property_references = {}
                             inst.property_references[prop_name] = resolved
+
+    def _resolve_weak_references(self) -> None:
+        """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
+
+        遍历所有已 preload 的 export 对象，填充 weak_references 字段。
+        """
+        for inst in self._export_objects:
+            if not inst._preloaded:
+                continue
+            if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
+                continue
+            for prop in inst.serialized_properties:
+                if not isinstance(prop, dict):
+                    continue
+                if prop.get('type') == 'WeakObjectProperty':
+                    pkg_idx = prop.get('value')
+                    if isinstance(pkg_idx, int):
+                        from uasset_read.serializers.object_resources import PackageIndex
+                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
+                        if resolved:
+                            inst.weak_references.append(resolved)
 
     def _verify_imports(self) -> List[str]:
         """验证所有导入对象的有效性。
