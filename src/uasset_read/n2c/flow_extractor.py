@@ -2,8 +2,6 @@
 
 将 build_execution_flows() 的逐对执行流转换为链式表达（N1->N2->N3），
 将 build_data_flows() 的输出转换为紧凑映射（N1.P0 -> N2.P1）。
-
-Phase 70 Wave 2 输出。
 """
 from __future__ import annotations
 

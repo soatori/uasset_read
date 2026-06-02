@@ -270,7 +270,7 @@ class FArchive:
     def read_fstring(self) -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
 
-        Phase 72-I Wave 2: 增加边界防卫和指针回退。失败时 seek 回入口位置，
+        增加边界防卫和指针回退。失败时 seek 回入口位置，
         避免偏移错位级联到后续字段。
         """
         pos_before = self.tell()
@@ -313,7 +313,7 @@ class FArchive:
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
 
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
-            # Phase 72-I Wave 3: Improved handling — truncate at first null rather than
+            # Improved handling — truncate at first null rather than
             # returning empty string, to preserve data and avoid position errors in Pin parsing
             if '\x00' in result:
                 null_count = result.count('\x00')

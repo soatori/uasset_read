@@ -2,7 +2,7 @@
 C++ JSON IR 格式化模块 — CppProperty, CppHeaderMeta, CppClassIR 数据模型。
 
 Per D-06: JSON IR 结构包含 header_meta, properties, methods, constructor 四部分。
-Phase 56: 只填充 header_meta 和 properties，methods 和 constructor 留空。
+只填充 header_meta 和 properties，methods 和 constructor 留空。
 
 导出：
     CppProperty: 单个 C++ UPROPERTY 声明数据模型
@@ -181,7 +181,7 @@ class CppMethodIR:
         parameters: 参数列表
         ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
         is_override: True 表示 K2Node_Event 的 bOverrideFunction
-        is_const: const 方法修饰符（Phase 58 上下文，默认 False）
+        is_const: const 方法修饰符（默认 False）
         is_static: static 方法修饰符
         is_virtual: virtual 方法修饰符
         is_pure: 纯函数（无副作用）
@@ -189,8 +189,8 @@ class CppMethodIR:
         is_native: 原生函数
         access_modifier: 访问修饰符（"public"、"protected"、"private"）
         source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
-        body: Phase 58 函数体语句（结构化 IR）
-        body_text: Phase 66 Kismet 反编译函数体文本（原始 C++ 伪代码）
+        body: 函数体语句（结构化 IR）
+        body_text: Kismet 反编译函数体文本（原始 C++ 伪代码）
     """
     cpp_name: str
     return_type: str
@@ -205,8 +205,8 @@ class CppMethodIR:
     is_native: bool = False
     access_modifier: str = "protected"  # 默认 protected
     source_node_type: str = ""
-    body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
-    body_text: Optional[str] = None  # Phase 66: Kismet 反编译函数体文本 (D-66-03)
+    body: List["CppStatement"] = field(default_factory=list)  # 函数体语句
+    body_text: Optional[str] = None  # Kismet 反编译函数体文本 (D-66-03)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -259,7 +259,7 @@ class CppCallStatement:
 
 @dataclass
 class CppStatement:
-    """C++ 语句基类（Phase 58）。
+    """C++ 语句基类。
 
     所有具体语句类型继承此类，用于表示函数体中的单条 C++ 语句。
     """
@@ -371,27 +371,24 @@ class CppInlineExprStmt(CppStatement):
 class CppClassIR:
     """完整 C++ 类骨架 IR（D-01, D-06）。
 
-    Phase 56: 只填充 name, parent_class, header_meta, properties。
-    Phase 57-59: 分别填充 methods 和 constructor。
-
     Attributes:
         name: C++ 类名（如 "ABP_FirstPersonCharacter"）
         parent_class: 父类名（如 "ACharacter"）
         header_meta: 头文件元数据
         properties: 属性列表（组件 + 变量）
-        methods: 方法列表（Phase 57 填充，Phase 56 为空）
-        constructor: 构造函数数据（Phase 59 填充，Phase 56 为空字典）
+        methods: 方法列表（填充后可用）
+        constructor: 构造函数数据（填充后可用）
     """
     name: str
     parent_class: str
     header_meta: CppHeaderMeta = field(default_factory=CppHeaderMeta)
     properties: List[CppProperty] = field(default_factory=list)
-    methods: List["CppMethodIR"] = field(default_factory=list)  # Phase 57 填充
+    methods: List["CppMethodIR"] = field(default_factory=list)
     constructor: Dict[str, List] = field(default_factory=lambda: {
         "component_creations": [],
         "component_assignments": [],
         "default_values": [],
-    })  # Phase 59 填充
+    })  # 填充
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 兼容字典（D-06 格式）。
@@ -415,7 +412,7 @@ class CppClassIR:
             "header_meta": self.header_meta.to_dict(),
             "properties": [prop.to_dict() for prop in self.properties],
             "methods": [m.to_dict() if hasattr(m, "to_dict") else m for m in self.methods],
-            "constructor": self.constructor,  # 空字典（Phase 56）
+            "constructor": self.constructor,  # 空字典
         }
 
 
@@ -461,11 +458,11 @@ __all__ = [
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
-    # Statement IR (Phase 58)
+    # Statement IR
     "CppStatement",
     "CppCallStmt",
     "CppAssignmentStmt",

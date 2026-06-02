@@ -1,7 +1,7 @@
 """
 BPGC Bytecode Extraction — BlueprintGeneratedClass cooked bytecode parsing.
 
-Phase 72-C Wave 1: Extract bytecode from BPGC script_serial_region (fallback
+Extract bytecode from BPGC script_serial_region (fallback
 for UE5 cooked Blueprints where Function exports contain no bytecode).
 
 Provides:

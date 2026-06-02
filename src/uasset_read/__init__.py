@@ -24,11 +24,11 @@ from .constants import (
     MMAP_THRESHOLD,
     MAX_PROPERTY_COUNT,
     PROPERTY_TAG_COMPLETE_TYPE_NAME,
-    # 图解析边界常量（Phase 31）
+    # 图解析边界常量
     MAX_PINS_PER_NODE,
     MAX_NODES_PER_GRAPH,
     MAX_LINKEDTO_PER_PIN,
-    # PropertyTag 标志（Phase 30）
+    # PropertyTag 标志
     PROP_TAG_NONE,
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
@@ -89,7 +89,7 @@ from .exceptions import (
 # 导出 FArchive（二进制读取器）
 from .archive import FArchive
 
-# 导出序列化模块（Phase 28）
+# 导出序列化模块
 from .serializers import (
     PackageFileSummary, PackageIndex, ObjectImport, ObjectExport,
     EngineVersion, CustomVersion, GenerationInfo,
@@ -102,11 +102,11 @@ from .serializers import (
     detect_blueprint_generated_class,
     detect_circular_deps,
     validate_package_index,
-    # 图序列化（Phase 31）
+    # 图序列化
     read_ue_graph, read_ue_graph_node, read_ue_graph_pin,
     read_ed_graph_pin_type, read_fmember_reference,
     create_node_from_archive,
-    # 节点类型读取器（Phase 31）
+    # 节点类型读取器
     read_k2node_call_function,
     read_k2node_event,
     read_k2node_knot,
@@ -115,7 +115,7 @@ from .serializers import (
     read_k2node_functionentry,
 )
 
-# 导出核心数据模型（Phase 29）
+# 导出核心数据模型
 from .models import (
     # 核心模型
     FEdGraphPinType,
@@ -152,7 +152,7 @@ from .mappings import (
     PropertyInfo,
 )
 
-# 属性数据模型（Phase 30）
+# 属性数据模型
 from .models import (
     PropertyTag,
     PropertyTypeName,
@@ -167,7 +167,7 @@ from .models import (
     DelegateValue,
 )
 
-# 解析器模块（Phase 30）
+# 解析器模块
 from .parsers import (
     parse_property_value,
     parse_properties_from_export,
@@ -228,7 +228,7 @@ from .parsers import (
     extract_inner_from_tag,
 )
 
-# 蓝图模块（Phase 30）
+# 蓝图模块
 from .blueprint import (
     extract_blueprint_variables,
     parse_component_transform,
@@ -236,7 +236,7 @@ from .blueprint import (
     extract_components,
 )
 
-# 图解析模块（Phase 31 Wave 3, Phase 71）
+# 图解析模块
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flow_entries,
@@ -246,18 +246,18 @@ from .graph import (
     build_graphs_summary,
     format_graphs_json,
     build_blueprint_node_index,
-    build_execution_chains,  # Phase 71
+    build_execution_chains,
     format_pin_ref,
     _derive_node_name,
-    build_execution_chains_from_flows,  # Phase 71 (N2C compat)
+    build_execution_chains_from_flows,  # N2C compat
     write_pin_trace_report,
     is_function_graph,
     build_function_graphs,
     write_phase75_diagnostic,
 )
 
-# 格式化模块（Phase 32 Wave 1-2）
-# 主解析管线（Phase 33）
+# 格式化模块
+# 主解析管线
 from .formatters import (
     # JSON 格式化
     format_json_full,
@@ -298,12 +298,12 @@ from .raw import (
     parse_audio_metadata,
 )
 
-# 变换数据类（Phase 33）
+# 变换数据类
 from .models.transforms import (
     VectorValue, RotatorValue, ScaleValue, format_transform_value,
 )
 
-# 辅助函数（Phase 33）
+# 辅助函数
 from .serializers.object_resources import (
     find_main_blueprint_generated_class,
     resolve_parent_class,
@@ -328,7 +328,7 @@ from .constants import (
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
 )
 
-# Kismet bytecode module (Phase 61)
+# Kismet bytecode module
 from .kismet import (
     EExprToken, ECastToken, EScriptInstrumentationType,
     EBlueprintTextLiteralType, EAutoRtfmStopTransactMode,
@@ -340,7 +340,7 @@ from .kismet import (
     reset_bpgc_cache,
 )
 
-# Kismet C++ translator (Phase 63)
+# Kismet C++ translator
 from .kismet import (
     KismetTranslator,
     MathFunctionCleaner,
@@ -353,22 +353,22 @@ from .kismet import (
     StructuredBlock,
 )
 
-# Kismet bytecode extractor (Phase 62)
+# Kismet bytecode extractor
 from .kismet import (
     extract_bytecode_bytes,
     parse_bytecode_stream,
     extract_and_parse,
 )
 
-# Kismet decompilation pipeline (Phase 64)
+# Kismet decompilation pipeline
 from .kismet.result import KismetDecompiledResult
 from .kismet.pipeline import decompile_uasset, decompile_single_function
 
-# Agent translation pipeline (Phase 66)
+# Agent translation pipeline
 from .agent.translator import AgentTranslationPipeline, translate_blueprint_to_cpp
 from .agent.writer import CppFileWriter, write_cpp_class_files
 
-# N2C intermediate format (Phase 70)
+# N2C intermediate format
 from .n2c import (
     N2CStruct, N2CGraph, N2CNode, N2CPin, N2CIdMapper,
     to_n2c_json, from_n2c_json,
@@ -389,7 +389,7 @@ from .exporter import (
     BatchExportResult,
 )
 
-# C++ code gen (Phase 56-58)
+# C++ code gen
 from .cpp_gen import (
     CppProperty, CppHeaderMeta, CppClassIR,
     format_cpp_class_json, format_cpp_header,
@@ -403,7 +403,7 @@ from .cpp_gen import (
     build_constructor_sections, format_cpp_constructor,
 )
 
-# Version management (Phase 76, COR-02)
+# Version management
 from .versioning import (
     VersionContainer, build_version_container, EUEVersion,
 )
@@ -413,7 +413,7 @@ from .link import (
     PackageLinker, UObjectInstance, LinkerParseResult,
 )
 
-# Pak module (Phase 77)
+# Pak module
 from .pak import (
     PAK_FILE_MAGIC, PakFileVersion, ECompressionFlags,
     Flag_Encrypted, Flag_Deleted, MaxNumCompressionMethods, PAK_INFO_SIZES,
@@ -422,10 +422,10 @@ from .pak import (
     PakFileReader,
 )
 
-# IoStore 容器系统 (Phase 78)
+# IoStore 容器系统
 from .iostore import IoStoreReader, FIoChunkId, FIoOffsetAndSize
 
-# Bulk Data (Phase 79)
+# Bulk Data
 from .bulk import FBulkDataHeader, BulkDataFlags
 
 # UObject 类型体系
@@ -504,7 +504,7 @@ __all__ = [
     "ParseError",
     # FArchive
     "FArchive",
-    # 序列化模块（Phase 28）
+    # 序列化模块
     "PackageFileSummary", "PackageIndex", "ObjectImport", "ObjectExport",
     "EngineVersion", "CustomVersion", "GenerationInfo",
     "read_package_summary", "read_name_table",
@@ -512,26 +512,26 @@ __all__ = [
     "build_imports_list", "get_asset_class", "resolve_class_name",
     "detect_blueprint_generated_class", "detect_circular_deps",
     "validate_package_index",
-    # 图序列化（Phase 31）
+    # 图序列化
     "read_ue_graph", "read_ue_graph_node", "read_ue_graph_pin",
     "read_ed_graph_pin_type", "read_fmember_reference", "create_node_from_archive",
-    # 核心数据模型（Phase 29）
+    # 核心数据模型
     "FEdGraphPinType",
     "UEdGraphPin",
     "UEdGraphNode",
     "UEdGraph",
     "FMemberReference",
-    # 节点类型（Phase 29）
+    # 节点类型
     "K2NodeCallFunction",
     "K2NodeEvent",
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
     "K2NodeFunctionEntry",
-    # 结果（Phase 29）
+    # 结果
     "ParseResult",
     "StatusInfo",
-    # 蓝图元数据（Phase 29）
+    # 蓝图元数据
     "BlueprintMetadata",
     "BlueprintVariable",
     "BlueprintFunction",
@@ -546,7 +546,7 @@ __all__ = [
     "StructMapping",
     "PropertyType",
     "PropertyInfo",
-    # 属性数据模型（Phase 30）
+    # 属性数据模型
     "PropertyTag",
     "PropertyTypeName",
     "PropertyValue",
@@ -558,7 +558,7 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
-    # 解析器模块（Phase 30）
+    # 解析器模块
     "parse_property_value",
     "parse_properties_from_export",
     "parse_bool_property",
@@ -616,12 +616,12 @@ __all__ = [
     "read_validated_count",
     "make_enum_value",
     "extract_inner_from_tag",
-    # 蓝图模块（Phase 30）
+    # 蓝图模块
     "extract_blueprint_variables",
     "parse_component_transform",
     "extract_blueprint_metadata",
     "extract_components",
-    # 主解析管线（Phase 33）
+    # 主解析管线
     "parse_package",
     "parse_uasset",
     "parse_uasset_with_linker",
@@ -638,7 +638,7 @@ __all__ = [
     "parse_locres",
     "parse_locmeta",
     "parse_audio_metadata",
-    # 图解析辅助函数（Phase 33 — 依赖 Phase 31, Phase 71）
+    # 图解析辅助函数
     "extract_blueprint_graphs",
     "build_execution_flow_entries",
     "build_execution_flows",
@@ -646,13 +646,13 @@ __all__ = [
     "build_connections_map",
     "build_graphs_summary",
     "build_blueprint_node_index",
-    "build_execution_chains",  # Phase 71
-    "build_execution_chains_from_flows",  # Phase 71
+    "build_execution_chains",
+    "build_execution_chains_from_flows",
     "write_pin_trace_report",
     "is_function_graph",
     "build_function_graphs",
     "write_phase75_diagnostic",
-    # 格式化函数（Phase 33 — 依赖 Phase 32）
+    # 格式化函数
     "format_json_full",
     "format_json_summary",
     "format_exports_list",
@@ -668,7 +668,7 @@ __all__ = [
     "resolve_fpackage_index",
     "format_pin_ref",
     "build_status_info",
-    # 辅助函数（Phase 33）
+    # 辅助函数
     "find_main_blueprint_generated_class",
     "resolve_parent_class",
     "resolve_class_name_with_linker",
@@ -688,7 +688,7 @@ __all__ = [
     "parse_default_value",
     "read_blueprint_variable",
     "format_variable_type",
-    # CPF 常量（Phase 33）
+    # CPF 常量
     "CPF_Edit",
     "CPF_BlueprintVisible",
     "CPF_InstancedReference",
@@ -699,18 +699,18 @@ __all__ = [
     "CPF_Transient",
     "CPF_SaveGame",
     "CPF_ExposeOnSpawn",
-    # 变换数据类（Phase 33）
+    # 变换数据类
     "VectorValue",
     "RotatorValue",
     "ScaleValue",
-    # 节点类型读取器（Phase 31 / 测试依赖）
+    # 节点类型读取器（测试依赖）
     "read_k2node_call_function",
     "read_k2node_event",
     "read_k2node_knot",
     "read_edgraph_node_comment",
     "read_k2node_enhanced_input",
     "read_k2node_functionentry",
-    # Kismet bytecode (Phase 61)
+    # Kismet bytecode
     "EExprToken",
     "ECastToken",
     "EScriptInstrumentationType",
@@ -724,7 +724,7 @@ __all__ = [
     "FKismetArchive",
     "USTRUCT_TYPES",
     "reset_bpgc_cache",
-    # Kismet translator (Phase 63)
+    # Kismet translator
     "KismetTranslator",
     "MathFunctionCleaner",
     "TypeRegistry",
@@ -734,20 +734,20 @@ __all__ = [
     "to_function_body",
     "StructuredControlFlow",
     "StructuredBlock",
-    # Kismet bytecode extractor (Phase 62)
+    # Kismet bytecode extractor
     "extract_bytecode_bytes",
     "parse_bytecode_stream",
     "extract_and_parse",
-    # Kismet decompilation pipeline (Phase 64)
+    # Kismet decompilation pipeline
     "KismetDecompiledResult",
     "decompile_uasset",
     "decompile_single_function",
-    # Agent translation pipeline (Phase 66)
+    # Agent translation pipeline
     "AgentTranslationPipeline",
     "translate_blueprint_to_cpp",
     "CppFileWriter",
     "write_cpp_class_files",
-    # N2C intermediate format (Phase 70)
+    # N2C intermediate format
     "N2CStruct",
     "N2CGraph",
     "N2CNode",
@@ -795,7 +795,7 @@ __all__ = [
     "format_cpp_input_action_load",
     "build_constructor_sections",
     "format_cpp_constructor",
-    # Version management (Phase 76)
+    # Version management
     "VersionContainer",
     "build_version_container",
     "EUEVersion",
@@ -803,7 +803,7 @@ __all__ = [
     "PackageLinker",
     "UObjectInstance",
     "LinkerParseResult",
-    # Pak module (Phase 77)
+    # Pak module
     "PAK_FILE_MAGIC",
     "PakFileVersion",
     "ECompressionFlags",
@@ -819,11 +819,11 @@ __all__ = [
     "decompress_block",
     "decompress_entry",
     "PakFileReader",
-    # IoStore 容器系统 (Phase 78)
+    # IoStore 容器系统
     "IoStoreReader",
     "FIoChunkId",
     "FIoOffsetAndSize",
-    # Bulk Data (Phase 79)
+    # Bulk Data
     "FBulkDataHeader",
     "BulkDataFlags",
     # UObject 类型体系

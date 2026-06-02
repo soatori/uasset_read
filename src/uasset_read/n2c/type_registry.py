@@ -2,8 +2,6 @@
 
 将 UE K2Node class_name 解析为 N2CNodeType 语义类型枚举。
 支持精确匹配和继承链回退查找。
-
-Phase 68 Wave 2 输出。
 """
 from __future__ import annotations
 

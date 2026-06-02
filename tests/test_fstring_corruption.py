@@ -51,7 +51,7 @@ class TestFStringCorruption:
         assert result == "Hello World"
 
     def test_position_restored_on_boundary_error(self):
-        """长度异常时位置回退到入口（Phase 72-I 防护）。"""
+        """长度异常时位置回退到入口。"""
         # length=999999 但后面没有足够数据
         data = b"\x3f\x42\x0f\x00"  # 大长度，无后续数据
         archive = _make_archive(data)

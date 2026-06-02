@@ -1,7 +1,6 @@
 """属性解析分派器和导出条目属性循环。
 
 等价迁移 uasset_read.py 第 6007-6220 行。
-Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04, D-05, D-08)。
 """
 from __future__ import annotations
 

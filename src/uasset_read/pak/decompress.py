@@ -5,8 +5,6 @@ Pak 文件解压缩模块
 - Zlib: Python stdlib，始终可用
 - LZ4/Zstd: 可选 PyPI 包，延迟导入
 - Oodle: 不支持（专有库），优雅降级
-
-Phase 77 — PAK-02.
 """
 import gzip
 import zlib

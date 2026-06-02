@@ -1,7 +1,7 @@
 """
 Agent 翻译管线整合模块 — AgentTranslationPipeline。
 
-Phase 66-01: 整合 cpp_gen + Kismet 反编译输出，提供 Agent 可调用的翻译入口。
+整合 cpp_gen + Kismet 反编译输出，提供 Agent 可调用的翻译入口。
 
 Per D-66-01: 如果 blueprint 为 None，raise ValueError。
 Per D-66-02: 如果 graphs 为空，从 blueprint_functions 回退。
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AgentTranslationPipeline:
     """Agent 翻译管线整合类。
 
-    连接 cpp_gen (Phase 56-59) + Kismet 反编译 (Phase 61-64) 输出，
+    连接 cpp_gen + Kismet 反编译输出，
     将 LinkerParseResult 转换为完整的 CppClassIR。
 
     Usage:
@@ -80,12 +80,12 @@ class AgentTranslationPipeline:
         Returns:
             CppClassIR: 完整的 C++ 类中间表示
         """
-        # Step 1: 提取类骨架（Phase 56-59）
+        # Step 1: 提取类骨架
         from uasset_read.cpp_gen import extract_cpp_class_skeleton
 
         ir = extract_cpp_class_skeleton(self.result)
 
-        # Step 2: 提取方法签名（Phase 57）
+        # Step 2: 提取方法签名
         from uasset_read.cpp_gen.extract_cpp_skeleton import extract_cpp_functions
 
         # Per D-66-02: 如果 graphs 为空，尝试从 blueprint_functions 回退

@@ -1,7 +1,7 @@
 """
 Kismet Decompilation Result — Single function decompilation result.
 
-Phase 64: Data model for Kismet bytecode decompilation output.
+Data model for Kismet bytecode decompilation output.
 """
 from __future__ import annotations
 

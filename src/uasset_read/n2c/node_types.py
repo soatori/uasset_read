@@ -1,6 +1,6 @@
 """N2C 节点语义类型枚举（126 种）。
 
-Phase 68 从 30 种扩展到 126 种（UE5.8 全覆盖）。
+从 30 种扩展到 126 种（UE5.8 全覆盖）。
 数据来源：UE5.8 Engine/Source/Editor/ 全模块扫描。
 """
 from enum import Enum
@@ -13,7 +13,7 @@ class N2CNodeType(Enum):
     UMGEditor、MovieSceneTools、GameplayTasksEditor 模块。
     """
 
-    # === Phase 69 已用类型（30 种，保持不变）===
+    # === 已用类型（30 种，保持不变）===
 
     CallFunction = "CallFunction"
     Event = "Event"

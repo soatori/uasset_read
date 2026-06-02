@@ -53,7 +53,7 @@ class PackageLinker:
         self._preload_cache: dict[int, bool] = {}
 
     def link(self) -> None:
-        """Phase 1: create UObjectInstance shells from import/export maps.
+        """Create UObjectInstance shells from import/export maps.
 
         注意：当前实现一次性创建所有实例。
         对于超大包（>10000 个对象），可考虑延迟创建优化。
@@ -164,7 +164,7 @@ class PackageLinker:
         return [inst for inst in all_objs if inst.outer is obj]
 
     def preload(self, index: int) -> None:
-        """Phase 2: lazily deserialize properties for export *index*."""
+        """Lazily deserialize properties for export *index*."""
         if index in self._preload_cache:
             return
         if index < 0 or index >= len(self._export_objects):

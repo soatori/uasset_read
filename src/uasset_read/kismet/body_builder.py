@@ -1,7 +1,7 @@
 """
 Kismet Expression → C++ Function Body Builder.
 
-Phase 63 Wave 4: Assembles a list of KismetExpression into a complete
+Assembles a list of KismetExpression into a complete
 C++ function body with proper indentation, semicolons, braces, and labels.
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ class FunctionBodyBuilder:
         Translate a list of KismetExpression into a C++ function body.
 
         Args:
-            expressions: List of expressions from Phase 62 bytecode parsing.
+            expressions: List of expressions from bytecode parsing.
             func_name: Optional function name for the output wrapper.
 
         Returns:
@@ -126,7 +126,7 @@ class FunctionBodyBuilder:
         if no structured patterns are detected.
 
         Args:
-            expressions: List of KismetExpression from Phase 62.
+            expressions: List of KismetExpression from bytecode parsing.
             func_name: Optional function name for the wrapper.
 
         Returns:
@@ -173,7 +173,7 @@ def to_function_body(
     Usage:
         from uasset_read.kismet import to_function_body
 
-        expressions = [...]  # list of KismetExpression from Phase 62
+        expressions = [...]  # list of KismetExpression from bytecode parsing
         cpp = to_function_body(expressions, func_name="MyFunction")
     """
     builder = FunctionBodyBuilder()

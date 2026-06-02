@@ -1,8 +1,8 @@
 """
 Kismet Bytecode Extractor — UStruct ScriptBytecode extraction and parsing.
 
-Phase 62: Bridge between Phase 61 (FKismetArchive) and Phase 63 (AST translation).
-Phase 72-C Wave 2: BPGC fallback for UE5 cooked Blueprints.
+Bridge between FKismetArchive and AST translation.
+BPGC fallback for UE5 cooked Blueprints.
 
 Provides:
 - extract_bytecode_bytes: Extract raw ScriptBytecode from a UStruct export (with BPGC fallback)
@@ -130,7 +130,7 @@ def extract_bytecode_bytes(
 
     # T-62-02: Validate serializedScriptSize bounds
     if serialized_script_size <= 0:
-        # BPGC fallback for UE5 cooked Blueprints (Phase 72-C Wave 2)
+        # BPGC fallback for UE5 cooked Blueprints
         fallback = _bpgc_fallback(
             archive, export, summary, name_map, import_map, export_map
         )

@@ -1,6 +1,6 @@
 """C++ 文件输出模块 — CppClassIR → .h/.cpp 文件文本。
 
-Phase 66-02: 将 CppClassIR 转换为符合 UE C++ 规范的类文件。
+将 CppClassIR 转换为符合 UE C++ 规范的类文件。
 
 类结构：
     CppFileWriter: 文件生成器类
@@ -219,8 +219,8 @@ class CppFileWriter:
         """渲染方法体。
 
         支持两种 body 类型：
-        1. List[CppStatement] — Phase 58 IR 格式
-        2. str — Kismet 反编译的文本格式（Phase 66-01）
+        1. List[CppStatement] — IR 格式
+        2. str — Kismet 反编译的文本格式
 
         Args:
             body: 方法体（IR 或字符串）
@@ -235,7 +235,7 @@ class CppFileWriter:
             for line in body.strip().split("\n"):
                 lines.append(f"{_INDENT}{line}")
         elif isinstance(body, list):
-            # Phase 58 IR 格式 — 渲染语句
+            # IR 格式 — 渲染语句
             for stmt in body:
                 rendered = self._render_statement(stmt)
                 if rendered:

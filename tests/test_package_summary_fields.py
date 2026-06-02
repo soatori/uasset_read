@@ -75,15 +75,22 @@ class TestMissingFields:
 def _minimal_package_summary_bytes(
     legacy_file_version: int,
     *,
-    file_version_ue5: int = 1016,
+    file_version_ue5: int | None = None,  # None = don't write (for legacy -6/-7)
 ) -> bytes:
     data = bytearray()
-    data += struct.pack("<Iiiiii", PACKAGE_FILE_TAG, legacy_file_version, 0, 0, file_version_ue5, 0)
-    if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
+    # Tag + LegacyFileVersion + LegacyUE3Version + FileVersionUE4
+    data += struct.pack("<Iiii", PACKAGE_FILE_TAG, legacy_file_version, 0, 0)
+    # FileVersionUE5: only for legacy <= -8
+    if legacy_file_version <= -8:
+        ue5 = file_version_ue5 if file_version_ue5 is not None else 1016
+        data += struct.pack("<i", ue5)
+    data += struct.pack("<i", 0)  # file_version_licensee
+    if file_version_ue5 is not None and file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
         data += b"\x00" * 20  # saved_hash
         data += struct.pack("<i", 0)  # total_header_size
     data += struct.pack("<I", 0)  # custom_versions_count
-    if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
+    ue5_val = file_version_ue5 if file_version_ue5 is not None else 0
+    if ue5_val < UE5_PACKAGE_SAVED_HASH:
         data += struct.pack("<i", 0)  # total_header_size
     data += struct.pack("<i", 0)  # package_name
     data += struct.pack("<I", 0)  # package_flags
@@ -108,12 +115,13 @@ def _minimal_package_summary_bytes(
 class TestLegacyFileVersion:
     """验证 UE5 LegacyFileVersion 兼容边界。"""
 
-    @pytest.mark.parametrize("legacy_file_version", [-8, UE5_LEGACY_VERSION])
+    @pytest.mark.parametrize("legacy_file_version", [-8, -7, UE5_LEGACY_VERSION])
     def test_supported_ue5_legacy_versions_parse(self, legacy_file_version):
         from uasset_read.package import ByteArchive
         from uasset_read.serializers.package_summary import read_package_summary
 
-        file_version_ue5 = 1004 if legacy_file_version == -8 else UE5_PACKAGE_SAVED_HASH
+        # For legacy -7, file_version_ue5 is not present (None)
+        file_version_ue5 = None if legacy_file_version == -7 else (1004 if legacy_file_version == -8 else UE5_PACKAGE_SAVED_HASH)
         archive = ByteArchive(
             "minimal.uasset",
             _minimal_package_summary_bytes(
@@ -125,16 +133,18 @@ class TestLegacyFileVersion:
         summary = read_package_summary(archive)
 
         assert summary.legacy_file_version == legacy_file_version
-        assert summary.file_version_ue5 == file_version_ue5
+        expected_ue5 = 0 if legacy_file_version == -7 else file_version_ue5
+        assert summary.file_version_ue5 == expected_ue5
 
     def test_unsupported_legacy_version_reports_supported_values(self):
         from uasset_read.exceptions import VersionError
         from uasset_read.package import ByteArchive
         from uasset_read.serializers.package_summary import read_package_summary
 
-        archive = ByteArchive("minimal.uasset", _minimal_package_summary_bytes(-7))
+        # -5 is unsupported (supported: -9, -8, -7, -6)
+        archive = ByteArchive("minimal.uasset", _minimal_package_summary_bytes(-5))
 
-        with pytest.raises(VersionError, match=r"legacy_file_version in \{-9, -8\}"):
+        with pytest.raises(VersionError, match=r"legacy_file_version in \{-9, -8, -7, -6\}"):
             read_package_summary(archive)
 
 

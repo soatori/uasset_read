@@ -3,8 +3,6 @@
 所有解析器通过扁平导出（per D-03），调用者使用：
     from uasset_read.parsers import parse_property_value
     from uasset_read.parsers import parse_properties_from_export
-
-Phase 30: 属性解析模块。
 """
 
 from uasset_read.parsers.property_parser import (

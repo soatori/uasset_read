@@ -2,8 +2,6 @@
 
 将 build_execution_flows() 的逐对执行流转换为链式字符串格式（N1->N2->N3），
 替代原有 pair 格式，提供更简洁的 LLM 优化输出。
-
-Phase 71 Wave 1 输出。
 """
 from __future__ import annotations
 

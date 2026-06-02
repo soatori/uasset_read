@@ -1,7 +1,7 @@
-"""Phase 73/75 Pin 字段级诊断入口。
+"""Pin 字段级诊断入口。
 
-Phase 73: Pin 字段 offset 追踪（成功/失败都记录）。
-Phase 75: 字段级诊断基线 —— 每个 graph 的节点类型计数、关键节点字段详情、
+Pin 字段 offset 追踪（成功/失败都记录）。
+字段级诊断基线 —— 每个 graph 的节点类型计数、关键节点字段详情、
           每个 pin 的 LinkedTo 起点 offset、失败 count、recovery reason。
 """
 from __future__ import annotations
@@ -83,7 +83,7 @@ def write_pin_trace_report(
 
 
 # ============================================================================
-# Phase 75: 字段级诊断基线
+# 字段级诊断基线
 # ============================================================================
 
 def _classify_node(node) -> str:
@@ -169,7 +169,7 @@ def write_phase75_diagnostic(
     *,
     tolerant: bool = True,
 ) -> Dict[str, Any]:
-    """Phase 75 字段级诊断基线。
+    """字段级诊断基线。
 
     输出到 output_dir（默认 temp/phase75/）：
     - graph_node_counts.json: 每个 graph 的节点类型计数
@@ -422,7 +422,7 @@ def write_phase75_diagnostic(
 
     # ========== 6. LinkedTo recovery 汇总 ==========
     recovery_lines = []
-    recovery_lines.append(f"Phase 75 LinkedTo Recovery Summary")
+    recovery_lines.append(f"LinkedTo Recovery Summary")
     recovery_lines.append(f"=" * 50)
     recovery_lines.append(f"Asset: {asset_path}")
     recovery_lines.append(f"Total pins traced: {len(pins_traced)}")

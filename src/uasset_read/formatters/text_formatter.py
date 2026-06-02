@@ -1,8 +1,6 @@
 """Text 格式化 — YAML 风格完整输出、精简输出。
 
 等价迁移 uasset_read_legacy.py L7431-7571。
-Phase 32: 输出格式化模块。
-Phase 71: 执行流链式表达适配。
 """
 from __future__ import annotations
 
@@ -18,14 +16,12 @@ from uasset_read.graph import build_connections_map, build_execution_chains
 
 def format_text_full(result: ParseResult) -> str:
     """
-    YAML 风格完整文本输出（OUT-02, OUT2-03, Phase 71）。
+    YAML 风格完整文本输出（OUT-02, OUT2-03）。
 
     Per D-17: YAML 风格层级，2 空格缩进
     Per D-19: ERRORS 区块在末尾
     Per D-21: Blueprint 元数据嵌入
     Per D-22: 嵌套 YAML 缩进
-    Phase 8: Graphs section with summary（OUT2-03）
-    Phase 71: execution_chains 链式表达
 
     Args:
         result: ParseResult 来自 parse_uasset()
@@ -42,7 +38,8 @@ def format_text_full(result: ParseResult) -> str:
         lines.append(f"  Version: UE5={result.summary.file_version_ue5}")
         lines.append(f"  Flags: 0x{result.summary.package_flags:08X}")
         lines.append(f"  Imports: {len(result.import_map)}")
-        lines.append(f"  Exports: {len(result.export_map)}")
+        lines.append(f"  Exports: {len(result.export_map) if result.export_map else 0}")
+        lines.append(f"  NameMap: {len(result.name_map)}")
         lines.append("")
     else:
         lines.append("Package: Unknown")
@@ -50,6 +47,7 @@ def format_text_full(result: ParseResult) -> str:
         lines.append("  Flags: Unknown")
         lines.append("  Imports: 0")
         lines.append("  Exports: 0")
+        lines.append("  NameMap: 0")
         lines.append("")
 
     # Exports section
@@ -58,8 +56,8 @@ def format_text_full(result: ParseResult) -> str:
     # Extract linker for class resolution (may be None for legacy ParseResult)
     linker = getattr(result, 'linker', None)
 
-    for i, exp in enumerate(result.export_map):
-        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
+    for i, exp in enumerate(result.export_map or []):
+        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map or []))
         lines.append(f"  - Name: {exp.object_name}")
         lines.append(f"    Class: {asset_class}")
         lines.append(f"    SerialSize: {exp.serial_size}")
@@ -91,14 +89,14 @@ def format_text_full(result: ParseResult) -> str:
 
         lines.append("")  # Blank line after blueprint
 
-    # Phase 8: Graphs section (OUT2-03, Phase 71)
+    # Graphs section (OUT2-03)
     if result.graphs:
         lines.append("Graphs:")
         for graph in result.graphs:
             # 获取连接数量
             connections, _ = build_connections_map(graph)
 
-            # 获取执行流链式表达（Phase 71）
+            # 获取执行流链式表达
             execution_chains = build_execution_chains(graph)
 
             lines.append(f"  - Name: {graph.graph_name}")
@@ -106,7 +104,7 @@ def format_text_full(result: ParseResult) -> str:
             lines.append(f"    Nodes: {len(graph.nodes)}")
             lines.append(f"    Connections: {len(connections)}")
 
-            # 执行流链式概览（Phase 71）
+            # 执行流链式概览
             lines.append(f"    ExecutionChains: {len(execution_chains)}")
             for chain_entry in execution_chains:
                 start_event = chain_entry.get("start_event", "Unknown")
@@ -118,6 +116,22 @@ def format_text_full(result: ParseResult) -> str:
                     lines.append(f"      - {start_event}: {chain_str}{cycle_marker}")
 
         lines.append("")  # Graphs 区块后的空行
+
+    # Linker section
+    lines.append("Linker:")
+    linker = getattr(result, 'linker', None)
+    if linker is not None:
+        export_count = len(getattr(linker, '_export_objects', []))
+        import_count = len(getattr(linker, '_import_objects', []))
+        root_count = len(getattr(linker, '_root_objects', []))
+        lines.append(f"  ImportObjects: {import_count}")
+        lines.append(f"  ExportObjects: {export_count}")
+        lines.append(f"  RootObjects: {root_count}")
+    else:
+        lines.append(f"  ImportMap: {len(result.import_map)}")
+        lines.append(f"  ExportMap: {len(result.export_map) if result.export_map else 0}")
+        lines.append(f"  Status: not_available")
+    lines.append("")
 
     # ERRORS block
     if result.errors:
@@ -149,15 +163,15 @@ def format_text_summary(result: ParseResult) -> str:
     # Package header
     package_name = result.summary.package_name if result.summary else "Unknown"
     lines.append(f"Package: {package_name}")
-    lines.append(f"Exports: {len(result.export_map)}")
+    lines.append(f"Exports: {len(result.export_map) if result.export_map else 0}")
     lines.append("")  # Blank line
 
     # Exports: one line each
     # Extract linker for class resolution (may be None for legacy ParseResult)
     linker = getattr(result, 'linker', None)
 
-    for exp in result.export_map:
-        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
+    for exp in result.export_map or []:
+        asset_class = (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map or []))
         lines.append(f"  - {exp.object_name} ({asset_class})")
 
     # Blueprint summary
