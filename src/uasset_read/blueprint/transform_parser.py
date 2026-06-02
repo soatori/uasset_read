@@ -1,7 +1,6 @@
 """组件变换解析函数 — extract_component_transforms 及值解析辅助函数。
 
 等价迁移 uasset_read.py §1514-1630。
-Phase 33: 入口与测试适配。
 """
 from __future__ import annotations
 

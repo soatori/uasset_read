@@ -2,7 +2,6 @@
 Pak 文件数据结构
 
 镜像 UE 引擎 IPlatformFilePak.h 中的 FPakInfo、FPakEntry、FPakDirectoryEntry 等结构。
-Phase 77 — PAK-01.
 """
 import struct
 from dataclasses import dataclass, field

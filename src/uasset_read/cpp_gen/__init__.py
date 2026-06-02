@@ -1,5 +1,5 @@
 """
-C++ 代码生成模块（Phase 56）。
+C++ 代码生成模块。
 
 提供 UE 蓝图数据到 C++ 骨架代码的映射和生成功能。
 
@@ -52,7 +52,7 @@ from uasset_read.cpp_gen.formatters import (
     format_cpp_class_json,
     format_cpp_header,
     format_cpp_call_statements,
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     CppCallParameter,
     CppMethodIR,
     CppCallStatement,
@@ -89,18 +89,18 @@ __all__ = [
     "format_cpp_class_json",
     # .h 头文件生成
     "format_cpp_header",
-    # Call statement formatting (Phase 57)
+    # Call statement formatting
     "format_cpp_call_statements",
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
-    # C++ 默认值格式化（Phase 59）
+    # C++ 默认值格式化
     "format_cpp_default_value",
     "format_cpp_transform",
     "format_cpp_component_init",
     "format_cpp_input_action_load",
-    # C++ 构造函数格式化（Phase 59 Plan 03）
+    # C++ 构造函数格式化
     "build_constructor_sections",
     "format_cpp_constructor",
     "extract_cpp_constructor",

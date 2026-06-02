@@ -1,8 +1,6 @@
 """Markdown 格式化 — Markdown 输出 + Mermaid 流程图。
 
 等价迁移 uasset_read_legacy.py L7574-7667。
-Phase 32: 输出格式化模块。
-Phase 71: 执行流链式表达适配（Mermaid 从 chains 解析）。
 """
 from __future__ import annotations
 
@@ -24,7 +22,7 @@ def _escape_md_cell(text: str) -> str:
 
 def format_markdown(result: ParseResult) -> str:
     """
-    Markdown 输出（D-14-10~12, OUT-04, Phase 71）。
+    Markdown 输出（D-14-10~12, OUT-04）。
 
     三节结构 + 表格优先 + Mermaid 流程图。
 
@@ -77,7 +75,7 @@ def format_markdown(result: ParseResult) -> str:
             graph_name = graph_summary.get("graph_name", "Unknown")
             lines.append(f"### {graph_name}")
 
-            # Mermaid 流程图（Phase 71: 从 execution_chains 解析）
+            # Mermaid 流程图（从 execution_chains 解析）
             chains = graph_summary.get("execution_chains", [])
             if chains:
                 mermaid_lines = _build_mermaid_flowchart_from_chains(chains)
@@ -104,7 +102,7 @@ def format_markdown(result: ParseResult) -> str:
 
         for i, exp in enumerate(result.export_map):
             name = _escape_md_cell(exp.object_name)
-            cls = _escape_md_cell(get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map))
+            cls = _escape_md_cell(get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map or []))
             parent = _escape_md_cell(result.blueprint.parent_class or "") if result.blueprint and i == 0 else ""
             lines.append(f"| {name} | {cls} | {parent} |")
         lines.append("")
@@ -113,7 +111,7 @@ def format_markdown(result: ParseResult) -> str:
 
 
 def _build_mermaid_flowchart_from_chains(execution_chains: List[Dict]) -> List[str]:
-    """从 execution_chains 生成 Mermaid graph LR 代码（Phase 71）。
+    """从 execution_chains 生成 Mermaid graph LR 代码。
 
     Args:
         execution_chains: build_execution_chains() 的返回值
@@ -150,7 +148,7 @@ def _build_mermaid_flowchart(execution_flows: List[Dict]) -> List[str]:
     """
     从 execution_flows 生成 Mermaid graph LR 代码（D-06, D-07, deprecated）。
 
-    已弃用，保留向后兼容。Phase 71 使用 _build_mermaid_flowchart_from_chains。
+    已弃用，保留向后兼容。使用 _build_mermaid_flowchart_from_chains 替代。
 
     .. deprecated:: 0.3.3
         请使用 _build_mermaid_flowchart_from_chains() 替代。

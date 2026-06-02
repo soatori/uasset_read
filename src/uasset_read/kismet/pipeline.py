@@ -1,11 +1,11 @@
 """
 Kismet Decompilation Pipeline — Standalone decompile_uasset() entry point.
 
-Phase 64: Provides decompile_uasset(path) function that iterates Blueprint
+Provides decompile_uasset(path) function that iterates Blueprint
 UStruct exports, extracts bytecode, translates to C++ pseudocode, and returns
 structured results.
 
-Phase 72-C Wave 2: Added BPGC bytecode fallback with cache reset.
+BPGC bytecode fallback with cache reset.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
     extract_and_parse,
     USTRUCT_TYPES,
-    reset_bpgc_cache,  # Phase 72-C Wave 2
+    reset_bpgc_cache,
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder
 from uasset_read.kismet.translator import TypeRegistry
@@ -126,7 +126,7 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
     4. Calls decompile_single_function for each qualifying export
     5. Collects non-None results into list
 
-    Phase 72-C Wave 2: Resets BPGC bytecode cache at start (T-72C-04 mitigation).
+    Resets BPGC bytecode cache at start (T-72C-04 mitigation).
 
     Args:
         path: Path to the .uasset file

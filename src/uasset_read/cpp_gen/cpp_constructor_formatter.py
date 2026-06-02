@@ -1,4 +1,4 @@
-"""C++ 构造函数文本格式化器 — Phase 59 Plan 03。
+"""C++ 构造函数文本格式化器。
 
 将 CppClassIR.constructor 字典中的 IR 数据格式化为完整的 C++ 构造函数文本。
 

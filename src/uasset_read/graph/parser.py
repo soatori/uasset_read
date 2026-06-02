@@ -1,7 +1,6 @@
 """蓝图图解析入口 — 从 ExportMap 提取所有 EdGraph/UberEdGraph。
 
 等价迁移 uasset_read.py L3095-3143。
-Phase 31: 蓝图图解析模块。
 """
 from __future__ import annotations
 

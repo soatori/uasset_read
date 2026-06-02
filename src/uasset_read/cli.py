@@ -1,7 +1,6 @@
 """CLI 入口模块 — argparse 参数解析、格式路由、错误处理。
 
 等价迁移 uasset_read_legacy.py §7814-7938。
-Phase 33 Plan 02: 入口与测试适配。
 Phase Export: 重构为使用统一导出系统（保持向后兼容）。
 """
 from __future__ import annotations
@@ -66,7 +65,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--graph', action='store_true', help='Include blueprint graph data in output')
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations (_schema) (D-14-19)')
     parser.add_argument('--function-graphs', action='store_true',
-                        help='Include top-level function_graphs array in JSON output (output_version 5.0) (Phase 55)')
+                        help='Include top-level function_graphs array in JSON output (output_version 5.0)')
     parser.add_argument('--asset-root', action='append', default=[],
                         help='Root directory to search for parent .uasset files (can be repeated)')
     parser.add_argument('--include-parent-assets', action='store_true',
@@ -290,7 +289,7 @@ def main():
             print(f"  - {err}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
-    # Phase 8: --graph flag handling (D-08-12/13)
+    # --graph flag handling (D-08-12/13)
     # --graph 有特殊逻辑，不经过统一导出器
     if args.graph:
         _handle_graph_mode(args, result)
@@ -325,7 +324,7 @@ def _handle_graph_mode(args, result):
     )
     from uasset_read.graph import format_graphs_json
 
-    # Phase 55: --function-graphs 隐含 --json
+    # --function-graphs 隐含 --json
     if args.function_graphs and not (
         args.json or args.json_summary or args.text or args.text_summary
         or args.summary or args.markdown or args.blueprint_text

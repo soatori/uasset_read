@@ -123,7 +123,7 @@ def format_cpp_header(ir: CppClassIR) -> str:
         for prop in variables:
             lines.extend(_format_variable_property(prop))
 
-    # 13. 方法声明（Phase 57）
+    # 13. 方法声明
     if ir.methods:
         lines.append("")
         lines.append("public:")
@@ -322,7 +322,7 @@ def _format_default_value(cpp_type: str, value: any) -> str:
     if cpp_type in ("FString", "FName"):
         return f'TEXT("{value}")'
 
-    # FText 太复杂，跳过（Phase 56 不支持）
+    # FText 太复杂，跳过（当前不支持）
     if cpp_type == "FText":
         return "FText::GetEmpty()"
 

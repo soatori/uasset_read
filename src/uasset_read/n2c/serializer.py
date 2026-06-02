@@ -3,8 +3,7 @@
 将现有图数据转换为 N2CStruct 格式（to_n2c_json），
 以及从 N2CStruct dict 重建 dataclass 实例（from_n2c_json）。
 
-Phase 70 Wave 2 输出。
-Phase 71: 链提取逻辑迁移到 graph/chain_builder。
+链提取逻辑迁移到 graph/chain_builder。
 """
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from uasset_read.n2c.id_mapper import N2CIdMapper
 from uasset_read.n2c.type_registry import N2CNodeTypeRegistry, get_type_registry
 from uasset_read.n2c.processors import register_all_processors
 from uasset_read.n2c.processor_registry import N2CProcessorRegistry, get_registry
-# Phase 71: 链提取逻辑迁移到 graph/chain_builder
+# 链提取逻辑迁移到 graph/chain_builder
 from uasset_read.graph.chain_builder import build_execution_chains_from_flows
 from uasset_read.n2c.flow_extractor import extract_data_flow_map
 

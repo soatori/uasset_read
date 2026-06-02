@@ -1,7 +1,6 @@
 """蓝图变量提取模块 — 从属性数据中提取蓝图变量、函数、事件元数据。
 
 独立模块（per D-02），可被属性解析和蓝图图解析共同使用。
-Phase 30: 属性解析模块。
 """
 from __future__ import annotations
 
@@ -736,7 +735,7 @@ def extract_blueprint_metadata(
         if parent_name:
             parent_class = parent_name
 
-    # Phase 72g M-03: Merge primary BPGC path + fallback graph path
+    # Merge primary BPGC path + fallback graph path
     functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
     functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
     # Deduplicate by name
@@ -759,7 +758,7 @@ def extract_blueprint_metadata(
 
 
 def parse_property_flags_to_labels(flags: int) -> List[str]:
-    """将 CPF_* 位标志转换为可读标签列表（Phase 12）。
+    """将 CPF_* 位标志转换为可读标签列表。
 
     等价迁移 uasset_read.py §4775-4827。
     包含语义映射：CPF_Edit → EditAnywhere/EditConst,

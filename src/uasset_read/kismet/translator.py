@@ -1,7 +1,7 @@
 """
 Kismet Expression → C++ Pseudocode Translator.
 
-Phase 63: Translates KismetExpression AST into readable C++ pseudocode.
+Translates KismetExpression AST into readable C++ pseudocode.
 
 Provides:
 - TypeRegistry: UE → C++ type mapping with metadata population

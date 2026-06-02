@@ -1,7 +1,5 @@
 """输出格式化模块 — JSON/Text/Markdown 输出。
 
-Phase 32: 输出格式化模块。
-
 模块组织（D-01）:
 - json_formatter: format_json_full, format_json_summary, format_exports_list,
                   format_properties_list, format_blueprint_dict
@@ -31,7 +29,7 @@ from .markdown_formatter import (
     format_markdown,
 )
 
-# Blueprint 翻译参考文本（Phase 74）
+# Blueprint 翻译参考文本
 from .blueprint_text_formatter import (
     format_blueprint_translation_text,
 )

@@ -1,7 +1,7 @@
 """
 Kismet Expression → Structured Control Flow Reconstruction.
 
-Phase 63 Wave 5: Identifies if/else, while/for patterns from
+Identifies if/else, while/for patterns from
 PushExecutionFlow / PopExecutionFlow / JumpIfNot sequences and
 produces structured C++ output. Falls back to goto for unrecognized patterns.
 

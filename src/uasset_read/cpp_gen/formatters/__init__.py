@@ -15,11 +15,11 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppHeaderMeta,
     CppClassIR,
     format_cpp_class_json,
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     CppCallParameter,
     CppMethodIR,
     CppCallStatement,
-    # Statement IR (Phase 58)
+    # Statement IR
     CppStatement,
     CppCallStmt,
     CppAssignmentStmt,
@@ -41,19 +41,19 @@ __all__ = [
     "CppClassIR",
     "format_cpp_class_json",
     "format_cpp_header",
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
-    # Call statement formatting (Phase 57)
+    # Call statement formatting
     "format_cpp_call_statements",
-    # Statement IR (Phase 58)
+    # Statement IR
     "CppStatement",
     "CppCallStmt",
     "CppAssignmentStmt",
     "CppIfStmt",
     "CppInlineExprStmt",
-    # Function body formatting (Phase 58)
+    # Function body formatting
     "format_cpp_function_body",
     "format_full_cpp_implementation",
 ]

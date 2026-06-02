@@ -5,7 +5,7 @@
 Per D-01: 保持 UE 源码命名。
 Per D-06: 数据和序列化解耦，from_archive 为 stub。
 Per D-10: Python 3.10+ 严格类型提示。
-Per D-12: 静态 from_archive 方法（Phase 31 实现）。
+Per D-12: 静态 from_archive 方法。
 """
 from __future__ import annotations
 

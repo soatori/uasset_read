@@ -1,6 +1,6 @@
 """C++ 函数体提取模块 — 从 execution_flows / data_flows 生成 CppStatement 树。
 
-Phase 58: 将蓝图函数体逻辑翻译为中间 IR 结构。
+将蓝图函数体逻辑翻译为中间 IR 结构。
 """
 from __future__ import annotations
 

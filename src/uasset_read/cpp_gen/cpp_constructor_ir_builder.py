@@ -1,5 +1,5 @@
 """
-构造函数 IR 构建器模块 — Phase 59 Plan 01。
+构造函数 IR 构建器模块。
 
 从 CppClassIR.properties、component 数据和 blueprint.variables 提取数据，
 填充 CppClassIR.constructor 字典的 component_creations、component_assignments、

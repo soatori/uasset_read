@@ -1,0 +1,49 @@
+Package: /Game/Audio/Foley/MetaSounds/Presets/MSS_FoleySound_ScuffPivot
+  Version: UE5=1018
+  Flags: 0x00040000
+  Imports: 44
+  Exports: 9
+
+Exports:
+  - Name: AssetImportData
+    Class: AssetImportData
+    SerialSize: 20
+
+  - Name: MetasoundEditorGraphMemberDefaultBool_11
+    Class: MetasoundEditorGraphMemberDefaultBool
+    SerialSize: 78
+
+  - Name: MetasoundEditorGraphMemberDefaultFloat_51
+    Class: MetasoundEditorGraphMemberDefaultFloat
+    SerialSize: 241
+
+  - Name: MetasoundEditorGraphMemberDefaultFloat_52
+    Class: MetasoundEditorGraphMemberDefaultFloat
+    SerialSize: 107
+
+  - Name: MetasoundEditorGraphMemberDefaultFloat_53
+    Class: MetasoundEditorGraphMemberDefaultFloat
+    SerialSize: 107
+
+  - Name: MetasoundEditorGraphMemberDefaultFloat_54
+    Class: MetasoundEditorGraphMemberDefaultFloat
+    SerialSize: 107
+
+  - Name: MetasoundEditorGraphMemberDefaultFloat_55
+    Class: MetasoundEditorGraphMemberDefaultFloat
+    SerialSize: 107
+
+  - Name: MetasoundEditorGraphMemberDefaultObjectArray_1
+    Class: MetasoundEditorGraphMemberDefaultObjectArray
+    SerialSize: 698
+
+  - Name: MSS_FoleySound_ScuffPivot
+    Class: MetaSoundSource
+    SerialSize: 75664
+    Properties:
+      - Name: Unknown
+        Type: Warning
+        Value: ParseError: Size 74079 exceeds max_reasonable 9125 at RootMetasoundDocument
+
+ERRORS:
+  (none)

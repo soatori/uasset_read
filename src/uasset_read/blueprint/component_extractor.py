@@ -1,6 +1,6 @@
 """组件提取模块 — 从 ExportMap 发现 SCS 组件并提取数值属性。
 
-Phase 48: 组件属性递归解析 (D-01, D-02, D-04)。
+组件属性递归解析 (D-01, D-02, D-04)。
 通过 Outer 层级扫描发现组件对象，提取变换 + 标量属性。
 """
 from __future__ import annotations

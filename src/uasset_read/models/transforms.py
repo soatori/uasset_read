@@ -1,7 +1,6 @@
 """变换属性数据类 — VectorValue, RotatorValue, ScaleValue。
 
 等价迁移 uasset_read.py §1435-1480。
-Phase 33: 入口与测试适配。
 """
 from __future__ import annotations
 

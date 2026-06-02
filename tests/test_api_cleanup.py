@@ -232,6 +232,14 @@ class _Provider:
 class _Export:
     serial_size = 1
     object_name = "BrokenExport"
+    class_index = None
+    outer_index = None
+    serial_offset = 0
+
+
+class _MockLinker:
+    def link(self): pass
+    def post_load(self): pass
 
 
 def test_strict_property_parse_error_is_fatal(monkeypatch):
@@ -248,6 +256,10 @@ def test_strict_property_parse_error_is_fatal(monkeypatch):
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad property")),
     )
     monkeypatch.setattr(parser_module, "_post_process", lambda *args, **kwargs: None)
+
+    # Mock PackageLinker at its source module (test focuses on property parse error, not linker)
+    from uasset_read.link import linker as linker_mod
+    monkeypatch.setattr(linker_mod, "PackageLinker", lambda *a, **kw: _MockLinker())
 
     result = parse_package("Game/A.uasset", tolerant=False, provider=_Provider())
 

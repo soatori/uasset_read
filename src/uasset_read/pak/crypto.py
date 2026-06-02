@@ -2,7 +2,6 @@
 Pak 文件 AES-ECB 加密/解密模块
 
 用于加密索引和文件条目的 AES-ECB 解密。
-Phase 77 — PAK-03.
 """
 import hashlib
 

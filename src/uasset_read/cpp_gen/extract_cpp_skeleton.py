@@ -5,8 +5,8 @@ Per D-02: 沿 ClassParent 追溯继承链。
 Per D-03: 使用 ue_path_to_cpp_type 进行类型映射。
 Per D-04: 使用 cpf_flags_to_uproperty_marks 获取 UPROPERTY 标记。
 Per D-05: 构建完整的 header_meta。
-Phase 57: 从图节点提取方法声明填充 methods。
-Phase 66: 从 decompiled_functions 注入函数体到 body_text。
+从图节点提取方法声明填充 methods。
+从 decompiled_functions 注入函数体到 body_text。
 
 导出：
     extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
@@ -68,7 +68,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     Per D-03: 将 UE 类型映射为 C++ 类型名。
     Per D-04: 将 CPF 标志转换为 UPROPERTY 标记。
     Per D-05: 构建 header_meta（includes + generated_include）。
-    Phase 57: 从图节点提取方法声明填充 methods。
+    从图节点提取方法声明填充 methods。
 
     Args:
         result: LinkerParseResult（来自 parse_uasset_with_linker）
@@ -104,7 +104,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     if result.graphs:
         properties.extend(_extract_input_action_properties(result.graphs))
 
-    # 6. 提取方法声明（Phase 57）
+    # 6. 提取方法声明
     methods: List[CppMethodIR] = []
     if result.graphs:
         blueprint_functions = getattr(blueprint, 'functions', None)
@@ -132,10 +132,10 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             "component_creations": [],
             "component_assignments": [],
             "default_values": [],
-        },  # Phase 59 填充
+        },  # 填充
     )
 
-    # Phase 59: 填充 constructor 字典
+    # 填充 constructor 字典
     components = result.components or []
     ir.constructor["component_creations"] = build_component_creations(ir)
     ir.constructor["component_assignments"] = build_component_assignments(components)
@@ -657,7 +657,7 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
 
 
 # ============================================================================
-# Phase 57: 函数签名映射
+# 函数签名映射
 # ============================================================================
 
 # --- 辅助函数（Plan 02） ---
@@ -1067,7 +1067,7 @@ def extract_cpp_call_statements(
 
 
 # ============================================================================
-# 构造函数提取（Phase 59 Plan 03）
+# 构造函数提取
 # ============================================================================
 
 
@@ -1091,10 +1091,8 @@ def extract_cpp_constructor(ir: "CppClassIR") -> str:
 
 __all__ = [
     "extract_cpp_class_skeleton",
-    # Phase 57
     "extract_cpp_functions",
     "extract_cpp_call_statements",
-    # Phase 59
     "extract_cpp_constructor",
     "_sanitize_identifier",
     "_derive_call_target",

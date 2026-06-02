@@ -1,7 +1,6 @@
 """属性数据类 — PropertyTag, PropertyValue 及高级属性值容器。
 
 等价迁移 uasset_read.py 第 1294-1427 行。
-Phase 30: 属性解析模块 (per MOD-06, MOD-09)。
 """
 from __future__ import annotations
 
@@ -58,7 +57,6 @@ class PropertyTag:
     key_type_struct: Optional[str] = None  # Map key StructProperty 的结构体类型
     value_type: Optional[str] = None   # Map value 类型
     value_type_struct: Optional[str] = None  # Map value StructProperty 的结构体类型
-    # Phase 73 Wave 4: offset tracking for PropertyTag cascade failure diagnosis
     tag_start_offset: Optional[int] = None  # PropertyTag 开始读取位置（archive.tell()）
     value_start_offset: Optional[int] = None  # Property value 开始位置（tag 读取后）
     value_end_offset: Optional[int] = None  # Property value 期望结束位置（value_start + size）

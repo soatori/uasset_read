@@ -1,6 +1,6 @@
 """C++ 函数体格式化模块 — CppStatement 树 → .cpp 文本。
 
-Phase 58 Wave 2: 将函数体 IR 渲染为可读的 UE .cpp 实现文件。
+将函数体 IR 渲染为可读的 UE .cpp 实现文件。
 """
 from __future__ import annotations
 

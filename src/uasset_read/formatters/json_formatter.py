@@ -1,7 +1,6 @@
 """JSON 格式化 — 完整输出、摘要输出、导出列表、属性列表、蓝图字典。
 
 等价迁移 uasset_read_legacy.py L7188-7428, L7251-7357, L7670-7807。
-Phase 32: 输出格式化模块。
 """
 from __future__ import annotations
 
@@ -29,17 +28,17 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
     Per D-03: 顶层 errors 字段
     Per D-04: 单一 blueprint 对象结构（D-20-04: graphs 移入 blueprint 内部）
     Per D-05: 未解析的 FPackageIndex 原值保留
-    Per D-06: name_map 不输出（已解析为对象名）
+    Per D-06: name_map 输出供名称索引和诊断使用
     Per D-20-04: 单一 blueprint 对象结构（graphs 移入 blueprint 内部）
     Per D-20-05: output_version 升级到 "4.0"
     Per D-20-06: blueprint_name 从 package_name 提取
-    Per D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
-    Phase 55: output_version 升级到 "5.0" when include_function_graphs=True
+    Per D-02: 移除 imports, soft_references, circular_deps 字段
+    output_version 升级到 "5.0" when include_function_graphs=True
 
     Args:
         result: ParseResult 来自 parse_uasset()
         include_schema: bool，是否包含 _schema 字段（OUT-05）
-        include_function_graphs: bool，是否包含顶层 function_graphs 数组（Phase 55）
+        include_function_graphs: bool，是否包含顶层 function_graphs 数组
 
     Returns:
         Dict: 包含 status, output_version, summary, exports, blueprint, errors
@@ -59,15 +58,17 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
     if result.blueprint:
         blueprint_obj = _format_blueprint_result(result)
 
-    # Phase 55: output_version 条件化
+    # output_version 条件化
     output_version = "5.0" if include_function_graphs else "4.0"
 
     output = {
         "status": asdict(build_status_info(result)),  # D-14-03: 顶层位置（第一个字段）
-        "output_version": output_version,  # D-20-05: 反映输出结构重大变化（Phase 55: 条件化）
+        "output_version": output_version,  # D-20-05: 反映输出结构重大变化
         "summary": summary_dict,
+        "name_map": result.name_map,  # D-06: 名称表供名称索引和诊断
         "exports": format_exports_list(result),
         "blueprint": blueprint_obj,  # D-20-04: 单一 blueprint 对象
+        "linker": _format_linker_summary(result),
         "components": _format_components(getattr(result, "components", [])),
         "decompiled_functions": [
             fn.to_dict() if hasattr(fn, "to_dict") else serialize_property_value(fn)
@@ -76,12 +77,12 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         "resolved_parent_assets": getattr(result, "resolved_parent_assets", []),
         "inherited_blueprint_graphs": getattr(result, "inherited_blueprint_graphs", []),
         "logic_sources": getattr(result, "logic_sources", []),
-        # D-02（Phase 32）: 移除 imports, soft_references, circular_deps 字段
+        # D-02: 移除 imports, soft_references, circular_deps 字段
         # 原因：依赖分析字段不属于格式化模块核心职责
         "errors": result.errors
     }
 
-    # Phase 55: 添加 function_graphs 顶层数组（仅在 include_function_graphs=True）
+    # 添加 function_graphs 顶层数组（仅在 include_function_graphs=True）
     if include_function_graphs and result.graphs:
         from uasset_read.graph import build_function_graphs
         blueprint_functions = result.blueprint.functions if result.blueprint else None
@@ -148,7 +149,7 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
     """
     格式化导出列表用于 JSON 输出。
 
-    Per D-11/D-12: ParentClass, SuperIndex 在 Phase 3 解析
+    Per D-11/D-12: ParentClass, SuperIndex 在解析阶段提取
     Per D-13: 解析失败时添加 Warning 字段
     Per D-15: Soft object paths 输出原始路径字符串
 
@@ -164,8 +165,8 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
     # Extract linker for class resolution (may be None for legacy ParseResult)
     linker = getattr(result, 'linker', None)
 
-    for i, exp in enumerate(result.export_map):
-        # Resolve ParentClass from Phase 3 extraction
+    for i, exp in enumerate(result.export_map or []):
+        # Resolve ParentClass from blueprint extraction
         parent_class = None
         parent_warning = None
         if result.blueprint and result.blueprint.is_blueprint:
@@ -175,13 +176,13 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
         export_dict = {
             "index": i,
             "name": exp.object_name,
-            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map)),
+            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map or [])),
             "serial_size": exp.serial_size,
             "properties": format_properties_list(exp.properties) if exp.properties else [],
             # Per D-12: resolved references
             "outer_index": resolve_fpackage_index(exp.outer_index, result),
             "super_index": resolve_fpackage_index(exp.super_index, result),
-            "parent_class": parent_class,  # from Phase 3 or resolution
+            "parent_class": parent_class,  # from blueprint or resolution
         }
 
         # Per D-13: include warning if resolution failed
@@ -329,7 +330,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     # Extract linker for class resolution (may be None for legacy ParseResult)
     linker = getattr(result, 'linker', None)
 
-    for i, exp in enumerate(result.export_map):
+    for i, exp in enumerate(result.export_map or []):
         # 获取 parent_class（仅在蓝图主对象的第一个 export）
         parent_class = ""
         if result.blueprint and result.blueprint.is_blueprint and i == 0:
@@ -337,7 +338,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
 
         exports_summary.append({
             "name": exp.object_name,
-            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map)),
+            "class": (get_asset_class_with_linker(exp, linker) if linker else get_asset_class(exp, result.import_map, result.export_map or [])),
             "parent_class": parent_class
         })
 
@@ -346,7 +347,9 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
         "output_version": "4.0",  # D-20-05: API 版本标识
         "version": version_dict,
         "package_name": result.summary.package_name if result.summary else "",
+        "name_map": result.name_map,  # D-06: 名称表供名称索引和诊断
         "exports": exports_summary,  # D-14-08: 精简版本
+        "linker": _format_linker_summary(result),
     }
 
     # D-14-07: 移除 imports/soft_references/circular_deps/errors
@@ -368,7 +371,6 @@ def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = No
     格式化 BlueprintMetadata 用于 JSON 输出（D-04, D-20-06）。
 
     Per D-20-06: blueprint_name 从 package_name 或导出名提取
-    Phase 26: 增强元数据输出（META-04）
 
     Args:
         blueprint: BlueprintMetadata 对象
@@ -377,31 +379,31 @@ def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = No
     Returns:
         Dict: 包含 blueprint_name, parent_class, variables, functions, events, detection_warning
     """
-    # 增强的变量输出（Phase 26）
+    # 增强的变量输出
     variables_list = [_format_variable_enhanced(var) for var in blueprint.variables]
 
-    # 增强的函数输出（Phase 26）
+    # 增强的函数输出
     functions_list = [_format_function_enhanced(func) for func in blueprint.functions]
 
-    # 增强的事件输出（Phase 26）
+    # 增强的事件输出
     events_list = [_format_event_enhanced(event) for event in blueprint.events]
 
     return {
         "blueprint_name": blueprint_name,  # D-20-06
         "parent_class": blueprint.parent_class,  # None if not resolved
-        "variables": variables_list,  # Phase 26: 增强格式
-        "functions": functions_list,  # Phase 26: 新增
-        "events": events_list,  # Phase 26: 新增
+        "variables": variables_list,  # 增强格式
+        "functions": functions_list,
+        "events": events_list,
         "detection_warning": blueprint.detection_warning  # None if no warning
     }
 
 
 # ============================================================================
-# Phase 26: 增强的 JSON 格式化辅助函数 (META-04)
+# 增强的 JSON 格式化辅助函数 (META-04)
 # ============================================================================
 
 def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
-    """格式化增强的变量元数据（Phase 26: META-04）"""
+    """格式化增强的变量元数据（META-04）"""
     result = {
         "name": variable.var_name,
         "type": {
@@ -447,7 +449,7 @@ def _format_variable_enhanced(variable: BlueprintVariable) -> dict:
 
 
 def _format_parameter(parameter: FunctionParameter) -> dict:
-    """格式化函数参数（Phase 26: META-04）"""
+    """格式化函数参数（META-04）"""
     return {
         "name": parameter.name,
         "type": parameter.param_type,
@@ -461,7 +463,7 @@ def _format_parameter(parameter: FunctionParameter) -> dict:
 
 
 def _format_function_enhanced(function: BlueprintFunction) -> dict:
-    """格式化增强的函数元数据（Phase 26: META-04）"""
+    """格式化增强的函数元数据（META-04）"""
     result = {
         "name": function.name,
         "return_type": function.return_type,
@@ -499,7 +501,7 @@ def _format_function_enhanced(function: BlueprintFunction) -> dict:
 
 
 def _format_event_enhanced(event: BlueprintEvent) -> dict:
-    """格式化增强的事件元数据（Phase 26: META-04）"""
+    """格式化增强的事件元数据（META-04）"""
     result = {
         "name": event.name,
         "event_type": event.event_type,
@@ -541,10 +543,10 @@ def _extract_call_function_parameters(
     node_lookup: Optional[Dict] = None,
     node_name_lookup: Optional[Dict] = None
 ) -> Dict[str, List[Dict]]:
-    """从 K2Node_CallFunction 节点的 pins 中提取函数参数（Phase 49 + Phase 54）。
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数。
 
     过滤 exec pins，将输入/输出参数分离为结构化数组。
-    Phase 54: 增强 input_params 的 data_source 字段（数据来源追踪）。
+    增强 input_params 的 data_source 字段（数据来源追踪）。
 
     Args:
         node: K2Node_CallFunction 节点
@@ -575,7 +577,7 @@ def _extract_call_function_parameters(
             param["default_value"] = pin.default_value
 
         if pin.direction == 0:  # Input
-            # Phase 54: 添加 data_source 字段（仅当 lookup 可用时）
+            # 添加 data_source 字段（仅当 lookup 可用时）
             if pin_lookup and node_lookup and node_name_lookup:
                 from uasset_read.graph.flow_builder import _trace_data_source
                 try:
@@ -593,7 +595,7 @@ def _extract_call_function_parameters(
 
 
 def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """格式化组件列表用于 JSON 输出（D-06, Phase 48）。"""
+    """格式化组件列表用于 JSON 输出（D-06）。"""
     result = []
     for comp in components:
         comp_dict = {
@@ -610,3 +612,74 @@ def _format_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 comp_dict["transforms"][key] = value
         result.append(comp_dict)
     return result
+
+
+def _format_linker_summary(result: ParseResult) -> Dict[str, Any]:
+    """序列化 PackageLinker 对象图为 JSON 可输出的摘要。
+
+    包含对象计数、根对象列表和完整导出/导入对象列表。
+    避免序列化循环引用（outer、linker 等），仅输出名称和类信息。
+    当 linker 为 None 时，返回基于 import_map/export_map 的基础信息。
+    """
+    linker = result.linker
+
+    def _instance_summary(inst) -> Dict[str, Any]:
+        """将 UObjectInstance 转换为可序列化的摘要字典。"""
+        return {
+            "name": inst.object_name,
+            "class": inst.object_class,
+            "is_import": inst.is_import,
+            "outer": inst.outer.object_name if inst.outer else None,
+        }
+
+    if linker is None:
+        # Linker 未创建时，基于 import_map/export_map 返回基础信息
+        export_objects = []
+        import_objects = []
+        for exp in (result.export_map or []):
+            import_objects.append({
+                "name": exp.object_name if isinstance(exp.object_name, str) else f"<name_id_{exp.object_name}>",
+                "class": "",
+                "is_import": False,
+                "outer": None,
+            })
+        for imp in (result.import_map or []):
+            import_objects.append({
+                "name": imp.object_name if isinstance(imp.object_name, str) else f"<name_id_{imp.object_name}>",
+                "class": "",
+                "is_import": True,
+                "outer": None,
+            })
+
+        return {
+            "import_count": len(import_objects),
+            "export_count": len(export_objects),
+            "root_count": 0,
+            "root_objects": [],
+            "exports": export_objects,
+            "imports": import_objects,
+            "status": "not_available",
+        }
+
+    export_objects = [
+        _instance_summary(inst)
+        for inst in getattr(linker, '_export_objects', [])
+    ]
+    import_objects = [
+        _instance_summary(inst)
+        for inst in getattr(linker, '_import_objects', [])
+    ]
+    root_objects = [
+        _instance_summary(inst)
+        for inst in getattr(linker, '_root_objects', [])
+    ]
+
+    return {
+        "import_count": len(import_objects),
+        "export_count": len(export_objects),
+        "root_count": len(root_objects),
+        "root_objects": root_objects,
+        "exports": export_objects,
+        "imports": import_objects,
+        "status": "ok",
+    }

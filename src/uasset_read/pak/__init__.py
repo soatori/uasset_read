@@ -9,8 +9,6 @@ Public API:
 - parse_primary_index: Index blob parsing
 - decompress_block, decompress_entry: Compression dispatch
 - decrypt_aes_ecb, decrypt_index_blob: AES-ECB decryption
-
-Phase 77 — PAK-01, PAK-02, PAK-03.
 """
 
 # Constants

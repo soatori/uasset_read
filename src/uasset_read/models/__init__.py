@@ -75,7 +75,7 @@ __all__ = [
     "BlueprintEvent",
     "FunctionParameter",
     "MulticastDelegate",
-    # 属性数据模型（Phase 30）
+    # 属性数据模型
     "PropertyTag",
     "PropertyTypeName",
     "PropertyValue",
@@ -87,7 +87,7 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
-    # 变换数据类（Phase 33）
+    # 变换数据类
     "VectorValue",
     "RotatorValue",
     "ScaleValue",
