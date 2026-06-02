@@ -360,7 +360,6 @@ def test_blueprint_reference_binary_helpers(tmp_path):
     pin_ref = read_pin_reference(ar, [], [], [])
 
     assert pin_ref["pin_guid"] == "000102030405060708090A0B0C0D0E0F"
-    assert pin_ref["_pin_guid_valid"] is True
 
     name_map = ["Func"]
     member_guid = bytes(range(16, 32))

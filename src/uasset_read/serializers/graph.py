@@ -569,14 +569,10 @@ def read_pin_reference(
         if import_idx < len(import_map):
             owning_node_name = import_map[import_idx].object_name
 
-    # 标记 pin_guid 最小有效性，供连接层过滤
-    guid_text = pin_guid.replace("-", "")
-    guid_is_hex = len(guid_text) == 32 and all(c in "0123456789ABCDEF" for c in guid_text)
-    guid_is_zero = guid_text == ("0" * 32)
+    # pin_guid 已在上方归一化为 32 字符大写 hex（无 dash）
     result = {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
-        "_pin_guid_valid": guid_is_hex and not guid_is_zero,
     }
 
     # 如果有 linker，解析 owning_node_index 为对象引用

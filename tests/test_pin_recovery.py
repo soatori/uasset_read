@@ -294,54 +294,97 @@ class TestFTextSafetyNet:
 class TestPinReferenceGUID:
     """PinReference GUID 格式统一测试。"""
 
-    def test_read_pin_reference_returns_normalized_guid(self):
-        """验证 read_pin_reference 返回 32 字符纯 hex GUID。"""
+    @pytest.mark.parametrize("raw_guid,expected", [
+        ("a1b2c3d4-e5f6-7890-abcd-ef1234567890", "A1B2C3D4E5F67890ABCDEF1234567890"),
+        ("01020304-0506-0708-090a-0b0c0d0e0f10", "0102030405060708090A0B0C0D0E0F10"),
+        ("00000000-0000-0000-0000-000000000000", "0" * 32),
+    ], ids=["dashed-upper", "dashed-lower", "zero-guid"])
+    def test_read_pin_reference_normalizes_guid(self, raw_guid, expected):
+        """验证 read_pin_reference 将各种 GUID 格式归一化为 32 字符大写 hex。"""
         fake_archive = MagicMock()
-        fake_archive.read_i32.side_effect = [0, 1]  # b_null=0, owning_node=1
+        fake_archive.read_i32.side_effect = [0, 1]
 
         export_map = [MagicMock(object_name="TestNode")]
+        import_map = []
+
+        with patch("uasset_read.serializers.graph._read_guid", return_value=raw_guid):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        assert result is not None
+        assert result["pin_guid"] == expected
+        assert len(result["pin_guid"]) == 32
+        assert "-" not in result["pin_guid"]
+
+    def test_read_pin_reference_null_pointer_returns_none(self):
+        """验证 b_null_ptr != 0 时返回 None（仅消耗 4 字节）。"""
+        fake_archive = MagicMock()
+        fake_archive.read_i32.side_effect = [1]  # b_null_ptr = 1 (非零)
+
+        result = read_pin_reference(fake_archive, [], [], [])
+
+        assert result is None
+        # 仅调用一次 read_i32（读 b_null_ptr），不应再读更多
+        assert fake_archive.read_i32.call_count == 1
+
+    def test_read_pin_reference_negative_owning_node_uses_import_map(self):
+        """验证 owning_node_index 为负数时从 import_map 解析节点名。"""
+        fake_archive = MagicMock()
+        # b_null=0, owning_node=-1（负索引 → import_map[0]）
+        fake_archive.read_i32.side_effect = [0, -1]
+
+        export_map = []
+        import_map = [MagicMock(object_name="ImportedClass")]
+
+        with patch("uasset_read.serializers.graph._read_guid",
+                    return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        assert result is not None
+        assert result["owning_node"] == "ImportedClass"
+
+    def test_read_pin_reference_out_of_bounds_export_index(self):
+        """验证 owning_node_index 超出 export_map 范围时 owning_node 为 None。"""
+        fake_archive = MagicMock()
+        # b_null=0, owning_node=10（远超 export_map 长度 1）
+        fake_archive.read_i32.side_effect = [0, 10]
+
+        export_map = [MagicMock(object_name="OnlyNode")]
         import_map = []
 
         with patch("uasset_read.serializers.graph._read_guid",
                     return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
-        # 验证返回的 pin_guid 是归一化后的 32 字符纯 hex
         assert result is not None
-        assert len(result["pin_guid"]) == 32
-        assert result["pin_guid"] == result["pin_guid"].upper()
-        assert "-" not in result["pin_guid"]
-        assert result["pin_guid"] == "A1B2C3D4E5F67890ABCDEF1234567890"
+        assert result["owning_node"] is None
 
-    def test_read_pin_reference_guid_no_dashes(self):
-        """验证 read_pin_reference 的 GUID 不含 dash 分隔符。"""
+    def test_read_pin_reference_out_of_bounds_import_index(self):
+        """验证负索引超出 import_map 范围时 owning_node 为 None。"""
         fake_archive = MagicMock()
-        fake_archive.read_i32.side_effect = [0, 1]
+        # b_null=0, owning_node=-10（远超 import_map 长度 1）
+        fake_archive.read_i32.side_effect = [0, -10]
+
+        export_map = []
+        import_map = [MagicMock(object_name="OnlyImport")]
+
+        with patch("uasset_read.serializers.graph._read_guid",
+                    return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        assert result is not None
+        assert result["owning_node"] is None
+
+    def test_read_pin_reference_zero_owning_node(self):
+        """验证 owning_node_index 为 0 时 owning_node 为 None（既非正也非负）。"""
+        fake_archive = MagicMock()
+        fake_archive.read_i32.side_effect = [0, 0]
 
         export_map = [MagicMock(object_name="Node")]
-        import_map = []
+        import_map = [MagicMock(object_name="Import")]
 
         with patch("uasset_read.serializers.graph._read_guid",
-                    return_value="01020304-0506-0708-090a-0b0c0d0e0f10"):
+                    return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
         assert result is not None
-        assert "-" not in result["pin_guid"]
-        # 应为 32 字符纯 hex
-        assert result["pin_guid"] == "0102030405060708090A0B0C0D0E0F10"
-
-    def test_read_pin_reference_zero_guid_normalized(self):
-        """验证全零 GUID 也被归一化为 32 字符纯 hex。"""
-        fake_archive = MagicMock()
-        fake_archive.read_i32.side_effect = [0, 2]
-
-        export_map = [MagicMock(object_name="NodeA"), MagicMock(object_name="NodeB")]
-        import_map = []
-
-        with patch("uasset_read.serializers.graph._read_guid",
-                    return_value="00000000-0000-0000-0000-000000000000"):
-            result = read_pin_reference(fake_archive, [], export_map, import_map)
-
-        assert result is not None
-        assert result["pin_guid"] == "0" * 32
-        assert "-" not in result["pin_guid"]
+        assert result["owning_node"] is None
