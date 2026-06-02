@@ -29,6 +29,7 @@ class FArchive:
         self._use_mmap: bool = False
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
+        self._name_map: Optional[list] = None  # 可选的名称表缓存
 
         try:
             self._file = open(path, 'rb')
@@ -343,8 +344,41 @@ class FArchive:
 
         return result
 
-    def read_name(self, name_map: list) -> str:
-        """读取 FName（名称表索引 + 实例编号）。"""
+    def set_name_map(self, name_map: list) -> None:
+        """设置名称表缓存，用于 read_name() 无参调用。
+
+        Args:
+            name_map: 名称表列表
+        """
+        self._name_map = name_map
+
+    def get_name_map(self) -> Optional[list]:
+        """获取当前缓存的名称表。
+
+        Returns:
+            名称表列表，未设置时返回 None
+        """
+        return self._name_map
+
+    def read_name(self, name_map: Optional[list] = None) -> str:
+        """读取 FName（名称表索引 + 实例编号）。
+
+        Args:
+            name_map: 名称表列表。如果为 None，使用内部缓存的名称表。
+
+        Returns:
+            解析后的名称字符串
+
+        Raises:
+            ParseError: 如果 name_map 为 None 且未设置内部缓存
+        """
+        if name_map is None:
+            name_map = self._name_map
+            if name_map is None:
+                raise ParseError(
+                    "read_name() 需要 name_map 参数或通过 set_name_map() 设置内部缓存"
+                )
+
         index = self.read_u32()
         number = self.read_u32()
         if 0 <= index < len(name_map):
@@ -359,6 +393,35 @@ class FArchive:
             index, len(name_map), self.tell() - 8
         )
         return "None"
+
+    def read_array(self, count: int, element_reader) -> list:
+        """读取指定数量的元素数组。
+
+        泛型数组读取方法，等价于 UE 的 ReadArray<T>。
+
+        Args:
+            count: 元素数量
+            element_reader: 元素读取函数，接受 archive 参数，返回单个元素
+
+        Returns:
+            元素列表
+
+        Example:
+            # 读取 int32 数组
+            values = archive.read_array(5, lambda ar: ar.read_i32())
+
+            # 读取 FString 数组
+            strings = archive.read_array(3, lambda ar: ar.read_fstring())
+        """
+        if count < 0:
+            raise ParseError(f"read_array: 负数元素数量 {count}")
+        if count > 1_000_000:  # 防御性检查
+            raise ParseError(f"read_array: 元素数量 {count} 超过最大限制")
+
+        result = []
+        for _ in range(count):
+            result.append(element_reader(self))
+        return result
 
 
 def _contains_binary_data(

@@ -76,6 +76,9 @@ class UObjectInstance:
     super_object: Optional["UObjectInstance"] = None
     """Resolved super (parent class) object from super_index."""
 
+    weak_references: List["UObjectInstance"] = field(default_factory=list)
+    """Resolved weak object references (WeakObjectProperty)."""
+
     script_serialization_start_offset: int = 0
     """UE5 蓝图脚本序列化起始偏移。"""
 
