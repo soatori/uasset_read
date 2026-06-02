@@ -402,8 +402,9 @@ class TestLinkedToRecovery:
     @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
     @patch("uasset_read.serializers.graph._read_ftext_value")
     @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph.logger")
     def test_recover_to_subpins_result_is_used(
-        self, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
+        self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
         mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 _try_recover_to_subpins 返回值被正确使用。"""
@@ -434,6 +435,12 @@ class TestLinkedToRecovery:
         assert recovery_result is not None
         assert recovery_result["recovery_type"] == "subpins_resync"
         assert recovery_result["recovered_pos"] == 100
+        # 验证 logger.info 被调用且包含恢复信息
+        mock_logger.info.assert_called_once()
+        info_args = mock_logger.info.call_args[0]
+        assert "SubPins resynced" in info_args[0]
+        assert info_args[1] == 100  # recovered_pos
+        assert info_args[2] == "subpins_resync"  # recovery_type
 
     @patch("uasset_read.serializers.graph.read_pin_array")
     @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
@@ -443,8 +450,9 @@ class TestLinkedToRecovery:
     @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
     @patch("uasset_read.serializers.graph._read_ftext_value")
     @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph.logger")
     def test_linkedto_failure_log_dedup_with_pin_name(
-        self, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
+        self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
         mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证失败日志去重包含 pin_name。"""
@@ -474,3 +482,49 @@ class TestLinkedToRecovery:
             added_key = next(iter(tls_obj.linkedto_failure_seen))
             assert len(added_key) == 3, "failure_key 应为三元组 (offset, exc_type, pin_name)"
             assert added_key[2] == "TestPin", f"第三元素应为 pin_name，实际为 {added_key[2]}"
+            # 验证第一次调用时 logger.error 被调用（非去重路径）
+            mock_logger.error.assert_called_once()
+            error_args = mock_logger.error.call_args[0]
+            assert "LinkedTo read failed at pos" in error_args[0]
+
+    @patch("uasset_read.serializers.graph.read_pin_array")
+    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
+    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph._get_thread_local")
+    @patch("uasset_read.serializers.graph.logger")
+    def test_recovery_result_none_skips_info_log(
+        self, mock_logger, mock_tls, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
+        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+    ):
+        """验证 _try_recover_to_subpins 返回 None 时不输出 info 日志。"""
+        mock_pin_array.side_effect = Exception("LinkedTo parse error")
+        mock_recover.return_value = None  # 恢复失败
+
+        # 提供干净的线程局部状态，确保 logger.error 不被去重跳过
+        tls_obj = MagicMock()
+        tls_obj.linkedto_failure_seen = set()
+        mock_tls.return_value = tls_obj
+
+        archive = _TrackingArchive()
+        archive.advance(20)
+
+        mock_ftext.side_effect = _make_ftext_side_effect([50, 50])
+        mock_pin_type.return_value = MagicMock()
+        name_map, summary, export_map, import_map = _make_pin_args()
+
+        result = read_ue_graph_pin(
+            archive, name_map, summary, export_map, import_map,
+            trace_mode=False,
+        )
+
+        # _try_recover_to_subpins 仍应被调用
+        mock_recover.assert_called_once()
+        # recovery_result 为 None 时不应调用 logger.info
+        mock_logger.info.assert_not_called()
+        # logger.error 应被调用（异常路径，首次未去重）
+        mock_logger.error.assert_called_once()

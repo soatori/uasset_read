@@ -1116,8 +1116,9 @@ def read_ue_graph_pin(
     except Exception as e:
         # Phase 75: 改进日志去重，包含 pin_name
         failure_key = (linkedto_start, type(e).__name__, pin_name)
-        if failure_key not in _get_thread_local().linkedto_failure_seen:
-            _get_thread_local().linkedto_failure_seen.add(failure_key)
+        tl = _get_thread_local()
+        if failure_key not in tl.linkedto_failure_seen:
+            tl.linkedto_failure_seen.add(failure_key)
             logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
                          linkedto_start, pin_name, e)
         else:
