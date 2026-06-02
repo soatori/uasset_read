@@ -13,7 +13,7 @@ section: overview
 
 | 项目 | 详情 |
 |------|------|
-| 版本信息 | `0.3.6-dev` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
+| 版本信息 | `0.3.8` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
 | 构建系统 | Setuptools（src 布局） · `pip install -e ".[dev]"` · `pip install -e ".[pak]"` PAK 支持 |
 | 支持资产 | 18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等 · 容器：文件系统 / PAK / IoStore |
 

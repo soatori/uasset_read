@@ -1,4 +1,4 @@
-## uasset_read 开发文档 v0.3.6-dev
+## uasset_read 开发文档 v0.3.8
 
 ### 概览
 - [项目介绍](Overview)

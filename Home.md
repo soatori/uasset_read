@@ -16,6 +16,6 @@
 
 ## 项目信息
 
-- **版本**: 0.3.6-dev
+- **版本**: 0.3.8
 - **Python**: 3.10+
 - **仓库**: [GitHub](https://github.com/SOATOORL/uasset_read)
