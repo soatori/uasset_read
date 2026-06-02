@@ -55,6 +55,7 @@ tests/*
 !tests/test_pak_handling.py
 !tests/test_variable_extractor.py
 !tests/test_pin_guid_filtering.py
+!tests/test_fstring_corruption.py
 # Claude Code skill - superpowers (local only, never commit)
 docs/superpowers/
 QWEN.md
