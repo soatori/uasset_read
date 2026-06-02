@@ -662,9 +662,14 @@ def _recover_pin_array_count(
     import_map: List[ObjectImport] = None,
     scan_window: int = 16,
 ) -> Optional[Dict[str, Any]]:
-    """滑动恢复增强校验。
+    """滑动恢复增强校验（Phase 75: 动态窗口）。
 
     扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+
+    scan_window 根据 bad_count 大小动态调整：
+    - bad_count <= 20: 基础窗口 16 字节
+    - bad_count <= 100: 窗口 32 字节
+    - bad_count > 100: 窗口 64 字节
 
     改进：
     - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
@@ -681,6 +686,12 @@ def _recover_pin_array_count(
         }
     """
     import struct
+
+    # Phase 75: 动态调整 scan_window
+    if bad_count > 100:
+        scan_window = max(scan_window, 64)
+    elif bad_count > 20:
+        scan_window = max(scan_window, 32)
 
     current_pos = archive.tell()
     search_start = max(0, error_pos - scan_window)

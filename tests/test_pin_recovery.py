@@ -528,3 +528,176 @@ class TestLinkedToRecovery:
         mock_logger.info.assert_not_called()
         # logger.error 应被调用（异常路径，首次未去重）
         mock_logger.error.assert_called_once()
+
+
+class _ByteArchive:
+    """基于字节缓冲区的 mock archive，支持真实数据读取。"""
+
+    def __init__(self, data: bytes):
+        self._data = data
+        self._pos = 0
+        self._file_size = len(data)
+        self._byte_swapping = False
+
+    def tell(self):
+        return self._pos
+
+    def seek(self, pos, *args, **kwargs):
+        self._pos = pos
+
+    def read(self, n=None):
+        if n is None:
+            n = 1
+        start = self._pos
+        end = min(start + n, len(self._data))
+        self._pos = end
+        return self._data[start:end]
+
+
+class TestSlidingRecovery:
+    """滑动恢复机制测试。"""
+
+    def test_dynamic_scan_window_based_on_bad_count(self):
+        """验证 scan_window 根据 bad_count 动态调整。
+
+        策略：在 error_pos - 30 处放置一个合法 count=1，
+        - bad_count=5 (窗口 16): 搜索范围 [184, 216], target@170 不在范围内 -> None
+        - bad_count=150 (窗口 64): 搜索范围 [136, 264], target@170 在范围内 -> 找到
+
+        缓冲区填充 0xFF 以避免误匹配（0xFF 解析为 -1，超出 0..20 范围）。
+        """
+        error_pos = 200
+        # 在 error_pos - 30 处放置 count=1 (little-endian)
+        target_offset = error_pos - 30  # 170
+        buf_size = 512
+        buf = bytearray(b'\xff' * buf_size)
+        struct.pack_into('<i', buf, target_offset, 1)
+
+        archive = _ByteArchive(bytes(buf))
+        export_map = []
+
+        # bad_count=5 -> scan_window stays 16, range [184, 216], target@170 不在范围内
+        archive.seek(error_pos)
+        result_small = _recover_pin_array_count(
+            archive, error_pos, bad_count=5,
+            export_map=export_map, scan_window=16,
+        )
+        assert result_small is None, (
+            f"bad_count=5 时窗口应为 16，不应找到 offset={target_offset} 处的 count"
+        )
+
+        # bad_count=150 -> scan_window becomes 64, range [136, 264], target@170 在范围内
+        archive.seek(error_pos)
+        result_large = _recover_pin_array_count(
+            archive, error_pos, bad_count=150,
+            export_map=export_map, scan_window=16,
+        )
+        assert result_large is not None, (
+            f"bad_count=150 时窗口应为 64，应能找到 offset={target_offset} 处的 count"
+        )
+        assert result_large["count"] == 1
+
+    def test_dynamic_scan_window_medium_bad_count(self):
+        """验证 bad_count 在 (20, 100] 范围时窗口为 32。
+
+        在 error_pos - 25 处放置 count=1，
+        - bad_count=5 (窗口 16): range [184, 216], target@175 不在范围内 -> None
+        - bad_count=30 (窗口 32): range [168, 232], target@175 在范围内 -> 找到
+        """
+        error_pos = 200
+        target_offset = error_pos - 25  # 175
+        buf_size = 512
+        buf = bytearray(b'\xff' * buf_size)
+        struct.pack_into('<i', buf, target_offset, 1)
+
+        archive = _ByteArchive(bytes(buf))
+        export_map = []
+
+        # bad_count=5 -> window=16, range [184, 216], target@175 不在范围内
+        archive.seek(error_pos)
+        result_none = _recover_pin_array_count(
+            archive, error_pos, bad_count=5,
+            export_map=export_map, scan_window=16,
+        )
+        assert result_none is None, (
+            f"bad_count=5 时窗口应为 16，不应找到 offset={target_offset} 处的 count"
+        )
+
+        # bad_count=30 -> scan_window becomes 32, range [168, 232], target@175 在范围内
+        archive.seek(error_pos)
+        result = _recover_pin_array_count(
+            archive, error_pos, bad_count=30,
+            export_map=export_map, scan_window=16,
+        )
+        assert result is not None, (
+            f"bad_count=30 时窗口应为 32，应能找到 offset={target_offset} 处的 count"
+        )
+        assert result["count"] == 1
+
+    def test_high_confidence_recovery_validated(self):
+        """验证高置信度恢复的所有 ref 都通过验证。
+
+        在 error_pos 处放置合法 count=2 + 两个合法 PinReference 结构，
+        使用 scan_window=64 确保窗口足够覆盖所有数据。
+        """
+        error_pos = 100
+        buf_size = 300
+        buf = bytearray(b'\xff' * buf_size)
+
+        # 在 error_pos 处放置 count=2
+        struct.pack_into('<i', buf, error_pos, 2)
+
+        export_map = [MagicMock(object_name="Node0")]
+
+        # PinRef 1: b_null=0, owning_node=0, guid=non-zero
+        ref1_offset = error_pos + 4  # 104
+        struct.pack_into('<i', buf, ref1_offset, 0)      # b_null = 0
+        struct.pack_into('<i', buf, ref1_offset + 4, 0)  # owning_node = 0
+        for i in range(16):
+            buf[ref1_offset + 8 + i] = 0x01
+
+        # PinRef 2: b_null=0, owning_node=0, guid=non-zero
+        ref2_offset = ref1_offset + 24  # 128
+        struct.pack_into('<i', buf, ref2_offset, 0)      # b_null = 0
+        struct.pack_into('<i', buf, ref2_offset + 4, 0)  # owning_node = 0
+        for i in range(16):
+            buf[ref2_offset + 8 + i] = 0x02
+
+        archive = _ByteArchive(bytes(buf))
+
+        # 使用 scan_window=64 确保窗口覆盖 count + 2 个 PinRef (52 字节)
+        archive.seek(error_pos)
+        result = _recover_pin_array_count(
+            archive, error_pos, bad_count=5,
+            export_map=export_map, scan_window=64,
+        )
+
+        assert result is not None, "恢复应成功"
+        assert result["confidence"] == "high", (
+            f"两个 ref 都验证通过时置信度应为 high，实际为 {result['confidence']}"
+        )
+        assert result["count"] == 2
+
+    def test_low_confidence_count_zero_without_structure(self):
+        """验证 count=0 且后续无结构时置信度为 low。"""
+        error_pos = 100
+        buf_size = 200
+        buf = bytearray(b'\xff' * buf_size)
+
+        # 在 error_pos 处放置 count=0，后面不放合法结构（0xFF 作为垃圾数据）
+        struct.pack_into('<i', buf, error_pos, 0)
+
+        archive = _ByteArchive(bytes(buf))
+        export_map = []
+
+        archive.seek(error_pos)
+        result = _recover_pin_array_count(
+            archive, error_pos, bad_count=5,
+            export_map=export_map, scan_window=16,
+        )
+
+        assert result is not None, "恢复应成功（兜底）"
+        assert result["confidence"] == "low", (
+            f"count=0 且无后续结构时置信度应为 low，实际为 {result['confidence']}"
+        )
+        assert result["count"] == 0
