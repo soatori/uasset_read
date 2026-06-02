@@ -289,3 +289,59 @@ class TestFTextSafetyNet:
         assert result.pin_friendly_name is None
         # seek 回退仍然发生
         assert len(archive.seek_calls) > 0
+
+
+class TestPinReferenceGUID:
+    """PinReference GUID 格式统一测试。"""
+
+    def test_read_pin_reference_returns_normalized_guid(self):
+        """验证 read_pin_reference 返回 32 字符纯 hex GUID。"""
+        fake_archive = MagicMock()
+        fake_archive.read_i32.side_effect = [0, 1]  # b_null=0, owning_node=1
+
+        export_map = [MagicMock(object_name="TestNode")]
+        import_map = []
+
+        with patch("uasset_read.serializers.graph._read_guid",
+                    return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        # 验证返回的 pin_guid 是归一化后的 32 字符纯 hex
+        assert result is not None
+        assert len(result["pin_guid"]) == 32
+        assert result["pin_guid"] == result["pin_guid"].upper()
+        assert "-" not in result["pin_guid"]
+        assert result["pin_guid"] == "A1B2C3D4E5F67890ABCDEF1234567890"
+
+    def test_read_pin_reference_guid_no_dashes(self):
+        """验证 read_pin_reference 的 GUID 不含 dash 分隔符。"""
+        fake_archive = MagicMock()
+        fake_archive.read_i32.side_effect = [0, 1]
+
+        export_map = [MagicMock(object_name="Node")]
+        import_map = []
+
+        with patch("uasset_read.serializers.graph._read_guid",
+                    return_value="01020304-0506-0708-090a-0b0c0d0e0f10"):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        assert result is not None
+        assert "-" not in result["pin_guid"]
+        # 应为 32 字符纯 hex
+        assert result["pin_guid"] == "0102030405060708090A0B0C0D0E0F10"
+
+    def test_read_pin_reference_zero_guid_normalized(self):
+        """验证全零 GUID 也被归一化为 32 字符纯 hex。"""
+        fake_archive = MagicMock()
+        fake_archive.read_i32.side_effect = [0, 2]
+
+        export_map = [MagicMock(object_name="NodeA"), MagicMock(object_name="NodeB")]
+        import_map = []
+
+        with patch("uasset_read.serializers.graph._read_guid",
+                    return_value="00000000-0000-0000-0000-000000000000"):
+            result = read_pin_reference(fake_archive, [], export_map, import_map)
+
+        assert result is not None
+        assert result["pin_guid"] == "0" * 32
+        assert "-" not in result["pin_guid"]
