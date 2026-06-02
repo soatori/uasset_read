@@ -171,6 +171,16 @@ def get_struct_size(
 _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "MemberReference",
     "SimpleMemberReference",
+    # Blueprint 变量描述 struct（ArrayProperty 内层，size=0 时仍需 tagged 解析）
+    "FBPVariableDescription",
+    "BPVariableDescription",
+    "EdGraphPinType",
+    "FEdGraphPinType",
+    "BPVariableDescriptionHelper",
+    # Blueprint 相关 struct
+    "ImplementedInterfaces",
+    "LastEditedDocuments",
+    "CategorySorting",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -403,6 +413,9 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             type=inner_type,
             size=0  # 让解析函数按类型原生序列化
         )
+        # 对于 StructProperty 数组元素，传递 struct_type 使 parse_struct_property 能命中 fast-path
+        if inner_type == "StructProperty":
+            inner_tag.struct_type = getattr(tag, "inner_type_struct", None)
         inner_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         elements.append(inner_value)
 

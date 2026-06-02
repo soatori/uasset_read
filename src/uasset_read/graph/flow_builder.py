@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 def _ensure_registry():
     """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
     from uasset_read.n2c.processors import register_all_processors
-    from uasset_read.n2c.processor_registry import N2CProcessorRegistry
-    registry = N2CProcessorRegistry.get_instance()
+    from uasset_read.n2c.processor_registry import get_registry
+    registry = get_registry()
     if not registry._processors or registry._fallback is None:
         register_all_processors()
 

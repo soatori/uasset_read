@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional
 
 from uasset_read.n2c.schema import N2CStruct, N2CGraph, N2CNode, N2CPin
 from uasset_read.n2c.id_mapper import N2CIdMapper
-from uasset_read.n2c.type_registry import N2CNodeTypeRegistry
+from uasset_read.n2c.type_registry import N2CNodeTypeRegistry, get_type_registry
 from uasset_read.n2c.processors import register_all_processors
-from uasset_read.n2c.processor_registry import N2CProcessorRegistry
+from uasset_read.n2c.processor_registry import N2CProcessorRegistry, get_registry
 # Phase 71: 链提取逻辑迁移到 graph/chain_builder
 from uasset_read.graph.chain_builder import build_execution_chains_from_flows
 from uasset_read.n2c.flow_extractor import extract_data_flow_map
@@ -42,7 +42,7 @@ def to_n2c_json(
         dict: N2CStruct 兼容 dict（version, metadata, graphs, structs, enums）
     """
     # Ensure registry initialized (idempotent)
-    registry = N2CProcessorRegistry.get_instance()
+    registry = get_registry()
     if not registry._processors or registry._fallback is None:
         register_all_processors()
 
@@ -95,7 +95,7 @@ def to_n2c_json(
                 short_id = f"no-guid-{idx}"
 
             # Resolve semantic type
-            node_type = N2CNodeTypeRegistry.get_instance().resolve(node.class_name)
+            node_type = get_type_registry().resolve(node.class_name)
             semantic_type = node_type.value
 
             # Derive name
@@ -134,7 +134,7 @@ def to_n2c_json(
                     position=(node.node_pos_x, node.node_pos_y),
                     comment=node.node_comment or "",
                 )
-                N2CProcessorRegistry.get_instance().process_node(
+                get_registry().process_node(
                     node, node_type, definition
                 )
                 extra_data = dict(definition.extra_data)

@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
 
-- **版本**: 0.3.5-dev（分支 `0.3.5-dev`）
+- **版本**: 0.3.8-dev（分支 `0.3.8-dev`）
 - **Python**: 3.10+（使用 `match/case`、类型注解）
 - **运行时依赖**: 零依赖（PAK AES/LZ4/Zstd 为可选依赖）
 - **构建系统**: setuptools（src 布局）
@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 测试
 
-- 测试位于 `tests/`（10 个测试文件，108 个测试）
+- 测试位于 `tests/`（12+ 个测试文件，218+ 个测试）
 - 集成测试使用 `@pytest.mark.integration` 标记
 - `pyproject.toml` 中配置了 pytest 选项
 
@@ -113,7 +113,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **序列化** | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag`、图序列化器、对象资源 |
 | **数据模型** | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、变换、蓝图模型、节点类型 |
 | **属性解析器** | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 类特定跳过机制 |
-| ├ 资产类型 | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
+| ├ 资产类型 | `parsers/asset_types/` | (已废弃，0.4.0 移除) SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图分析** | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
 | **Kismet** | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器、BPGC 回退、结构化控制流 |
@@ -121,11 +121,11 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **链接器** | `link/` | `PackageLinker` 两阶段对象图重建、`UObjectInstance` |
 | **C++ 生成** | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射 |
 | **Agent** | `agent/` | `AgentTranslationPipeline` + `CppFileWriter`（蓝图→C++） |
-| **N2C** | `n2c/` | 中间格式：`N2CStruct/Graph/Node/Pin`、JSON Schema、验证器、14 种节点处理器 |
+| **N2C** | `n2c/` | 中间格式：`N2CStruct/Graph/Node/Pin`、JSON Schema、验证器、57 种节点处理器 |
 | **Pak** | `pak/` | `FPakInfo/PakEntry/FPakDirectoryEntry`、`PakFileReader`、索引解析、压缩分发、AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析、标志定义 |
-| **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
+| **UObject** | `objects/` | (已废弃，0.4.0 移除) UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
 | **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid/蓝图翻译文本/UE 格式文本输出生成器 |
 
 ### 公共 API
@@ -134,7 +134,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 
 ## 外部参考
 
-- `external/uasset-format/` — UE .uasset 格式文档（60+ 个 Markdown 文件，覆盖资产类型、序列化、Cooked 格式、版本兼容）。`SKILL.md` 为主索引。
+- `docs/uasset-format/` — UE .uasset 格式文档（60+ 个 Markdown 文件，覆盖资产类型、序列化、Cooked 格式、版本兼容）。`Index.md` 为主索引。
 - `external/CUE4Parse/` — 参考 C# 实现，用于交叉验证解析逻辑。
 - `docs/reference/` — 蓝图节点文本参考、UE 加载流程、CUE4Parse 对照索引、蓝图转 C++ 指南。
 - `docs/asset_type_index.md` — 60+ 种 UE 资产类型综合索引，含命名规范和示例文件路径。
@@ -145,7 +145,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 - **仅支持未烘焙/编辑器保存的资产**: Cooked 资产的图数据已被剥离
 - **只读**: 仅解析，不支持修改或写入
 - **零运行时依赖**: 不要向 `pyproject.toml` 的 `dependencies` 添加第三方包（PAK 可选依赖在 `optional-dependencies` 中）
-- **必须参考 UE 源码**: 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制（参见 `external/uasset-format/SKILL.md`）
+- **必须参考 UE 源码**: 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制（参见 `docs/uasset-format/Index.md`）
 - **临时文件一律放在 `temp/` 目录**: 任何运行脚本、中间输出、调试日志、测试产物等临时文件必须创建在项目根目录的 `temp/` 子目录下，禁止放在项目根目录
 
 ## 工作规范
