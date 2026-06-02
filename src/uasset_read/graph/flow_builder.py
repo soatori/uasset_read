@@ -144,13 +144,25 @@ def format_pin_ref(
         }
 
 
-def _pin_ref_guid(ref: object) -> Optional[str]:
-    """从 LinkedTo/PinReference 结构中取 pin guid。"""
+def _pin_ref_guid(ref: object) -> str | None:
+    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
+
+    PinReference GUID 原始格式为 8-4-4-4-12 带 dash（_read_guid 输出），
+    而归一化后与 pin_id（.hex().upper() 输出）格式一致，确保连接查找匹配。
+    """
+    raw_guid: str | None = None
     if isinstance(ref, dict):
-        return ref.get("pin_guid") or ref.get("pin_id")
-    if isinstance(ref, str):
-        return ref
-    return getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+        raw_guid = ref.get("pin_guid") or ref.get("pin_id")
+    elif isinstance(ref, str):
+        raw_guid = ref
+    else:
+        raw_guid = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+
+    if not raw_guid:
+        return None
+
+    # 归一化：移除 dash，转大写
+    return raw_guid.replace("-", "").upper()
 
 
 def _pin_direction_text(direction: int) -> str:
@@ -225,12 +237,33 @@ def _is_exec_pin(pin: UEdGraphPin) -> bool:
 
 
 def _is_valid_pin_guid(guid: object) -> bool:
-    if not isinstance(guid, str) or len(guid) != 32:
-        # Unit tests and some synthetic fixtures use readable pin ids.
-        return bool(guid) and guid.startswith("pin-")
-    if guid == ("0" * 32):
+    """验证 Pin GUID 有效性。
+
+    支持两种格式：
+    - 32 字符纯 hex（pin_id 格式）
+    - 36 字符带 dash hex（PinReference 格式，如 A1B2C3D4-E5F6-...）
+    - "pin-" 前缀（测试 fixture）
+    - 全零 GUID（ParentPin 空引用）
+    """
+    if not isinstance(guid, str) or not guid:
+        return False
+
+    # 测试 fixture 兼容
+    if guid.startswith("pin-"):
         return True
-    return all(c in "0123456789ABCDEFabcdef" for c in guid)
+
+    # 归一化：移除 dash，转大写
+    normalized = guid.replace("-", "").upper()
+
+    # 全零 GUID（有效空引用）
+    if normalized == "0" * 32:
+        return True
+
+    # 验证 32 字符 hex
+    if len(normalized) != 32:
+        return False
+
+    return all(c in "0123456789ABCDEF" for c in normalized)
 
 
 def _iter_normalized_edges(
