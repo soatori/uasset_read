@@ -57,6 +57,7 @@ tests/*
 !tests/test_pin_guid_filtering.py
 !tests/test_fstring_corruption.py
 !tests/test_framerate_animnotify.py
+!tests/test_pin_recovery.py
 # Claude Code skill - superpowers (local only, never commit)
 docs/superpowers/
 QWEN.md

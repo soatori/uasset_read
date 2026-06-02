@@ -949,12 +949,25 @@ def read_ue_graph_pin(
         _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText)
+    # FText 安全网：记录解析前位置，限制最大消耗
+    FTEXT_MAX_CONSUMPTION = 10240  # 10KB
     ftext_start_pos = archive.tell()
     pin_friendly_name: Optional[str] = None
     try:
         pin_friendly_name, flags, history_type, _ = _read_ftext_value(
             archive, tolerant=True
         )
+        # FText 安全网：验证消耗字节数
+        ftext_consumed = archive.tell() - ftext_start_pos
+        if ftext_consumed > FTEXT_MAX_CONSUMPTION:
+            logger.warning(
+                "[FTEXT-SAFETY] PinFriendlyName consumed %d bytes (> %d), "
+                "possible corruption, seeking back to %d",
+                ftext_consumed, FTEXT_MAX_CONSUMPTION, ftext_start_pos
+            )
+            archive.seek(ftext_start_pos)
+            # 标记解析失败，使用默认值
+            pin_friendly_name = None
         if trace_mode:
             _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
                          f"flags={flags},htype={history_type}")
@@ -1064,6 +1077,17 @@ def read_ue_graph_pin(
         default_text_value, _dtv_flags, _dtv_history, _ = _read_ftext_value(
             archive, tolerant=True
         )
+        # DefaultTextValue FText 安全网：验证消耗字节数
+        dtv_consumed = archive.tell() - _dtv_start
+        if dtv_consumed > FTEXT_MAX_CONSUMPTION:
+            logger.warning(
+                "[FTEXT-SAFETY] DefaultTextValue consumed %d bytes (> %d), "
+                "possible corruption, seeking back to %d",
+                dtv_consumed, FTEXT_MAX_CONSUMPTION, _dtv_start
+            )
+            archive.seek(_dtv_start)
+            # 标记解析失败，使用默认值
+            default_text_value = None
         if trace_mode:
             _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
                          f"flags={_dtv_flags},htype={_dtv_history}")
