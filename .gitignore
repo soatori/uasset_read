@@ -53,6 +53,7 @@ memory/
 # Test files
 tests/*
 !tests/test_pak_handling.py
+!tests/test_variable_extractor.py
 # Claude Code skill
 QWEN.md
 # AI agent plans, specs, and reports (keep local only)

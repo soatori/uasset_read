@@ -647,7 +647,12 @@ def _apply_mapping_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     value = getattr(prop_type, "value_type", None)
     if inner is not None:
         tag.inner_type = getattr(inner, "type", None)
+        # 对于 Array/Set 中内层为 StructProperty 的情况，保存 inner struct_type
+        if tag.type in ("ArrayProperty", "SetProperty"):
+            tag.inner_type_struct = getattr(inner, "struct_type", None)
         if tag.type == "MapProperty":
             tag.key_type = getattr(inner, "type", None)
+            tag.key_type_struct = getattr(inner, "struct_type", None)
     if value is not None:
         tag.value_type = getattr(value, "type", None)
+        tag.value_type_struct = getattr(value, "struct_type", None)

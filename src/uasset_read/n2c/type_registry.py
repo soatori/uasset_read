@@ -1,4 +1,4 @@
-"""K2Node 类型注册表 — 单例模式 + 继承回退 + 缓存。
+"""K2Node 类型注册表 — 函数式懒初始化 + 继承回退 + 缓存。
 
 将 UE K2Node class_name 解析为 N2CNodeType 语义类型枚举。
 支持精确匹配和继承链回退查找。
@@ -19,38 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 class N2CNodeTypeRegistry:
-    """K2Node 类名 -> 语义类型注册表（单例）。
+    """K2Node 类名 -> 语义类型注册表。
 
     提供 class_name 到 N2CNodeType 的解析服务：
     - 精确匹配：K2Node_CallFunction -> CallFunction
     - 继承回退：沿 K2NODE_INHERITANCE 向上查找
     - 缓存优化：_resolve_cache 避免重复查找
     - Unknown fallback：未知类型返回 Unknown
-
-    使用方式：
-        registry = N2CNodeTypeRegistry.get_instance()
-        node_type = registry.resolve("K2Node_CallFunction")
     """
-
-    _instance: Optional[N2CNodeTypeRegistry] = None
 
     def __init__(self) -> None:
         self._type_map: Dict[str, N2CNodeType] = {}
         self._inheritance_map: Dict[str, str] = K2NODE_INHERITANCE
         self._resolve_cache: Dict[str, N2CNodeType] = {}
         self._initialized = False
-
-    @classmethod
-    def get_instance(cls) -> N2CNodeTypeRegistry:
-        """获取单例实例（延迟创建）。"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset(cls) -> None:
-        """重置单例（测试用）。"""
-        cls._instance = None
 
     def _ensure_initialized(self) -> None:
         """延迟填充 _type_map，避免导入循环。
@@ -120,3 +102,20 @@ class N2CNodeTypeRegistry:
         """返回所有已注册的 class_name 列表（诊断用）。"""
         self._ensure_initialized()
         return sorted(self._type_map.keys())
+
+
+_default_type_registry: Optional[N2CNodeTypeRegistry] = None
+
+
+def get_type_registry() -> N2CNodeTypeRegistry:
+    """获取默认类型注册表（懒初始化）。"""
+    global _default_type_registry
+    if _default_type_registry is None:
+        _default_type_registry = N2CNodeTypeRegistry()
+    return _default_type_registry
+
+
+def reset_type_registry() -> None:
+    """重置默认类型注册表，用于测试隔离。"""
+    global _default_type_registry
+    _default_type_registry = None

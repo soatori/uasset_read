@@ -368,6 +368,19 @@ def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
 
 
 def _guid_from_description(value: Any) -> str:
+    # StructValue(Guid, {A:int, B:int, C:int, D:int}) — StructProperty 解析结果
+    if isinstance(value, StructValue) and value.struct_type == "Guid":
+        fields = value.fields
+        a = int(fields.get("A", 0))
+        b = int(fields.get("B", 0))
+        c = int(fields.get("C", 0))
+        d = int(fields.get("D", 0))
+        # 每个 uint32 按小端序转为 4 字节
+        def _u32_to_bytes(v: int) -> bytes:
+            return v.to_bytes(4, byteorder='little')
+        raw = _u32_to_bytes(a) + _u32_to_bytes(b) + _u32_to_bytes(c) + _u32_to_bytes(d)
+        return _format_guid_bytes(raw)
+
     if isinstance(value, dict) and value.get("kind") == "binary_or_native_property":
         raw = value.get("raw_data")
         if isinstance(raw, bytes) and len(raw) == 16:
