@@ -90,6 +90,14 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
         inner = child_type(0)
         if inner is not None:
             tag.inner_type = getattr(inner, "name", None) or getattr(inner, "type", None)
+            # Array/Set 内层为 StructProperty 时，提取 inner_type_struct
+            if tag.inner_type == "StructProperty":
+                inner_children = getattr(inner, "children", None)
+                if inner_children and len(inner_children) > 0:
+                    struct_name_node = inner_children[0]
+                    struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
+                    if struct_name:
+                        tag.inner_type_struct = struct_name.split(".")[-1]
     elif tag.type == "MapProperty":
         key = child_type(0)
         value = child_type(1)

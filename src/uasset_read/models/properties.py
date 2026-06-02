@@ -53,8 +53,11 @@ class PropertyTag:
     type_parts: List[Tuple[str, int]] = field(default_factory=list)  # 完整 FPropertyTypeName 节点
     struct_type: Optional[str] = None  # StructProperty 的结构体类型名
     inner_type: Optional[str] = None   # Array/Set 内层类型
+    inner_type_struct: Optional[str] = None  # Array/Set 内层 StructProperty 的结构体类型
     key_type: Optional[str] = None     # Map key 类型
+    key_type_struct: Optional[str] = None  # Map key StructProperty 的结构体类型
     value_type: Optional[str] = None   # Map value 类型
+    value_type_struct: Optional[str] = None  # Map value StructProperty 的结构体类型
     # Phase 73 Wave 4: offset tracking for PropertyTag cascade failure diagnosis
     tag_start_offset: Optional[int] = None  # PropertyTag 开始读取位置（archive.tell()）
     value_start_offset: Optional[int] = None  # Property value 开始位置（tag 读取后）

@@ -1,4 +1,4 @@
-"""N2C 节点处理器注册表 — 单例模式。"""
+"""N2C 节点处理器注册表 — 函数式懒初始化。"""
 from __future__ import annotations
 
 import logging
@@ -15,29 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 class N2CProcessorRegistry:
-    """节点处理器注册表（单例）。
+    """节点处理器注册表。
 
     负责注册、查找和调度 N2CNodeProcessor 实例。
     支持设置 fallback 处理器处理未知类型。
     """
 
-    _instance: Optional[N2CProcessorRegistry] = None
-
     def __init__(self) -> None:
         self._processors: Dict[N2CNodeType, N2CNodeProcessor] = {}
         self._fallback: Optional[N2CNodeProcessor] = None
-
-    @classmethod
-    def get_instance(cls) -> N2CProcessorRegistry:
-        """获取单例实例。"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset(cls) -> None:
-        """重置单例，用于测试隔离。"""
-        cls._instance = None
 
     def register(self, processor: N2CNodeProcessor) -> None:
         """注册处理器。
@@ -108,3 +94,120 @@ class N2CProcessorRegistry:
                 exc,
             )
             return False
+
+
+_default_registry: Optional[N2CProcessorRegistry] = None
+
+
+def get_registry() -> N2CProcessorRegistry:
+    """获取默认处理器注册表（懒初始化）。"""
+    global _default_registry
+    if _default_registry is None:
+        _default_registry = N2CProcessorRegistry()
+        _register_default_processors(_default_registry)
+    return _default_registry
+
+
+def reset_registry() -> None:
+    """重置默认注册表，用于测试隔离。"""
+    global _default_registry
+    _default_registry = None
+
+
+def _register_default_processors(registry: N2CProcessorRegistry) -> None:
+    """注册所有默认处理器到给定注册表（幂等：跳过已注册的类型）。"""
+    from uasset_read.n2c.processors import (
+        # 原有处理器
+        CallFunctionProcessor,
+        CommentProcessor,
+        DelegateProcessor,
+        EnhancedInputActionProcessor,
+        EventProcessor,
+        FlowControlProcessor,
+        FunctionEntryProcessor,
+        VariableProcessor,
+        CastProcessor,
+        WidgetProcessor,
+        FallbackProcessor,
+        # flow_control 扩展
+        MultiGateProcessor,
+        DoOnceProcessor,
+        SelectProcessor,
+        EaseFunctionProcessor,
+        ForEachEnumProcessor,
+        MapForEachProcessor,
+        SetForEachProcessor,
+        # struct_ops
+        StructOpsProcessor,
+        MakeArrayProcessor,
+        MakeMapProcessor,
+        MakeSetProcessor,
+        # variable_ops
+        LocalVariableProcessor,
+        CreateDelegateProcessor,
+        ClearDelegateProcessor,
+        RemoveDelegateProcessor,
+        DelegateSetProcessor,
+        StructMemberGetProcessor,
+        StructMemberSetProcessor,
+        SetFieldsInStructProcessor,
+        # utilities
+        AsyncActionProcessor,
+        TimelineProcessor,
+        FormatTextProcessor,
+        MathExpressionProcessor,
+        GetEnumeratorNameProcessor,
+        GetEnumeratorNameAsStringProcessor,
+        GetNumEnumEntriesProcessor,
+        EnumComparisonProcessor,
+    )
+    for proc_cls in [
+        # 原有处理器
+        CallFunctionProcessor,
+        CommentProcessor,
+        DelegateProcessor,
+        EnhancedInputActionProcessor,
+        EventProcessor,
+        FunctionEntryProcessor,
+        FlowControlProcessor,
+        VariableProcessor,
+        CastProcessor,
+        WidgetProcessor,
+        # flow_control 扩展
+        MultiGateProcessor,
+        DoOnceProcessor,
+        SelectProcessor,
+        EaseFunctionProcessor,
+        ForEachEnumProcessor,
+        MapForEachProcessor,
+        SetForEachProcessor,
+        # struct_ops
+        StructOpsProcessor,
+        MakeArrayProcessor,
+        MakeMapProcessor,
+        MakeSetProcessor,
+        # variable_ops
+        LocalVariableProcessor,
+        CreateDelegateProcessor,
+        ClearDelegateProcessor,
+        RemoveDelegateProcessor,
+        DelegateSetProcessor,
+        StructMemberGetProcessor,
+        StructMemberSetProcessor,
+        SetFieldsInStructProcessor,
+        # utilities
+        AsyncActionProcessor,
+        TimelineProcessor,
+        FormatTextProcessor,
+        MathExpressionProcessor,
+        GetEnumeratorNameProcessor,
+        GetEnumeratorNameAsStringProcessor,
+        GetNumEnumEntriesProcessor,
+        EnumComparisonProcessor,
+    ]:
+        try:
+            registry.register(proc_cls())
+        except ValueError:
+            pass  # Already registered, skip (idempotent)
+    if registry._fallback is None:
+        registry.set_fallback(FallbackProcessor())
