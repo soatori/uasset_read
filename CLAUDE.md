@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 测试
 
-测试位于 `tests/`（13 个测试文件，218+ 个单元测试，40+ 个集成测试）。
+测试位于 `tests/`（15+ 个测试文件，268+ 个单元测试，40+ 个集成测试）。
 
 ### 测试运行命令
 
@@ -198,7 +198,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **属性解析器** | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 类特定跳过机制 |
 | ├ 资产类型 | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
-| **图分析** | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
+| **图分析** | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告、子 Pin 恢复 (`_try_recover_to_subpins`) |
 | **Kismet** | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器、BPGC 回退、结构化控制流 |
 | ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | **链接器** | `link/` | `PackageLinker` 两阶段对象图重建、`UObjectInstance` |
@@ -214,6 +214,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 ### 公共 API
 
 所有公共符号在 `src/uasset_read/__init__.py` 中通过 `__all__` 导出。以该文件为权威 API 参考。
+合并或重构后务必运行 `python -m pytest tests/test_api_cleanup.py -v` 验证导出完整性。
 
 ## 外部参考
 
@@ -229,6 +230,8 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 - **只读**: 仅解析，不支持修改或写入
 - **零运行时依赖**: 不要向 `pyproject.toml` 的 `dependencies` 添加第三方包（PAK 可选依赖在 `optional-dependencies` 中）
 - **必须参考 UE 源码**: 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制（参见 `docs/uasset-format/Index.md`）
+- **GUID 格式统一**: Pin GUID 必须在源头标准化为 32 位小写 hex（无 dashes），所有比较前统一格式
+- **FText 偏移安全网**: 图序列化器的 FText 解析包含 safety net 检测偏移错位，遇到时自动校正
 - **临时文件一律放在 `temp/` 目录**: 任何运行脚本、中间输出、调试日志、测试产物等临时文件必须创建在项目根目录的 `temp/` 子目录下，禁止放在项目根目录
 
 ## 工作规范
