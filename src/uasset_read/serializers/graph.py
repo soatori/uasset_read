@@ -56,7 +56,7 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
 def _get_thread_local():
     """返回当前线程的隔离诊断状态，避免全局可变状态竞态。"""
     if not hasattr(_thread_local, 'linkedto_failure_seen'):
-        _thread_local.linkedto_failure_seen: set[tuple[int, str]] = set()
+        _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
         _thread_local.pin_trace_events: List[Dict[str, Any]] = []
         _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
     return _thread_local
@@ -1114,19 +1114,27 @@ def read_ue_graph_pin(
             _trace_field("LinkedTo", linkedto_start, archive.tell(),
                          f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
     except Exception as e:
-        # 聚合失败日志：同一位置+异常类型仅首次 error，后续降级 debug
-        failure_key = (linkedto_start, type(e).__name__)
+        # Phase 75: 改进日志去重，包含 pin_name
+        failure_key = (linkedto_start, type(e).__name__, pin_name)
         if failure_key not in _get_thread_local().linkedto_failure_seen:
             _get_thread_local().linkedto_failure_seen.add(failure_key)
-            logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
+            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
         else:
-            logger.debug("LinkedTo read failed (deduped) at pos %d: %s", linkedto_start, e)
+            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
         if trace_mode:
             _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
                          is_exception=True)
         linked_to = []
-        # 仅记录重同步信息，不再依赖低置信度 salvage 来构建正式连接结果。
-        _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
+        # Phase 75: 使用恢复结果
+        recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
+        if recovery_result is not None:
+            logger.info(
+                "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
+                recovery_result.get("recovered_pos"),
+                recovery_result.get("recovery_type"),
+            )
 
     # 14. SubPins array
     subpins_start = archive.tell()

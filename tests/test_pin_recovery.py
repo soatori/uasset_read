@@ -7,6 +7,7 @@ from uasset_read.serializers.graph import (
     read_ue_graph_pin,
     read_pin_reference,
     _recover_pin_array_count,
+    _try_recover_to_subpins,
 )
 
 
@@ -388,3 +389,88 @@ class TestPinReferenceGUID:
 
         assert result is not None
         assert result["owning_node"] is None
+
+
+class TestLinkedToRecovery:
+    """LinkedTo 恢复机制测试。"""
+
+    @patch("uasset_read.serializers.graph.read_pin_array")
+    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
+    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    def test_recover_to_subpins_result_is_used(
+        self, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
+        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+    ):
+        """验证 _try_recover_to_subpins 返回值被正确使用。"""
+        mock_pin_array.side_effect = Exception("LinkedTo parse error")
+        mock_recover.return_value = {
+            "recovered_pos": 100,
+            "count": 2,
+            "recovery_type": "subpins_resync",
+            "reason": "b_null!=0 null reference",
+        }
+
+        archive = _TrackingArchive()
+        archive.advance(20)  # OwningNode(4) + PinId(16)
+
+        mock_ftext.side_effect = _make_ftext_side_effect([50, 50])
+        mock_pin_type.return_value = MagicMock()
+        name_map, summary, export_map, import_map = _make_pin_args()
+
+        result = read_ue_graph_pin(
+            archive, name_map, summary, export_map, import_map,
+            trace_mode=False,
+        )
+
+        # _try_recover_to_subpins 应被调用一次
+        mock_recover.assert_called_once()
+        # 验证返回值被正确获取（info 日志应包含 recovery 信息）
+        recovery_result = mock_recover.return_value
+        assert recovery_result is not None
+        assert recovery_result["recovery_type"] == "subpins_resync"
+        assert recovery_result["recovered_pos"] == 100
+
+    @patch("uasset_read.serializers.graph.read_pin_array")
+    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
+    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    def test_linkedto_failure_log_dedup_with_pin_name(
+        self, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
+        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+    ):
+        """验证失败日志去重包含 pin_name。"""
+        mock_pin_array.side_effect = Exception("test error")
+        mock_recover.return_value = None
+
+        archive = _TrackingArchive()
+        archive.advance(20)
+
+        mock_ftext.side_effect = _make_ftext_side_effect([50, 50])
+        mock_pin_type.return_value = MagicMock()
+        name_map, summary, export_map, import_map = _make_pin_args()
+
+        # 使用 patch 清除线程局部状态
+        with patch("uasset_read.serializers.graph._get_thread_local") as mock_tls:
+            tls_obj = MagicMock()
+            tls_obj.linkedto_failure_seen = set()
+            mock_tls.return_value = tls_obj
+
+            # 第一次调用：pin_name="TestPin" — 应添加到 seen 集合
+            read_ue_graph_pin(
+                archive, name_map, summary, export_map, import_map,
+                trace_mode=False,
+            )
+            # 验证三元组 key 被添加（包含 pin_name）
+            assert len(tls_obj.linkedto_failure_seen) == 1
+            added_key = next(iter(tls_obj.linkedto_failure_seen))
+            assert len(added_key) == 3, "failure_key 应为三元组 (offset, exc_type, pin_name)"
+            assert added_key[2] == "TestPin", f"第三元素应为 pin_name，实际为 {added_key[2]}"
