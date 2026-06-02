@@ -6,6 +6,7 @@
     <meta name="doc-type" content="developer-reference">
     <meta name="doc-version" content="0.3.6-dev">
     <title>uasset_read 开发文档</title>
+    <script>const WIKI_BASE_URL = 'https://github.com/SOATOORL/uasset_read/wiki';</script>
     <style>
         :root {
             --primary: #2563eb; --primary-light: #3b82f6; --primary-dark: #1d4ed8;
@@ -92,6 +93,57 @@
         @media (max-width: 1024px) { .sidebar { display: none; } .main { margin-left: 0; } }
         .section-anchor { scroll-margin-top: 80px; }
         .dep-tree { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin: 1rem 0; font-family: monospace; font-size: 0.85rem; line-height: 1.6; overflow-x: auto; }
+
+        /* Wiki 链接卡片样式 */
+        .wiki-link-card {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1px solid #93c5fd;
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            margin: 1rem 0 1.5rem;
+            transition: box-shadow 0.2s, transform 0.15s;
+        }
+        .wiki-link-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+        .wiki-link-card h4 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            color: var(--primary);
+        }
+        .wiki-link-card p {
+            margin-bottom: 0;
+            font-size: 0.9rem;
+        }
+        .wiki-link-card a {
+            font-weight: 600;
+            color: var(--primary-dark);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .wiki-link-card a:hover {
+            color: var(--primary);
+        }
+        .wiki-link-card .wiki-icon {
+            font-size: 1.1em;
+        }
+
+        /* 章节摘要容器 */
+        .section-summary {
+            padding: 1rem 0;
+        }
+        .section-summary p {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+        .section-summary ul {
+            font-size: 0.875rem;
+            margin-bottom: 0.75rem;
+        }
     </style>
 </head>
 <body data-doc="uasset_read-dev-guide" data-version="0.3.6-dev" data-agent-optimized="true">
@@ -147,959 +199,473 @@
     <div class="main">
         <div class="topbar"><h1>uasset_read 开发文档</h1><span class="breadcrumb">v0.3.6-dev | Unreal Engine .uasset 解析器</span></div>
         <div class="content">
-<!-- Agent metadata: tables are struct: col1=key, col2=value/name, col3=description.
-     API sigs use class="api-sig" with data-api attribute.
-     Sections have data-section matching id. Dep trees use class="dep-tree". -->
 
-<section id="overview" class="section-anchor" data-section="overview">
-<h1>项目介绍</h1>
-<div class="callout callout-info"><div class="callout-title">项目定位</div>
-<p><strong>uasset_read</strong> 是纯 Python 实现的虚幻引擎 <code>.uasset</code> 文件解析器，使 AI 代理和开发者无需启动 UE 编辑器即可读取蓝图、资产数据和图结构。专注于<strong>未烘焙/编辑器保存</strong>的资产。</p>
-</div>
-<div class="module-grid">
-    <div class="module-card"><h4>版本信息</h4><p><span class="badge badge-primary">0.3.6-dev</span></p><p>Python 3.10+（match/case、类型注解）</p><p>运行时零依赖</p></div>
-    <div class="module-card"><h4>构建系统</h4><p>Setuptools（src 布局）</p><p><code>pip install -e ".[dev]"</code></p><p><code>pip install -e ".[pak]"</code> PAK 支持</p></div>
-    <div class="module-card"><h4>支持资产</h4><p>18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等</p><p>容器：文件系统 / PAK / IoStore</p></div>
-</div>
-<h3>核心能力</h3>
-<ul>
-    <li><strong>二进制解析</strong>：完整 FArchive 序列化管线，字节序交换、mmap 大文件优化</li>
-    <li><strong>蓝图提取</strong>：变量、变换、组件、元数据、执行流、数据流</li>
-    <li><strong>Kismet 反编译</strong>：字节码 → AST → C++ 代码翻译，结构化控制流</li>
-    <li><strong>对象链接器</strong>：两阶段对象图重建，跨包引用解析</li>
-    <li><strong>多格式输出</strong>：JSON / Text / Markdown / Mermaid / UE 格式文本 / C++ 骨架</li>
-    <li><strong>容器支持</strong>：PAK（AES 解密、LZ4/Zstd 压缩）、IoStore 容器</li>
-    <li><strong>N2C 中间格式</strong>：标准化蓝图图结构，验证和双向转换</li>
-</ul>
-<h3>关键约束</h3>
-<div class="callout callout-warning"><div class="callout-title">重要限制</div>
-<ul>
-    <li><strong>仅支持未烘焙/编辑器保存的资产</strong>：Cooked 资产图数据已剥离</li>
-    <li><strong>只读</strong>：仅解析，不支持修改或写入</li>
-    <li><strong>零运行时依赖</strong>：不向 dependencies 添加第三方包</li>
-    <li><strong>必须参考 UE 源码</strong>：格式理解追溯 UE C++ 源码，禁止猜测</li>
-</ul>
-</div>
-</section>
+            <!-- 概览 -->
+            <div id="wiki-overview" class="wiki-content" data-wiki-file="01-Overview/Overview.md">
+                <div class="section-summary">
+                    <h2 id="overview">项目介绍</h2>
+                    <p><strong>uasset_read</strong> 是虚幻引擎 <code>.uasset</code> 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据），采用零运行时依赖设计。</p>
+                    <ul>
+                        <li>支持 40+ 种属性类型解析、蓝图变量/变换/组件提取、Kismet 字节码反编译</li>
+                        <li>输出格式：JSON / Text / Markdown / Mermaid / C++ 骨架 / N2C 中间格式</li>
+                        <li>可选 PAK/IoStore 容器读取支持</li>
+                    </ul>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/01-Overview" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="quick-start" class="section-anchor" data-section="quick-start">
-<h2>快速开始</h2>
-<h3>安装</h3>
-<pre><code>pip install uasset-read                   # 基础安装
-pip install -e ".[dev]"                   # 开发环境
-pip install -e ".[pak]"                   # PAK 支持</code></pre>
-<h3>Python API</h3>
-<pre><code>from uasset_read import parse_uasset
-result = parse_uasset("path/to/MyBlueprint.uasset")
-print(result.exports)      # 导出列表
-print(result.blueprint)    # 蓝图数据
-print(result.graphs)       # 图结构</code></pre>
-<h3>CLI 命令</h3>
-<pre><code>uasset-read file.uasset                  # JSON 输出（默认）
-uasset-read file.uasset --text           # 人类可读文本
-uasset-read file.uasset --markdown       # Markdown + Mermaid
-uasset-read file.uasset --blueprint-text # 蓝图节点文本
-uasset-read file.uasset --cpp-skeleton   # C++ 类骨架
-uasset-read file.uasset --n2c            # N2C 中间格式
-uasset-read file.uasset --strict         # 遇到警告停止</code></pre>
-<h3>PAK 解析</h3>
-<pre><code>from uasset_read import parse_package, PakFileReader
-reader = PakFileReader("game.pak")
-result = parse_package("Game/Content/MyAsset.uasset", provider=reader)</code></pre>
-</section>
+            <div id="wiki-quick-start" class="wiki-content" data-wiki-file="01-Overview/Quick-Start.md">
+                <div class="section-summary">
+                    <h2 id="quick-start">快速开始</h2>
+                    <p>安装后即可通过 CLI 或 Python API 使用：</p>
+                    <pre><code>pip install uasset-read
+uasset-read path/to/file.uasset          # JSON 输出（默认）
+uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
+                    <p>Python 入口：<code>parse_uasset()</code> 和 <code>parse_package()</code></p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Quick-Start" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="architecture" class="section-anchor" data-section="architecture">
-<h2>架构设计</h2>
-<h3>整体架构</h3>
-<div class="arch-diagram">
-<div><span class="arch-layer arch-input">.uasset / .umap</span> <span class="arch-layer arch-input">.pak</span> <span class="arch-layer arch-input">.iostore</span></div>
-<div style="margin:0.5rem 0;color:var(--text-muted)">↓ 文件来源</div>
-<div><span class="arch-layer arch-core">PackageBundle</span> <span class="arch-layer arch-core">PackageArchive</span> <span class="arch-layer arch-core">FArchive</span></div>
-<div style="margin:0.5rem 0;color:var(--text-muted)">↓ 二进制读取</div>
-<div><span class="arch-layer arch-core">PackageFileSummary</span> <span class="arch-layer arch-core">NameTable</span> <span class="arch-layer arch-core">ImportMap</span> <span class="arch-layer arch-core">ExportMap</span></div>
-<div style="margin:0.5rem 0;color:var(--text-muted)">↓ 序列化</div>
-<div><span class="arch-layer arch-core">PropertyTag</span> <span class="arch-layer arch-core">PropertyParser</span> <span class="arch-layer arch-core">TypeMappings</span></div>
-<div style="margin:0.5rem 0;color:var(--text-muted)">↓ 属性解析</div>
-<div><span class="arch-layer arch-analysis">BlueprintParser</span> <span class="arch-layer arch-analysis">GraphParser</span> <span class="arch-layer arch-analysis">PackageLinker</span> <span class="arch-layer arch-analysis">KismetDecompiler</span></div>
-<div style="margin:0.5rem 0;color:var(--text-muted)">↓ 分析处理</div>
-<div><span class="arch-layer arch-output">JSON</span> <span class="arch-layer arch-output">Text</span> <span class="arch-layer arch-output">Markdown</span> <span class="arch-layer arch-output">C++ Generator</span> <span class="arch-layer arch-output">N2C</span></div>
-</div>
-<h3>解析管线</h3>
-<div class="flow-chart">
-<div class="flow-step">open_package_bundle</div><div class="flow-arrow">→</div>
-<div class="flow-step">read_package_summary</div><div class="flow-arrow">→</div>
-<div class="flow-step">build_version_container</div><div class="flow-arrow">→</div>
-<div class="flow-step">read_name_table</div>
-</div>
-<div class="flow-chart">
-<div class="flow-step">read_import_map</div><div class="flow-arrow">→</div>
-<div class="flow-step">read_export_map</div><div class="flow-arrow">→</div>
-<div class="flow-step">parse_properties</div><div class="flow-arrow">→</div>
-<div class="flow-step">post_process</div>
-</div>
-<h3>模块结构</h3>
-<div class="module-grid">
-    <div class="module-card"><h4>核心层</h4><p class="path">archive.py / constants.py / exceptions.py</p><p>二进制读取、常量、异常体系</p></div>
-    <div class="module-card"><h4>包管理</h4><p class="path">package.py / parse_uasset.py</p><p>包捆绑、Provider 抽象、解析管线</p></div>
-    <div class="module-card"><h4>序列化</h4><p class="path">serializers/</p><p>Summary/Import/Export/PropertyTag/图</p></div>
-    <div class="module-card"><h4>解析器</h4><p class="path">parsers/</p><p>40+ 种属性类型解析器</p></div>
-    <div class="module-card"><h4>数据模型</h4><p class="path">models/</p><p>UEdGraph/Node/Pin、属性值、蓝图</p></div>
-    <div class="module-card"><h4>蓝图</h4><p class="path">blueprint/</p><p>变量/变换/组件/元数据提取</p></div>
-    <div class="module-card"><h4>图分析</h4><p class="path">graph/</p><p>执行流/数据流/链构建器</p></div>
-    <div class="module-card"><h4>Kismet</h4><p class="path">kismet/</p><p>字节码提取、AST、C++ 翻译</p></div>
-    <div class="module-card"><h4>链接器</h4><p class="path">link/</p><p>PackageLinker 对象图重建</p></div>
-    <div class="module-card"><h4>C++ 生成</h4><p class="path">cpp_gen/</p><p>C++ 骨架/函数提取、IR 格式化</p></div>
-    <div class="module-card"><h4>N2C 格式</h4><p class="path">n2c/</p><p>中间格式、JSON Schema、验证器</p></div>
-    <div class="module-card"><h4>输出</h4><p class="path">formatters/ / exporter/</p><p>多格式输出 + 导出系统</p></div>
-</div>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#archive">FArchive</a> · <a href="#parse-pipeline">解析管线</a></p>
-</div>
-</section>
+            <div id="wiki-architecture" class="wiki-content" data-wiki-file="01-Overview/Architecture.md">
+                <div class="section-summary">
+                    <h2 id="architecture">架构设计</h2>
+                    <p>解析器镜像 UE 内部的 <code>FArchive</code> 序列化管线：</p>
+                    <div class="arch-diagram">
+                        <span class="arch-layer arch-input">.uasset 文件</span> →
+                        <span class="arch-layer arch-core">FArchive 读取器</span> →
+                        <span class="arch-layer arch-core">Deserializer</span> →
+                        <span class="arch-layer arch-analysis">GraphParser / BlueprintParser</span> →
+                        <span class="arch-layer arch-output">Formatters → 输出</span>
+                    </div>
+                    <p>采用 src 布局，核心模块位于 <code>src/uasset_read/</code>，测试位于 <code>tests/</code>。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Architecture" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="archive" class="section-anchor" data-section="archive">
-<h2>FArchive 二进制读取器</h2>
-<p><code>archive.py</code> 实现 UE 的 <code>FArchive</code>，是所有二进制读取的基础。</p>
-<h3>核心 API</h3>
-<div class="api-sig" data-api="FArchive">
-<span class="func-name">FArchive</span>(<span class="param">path: str</span>, <span class="param">tolerant: bool = False</span>) <span class="return">→ FArchive</span>
-</div>
-<h4>主要方法</h4>
-<table>
-    <tr><th>方法</th><th>返回类型</th><th>说明</th></tr>
-    <tr><td><code>read(size)</code></td><td><code>bytes</code></td><td>读取指定大小字节</td></tr>
-    <tr><td><code>seek(pos)</code></td><td><code>None</code></td><td>移动文件指针</td></tr>
-    <tr><td><code>tell()</code></td><td><code>int</code></td><td>获取当前位置</td></tr>
-    <tr><td><code>total_size()</code></td><td><code>int</code></td><td>获取文件总大小</td></tr>
-    <tr><td><code>read_u8() / read_i16() / read_u16()</code></td><td><code>int</code></td><td>8/16 位整数</td></tr>
-    <tr><td><code>read_i32() / read_u32()</code></td><td><code>int</code></td><td>32 位整数</td></tr>
-    <tr><td><code>read_i64() / read_u64()</code></td><td><code>int</code></td><td>64 位整数</td></tr>
-    <tr><td><code>peek_i32()</code></td><td><code>int</code></td><td>预读（不移动位置）</td></tr>
-    <tr><td><code>read_f32() / read_f64()</code></td><td><code>float</code></td><td>32/64 位浮点</td></tr>
-    <tr><td><code>read_freal(use_double=False)</code></td><td><code>float</code></td><td>LWC 双精度坐标</td></tr>
-    <tr><td><code>read_bool()</code></td><td><code>bool</code></td><td>4 字节布尔（UE 标准）</td></tr>
-    <tr><td><code>read_bool_1byte()</code></td><td><code>bool</code></td><td>1 字节布尔（UE5）</td></tr>
-    <tr><td><code>read_fstring()</code></td><td><code>str</code></td><td>UTF-8/UTF-16 字符串</td></tr>
-    <tr><td><code>read_name(name_map)</code></td><td><code>str</code></td><td>FName 索引查找</td></tr>
-    <tr><td><code>read_array(count, reader)</code></td><td><code>list</code></td><td>读取数组</td></tr>
-    <tr><td><code>set_byte_swapping(bool)</code></td><td><code>None</code></td><td>字节序交换</td></tr>
-    <tr><td><code>validate_offset(offset, context="")</code></td><td><code>None</code></td><td>边界验证（含上下文）</td></tr>
-    <tr><td><code>validate_size(size)</code></td><td><code>None</code></td><td>大小验证</td></tr>
-</table>
-<h3>关键设计</h3>
-<ul>
-    <li><strong>大文件 mmap</strong>：超过 50MB 自动切换，失败时降级</li>
-    <li><strong>字节序透明</strong>：<code>set_byte_swapping()</code> 控制</li>
-    <li><strong>容错模式</strong>：<code>tolerant</code> 标志控制验证严格度</li>
-    <li><strong>FString 边界防护</strong>：失败时自动 seek 回入口</li>
-</ul>
-<div class="dep-tree">archive.py → exceptions.py(ParseError), constants.py(MMAP_THRESHOLD, MAX_FSTRING_LENGTH)</div>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#parse-pipeline">解析管线</a> · <a href="#constants">常量与配置</a></p>
-</div>
-</section>
+            <!-- 核心模块 -->
+            <div id="wiki-archive" class="wiki-content" data-wiki-file="02-Core-Modules/FArchive.md">
+                <div class="section-summary">
+                    <h2 id="archive">FArchive 二进制读取器</h2>
+                    <p>底层二进制读取器，封装字节序交换、mmap 内存映射、位置/长度管理，镜像 UE 的 <code>FArchive</code> 序列化接口。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">read_bytes</span>(<span class="param">offset: int, count: int</span>) → <span class="type">bytes</span>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">read_int32</span>() → <span class="type">int</span> |
+                    <span class="func-name">read_uint32</span>() → <span class="type">int</span> |
+                    <span class="func-name">read_fstring</span>() → <span class="type">str</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/FArchive" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="parse-pipeline" class="section-anchor" data-section="parse-pipeline">
-<h2>解析管线</h2>
-<p><code>parse_uasset.py</code> 提供三个入口函数：</p>
-<div class="api-sig" data-api="parse_package">
-<span class="func-name">parse_package</span>(<span class="param">path: str</span>, <span class="param">tolerant: bool = True</span>, <span class="param">include_parent_assets: bool = False</span>, <span class="param">provider</span>, <span class="param">mappings_path</span>, <span class="param">game</span>) <span class="return">→ ParseResult</span>
-</div>
-<div class="api-sig" data-api="parse_uasset">
-<span class="func-name">parse_uasset</span>(...) <span class="return">→ ParseResult</span> <span style="color:#94a3b8"># 委托给 parse_package</span>
-</div>
-<div class="api-sig" data-api="parse_uasset_with_linker">
-<span class="func-name">parse_uasset_with_linker</span>(<span class="param">path: str</span>, <span class="param">tolerant: bool = True</span>, <span class="param">preload_all: bool = False</span>, ...) <span class="return">→ LinkerParseResult</span>
-</div>
-<h3>解析流程</h3>
-<div class="dep-tree">
-1. open_package_bundle() → PackageBundle<br>
-2. bundle.open_archive() → PackageArchive<br>
-3. read_package_summary() → PackageFileSummary<br>
-4. build_version_container() → VersionContainer<br>
-5. read_name_table() → List[str]<br>
-6. read_import_map() → List[ObjectImport]<br>
-7. read_export_map() → List[ObjectExport]<br>
-8. parse_properties_from_export() (每个 export)<br>
-9. [linker only] PackageLinker.link() + post_load()<br>
-10. _post_process() → 蓝图/图/Kismet/组件
-</div>
-<h3>关键设计</h3>
-<ul>
-    <li><strong>双入口</strong>：parse_package（标准）和 parse_uasset_with_linker（带链接器）</li>
-    <li><strong>容错优先</strong>：可选功能失败不影响主管线，错误收集到 result.errors</li>
-    <li><strong>Provider 抽象</strong>：filesystem/pak/iostore 三种来源</li>
-</ul>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#archive">FArchive</a> · <a href="#serializers">序列化模块</a></p>
-</div>
-</section>
+            <div id="wiki-parse-pipeline" class="wiki-content" data-wiki-file="02-Core-Modules/Parse-Pipeline.md">
+                <div class="section-summary">
+                    <h2 id="parse-pipeline">解析管线</h2>
+                    <p>高层解析入口，协调 Summary → NameMap → Import/ExportMap → ObjectData 的完整解析流程，支持容错与严格两种模式。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">parse_uasset</span>(<span class="param">path: str, mode: str = 'tolerant'</span>) → <span class="type">ParseResult</span>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">parse_package</span>(<span class="param">archive: FArchive</span>) → <span class="type">PackageBundle</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Parse-Pipeline" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="package" class="section-anchor" data-section="package">
-<h2>包管理</h2>
-<p><code>package.py</code> 管理 .uasset + .uexp 文件捆绑。</p>
-<div class="api-sig" data-api="PackageBundle">
-<span class="func-name">PackageBundle</span> — main_path, package_kind, container, files, payloads, provider
-</div>
-<div class="api-sig" data-api="PackageArchive">
-<span class="func-name">PackageArchive</span>(<span class="param">main_archive</span>, <span class="param">uexp_archive</span>, <span class="param">tolerant</span>) <span style="color:#94a3b8"># .uasset + .uexp 合并</span>
-</div>
-<h3>Provider 类型</h3>
-<table>
-    <tr><th>Provider</th><th>容器</th><th>说明</th></tr>
-    <tr><td><code>FileSystemPackageProvider</code></td><td>filesystem</td><td>直接文件系统</td></tr>
-    <tr><td><code>PakPackageProvider</code></td><td>pak</td><td>PAK 容器</td></tr>
-    <tr><td><code>IoStorePackageProvider</code></td><td>iostore</td><td>IoStore 容器</td></tr>
-</table>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#parse-pipeline">解析管线</a> · <a href="#pak">PAK</a></p>
-</div>
-</section>
+            <div id="wiki-package" class="wiki-content" data-wiki-file="02-Core-Modules/Package.md">
+                <div class="section-summary">
+                    <h2 id="package">包管理</h2>
+                    <p><code>PackageBundle</code> 封装解析后的完整包数据（Summary、NameMap、Import/Export Map、对象资源），<code>PackageProvider</code> 支持从文件系统 / Pak / IoStore 统一加载包。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">PackageProvider</span>.<span class="func-name">load</span>(<span class="param">path: str</span>) → <span class="type">PackageBundle</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Package" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="constants" class="section-anchor" data-section="constants">
-<h2>常量与配置</h2>
-<table>
-    <tr><th>常量</th><th>值</th><th>说明</th></tr>
-    <tr><td><code>PACKAGE_FILE_TAG</code></td><td><code>0x9E2A83C1</code></td><td>UE 包文件魔术</td></tr>
-    <tr><td><code>MMAP_THRESHOLD</code></td><td>50MB</td><td>mmap 启用阈值</td></tr>
-    <tr><td><code>MAX_FSTRING_LENGTH</code></td><td>10MB</td><td>FString 最大长度</td></tr>
-    <tr><td><code>MAX_PROPERTY_COUNT</code></td><td>10,000</td><td>属性循环上限</td></tr>
-    <tr><td><code>MAX_ARRAY_COUNT</code></td><td>1,000,000</td><td>数组元素上限</td></tr>
-    <tr><td><code>UE5_LARGE_WORLD_COORDINATES</code></td><td>1004</td><td>LWC 版本阈值</td></tr>
-    <tr><td><code>UE5_PROPERTY_TAG_EXTENSION</code></td><td>1011</td><td>PropertyTag 扩展版本</td></tr>
-</table>
-<h3>PropertyTag 标志</h3>
-<table>
-    <tr><th>标志</th><th>值</th><th>说明</th></tr>
-    <tr><td><code>PROP_TAG_NONE</code></td><td>0x00</td><td>无标志</td></tr>
-    <tr><td><code>PROP_TAG_HAS_ARRAY_INDEX</code></td><td>0x01</td><td>有数组索引</td></tr>
-    <tr><td><code>PROP_TAG_HAS_PROPERTY_GUID</code></td><td>0x02</td><td>有属性 GUID</td></tr>
-    <tr><td><code>PROP_TAG_BOOL_TRUE</code></td><td>0x10</td><td>布尔值为真</td></tr>
-    <tr><td><code>PROP_TAG_SKIPPED_SERIALIZE</code></td><td>0x20</td><td>跳过序列化</td></tr>
-</table>
-</section>
+            <div id="wiki-constants" class="wiki-content" data-wiki-file="02-Core-Modules/Constants.md">
+                <div class="section-summary">
+                    <h2 id="constants">常量与配置</h2>
+                    <p>定义 UE 版本号（VER_UE4_* / VER_UE5_*）、属性类型阈值、CPF 标志、PropertyTag 标志等，所有解析逻辑引用此模块的常量而非硬编码。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Constants" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="exceptions" class="section-anchor" data-section="exceptions">
-<h2>异常体系</h2>
-<div class="dep-tree">
-UAssetError (Exception)<br>
-├── VersionError<br>
-├── ParseError (partial_result, context: ErrorContext)<br>
-├── InvalidFormatError (format_type)<br>
-├── CorruptedDataError<br>
-├── UnsupportedFeatureError (feature)<br>
-├── MissingDependencyError (dependency)<br>
-└── ContainerError<br>
-    ├── PakError    └── IoStoreError
-</div>
-<h3>ErrorContext</h3>
-<table>
-    <tr><th>字段</th><th>类型</th><th>说明</th></tr>
-    <tr><td><code>offset</code></td><td>int</td><td>文件偏移</td></tr>
-    <tr><td><code>phase</code></td><td>str</td><td>解析阶段</td></tr>
-    <tr><td><code>operation</code></td><td>str</td><td>操作类型</td></tr>
-    <tr><td><code>export_index</code></td><td>Optional[int]</td><td>导出索引</td></tr>
-    <tr><td><code>expected_offset</code></td><td>Optional[int]</td><td>预期偏移</td></tr>
-</table>
-</section>
+            <div id="wiki-exceptions" class="wiki-content" data-wiki-file="02-Core-Modules/Exceptions.md">
+                <div class="section-summary">
+                    <h2 id="exceptions">异常体系</h2>
+                    <p><code>UAssetError</code>（根异常）→ <code>VersionError</code>（版本不兼容）/ <code>ParseError</code>（解析失败）/ <code>ErrorContext</code>（带上下文的错误包装），提供结构化的错误信息。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Exceptions" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="serializers" class="section-anchor" data-section="serializers">
-<h2>序列化模块</h2>
-<table>
-    <tr><th>模块</th><th>职责</th><th>关键函数/类</th></tr>
-    <tr><td><code>package_summary.py</code></td><td>PackageFileSummary、NameTable</td><td><code>read_package_summary</code> <code>read_name_table</code></td></tr>
-    <tr><td><code>object_resources.py</code></td><td>ImportMap、ExportMap、PackageIndex</td><td><code>read_import_map</code> <code>read_export_map</code> <code>resolve_class_name</code></td></tr>
-    <tr><td><code>property_tags.py</code></td><td>PropertyTag 读取、控制标志</td><td><code>read_property_tag</code> <code>parse_ctrl_flags</code></td></tr>
-    <tr><td><code>graph.py</code></td><td>UEdGraph/Node/Pin 读取</td><td><code>read_ue_graph</code> <code>read_ue_graph_node</code> <code>read_ue_graph_pin</code></td></tr>
-</table>
-<h3>PackageIndex 编码</h3>
-<ul>
-    <li><strong>正数</strong>：导出索引（1-based）</li>
-    <li><strong>负数</strong>：导入索引（-1-based）</li>
-    <li><strong>零</strong>：空引用</li>
-</ul>
-</section>
+            <!-- 数据处理 -->
+            <div id="wiki-serializers" class="wiki-content" data-wiki-file="03-Data-Processing/Serializers.md">
+                <div class="section-summary">
+                    <h2 id="serializers">序列化模块</h2>
+                    <p>负责从二进制流中反序列化 <code>PackageFileSummary</code>、<code>ImportMap</code>、<code>ExportMap</code>、<code>PropertyTag</code> 等结构，支持版本感知的字段跳过。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">deserialize_summary</span>(<span class="param">archive: FArchive</span>) → <span class="type">PackageFileSummary</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Serializers" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="parsers" class="section-anchor" data-section="parsers">
-<h2>属性解析器</h2>
-<p><code>parsers/</code> 包含 <strong>40+</strong> 种属性类型解析器和分发机制，涵盖基础类型、整型变体、对象引用、复合类型、特殊类型和 Verse 类型。</p>
-<div class="api-sig" data-api="parse_property_value">
-<span class="func-name">parse_property_value</span>(<span class="param">archive</span>, <span class="param">tag</span>, <span class="param">name_map</span>, ...) <span class="return">→ PropertyValue</span><br>
-<span style="color:#94a3b8"># 根据 PropertyTag.type_name 分发</span>
-</div>
-<h3>支持的属性类型</h3>
-<table>
-    <tr><th>类型</th><th>解析函数</th><th>说明</th></tr>
-    <tr><td><code>BoolProperty</code></td><td><code>parse_bool_property</code></td><td>布尔值</td></tr>
-    <tr><td><code>IntProperty</code></td><td><code>parse_int_property</code></td><td>32 位整数</td></tr>
-    <tr><td><code>FloatProperty</code></td><td><code>parse_float_property</code></td><td>32 位浮点</td></tr>
-    <tr><td><code>StrProperty</code></td><td><code>parse_str_property</code></td><td>FString</td></tr>
-    <tr><td><code>NameProperty</code></td><td><code>parse_name_property</code></td><td>FName</td></tr>
-    <tr><td><code>ObjectProperty</code></td><td><code>parse_object_property</code></td><td>对象引用</td></tr>
-    <tr><td><code>SoftObjectProperty</code></td><td><code>parse_soft_object_property</code></td><td>软对象引用</td></tr>
-    <tr><td><code>ArrayProperty</code></td><td><code>parse_array_property</code></td><td>数组</td></tr>
-    <tr><td><code>StructProperty</code></td><td><code>parse_struct_property</code></td><td>结构体</td></tr>
-    <tr><td><code>MapProperty</code></td><td><code>parse_map_property</code></td><td>映射</td></tr>
-    <tr><td><code>SetProperty</code></td><td><code>parse_set_property</code></td><td>集合</td></tr>
-    <tr><td><code>EnumProperty</code></td><td><code>parse_enum_property</code></td><td>枚举</td></tr>
-    <tr><td><code>TextProperty</code></td><td><code>parse_text_property</code></td><td>FText</td></tr>
-    <tr><td><code>DelegateProperty</code></td><td><code>parse_delegate_property</code></td><td>委托</td></tr>
-    <tr><td><code>UInt16Property</code></td><td><code>parse_uint16_property</code></td><td>16 位无符号整数</td></tr>
-    <tr><td><code>UInt32Property</code></td><td><code>parse_uint32_property</code></td><td>32 位无符号整数</td></tr>
-    <tr><td><code>UInt64Property</code></td><td><code>parse_uint64_property</code></td><td>64 位无符号整数</td></tr>
-    <tr><td><code>WeakObjectProperty</code></td><td><code>parse_weak_object_property</code></td><td>弱对象引用</td></tr>
-    <tr><td><code>LazyObjectProperty</code></td><td><code>parse_lazy_object_property</code></td><td>延迟加载对象</td></tr>
-    <tr><td><code>ClassProperty</code></td><td><code>parse_class_property</code></td><td>类引用</td></tr>
-    <tr><td><code>SoftClassProperty</code></td><td><code>parse_soft_class_property</code></td><td>软类引用</td></tr>
-    <tr><td><code>AssetObjectProperty</code></td><td><code>parse_asset_object_property</code></td><td>资产对象引用</td></tr>
-    <tr><td><code>MulticastDelegateProperty</code></td><td><code>parse_multicast_delegate_property</code></td><td>多播委托</td></tr>
-    <tr><td><code>MulticastInlineDelegateProperty</code></td><td><code>parse_multicast_inline_delegate_property</code></td><td>内联多播委托</td></tr>
-    <tr><td><code>MulticastSparseDelegateProperty</code></td><td><code>parse_multicast_sparse_delegate_property</code></td><td>稀疏多播委托</td></tr>
-    <tr><td><code>FieldPathProperty</code></td><td><code>parse_field_path_property</code></td><td>字段路径</td></tr>
-    <tr><td><code>InterfaceProperty</code></td><td><code>parse_interface_property</code></td><td>接口引用</td></tr>
-    <tr><td><code>DoubleProperty</code></td><td><code>parse_double_property</code></td><td>64 位浮点</td></tr>
-    <tr><td><code>GuidProperty</code></td><td><code>parse_guid_property</code></td><td>GUID</td></tr>
-    <tr><td><code>OptionalProperty</code></td><td><code>parse_optional_property</code></td><td>可选属性</td></tr>
-    <tr><td><code>AnsiStrProperty</code></td><td><code>parse_ansi_str_property</code></td><td>ANSI 字符串</td></tr>
-    <tr><td><code>Utf8StrProperty</code></td><td><code>parse_utf8_str_property</code></td><td>UTF-8 字符串</td></tr>
-    <tr><td><code>VerseStringProperty</code></td><td><code>parse_verse_string_property</code></td><td>Verse 字符串</td></tr>
-    <tr><td><code>VerseClassProperty</code></td><td><code>parse_verse_class_property</code></td><td>Verse 类引用</td></tr>
-    <tr><td><code>VerseFunctionProperty</code></td><td><code>parse_verse_function_property</code></td><td>Verse 函数引用</td></tr>
-    <tr><td><code>VerseDynamicProperty</code></td><td><code>parse_verse_dynamic_property</code></td><td>Verse 动态属性</td></tr>
-    <tr><td><code>VerseCellProperty</code></td><td><code>parse_verse_cell_property</code></td><td>Verse 单元格</td></tr>
-    <tr><td><code>VerseValueProperty</code></td><td><code>parse_verse_value_property</code></td><td>Verse 值类型</td></tr>
-</table>
-<h3>自定义属性注册表</h3>
-<div class="api-sig" data-api="register_custom_property">
-<span class="func-name">register_custom_property</span>(<span class="param">type_name: str</span>, <span class="param">handler</span>) <span class="return">→ None</span><br>
-<span class="func-name">handle_custom_property</span>(<span class="param">archive</span>, <span class="param">tag</span>, <span class="param">context</span>) <span class="return">→ PropertyValue</span>
-</div>
-</section>
+            <div id="wiki-parsers" class="wiki-content" data-wiki-file="03-Data-Processing/Parsers.md">
+                <div class="section-summary">
+                    <h2 id="parsers">属性解析器</h2>
+                    <p>40+ 种 UE 属性类型的分发解析器，支持自定义属性注册表、类特定跳过机制。覆盖 Bool/Int/Float/Name/Str/Struct/Array/Map/Set/ObjectProperty 等。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">PropertyDispatcher</span>.<span class="func-name">dispatch</span>(<span class="param">tag: PropertyTag, archive: FArchive</span>) → <span class="type">Any</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Parsers" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="models" class="section-anchor" data-section="models">
-<h2>数据模型</h2>
-<h3>核心模型</h3>
-<table>
-    <tr><th>模型</th><th>说明</th></tr>
-    <tr><td><code>UEdGraph / UEdGraphNode / UEdGraphPin</code></td><td>蓝图图/节点/引脚</td></tr>
-    <tr><td><code>FEdGraphPinType / FMemberReference</code></td><td>引脚类型/成员引用</td></tr>
-    <tr><td><code>PropertyTag / PropertyValue</code></td><td>属性标签/属性值基类</td></tr>
-    <tr><td><code>StructValue / MapValue / SetValue / EnumValue</code></td><td>复合属性值</td></tr>
-    <tr><td><code>TextValue / DelegateValue</code></td><td>特殊属性值</td></tr>
-    <tr><td><code>ParseResult / StatusInfo</code></td><td>解析结果/状态</td></tr>
-</table>
-<h3>蓝图模型</h3>
-<table>
-    <tr><th>模型</th><th>说明</th></tr>
-    <tr><td><code>BlueprintMetadata</code></td><td>蓝图元数据（变量、函数、事件）</td></tr>
-    <tr><td><code>BlueprintVariable</code></td><td>蓝图变量</td></tr>
-    <tr><td><code>BlueprintFunction</code></td><td>蓝图函数</td></tr>
-    <tr><td><code>BlueprintEvent</code></td><td>蓝图事件</td></tr>
-    <tr><td><code>FunctionParameter</code></td><td>函数参数</td></tr>
-</table>
-<h3>变换模型</h3>
-<table>
-    <tr><th>模型</th><th>说明</th></tr>
-    <tr><td><code>VectorValue</code></td><td>三维向量 (X, Y, Z)</td></tr>
-    <tr><td><code>RotatorValue</code></td><td>旋转 (Pitch, Yaw, Roll)</td></tr>
-    <tr><td><code>ScaleValue</code></td><td>缩放 (X, Y, Z)</td></tr>
-</table>
-</section>
+            <div id="wiki-models" class="wiki-content" data-wiki-file="03-Data-Processing/Models.md">
+                <div class="section-summary">
+                    <h2 id="models">数据模型</h2>
+                    <p>定义 <code>UEdGraph</code>、<code>Node</code>、<code>Pin</code>、属性值模型、<code>ParseResult</code>、变换、蓝图模型、节点类型等 Python 数据结构。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Models" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="versioning" class="section-anchor" data-section="versioning">
-<h2>版本管理</h2>
-<div class="api-sig" data-api="build_version_container">
-<span class="func-name">build_version_container</span>(<span class="param">summary</span>) <span class="return">→ VersionContainer</span>
-</div>
-<h3>CustomVersion GUIDs</h3>
-<table>
-    <tr><th>GUID</th><th>名称</th><th>说明</th></tr>
-    <tr><td><code>FFrameworkObjectVersion</code></td><td>框架对象版本</td><td>蓝图图结构版本</td></tr>
-    <tr><td><code>FUE5MainStreamObjectVersion</code></td><td>UE5 主流版本</td><td>UE5 核心版本</td></tr>
-    <tr><td><code>FReleaseObjectVersion</code></td><td>发行版本</td><td>UE 发行版本</td></tr>
-</table>
-</section>
+            <div id="wiki-versioning" class="wiki-content" data-wiki-file="03-Data-Processing/Versioning.md">
+                <div class="section-summary">
+                    <h2 id="versioning">版本管理</h2>
+                    <p><code>VersionContainer</code> 和 <code>build_version_container()</code> 根据文件头 <code>PackageFileSummary</code> 自动识别 UE4/UE5 版本，驱动后续序列化器的字段差异。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">build_version_container</span>(<span class="param">summary: PackageFileSummary</span>) → <span class="type">VersionContainer</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Versioning" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="blueprint" class="section-anchor" data-section="blueprint">
-<h2>蓝图解析</h2>
-<p><code>blueprint/</code> 提取蓝图变量、变换、组件和元数据。</p>
-<div class="api-sig" data-api="extract_blueprint_variables">
-<span class="func-name">extract_blueprint_variables</span>(<span class="param">properties: List[PropertyValue]</span>) <span class="return">→ List[BlueprintVariable]</span>
-</div>
-<div class="api-sig" data-api="extract_blueprint_metadata">
-<span class="func-name">extract_blueprint_metadata</span>(<span class="param">export</span>, <span class="param">archive</span>, <span class="param">import_map</span>, <span class="param">export_map</span>, <span class="param">name_map</span>, <span class="param">summary</span>, <span class="param">linker</span>, <span class="param">graphs</span>) <span class="return">→ Tuple[BlueprintMetadata, str]</span>
-</div>
-<div class="api-sig" data-api="parse_component_transform">
-<span class="func-name">parse_component_transform</span>(<span class="param">properties: List[PropertyValue]</span>) <span class="return">→ Dict[str, Any]</span>
-</div>
-<h3>变量提取路径</h3>
-<ul>
-    <li><strong>主要</strong>：从 <code>UBlueprint.NewVariables</code> 解析 FBPVariableDescription</li>
-    <li><strong>回退</strong>：从属性迭代推断类型和标志</li>
-</ul>
-<div class="api-sig" data-api="extract_components">
-<span class="func-name">extract_components</span>(<span class="param">export_map</span>, <span class="param">import_map</span>) <span class="return">→ List[Dict]</span><br>
-<span style="color:#94a3b8"># 从 ExportMap 发现 SCS 组件</span>
-</div>
-<div class="api-sig" data-api="extract_component_transforms">
-<span class="func-name">extract_component_transforms</span>(<span class="param">export_properties</span>, <span class="param">component_name</span>) <span class="return">→ Dict</span><br>
-<span style="color:#94a3b8"># 提取 RelativeLocation/Rotation/Scale3D</span>
-</div>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#graph">图分析</a> · <a href="#kismet">Kismet 反编译</a></p>
-</div>
-</section>
+            <!-- 高级功能 -->
+            <div id="wiki-blueprint" class="wiki-content" data-wiki-file="04-Advanced-Features/Blueprint.md">
+                <div class="section-summary">
+                    <h2 id="blueprint">蓝图解析</h2>
+                    <p>从 <code>Ubergraph</code> 中提取蓝图变量（含 Guid）、变换（Transforms）、组件、元数据。支持 BP 生成类和子类的区分。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">BlueprintParser</span>.<span class="func-name">extract_variables</span>() → <span class="type">list[BlueprintVariable]</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Blueprint" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="graph" class="section-anchor" data-section="graph">
-<h2>图分析</h2>
-<p><code>graph/</code> 提取和分析蓝图执行流、数据流和连接关系。</p>
-<div class="api-sig" data-api="extract_blueprint_graphs">
-<span class="func-name">extract_blueprint_graphs</span>(<span class="param">archive</span>, <span class="param">summary</span>, <span class="param">name_map</span>, <span class="param">import_map</span>, <span class="param">export_map</span>, <span class="param">linker</span>) <span class="return">→ List[UEdGraph]</span>
-</div>
-<div class="api-sig" data-api="build_execution_flow_entries">
-<span class="func-name">build_execution_flow_entries</span>(<span class="param">graph: UEdGraph</span>) <span class="return">→ List[Dict]</span>
-</div>
-<div class="api-sig" data-api="build_data_flows">
-<span class="func-name">build_data_flows</span>(<span class="param">graph</span>, <span class="param">mode="name"</span>) <span class="return">→ List[Dict]</span>
-</div>
-<div class="api-sig" data-api="build_execution_chains">
-<span class="func-name">build_execution_chains</span>(<span class="param">graph</span>, <span class="param">execution_flows=None</span>) <span class="return">→ List[Dict]</span>
-</div>
-<h3>执行流追踪</h3>
-<div class="dep-tree">
-1. 找到 START_EVENT_TYPES 节点（K2Node_Event 等）<br>
-2. 对每个 start_node → _trace_execution_from_event()<br>
-   ├── 迭代：输出执行引脚 → 链接输入引脚 → 下一个节点<br>
-   ├── CallFunction：提取参数 + 追踪数据源<br>
-   ├── CONTROL_FLOW_NODES：标记分支类型<br>
-   └── 纯节点：标记数据提供者<br>
-3. 返回执行流条目列表
-</div>
-<h3>关键设计</h3>
-<ul>
-    <li><strong>PKG_Cooked 检查</strong>：烘焙资产图数据已剥离，提前返回空</li>
-    <li><strong>链格式</strong>：配对格式 → 链字符串 "N1→N2→N3"</li>
-    <li><strong>循环检测</strong>：DFS 三色标记法（WHITE/GRAY/BLACK）</li>
-</ul>
-<h3>兼容层函数</h3>
-<table>
-    <tr><th>函数</th><th>说明</th></tr>
-    <tr><td><code>write_pin_trace_report</code></td><td>Phase 73 Pin 诊断报告</td></tr>
-    <tr><td><code>is_function_graph</code></td><td>判断图是否为 FunctionGraph</td></tr>
-    <tr><td><code>build_function_graphs</code></td><td>构建函数级图</td></tr>
-    <tr><td><code>write_phase75_diagnostic</code></td><td>Phase 75 字段级诊断</td></tr>
-</table>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#blueprint">蓝图解析</a> · <a href="#kismet">Kismet 反编译</a></p>
-</div>
-</section>
+            <div id="wiki-graph" class="wiki-content" data-wiki-file="04-Advanced-Features/Graph.md">
+                <div class="section-summary">
+                    <h2 id="graph">图分析</h2>
+                    <p>执行流/数据流追踪、链构建器、Pin 追踪报告。将 <code>UEdGraph</code> 转换为有向图，支持路径查询和依赖分析。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Graph" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="kismet" class="section-anchor" data-section="kismet">
-<h2>Kismet 反编译</h2>
-<p><code>kismet/</code> 实现 Kismet 字节码提取、AST 解析和 C++ 代码翻译。</p>
-<div class="api-sig" data-api="decompile_uasset">
-<span class="func-name">decompile_uasset</span>(<span class="param">path: str</span>, <span class="param">tolerant: bool</span>) <span class="return">→ List[KismetDecompiledResult]</span>
-</div>
-<div class="api-sig" data-api="extract_bytecode_bytes">
-<span class="func-name">extract_bytecode_bytes</span>(<span class="param">archive</span>, <span class="param">export</span>, <span class="param">summary</span>, <span class="param">name_map</span>, <span class="param">import_map</span>, <span class="param">export_map</span>) <span class="return">→ bytes</span>
-</div>
-<div class="api-sig" data-api="parse_bytecode_stream">
-<span class="func-name">parse_bytecode_stream</span>(<span class="param">bytecode_bytes</span>, <span class="param">name_map</span>, <span class="param">tolerant</span>) <span class="return">→ List[KismetExpression]</span>
-</div>
-<h3>表达式类层次</h3>
-<div class="dep-tree">
-KismetExpression (抽象基类)<br>
-├── KismetExpressionT[T] (带值)<br>
-├── EX_VariableBase → EX_LocalVariable, EX_InstanceVariable, EX_DefaultVariable<br>
-├── EX_LetBase (赋值) → EX_Let, EX_LetBool, EX_LetDelegate<br>
-├── EX_FinalFunction (调用) → EX_CallMath, EX_LocalFinalFunction<br>
-├── EX_CastBase → EX_Cast, EX_DynamicCast, EX_MetaCast<br>
-├── EX_ContextBase → EX_Context, EX_Context_FailSilent, EX_ClassContext<br>
-├── 字面量: EX_IntConst, EX_FloatConst, EX_StringConst, EX_VectorConst<br>
-└── 控制流: EX_Jump, EX_JumpIfNot, EX_Return, EX_EndOfScript
-</div>
-<h3>关键设计</h3>
-<ul>
-    <li><strong>两阶段翻译</strong>：Phase 62 二进制→AST，Phase 63 AST→C++</li>
-    <li><strong>MathFunctionCleaner</strong>：美化 <code>UKismetMathLibrary::Add_IntInt(a,b)</code> → <code>a + b</code></li>
-    <li><strong>BPGC 回退</strong>：UE5 烘焙蓝图字节码在 BlueprintGeneratedClass.script_serial_region</li>
-    <li><strong>结构化流 vs Goto</strong>：StructuredControlFlow 检测 Push/Pop 模式，失败时回退 goto</li>
-</ul>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#blueprint">蓝图解析</a> · <a href="#cpp-gen">C++ 代码生成</a></p>
-</div>
-</section>
+            <div id="wiki-kismet" class="wiki-content" data-wiki-file="04-Advanced-Features/Kismet.md">
+                <div class="section-summary">
+                    <h2 id="kismet">Kismet 反编译</h2>
+                    <p>字节码提取器、<code>EExprToken</code> → AST → C++ 翻译器、BPGC 回退、结构化控制流。覆盖 16 种表达式类型（赋值、控制流、函数调用、字面量等）。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">KismetDecompiler</span>.<span class="func-name">decompile_script</span>(<span class="param">bytecode: bytes</span>) → <span class="type">list[ExprAST]</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Kismet" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="linker" class="section-anchor" data-section="linker">
-<h2>对象链接器</h2>
-<p><code>link/</code> 实现 FLinkerLoad 风格的两阶段对象图重建。</p>
-<div class="api-sig" data-api="PackageLinker">
-<span class="func-name">PackageLinker</span>(<span class="param">archive</span>, <span class="param">summary</span>, <span class="param">name_map</span>, <span class="param">import_map</span>, <span class="param">export_map</span>, <span class="param">version_container</span>)
-</div>
-<h3>两阶段加载</h3>
-<div class="dep-tree">
-link() -- Phase 1<br>
-├── _create_import_instances() → _import_objects[]<br>
-├── _create_export_instances() → _export_objects[]<br>
-├── build_outer_tree() → 解析 outer_index<br>
-└── _collect_root_objects()<br>
-<br>
-preload(index) -- Phase 2 (延迟)<br>
-└── parse_properties_from_export() → serialized_properties<br>
-<br>
-post_load() -- Stage 4<br>
-├── _resolve_property_references() + _resolve_weak_references()<br>
-├── _verify_imports() + _resolve_template_objects()<br>
-└── _build_dependency_graph()
-</div>
-<h3>UObjectInstance 字段</h3>
-<table>
-    <tr><th>字段</th><th>类型</th><th>说明</th></tr>
-    <tr><td><code>package_index</code></td><td>int</td><td>+导出, -导入, 0=null</td></tr>
-    <tr><td><code>object_name / object_class</code></td><td>str</td><td>对象名/类</td></tr>
-    <tr><td><code>outer_index / super_object</code></td><td>PackageIndex / UObjectInstance</td><td>外部对象/父类</td></tr>
-    <tr><td><code>template_object</code></td><td>UObjectInstance</td><td>CDO 引用</td></tr>
-    <tr><td><code>serialized_properties</code></td><td>List[Any]</td><td>序列化属性</td></tr>
-    <tr><td><code>property_references</code></td><td>Dict[str, UObjectInstance]</td><td>属性引用</td></tr>
-    <tr><td><code>dependencies</code></td><td>List[UObjectInstance]</td><td>依赖列表</td></tr>
-</table>
-<h3>PackageRegistry</h3>
-<div class="api-sig" data-api="get_or_load">
-<span class="func-name">get_or_load</span>(<span class="param">package_path</span>, <span class="param">provider</span>, <span class="param">tolerant</span>) <span class="return">→ PackageLinker</span><br>
-<span class="func-name">resolve_import_across_packages</span>(<span class="param">path</span>, <span class="param">name</span>, <span class="param">provider</span>) <span class="return">→ UObjectInstance</span>
-</div>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#parse-pipeline">解析管线</a> · <a href="#serializers">序列化模块</a></p>
-</div>
-</section>
+            <div id="wiki-linker" class="wiki-content" data-wiki-file="04-Advanced-Features/Linker.md">
+                <div class="section-summary">
+                    <h2 id="linker">对象链接器</h2>
+                    <p><code>PackageLinker</code> 实现两阶段对象图重建：<code>UObjectInstance</code> 创建 → 跨包引用解析 → 链接。支持 Import/Export 双向引用链。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">PackageLinker</span>.<span class="func-name">resolve_imports</span>(<span class="param">bundle: PackageBundle</span>) → <span class="type">dict[int, UObjectInstance]</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Linker" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="cpp-gen" class="section-anchor" data-section="cpp-gen">
-<h2>C++ 代码生成</h2>
-<div class="api-sig" data-api="extract_cpp_class_skeleton">
-<span class="func-name">extract_cpp_class_skeleton</span>(<span class="param">result</span>) <span class="return">→ CppClassIR</span>
-</div>
-<div class="api-sig" data-api="format_cpp_header">
-<span class="func-name">format_cpp_header</span>(<span class="param">class_ir</span>) <span class="return">→ str</span>
-</div>
-<div class="api-sig" data-api="format_cpp_class_json">
-<span class="func-name">format_cpp_class_json</span>(<span class="param">class_ir</span>) <span class="return">→ Dict</span>
-</div>
-<h3>CPF → UPROPERTY 映射</h3>
-<table>
-    <tr><th>CPF 标志</th><th>UPROPERTY 标记</th></tr>
-    <tr><td><code>CPF_Edit</code></td><td><code>UPROPERTY(EditAnywhere)</code></td></tr>
-    <tr><td><code>CPF_BlueprintVisible</code></td><td><code>UPROPERTY(BlueprintReadWrite)</code></td></tr>
-    <tr><td><code>CPF_InstancedReference</code></td><td><code>UPROPERTY(Instanced)</code></td></tr>
-    <tr><td><code>CPF_Transient</code></td><td><code>UPROPERTY(Transient)</code></td></tr>
-    <tr><td><code>CPF_SaveGame</code></td><td><code>UPROPERTY(SaveGame)</code></td></tr>
-    <tr><td><code>CPF_ExposeOnSpawn</code></td><td><code>UPROPERTY(ExposeOnSpawn)</code></td></tr>
-</table>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#kismet">Kismet 反编译</a> · <a href="#blueprint">蓝图解析</a></p>
-</div>
-</section>
+            <div id="wiki-cpp-gen" class="wiki-content" data-wiki-file="04-Advanced-Features/CPP-Generator.md">
+                <div class="section-summary">
+                    <h2 id="cpp-gen">C++ 代码生成</h2>
+                    <p>从解析结果生成 C++ 类骨架：UPROPERTY 映射、UFUNCTION 提取、IR 格式化器、类型映射。支持蓝图变量 → C++ 成员的自动翻译。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">generate_cpp_skeleton</span>(<span class="param">result: ParseResult</span>) → <span class="type">str</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/CPP-Generator" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="n2c" class="section-anchor" data-section="n2c">
-<h2>N2C 中间格式</h2>
-<p><code>n2c/</code> 定义标准化的蓝图图结构中间格式，支持验证和双向转换。</p>
-<h3>核心类</h3>
-<table>
-    <tr><th>类</th><th>说明</th></tr>
-    <tr><td><code>N2CStruct / N2CGraph / N2CNode / N2CPin</code></td><td>N2C 数据类</td></tr>
-    <tr><td><code>N2CIdMapper</code></td><td>GUID 到短 ID 转换</td></tr>
-    <tr><td><code>N2CNodeProcessor / N2CNodeType</code></td><td>处理器和类型</td></tr>
-    <tr><td><code>N2CProcessorRegistry</code></td><td>处理器注册表</td></tr>
-    <tr><td><code>N2CNodeTypeRegistry</code></td><td>类型注册表</td></tr>
-</table>
-<h3>序列化</h3>
-<div class="api-sig" data-api="to_n2c_json">
-<span class="func-name">to_n2c_json</span>(<span class="param">struct: N2CStruct</span>) <span class="return">→ Dict</span><br>
-<span class="func-name">from_n2c_json</span>(<span class="param">data: Dict</span>) <span class="return">→ N2CStruct</span><br>
-<span class="func-name">validate_n2c_json</span>(<span class="param">data: Dict</span>) <span class="return">→ List[str]</span>
-</div>
-</section>
+            <div id="wiki-n2c" class="wiki-content" data-wiki-file="04-Advanced-Features/N2C.md">
+                <div class="section-summary">
+                    <h2 id="n2c">N2C 中间格式</h2>
+                    <p>标准化中间格式：<code>N2CStruct</code>、<code>N2CGraph</code>、<code>N2CNode</code>、<code>N2CPin</code>。57 种节点处理器，JSON Schema 验证器。为跨版本/跨工具互操作提供统一数据模型。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/N2C" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="pak" class="section-anchor" data-section="pak">
-<h2>PAK 文件读取</h2>
-<div class="api-sig" data-api="PakFileReader">
-<span class="func-name">PakFileReader</span>()<br>
-<span class="param">.open(path)</span> → None · <span class="param">.list_files()</span> → List[str] · <span class="param">.read_file(path)</span> → bytes
-</div>
-<h3>PAK 结构</h3>
-<table>
-    <tr><th>结构</th><th>说明</th></tr>
-    <tr><td><code>FPakInfo</code></td><td>PAK 头部信息（版本、条目数、索引偏移）</td></tr>
-    <tr><td><code>FPakEntry</code></td><td>文件条目（偏移、大小、压缩方法、标志）</td></tr>
-    <tr><td><code>FPakDirectoryEntry</code></td><td>目录条目（路径、文件映射）</td></tr>
-</table>
-<h3>压缩与加密</h3>
-<table>
-    <tr><th>特性</th><th>说明</th></tr>
-    <tr><td>无压缩 / Zlib / LZ4 / Zstd</td><td>标准压缩方法（LZ4/Zstd 为可选依赖）</td></tr>
-    <tr><td>AES 加密</td><td>需要 pycryptodome 可选依赖</td></tr>
-    <tr><td>PAK_FILE_MAGIC</td><td><code>0x5A6F12E1</code></td></tr>
-</table>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#package">包管理</a> · <a href="#iostore">IoStore 容器</a></p>
-</div>
-</section>
+            <!-- 容器系统 -->
+            <div id="wiki-pak" class="wiki-content" data-wiki-file="05-Container-Systems/PAK.md">
+                <div class="section-summary">
+                    <h2 id="pak">PAK 文件读取</h2>
+                    <p><code>FPakInfo</code>、<code>PakEntry</code>、<code>FPakDirectoryEntry</code>、<code>PakFileReader</code>。支持索引解析、压缩分发（LZ4/Zstd）、AES 解密。可选依赖，安装 <code>pip install -e ".[pak]"</code> 启用。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">PakFileReader</span>.<span class="func-name">list_files</span>(<span class="param">pak_path: str</span>) → <span class="type">list[str]</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/PAK" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="iostore" class="section-anchor" data-section="iostore">
-<h2>IoStore 容器</h2>
-<div class="api-sig" data-api="IoStoreReader">
-<span class="func-name">IoStoreReader</span>()<br>
-<span class="param">.open(toc_path)</span> → None · <span class="param">.list_files()</span> → List[str] · <span class="param">.read_file(path)</span> → bytes
-</div>
-<h3>核心结构</h3>
-<table>
-    <tr><th>结构</th><th>说明</th></tr>
-    <tr><td><code>FIoChunkId</code></td><td>Chunk ID（类型 + 索引）</td></tr>
-    <tr><td><code>FIoOffsetAndSize</code></td><td>偏移和大小组合结构</td></tr>
-</table>
-</section>
+            <div id="wiki-iostore" class="wiki-content" data-wiki-file="05-Container-Systems/IoStore.md">
+                <div class="section-summary">
+                    <h2 id="iostore">IoStore 容器</h2>
+                    <p>IoStore 容器读取器，解析 Chunk ID、偏移/大小结构。适用于 UE5 的 .utoc + .ucas 容器格式。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/IoStore" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="raw" class="section-anchor" data-section="raw">
-<h2>原始文件解析</h2>
-<div class="api-sig" data-api="parse_raw_file">
-<span class="func-name">parse_raw_file</span>(<span class="param">path: str</span>) <span class="return">→ RawFileResult</span>
-</div>
-<table>
-    <tr><th>类型</th><th>函数</th><th>说明</th></tr>
-    <tr><td><code>.json</code></td><td><code>parse_json_descriptor</code></td><td>JSON 描述符</td></tr>
-    <tr><td><code>.ini</code></td><td><code>parse_ini_file</code></td><td>INI 配置文件</td></tr>
-    <tr><td><code>.locres</code></td><td><code>parse_locres</code></td><td>本地化资源</td></tr>
-    <tr><td><code>.locmeta</code></td><td><code>parse_locmeta</code></td><td>本地化元数据</td></tr>
-    <tr><td><code>.ogg / .wav</code></td><td><code>parse_audio_metadata</code></td><td>音频元数据</td></tr>
-</table>
-</section>
+            <div id="wiki-raw" class="wiki-content" data-wiki-file="05-Container-Systems/Raw-Files.md">
+                <div class="section-summary">
+                    <h2 id="raw">原始文件解析</h2>
+                    <p>JSON / INI / LocRes / LocMeta / Audio 等非 uasset 文件的解析器，支持从 PAK 中提取的非标准资产。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Raw-Files" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="formatters" class="section-anchor" data-section="formatters">
-<h2>格式化器</h2>
-<table>
-    <tr><th>格式</th><th>函数</th><th>说明</th></tr>
-    <tr><td><code>JSON (full)</code></td><td><code>format_json_full</code></td><td>完整 JSON 输出</td></tr>
-    <tr><td><code>JSON (summary)</code></td><td><code>format_json_summary</code></td><td>仅摘要 JSON</td></tr>
-    <tr><td><code>Text (full)</code></td><td><code>format_text_full</code></td><td>人类可读全文</td></tr>
-    <tr><td><code>Text (summary)</code></td><td><code>format_text_summary</code></td><td>仅摘要文本</td></tr>
-    <tr><td><code>Markdown</code></td><td><code>format_markdown</code></td><td>Markdown + Mermaid</td></tr>
-    <tr><td><code>Blueprint Text</code></td><td><code>format_blueprint_translation_text</code></td><td>蓝图节点翻译文本</td></tr>
-    <tr><td><code>UE Text</code></td><td><code>format_blueprint_ue_text</code></td><td>UE 格式文本</td></tr>
-</table>
-<h3>辅助函数</h3>
-<table>
-    <tr><th>函数</th><th>说明</th></tr>
-    <tr><td><code>format_exports_list</code></td><td>导出列表格式化</td></tr>
-    <tr><td><code>format_properties_list</code></td><td>属性列表格式化</td></tr>
-    <tr><td><code>format_blueprint_dict</code></td><td>蓝图数据字典</td></tr>
-    <tr><td><code>build_status_info</code></td><td>构建状态信息</td></tr>
-    <tr><td><code>build_schema_info</code></td><td>构建 Schema 信息</td></tr>
-    <tr><td><code>resolve_fpackage_index</code></td><td>解析 FPackageIndex 为字符串</td></tr>
-</table>
-<div class="callout callout-success" data-related="true"><div class="callout-title">相关章节</div>
-<p><a href="#exporter">导出系统</a> · <a href="#cli">CLI 接口</a></p>
-</div>
-</section>
+            <!-- 输出与导出 -->
+            <div id="wiki-formatters" class="wiki-content" data-wiki-file="06-Output-Export/Formatters.md">
+                <div class="section-summary">
+                    <h2 id="formatters">格式化器</h2>
+                    <p>JSON / Text / Markdown / Mermaid / 蓝图翻译文本 / UE 格式文本输出生成器。CLI 的 <code>--text</code>、<code>--markdown</code>、<code>--blueprint-text</code>、<code>--blueprint-ue-text</code> 均由此模块驱动。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Formatters" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="exporter" class="section-anchor" data-section="exporter">
-<h2>导出系统</h2>
-<div class="api-sig" data-api="IExporter">
-<span class="func-name">IExporter</span> — 导出器接口（抽象基类）<br>
-<span class="func-name">ExporterRegistry</span> — 导出器注册表<br>
-<span class="func-name">BatchExporter</span> — 批量导出器
-</div>
-<div class="api-sig" data-api="export">
-<span class="func-name">export</span>(<span class="param">result</span>, <span class="param">options: ExportOptions</span>) <span class="return">→ bytes</span>
-</div>
-</section>
+            <div id="wiki-exporter" class="wiki-content" data-wiki-file="06-Output-Export/Exporter.md">
+                <div class="section-summary">
+                    <h2 id="exporter">导出系统</h2>
+                    <p><code>IExporter</code> 接口 + 注册表 + 批量导出。支持按格式注册自定义导出器，CLI 的 <code>--n2c</code>、<code>--cpp-skeleton</code> 等通过此系统路由。</p>
+                </div>
+                <div class="api-sig">
+                    <span class="func-name">IExporter</span>.<span class="func-name">export</span>(<span class="param">result: ParseResult, **kwargs</span>) → <span class="type">str | bytes</span>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Exporter" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="cli" class="section-anchor" data-section="cli">
-<h2>CLI 接口</h2>
-<table>
-    <tr><th>参数</th><th>说明</th></tr>
-    <tr><td><code>path</code></td><td>输入文件路径（必需）</td></tr>
-    <tr><td><code>--output</code></td><td>输出文件路径</td></tr>
-    <tr><td><code>--text / --markdown / --blueprint-text</code></td><td>输出格式选择</td></tr>
-    <tr><td><code>--cpp-skeleton / --n2c</code></td><td>C++ 骨架 / N2C 格式</td></tr>
-    <tr><td><code>--strict</code></td><td>遇到警告时停止</td></tr>
-    <tr><td><code>--tolerant</code></td><td>容错模式（默认）</td></tr>
-    <tr><td><code>--verbose</code></td><td>启用调试日志</td></tr>
-    <tr><td><code>--batch</code></td><td>批量处理目录</td></tr>
-    <tr><td><code>--validate</code></td><td>验证输出格式</td></tr>
-</table>
-<h3>退出代码</h3>
-<table>
-    <tr><th>代码</th><th>说明</th></tr>
-    <tr><td><code>0</code></td><td>成功</td></tr>
-    <tr><td><code>1</code></td><td>解析错误</td></tr>
-    <tr><td><code>2</code></td><td>文件不存在</td></tr>
-    <tr><td><code>3</code></td><td>参数错误</td></tr>
-</table>
-</section>
+            <div id="wiki-cli" class="wiki-content" data-wiki-file="06-Output-Export/CLI.md">
+                <div class="section-summary">
+                    <h2 id="cli">CLI 接口</h2>
+                    <p><code>uasset-read</code> 命令行入口，argparse 驱动。支持 <code>--n2c</code>、<code>--batch</code>、<code>--validate</code>、<code>--strict</code>/<code>--tolerant</code>、<code>--verbose</code>、<code>--output</code>、<code>--summary</code> 等选项。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/CLI" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="agent-index" class="section-anchor" data-section="agent-index">
-<h2>Agent 速查索引</h2>
-<div class="callout callout-info"><div class="callout-title">本文档已为 AI Agent 优化</div>
-<p>所有表格采用结构化 HTML table（col1=键/名称，col2=值，col3=说明）。API 签名使用 <code>data-api</code> 标记。Agent 可直接 grep <code>data-api="函数名"</code> 定位。</p>
-</div>
-<h3>按任务类型快速定位</h3>
-<table>
-    <tr><th>Agent 任务</th><th>定位章节</th><th>关键文件</th></tr>
-    <tr><td>解析 .uasset 文件</td><td><a href="#parse-pipeline">解析管线</a></td><td><code>parse_uasset.py</code></td></tr>
-    <tr><td>读取二进制字段</td><td><a href="#archive">FArchive</a></td><td><code>archive.py</code></td></tr>
-    <tr><td>新增属性类型解析器</td><td><a href="#parsers">属性解析器</a></td><td><code>parsers/</code></td></tr>
-    <tr><td>修改蓝图输出格式</td><td><a href="#blueprint">蓝图解析</a></td><td><code>blueprint/</code></td></tr>
-    <tr><td>修改图分析逻辑</td><td><a href="#graph">图分析</a></td><td><code>graph/</code></td></tr>
-    <tr><td>修复 Kismet 反编译</td><td><a href="#kismet">Kismet 反编译</a></td><td><code>kismet/</code></td></tr>
-    <tr><td>修改 C++ 代码生成</td><td><a href="#cpp-gen">C++ 代码生成</a></td><td><code>cpp_gen/</code></td></tr>
-    <tr><td>新增导出格式</td><td><a href="#exporter">导出系统</a></td><td><code>exporter/</code></td></tr>
-    <tr><td>版本兼容性适配</td><td><a href="#versioning">版本管理</a></td><td><code>versioning.py</code></td></tr>
-    <tr><td>跨包引用修复</td><td><a href="#linker">对象链接器</a></td><td><code>link/</code></td></tr>
-    <tr><td>PAK/IoStore 容器支持</td><td><a href="#pak">PAK</a> / <a href="#iostore">IoStore</a></td><td><code>pak/</code> / <code>iostore/</code></td></tr>
-    <tr><td>N2C Schema 变更</td><td><a href="#n2c">N2C 中间格式</a></td><td><code>n2c/</code></td></tr>
-    <tr><td>添加测试用例</td><td><a href="#testing">测试指南</a></td><td><code>tests/</code></td></tr>
-    <tr><td>对照 UE 源码</td><td><a href="#ue-reference">UE 源码对照</a></td><td><code>docs/uasset-format/</code></td></tr>
-</table>
-<h3>完整 API 分类索引</h3>
-<h4>解析入口 (3)</h4>
-<table><tr><th>函数</th><th>说明</th></tr>
-<tr><td><code>parse_package</code></td><td>标准包解析入口，支持 provider 抽象</td></tr>
-<tr><td><code>parse_uasset</code></td><td>委托给 parse_package，向后兼容</td></tr>
-<tr><td><code>parse_uasset_with_linker</code></td><td>带对象图链接器的完整解析</td></tr>
-</table>
-<h4>属性解析器 (38+)</h4>
-<table><tr><th>分类</th><th>解析函数列表</th></tr>
-<tr><td>基础类型</td><td><code>parse_bool_property</code> <code>parse_int_property</code> <code>parse_float_property</code> <code>parse_double_property</code> <code>parse_str_property</code> <code>parse_name_property</code> <code>parse_utf8_str_property</code> <code>parse_ansi_str_property</code> <code>parse_guid_property</code></td></tr>
-<tr><td>整型变体</td><td><code>parse_uint16_property</code> <code>parse_uint32_property</code> <code>parse_uint64_property</code></td></tr>
-<tr><td>对象引用</td><td><code>parse_object_property</code> <code>parse_soft_object_property</code> <code>parse_weak_object_property</code> <code>parse_lazy_object_property</code> <code>parse_class_property</code> <code>parse_soft_class_property</code> <code>parse_asset_object_property</code> <code>parse_interface_property</code> <code>parse_field_path_property</code></td></tr>
-<tr><td>复合类型</td><td><code>parse_array_property</code> <code>parse_struct_property</code> <code>parse_map_property</code> <code>parse_set_property</code> <code>parse_enum_property</code></td></tr>
-<tr><td>特殊类型</td><td><code>parse_text_property</code> <code>parse_delegate_property</code> <code>parse_multicast_delegate_property</code> <code>parse_multicast_inline_delegate_property</code> <code>parse_multicast_sparse_delegate_property</code> <code>parse_optional_property</code></td></tr>
-<tr><td>Verse 类型</td><td><code>parse_verse_string_property</code> <code>parse_verse_class_property</code> <code>parse_verse_function_property</code> <code>parse_verse_dynamic_property</code> <code>parse_verse_cell_property</code> <code>parse_verse_value_property</code></td></tr>
-</table>
-<h4>蓝图与图 (17+)</h4>
-<table><tr><th>分类</th><th>函数列表</th></tr>
-<tr><td>蓝图元数据</td><td><code>extract_blueprint_metadata</code> <code>extract_blueprint_variables</code> <code>extract_components</code> <code>parse_component_transform</code> <code>extract_component_transforms</code> <code>read_blueprint_variable</code> <code>parse_property_flags_to_labels</code></td></tr>
-<tr><td>图提取</td><td><code>extract_blueprint_graphs</code> <code>build_execution_flow_entries</code> <code>build_data_flows</code> <code>build_connections_map</code> <code>build_execution_chains</code> <code>build_graphs_summary</code> <code>format_graphs_json</code> <code>build_blueprint_node_index</code> <code>format_pin_ref</code></td></tr>
-<tr><td>兼容层</td><td><code>build_execution_flows</code> <code>write_pin_trace_report</code> <code>is_function_graph</code> <code>build_function_graphs</code> <code>write_phase75_diagnostic</code></td></tr>
-</table>
-<h4>Kismet 反编译 (11+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>提取</td><td><code>extract_bytecode_bytes</code> <code>parse_bytecode_stream</code> <code>extract_and_parse</code> <code>FKismetArchive</code> <code>EXPR_CLASS_MAP</code></td></tr>
-<tr><td>翻译</td><td><code>KismetTranslator</code> <code>MathFunctionCleaner</code> <code>TypeRegistry</code> <code>line_cpp</code> <code>FunctionBodyBuilder</code> <code>StructuredControlFlow</code></td></tr>
-<tr><td>管线</td><td><code>decompile_uasset</code> <code>decompile_single_function</code> <code>KismetDecompiledResult</code></td></tr>
-</table>
-<h4>序列化 (18+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>Summary</td><td><code>read_package_summary</code> <code>read_name_table</code> <code>build_version_container</code></td></tr>
-<tr><td>Import/Export</td><td><code>read_import_map</code> <code>read_export_map</code> <code>resolve_class_name</code> <code>get_asset_class</code> <code>detect_blueprint</code> <code>resolve_parent_class</code> <code>get_asset_class_with_linker</code> <code>resolve_class_name_with_linker</code> <code>detect_blueprint_with_linker</code> <code>resolve_parent_class_with_linker</code> <code>build_imports_list</code></td></tr>
-<tr><td>PropertyTag</td><td><code>read_property_tag</code> <code>parse_ctrl_flags</code> <code>parse_ue511_ctrl_flags</code></td></tr>
-<tr><td>图序列化</td><td><code>read_ue_graph</code> <code>read_ue_graph_node</code> <code>read_ue_graph_pin</code> <code>read_ed_graph_pin_type</code> <code>read_fmember_reference</code> <code>create_node_from_archive</code></td></tr>
-<tr><td>安全</td><td><code>detect_circular_deps</code> <code>validate_package_index</code></td></tr>
-</table>
-<h4>格式化与导出 (18+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>JSON</td><td><code>format_json_full</code> <code>format_json_summary</code> <code>format_exports_list</code> <code>format_properties_list</code> <code>format_blueprint_dict</code></td></tr>
-<tr><td>文本</td><td><code>format_text_full</code> <code>format_text_summary</code></td></tr>
-<tr><td>Markdown/蓝图</td><td><code>format_markdown</code> <code>format_blueprint_translation_text</code> <code>format_blueprint_ue_text</code></td></tr>
-<tr><td>辅助</td><td><code>build_status_info</code> <code>build_schema_info</code> <code>resolve_fpackage_index</code></td></tr>
-<tr><td>导出系统</td><td><code>ExportOptions</code> <code>IExporter</code> <code>ExporterRegistry</code> <code>export</code> <code>BatchExporter</code> <code>BatchExportResult</code></td></tr>
-</table>
-<h4>C++ 代码生成 (15+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>IR</td><td><code>CppClassIR</code> <code>CppProperty</code> <code>CppMethodIR</code> <code>CppHeaderMeta</code> <code>CppCallParameter</code> <code>CppCallStatement</code></td></tr>
-<tr><td>提取</td><td><code>extract_cpp_class_skeleton</code> <code>extract_cpp_constructor</code> <code>extract_cpp_functions</code></td></tr>
-<tr><td>格式化</td><td><code>format_cpp_header</code> <code>format_cpp_class_json</code> <code>format_cpp_call_statements</code> <code>format_cpp_default_value</code> <code>format_cpp_transform</code> <code>format_cpp_component_init</code> <code>format_cpp_input_action_load</code> <code>format_cpp_constructor</code> <code>build_constructor_sections</code></td></tr>
-<tr><td>类型映射</td><td><code>ue_path_to_cpp_type</code> <code>ue_package_path_to_cpp_class</code> <code>cpf_flags_to_uproperty_marks</code> <code>UE_TO_CPP_TYPE_MAP</code> <code>ENGINE_CLASS_PATHS</code> <code>CPF_TO_UPROPERTY_MAP</code></td></tr>
-</table>
-<h4>容器与原始文件 (12+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>PAK</td><td><code>PakFileReader</code> <code>FPakInfo</code> <code>FPakEntry</code> <code>FPakDirectoryEntry</code> <code>FPakCompressedBlock</code> <code>decompress_block</code> <code>decompress_entry</code> <code>read_fstring</code></td></tr>
-<tr><td>IoStore</td><td><code>IoStoreReader</code> <code>FIoChunkId</code> <code>FIoOffsetAndSize</code></td></tr>
-<tr><td>原始文件</td><td><code>parse_raw_file</code> <code>parse_json_descriptor</code> <code>parse_ini_file</code> <code>parse_locres</code> <code>parse_locmeta</code> <code>parse_audio_metadata</code></td></tr>
-</table>
-<h4>N2C 中间格式 (10+)</h4>
-<table><tr><th>分类</th><th>函数/类列表</th></tr>
-<tr><td>数据类</td><td><code>N2CStruct</code> <code>N2CGraph</code> <code>N2CNode</code> <code>N2CPin</code> <code>N2CNodeDefinition</code> <code>N2CNodeType</code> <code>N2CNodeProcessor</code></td></tr>
-<tr><td>序列化</td><td><code>to_n2c_json</code> <code>from_n2c_json</code> <code>N2C_JSON_SCHEMA</code> <code>validate_n2c_json</code> <code>N2CIdMapper</code></td></tr>
-<tr><td>注册表</td><td><code>N2CProcessorRegistry</code> <code>N2CNodeTypeRegistry</code></td></tr>
-</table>
-<h4>Agent 管线 (4)</h4>
-<table><tr><th>函数/类</th><th>说明</th></tr>
-<tr><td><code>AgentTranslationPipeline</code></td><td>Agent 翻译管线整合类</td></tr>
-<tr><td><code>translate_blueprint_to_cpp</code></td><td>便捷翻译函数</td></tr>
-<tr><td><code>CppFileWriter</code></td><td>C++ 文件写入器</td></tr>
-<tr><td><code>write_cpp_class_files</code></td><td>写入完整 C++ 类文件</td></tr>
-</table>
-<h4>版本管理 (3)</h4>
-<table><tr><th>函数/类</th><th>说明</th></tr>
-<tr><td><code>VersionContainer</code></td><td>统一版本查询数据类</td></tr>
-<tr><td><code>build_version_container</code></td><td>从 Summary 构建</td></tr>
-<tr><td><code>EUEVersion</code></td><td>UE 版本阈值枚举</td></tr>
-</table>
-<h4>链接器 (3)</h4>
-<table><tr><th>函数/类</th><th>说明</th></tr>
-<tr><td><code>PackageLinker</code></td><td>两阶段对象图重建</td></tr>
-<tr><td><code>UObjectInstance</code></td><td>轻量 UE 对象表示</td></tr>
-<tr><td><code>LinkerParseResult</code></td><td>完整链接解析结果</td></tr>
-</table>
-<h4>包管理 (7)</h4>
-<table><tr><th>函数/类</th><th>说明</th></tr>
-<tr><td><code>PackageBundle</code></td><td>包捆绑数据类</td></tr>
-<tr><td><code>PackageArchive</code></td><td>虚拟归档（.uasset + .uexp 合并）</td></tr>
-<tr><td><code>PackageProvider</code></td><td>Provider 基类</td></tr>
-<tr><td><code>FileSystemPackageProvider</code></td><td>文件系统 Provider</td></tr>
-<tr><td><code>PakPackageProvider</code></td><td>PAK 容器 Provider</td></tr>
-<tr><td><code>IoStorePackageProvider</code></td><td>IoStore 容器 Provider</td></tr>
-<tr><td><code>open_package_bundle</code></td><td>工厂函数</td></tr>
-</table>
-<h4>辅助解析器 (6)</h4>
-<table><tr><th>函数</th><th>说明</th></tr>
-<tr><td><code>parse_default_value</code></td><td>解析默认值</td></tr>
-<tr><td><code>format_variable_type</code></td><td>格式化变量类型字符串</td></tr>
-<tr><td><code>get_struct_size</code></td><td>获取结构体大小</td></tr>
-<tr><td><code>resolve_name_from_index</code></td><td>从索引解析名称</td></tr>
-<tr><td><code>read_validated_count</code></td><td>读取验证后的计数</td></tr>
-<tr><td><code>make_enum_value</code></td><td>创建枚举值</td></tr>
-</table>
-</section>
+            <!-- 开发指南 -->
+            <div id="wiki-agent-index" class="wiki-content" data-wiki-file="07-Dev-Guide/Agent-Index.md">
+                <div class="section-summary">
+                    <h2 id="agent-index">Agent 速查索引</h2>
+                    <p>为 AI 代理优化的快速参考索引，覆盖常用 API 组合、典型调用模式、常见错误处理路径。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Agent-Index" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="public-api" class="section-anchor" data-section="public-api">
-<h2>公共 API</h2>
-<p>所有公共符号在 <code>src/uasset_read/__init__.py</code> 中通过 <code>__all__</code> 导出。共导出 <strong>250+</strong> 个公共符号。</p>
-<h3>导入模式</h3>
-<pre><code># 推荐：按需导入
-from uasset_read import parse_uasset, ParseResult
-from uasset_read import FArchive, BlueprintMetadata, UEdGraph
-from uasset_read import PakFileReader, format_json_full
+            <div id="wiki-public-api" class="wiki-content" data-wiki-file="07-Dev-Guide/Public-API.md">
+                <div class="section-summary">
+                    <h2 id="public-api">公共 API</h2>
+                    <p>所有公共符号在 <code>src/uasset_read/__init__.py</code> 中通过 <code>__all__</code> 导出。以该文件为权威 API 参考。</p>
+                    <ul>
+                        <li><code>parse_uasset(path, mode)</code> → <code>ParseResult</code></li>
+                        <li><code>parse_package(archive)</code> → <code>PackageBundle</code></li>
+                        <li><code>PakFileReader</code>、<code>IExporter</code>、<code>N2CStruct</code></li>
+                    </ul>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Public-API" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-# 新代码优先使用聚焦导入
-from uasset_read.pak import PakFileReader
-from uasset_read.n2c import to_n2c_json, N2CStruct
-from uasset_read.cpp_gen import extract_cpp_class_skeleton
-from uasset_read.agent import AgentTranslationPipeline</code></pre>
-<h3>向后兼容</h3>
-<div class="callout callout-info"><div class="callout-title">兼容性说明</div>
-<p>根包仍重新导出高级子模块供现有用户使用。新代码应优先使用聚焦导入。</p>
-</div>
-<h3>废弃模块</h3>
-<ul>
-    <li><code>bulk/</code> — 已废弃，0.3.6 从公共 API 移除</li>
-    <li><code>objects/</code> — 已废弃，0.3.6 从公共 API 移除</li>
-    <li><code>parsers/asset_types/</code> — 已废弃，0.4.0 将移除</li>
-</ul>
-</section>
+            <div id="wiki-testing" class="wiki-content" data-wiki-file="07-Dev-Guide/Testing.md">
+                <div class="section-summary">
+                    <h2 id="testing">测试指南</h2>
+                    <p>测试位于 <code>tests/</code>（12+ 个测试文件，218+ 个测试）。集成测试使用 <code>@pytest.mark.integration</code> 标记。<code>pyproject.toml</code> 中配置了 pytest 选项。</p>
+                    <pre><code>python -m pytest tests/ -v                          # 所有测试
+python -m pytest tests/ -v --cov=uasset_read         # 覆盖率
+python -m pytest tests/ -v -m integration            # 仅集成测试</code></pre>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Testing" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="testing" class="section-anchor" data-section="testing">
-<h2>测试指南</h2>
-<h3>测试分层</h3>
-<div class="dep-tree">
-tests/<br>
-├── 单元测试（无外部依赖，CI 每次运行）<br>
-├── 集成测试（@pytest.mark.integration，需要真实资产文件）<br>
-│   ├── test_real_asset_coverage.py    — 20 资产 / 18 类型<br>
-│   ├── test_engine_content.py         — 12 Engine 内置资产<br>
-│   ├── test_known_failures.py         — 8 类已知失败回归<br>
-│   ├── test_formatter_outputs.py      — 6 资产 × 7 格式化器<br>
-│   └── test_asset_type_depth.py       — 6 类型深度字段验证<br>
-└── fixtures/                          — 已知失败记录（8 个 txt）
-</div>
-<h3>运行测试</h3>
-<pre><code>python -m pytest tests/ -v                                    # 单元测试
-UE_SAMPLE_ROOT=/path python -m pytest tests/ -v -m integration # 集成测试
-python -m pytest tests/ -v --cov=uasset_read                   # 覆盖率报告</code></pre>
-<h3>覆盖率要求</h3>
-<ul>
-    <li>核心解析模块覆盖率 <strong>≥ 90%</strong></li>
-    <li>新增代码不得降低总体覆盖率</li>
-    <li>新功能必须配套至少一个单元测试</li>
-    <li>解析器变更需补充集成测试</li>
-</ul>
-</section>
+            <div id="wiki-contributing" class="wiki-content" data-wiki-file="07-Dev-Guide/Contributing.md">
+                <div class="section-summary">
+                    <h2 id="contributing">开发规范</h2>
+                    <ul>
+                        <li>仅支持未烘焙/编辑器保存的资产（Cooked 资产图数据已剥离）</li>
+                        <li>只读设计：仅解析，不支持修改或写入</li>
+                        <li>零运行时依赖：不向 <code>dependencies</code> 添加第三方包</li>
+                        <li>必须参考 UE 源码：格式理解追溯到 UE C++ 源码</li>
+                        <li>临时文件一律放在 <code>temp/</code> 目录</li>
+                    </ul>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Contributing" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
-<section id="contributing" class="section-anchor" data-section="contributing">
-<h2>开发规范</h2>
-<h3>代码风格</h3>
-<ul>
-    <li>Python 3.10+，使用 <code>match/case</code>、类型注解</li>
-    <li>代码注释使用中文，错误提示使用中文</li>
-    <li>遵循 src 布局规范</li>
-</ul>
-<h3>临时文件</h3>
-<div class="callout callout-warning"><div class="callout-title">重要</div>
-<p>临时文件必须放在 <code>temp/</code> 目录下，禁止放在项目根目录。</p>
-</div>
-<h3>Git 工作流</h3>
-<ul>
-    <li>开发分支：<code>0.3.7-dev</code> · 主分支：<code>master</code></li>
-    <li>提交前运行 <code>python -m pytest tests/ -v</code></li>
-    <li>PR 需要包含测试覆盖</li>
-</ul>
-<h3>依赖管理</h3>
-<ul>
-    <li>运行时依赖：零依赖</li>
-    <li>可选依赖：PAK 支持在 <code>optional-dependencies</code> 中</li>
-</ul>
-</section>
-
-<section id="ue-reference" class="section-anchor" data-section="ue-reference">
-<h2>UE 源码对照</h2>
-<table>
-    <tr><th>UE 类</th><th>源码位置</th><th>本包对应</th></tr>
-    <tr><td><code>FArchive</code></td><td><code>Core/Public/Serialization/Archive.h</code></td><td><code>archive.py</code></td></tr>
-    <tr><td><code>FLinkerLoad</code></td><td><code>CoreUObject/Private/UObject/LinkerLoad.cpp</code></td><td><code>link/linker.py</code></td></tr>
-    <tr><td><code>UPackage</code></td><td><code>CoreUObject/Public/UObject/Package.h</code></td><td><code>package.py</code></td></tr>
-    <tr><td><code>UObject</code></td><td><code>CoreUObject/Public/UObject/Object.h</code></td><td><code>linker UObjectInstance</code></td></tr>
-    <tr><td><code>UBlueprint</code></td><td><code>Engine/Classes/Engine/Blueprint.h</code></td><td><code>blueprint/</code></td></tr>
-    <tr><td><code>UEdGraph</code></td><td><code>Engine/Classes/EdGraph/EdGraph.h</code></td><td><code>graph/</code></td></tr>
-    <tr><td><code>Kismet VM</code></td><td><code>Engine/Private/Kismet/ScriptStack.cpp</code></td><td><code>kismet/</code></td></tr>
-    <tr><td><code>FPakFile</code></td><td><code>PakFile/Public/IPlatformFilePak.h</code></td><td><code>pak/</code></td></tr>
-    <tr><td><code>FIoStoreReader</code></td><td><code>Core/Public/Serialization/IoStoreReader.h</code></td><td><code>iostore/</code></td></tr>
-</table>
-<h3>版本对应关系</h3>
-<table>
-    <tr><th>UE 版本</th><th>支持</th><th>关键特性</th></tr>
-    <tr><td>UE 5.0</td><td>✅</td><td>大世界坐标（LWC）</td></tr>
-    <tr><td>UE 5.1</td><td>✅</td><td>PropertyTag 扩展</td></tr>
-    <tr><td>UE 5.2</td><td>✅</td><td>完整类型名称</td></tr>
-    <tr><td>UE 5.3</td><td>✅</td><td>可选资源</td></tr>
-    <tr><td>UE 5.4</td><td>✅</td><td>数据资源</td></tr>
-    <tr><td>UE 5.5</td><td>✅</td><td>资产注册表依赖</td></tr>
-    <tr><td>UE 5.6</td><td>✅</td><td>UE5_LEGACY_VERSION = -9</td></tr>
-</table>
-<h3>外部参考</h3>
-<ul>
-    <li><code>docs/uasset-format/</code> — UE .uasset 格式文档（60+ Markdown 文件），<code>Index.md</code> 为主索引</li>
-    <li><code>docs/reference/</code> — 蓝图节点参考、UE 加载流程、蓝图转 C++ 指南</li>
-    <li><code>docs/reference/agent-dev-reference.md</code> — Agent 开发参考文档索引</li>
-</ul>
-</section>
+            <div id="wiki-ue-reference" class="wiki-content" data-wiki-file="07-Dev-Guide/UE-Reference.md">
+                <div class="section-summary">
+                    <h2 id="ue-reference">UE 源码对照</h2>
+                    <p>UE <code>.uasset</code> 格式文档索引（60+ 个 Markdown 文件），覆盖资产类型、序列化、Cooked 格式、版本兼容。参考 <code>docs/uasset-format/Index.md</code>。</p>
+                    <p>外部参考：<code>external/CUE4Parse/</code> — 参考 C# 实现，用于交叉验证解析逻辑。</p>
+                </div>
+                <div class="module-card wiki-link-card">
+                    <h4>📖 完整文档</h4>
+                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/UE-Reference" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
+                </div>
+            </div>
 
         </div>
     </div>
     <script>
-        document.querySelectorAll('.nav-link').forEach(link => {
+        // Wiki文件映射表（保留用于可能的动态加载）
+        var WIKI_FILES = {
+            "overview": "01-Overview/Overview.md",
+            "quick-start": "01-Overview/Quick-Start.md",
+            "architecture": "01-Overview/Architecture.md",
+            "archive": "02-Core-Modules/FArchive.md",
+            "parse-pipeline": "02-Core-Modules/Parse-Pipeline.md",
+            "package": "02-Core-Modules/Package.md",
+            "constants": "02-Core-Modules/Constants.md",
+            "exceptions": "02-Core-Modules/Exceptions.md",
+            "serializers": "03-Data-Processing/Serializers.md",
+            "parsers": "03-Data-Processing/Parsers.md",
+            "models": "03-Data-Processing/Models.md",
+            "versioning": "03-Data-Processing/Versioning.md",
+            "blueprint": "04-Advanced-Features/Blueprint.md",
+            "graph": "04-Advanced-Features/Graph.md",
+            "kismet": "04-Advanced-Features/Kismet.md",
+            "linker": "04-Advanced-Features/Linker.md",
+            "cpp-gen": "04-Advanced-Features/CPP-Generator.md",
+            "n2c": "04-Advanced-Features/N2C.md",
+            "pak": "05-Container-Systems/PAK.md",
+            "iostore": "05-Container-Systems/IoStore.md",
+            "raw": "05-Container-Systems/Raw-Files.md",
+            "formatters": "06-Output-Export/Formatters.md",
+            "exporter": "06-Output-Export/Exporter.md",
+            "cli": "06-Output-Export/CLI.md",
+            "agent-index": "07-Dev-Guide/Agent-Index.md",
+            "public-api": "07-Dev-Guide/Public-API.md",
+            "testing": "07-Dev-Guide/Testing.md",
+            "contributing": "07-Dev-Guide/Contributing.md",
+            "ue-reference": "07-Dev-Guide/UE-Reference.md"
+        };
+
+        // 导航链接点击平滑滚动
+        document.querySelectorAll('.nav-link').forEach(function(link) {
             link.addEventListener('click', function(e) {
                 e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+                var tid = this.getAttribute('href').substring(1);
+                var target = document.getElementById('wiki-' + tid);
                 if (target) {
                     target.scrollIntoView({ behavior: 'smooth' });
-                    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                    document.querySelectorAll('.nav-link').forEach(function(l) { l.classList.remove('active'); });
                     this.classList.add('active');
                 }
             });
         });
-        const sections = document.querySelectorAll('.section-anchor');
-        const navLinks = document.querySelectorAll('.nav-link');
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
+
+        // IntersectionObserver 滚动监听高亮当前章节
+        var secs = document.querySelectorAll('.wiki-content');
+        var nls = document.querySelectorAll('.nav-link');
+        var obs = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
-                    const id = entry.target.getAttribute('id');
-                    navLinks.forEach(link => {
-                        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+                    var id = entry.target.id.replace('wiki-', '');
+                    nls.forEach(function(l) {
+                        l.classList.toggle('active', l.getAttribute('href') === '#' + id);
                     });
                 }
             });
         }, { rootMargin: '-20% 0px -70% 0px' });
-        sections.forEach(section => observer.observe(section));
+        secs.forEach(function(s) { obs.observe(s); });
     </script>
 </body>
 </html>
