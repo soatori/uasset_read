@@ -18,7 +18,8 @@ PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
 
 UE5_VERSION_MIN = 0                # UE5 版本最低值
 UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定值
-UE5_LEGACY_VERSIONS = frozenset({-8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
+# -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
+UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
 
 # ============================================================================
 # CustomVersion GUIDs
@@ -72,6 +73,7 @@ PKG_FilterEditorOnly = 0x80000000      # Filter editor-only objects
 MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
+MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
 
 # ============================================================================
 # FPropertyTypeName 最大节点数（UE 源码限制）
@@ -112,6 +114,7 @@ UE4_SERIALIZE_TEXT_IN_PACKAGES = 517
 UE4_ADDED_SEARCHABLE_NAMES = 518
 UE4_ADDED_PACKAGE_OWNER = 519
 UE4_NON_OUTER_PACKAGE_IMPORT = 520
+UE4_NAME_HASHES_SERIALIZED = 514  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
@@ -175,11 +178,11 @@ START_EVENT_TYPES = frozenset({
     "K2Node_EnhancedInputAction",
     "K2Node_VariableSet",
     "K2Node_CustomEvent",
-    "K2Node_FunctionEntry",  # Phase 52: 函数图执行流起点
+    "K2Node_FunctionEntry",  # 函数图执行流起点
 })
 
 # ============================================================================
-# 数据流边界节点集合（Phase 54）
+# 数据流边界节点集合
 # ============================================================================
 
 DATA_BOUNDARY_NODES = frozenset({
