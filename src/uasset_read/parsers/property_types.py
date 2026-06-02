@@ -78,8 +78,10 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Matrix44f": 64,         # 4 * Plane4f(16)
     "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
     # 动画/混合空间高频结构体（Phase 76 报告补充）
-    "FrameRate": 8,          # float Numerator + int32 Denominator
-    "AnimNotifyTrack": 8,    # int64 TrackIndex + float Duration 或类似
+    "FrameRate": 8,          # float Numerator + int32 Denominator（紧凑格式）
+                             # 部分资产使用 tagged 格式（size=37），通过 tagged fallback 解析
+    "AnimNotifyTrack": 8,    # 紧凑格式大小
+                             # 部分资产使用 tagged 格式（size=0），通过 tagged fallback 解析
     "GuidProperty": 16,      # FGuid 标准大小
 }
 
@@ -181,6 +183,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "ImplementedInterfaces",
     "LastEditedDocuments",
     "CategorySorting",
+    # AnimSequence 结构体（部分资产使用 tagged 格式）
+    "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
+    "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -207,6 +212,15 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     "CategorySorting": [
         ("CategoryName", "NameProperty"),
+    ],
+    # AnimSequence 结构体 tagged fallback schemas
+    "FrameRate": [
+        ("Numerator", "FloatProperty"),
+        ("Denominator", "IntProperty"),
+    ],
+    "AnimNotifyTrack": [
+        ("TrackIndex", "Int64Property"),
+        ("TrackName", "NameProperty"),
     ],
 }
 
