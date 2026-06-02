@@ -25,7 +25,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | Metric | Value |
 |--------|-------|
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 108 tests across 10 files |
+| Tests | 218 tests across 13 files |
 
 ## Features
 
@@ -53,8 +53,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### File Format Support
 - **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB decryption
 - **IoStore container** — Chunk ID, offset/size structures
-- **Asset type parsers** — SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
+- **Asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
 - **Bulk Data** — BulkData header parsing
+- **Game version support** — Game-specific serialization constants
 
 ### Multiple Output Formats
 - **JSON** — full structured output or summary
@@ -196,18 +197,20 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
-| **Asset Types** | `parsers/asset_types/` | SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
-| **Graph** | `graph/` | Execution/data flow tracing, chain builder |
+| **Graph** | `graph/` | Execution/data flow tracing, chain builder, pin tracing |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
-| **Linker** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters |
-| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
-| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators |
-| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing |
-| **Compression** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle dispatch with graceful degradation |
-| **Crypto** | `pak/crypto.py` | AES-ECB decryption helpers |
-| **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid output |
+| ├ 表达式 | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
+| **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
+| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping |
+| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (blueprint → C++ translation) |
+| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators, 57 node processors |
+| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
+| **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
+| **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
+| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
+| **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid/Blueprint text/UE format output generation |
 
 ## Testing
 

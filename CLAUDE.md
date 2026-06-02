@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
 
-- **版本**: 0.3.8-dev（分支 `0.3.8-dev`）
+- **版本**: 0.3.8-beta（分支 `0.3.8-dev`）
 - **Python**: 3.10+（使用 `match/case`、类型注解）
 - **运行时依赖**: 零依赖（PAK AES/LZ4/Zstd 为可选依赖）
 - **构建系统**: setuptools（src 布局）
@@ -44,9 +44,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 测试
 
-- 测试位于 `tests/`（12+ 个测试文件，218+ 个测试）
-- 集成测试使用 `@pytest.mark.integration` 标记
-- `pyproject.toml` 中配置了 pytest 选项
+测试位于 `tests/`（13 个测试文件，218+ 个单元测试，40+ 个集成测试）。
+
+### 测试运行命令
+
+```bash
+# 运行所有测试
+python -m pytest tests/ -v
+
+# 运行所有测试 + 覆盖率
+python -m pytest tests/ -v --cov=uasset_read
+
+# 仅运行集成测试
+python -m pytest tests/ -v -m integration
+
+# 运行真实资产集成测试
+python -m pytest tests/test_sample_assets_representative.py -v -m integration
+
+# 运行单个测试文件
+python -m pytest tests/test_pak_handling.py -v
+```
+
+### 测试要求
+
+| 要求 | 说明 |
+|------|------|
+| **最小测试数** | ≥ 200 个单元测试 |
+| **通过率** | 100%（不包括预期的 xfail） |
+| **集成测试** | ≥ 40 个用例，使用 `@pytest.mark.integration` 标记 |
+| **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
+| **双模式** | 稳定资产必须在 strict 和 tolerant 两种模式下都通过 |
+
+### 样本资产
+
+测试依赖 `E:\Develop\lib\UnrealEngine\Samples` 目录的真实 UE 资产：
+
+```
+E:\Develop\lib\UnrealEngine\Samples\
+├── FirstPerson\        # UE First Person 模板
+├── ThirtPerson\        # UE Third Person 模板
+├── StarterContent\     # UE Starter Content
+└── Games\LyraStarterGame\  # UE Lyra 示例游戏
+```
+
+在 `tests/test_sample_assets_representative.py` 中配置：
+- `STABLE_ASSETS` — 已知可正常解析的资产
+- `DIAGNOSTIC_ASSETS` — 用于诊断的资产
+- `PARSER_ASSETS` — 用于测试特定资产类型解析器的资产
+
+### 集成测试验证要求
+
+**每个解析成功的资产必须验证**:
+1. `result.is_success` 为 `True`
+2. `result.summary`、`result.linker`、`result.name_map`、`result.export_map` 不为空
+
+**蓝图资产额外验证**:
+1. `result.blueprint` 不为空，`len(result.blueprint.variables) >= 1`
+2. 至少一个变量有 GUID（`any(variable.var_guid for ...)`）
+3. `len(result.graphs) >= 1`，至少一个 Graph 有 `graph_guid`
+4. 至少一个节点有 Pin，至少一个 Pin 有 `persistent_guid`
+5. 至少一个 Pin 有连接关系（`linked_to_raw` 非空）
+6. 至少一个变量有默认值
+
+### 已知缺陷资产
+
+| 资产 | 缺陷 | 标记 |
+|------|------|------|
+| `P_Fire.uasset` (ParticleSystem) | UE4 legacy_file_version=-3，当前仅支持 {-9, -8} | `xfail` |
+
+### 提交前检查
+
+- [ ] 所有单元测试通过（`python -m pytest tests/ -v`）
+- [ ] 所有集成测试通过（`python -m pytest tests/ -v -m integration`）
+- [ ] 无新的测试失败（xfail 除外）
+- [ ] 新增功能有对应的测试用例
+- [ ] Bug 修复有回归测试
+
+### 版本发布前测试
+
+发布新版本前，除常规测试外还需：
+1. **真实资产随机测试** — 从 LyraStarterGame 随机抽取 ≥ 50 个资产验证
+2. **多类型蓝图验证** — 手动验证 ≥ 3 种不同类型蓝图的完整输出
+3. **事件函数执行追踪** — 验证至少 2 个蓝图的事件→函数调用链可正确追踪
+4. **版本号一致性** — 确认 `pyproject.toml`、`__init__.py`、文档版本号统一
+5. **文档同步** — 确认 CLAUDE.md、README.md、Wiki 文档与代码一致
+
+详细测试规范见 `docs/release-notes/testing-requirements.md`。
 
 ## 开发命令
 
@@ -113,7 +196,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **序列化** | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag`、图序列化器、对象资源 |
 | **数据模型** | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、变换、蓝图模型、节点类型 |
 | **属性解析器** | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 类特定跳过机制 |
-| ├ 资产类型 | `parsers/asset_types/` | (已废弃，0.4.0 移除) SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
+| ├ 资产类型 | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图分析** | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
 | **Kismet** | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器、BPGC 回退、结构化控制流 |
@@ -125,7 +208,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **Pak** | `pak/` | `FPakInfo/PakEntry/FPakDirectoryEntry`、`PakFileReader`、索引解析、压缩分发、AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析、标志定义 |
-| **UObject** | `objects/` | (已废弃，0.4.0 移除) UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
+| **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
 | **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid/蓝图翻译文本/UE 格式文本输出生成器 |
 
 ### 公共 API
