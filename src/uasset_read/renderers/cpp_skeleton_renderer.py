@@ -1,6 +1,12 @@
-"""C++ 头文件骨架渲染器。"""
+"""C++ 骨架渲染器 — 使用 cpp_gen 模块生成完整的 .h 头文件和 .cpp 实现。
+
+输出结构：
+    1. // {ClassName}.h 头文件（声明 + UPROPERTY + 方法签名）
+    2. // {ClassName}.cpp 实现文件（构造函数 + 方法函数体）
+"""
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.renderers.base import IRenderer, RenderOptions
@@ -9,7 +15,9 @@ from uasset_read.renderers import register_renderer
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
 
-# UE 属性类型到 C++ 类型映射
+logger = logging.getLogger(__name__)
+
+# UE 属性类型到 C++ 类型映射（回退模式使用）
 _UE_TO_CPP_TYPE = {
     "IntProperty": "int32",
     "Int64Property": "int64",
@@ -37,14 +45,63 @@ _UE_TO_CPP_TYPE = {
     "EnumProperty": "uint8",
 }
 
-# 集合类型，需要包含模板参数
-_CONTAINER_TYPES = {"ArrayProperty", "MapProperty", "SetProperty"}
-
 
 class CppSkeletonRenderer(IRenderer):
-    """C++ 类骨架生成器（.h header）。"""
+    """C++ 骨架生成器 — 输出 .h 头文件声明和 .cpp 函数体实现。"""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
+        """渲染 C++ 骨架输出。
+
+        优先使用 cpp_gen 管线（extract_cpp_class_skeleton → format_cpp_header +
+        format_full_cpp_implementation），输出完整的 .h 声明和 .cpp 函数体。
+        如果 linker_result 不可用，回退到基于 PackageIR 的简单输出。
+        """
+        linker_result = options.linker_result
+        if linker_result is not None:
+            return self._render_from_linker_result(linker_result)
+
+        # 回退：从 PackageIR 生成简单头文件（无函数体）
+        logger.warning(
+            "linker_result 不可用，回退到简单属性骨架（无函数体）"
+        )
+        return self._render_simple_header(ir)
+
+    def _render_from_linker_result(self, result) -> str:
+        """使用 cpp_gen 管线从 LinkerParseResult 生成完整 C++ 骨架。"""
+        from uasset_read.cpp_gen import extract_cpp_class_skeleton
+        from uasset_read.cpp_gen.formatters import (
+            format_cpp_header,
+            format_full_cpp_implementation,
+        )
+
+        try:
+            cpp_ir = extract_cpp_class_skeleton(result)
+        except (ValueError, AttributeError) as exc:
+            logger.warning("extract_cpp_class_skeleton 失败: %s", exc)
+            return f"// C++ 骨架提取失败: {exc}\n"
+
+        sections: list[str] = []
+
+        # .h 头文件
+        header_text = format_cpp_header(cpp_ir)
+        sections.append(f"// {cpp_ir.name}.h")
+        sections.append(header_text)
+
+        # .cpp 实现文件（含函数体 + 构造函数）
+        impl_text = format_full_cpp_implementation(cpp_ir)
+        if impl_text.strip():
+            sections.append(f"// {cpp_ir.name}.cpp")
+            sections.append(impl_text)
+
+            # 构造函数追加到 .cpp 实现部分
+            ctor_text = cpp_ir.constructor.get("constructor_text", "")
+            if ctor_text and ctor_text.strip():
+                sections.append(ctor_text)
+
+        return "\n".join(sections)
+
+    def _render_simple_header(self, ir: PackageIR) -> str:
+        """从 PackageIR 生成简单的 .h 头文件（无函数体，回退模式）。"""
         lines: list[str] = []
 
         # 从包名提取类名
@@ -131,7 +188,6 @@ class CppSkeletonRenderer(IRenderer):
 
     def _property_to_cpp_type(self, prop_type: str, value: Any) -> str:
         """将 UE 属性类型映射为 C++ 类型。"""
-        base_type = prop_type
         if prop_type in _UE_TO_CPP_TYPE:
             cpp_type = _UE_TO_CPP_TYPE[prop_type]
         else:
@@ -147,7 +203,7 @@ class CppSkeletonRenderer(IRenderer):
 
         return cpp_type
 
-    def _format_cpp_default(self, value: Any) -> str:
+    def _format_cpp_default(self, value) -> str:
         """格式化 C++ 默认值。"""
         if value is None:
             return ""
@@ -158,7 +214,7 @@ class CppSkeletonRenderer(IRenderer):
         if isinstance(value, float):
             return f"{value}f"
         if isinstance(value, str):
-            return f"TEXT(\"{value}\")"
+            return f'TEXT("{value}")'
         return ""
 
     @property

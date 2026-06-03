@@ -101,6 +101,7 @@ def parse_single(
         verbose=verbose,
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
+        linker_result=result if format == "cpp_skeleton" else None,
     )
     return renderer.render(ir, options)
 

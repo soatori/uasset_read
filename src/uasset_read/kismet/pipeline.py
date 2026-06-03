@@ -22,6 +22,7 @@ from uasset_read.kismet.translator import TypeRegistry
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.link.linker import PackageLinker
     from uasset_read.serializers.object_resources import ObjectExport, PackageFileSummary
 
 
@@ -33,6 +34,7 @@ def decompile_single_function(
     import_map: list,
     export_map: list,
     tolerant: bool = True,
+    linker: "PackageLinker | None" = None,
 ) -> KismetDecompiledResult | None:
     """
     Decompile a single UStruct export to KismetDecompiledResult.
@@ -73,7 +75,7 @@ def decompile_single_function(
 
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
-    builder = FunctionBodyBuilder(type_registry)
+    builder = FunctionBodyBuilder(type_registry, linker=linker)
 
     # Use export.object_name as function name
     func_name = export.object_name

@@ -56,6 +56,17 @@ from uasset_read.cpp_gen.formatters import (
     CppCallParameter,
     CppMethodIR,
     CppCallStatement,
+    # Statement IR
+    CppStatement,
+    CppCallStmt,
+    CppAssignmentStmt,
+    CppIfStmt,
+    CppInlineExprStmt,
+    CppReturnStmt,
+    CppWhileStmt,
+    CppRawStmt,
+    # Body builder
+    kismet_to_cpp_body,
 )
 from uasset_read.cpp_gen.cpp_default_value_formatter import (
     format_cpp_default_value,
@@ -95,6 +106,17 @@ __all__ = [
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
+    # Statement IR
+    "CppStatement",
+    "CppCallStmt",
+    "CppAssignmentStmt",
+    "CppIfStmt",
+    "CppInlineExprStmt",
+    "CppReturnStmt",
+    "CppWhileStmt",
+    "CppRawStmt",
+    # Body builder
+    "kismet_to_cpp_body",
     # C++ 默认值格式化
     "format_cpp_default_value",
     "format_cpp_transform",

@@ -32,8 +32,10 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
     }
     ```
 
+    优先使用结构化 body（CppStatement 列表），回退到 body_text（原始文本）。
+
     Args:
-        method_ir: 方法 IR（含 body 字段）
+        method_ir: 方法 IR（含 body 或 body_text 字段）
 
     Returns:
         .cpp 函数实现文本
@@ -47,10 +49,16 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
     lines.append(sig)
     lines.append("{")
 
-    # 渲染 body 语句
+    # 优先渲染结构化 body 语句
     if method_ir.body:
         body_lines = _render_statements(method_ir.body, indent=1)
         lines.extend(body_lines)
+    elif method_ir.body_text:
+        # 回退：直接使用 Kismet 反编译的原始文本
+        for raw_line in method_ir.body_text.split("\n"):
+            raw_line = raw_line.strip()
+            if raw_line:
+                lines.append(f"    {raw_line}")
 
     lines.append("}")
 
@@ -84,8 +92,8 @@ def format_full_cpp_implementation(ir: CppClassIR) -> str:
     # 空行
     lines.append("")
 
-    # 方法实现
-    methods_with_body = [m for m in ir.methods if m.body]
+    # 方法实现（优先结构化 body，回退到 body_text）
+    methods_with_body = [m for m in ir.methods if m.body or m.body_text]
 
     for i, method in enumerate(methods_with_body):
         if i > 0:

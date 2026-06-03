@@ -41,6 +41,7 @@ def _extract_kismet_decompiled(
     import_map: List["ObjectImport"],
     export_map: List["ObjectExport"],
     tolerant: bool = True,
+    linker: Optional["PackageLinker"] = None,
 ) -> List["KismetDecompiledResult"]:
     """Extract and decompile Kismet bytecode from Blueprint UStruct exports.
 
@@ -61,7 +62,7 @@ def _extract_kismet_decompiled(
         try:
             result = decompile_single_function(
                 archive, export, summary, name_map, import_map, export_map,
-                tolerant=tolerant,
+                tolerant=tolerant, linker=linker,
             )
             if result is not None:
                 results.append(result)
@@ -172,7 +173,7 @@ def _post_process(
         if hasattr(result, 'decompiled_functions'):
             decompiled = _extract_kismet_decompiled(
                 path, archive, summary, name_map,
-                import_map, export_map, tolerant,
+                import_map, export_map, tolerant, linker=linker,
             )
             result.decompiled_functions = decompiled
             if decompiled and getattr(result, "graphs", None):

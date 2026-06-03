@@ -9,6 +9,7 @@ C++ 代码生成格式化子模块。
     CppClassIR: 完整 C++ 类骨架 IR 数据模型
     format_cpp_class_json: JSON IR 格式化函数
     format_cpp_header: .h 头文件文本生成函数
+    kismet_to_cpp_body: Kismet 表达式 → 结构化 C++ 语句列表
 """
 from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppProperty,
@@ -25,6 +26,11 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppAssignmentStmt,
     CppIfStmt,
     CppInlineExprStmt,
+    CppReturnStmt,
+    CppWhileStmt,
+    CppRawStmt,
+    # Body builder
+    kismet_to_cpp_body,
 )
 from uasset_read.cpp_gen.formatters.cpp_header_formatter import (
     format_cpp_header,
@@ -53,7 +59,11 @@ __all__ = [
     "CppAssignmentStmt",
     "CppIfStmt",
     "CppInlineExprStmt",
-    # Function body formatting
+    "CppReturnStmt",
+    "CppWhileStmt",
+    "CppRawStmt",
+    # Body builder
+    "kismet_to_cpp_body",
     "format_cpp_function_body",
     "format_full_cpp_implementation",
 ]

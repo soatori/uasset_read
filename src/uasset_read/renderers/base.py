@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -21,6 +21,7 @@ class RenderOptions:
     indent: int = 2
     include_schema: bool = False
     include_function_graphs: bool = False
+    linker_result: Any = None  # LinkerParseResult，供需要 linker 数据的格式使用
 
 
 class IRenderer(ABC):

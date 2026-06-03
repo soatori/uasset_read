@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
+    from uasset_read.link.linker import PackageLinker
 
 
 @dataclass
@@ -35,9 +36,9 @@ class StructuredControlFlow:
     - Unrecognized → goto fallback
     """
 
-    def __init__(self) -> None:
+    def __init__(self, linker: "PackageLinker | None" = None) -> None:
         from uasset_read.kismet.translator import KismetTranslator
-        self._translator = KismetTranslator()
+        self._translator = KismetTranslator(linker=linker)
 
     def reconstruct(self, expressions: list["KismetExpression"]) -> list[str]:
         """
@@ -270,7 +271,7 @@ class StructuredControlFlow:
                 # For expressions that have CodeOffset and are targets
                 pass  # label will be emitted when we reach the target index
 
-            line = self._translator.line_cpp(expr)
+            line = self._translator.line_cpp(expr, index=i)
             if line and line.strip():
                 result.append(line)
 
