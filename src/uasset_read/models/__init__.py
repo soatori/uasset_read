@@ -60,6 +60,13 @@ from .ir import (
     LinkerSummaryIR,
     PackageIR,
 )
+from .fallback import (
+    PropertyFallback,
+    StructFallback,
+    GenericUObject,
+    ExportParseStatus,
+    FallbackReason,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -111,4 +118,10 @@ __all__ = [
     "ExportIR",
     "LinkerSummaryIR",
     "PackageIR",
+    # Fallback 模型
+    "PropertyFallback",
+    "StructFallback",
+    "GenericUObject",
+    "ExportParseStatus",
+    "FallbackReason",
 ]
