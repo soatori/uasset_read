@@ -133,21 +133,50 @@ class PackageIR:
 
 ## 2b. ParseResult → IR 映射规则
 
+**原则**：数据不丢弃，重新归位到正确层级，消除游离的 `blueprint` 顶层对象。
+
 | ParseResult 字段 | 映射到 IR | 处理 |
 |-------------------|-----------|------|
 | `summary` | `PackageIR.header` | 提取 package_class, flags, counts |
 | `name_map` | `PackageIR.name_map` | 直接传递 |
 | `import_map` | `PackageIR.imports` | 通过 linker 解析为路径摘要 |
 | `export_map` | `PackageIR.exports` | 逐条转 ExportIR，ObjectTypeRegistry 路由 graphs |
-| `blueprint.variables` | 丢弃（不在 IR 层暴露） | 输出需要的话由渲染器从 properties 重组 |
-| `blueprint.graphs` | 丢弃 | IR 中的 graphs 来自 export 级别，非 blueprint 级别 |
+| `blueprint.variables` | `ExportIR.properties` | 变量本质是属性，归入主 Export 的 properties 列表 |
+| `blueprint.functions` | `GraphIR.nodes`（函数定义节点） | 函数元数据通过 Graph 节点表达，不单独保留 |
+| `blueprint.events` | `GraphIR.nodes`（事件节点） | 事件本质是 K2Node_Event，已在 nodes 中 |
+| `blueprint.graphs` 摘要 | `ExportIR.graphs` 头部 | 图摘要已是 graphs 列表的聚合，不单独保留 |
+| `blueprint.Nodes` 索引 | `GraphIR.nodes` | 扁平节点索引已是 nodes 本身，不保留冗余副本 |
+| `blueprint.Warnings` | 构建阶段日志 | 不进入 IR，构建过程中记录到 stderr |
 | `graphs` (UEdGraph) | `ExportIR.graphs` | UEdGraphNode → NodeIR，UEdGraphPin → PinIR |
-| `errors` | 丢弃 | IR 构建阶段处理，不在最终 IR 中暴露 |
-| `warnings` | 丢弃 | 同上 |
-| `decompiled_functions` | 丢弃 | kismet 专属，不参与 IR 渲染 |
+| `errors` | 构建阶段处理 | 不进入 IR；tolerant 模式跳过，strict 模式抛 `IRError` |
+| `warnings` | 构建阶段处理 | 同上 |
+| `decompiled_functions` | `ExportIR.properties`（可选） | kismet 反编译结果，作为可选字段保留，tolerant 失败不阻断 |
 | `linker` | `PackageIR.linker` | 提取路径摘要 |
 | `version_container` | `PackageIR.header.ue_version` | 提取版本字符串 |
-| `components` / `soft_references` 等 | 丢弃 | IR 不包含元数据/引用分析 |
+| `components` | `ExportIR.properties`（可选） | 组件初始化信息，作为可选字段保留 |
+| `soft_references` / `circular_deps` | 丢弃 | 引用分析非核心职责，不参与 IR |
+| `resolved_parent_assets` / `inherited_blueprint_graphs` / `logic_sources` | 丢弃 | 元数据/引用分析，非输出所需 |
+
+### 归位说明
+
+**`blueprint` 顶层对象消除**：当前 JSON 输出中 `blueprint` 是一个游离的顶层对象，包含 Nodes、Graphs、Variables、Functions、Events 等大量数据。IR 中这些数据归位到正确层级：
+
+- **Variables** → 归入蓝图主 Export 的 `properties` 列表（变量本质就是属性定义）
+- **Functions/Events** → 通过 `GraphIR.nodes` 中的函数/事件节点表达（已在节点列表中）
+- **Nodes 索引** → 就是 `GraphIR.nodes` 本身（不保留冗余副本）
+- **Graphs 摘要** → 就是 `ExportIR.graphs` 列表头部（不保留聚合摘要）
+
+**JSON 输出对比**：
+
+| 当前 JSON 顶层字段 | IR JSON 中的位置 | 变化 |
+|---------------------|------------------|------|
+| `blueprint` | 不存在 | 消除，数据归入 exports |
+| `blueprint.Nodes` | `exports[].graphs[].nodes[]` | 下沉到 Export 级别 |
+| `blueprint.Graphs` | `exports[].graphs[]` | 下沉到 Export 级别 |
+| `blueprint.Variables` | `exports[].properties[]` | 归入属性列表 |
+| `blueprint.Functions` | `exports[].graphs[].nodes[]`（函数节点） | 已在节点中 |
+| `decompiled_functions` | `exports[].properties[]`（可选） | 归入属性或移除 |
+| `components` | `exports[].properties[]`（可选） | 归入属性或移除 |
 
 ---
 
@@ -175,7 +204,71 @@ class IRenderer(ABC):
 
 | 渲染器 | 格式 | 说明 |
 |--------|------|------|
-| JSONRenderer | json | `asdict()` 递归序列化 IR |
+| JSONRenderer | json | 递归序列化 IR 为 JSON，包含 status 字段 |
+| TextRenderer | text | YAML 风格缩进，与 JSON 等价 |
+| MarkdownRenderer | markdown | 标题 + Mermaid 流程图 |
+| BlueprintTextRenderer | blueprint_text | 紧凑节点列表 |
+| BlueprintUERenderer | blueprint_ue | 模拟 UE Ctrl+C 文本 |
+| CppSkeletonRenderer | cpp_skeleton | C++ 头文件骨架（可选） |
+
+> N2C 渲染器已删除（对应 n2c/ 模块整体移除）
+
+### JSON 输出结构
+
+JSONRenderer 输出的顶层结构（消除 blueprint 顶层对象后）：
+
+```json
+{
+  "status": { "status": "success", "message": null, "code": null },
+  "summary": { "package_class": "...", "package_flags": 262144, "total_export_count": 69, "total_import_count": 73, "ue_version": "5.x" },
+  "name_map": [...],
+  "imports": [...],
+  "exports": [
+    {
+      "object_name": "Default__BP_FirstPersonCharacter_C",
+      "object_class": "BlueprintGeneratedClass",
+      "outer_path": ["/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter"],
+      "properties": [
+        { "name": "BlueprintSystemVersion", "type": "IntProperty", "value": 2, "guid": null },
+        { "name": "DefaultSceneRoot", "type": "ObjectProperty", "value": {...} }
+      ],
+      "graphs": [
+        {
+          "graph_name": "Aim",
+          "graph_guid": "...",
+          "nodes": [
+            {
+              "node_guid": "...",
+              "node_class": "K2Node_Event",
+              "node_comment": "事件节点注释",
+              "pins": [
+                { "pin_name": "Then", "pin_type": "exec", "pin_type_value": null, "linked_to": ["..."], "direction": "EGPD_Output", "default_value": null }
+              ],
+              "execution_flow": []
+            }
+          ],
+          "execution_chains": [["...", "...", "..."]]
+        }
+      ]
+    }
+  ],
+  "linker": { "has_linker": true, "import_paths": [...], "export_paths": [...] }
+}
+```
+
+**与当前 JSON 的差异**：
+
+| 变化 | 当前 | IR |
+|------|------|-----|
+| `blueprint` 顶层对象 | 存在 | **消除**，数据归入 exports |
+| `output_version` | `"4.0"` | **消除**，不需要 |
+| `components` 顶层 | 存在（蓝图）/ []（非蓝图） | 归入 exports[].properties（可选） |
+| `decompiled_functions` 顶层 | 存在 | 归入 exports[].properties（可选） |
+| `resolved_parent_assets` | [] | **消除** |
+| `inherited_blueprint_graphs` | [] | **消除** |
+| `logic_sources` | [] | **消除** |
+| `errors` 顶层 | [] | 渲染器不输出，由 status 字段表达 |
+| `_schema` | 可选 | 可选（include_schema=True） |
 | TextRenderer | text | YAML 风格缩进，与 JSON 等价 |
 | MarkdownRenderer | markdown | 标题 + Mermaid 流程图 |
 | BlueprintTextRenderer | blueprint_text | 紧凑节点列表 |
