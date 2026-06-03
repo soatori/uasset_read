@@ -28,6 +28,7 @@ from uasset_read.cpp_gen.formatters import (
 from uasset_read.cpp_gen.cpp_type_mapper import (
     ue_path_to_cpp_type,
     ue_package_path_to_cpp_class,
+    infer_class_prefix,
 )
 from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     cpf_flags_to_uproperty_marks,
@@ -305,13 +306,9 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
     """提取 C++ 类名。
 
     根据蓝图名称和父类类型确定 C++ 前缀：
-    - Actor 派生 → A 前缀
-    - Component 派生 → U 前缀
-    - UObject 派生 → U 前缀
-    - 其他 → U 前缀（默认）
-
-    P0 改进：使用 _simplify_class_name 提取简洁名称，
-    而非使用完整包路径。
+    - 使用 infer_class_prefix 从父类名推导前缀（A/U/F/E/I）
+    - 如果简化后的名称已有正确的 UE 前缀，不重复添加
+    - 否则添加推导的前缀
 
     Args:
         result: LinkerParseResult
@@ -330,22 +327,16 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
         logger.warning("Could not determine class name from result")
         return "UUnknownClass"
 
-    # P0 改进：简化类名
+    # 简化类名
     clean_name = _simplify_class_name(raw_name)
 
-    # 确定前缀（根据父类类型）
+    # 从父类推导前缀（使用 infer_class_prefix 统一逻辑）
     parent_class_path = result.blueprint.parent_class or ""
     parent_cpp = ue_package_path_to_cpp_class(parent_class_path)
+    prefix = infer_class_prefix(parent_cpp)
 
-    # 确定前缀
-    prefix = "U"  # 默认 UObject 前缀
-    if parent_cpp.startswith("A"):
-        prefix = "A"  # Actor 前缀
-    elif parent_cpp.startswith("U") and "Component" in parent_cpp:
-        prefix = "U"  # Component 前缀（已经是 U）
-
-    # 如果名称已有前缀，不重复添加
-    if clean_name.startswith(('A', 'U', 'F', 'E', 'I')):
+    # 如果名称已有该前缀，不重复添加
+    if clean_name.startswith(prefix):
         return clean_name
 
     return f"{prefix}{clean_name}"

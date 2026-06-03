@@ -9,6 +9,8 @@ Per D-03: 核心类型硬编码字典 + 可扩展脚本路径策略。
     ENGINE_CLASS_PATHS: Engine 类路径映射字典
     ue_path_to_cpp_type: UE 类型路径 → C++ 类型名转换函数
     ue_package_path_to_cpp_class: /Script/Engine.XXX → C++ 类名转换函数
+    infer_class_prefix: 父类名 → C++ 前缀推断函数
+    resolve_ue_type: 完整 UE 路径 → C++ 类型名解析函数
 """
 from __future__ import annotations
 
@@ -42,6 +44,7 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/CoreUObject.DateTime": "FDateTime",
     "/Script/CoreUObject.Timespan": "FTimespan",
     "/Script/CoreUObject.Color": "FColor",
+    "/Script/CoreUObject.Object": "UObject",
     "/Script/Engine.HitResult": "FHitResult",
     "/Script/Engine.TimerHandle": "FTimerHandle",
     "/Script/Engine.ActorReference": "FActorReference",
@@ -59,15 +62,23 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/Engine.Actor": "AActor",
     "/Script/Engine.GameModeBase": "AGameModeBase",
     "/Script/Engine.GameMode": "AGameMode",
+    "/Script/Engine.GameStateBase": "AGameStateBase",
     "/Script/Engine.PlayerController": "APlayerController",
+    "/Script/Engine.PlayerState": "APlayerState",
     "/Script/Engine.Controller": "AController",
     "/Script/Engine.HUD": "AHUD",
     "/Script/Engine.PlayerCameraManager": "APlayerCameraManager",
+    "/Script/Engine.CameraActor": "ACameraActor",
+    "/Script/Engine.Light": "ALight",
     "/Script/Engine.CameraComponent": "UCameraComponent",
     "/Script/Engine.SpringArmComponent": "USpringArmComponent",
     "/Script/Engine.StaticMeshComponent": "UStaticMeshComponent",
     "/Script/Engine.SkeletalMeshComponent": "USkeletalMeshComponent",
+    "/Script/Engine.BoxComponent": "UBoxComponent",
+    "/Script/Engine.SphereComponent": "USphereComponent",
+    "/Script/Engine.CapsuleComponent": "UCapsuleComponent",
     "/Script/Engine.AudioComponent": "UAudioComponent",
+    "/Script/Engine.LightComponent": "ULightComponent",
     "/Script/Engine.ParticleSystemComponent": "UParticleSystemComponent",
     "/Script/Engine.MovementComponent": "UMovementComponent",
     "/Script/Engine.CharacterMovementComponent": "UCharacterMovementComponent",
@@ -136,8 +147,10 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.Character": "ACharacter",
     "/Script/Engine.Controller": "AController",
     "/Script/Engine.PlayerController": "APlayerController",
+    "/Script/Engine.PlayerState": "APlayerState",
     "/Script/Engine.GameModeBase": "AGameModeBase",
     "/Script/Engine.GameMode": "AGameMode",
+    "/Script/Engine.GameStateBase": "AGameStateBase",
     "/Script/Engine.HUD": "AHUD",
     "/Script/Engine.PlayerCameraManager": "APlayerCameraManager",
     "/Script/Engine.LevelScriptActor": "ALevelScriptActor",
@@ -161,6 +174,7 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.CameraComponent": "UCameraComponent",
     "/Script/Engine.SpringArmComponent": "USpringArmComponent",
     "/Script/Engine.AudioComponent": "UAudioComponent",
+    "/Script/Engine.LightComponent": "ULightComponent",
     "/Script/Engine.ParticleSystemComponent": "UParticleSystemComponent",
     "/Script/Engine.MovementComponent": "UMovementComponent",
     "/Script/Engine.CharacterMovementComponent": "UCharacterMovementComponent",
@@ -200,6 +214,7 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
 # Actor 类后缀集合（用于启发式前缀判断）
 ACTOR_SUFFIXES = frozenset({
     "Actor", "Pawn", "Character", "Controller", "GameMode", "GameModeBase",
+    "GameState", "GameStateBase", "PlayerState",
     "HUD", "Manager", "Volume", "Brush", "Light", "Camera", "PlayerStart",
     "Trigger", "Zone",
 })
@@ -379,6 +394,119 @@ def ue_package_path_to_cpp_class(package_path: str) -> str:
 
 
 # ============================================================================
+# 父类前缀推断
+# ============================================================================
+
+# 父类名前缀 → C++ 类型前缀映射
+_PREFIX_MAP = {
+    "A": "A",
+    "U": "U",
+    "F": "F",
+    "E": "E",
+    "I": "I",
+}
+
+
+def infer_class_prefix(parent_class: str) -> str:
+    """
+    根据父类名推断 C++ 类型前缀。
+
+    规则：
+    - 父类以 A 开头 → 返回 A（Actor 派生）
+    - 父类以 U 开头 → 返回 U（UObject 派生）
+    - 父类以 F 开头 → 返回 F（结构体）
+    - 父类以 E 开头 → 返回 E（枚举）
+    - 父类以 I 开头 → 返回 I（接口）
+    - 默认返回 U
+
+    Args:
+        parent_class: 父类 C++ 类名（如 "ACharacter"、"USceneComponent"）
+
+    Returns:
+        C++ 类型前缀字符
+
+    Examples:
+        >>> infer_class_prefix("ACharacter")
+        'A'
+        >>> infer_class_prefix("USceneComponent")
+        'U'
+        >>> infer_class_prefix("FVector")
+        'F'
+        >>> infer_class_prefix("EDirection")
+        'E'
+        >>> infer_class_prefix("IInteractable")
+        'I'
+        >>> infer_class_prefix("Unknown")
+        'U'
+    """
+    if not parent_class:
+        return "U"
+
+    first_char = parent_class[0]
+    return _PREFIX_MAP.get(first_char, "U")
+
+
+# ============================================================================
+# UE 类型路径 → C++ 类型名解析
+# ============================================================================
+
+def resolve_ue_type(ue_path: str) -> str:
+    """
+    从完整 UE 路径解析出 C++ 类型名。
+
+    支持的路径格式：
+    - /Script/Engine.Actor → AActor
+    - /Script/CoreUObject.Object → UObject
+    - /Script/Engine.SceneComponent → USceneComponent
+    - /Script/CoreUObject.Vector → FVector
+
+    Args:
+        ue_path: UE 完整类型路径（如 "/Script/Engine.Actor"）
+
+    Returns:
+        C++ 类型名字符串。如果无法解析，返回 UObject 作为安全默认值。
+
+    Examples:
+        >>> resolve_ue_type("/Script/Engine.Actor")
+        'AActor'
+        >>> resolve_ue_type("/Script/CoreUObject.Object")
+        'UObject'
+        >>> resolve_ue_type("/Script/Engine.Character")
+        'ACharacter'
+        >>> resolve_ue_type("/Script/Engine.SceneComponent")
+        'USceneComponent'
+        >>> resolve_ue_type("/Script/CoreUObject.Vector")
+        'FVector'
+    """
+    if not ue_path:
+        return "UObject"
+
+    # 尝试精确匹配已知映射
+    if ue_path in UE_TO_CPP_TYPE_MAP:
+        return UE_TO_CPP_TYPE_MAP[ue_path]
+
+    if ue_path in ENGINE_CLASS_PATHS:
+        return ENGINE_CLASS_PATHS[ue_path]
+
+    # 从路径提取类名部分
+    # /Script/Engine.Actor → Actor, /Script/CoreUObject.Vector → Vector
+    class_name = ue_path.rsplit(".", 1)[-1] if "." in ue_path else ue_path
+
+    # 根据路径包推断前缀
+    # CoreUObject 包下的类型通常是 F 前缀（结构体）
+    if "/CoreUObject." in ue_path:
+        return f"F{class_name}"
+
+    # Engine 包下的类型需要进一步判断
+    if "/Engine." in ue_path:
+        # 尝试启发式
+        return _apply_type_heuristic(ue_path)
+
+    # 其他包默认使用 U 前缀
+    return f"U{class_name}"
+
+
+# ============================================================================
 # 导出列表
 # ============================================================================
 
@@ -387,4 +515,6 @@ __all__ = [
     "ENGINE_CLASS_PATHS",
     "ue_path_to_cpp_type",
     "ue_package_path_to_cpp_class",
+    "infer_class_prefix",
+    "resolve_ue_type",
 ]

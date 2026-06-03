@@ -16,6 +16,12 @@ from uasset_read.models.ir import (
     NodeIR,
     PinIR,
     LinkerSummaryIR,
+    BlueprintIR,
+    BlueprintFunctionIR,
+    BlueprintEventIR,
+    DecompiledFunctionIR,
+    ExecutionChainIR,
+    VariableIR,
 )
 
 if TYPE_CHECKING:
@@ -43,6 +49,10 @@ def build_package_ir(result: ParseResult) -> PackageIR:
         imports=_build_imports(result),
         exports=exports,
         linker=linker,
+        blueprint=_build_blueprint_ir(result),
+        decompiled_functions=_build_decompiled_functions_ir(result),
+        execution_chains=_build_execution_chains_ir(result),
+        variables=_build_variables_ir(result),
     )
 
 
@@ -232,6 +242,240 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
         import_paths=import_paths,
         export_paths=export_paths,
     )
+
+
+def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
+    """从 ParseResult.blueprint 构建 BlueprintIR。"""
+    bp = result.blueprint
+    if bp is None:
+        return None
+
+    functions = []
+    for func in bp.functions:
+        functions.append(BlueprintFunctionIR(
+            name=func.name,
+            return_type=func.return_type,
+            parameters=[{
+                "name": p.name,
+                "param_type": p.param_type,
+                "default_value": p.default_value,
+                "is_input": p.is_input,
+                "is_output": p.is_output,
+            } for p in func.parameters],
+        ))
+
+    events = []
+    for evt in bp.events:
+        events.append(BlueprintEventIR(
+            name=evt.name,
+            event_type=evt.event_type,
+            parameters=[{
+                "name": p.name,
+                "param_type": p.param_type,
+                "default_value": p.default_value,
+                "is_input": p.is_input,
+                "is_output": p.is_output,
+            } for p in evt.parameters],
+        ))
+
+    components = list(result.components) if result.components else []
+
+    return BlueprintIR(
+        parent_class=bp.parent_class,
+        functions=functions,
+        events=events,
+        components=components,
+    )
+
+
+def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFunctionIR]:
+    """从 ParseResult.decompiled_functions 构建 DecompiledFunctionIR 列表。"""
+    decompiled = []
+    for func in result.decompiled_functions or []:
+        # 从 signature 解析 return_type（签名格式："ReturnType FuncName(params)"）
+        return_type = _extract_return_type(func.signature)
+        parameters = _extract_parameters(func)
+        decompiled.append(DecompiledFunctionIR(
+            name=func.function_name,
+            signature=func.signature,
+            cpp_code=func.cpp_code,
+            parameters=parameters,
+            return_type=return_type,
+        ))
+    return decompiled
+
+
+def _extract_return_type(signature: str) -> str:
+    """从 C++ 函数签名中提取返回类型。
+
+    签名格式："ReturnType FuncName(params)"
+    """
+    if not signature:
+        return "void"
+    # 查找第一个空格（返回类型和函数名之间的分隔）
+    space_idx = signature.find(" ")
+    if space_idx > 0:
+        return signature[:space_idx]
+    return "void"
+
+
+def _extract_parameters(func) -> list[dict]:
+    """从 KismetDecompiledResult 中提取参数信息。
+
+    优先使用 semantic_calls 中的参数信息，回退到 signature 解析。
+    """
+    # 如果 semantic_calls 包含参数信息
+    if func.semantic_calls:
+        for call in func.semantic_calls:
+            params = call.get("parameters")
+            if params:
+                return params
+
+    # 从 local_variables 回退
+    if func.local_variables:
+        return [{"name": v.get("name", ""), "param_type": v.get("type", "")} for v in func.local_variables]
+
+    return []
+
+
+def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
+    """从所有图的执行链构建 ExecutionChainIR 列表。"""
+    chains = []
+    for graph in result.graphs or []:
+        for node in graph.nodes or []:
+            # 查找事件节点作为链的起始
+            class_name = getattr(node, "class_name", "") or ""
+            if "Event" not in class_name:
+                continue
+            # 从事件节点的引脚获取事件名
+            event_name = _get_event_name_from_node(node)
+            # 构建从该事件开始的执行链
+            chain = _trace_execution_from_node(node, graph)
+            if chain:
+                chains.append(ExecutionChainIR(event=event_name, chain=chain))
+    return chains
+
+
+def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
+    """从 ParseResult.blueprint.variables 构建 VariableIR 列表。"""
+    variables = []
+    bp = result.blueprint
+    if bp is None:
+        return variables
+    for var in bp.variables or []:
+        var_type = _format_var_type(var)
+        default_value = _safe_str(getattr(var, "default_value", None)) or None
+        variables.append(VariableIR(
+            name=_safe_str(getattr(var, "var_name", None)),
+            type=var_type,
+            default_value=default_value,
+        ))
+    return variables
+
+
+def _format_var_type(var) -> str:
+    """将 BlueprintVariable 的 var_type 格式化为可读字符串。"""
+    pin_type = getattr(var, "var_type", None)
+    if pin_type is None:
+        return "Unknown"
+    category = getattr(pin_type, "pin_category", "") or ""
+    subcategory = getattr(pin_type, "pin_subcategory", "") or ""
+    object_name = getattr(pin_type, "pin_subcategory_object_name", None) or ""
+    container = getattr(pin_type, "container_type", 0)
+
+    # 容器类型前缀
+    container_map = {1: "TArray", 2: "TMap", 3: "TSet"}
+    prefix = container_map.get(container, "")
+
+    # 基础类型
+    if category == "struct" and object_name:
+        base = object_name
+    elif category == "class" and object_name:
+        base = object_name
+    elif category == "enum" and subcategory:
+        base = subcategory
+    elif subcategory:
+        base = subcategory
+    elif category:
+        base = category
+    else:
+        base = "Unknown"
+
+    if prefix:
+        return f"{prefix}<{base}>"
+    return base
+
+
+def _get_event_name_from_node(node) -> str:
+    """从事件节点提取事件名称。"""
+    # 优先使用 node_comment（事件节点的注释通常是事件名）
+    comment = getattr(node, "node_comment", None)
+    if comment:
+        return comment
+    # 回退到类名
+    return getattr(node, "class_name", "Unknown") or "Unknown"
+
+
+def _trace_execution_from_node(start_node, graph) -> list[str]:
+    """从起始节点追踪执行流链。"""
+    visited = set()
+    chain = []
+    current = start_node
+    while current:
+        guid = getattr(current, "node_guid", None)
+        if not guid or guid in visited:
+            break
+        visited.add(guid)
+        class_name = getattr(current, "class_name", "") or "Unknown"
+        chain.append(class_name)
+        # 找到下一个执行节点
+        next_node = _find_next_exec_node(current, graph, visited)
+        current = next_node
+    return chain
+
+
+def _find_next_exec_node(node, graph, visited) -> object | None:
+    """从节点的执行输出引脚找到下一个节点。"""
+    for pin in node.pins or []:
+        # 执行输出引脚（direction=1 表示输出）
+        direction = getattr(pin, "direction", 0)
+        if direction != 1:
+            continue
+        pin_type = getattr(pin, "pin_type", None)
+        pin_category = ""
+        if pin_type:
+            pin_category = getattr(pin_type, "pin_category", "") or ""
+        if pin_category != "exec":
+            continue
+        # 遍历 linked_to_raw 找到下一个节点
+        for ref in pin.linked_to_raw or []:
+            target_pin_id = None
+            if isinstance(ref, dict):
+                target_pin_id = ref.get("pin_guid") or ref.get("pin_id")
+            elif isinstance(ref, str):
+                target_pin_id = ref
+            else:
+                target_pin_id = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+            if not target_pin_id:
+                continue
+            # 查找目标引脚所在的节点
+            target_node = _find_node_by_pin_id(target_pin_id, graph, visited)
+            if target_node:
+                return target_node
+    return None
+
+
+def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
+    """根据引脚 ID 查找对应的节点（未访问过的）。"""
+    for node in graph.nodes or []:
+        node_guid = getattr(node, "node_guid", None)
+        if node_guid in visited:
+            continue
+        for pin in node.pins or []:
+            pin_guid = getattr(pin, "pin_id", None)
+            if pin_guid == pin_id:
+                return node
+    return None
 
 
 def _safe_str(value) -> str:

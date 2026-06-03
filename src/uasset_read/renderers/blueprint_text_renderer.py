@@ -1,4 +1,11 @@
-"""蓝图翻译参考文本渲染器。"""
+"""蓝图翻译参考文本渲染器。
+
+输出包含：
+1. 包头信息
+2. 执行链（事件 → 节点序列）
+3. 反编译的事件函数 C++ 实现（完整函数体）
+4. 图节点与引脚详情
+"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -32,6 +39,26 @@ class BlueprintTextRenderer(IRenderer):
         lines.append(f"Class: {ir.header.package_class}")
         lines.append("")
 
+        # 执行链概览
+        if ir.execution_chains:
+            lines.append("=== Execution Chains ===")
+            for chain_ir in ir.execution_chains:
+                lines.append(f"  {chain_ir.event}: {' -> '.join(chain_ir.chain)}")
+            lines.append("")
+
+        # 反编译的事件函数实现
+        if ir.decompiled_functions:
+            lines.append("=== Event Function Implementations ===")
+            for func in ir.decompiled_functions:
+                lines.append(f"  {func.signature}")
+                lines.append("  {")
+                if func.cpp_code:
+                    for code_line in func.cpp_code.splitlines():
+                        lines.append(f"    {code_line}")
+                lines.append("  }")
+                lines.append("")
+
+        # 图节点详情
         for export in ir.exports:
             if not export.graphs:
                 continue

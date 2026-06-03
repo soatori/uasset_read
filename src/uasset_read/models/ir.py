@@ -77,11 +77,61 @@ class ExportIR:
 
 
 @dataclass
+class BlueprintFunctionIR:
+    """蓝图函数 IR。"""
+    name: str
+    return_type: str
+    parameters: list[dict]
+
+
+@dataclass
+class BlueprintEventIR:
+    """蓝图事件 IR。"""
+    name: str
+    event_type: str
+    parameters: list[dict]
+
+
+@dataclass
+class BlueprintIR:
+    """蓝图元数据 IR（来自 BlueprintMetadata）。"""
+    parent_class: str | None
+    functions: list[BlueprintFunctionIR]
+    events: list[BlueprintEventIR]
+    components: list[dict]
+
+
+@dataclass
+class DecompiledFunctionIR:
+    """反编译函数 IR（来自 KismetDecompiledResult）。"""
+    name: str
+    signature: str
+    cpp_code: str
+    parameters: list[dict]
+    return_type: str
+
+
+@dataclass
+class ExecutionChainIR:
+    """执行链 IR。"""
+    event: str
+    chain: list[str]
+
+
+@dataclass
 class LinkerSummaryIR:
     """包链接摘要。"""
     has_linker: bool
     import_paths: list[str]
     export_paths: list[str]
+
+
+@dataclass
+class VariableIR:
+    """蓝图变量 IR。"""
+    name: str
+    type: str
+    default_value: str | None
 
 
 @dataclass
@@ -92,3 +142,7 @@ class PackageIR:
     imports: list[dict]
     exports: list[ExportIR]
     linker: LinkerSummaryIR | None
+    blueprint: BlueprintIR | None = None
+    decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
+    execution_chains: list[ExecutionChainIR] = field(default_factory=list)
+    variables: list[VariableIR] = field(default_factory=list)

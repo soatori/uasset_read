@@ -163,6 +163,24 @@ from .models import (
     DelegateValue,
 )
 
+# Fallback 模型
+from .models import (
+    PropertyFallback,
+    StructFallback,
+    GenericUObject,
+    ExportParseStatus,
+    FallbackReason,
+)
+
+# Class Handler Registry
+from .parsers.class_registry import (
+    ClassHandlerRegistry,
+    ClassHandler,
+    HandlerResult,
+    FallbackPolicy,
+    get_class_registry,
+)
+
 # 解析器模块
 from .parsers import (
     parse_property_value,
@@ -369,6 +387,7 @@ from .cpp_gen import (
     format_cpp_class_json, format_cpp_header,
     UE_TO_CPP_TYPE_MAP, ENGINE_CLASS_PATHS,
     ue_path_to_cpp_type, ue_package_path_to_cpp_class,
+    infer_class_prefix, resolve_ue_type,
     CPF_TO_UPROPERTY_MAP, cpf_flags_to_uproperty_marks,
     extract_cpp_class_skeleton, extract_cpp_constructor,
     format_cpp_call_statements, CppCallParameter, CppMethodIR, CppCallStatement,
@@ -598,6 +617,18 @@ __all__ = [
     "read_validated_count",
     "make_enum_value",
     "extract_inner_from_tag",
+    # Fallback 模型
+    "PropertyFallback",
+    "StructFallback",
+    "GenericUObject",
+    "ExportParseStatus",
+    "FallbackReason",
+    # Class Handler Registry
+    "ClassHandlerRegistry",
+    "ClassHandler",
+    "HandlerResult",
+    "FallbackPolicy",
+    "get_class_registry",
     # 蓝图模块
     "extract_blueprint_variables",
     "parse_component_transform",
@@ -734,6 +765,8 @@ __all__ = [
     "ENGINE_CLASS_PATHS",
     "ue_path_to_cpp_type",
     "ue_package_path_to_cpp_class",
+    "infer_class_prefix",
+    "resolve_ue_type",
     "CPF_TO_UPROPERTY_MAP",
     "cpf_flags_to_uproperty_marks",
     "extract_cpp_class_skeleton",

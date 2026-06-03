@@ -15,6 +15,8 @@ C++ 代码生成模块。
         ENGINE_CLASS_PATHS: Engine 类路径 → C++ 类名字典
         ue_path_to_cpp_type: UE 类型路径 → C++ 类型名转换函数
         ue_package_path_to_cpp_class: 包路径 → C++ 类名转换函数
+        infer_class_prefix: 父类名 → C++ 前缀推断函数
+        resolve_ue_type: 完整 UE 路径 → C++ 类型名解析函数
 
     属性映射：
         CPF_TO_UPROPERTY_MAP: CPF 标志 → UPROPERTY 标记映射规则
@@ -37,6 +39,8 @@ from uasset_read.cpp_gen.cpp_type_mapper import (
     ENGINE_CLASS_PATHS,
     ue_path_to_cpp_type,
     ue_package_path_to_cpp_class,
+    infer_class_prefix,
+    resolve_ue_type,
 )
 from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     CPF_TO_UPROPERTY_MAP,
@@ -88,6 +92,8 @@ __all__ = [
     "ENGINE_CLASS_PATHS",
     "ue_path_to_cpp_type",
     "ue_package_path_to_cpp_class",
+    "infer_class_prefix",
+    "resolve_ue_type",
     # 属性映射
     "CPF_TO_UPROPERTY_MAP",
     "cpf_flags_to_uproperty_marks",

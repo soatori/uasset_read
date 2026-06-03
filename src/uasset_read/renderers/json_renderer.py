@@ -47,6 +47,12 @@ class JSONRenderer(IRenderer):
                 "import_paths": ir.linker.import_paths,
                 "export_paths": ir.linker.export_paths,
             }
+        if ir.blueprint is not None:
+            data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
+        if ir.decompiled_functions:
+            data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
+        if ir.execution_chains:
+            data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
@@ -78,6 +84,21 @@ class JSONRenderer(IRenderer):
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
         return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}
+
+    def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
+        """序列化 BlueprintIR 为字典。"""
+        d: dict[str, Any] = {"parent_class": blueprint.parent_class}
+        if blueprint.functions:
+            d["functions"] = [{"name": f.name, "return_type": f.return_type, "parameters": f.parameters} for f in blueprint.functions]
+        if blueprint.events:
+            d["events"] = [{"name": e.name, "event_type": e.event_type, "parameters": e.parameters} for e in blueprint.events]
+        if blueprint.components:
+            d["components"] = blueprint.components
+        return d
+
+    def _decompiled_function_to_dict(self, func) -> dict[str, Any]:
+        """序列化 DecompiledFunctionIR 为字典。"""
+        return {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
         graphs = []
