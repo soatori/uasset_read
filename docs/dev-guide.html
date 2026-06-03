@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="doc-type" content="developer-reference" />
-    <meta name="doc-version" content="0.3.8" />
+    <meta name="doc-version" content="0.4.1-dev" />
     <title>uasset_read 开发文档</title>
     <script>
       const WIKI_BASE_URL = "https://github.com/SOATOORL/uasset_read/wiki";
@@ -498,13 +498,13 @@
   </head>
   <body
     data-doc="uasset_read-dev-guide"
-    data-version="0.3.8"
+    data-version="0.4.1-dev"
     data-agent-optimized="true"
   >
     <nav class="sidebar">
       <div class="sidebar-header">
         <h2>uasset_read</h2>
-        <div class="version">开发文档 v0.3.8</div>
+        <div class="version">开发文档 v0.4.1-dev</div>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">概览</div>
@@ -534,7 +534,6 @@
         <a href="#kismet" class="nav-link">Kismet 反编译</a>
         <a href="#linker" class="nav-link">对象链接器</a>
         <a href="#cpp-gen" class="nav-link">C++ 代码生成</a>
-        <a href="#n2c" class="nav-link">N2C 中间格式</a>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">容器系统</div>
@@ -543,9 +542,10 @@
         <a href="#raw" class="nav-link">原始文件解析</a>
       </div>
       <div class="nav-section">
-        <div class="nav-section-title">输出与导出</div>
+        <div class="nav-section-title">输出与渲染</div>
+        <a href="#renderers" class="nav-link">渲染器系统</a>
+        <a href="#ir" class="nav-link">IR 中间表示</a>
         <a href="#formatters" class="nav-link">格式化器</a>
-        <a href="#exporter" class="nav-link">导出系统</a>
         <a href="#cli" class="nav-link">CLI 接口</a>
       </div>
       <div class="nav-section">
@@ -560,7 +560,7 @@
     <div class="main">
       <div class="topbar">
         <h1>uasset_read 开发文档</h1>
-        <span class="breadcrumb">v0.3.8 | Unreal Engine .uasset 解析器</span>
+        <span class="breadcrumb">v0.4.1-dev | Unreal Engine .uasset 解析器</span>
       </div>
       <div class="content">
         <!-- 概览 -->
@@ -582,8 +582,7 @@
                 字节码反编译
               </li>
               <li>
-                输出格式：JSON / Text / Markdown / Mermaid / C++ 骨架 / N2C
-                中间格式
+                输出格式：JSON / Text / Markdown / Mermaid / C++ 骨架（0.4.1: IR + Renderers 架构）
               </li>
               <li>可选 PAK/IoStore 容器读取支持</li>
             </ul>
