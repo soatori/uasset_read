@@ -1094,27 +1094,63 @@ uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
           </div>
         </div>
 
+        <!-- 输出与渲染 (0.4.1+) -->
         <div
-          id="wiki-n2c"
+          id="wiki-renderers"
           class="wiki-content"
-          data-wiki-file="04-Advanced-Features/N2C.md"
+          data-wiki-file="06-Output-Export/Renderers.md"
         >
           <div class="section-summary">
-            <h2 id="n2c">N2C 中间格式</h2>
+            <h2 id="renderers">渲染器系统</h2>
             <p>
-              标准化中间格式：<code>N2CStruct</code>、<code>N2CGraph</code>、<code>N2CNode</code>、<code>N2CPin</code>。57
-              种节点处理器，JSON Schema
-              验证器。为跨版本/跨工具互操作提供统一数据模型。
+              0.4.1 新架构：<code>IRenderer</code> 抽象基类 + <code>RENDERER_REGISTRY</code> 自动注册。8 个渲染器（json/json_summary/text/text_summary/markdown/blueprint_text/blueprint_ue_text/cpp_skeleton），通过 <code>parse_single(format=...)</code> 一键调用。
             </p>
           </div>
           <div class="module-card wiki-link-card">
             <h4>📖 完整文档</h4>
             <p>
               <a
-                href="https://github.com/SOATOORL/uasset_read/wiki/N2C"
+                href="https://github.com/SOATOORL/uasset_read/wiki/Renderers"
                 target="_blank"
                 >查看 Wiki 页面 <span class="wiki-icon">→</span></a
               >
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="wiki-ir"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/IR.md"
+        >
+          <div class="section-summary">
+            <h2 id="ir">IR 中间表示</h2>
+            <p>
+              统一数据层：<code>PackageIR</code>、<code>ExportIR</code>、<code>GraphIR</code>、<code>NodeIR</code>、<code>PinIR</code>。渲染器只接收 IR，不访问 ParseResult。GUID 标准化为 32 位小写 hex。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/IR"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
+
+        <!-- N2C (0.4.1 已废弃) -->
+        <div
+          id="wiki-n2c"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/N2C.md"
+        >
+          <div class="section-summary">
+            <h2 id="n2c">N2C 中间格式 <span style="color:var(--danger);font-size:0.8em">⚠ 已废弃</span></h2>
+            <p>
+              N2C 模块已在 0.4.1-dev 整体删除。请使用新的 <a href="#renderers">渲染器系统</a> 和 <a href="#ir">IR 中间表示</a>。
             </p>
           </div>
         </div>
@@ -1235,27 +1271,11 @@ uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
           data-wiki-file="06-Output-Export/Exporter.md"
         >
           <div class="section-summary">
-            <h2 id="exporter">导出系统</h2>
+            <h2 id="exporter">导出系统 <span style="color:var(--danger);font-size:0.8em">⚠ 已废弃</span></h2>
             <p>
-              <code>IExporter</code> 接口 + 注册表 +
-              批量导出。支持按格式注册自定义导出器，CLI 的
-              <code>--n2c</code>、<code>--cpp-skeleton</code> 等通过此系统路由。
-            </p>
-          </div>
-          <div class="api-sig">
-            <span class="func-name">IExporter</span>.<span class="func-name"
-              >export</span
-            >(<span class="param">result: ParseResult, **kwargs</span>) →
-            <span class="type">str | bytes</span>
-          </div>
-          <div class="module-card wiki-link-card">
-            <h4>📖 完整文档</h4>
-            <p>
-              <a
-                href="https://github.com/SOATOORL/uasset_read/wiki/Exporter"
-                target="_blank"
-                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
-              >
+              Exporter 系统在 0.4.1 已被 <a href="#renderers">渲染器系统</a> 替代。
+              新架构：<code>ParseResult → PackageIR → Renderers → Output</code>。
+              请使用 <code>parse_single(format="json")</code> 替代 <code>export(result, format="json")</code>。
             </p>
           </div>
         </div>
@@ -1268,12 +1288,10 @@ uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
           <div class="section-summary">
             <h2 id="cli">CLI 接口</h2>
             <p>
-              <code>uasset-read</code> 命令行入口，argparse 驱动。支持
-              <code>--n2c</code
-              >、<code>--batch</code>、<code>--validate</code>、<code>--strict</code>/<code>--tolerant</code>、<code>--verbose</code>、<code>--output</code>、<code
-                >--summary</code
-              >
-              等选项。
+              <code>uasset-read</code> 命令行入口，0.4.1 重构后委托 <code>core.py</code> 核心 API。
+              支持 <code>--json</code>/<code>--json-summary</code>/<code>--text</code>/<code>--markdown</code>
+              /<code>--blueprint-text</code>/<code>--blueprint-ue-text</code>/<code>--cpp-skeleton</code>
+              等格式。<code>--n2c</code>、<code>--cpp-json-ir</code> 已移除。
             </p>
           </div>
           <div class="module-card wiki-link-card">
@@ -1332,8 +1350,8 @@ uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
                 <code>parse_package(archive)</code> → <code>PackageBundle</code>
               </li>
               <li>
-                <code>PakFileReader</code>、<code>IExporter</code>、<code
-                  >N2CStruct</code
+                <code>PakFileReader</code>、<code>IRenderer</code>、<code
+                  >PackageIR</code
                 >
               </li>
             </ul>
@@ -1462,6 +1480,8 @@ python -m pytest tests/ -v -m integration            # 仅集成测试</code></p
         pak: "05-Container-Systems/PAK.md",
         iostore: "05-Container-Systems/IoStore.md",
         raw: "05-Container-Systems/Raw-Files.md",
+        renderers: "06-Output-Export/Renderers.md",
+        ir: "06-Output-Export/IR.md",
         formatters: "06-Output-Export/Formatters.md",
         exporter: "06-Output-Export/Exporter.md",
         cli: "06-Output-Export/CLI.md",
