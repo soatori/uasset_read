@@ -87,8 +87,9 @@ class IRenderer(ABC):
 | MarkdownRenderer | markdown | 标题 + Mermaid 流程图 |
 | BlueprintTextRenderer | blueprint_text | 紧凑节点列表 |
 | BlueprintUERenderer | blueprint_ue | 模拟 UE Ctrl+C 文本 |
-| CppSkeletonRenderer | cpp_skeleton | C++ 头文件骨架 |
-| N2CRenderer | n2c | N2C 中间格式 + 验证 |
+| CppSkeletonRenderer | cpp_skeleton | C++ 头文件骨架（可选） |
+
+> N2C 渲染器已删除（对应 n2c/ 模块整体移除）
 
 ### 关键规则
 
@@ -225,20 +226,76 @@ print(parse_single(path, format=fmt))
 
 ---
 
-## 6. 迁移和测试
+## 7. 精简决策（轻量化方向）
 
-### 迁移顺序
+### 目标
+
+项目定位为**轻量化脚本**——`python diag.py <path>` 或 `python -m uasset_read <path>` 直接解析出结果，不需要 pip install。
+
+### 删除的模块
+
+| 模块 | 文件数 | 删除理由 |
+|------|--------|----------|
+| **exporter/** | 13 | IExporter 接口 + 注册表 + 批量导出 = 一个 dict + 循环调 formatter，过度抽象 |
+| **n2c/** | 15+ | 57 种节点处理器 + JSON Schema 验证器，专用工具非核心需求 |
+| **agent/** | 2 | AI 翻译管线，高级功能，与核心解析无关 |
+
+### 保留为可选
+
+| 模块 | 保留理由 |
+|------|----------|
+| **cpp_gen/** | 蓝图→C++ 骨架有用，但不走快捷路径，仅被 `--cpp-skeleton` 调用 |
+| **kismet/** | 蓝图字节码反编译是核心能力（parse_uasset 已依赖），但 tolerant 失败不阻断主流程，暂不重构（需进一步研究） |
+| **pak/ / iostore/** | 可选依赖，保留 |
+
+### 格式路由替换方案
+
+用 `formatters/__init__.py` 中的极简 dict 取代 ExporterRegistry：
+
+```python
+FORMAT_REGISTRY = {
+    "json": format_json_full,
+    "json_summary": format_json_summary,
+    "text": format_text_full,
+    "text_summary": format_text_summary,
+    "markdown": format_markdown,
+    "blueprint_text": format_blueprint_translation_text,
+    "blueprint_ue_text": format_blueprint_ue_text,
+    "cpp_skeleton": format_cpp_skeleton,  # 可选
+}
+
+def export(result, format: str = "text", **options) -> str:
+    fn = FORMAT_REGISTRY.get(format)
+    if fn is None:
+        raise ValueError(f"未知格式: {format}")
+    return fn(result, **options)
+```
+
+5 行函数 + 1 个 dict，替换 13 个文件的 exporter 系统。
+
+### 项目布局调整
+
+| 变化 | 旧 | 新 |
+|------|----|----|
+| 打包方式 | setuptools + pip install | 扁平脚本，直接 `python diag.py` 或 `python -m uasset_read` |
+| 保留 | pyproject.toml + src 布局 | 保留 pyproject.toml（仅用于开发依赖 pytest），删除 `[project.scripts]` |
+| 入口 | `uasset-read` CLI 命令 | `diag.py`（项目根） + `python -m uasset_read` + `python -m uasset_read.simple` |
+
+---
+
+## 8. 更新后的迁移顺序
 
 1. 定义 `PackageIR` 数据结构（`models/ir.py`）
-2. 定义 `core.py` API（parse_single, parse_batch, list_formats）
-3. 实现 `build_package_ir()` 构建器 + `IRenderer` 接口
-4. 实现 `parse_single` 内部逻辑（IR 构建 → 渲染器路由）
-5. 实现 `parse_batch` 内部逻辑
-6. 逐个迁移渲染器（JSON → Text → Markdown → BlueprintText → BlueprintUE → CppSkeleton → N2C）
-7. CLI 瘦身：main() 委托 core.py
-8. 创建 `diag.py` 和 `simple.py`
-9. 删除旧的 `formatters/` 和 `exporter/` 模块
-10. 更新 `cli.py` 和 `__init__.py`
+2. 精简导出系统：删除 `exporter/`、`n2c/`、`agent/`，formatters 接管路由
+3. 定义 `core.py` API（parse_single, parse_batch, list_formats）
+4. 实现 `build_package_ir()` 构建器 + `IRenderer` 接口
+5. 实现 `parse_single` 内部逻辑（IR 构建 → 渲染器路由）
+6. 实现 `parse_batch` 内部逻辑
+7. 逐个迁移渲染器（JSON → Text → Markdown → BlueprintText → BlueprintUE → CppSkeleton）
+8. CLI 瘦身：main() 委托 core.py
+9. 创建 `diag.py` 和 `simple.py`
+10. 删除旧的 `formatters/` 旧函数，更新 `__init__.py`
+11. 研究 kismet 模块是否需要精简
 
 ### 测试矩阵
 
@@ -249,6 +306,6 @@ print(parse_single(path, format=fmt))
 | 渲染器独立性 | 固定 IR fixture | 给定同一 IR，输出可重复 |
 | CLI 回归 | `--json/--text/--markdown` | CLI 输出格式正确 |
 | 蓝图 Pin 连接 | ≥ 2 种蓝图资产 | linked_to 正确，GUID 统一 |
-| core.parse_single | 每种格式 | 输出与现有 CLI 等价 |
-| 脚本基本功能 | `python diag.py <path>` | 正确输出 |
+| export() 函数 | 每种格式 | 输出与现有 CLI 等价 |
+| 快捷脚本 | `python diag.py <path>` | 正确输出 |
 | 错误处理 | 文件不存在、目录传入 | 正确抛出异常 |
