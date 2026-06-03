@@ -58,6 +58,7 @@ tests/*
 !tests/test_fstring_corruption.py
 !tests/test_framerate_animnotify.py
 !tests/test_pin_recovery.py
+!tests/test_ir_structures.py
 QWEN.md
 
 # AI agent reports (local only)

@@ -50,6 +50,16 @@ from .transforms import (
     ScaleValue,
     format_transform_value,
 )
+from .ir import (
+    PackageHeaderIR,
+    PinIR,
+    NodeIR,
+    GraphIR,
+    PropertyIR,
+    ExportIR,
+    LinkerSummaryIR,
+    PackageIR,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -92,4 +102,13 @@ __all__ = [
     "RotatorValue",
     "ScaleValue",
     "format_transform_value",
+    # IR 中间表示（ir.py）
+    "PackageHeaderIR",
+    "PinIR",
+    "NodeIR",
+    "GraphIR",
+    "PropertyIR",
+    "ExportIR",
+    "LinkerSummaryIR",
+    "PackageIR",
 ]
