@@ -63,6 +63,92 @@ PackageIR
 4. `execution_flow` 是节点序列化顺序 + Pin 连接关系，非重新发明的格式
 5. 所有 GUID（Node/Pin）统一为 32 位小写 hex（构建阶段完成）
 
+### Python 数据结构定义
+
+```python
+@dataclass
+class PackageHeaderIR:
+    package_class: str           # 包内主类名
+    package_flags: int           # 精简后的 flag 值
+    total_export_count: int
+    total_import_count: int
+    ue_version: str             # "5.x" 或 "4.x"
+
+@dataclass
+class PinIR:
+    pin_name: str
+    pin_type: str               # "EdGraphPin", "EdGraphPinType"
+    pin_type_value: str | None  # 类型具体值（int, float, Object 等）
+    linked_to: list[str]        # 目标 PinID 列表，32位小写 hex
+    direction: str              # "EGPD_Input" | "EGPD_Output"
+    default_value: str | None   # 默认值字符串化
+
+@dataclass
+class NodeIR:
+    node_guid: str              # 32位小写 hex
+    node_class: str             # "K2Node_Event" 等
+    node_comment: str | None    # 蓝图原注释
+    pins: list[PinIR]
+    execution_flow: list[dict]  # 序列化顺序 + Pin 连接，非重新发明格式
+
+@dataclass
+class GraphIR:
+    graph_guid: str             # 32位小写 hex
+    graph_name: str
+    graph_class: str
+    nodes: list[NodeIR]
+    execution_chains: list[list[str]]  # 节点 GUID 链
+
+@dataclass
+class PropertyIR:
+    name: str
+    type: str
+    value: Any                  # 原始值，渲染器负责格式化
+    guid: str | None            # PropertyTag GUID，可选
+
+@dataclass
+class ExportIR:
+    object_name: str
+    object_class: str
+    outer_path: list[str]       # 从根到当前对象的层级路径
+    properties: list[PropertyIR]
+    graphs: list[GraphIR]       # 仅蓝图类非空
+
+@dataclass
+class LinkerSummaryIR:
+    has_linker: bool
+    import_paths: list[str]     # 已解析的 import 对象路径列表
+    export_paths: list[str]     # 已解析的 export 对象路径列表
+
+@dataclass
+class PackageIR:
+    header: PackageHeaderIR
+    name_map: list[str]
+    imports: list[dict]         # 轻量导入摘要
+    exports: list[ExportIR]
+    linker: LinkerSummaryIR | None
+```
+
+---
+
+## 2b. ParseResult → IR 映射规则
+
+| ParseResult 字段 | 映射到 IR | 处理 |
+|-------------------|-----------|------|
+| `summary` | `PackageIR.header` | 提取 package_class, flags, counts |
+| `name_map` | `PackageIR.name_map` | 直接传递 |
+| `import_map` | `PackageIR.imports` | 通过 linker 解析为路径摘要 |
+| `export_map` | `PackageIR.exports` | 逐条转 ExportIR，ObjectTypeRegistry 路由 graphs |
+| `blueprint.variables` | 丢弃（不在 IR 层暴露） | 输出需要的话由渲染器从 properties 重组 |
+| `blueprint.graphs` | 丢弃 | IR 中的 graphs 来自 export 级别，非 blueprint 级别 |
+| `graphs` (UEdGraph) | `ExportIR.graphs` | UEdGraphNode → NodeIR，UEdGraphPin → PinIR |
+| `errors` | 丢弃 | IR 构建阶段处理，不在最终 IR 中暴露 |
+| `warnings` | 丢弃 | 同上 |
+| `decompiled_functions` | 丢弃 | kismet 专属，不参与 IR 渲染 |
+| `linker` | `PackageIR.linker` | 提取路径摘要 |
+| `version_container` | `PackageIR.header.ue_version` | 提取版本字符串 |
+| `components` / `soft_references` 等 | 丢弃 | IR 不包含元数据/引用分析 |
+
 ---
 
 ## 3. 渲染层设计
@@ -70,6 +156,13 @@ PackageIR
 ### 统一接口
 
 ```python
+@dataclass
+class RenderOptions:
+    """渲染选项（渲染器只读，不修改）。"""
+    verbose: bool = False          # 是否包含额外字段
+    indent: int = 2                # JSON 缩进
+    include_schema: bool = False   # 是否包含字段语义注解
+
 class IRenderer(ABC):
     @abstractmethod
     def render(self, ir: PackageIR, options: RenderOptions) -> str: ...
@@ -125,6 +218,13 @@ ParseResult → PackageIR 构建器
 2. **类型路由**: 复用 `ObjectTypeRegistry` 自动路由，不硬编码
 3. **跨引用解析**: 构建阶段处理所有 `FPackageIndex`，IR 中无未解析索引
 4. **GUID 标准化**: 构建阶段一次性完成
+
+### 错误处理策略
+
+- **tolerant 模式（默认）**：IR 构建阶段遇到可恢复问题（如单个 Export 解析失败、缺少 Pin GUID）时跳过该项继续，不抛出异常。最终 IR 中可能包含不完整的 ExportIR/NodeIR，但结构完整。
+- **strict 模式**：任何 IR 构建失败都立即抛出 `IRError`，终止解析。
+- **渲染器错误**：渲染器只负责格式排版，不处理数据错误。IR 中的空字段由渲染器决定是否跳过或输出占位。
+- **降级行为**：当 IR 构建因数据损坏无法完成时，`core.parse_single()` 降级为直接调用旧 `parse_package()` + 旧 formatter 输出，确保快捷脚本始终有结果（非零结果优于零结果）。
 
 ---
 
