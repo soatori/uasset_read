@@ -8,6 +8,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from uasset_read.parsers.class_registry import (
+    FallbackPolicy,
+    get_class_registry,
+)
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -114,10 +119,11 @@ def should_skip_export_for_tolerant_parsing(
 ) -> bool:
     """判断是否应对某 export 使用 tolerant skip（不尝试解析属性）。
 
-    检查逻辑（任一匹配即跳过）：
-    1. export.object_name 是否以 SKIP_CLASS_PREFIXES 开头
-    2. class_name 是否在 SKIP_CLASS_NAMES 中（精确匹配）
-    3. class_name 是否以 SKIP_CLASS_PREFIXES 开头
+    检查顺序：
+    1. class handler registry 中是否有 handler 且其 fallback_policy == SKIP
+    2. export.object_name 是否以 SKIP_CLASS_PREFIXES 开头
+    3. class_name 是否在 SKIP_CLASS_NAMES 中（精确匹配）
+    4. class_name 是否以 SKIP_CLASS_PREFIXES 开头
 
     Args:
         export: ObjectExport 实例
@@ -126,14 +132,19 @@ def should_skip_export_for_tolerant_parsing(
     Returns:
         True 表示应跳过属性解析，仅保留 export 元数据
     """
+    # 检查 1: registry handler fallback policy
+    if class_name is not None:
+        registry = get_class_registry()
+        handler = registry.find_handler(class_name)
+        if handler is not None and handler.fallback_policy == FallbackPolicy.SKIP:
+            return True
+
+    # 检查 2-4: 原有 skip list（作为 fallback policy）
     object_name = str(export.object_name)
-    # 检查 1: export 名称前缀匹配
     if object_name.startswith(SKIP_CLASS_PREFIXES):
         return True
-    # 检查 2: class name 精确匹配
     if class_name is not None and class_name in SKIP_CLASS_NAMES:
         return True
-    # 检查 3: class name 前缀匹配
     if class_name is not None and class_name.startswith(SKIP_CLASS_PREFIXES):
         return True
     return False
