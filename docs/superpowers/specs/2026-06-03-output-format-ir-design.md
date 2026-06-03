@@ -32,23 +32,35 @@
 ```
 PackageIR
 ├── header          # PackageFileSummary 精简版
+│   ├── package_name       # 完整路径 /Game/...
+│   ├── package_class      # 主类名
+│   ├── package_flags
+│   ├── total_export_count
+│   ├── total_import_count
+│   └── ue_version
 ├── name_map        # 名称表（供引用解析）
 ├── imports         # 导入表
 ├── exports         # 导出对象列表
 │   └── ExportIR
+│       ├── index              # 导出序号（0-based）
 │       ├── object_name
 │       ├── object_class
-│       ├── outer_path
-│       ├── properties        # 属性列表（IPropertyHolder 注册表模式）
-│       ├── graphs            # 仅蓝图类型
+│       ├── serial_size        # 序列化数据大小
+│       ├── outer_index_resolved  # 已解析的 outer 对象名
+│       ├── super_index_resolved  # 父类路径（null 则无）
+│       ├── parent_class       # 蓝图主类路径
+│       ├── properties         # 属性列表（IPropertyHolder 注册表模式）
+│       ├── graphs             # 仅蓝图类型
 │       │   └── GraphIR
 │       │       ├── graph_name
+│       │       ├── graph_guid
 │       │       ├── nodes
 │       │       │   └── NodeIR
+│       │       │       ├── node_guid     # 32位小写 hex
 │       │       │       ├── node_class
-│       │       │       ├── node_comment    # 蓝图原注释
-│       │       │       ├── pins            # PinIR 列表
-│       │       │       │   └── linked_to   # 引用 PinID
+│       │       │       ├── node_comment  # 蓝图原注释
+│       │       │       ├── pins          # PinIR 列表
+│       │       │       │   └── linked_to # 引用 PinID（32位小写 hex）
 │       │       │       └── execution_flow  # 序列化顺序 + Pin 连接
 │       │       └── execution_chains
 │       └── bulk_data         # L3+ 资产头部信息
@@ -68,6 +80,7 @@ PackageIR
 ```python
 @dataclass
 class PackageHeaderIR:
+    package_name: str            # 包完整路径（/Game/.../BP_FirstPersonCharacter）
     package_class: str           # 包内主类名
     package_flags: int           # 精简后的 flag 值
     total_export_count: int
@@ -104,15 +117,21 @@ class PropertyIR:
     name: str
     type: str
     value: Any                  # 原始值，渲染器负责格式化
+    array_index: int            # 数组索引（-1 表示非数组元素）
     guid: str | None            # PropertyTag GUID，可选
 
 @dataclass
 class ExportIR:
+    index: int                    # 导出序号（0-based）
     object_name: str
     object_class: str
-    outer_path: list[str]       # 从根到当前对象的层级路径
+    serial_size: int              # 序列化数据大小
+    outer_index_resolved: str | None  # 已解析的 outer 对象名
+    super_index_resolved: str | None  # 已解析的父类路径（null 则无）
+    parent_class: str | None      # 蓝图主类路径
     properties: list[PropertyIR]
-    graphs: list[GraphIR]       # 仅蓝图类非空
+    graphs: list[GraphIR]         # 仅蓝图类非空
+    bulk_data: dict | None        # L3+ 资产（Texture2D/SkeletalMesh 等）的 BulkData 头部信息
 
 @dataclass
 class LinkerSummaryIR:
@@ -191,6 +210,7 @@ class RenderOptions:
     verbose: bool = False          # 是否包含额外字段
     indent: int = 2                # JSON 缩进
     include_schema: bool = False   # 是否包含字段语义注解
+    include_function_graphs: bool = False  # 是否包含顶层 function_graphs 数组
 
 class IRenderer(ABC):
     @abstractmethod
@@ -220,17 +240,21 @@ JSONRenderer 输出的顶层结构（消除 blueprint 顶层对象后）：
 ```json
 {
   "status": { "status": "success", "message": null, "code": null },
-  "summary": { "package_class": "...", "package_flags": 262144, "total_export_count": 69, "total_import_count": 73, "ue_version": "5.x" },
+  "summary": { "package_name": "/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter", "package_class": "...", "package_flags": 262144, "total_export_count": 69, "total_import_count": 73, "ue_version": "5.x" },
   "name_map": [...],
   "imports": [...],
   "exports": [
     {
+      "index": 0,
       "object_name": "Default__BP_FirstPersonCharacter_C",
       "object_class": "BlueprintGeneratedClass",
-      "outer_path": ["/Game/FirstPerson/Blueprints/BP_FirstPersonCharacter"],
+      "serial_size": 46,
+      "outer_index_resolved": "Default__BP_FirstPersonCharacter_C",
+      "super_index_resolved": null,
+      "parent_class": "/Script/Engine.Character",
       "properties": [
-        { "name": "BlueprintSystemVersion", "type": "IntProperty", "value": 2, "guid": null },
-        { "name": "DefaultSceneRoot", "type": "ObjectProperty", "value": {...} }
+        { "name": "BlueprintSystemVersion", "type": "IntProperty", "value": 2, "array_index": -1, "guid": null },
+        { "name": "DefaultSceneRoot", "type": "ObjectProperty", "value": {...}, "array_index": -1, "guid": null }
       ],
       "graphs": [
         {
@@ -269,13 +293,8 @@ JSONRenderer 输出的顶层结构（消除 blueprint 顶层对象后）：
 | `logic_sources` | [] | **消除** |
 | `errors` 顶层 | [] | 渲染器不输出，由 status 字段表达 |
 | `_schema` | 可选 | 可选（include_schema=True） |
-| TextRenderer | text | YAML 风格缩进，与 JSON 等价 |
-| MarkdownRenderer | markdown | 标题 + Mermaid 流程图 |
-| BlueprintTextRenderer | blueprint_text | 紧凑节点列表 |
-| BlueprintUERenderer | blueprint_ue | 模拟 UE Ctrl+C 文本 |
-| CppSkeletonRenderer | cpp_skeleton | C++ 头文件骨架（可选） |
-
-> N2C 渲染器已删除（对应 n2c/ 模块整体移除）
+| `function_graphs` 顶层 | 存在（`--function-graphs`） | 渲染器动态生成（不在 IR 中存储） |
+| `bulk_data` 字段 | 不存在 | 新增：L3+ 资产的 BulkData 头部信息（可选） |
 
 ### 关键规则
 
@@ -283,6 +302,7 @@ JSONRenderer 输出的顶层结构（消除 blueprint 顶层对象后）：
 2. 渲染器**不得**做数据转换（GUID 格式化等），在 IR 构建时完成
 3. 渲染器**不得**拼接业务逻辑，只负责格式排版
 4. 复用现有 `ExporterRegistry` 改为注册 `IRenderer`
+5. `function_graphs` 是**计算派生视图**（按函数/事件分组节点 + 签名 + 执行流），不在 IR 中存储，由渲染器在 `include_function_graphs=True` 时从 `GraphIR.nodes` 动态生成
 
 ---
 
@@ -311,6 +331,7 @@ ParseResult → PackageIR 构建器
 2. **类型路由**: 复用 `ObjectTypeRegistry` 自动路由，不硬编码
 3. **跨引用解析**: 构建阶段处理所有 `FPackageIndex`，IR 中无未解析索引
 4. **GUID 标准化**: 构建阶段一次性完成
+5. **Graph → Export 归属**: `UEdGraph` 没有直接 outer 引用。构建层通过 linker 将 graphs 归入 `BlueprintGeneratedClass` 类型的 Export（蓝图的主导出）。非蓝图资产的 graphs 为空列表。
 
 ### 错误处理策略
 
@@ -419,7 +440,7 @@ print(parse_single(path, format=fmt))
 
 ---
 
-## 7. 精简决策（轻量化方向）
+## 6. 精简决策（轻量化方向）
 
 ### 目标
 
@@ -443,28 +464,33 @@ print(parse_single(path, format=fmt))
 
 ### 格式路由替换方案
 
-用 `formatters/__init__.py` 中的极简 dict 取代 ExporterRegistry：
+用 `core.py` 中的 `RENDERER_REGISTRY` 取代旧的 `ExporterRegistry` + `FORMAT_REGISTRY`：
 
 ```python
-FORMAT_REGISTRY = {
-    "json": format_json_full,
-    "json_summary": format_json_summary,
-    "text": format_text_full,
-    "text_summary": format_text_summary,
-    "markdown": format_markdown,
-    "blueprint_text": format_blueprint_translation_text,
-    "blueprint_ue_text": format_blueprint_ue_text,
-    "cpp_skeleton": format_cpp_skeleton,  # 可选
+RENDERER_REGISTRY: dict[str, type[IRenderer]] = {
+    "json": JSONRenderer,
+    "text": TextRenderer,
+    "text_summary": TextRenderer,
+    "markdown": MarkdownRenderer,
+    "blueprint_text": BlueprintTextRenderer,
+    "blueprint_ue_text": BlueprintUERenderer,
+    "cpp_skeleton": CppSkeletonRenderer,
 }
 
-def export(result, format: str = "text", **options) -> str:
-    fn = FORMAT_REGISTRY.get(format)
-    if fn is None:
+def get_renderer(format: str) -> IRenderer:
+    cls = RENDERER_REGISTRY.get(format)
+    if cls is None:
         raise ValueError(f"未知格式: {format}")
-    return fn(result, **options)
+    return cls()
 ```
 
-5 行函数 + 1 个 dict，替换 13 个文件的 exporter 系统。
+渲染器实例化 + 调用：
+```python
+renderer = get_renderer(format)
+output = renderer.render(ir, RenderOptions(verbose=verbose, indent=2))
+```
+
+取代旧的 13 文件 exporter 系统 + dict+函数 路由。
 
 ### 项目布局调整
 
@@ -476,7 +502,7 @@ def export(result, format: str = "text", **options) -> str:
 
 ---
 
-## 8. 更新后的迁移顺序
+## 7. 更新后的迁移顺序
 
 1. 定义 `PackageIR` 数据结构（`models/ir.py`）
 2. 精简导出系统：删除 `exporter/`、`n2c/`、`agent/`，formatters 接管路由
@@ -502,3 +528,9 @@ def export(result, format: str = "text", **options) -> str:
 | export() 函数 | 每种格式 | 输出与现有 CLI 等价 |
 | 快捷脚本 | `python diag.py <path>` | 正确输出 |
 | 错误处理 | 文件不存在、目录传入 | 正确抛出异常 |
+| **结构变化验证** | 蓝图资产 | 无顶层 `blueprint` 字段，graphs 在 exports 下 |
+| **结构变化验证** | 蓝图资产 | `blueprint.variables` 归入 exports[].properties |
+| **结构变化验证** | 所有资产 | 无 `output_version` 字段 |
+| **字段完整性** | 所有资产 | ExportIR 包含 index/serial_size/outer_index_resolved |
+| **字段完整性** | 所有资产 | PropertyIR 包含 array_index |
+| **BulkData** | Texture2D/SkeletalMesh | ExportIR.bulk_data 非空 |
