@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import dataclasses
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.renderers.base import IRenderer, RenderOptions
@@ -9,6 +10,17 @@ from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
+
+
+class _JSONEncoder(json.JSONEncoder):
+    """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
+
+    def default(self, o):
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        if isinstance(o, bytes):
+            return o.hex()
+        return super().default(o)
 
 
 class JSONRenderer(IRenderer):
@@ -37,7 +49,7 @@ class JSONRenderer(IRenderer):
             }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
-        return json.dumps(data, indent=options.indent, ensure_ascii=False)
+        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
     def _export_to_dict(self, export, options: RenderOptions) -> dict[str, Any]:
         d = {
