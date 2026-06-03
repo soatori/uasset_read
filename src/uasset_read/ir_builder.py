@@ -1,0 +1,262 @@
+"""IR 构建层 — 将 ParseResult 转换为 PackageIR。
+
+构建阶段处理所有 FPackageIndex 跨引用解析和 GUID 标准化。
+渲染器只接收 PackageIR，不访问 ParseResult。
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from uasset_read.models.ir import (
+    PackageIR,
+    PackageHeaderIR,
+    PropertyIR,
+    ExportIR,
+    GraphIR,
+    NodeIR,
+    PinIR,
+    LinkerSummaryIR,
+)
+
+if TYPE_CHECKING:
+    from uasset_read.models.result import ParseResult
+
+
+def build_package_ir(result: ParseResult) -> PackageIR:
+    """将 ParseResult 转换为 PackageIR。
+
+    构建阶段：
+    1. 从 summary 提取 header
+    2. 逐条转换 export_map 为 ExportIR
+    3. 通过 linker 解析 import/export 路径
+    4. GUID 标准化为 32 位小写 hex
+
+    tolerant 模式：单个 Export 解析失败时跳过该项继续。
+    """
+    header = _build_header(result)
+    exports = _build_exports(result)
+    linker = _build_linker(result)
+
+    return PackageIR(
+        header=header,
+        name_map=list(result.name_map) if result.name_map else [],
+        imports=_build_imports(result),
+        exports=exports,
+        linker=linker,
+    )
+
+
+def _build_header(result: ParseResult) -> PackageHeaderIR:
+    summary = result.summary
+    version = _get_version_string(result)
+
+    return PackageHeaderIR(
+        package_name=_safe_str(getattr(summary, "package_name", None)),
+        package_class=_safe_str(getattr(summary, "package_class", None)),
+        package_flags=getattr(summary, "package_flags", 0) or 0,
+        total_export_count=getattr(summary, "total_export_count", 0) or 0,
+        total_import_count=getattr(summary, "total_import_count", 0) or 0,
+        ue_version=version,
+    )
+
+
+def _get_version_string(result: ParseResult) -> str:
+    """从 version_container 提取 UE 版本字符串。"""
+    vc = result.version_container
+    if vc is None:
+        return "unknown"
+
+    # 优先尝试 get_ue_version_string（如果存在且可调用）
+    method = getattr(vc, "get_ue_version_string", None)
+    if callable(method):
+        try:
+            return method()
+        except Exception:
+            pass
+
+    # 回退：基于 is_ue5 判断
+    if getattr(vc, "is_ue5", False):
+        return "5.x"
+    return "4.x"
+
+
+def _build_imports(result: ParseResult) -> list[dict]:
+    imports = []
+    for imp in result.import_map or []:
+        imports.append({
+            "class_package": _safe_str(getattr(imp, "class_package", None)),
+            "class_name": _safe_str(getattr(imp, "class_name", None)),
+            "object_name": _safe_str(getattr(imp, "object_name", None)),
+        })
+    return imports
+
+
+def _build_exports(result: ParseResult) -> list[ExportIR]:
+    exports = []
+    for idx, export in enumerate(result.export_map or []):
+        try:
+            export_ir = _build_export_ir(idx, export, result)
+            exports.append(export_ir)
+        except Exception:
+            # tolerant 模式：跳过失败的 export
+            pass
+    return exports
+
+
+def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
+    outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
+    super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
+
+    parent_class = None
+    if result.blueprint and getattr(result.blueprint, "parent_class", None):
+        parent_class = result.blueprint.parent_class
+
+    properties = []
+    for prop in getattr(export, "properties", None) or []:
+        properties.append(_build_property_ir(prop))
+
+    graphs = []
+    for graph in getattr(export, "graphs", None) or []:
+        graphs.append(_build_graph_ir(graph))
+
+    bulk_data = getattr(export, "bulk_data_header", None)
+
+    return ExportIR(
+        index=idx,
+        object_name=_safe_str(getattr(export, "object_name", None)),
+        object_class=_safe_str(getattr(export, "object_class", None)),
+        serial_size=getattr(export, "serial_size", 0) or 0,
+        outer_index_resolved=outer_resolved,
+        super_index_resolved=super_resolved,
+        parent_class=parent_class,
+        properties=properties,
+        graphs=graphs,
+        bulk_data=bulk_data,
+    )
+
+
+def _build_property_ir(prop) -> PropertyIR:
+    return PropertyIR(
+        name=_safe_str(getattr(prop, "name", None)),
+        type=_safe_str(getattr(prop, "type", None)),
+        value=getattr(prop, "value", None),
+        array_index=getattr(prop, "array_index", -1) or -1,
+        guid=_normalize_guid(getattr(prop, "guid", None)),
+    )
+
+
+def _build_graph_ir(graph) -> GraphIR:
+    nodes = []
+    for node in getattr(graph, "nodes", None) or []:
+        nodes.append(_build_node_ir(node))
+
+    return GraphIR(
+        graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
+        graph_name=_safe_str(getattr(graph, "graph_name", None)),
+        graph_class=_safe_str(getattr(graph, "graph_class", None)),
+        nodes=nodes,
+        execution_chains=getattr(graph, "execution_chains", None) or [],
+    )
+
+
+def _build_node_ir(node) -> NodeIR:
+    pins = []
+    for pin in getattr(node, "pins", None) or []:
+        pins.append(_build_pin_ir(pin))
+
+    return NodeIR(
+        node_guid=_normalize_guid(getattr(node, "node_guid", None)),
+        node_class=_safe_str(getattr(node, "class_name", None)),
+        node_comment=getattr(node, "node_comment", None),
+        pins=pins,
+        execution_flow=getattr(node, "execution_flow", None) or [],
+    )
+
+
+def _build_pin_ir(pin) -> PinIR:
+    linked_to = []
+    for ref in getattr(pin, "linked_to_raw", None) or []:
+        guid = _extract_pin_guid(ref)
+        if guid:
+            linked_to.append(guid)
+
+    direction = "EGPD_Input"
+    if getattr(pin, "direction", 0) == 1:
+        direction = "EGPD_Output"
+
+    return PinIR(
+        pin_name=_safe_str(getattr(pin, "pin_name", None)),
+        pin_type=_safe_str(getattr(pin, "pin_type", None)),
+        pin_type_value=getattr(pin, "pin_type_value", None),
+        linked_to=linked_to,
+        direction=direction,
+        default_value=getattr(pin, "default_value", None),
+    )
+
+
+def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
+    """将 PackageIndex 解析为可读路径字符串。"""
+    if pkg_index is None or result.linker is None:
+        return None
+    try:
+        obj_ref = result.linker.resolve_package_index(pkg_index)
+        if obj_ref is None:
+            return None
+        # UObjectInstance 有 get_full_name() 方法
+        if hasattr(obj_ref, "get_full_name"):
+            return obj_ref.get_full_name()
+        return str(obj_ref)
+    except Exception:
+        return None
+
+
+def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
+    linker = result.linker
+    if linker is None:
+        return None
+
+    import_paths = []
+    for imp in result.import_map or []:
+        path = f"{_safe_str(getattr(imp, 'class_package', None))}.{_safe_str(getattr(imp, 'class_name', None))}"
+        if path.strip("."):
+            import_paths.append(path)
+
+    export_paths = []
+    for exp in result.export_map or []:
+        name = getattr(exp, "object_name", "")
+        if name:
+            export_paths.append(name)
+
+    return LinkerSummaryIR(
+        has_linker=True,
+        import_paths=import_paths,
+        export_paths=export_paths,
+    )
+
+
+def _safe_str(value) -> str:
+    """安全地将值转为字符串，None 返回空字符串。"""
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _normalize_guid(guid: str | None) -> str | None:
+    """将 GUID 标准化为 32 位小写 hex（无横杠）。"""
+    if not guid:
+        return None
+    cleaned = str(guid).replace("-", "").lower()
+    if len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
+        return cleaned
+    return None
+
+
+def _extract_pin_guid(ref) -> str | None:
+    """从 Pin 引用中提取并标准化 GUID。"""
+    if isinstance(ref, dict):
+        raw = ref.get("pin_guid") or ref.get("pin_id")
+        return _normalize_guid(raw) if raw else None
+    if isinstance(ref, str):
+        return _normalize_guid(ref)
+    raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+    return _normalize_guid(raw) if raw else None
