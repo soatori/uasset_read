@@ -31,3 +31,7 @@ def get_renderer(format_name: str) -> IRenderer:
 def list_formats() -> list[str]:
     """返回所有已注册的格式名。"""
     return sorted(RENDERER_REGISTRY.keys())
+
+
+# 导入具体渲染器模块以触发注册
+from uasset_read.renderers import json_renderer  # noqa: F401, E402
