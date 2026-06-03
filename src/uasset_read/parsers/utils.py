@@ -1,6 +1,8 @@
 """parsers 模块的共享辅助函数"""
 from typing import Any, List, Optional
 
+from uasset_read.exceptions import ParseError, ErrorContext
+
 
 def resolve_name_from_index(
     archive: Any,
@@ -40,13 +42,29 @@ def read_validated_count(
         验证后的数量值
 
     Raises:
-        ValueError: 数量无效
+        ParseError: 数量无效（可被 smart continue 机制捕获）
     """
     count = archive.read_i32()
     if count < 0:
-        raise ValueError(f"{label}: 数量不能为负数 ({count})")
+        raise ParseError(
+            f"{label}: 数量不能为负数 ({count})",
+            context=ErrorContext(
+                offset=archive.tell() - 4,
+                phase="properties",
+                operation="read_validated_count",
+                context_name=label,
+            ),
+        )
     if count > max_count:
-        raise ValueError(f"{label}: 数量超过最大值 ({count} > {max_count})")
+        raise ParseError(
+            f"{label}: 数量超过最大值 ({count} > {max_count})",
+            context=ErrorContext(
+                offset=archive.tell() - 4,
+                phase="properties",
+                operation="read_validated_count",
+                context_name=label,
+            ),
+        )
     return count
 
 

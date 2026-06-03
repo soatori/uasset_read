@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -48,18 +48,95 @@ SKIP_CLASS_PREFIXES = (
     "AggGeom_",
 )
 
+# 需要跳过的精确 class 名称（不使用前缀匹配）
+# 这些 class 使用完全自定义的序列化格式，无法用通用 parser 处理
+SKIP_CLASS_NAMES = {
+    # Niagara — 使用 FNiagaraVariable 等自定义序列化器
+    "NiagaraSystem",
+    "NiagaraGraph",
+    "NiagaraEmitter",
+    "NiagaraScript",
+    "NiagaraScriptSource",
+    "NiagaraDataInterface",
+    "NiagaraDataInterfaceExport",
+    "NiagaraDataInterfaceGrid2D",
+    "NiagaraDataInterfaceGrid3D",
+    "NiagaraDataInterfaceSkeletalMesh",
+    "NiagaraDataInterfaceTexture",
+    "NiagaraDataInterfaceComponentRenderer",
+    "NiagaraDataInterfaceAudioSubmix",
+    "NiagaraDataInterfaceCurlNoise",
+    "NiagaraDataInterfaceRenderTarget2D",
+    "NiagaraDataInterfaceSkeletalMeshSlice",
+    "NiagaraDataInterfaceStaticMesh",
+    "NiagaraDataInterfaceRwGrid2D",
+    "NiagaraDataInterfaceRwGrid3D",
+    "NiagaraDataInterfaceNeighborGrid3D",
+    "NiagaraDataInterfaceLandscape",
+    "NiagaraDataInterfaceOcclusion",
+    "NiagaraDataInterfaceParticleRead",
+    "NiagaraDataInterfaceDebugColor",
+    "NiagaraDataInterfaceGpuReadback",
+    "NiagaraDataInterfaceAudio",
+    "NiagaraDataInterfaceMediaTexture",
+    "NiagaraDataInterfaceVideo",
+    "NiagaraDataInterfaceVirtualTexture",
+    "NiagaraDataInterfaceSparseVolumeTexture",
+    # Niagara — Renderer / Emitter
+    "NiagaraSpriteRendererProperties",
+    "NiagaraMeshRendererProperties",
+    "NiagaraRibbonRendererProperties",
+    "NiagaraRendererProperties",
+    "NiagaraEmitterProperties",
+    # Anim — 使用自定义序列化
+    "AnimBlueprintGeneratedClass",
+    "AnimBlueprintExtension",
+    "AnimSequence",
+    "AnimMontage",
+    "AnimComposite",
+    "AnimPoseSnapshot",
+    # Audio — ImpulseResponse 等使用特殊格式
+    "ImpulseResponse",
+    "SoundWave",
+    "SoundCue",
+    "SoundAttenuation",
+    "SoundConcurrency",
+    "SoundMix",
+    "SoundClass",
+    "ReverbEffect",
+    "AmbientSound",
+}
 
-def should_skip_export_for_tolerant_parsing(export: "ObjectExport") -> bool:
+
+def should_skip_export_for_tolerant_parsing(
+    export: "ObjectExport",
+    class_name: Optional[str] = None,
+) -> bool:
     """判断是否应对某 export 使用 tolerant skip（不尝试解析属性）。
+
+    检查逻辑（任一匹配即跳过）：
+    1. export.object_name 是否以 SKIP_CLASS_PREFIXES 开头
+    2. class_name 是否在 SKIP_CLASS_NAMES 中（精确匹配）
+    3. class_name 是否以 SKIP_CLASS_PREFIXES 开头
 
     Args:
         export: ObjectExport 实例
+        class_name: 可选的类名（从 class_index 解析）
 
     Returns:
         True 表示应跳过属性解析，仅保留 export 元数据
     """
     object_name = str(export.object_name)
-    return object_name.startswith(SKIP_CLASS_PREFIXES)
+    # 检查 1: export 名称前缀匹配
+    if object_name.startswith(SKIP_CLASS_PREFIXES):
+        return True
+    # 检查 2: class name 精确匹配
+    if class_name is not None and class_name in SKIP_CLASS_NAMES:
+        return True
+    # 检查 3: class name 前缀匹配
+    if class_name is not None and class_name.startswith(SKIP_CLASS_PREFIXES):
+        return True
+    return False
 
 
 def skip_export_payload(

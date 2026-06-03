@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional, List, Union, Sequence
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from uasset_read.blueprint import (
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.link.result import LinkerParseResult
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_kismet_decompiled(
@@ -585,7 +588,10 @@ def parse_uasset_with_linker(
         # 可选：预加载所有 exports
         if preload_all:
             for i in range(len(linker._export_objects)):
-                linker.preload(i)
+                try:
+                    linker.preload(i)
+                except (ParseError, Exception) as e:
+                    logger.warning("预加载 export %d 失败，跳过: %s", i, e)
 
         # Stage 4: 后处理（引用修复、导入验证、依赖图构建）
         linker.post_load()

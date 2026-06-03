@@ -239,7 +239,15 @@ def parse_properties_from_export(
         should_skip_export_for_tolerant_parsing,
         skip_export_payload,
     )
-    if should_skip_export_for_tolerant_parsing(export):
+    # 解析 export 的 class name 用于 skip 检查
+    _skip_class_name = None
+    if import_map is not None:
+        try:
+            from uasset_read.serializers.object_resources import resolve_class_name
+            _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
+        except Exception:
+            pass
+    if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
             export.object_name,
