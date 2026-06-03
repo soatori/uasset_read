@@ -11,19 +11,29 @@ section: public-api
 
 ```python
 # 推荐：按需导入
+from uasset_read import parse_single, parse_batch, list_formats
 from uasset_read import parse_uasset, ParseResult
 from uasset_read import FArchive, BlueprintMetadata, UEdGraph
-from uasset_read import PakFileReader, format_json_full
+from uasset_read import PakFileReader
 
 # 新代码优先使用聚焦导入
 from uasset_read.pak import PakFileReader
-from uasset_read.n2c import to_n2c_json, N2CStruct
 from uasset_read.cpp_gen import extract_cpp_class_skeleton
-from uasset_read.agent import AgentTranslationPipeline
+from uasset_read.renderers import get_renderer, list_formats
 ```
 
-> [!NOTE] 兼容性说明
-> 根包仍重新导出高级子模块供现有用户使用。新代码应优先使用聚焦导入，如 `from uasset_read.pak import ...` 而非 `from uasset_read import PakFileReader`。
+> [!NOTE] 架构变更
+> **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。旧 `export()` 函数被 `parse_single()` 替代。
+> 根包仍重新导出高级子模块供现有用户使用。新代码应优先使用聚焦导入。
+
+## 核心 API（0.4.1+ 新增）
+
+| 符号 | 说明 |
+|------|------|
+| `parse_single` | 解析单个文件并返回格式化字符串 |
+| `parse_batch` | 批量解析目录中所有 .uasset/.umap |
+| `list_formats` | 返回所有已注册的格式名 |
+| `BatchResult` | 批量导出结果数据类 |
 
 ## 版本号
 
@@ -555,18 +565,17 @@ from uasset_read.agent import AgentTranslationPipeline
 | `decompile_uasset` | 反编译整个 uasset |
 | `decompile_single_function` | 反编译单个函数 |
 
-## Agent 模块 (agent)
+## ~~Agent 模块 (agent)~~ — 已移除
 
-| 符号 | 说明 |
-|------|------|
-| `AgentTranslationPipeline` | Agent 翻译管线 |
-| `translate_blueprint_to_cpp` | 蓝图翻译为 C++ |
-| `CppFileWriter` | C++ 文件写入器 |
-| `write_cpp_class_files` | 写入 C++ 类文件 |
+> [!WARNING] 已移除
+> `agent/` 模块已在 0.4.1 整体删除。请通过 `parse_single(format="cpp_skeleton")` 获取 C++ 输出。
 
-## N2C 中间格式 (n2c)
+## ~~N2C 中间格式 (n2c)~~ — 已移除
 
-### 数据结构
+> [!WARNING] 已移除
+> `n2c/` 模块已在 0.4.1 整体删除。N2C 中间格式不再提供。
+
+### 旧 N2C 数据结构（仅供参考）
 
 | 符号 | 说明 |
 |------|------|
@@ -576,7 +585,7 @@ from uasset_read.agent import AgentTranslationPipeline
 | `N2CPin` | N2C Pin |
 | `N2CIdMapper` | N2C ID 映射器 |
 
-### JSON 序列化
+### 旧 N2C 序列化（仅供参考）
 
 | 符号 | 说明 |
 |------|------|
@@ -585,7 +594,7 @@ from uasset_read.agent import AgentTranslationPipeline
 | `N2C_JSON_SCHEMA` | N2C JSON Schema |
 | `validate_n2c_json` | 验证 N2C JSON |
 
-### 节点处理器
+### 旧 N2C 节点处理器（仅供参考）
 
 | 符号 | 说明 |
 |------|------|
@@ -596,17 +605,20 @@ from uasset_read.agent import AgentTranslationPipeline
 | `N2CNodeTypeRegistry` | N2C 节点类型注册表 |
 | `extract_data_flow_map` | 提取数据流映射 |
 
-## 导出系统 (exporter)
+## ~~导出系统 (exporter)~~ — 已移除
 
-| 符号 | 说明 |
+> [!WARNING] 已移除
+> `exporter/` 模块已在 0.4.1 整体删除。请使用 `parse_single()` + 渲染器系统。
+
+| 符号 | 状态 |
 |------|------|
-| `ExportOptions` | 导出选项 |
-| `IExporter` | 导出器接口 |
-| `ExportValidationError` | 导出验证异常 |
-| `ExporterRegistry` | 导出器注册表 |
-| `export` | 导出函数 |
-| `BatchExporter` | 批量导出器 |
-| `BatchExportResult` | 批量导出结果 |
+| `ExportOptions` | 已移除 → 使用 `RenderOptions` |
+| `IExporter` | 已移除 → 使用 `IRenderer` |
+| `ExportValidationError` | 已移除 |
+| `ExporterRegistry` | 已移除 → 使用 `RENDERER_REGISTRY` |
+| `export` | 已移除 → 使用 `parse_single()` |
+| `BatchExporter` | 已移除 → 使用 `parse_batch()` |
+| `BatchExportResult` | 已移除 → 使用 `BatchResult` |
 
 ## C++ 代码生成 (cpp_gen)
 
