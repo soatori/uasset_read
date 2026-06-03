@@ -3,11 +3,7 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 版本 0.3.8-beta（稳定发布，存在已知限制，详见 release-notes）
 
-公共API通过__all__控制，初始阶段导出常量和异常类。
-
-Compatibility note: the root package still re-exports advanced submodules for
-existing users. New code should prefer focused imports from subpackages such as
-uasset_read.pak, uasset_read.n2c, uasset_read.cpp_gen, and uasset_read.agent.
+公共API通过__all__控制。
 """
 __version__ = "0.3.8-beta"
 
@@ -278,6 +274,9 @@ from .formatters import (
     build_schema_info,
     resolve_fpackage_index,
 )
+# Core API (parse_single, parse_batch, list_formats)
+from .core import parse_single, parse_batch, list_formats, BatchResult
+
 # ============================================================================
 from .parse_uasset import parse_package, parse_uasset, parse_uasset_with_linker
 from .package import (
@@ -411,6 +410,11 @@ from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, 
 __all__ = [
     # 版本号
     "__version__",
+    # Core API
+    "parse_single",
+    "parse_batch",
+    "list_formats",
+    "BatchResult",
     # 常量（基础）
     "PACKAGE_FILE_TAG",
     "PACKAGE_FILE_TAG_SWAPPED",
