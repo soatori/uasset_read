@@ -64,6 +64,7 @@ tests/*
 !tests/test_core_api.py
 !tests/test_function_resolver.py
 !tests/test_jump_analyzer.py
+!tests/test_unknown_property_fallback.py
 QWEN.md
 
 # AI agent reports (local only)
