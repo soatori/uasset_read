@@ -303,6 +303,24 @@ def _simplify_class_name(raw_name: str) -> str:
 # 辅助函数
 # ============================================================================
 
+def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
+    """构建 {原始参数名模式 -> sanitized名} 映射。
+
+    Sanitizer 将 '/' 等非法字符替换为 '__'。例如：
+    - 'Left / Right' → 'Left__Right'
+    - 'Forward / Backward' → 'Forward__Backward'
+
+    反向推导：如果 sanitized 名包含 '__'，构造对应的 ' / ' 模式。
+    """
+    name_map = {}
+    for param in method.parameters:
+        if '__' in param.name:
+            # 反向推导原始名：'__' → ' / '
+            original = param.name.replace('__', ' / ')
+            name_map[original] = param.name
+    return name_map
+
+
 def _inject_function_bodies(
     methods: List[CppMethodIR],
     decompiled_functions: List[Any],
@@ -313,6 +331,8 @@ def _inject_function_bodies(
     1. 精确匹配：function_name == cpp_name
     2. 清理后匹配：function_name 清理后 == cpp_name
     3. 大小写不敏感匹配
+
+    注入前执行符号映射替换，确保函数体内变量名与方法声明一致。
 
     Args:
         methods: CppMethodIR 列表（已填充方法声明）
@@ -339,7 +359,11 @@ def _inject_function_bodies(
                     break
 
         if method and decompiled.cpp_code:
-            method.body_text = decompiled.cpp_code
+            body = decompiled.cpp_code
+            # 执行符号映射替换：原始参数名 → sanitized 名
+            for original, sanitized in _build_param_name_map(method).items():
+                body = body.replace(original, sanitized)
+            method.body_text = body
 
 def _extract_class_name(result: "LinkerParseResult") -> str:
     """提取 C++ 类名。

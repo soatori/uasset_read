@@ -134,6 +134,17 @@ class TestCppParameterBinding:
         move_section = _extract_function_body(cpp_output, "Move")
         assert "false" in move_section
 
+    def test_no_illegal_characters_in_body(self, cpp_output: str):
+        """函数体内不应出现含 '/' 的参数名（如 'Left / Right'）。"""
+        illegal_patterns = [
+            "Left / Right",
+            "Forward / Backward",
+        ]
+        for pattern in illegal_patterns:
+            assert pattern not in cpp_output, (
+                f"函数体内出现非法参数名 '{pattern}'，应被 sanitized 替换"
+            )
+
 
 @pytest.mark.integration
 @pytest.mark.regression
