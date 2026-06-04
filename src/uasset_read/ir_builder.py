@@ -29,19 +29,7 @@ if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
 
 
-# Blueprint 元数据键列表 — 与 cpp_constructor_ir_builder.py 保持一致
-_BLUEPRINT_METADATA_KEYS = frozenset({
-    "BlueprintSystemVersion",
-    "GeneratedClass",
-    "SimpleConstructionScript",
-    "bCanEverTick",
-    "bCanEverRender",
-    "bStartWithTickEnabled",
-    "bReplicates",
-    "NetUpdateFrequency",
-    "MinNetUpdateFrequency",
-    "NetPriority",
-})
+from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
 
 
 def _classify_variable(var) -> str:

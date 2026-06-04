@@ -30,20 +30,7 @@ if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintVariable
 
 
-# Blueprint 元数据键列表 — 这些是 UE 编辑器使用的内部字段，
-# 不应注入到用户 C++ 构造函数中。
-_BLUEPRINT_METADATA_KEYS = frozenset({
-    "BlueprintSystemVersion",
-    "GeneratedClass",
-    "SimpleConstructionScript",
-    "bCanEverTick",
-    "bCanEverRender",
-    "bStartWithTickEnabled",
-    "bReplicates",
-    "NetUpdateFrequency",
-    "MinNetUpdateFrequency",
-    "NetPriority",
-})
+from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
 
 
 def _is_blueprint_metadata(var_name: str) -> bool:

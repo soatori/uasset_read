@@ -159,6 +159,23 @@ FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
 FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION = 36
 
 # ============================================================================
+# 蓝图元数据键（UE 编辑器内部字段）
+# ============================================================================
+
+BLUEPRINT_METADATA_KEYS = frozenset({
+    "BlueprintSystemVersion",
+    "GeneratedClass",
+    "SimpleConstructionScript",
+    "bCanEverTick",
+    "bCanEverRender",
+    "bStartWithTickEnabled",
+    "bReplicates",
+    "NetUpdateFrequency",
+    "MinNetUpdateFrequency",
+    "NetPriority",
+})
+
+# ============================================================================
 # 控制流节点集合（用于蓝图图解析）
 # ============================================================================
 
