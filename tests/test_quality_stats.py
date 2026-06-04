@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +20,12 @@ def _run(args=None, cwd=None):
     cmd = [sys.executable, str(_SCRIPT)]
     if args:
         cmd.extend(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
+    result = subprocess.run(
+        cmd, capture_output=True, cwd=cwd, env=env,
+        encoding="utf-8", errors="replace",
+    )
     return result.returncode, result.stdout, result.stderr
 
 

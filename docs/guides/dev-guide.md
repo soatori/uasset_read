@@ -84,21 +84,24 @@ E:\Develop\lib\UnrealEngine\Samples\
 1. **真实资产随机测试** — 从 LyraStarterGame 随机抽取 ≥ 50 个资产验证
 2. **多类型蓝图验证** — 手动验证 ≥ 3 种不同类型蓝图的完整输出
 3. **事件函数执行追踪** — 验证至少 2 个蓝图的事件→函数调用链可正确追踪
-4. **版本号一致性** — 确认 `pyproject.toml`、`__init__.py`、文档版本号统一
+4. **版本号一致性** — 确认 `__init__.py`、文档版本号统一
 5. **文档同步** — 确认 CLAUDE.md、README.md、Wiki 文档与代码一致
 
 详细测试规范见 `docs/guides/testing-requirements.md`。
 
 ## 开发命令
 
-### 安装
+### 直接调用
 
 ```bash
-# 安装（含开发依赖）
-pip install -e ".[dev]"
+python run.py path/to/file.uasset --text
+python run.py path/to/file.uasset --cpp-skeleton
+```
 
-# PAK 可选依赖（AES 解密、LZ4/Zstd 压缩）
-pip install -e ".[pak]"
+或通过模块：
+
+```bash
+python -m uasset_read path/to/file.uasset --text
 ```
 
 ### 测试
@@ -113,19 +116,18 @@ python -m pytest tests/ -v -m integration   # 仅集成测试
 ### CLI 入口
 
 ```bash
-uasset-read path/to/file.uasset              # JSON 输出（默认）
-uasset-read path/to/file.uasset --output out.json   # 保存到文件
-uasset-read path/to/file.uasset --summary      # 仅摘要
-uasset-read path/to/file.uasset --text       # 人类可读文本
-uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
-uasset-read path/to/file.uasset --blueprint-text   # 蓝图节点文本
-uasset-read path/to/file.uasset --blueprint-ue-text  # UE 格式文本
-uasset-read path/to/file.uasset --cpp-skeleton       # C++ 类骨架
-uasset-read path/to/file.uasset --n2c          # N2C 中间格式 JSON
-uasset-read --batch-dir path/to/dir/           # 批量导出目录
-uasset-read path/to/file.uasset --strict     # 遇到警告时停止
-uasset-read path/to/file.uasset --tolerant   # 容错模式（默认）
-uasset-read path/to/file.uasset --verbose    # 启用调试日志
+python run.py path/to/file.uasset              # JSON 输出（默认）
+python run.py path/to/file.uasset --output out.json   # 保存到文件
+python run.py path/to/file.uasset --summary      # 仅摘要
+python run.py path/to/file.uasset --text       # 人类可读文本
+python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
+python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
+python run.py path/to/file.uasset --blueprint-ue-text  # UE 格式文本
+python run.py path/to/file.uasset --cpp-skeleton       # C++ 类骨架
+python run.py --batch-dir path/to/dir/           # 批量导出目录
+python run.py path/to/file.uasset --strict     # 遇到警告时停止
+python run.py path/to/file.uasset --tolerant   # 容错模式（默认）
+python run.py path/to/file.uasset --verbose    # 启用调试日志
 ```
 
 ## 架构
@@ -136,7 +138,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 .uasset → FArchive → Deserializer → Models → Formatters → Output
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
-          PackageLinker · KismetDecompiler · N2C Format · PakFileReader
+          PackageLinker · KismetDecompiler · PakFileReader
           IR Builder → Renderers (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
 ```
 
@@ -153,8 +155,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | 主解析器 | `parse_uasset.py` | `parse_package()`、`parse_uasset()` 和 `parse_uasset_with_linker()` 入口 |
 | 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 等非 uasset 文件解析 |
-| CLI | `cli.py` | argparse 入口（`uasset-read`），支持 `--n2c`、`--batch`、`--validate` |
-| 导出器 | `exporter/` | `IExporter` 接口、注册表、批量导出 |
+| CLI | `cli.py` | argparse 入口，委托 `core.py` API |
 | 版本管理 | `versioning.py` | `VersionContainer`、`build_version_container`、`EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
 | **序列化** | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag`、图序列化器、对象资源 |
@@ -167,15 +168,13 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | **链接器** | `link/` | `PackageLinker` 两阶段对象图重建、`UObjectInstance` |
 | **C++ 生成** | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射、构造函数 IR 构建器 |
-| **Agent** | `agent/` | `AgentTranslationPipeline` + `CppFileWriter`（蓝图→C++） |
-| **N2C** | `n2c/` | 中间格式：`N2CStruct/Graph/Node/Pin`、JSON Schema、验证器、57 种节点处理器 |
 | **Pak** | `pak/` | `FPakInfo/PakEntry/FPakDirectoryEntry`、`PakFileReader`、索引解析、压缩分发、AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析、标志定义 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
 | **IR** | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器、`PackageIR`、`ExportIR`、`PropertyIR` |
 | **Renderer** | `renderers/` | 可插拔 `IRenderer` ABC + format registry（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton，6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid/蓝图翻译文本/UE 格式文本输出生成器 |
+| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/蓝图翻译文本/UE 格式文本输出生成器 |
 | **Core API** | `core.py` | `parse_single()`、`parse_batch()`、`list_formats()` — 简化高层 API |
 | **Simple API** | `simple.py` | 更简化的单文件解析入口 |
 

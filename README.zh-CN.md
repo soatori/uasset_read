@@ -26,8 +26,8 @@
 |------|-----|
 | 版本 | 0.4.2 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 994 通过，2 xfail（51 个测试文件，覆盖 12+ 种资产类型） |
-| 模块 | 15 个子包，100+ 个源文件 |
+| 测试 | 994 通过，2 xfail（54 个测试文件，覆盖 12+ 种资产类型） |
+| 模块 | 13 个子包，137 个源文件 |
 
 ## 功能特性
 
@@ -50,7 +50,6 @@
 ### 高级功能
 - **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码，支持结构化控制流
 - **PackageLinker** — 两阶段对象图重建
-- **N2C 中间格式** — 结构化 JSON Schema、执行链
 - **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射、构造函数格式化、默认值生成、标识符清理
 - **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
 - **循环依赖检测** — 导入映射相互引用检测
@@ -67,8 +66,7 @@
 ### 多种输出格式
 - **JSON** — 完整结构化输出或摘要（基于渲染器，无 blueprint 包装层）
 - **Text** — 人类可读格式
-- **Markdown** — 带表格的格式化文档
-- **Mermaid** — 交互式流程图和依赖图
+- **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
 - **Blueprint UE Text** — UE 编辑器风格格式
 - **C++ Skeleton** — 可直接使用的类骨架代码，含构造函数初始化列表
 
@@ -82,48 +80,44 @@
 ```bash
 git clone https://github.com/soatori/uasset_read.git
 cd uasset_read
-pip install -e ".[dev]"
 ```
 
-核心 `.uasset` 解析零运行时依赖，仅需 Python 3.10+。
-如需 PAK 的 AES/LZ4/Zstd 可选支持，请安装：
-
-```bash
-pip install -e ".[pak]"
-# 或从 PyPI 安装：
-pip install "uasset_read[pak]"
-```
+零运行时依赖，仅需 Python 3.10+。
 
 ## 使用
 
 ### CLI
 
 ```bash
-# 基本用法
-uasset-read path/to/file.uasset                    # JSON 输出到 stdout
-uasset-read path/to/file.uasset --output output.json   # 保存到文件
+python run.py path/to/file.uasset                    # JSON 输出到 stdout
+python run.py path/to/file.uasset --output output.json   # 保存到文件
 
 # 输出模式
-uasset-read path/to/file.uasset --summary          # 仅摘要
-uasset-read path/to/file.uasset --text             # 可读文本
-uasset-read path/to/file.uasset --markdown         # Markdown 输出
-uasset-read path/to/file.uasset --blueprint-text   # 蓝图节点文本
-uasset-read path/to/file.uasset --blueprint-ue-text # UE 格式文本
-uasset-read path/to/file.uasset --cpp-skeleton     # C++ 类骨架
-uasset-read path/to/file.uasset --n2c              # N2C 中间格式 JSON
+python run.py path/to/file.uasset --summary          # 仅摘要
+python run.py path/to/file.uasset --text             # 可读文本
+python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
+python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
+python run.py path/to/file.uasset --blueprint-ue-text # UE 格式文本
+python run.py path/to/file.uasset --cpp-skeleton     # C++ 类骨架
 
 # 批量导出
-uasset-read --batch-dir path/to/dir/               # 批量导出目录
+python run.py --batch-dir path/to/dir/               # 批量导出目录
 
 # 严格度
-uasset-read path/to/file.uasset --strict           # 遇到警告即停止
-uasset-read path/to/file.uasset --tolerant         # 容错模式（默认）
+python run.py path/to/file.uasset --strict           # 遇到警告即停止
+python run.py path/to/file.uasset --tolerant         # 容错模式（默认）
 
 # 调试
-uasset-read path/to/file.uasset --verbose          # 启用详细日志
+python run.py path/to/file.uasset --verbose          # 启用详细日志
 ```
 
-### 核心 API（推荐）
+或通过模块调用：
+
+```bash
+python -m uasset_read path/to/file.uasset --text
+```
+
+## 核心 API（推荐）
 
 简化的高级编程接口：
 
@@ -176,13 +170,6 @@ from uasset_read import (
     decompile_uasset, KismetDecompiledResult,
     KismetTranslator, to_function_body,
 
-    # N2C
-    N2CStruct, N2CGraph, to_n2c_json, from_n2c_json,
-
-    # Agent 翻译
-    AgentTranslationPipeline, translate_blueprint_to_cpp,
-    CppFileWriter, write_cpp_class_files,
-
     # 回退模型
     PropertyFallback, StructFallback, GenericUObject,
 
@@ -217,7 +204,6 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
           DependencyGraphBuilder
           PackageLinker
           KismetDecompiler
-          N2C Format
           PakFileReader
           IR Builder → Renderers
 ```
@@ -234,8 +220,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | 核心 API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
-| CLI | `cli.py` | argparse 入口 (`uasset-read`)，委托到核心 API |
-| Exporter | `exporter/` | IExporter 接口、注册表、批量导出 |
+| CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
 | **IR** | `ir.py` | 包级中间表示构建器 |
@@ -248,8 +233,6 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
 | **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 构造函数格式化 |
-| **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
-| **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin 模型, JSON Schema |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
 | **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
 | **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
@@ -257,7 +240,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **Bulk Data** | `bulk/` | BulkData 头部解析 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表 |
 | **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid 输出 |
+| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint 文本/UE 格式输出 |
 
 ## 测试
 
@@ -270,7 +253,7 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 
 - **语言**: Python 3.10+（match/case，类型提示）
 - **依赖**: 零运行时依赖
-- **构建**: setuptools（src layout），pyproject.toml
+- **构建**: 直接脚本（src layout）
 - **测试**: pytest
 
 ## 文档

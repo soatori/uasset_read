@@ -496,9 +496,8 @@ output = renderer.render(ir, RenderOptions(verbose=verbose, indent=2))
 
 | 变化 | 旧 | 新 |
 |------|----|----|
-| 打包方式 | setuptools + pip install | 扁平脚本，直接 `python diag.py` 或 `python -m uasset_read` |
-| 保留 | pyproject.toml + src 布局 | 保留 pyproject.toml（仅用于开发依赖 pytest），删除 `[project.scripts]` |
-| 入口 | `uasset-read` CLI 命令 | `diag.py`（项目根） + `python -m uasset_read` + `python -m uasset_read.simple` |
+| 打包方式 | setuptools + pip install | 直接脚本运行 `python run.py` 或 `python -m uasset_read` |
+| 入口 | `uasset-read` CLI 命令 | `run.py`（项目根） + `python -m uasset_read` |
 
 ---
 

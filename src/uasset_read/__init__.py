@@ -264,7 +264,6 @@ from .graph import (
     build_execution_chains,
     format_pin_ref,
     _derive_node_name,
-    build_execution_chains_from_flows,  # N2C compat
     write_pin_trace_report,
     is_function_graph,
     build_function_graphs,
@@ -664,7 +663,6 @@ __all__ = [
     "build_graphs_summary",
     "build_blueprint_node_index",
     "build_execution_chains",
-    "build_execution_chains_from_flows",
     "write_pin_trace_report",
     "is_function_graph",
     "build_function_graphs",

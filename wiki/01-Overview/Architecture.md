@@ -61,7 +61,7 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 | Bulk Data | `bulk/` | BulkData 头部解析、标志定义 |
 | UObject | `objects/` | UObject 类型体系、类型注册表、导出类型 |
 | 格式化器 | `formatters/` | 底层格式化函数（JSON/Text/Markdown/蓝图文本等） |
-| CLI | `cli.py` | argparse 入口（uasset-read），委托 core.py 核心 API |
+| CLI | `cli.py` | argparse 入口，委托 core.py 核心 API |
 
 > [!TIP]
 > **架构变更（0.4.1）**：`exporter/`、`n2c/`、`agent/` 模块已移除，被 IR + Renderers 架构替代。

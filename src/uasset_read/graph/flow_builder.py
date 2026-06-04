@@ -534,48 +534,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     return result
 
 
-def _format_graph_node_links(
-    node: UEdGraphNode,
-    node_name_lookup: Dict[str, str],
-    pin_lookup: Dict[str, Tuple[str, str]],
-) -> List[Dict[str, Any]]:
-    """Build stable, normalized link objects for a node's raw Pin references."""
-    links: List[Dict[str, Any]] = []
-    current_node_name = node_name_lookup.get(node.node_guid, node.node_guid)
-
-    for pin in node.pins:
-        for ref in pin.linked_to_raw or []:
-            target_pin_id = _pin_ref_guid(ref)
-            target_node_guid = ""
-            target_pin_name = ""
-            target_node_name = ""
-            if target_pin_id in pin_lookup:
-                target_node_guid, target_pin_name = pin_lookup[target_pin_id]
-                target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
-            elif isinstance(ref, dict):
-                target_node_name = ref.get("owning_node", "") or ""
-
-            links.append({
-                "source": {
-                    "node": current_node_name,
-                    "node_guid": node.node_guid,
-                    "pin": pin.pin_name,
-                    "pin_id": pin.pin_id,
-                    "direction": "output" if pin.direction == 1 else "input",
-                },
-                "target": {
-                    "node": target_node_name,
-                    "node_guid": target_node_guid,
-                    "pin": target_pin_name,
-                    "pin_id": target_pin_id or "",
-                },
-                "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
-                "raw": _sanitize_recursive(ref),
-            })
-
-    return links
-
-
 def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List[str]:
     """Return export names for nodes inside an EdGraph comment rectangle."""
     data = comment_node.node_data if isinstance(comment_node.node_data, dict) else {}

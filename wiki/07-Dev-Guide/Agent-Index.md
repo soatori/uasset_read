@@ -147,16 +147,6 @@ section: agent-index
 #### 原始文件
 `parse_raw_file` · `parse_json_descriptor` · `parse_ini_file` · `parse_locres` · `parse_locmeta` · `parse_audio_metadata`
 
-### ~~N2C 中间格式~~ — 已移除
-
-> [!WARNING] 已移除
-> `n2c/` 模块已在 0.4.1 整体删除。
-
-### ~~Agent 管线~~ — 已移除
-
-> [!WARNING] 已移除
-> `agent/` 模块已在 0.4.1 整体删除。C++ 输出请使用 `parse_single(format="cpp_skeleton")`。
-
 ### 版本管理 (3)
 
 <!-- data-api="VersionContainer" -->

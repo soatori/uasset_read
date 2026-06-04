@@ -9,7 +9,7 @@ def _read_fixture_lines(name: str) -> list[str]:
     """读取 fixture 文件中的非空行。"""
     path = FIXTURES_DIR / name
     if not path.exists():
-        pytest.skip(f"Fixture file not found: {path}")
+        pytest.skip(f"Fixture file not found: {path}", allow_module_level=True)
     return [line.strip() for line in path.read_text().splitlines() if line.strip()]
 
 

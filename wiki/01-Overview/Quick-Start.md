@@ -8,10 +8,29 @@ section: quick-start
 ## 安装
 
 ```bash
-pip install uasset-read                   # 基础安装
-pip install -e ".[dev]"                   # 开发环境
-pip install -e ".[pak]"                   # PAK 支持
+git clone https://github.com/soatori/uasset_read.git
+cd uasset_read
 ```
+
+零运行时依赖，Python 3.10+。
+
+## 直接调用
+
+```bash
+python run.py file.uasset                  # JSON 输出到 stdout
+python run.py file.uasset --text           # 可读文本
+python run.py file.uasset --markdown       # Markdown + Mermaid
+python run.py file.uasset --blueprint-text # 蓝图节点翻译文本
+python run.py file.uasset --blueprint-ue-text  # UE 风格蓝图文本
+python run.py file.uasset --cpp-skeleton   # C++ 类骨架
+python run.py file.uasset --summary        # 仅摘要
+python run.py file.uasset --output out.json  # 保存到文件
+python run.py file.uasset --verbose        # 调试日志
+python run.py --batch-dir path/to/dir/     # 批量模式
+python run.py file.uasset --strict         # 严格模式（默认容错）
+```
+
+所有参数同样适用于 `python -m uasset_read`。
 
 ## Python API
 
@@ -42,24 +61,6 @@ print(result.exports)      # 导出列表
 print(result.blueprint)    # 蓝图数据
 print(result.graphs)       # 图结构
 ```
-
-## CLI 命令
-
-```bash
-uasset-read file.uasset                  # YAML 风格文本（默认）
-uasset-read file.uasset --json           # JSON 输出
-uasset-read file.uasset --json-summary   # JSON 摘要
-uasset-read file.uasset --text           # YAML 风格全文
-uasset-read file.uasset --markdown       # Markdown + Mermaid
-uasset-read file.uasset --blueprint-text # 蓝图节点翻译文本
-uasset-read file.uasset --blueprint-ue-text  # UE 风格蓝图文本
-uasset-read file.uasset --cpp-skeleton   # C++ 类骨架
-uasset-read file.uasset --list-formats   # 列出所有可用格式
-uasset-read file.uasset --batch          # 批量模式
-```
-
-> [!WARNING]
-> **已移除标志**：`--n2c`（N2C 模块已移除）
 
 ## PAK 解析
 

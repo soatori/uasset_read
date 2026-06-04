@@ -21,7 +21,8 @@ section: contributing
 .uasset → FArchive → Deserializer → Models → Formatters → Output
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
-          PackageLinker · KismetDecompiler · N2C Format · PakFileReader
+          PackageLinker · KismetDecompiler · PakFileReader
+          IR Builder → Renderers
 ```
 
 ### 模块职责
@@ -34,17 +35,18 @@ section: contributing
 | 主解析器 | `parse_uasset.py` | `parse_package()`、`parse_uasset()` 入口 |
 | 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
 | 序列化 | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag` |
-| 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult` |
+| 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、IR 中间表示 |
 | 属性解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
 | 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
 | 图分析 | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
 | Kismet | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器 |
 | 链接器 | `link/` | `PackageLinker` 两阶段对象图重建 |
 | C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射 |
-| N2C | `n2c/` | 中间格式：`N2CStruct/Graph/Node/Pin`、JSON Schema、验证器 |
 | PAK | `pak/` | `FPakInfo/PakEntry`、`PakFileReader`、AES 解密 |
 | IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
-| 格式化器 | `formatters/` | JSON/Text/Markdown/Mermaid/蓝图翻译文本输出生成器 |
+| IR | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器 |
+| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（6 种渲染器） |
+| 格式化器 | `formatters/` | JSON/Text/Markdown(with Mermaid)/蓝图翻译文本/UE 格式输出生成器 |
 
 ## 临时文件
 
@@ -61,18 +63,12 @@ section: contributing
 ## 依赖管理
 
 - **运行时依赖**: 零依赖
-- **可选依赖**: PAK 支持（AES 解密、LZ4/Zstd 压缩）在 `optional-dependencies` 中
-- **禁止添加**: 不要向 `pyproject.toml` 的 `dependencies` 添加第三方包
+- **PAK 支持**: AES 解密需要 `cryptography`，LZ4/Zstd 解压需要 `lz4`/`zstandard`（均为可选）
+- **禁止添加**: 不要向主 `dependencies` 添加第三方包
 
 ## 开发命令
 
 ```bash
-# 安装（含开发依赖）
-pip install -e ".[dev]"
-
-# PAK 可选依赖
-pip install -e ".[pak]"
-
 # 运行所有测试
 python -m pytest tests/ -v
 

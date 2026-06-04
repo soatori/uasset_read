@@ -74,8 +74,7 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
             import lz4.block
         except ImportError:
             raise ImportError(
-                "LZ4 decompression requires 'lz4' package. "
-                "Install with: pip install uasset_read[pak]"
+                "LZ4 decompression requires 'lz4' package"
             )
         return lz4.block.decompress(data, uncompressed_size=uncompressed_size)
     elif method == "Zstd":
@@ -83,8 +82,7 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
             import zstandard
         except ImportError:
             raise ImportError(
-                "Zstd decompression requires 'zstandard' package. "
-                "Install with: pip install uasset_read[pak]"
+                "Zstd decompression requires 'zstandard' package"
             )
         return zstandard.ZstdDecompressor().decompress(data, max_output_size=uncompressed_size)
     elif method == "Oodle":
@@ -157,6 +155,5 @@ def _decrypt_entry_data(data: bytes, encryption_key: bytes | None) -> bytes:
         return decrypt_aes_ecb(data, encryption_key)
     except ImportError as exc:
         raise ParseError(
-            "AES decryption requires 'cryptography' package. "
-            "Install with: pip install uasset_read[pak]"
+            "AES decryption requires 'cryptography' package"
         ) from exc

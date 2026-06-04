@@ -392,11 +392,6 @@ with open("game.pak", "rb") as f:
 | AES 解密 | `cryptography` | 可选 |
 | Oodle 解压 | `oo2core` | 不支持（专有） |
 
-安装可选依赖:
-```bash
-pip install uasset_read[pak]
-```
-
 ## 相关章节
 
 [[包管理]] · [[IoStore 容器]] · [[原始文件解析]]

@@ -1,4 +1,4 @@
-## uasset_read 开发文档 v0.3.8
+## uasset_read 开发文档 v0.4.2
 
 ### 概览
 - [项目介绍](Overview)
@@ -24,7 +24,6 @@
 - [Kismet 反编译](Kismet)
 - [对象链接器](Linker)
 - [C++ 代码生成](CPP-Generator)
-- [N2C 中间格式](N2C)
 
 ### 容器系统
 - [PAK 文件读取](PAK)
@@ -32,13 +31,11 @@
 - [原始文件解析](Raw-Files)
 
 ### 输出与导出
+- [渲染器系统](Renderers)
 - [格式化器](Formatters)
-- [导出系统](Exporter)
 - [CLI 接口](CLI)
 
 ### 开发指南
-- [Agent 速查索引](Agent-Index)
-- [Agent API 索引](Agent-Index-API-Reference)
 - [公共 API](Public-API)
 - [测试指南](Testing)
 - [开发规范](Contributing)

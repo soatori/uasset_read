@@ -5,7 +5,7 @@ section: cli
 
 # CLI 接口
 
-命令行工具 `uasset-read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式输出能力。
+通过 `python run.py` 或 `python -m uasset_read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式输出能力。
 
 ## 架构变更（0.4.1）
 
@@ -30,10 +30,10 @@ CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Out
 ## 基本用法
 
 ```bash
-uasset-read path/to/file.uasset              # YAML 风格文本（默认）
-uasset-read path/to/file.uasset --json       # 完整 JSON 输出
-uasset-read path/to/file.uasset --summary    # JSON 摘要
-uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
+python run.py path/to/file.uasset              # YAML 风格文本（默认）
+python run.py path/to/file.uasset --json       # 完整 JSON 输出
+python run.py path/to/file.uasset --summary    # JSON 摘要
+python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 
 ## 命令行参数
@@ -145,13 +145,13 @@ CLI 通过 `core.py` 的 `parse_single()` 进行解析：
 
 ```bash
 # 处理目录中所有 .uasset/.umap 文件
-uasset-read /path/to/assets/ --batch
+python run.py /path/to/assets/ --batch
 
 # 指定输出目录
-uasset-read /path/to/assets/ --batch --batch-dir /path/to/output/
+python run.py /path/to/assets/ --batch --batch-dir /path/to/output/
 
 # 批量导出为 JSON
-uasset-read /path/to/assets/ --batch --json
+python run.py /path/to/assets/ --batch --json
 ```
 
 批量结果报告输出到 stderr：
@@ -167,39 +167,39 @@ Batch export complete: 10 files
 
 ```bash
 # 1. 解析单个文件，输出到 stdout
-uasset-read MyBlueprint.uasset
+python run.py MyBlueprint.uasset
 
 # 2. 完整 JSON 输出
-uasset-read MyBlueprint.uasset --json
+python run.py MyBlueprint.uasset --json
 
 # 3. 输出到文件
-uasset-read MyBlueprint.uasset --json --output result.json
+python run.py MyBlueprint.uasset --json --output result.json
 
 # 4. C++ 骨架生成（需要 Blueprint）
-uasset-read MyBlueprint.uasset --cpp-skeleton --output MyBlueprint.h
+python run.py MyBlueprint.uasset --cpp-skeleton --output MyBlueprint.h
 
 # 5. Markdown + Mermaid 文档
-uasset-read MyBlueprint.uasset --markdown --output report.md
+python run.py MyBlueprint.uasset --markdown --output report.md
 
 # 6. 包含父级资产解析
-uasset-read MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
+python run.py MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
 
 # 7. 使用类型映射
-uasset-read MyBlueprint.uasset --json --mappings mappings.usmap
+python run.py MyBlueprint.uasset --json --mappings mappings.usmap
 
 # 8. 列出包文件
-uasset-read MyBlueprint.uasset --list-package-files
+python run.py MyBlueprint.uasset --list-package-files
 
 # 9. 列出所有可用格式
-uasset-read --list-formats
+python run.py --list-formats
 ```
 
-## 双入口点
+## 调用方式
 
 CLI 可通过以下方式调用：
 
-- **命令行**: `uasset-read ...`（通过 `pyproject.toml` 的 `console_scripts` 入口）
-- **模块**: `python -m uasset_read ...`（通过 `__main__.py`）
+- **脚本**: `python run.py ...`（项目根目录）
+- **模块**: `python -m uasset_read ...`（`__main__.py` 入口）
 
 两者都调用同一个 `main()` 函数。
 

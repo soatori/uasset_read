@@ -9,7 +9,7 @@
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器。专注于未烘焙/编辑器保存的资产（含完整蓝图数据）。
 
 - **版本**: 0.4.2 | **Python**: 3.10+ | **运行时依赖**: 零依赖
-- 构建系统: setuptools（src 布局）
+- 构建系统: 直接脚本运行（src 布局）
 - 详细开发指南（测试、CLI、架构、模块索引）见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md)
 
 ## CodeGraph
@@ -21,6 +21,7 @@
 - **仅支持未烘焙/编辑器保存的资产** — Cooked 资产的图数据已被剥离
 - **只读** — 仅解析，不支持修改或写入
 - **零运行时依赖** — 不向 `dependencies` 添加第三方包（PAK 可选依赖在 `optional-dependencies` 中）
+- **禁止 pip install** — 项目采用直接脚本运行（`python run.py`），禁止 `pip install -e .` 或 `pip install uasset_read`。CI 中的 `pip install pytest` 仅用于测试框架，不安装项目本身
 - **必须参考 UE 源码** — 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制
 - **GUID 格式统一** — Pin GUID 在源头标准化为 32 位小写 hex（无 dashes），比较前统一格式
 - **FText 偏移安全网** — 图序列化器包含 safety net 检测偏移错位，遇到时自动校正

@@ -39,8 +39,7 @@ def decrypt_aes_ecb(data: bytes, key: bytes) -> bytes:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     except ImportError:
         raise ImportError(
-            "AES decryption requires 'cryptography' package. "
-            "Install with: pip install uasset_read[pak]"
+            "AES decryption requires 'cryptography' package"
         )
 
     # ECB mode

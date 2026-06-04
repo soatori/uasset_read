@@ -19,7 +19,6 @@ from .flow_builder import (
 )
 from .chain_builder import (
     build_execution_chains,
-    build_execution_chains_from_flows,  # N2C compat
 )
 from .pin_trace import write_pin_trace_report, write_phase75_diagnostic
 
@@ -37,7 +36,6 @@ __all__ = [
     "build_function_graphs",
     "build_blueprint_node_index",
     "build_execution_chains",
-    "build_execution_chains_from_flows",
     "write_pin_trace_report",
     "write_phase75_diagnostic",
 ]

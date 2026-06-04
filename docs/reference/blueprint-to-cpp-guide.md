@@ -145,7 +145,7 @@ void AMYCharacter::DoJumpStart()
 
 ## 与 cpp_gen 模块的关系
 
-本项目已内置 `cpp_gen/` 和 `agent/` 模块，支持从蓝图自动生成 C++ 骨架：
+本项目已内置 `cpp_gen/` 模块，支持从蓝图自动生成 C++ 骨架：
 
 | 模块 | 功能 |
 |------|------|
@@ -153,7 +153,5 @@ void AMYCharacter::DoJumpStart()
 | `cpp_gen/cpp_uproperty_mapper.py` | CPF 标志 → UPROPERTY 修饰符映射 |
 | `cpp_gen/cpp_default_value_formatter.py` | UE 默认值 → C++ 字面量 |
 | `cpp_gen/cpp_constructor_ir_builder.py` | 从 BlueprintVariable 构建构造函数 IR |
-| `agent/translator.py` | 整合管线：ParseResult → CppClassIR |
-| `agent/writer.py` | CppClassIR → .h/.cpp 文件 |
 
-> 生成代码为骨架参考，函数实现体仍需手动编写。
+> 使用方式：`parse_single(path, format="cpp_skeleton")`，通过渲染器系统输出。

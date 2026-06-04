@@ -14,7 +14,7 @@ section: overview
 | 项目 | 详情 |
 |------|------|
 | 版本信息 | `0.4.2` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
-| 构建系统 | Setuptools（src 布局） · `pip install -e ".[dev]"` · `pip install -e ".[pak]"` PAK 支持 |
+| 构建系统 | Setuptools（src 布局） · 直接 `python run.py file.uasset` 调用 · PAK 可选依赖 |
 | 支持资产 | 18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等 · 容器：文件系统 / PAK / IoStore |
 
 ## 核心能力

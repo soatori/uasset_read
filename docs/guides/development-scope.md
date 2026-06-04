@@ -38,12 +38,7 @@
 - Material（材质）
 - MaterialInstanceConstant（材质实例常量）
 - Texture2D（2D 纹理）
-- Niagara（粒子系统）
-- Map（关卡地图）
-- InputAction / InputMappingContext（输入资产）
-- AnimBlueprint（动画蓝图）
-- ParticleSystem（粒子系统，UE4 有限支持）
-- 60+ 种资产类型的基础元数据读取
+- 60+ 种资产类型的基础元数据读取（通过通用解析器 + skip-list 安全跳过机制）
 
 #### 4. 输出格式
 - JSON（完整/摘要）
@@ -52,7 +47,6 @@
 - 蓝图翻译参考文本
 - UE 格式文本
 - C++ 类骨架生成
-- N2C 中间格式 JSON
 - 批量导出支持
 
 #### 5. 容器支持
@@ -64,8 +58,7 @@
 #### 6. 高级功能
 - 类型映射支持（.usmap/.jmap）
 - C++ 代码生成（骨架、函数体、组件初始化）
-- Agent 翻译管线（蓝图→C++ 完整转换）
-- CLI 工具（`uasset-read` 命令）
+- CLI 工具（`python run.py`）
 - 容错/严格双模式解析
 
 ### ❌ 不包含的功能（OUT OF SCOPE）
@@ -94,7 +87,6 @@
 
 #### 5. 格式转换
 - **不支持** `.uasset` ↔ 其他格式的双向转换
-- N2C 是中间格式，非最终交换格式
 - 不支持从输出格式还原为 `.uasset`
 
 ## 技术限制
