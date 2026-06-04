@@ -108,6 +108,10 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
     if value is None:
         return ""
 
+    # 空字符串或纯空白 — 无有效默认值（防止输出 "= ;"）
+    if isinstance(value, str) and not value.strip():
+        return ""
+
     # float — 55.f 格式
     if cpp_type == "float":
         return _format_float_value(value)

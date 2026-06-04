@@ -85,6 +85,9 @@ from uasset_read.cpp_gen.cpp_constructor_formatter import (
 from uasset_read.cpp_gen.extract_cpp_skeleton import (
     extract_cpp_constructor,
 )
+from uasset_read.cpp_gen.sanitizer import (
+    sanitize_identifier,
+)
 
 __all__ = [
     # 类型映射
@@ -132,4 +135,6 @@ __all__ = [
     "build_constructor_sections",
     "format_cpp_constructor",
     "extract_cpp_constructor",
+    # C++ 标识符清理
+    "sanitize_identifier",
 ]

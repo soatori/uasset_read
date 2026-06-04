@@ -67,6 +67,9 @@ from .fallback import (
     ExportParseStatus,
     FallbackReason,
 )
+from .diagnostics import (
+    OffsetRangeDiagnostic,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -124,4 +127,6 @@ __all__ = [
     "GenericUObject",
     "ExportParseStatus",
     "FallbackReason",
+    # 诊断模型
+    "OffsetRangeDiagnostic",
 ]

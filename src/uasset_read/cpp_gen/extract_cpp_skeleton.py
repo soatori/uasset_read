@@ -42,6 +42,7 @@ from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
 from uasset_read.cpp_gen.cpp_constructor_formatter import (
     format_cpp_constructor,
 )
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 from uasset_read.constants import CPF_InstancedReference
 
 if TYPE_CHECKING:
@@ -656,16 +657,14 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
 def _sanitize_identifier(name: str) -> str:
     """将 UE 引脚名转换为有效 C++ 标识符。
 
-    "Left / Right" → "LeftRight"
-    "Primary Thumbstick" → "PrimaryThumbstick"
+    委托给 sanitizer.sanitize_identifier。
+
+    "Left / Right" → "Left__Right"
+    "Primary Thumbstick" → "Primary_Thumbstick"
     "2DValue" → "_2DValue"
+    "Target Touch UI" → "Target_Touch_UI"
     """
-    if not name:
-        return "unnamed"
-    cleaned = re.sub(r'[^A-Za-z0-9_]', '', name)
-    if cleaned and cleaned[0].isdigit():
-        cleaned = '_' + cleaned
-    return cleaned if cleaned else "unnamed"
+    return sanitize_identifier(name)
 
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:

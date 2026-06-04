@@ -44,6 +44,7 @@ class ParseResult:
     logic_sources: List[Dict] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     linker: Optional["PackageLinker"] = None
+    diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
 
     @property
     def status(self) -> str:

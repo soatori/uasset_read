@@ -17,7 +17,6 @@ from uasset_read.package import FileSystemPackageProvider
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 
 
-@pytest.mark.xfail(reason="format_graphs_json 依赖已删除的 n2c.processors 模块")
 def test_format_graphs_json_minimal_graph_does_not_crash():
     graph = UEdGraph(
         graph_name="EventGraph",

@@ -276,10 +276,11 @@ def _format_variable_property(prop: CppProperty) -> List[str]:
     # 属性声明
     decl = f"    {prop.cpp_type} {prop.name}"
 
-    # 添加默认值（如果有）
+    # 添加默认值（如果有且非空）
     if prop.default_value is not None:
         default_str = _format_default_value(prop.cpp_type, prop.default_value)
-        decl += f" = {default_str}"
+        if default_str:
+            decl += f" = {default_str}"
 
     decl += ";"
 
@@ -304,6 +305,10 @@ def _format_default_value(cpp_type: str, value: any) -> str:
         格式化后的默认值字符串
     """
     if value is None:
+        return ""
+
+    # 空字符串或纯空白 — 无有效默认值
+    if isinstance(value, str) and not value.strip():
         return ""
 
     # 处理布尔值

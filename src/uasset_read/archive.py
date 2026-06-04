@@ -10,6 +10,7 @@ from typing import Optional, Dict, BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
 class FArchive:
@@ -30,6 +31,7 @@ class FArchive:
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
+        self._diagnostics: list[OffsetRangeDiagnostic] = []  # 偏移诊断记录
 
         try:
             self._file = open(path, 'rb')
@@ -126,6 +128,75 @@ class FArchive:
             return self._mmap.tell()
         return self._file.tell()
 
+    def seek_safe(self, pos: int, context: str = "") -> bool:
+        """安全定位 — 越界时记录诊断并返回 False。
+
+        与 seek() 不同，不抛出异常，适合容错解析场景。
+
+        Args:
+            pos: 目标偏移
+            context: 诊断上下文描述
+
+        Returns:
+            True 定位成功，False 越界（诊断已记录）
+        """
+        current = self.tell()
+        if pos < 0 or pos > self._file_size:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="archive",
+                field="seek",
+                current_pos=current,
+                target_offset=pos,
+                file_size=self._file_size,
+                source=context or "seek_safe",
+                error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
+            ))
+            return False
+        if self._use_mmap and self._mmap:
+            self._mmap.seek(pos)
+        else:
+            self._file.seek(pos)
+        return True
+
+    def read_safe(self, size: int, context: str = "") -> Optional[bytes]:
+        """安全读取 — 越界时记录诊断并返回 None。
+
+        与 read() 不同，不抛出异常，适合容错解析场景。
+        当请求大小超出剩余字节时，尝试截断读取可用数据。
+
+        Args:
+            size: 请求读取字节数
+            context: 诊断上下文描述
+
+        Returns:
+            读取到的 bytes，越界时返回 None
+        """
+        current = self.tell()
+        remaining = self._file_size - current
+        if size < 0:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 大小 {size} 为负数",
+            ))
+            return None
+        if size > remaining:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
+            ))
+            return None
+        return self.read(size)
+
     def close(self) -> None:
         """关闭文件和 mmap"""
         if self._mmap:
@@ -147,6 +218,10 @@ class FArchive:
     def get_mmap_info(self) -> Dict:
         """返回 mmap 状态信息"""
         return {"used": self._use_mmap, "warning": self._mmap_warning}
+
+    def get_diagnostics(self) -> list[OffsetRangeDiagnostic]:
+        """返回收集到的偏移诊断记录。"""
+        return list(self._diagnostics)
 
     # 类型读取方法
 

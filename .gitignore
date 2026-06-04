@@ -52,20 +52,9 @@ memory/
 .codegraph/
 # Test files
 tests/*
-!tests/test_pak_handling.py
-!tests/test_variable_extractor.py
-!tests/test_pin_guid_filtering.py
-!tests/test_fstring_corruption.py
-!tests/test_framerate_animnotify.py
-!tests/test_pin_recovery.py
-!tests/test_ir_structures.py
-!tests/test_ir_builder.py
-!tests/test_renderers.py
-!tests/test_core_api.py
-!tests/test_function_resolver.py
-!tests/test_jump_analyzer.py
-!tests/test_unknown_property_fallback.py
-!tests/test_export_error_context.py
+!tests/test_*.py
+!tests/conftest.py
+!tests/__init__.py
 QWEN.md
 
 # AI agent reports (local only)

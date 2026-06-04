@@ -170,6 +170,7 @@ from .models import (
     GenericUObject,
     ExportParseStatus,
     FallbackReason,
+    OffsetRangeDiagnostic,
 )
 
 # Class Handler Registry
@@ -397,6 +398,7 @@ from .cpp_gen import (
     format_cpp_default_value, format_cpp_transform,
     format_cpp_component_init, format_cpp_input_action_load,
     build_constructor_sections, format_cpp_constructor,
+    sanitize_identifier,
 )
 
 # Version management
@@ -623,6 +625,8 @@ __all__ = [
     "GenericUObject",
     "ExportParseStatus",
     "FallbackReason",
+    # 诊断模型
+    "OffsetRangeDiagnostic",
     # Class Handler Registry
     "ClassHandlerRegistry",
     "ClassHandler",
@@ -792,6 +796,7 @@ __all__ = [
     "format_cpp_input_action_load",
     "build_constructor_sections",
     "format_cpp_constructor",
+    "sanitize_identifier",
     # Version management
     "VersionContainer",
     "build_version_container",
