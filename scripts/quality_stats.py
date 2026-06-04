@@ -186,7 +186,6 @@ def scan_directory(scan_dir: Path, verbose: bool = False) -> QualityMetrics:
     )
 
     if not cpp_files:
-        print(f"警告：在 {scan_dir} 中未找到 C++ 源文件", file=sys.stderr)
         return metrics
 
     metrics.file_count = len(cpp_files)
