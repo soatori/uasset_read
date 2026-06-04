@@ -25,7 +25,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | Metric | Value |
 |--------|-------|
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 35 test files, 2100+ test cases |
+| Tests | 51 test files, 976 test cases |
 | Modules | 100+ source files across 15 subpackages |
 
 ## Features

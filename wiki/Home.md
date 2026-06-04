@@ -16,6 +16,6 @@
 
 ## 项目信息
 
-- **版本**: 0.4.1-dev (当前分支: 0.4.1-dev)
+- **版本**: 0.4.2-dev (当前分支: 0.4.2-dev)
 - **Python**: 3.10+
 - **仓库**: [GitHub](https://github.com/SOATOORL/uasset_read)

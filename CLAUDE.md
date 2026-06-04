@@ -8,7 +8,7 @@
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器。专注于未烘焙/编辑器保存的资产（含完整蓝图数据）。
 
-- **版本**: 0.4.1-dev | **Python**: 3.10+ | **运行时依赖**: 零依赖
+- **版本**: 0.4.2-dev | **Python**: 3.10+ | **运行时依赖**: 零依赖
 - 构建系统: setuptools（src 布局）
 - 详细开发指南（测试、CLI、架构、模块索引）见 [docs/dev-guide.md](docs/dev-guide.md)
 
