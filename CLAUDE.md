@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
 
-- **版本**: 0.3.8-beta（开发分支 `0.4.1-dev`）
+- **版本**: 0.4.1-dev（分支 `0.4.1-dev`）
 - **Python**: 3.10+（使用 `match/case`、类型注解）
 - **运行时依赖**: 零依赖（PAK AES/LZ4/Zstd 为可选依赖）
 - **构建系统**: setuptools（src 布局）
@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 测试
 
-测试位于 `tests/`（35+ 个测试文件，2100+ 个测试用例，40+ 个集成测试）。
+测试位于 `tests/`（40+ 个测试文件，824+ 个测试用例，40+ 个集成测试）。
 
 ### 测试运行命令
 
@@ -69,7 +69,7 @@ python -m pytest tests/test_pak_handling.py -v
 
 | 要求 | 说明 |
 |------|------|
-| **最小测试数** | ≥ 200 个单元测试 |
+| **最小测试数** | ≥ 800 个单元测试 |
 | **通过率** | 100%（不包括预期的 xfail） |
 | **集成测试** | ≥ 40 个用例，使用 `@pytest.mark.integration` 标记 |
 | **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
