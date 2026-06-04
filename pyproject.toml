@@ -49,4 +49,5 @@ markers = [
     "integration: 需要外部样本资产或较慢路径的集成测试",
     "quality: C++ 输出质量门禁测试",
     "regression: 真实资产回归测试",
+    "slow: 需要大量时间或全量资产扫描的慢速测试",
 ]
