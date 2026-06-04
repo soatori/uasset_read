@@ -577,7 +577,7 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
 
     return CppProperty(
         cpp_type=cpp_type,
-        name=var.var_name,
+        name=sanitize_identifier(var.var_name),
         uproperty_marks=marks,
         category="variable",
         default_value=var.default_value,
@@ -637,7 +637,7 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
         return "UObject"  # 未知 object 类型
 
     # struct 类型：subcategory 是结构名
-    if category == "struct":
+    if category in ("struct", "StructProperty"):
         if subcategory:
             if subcategory.startswith("/Script/"):
                 return subcategory
@@ -647,7 +647,8 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
             if subcategory in common_structs:
                 return f"/Script/CoreUObject.{subcategory}"
             return f"/Script/CoreUObject.{subcategory}"
-        return "/Script/CoreUObject.Struct"
+        # StructProperty 无 subcategory — 使用通用 FStruct 占位
+        return "FStruct"
 
     # 其他类型返回 category
     return category

@@ -88,9 +88,9 @@ class CppSkeletonRenderer(IRenderer):
         sections.append(header_text)
 
         # .cpp 实现文件（含函数体 + 构造函数）
+        # format_full_cpp_implementation() 内部已输出 .cpp 标题，不再重复
         impl_text = format_full_cpp_implementation(cpp_ir)
         if impl_text.strip():
-            sections.append(f"// {cpp_ir.name}.cpp")
             sections.append(impl_text)
 
             # 构造函数追加到 .cpp 实现部分

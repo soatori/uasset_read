@@ -26,9 +26,10 @@ from uasset_read.models.ir import (
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
+    from uasset_read.link.result import LinkerParseResult
 
 
-def build_package_ir(result: ParseResult) -> PackageIR:
+def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     """将 ParseResult 转换为 PackageIR。
 
     构建阶段：

@@ -287,8 +287,8 @@ def format_cpp_constructor(ir: "CppClassIR") -> str:
     # 函数签名
     lines.append(f"{ir.name}::{ir.name}()")
 
-    # 初始化列表 — 无条件使用 Super::ClassName()（D-59-05）
-    lines.append(f"    : Super::{ir.name}()")
+    # 初始化列表 — UE5 使用 Super() 作为父类构造调用
+    lines.append(f"    : Super()")
 
     # 函数体开始
     lines.append("{")

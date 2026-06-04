@@ -4,8 +4,8 @@
 **项目目标**: 成功解析 `.uasset`，并输出蓝图函数、变量及具体功能实现代码  
 **复审基线**: `docs/superpowers/reports/2026-06-04-uasset-blueprint-implementation-gap-report.md`  
 **进度报告**: `docs/superpowers/reports/2026-06-04-blueprint-gap-fix-progress.md`  
-**HEAD**: `71b7397 feat: P2-P3 完成...`  
-**工作区状态**: 包含未提交的 Kismet 修改和 3 个未跟踪测试文件
+**HEAD**: `8441fee fix: 剩余改进 — 裸数字修复 + goto label 修复 + 空函数体充实`
+**工作区状态**: 干净；本报告对应当前已提交快照
 
 ---
 
@@ -14,7 +14,7 @@
 当前修改解决了部分基础问题，但**尚未解决项目最终目标**。
 
 底层 `parse_uasset_with_linker()` 已能成功读取真实的
-`BP_FirstPersonCharacter.uasset`，并且最新未提交修改能从图拓扑恢复
+`BP_FirstPersonCharacter.uasset`，并且最新提交能从图拓扑恢复
 `Aim`、`Move` 的调用名称。这些属于有效进展。
 
 但是当前仍存在以下阻断问题：
@@ -25,7 +25,7 @@
 4. linker 已记录的偏移/范围诊断没有传递到最终解析结果或 JSON/Markdown 输出。
 5. 真实 `Aim`、`Move` 虽恢复了调用名称，但没有恢复参数数据流；`ExecuteUbergraph` 仍为空壳。
 6. 当前质量统计会把明显不可编译的 C++ 判定为“全部达标”。
-7. 本地测试全部通过，但真实高层入口没有被测试覆盖；新增的 3 个测试文件尚未被 Git 跟踪。
+7. 测试全部通过，但真实高层入口仍没有被测试覆盖。
 8. 进度报告将 Phase 0-4 标记为完成，与实际验收结果矛盾。
 
 **发布判断**: 当前状态不应进入 `0.4.1` 发布准备，应先完成 P0/P1 阻断项。
@@ -39,27 +39,23 @@
 当前 HEAD:
 
 ```text
-71b73978f92779bfdf674c4b2103693c4a51ea8a
-feat: P2-P3 完成 — diagnostics 输出 + 质量统计 + include 去重 +
-wrapper 嵌套修复 + ClassName:: 作用域 + 截断文件诊断 + UE4 legacy xfail
+8441fee3d073eb5abf73afebd08dfc02eff38998
+fix: 剩余改进 — 裸数字修复 + goto label 修复 + 空函数体充实
 ```
 
-当前未提交修改:
+最新提交包含:
 
 ```text
-M  src/uasset_read/kismet/bytecode_extractor.py
-M  src/uasset_read/kismet/semantic.py
-M  src/uasset_read/kismet/structured_flow.py
-M  src/uasset_read/kismet/translator.py
-?? tests/test_bytecode_scanner_fix.py
-?? tests/test_empty_function_enrichment.py
-?? tests/test_goto_label_emission.py
+src/uasset_read/kismet/bytecode_extractor.py
+src/uasset_read/kismet/semantic.py
+src/uasset_read/kismet/structured_flow.py
+src/uasset_read/kismet/translator.py
+tests/test_bytecode_scanner_fix.py
+tests/test_empty_function_enrichment.py
+tests/test_goto_label_emission.py
 ```
 
-因此，本报告同时区分：
-
-- **已提交基线**: HEAD `71b7397`
-- **当前本地快照**: HEAD 加上述未提交修改
+当前工作区干净，本报告结论对应 HEAD `8441fee`。
 
 ### 2.2 测试执行结果
 
@@ -86,8 +82,8 @@ M  src/uasset_read/kismet/translator.py
 | 指标 | 当前值 |
 |---|---:|
 | 磁盘上的 `test_*.py` | 49 |
-| Git 跟踪的 `test_*.py` | 46 |
-| 未跟踪测试文件 | 3 |
+| Git 跟踪的 `test_*.py` | 49 |
+| 未跟踪测试文件 | 0 |
 
 当前两个 `xfail` 均为 UE4 `legacy_file_version=-3` 的已知限制，且使用
 `strict=True`，标注本身合理。
@@ -135,12 +131,12 @@ parse_uasset_with_linker(truncated_file)
 |---|---|---|
 | 完整测试无普通失败 | 已解决 | 当前 `947 passed, 2 xfailed` |
 | 意外 `xpass` | 已解决 | 当前无 `xpass` |
-| 原有测试文件忽略规则 | 基本解决 | 已提交测试文件可被跟踪，但新增 3 个测试仍未跟踪 |
+| 测试文件忽略和跟踪规则 | 已解决 | 当前 49 个测试文件均被 Git 跟踪 |
 | `OffsetRangeDiagnostic` 模型 | 已实现 | 模型、JSON/Markdown renderer 支持已存在 |
 | `= ;` 空默认值 | 已解决 | 真实输出未再出现 |
 | 方法 `ClassName::Method` 作用域 | 部分解决 | 外层方法实现已有类作用域 |
 | deprecated 注释噪声 | 表面解决 | 输出中不再出现，但当前采用静默跳过 |
-| `Aim` / `Move` 调用名称恢复 | 有进展 | 当前未提交图拓扑补充可恢复调用名称 |
+| `Aim` / `Move` 调用名称恢复 | 有进展 | 当前提交的图拓扑补充可恢复调用名称 |
 | goto label fallback | 有进展 | 新增标签映射修改和测试 |
 | UE4 legacy 限制标注 | 已明确 | 使用严格 `xfail` 标注 |
 
@@ -332,7 +328,7 @@ Export PackageIndex 65280 (idx=65279) 越界，export 数量 69
 
 ### 当前进展
 
-最新未提交修改能从函数图恢复：
+最新提交能从函数图恢复：
 
 ```cpp
 void Aim() {
@@ -368,7 +364,7 @@ void Move() {
 
 ### 最新 scanner 修改风险
 
-当前未提交修改从候选起始 token 中删除：
+当前提交从候选起始 token 中删除：
 
 - `EX_IntConst`
 - `EX_WireTracepoint`
@@ -439,16 +435,8 @@ integration
 
 ### 当前跟踪状态
 
-以下测试文件未被 Git 跟踪：
-
-```text
-tests/test_bytecode_scanner_fix.py
-tests/test_empty_function_enrichment.py
-tests/test_goto_label_emission.py
-```
-
-它们共贡献 39 个本地通过测试。当前本地 `947 passed` 不能等同于 CI 或提交后的
-测试基线。
+当前 49 个 `test_*.py` 均已被 Git 跟踪。最新提交新增的 3 个测试文件共贡献
+39 个通过测试。
 
 ### 必须修复
 
@@ -456,8 +444,7 @@ tests/test_goto_label_emission.py
 2. 增加截断文件 linker 结果回归。
 3. 增加真实 C++ 输出 fatal-pattern 和 syntax smoke test。
 4. 注册并使用 `quality`、`regression`、`slow` marker。
-5. 将应进入项目的 3 个新测试纳入 Git。
-6. CI 分别执行 unit、integration、quality、slow。
+5. CI 分别执行 unit、integration、quality、slow。
 
 ---
 
@@ -544,8 +531,8 @@ quality stats 均与目标相关。
 4. Phase 3 标记完成，但 `Aim`/`Move` 参数数据流和 Ubergraph 未恢复。
 5. Phase 4 标记完成，但全量资产解析通过率仍为“待测试”。
 6. `~85%` 函数解析率和 `~75%` 控制流结构化率没有可复现测量证据。
-7. 测试数字仍是 `824` 和 `40` 个测试文件，当前本地快照为
-   `949` 个收集用例、49 个测试文件，其中 3 个未跟踪。
+7. 测试数字仍是 `824` 和 `40` 个测试文件，当前已提交快照为
+   `949` 个收集用例、49 个已跟踪测试文件。
 8. “未完成任务（可选）”中包含实际 P0/P1 阻断项，不应标为可选。
 
 建议将该报告改为“阶段进展”，撤销 Phase 1-4 的完成标记。
@@ -635,12 +622,11 @@ quality stats 均与目标相关。
 
 任务：
 
-1. 跟踪 3 个新增测试文件。
-2. 注册 `quality`、`regression`、`slow` marker。
-3. CI 增加真实 E2E 和 C++ syntax gate。
-4. 修复 `quality_stats.py` 统计错误和扫描范围。
-5. 更新 README、CLAUDE、testing requirements 和进度报告。
-6. 测量全量资产解析成功率后再更新 Phase 4。
+1. 注册 `quality`、`regression`、`slow` marker。
+2. CI 增加真实 E2E 和 C++ syntax gate。
+3. 修复 `quality_stats.py` 统计错误和扫描范围。
+4. 更新 README、CLAUDE、testing requirements 和进度报告。
+5. 测量全量资产解析成功率后再更新 Phase 4。
 
 ---
 
@@ -702,7 +688,7 @@ def test_real_aim_and_move_bind_parameters(...):
 | 真实蓝图 C++ syntax gate 通过 | 失败 |
 | `Aim` / `Move` 参数数据流恢复 | 失败 |
 | 全量资产解析通过率已测量且达到目标 | 未测量 |
-| 所有项目测试被 Git 跟踪 | 失败 |
+| 所有项目测试被 Git 跟踪 | 通过 |
 | quality/regression/slow 标注已建立 | 失败 |
 | 进度报告与实际一致 | 失败 |
 

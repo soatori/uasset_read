@@ -58,6 +58,13 @@ class FArchive:
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
+            # 记录诊断后再抛异常（确保 finally 块可收集）
+            self._record_diagnostic(
+                module="archive", field="read",
+                source="read", read_size=size,
+                current_pos=current_pos, file_size=self._file_size,
+                error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
+            )
             raise ParseError(
                 f"Cannot read {size} bytes at position {current_pos}, "
                 f"only {remaining} bytes remaining"
@@ -90,8 +97,20 @@ class FArchive:
     def validate_offset(self, offset: int, context: str = "") -> None:
         """全偏移验证 - 在定位前检查偏移有效性。"""
         if offset < 0:
+            self._record_diagnostic(
+                module="archive", field="seek",
+                source=context or "validate_offset",
+                target_offset=offset, file_size=self._file_size,
+                error=f"Invalid offset {offset} (negative) at {context}",
+            )
             raise ParseError(f"Invalid offset {offset} (negative) at {context}")
         if offset > self._file_size:
+            self._record_diagnostic(
+                module="archive", field="seek",
+                source=context or "validate_offset",
+                target_offset=offset, file_size=self._file_size,
+                error=f"Offset {offset} exceeds file size {self._file_size} at {context}",
+            )
             raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
 
     def validate_size(self, size: int, context: str = "", tolerant: bool | None = None) -> None:
@@ -248,6 +267,10 @@ class FArchive:
     def get_mmap_info(self) -> Dict:
         """返回 mmap 状态信息"""
         return {"used": self._use_mmap, "warning": self._mmap_warning}
+
+    def _record_diagnostic(self, **kwargs) -> None:
+        """记录偏移/范围诊断（内部辅助方法）。"""
+        self._diagnostics.append(OffsetRangeDiagnostic(**kwargs))
 
     def get_diagnostics(self) -> list[OffsetRangeDiagnostic]:
         """返回收集到的偏移诊断记录。"""

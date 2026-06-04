@@ -150,8 +150,16 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
     if cpp_type.startswith("E"):
         return str(value)
 
+    # 数组 / StructValue / opaque fallback — 输出空字符串而非 Python repr
+    # 这些类型无法在 C++ 中用字面量表达，跳过赋值比输出非法语法更好
+    if isinstance(value, (list, tuple)):
+        return ""
+    str_val = str(value)
+    if "StructValue(" in str_val or "[" in str_val:
+        return ""
+
     # 其他类型 — 直接返回字符串表示
-    return str(value)
+    return str_val
 
 
 def _format_fvector(x: float, y: float, z: float) -> str:

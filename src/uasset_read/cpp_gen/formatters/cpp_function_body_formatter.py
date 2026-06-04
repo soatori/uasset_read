@@ -175,38 +175,44 @@ def _strip_function_wrapper(text: str) -> str:
         return text
 
     first_idx, first_text = non_empty[0]
-    second_idx, second_text = non_empty[1]
     last_idx, last_text = non_empty[-1]
 
     # 条件 1：首行是函数签名（含 '(' 且匹配正则）
     if '(' not in first_text or not _FUNC_SIG_RE.match(first_text):
         return text
 
-    # 条件 2：第二非空行是 '{'
-    if second_text != '{':
-        return text
+    # 条件 2：'{ 位置' — 支持两种格式：
+    #   格式 A: 签名独占一行，第二非空行为 '{'
+    #   格式 B: 签名行以 '{' 结尾（如 "void Func() {"）
+    brace_on_first_line = first_text.endswith('{')
+    if not brace_on_first_line:
+        if len(non_empty) < 3:
+            return text
+        second_idx, second_text = non_empty[1]
+        if second_text != '{':
+            return text
+        body_start = second_idx + 1
+    else:
+        if len(non_empty) < 2:
+            return text
+        body_start = first_idx + 1
 
     # 条件 3：最后非空行是 '}'
     if last_text != '}':
         return text
 
     # 条件 4：排除控制流语句（if/for/while 等）
-    # 提取 '(' 前的最后一个单词
     before_paren = first_text[:first_text.index('(')].split()[-1].lower() if '(' in first_text else ''
     if before_paren in _CONTROL_KEYWORDS:
         return text
 
     # 满足所有条件，剥离外层
-    # 提取 '{' 之后、'}' 之前的内容
-    body_start = second_idx + 1
     body_end = last_idx
-
     body_lines = lines[body_start:body_end]
 
     # 去掉一层缩进（如果存在的话）
     dedented = []
     for line in body_lines:
-        # 尝试去掉 4 个空格或 1 个 tab
         if line.startswith("    "):
             dedented.append(line[4:])
         elif line.startswith("\t"):

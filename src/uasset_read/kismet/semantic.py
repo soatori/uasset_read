@@ -276,9 +276,57 @@ def _format_call_node(
         category = param.get("pin_category", "")
         if category == "exec":
             continue
-        args.append(name)
+
+        # 优先使用 data_source 追踪到的真实参数名
+        resolved_name = _resolve_param_name(param)
+        args.append(resolved_name or name)
 
     return f"{func_name}({', '.join(args)})"
+
+
+def _resolve_param_name(param: Dict[str, Any]) -> str:
+    """从 data_source 解析参数的真实语义名称。
+
+    优先级：
+    1. function_parameter → 使用 FunctionEntry 的 pin 名（如 "Yaw"）
+    2. default_value → 使用默认值字面量
+    3. pure_function → 使用函数调用表达式
+    4. 其他 → 返回空字符串（回退到原始 pin 名）
+
+    Args:
+        param: input_params 中的参数字典
+
+    Returns:
+        解析后的参数名，或空字符串（表示无法解析）
+    """
+    ds = param.get("data_source")
+    if not isinstance(ds, dict):
+        return ""
+
+    sources = ds.get("data_sources", [])
+    if not sources:
+        return ""
+
+    src = sources[0]
+    source_type = src.get("source_type", "")
+
+    if source_type == "function_parameter":
+        # FunctionEntry 参数 → 使用 pin 名（如 "Yaw", "Pitch"）
+        return src.get("pin", "")
+
+    if source_type == "default_value":
+        # 默认值字面量
+        value = src.get("value", "")
+        if value:
+            return value
+
+    if source_type == "pure_function":
+        # Pure 函数输出 → 使用函数调用形式
+        func = src.get("function_name", "")
+        if func:
+            return f"{func}()"
+
+    return ""
 
 
 def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, Any]]:

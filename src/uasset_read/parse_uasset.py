@@ -638,6 +638,9 @@ def parse_uasset_with_linker(
         result.is_success = False
 
     finally:
+        # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
+        if result.linker and result.linker.diagnostics:
+            result.diagnostics.extend(result.linker.diagnostics)
         if archive:
             # 收集 FArchive 诊断记录（截断检测、偏移越界等）
             archive_diagnostics = archive.get_diagnostics()

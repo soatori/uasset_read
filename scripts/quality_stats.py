@@ -52,11 +52,11 @@ RE_EMPTY_FUNCTION_BODY = re.compile(
     r"\w+\s*\([^)]*\)\s*\{\s*\}"
 )
 
-# 所有函数定义（含非空体）：匹配 返回类型 函数名(...) { 或 单行 { }
+# 所有函数定义（含非空体）：匹配 返回类型 [ClassName::]FuncName(...) {
 RE_FUNCTION_DEF = re.compile(
     r"(?:void|int|float|bool|auto|FString|FName|FText|UObject\*|"
     r"[A-Z]\w+(?:::\w+)*\*?)\s+"
-    r"\w+\s*\([^)]*\)\s*\{"
+    r"(?:\w+::)?\w+\s*\([^)]*\)\s*\{"
 )
 
 # C++ 源文件扩展名
@@ -174,10 +174,15 @@ def scan_directory(scan_dir: Path, verbose: bool = False) -> QualityMetrics:
     """扫描目录下所有 C++ 文件，汇总质量指标。"""
     metrics = QualityMetrics()
 
-    # 收集所有 C++ 源文件
+    # 排除的目录（vendor、external、node_modules 等）
+    _EXCLUDE_DIRS = {"external", "vendor", "node_modules", ".git", "__pycache__", "third_party"}
+
+    # 收集所有 C++ 源文件（排除 vendor 目录）
     cpp_files = sorted(
         f for f in scan_dir.rglob("*")
-        if f.is_file() and f.suffix.lower() in CPP_EXTENSIONS
+        if f.is_file()
+        and f.suffix.lower() in CPP_EXTENSIONS
+        and not any(part.lower() in _EXCLUDE_DIRS for part in f.relative_to(scan_dir).parts)
     )
 
     if not cpp_files:
