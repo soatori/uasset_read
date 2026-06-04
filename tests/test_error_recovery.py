@@ -32,17 +32,17 @@ class TestReadValidatedCount:
         archive._file = BytesIO(data)
         return archive
 
-    def test_negative_count_raises_parse_error(self):
-        """负数数量应抛出 ParseError（而非 ValueError）。"""
+    def test_negative_count_returns_zero_with_warning(self):
+        """负数数量应返回 0 并记录警告（而非抛出 ParseError）。"""
         archive = self._make_archive_with_i32(-1)
-        with pytest.raises(ParseError, match="数量不能为负数"):
-            read_validated_count(archive, 1000000, "test")
+        result = read_validated_count(archive, 1000000, "test")
+        assert result == 0
 
-    def test_exceeds_max_raises_parse_error(self):
-        """超大数量应抛出 ParseError（而非 ValueError）。"""
+    def test_exceeds_max_returns_zero_with_warning(self):
+        """超大数量应返回 0 并记录警告（而非抛出 ParseError）。"""
         archive = self._make_archive_with_i32(9999999)
-        with pytest.raises(ParseError, match="数量超过最大值"):
-            read_validated_count(archive, 1000000, "test")
+        result = read_validated_count(archive, 1000000, "test")
+        assert result == 0
 
     def test_valid_count_returns_value(self):
         """正常数量应正常返回。"""
@@ -56,17 +56,11 @@ class TestReadValidatedCount:
         result = read_validated_count(archive, 1000000, "test")
         assert result == 0
 
-    def test_parse_error_not_value_error(self):
-        """确认抛出的是 ParseError 而非 ValueError。"""
+    def test_invalid_count_returns_zero_not_exception(self):
+        """无效数量应返回 0 而非抛出任何异常。"""
         archive = self._make_archive_with_i32(-100)
-        try:
-            read_validated_count(archive, 1000000, "test_label")
-            assert False, "应抛出异常"
-        except ParseError:
-            # 确认是 ParseError，不是 ValueError
-            pass
-        except ValueError:
-            pytest.fail("应抛出 ParseError 而非 ValueError")
+        result = read_validated_count(archive, 1000000, "test_label")
+        assert result == 0
 
 
 class TestPropertyParserSmartContinue:

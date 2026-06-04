@@ -22,6 +22,7 @@ from uasset_read.kismet.translator import (
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder, to_function_body
 from uasset_read.kismet.structured_flow import StructuredControlFlow, StructuredBlock
+from uasset_read.kismet.blueprint_node_cleaner import BlueprintNodeCleaner
 
 # Decompilation result and pipeline
 from uasset_read.kismet.result import KismetDecompiledResult
@@ -55,6 +56,8 @@ __all__ = [
     "to_function_body",
     "StructuredControlFlow",
     "StructuredBlock",
+    # Blueprint node cleaner
+    "BlueprintNodeCleaner",
     # Decompilation result and pipeline
     "KismetDecompiledResult",
     "decompile_uasset",

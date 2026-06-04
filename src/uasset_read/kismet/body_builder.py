@@ -37,26 +37,26 @@ def _needs_semicolon(line: str) -> bool:
 
 
 def _is_structured_block_start(jump_analyzer, idx: int) -> bool:
-    """判断指定索引是否是结构化块（while/if/else）的起始位置。"""
-    while_result = jump_analyzer.detect_while_pattern(idx)
-    if while_result is not None:
-        return True
-    if_else_result = jump_analyzer.detect_if_else_pattern(idx)
-    if if_else_result is not None:
-        return True
-    return False
+    """判断指定索引是否是结构化块（while/if/for/switch）的起始位置。"""
+    return jump_analyzer.detect_pattern(idx) is not None
 
 
 def _get_structured_block_end(jump_analyzer, idx: int) -> int:
     """获取从 idx 开始的结构化块的结束索引（含）。"""
-    while_result = jump_analyzer.detect_while_pattern(idx)
-    if while_result is not None:
-        return while_result["body_end"]
-    if_else_result = jump_analyzer.detect_if_else_pattern(idx)
-    if if_else_result is not None:
-        if if_else_result["type"] == "if_else":
-            return if_else_result["else_end"]
-        return if_else_result["then_end"]
+    result = jump_analyzer.detect_pattern(idx)
+    if result is None:
+        return idx
+
+    ptype = result["type"]
+    if ptype in ("while", "for"):
+        return result["body_end"]
+    if ptype == "if_else":
+        return result["else_end"]
+    if ptype == "if":
+        return result["then_end"]
+    if ptype == "switch":
+        # switch 自身是单个表达式
+        return idx
     return idx
 
 
@@ -70,6 +70,14 @@ def _emit_structured_block(
     label_set: set[int],
 ) -> list[str]:
     """检测并输出从 start_idx 开始的结构化控制流块。"""
+
+    # --- for 模式（优先于 while） ---
+    for_result = jump_analyzer.detect_for_pattern(start_idx)
+    if for_result is not None:
+        return _emit_for_block(
+            for_result, translator, expressions,
+            jump_targets, offset_to_index, label_set,
+        )
 
     # --- while 模式 ---
     while_result = jump_analyzer.detect_while_pattern(start_idx)
@@ -87,7 +95,90 @@ def _emit_structured_block(
             jump_targets, offset_to_index, label_set,
         )
 
+    # --- switch/case 模式 ---
+    switch_result = jump_analyzer.detect_switch_pattern(start_idx)
+    if switch_result is not None:
+        return _emit_switch_block(
+            switch_result, translator, expressions,
+        )
+
     return []
+
+
+def _emit_for_block(
+    for_result: dict,
+    translator,
+    expressions: list,
+    jump_targets: set[int],
+    offset_to_index: dict[int, int],
+    label_set: set[int],
+) -> list[str]:
+    """输出 for 循环块。"""
+    start_idx = for_result["start"]
+    body_start = for_result["body_start"]
+    body_end = for_result["body_end"]
+    condition = for_result["condition"]
+    inc_start = for_result["increment_start"]
+    inc_end = for_result["increment_end"]
+
+    cond_str = translator.line_cpp(condition)
+
+    # 生成递增表达式字符串
+    inc_parts: list[str] = []
+    for j in range(inc_start, inc_end + 1):
+        line = translator.line_cpp(expressions[j], index=j)
+        if line and line.strip():
+            inc_parts.append(line.strip().rstrip(";"))
+    inc_str = ", ".join(inc_parts) if inc_parts else ""
+
+    result: list[str] = [f"for (; {cond_str}; {inc_str}) {{" ]
+
+    # 输出循环体（不含递增和回跳）
+    for j in range(body_start, inc_start):
+        byte_off = getattr(expressions[j], "byte_offset", None)
+        if byte_off is not None and byte_off in jump_targets:
+            target_idx = offset_to_index.get(byte_off)
+            if target_idx is not None and target_idx not in label_set:
+                result.append(f"    Label_{byte_off}:")
+                label_set.add(target_idx)
+
+        line = translator.line_cpp(expressions[j], index=j)
+        if line and line.strip():
+            result.append(f"    {line}")
+
+    result.append("}")
+    return result
+
+
+def _emit_switch_block(
+    switch_result: dict,
+    translator,
+    expressions: list,
+) -> list[str]:
+    """输出 switch/case 块。"""
+    index_term = switch_result["index_term"]
+    cases = switch_result["cases"]
+    default_term = switch_result["default_term"]
+
+    index_str = translator.line_cpp(index_term) if index_term else "?"
+    result: list[str] = [f"switch ({index_str}) {{" ]
+
+    for case_item in cases:
+        case_idx = case_item["index_term"]
+        case_term = case_item["case_term"]
+        case_idx_str = translator.line_cpp(case_idx) if case_idx else "?"
+        case_val_str = translator.line_cpp(case_term) if case_term else "?"
+        result.append(f"    case {case_idx_str}:")
+        result.append(f"        {case_val_str};")
+        result.append("        break;")
+
+    if default_term:
+        default_str = translator.line_cpp(default_term)
+        result.append("    default:")
+        result.append(f"        {default_str};")
+
+    result.append("}")
+    return result
 
 
 def _emit_while_block(

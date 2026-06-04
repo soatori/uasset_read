@@ -5,6 +5,7 @@ preload(index) lazily deserializes properties on demand.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
@@ -17,6 +18,9 @@ if TYPE_CHECKING:
 
 from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
 from uasset_read.link.object_instance import UObjectInstance
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+
+logger = logging.getLogger(__name__)
 
 
 class PackageLinker:
@@ -51,6 +55,13 @@ class PackageLinker:
         self._export_objects: List[UObjectInstance] = []
         self._root_objects: List[UObjectInstance] = []
         self._preload_cache: dict[int, bool] = {}
+        self._diagnostics: List[OffsetRangeDiagnostic] = []
+        self._file_size: int = getattr(archive, '_file_size', 0)
+
+    @property
+    def diagnostics(self) -> List[OffsetRangeDiagnostic]:
+        """返回所有偏移诊断记录。"""
+        return self._diagnostics
 
     def link(self) -> None:
         """Create UObjectInstance shells from import/export maps.
@@ -104,6 +115,24 @@ class PackageLinker:
             cls_name = resolve_class_name(
                 exp.class_index, self._import_map, self._export_map
             )
+
+            # 早期验证 serial_offset（防止溢出值传播到 preload 阶段）
+            serial_offset = exp.serial_offset
+            serial_size = exp.serial_size
+            if serial_offset < 0 or serial_offset > self._file_size:
+                self._diagnostics.append(OffsetRangeDiagnostic(
+                    module="linker",
+                    field="serial_offset",
+                    export_index=idx,
+                    object_name=obj_name,
+                    target_offset=serial_offset,
+                    file_size=self._file_size,
+                    source="_create_export_instances",
+                    error=f"Export #{idx} ({obj_name}) serial_offset {serial_offset} 超出文件范围 [0, {self._file_size}]",
+                ))
+                serial_offset = 0
+                serial_size = 0
+
             inst = UObjectInstance(
                 package_index=pkg_idx,
                 object_name=obj_name,
@@ -111,8 +140,8 @@ class PackageLinker:
                 class_package=None,
                 outer_index=exp.outer_index,
                 is_import=False,
-                serial_offset=exp.serial_offset,
-                serial_size=exp.serial_size,
+                serial_offset=serial_offset,
+                serial_size=serial_size,
                 linker=self,
                 _raw_export=exp,
             )
@@ -142,6 +171,7 @@ class PackageLinker:
     ) -> Optional[UObjectInstance]:
         """Resolve a PackageIndex to its UObjectInstance.
 
+        Validates index bounds and records OffsetRangeDiagnostic on out-of-bounds.
         Returns None for null or out-of-bounds indices.
         """
         if pkg_idx.is_null:
@@ -150,11 +180,29 @@ class PackageLinker:
             idx = pkg_idx.to_export_index()
             if 0 <= idx < len(self._export_objects):
                 return self._export_objects[idx]
+            # 越界诊断
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="PackageIndex",
+                export_index=idx,
+                file_size=self._file_size,
+                source="resolve_package_index",
+                error=f"Export PackageIndex {pkg_idx.index} (idx={idx}) 越界，export 数量 {len(self._export_objects)}",
+            ))
             return None
         if pkg_idx.is_import:
             idx = pkg_idx.to_import_index()
             if 0 <= idx < len(self._import_objects):
                 return self._import_objects[idx]
+            # 越界诊断
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="PackageIndex",
+                import_index=idx,
+                file_size=self._file_size,
+                source="resolve_package_index",
+                error=f"Import PackageIndex {pkg_idx.index} (idx={idx}) 越界，import 数量 {len(self._import_objects)}",
+            ))
             return None
         return None
 
@@ -176,6 +224,39 @@ class PackageLinker:
             return
 
         if instance.serial_size == 0:
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
+        # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
+        if instance.serial_offset < 0 or instance.serial_offset > self._file_size:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="serial_offset",
+                export_index=index,
+                object_name=instance.object_name,
+                target_offset=instance.serial_offset,
+                file_size=self._file_size,
+                source="preload",
+                error=f"Export #{index} ({instance.object_name}) serial_offset {instance.serial_offset} 超出文件范围 [0, {self._file_size}]",
+            ))
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
+        # 验证 serial_offset + serial_size 不超出文件
+        if instance.serial_offset + instance.serial_size > self._file_size:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="serial_size",
+                export_index=index,
+                object_name=instance.object_name,
+                target_offset=instance.serial_offset,
+                read_size=instance.serial_size,
+                file_size=self._file_size,
+                source="preload",
+                error=f"Export #{index} ({instance.object_name}) offset+size {instance.serial_offset}+{instance.serial_size} 超出文件大小 {self._file_size}",
+            ))
             instance._preloaded = True
             self._preload_cache[index] = True
             return

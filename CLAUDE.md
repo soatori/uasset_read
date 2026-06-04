@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据）。
 
-- **版本**: 0.3.8-beta（分支 `0.3.8-dev`）
+- **版本**: 0.3.8-beta（开发分支 `0.4.1-dev`）
 - **Python**: 3.10+（使用 `match/case`、类型注解）
 - **运行时依赖**: 零依赖（PAK AES/LZ4/Zstd 为可选依赖）
 - **构建系统**: setuptools（src 布局）
@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 测试
 
-测试位于 `tests/`（15+ 个测试文件，268+ 个单元测试，40+ 个集成测试）。
+测试位于 `tests/`（35+ 个测试文件，2100+ 个测试用例，40+ 个集成测试）。
 
 ### 测试运行命令
 
@@ -162,6 +162,7 @@ uasset-read path/to/file.uasset --blueprint-text   # 蓝图节点文本
 uasset-read path/to/file.uasset --blueprint-ue-text  # UE 格式文本
 uasset-read path/to/file.uasset --cpp-skeleton       # C++ 类骨架
 uasset-read path/to/file.uasset --n2c          # N2C 中间格式 JSON
+uasset-read --batch-dir path/to/dir/           # 批量导出目录
 uasset-read path/to/file.uasset --strict     # 遇到警告时停止
 uasset-read path/to/file.uasset --tolerant   # 容错模式（默认）
 uasset-read path/to/file.uasset --verbose    # 启用调试日志
@@ -176,6 +177,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
           PackageLinker · KismetDecompiler · N2C Format · PakFileReader
+          IR Builder → Renderers (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
 ```
 
 ### 模块结构 (`src/uasset_read/`)
@@ -194,7 +196,7 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | 版本管理 | `versioning.py` | `VersionContainer`、`build_version_container`、`EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
 | **序列化** | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag`、图序列化器、对象资源 |
-| **数据模型** | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、变换、蓝图模型、节点类型 |
+| **数据模型** | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、变换、蓝图模型、节点类型、IR 中间表示 |
 | **属性解析器** | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 类特定跳过机制 |
 | ├ 资产类型 | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant 专用解析器 |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
@@ -202,14 +204,18 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 | **Kismet** | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器、BPGC 回退、结构化控制流 |
 | ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | **链接器** | `link/` | `PackageLinker` 两阶段对象图重建、`UObjectInstance` |
-| **C++ 生成** | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射 |
+| **C++ 生成** | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射、构造函数 IR 构建器 |
 | **Agent** | `agent/` | `AgentTranslationPipeline` + `CppFileWriter`（蓝图→C++） |
 | **N2C** | `n2c/` | 中间格式：`N2CStruct/Graph/Node/Pin`、JSON Schema、验证器、57 种节点处理器 |
 | **Pak** | `pak/` | `FPakInfo/PakEntry/FPakDirectoryEntry`、`PakFileReader`、索引解析、压缩分发、AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析、标志定义 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
+| **IR** | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器、`PackageIR`、`ExportIR`、`PropertyIR` |
+| **Renderer** | `renderers/` | 可插拔 `IRenderer` ABC + format registry（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton，6 种渲染器） |
 | **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid/蓝图翻译文本/UE 格式文本输出生成器 |
+| **Core API** | `core.py` | `parse_single()`、`parse_batch()`、`list_formats()` — 简化高层 API |
+| **Simple API** | `simple.py` | 更简化的单文件解析入口 |
 
 ### 公共 API
 

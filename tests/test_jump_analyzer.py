@@ -1,5 +1,6 @@
 """JumpAnalyzer 单元测试。"""
 from uasset_read.kismet.expressions.control_flow import EX_Jump, EX_JumpIfNot
+from uasset_read.kismet.expressions.assignments import EX_Let
 from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
 
@@ -26,6 +27,15 @@ def _make_jump_if_not(
     jmp = EX_JumpIfNot(CodeOffset=code_offset, BooleanExpression=boolean_expression)
     jmp.StatementIndex = statement_index
     return jmp
+
+
+def _make_let(statement_index: int) -> EX_Let:
+    """创建 mock EX_Let 赋值表达式（用于 for 循环递增）。"""
+    let = EX_Let()
+    let.StatementIndex = statement_index
+    let.Variable = _make_expr(0)
+    let.Assignment = _make_expr(0)
+    return let
 
 
 class TestLabelMapping:
@@ -189,13 +199,14 @@ class TestForDetection:
     """for 循环模式检测。"""
 
     def test_for_detection(self):
-        """for: JumpIfNot → increment → Jump(back to start)"""
+        """for: JumpIfNot → body → increment → Jump(back to start)"""
         cond = _make_expr(0)
         jump_if_not = _make_jump_if_not(statement_index=10, code_offset=50, boolean_expression=cond)
-        increment = _make_expr(20)
-        jump_back = _make_jump(statement_index=30, code_offset=10)
+        body = _make_expr(20)
+        increment = _make_let(30)
+        jump_back = _make_jump(statement_index=40, code_offset=10)
         exit_expr = _make_expr(50)
-        exprs = [cond, jump_if_not, increment, jump_back, exit_expr]
+        exprs = [cond, jump_if_not, body, increment, jump_back, exit_expr]
         analyzer = JumpAnalyzer(exprs)
 
         result = analyzer.detect_for_pattern(1)
@@ -203,26 +214,27 @@ class TestForDetection:
         assert result["type"] == "for"
         assert result["start"] == 1
         assert result["body_start"] == 2
-        assert result["body_end"] == 3
-        assert result["increment_start"] == 2
-        assert result["increment_end"] == 2
+        assert result["body_end"] == 4
+        assert result["increment_start"] == 3
+        assert result["increment_end"] == 3
 
     def test_for_with_multiple_increments(self):
         """多个递增表达式。"""
         cond = _make_expr(0)
         jump_if_not = _make_jump_if_not(statement_index=10, code_offset=60, boolean_expression=cond)
-        inc1 = _make_expr(20)
-        inc2 = _make_expr(30)
-        jump_back = _make_jump(statement_index=40, code_offset=10)
+        body = _make_expr(20)
+        inc1 = _make_let(30)
+        inc2 = _make_let(40)
+        jump_back = _make_jump(statement_index=50, code_offset=10)
         exit_expr = _make_expr(60)
-        exprs = [cond, jump_if_not, inc1, inc2, jump_back, exit_expr]
+        exprs = [cond, jump_if_not, body, inc1, inc2, jump_back, exit_expr]
         analyzer = JumpAnalyzer(exprs)
 
         result = analyzer.detect_for_pattern(1)
         assert result is not None
         assert result["type"] == "for"
-        assert result["increment_start"] == 2
-        assert result["increment_end"] == 3
+        assert result["increment_start"] == 3
+        assert result["increment_end"] == 4
 
     def test_for_body_too_short(self):
         """body 只有 Jump 无递增，不满足 for 模式。"""

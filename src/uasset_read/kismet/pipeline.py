@@ -84,6 +84,15 @@ def decompile_single_function(
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
     warnings = _collect_translation_warnings(cpp_code)
 
+    # 提取函数引用解析统计
+    func_ref_stats: dict = {}
+    if builder._translator._func_resolver is not None:
+        func_ref_stats = builder._translator._func_resolver.get_statistics()
+        # 如果有未解析引用，添加警告
+        unresolved_report = builder._translator._func_resolver.get_unresolved_report()
+        if unresolved_report:
+            warnings.append(unresolved_report)
+
     # Extract signature from generated code (first line)
     # Format: "void FuncName(...) {" or similar
     signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {func_name}()"
@@ -102,6 +111,7 @@ def decompile_single_function(
         bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
         bytecode_status="parsed",
         warnings=warnings,
+        function_ref_stats=func_ref_stats,
     )
 
 
@@ -110,8 +120,6 @@ def _collect_translation_warnings(cpp_code: str) -> list[str]:
     warnings: list[str] = []
     if "/* unknown:" in cpp_code:
         warnings.append("Kismet translation contains unsupported expression tokens")
-    if "/* deprecated */" in cpp_code:
-        warnings.append("Kismet translation contains deprecated/instrumentation tokens")
     if "Function_" in cpp_code or "LocalFunction_" in cpp_code:
         warnings.append("Kismet translation contains unresolved function references")
     return warnings
