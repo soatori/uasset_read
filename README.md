@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> ⚠️ **Active development** — This project is still under active development and is not yet complete. Some asset types and features may have limited or partial support, and not all UE assets are guaranteed to parse correctly.
+> 📦 **v0.4.2 released** — Stable release with IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,6 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
+| Version | 0.4.2 |
 | Source | Python parser for Unreal Engine .uasset files |
 | Tests | 994 passed, 2 xfailed (51 test files, 12+ asset types) |
 | Modules | 100+ source files across 15 subpackages |

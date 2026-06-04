@@ -26,7 +26,7 @@ section: agent-index
 | 跨包引用修复 | [[对象链接器]] | `link/` |
 | PAK/IoStore 容器支持 | [[PAK]] / [[IoStore]] | `pak/` / `iostore/` |
 | 添加测试用例 | [[测试指南]] | `tests/` |
-| 对照 UE 源码 | [[UE 源码对照]] | `docs/uasset-format/` |
+| 对照 UE 源码 | [[UE 源码对照]] | `docs/formats/uasset/` |
 
 > [!WARNING] 已移除任务
 > - ~~N2C Schema 变更~~ → `n2c/` 已整体删除

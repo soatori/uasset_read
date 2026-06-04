@@ -152,8 +152,8 @@ v1.1 仅覆盖 Cascade。Niagara 格式文档在 v1.2 阶段规划。
 | Runtime/Engine/Classes/Particles/ParticleModuleRequired.h | UVFlippingMode/LWC 字段 |
 | Runtime/Engine/Private/Particles/ParticleSystem.cpp | Serialize 版本处理 |
 | Runtime/Core/Public/UObject/ObjectVersion.h | 版本枚举定义 |
-| docs/version/ue4-evolution.md | UE4 版本演进主文档 |
-| docs/version/ue5-evolution.md | UE5 版本演进主文档 |
+| ../ue4-evolution.md | UE4 版本演进主文档 |
+| ../ue5-evolution.md | UE5 版本演进主文档 |
 
 ---
 

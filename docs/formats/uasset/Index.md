@@ -23,52 +23,52 @@ Unreal Engine .uasset 文件格式知识库。核心原则：**解析 .uasset �
 
 ## Quick Reference - 文档导航
 
-### 文件结构基础 (references/)
+### 文件结构基础
 | 文档 | 内容 | 关键结构 |
 |------|------|----------|
-| [file-structure.md](references/file-structure.md) | 文件整体布局 | Header → Tables → Data → Trailer |
-| [package-summary.md](references/package-summary.md) | FPackageFileSummary | Tag, Version, 各表 Offset/Count |
-| [name-table.md](references/name-table.md) | 名称表 | FName 序列化机制 |
-| [import-export-tables.md](references/import-export-tables.md) | Import/Export 表 | FPackageIndex 引用机制 |
-| [bulkdata-region.md](references/bulkdata-region.md) | 数据区 | BulkData/PayloadTOC/DataResource |
-| [package-trailer.md](references/package-trailer.md) | 文件尾 (UE5) | PackageTrailer 结构 |
+| [file-structure.md](file-structure.md) | 文件整体布局 | Header → Tables → Data → Trailer |
+| [package-summary.md](package-summary.md) | FPackageFileSummary | Tag, Version, 各表 Offset/Count |
+| [name-table.md](name-table.md) | 名称表 | FName 序列化机制 |
+| [import-export-tables.md](import-export-tables.md) | Import/Export 表 | FPackageIndex 引用机制 |
+| [bulkdata-region.md](bulkdata-region.md) | 数据区 | BulkData/PayloadTOC/DataResource |
+| [package-trailer.md](package-trailer.md) | 文件尾 (UE5) | PackageTrailer 结构 |
 
-### 序列化机制 (references/serialization/)
+### 序列化机制 (serialization/)
 | 文档 | 内容 | 关键流程 |
 |------|------|----------|
-| [linker-load.md](references/serialization/linker-load.md) | 加载流程 | 4 阶段：Header → Tables → Objects → PostProcess |
-| [linker-save.md](references/serialization/linker-save.md) | 保存流程 | 序列化写入机制 |
-| [property-tag.md](references/serialization/property-tag.md) | FPropertyTag | 20 种属性类型、版本差异 |
-| [bulkdata.md](references/serialization/bulkdata.md) | BulkData 机制 | 运行时加载、流式传输 |
-| [version-compatibility.md](references/serialization/version-compatibility.md) | 版本判断 | UE4/UE5 双版本机制 |
+| [linker-load.md](serialization/linker-load.md) | 加载流程 | 4 阶段：Header → Tables → Objects → PostProcess |
+| [linker-save.md](serialization/linker-save.md) | 保存流程 | 序列化写入机制 |
+| [property-tag.md](serialization/property-tag.md) | FPropertyTag | 20 种属性类型、版本差异 |
+| [bulkdata.md](serialization/bulkdata.md) | BulkData 机制 | 运行时加载、流式传输 |
+| [version-compatibility.md](serialization/version-compatibility.md) | 版本判断 | UE4/UE5 双版本机制 |
 
-### Cooked 格式 (references/cooked/)
+### Cooked 格式 (cooked/)
 | 文档 | 内容 | 适用场景 |
 |------|------|----------|
-| [cooked-vs-uncooked.md](references/cooked/cooked-vs-uncooked.md) | 格式对比 | 15 项差异、PKG 标志 |
-| [pak.md](references/cooked/pak.md) | Pak 容器 | UE4 Pak 文件格式 |
-| [iostore.md](references/cooked/iostore.md) | IoStore 容器 | UE5 IoStore 格式 |
+| [cooked-vs-uncooked.md](cooked/cooked-vs-uncooked.md) | 格式对比 | 15 项差异、PKG 标志 |
+| [pak.md](cooked/pak.md) | Pak 容器 | UE4 Pak 文件格式 |
+| [iostore.md](cooked/iostore.md) | IoStore 容器 | UE5 IoStore 格式 |
 
-### 版本演进 (references/version/)
+### 版本演进 (version/)
 | 文档 | 内容 | 版本范围 |
 |------|------|----------|
-| [ue4-evolution.md](references/version/ue4-evolution.md) | UE4 版本历史 | 214-522 关键版本 |
-| [ue5-evolution.md](references/version/ue5-evolution.md) | UE5 版本历史 | UE5 新增版本号 |
-| [migration-guide.md](references/version/migration-guide.md) | 迁移指南 | 跨版本资产处理 |
+| [ue4-evolution.md](version/ue4-evolution.md) | UE4 版本历史 | 214-522 关键版本 |
+| [ue5-evolution.md](version/ue5-evolution.md) | UE5 版本历史 | UE5 新增版本号 |
+| [migration-guide.md](version/migration-guide.md) | 迁移指南 | 跨版本资产处理 |
 
-### 资产类型 (references/assets/)
+### 资产类型 (assets/)
 | 资产类型 | 导航文档 | 核心源码路径 |
 |----------|----------|--------------|
-| 静态网格 | [static-mesh.md](references/assets/static-mesh.md) | Engine/StaticMesh.h |
-| 骨骼网格 | [skeletal-mesh.md](references/assets/skeletal-mesh.md) | Engine/SkeletalMesh.h |
-| 动画序列 | [animation.md](references/assets/animation.md) | Animation/AnimSequence.h |
-| 蓝图 | [blueprint.md](references/assets/blueprint.md) | Engine/Blueprint.h |
-| 材质 | [material.md](references/assets/material.md) | Engine/Material.h |
-| 纹理 | [texture.md](references/assets/texture.md) | Engine/Texture.h |
-| 音频 | [audio.md](references/assets/audio.md) | Engine/SoundWave.h |
-| 关卡 | [level.md](references/assets/level.md) | Engine/World.h |
-| 粒子 | [particle-system.md](references/assets/particle-system.md) | Engine/ParticleSystem.h |
-| UMG Widget | [widget-blueprint.md](references/assets/widget-blueprint.md) | UMG/WidgetBlueprint.h |
+| 静态网格 | [static-mesh.md](assets/static-mesh.md) | Engine/StaticMesh.h |
+| 骨骼网格 | [skeletal-mesh.md](assets/skeletal-mesh.md) | Engine/SkeletalMesh.h |
+| 动画序列 | [animation.md](assets/animation.md) | Animation/AnimSequence.h |
+| 蓝图 | [blueprint.md](assets/blueprint.md) | Engine/Blueprint.h |
+| 材质 | [material.md](assets/material.md) | Engine/Material.h |
+| 纹理 | [texture.md](assets/texture.md) | Engine/Texture.h |
+| 音频 | [audio.md](assets/audio.md) | Engine/SoundWave.h |
+| 关卡 | [level.md](assets/level.md) | Engine/World.h |
+| 粒子 | [particle-system.md](assets/particle-system.md) | Engine/ParticleSystem.h |
+| UMG Widget | [widget-blueprint.md](assets/widget-blueprint.md) | UMG/WidgetBlueprint.h |
 
 ## Key Constants
 
@@ -128,7 +128,7 @@ FPackageIndex: 正数 = Export, 负数 = Import, 0 = Null
 8. UE5: 解析 PackageTrailer 和 PayloadTOC
 ```
 
-详见 [linker-load.md](references/serialization/linker-load.md)
+详见 [linker-load.md](serialization/linker-load.md)
 
 ## Asset Structure Pattern
 

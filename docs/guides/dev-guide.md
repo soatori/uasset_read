@@ -31,6 +31,8 @@ python -m pytest tests/test_pak_handling.py -v
 | **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
 | **双模式** | 稳定资产必须在 strict 和 tolerant 两种模式下都通过 |
 
+> **当前状态** (v0.4.2): 994 passed, 2 xfail, 51 测试文件, 40+ 集成测试
+
 ### 样本资产
 
 测试依赖 `E:\Develop\lib\UnrealEngine\Samples` 目录的真实 UE 资产：
@@ -85,7 +87,7 @@ E:\Develop\lib\UnrealEngine\Samples\
 4. **版本号一致性** — 确认 `pyproject.toml`、`__init__.py`、文档版本号统一
 5. **文档同步** — 确认 CLAUDE.md、README.md、Wiki 文档与代码一致
 
-详细测试规范见 `docs/release-notes/testing-requirements.md`。
+详细测试规范见 `docs/guides/testing-requirements.md`。
 
 ## 开发命令
 
@@ -184,7 +186,6 @@ uasset-read path/to/file.uasset --verbose    # 启用调试日志
 
 ## 外部参考
 
-- `docs/uasset-format/` — UE .uasset 格式文档（60+ 个 Markdown 文件，覆盖资产类型、序列化、Cooked 格式、版本兼容）。`Index.md` 为主索引。
+- `docs/formats/uasset/` — UE .uasset 格式文档（60+ 个 Markdown 文件，覆盖资产类型、序列化、Cooked 格式、版本兼容）。`Index.md` 为主索引。
 - `external/CUE4Parse/` — 参考 C# 实现，用于交叉验证解析逻辑。
 - `docs/reference/` — 蓝图节点文本参考、UE 加载流程、CUE4Parse 对照索引、蓝图转 C++ 指南。
-- `docs/asset_type_index.md` — 60+ 种 UE 资产类型综合索引，含命名规范和示例文件路径。

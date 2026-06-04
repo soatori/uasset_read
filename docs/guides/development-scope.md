@@ -169,7 +169,7 @@ E:\Develop\lib\UnrealEngine\Samples\
 - **临时文件一律放在 `temp/` 目录**
 
 ### 外部参考
-- `docs/uasset-format/` — UE 格式文档（60+ Markdown 文件）
+- `docs/formats/uasset/` — UE 格式文档（60+ Markdown 文件）
 - `external/CUE4Parse/` — 参考 C# 实现
 - `docs/reference/` — 蓝图节点文本参考等
 - **必须参考 UE 源码**：格式理解必须追溯到 UE C++ 源码，禁止猜测二进制格式
