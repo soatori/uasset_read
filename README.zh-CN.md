@@ -25,7 +25,7 @@
 | 指标 | 值 |
 |------|-----|
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 35 个测试文件，2100+ 个测试用例 |
+| 测试 | 994 通过，2 xfail（51 个测试文件，覆盖 12+ 种资产类型） |
 | 模块 | 15 个子包，100+ 个源文件 |
 
 ## 功能特性
@@ -276,10 +276,12 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 
 | 文档 | 路径 |
 |------|------|
-| 快速开始 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) |
-| 架构设计 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| 开发指南 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| 开发指南 | [docs/guides/dev-guide.md](docs/guides/dev-guide.md) |
+| 开发范围 | [docs/guides/development-scope.md](docs/guides/development-scope.md) |
+| 测试要求 | [docs/guides/testing-requirements.md](docs/guides/testing-requirements.md) |
+| 格式参考 | [docs/formats/uasset/Index.md](docs/formats/uasset/Index.md) |
 | 参考资料 | [docs/reference/](docs/reference/) |
+| 设计规格 | [docs/designs/](docs/designs/) |
 
 ## 应用场景
 
