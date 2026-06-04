@@ -29,6 +29,33 @@ if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
 
 
+# Blueprint 元数据键列表 — 与 cpp_constructor_ir_builder.py 保持一致
+_BLUEPRINT_METADATA_KEYS = frozenset({
+    "BlueprintSystemVersion",
+    "GeneratedClass",
+    "SimpleConstructionScript",
+    "bCanEverTick",
+    "bCanEverRender",
+    "bStartWithTickEnabled",
+    "bReplicates",
+    "NetUpdateFrequency",
+    "MinNetUpdateFrequency",
+    "NetPriority",
+})
+
+
+def _classify_variable(var) -> str:
+    """分类蓝图变量。"""
+    name = getattr(var, "var_name", "") or ""
+    if name in _BLUEPRINT_METADATA_KEYS:
+        return "metadata"
+    if getattr(var, "is_component", False):
+        return "component"
+    if "InputAction" in name or "InputAxis" in name:
+        return "input_action"
+    return "user"
+
+
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     """将 ParseResult 转换为 PackageIR。
 
@@ -365,12 +392,16 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
     if bp is None:
         return variables
     for var in bp.variables or []:
+        kind = _classify_variable(var)
+        if kind == "metadata":
+            continue  # 跳过元数据变量
         var_type = _format_var_type(var)
         default_value = _safe_str(getattr(var, "default_value", None)) or None
         variables.append(VariableIR(
             name=_safe_str(getattr(var, "var_name", None)),
             type=var_type,
             default_value=default_value,
+            kind=kind,
         ))
     return variables
 

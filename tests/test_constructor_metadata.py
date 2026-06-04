@@ -63,7 +63,6 @@ class TestConstructorMetadataFilter:
 @pytest.mark.integration
 @pytest.mark.quality
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
-@pytest.mark.skip(reason="IR 层过滤由 Task 4 (ir_builder.py) 处理")
 class TestVariableClassification:
     """验证 PackageIR.variables 不包含元数据变量。"""
 

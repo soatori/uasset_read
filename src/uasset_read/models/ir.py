@@ -132,6 +132,7 @@ class VariableIR:
     name: str
     type: str
     default_value: str | None
+    kind: str = "user"  # "user" | "component" | "input_action" | "metadata"
 
 
 @dataclass
