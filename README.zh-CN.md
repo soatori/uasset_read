@@ -25,7 +25,8 @@
 | 指标 | 值 |
 |------|-----|
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 10 个文件，108 个测试 |
+| 测试 | 35 个测试文件，2100+ 个测试用例 |
+| 模块 | 15 个子包，100+ 个源文件 |
 
 ## 功能特性
 
@@ -34,35 +35,46 @@
 - **NameMap** — 名称表提取
 - **ImportMap / ExportMap** — 依赖和导出映射
 - **高级属性** — Struct / Map / Set / Enum / Text / Delegate
+- **属性回退系统** — 未知属性返回 `PropertyFallback` 并携带诊断信息，而非直接失败
+- **类处理器注册表** — 按类定制序列化，支持可配置的回退策略
+- **错误恢复** — 容错模式配合偏移范围诊断
 
 ### 蓝图分析
-- **蓝图图解析** — UEdGraph / Node / Pin 结构
+- **蓝图图解析** — UEdGraph / Node / Pin 结构，带类型化节点模型
 - **变量提取** — 变量、函数、事件、元数据，带类型推断
 - **组件属性** — Transform/Rotation/Scale + 标量属性
 - **执行流/数据流追踪** — Event → CallFunction 链路追踪
 - **函数图分析** — FunctionEntry 识别、按函数粒度的调用链
 
 ### 高级功能
-- **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码
+- **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码，支持结构化控制流
 - **PackageLinker** — 两阶段对象图重建
 - **N2C 中间格式** — 结构化 JSON Schema、执行链
-- **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射
+- **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射、构造函数格式化、默认值生成、标识符清理
 - **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
 - **循环依赖检测** — 导入映射相互引用检测
+- **IR（中间表示）** — 包级 IR 构建器，实现解耦的渲染管线
 
 ### 文件格式支持
 - **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB 解密
 - **IoStore 容器** — Chunk ID、偏移/大小结构
 - **资产类型解析器** — SkeletalMesh、Texture2D、Material、MaterialInstanceConstant
 - **Bulk Data** — BulkData 头部解析
+- **游戏版本支持** — 游戏特定的序列化常量
+- **Binary/Native 处理器** — 支持二进制或原生属性序列化
 
 ### 多种输出格式
-- **JSON** — 完整结构化输出或摘要
+- **JSON** — 完整结构化输出或摘要（基于渲染器，无 blueprint 包装层）
 - **Text** — 人类可读格式
 - **Markdown** — 带表格的格式化文档
 - **Mermaid** — 交互式流程图和依赖图
 - **Blueprint UE Text** — UE 编辑器风格格式
-- **C++ Skeleton** — 可直接使用的类骨架代码
+- **C++ Skeleton** — 可直接使用的类骨架代码，含构造函数初始化列表
+
+### 架构
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（6 种渲染器）
+- **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
+- **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
 ## 安装
 
@@ -110,6 +122,23 @@ uasset-read path/to/file.uasset --tolerant         # 容错模式（默认）
 uasset-read path/to/file.uasset --verbose          # 启用详细日志
 ```
 
+### 核心 API（推荐）
+
+简化的高级编程接口：
+
+```python
+from uasset_read import parse_single, parse_batch, list_formats
+
+# 解析单个文件
+result = parse_single("path/to/file.uasset")
+
+# 批量解析目录
+results = parse_batch("path/to/directory")
+
+# 列出可用的输出格式
+formats = list_formats()
+```
+
 ### Python API
 
 解析函数建议直接从包根导入。如果需要 `uasset_read.parse_uasset`
@@ -153,6 +182,12 @@ from uasset_read import (
     AgentTranslationPipeline, translate_blueprint_to_cpp,
     CppFileWriter, write_cpp_class_files,
 
+    # 回退模型
+    PropertyFallback, StructFallback, GenericUObject,
+
+    # 类注册表
+    ClassHandlerRegistry, ClassHandler, HandlerResult, FallbackPolicy,
+
     # 常量 & 异常
     PACKAGE_FILE_TAG, MMAP_THRESHOLD,
     UAssetError, ParseError, VersionError,
@@ -183,6 +218,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
           KismetDecompiler
           N2C Format
           PakFileReader
+          IR Builder → Renderers
 ```
 
 ### 模块结构 (`src/uasset_read/`)
@@ -194,26 +230,32 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | 主解析器 | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| 核心 API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
-| CLI | `cli.py` | argparse 入口 (`uasset-read`) |
+| CLI | `cli.py` | argparse 入口 (`uasset-read`)，委托到核心 API |
 | Exporter | `exporter/` | IExporter 接口、注册表、批量导出 |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
+| **IR** | `ir.py` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
 | **资产类型** | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
-| **图** | `graph/` | 执行流/数据流追踪、链构建器 |
+| **图** | `graph/` | 执行流/数据流追踪、链构建器、引脚追踪 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器 |
+| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 构造函数格式化 |
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter |
 | **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin 模型, JSON Schema |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
 | **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
 | **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
+| **IoStore** | `iostore/` | IoStore 容器读取器 |
+| **Bulk Data** | `bulk/` | BulkData 头部解析 |
+| **UObject** | `objects/` | UObject 类型体系、类型注册表 |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（6 种渲染器） |
 | **格式化器** | `formatters/` | JSON/Text/Markdown/Mermaid 输出 |
 
 ## 测试
