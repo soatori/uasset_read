@@ -433,6 +433,11 @@ def main() -> None:
     # 扫描
     metrics = scan_directory(scan_dir, verbose=args.verbose)
 
+    # 零文件检查：无文件可扫描视为 FAIL
+    if metrics.file_count == 0:
+        print(f"错误：在 {scan_dir} 中未找到 C++ 源文件", file=sys.stderr)
+        sys.exit(1)
+
     # 评估
     evaluate_metrics(metrics, threshold=args.threshold)
 

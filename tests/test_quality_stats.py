@@ -104,6 +104,13 @@ void UTestClass::Test() { return; }
         assert rc == 0
         assert len(out) > 0
 
+    def test_zero_files_returns_fail(self, tmp_path):
+        """零文件时应返回非零 exit code。"""
+        rc, out, err = _run([str(tmp_path)])
+        assert rc != 0, "零文件时不应返回 PASS"
+        combined = out + err
+        assert "未找到" in combined or "no files" in combined.lower() or "FAIL" in combined
+
     def test_clean_cpp_passes(self, tmp_path):
         """清洁的 C++ 输出应全部通过。"""
         cpp_dir = self._write_cpp(tmp_path, """
