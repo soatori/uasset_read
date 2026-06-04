@@ -30,6 +30,27 @@ if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintVariable
 
 
+# Blueprint 元数据键列表 — 这些是 UE 编辑器使用的内部字段，
+# 不应注入到用户 C++ 构造函数中。
+_BLUEPRINT_METADATA_KEYS = frozenset({
+    "BlueprintSystemVersion",
+    "GeneratedClass",
+    "SimpleConstructionScript",
+    "bCanEverTick",
+    "bCanEverRender",
+    "bStartWithTickEnabled",
+    "bReplicates",
+    "NetUpdateFrequency",
+    "MinNetUpdateFrequency",
+    "NetPriority",
+})
+
+
+def _is_blueprint_metadata(var_name: str) -> bool:
+    """检查变量名是否为蓝图元数据键。"""
+    return var_name in _BLUEPRINT_METADATA_KEYS
+
+
 # ============================================================================
 # 数据模型
 # ============================================================================
@@ -289,6 +310,8 @@ def build_default_values(
             if var.is_component:
                 continue
             if var.default_value is None:
+                continue
+            if _is_blueprint_metadata(var.var_name):
                 continue
 
             # 跳过已经在 ir.properties 中处理过的变量
