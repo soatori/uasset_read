@@ -135,6 +135,51 @@ class TestCppParameterBinding:
         assert "false" in move_section
 
 
+@pytest.mark.integration
+@pytest.mark.regression
+@pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
+class TestCppFunctionCompleteness:
+    """验证反编译函数完整性。"""
+
+    def test_all_decompiled_functions_have_cpp_output(self):
+        """所有反编译函数都应有 C++ 输出。"""
+        from uasset_read.parse_uasset import parse_uasset_with_linker
+        result = parse_uasset_with_linker(_REAL_BLUEPRINT, tolerant=True)
+
+        decompiled_names = {f.function_name for f in result.decompiled_functions}
+
+        # 生成 C++ 输出
+        cpp = parse_single(_REAL_BLUEPRINT, format="cpp_skeleton", tolerant=True)
+
+        # 每个反编译函数名（sanitized 后）应出现在 C++ 输出中
+        from uasset_read.cpp_gen.extract_cpp_skeleton import _sanitize_identifier
+        missing = []
+        for name in decompiled_names:
+            sanitized = _sanitize_identifier(name)
+            if sanitized not in cpp:
+                missing.append(name)
+
+        # 允许 ExecuteUbergraph 缺少（无源码可恢复）
+        missing = [n for n in missing if "Ubergraph" not in n]
+        assert len(missing) == 0, f"缺失 C++ 输出的函数: {missing}"
+
+    def test_decompiled_function_ratio(self):
+        """C++ 输出函数数 >= 反编译函数数的 90%（排除 Ubergraph）。"""
+        from uasset_read.parse_uasset import parse_uasset_with_linker
+        result = parse_uasset_with_linker(_REAL_BLUEPRINT, tolerant=True)
+
+        total = len([f for f in result.decompiled_functions
+                     if "Ubergraph" not in f.function_name])
+        assert total > 0
+
+        cpp = parse_single(_REAL_BLUEPRINT, format="cpp_skeleton", tolerant=True)
+        # 计数方法定义
+        method_defs = len(re.findall(r'void ABP_\w+::\w+\(', cpp))
+
+        ratio = method_defs / total
+        assert ratio >= 0.9, f"函数覆盖率 {ratio:.0%} < 90% ({method_defs}/{total})"
+
+
 def _extract_function_body(cpp_output: str, func_name: str) -> str:
     """提取指定函数的函数体内容。"""
     import re

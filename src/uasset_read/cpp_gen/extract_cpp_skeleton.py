@@ -60,6 +60,35 @@ MAX_INHERITANCE_DEPTH = 50  # 防止无限循环
 
 
 # ============================================================================
+# 从 decompiled_functions 补齐缺失方法（第三条路径）
+# ============================================================================
+
+def _backfill_missing_methods(
+    methods: List[CppMethodIR],
+    decompiled_functions: List[Any],
+) -> None:
+    """从 decompiled_functions 补齐 extract_cpp_functions 遗漏的 CppMethodIR。
+
+    原因：extract_cpp_functions 只处理 K2Node_FunctionEntry 和
+    K2Node_Event(b_override=True)，但部分反编译函数无对应图节点
+    （如 ExecuteUbergraph、UserConstructionScript、InputAction 事件）。
+    """
+    existing_names = {m.cpp_name for m in methods}
+    for decompiled in decompiled_functions:
+        sanitized = _sanitize_identifier(decompiled.function_name)
+        if sanitized not in existing_names:
+            methods.append(CppMethodIR(
+                cpp_name=sanitized,
+                return_type="void",
+                parameters=[],
+                ufunction_specifiers=[],
+                is_override=False,
+                body_text=decompiled.cpp_code or "/* no source available */",
+            ))
+            existing_names.add(sanitized)
+
+
+# ============================================================================
 # 核心提取函数
 # ============================================================================
 
@@ -115,6 +144,10 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             blueprint_functions=blueprint_functions,
             linker=result.linker,
         )
+
+    # 6. 补齐缺失方法（第三条路径 — 从 decompiled_functions 直接生成 CppMethodIR）
+    if hasattr(result, 'decompiled_functions') and result.decompiled_functions:
+        _backfill_missing_methods(methods, result.decompiled_functions)
 
     # 6. 注入函数体（从 decompiled_functions）
     if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
