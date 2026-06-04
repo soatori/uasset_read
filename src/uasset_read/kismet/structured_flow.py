@@ -75,7 +75,7 @@ class StructuredControlFlow:
         if structured_regions:
             return self._emit_structured(expressions, structured_regions, jump_targets)
         else:
-            return self._emit_goto_fallback(expressions, jump_targets)
+            return self._emit_goto_fallback(expressions, jump_targets, offset_map)
 
     def _detect_patterns(
         self,
@@ -255,21 +255,31 @@ class StructuredControlFlow:
         self,
         expressions: list["KismetExpression"],
         jump_targets: set[int],
+        offset_to_index: dict[int, int] | None = None,
     ) -> list[str]:
         """
         Emit goto-based output as fallback when no structured patterns detected.
 
-        This is the same as what FunctionBodyBuilder.to_function_body() produces.
+        使用 offset_to_index 映射（与 body_builder.py 一致）精确匹配跳转目标。
         """
+        # 若未传入映射则自行构建
+        if offset_to_index is None:
+            offset_to_index = {}
+            for idx, expr in enumerate(expressions):
+                byte_offset = getattr(expr, "byte_offset", None)
+                if byte_offset is not None:
+                    offset_to_index[byte_offset] = idx
+                if hasattr(expr, "CodeOffset"):
+                    offset_to_index[expr.CodeOffset] = idx
+
         result: list[str] = []
+        label_set: set[int] = set()  # 已输出的标签，防止重复
         for i, expr in enumerate(expressions):
-            # Check if this index is a jump target
-            byte_off = getattr(expr, "byte_offset", None)
-            if byte_off is not None and byte_off in jump_targets:
-                result.append(f"Label_{byte_off}:")
-            elif hasattr(expr, "CodeOffset") and expr.CodeOffset in jump_targets:
-                # For expressions that have CodeOffset and are targets
-                pass  # label will be emitted when we reach the target index
+            # 检查当前索引是否对应某个跳转目标 — 输出标签
+            for target in sorted(jump_targets):
+                if offset_to_index.get(target) == i and target not in label_set:
+                    result.append(f"Label_{target}:")
+                    label_set.add(target)
 
             line = self._translator.line_cpp(expr, index=i)
             if line and line.strip():

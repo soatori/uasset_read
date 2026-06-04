@@ -662,7 +662,13 @@ class KismetTranslator:
 
         # --- Integer literals ---
         if isinstance(expr, EX_IntConst):
-            return str(expr.Value)
+            val = expr.Value
+            # 安全检查：如果 int32 值高位有数据且低位全零，
+            # 很可能是 scanner 误选起始位置导致的嵌入数据被错误解析。
+            # 将其标记为可疑值，避免输出裸数字（如 1509949440）。
+            if val > 0xFFFFFF and (val & 0xFFFFFF) == 0:
+                return f"/* suspicious: 0x{val:08X} */"
+            return str(val)
         if isinstance(expr, EX_IntZero):
             return "0"
         if isinstance(expr, EX_IntOne):

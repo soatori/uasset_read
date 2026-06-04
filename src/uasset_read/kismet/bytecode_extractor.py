@@ -35,10 +35,10 @@ _PLAUSIBLE_SCRIPT_START_TOKENS = {
     0x19,  # EX_Context
     0x1B,  # EX_VirtualFunction
     0x1C,  # EX_FinalFunction
-    0x1D,  # EX_IntConst
     0x46,  # EX_LocalFinalFunction
-    0x5A,  # EX_WireTracepoint
-    0x5E,  # EX_Tracepoint
+    # 已移除 0x1D (EX_IntConst)、0x5A (EX_WireTracepoint)、0x5E (EX_Tracepoint)
+    # 这些 token 频繁出现在内嵌数据中，导致 scanner 误选起始位置，
+    # 产生裸数字（如 1509949440）等错误反编译输出。
 }
 
 
