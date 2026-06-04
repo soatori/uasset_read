@@ -42,8 +42,10 @@ def decrypt_aes_ecb(data: bytes, key: bytes) -> bytes:
             "AES decryption requires 'cryptography' package"
         )
 
-    # ECB mode
-    cipher = Cipher(algorithms.AES(key), modes.ECB())
+    # ECB mode — mandated by UE PAK format (FAES::DecryptData).
+    # This is a read-only parser matching UE's spec, not a security choice.
+    # nosemgrep: python.lang.security.audit.cbc-not-used.cbc-not-used
+    cipher = Cipher(algorithms.AES(key), modes.ECB())  # noqa: S305
     decryptor = cipher.decryptor()
     decrypted = decryptor.update(data) + decryptor.finalize()
 
