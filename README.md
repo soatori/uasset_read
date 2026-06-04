@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.4.2 released** — Stable release with IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
+> 📦 **v0.4.3 released** — Direct script execution (no pip install), IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.2 |
+| Version | 0.4.3 |
 | Source | Python parser for Unreal Engine .uasset files |
 | Tests | 994 passed, 2 xfailed (54 test files, 12+ asset types) |
 | Modules | 137 source files across 13 subpackages |
@@ -214,7 +214,6 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
 | Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
 | CLI | `cli.py` | argparse 入口点，委托 `core.py` API |
-| Exporter | `exporter/` | IExporter interface, registry, batch export |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | **IR** | `ir.py` | Package-level intermediate representation builder |
