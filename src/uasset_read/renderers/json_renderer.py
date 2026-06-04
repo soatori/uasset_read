@@ -53,6 +53,8 @@ class JSONRenderer(IRenderer):
             data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
         if ir.execution_chains:
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
+        if ir.diagnostics:
+            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)

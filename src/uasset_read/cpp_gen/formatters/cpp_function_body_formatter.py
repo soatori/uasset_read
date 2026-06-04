@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import List
 
 from uasset_read.cpp_gen.formatters import (
@@ -42,9 +43,12 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
     """
     lines: List[str] = []
 
-    # 函数签名行
+    # 函数签名行 — .cpp 实现必须使用 ClassName::MethodName 格式
     param_str = ", ".join(f"{p.cpp_type} {p.name}" for p in method_ir.parameters)
-    sig = f"{method_ir.return_type} {method_ir.cpp_name}({param_str})"
+    if method_ir.class_name:
+        sig = f"{method_ir.return_type} {method_ir.class_name}::{method_ir.cpp_name}({param_str})"
+    else:
+        sig = f"{method_ir.return_type} {method_ir.cpp_name}({param_str})"
 
     lines.append(sig)
     lines.append("{")
@@ -55,7 +59,9 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
         lines.extend(body_lines)
     elif method_ir.body_text:
         # 回退：直接使用 Kismet 反编译的原始文本
-        for raw_line in method_ir.body_text.split("\n"):
+        # 先检测并剥离多余的函数签名包裹，避免嵌套
+        stripped = _strip_function_wrapper(method_ir.body_text)
+        for raw_line in stripped.split("\n"):
             raw_line = raw_line.strip()
             if raw_line:
                 lines.append(f"    {raw_line}")
@@ -96,6 +102,9 @@ def format_full_cpp_implementation(ir: CppClassIR) -> str:
     methods_with_body = [m for m in ir.methods if m.body or m.body_text]
 
     for i, method in enumerate(methods_with_body):
+        # 确保方法设置了 class_name，用于 ClassName::Method 前缀
+        if not method.class_name:
+            method.class_name = ir.name
         if i > 0:
             lines.append("")  # 方法之间空 2 行
             lines.append("")
@@ -105,6 +114,107 @@ def format_full_cpp_implementation(ir: CppClassIR) -> str:
     lines.append("")
 
     return "\n".join(lines)
+
+
+# ============================================================================
+# body_text 包裹剥离
+# ============================================================================
+
+# 函数签名正则：匹配 ReturnType FuncName(...) 形式的行
+# 例如：void UMyClass::ExecuteUbergraph(int32 EntryPoint)
+# 策略：首行以标识符开头、含 '('、且 '(' 前最后一词不是控制流关键字
+
+# 匹配 C++ 标识符（含 ::、*、& 等修饰符）直到 '('
+_FUNC_SIG_RE = re.compile(
+    r'^[A-Za-z_]\w*'            # 返回类型（至少一个标识符）
+    r'[\s\w:*&]*'               # 后续修饰符（类型指针、const、命名空间等）
+    r'\('                       # 左括号
+)
+
+# 控制流关键字集合，用于排除误判
+_CONTROL_KEYWORDS = frozenset({
+    'if', 'else', 'for', 'while', 'switch', 'do', 'try', 'catch',
+})
+
+
+def _strip_function_wrapper(text: str) -> str:
+    """检测并剥离 body_text 外层的函数签名 + 花括号包裹。
+
+    有些 Kismet 反编译器输出的 body_text 已包含完整函数定义：
+    ```
+    void UMyClass::ExecuteUbergraph(int32 EntryPoint)
+    {
+        // 实际语句
+    }
+    ```
+    这种情况如果不处理，format_cpp_function_body() 会再次包裹签名和花括号，
+    导致嵌套。本函数检测这种情况并剥离外层，返回纯函数体内容。
+
+    剥离逻辑：
+    1. 首行匹配函数签名正则
+    2. 第二行（忽略空行）为 '{'
+    3. 最后一个非空行为 '}'
+    4. 满足以上条件时，提取中间内容并去掉一层缩进
+
+    Args:
+        text: body_text 原始文本
+
+    Returns:
+        剥离后的纯函数体文本；如果不是包裹格式则原样返回
+    """
+    if not text or not text.strip():
+        return text
+
+    lines = text.split("\n")
+
+    # 过滤出非空行索引，用于定位首行、花括号位置
+    non_empty = [(i, line.strip()) for i, line in enumerate(lines) if line.strip()]
+
+    if len(non_empty) < 3:
+        # 不足 3 行非空行（签名、{、}），不可能是包裹格式
+        return text
+
+    first_idx, first_text = non_empty[0]
+    second_idx, second_text = non_empty[1]
+    last_idx, last_text = non_empty[-1]
+
+    # 条件 1：首行是函数签名（含 '(' 且匹配正则）
+    if '(' not in first_text or not _FUNC_SIG_RE.match(first_text):
+        return text
+
+    # 条件 2：第二非空行是 '{'
+    if second_text != '{':
+        return text
+
+    # 条件 3：最后非空行是 '}'
+    if last_text != '}':
+        return text
+
+    # 条件 4：排除控制流语句（if/for/while 等）
+    # 提取 '(' 前的最后一个单词
+    before_paren = first_text[:first_text.index('(')].split()[-1].lower() if '(' in first_text else ''
+    if before_paren in _CONTROL_KEYWORDS:
+        return text
+
+    # 满足所有条件，剥离外层
+    # 提取 '{' 之后、'}' 之前的内容
+    body_start = second_idx + 1
+    body_end = last_idx
+
+    body_lines = lines[body_start:body_end]
+
+    # 去掉一层缩进（如果存在的话）
+    dedented = []
+    for line in body_lines:
+        # 尝试去掉 4 个空格或 1 个 tab
+        if line.startswith("    "):
+            dedented.append(line[4:])
+        elif line.startswith("\t"):
+            dedented.append(line[1:])
+        else:
+            dedented.append(line)
+
+    return "\n".join(dedented)
 
 
 # ============================================================================

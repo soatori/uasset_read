@@ -72,8 +72,8 @@ def format_cpp_header(ir: CppClassIR) -> str:
     # 3. #include "CoreMinimal.h"（UE 约定，始终添加）
     lines.append('#include "CoreMinimal.h"')
 
-    # 4. header_meta.includes（排序）
-    includes = sorted(ir.header_meta.includes)
+    # 4. header_meta.includes（去重 + 排序）
+    includes = sorted(set(ir.header_meta.includes))
     for inc in includes:
         lines.append(f'#include {inc}')
 

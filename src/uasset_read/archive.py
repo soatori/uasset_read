@@ -215,6 +215,36 @@ class FArchive:
         """返回文件总大小"""
         return self._file_size
 
+    def check_remaining(self, expected_bytes: int, context: str = "") -> bool:
+        """检查剩余字节是否足够。
+
+        用于截断文件检测 — 在关键读取前验证数据完整性。
+
+        Args:
+            expected_bytes: 需要的字节数
+            context: 诊断上下文描述
+
+        Returns:
+            True 剩余字节足够，False 不足（诊断已记录到 _diagnostics）
+        """
+        current = self.tell()
+        remaining = self._file_size - current
+        if remaining < expected_bytes:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="archive",
+                field="check_remaining",
+                current_pos=current,
+                read_size=expected_bytes,
+                file_size=self._file_size,
+                source=context or "check_remaining",
+                error=(
+                    f"需要 {expected_bytes} 字节，仅剩 {remaining} 字节，"
+                    f"文件可能已截断"
+                ),
+            ))
+            return False
+        return True
+
     def get_mmap_info(self) -> Dict:
         """返回 mmap 状态信息"""
         return {"used": self._use_mmap, "warning": self._mmap_warning}

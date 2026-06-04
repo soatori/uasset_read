@@ -146,3 +146,4 @@ class PackageIR:
     decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
+    diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]

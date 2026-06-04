@@ -138,6 +138,9 @@ class CppSkeletonRenderer(IRenderer):
                 if parent_base.startswith("F") or parent_base.startswith("T"):
                     cpp_types.add(parent_base)
 
+        # 移除 CoreMinimal — 已在上方手动 #include，避免重复
+        cpp_types.discard("CoreMinimal")
+
         for cpp_type in sorted(cpp_types):
             lines.append(f'#include "{cpp_type}.h"')
         lines.append("")

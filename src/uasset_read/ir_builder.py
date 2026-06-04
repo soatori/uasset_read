@@ -53,6 +53,7 @@ def build_package_ir(result: ParseResult) -> PackageIR:
         decompiled_functions=_build_decompiled_functions_ir(result),
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
+        diagnostics=result.diagnostics or [],
     )
 
 

@@ -98,6 +98,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"- **Exports**: {len(ir.linker.export_paths)}")
             lines.append("")
 
+        # === 诊断信息 ===
+        self._render_diagnostics(lines, ir)
+
         return "\n".join(lines)
 
     def _render_event_graph(self, lines: list[str], ir: PackageIR) -> None:
@@ -256,6 +259,25 @@ class MarkdownRenderer(IRenderer):
         for var in ir.variables:
             default_str = _escape_md_cell(str(var.default_value)) if var.default_value is not None else "-"
             lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
+        lines.append("")
+
+    def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
+        """渲染诊断信息章节 — 偏移范围诊断表格。"""
+        if not ir.diagnostics:
+            return
+
+        lines.append("## 诊断信息")
+        lines.append("")
+        lines.append("| 类型 | 模块 | 对象名 | 字段 | 错误信息 |")
+        lines.append("|------|------|--------|------|----------|")
+        for diag in ir.diagnostics:
+            d = diag.to_dict() if hasattr(diag, "to_dict") else {}
+            kind = _escape_md_cell(d.get("kind", ""))
+            module = _escape_md_cell(d.get("module", ""))
+            object_name = _escape_md_cell(d.get("object_name", ""))
+            field_name = _escape_md_cell(d.get("field", ""))
+            error = _escape_md_cell(d.get("error", ""))
+            lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
         lines.append("")
 
     def _find_decompiled(self, ir: PackageIR, name: str):

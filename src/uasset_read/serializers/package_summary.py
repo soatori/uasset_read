@@ -30,6 +30,8 @@ from uasset_read.constants import (
     UE4_NAME_HASHES_SERIALIZED,
 )
 from uasset_read.exceptions import VersionError, ParseError
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.constants import MIN_UASSET_SIZE
 
 
 @dataclass
@@ -121,6 +123,25 @@ class PackageFileSummary:
 
 def read_package_summary(archive: FArchive) -> PackageFileSummary:
     """读取 PackageFileSummary 文件头（UE5.7 专用）。"""
+    # 截断文件检测：文件过小时直接报错
+    file_size = archive.total_size()
+    if file_size < MIN_UASSET_SIZE:
+        archive._diagnostics.append(OffsetRangeDiagnostic(
+            kind="truncated_file",
+            module="package_summary",
+            field="file_size",
+            file_size=file_size,
+            source="read_package_summary",
+            error=(
+                f"文件大小 {file_size} 字节，小于最小合法大小 {MIN_UASSET_SIZE} 字节，"
+                f"文件可能已截断或损坏"
+            ),
+        ))
+        raise ParseError(
+            f"文件过小（{file_size} 字节），无法解析为 .uasset 文件。"
+            f"最小合法大小为 {MIN_UASSET_SIZE} 字节，文件可能已截断或损坏"
+        )
+
     archive.seek(0)
 
     # 第 1 步：魔数和版本号
@@ -134,6 +155,12 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     legacy_file_version = archive.read_i32()
     if legacy_file_version not in UE5_LEGACY_VERSIONS:
         supported_versions = ", ".join(str(v) for v in sorted(UE5_LEGACY_VERSIONS))
+        # 根据 legacy_file_version 提供更精确的错误提示
+        if legacy_file_version > -6:
+            raise VersionError(
+                f"Legacy file version {legacy_file_version} indicates UE4 asset. "
+                f"Current version supports UE5 only (legacy versions -6 to -9)."
+            )
         raise VersionError(
             f"Only UE5 files with legacy_file_version in {{{supported_versions}}} are supported, "
             f"got {legacy_file_version}"
@@ -458,6 +485,47 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         payload_toc_offset=payload_toc_offset,
         data_resource_offset=data_resource_offset
     )
+
+
+def validate_export_data_range(
+    archive: FArchive,
+    summary: PackageFileSummary,
+) -> None:
+    """验证导出数据偏移是否超出文件范围。
+
+    检查每个导出条目的 serial_offset + serial_size 是否在文件范围内。
+    截断文件的导出表可能指向超出文件末尾的偏移。
+
+    Args:
+        archive: 文件归档读取器
+        summary: 包文件摘要
+
+    注：此函数仅记录诊断，不抛出异常（容错模式友好）。
+    """
+    from uasset_read.serializers.object_resources import ObjectExport
+
+    file_size = archive.total_size()
+    if file_size <= 0 or summary.export_count <= 0:
+        return
+
+    # 导出表本身占用的空间检查
+    # 每个导出表条目约 100+ 字节（FObjectExport 结构）
+    export_table_min_entry_size = 72  # 最小 FObjectExport 大小
+    export_table_end = summary.export_offset + summary.export_count * export_table_min_entry_size
+    if export_table_end > file_size:
+        archive._diagnostics.append(OffsetRangeDiagnostic(
+            kind="truncated_file",
+            module="package_summary",
+            field="export_table",
+            current_pos=summary.export_offset,
+            target_offset=export_table_end,
+            file_size=file_size,
+            source="validate_export_data_range",
+            error=(
+                f"导出表区域 [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
+                f"超出文件大小 0x{file_size:X}，文件可能在导出表区域被截断"
+            ),
+        ))
 
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:

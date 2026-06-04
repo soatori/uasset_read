@@ -15,7 +15,10 @@ if TYPE_CHECKING:
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
-from uasset_read.serializers.package_summary import read_package_summary, read_name_table, read_depends_map, read_preload_dependencies
+from uasset_read.serializers.package_summary import (
+    read_package_summary, read_name_table, read_depends_map,
+    read_preload_dependencies, validate_export_data_range,
+)
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
@@ -390,6 +393,9 @@ def parse_package(
         result.summary = read_package_summary(archive)
         result.version_container = build_version_container(result.summary)
 
+        # 截断文件检测：验证导出数据范围
+        validate_export_data_range(archive, result.summary)
+
         # 读取名称表
         result.name_map = read_name_table(archive, result.summary)
 
@@ -471,6 +477,10 @@ def parse_package(
 
     finally:
         if archive:
+            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
+            archive_diagnostics = archive.get_diagnostics()
+            if archive_diagnostics:
+                result.diagnostics.extend(archive_diagnostics)
             archive.close()
 
     return result
@@ -549,6 +559,10 @@ def parse_uasset_with_linker(
         # 读取文件头
         result.summary = read_package_summary(archive)
         result.version_container = build_version_container(result.summary)
+
+        # 截断文件检测：验证导出数据范围
+        validate_export_data_range(archive, result.summary)
+
         result.name_map = read_name_table(archive, result.summary)
         result.import_map = read_import_map(archive, result.summary, result.name_map)
         result.export_map = read_export_map(archive, result.summary, result.name_map)
@@ -625,6 +639,10 @@ def parse_uasset_with_linker(
 
     finally:
         if archive:
+            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
+            archive_diagnostics = archive.get_diagnostics()
+            if archive_diagnostics:
+                result.diagnostics.extend(archive_diagnostics)
             archive.close()
 
     return result

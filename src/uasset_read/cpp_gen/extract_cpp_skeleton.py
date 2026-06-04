@@ -120,6 +120,11 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
         _inject_function_bodies(methods, result.decompiled_functions)
 
+    # 6.1 设置 class_name（用于 .cpp 实现中 ClassName::Method 前缀）
+    for method in methods:
+        if not method.class_name:
+            method.class_name = class_name
+
     # 7. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 

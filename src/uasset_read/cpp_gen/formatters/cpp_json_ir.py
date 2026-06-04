@@ -211,6 +211,7 @@ class CppMethodIR:
     is_native: bool = False
     access_modifier: str = "protected"  # 默认 protected
     source_node_type: str = ""
+    class_name: str = ""  # 所属类名（用于 .cpp 实现中 ClassName::Method 前缀）
     body: List["CppStatement"] = field(default_factory=list)  # 函数体语句
     body_text: Optional[str] = None  # Kismet 反编译函数体文本 (D-66-03)
 
@@ -231,6 +232,8 @@ class CppMethodIR:
             "source_node_type": self.source_node_type,
             "body": [s.to_dict() for s in self.body],
         }
+        if self.class_name:
+            result["class_name"] = self.class_name
         if self.body_text is not None:
             result["body_text"] = self.body_text
         return result

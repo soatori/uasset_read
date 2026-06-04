@@ -10,6 +10,7 @@ import os
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
@@ -41,6 +42,7 @@ class ByteArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._logger = logging.getLogger(__name__)
+        self._diagnostics: list[OffsetRangeDiagnostic] = []
 
     def close(self) -> None:
         if self._file:
@@ -71,6 +73,7 @@ class PackageArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._logger = logging.getLogger(__name__)
+        self._diagnostics: list[OffsetRangeDiagnostic] = []
 
     def read(self, size: int) -> bytes:
         current_pos = self.tell()
