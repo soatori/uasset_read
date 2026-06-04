@@ -1,0 +1,5 @@
+query-filters:
+  - exclude:
+      id: py/weak-cryptographic-algorithm
+      path: "src/uasset_read/pak/crypto.py"
+      reason: "AES-ECB is mandated by UE PAK format (FAES::DecryptData). This is a read-only parser matching UE's spec, not a security choice."
