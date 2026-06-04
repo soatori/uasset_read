@@ -50,6 +50,26 @@ from .transforms import (
     ScaleValue,
     format_transform_value,
 )
+from .ir import (
+    PackageHeaderIR,
+    PinIR,
+    NodeIR,
+    GraphIR,
+    PropertyIR,
+    ExportIR,
+    LinkerSummaryIR,
+    PackageIR,
+)
+from .fallback import (
+    PropertyFallback,
+    StructFallback,
+    GenericUObject,
+    ExportParseStatus,
+    FallbackReason,
+)
+from .diagnostics import (
+    OffsetRangeDiagnostic,
+)
 
 __all__ = [
     # 核心模型（core.py）
@@ -75,7 +95,7 @@ __all__ = [
     "BlueprintEvent",
     "FunctionParameter",
     "MulticastDelegate",
-    # 属性数据模型（Phase 30）
+    # 属性数据模型
     "PropertyTag",
     "PropertyTypeName",
     "PropertyValue",
@@ -87,9 +107,26 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
-    # 变换数据类（Phase 33）
+    # 变换数据类
     "VectorValue",
     "RotatorValue",
     "ScaleValue",
     "format_transform_value",
+    # IR 中间表示（ir.py）
+    "PackageHeaderIR",
+    "PinIR",
+    "NodeIR",
+    "GraphIR",
+    "PropertyIR",
+    "ExportIR",
+    "LinkerSummaryIR",
+    "PackageIR",
+    # Fallback 模型
+    "PropertyFallback",
+    "StructFallback",
+    "GenericUObject",
+    "ExportParseStatus",
+    "FallbackReason",
+    # 诊断模型
+    "OffsetRangeDiagnostic",
 ]

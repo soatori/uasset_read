@@ -5,8 +5,6 @@ PakFileReader — .pak 文件主读取器
 - open/close + 上下文管理器
 - list_files / get_entry / extract
 - 自动处理 FPakInfo 检测、索引解密、条目解析、解压缩
-
-Phase 77 — PAK-04.
 """
 import logging
 from typing import BinaryIO

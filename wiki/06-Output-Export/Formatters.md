@@ -5,7 +5,11 @@ section: formatters
 
 # 格式化器 (Formatters)
 
-格式化器模块负责将 `ParseResult` 对象转换为多种人类可读和机器可读的输出格式。所有格式化器定义在 `src/uasset_read/formatters/` 目录下，通过统一的函数接口接收解析结果并返回对应格式的数据。
+> [!NOTE] 架构定位
+>
+> 格式化器是底层格式化函数库，提供 `ParseResult → str` 的直接转换。在 0.4.1 的 IR 架构中，格式化器被渲染器内部调用。
+> 
+> 推荐用户使用 **渲染器系统**（`parse_single` / `get_renderer`），格式化器主要用于底层实现和向后兼容。
 
 ## 模块结构
 

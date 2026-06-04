@@ -6,7 +6,7 @@ Kismet 属性指针 — FFieldPath + FKismetPropertyPointer。
 
 UE4.25+ 引入 bNew 标志位：True 时使用 FFieldPath 路径引用，
 False 时使用 legacy FPackageIndex 单步引用。
-Phase 61 简化：始终读取 FFieldPath 路径（UE5 默认行为）。
+简化实现：始终读取 FFieldPath 路径（UE5 默认行为）。
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class FKismetPropertyPointer:
     - True (UE4.25+): 使用 FFieldPath 多段路径引用
     - False (legacy): 使用 FPackageIndex 单步引用
 
-    Phase 61 简化实现：始终使用 New (FFieldPath) 路径。
+    简化实现：始终使用 New (FFieldPath) 路径。
     """
 
     bNew: bool = True
@@ -80,8 +80,8 @@ class FKismetPropertyPointer:
         """
         从 FArchive 反序列化 FKismetPropertyPointer。
 
-        Phase 61 简化：读取 bNew 标志后，始终使用 New (FFieldPath) 路径。
-        完整的 legacy Old 路径支持留待后续 phase 实现。
+        简化：读取 bNew 标志后，始终使用 New (FFieldPath) 路径。
+        完整的 legacy Old 路径支持留待后续实现。
         """
         b_new = archive.read_bool()
 

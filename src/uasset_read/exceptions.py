@@ -29,14 +29,13 @@ class ErrorContext:
     错误上下文信息。
 
     记录错误发生时的解析状态，帮助定位问题。
-    Phase 6新增：导出表解析阶段信息。
     """
 
     offset: int           # 文件偏移位置
     phase: str            # 解析阶段：header/name_table/import_map/export_map/properties/blueprint
     operation: str        # 操作类型：read_i32/read_name/seek 等
     context_name: str = ""  # 相关对象名或属性名
-    # Phase 6新增：导出表解析阶段信息
+    # 导出表解析阶段信息
     export_index: Optional[int] = None    # 当前导出索引（0-based）
     expected_offset: Optional[int] = None  # 期望偏移
     actual_offset: Optional[int] = None    # 实际偏移

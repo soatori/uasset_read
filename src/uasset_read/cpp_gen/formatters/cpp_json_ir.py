@@ -1,21 +1,27 @@
 """
-C++ JSON IR 格式化模块 — CppProperty, CppHeaderMeta, CppClassIR 数据模型。
+C++ JSON IR 格式化模块 — CppProperty, CppHeaderMeta, CppClassIR, CppStatement 数据模型。
 
 Per D-06: JSON IR 结构包含 header_meta, properties, methods, constructor 四部分。
-Phase 56: 只填充 header_meta 和 properties，methods 和 constructor 留空。
+只填充 header_meta 和 properties，methods 和 constructor 留空。
 
 导出：
     CppProperty: 单个 C++ UPROPERTY 声明数据模型
     CppHeaderMeta: 头文件元数据模型
     CppClassIR: 完整 C++ 类骨架 IR 数据模型
     format_cpp_class_json: JSON IR 格式化函数
+    kismet_to_cpp_body: Kismet 表达式 → 结构化 C++ 语句列表
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import logging
+
+if TYPE_CHECKING:
+    from uasset_read.kismet.expressions.base import KismetExpression
+    from uasset_read.kismet.translator import KismetTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +187,7 @@ class CppMethodIR:
         parameters: 参数列表
         ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
         is_override: True 表示 K2Node_Event 的 bOverrideFunction
-        is_const: const 方法修饰符（Phase 58 上下文，默认 False）
+        is_const: const 方法修饰符（默认 False）
         is_static: static 方法修饰符
         is_virtual: virtual 方法修饰符
         is_pure: 纯函数（无副作用）
@@ -189,8 +195,8 @@ class CppMethodIR:
         is_native: 原生函数
         access_modifier: 访问修饰符（"public"、"protected"、"private"）
         source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
-        body: Phase 58 函数体语句（结构化 IR）
-        body_text: Phase 66 Kismet 反编译函数体文本（原始 C++ 伪代码）
+        body: 函数体语句（结构化 IR）
+        body_text: Kismet 反编译函数体文本（原始 C++ 伪代码）
     """
     cpp_name: str
     return_type: str
@@ -205,8 +211,9 @@ class CppMethodIR:
     is_native: bool = False
     access_modifier: str = "protected"  # 默认 protected
     source_node_type: str = ""
-    body: List["CppStatement"] = field(default_factory=list)  # Phase 58: 函数体语句
-    body_text: Optional[str] = None  # Phase 66: Kismet 反编译函数体文本 (D-66-03)
+    class_name: str = ""  # 所属类名（用于 .cpp 实现中 ClassName::Method 前缀）
+    body: List["CppStatement"] = field(default_factory=list)  # 函数体语句
+    body_text: Optional[str] = None  # Kismet 反编译函数体文本 (D-66-03)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -225,6 +232,8 @@ class CppMethodIR:
             "source_node_type": self.source_node_type,
             "body": [s.to_dict() for s in self.body],
         }
+        if self.class_name:
+            result["class_name"] = self.class_name
         if self.body_text is not None:
             result["body_text"] = self.body_text
         return result
@@ -259,7 +268,7 @@ class CppCallStatement:
 
 @dataclass
 class CppStatement:
-    """C++ 语句基类（Phase 58）。
+    """C++ 语句基类。
 
     所有具体语句类型继承此类，用于表示函数体中的单条 C++ 语句。
     """
@@ -360,8 +369,197 @@ class CppInlineExprStmt(CppStatement):
         }
 
 
-# 为 CppMethodIR 新增 body 字段 — 在现有 dataclass 之后添加兼容处理
-# CppMethodIR.body 通过 asdict 自动序列化，无需修改 to_dict
+@dataclass
+class CppReturnStmt(CppStatement):
+    """return 语句。
+
+    Attributes:
+        value: 返回值表达式（空字符串表示无返回值的 return）
+    """
+    value: str = ""
+    statement_type: str = "return"
+
+    def to_dict(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {"statement_type": self.statement_type}
+        if self.value:
+            result["value"] = self.value
+        return result
+
+
+@dataclass
+class CppWhileStmt(CppStatement):
+    """while 循环语句。
+
+    Attributes:
+        condition: 循环条件表达式
+    """
+    condition: str = ""
+    statement_type: str = "while"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "condition": self.condition,
+        }
+
+
+@dataclass
+class CppRawStmt(CppStatement):
+    """未分类的原始 C++ 文本语句。
+
+    用于无法归入其他具体类型的文本输出（如 goto、switch、注释等）。
+
+    Attributes:
+        raw_text: 原始 C++ 文本
+    """
+    raw_text: str = ""
+    statement_type: str = "raw"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "raw_text": self.raw_text,
+        }
+
+
+# ============================================================================
+# Kismet 表达式 → 结构化 C++ 语句分类器
+# ============================================================================
+
+# 分类优先级顺序：从最具体到最通用
+# 每个模式元组: (compiled_regex, factory_function)
+_IF_PATTERN = re.compile(r'^if\s*\((.+)\)\s*\{?$')
+_WHILE_PATTERN = re.compile(r'^while\s*\((.+)\)\s*\{?$')
+_RETURN_PATTERN = re.compile(r'^return(?:\s+(.+))?$')
+_ASSIGN_PATTERN = re.compile(r'^([\w][\w.>-]*)\s*=\s*(.+)$')
+_CALL_PATTERN = re.compile(r'^([\w][\w:>-]*)\((.*)\)$')
+_GOTO_PATTERN = re.compile(r'^goto\s+(\w+);?$')
+
+
+def _classify_cpp_line(line: str) -> CppStatement:
+    """将单行 C++ 文本分类为结构化语句。
+
+    分类规则（按优先级）:
+    1. if (cond) {  → CppIfStmt
+    2. while (cond) { → CppWhileStmt
+    3. return [expr] → CppReturnStmt
+    4. lhs = rhs → CppAssignmentStmt
+    5. func(args) / Class::Func(args) → CppCallStmt
+    6. goto Label_N → CppRawStmt
+    7. 其他 → CppRawStmt
+
+    Args:
+        line: 单行 C++ 文本（已 strip）
+
+    Returns:
+        分类后的 CppStatement 实例
+    """
+    # 1. if 语句
+    m = _IF_PATTERN.match(line)
+    if m:
+        return CppIfStmt(condition=m.group(1))
+
+    # 2. while 语句
+    m = _WHILE_PATTERN.match(line)
+    if m:
+        return CppWhileStmt(condition=m.group(1))
+
+    # 3. return 语句
+    m = _RETURN_PATTERN.match(line)
+    if m:
+        return CppReturnStmt(value=m.group(1) or "")
+
+    # 4. 赋值语句: lhs = rhs
+    #    仅当行中存在顶层 = 且左侧不是函数名时分类为赋值
+    m = _ASSIGN_PATTERN.match(line)
+    if m:
+        lhs = m.group(1)
+        rhs = m.group(2)
+        # 排除误匹配：如果左侧包含 :: 或 -> 后紧跟 (，则是调用不是赋值
+        # 例如 "Obj->Func()" 不应匹配为赋值
+        if '(' not in lhs and not rhs.lstrip().startswith('('):
+            return CppAssignmentStmt(lhs=lhs, rhs=rhs)
+
+    # 5. 函数调用: Func(args) 或 Class::Func(args)
+    m = _CALL_PATTERN.match(line)
+    if m:
+        method_name = m.group(1)
+        args_str = m.group(2).strip()
+        args = _split_args(args_str) if args_str else []
+        return CppCallStmt(method_name=method_name, args=args)
+
+    # 6. 其他: goto、switch、注释等统一归为 CppRawStmt
+    return CppRawStmt(raw_text=line)
+
+
+def _split_args(args_str: str) -> List[str]:
+    """安全分割函数参数字符串（处理嵌套括号）。
+
+    Args:
+        args_str: 逗号分隔的参数字符串
+
+    Returns:
+        参数列表
+    """
+    if not args_str:
+        return []
+
+    result: List[str] = []
+    depth = 0
+    current: List[str] = []
+
+    for ch in args_str:
+        if ch in ('(', '<', '[', '{'):
+            depth += 1
+            current.append(ch)
+        elif ch in (')', '>', ']', '}'):
+            depth -= 1
+            current.append(ch)
+        elif ch == ',' and depth == 0:
+            result.append(''.join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+
+    if current:
+        result.append(''.join(current).strip())
+
+    return result
+
+
+def kismet_to_cpp_body(
+    expressions: List["KismetExpression"],
+    translator: "KismetTranslator",
+) -> List[CppStatement]:
+    """将 Kismet 表达式列表转换为结构化 C++ 语句列表。
+
+    遍历每个表达式，调用 translator.line_cpp() 获取 C++ 文本，
+    然后将文本分类为 CppCallStmt、CppAssignmentStmt、CppIfStmt 等。
+
+    Args:
+        expressions: Kismet 表达式列表（来自字节码解析）
+        translator: KismetTranslator 实例（含 JumpAnalyzer 结构化检测）
+
+    Returns:
+        结构化 CppStatement 列表
+    """
+    statements: List[CppStatement] = []
+
+    for idx, expr in enumerate(expressions):
+        text = translator.line_cpp(expr, index=idx)
+        if not text or not text.strip():
+            continue
+
+        # 处理多行输出（如 EX_SwitchValue 产生的 switch/case）
+        lines = text.split("\n")
+        for sub_line in lines:
+            sub_line = sub_line.strip()
+            if not sub_line:
+                continue
+            stmt = _classify_cpp_line(sub_line)
+            statements.append(stmt)
+
+    return statements
 
 # ============================================================================
 # C++ 类骨架 IR 数据模型（Per D-01, D-06）
@@ -371,27 +569,24 @@ class CppInlineExprStmt(CppStatement):
 class CppClassIR:
     """完整 C++ 类骨架 IR（D-01, D-06）。
 
-    Phase 56: 只填充 name, parent_class, header_meta, properties。
-    Phase 57-59: 分别填充 methods 和 constructor。
-
     Attributes:
         name: C++ 类名（如 "ABP_FirstPersonCharacter"）
         parent_class: 父类名（如 "ACharacter"）
         header_meta: 头文件元数据
         properties: 属性列表（组件 + 变量）
-        methods: 方法列表（Phase 57 填充，Phase 56 为空）
-        constructor: 构造函数数据（Phase 59 填充，Phase 56 为空字典）
+        methods: 方法列表（填充后可用）
+        constructor: 构造函数数据（填充后可用）
     """
     name: str
     parent_class: str
     header_meta: CppHeaderMeta = field(default_factory=CppHeaderMeta)
     properties: List[CppProperty] = field(default_factory=list)
-    methods: List["CppMethodIR"] = field(default_factory=list)  # Phase 57 填充
+    methods: List["CppMethodIR"] = field(default_factory=list)
     constructor: Dict[str, List] = field(default_factory=lambda: {
         "component_creations": [],
         "component_assignments": [],
         "default_values": [],
-    })  # Phase 59 填充
+    })  # 填充
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 兼容字典（D-06 格式）。
@@ -415,7 +610,7 @@ class CppClassIR:
             "header_meta": self.header_meta.to_dict(),
             "properties": [prop.to_dict() for prop in self.properties],
             "methods": [m.to_dict() if hasattr(m, "to_dict") else m for m in self.methods],
-            "constructor": self.constructor,  # 空字典（Phase 56）
+            "constructor": self.constructor,  # 空字典
         }
 
 
@@ -461,14 +656,19 @@ __all__ = [
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
-    # Method/Call IR (Phase 57)
+    # Method/Call IR
     "CppCallParameter",
     "CppMethodIR",
     "CppCallStatement",
-    # Statement IR (Phase 58)
+    # Statement IR
     "CppStatement",
     "CppCallStmt",
     "CppAssignmentStmt",
     "CppIfStmt",
     "CppInlineExprStmt",
+    "CppReturnStmt",
+    "CppWhileStmt",
+    "CppRawStmt",
+    # Body builder
+    "kismet_to_cpp_body",
 ]

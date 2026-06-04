@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uasset_read"
-version = "0.3.8-beta"
+version = "0.4.2"
 description = "Unreal Engine .uasset file parser for AI agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,4 +47,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "integration: 需要外部样本资产或较慢路径的集成测试",
+    "quality: C++ 输出质量门禁测试",
+    "regression: 真实资产回归测试",
+    "slow: 需要大量时间或全量资产扫描的慢速测试",
 ]

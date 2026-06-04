@@ -1,7 +1,7 @@
 """
 Kismet Expression → C++ Pseudocode Translator.
 
-Phase 63: Translates KismetExpression AST into readable C++ pseudocode.
+Translates KismetExpression AST into readable C++ pseudocode.
 
 Provides:
 - TypeRegistry: UE → C++ type mapping with metadata population
@@ -14,6 +14,9 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
+    from uasset_read.kismet.function_resolver import FunctionRefResolver
+    from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+    from uasset_read.link.linker import PackageLinker
 
 
 # ===========================================================================
@@ -197,8 +200,8 @@ class MathFunctionCleaner:
             return f"({p[0]} != {p[1]})"
         if func_name.startswith("NotEqual_"):
             if func_name.startswith("NotEqual_ByteByte"):
-                return f"((!{p[0]}) !== (!{p[1]}))"
-            return f"({p[0]} !== {p[1]})"
+                return f"((!{p[0]}) != (!{p[1]}))"
+            return f"({p[0]} != {p[1]})"
         if func_name.startswith("LessEqual_"):
             return f"({p[0]} <= {p[1]})"
         if func_name.startswith("Less_"):
@@ -399,7 +402,7 @@ class MathFunctionCleaner:
         if func_name.startswith("EqualEqual_"):
             return f"{p[0]} == {p[1]}"
         if func_name.startswith("NotEqual_"):
-            return f"({p[0]} !== {p[1]})"
+            return f"({p[0]} != {p[1]})"
 
         if func_name.startswith("Conv_BoolToString"):
             return f"{p[0]} ? \"true\" : \"false\""
@@ -481,7 +484,7 @@ class MathFunctionCleaner:
         if func_name.startswith("EqualEqual_"):
             return f"{p[0]} == {p[1]}"
         if func_name.startswith("NotEqual_"):
-            return f"({p[0]} !== {p[1]})"
+            return f"({p[0]} != {p[1]})"
         if func_name.endswith("ToText"):
             return f"FText({p[0]})"
         if func_name.endswith("ToString"):
@@ -570,10 +573,37 @@ class KismetTranslator:
     Uses match/case dispatch aligned with GetLineExpression switch.
     """
 
-    def __init__(self, type_registry: TypeRegistry | None = None):
+    def __init__(
+        self,
+        type_registry: TypeRegistry | None = None,
+        linker: "PackageLinker | None" = None,
+        expressions: list["KismetExpression"] | None = None,
+    ):
         self.type_registry = type_registry or TypeRegistry()
+        self._func_resolver: FunctionRefResolver | None = None
+        # 统计计数器：跟踪 deprecated / instrumentation token
+        self.skipped_tokens: dict[str, int] = {}
+        if linker is not None:
+            from uasset_read.kismet.function_resolver import FunctionRefResolver
+            self._func_resolver = FunctionRefResolver(linker)
+        self._jump_analyzer: "JumpAnalyzer | None" = None
+        self._structured_indices: set[int] = set()
+        if expressions is not None:
+            from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+            self._jump_analyzer = JumpAnalyzer(expressions)
+            self._structured_indices = self._build_structured_indices(expressions)
 
-    def line_cpp(self, expr: KismetExpression) -> str:
+    def _build_structured_indices(self, expressions: list["KismetExpression"]) -> set[int]:
+        """构建结构化控制流块中所有表达式的索引集合。
+
+        委托给 JumpAnalyzer.get_structured_indices()，覆盖 while/for/if/switch 模式。
+        这些索引对应的表达式在线性翻译中应被跳过或特殊处理。
+        """
+        if self._jump_analyzer is None:
+            return set()
+        return self._jump_analyzer.get_structured_indices()
+
+    def line_cpp(self, expr: KismetExpression, index: int | None = None) -> str:
         """Translate a single KismetExpression to C++ pseudocode."""
         from uasset_read.kismet.expressions import (
             EX_LocalVariable, EX_InstanceVariable, EX_DefaultVariable,
@@ -632,7 +662,13 @@ class KismetTranslator:
 
         # --- Integer literals ---
         if isinstance(expr, EX_IntConst):
-            return str(expr.Value)
+            val = expr.Value
+            # 安全检查：如果 int32 值高位有数据且低位全零，
+            # 很可能是 scanner 误选起始位置导致的嵌入数据被错误解析。
+            # 将其标记为可疑值，避免输出裸数字（如 1509949440）。
+            if val > 0xFFFFFF and (val & 0xFFFFFF) == 0:
+                return f"/* suspicious: 0x{val:08X} */"
+            return str(val)
         if isinstance(expr, EX_IntZero):
             return "0"
         if isinstance(expr, EX_IntOne):
@@ -743,9 +779,29 @@ class KismetTranslator:
         if isinstance(expr, EX_JumpIfNot):
             cond = self.line_cpp(expr.BooleanExpression) if hasattr(expr, 'BooleanExpression') and expr.BooleanExpression else "?"
             offset = expr.CodeOffset if hasattr(expr, 'CodeOffset') else getattr(expr, 'Value', 0)
+
+            # 尝试结构化控制流检测
+            if self._jump_analyzer is not None and index is not None:
+                # for 模式（优先于 while）
+                for_result = self._jump_analyzer.detect_for_pattern(index)
+                if for_result is not None:
+                    return f"for ({cond}) {{"
+                # while 模式
+                while_result = self._jump_analyzer.detect_while_pattern(index)
+                if while_result is not None:
+                    return f"while ({cond}) {{"
+                # if/else 或简单 if 模式
+                if_else_result = self._jump_analyzer.detect_if_else_pattern(index)
+                if if_else_result is not None:
+                    return f"if ({cond}) {{"
+
             return f"if (!{cond}) goto Label_{offset};"
         if isinstance(expr, EX_Jump):
             offset = expr.CodeOffset if hasattr(expr, 'CodeOffset') else getattr(expr, 'Value', 0)
+            # 在结构化循环中，回跳由循环结构处理，跳过
+            if self._jump_analyzer is not None and index is not None:
+                if self._jump_analyzer.is_while_backjump(index):
+                    return ""
             return f"goto Label_{offset};"
         if isinstance(expr, EX_ComputedJump):
             var = self.line_cpp(expr.CodeOffsetExpression) if hasattr(expr, 'CodeOffsetExpression') and expr.CodeOffsetExpression else "?"
@@ -757,7 +813,11 @@ class KismetTranslator:
             offset = expr.Value if hasattr(expr, 'Value') else 0
             return f"goto Label_{offset};"
         if isinstance(expr, EX_PopExecutionFlow):
-            # Without execution flow stack, output return as fallback
+            # 在结构化控制流中，PopExecutionFlow 是结构块的结束标记
+            if self._jump_analyzer is not None and index is not None:
+                if index in self._structured_indices:
+                    return "}"
+            # 无结构化匹配时回退为 return
             return "return;"
         if isinstance(expr, EX_PopExecutionFlowIfNot):
             cond = self.line_cpp(expr.BooleanExpression) if hasattr(expr, 'BooleanExpression') else "?"
@@ -840,20 +900,41 @@ class KismetTranslator:
             # use Function_{index} placeholder (per PLAN.md Risk mitigation).
             stack_node = expr.StackNode if hasattr(expr, 'StackNode') else 0
 
+            # 尝试通过 FunctionRefResolver 解析 StackNode 为类名+函数名
+            resolved_class = None
+            resolved_func = None
+            if self._func_resolver and isinstance(stack_node, int) and stack_node != 0:
+                result = self._func_resolver.resolve(stack_node)
+                if result is not None:
+                    resolved_class, resolved_func = result
+
             # EX_CallMath always goes through MathFunctionCleaner
             if isinstance(expr, EX_CallMath):
-                # Without linker, we can't resolve StackNode to ClassName:FuncName
-                # Use placeholder format
-                class_name = f"Function_{stack_node}" if isinstance(stack_node, int) else str(stack_node)
-                func_name = f"Call_{stack_node}"
-                # Try to extract from Parameters if first param looks like a class reference
+                if resolved_class is not None and resolved_func is not None:
+                    # 解析成功，使用解析结果
+                    class_name = resolved_class
+                    func_name = resolved_func
+                else:
+                    # 解析失败，使用回退格式
+                    class_name = f"Function_{stack_node}" if isinstance(stack_node, int) else str(stack_node)
+                    func_name = f"Call_{stack_node}"
                 return MathFunctionCleaner.clean(class_name, func_name, params_list)
 
-            # EX_LocalFinalFunction: prefix with class
+            # EX_LocalFinalFunction: prefix with class, 标记蓝图本地函数
             if isinstance(expr, EX_LocalFinalFunction):
+                if resolved_class is not None and resolved_func is not None:
+                    # 检测是否为蓝图本地函数
+                    is_local = False
+                    if self._func_resolver and isinstance(stack_node, int):
+                        is_local = self._func_resolver.is_local_function(stack_node)
+                    if is_local:
+                        return f"this->{resolved_func}({', '.join(params_list)})"
+                    return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
                 return f"LocalFunction_{stack_node}({', '.join(params_list)})"
 
             # EX_FinalFunction: generic format
+            if resolved_class is not None and resolved_func is not None:
+                return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
             return f"Function_{stack_node}({', '.join(params_list)})"
 
         if isinstance(expr, (EX_VirtualFunction, EX_LocalVirtualFunction)):
@@ -864,7 +945,21 @@ class KismetTranslator:
                     p_str = self.line_cpp(param)
                     if p_str:
                         params_list.append(p_str)
-            return f"{func_name}({', '.join(params_list)})"
+
+            # 尝试通过 FunctionRefResolver 解析虚函数所属类名
+            class_name = None
+            if self._func_resolver and func_name and func_name != '?':
+                class_name = self._func_resolver.resolve_virtual_function_class(func_name)
+
+            if class_name:
+                prefix = f"{class_name}::"
+            else:
+                prefix = ""
+
+            # EX_LocalVirtualFunction 标记为本地调用
+            if isinstance(expr, EX_LocalVirtualFunction):
+                return f"{prefix}{func_name}({', '.join(params_list)})"
+            return f"{prefix}{func_name}({', '.join(params_list)})"
 
         if isinstance(expr, EX_CallMulticastDelegate):
             params_list = []
@@ -874,6 +969,17 @@ class KismetTranslator:
                     if p_str:
                         params_list.append(p_str)
             delegate = self.line_cpp(expr.Delegate) if hasattr(expr, 'Delegate') and expr.Delegate else "?"
+
+            # 尝试解析 StackNode 获取函数名
+            stack_node = expr.StackNode if hasattr(expr, 'StackNode') else 0
+            resolved_func = None
+            if self._func_resolver and isinstance(stack_node, int) and stack_node != 0:
+                result = self._func_resolver.resolve(stack_node)
+                if result is not None:
+                    _, resolved_func = result
+
+            if resolved_func is not None:
+                return f"{delegate}->{resolved_func}({', '.join(params_list)})"
             return f"{delegate}->Broadcast({', '.join(params_list)})"
 
         if isinstance(expr, EX_InstanceDelegate):
@@ -1002,11 +1108,17 @@ class KismetTranslator:
             cond = str(expr.AssertExpression) if hasattr(expr, 'AssertExpression') else "?"
             return f"assert({cond})"
 
-        # --- Deprecated / breakpoints ---
-        if isinstance(expr, (EX_DeprecatedOp4A, EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint)):
-            return "/* deprecated */"
+        # --- Deprecated / breakpoints / instrumentation — 静默跳过 ---
+        if isinstance(expr, EX_DeprecatedOp4A):
+            self.skipped_tokens["EX_DeprecatedOp4A"] = self.skipped_tokens.get("EX_DeprecatedOp4A", 0) + 1
+            return ""
+        if isinstance(expr, (EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint)):
+            name = type(expr).__name__
+            self.skipped_tokens[name] = self.skipped_tokens.get(name, 0) + 1
+            return ""
         if isinstance(expr, EX_InstrumentationEvent):
-            return "/* instrumentation */"
+            self.skipped_tokens["EX_InstrumentationEvent"] = self.skipped_tokens.get("EX_InstrumentationEvent", 0) + 1
+            return ""
         if isinstance(expr, EX_FieldPathConst):
             val = str(expr.Value) if hasattr(expr, 'Value') else "?"
             return val

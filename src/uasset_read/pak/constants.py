@@ -2,7 +2,6 @@
 Pak 文件常量定义
 
 镜像 UE 引擎 IPlatformFilePak.h 中的魔术数字、版本枚举、标志常量。
-Phase 77 — PAK-01.
 """
 from enum import IntEnum, IntFlag
 

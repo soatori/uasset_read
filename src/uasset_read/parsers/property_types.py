@@ -1,7 +1,6 @@
 """属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
 
 等价迁移 uasset_read.py 第 5289-6004 行。
-Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04)。
 """
 from __future__ import annotations
 
@@ -77,9 +76,11 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box3f": 24,             # 2 * Vector3f(12)
     "Matrix44f": 64,         # 4 * Plane4f(16)
     "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
-    # 动画/混合空间高频结构体（Phase 76 报告补充）
-    "FrameRate": 8,          # float Numerator + int32 Denominator
-    "AnimNotifyTrack": 8,    # int64 TrackIndex + float Duration 或类似
+    # 动画/混合空间高频结构体（报告补充）
+    "FrameRate": 8,          # float Numerator + int32 Denominator（紧凑格式）
+                             # 部分资产使用 tagged 格式（size=37），通过 tagged fallback 解析
+    "AnimNotifyTrack": 8,    # 紧凑格式大小
+                             # 部分资产使用 tagged 格式（size=0），通过 tagged fallback 解析
     "GuidProperty": 16,      # FGuid 标准大小
 }
 
@@ -181,6 +182,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "ImplementedInterfaces",
     "LastEditedDocuments",
     "CategorySorting",
+    # AnimSequence 结构体（部分资产使用 tagged 格式）
+    "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
+    "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -192,7 +196,7 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
 _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
     "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
-    # Phase 76: 新增 UE5.5 结构体
+    # 新增 UE5.5 结构体
     "NewVariables": [
         ("VarName", "NameProperty"),
         ("VarGuid", "GuidProperty"),
@@ -207,6 +211,15 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     "CategorySorting": [
         ("CategoryName", "NameProperty"),
+    ],
+    # AnimSequence 结构体 tagged fallback schemas
+    "FrameRate": [
+        ("Numerator", "FloatProperty"),
+        ("Denominator", "IntProperty"),
+    ],
+    "AnimNotifyTrack": [
+        ("TrackIndex", "Int64Property"),
+        ("TrackName", "NameProperty"),
     ],
 }
 
@@ -459,7 +472,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             )
             struct_type = None  # Skip all fast-path branches
 
-    # Phase 76: Handle negative size values gracefully
+    # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
         import logging
         logging.getLogger(__name__).warning(
@@ -479,7 +492,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             parse_status="opaque",
         )
 
-    # Phase 72g M-01: Fast-path for simple structs (FScriptStruct.cs L174-178)
+    # Fast-path for simple structs (FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
     if struct_type == "Vector":
         reader = archive.read_f64 if tag.size == 24 else archive.read_f32
@@ -501,7 +514,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         y = reader()
         return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
 
-    # Phase 76 COR-01: Additional fast-path structs (raw reads, no PropertyTags loop)
+    # Additional fast-path structs (raw reads, no PropertyTags loop)
     if struct_type == "Vector4":
         if tag.size == 32:
             # UE5.5 LWC: double 精度
@@ -714,7 +727,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     read_property_tag = _get_read_property_tag()
     read_tag_value_bounded = _get_read_tag_value_bounded()
 
-    # Phase 73 Wave 4: Track expected struct end position for recovery
+    # Track expected struct end position for recovery
     struct_start = archive.tell()
     struct_end = struct_start + tag.size if tag.size > 0 else None
 
@@ -1262,7 +1275,7 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
 
 def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
     """
-    将 FEdGraphPinType 格式化为完整类型字符串（Phase 12, per D-04）。
+    将 FEdGraphPinType 格式化为完整类型字符串（per D-04）。
 
     处理：基本类型、容器类型（TArray/TSet/TMap）、引用类型、const 类型。
     """

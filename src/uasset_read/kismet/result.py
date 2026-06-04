@@ -1,7 +1,7 @@
 """
 Kismet Decompilation Result — Single function decompilation result.
 
-Phase 64: Data model for Kismet bytecode decompilation output.
+Data model for Kismet bytecode decompilation output.
 """
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ class KismetDecompiledResult:
     warnings: list[str] = field(default_factory=list)
     semantic_calls: list[dict[str, Any]] = field(default_factory=list)
     logic_source: str = "current_asset"
+    function_ref_stats: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """
@@ -56,6 +57,7 @@ class KismetDecompiledResult:
             "warnings": self.warnings,
             "semantic_calls": self.semantic_calls,
             "logic_source": self.logic_source,
+            "function_ref_stats": self.function_ref_stats,
             "expressions": [
                 e.to_dict() if hasattr(e, "to_dict") else str(e)
                 for e in self.expressions

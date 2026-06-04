@@ -1,7 +1,6 @@
 """属性解析分派器和导出条目属性循环。
 
 等价迁移 uasset_read.py 第 6007-6220 行。
-Phase 30: 属性解析模块 (per MOD-07, MOD-09, D-04, D-05, D-08)。
 """
 from __future__ import annotations
 
@@ -16,6 +15,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectImport
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
+from uasset_read.models.fallback import PropertyFallback, FallbackReason
 from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
@@ -142,21 +142,37 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
     parsers = _get_parse_functions()
     handler = parsers.get(tag.type)
     if handler is None:
-        # D-05: 未知类型 — 尝试作为自定义属性处理 (0xFD/0xFE)
+        # D-05: 未知类型 — 返回结构化 PropertyFallback 替代 None
+        # 先尝试自定义属性处理 (0xFD/0xFE)
         from uasset_read.parsers.custom_properties import CUSTOM_PROPERTY_HANDLERS, handle_custom_property
-        # 检查 type_parts 的第一个节点是否为自定义属性 ID
         type_parts = getattr(tag, "type_parts", None)
         if type_parts:
             first_node_name = type_parts[0][0] if type_parts else ""
-            # 映射常见自定义属性名到 ID
             custom_id_map = {"CustomProperty_FD": 0xFD, "CustomProperty_FE": 0xFE}
             custom_id = custom_id_map.get(first_node_name)
             if custom_id is not None:
-                return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+                try:
+                    return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+                except Exception:
+                    pass  # fallback 到 PropertyFallback
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
-            return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-        return None  # D-05: unknown type → None, no exception
+            try:
+                return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+            except Exception:
+                pass  # fallback 到 PropertyFallback
+
+        # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
+        raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        return PropertyFallback(
+            name=tag.name,
+            type=tag.type,
+            size=tag.size,
+            raw_bytes=raw_data,
+            reason=FallbackReason.UNSUPPORTED_TYPE,
+            array_index=getattr(tag, "array_index", 0),
+            tag_data=getattr(tag, "tag_data", None),
+        )
 
     # Dispatch based on handler signature
     # Special case: ByteProperty with enum backing needs name_map (reads FName)
@@ -240,7 +256,15 @@ def parse_properties_from_export(
         should_skip_export_for_tolerant_parsing,
         skip_export_payload,
     )
-    if should_skip_export_for_tolerant_parsing(export):
+    # 解析 export 的 class name 用于 skip 检查
+    _skip_class_name = None
+    if import_map is not None:
+        try:
+            from uasset_read.serializers.object_resources import resolve_class_name
+            _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
+        except Exception:
+            pass
+    if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
             export.object_name,
@@ -340,6 +364,18 @@ def parse_properties_from_export(
                 lambda: parse_property_value(tag, archive, name_map, export_map, summary),
             )
 
+            # 如果解析返回 None（旧路径或 handler 显式返回 None），转为 PropertyFallback
+            if value is None:
+                value = PropertyFallback(
+                    name=tag.name,
+                    type=tag.type,
+                    size=tag.size,
+                    raw_bytes=b"",
+                    reason=FallbackReason.UNSUPPORTED_TYPE,
+                    array_index=tag.array_index,
+                    error_message="Parser returned None (unsupported or missing handler)",
+                )
+
             properties.append(PropertyValue(
                 name=tag.name,
                 type=tag.type,
@@ -373,11 +409,22 @@ def parse_properties_from_export(
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
             if tag is not None and start_pos is not None:
                 archive.seek(start_pos + tag.size)
-            properties.append(PropertyValue(
+
+            # 使用 PropertyFallback 替代纯字符串错误信息
+            fb = PropertyFallback(
                 name=tag.name if tag is not None else "Unknown",
+                type=tag.type if tag is not None else "Unknown",
+                size=tag.size if tag is not None else 0,
+                raw_bytes=b"",
+                reason=FallbackReason.PARSE_ERROR,
+                array_index=tag.array_index if tag is not None else 0,
+                error_message=f"ParseError at offset {start_pos}: {e}",
+            )
+            properties.append(PropertyValue(
+                name=fb.name,
                 type="Warning",
-                value=f"ParseError: {e}",
-                array_index=0
+                value=fb,
+                array_index=fb.array_index,
             ))
 
     return properties
@@ -440,7 +487,16 @@ def _parse_unversioned_properties_from_mapping(
         except ParseError as exc:
             if tag.size > 0:
                 archive.seek(min(start + tag.size, property_end))
-            out.append(PropertyValue(info.name, "Warning", f"ParseError: {exc}"))
+            fb = PropertyFallback(
+                name=info.name,
+                type=tag.type,
+                size=tag.size,
+                raw_bytes=b"",
+                reason=FallbackReason.PARSE_ERROR,
+                array_index=0,
+                error_message=f"ParseError: {exc}",
+            )
+            out.append(PropertyValue(info.name, "Warning", fb))
             continue
         if tag.size <= 0:
             tag.size = archive.tell() - start

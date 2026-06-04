@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> ⚠️ **Active development** — This project is still under active development and is not yet complete. Some asset types and features may have limited or partial support, and not all UE assets are guaranteed to parse correctly.
+> 📦 **v0.4.2 released** — Stable release with IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,8 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
+| Version | 0.4.2 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 218 tests across 13 files |
+| Tests | 994 passed, 2 xfailed (51 test files, 12+ asset types) |
+| Modules | 100+ source files across 15 subpackages |
 
 ## Features
 
@@ -34,21 +36,25 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **NameMap** — name table extraction
 - **ImportMap / ExportMap** — dependency and export mapping
 - **Advanced properties** — Struct / Map / Set / Enum / Text / Delegate
+- **Property fallback system** — unknown properties return `PropertyFallback` with diagnostic info instead of failing
+- **Class handler registry** — per-class serialization with configurable fallback policies
+- **Error recovery** — tolerant mode with offset range diagnostics
 
 ### Blueprint Analysis
-- **Blueprint graph parsing** — UEdGraph / Node / Pin structures
+- **Blueprint graph parsing** — UEdGraph / Node / Pin structures with typed node models
 - **Variable extraction** — variables, functions, events, metadata with type inference
 - **Component properties** — Transform / Rotation / Scale + scalar attributes
 - **Execution / data flow tracing** — Event → CallFunction chain tracking
 - **Function graph analysis** — FunctionEntry identification, per-function call chains
 
 ### Advanced Features
-- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code
+- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
 - **PackageLinker** — two-phase object graph reconstruction
 - **N2C intermediate format** — structured JSON schema with execution chains
-- **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping
+- **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping, constructor formatting, default value generation, identifier sanitization
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 - **Circular dependency detection** — mutual reference detection
+- **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
 
 ### File Format Support
 - **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB decryption
@@ -56,14 +62,20 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
+- **Binary/native handlers** — binary or native property serialization support
 
 ### Multiple Output Formats
-- **JSON** — full structured output or summary
+- **JSON** — full structured output or summary (renderer-based, no blueprint wrapper)
 - **Text** — human-readable format
 - **Markdown** — formatted documentation with tables
 - **Mermaid** — interactive flowcharts and dependency graphs
 - **Blueprint UE Text** — UE-editor-style format
-- **C++ Skeleton** — ready-to-use class boilerplate
+- **C++ Skeleton** — ready-to-use class boilerplate with constructor init lists
+
+### Architecture
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
+- **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
+- **CLI delegation** — lightweight CLI delegates to `core.py`
 
 ## Installation
 
@@ -110,6 +122,23 @@ uasset-read path/to/file.uasset --tolerant     # Continue on recoverable errors 
 uasset-read path/to/file.uasset --verbose      # Enable verbose logging
 ```
 
+### Core API (Recommended)
+
+Simplified high-level API for programmatic use:
+
+```python
+from uasset_read import parse_single, parse_batch, list_formats
+
+# Parse a single file
+result = parse_single("path/to/file.uasset")
+
+# Batch parse a directory
+results = parse_batch("path/to/directory")
+
+# List available output formats
+formats = list_formats()
+```
+
 ### Module-level API
 
 Import parser functions directly from the package root. If you need the
@@ -153,6 +182,12 @@ from uasset_read import (
     AgentTranslationPipeline, translate_blueprint_to_cpp,
     CppFileWriter, write_cpp_class_files,
 
+    # Fallback models
+    PropertyFallback, StructFallback, GenericUObject,
+
+    # Class registry
+    ClassHandlerRegistry, ClassHandler, HandlerResult, FallbackPolicy,
+
     # Constants & exceptions
     PACKAGE_FILE_TAG, MMAP_THRESHOLD,
     UAssetError, ParseError, VersionError,
@@ -177,6 +212,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
           KismetDecompiler
           N2C Format
           PakFileReader
+          IR Builder → Renderers
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -188,12 +224,14 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| Core API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
 | Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
-| CLI | `cli.py` | argparse entry point (`uasset-read`) |
+| CLI | `cli.py` | argparse entry point (`uasset-read`), delegates to core API |
 | Exporter | `exporter/` | IExporter interface, registry, batch export |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
+| **IR** | `ir.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
@@ -203,13 +241,14 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
 | ├ 表达式 | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping |
+| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting |
 | **Agent** | `agent/` | AgentTranslationPipeline + CppFileWriter (blueprint → C++ translation) |
 | **N2C** | `n2c/` | N2CStruct/Graph/Node/Pin models, JSON schema, validators, 57 node processors |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
 | **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (6 renderers) |
 | **Formatters** | `formatters/` | JSON/Text/Markdown/Mermaid/Blueprint text/UE format output generation |
 
 ## Testing

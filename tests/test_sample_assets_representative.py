@@ -155,7 +155,7 @@ def _asset_path(sample_root: Path, asset: SampleAsset) -> Path:
 def _param(asset: SampleAsset):
     marks = []
     if asset.known_current_defect:
-        marks.append(pytest.mark.xfail(reason=asset.known_current_defect))
+        marks.append(pytest.mark.xfail(reason=asset.known_current_defect, strict=True))
     return pytest.param(asset, id=f"{asset.category}:{asset.label}", marks=marks)
 
 

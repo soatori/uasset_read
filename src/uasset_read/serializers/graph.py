@@ -1,8 +1,7 @@
 """蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
 
 等价迁移 uasset_read.py L3191-4679。
-Phase 31: 蓝图图解析模块 (per MOD-09)。
-Phase 73: Pin 字段级诊断钩子 (trace_mode)。
+Pin 字段级诊断钩子 (trace_mode)。
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
-    MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN,
+    MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
     FFRAMEWORK_OBJECT_VERSION_GUID, FUE5_MAINSTREAM_VERSION_GUID, FRELEASE_OBJECT_VERSION_GUID,
     FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE, FFRAMEWORK_VERSION_PINS_STORE_FNAME,
@@ -57,7 +56,7 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
 def _get_thread_local():
     """返回当前线程的隔离诊断状态，避免全局可变状态竞态。"""
     if not hasattr(_thread_local, 'linkedto_failure_seen'):
-        _thread_local.linkedto_failure_seen: set[tuple[int, str]] = set()
+        _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
         _thread_local.pin_trace_events: List[Dict[str, Any]] = []
         _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
     return _thread_local
@@ -80,12 +79,12 @@ from uasset_read.models.node_types import (
 
 
 # ---------------------------------------------------------------------------
-# Phase 73 异常 Pin 计数值检测与恢复
+# 异常 Pin 计数值检测与恢复
 # ---------------------------------------------------------------------------
 
 
 def get_pin_trace_events() -> Dict[str, List[Dict[str, Any]]]:
-    """返回 Phase 73 Pin 字段级诊断快照。"""
+    """返回 Pin 字段级诊断快照。"""
     _local = _get_thread_local()
     return {
         "pins": [dict(item) for item in _local.pin_trace_events],
@@ -114,13 +113,13 @@ def _gac(exp, im, em, lk):
 
 
 # ============================================================================
-# Phase 75-03: PropertyTag helper functions
+# PropertyTag helper functions
 # ============================================================================
 
 def _read_tag_bool(archive: FArchive, tag) -> bool:
     """读取 PropertyTag 中的 bool 值。
 
-    Phase 75-03: 统一处理 inline bool 与 value body 两种形态：
+    统一处理 inline bool 与 value body 两种形态：
     - tag.size > 0: 从 value body 读取 i32 (UE5 bool serialization)
     - tag.size == 0: 使用 tag.bool_val (inline bool)
 
@@ -142,7 +141,7 @@ def _read_tag_bool(archive: FArchive, tag) -> bool:
 def _read_tag_i32(archive: FArchive, tag) -> int:
     """读取 PropertyTag 中的 int32 值并确保 seek 到 value_end_offset。
 
-    Phase 75-03: 标准化 int property 读取流程。
+    标准化 int property 读取流程。
 
     Args:
         archive: FArchive 实例
@@ -157,7 +156,7 @@ def _read_tag_i32(archive: FArchive, tag) -> int:
 def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
     """读取 PropertyTag 中的 FName 值并确保 seek 到 value_end_offset。
 
-    Phase 75-03: 标准化 FName property 读取流程。
+    标准化 FName property 读取流程。
 
     Args:
         archive: FArchive 实例
@@ -253,11 +252,11 @@ def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
     - length > 0: ANSI 字符串，读取 length bytes
     - length < -1: UTF-16 字符串，读取 (-length * 2) bytes
 
-    Phase 75: 修复 length == -1 边界条件（SubPin PinToolTip 常见）。
+    修复 length == -1 边界条件（SubPin PinToolTip 常见）。
     """
     length = archive.read_i32()
     if length == 0 or length == -1:
-        # Phase 75: length=-1 是 UE 空字符串标记，不读取任何数据
+        # length=-1 是 UE 空字符串标记，不读取任何数据
         return ""
     if abs(length) > max_length:
         # 长度异常，回退并返回空字符串
@@ -387,14 +386,14 @@ def validate_pin_reference_at(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Phase 73 Wave 2: 校验指定位置的 PinReference 结构有效性。
+    """校验指定位置的 PinReference 结构有效性。
 
     不移动指针，只检查指定位置是否符合 PinReference 格式：
     - b_null (i32): 0 表示正常引用，非 0 表示空引用（仅 4 字节）
     - owning_node (i32): 在 import/export 范围内（仅当 b_null == 0）
     - pin_guid (16 bytes): 非全零（除非是 ParentPin 空引用）
 
-    Phase 74: 支持 4 字节 null PinReference（b_null != 0 时仅需 4 字节）。
+    支持 4 字节 null PinReference（b_null != 0 时仅需 4 字节）。
 
     Returns:
         None: 无效结构
@@ -490,7 +489,7 @@ def peek_valid_pin_array_count(
     export_map: List[ObjectExport],
     max_count: int = 20,
 ) -> Optional[int]:
-    """Phase 73 Wave 1: 不移动指针，检查当前位置是否是有效的 LinkedTo 数组。
+    """不移动指针，检查当前位置是否是有效的 LinkedTo 数组。
 
     只读取 i32 count，验证范围 0..max_count，检查后续数据是否符合 PinReference 结构。
     如果有效返回 count；否则返回 None。
@@ -554,7 +553,10 @@ def read_pin_reference(
         return None  # null marker consumed 4 bytes only, no more reading
 
     owning_node_index = archive.read_i32()
-    pin_guid = _read_guid(archive)
+    pin_guid_raw = _read_guid(archive)
+
+    # 归一化为 32 字符大写 hex（移除 dash），与 pin_id 格式一致
+    pin_guid = pin_guid_raw.replace("-", "").upper()
 
     # 解析 owning node 名称
     owning_node_name: Optional[str] = None
@@ -567,14 +569,10 @@ def read_pin_reference(
         if import_idx < len(import_map):
             owning_node_name = import_map[import_idx].object_name
 
-    # Phase 73 收敛：标记 pin_guid 最小有效性，供连接层过滤
-    guid_text = pin_guid.replace("-", "")
-    guid_is_hex = len(guid_text) == 32 and all(c in "0123456789ABCDEF" for c in guid_text)
-    guid_is_zero = guid_text == ("0" * 32)
+    # pin_guid 已在上方归一化为 32 字符大写 hex（无 dash）
     result = {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
-        "_pin_guid_valid": guid_is_hex and not guid_is_zero,
     }
 
     # 如果有 linker，解析 owning_node_index 为对象引用
@@ -593,14 +591,14 @@ def read_pin_array(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
-    recovery_context: str = "linkedto",  # Phase 73 Wave 2: 区分 linkedto vs subpins
+    recovery_context: str = "linkedto",  # 区分 linkedto vs subpins
 ) -> List[dict]:
     """读取 Pin 引用数组（SerializePinArray 格式）。
 
-    Phase 72-I Wave 2: 滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
+    滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
     验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
 
-    Phase 73 Wave 2: 恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
+    恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
     """
     array_count = archive.read_i32()
 
@@ -664,11 +662,16 @@ def _recover_pin_array_count(
     import_map: List[ObjectImport] = None,
     scan_window: int = 16,
 ) -> Optional[Dict[str, Any]]:
-    """Phase 73 Wave 2: 滑动恢复增强校验。
+    """滑动恢复增强校验（Phase 75: 动态窗口）。
 
     扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
 
-    Wave 2 改进：
+    scan_window 根据 bad_count 大小动态调整：
+    - bad_count <= 20: 基础窗口 16 字节
+    - bad_count <= 100: 窗口 32 字节
+    - bad_count > 100: 窗口 64 字节
+
+    改进：
     - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
     - count>0 必须验证全部或至少前两个 PinReference
     - 恢复成功返回结构化结果：{count, candidate_pos, confidence, reason}
@@ -683,6 +686,12 @@ def _recover_pin_array_count(
         }
     """
     import struct
+
+    # Phase 75: 动态调整 scan_window
+    if bad_count > 100:
+        scan_window = max(scan_window, 64)
+    elif bad_count > 20:
+        scan_window = max(scan_window, 32)
 
     current_pos = archive.tell()
     search_start = max(0, error_pos - scan_window)
@@ -704,7 +713,7 @@ def _recover_pin_array_count(
         candidate_pos = search_start + offset
         after_count = offset + 4
 
-        # Phase 73 Wave 2: count=0 需要额外验证后续结构
+        # count=0 需要额外验证后续结构
         if candidate == 0:
             # count=0 后面应该是 SubPins 数组或其他合理结构
             # 检查是否有另一个小整数 count (0..20) 紧随其后
@@ -782,12 +791,12 @@ def _try_recover_to_subpins(
     import_map: List[ObjectImport] = None,
     max_scan: int = 256,
 ) -> Optional[Dict[str, Any]]:
-    """Phase 73 Wave 2: LinkedTo 失败后恢复到 SubPins。
+    """LinkedTo 失败后恢复到 SubPins。
 
     扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
     (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
 
-    Wave 2 改进：
+    改进：
     - 使用 validate_pin_reference_at() 进行结构校验
     - 区分 linkedto_recovered（找到合法 Pin 数组）和 subpins_resync（跳到下一个结构）
     - 返回结构化恢复结果
@@ -816,7 +825,7 @@ def _try_recover_to_subpins(
         candidate_pos = scan_start + offset
         after = offset + 4
 
-        # Phase 73 Wave 2: 使用 validate_pin_reference_at 校验
+        # 使用 validate_pin_reference_at 校验
         if candidate > 0 and after + 24 <= len(window):
             pin_ref_result = validate_pin_reference_at(
                 archive, candidate_pos + 4, export_map, import_map
@@ -886,7 +895,7 @@ def read_ue_graph_pin(
     linker: Optional["PackageLinker"] = None,
     header_owning_node: Optional[int] = None,
     header_pin_id: Optional[str] = None,
-    trace_mode: bool = False,  # Phase 73: 字段级诊断开关
+    trace_mode: bool = False,  # 字段级诊断开关
 ) -> UEdGraphPin:
     """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
 
@@ -896,11 +905,11 @@ def read_ue_graph_pin(
 
     If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
 
-    Phase 73: trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
+    trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
     """
     trace_mode = _pin_trace_enabled(trace_mode)
 
-    # Phase 73: 诊断记录
+    # 诊断记录
     _trace_fields: Dict[str, Any] = {}
     if trace_mode:
         _trace_fields["fields"] = []
@@ -949,17 +958,30 @@ def read_ue_graph_pin(
         _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText)
+    # FText 安全网：记录解析前位置，限制最大消耗
     ftext_start_pos = archive.tell()
     pin_friendly_name: Optional[str] = None
     try:
         pin_friendly_name, flags, history_type, _ = _read_ftext_value(
             archive, tolerant=True
         )
+        # FText 安全网：验证消耗字节数
+        ftext_consumed = archive.tell() - ftext_start_pos
+        if ftext_consumed > MAX_FTEXT_CONSUMPTION:
+            logger.warning(
+                "[FTEXT-SAFETY] PinFriendlyName consumed %d bytes (> %d), "
+                "possible corruption, seeking back to %d",
+                ftext_consumed, MAX_FTEXT_CONSUMPTION, ftext_start_pos + 5
+            )
+            archive.seek(ftext_start_pos + 5)
+            # 标记解析失败，使用默认值
+            pin_friendly_name = None
         if trace_mode:
             _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
                          f"flags={flags},htype={history_type}")
     except Exception as e:
-        archive.seek(ftext_start_pos)
+        pin_friendly_name = None
+        archive.seek(ftext_start_pos + 5)
         if trace_mode:
             _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
                          "", is_exception=True, is_fallback=True)
@@ -976,7 +998,7 @@ def read_ue_graph_pin(
     # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
     _field_start = archive.tell()
     try:
-        # Phase 73 收敛：PinToolTip 常为短字符串，使用安全读取避免异常长度吞偏游标
+        # PinToolTip 常为短字符串，使用安全读取避免异常长度吞偏游标
         pin_tooltip = _read_fstring_safe(archive, max_length=4096)
         # 额外检查：pin_tooltip 专用二进制数据过滤
         # 注意：archive._contains_binary_data 不存在，需要从 archive 模块导入
@@ -1016,7 +1038,7 @@ def read_ue_graph_pin(
     # 9-10. DefaultValue strings (容错)
     _field_start = archive.tell()
     try:
-        # Phase 73 收敛：DefaultValue 常为短字面量，使用安全读取避免大块错误消费
+        # DefaultValue 常为短字面量，使用安全读取避免大块错误消费
         default_value = _read_fstring_safe(archive, max_length=4096)
         if trace_mode:
             from uasset_read.archive import _contains_binary_data
@@ -1033,7 +1055,7 @@ def read_ue_graph_pin(
 
     _field_start = archive.tell()
     try:
-        # Phase 73 收敛：AutogeneratedDefaultValue 同上，限制异常长度影响
+        # AutogeneratedDefaultValue 同上，限制异常长度影响
         autogenerated_default_value = _read_fstring_safe(archive, max_length=4096)
         if trace_mode:
             from uasset_read.archive import _contains_binary_data
@@ -1064,6 +1086,17 @@ def read_ue_graph_pin(
         default_text_value, _dtv_flags, _dtv_history, _ = _read_ftext_value(
             archive, tolerant=True
         )
+        # DefaultTextValue FText 安全网：验证消耗字节数
+        dtv_consumed = archive.tell() - _dtv_start
+        if dtv_consumed > MAX_FTEXT_CONSUMPTION:
+            logger.warning(
+                "[FTEXT-SAFETY] DefaultTextValue consumed %d bytes (> %d), "
+                "possible corruption, seeking back to %d",
+                dtv_consumed, MAX_FTEXT_CONSUMPTION, _dtv_start + 5
+            )
+            archive.seek(_dtv_start + 5)
+            # 标记解析失败，使用默认值
+            default_text_value = None
         if trace_mode:
             _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
                          f"flags={_dtv_flags},htype={_dtv_history}")
@@ -1075,23 +1108,7 @@ def read_ue_graph_pin(
         logger.debug("DefaultTextValue read failed at pos %d, skipping header: %s",
                      _dtv_start, e)
 
-    # 严格重对齐：仅当当前位置不可能是合法 pin array，而 header 后位置是合法 pin array
-    # 时，才回退到仅消费 flags+history_type 的位置。
-    _linkedto_probe_pos = archive.tell()
-    _probe_now = peek_valid_pin_array_count(archive, export_map)
-    if _probe_now is None:
-        archive.seek(_dtv_start + 5)
-        _probe_after_header = peek_valid_pin_array_count(archive, export_map)
-        if _probe_after_header is not None:
-            logger.debug(
-                "[P73-RESYNC] DefaultTextValue consumed too much at pos %d, "
-                "realigned LinkedTo start to %d (count=%d)",
-                _linkedto_probe_pos, _dtv_start + 5, _probe_after_header,
-            )
-        else:
-            archive.seek(_linkedto_probe_pos)
-
-    # 13. LinkedTo array — Phase 73 关键诊断点
+    # 13. LinkedTo array — 关键诊断点
     linkedto_start = archive.tell()
     linkedto_raw_count: Optional[int] = None
     try:
@@ -1108,19 +1125,28 @@ def read_ue_graph_pin(
             _trace_field("LinkedTo", linkedto_start, archive.tell(),
                          f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
     except Exception as e:
-        # 聚合失败日志：同一位置+异常类型仅首次 error，后续降级 debug
-        failure_key = (linkedto_start, type(e).__name__)
-        if failure_key not in _get_thread_local().linkedto_failure_seen:
-            _get_thread_local().linkedto_failure_seen.add(failure_key)
-            logger.error("LinkedTo read failed at pos %d: %s", linkedto_start, e)
+        # Phase 75: 改进日志去重，包含 pin_name
+        failure_key = (linkedto_start, type(e).__name__, pin_name)
+        tl = _get_thread_local()
+        if failure_key not in tl.linkedto_failure_seen:
+            tl.linkedto_failure_seen.add(failure_key)
+            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
         else:
-            logger.debug("LinkedTo read failed (deduped) at pos %d: %s", linkedto_start, e)
+            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
         if trace_mode:
             _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
                          is_exception=True)
         linked_to = []
-        # 仅记录重同步信息，不再依赖低置信度 salvage 来构建正式连接结果。
-        _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
+        # Phase 75: 使用恢复结果
+        recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
+        if recovery_result is not None:
+            logger.info(
+                "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
+                recovery_result.get("recovered_pos"),
+                recovery_result.get("recovery_type"),
+            )
 
     # 14. SubPins array
     subpins_start = archive.tell()
@@ -1200,7 +1226,7 @@ def read_ue_graph_pin(
     parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
     ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
 
-    # Phase 73: 诊断日志输出
+    # 诊断日志输出
     if trace_mode:
         # 找出第一个可能错位的字段
         first_misaligned = ""
@@ -1342,8 +1368,6 @@ def read_k2node_event(
 ) -> Dict[str, Any]:
     """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
 
-    Phase 75-04: 移除尾部盲读。
-
     如果 event_reference、b_override_function 等字段已在 PropertyTag 层解析（script_serial），
     直接使用；fallback 读取必须受 script_serial_size / 字段 trace 验证保护。
 
@@ -1360,7 +1384,7 @@ def read_k2node_event(
     if event_reference is None:
         event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
-    # Phase 75-04: b_override_function 优先使用 PropertyTag 值，不再盲读
+    # b_override_function 优先使用 PropertyTag 值，不再盲读
     # 只有 PropertyTag 未提供时才考虑 fallback，且 fallback 必须受验证保护
     if b_override_function is None:
         # Legacy fallback: 仅在确认有剩余字节时读取
@@ -1442,7 +1466,7 @@ def read_k2node_enhanced_input(
 ) -> Dict[str, Any]:
     """读取 K2Node_EnhancedInputAction 特有字段，返回字典（作为 node_data）。
 
-    Phase 75-05: 从 PropertyTag 层获取 AdvancedPinDisplay、InputAction 短名等字段。
+    从 PropertyTag 层获取 AdvancedPinDisplay、InputAction 短名等字段。
 
     返回字段：
     - input_action_path: 完整对象路径
@@ -1492,7 +1516,7 @@ def read_k2node_functionentry(
 ) -> Dict[str, Any]:
     """读取 K2Node_FunctionEntry 特有字段，返回字典（作为 node_data）。
 
-    Phase 75-03: 从 PropertyTag 层获取 ExtraFlags、bIsEditable。
+    从 PropertyTag 层获取 ExtraFlags、bIsEditable。
 
     FunctionReference 已在 read_ue_graph_node() 中从 PropertyTag 解析。
 
@@ -1891,7 +1915,7 @@ def read_ue_graph_node(
 
     function_reference: Optional[FMemberReference] = None
     event_reference: Optional[FMemberReference] = None
-    # Phase 75-04: K2Node_Event PropertyTag 字段
+    # K2Node_Event PropertyTag 字段
     b_override_function: Optional[bool] = None
     b_internal_event: Optional[bool] = None
     custom_function_name: Optional[str] = None
@@ -2042,7 +2066,7 @@ def read_ue_graph_node(
                     )
 
                 event_reference = read_tag_value_bounded(archive, tag, _read_event_reference)
-            # Phase 75-03: K2Node_Event PropertyTag 字段使用 helper functions
+            # K2Node_Event PropertyTag 字段使用 helper functions
             # 注意：这些字段会在后面的 elif 分支（使用 helper functions）处理
             # 这里只是占位注释，实际处理在 lines 1859-1872
             elif tag.name == "NodePosX":
@@ -2064,7 +2088,7 @@ def read_ue_graph_node(
                     if pkg_idx != 0 else ""
                 )
                 raw_properties[tag.name] = input_action_path
-                # Phase 75-03: 保留短名提取
+                # 保留短名提取
                 raw_properties["InputActionShortName"] = (
                     input_action_path.split(".")[-1].split("'")[0]
                     if input_action_path else ""
@@ -2089,7 +2113,7 @@ def read_ue_graph_node(
                 raw_properties[tag.name] = _read_tag_i32(archive, tag)
             elif tag.name == "ExtraFlags" and tag.size > 0:
                 raw_properties[tag.name] = _read_tag_i32(archive, tag)
-            # Phase 75-03: 新增节点字段收集
+            # 新增节点字段收集
             elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
                 raw_val = _read_tag_i32(archive, tag)
                 raw_properties[tag.name] = raw_val
@@ -2202,7 +2226,7 @@ def read_ue_graph_node(
     node_refs = {
         'function_reference': function_reference,
         'event_reference': event_reference,
-        # Phase 75-04: K2Node_Event PropertyTag 字段
+        # K2Node_Event PropertyTag 字段
         'b_override_function': b_override_function,
         'b_internal_event': b_internal_event,
         'custom_function_name': custom_function_name,

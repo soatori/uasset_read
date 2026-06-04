@@ -72,8 +72,8 @@ def format_cpp_header(ir: CppClassIR) -> str:
     # 3. #include "CoreMinimal.h"（UE 约定，始终添加）
     lines.append('#include "CoreMinimal.h"')
 
-    # 4. header_meta.includes（排序）
-    includes = sorted(ir.header_meta.includes)
+    # 4. header_meta.includes（去重 + 排序）
+    includes = sorted(set(ir.header_meta.includes))
     for inc in includes:
         lines.append(f'#include {inc}')
 
@@ -123,7 +123,7 @@ def format_cpp_header(ir: CppClassIR) -> str:
         for prop in variables:
             lines.extend(_format_variable_property(prop))
 
-    # 13. 方法声明（Phase 57）
+    # 13. 方法声明
     if ir.methods:
         lines.append("")
         lines.append("public:")
@@ -276,10 +276,11 @@ def _format_variable_property(prop: CppProperty) -> List[str]:
     # 属性声明
     decl = f"    {prop.cpp_type} {prop.name}"
 
-    # 添加默认值（如果有）
+    # 添加默认值（如果有且非空）
     if prop.default_value is not None:
         default_str = _format_default_value(prop.cpp_type, prop.default_value)
-        decl += f" = {default_str}"
+        if default_str:
+            decl += f" = {default_str}"
 
     decl += ";"
 
@@ -306,6 +307,10 @@ def _format_default_value(cpp_type: str, value: any) -> str:
     if value is None:
         return ""
 
+    # 空字符串或纯空白 — 无有效默认值
+    if isinstance(value, str) and not value.strip():
+        return ""
+
     # 处理布尔值
     if cpp_type == "bool":
         return "true" if value else "false"
@@ -322,7 +327,7 @@ def _format_default_value(cpp_type: str, value: any) -> str:
     if cpp_type in ("FString", "FName"):
         return f'TEXT("{value}")'
 
-    # FText 太复杂，跳过（Phase 56 不支持）
+    # FText 太复杂，跳过（当前不支持）
     if cpp_type == "FText":
         return "FText::GetEmpty()"
 

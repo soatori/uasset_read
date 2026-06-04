@@ -1,11 +1,53 @@
 ---
-title: 导出系统
+title: 导出系统（已废弃）
 section: exporter
 ---
 
-# 导出系统
+# 导出系统（已废弃）
 
-导出系统提供统一的接口，将解析结果（`ParseResult` / `LinkerParseResult`）转换为多种输出格式。
+> [!WARNING] 已废弃
+>
+> **Exporter 系统在 0.4.1 中已被 Renderers 系统替代。**
+> 
+> - `exporter/` 模块已从代码库中删除
+> - 新架构：`ParseResult → IR → Renderers → Output`
+> - 请查看 [[渲染器系统]] 和 [[IR 中间表示]] 获取最新文档
+
+## 历史参考
+
+以下为 0.3.x 版本的导出系统架构，仅供代码迁移参考：
+
+### 旧架构概览
+
+```
+.uasset → Parser → ParseResult → Exporter → Output (JSON/Text/Markdown/N2C/C++/...)
+```
+
+采用 **IExporter 接口 + 注册表分发** 模式。
+
+### 旧导出器列表
+
+| 格式名 | 导出器类 | 状态 |
+|--------|----------|------|
+| `json` | `JsonExporter` | → JsonRenderer |
+| `json_summary` | `JsonExporter` | → JsonRenderer |
+| `text` | `TextExporter` | → TextRenderer |
+| `text_summary` | `TextExporter` | → TextRenderer |
+| `markdown` | `MarkdownExporter` | → MarkdownRenderer |
+| `blueprint_text` | `BlueprintTextExporter` | → BlueprintTextRenderer |
+| `blueprint_ue_text` | `BlueprintUETextExporter` | → BlueprintUERenderer |
+| `n2c` | `N2CExporter` | 已移除（N2C 模块整体删除） |
+| `cpp_skeleton` | `CppSkeletonExporter` | → CppSkeletonRenderer |
+| `cpp_json_ir` | `CppJsonIrExporter` | 合并到 cpp_skeleton |
+
+### 迁移路径
+
+| 旧 API | 新 API |
+|--------|--------|
+| `export(result, format="json")` | `parse_single(path, format="json")` |
+| `ExporterRegistry.get(format)` | `get_renderer(format)` |
+| `BatchExporter.export_files(paths)` | `parse_batch(input_dir, format=...)` |
+| `ExportOptions` | `RenderOptions` |
 
 ## 架构概览
 

@@ -1,7 +1,6 @@
 """PropertyTag 序列化器 — read_property_tag。
 
 等价迁移 uasset_read.py 第 5186-5282 行。
-Phase 30: 属性解析模块 (per MOD-06, MOD-09)。
 UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 from __future__ import annotations
@@ -153,7 +152,7 @@ def read_property_tag(
     Returns:
         PropertyTag 实例
     """
-    # Phase 73 Wave 4: Record tag start position for cascade failure diagnosis
+    # Record tag start position for cascade failure diagnosis
     tag_start_pos = archive.tell()
 
     tag = PropertyTag(name=archive.read_name(name_map), type="", size=0, tag_start_offset=tag_start_pos)
@@ -200,7 +199,7 @@ def read_property_tag(
     if tag.flags & PROP_TAG_BOOL_TRUE:
         tag.bool_val = 1
 
-    # Phase 73 Wave 4: Record value start position and expected end position
+    # Record value start position and expected end position
     tag.value_start_offset = archive.tell()
     if tag.size > 0:
         tag.value_end_offset = tag.value_start_offset + tag.size

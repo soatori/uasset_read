@@ -7,25 +7,30 @@ section: agent-index
 
 > [!NOTE]
 > 本文档已为 AI Agent 优化。所有表格采用结构化格式，API 签名使用 `data-api` 注释标记。Agent 可通过 grep `<!-- data-api="函数名" -->` 定位 API。
+>
+> **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。新增 `core.py`（parse_single/parse_batch）、`renderers/`、`models/ir.py`。
 
 ## 按任务类型快速定位
 
 | Agent 任务 | 定位章节 | 关键文件 |
 |------------|----------|----------|
-| 解析 .uasset 文件 | [[解析管线]] | `parse_uasset.py` |
+| 解析 .uasset 文件 | [[解析管线]] | `parse_uasset.py` / `core.py` |
 | 读取二进制字段 | [[FArchive]] | `archive.py` |
 | 新增属性类型解析器 | [[属性解析器]] | `parsers/` |
 | 修改蓝图输出格式 | [[蓝图解析]] | `blueprint/` |
 | 修改图分析逻辑 | [[图分析]] | `graph/` |
 | 修复 Kismet 反编译 | [[Kismet 反编译]] | `kismet/` |
 | 修改 C++ 代码生成 | [[C++ 代码生成]] | `cpp_gen/` |
-| 新增导出格式 | [[导出系统]] | `exporter/` |
+| 新增输出格式 | [[渲染器系统]] | `renderers/` |
 | 版本兼容性适配 | [[版本管理]] | `versioning.py` |
 | 跨包引用修复 | [[对象链接器]] | `link/` |
 | PAK/IoStore 容器支持 | [[PAK]] / [[IoStore]] | `pak/` / `iostore/` |
-| N2C Schema 变更 | [[N2C 中间格式]] | `n2c/` |
 | 添加测试用例 | [[测试指南]] | `tests/` |
-| 对照 UE 源码 | [[UE 源码对照]] | `docs/uasset-format/` |
+| 对照 UE 源码 | [[UE 源码对照]] | `docs/formats/uasset/` |
+
+> [!WARNING] 已移除任务
+> - ~~N2C Schema 变更~~ → `n2c/` 已整体删除
+> - ~~新增导出格式（旧）~~ → 使用 [[渲染器系统]] 替代
 
 ## 完整 API 分类索引
 
@@ -97,7 +102,7 @@ section: agent-index
 #### 安全
 `detect_circular_deps` · `validate_package_index`
 
-### 格式化与导出 (18+)
+### 格式化与渲染（0.4.1+）
 
 #### JSON
 `format_json_full` · `format_json_summary` · `format_exports_list` · `format_properties_list` · `format_blueprint_dict`
@@ -111,8 +116,11 @@ section: agent-index
 #### 辅助
 `build_status_info` · `build_schema_info` · `resolve_fpackage_index`
 
-#### 导出系统
-`ExportOptions` · `IExporter` · `ExporterRegistry` · `export` · `BatchExporter` · `BatchExportResult`
+#### 核心 API
+`parse_single` · `parse_batch` · `list_formats` · `BatchResult`
+
+#### 渲染器系统
+`IRenderer` · `RenderOptions` · `get_renderer` · `list_formats` · `register_renderer` · `RENDERER_REGISTRY`
 
 ### C++ 代码生成 (15+)
 
@@ -139,26 +147,15 @@ section: agent-index
 #### 原始文件
 `parse_raw_file` · `parse_json_descriptor` · `parse_ini_file` · `parse_locres` · `parse_locmeta` · `parse_audio_metadata`
 
-### N2C 中间格式 (10+)
+### ~~N2C 中间格式~~ — 已移除
 
-#### 数据类
-`N2CStruct` · `N2CGraph` · `N2CNode` · `N2CPin` · `N2CNodeDefinition` · `N2CNodeType` · `N2CNodeProcessor`
+> [!WARNING] 已移除
+> `n2c/` 模块已在 0.4.1 整体删除。
 
-#### 序列化
-`to_n2c_json` · `from_n2c_json` · `N2C_JSON_SCHEMA` · `validate_n2c_json` · `N2CIdMapper`
+### ~~Agent 管线~~ — 已移除
 
-#### 注册表
-`N2CProcessorRegistry` · `N2CNodeTypeRegistry`
-
-### Agent 管线 (4)
-
-<!-- data-api="AgentTranslationPipeline" -->
-| 函数/类 | 说明 |
-|---------|------|
-| `AgentTranslationPipeline` | Agent 翻译管线整合类 |
-| `translate_blueprint_to_cpp` | 便捷翻译函数 |
-| `CppFileWriter` | C++ 文件写入器 |
-| `write_cpp_class_files` | 写入完整 C++ 类文件 |
+> [!WARNING] 已移除
+> `agent/` 模块已在 0.4.1 整体删除。C++ 输出请使用 `parse_single(format="cpp_skeleton")`。
 
 ### 版本管理 (3)
 

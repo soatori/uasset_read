@@ -1,5 +1,5 @@
 """
-构造函数 IR 构建器模块 — Phase 59 Plan 01。
+构造函数 IR 构建器模块。
 
 从 CppClassIR.properties、component 数据和 blueprint.variables 提取数据，
 填充 CppClassIR.constructor 字典的 component_creations、component_assignments、
@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters.cpp_json_ir import CppClassIR
     from uasset_read.models.blueprint import BlueprintVariable
+
+
+from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
+
+
+def _is_blueprint_metadata(var_name: str) -> bool:
+    """检查变量名是否为蓝图元数据键。"""
+    return var_name in _BLUEPRINT_METADATA_KEYS
 
 
 # ============================================================================
@@ -289,6 +297,8 @@ def build_default_values(
             if var.is_component:
                 continue
             if var.default_value is None:
+                continue
+            if _is_blueprint_metadata(var.var_name):
                 continue
 
             # 跳过已经在 ir.properties 中处理过的变量

@@ -49,3 +49,4 @@ class LinkerParseResult:
     inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
     logic_sources: List[Dict] = field(default_factory=list)
     metadata: Dict[str, object] = field(default_factory=dict)
+    diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]

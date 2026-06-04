@@ -106,7 +106,7 @@ python -m pytest tests/ -v -m integration
 
 ## 外部参考
 
-- `docs/uasset-format/` — UE .uasset 格式文档（60+ 个 Markdown 文件）
+- `docs/formats/uasset/` — UE .uasset 格式文档（60+ 个 Markdown 文件）
 - `external/CUE4Parse/` — 参考 C# 实现，用于交叉验证解析逻辑
 - `docs/reference/` — 蓝图节点文本参考、UE 加载流程、CUE4Parse 对照索引
 

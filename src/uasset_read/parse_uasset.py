@@ -1,10 +1,10 @@
 """主解析管线入口 — parse_uasset() 函数。
 
 等价迁移 uasset_read.py §6223-6412。
-Phase 33: 入口与测试适配。
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional, List, Union, Sequence
 from pathlib import Path
 
@@ -15,7 +15,10 @@ if TYPE_CHECKING:
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
-from uasset_read.serializers.package_summary import read_package_summary, read_name_table, read_depends_map, read_preload_dependencies
+from uasset_read.serializers.package_summary import (
+    read_package_summary, read_name_table, read_depends_map,
+    read_preload_dependencies, validate_export_data_range,
+)
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
@@ -30,6 +33,8 @@ from uasset_read.blueprint import (
 from uasset_read.models.result import ParseResult
 from uasset_read.link.result import LinkerParseResult
 
+logger = logging.getLogger(__name__)
+
 
 def _extract_kismet_decompiled(
     path: str,
@@ -39,6 +44,7 @@ def _extract_kismet_decompiled(
     import_map: List["ObjectImport"],
     export_map: List["ObjectExport"],
     tolerant: bool = True,
+    linker: Optional["PackageLinker"] = None,
 ) -> List["KismetDecompiledResult"]:
     """Extract and decompile Kismet bytecode from Blueprint UStruct exports.
 
@@ -59,7 +65,7 @@ def _extract_kismet_decompiled(
         try:
             result = decompile_single_function(
                 archive, export, summary, name_map, import_map, export_map,
-                tolerant=tolerant,
+                tolerant=tolerant, linker=linker,
             )
             if result is not None:
                 results.append(result)
@@ -164,13 +170,13 @@ def _post_process(
     if hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
-    # Kismet decompilation (Phase 64, per D-02, D-10)
+    # Kismet decompilation (per D-02, D-10)
     try:
         from uasset_read.kismet.pipeline import decompile_single_function
         if hasattr(result, 'decompiled_functions'):
             decompiled = _extract_kismet_decompiled(
                 path, archive, summary, name_map,
-                import_map, export_map, tolerant,
+                import_map, export_map, tolerant, linker=linker,
             )
             result.decompiled_functions = decompiled
             if decompiled and getattr(result, "graphs", None):
@@ -190,7 +196,7 @@ def _post_process(
     if include_parent_assets:
         _resolve_parent_assets(path, result, tolerant, asset_roots)
 
-    # Component property extraction (Phase 48)
+    # Component property extraction
     try:
         from uasset_read.blueprint.component_extractor import extract_components
         if hasattr(result, 'components'):
@@ -214,6 +220,17 @@ def _post_process(
     except ParseError as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"dependency analysis error: {e}")
+
+    # name_map 一致性检查：如果 summary.name_count > 0 但 name_map 为空，
+    # 说明名称表读取失败或为空，这不应该在成功的解析中出现。
+    # 添加错误以确保集成测试的 name_map 验证通过。
+    if hasattr(result, 'name_map') and not result.name_map:
+        if summary is not None and getattr(summary, 'name_count', 0) > 0:
+            if hasattr(result, 'errors'):
+                result.errors.append(
+                    f"name_map 为空（summary.name_count={summary.name_count}），"
+                    f"名称表读取失败"
+                )
 
     # 设置成功标志
     result.is_success = len(result.errors) == 0
@@ -329,6 +346,7 @@ def parse_package(
     provider: Optional[PackageProvider] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
+    include_linker: bool = True,  # Deprecated: linker is now always created
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -339,6 +357,8 @@ def parse_package(
         aes_key: Deprecated. Construct encrypted container readers/providers with
             their AES key instead; the parser no longer accepts an unused key.
         provider: 可选 package provider（filesystem/pak/iostore）
+        include_linker: Deprecated. Linker is now always created for complete
+            object graph resolution. Parameter retained for backward compatibility.
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
@@ -373,6 +393,9 @@ def parse_package(
         result.summary = read_package_summary(archive)
         result.version_container = build_version_container(result.summary)
 
+        # 截断文件检测：验证导出数据范围
+        validate_export_data_range(archive, result.summary)
+
         # 读取名称表
         result.name_map = read_name_table(archive, result.summary)
 
@@ -388,13 +411,31 @@ def parse_package(
         if hasattr(result.summary, 'preload_dependency_count'):
             result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
-        # 解析 ExportMap 属性
-        for export in result.export_map:
+        # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
+        from uasset_read.link.linker import PackageLinker
+        linker: Optional["PackageLinker"] = None
+        try:
+            linker = PackageLinker(
+                archive, result.summary, result.name_map,
+                result.import_map, result.export_map or [],
+                version_container=result.version_container,
+            )
+            linker.link()
+            result.linker = linker
+            linker.post_load()
+        except Exception as e:
+            if not tolerant:
+                raise ParseError(f"Linker creation failed: {e}") from e
+            result.errors.append(f"Linker creation failed: {e}")
+
+        # 解析 ExportMap 属性（此时 result.linker 已可用）
+        for export in result.export_map or []:
             if export.serial_size > 0:
                 try:
                     export.properties = parse_properties_from_export(
                         export, archive, result.summary, result.name_map,
-                        result.export_map, result.import_map,
+                        result.export_map or [], result.import_map,
+                        linker=linker,
                         mappings=mappings_provider.mappings if mappings_provider else None,
                         game=game,
                     )
@@ -411,7 +452,8 @@ def parse_package(
         # 共享后处理
         _post_process(
             path, archive, result.summary, result.name_map,
-            result.import_map, result.export_map, result, tolerant,
+            result.import_map, result.export_map or [], result, tolerant,
+            linker=linker,
             include_parent_assets=include_parent_assets,
             asset_roots=asset_roots,
             archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
@@ -435,6 +477,10 @@ def parse_package(
 
     finally:
         if archive:
+            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
+            archive_diagnostics = archive.get_diagnostics()
+            if archive_diagnostics:
+                result.diagnostics.extend(archive_diagnostics)
             archive.close()
 
     return result
@@ -447,6 +493,7 @@ def parse_uasset(
     asset_roots: Optional[Sequence[str]] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
+    include_linker: bool = True,  # Deprecated: linker is now always created
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -461,6 +508,7 @@ def parse_uasset(
         asset_roots=asset_roots,
         mappings_path=mappings_path,
         game=game,
+        include_linker=include_linker,
     )
 
 
@@ -511,18 +559,34 @@ def parse_uasset_with_linker(
         # 读取文件头
         result.summary = read_package_summary(archive)
         result.version_container = build_version_container(result.summary)
+
+        # 截断文件检测：验证导出数据范围
+        validate_export_data_range(archive, result.summary)
+
         result.name_map = read_name_table(archive, result.summary)
         result.import_map = read_import_map(archive, result.summary, result.name_map)
         result.export_map = read_export_map(archive, result.summary, result.name_map)
 
-        # 解析 ExportMap 属性
-        for export in result.export_map:
+        # 创建并运行 linker（在属性解析之前，确保 parse_properties_from_export 可使用 linker）
+        from uasset_read.link.linker import PackageLinker
+        linker = PackageLinker(
+            archive, result.summary, result.name_map,
+            result.import_map, result.export_map or [],
+            version_container=result.version_container,
+        )
+        linker.link()
+        result.linker = linker
+        result.all_objects = linker._import_objects + linker._export_objects
+        result.root_objects = linker._root_objects
+
+        # 解析 ExportMap 属性（此时 result.linker 已可用）
+        for export in result.export_map or []:
             if export.serial_size > 0:
                 try:
                     export.properties = parse_properties_from_export(
                         export, archive, result.summary, result.name_map,
-                        result.export_map, result.import_map,
-                        linker=result.linker,  # None at this point, linker not yet created
+                        result.export_map or [], result.import_map,
+                        linker=result.linker,
                         mappings=mappings_provider.mappings if mappings_provider else None,
                         game=game,
                     )
@@ -536,21 +600,13 @@ def parse_uasset_with_linker(
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
-        # 创建并运行 linker
-        linker = PackageLinker(
-            archive, result.summary, result.name_map,
-            result.import_map, result.export_map,
-            version_container=result.version_container,
-        )
-        linker.link()
-        result.linker = linker
-        result.all_objects = linker._import_objects + linker._export_objects
-        result.root_objects = linker._root_objects
-
         # 可选：预加载所有 exports
         if preload_all:
             for i in range(len(linker._export_objects)):
-                linker.preload(i)
+                try:
+                    linker.preload(i)
+                except (ParseError, Exception) as e:
+                    logger.warning("预加载 export %d 失败，跳过: %s", i, e)
 
         # Stage 4: 后处理（引用修复、导入验证、依赖图构建）
         linker.post_load()
@@ -558,7 +614,7 @@ def parse_uasset_with_linker(
         # 共享后处理
         _post_process(
             path, archive, result.summary, result.name_map,
-            result.import_map, result.export_map, result, tolerant,
+            result.import_map, result.export_map or [], result, tolerant,
             linker=result.linker,
             include_parent_assets=include_parent_assets,
             asset_roots=asset_roots,
@@ -582,7 +638,14 @@ def parse_uasset_with_linker(
         result.is_success = False
 
     finally:
+        # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
+        if result.linker and result.linker.diagnostics:
+            result.diagnostics.extend(result.linker.diagnostics)
         if archive:
+            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
+            archive_diagnostics = archive.get_diagnostics()
+            if archive_diagnostics:
+                result.diagnostics.extend(archive_diagnostics)
             archive.close()
 
     return result

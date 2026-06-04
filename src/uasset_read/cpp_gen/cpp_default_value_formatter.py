@@ -1,6 +1,6 @@
 """C++ 默认值格式化器 — 将 Python 值转换为类型正确的 C++ 字面量。
 
-Phase 59 Plan 02: 为构造函数生成器提供类型安全的值格式化工具。
+为构造函数生成器提供类型安全的值格式化工具。
 
 安全缓解（威胁模型 T-059-03, T-059-04）：
 - 字符串值中引号转义
@@ -108,6 +108,10 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
     if value is None:
         return ""
 
+    # 空字符串或纯空白 — 无有效默认值（防止输出 "= ;"）
+    if isinstance(value, str) and not value.strip():
+        return ""
+
     # float — 55.f 格式
     if cpp_type == "float":
         return _format_float_value(value)
@@ -146,8 +150,16 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
     if cpp_type.startswith("E"):
         return str(value)
 
+    # 数组 / StructValue / opaque fallback — 输出空字符串而非 Python repr
+    # 这些类型无法在 C++ 中用字面量表达，跳过赋值比输出非法语法更好
+    if isinstance(value, (list, tuple)):
+        return ""
+    str_val = str(value)
+    if "StructValue(" in str_val or "[" in str_val:
+        return ""
+
     # 其他类型 — 直接返回字符串表示
-    return str(value)
+    return str_val
 
 
 def _format_fvector(x: float, y: float, z: float) -> str:

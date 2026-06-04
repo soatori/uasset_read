@@ -1,7 +1,6 @@
 """蓝图图流构建 — 执行流、数据流、连接映射。
 
 等价迁移 uasset_read.py L6478-6620, L6546-6607, L6836-7114。
-Phase 31: 蓝图图解析模块。
 """
 from __future__ import annotations
 
@@ -19,15 +18,6 @@ from uasset_read.models.node_types import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_registry():
-    """确保 Processor Registry 已初始化（幂等，conftest-reset-safe）。"""
-    from uasset_read.n2c.processors import register_all_processors
-    from uasset_read.n2c.processor_registry import get_registry
-    registry = get_registry()
-    if not registry._processors or registry._fallback is None:
-        register_all_processors()
 
 
 # ============================================================================
@@ -144,13 +134,25 @@ def format_pin_ref(
         }
 
 
-def _pin_ref_guid(ref: object) -> Optional[str]:
-    """从 LinkedTo/PinReference 结构中取 pin guid。"""
+def _pin_ref_guid(ref: object) -> str | None:
+    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
+
+    PinReference GUID 原始格式为 8-4-4-4-12 带 dash（_read_guid 输出），
+    而归一化后与 pin_id（.hex().upper() 输出）格式一致，确保连接查找匹配。
+    """
+    raw_guid: str | None = None
     if isinstance(ref, dict):
-        return ref.get("pin_guid") or ref.get("pin_id")
-    if isinstance(ref, str):
-        return ref
-    return getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+        raw_guid = ref.get("pin_guid") or ref.get("pin_id")
+    elif isinstance(ref, str):
+        raw_guid = ref
+    else:
+        raw_guid = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+
+    if not raw_guid:
+        return None
+
+    # 归一化：移除 dash，转大写
+    return raw_guid.replace("-", "").upper()
 
 
 def _pin_direction_text(direction: int) -> str:
@@ -225,12 +227,33 @@ def _is_exec_pin(pin: UEdGraphPin) -> bool:
 
 
 def _is_valid_pin_guid(guid: object) -> bool:
-    if not isinstance(guid, str) or len(guid) != 32:
-        # Unit tests and some synthetic fixtures use readable pin ids.
-        return bool(guid) and guid.startswith("pin-")
-    if guid == ("0" * 32):
+    """验证 Pin GUID 有效性。
+
+    支持两种格式：
+    - 32 字符纯 hex（pin_id 格式）
+    - 36 字符带 dash hex（PinReference 格式，如 A1B2C3D4-E5F6-...）
+    - "pin-" 前缀（测试 fixture）
+    - 全零 GUID（ParentPin 空引用）
+    """
+    if not isinstance(guid, str) or not guid:
+        return False
+
+    # 测试 fixture 兼容
+    if guid.startswith("pin-"):
         return True
-    return all(c in "0123456789ABCDEFabcdef" for c in guid)
+
+    # 归一化：移除 dash，转大写
+    normalized = guid.replace("-", "").upper()
+
+    # 全零 GUID（有效空引用）
+    if normalized == "0" * 32:
+        return True
+
+    # 验证 32 字符 hex
+    if len(normalized) != 32:
+        return False
+
+    return all(c in "0123456789ABCDEF" for c in normalized)
 
 
 def _iter_normalized_edges(
@@ -503,7 +526,7 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             if value is not None
         }
 
-    # Phase 49: CallFunction 节点提取结构化 parameters
+    # CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
         from uasset_read.formatters.json_formatter import _extract_call_function_parameters
         result["parameters"] = _extract_call_function_parameters(node)
@@ -663,7 +686,7 @@ def is_function_graph(graph: UEdGraph) -> bool:
 
 
 def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
-    """判断是否为数据流边界节点（Phase 54）。
+    """判断是否为数据流边界节点。
 
     Args:
         node: 目标节点
@@ -688,7 +711,7 @@ def _resolve_knot_chain(
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     max_depth: int = 20
 ) -> Tuple[str, bool]:
-    """递归穿透 Knot 链直到到达非 Knot 节点（Phase 54）。
+    """递归穿透 Knot 链直到到达非 Knot 节点。
 
     用于反向数据流追踪：从目标 pin 开始，穿透 Knot 链找到数据源。
 
@@ -748,7 +771,7 @@ def _trace_data_source(
     node_name_lookup: Dict[str, str] = {},
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Optional[Dict]:
-    """追踪单个参数的数据来源（Phase 54）。
+    """追踪单个参数的数据来源。
 
     用于反向数据流追踪：从 CallFunction input pin 开始，穿透 Knot 链，
     找到数据源节点（FunctionEntry 参数、Pure 函数 ReturnValue、self 引用等）。
@@ -899,13 +922,13 @@ def _trace_execution_from_event(
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> List[Dict]:
-    """追踪单条执行流（D-08-07~11, D-19-13~14, Phase 54）。
+    """追踪单条执行流（D-08-07~11, D-19-13~14）。
 
     Args:
         start_node: K2Node_Event 起点（或其他START_EVENT_TYPES起点）
         pin_lookup: pin_id → (node_guid, pin_name) 查找表
         node_lookup: node_guid → node 查找表
-        node_name_lookup: node_guid → node_name 查找表（Phase 54 新增）
+        node_name_lookup: node_guid → node_name 查找表
 
     Returns:
         List[Dict]: 节点信息序列
@@ -950,12 +973,12 @@ def _trace_execution_from_event(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
 
-        # Phase 53: mark pure functions with "pure": true in flow
+        # mark pure functions with "pure": true in flow
         has_exec_pin = any(pin.pin_type and pin.pin_type.pin_category == "exec" for pin in current_node.pins)
         if not has_exec_pin:
             node_info["pure"] = True
 
-            # Phase 54: Pure 函数 data_providers 标注（正向追踪）
+            # Pure 函数 data_providers 标注（正向追踪）
             data_providers: List[Dict] = []
             for pin in current_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
@@ -1013,10 +1036,10 @@ def _trace_execution_from_pin(
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> List[Dict]:
-    """从特定Pin开始追踪执行流（D-19-12, Phase 54）。
+    """从特定Pin开始追踪执行流（D-19-12）。
 
     用于EnhancedInputAction多触发时机追踪。
-    Phase 54: 增加 node_name_lookup 参数传递。
+    增加 node_name_lookup 参数传递。
     """
     if edges_by_from_pin and start_pin.pin_id in edges_by_from_pin:
         edge = edges_by_from_pin[start_pin.pin_id][0]
@@ -1071,7 +1094,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     invalid_guid_refs = 0
     unresolved_refs = 0
 
-    # Phase 72g M-02: Validate linked_to_raw is populated
+    # Validate linked_to_raw is populated
     linked_to_count = sum(
         len(pin.linked_to_raw or [])
         for node in graph.nodes
@@ -1124,11 +1147,11 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
 
 def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
-    """构建执行流路径条目（D-08-07~11, D-19-10~12, Phase 54）。
+    """构建执行流路径条目（D-08-07~11, D-19-10~12）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
-    Phase 54: 增强 CallFunction 数据标注（data_source + data_providers）。
-    Phase 72: 重命名为 build_execution_flow_entries()，作为内部规范 API。
+    增强 CallFunction 数据标注（data_source + data_providers）。
+    重命名为 build_execution_flow_entries()，作为内部规范 API。
 
     Args:
         graph: UEdGraph 对象
@@ -1138,19 +1161,16 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
             - start_event: 起始事件名称
             - nodes: 执行流节点列表
     """
-    # Phase 69: ensure registry initialized
-    _ensure_registry()
-
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
-    node_name_lookup: Dict[str, str] = {}  # Phase 54: 新增
+    node_name_lookup: Dict[str, str] = {}  # 新增
 
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
             pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
 
-    # Phase 54: 构建 node_name_lookup
+    # 构建 node_name_lookup
     for idx, node in enumerate(graph.nodes):
         node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
 
@@ -1304,7 +1324,7 @@ def _build_synthetic_function_data_flows(
 
 
 def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
-    """构建所有图的摘要（OUT-03, D-19-09, Phase 71）。
+    """构建所有图的摘要（OUT-03, D-19-09）。
 
     Args:
         graphs: List[UEdGraph] 图列表
@@ -1323,7 +1343,7 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
         # 执行流构建（用于 chain_builder）
         execution_flows = build_execution_flow_entries(graph)
 
-        # 执行流链式表达（Phase 71）
+        # 执行流链式表达
         execution_chains = build_execution_chains(graph, execution_flows)
 
         # 连接映射构建
@@ -1340,7 +1360,7 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
             "graph_type": graph_type,
             "node_count": len(graph.nodes),
             "schema": graph.schema,
-            "execution_chains": non_empty_chains,  # Phase 71: 链式表达替代 execution_flows
+            "execution_chains": non_empty_chains,  # 链式表达替代 execution_flows
             "connections": connections,
             "data_flows": data_flows,  # D-19-09: 数据流与执行流独立分离
             "warnings": warnings if warnings else None,
@@ -1350,16 +1370,16 @@ def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
 
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
-    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04, Phase 71）。
+    """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
 
     等价迁移 uasset_read_legacy.py L6685-6735。
 
     Per D-08-03: connections 放在 graph 层级
-    Per D-08-09: execution_flows 数组（Phase 71: 改为 execution_chains）
+    Per D-08-09: execution_flows 数组（改为 execution_chains）
     Per D-19-09: data_flows 数组（LINK-03）
     Per D-20-07: graph_type 语义化映射（EdGraph→event, UberEdGraph→uber）
     Per OUT-01: nodes 使用 format_node_dict 格式化
-    Per Phase 71: execution_chains 链式表达替代 execution_flows
+    Per: execution_chains 链式表达替代 execution_flows
 
     Args:
         graphs: List[UEdGraph] from ParseResult.graphs
@@ -1385,7 +1405,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         # 构建执行流
         execution_flows = build_execution_flow_entries(graph)
 
-        # 构建执行流链式表达（Phase 71）
+        # 构建执行流链式表达
         execution_chains = build_execution_chains(graph, execution_flows)
 
         # 构建数据流
@@ -1406,7 +1426,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
             "node_count": len(graph.nodes),  # D-14-04: 顶层 graphs_summary 使用 node_count
             "nodes": nodes,  # OUT-01: 完整节点列表
             "connections": connections,
-            "execution_chains": execution_chains,  # Phase 71: 链式表达替代 execution_flows
+            "execution_chains": execution_chains,  # 链式表达替代 execution_flows
             "data_flows": data_flows,
         }
 
@@ -1531,7 +1551,7 @@ def build_function_graphs(
     graphs: List[UEdGraph],
     blueprint_functions: Optional[List] = None,
 ) -> List[Dict]:
-    """构建顶层 function_graphs 数组（Phase 55）。
+    """构建顶层 function_graphs 数组。
 
     每个 FunctionEntry 节点对应一个条目，包含签名、执行流和数据流内嵌标注。
 

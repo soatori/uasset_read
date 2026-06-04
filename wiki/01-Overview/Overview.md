@@ -13,7 +13,7 @@ section: overview
 
 | 项目 | 详情 |
 |------|------|
-| 版本信息 | `0.3.8` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
+| 版本信息 | `0.4.2` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
 | 构建系统 | Setuptools（src 布局） · `pip install -e ".[dev]"` · `pip install -e ".[pak]"` PAK 支持 |
 | 支持资产 | 18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等 · 容器：文件系统 / PAK / IoStore |
 
@@ -23,9 +23,18 @@ section: overview
 - **蓝图提取**：变量、变换、组件、元数据、执行流、数据流
 - **Kismet 反编译**：字节码 → AST → C++ 代码翻译，结构化控制流
 - **对象链接器**：两阶段对象图重建，跨包引用解析
-- **多格式输出**：JSON / Text / Markdown / Mermaid / UE 格式文本 / C++ 骨架
+- **IR 中间表示**：统一数据结构层（PackageIR/ExportIR/GraphIR/NodeIR/PinIR），渲染器只接收 IR 不访问 ParseResult
+- **渲染器系统**：6 个自动注册渲染器（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton），通过 RENDERER_REGISTRY 分发
 - **容器支持**：PAK（AES 解密、LZ4/Zstd 压缩）、IoStore 容器
-- **N2C 中间格式**：标准化蓝图图结构，验证和双向转换
+- **Core API**：`parse_single`、`parse_batch`、`list_formats` 纯函数入口，无 argparse/sys.exit/print
+
+## 架构演进
+
+| 版本 | 架构 | 说明 |
+|------|------|------|
+| ≤ 0.3.8 | ParseResult → Exporter → Output | 导出器直接访问 ParseResult |
+| 0.4.1 | ParseResult → IR Builder → PackageIR → Renderers → Output | IR 层引入，解析与输出解耦 |
+| **0.4.2** | IR + 6 渲染器，8 输出格式，Kismet 反编译改进，C++ 骨架质量提升，PropertyFallback 系统 | 首个稳定发布 |
 
 ## 关键约束
 

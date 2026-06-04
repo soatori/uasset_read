@@ -208,7 +208,10 @@ FinalizeCreation() → PostLoad() → 资产就绪
 
 ## 外部参考
 
-- `docs/uasset-format/` — UE .uasset 格式文档（60+ Markdown 文件），`Index.md` 为主索引
-- `docs/uasset-format/references/` — 文件结构、序列化、Cooked 格式、版本演进、资产类型参考
+- `docs/formats/uasset/` — UE .uasset 格式文档（60+ Markdown 文件），`Index.md` 为主索引
+- `docs/formats/uasset/serialization/` — 序列化机制参考
+- `docs/formats/uasset/cooked/` — Cooked 格式参考
+- `docs/formats/uasset/version/` — 版本演进参考
+- `docs/formats/uasset/assets/` — 资产类型参考
 - `docs/reference/` — 蓝图节点文本参考、UE 加载流程、蓝图转 C++ 指南
 - `external/CUE4Parse/` — C# 参考实现，用于交叉验证解析逻辑

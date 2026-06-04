@@ -2,7 +2,6 @@
 Pak 文件 Primary Index 解析模块
 
 处理 legacy (v<10) 和 v10+ (PathHashIndex + bitfield 编码) 两种索引格式。
-Phase 77 — PAK-04.
 """
 import struct
 import logging

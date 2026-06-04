@@ -1,11 +1,11 @@
 """
 Kismet Decompilation Pipeline — Standalone decompile_uasset() entry point.
 
-Phase 64: Provides decompile_uasset(path) function that iterates Blueprint
+Provides decompile_uasset(path) function that iterates Blueprint
 UStruct exports, extracts bytecode, translates to C++ pseudocode, and returns
 structured results.
 
-Phase 72-C Wave 2: Added BPGC bytecode fallback with cache reset.
+BPGC bytecode fallback with cache reset.
 """
 from __future__ import annotations
 
@@ -15,13 +15,14 @@ from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
     extract_and_parse,
     USTRUCT_TYPES,
-    reset_bpgc_cache,  # Phase 72-C Wave 2
+    reset_bpgc_cache,
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder
 from uasset_read.kismet.translator import TypeRegistry
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.link.linker import PackageLinker
     from uasset_read.serializers.object_resources import ObjectExport, PackageFileSummary
 
 
@@ -33,6 +34,7 @@ def decompile_single_function(
     import_map: list,
     export_map: list,
     tolerant: bool = True,
+    linker: "PackageLinker | None" = None,
 ) -> KismetDecompiledResult | None:
     """
     Decompile a single UStruct export to KismetDecompiledResult.
@@ -73,7 +75,7 @@ def decompile_single_function(
 
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
-    builder = FunctionBodyBuilder(type_registry)
+    builder = FunctionBodyBuilder(type_registry, linker=linker)
 
     # Use export.object_name as function name
     func_name = export.object_name
@@ -81,6 +83,15 @@ def decompile_single_function(
     # Generate C++ code (use structured flow first, fallback to goto)
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
     warnings = _collect_translation_warnings(cpp_code)
+
+    # 提取函数引用解析统计
+    func_ref_stats: dict = {}
+    if builder._translator._func_resolver is not None:
+        func_ref_stats = builder._translator._func_resolver.get_statistics()
+        # 如果有未解析引用，添加警告
+        unresolved_report = builder._translator._func_resolver.get_unresolved_report()
+        if unresolved_report:
+            warnings.append(unresolved_report)
 
     # Extract signature from generated code (first line)
     # Format: "void FuncName(...) {" or similar
@@ -100,6 +111,7 @@ def decompile_single_function(
         bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
         bytecode_status="parsed",
         warnings=warnings,
+        function_ref_stats=func_ref_stats,
     )
 
 
@@ -108,8 +120,6 @@ def _collect_translation_warnings(cpp_code: str) -> list[str]:
     warnings: list[str] = []
     if "/* unknown:" in cpp_code:
         warnings.append("Kismet translation contains unsupported expression tokens")
-    if "/* deprecated */" in cpp_code:
-        warnings.append("Kismet translation contains deprecated/instrumentation tokens")
     if "Function_" in cpp_code or "LocalFunction_" in cpp_code:
         warnings.append("Kismet translation contains unresolved function references")
     return warnings
@@ -126,7 +136,7 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
     4. Calls decompile_single_function for each qualifying export
     5. Collects non-None results into list
 
-    Phase 72-C Wave 2: Resets BPGC bytecode cache at start (T-72C-04 mitigation).
+    Resets BPGC bytecode cache at start (T-72C-04 mitigation).
 
     Args:
         path: Path to the .uasset file

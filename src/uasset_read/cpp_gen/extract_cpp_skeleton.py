@@ -5,8 +5,8 @@ Per D-02: 沿 ClassParent 追溯继承链。
 Per D-03: 使用 ue_path_to_cpp_type 进行类型映射。
 Per D-04: 使用 cpf_flags_to_uproperty_marks 获取 UPROPERTY 标记。
 Per D-05: 构建完整的 header_meta。
-Phase 57: 从图节点提取方法声明填充 methods。
-Phase 66: 从 decompiled_functions 注入函数体到 body_text。
+从图节点提取方法声明填充 methods。
+从 decompiled_functions 注入函数体到 body_text。
 
 导出：
     extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
@@ -28,6 +28,7 @@ from uasset_read.cpp_gen.formatters import (
 from uasset_read.cpp_gen.cpp_type_mapper import (
     ue_path_to_cpp_type,
     ue_package_path_to_cpp_class,
+    infer_class_prefix,
 )
 from uasset_read.cpp_gen.cpp_uproperty_mapper import (
     cpf_flags_to_uproperty_marks,
@@ -41,6 +42,7 @@ from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
 from uasset_read.cpp_gen.cpp_constructor_formatter import (
     format_cpp_constructor,
 )
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 from uasset_read.constants import CPF_InstancedReference
 
 if TYPE_CHECKING:
@@ -58,6 +60,35 @@ MAX_INHERITANCE_DEPTH = 50  # 防止无限循环
 
 
 # ============================================================================
+# 从 decompiled_functions 补齐缺失方法（第三条路径）
+# ============================================================================
+
+def _backfill_missing_methods(
+    methods: List[CppMethodIR],
+    decompiled_functions: List[Any],
+) -> None:
+    """从 decompiled_functions 补齐 extract_cpp_functions 遗漏的 CppMethodIR。
+
+    原因：extract_cpp_functions 只处理 K2Node_FunctionEntry 和
+    K2Node_Event(b_override=True)，但部分反编译函数无对应图节点
+    （如 ExecuteUbergraph、UserConstructionScript、InputAction 事件）。
+    """
+    existing_names = {m.cpp_name for m in methods}
+    for decompiled in decompiled_functions:
+        sanitized = _sanitize_identifier(decompiled.function_name)
+        if sanitized not in existing_names:
+            methods.append(CppMethodIR(
+                cpp_name=sanitized,
+                return_type="void",
+                parameters=[],
+                ufunction_specifiers=[],
+                is_override=False,
+                body_text=decompiled.cpp_code or "/* no source available */",
+            ))
+            existing_names.add(sanitized)
+
+
+# ============================================================================
 # 核心提取函数
 # ============================================================================
 
@@ -68,7 +99,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     Per D-03: 将 UE 类型映射为 C++ 类型名。
     Per D-04: 将 CPF 标志转换为 UPROPERTY 标记。
     Per D-05: 构建 header_meta（includes + generated_include）。
-    Phase 57: 从图节点提取方法声明填充 methods。
+    从图节点提取方法声明填充 methods。
 
     Args:
         result: LinkerParseResult（来自 parse_uasset_with_linker）
@@ -104,7 +135,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     if result.graphs:
         properties.extend(_extract_input_action_properties(result.graphs))
 
-    # 6. 提取方法声明（Phase 57）
+    # 6. 提取方法声明
     methods: List[CppMethodIR] = []
     if result.graphs:
         blueprint_functions = getattr(blueprint, 'functions', None)
@@ -114,9 +145,18 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             linker=result.linker,
         )
 
+    # 6. 补齐缺失方法（第三条路径 — 从 decompiled_functions 直接生成 CppMethodIR）
+    if hasattr(result, 'decompiled_functions') and result.decompiled_functions:
+        _backfill_missing_methods(methods, result.decompiled_functions)
+
     # 6. 注入函数体（从 decompiled_functions）
     if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
         _inject_function_bodies(methods, result.decompiled_functions)
+
+    # 6.1 设置 class_name（用于 .cpp 实现中 ClassName::Method 前缀）
+    for method in methods:
+        if not method.class_name:
+            method.class_name = class_name
 
     # 7. 构建 header_meta（Per D-05）
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
@@ -132,10 +172,10 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
             "component_creations": [],
             "component_assignments": [],
             "default_values": [],
-        },  # Phase 59 填充
+        },  # 填充
     )
 
-    # Phase 59: 填充 constructor 字典
+    # 填充 constructor 字典
     components = result.components or []
     ir.constructor["component_creations"] = build_component_creations(ir)
     ir.constructor["component_assignments"] = build_component_assignments(components)
@@ -263,6 +303,24 @@ def _simplify_class_name(raw_name: str) -> str:
 # 辅助函数
 # ============================================================================
 
+def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
+    """构建 {原始参数名模式 -> sanitized名} 映射。
+
+    Sanitizer 将 '/' 等非法字符替换为 '__'。例如：
+    - 'Left / Right' → 'Left__Right'
+    - 'Forward / Backward' → 'Forward__Backward'
+
+    反向推导：如果 sanitized 名包含 '__'，构造对应的 ' / ' 模式。
+    """
+    name_map = {}
+    for param in method.parameters:
+        if '__' in param.name:
+            # 反向推导原始名：'__' → ' / '
+            original = param.name.replace('__', ' / ')
+            name_map[original] = param.name
+    return name_map
+
+
 def _inject_function_bodies(
     methods: List[CppMethodIR],
     decompiled_functions: List[Any],
@@ -273,6 +331,8 @@ def _inject_function_bodies(
     1. 精确匹配：function_name == cpp_name
     2. 清理后匹配：function_name 清理后 == cpp_name
     3. 大小写不敏感匹配
+
+    注入前执行符号映射替换，确保函数体内变量名与方法声明一致。
 
     Args:
         methods: CppMethodIR 列表（已填充方法声明）
@@ -299,19 +359,19 @@ def _inject_function_bodies(
                     break
 
         if method and decompiled.cpp_code:
-            method.body_text = decompiled.cpp_code
+            body = decompiled.cpp_code
+            # 执行符号映射替换：原始参数名 → sanitized 名
+            for original, sanitized in _build_param_name_map(method).items():
+                body = body.replace(original, sanitized)
+            method.body_text = body
 
 def _extract_class_name(result: "LinkerParseResult") -> str:
     """提取 C++ 类名。
 
     根据蓝图名称和父类类型确定 C++ 前缀：
-    - Actor 派生 → A 前缀
-    - Component 派生 → U 前缀
-    - UObject 派生 → U 前缀
-    - 其他 → U 前缀（默认）
-
-    P0 改进：使用 _simplify_class_name 提取简洁名称，
-    而非使用完整包路径。
+    - 使用 infer_class_prefix 从父类名推导前缀（A/U/F/E/I）
+    - 如果简化后的名称已有正确的 UE 前缀，不重复添加
+    - 否则添加推导的前缀
 
     Args:
         result: LinkerParseResult
@@ -330,22 +390,16 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
         logger.warning("Could not determine class name from result")
         return "UUnknownClass"
 
-    # P0 改进：简化类名
+    # 简化类名
     clean_name = _simplify_class_name(raw_name)
 
-    # 确定前缀（根据父类类型）
+    # 从父类推导前缀（使用 infer_class_prefix 统一逻辑）
     parent_class_path = result.blueprint.parent_class or ""
     parent_cpp = ue_package_path_to_cpp_class(parent_class_path)
+    prefix = infer_class_prefix(parent_cpp)
 
-    # 确定前缀
-    prefix = "U"  # 默认 UObject 前缀
-    if parent_cpp.startswith("A"):
-        prefix = "A"  # Actor 前缀
-    elif parent_cpp.startswith("U") and "Component" in parent_cpp:
-        prefix = "U"  # Component 前缀（已经是 U）
-
-    # 如果名称已有前缀，不重复添加
-    if clean_name.startswith(('A', 'U', 'F', 'E', 'I')):
+    # 如果名称已有该前缀，不重复添加
+    if clean_name.startswith(prefix):
         return clean_name
 
     return f"{prefix}{clean_name}"
@@ -580,7 +634,7 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
 
     return CppProperty(
         cpp_type=cpp_type,
-        name=var.var_name,
+        name=sanitize_identifier(var.var_name),
         uproperty_marks=marks,
         category="variable",
         default_value=var.default_value,
@@ -640,7 +694,7 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
         return "UObject"  # 未知 object 类型
 
     # struct 类型：subcategory 是结构名
-    if category == "struct":
+    if category in ("struct", "StructProperty"):
         if subcategory:
             if subcategory.startswith("/Script/"):
                 return subcategory
@@ -650,14 +704,15 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
             if subcategory in common_structs:
                 return f"/Script/CoreUObject.{subcategory}"
             return f"/Script/CoreUObject.{subcategory}"
-        return "/Script/CoreUObject.Struct"
+        # StructProperty 无 subcategory — 使用通用 FStruct 占位
+        return "FStruct"
 
     # 其他类型返回 category
     return category
 
 
 # ============================================================================
-# Phase 57: 函数签名映射
+# 函数签名映射
 # ============================================================================
 
 # --- 辅助函数（Plan 02） ---
@@ -665,16 +720,14 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
 def _sanitize_identifier(name: str) -> str:
     """将 UE 引脚名转换为有效 C++ 标识符。
 
-    "Left / Right" → "LeftRight"
-    "Primary Thumbstick" → "PrimaryThumbstick"
+    委托给 sanitizer.sanitize_identifier。
+
+    "Left / Right" → "Left__Right"
+    "Primary Thumbstick" → "Primary_Thumbstick"
     "2DValue" → "_2DValue"
+    "Target Touch UI" → "Target_Touch_UI"
     """
-    if not name:
-        return "unnamed"
-    cleaned = re.sub(r'[^A-Za-z0-9_]', '', name)
-    if cleaned and cleaned[0].isdigit():
-        cleaned = '_' + cleaned
-    return cleaned if cleaned else "unnamed"
+    return sanitize_identifier(name)
 
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
@@ -1067,7 +1120,7 @@ def extract_cpp_call_statements(
 
 
 # ============================================================================
-# 构造函数提取（Phase 59 Plan 03）
+# 构造函数提取
 # ============================================================================
 
 
@@ -1091,10 +1144,8 @@ def extract_cpp_constructor(ir: "CppClassIR") -> str:
 
 __all__ = [
     "extract_cpp_class_skeleton",
-    # Phase 57
     "extract_cpp_functions",
     "extract_cpp_call_statements",
-    # Phase 59
     "extract_cpp_constructor",
     "_sanitize_identifier",
     "_derive_call_target",

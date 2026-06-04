@@ -1,7 +1,14 @@
 ---
-title: Agent API 分类索引
+title: Agent API 分类索引（已废弃）
 section: agent-index-api-reference
 ---
+
+> [!WARNING] 已废弃 — 0.4.1 移除
+>
+> 本文档引用了已删除的 `exporter/`、`n2c/`、`agent/` 模块。
+> 请参阅 [[Agent 速查索引]] 获取最新 API 索引。
+>
+> 本文档保留仅供参考。
 
 # Agent API 分类索引
 

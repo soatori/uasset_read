@@ -27,8 +27,11 @@ from uasset_read.constants import (
     UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID,
     UE4_SERIALIZE_TEXT_IN_PACKAGES,
     UE4_ADDED_PACKAGE_OWNER,
+    UE4_NAME_HASHES_SERIALIZED,
 )
 from uasset_read.exceptions import VersionError, ParseError
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.constants import MIN_UASSET_SIZE
 
 
 @dataclass
@@ -60,6 +63,7 @@ class PackageFileSummary:
     """PackageFileSummary 文件头。"""
     tag: int
     legacy_file_version: int
+    file_version_ue4: int = 0
     file_version_ue5: int = 0
     file_version_licensee: int = 0
     saved_hash: bytes = field(default_factory=lambda: b'')
@@ -119,6 +123,25 @@ class PackageFileSummary:
 
 def read_package_summary(archive: FArchive) -> PackageFileSummary:
     """读取 PackageFileSummary 文件头（UE5.7 专用）。"""
+    # 截断文件检测：文件过小时直接报错
+    file_size = archive.total_size()
+    if file_size < MIN_UASSET_SIZE:
+        archive._diagnostics.append(OffsetRangeDiagnostic(
+            kind="truncated_file",
+            module="package_summary",
+            field="file_size",
+            file_size=file_size,
+            source="read_package_summary",
+            error=(
+                f"文件大小 {file_size} 字节，小于最小合法大小 {MIN_UASSET_SIZE} 字节，"
+                f"文件可能已截断或损坏"
+            ),
+        ))
+        raise ParseError(
+            f"文件过小（{file_size} 字节），无法解析为 .uasset 文件。"
+            f"最小合法大小为 {MIN_UASSET_SIZE} 字节，文件可能已截断或损坏"
+        )
+
     archive.seek(0)
 
     # 第 1 步：魔数和版本号
@@ -132,6 +155,12 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     legacy_file_version = archive.read_i32()
     if legacy_file_version not in UE5_LEGACY_VERSIONS:
         supported_versions = ", ".join(str(v) for v in sorted(UE5_LEGACY_VERSIONS))
+        # 根据 legacy_file_version 提供更精确的错误提示
+        if legacy_file_version > -6:
+            raise VersionError(
+                f"Legacy file version {legacy_file_version} indicates UE4 asset. "
+                f"Current version supports UE5 only (legacy versions -6 to -9)."
+            )
         raise VersionError(
             f"Only UE5 files with legacy_file_version in {{{supported_versions}}} are supported, "
             f"got {legacy_file_version}"
@@ -139,19 +168,28 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     legacy_ue3_version = archive.read_i32()
     file_version_ue4 = archive.read_i32()  # kept for internal reference only
-    file_version_ue5 = archive.read_i32()
 
-    if file_version_ue5 < UE5_VERSION_MIN:
+    # FileVersionUE5: only present when legacy_file_version <= -8
+    # legacy -6/-7 files do NOT have this field (CUE4Parse reference: legacyFileVersion <= -8)
+    if legacy_file_version <= -8:
+        file_version_ue5 = archive.read_i32()
+    else:
+        file_version_ue5 = 0  # not present in file
+
+    # UE5 version check: skip for legacy -6/-7 (no FileVersionUE5 field)
+    if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
         raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
 
     file_version_licensee = archive.read_i32()
 
+    # SavedHash + TotalHeaderSize BEFORE CustomVersions (UE5 >= 1016 only)
+    # For legacy -6/-7, file_version_ue5=0 < 1016, so these are NOT read here
     if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
         saved_hash = archive.read(20)
         total_header_size = archive.read_i32()
     else:
         saved_hash = b""
-        total_header_size = 0
+        total_header_size = 0  # will be read AFTER CustomVersions below
 
     # 第 3 步：CustomVersions
     custom_versions_count = archive.read_u32()
@@ -281,17 +319,22 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         import_type_hierarchies_offset = 0
 
     # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件，UE4 519+）
+    # For legacy -6, the Guid field is at a different position. Skip for -6 only.
     persistent_guid = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
-        guid_bytes = archive.read(16)
-        persistent_guid = guid_bytes.hex()
+        if legacy_file_version != -6:
+            guid_bytes = archive.read(16)
+            persistent_guid = guid_bytes.hex()
+        # else: legacy -6: Guid is at a different position, skip here
 
     # 第 16b 步：OwnerPersistentGuid
+    # For legacy -7, both PersistentGuid and OwnerPersistentGuid are present
+    # (same as legacy -8 format, just without FileVersionUE5)
     if (
         not has_filter_editor_only
         and (
             file_version_ue4 == UE4_ADDED_PACKAGE_OWNER
-            or legacy_file_version == -8
+            or legacy_file_version in (-8, -7)
         )
     ):
         archive.read(16)  # 跳过 OwnerPersistentGuid
@@ -306,13 +349,13 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         gen_name_count = archive.read_i32()
         generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
 
-    # 第 18 步：SavedByEngineVersion（UE5.7 始终为 FEngineVersion 结构）
+    # 第 18 步：SavedByEngineVersion（UE5 始终为 FEngineVersion 结构）
     saved_by_engine_version = EngineVersion(
         major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
         changelist=archive.read_u32(), branch=archive.read_fstring()
     )
 
-    # 第 19 步：CompatibleWithEngineVersion（UE5.7 始终存在）
+    # 第 19 步：CompatibleWithEngineVersion（UE5 始终存在）
     compatible_with_engine_version = EngineVersion(
         major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
         changelist=archive.read_u32(), branch=archive.read_fstring()
@@ -360,7 +403,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         guid_bytes = archive.read(16)
         chunk_ids.append(guid_bytes.hex())
 
-    # 第 28 步：PreloadDependencies（UE5.7 始终存在）
+    # 第 28 步：PreloadDependencies
     preload_dependency_count = archive.read_i32()
     preload_dependency_offset = archive.read_i32()
     if preload_dependency_offset > 0:
@@ -407,6 +450,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     return PackageFileSummary(
         tag=tag, legacy_file_version=legacy_file_version,
+        file_version_ue4=file_version_ue4,
         file_version_ue5=file_version_ue5, file_version_licensee=file_version_licensee,
         saved_hash=saved_hash, total_header_size=total_header_size,
         custom_versions=custom_versions, package_name=package_name,
@@ -443,16 +487,112 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     )
 
 
-def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
-    """读取名称表（UE5.7 专用）。"""
-    archive.seek(summary.name_offset)
+def validate_export_data_range(
+    archive: FArchive,
+    summary: PackageFileSummary,
+) -> None:
+    """验证导出数据偏移是否超出文件范围。
 
-    name_map = []
-    for _ in range(summary.name_count):
-        name = archive.read_fstring()
-        name_map.append(name)
-        # UE5 始终有 name hashes (4 bytes)
-        archive.read(4)
+    检查每个导出条目的 serial_offset + serial_size 是否在文件范围内。
+    截断文件的导出表可能指向超出文件末尾的偏移。
+
+    Args:
+        archive: 文件归档读取器
+        summary: 包文件摘要
+
+    注：此函数仅记录诊断，不抛出异常（容错模式友好）。
+    """
+    from uasset_read.serializers.object_resources import ObjectExport
+
+    file_size = archive.total_size()
+    if file_size <= 0 or summary.export_count <= 0:
+        return
+
+    # 导出表本身占用的空间检查
+    # 每个导出表条目约 100+ 字节（FObjectExport 结构）
+    export_table_min_entry_size = 72  # 最小 FObjectExport 大小
+    export_table_end = summary.export_offset + summary.export_count * export_table_min_entry_size
+    if export_table_end > file_size:
+        archive._diagnostics.append(OffsetRangeDiagnostic(
+            kind="truncated_file",
+            module="package_summary",
+            field="export_table",
+            current_pos=summary.export_offset,
+            target_offset=export_table_end,
+            file_size=file_size,
+            source="validate_export_data_range",
+            error=(
+                f"导出表区域 [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
+                f"超出文件大小 0x{file_size:X}，文件可能在导出表区域被截断"
+            ),
+        ))
+
+
+def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
+    """读取名称表。
+
+    每个名称条目格式：
+    - NameString (FString) - 名称字符串
+    - NonCasePreservingHash (uint16) - 非大小写保留哈希
+    - CasePreservingHash (uint16) - 大小写保留哈希
+    （两个 uint16 共 4 字节，仅 VER_UE4_NAME_HASHES_SERIALIZED 及之后版本存在）
+
+    UE5 资产始终有 name hashes（4 bytes）。
+
+    Args:
+        archive: 文件归档读取器
+        summary: 包文件摘要，含 name_offset 和 name_count
+
+    Returns:
+        名称字符串列表。
+
+    Raises:
+        ParseError: 如果 name_count 为 0、name_offset 无效或读取后名称表为空。
+            每个 UE 包必须有非空的名称表，否则后续所有名称查找都会失败。
+    """
+    # 防御性检查：name_count 为 0 时抛出错误（UE 包必须有名称表）
+    if summary.name_count <= 0:
+        raise ParseError(
+            f"name_count={summary.name_count}，UE 包必须有非空名称表"
+        )
+
+    # 验证 name_offset 有效性
+    if summary.name_offset <= 0:
+        raise ParseError(
+            f"name_offset={summary.name_offset} 无效，无法读取名称表"
+        )
+
+    try:
+        archive.seek(summary.name_offset)
+    except Exception as e:
+        raise ParseError(
+            f"seek({summary.name_offset}) 失败，无法读取名称表: {e}"
+        ) from e
+
+    name_map: List[str] = []
+    for i in range(summary.name_count):
+        try:
+            name = archive.read_fstring()
+            name_map.append(name)
+            # 名称哈希字段：仅当 file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED (803) 时存在
+            # UE5 资产始终有 name hashes (4 bytes)
+            # 旧 UE4 资产（如 legacy -6 且 version < 803）没有哈希字段
+            from uasset_read.constants import UE4_NAME_HASHES_SERIALIZED
+            if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
+                archive.read(4)
+        except Exception as e:
+            logger.warning(
+                "read_name_table: 读取名称条目 %d/%d 失败: %s（已读取 %d 个名称）",
+                i, summary.name_count, e, len(name_map),
+            )
+            break
+
+    if not name_map:
+        raise ParseError(
+            f"名称表为空（name_count={summary.name_count}, name_offset={summary.name_offset}），"
+            f"无法继续解析"
+        )
+
     return name_map
 
 

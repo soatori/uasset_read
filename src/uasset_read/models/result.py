@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
     from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.versioning import VersionContainer
+    from uasset_read.link.linker import PackageLinker
 
 
 @dataclass
@@ -42,6 +43,8 @@ class ParseResult:
     inherited_blueprint_graphs: List[Dict] = field(default_factory=list)
     logic_sources: List[Dict] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    linker: Optional["PackageLinker"] = None
+    diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
 
     @property
     def status(self) -> str:

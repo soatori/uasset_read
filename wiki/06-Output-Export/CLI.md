@@ -5,7 +5,17 @@ section: cli
 
 # CLI 接口
 
-命令行工具 `uasset-read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式导出能力。
+命令行工具 `uasset-read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式输出能力。
+
+## 架构变更（0.4.1）
+
+CLI 在 0.4.1 进行了重构，核心逻辑委托给 `core.py` 的纯函数 API，CLI 仅负责参数解析和输出写入。
+
+```
+CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Output
+```
+
+`--n2c` 和 `--cpp-json-ir` 标志已移除（N2C 模块整体删除）。
 
 ## 模块信息
 
@@ -15,13 +25,14 @@ section: cli
 | 入口函数 | `main()` |
 | 参数解析 | `create_parser()` |
 | 格式路由 | `resolve_format()` |
+| 核心委托 | `core.py`（parse_single / parse_batch / list_formats） |
 
 ## 基本用法
 
 ```bash
-uasset-read path/to/file.uasset              # 默认 YAML 风格文本
+uasset-read path/to/file.uasset              # YAML 风格文本（默认）
 uasset-read path/to/file.uasset --json       # 完整 JSON 输出
-uasset-read path/to/file.uasset --summary    # 紧凑摘要
+uasset-read path/to/file.uasset --summary    # JSON 摘要
 uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 
@@ -40,28 +51,34 @@ uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 | 标志 | 格式名 | 说明 |
 |------|--------|------|
 | `--json` | `json` | 完整 JSON 结构输出 |
-| `--json-summary` | `json_summary` | 精简 JSON 摘要（token 减少 70%+） |
+| `--json-summary` | `json_summary` | 精简 JSON 摘要 |
 | `--text` | `text` | YAML 风格全文（默认） |
 | `--text-summary` | `text_summary` | YAML 风格精简摘要 |
 | `--summary` | `json_summary` | 同 `--json-summary`，紧凑摘要 |
 | `--markdown` | `markdown` | Markdown + Mermaid 流程图 |
-| `--blueprint-text` | `blueprint_text` | 蓝图节点翻译参考文本（紧凑格式） |
+| `--blueprint-text` | `blueprint_text` | 蓝图节点翻译参考文本 |
 | `--blueprint-ue-text` | `blueprint_ue_text` | UE 编辑器风格蓝图节点文本 |
 | `--cpp-skeleton` | `cpp_skeleton` | C++ 类骨架 `.h` 头文件（需要 Blueprint） |
-| `--cpp-json-ir` | `cpp_json_ir` | C++ 类骨架 JSON IR 格式 |
-| `--n2c` | `n2c` | N2C 中间格式 JSON |
+
+### 已移除的标志
+
+| 标志 | 说明 |
+|------|------|
+| `--n2c` | N2C 模块已整体删除 |
+| `--cpp-json-ir` | 合并到 cpp_skeleton |
+| `--validate` | N2C 验证已移除 |
+| `--graph` | 旧版兼容标志已移除 |
 
 ### 解析控制标志
 
 | 标志 | 说明 |
 |------|------|
 | `--verbose` | 输出额外详细字段 |
-| `--graph` | 包含蓝图图数据（向后兼容逻辑） |
-| `--function-graphs` | 在 JSON 输出中包含 `function_graphs` 数组（output_version 5.0） |
+| `--function-graphs` | 在输出中包含 `function_graphs` |
 | `--tolerant` | 容错模式（默认开启） |
 | `--strict` | 禁用容错模式：序列化问题抛出 ParseError |
 | `--export INDEX` | 仅输出指定索引的 export |
-| `--schema` | 包含字段语义注解（`_schema`） |
+| `--schema` | 包含字段语义注解 |
 
 ### 资源解析标志
 
@@ -83,10 +100,8 @@ uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 
 | 标志 | 说明 |
 |------|------|
-| `--verbose` | 启用调试日志 |
 | `--output FILE` | 将输出写入文件而非 stdout |
 | `--list-formats` | 列出所有可用导出格式并退出 |
-| `--validate` | 验证输出是否符合 schema（N2C 格式） |
 | `--list-package-files` | 列出发现的包侧车/载荷文件并退出 |
 
 ## 退出代码
@@ -103,47 +118,28 @@ uasset-read path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 `resolve_format()` 函数将 CLI 标志映射到内部格式名：
 
 ```
---n2c            → n2c
---cpp-json-ir    → cpp_json_ir
---cpp-skeleton   → cpp_skeleton
---blueprint-text → blueprint_text
+--blueprint-text  → blueprint_text
 --blueprint-ue-text → blueprint_ue_text
---markdown       → markdown
---summary        → json_summary
---json-summary   → json_summary
---json           → json
---text-summary   → text_summary
---text           → text
-(无标志)         → text（默认）
+--cpp-skeleton    → cpp_skeleton
+--markdown        → markdown
+--summary         → json_summary
+--json-summary    → json_summary
+--json            → json
+--text-summary    → text_summary
+--text            → text
+(无标志)          → text（默认）
 ```
+
+> [!WARNING]
+> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--graph`
 
 ## 解析路径
 
-CLI 主函数根据格式选择不同的解析路径：
+CLI 通过 `core.py` 的 `parse_single()` 进行解析：
 
-### 需要 Linker 解析的格式
-
-以下格式调用 `parse_uasset_with_linker()`，需要完整的对象图重建：
-
-- `cpp_skeleton`
-- `cpp_json_ir`
-- `blueprint_ue_text`
-- `json`
-- `json_summary`
-
-### 标准解析路径
-
-其他格式调用 `parse_package()` 进行标准解析。
-
-### 特殊路径：`--graph` 模式
-
-`--graph` 标志不经过统一导出器，直接调用旧版格式化器函数（向后兼容）：
-
-- `--graph` + `--json-summary` / `--summary` → `format_json_summary`
-- `--graph` + `--json` / `--verbose` → `format_json_full`
-- `--graph` + `--text-summary` → `format_text_summary`
-- `--graph` + `--text` → `format_text_full`
-- `--graph` 单独使用 → 仅输出图数据的 JSON
+1. 根据格式判断是否需要 linker（`cpp_skeleton` 需要，其他不需要）
+2. 调用 `parse_single()` → 内部自动完成：解析 → IR 构建 → 渲染
+3. 写入 stdout 或文件
 
 ## 批量模式
 
@@ -158,24 +154,12 @@ uasset-read /path/to/assets/ --batch --batch-dir /path/to/output/
 uasset-read /path/to/assets/ --batch --json
 ```
 
-批量导出目录结构：
-
-```
-output_dir/
-  BP_MyBlueprint/
-    blueprint.json
-  BP_Another/
-    blueprint.json
-```
-
 批量结果报告输出到 stderr：
 
 ```
 Batch export complete: 10 files
   Success: 8
-  Skipped: 1
-    - BP_Skipped.uasset: already cooked
-  Failed: 1
+  Failed: 2
     - BP_Error.uasset: ParseError: ...
 ```
 
@@ -197,19 +181,16 @@ uasset-read MyBlueprint.uasset --cpp-skeleton --output MyBlueprint.h
 # 5. Markdown + Mermaid 文档
 uasset-read MyBlueprint.uasset --markdown --output report.md
 
-# 6. N2C 中间格式 + 验证
-uasset-read MyBlueprint.uasset --n2c --validate
-
-# 7. 包含父级资产解析
+# 6. 包含父级资产解析
 uasset-read MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
 
-# 8. 使用类型映射
+# 7. 使用类型映射
 uasset-read MyBlueprint.uasset --json --mappings mappings.usmap
 
-# 9. 列出包文件
+# 8. 列出包文件
 uasset-read MyBlueprint.uasset --list-package-files
 
-# 10. 列出所有可用格式
+# 9. 列出所有可用格式
 uasset-read --list-formats
 ```
 
@@ -229,4 +210,4 @@ CLI 可通过以下方式调用：
 
 这允许用户通过管道将数据与其他工具连接，同时保留人类可读的错误信息。
 
-**相关章节**: [[导出系统]] · [[格式化器]]
+**相关章节**: [[渲染器系统]] · [[格式化器]]

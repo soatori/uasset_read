@@ -1,671 +1,1535 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="doc-type" content="developer-reference">
-    <meta name="doc-version" content="0.3.8">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="doc-type" content="developer-reference" />
+    <meta name="doc-version" content="0.4.2-dev" />
     <title>uasset_read 开发文档</title>
-    <script>const WIKI_BASE_URL = 'https://github.com/SOATOORL/uasset_read/wiki';</script>
+    <script>
+      const WIKI_BASE_URL = "https://github.com/SOATOORL/uasset_read/wiki";
+    </script>
     <style>
-        :root {
-            --primary: #2563eb; --primary-light: #3b82f6; --primary-dark: #1d4ed8;
-            --secondary: #64748b; --accent: #f59e0b; --success: #10b981;
-            --danger: #ef4444; --warning: #f59e0b; --info: #3b82f6;
-            --bg: #ffffff; --bg-secondary: #f8fafc; --bg-tertiary: #f1f5f9;
-            --text: #0f172a; --text-secondary: #475569; --text-muted: #94a3b8;
-            --border: #e2e8f0; --border-light: #f1f5f9;
-            --code-bg: #1e293b; --code-text: #e2e8f0;
-            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05); --shadow: 0 1px 3px rgba(0,0,0,0.1);
-            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1); --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
-            --radius: 8px; --radius-lg: 12px;
+      :root {
+        --primary: #2563eb;
+        --primary-light: #3b82f6;
+        --primary-dark: #1d4ed8;
+        --secondary: #64748b;
+        --accent: #f59e0b;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --info: #3b82f6;
+        --bg: #ffffff;
+        --bg-secondary: #f8fafc;
+        --bg-tertiary: #f1f5f9;
+        --text: #0f172a;
+        --text-secondary: #475569;
+        --text-muted: #94a3b8;
+        --border: #e2e8f0;
+        --border-light: #f1f5f9;
+        --code-bg: #1e293b;
+        --code-text: #e2e8f0;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        --radius: 8px;
+        --radius-lg: 12px;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC",
+          sans-serif;
+        line-height: 1.7;
+        color: var(--text);
+        background: var(--bg);
+      }
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 280px;
+        height: 100vh;
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        z-index: 100;
+        padding: 1.5rem 0;
+      }
+      .sidebar-header {
+        padding: 0 1.5rem 1rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1rem;
+      }
+      .sidebar-header h2 {
+        font-size: 1.1rem;
+        color: var(--primary);
+        font-weight: 700;
+      }
+      .sidebar-header .version {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+      }
+      .nav-section {
+        margin-bottom: 0.5rem;
+      }
+      .nav-section-title {
+        padding: 0.5rem 1.5rem;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      .nav-link {
+        display: block;
+        padding: 0.4rem 1.5rem 0.4rem 2rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        transition: all 0.15s ease;
+        border-left: 3px solid transparent;
+      }
+      .nav-link:hover {
+        color: var(--primary);
+        background: var(--bg-tertiary);
+        border-left-color: var(--primary-light);
+      }
+      .nav-link.active {
+        color: var(--primary);
+        background: var(--bg-tertiary);
+        border-left-color: var(--primary);
+        font-weight: 500;
+      }
+      .main {
+        margin-left: 280px;
+        min-height: 100vh;
+      }
+      .topbar {
+        position: sticky;
+        top: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        padding: 0.75rem 2rem;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .topbar h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .topbar .breadcrumb {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+      .content {
+        max-width: 960px;
+        padding: 2rem 2rem 4rem;
+      }
+      h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+      }
+      h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-top: 2.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--border);
+      }
+      h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 2rem;
+        margin-bottom: 0.75rem;
+      }
+      h4 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+      }
+      p {
+        margin-bottom: 1rem;
+        color: var(--text-secondary);
+      }
+      a {
+        color: var(--primary);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      code {
+        font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+        font-size: 0.875em;
+        background: var(--bg-tertiary);
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        color: var(--primary-dark);
+      }
+      pre {
+        background: var(--code-bg);
+        color: var(--code-text);
+        padding: 1.25rem;
+        border-radius: var(--radius);
+        overflow-x: auto;
+        margin-bottom: 1.5rem;
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+        font-size: inherit;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+      }
+      th,
+      td {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        background: var(--bg-secondary);
+        font-weight: 600;
+      }
+      tr:hover {
+        background: var(--bg-secondary);
+      }
+      .card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--shadow-sm);
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.2em 0.6em;
+        font-size: 0.75em;
+        font-weight: 600;
+        border-radius: 9999px;
+      }
+      .badge-primary {
+        background: #dbeafe;
+        color: #1d4ed8;
+      }
+      .badge-success {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .badge-warning {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .badge-danger {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .badge-info {
+        background: #e0f2fe;
+        color: #075985;
+      }
+      .callout {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius);
+        margin-bottom: 1.5rem;
+        border-left: 4px solid;
+      }
+      .callout-info {
+        background: #eff6ff;
+        border-color: var(--info);
+      }
+      .callout-warning {
+        background: #fffbeb;
+        border-color: var(--warning);
+      }
+      .callout-danger {
+        background: #fef2f2;
+        border-color: var(--danger);
+      }
+      .callout-success {
+        background: #f0fdf4;
+        border-color: var(--success);
+      }
+      .callout-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+      .arch-diagram {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        margin: 1.5rem 0;
+        text-align: center;
+        font-family: monospace;
+        font-size: 0.85rem;
+        line-height: 1.8;
+        overflow-x: auto;
+      }
+      .arch-layer {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius);
+        margin: 0.25rem;
+        font-weight: 500;
+      }
+      .arch-input {
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #93c5fd;
+      }
+      .arch-core {
+        background: #d1fae5;
+        color: #065f46;
+        border: 1px solid #6ee7b7;
+      }
+      .arch-analysis {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+      }
+      .arch-output {
+        background: #ede9fe;
+        color: #5b21b6;
+        border: 1px solid #c4b5fd;
+      }
+      .flow-chart {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        justify-content: center;
+        margin: 1rem 0;
+      }
+      .flow-step {
+        background: var(--bg);
+        border: 2px solid var(--primary);
+        border-radius: var(--radius);
+        padding: 0.5rem 1rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        text-align: center;
+        min-width: 120px;
+      }
+      .flow-arrow {
+        color: var(--primary);
+        font-size: 1.2rem;
+      }
+      .module-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+        margin: 1.5rem 0;
+      }
+      .module-card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.25rem;
+        transition: box-shadow 0.2s;
+      }
+      .module-card:hover {
+        box-shadow: var(--shadow-md);
+      }
+      .module-card h4 {
+        margin-top: 0;
+        color: var(--primary);
+      }
+      .module-card .path {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        font-family: monospace;
+      }
+      .module-card p {
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+      }
+      .api-sig {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        font-family: monospace;
+        font-size: 0.85rem;
+        overflow-x: auto;
+      }
+      .api-sig .func-name {
+        color: var(--primary);
+        font-weight: 600;
+      }
+      .api-sig .param {
+        color: #059669;
+      }
+      .api-sig .type {
+        color: #d97706;
+      }
+      .api-sig .return {
+        color: #7c3aed;
+      }
+      ul,
+      ol {
+        margin-left: 1.5rem;
+        margin-bottom: 1rem;
+        color: var(--text-secondary);
+      }
+      li {
+        margin-bottom: 0.25rem;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+      .sidebar::-webkit-scrollbar {
+        width: 4px;
+      }
+      @media print {
+        .sidebar {
+          display: none;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; line-height: 1.7; color: var(--text); background: var(--bg); }
-        .sidebar { position: fixed; top: 0; left: 0; width: 280px; height: 100vh; background: var(--bg-secondary); border-right: 1px solid var(--border); overflow-y: auto; z-index: 100; padding: 1.5rem 0; }
-        .sidebar-header { padding: 0 1.5rem 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
-        .sidebar-header h2 { font-size: 1.1rem; color: var(--primary); font-weight: 700; }
-        .sidebar-header .version { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
-        .nav-section { margin-bottom: 0.5rem; }
-        .nav-section-title { padding: 0.5rem 1.5rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
-        .nav-link { display: block; padding: 0.4rem 1.5rem 0.4rem 2rem; color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; transition: all 0.15s ease; border-left: 3px solid transparent; }
-        .nav-link:hover { color: var(--primary); background: var(--bg-tertiary); border-left-color: var(--primary-light); }
-        .nav-link.active { color: var(--primary); background: var(--bg-tertiary); border-left-color: var(--primary); font-weight: 500; }
-        .main { margin-left: 280px; min-height: 100vh; }
-        .topbar { position: sticky; top: 0; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); padding: 0.75rem 2rem; z-index: 50; display: flex; align-items: center; justify-content: space-between; }
-        .topbar h1 { font-size: 1.25rem; font-weight: 600; }
-        .topbar .breadcrumb { font-size: 0.8rem; color: var(--text-muted); }
-        .content { max-width: 960px; padding: 2rem 2rem 4rem; }
-        h1 { font-size: 2rem; font-weight: 700; margin-bottom: 1rem; }
-        h2 { font-size: 1.5rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border); }
-        h3 { font-size: 1.25rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.75rem; }
-        h4 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
-        p { margin-bottom: 1rem; color: var(--text-secondary); }
-        a { color: var(--primary); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        code { font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.875em; background: var(--bg-tertiary); padding: 0.15em 0.4em; border-radius: 4px; color: var(--primary-dark); }
-        pre { background: var(--code-bg); color: var(--code-text); padding: 1.25rem; border-radius: var(--radius); overflow-x: auto; margin-bottom: 1.5rem; font-size: 0.85rem; line-height: 1.6; }
-        pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.875rem; }
-        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
-        th { background: var(--bg-secondary); font-weight: 600; }
-        tr:hover { background: var(--bg-secondary); }
-        .card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm); }
-        .badge { display: inline-block; padding: 0.2em 0.6em; font-size: 0.75em; font-weight: 600; border-radius: 9999px; }
-        .badge-primary { background: #dbeafe; color: #1d4ed8; }
-        .badge-success { background: #d1fae5; color: #065f46; }
-        .badge-warning { background: #fef3c7; color: #92400e; }
-        .badge-danger { background: #fee2e2; color: #991b1b; }
-        .badge-info { background: #e0f2fe; color: #075985; }
-        .callout { padding: 1rem 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; border-left: 4px solid; }
-        .callout-info { background: #eff6ff; border-color: var(--info); }
-        .callout-warning { background: #fffbeb; border-color: var(--warning); }
-        .callout-danger { background: #fef2f2; border-color: var(--danger); }
-        .callout-success { background: #f0fdf4; border-color: var(--success); }
-        .callout-title { font-weight: 600; margin-bottom: 0.25rem; }
-        .arch-diagram { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; margin: 1.5rem 0; text-align: center; font-family: monospace; font-size: 0.85rem; line-height: 1.8; overflow-x: auto; }
-        .arch-layer { display: inline-block; padding: 0.5rem 1rem; border-radius: var(--radius); margin: 0.25rem; font-weight: 500; }
-        .arch-input { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
-        .arch-core { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-        .arch-analysis { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-        .arch-output { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
-        .flow-chart { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: center; margin: 1rem 0; }
-        .flow-step { background: var(--bg); border: 2px solid var(--primary); border-radius: var(--radius); padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: 500; text-align: center; min-width: 120px; }
-        .flow-arrow { color: var(--primary); font-size: 1.2rem; }
-        .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-        .module-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; transition: box-shadow 0.2s; }
-        .module-card:hover { box-shadow: var(--shadow-md); }
-        .module-card h4 { margin-top: 0; color: var(--primary); }
-        .module-card .path { font-size: 0.8rem; color: var(--text-muted); font-family: monospace; }
-        .module-card p { font-size: 0.875rem; margin-bottom: 0.5rem; }
-        .api-sig { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.85rem; overflow-x: auto; }
-        .api-sig .func-name { color: var(--primary); font-weight: 600; }
-        .api-sig .param { color: #059669; }
-        .api-sig .type { color: #d97706; }
-        .api-sig .return { color: #7c3aed; }
-        ul, ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); }
-        li { margin-bottom: 0.25rem; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        .sidebar::-webkit-scrollbar { width: 4px; }
-        @media print { .sidebar { display: none; } .main { margin-left: 0; } }
-        @media (max-width: 1024px) { .sidebar { display: none; } .main { margin-left: 0; } }
-        .section-anchor { scroll-margin-top: 80px; }
-        .dep-tree { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin: 1rem 0; font-family: monospace; font-size: 0.85rem; line-height: 1.6; overflow-x: auto; }
+        .main {
+          margin-left: 0;
+        }
+      }
+      @media (max-width: 1024px) {
+        .sidebar {
+          display: none;
+        }
+        .main {
+          margin-left: 0;
+        }
+      }
+      .section-anchor {
+        scroll-margin-top: 80px;
+      }
+      .dep-tree {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin: 1rem 0;
+        font-family: monospace;
+        font-size: 0.85rem;
+        line-height: 1.6;
+        overflow-x: auto;
+      }
 
-        /* Wiki 链接卡片样式 */
-        .wiki-link-card {
-            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-            border: 1px solid #93c5fd;
-            border-radius: var(--radius);
-            padding: 1rem 1.25rem;
-            margin: 1rem 0 1.5rem;
-            transition: box-shadow 0.2s, transform 0.15s;
-        }
-        .wiki-link-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-1px);
-        }
-        .wiki-link-card h4 {
-            margin-top: 0;
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-            color: var(--primary);
-        }
-        .wiki-link-card p {
-            margin-bottom: 0;
-            font-size: 0.9rem;
-        }
-        .wiki-link-card a {
-            font-weight: 600;
-            color: var(--primary-dark);
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
-        .wiki-link-card a:hover {
-            color: var(--primary);
-        }
-        .wiki-link-card .wiki-icon {
-            font-size: 1.1em;
-        }
+      /* Wiki 链接卡片样式 */
+      .wiki-link-card {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border: 1px solid #93c5fd;
+        border-radius: var(--radius);
+        padding: 1rem 1.25rem;
+        margin: 1rem 0 1.5rem;
+        transition:
+          box-shadow 0.2s,
+          transform 0.15s;
+      }
+      .wiki-link-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+      .wiki-link-card h4 {
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+        font-size: 1rem;
+        color: var(--primary);
+      }
+      .wiki-link-card p {
+        margin-bottom: 0;
+        font-size: 0.9rem;
+      }
+      .wiki-link-card a {
+        font-weight: 600;
+        color: var(--primary-dark);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+      .wiki-link-card a:hover {
+        color: var(--primary);
+      }
+      .wiki-link-card .wiki-icon {
+        font-size: 1.1em;
+      }
 
-        /* 章节摘要容器 */
-        .section-summary {
-            padding: 1rem 0;
-        }
-        .section-summary p {
-            font-size: 0.9rem;
-            line-height: 1.6;
-            color: var(--text-secondary);
-        }
-        .section-summary ul {
-            font-size: 0.875rem;
-            margin-bottom: 0.75rem;
-        }
+      /* 章节摘要容器 */
+      .section-summary {
+        padding: 1rem 0;
+      }
+      .section-summary p {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--text-secondary);
+      }
+      .section-summary ul {
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+      }
     </style>
-</head>
-<body data-doc="uasset_read-dev-guide" data-version="0.3.8" data-agent-optimized="true">
+  </head>
+  <body
+    data-doc="uasset_read-dev-guide"
+    data-version="0.4.2-dev"
+    data-agent-optimized="true"
+  >
     <nav class="sidebar">
-        <div class="sidebar-header">
-            <h2>uasset_read</h2>
-            <div class="version">开发文档 v0.3.8</div>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">概览</div>
-            <a href="#overview" class="nav-link active">项目介绍</a>
-            <a href="#quick-start" class="nav-link">快速开始</a>
-            <a href="#architecture" class="nav-link">架构设计</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">核心模块</div>
-            <a href="#archive" class="nav-link">FArchive</a>
-            <a href="#parse-pipeline" class="nav-link">解析管线</a>
-            <a href="#package" class="nav-link">包管理</a>
-            <a href="#constants" class="nav-link">常量与配置</a>
-            <a href="#exceptions" class="nav-link">异常体系</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">数据处理</div>
-            <a href="#serializers" class="nav-link">序列化模块</a>
-            <a href="#parsers" class="nav-link">属性解析器</a>
-            <a href="#models" class="nav-link">数据模型</a>
-            <a href="#versioning" class="nav-link">版本管理</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">高级功能</div>
-            <a href="#blueprint" class="nav-link">蓝图解析</a>
-            <a href="#graph" class="nav-link">图分析</a>
-            <a href="#kismet" class="nav-link">Kismet 反编译</a>
-            <a href="#linker" class="nav-link">对象链接器</a>
-            <a href="#cpp-gen" class="nav-link">C++ 代码生成</a>
-            <a href="#n2c" class="nav-link">N2C 中间格式</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">容器系统</div>
-            <a href="#pak" class="nav-link">PAK 文件读取</a>
-            <a href="#iostore" class="nav-link">IoStore 容器</a>
-            <a href="#raw" class="nav-link">原始文件解析</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">输出与导出</div>
-            <a href="#formatters" class="nav-link">格式化器</a>
-            <a href="#exporter" class="nav-link">导出系统</a>
-            <a href="#cli" class="nav-link">CLI 接口</a>
-        </div>
-        <div class="nav-section"><div class="nav-section-title">开发指南</div>
-            <a href="#agent-index" class="nav-link">Agent 速查索引</a>
-            <a href="#public-api" class="nav-link">公共 API</a>
-            <a href="#testing" class="nav-link">测试指南</a>
-            <a href="#contributing" class="nav-link">开发规范</a>
-            <a href="#ue-reference" class="nav-link">UE 源码对照</a>
-        </div>
+      <div class="sidebar-header">
+        <h2>uasset_read</h2>
+        <div class="version">开发文档 v0.4.2-dev</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">概览</div>
+        <a href="#overview" class="nav-link active">项目介绍</a>
+        <a href="#quick-start" class="nav-link">快速开始</a>
+        <a href="#architecture" class="nav-link">架构设计</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">核心模块</div>
+        <a href="#archive" class="nav-link">FArchive</a>
+        <a href="#parse-pipeline" class="nav-link">解析管线</a>
+        <a href="#package" class="nav-link">包管理</a>
+        <a href="#constants" class="nav-link">常量与配置</a>
+        <a href="#exceptions" class="nav-link">异常体系</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">数据处理</div>
+        <a href="#serializers" class="nav-link">序列化模块</a>
+        <a href="#parsers" class="nav-link">属性解析器</a>
+        <a href="#models" class="nav-link">数据模型</a>
+        <a href="#versioning" class="nav-link">版本管理</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">高级功能</div>
+        <a href="#blueprint" class="nav-link">蓝图解析</a>
+        <a href="#graph" class="nav-link">图分析</a>
+        <a href="#kismet" class="nav-link">Kismet 反编译</a>
+        <a href="#linker" class="nav-link">对象链接器</a>
+        <a href="#cpp-gen" class="nav-link">C++ 代码生成</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">容器系统</div>
+        <a href="#pak" class="nav-link">PAK 文件读取</a>
+        <a href="#iostore" class="nav-link">IoStore 容器</a>
+        <a href="#raw" class="nav-link">原始文件解析</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">输出与渲染</div>
+        <a href="#renderers" class="nav-link">渲染器系统</a>
+        <a href="#ir" class="nav-link">IR 中间表示</a>
+        <a href="#formatters" class="nav-link">格式化器</a>
+        <a href="#cli" class="nav-link">CLI 接口</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">开发指南</div>
+        <a href="#agent-index" class="nav-link">Agent 速查索引</a>
+        <a href="#public-api" class="nav-link">公共 API</a>
+        <a href="#testing" class="nav-link">测试指南</a>
+        <a href="#contributing" class="nav-link">开发规范</a>
+        <a href="#ue-reference" class="nav-link">UE 源码对照</a>
+      </div>
     </nav>
     <div class="main">
-        <div class="topbar"><h1>uasset_read 开发文档</h1><span class="breadcrumb">v0.3.8 | Unreal Engine .uasset 解析器</span></div>
-        <div class="content">
+      <div class="topbar">
+        <h1>uasset_read 开发文档</h1>
+        <span class="breadcrumb">v0.4.2-dev | Unreal Engine .uasset 解析器</span>
+      </div>
+      <div class="content">
+        <!-- 概览 -->
+        <div
+          id="wiki-overview"
+          class="wiki-content"
+          data-wiki-file="01-Overview/Overview.md"
+        >
+          <div class="section-summary">
+            <h2 id="overview">项目介绍</h2>
+            <p>
+              <strong>uasset_read</strong> 是虚幻引擎
+              <code>.uasset</code> 文件的 Python 解析器，使 AI 代理无需 UE
+              编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据），采用零运行时依赖设计。
+            </p>
+            <ul>
+              <li>
+                支持 40+ 种属性类型解析、蓝图变量/变换/组件提取、Kismet
+                字节码反编译
+              </li>
+              <li>
+                输出格式：JSON / Text / Markdown / Mermaid / C++ 骨架（0.4.1: IR + Renderers 架构）
+              </li>
+              <li>可选 PAK/IoStore 容器读取支持</li>
+            </ul>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/01-Overview"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 概览 -->
-            <div id="wiki-overview" class="wiki-content" data-wiki-file="01-Overview/Overview.md">
-                <div class="section-summary">
-                    <h2 id="overview">项目介绍</h2>
-                    <p><strong>uasset_read</strong> 是虚幻引擎 <code>.uasset</code> 文件的 Python 解析器，使 AI 代理无需 UE 编辑器即可读取蓝图内容。专注于未烘焙/编辑器保存的资产（包含完整蓝图数据），采用零运行时依赖设计。</p>
-                    <ul>
-                        <li>支持 40+ 种属性类型解析、蓝图变量/变换/组件提取、Kismet 字节码反编译</li>
-                        <li>输出格式：JSON / Text / Markdown / Mermaid / C++ 骨架 / N2C 中间格式</li>
-                        <li>可选 PAK/IoStore 容器读取支持</li>
-                    </ul>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/01-Overview" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
-
-            <div id="wiki-quick-start" class="wiki-content" data-wiki-file="01-Overview/Quick-Start.md">
-                <div class="section-summary">
-                    <h2 id="quick-start">快速开始</h2>
-                    <p>安装后即可通过 CLI 或 Python API 使用：</p>
-                    <pre><code>pip install uasset-read
+        <div
+          id="wiki-quick-start"
+          class="wiki-content"
+          data-wiki-file="01-Overview/Quick-Start.md"
+        >
+          <div class="section-summary">
+            <h2 id="quick-start">快速开始</h2>
+            <p>安装后即可通过 CLI 或 Python API 使用：</p>
+            <pre><code>pip install uasset-read
 uasset-read path/to/file.uasset          # JSON 输出（默认）
 uasset-read path/to/file.uasset --summary  # 仅摘要</code></pre>
-                    <p>Python 入口：<code>parse_uasset()</code> 和 <code>parse_package()</code></p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Quick-Start" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+            <p>
+              Python 入口：<code>parse_uasset()</code> 和
+              <code>parse_package()</code>
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Quick-Start"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-architecture" class="wiki-content" data-wiki-file="01-Overview/Architecture.md">
-                <div class="section-summary">
-                    <h2 id="architecture">架构设计</h2>
-                    <p>解析器镜像 UE 内部的 <code>FArchive</code> 序列化管线：</p>
-                    <div class="arch-diagram">
-                        <span class="arch-layer arch-input">.uasset 文件</span> →
-                        <span class="arch-layer arch-core">FArchive 读取器</span> →
-                        <span class="arch-layer arch-core">Deserializer</span> →
-                        <span class="arch-layer arch-analysis">GraphParser / BlueprintParser</span> →
-                        <span class="arch-layer arch-output">Formatters → 输出</span>
-                    </div>
-                    <p>采用 src 布局，核心模块位于 <code>src/uasset_read/</code>，测试位于 <code>tests/</code>。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Architecture" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
+        <div
+          id="wiki-architecture"
+          class="wiki-content"
+          data-wiki-file="01-Overview/Architecture.md"
+        >
+          <div class="section-summary">
+            <h2 id="architecture">架构设计</h2>
+            <p>解析器镜像 UE 内部的 <code>FArchive</code> 序列化管线：</p>
+            <div class="arch-diagram">
+              <span class="arch-layer arch-input">.uasset 文件</span> →
+              <span class="arch-layer arch-core">FArchive 读取器</span> →
+              <span class="arch-layer arch-core">Deserializer</span> →
+              <span class="arch-layer arch-analysis"
+                >GraphParser / BlueprintParser</span
+              >
+              →
+              <span class="arch-layer arch-output">Formatters → 输出</span>
             </div>
+            <p>
+              采用 src 布局，核心模块位于
+              <code>src/uasset_read/</code>，测试位于 <code>tests/</code>。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Architecture"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 核心模块 -->
-            <div id="wiki-archive" class="wiki-content" data-wiki-file="02-Core-Modules/FArchive.md">
-                <div class="section-summary">
-                    <h2 id="archive">FArchive 二进制读取器</h2>
-                    <p>底层二进制读取器，封装字节序交换、mmap 内存映射、位置/长度管理，镜像 UE 的 <code>FArchive</code> 序列化接口。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">read_bytes</span>(<span class="param">offset: int, count: int</span>) → <span class="type">bytes</span>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">read_int32</span>() → <span class="type">int</span> |
-                    <span class="func-name">read_uint32</span>() → <span class="type">int</span> |
-                    <span class="func-name">read_fstring</span>() → <span class="type">str</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/FArchive" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 核心模块 -->
+        <div
+          id="wiki-archive"
+          class="wiki-content"
+          data-wiki-file="02-Core-Modules/FArchive.md"
+        >
+          <div class="section-summary">
+            <h2 id="archive">FArchive 二进制读取器</h2>
+            <p>
+              底层二进制读取器，封装字节序交换、mmap
+              内存映射、位置/长度管理，镜像 UE 的
+              <code>FArchive</code> 序列化接口。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">read_bytes</span>(<span class="param"
+              >offset: int, count: int</span
+            >) → <span class="type">bytes</span>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">read_int32</span>() →
+            <span class="type">int</span> |
+            <span class="func-name">read_uint32</span>() →
+            <span class="type">int</span> |
+            <span class="func-name">read_fstring</span>() →
+            <span class="type">str</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/FArchive"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-parse-pipeline" class="wiki-content" data-wiki-file="02-Core-Modules/Parse-Pipeline.md">
-                <div class="section-summary">
-                    <h2 id="parse-pipeline">解析管线</h2>
-                    <p>高层解析入口，协调 Summary → NameMap → Import/ExportMap → ObjectData 的完整解析流程，支持容错与严格两种模式。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">parse_uasset</span>(<span class="param">path: str, mode: str = 'tolerant'</span>) → <span class="type">ParseResult</span>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">parse_package</span>(<span class="param">archive: FArchive</span>) → <span class="type">PackageBundle</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Parse-Pipeline" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-parse-pipeline"
+          class="wiki-content"
+          data-wiki-file="02-Core-Modules/Parse-Pipeline.md"
+        >
+          <div class="section-summary">
+            <h2 id="parse-pipeline">解析管线</h2>
+            <p>
+              高层解析入口，协调 Summary → NameMap → Import/ExportMap →
+              ObjectData 的完整解析流程，支持容错与严格两种模式。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">parse_uasset</span>(<span class="param"
+              >path: str, mode: str = 'tolerant'</span
+            >) → <span class="type">ParseResult</span>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">parse_package</span>(<span class="param"
+              >archive: FArchive</span
+            >) → <span class="type">PackageBundle</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Parse-Pipeline"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-package" class="wiki-content" data-wiki-file="02-Core-Modules/Package.md">
-                <div class="section-summary">
-                    <h2 id="package">包管理</h2>
-                    <p><code>PackageBundle</code> 封装解析后的完整包数据（Summary、NameMap、Import/Export Map、对象资源），<code>PackageProvider</code> 支持从文件系统 / Pak / IoStore 统一加载包。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">PackageProvider</span>.<span class="func-name">load</span>(<span class="param">path: str</span>) → <span class="type">PackageBundle</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Package" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-package"
+          class="wiki-content"
+          data-wiki-file="02-Core-Modules/Package.md"
+        >
+          <div class="section-summary">
+            <h2 id="package">包管理</h2>
+            <p>
+              <code>PackageBundle</code>
+              封装解析后的完整包数据（Summary、NameMap、Import/Export
+              Map、对象资源），<code>PackageProvider</code> 支持从文件系统 / Pak
+              / IoStore 统一加载包。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">PackageProvider</span>.<span
+              class="func-name"
+              >load</span
+            >(<span class="param">path: str</span>) →
+            <span class="type">PackageBundle</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Package"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-constants" class="wiki-content" data-wiki-file="02-Core-Modules/Constants.md">
-                <div class="section-summary">
-                    <h2 id="constants">常量与配置</h2>
-                    <p>定义 UE 版本号（VER_UE4_* / VER_UE5_*）、属性类型阈值、CPF 标志、PropertyTag 标志等，所有解析逻辑引用此模块的常量而非硬编码。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Constants" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-constants"
+          class="wiki-content"
+          data-wiki-file="02-Core-Modules/Constants.md"
+        >
+          <div class="section-summary">
+            <h2 id="constants">常量与配置</h2>
+            <p>
+              定义 UE 版本号（VER_UE4_* / VER_UE5_*）、属性类型阈值、CPF
+              标志、PropertyTag 标志等，所有解析逻辑引用此模块的常量而非硬编码。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Constants"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-exceptions" class="wiki-content" data-wiki-file="02-Core-Modules/Exceptions.md">
-                <div class="section-summary">
-                    <h2 id="exceptions">异常体系</h2>
-                    <p><code>UAssetError</code>（根异常）→ <code>VersionError</code>（版本不兼容）/ <code>ParseError</code>（解析失败）/ <code>ErrorContext</code>（带上下文的错误包装），提供结构化的错误信息。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Exceptions" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-exceptions"
+          class="wiki-content"
+          data-wiki-file="02-Core-Modules/Exceptions.md"
+        >
+          <div class="section-summary">
+            <h2 id="exceptions">异常体系</h2>
+            <p>
+              <code>UAssetError</code>（根异常）→
+              <code>VersionError</code>（版本不兼容）/
+              <code>ParseError</code>（解析失败）/
+              <code>ErrorContext</code
+              >（带上下文的错误包装），提供结构化的错误信息。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Exceptions"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 数据处理 -->
-            <div id="wiki-serializers" class="wiki-content" data-wiki-file="03-Data-Processing/Serializers.md">
-                <div class="section-summary">
-                    <h2 id="serializers">序列化模块</h2>
-                    <p>负责从二进制流中反序列化 <code>PackageFileSummary</code>、<code>ImportMap</code>、<code>ExportMap</code>、<code>PropertyTag</code> 等结构，支持版本感知的字段跳过。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">deserialize_summary</span>(<span class="param">archive: FArchive</span>) → <span class="type">PackageFileSummary</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Serializers" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 数据处理 -->
+        <div
+          id="wiki-serializers"
+          class="wiki-content"
+          data-wiki-file="03-Data-Processing/Serializers.md"
+        >
+          <div class="section-summary">
+            <h2 id="serializers">序列化模块</h2>
+            <p>
+              负责从二进制流中反序列化
+              <code>PackageFileSummary</code
+              >、<code>ImportMap</code>、<code>ExportMap</code>、<code
+                >PropertyTag</code
+              >
+              等结构，支持版本感知的字段跳过。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">deserialize_summary</span>(<span
+              class="param"
+              >archive: FArchive</span
+            >) → <span class="type">PackageFileSummary</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Serializers"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-parsers" class="wiki-content" data-wiki-file="03-Data-Processing/Parsers.md">
-                <div class="section-summary">
-                    <h2 id="parsers">属性解析器</h2>
-                    <p>40+ 种 UE 属性类型的分发解析器，支持自定义属性注册表、类特定跳过机制。覆盖 Bool/Int/Float/Name/Str/Struct/Array/Map/Set/ObjectProperty 等。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">PropertyDispatcher</span>.<span class="func-name">dispatch</span>(<span class="param">tag: PropertyTag, archive: FArchive</span>) → <span class="type">Any</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Parsers" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-parsers"
+          class="wiki-content"
+          data-wiki-file="03-Data-Processing/Parsers.md"
+        >
+          <div class="section-summary">
+            <h2 id="parsers">属性解析器</h2>
+            <p>
+              40+ 种 UE
+              属性类型的分发解析器，支持自定义属性注册表、类特定跳过机制。覆盖
+              Bool/Int/Float/Name/Str/Struct/Array/Map/Set/ObjectProperty 等。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">PropertyDispatcher</span>.<span
+              class="func-name"
+              >dispatch</span
+            >(<span class="param">tag: PropertyTag, archive: FArchive</span>) →
+            <span class="type">Any</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Parsers"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-models" class="wiki-content" data-wiki-file="03-Data-Processing/Models.md">
-                <div class="section-summary">
-                    <h2 id="models">数据模型</h2>
-                    <p>定义 <code>UEdGraph</code>、<code>Node</code>、<code>Pin</code>、属性值模型、<code>ParseResult</code>、变换、蓝图模型、节点类型等 Python 数据结构。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Models" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-models"
+          class="wiki-content"
+          data-wiki-file="03-Data-Processing/Models.md"
+        >
+          <div class="section-summary">
+            <h2 id="models">数据模型</h2>
+            <p>
+              定义
+              <code>UEdGraph</code
+              >、<code>Node</code>、<code>Pin</code>、属性值模型、<code>ParseResult</code>、变换、蓝图模型、节点类型等
+              Python 数据结构。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Models"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-versioning" class="wiki-content" data-wiki-file="03-Data-Processing/Versioning.md">
-                <div class="section-summary">
-                    <h2 id="versioning">版本管理</h2>
-                    <p><code>VersionContainer</code> 和 <code>build_version_container()</code> 根据文件头 <code>PackageFileSummary</code> 自动识别 UE4/UE5 版本，驱动后续序列化器的字段差异。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">build_version_container</span>(<span class="param">summary: PackageFileSummary</span>) → <span class="type">VersionContainer</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Versioning" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-versioning"
+          class="wiki-content"
+          data-wiki-file="03-Data-Processing/Versioning.md"
+        >
+          <div class="section-summary">
+            <h2 id="versioning">版本管理</h2>
+            <p>
+              <code>VersionContainer</code> 和
+              <code>build_version_container()</code> 根据文件头
+              <code>PackageFileSummary</code> 自动识别 UE4/UE5
+              版本，驱动后续序列化器的字段差异。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">build_version_container</span>(<span
+              class="param"
+              >summary: PackageFileSummary</span
+            >) → <span class="type">VersionContainer</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Versioning"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 高级功能 -->
-            <div id="wiki-blueprint" class="wiki-content" data-wiki-file="04-Advanced-Features/Blueprint.md">
-                <div class="section-summary">
-                    <h2 id="blueprint">蓝图解析</h2>
-                    <p>从 <code>Ubergraph</code> 中提取蓝图变量（含 Guid）、变换（Transforms）、组件、元数据。支持 BP 生成类和子类的区分。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">BlueprintParser</span>.<span class="func-name">extract_variables</span>() → <span class="type">list[BlueprintVariable]</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Blueprint" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 高级功能 -->
+        <div
+          id="wiki-blueprint"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/Blueprint.md"
+        >
+          <div class="section-summary">
+            <h2 id="blueprint">蓝图解析</h2>
+            <p>
+              从 <code>Ubergraph</code> 中提取蓝图变量（含
+              Guid）、变换（Transforms）、组件、元数据。支持 BP
+              生成类和子类的区分。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">BlueprintParser</span>.<span
+              class="func-name"
+              >extract_variables</span
+            >() → <span class="type">list[BlueprintVariable]</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Blueprint"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-graph" class="wiki-content" data-wiki-file="04-Advanced-Features/Graph.md">
-                <div class="section-summary">
-                    <h2 id="graph">图分析</h2>
-                    <p>执行流/数据流追踪、链构建器、Pin 追踪报告。将 <code>UEdGraph</code> 转换为有向图，支持路径查询和依赖分析。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Graph" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-graph"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/Graph.md"
+        >
+          <div class="section-summary">
+            <h2 id="graph">图分析</h2>
+            <p>
+              执行流/数据流追踪、链构建器、Pin 追踪报告。将
+              <code>UEdGraph</code> 转换为有向图，支持路径查询和依赖分析。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Graph"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-kismet" class="wiki-content" data-wiki-file="04-Advanced-Features/Kismet.md">
-                <div class="section-summary">
-                    <h2 id="kismet">Kismet 反编译</h2>
-                    <p>字节码提取器、<code>EExprToken</code> → AST → C++ 翻译器、BPGC 回退、结构化控制流。覆盖 16 种表达式类型（赋值、控制流、函数调用、字面量等）。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">KismetDecompiler</span>.<span class="func-name">decompile_script</span>(<span class="param">bytecode: bytes</span>) → <span class="type">list[ExprAST]</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Kismet" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-kismet"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/Kismet.md"
+        >
+          <div class="section-summary">
+            <h2 id="kismet">Kismet 反编译</h2>
+            <p>
+              字节码提取器、<code>EExprToken</code> → AST → C++ 翻译器、BPGC
+              回退、结构化控制流。覆盖 16
+              种表达式类型（赋值、控制流、函数调用、字面量等）。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">KismetDecompiler</span>.<span
+              class="func-name"
+              >decompile_script</span
+            >(<span class="param">bytecode: bytes</span>) →
+            <span class="type">list[ExprAST]</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Kismet"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-linker" class="wiki-content" data-wiki-file="04-Advanced-Features/Linker.md">
-                <div class="section-summary">
-                    <h2 id="linker">对象链接器</h2>
-                    <p><code>PackageLinker</code> 实现两阶段对象图重建：<code>UObjectInstance</code> 创建 → 跨包引用解析 → 链接。支持 Import/Export 双向引用链。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">PackageLinker</span>.<span class="func-name">resolve_imports</span>(<span class="param">bundle: PackageBundle</span>) → <span class="type">dict[int, UObjectInstance]</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Linker" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-linker"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/Linker.md"
+        >
+          <div class="section-summary">
+            <h2 id="linker">对象链接器</h2>
+            <p>
+              <code>PackageLinker</code> 实现两阶段对象图重建：<code
+                >UObjectInstance</code
+              >
+              创建 → 跨包引用解析 → 链接。支持 Import/Export 双向引用链。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">PackageLinker</span>.<span class="func-name"
+              >resolve_imports</span
+            >(<span class="param">bundle: PackageBundle</span>) →
+            <span class="type">dict[int, UObjectInstance]</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Linker"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-cpp-gen" class="wiki-content" data-wiki-file="04-Advanced-Features/CPP-Generator.md">
-                <div class="section-summary">
-                    <h2 id="cpp-gen">C++ 代码生成</h2>
-                    <p>从解析结果生成 C++ 类骨架：UPROPERTY 映射、UFUNCTION 提取、IR 格式化器、类型映射。支持蓝图变量 → C++ 成员的自动翻译。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">generate_cpp_skeleton</span>(<span class="param">result: ParseResult</span>) → <span class="type">str</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/CPP-Generator" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-cpp-gen"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/CPP-Generator.md"
+        >
+          <div class="section-summary">
+            <h2 id="cpp-gen">C++ 代码生成</h2>
+            <p>
+              从解析结果生成 C++ 类骨架：UPROPERTY 映射、UFUNCTION 提取、IR
+              格式化器、类型映射。支持蓝图变量 → C++ 成员的自动翻译。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">generate_cpp_skeleton</span>(<span
+              class="param"
+              >result: ParseResult</span
+            >) → <span class="type">str</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/CPP-Generator"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-n2c" class="wiki-content" data-wiki-file="04-Advanced-Features/N2C.md">
-                <div class="section-summary">
-                    <h2 id="n2c">N2C 中间格式</h2>
-                    <p>标准化中间格式：<code>N2CStruct</code>、<code>N2CGraph</code>、<code>N2CNode</code>、<code>N2CPin</code>。57 种节点处理器，JSON Schema 验证器。为跨版本/跨工具互操作提供统一数据模型。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/N2C" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 输出与渲染 (0.4.1+) -->
+        <div
+          id="wiki-renderers"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/Renderers.md"
+        >
+          <div class="section-summary">
+            <h2 id="renderers">渲染器系统</h2>
+            <p>
+              0.4.1 新架构：<code>IRenderer</code> 抽象基类 + <code>RENDERER_REGISTRY</code> 自动注册。8 个渲染器（json/json_summary/text/text_summary/markdown/blueprint_text/blueprint_ue_text/cpp_skeleton），通过 <code>parse_single(format=...)</code> 一键调用。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Renderers"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 容器系统 -->
-            <div id="wiki-pak" class="wiki-content" data-wiki-file="05-Container-Systems/PAK.md">
-                <div class="section-summary">
-                    <h2 id="pak">PAK 文件读取</h2>
-                    <p><code>FPakInfo</code>、<code>PakEntry</code>、<code>FPakDirectoryEntry</code>、<code>PakFileReader</code>。支持索引解析、压缩分发（LZ4/Zstd）、AES 解密。可选依赖，安装 <code>pip install -e ".[pak]"</code> 启用。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">PakFileReader</span>.<span class="func-name">list_files</span>(<span class="param">pak_path: str</span>) → <span class="type">list[str]</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/PAK" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-ir"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/IR.md"
+        >
+          <div class="section-summary">
+            <h2 id="ir">IR 中间表示</h2>
+            <p>
+              统一数据层：<code>PackageIR</code>、<code>ExportIR</code>、<code>GraphIR</code>、<code>NodeIR</code>、<code>PinIR</code>。渲染器只接收 IR，不访问 ParseResult。GUID 标准化为 32 位小写 hex。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/IR"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-iostore" class="wiki-content" data-wiki-file="05-Container-Systems/IoStore.md">
-                <div class="section-summary">
-                    <h2 id="iostore">IoStore 容器</h2>
-                    <p>IoStore 容器读取器，解析 Chunk ID、偏移/大小结构。适用于 UE5 的 .utoc + .ucas 容器格式。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/IoStore" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- N2C (0.4.1 已废弃) -->
+        <div
+          id="wiki-n2c"
+          class="wiki-content"
+          data-wiki-file="04-Advanced-Features/N2C.md"
+        >
+          <div class="section-summary">
+            <h2 id="n2c">N2C 中间格式 <span style="color:var(--danger);font-size:0.8em">⚠ 已废弃</span></h2>
+            <p>
+              N2C 模块已在 0.4.2-dev 整体删除。请使用新的 <a href="#renderers">渲染器系统</a> 和 <a href="#ir">IR 中间表示</a>。
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-raw" class="wiki-content" data-wiki-file="05-Container-Systems/Raw-Files.md">
-                <div class="section-summary">
-                    <h2 id="raw">原始文件解析</h2>
-                    <p>JSON / INI / LocRes / LocMeta / Audio 等非 uasset 文件的解析器，支持从 PAK 中提取的非标准资产。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Raw-Files" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 容器系统 -->
+        <div
+          id="wiki-pak"
+          class="wiki-content"
+          data-wiki-file="05-Container-Systems/PAK.md"
+        >
+          <div class="section-summary">
+            <h2 id="pak">PAK 文件读取</h2>
+            <p>
+              <code>FPakInfo</code
+              >、<code>PakEntry</code>、<code>FPakDirectoryEntry</code>、<code>PakFileReader</code>。支持索引解析、压缩分发（LZ4/Zstd）、AES
+              解密。可选依赖，安装 <code>pip install -e ".[pak]"</code> 启用。
+            </p>
+          </div>
+          <div class="api-sig">
+            <span class="func-name">PakFileReader</span>.<span class="func-name"
+              >list_files</span
+            >(<span class="param">pak_path: str</span>) →
+            <span class="type">list[str]</span>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/PAK"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 输出与导出 -->
-            <div id="wiki-formatters" class="wiki-content" data-wiki-file="06-Output-Export/Formatters.md">
-                <div class="section-summary">
-                    <h2 id="formatters">格式化器</h2>
-                    <p>JSON / Text / Markdown / Mermaid / 蓝图翻译文本 / UE 格式文本输出生成器。CLI 的 <code>--text</code>、<code>--markdown</code>、<code>--blueprint-text</code>、<code>--blueprint-ue-text</code> 均由此模块驱动。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Formatters" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-iostore"
+          class="wiki-content"
+          data-wiki-file="05-Container-Systems/IoStore.md"
+        >
+          <div class="section-summary">
+            <h2 id="iostore">IoStore 容器</h2>
+            <p>
+              IoStore 容器读取器，解析 Chunk ID、偏移/大小结构。适用于 UE5 的
+              .utoc + .ucas 容器格式。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/IoStore"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-exporter" class="wiki-content" data-wiki-file="06-Output-Export/Exporter.md">
-                <div class="section-summary">
-                    <h2 id="exporter">导出系统</h2>
-                    <p><code>IExporter</code> 接口 + 注册表 + 批量导出。支持按格式注册自定义导出器，CLI 的 <code>--n2c</code>、<code>--cpp-skeleton</code> 等通过此系统路由。</p>
-                </div>
-                <div class="api-sig">
-                    <span class="func-name">IExporter</span>.<span class="func-name">export</span>(<span class="param">result: ParseResult, **kwargs</span>) → <span class="type">str | bytes</span>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Exporter" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-raw"
+          class="wiki-content"
+          data-wiki-file="05-Container-Systems/Raw-Files.md"
+        >
+          <div class="section-summary">
+            <h2 id="raw">原始文件解析</h2>
+            <p>
+              JSON / INI / LocRes / LocMeta / Audio 等非 uasset
+              文件的解析器，支持从 PAK 中提取的非标准资产。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Raw-Files"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-cli" class="wiki-content" data-wiki-file="06-Output-Export/CLI.md">
-                <div class="section-summary">
-                    <h2 id="cli">CLI 接口</h2>
-                    <p><code>uasset-read</code> 命令行入口，argparse 驱动。支持 <code>--n2c</code>、<code>--batch</code>、<code>--validate</code>、<code>--strict</code>/<code>--tolerant</code>、<code>--verbose</code>、<code>--output</code>、<code>--summary</code> 等选项。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/CLI" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <!-- 输出与导出 -->
+        <div
+          id="wiki-formatters"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/Formatters.md"
+        >
+          <div class="section-summary">
+            <h2 id="formatters">格式化器</h2>
+            <p>
+              JSON / Text / Markdown / Mermaid / 蓝图翻译文本 / UE
+              格式文本输出生成器。CLI 的
+              <code>--text</code
+              >、<code>--markdown</code>、<code>--blueprint-text</code>、<code
+                >--blueprint-ue-text</code
+              >
+              均由此模块驱动。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Formatters"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <!-- 开发指南 -->
-            <div id="wiki-agent-index" class="wiki-content" data-wiki-file="07-Dev-Guide/Agent-Index.md">
-                <div class="section-summary">
-                    <h2 id="agent-index">Agent 速查索引</h2>
-                    <p>为 AI 代理优化的快速参考索引，覆盖常用 API 组合、典型调用模式、常见错误处理路径。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Agent-Index" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-exporter"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/Exporter.md"
+        >
+          <div class="section-summary">
+            <h2 id="exporter">导出系统 <span style="color:var(--danger);font-size:0.8em">⚠ 已废弃</span></h2>
+            <p>
+              Exporter 系统在 0.4.1 已被 <a href="#renderers">渲染器系统</a> 替代。
+              新架构：<code>ParseResult → PackageIR → Renderers → Output</code>。
+              请使用 <code>parse_single(format="json")</code> 替代 <code>export(result, format="json")</code>。
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-public-api" class="wiki-content" data-wiki-file="07-Dev-Guide/Public-API.md">
-                <div class="section-summary">
-                    <h2 id="public-api">公共 API</h2>
-                    <p>所有公共符号在 <code>src/uasset_read/__init__.py</code> 中通过 <code>__all__</code> 导出。以该文件为权威 API 参考。</p>
-                    <ul>
-                        <li><code>parse_uasset(path, mode)</code> → <code>ParseResult</code></li>
-                        <li><code>parse_package(archive)</code> → <code>PackageBundle</code></li>
-                        <li><code>PakFileReader</code>、<code>IExporter</code>、<code>N2CStruct</code></li>
-                    </ul>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Public-API" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
+        <div
+          id="wiki-cli"
+          class="wiki-content"
+          data-wiki-file="06-Output-Export/CLI.md"
+        >
+          <div class="section-summary">
+            <h2 id="cli">CLI 接口</h2>
+            <p>
+              <code>uasset-read</code> 命令行入口，0.4.1 重构后委托 <code>core.py</code> 核心 API。
+              支持 <code>--json</code>/<code>--json-summary</code>/<code>--text</code>/<code>--markdown</code>
+              /<code>--blueprint-text</code>/<code>--blueprint-ue-text</code>/<code>--cpp-skeleton</code>
+              等格式。<code>--n2c</code>、<code>--cpp-json-ir</code> 已移除。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/CLI"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
 
-            <div id="wiki-testing" class="wiki-content" data-wiki-file="07-Dev-Guide/Testing.md">
-                <div class="section-summary">
-                    <h2 id="testing">测试指南</h2>
-                    <p>测试位于 <code>tests/</code>（12+ 个测试文件，218+ 个测试）。集成测试使用 <code>@pytest.mark.integration</code> 标记。<code>pyproject.toml</code> 中配置了 pytest 选项。</p>
-                    <pre><code>python -m pytest tests/ -v                          # 所有测试
+        <!-- 开发指南 -->
+        <div
+          id="wiki-agent-index"
+          class="wiki-content"
+          data-wiki-file="07-Dev-Guide/Agent-Index.md"
+        >
+          <div class="section-summary">
+            <h2 id="agent-index">Agent 速查索引</h2>
+            <p>
+              为 AI 代理优化的快速参考索引，覆盖常用 API
+              组合、典型调用模式、常见错误处理路径。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Agent-Index"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="wiki-public-api"
+          class="wiki-content"
+          data-wiki-file="07-Dev-Guide/Public-API.md"
+        >
+          <div class="section-summary">
+            <h2 id="public-api">公共 API</h2>
+            <p>
+              所有公共符号在 <code>src/uasset_read/__init__.py</code> 中通过
+              <code>__all__</code> 导出。以该文件为权威 API 参考。
+            </p>
+            <ul>
+              <li>
+                <code>parse_uasset(path, mode)</code> → <code>ParseResult</code>
+              </li>
+              <li>
+                <code>parse_package(archive)</code> → <code>PackageBundle</code>
+              </li>
+              <li>
+                <code>PakFileReader</code>、<code>IRenderer</code>、<code
+                  >PackageIR</code
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Public-API"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="wiki-testing"
+          class="wiki-content"
+          data-wiki-file="07-Dev-Guide/Testing.md"
+        >
+          <div class="section-summary">
+            <h2 id="testing">测试指南</h2>
+            <p>
+              测试位于 <code>tests/</code>（12+ 个测试文件，218+
+              个测试）。集成测试使用
+              <code>@pytest.mark.integration</code> 标记。<code
+                >pyproject.toml</code
+              >
+              中配置了 pytest 选项。
+            </p>
+            <pre><code>python -m pytest tests/ -v                          # 所有测试
 python -m pytest tests/ -v --cov=uasset_read         # 覆盖率
 python -m pytest tests/ -v -m integration            # 仅集成测试</code></pre>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Testing" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
-
-            <div id="wiki-contributing" class="wiki-content" data-wiki-file="07-Dev-Guide/Contributing.md">
-                <div class="section-summary">
-                    <h2 id="contributing">开发规范</h2>
-                    <ul>
-                        <li>仅支持未烘焙/编辑器保存的资产（Cooked 资产图数据已剥离）</li>
-                        <li>只读设计：仅解析，不支持修改或写入</li>
-                        <li>零运行时依赖：不向 <code>dependencies</code> 添加第三方包</li>
-                        <li>必须参考 UE 源码：格式理解追溯到 UE C++ 源码</li>
-                        <li>临时文件一律放在 <code>temp/</code> 目录</li>
-                    </ul>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/Contributing" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
-
-            <div id="wiki-ue-reference" class="wiki-content" data-wiki-file="07-Dev-Guide/UE-Reference.md">
-                <div class="section-summary">
-                    <h2 id="ue-reference">UE 源码对照</h2>
-                    <p>UE <code>.uasset</code> 格式文档索引（60+ 个 Markdown 文件），覆盖资产类型、序列化、Cooked 格式、版本兼容。参考 <code>docs/uasset-format/Index.md</code>。</p>
-                    <p>外部参考：<code>external/CUE4Parse/</code> — 参考 C# 实现，用于交叉验证解析逻辑。</p>
-                </div>
-                <div class="module-card wiki-link-card">
-                    <h4>📖 完整文档</h4>
-                    <p><a href="https://github.com/SOATOORL/uasset_read/wiki/UE-Reference" target="_blank">查看 Wiki 页面 <span class="wiki-icon">→</span></a></p>
-                </div>
-            </div>
-
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Testing"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
         </div>
+
+        <div
+          id="wiki-contributing"
+          class="wiki-content"
+          data-wiki-file="07-Dev-Guide/Contributing.md"
+        >
+          <div class="section-summary">
+            <h2 id="contributing">开发规范</h2>
+            <ul>
+              <li>仅支持未烘焙/编辑器保存的资产（Cooked 资产图数据已剥离）</li>
+              <li>只读设计：仅解析，不支持修改或写入</li>
+              <li>零运行时依赖：不向 <code>dependencies</code> 添加第三方包</li>
+              <li>必须参考 UE 源码：格式理解追溯到 UE C++ 源码</li>
+              <li>临时文件一律放在 <code>temp/</code> 目录</li>
+            </ul>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/Contributing"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="wiki-ue-reference"
+          class="wiki-content"
+          data-wiki-file="07-Dev-Guide/UE-Reference.md"
+        >
+          <div class="section-summary">
+            <h2 id="ue-reference">UE 源码对照</h2>
+            <p>
+              UE <code>.uasset</code> 格式文档索引（60+ 个 Markdown
+              文件），覆盖资产类型、序列化、Cooked 格式、版本兼容。参考
+              <code>docs/uasset-format/Index.md</code>。
+            </p>
+            <p>
+              外部参考：<code>external/CUE4Parse/</code> — 参考 C#
+              实现，用于交叉验证解析逻辑。
+            </p>
+          </div>
+          <div class="module-card wiki-link-card">
+            <h4>📖 完整文档</h4>
+            <p>
+              <a
+                href="https://github.com/SOATOORL/uasset_read/wiki/UE-Reference"
+                target="_blank"
+                >查看 Wiki 页面 <span class="wiki-icon">→</span></a
+              >
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
     <script>
-        // Wiki文件映射表（保留用于可能的动态加载）
-        var WIKI_FILES = {
-            "overview": "01-Overview/Overview.md",
-            "quick-start": "01-Overview/Quick-Start.md",
-            "architecture": "01-Overview/Architecture.md",
-            "archive": "02-Core-Modules/FArchive.md",
-            "parse-pipeline": "02-Core-Modules/Parse-Pipeline.md",
-            "package": "02-Core-Modules/Package.md",
-            "constants": "02-Core-Modules/Constants.md",
-            "exceptions": "02-Core-Modules/Exceptions.md",
-            "serializers": "03-Data-Processing/Serializers.md",
-            "parsers": "03-Data-Processing/Parsers.md",
-            "models": "03-Data-Processing/Models.md",
-            "versioning": "03-Data-Processing/Versioning.md",
-            "blueprint": "04-Advanced-Features/Blueprint.md",
-            "graph": "04-Advanced-Features/Graph.md",
-            "kismet": "04-Advanced-Features/Kismet.md",
-            "linker": "04-Advanced-Features/Linker.md",
-            "cpp-gen": "04-Advanced-Features/CPP-Generator.md",
-            "n2c": "04-Advanced-Features/N2C.md",
-            "pak": "05-Container-Systems/PAK.md",
-            "iostore": "05-Container-Systems/IoStore.md",
-            "raw": "05-Container-Systems/Raw-Files.md",
-            "formatters": "06-Output-Export/Formatters.md",
-            "exporter": "06-Output-Export/Exporter.md",
-            "cli": "06-Output-Export/CLI.md",
-            "agent-index": "07-Dev-Guide/Agent-Index.md",
-            "public-api": "07-Dev-Guide/Public-API.md",
-            "testing": "07-Dev-Guide/Testing.md",
-            "contributing": "07-Dev-Guide/Contributing.md",
-            "ue-reference": "07-Dev-Guide/UE-Reference.md"
-        };
+      // Wiki文件映射表（保留用于可能的动态加载）
+      var WIKI_FILES = {
+        overview: "01-Overview/Overview.md",
+        "quick-start": "01-Overview/Quick-Start.md",
+        architecture: "01-Overview/Architecture.md",
+        archive: "02-Core-Modules/FArchive.md",
+        "parse-pipeline": "02-Core-Modules/Parse-Pipeline.md",
+        package: "02-Core-Modules/Package.md",
+        constants: "02-Core-Modules/Constants.md",
+        exceptions: "02-Core-Modules/Exceptions.md",
+        serializers: "03-Data-Processing/Serializers.md",
+        parsers: "03-Data-Processing/Parsers.md",
+        models: "03-Data-Processing/Models.md",
+        versioning: "03-Data-Processing/Versioning.md",
+        blueprint: "04-Advanced-Features/Blueprint.md",
+        graph: "04-Advanced-Features/Graph.md",
+        kismet: "04-Advanced-Features/Kismet.md",
+        linker: "04-Advanced-Features/Linker.md",
+        "cpp-gen": "04-Advanced-Features/CPP-Generator.md",
+        n2c: "04-Advanced-Features/N2C.md",
+        pak: "05-Container-Systems/PAK.md",
+        iostore: "05-Container-Systems/IoStore.md",
+        raw: "05-Container-Systems/Raw-Files.md",
+        renderers: "06-Output-Export/Renderers.md",
+        ir: "06-Output-Export/IR.md",
+        formatters: "06-Output-Export/Formatters.md",
+        exporter: "06-Output-Export/Exporter.md",
+        cli: "06-Output-Export/CLI.md",
+        "agent-index": "07-Dev-Guide/Agent-Index.md",
+        "public-api": "07-Dev-Guide/Public-API.md",
+        testing: "07-Dev-Guide/Testing.md",
+        contributing: "07-Dev-Guide/Contributing.md",
+        "ue-reference": "07-Dev-Guide/UE-Reference.md",
+      };
 
-        // 导航链接点击平滑滚动
-        document.querySelectorAll('.nav-link').forEach(function(link) {
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                var tid = this.getAttribute('href').substring(1);
-                var target = document.getElementById('wiki-' + tid);
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                    document.querySelectorAll('.nav-link').forEach(function(l) { l.classList.remove('active'); });
-                    this.classList.add('active');
-                }
+      // 导航链接点击平滑滚动
+      document.querySelectorAll(".nav-link").forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          e.preventDefault();
+          var tid = this.getAttribute("href").substring(1);
+          var target = document.getElementById("wiki-" + tid);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth" });
+            document.querySelectorAll(".nav-link").forEach(function (l) {
+              l.classList.remove("active");
             });
+            this.classList.add("active");
+          }
         });
+      });
 
-        // IntersectionObserver 滚动监听高亮当前章节
-        var secs = document.querySelectorAll('.wiki-content');
-        var nls = document.querySelectorAll('.nav-link');
-        var obs = new IntersectionObserver(function(entries) {
-            entries.forEach(function(entry) {
-                if (entry.isIntersecting) {
-                    var id = entry.target.id.replace('wiki-', '');
-                    nls.forEach(function(l) {
-                        l.classList.toggle('active', l.getAttribute('href') === '#' + id);
-                    });
-                }
-            });
-        }, { rootMargin: '-20% 0px -70% 0px' });
-        secs.forEach(function(s) { obs.observe(s); });
+      // IntersectionObserver 滚动监听高亮当前章节
+      var secs = document.querySelectorAll(".wiki-content");
+      var nls = document.querySelectorAll(".nav-link");
+      var obs = new IntersectionObserver(
+        function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              var id = entry.target.id.replace("wiki-", "");
+              nls.forEach(function (l) {
+                l.classList.toggle(
+                  "active",
+                  l.getAttribute("href") === "#" + id,
+                );
+              });
+            }
+          });
+        },
+        { rootMargin: "-20% 0px -70% 0px" },
+      );
+      secs.forEach(function (s) {
+        obs.observe(s);
+      });
     </script>
-</body>
+  </body>
 </html>

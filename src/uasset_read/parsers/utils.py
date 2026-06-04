@@ -1,5 +1,10 @@
 """parsers 模块的共享辅助函数"""
 from typing import Any, List, Optional
+import logging
+
+from uasset_read.exceptions import ParseError, ErrorContext
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_name_from_index(
@@ -29,7 +34,11 @@ def read_validated_count(
     max_count: int,
     label: str,
 ) -> int:
-    """读取并验证数量值
+    """读取并验证数量值。
+
+    当 count 为负数或超过 max_count 时，记录诊断日志并返回 0（跳过后续循环），
+    而非抛出 ParseError。这样调用方的 ``for _ in range(count)`` 循环不会执行，
+    返回空集合，同时保留父级属性结构的完整性。
 
     Args:
         archive: FArchive 实例
@@ -37,16 +46,25 @@ def read_validated_count(
         label: 用于错误消息的标签
 
     Returns:
-        验证后的数量值
-
-    Raises:
-        ValueError: 数量无效
+        验证后的数量值（无效时返回 0）
     """
+    offset = archive.tell()
     count = archive.read_i32()
+
+    # 检查 struct.unpack 读取的值是否在 i32 范围内（Python 自动处理大整数，
+    # 但 read_i32 使用 '<i' 有符号格式，所以负数已正确表示）
     if count < 0:
-        raise ValueError(f"{label}: 数量不能为负数 ({count})")
+        logger.warning(
+            "%s: 数量为负数 (%d)，跳过 | 位置=0x%X, 上限=%d",
+            label, count, offset, max_count,
+        )
+        return 0
     if count > max_count:
-        raise ValueError(f"{label}: 数量超过最大值 ({count} > {max_count})")
+        logger.warning(
+            "%s: 数量超过最大值 (%d > %d)，跳过 | 位置=0x%X",
+            label, count, max_count, offset,
+        )
+        return 0
     return count
 
 
