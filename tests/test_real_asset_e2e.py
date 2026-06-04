@@ -40,6 +40,7 @@ def truncated_file(tmp_path):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
+@pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestRealAssetHighLevelFormats:
     """验证真实蓝图的 json / json_summary / cpp_skeleton 输出不崩溃。"""
@@ -77,6 +78,7 @@ class TestRealAssetHighLevelFormats:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
+@pytest.mark.regression
 class TestTruncatedFileLinkerDiagnostics:
     """验证截断文件通过 linker 入口返回诊断，不抛 AttributeError。"""
 
@@ -115,6 +117,7 @@ class TestTruncatedFileLinkerDiagnostics:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
+@pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestLinkerDiagnosticsInOutput:
     """验证 linker 诊断最终出现在 JSON 输出中。"""

@@ -32,6 +32,7 @@ def cpp_output() -> str:
 
 @pytest.mark.integration
 @pytest.mark.quality
+@pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestCppFatalPatterns:
     """验证真实 C++ 输出无致命语法问题。"""
@@ -102,6 +103,7 @@ class TestCppFatalPatterns:
 
 @pytest.mark.integration
 @pytest.mark.quality
+@pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestCppParameterBinding:
     """验证蓝图参数数据流绑定到函数参数。"""
