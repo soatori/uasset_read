@@ -19,6 +19,14 @@ from uasset_read.models.node_types import (
 
 logger = logging.getLogger(__name__)
 
+# Latent/Async 动作节点类型集合 — 在执行流中标记为 latent=True
+LATENT_NODE_TYPES = frozenset({
+    "K2Node_AsyncAction",
+    "K2Node_LatentGameCommand",
+    "K2Node_BaseAsyncTask",
+    "K2Node_Timeline",
+})
+
 
 # ============================================================================
 # 辅助函数
@@ -842,7 +850,7 @@ def _find_next_exec_node(
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
-) -> Optional[UEdGraphNode]:
+) -> Tuple[Optional[UEdGraphNode], Optional[str]]:
     """查找 exec output pin 连接的下一个节点。
 
     Args:
@@ -851,25 +859,25 @@ def _find_next_exec_node(
         node_lookup: node_guid → node 查找表
 
     Returns:
-        Optional[UEdGraphNode]: 下一个节点，或 None
+        Tuple[Optional[UEdGraphNode], Optional[str]]: (下一个节点, 用于连接的 exec output pin 名称)
     """
     for pin in node.pins:
         if pin.direction == 1:  # Output
             if pin.pin_type and pin.pin_type.pin_category == "exec":
                 if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
                     edge = edges_by_from_pin[pin.pin_id][0]
-                    return node_lookup.get(edge["to_node_guid"])
+                    return (node_lookup.get(edge["to_node_guid"]), pin.pin_name)
                 for linked_pin_id in (pin.linked_to_raw or []):
                     target_pin_guid = _pin_ref_guid(linked_pin_id)
                     if target_pin_guid in pin_lookup:
                         target_node_guid, _ = pin_lookup[target_pin_guid]
-                        return node_lookup.get(target_node_guid)
+                        return (node_lookup.get(target_node_guid), pin.pin_name)
     if edges_by_from_pin:
         for edges in edges_by_from_pin.values():
             for edge in edges:
                 if edge["from_node_guid"] == node.node_guid and edge.get("is_exec"):
-                    return node_lookup.get(edge["to_node_guid"])
-    return None
+                    return (node_lookup.get(edge["to_node_guid"]), edge.get("from_pin"))
+    return (None, None)
 
 
 def _trace_execution_from_event(
@@ -904,7 +912,7 @@ def _trace_execution_from_event(
                 "node_type": current_node.class_name,
                 "warning": "missing node_guid"
             })
-            current_node = _find_next_exec_node(
+            current_node, _ = _find_next_exec_node(
                 current_node, pin_lookup, node_lookup, edges_by_from_pin
             )
             continue
@@ -923,6 +931,10 @@ def _trace_execution_from_event(
             "node_guid": current_guid,
             "node_type": current_node.class_name,
         }
+
+        # Latent/Async 动作检测
+        if current_node.class_name in LATENT_NODE_TYPES:
+            node_info["latent"] = True
 
         # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
@@ -978,9 +990,11 @@ def _trace_execution_from_event(
             break
 
         flow.append(node_info)
-        current_node = _find_next_exec_node(
+        current_node, used_pin_name = _find_next_exec_node(
             current_node, pin_lookup, node_lookup, edges_by_from_pin
         )
+        if used_pin_name is not None:
+            node_info["used_exec_pin_name"] = used_pin_name
 
     return flow
 
