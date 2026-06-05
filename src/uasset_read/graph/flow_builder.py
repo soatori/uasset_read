@@ -11,6 +11,7 @@ from uasset_read.constants import (
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
     FORMAT_CONFIG, GRAPH_TYPE_MAP, DATA_BOUNDARY_NODES,
 )
+from uasset_read.graph.macro_expander import MacroExpander, STANDARD_MACROS
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
 from uasset_read.models.node_types import (
     K2NodeCallFunction, K2NodeEvent, K2NodeKnot,
@@ -893,6 +894,48 @@ def _find_next_exec_node(
     return (None, None)
 
 
+def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict[str, Any]:
+    """尝试展开宏实例。
+
+    Args:
+        node: MacroInstance 节点
+        asset_context: 资产上下文，包含 graphs 等信息
+
+    Returns:
+        展开结果字典，包含 macro_name, pin_mapping, unresolved 等
+    """
+    node_data = node.node_data or {}
+    if not isinstance(node_data, dict):
+        return {"unresolved": True, "reason": "node_data is not a dict"}
+
+    macro_ref = node_data.get("macro_graph_reference", {})
+
+    if not macro_ref:
+        return {"unresolved": True, "reason": "no macro_graph_reference"}
+
+    graph_name = macro_ref.get("graph_name", "")
+
+    # 检查是否为标准宏
+    is_standard = graph_name in STANDARD_MACROS
+
+    try:
+        expander = MacroExpander(asset_context)
+        expansion = expander.expand_macro_instance({"macro_graph_reference": macro_ref})
+        return {
+            "macro_name": expansion.context.macro_name,
+            "macro_guid": expansion.context.macro_guid,
+            "pin_mapping": expansion.pin_mapping,
+            "unresolved": expansion.unresolved,
+            "is_standard": is_standard or expansion.context.macro_name in STANDARD_MACROS,
+        }
+    except Exception as e:
+        return {
+            "unresolved": True,
+            "reason": str(e),
+            "macro_name": graph_name or "Unknown",
+        }
+
+
 def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
@@ -900,6 +943,7 @@ def _trace_execution_from_event(
     node_name_lookup: Dict[str, str] = {},
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    asset_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict]:
     """追踪单条执行流（D-08-07~11, D-19-13~14）。
 
@@ -991,16 +1035,21 @@ def _trace_execution_from_event(
         elif current_node.node_data and hasattr(current_node.node_data, 'b_defaults_to_pure') and current_node.node_data.b_defaults_to_pure:
             node_info["pure"] = True
 
-        # 控制流节点终止执行（stopped_at 已由 compat 层设置）
+        # 控制流节点处理
         if current_node.class_name in CONTROL_FLOW_NODES:
-            # 确保 branch_type 设置正确（如果 Processor 未覆盖）
-            if "branch_type" not in node_info:
-                branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
-                node_info["branch_type"] = branch_type
-            if "stopped_at" not in node_info:
-                node_info["stopped_at"] = "control_flow_node"
-            flow.append(node_info)
-            break
+            if current_node.class_name == "K2Node_MacroInstance":
+                # 宏实例：尝试展开并穿透，不终止执行链
+                ctx = asset_context or {}
+                node_info["macro_expansion"] = _try_expand_macro(current_node, ctx)
+            else:
+                # 其他控制流节点：设置 branch_type 并终止
+                if "branch_type" not in node_info:
+                    branch_type = BRANCH_TYPE_MAP.get(current_node.class_name, "unknown")
+                    node_info["branch_type"] = branch_type
+                if "stopped_at" not in node_info:
+                    node_info["stopped_at"] = "control_flow_node"
+                flow.append(node_info)
+                break
 
         flow.append(node_info)
         current_node, used_pin_name = _find_next_exec_node(
@@ -1020,6 +1069,7 @@ def _trace_execution_from_pin(
     node_name_lookup: Dict[str, str] = {},
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    asset_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict]:
     """从特定Pin开始追踪执行流（D-19-12）。
 
@@ -1032,7 +1082,7 @@ def _trace_execution_from_pin(
         if next_node:
             return _trace_execution_from_event(
                 next_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin,
+                edges_by_from_pin, source_edges_by_to_pin, asset_context,
             )
 
     for linked_pin_id in (start_pin.linked_to_raw or []):
@@ -1043,7 +1093,7 @@ def _trace_execution_from_pin(
             if next_node:
                 return _trace_execution_from_event(
                     next_node, pin_lookup, node_lookup, node_name_lookup,
-                    edges_by_from_pin, source_edges_by_to_pin,
+                    edges_by_from_pin, source_edges_by_to_pin, asset_context,
                 )
 
     return []
@@ -1131,7 +1181,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     return connections, warnings
 
 
-def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
+def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[str, Any]] = None) -> List[Dict]:
     """构建执行流路径条目（D-08-07~11, D-19-10~12）。
 
     从 START_EVENT_TYPES 节点开始，沿 exec pin 连接追踪到 CallFunction 链路。
@@ -1140,6 +1190,8 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
 
     Args:
         graph: UEdGraph 对象
+        asset_context: 可选的资产上下文（包含 graphs 用于宏展开）。
+            如果未提供，将从 graph 自动构建。
 
     Returns:
         List[Dict]: execution_flows 数组，每个 entry 包含:
@@ -1161,6 +1213,10 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
 
     edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
 
+    # 构建 asset_context（用于宏展开）
+    if asset_context is None:
+        asset_context = _build_asset_context_from_graph(graph)
+
     execution_flows: List[Dict] = []
     start_nodes = [n for n in graph.nodes if n.class_name in START_EVENT_TYPES]
 
@@ -1171,7 +1227,7 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category == "exec":
                     flow = _trace_execution_from_pin(
                         start_node, pin, pin_lookup, node_lookup, node_name_lookup,
-                        edges_by_from_pin, source_edges_by_to_pin,
+                        edges_by_from_pin, source_edges_by_to_pin, asset_context,
                     )
                     emitted_start_pins.add(pin.pin_name)
                     execution_flows.append({
@@ -1189,7 +1245,7 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
                         flow = (
                             _trace_execution_from_event(
                                 next_node, pin_lookup, node_lookup, node_name_lookup,
-                                edges_by_from_pin, source_edges_by_to_pin,
+                                edges_by_from_pin, source_edges_by_to_pin, asset_context,
                             )
                             if next_node else []
                         )
@@ -1201,7 +1257,7 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
         else:
             flow = _trace_execution_from_event(
                 start_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin,
+                edges_by_from_pin, source_edges_by_to_pin, asset_context,
             )
             start_event_name = _get_start_event_name(start_node)
             execution_flows.append({
@@ -1210,6 +1266,40 @@ def build_execution_flow_entries(graph: UEdGraph) -> List[Dict]:
             })
 
     return execution_flows
+
+
+def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
+    """从 UEdGraph 构建宏展开所需的 asset_context。
+
+    将 UEdGraph 转换为 MacroExpander 期望的字典格式。
+    """
+    graph_dict = {
+        "guid": graph.graph_guid or "",
+        "name": graph.graph_name,
+        "nodes": [
+            {
+                "node_type": node.class_name,
+                "node_guid": node.node_guid,
+                "pins": [
+                    {
+                        "pin_name": pin.pin_name,
+                        "direction": pin.direction,
+                        "pin_type": {
+                            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+                            "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
+                        } if pin.pin_type else {},
+                    }
+                    for pin in node.pins
+                ],
+                "macro_graph_reference": (
+                    node.node_data.get("macro_graph_reference", {})
+                    if isinstance(node.node_data, dict) else {}
+                ),
+            }
+            for node in graph.nodes
+        ],
+    }
+    return {"graphs": [graph_dict]}
 
 
 def build_execution_flows(graph: UEdGraph) -> List[Dict]:
@@ -1620,9 +1710,10 @@ def build_function_graphs(
                 signature = _extract_signature_from_pins(fe_node)
 
             # 构建执行流
+            asset_ctx = _build_asset_context_from_graph(graph)
             execution_flows = _trace_execution_from_event(
                 fe_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin,
+                edges_by_from_pin, source_edges_by_to_pin, asset_ctx,
             )
 
             # 过滤空执行流
