@@ -150,3 +150,4 @@ class PackageIR:
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
     diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
