@@ -570,7 +570,7 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
     - K2Node_Event: event_reference.member_name（dict或dataclass）
     - K2Node_EnhancedInputAction: input_action_path或class_name
     - K2Node_VariableSet: "VariableSet"
-    - K2Node_CustomEvent: "CustomEvent"
+    - K2Node_CustomEvent: "CustomEvent.{custom_event_name}"（从 node_data 提取）或回退 "CustomEvent"
 
     Fallback: 如果无法提取具体名称，返回 node.class_name 而非 "Unknown"。
     """
@@ -616,6 +616,19 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
     elif node.class_name == "K2Node_VariableSet":
         return "VariableSet"
     elif node.class_name == "K2Node_CustomEvent":
+        # 从 node_data 提取实际事件名（D-19-11 扩展）
+        if nd:
+            if isinstance(nd, dict):
+                # 直接从 dict 获取，或从 _raw_properties 获取（UE 原始属性名 CustomPropertyName）
+                event_name = (
+                    nd.get("custom_event_name")
+                    or nd.get("CustomEventName")
+                    or nd.get("_raw_properties", {}).get("CustomPropertyName")
+                )
+            else:
+                event_name = getattr(nd, 'custom_event_name', None)
+            if event_name:
+                return f"CustomEvent.{event_name}"
         return "CustomEvent"
     elif node.class_name == "K2Node_FunctionEntry":
         if not nd:
