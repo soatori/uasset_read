@@ -109,11 +109,8 @@ class JSONRenderer(IRenderer):
         return d
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
-        graphs = []
-        for export in ir.exports:
-            for graph in export.graphs:
-                graphs.append({"export_name": export.object_name, "graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "node_count": len(graph.nodes), "execution_chains": graph.execution_chains})
-        return graphs
+        """直接返回 IR 中已构建的 function_graphs 数据。"""
+        return ir.function_graphs
 
     @property
     def format_name(self) -> str:
