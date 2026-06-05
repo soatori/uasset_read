@@ -39,6 +39,7 @@ class NodeIR:
     node_comment: str | None
     pins: list[PinIR]
     execution_flow: list[dict]
+    macro_expansion: dict | None = None
 
 
 @dataclass

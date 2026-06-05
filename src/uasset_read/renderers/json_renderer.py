@@ -82,7 +82,10 @@ class JSONRenderer(IRenderer):
         return {"graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "nodes": [self._node_to_dict(n) for n in graph.nodes], "execution_chains": graph.execution_chains}
 
     def _node_to_dict(self, node) -> dict[str, Any]:
-        return {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+        if node.macro_expansion is not None:
+            d["macro_expansion"] = node.macro_expansion
+        return d
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
         return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}

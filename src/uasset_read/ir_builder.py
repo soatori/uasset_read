@@ -197,6 +197,7 @@ def _build_node_ir(node) -> NodeIR:
         node_comment=getattr(node, "node_comment", None),
         pins=pins,
         execution_flow=getattr(node, "execution_flow", None) or [],
+        macro_expansion=getattr(node, "macro_expansion", None),
     )
 
 
