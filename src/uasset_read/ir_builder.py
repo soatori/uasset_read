@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from uasset_read.models.ir import (
@@ -59,6 +60,15 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     exports = _build_exports(result)
     linker = _build_linker(result)
 
+    # 构建 function_graphs（从 result.graphs）
+    function_graphs = []
+    if hasattr(result, 'graphs') and result.graphs:
+        from uasset_read.graph import build_function_graphs
+        blueprint_functions = None
+        if hasattr(result, 'blueprint') and result.blueprint:
+            blueprint_functions = getattr(result.blueprint, 'functions', None)
+        function_graphs = build_function_graphs(result.graphs, blueprint_functions)
+
     return PackageIR(
         header=header,
         name_map=list(result.name_map) if result.name_map else [],
@@ -70,6 +80,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
         diagnostics=result.diagnostics or [],
+        function_graphs=function_graphs,
     )
 
 
@@ -338,21 +349,58 @@ def _extract_return_type(signature: str) -> str:
     return "void"
 
 
+def _extract_parameters_from_signature(signature: str) -> list[dict]:
+    """从 C++ 函数签名中解析参数列表。
+
+    签名格式: "ReturnType FuncName(param1, param2, ...)"
+    返回: [{"name": "param1", "type": "int32"}, ...]
+    """
+    if not signature:
+        return []
+
+    # 提取括号内的参数部分
+    match = re.search(r'\(([^)]*)\)', signature)
+    if not match:
+        return []
+
+    params_str = match.group(1).strip()
+    if not params_str:
+        return []
+
+    params = []
+    for param in params_str.split(','):
+        param = param.strip()
+        if not param:
+            continue
+        # 分离类型和名称: "int32 EntryPoint" → ("int32", "EntryPoint")
+        parts = param.rsplit(None, 1)
+        if len(parts) == 2:
+            params.append({"name": parts[1], "type": parts[0]})
+        elif len(parts) == 1:
+            # 只有类型没有名称
+            params.append({"name": "", "type": parts[0]})
+    return params
+
+
 def _extract_parameters(func) -> list[dict]:
     """从 KismetDecompiledResult 中提取参数信息。
 
-    优先使用 semantic_calls 中的参数信息，回退到 signature 解析。
+    优先级: semantic_calls → local_variables → signature 解析
     """
-    # 如果 semantic_calls 包含参数信息
+    # 1) semantic_calls 中的 arguments
     if func.semantic_calls:
         for call in func.semantic_calls:
-            params = call.get("parameters")
-            if params:
-                return params
+            args = call.get("arguments")
+            if args:
+                return [{"name": a, "type": ""} for a in args]
 
-    # 从 local_variables 回退
+    # 2) local_variables
     if func.local_variables:
-        return [{"name": v.get("name", ""), "param_type": v.get("type", "")} for v in func.local_variables]
+        return [{"name": v.get("name", ""), "type": v.get("type", "")} for v in func.local_variables]
+
+    # 3) 从 signature 字符串解析
+    if func.signature:
+        return _extract_parameters_from_signature(func.signature)
 
     return []
 
