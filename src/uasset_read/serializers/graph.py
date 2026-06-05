@@ -1694,6 +1694,16 @@ def read_k2node_macro_instance(
     if macro is not None:
         result["macro_name"] = macro
 
+    # MacroGraphReference 结构化解析（新格式：FGraphReference）
+    macro_graph_ref = raw_properties.get("MacroGraphReference")
+    if macro_graph_ref is not None:
+        result["macro_graph_reference"] = macro_graph_ref
+
+    # ResolvedWildcardType — 通配符引脚解析后的类型
+    resolved_wildcard = raw_properties.get("ResolvedWildcardType")
+    if resolved_wildcard is not None:
+        result["resolved_wildcard_type"] = resolved_wildcard
+
     return result
 
 

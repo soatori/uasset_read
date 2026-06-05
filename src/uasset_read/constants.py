@@ -186,6 +186,16 @@ CONTROL_FLOW_NODES = frozenset({
     "K2Node_SwitchEnum",
     "K2Node_SwitchInteger",
     "K2Node_MacroInstance",
+    # 循环类宏
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    # 多门控
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    # 选择
+    "K2Node_Select",
+    "K2Node_ExecutionSequence",
 })
 
 # ============================================================================
@@ -231,6 +241,12 @@ BRANCH_TYPE_MAP = {
     "K2Node_SwitchEnum": "switch_enum",
     "K2Node_SwitchInteger": "switch_integer",
     "K2Node_MacroInstance": "macro_instance",
+    "K2Node_ForLoop": "for_loop",
+    "K2Node_WhileLoop": "while_loop",
+    "K2Node_DoOnce": "do_once",
+    "K2Node_Sequence": "sequence",
+    "K2Node_MultiGate": "multi_gate",
+    "K2Node_Select": "select",
 }
 
 # ============================================================================
