@@ -63,7 +63,7 @@ def decompile_single_function(
     """
     # 复用 extract_and_parse() 提取和解析字节码
     try:
-        expressions, error = extract_and_parse(
+        expressions, error, extraction_reason = extract_and_parse(
             archive, export, summary, name_map, import_map, export_map,
             tolerant=tolerant,
         )
@@ -72,6 +72,11 @@ def decompile_single_function(
 
     if error or not expressions:
         return None
+
+    # 构建退回原因列表
+    fallback_reasons: list[str] = []
+    if extraction_reason != "function_export":
+        fallback_reasons.append(extraction_reason)
 
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
@@ -108,9 +113,10 @@ def decompile_single_function(
         local_variables=local_vars,
         cpp_code=cpp_code,
         expressions=expressions,
-        bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
+        bytecode_source=("function_export" if extraction_reason == "function_export" else "fallback_or_serial_scan"),
         bytecode_status="parsed",
         warnings=warnings,
+        fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
     )
 

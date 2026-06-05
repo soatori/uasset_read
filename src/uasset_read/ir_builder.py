@@ -319,6 +319,7 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             cpp_code=func.cpp_code,
             parameters=parameters,
             return_type=return_type,
+            fallback_reasons=func.fallback_reasons,
         ))
     return decompiled
 

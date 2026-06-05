@@ -110,6 +110,7 @@ class DecompiledFunctionIR:
     cpp_code: str
     parameters: list[dict]
     return_type: str
+    fallback_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass

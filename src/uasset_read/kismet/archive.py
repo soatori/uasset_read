@@ -13,6 +13,9 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
+    # 类级别去重集合：跨实例共享，同一偏移只打印一次警告
+    _warned_offsets: set[int] = set()
+
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
         self._path = name
         self._file = io.BytesIO(data)
@@ -25,6 +28,11 @@ class FKismetArchive(FArchive):
         self._name_map = name_map
         import logging
         self._logger = logging.getLogger(__name__)
+
+    @classmethod
+    def reset_warned_offsets(cls) -> None:
+        """重置类级别警告去重集合（在新资产反编译开始时调用）。"""
+        cls._warned_offsets = set()
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
@@ -42,9 +50,11 @@ class FKismetArchive(FArchive):
                         raise ParseError(
                             "Too many consecutive unknown tokens in tolerant mode"
                         )
-                    self._logger.warning(
-                        f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
-                    )
+                    if stmt_index not in self._warned_offsets:
+                        self._logger.warning(
+                            f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
+                        )
+                        self._warned_offsets.add(stmt_index)
                     # Skip back: we already consumed 1 byte, so seek to stmt_index + 1
                     self.seek(stmt_index + 1)
                     continue

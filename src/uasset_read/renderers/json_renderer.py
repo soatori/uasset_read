@@ -103,7 +103,10 @@ class JSONRenderer(IRenderer):
 
     def _decompiled_function_to_dict(self, func) -> dict[str, Any]:
         """序列化 DecompiledFunctionIR 为字典。"""
-        return {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
+        d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
+        if func.fallback_reasons:
+            d["fallback_reasons"] = func.fallback_reasons
+        return d
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
         graphs = []
