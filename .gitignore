@@ -29,6 +29,7 @@ test/
 output/
 debug/
 reports/
+/json
 # Session-local tool config
 .claude/
 .qwen/
@@ -40,7 +41,7 @@ memory/
 # Test files
 tests/*
 !tests/test_*.py
-!tests/conftest.py
+
 !tests/__init__.py
 !tests/graph/
 !tests/graph/*.py
@@ -51,4 +52,4 @@ QWEN.md
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
-!docs/superpowers/reports/
+
