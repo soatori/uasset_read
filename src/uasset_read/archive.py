@@ -9,7 +9,7 @@ import mmap
 from typing import Optional, Dict, BinaryIO, Callable, Any
 
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH
+from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
@@ -543,7 +543,7 @@ class FArchive:
         """
         if count < 0:
             raise ParseError(f"read_array: 负数元素数量 {count}")
-        if count > 1_000_000:  # 防御性检查
+        if count > MAX_ARRAY_COUNT:  # 防御性检查
             raise ParseError(f"read_array: 元素数量 {count} 超过最大限制")
 
         result = []

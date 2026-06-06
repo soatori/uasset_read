@@ -84,6 +84,18 @@ MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大�
 MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
 
 # ============================================================================
+# PropertyTag extension flags
+# ============================================================================
+
+PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+
+# ============================================================================
+# FPropertyTypeName type node read limit (relaxed from MAX_TYPENODE_NODES for complex nested types)
+# ============================================================================
+
+MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name (relaxed from MAX_TYPENODE_NODES=20 for complex nested types)
+
+# ============================================================================
 # UE5版本常量（EUnrealEngineObjectUE5Version）
 # ============================================================================
 
