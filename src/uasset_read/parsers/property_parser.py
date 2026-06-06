@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, List, Optional, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectImport
+    from uasset_read.serializers.package_summary import PackageFileSummary
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
 from uasset_read.models.fallback import PropertyFallback, FallbackReason
@@ -209,7 +210,7 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
 def parse_properties_from_export(
     export: ObjectExport,
     archive: FArchive,
-    summary: Any,
+    summary: "PackageFileSummary",
     name_map: List[str],
     export_map: List[Any],
     import_map: Optional[List[ObjectImport]] = None,
@@ -444,7 +445,7 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
 def _parse_unversioned_properties_from_mapping(
     export: ObjectExport,
     archive: FArchive,
-    summary: Any,
+    summary: "PackageFileSummary",
     name_map: List[str],
     export_map: List[Any],
     mappings: Any,

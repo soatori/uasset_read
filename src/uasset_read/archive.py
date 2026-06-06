@@ -6,7 +6,7 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 """
 import logging
 import mmap
-from typing import Optional, Dict, BinaryIO
+from typing import Optional, Dict, BinaryIO, Callable, Any
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH
@@ -522,7 +522,7 @@ class FArchive:
         )
         return "None"
 
-    def read_array(self, count: int, element_reader) -> list:
+    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any]) -> list:
         """读取指定数量的元素数组。
 
         泛型数组读取方法，等价于 UE 的 ReadArray<T>。
