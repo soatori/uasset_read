@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import io
+import logging
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.expressions import EXPR_CLASS_MAP
+
+logger = logging.getLogger(__name__)
 
 
 class FKismetArchive(FArchive):
@@ -26,8 +29,6 @@ class FKismetArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._name_map = name_map
-        import logging
-        self._logger = logging.getLogger(__name__)
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
@@ -51,7 +52,7 @@ class FKismetArchive(FArchive):
                             "Too many consecutive unknown tokens in tolerant mode"
                         )
                     if stmt_index not in self._warned_offsets:
-                        self._logger.warning(
+                        logger.warning(
                             f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
                         )
                         self._warned_offsets.add(stmt_index)
