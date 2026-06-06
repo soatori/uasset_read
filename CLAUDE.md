@@ -8,7 +8,7 @@
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器。专注于未烘焙/编辑器保存的资产（含完整蓝图数据）。
 
-- **版本**: 0.4.2 | **Python**: 3.10+ | **运行时依赖**: 零依赖
+- **版本**: 0.4.3 | **Python**: 3.10+ | **运行时依赖**: 零依赖
 - 构建系统: 直接脚本运行（src 布局）
 - 详细开发指南（测试、CLI、架构、模块索引）见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md)
 
@@ -59,3 +59,17 @@ docs/
 wiki/                ← 代码指南（独立维护，wiki 镜像）
 temp/                ← 临时文件、脚本、中间产物、session 归档
 ```
+
+## Agent skills
+
+### Issue tracker
+
+使用 GitHub Issues 跟踪任务（gh CLI）。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个标准角色标签：needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文布局。详见 `docs/agents/domain.md`。
