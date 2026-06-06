@@ -129,8 +129,8 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         if handler is not None:
             try:
                 return handler(tag, archive, name_map, export_map, summary)
-            except Exception:
-                pass  # 解析失败，回退到原始字节
+            except Exception as e:
+                logger.warning("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
             "kind": "binary_or_native_property",
@@ -153,14 +153,14 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
             if custom_id is not None:
                 try:
                     return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-                except Exception:
-                    pass  # fallback 到 PropertyFallback
+                except Exception as e:
+                    logger.warning("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-            except Exception:
-                pass  # fallback 到 PropertyFallback
+            except Exception as e:
+                logger.warning("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
         # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
@@ -262,8 +262,8 @@ def parse_properties_from_export(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve class name for export: %s", e)
     if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
@@ -333,7 +333,8 @@ def parse_properties_from_export(
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
 
@@ -435,8 +436,8 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             return resolve_class_name(export.class_index, import_map, export_map)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
 
 
@@ -569,7 +570,8 @@ def _try_read_unversioned_header(
         if archive.tell() >= property_end and not all(is_zero for _index, is_zero in selected):
             raise ParseError("unversioned header consumes entire property payload")
         return selected
-    except Exception:
+    except Exception as e:
+        logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
         archive.seek(start)
         return None
 
@@ -665,7 +667,8 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
             if inner_size <= 0:
                 return 0
             return min(remaining, 4 + inner_size)
-    except Exception:
+    except Exception as e:
+        logger.debug("Unversioned variable size estimation failed: %s", e)
         return 0
     finally:
         archive.seek(current)

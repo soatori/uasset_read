@@ -45,7 +45,7 @@ class FArchive:
                         access=mmap.ACCESS_READ
                     )
                     self._use_mmap = True
-                except (OSError, ValueError, PermissionError) as e:
+                except (OSError, ValueError, PermissionError, MemoryError) as e:
                     self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
                     self._use_mmap = False
         except BaseException:
