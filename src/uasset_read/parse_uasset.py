@@ -69,10 +69,10 @@ def _extract_kismet_decompiled(
             )
             if result is not None:
                 results.append(result)
-        except Exception:
+        except Exception as e:
             # Per D-10: failure does NOT block pipeline
-            # Error logged to caller's warnings list
-            pass
+            # Log warning so caller can diagnose if needed
+            logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
     return results
 
 
