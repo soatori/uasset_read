@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional, List, Union, Sequence
+from typing import TYPE_CHECKING, Optional, List, Union, Sequence, Callable
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -337,39 +337,40 @@ def _package_metadata(bundle: PackageBundle) -> dict:
     }
 
 
-def parse_package(
+def _parse_package_core(
     path: str,
+    result,
     tolerant: bool = True,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    aes_key: Optional[bytes] = None,
-    provider: Optional[PackageProvider] = None,
+    provider: Optional["PackageProvider"] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
-    include_linker: bool = True,  # Deprecated: linker is now always created
-) -> ParseResult:
-    """
-    主入口：解析 Unreal package（.uasset 或 .umap）。
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
+    extra_linker_setup: Optional[Callable] = None,
+    check_aes_key: Optional[bytes] = None,
+) -> None:
+    """共享核心解析逻辑 — 读取 package 并填充 result。
 
     Args:
-        path: .uasset/.umap 文件路径
-        tolerant: 是否启用容错模式（默认开启）
-        aes_key: Deprecated. Construct encrypted container readers/providers with
-            their AES key instead; the parser no longer accepts an unused key.
-        provider: 可选 package provider（filesystem/pak/iostore）
-        include_linker: Deprecated. Linker is now always created for complete
-            object graph resolution. Parameter retained for backward compatibility.
-
-    Returns:
-        ParseResult 实例（含解析数据和错误信息）
+        path: 文件路径
+        result: ParseResult 或 LinkerParseResult 实例（被原地修改）
+        tolerant: 容错模式
+        provider: package provider
+        mappings_path: 类型映射文件路径
+        game: 游戏标识
+        include_parent_assets: 是否解析父资产
+        asset_roots: 资产根目录列表
+        extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
+        check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
     """
-    result = ParseResult()
+    from uasset_read.link.linker import PackageLinker
+
     archive = None
     bundle = None
     mappings_provider = None
 
     try:
-        if aes_key is not None:
+        if check_aes_key is not None:
             raise ParseError(
                 "Unsupported argument: aes_key. Pass the key "
                 "when constructing the Pak/IoStore reader and provider"
@@ -380,6 +381,7 @@ def parse_package(
             result.metadata["mappings_path"] = mappings_path
         if game:
             result.metadata["game"] = game
+
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
         result.metadata.update(_package_metadata(bundle))
@@ -412,7 +414,6 @@ def parse_package(
             result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
         # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
-        from uasset_read.link.linker import PackageLinker
         linker: Optional["PackageLinker"] = None
         try:
             linker = PackageLinker(
@@ -422,6 +423,10 @@ def parse_package(
             )
             linker.link()
             result.linker = linker
+
+            if extra_linker_setup is not None:
+                extra_linker_setup(linker, result)
+
             linker.post_load()
         except Exception as e:
             if not tolerant:
@@ -476,6 +481,9 @@ def parse_package(
         result.is_success = False
 
     finally:
+        # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
+        if result.linker and getattr(result.linker, 'diagnostics', None):
+            result.diagnostics.extend(result.linker.diagnostics)
         if archive:
             # 收集 FArchive 诊断记录（截断检测、偏移越界等）
             archive_diagnostics = archive.get_diagnostics()
@@ -483,6 +491,51 @@ def parse_package(
                 result.diagnostics.extend(archive_diagnostics)
             archive.close()
 
+
+def parse_package(
+    path: str,
+    tolerant: bool = True,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
+    aes_key: Optional[bytes] = None,
+    provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
+    include_linker: bool = True,  # Deprecated: linker is now always created
+) -> ParseResult:
+    """
+    主入口：解析 Unreal package（.uasset 或 .umap）。
+
+    Args:
+        path: .uasset/.umap 文件路径
+        tolerant: 是否启用容错模式（默认开启）
+        aes_key: Deprecated. Construct encrypted container readers/providers with
+            their AES key instead; the parser no longer accepts an unused key.
+        provider: 可选 package provider（filesystem/pak/iostore）
+        include_linker: Deprecated. Linker is now always created for complete
+            object graph resolution. Parameter retained for backward compatibility.
+
+    Returns:
+        ParseResult 实例（含解析数据和错误信息）
+    """
+    result = ParseResult()
+
+    # Handle deprecated aes_key inline (don't pass to core)
+    if aes_key is not None:
+        result.errors.append(
+            "Unsupported argument: aes_key. Pass the key "
+            "when constructing the Pak/IoStore reader and provider"
+        )
+        result.is_success = False
+        return result
+
+    _parse_package_core(
+        path, result,
+        tolerant=tolerant, provider=provider,
+        mappings_path=mappings_path, game=game,
+        include_parent_assets=include_parent_assets,
+        asset_roots=asset_roots,
+    )
     return result
 
 
@@ -533,119 +586,26 @@ def parse_uasset_with_linker(
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
     """
-    from uasset_read.link.linker import PackageLinker
-
     result = LinkerParseResult()
-    archive = None
-    bundle = None
-    mappings_provider = None
 
-    try:
-        if mappings_path:
-            from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
-            result.metadata["mappings_path"] = mappings_path
-        if game:
-            result.metadata["game"] = game
-        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
-        archive = bundle.open_archive(tolerant=tolerant)
-        result.metadata.update(_package_metadata(bundle))
+    def extra_linker_setup(linker, res):
+        res.all_objects = linker._import_objects + linker._export_objects
+        res.root_objects = linker._root_objects
 
-        # Extract mmap info
-        mmap_info = archive.get_mmap_info()
-        result.mmap_used = mmap_info["used"]
-        result.mmap_warning = mmap_info["warning"]
+    _parse_package_core(
+        path, result,
+        tolerant=tolerant, provider=provider,
+        mappings_path=mappings_path, game=game,
+        include_parent_assets=include_parent_assets,
+        asset_roots=asset_roots,
+        extra_linker_setup=extra_linker_setup,
+    )
 
-        # 读取文件头
-        result.summary = read_package_summary(archive)
-        result.version_container = build_version_container(result.summary)
-
-        # 截断文件检测：验证导出数据范围
-        validate_export_data_range(archive, result.summary)
-
-        result.name_map = read_name_table(archive, result.summary)
-        result.import_map = read_import_map(archive, result.summary, result.name_map)
-        result.export_map = read_export_map(archive, result.summary, result.name_map)
-
-        # 创建并运行 linker（在属性解析之前，确保 parse_properties_from_export 可使用 linker）
-        from uasset_read.link.linker import PackageLinker
-        linker = PackageLinker(
-            archive, result.summary, result.name_map,
-            result.import_map, result.export_map or [],
-            version_container=result.version_container,
-        )
-        linker.link()
-        result.linker = linker
-        result.all_objects = linker._import_objects + linker._export_objects
-        result.root_objects = linker._root_objects
-
-        # 解析 ExportMap 属性（此时 result.linker 已可用）
-        for export in result.export_map or []:
-            if export.serial_size > 0:
-                try:
-                    export.properties = parse_properties_from_export(
-                        export, archive, result.summary, result.name_map,
-                        result.export_map or [], result.import_map,
-                        linker=result.linker,
-                        mappings=mappings_provider.mappings if mappings_provider else None,
-                        game=game,
-                    )
-                except Exception as e:
-                    if not tolerant:
-                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
-                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
-                    export.properties = []
-
-                # 提取组件变换属性
-                if export.properties:
-                    export.transforms = extract_component_transforms(export.properties)
-
-        # 可选：预加载所有 exports
-        if preload_all:
-            for i in range(len(linker._export_objects)):
-                try:
-                    linker.preload(i)
-                except (ParseError, Exception) as e:
-                    logger.warning("预加载 export %d 失败，跳过: %s", i, e)
-
-        # Stage 4: 后处理（引用修复、导入验证、依赖图构建）
-        linker.post_load()
-
-        # 共享后处理
-        _post_process(
-            path, archive, result.summary, result.name_map,
-            result.import_map, result.export_map or [], result, tolerant,
-            linker=result.linker,
-            include_parent_assets=include_parent_assets,
-            asset_roots=asset_roots,
-            archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
-        )
-
-    except VersionError as e:
-        result.errors.append(str(e))
-        result.is_success = False
-
-    except ParseError as e:
-        result.errors.append(str(e))
-        if e.partial_result:
-            for key, value in e.partial_result.items():
-                if hasattr(result, key):
-                    setattr(result, key, value)
-        result.is_success = False
-
-    except Exception as e:
-        result.errors.append(f"Unexpected error: {str(e)}")
-        result.is_success = False
-
-    finally:
-        # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
-        if result.linker and result.linker.diagnostics:
-            result.diagnostics.extend(result.linker.diagnostics)
-        if archive:
-            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
-            archive_diagnostics = archive.get_diagnostics()
-            if archive_diagnostics:
-                result.diagnostics.extend(archive_diagnostics)
-            archive.close()
+    if preload_all and result.linker:
+        for i in range(len(result.linker._export_objects)):
+            try:
+                result.linker.preload(i)
+            except (ParseError, Exception) as e:
+                logger.warning("预加载 export %d 失败，跳过: %s", i, e)
 
     return result
