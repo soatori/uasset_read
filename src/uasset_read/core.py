@@ -12,6 +12,7 @@ from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
+from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -24,11 +25,6 @@ class BatchResult:
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
-
-
-class ParseError(Exception):
-    """解析失败。"""
-    pass
 
 
 def parse_single(

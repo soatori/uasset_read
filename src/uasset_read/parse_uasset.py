@@ -607,6 +607,8 @@ def _parse_package_core(
         _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
         result.errors.append(str(e))
         result.is_success = False
+        if not tolerant:
+            raise
 
     except ParseError as e:
         _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
@@ -616,11 +618,15 @@ def _parse_package_core(
                 if hasattr(result, key):
                     setattr(result, key, value)
         result.is_success = False
+        if not tolerant:
+            raise
 
     except Exception as e:
         _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
         result.errors.append(f"Unexpected error: {str(e)}")
         result.is_success = False
+        if not tolerant:
+            raise
 
     finally:
         # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）

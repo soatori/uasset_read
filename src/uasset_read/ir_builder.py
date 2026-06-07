@@ -72,6 +72,23 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             if hasattr(result, "warnings"):
                 result.warnings.append(f"function_graphs generation skipped: {e}")
 
+    status = _result_status(result)
+    metadata = getattr(result, "metadata", None) or {}
+    errors = list(getattr(result, "errors", None) or [])
+
+    if errors:
+        status_code = "PARSE_ERROR"
+        status_message = errors[0]
+    elif metadata.get("lightweight_tolerant_parse"):
+        status_code = "LIGHTWEIGHT_TOLERANT_PARSE"
+        status_message = (
+            f"轻量容错解析：导出数量过多"
+            f"({getattr(result.summary, 'export_count', '?')})，已降级处理"
+        )
+    else:
+        status_code = None
+        status_message = None
+
     ir = PackageIR(
         header=header,
         name_map=list(result.name_map) if result.name_map else [],
@@ -87,10 +104,10 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
         inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
         logic_sources=list(getattr(result, "logic_sources", None) or []),
-        errors=list(getattr(result, "errors", None) or []),
-        status=_result_status(result),
-        status_message=(result.errors[0] if getattr(result, "errors", None) else None),
-        status_code=("PARSE_ERROR" if getattr(result, "errors", None) else None),
+        errors=errors,
+        status=status,
+        status_message=status_message,
+        status_code=status_code,
     )
 
     # 绑定函数/事件实现关联
@@ -102,7 +119,13 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
 def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     if getattr(result, "is_success", False):
-        return "partial" if getattr(result, "errors", None) else "success"
+        if getattr(result, "errors", None):
+            return "partial"
+        # 轻量容错解析（大资产降级）也应标记为 partial
+        metadata = getattr(result, "metadata", None) or {}
+        if metadata.get("lightweight_tolerant_parse"):
+            return "partial"
+        return "success"
     if (
         getattr(result, "summary", None) is not None
         or getattr(result, "name_map", None)
