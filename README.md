@@ -26,7 +26,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 |--------|-------|
 | Version | 0.4.4-dev |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1125 passed, 2 skipped, 2 xfailed (71 test files) |
+| Tests | 1172 passed, 2 skipped, 2 xfailed |
 | Modules | 145 source files across 14 subpackages |
 
 ## Features

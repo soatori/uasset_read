@@ -20,8 +20,8 @@
 
 ## 测试要点
 
-- 位置: `tests/`（994 用例通过，2 xfail，40+ 集成测试）
-- 要求: ≥ 800 单元测试，100% 通过率，≥ 12 种资产类型
+- 位置: `tests/`（1172 用例通过，2 skipped，2 xfail）
+- 要求: 100% 通过率，≥ 12 种资产类型
 - 稳定资产必须在 strict 和 tolerant 双模式下通过
 - 详细规范见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md) 的"测试"章节
 

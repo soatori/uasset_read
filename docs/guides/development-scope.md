@@ -177,6 +177,6 @@ E:\Develop\lib\UnrealEngine\Samples\
 
 ---
 
-**版本**: 0.4.2-dev  
+**版本**: 0.4.4-dev  
 **最后更新**: 2026-06-03  
 **维护者**: uasset_read Contributors

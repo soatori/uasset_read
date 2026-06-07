@@ -13,7 +13,7 @@ section: overview
 
 | 项目 | 详情 |
 |------|------|
-| 版本信息 | `0.4.2` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
+| 版本信息 | `0.4.4-dev` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
 | 构建系统 | Setuptools（src 布局） · 直接 `python run.py file.uasset` 调用 · PAK 可选依赖 |
 | 支持资产 | 18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等 · 容器：文件系统 / PAK / IoStore |
 
@@ -34,7 +34,7 @@ section: overview
 |------|------|------|
 | ≤ 0.3.8 | ParseResult → Exporter → Output | 导出器直接访问 ParseResult |
 | 0.4.1 | ParseResult → IR Builder → PackageIR → Renderers → Output | IR 层引入，解析与输出解耦 |
-| **0.4.2** | IR + 6 渲染器，8 输出格式，Kismet 反编译改进，C++ 骨架质量提升，PropertyFallback 系统 | 首个稳定发布 |
+| **0.4.4-dev** | IR + 6 渲染器，8 输出格式，Kismet 反编译改进，C++ 骨架质量提升，PropertyFallback 系统，严格模式语义统一，容错 partial 状态标记，蓝图事件函数提取修复，函数返回值类型修复，轻量解析阈值可配置 | 当前开发版 |
 
 ## 关键约束
 
