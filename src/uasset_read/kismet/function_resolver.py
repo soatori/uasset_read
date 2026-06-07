@@ -113,7 +113,7 @@ class FunctionRefResolver:
             return self._virtual_class_cache[func_name]
 
         # 在 export 对象中搜索匹配的函数名
-        for inst in self._linker._export_objects:
+        for inst in self._linker.export_objects():
             if inst.object_name == func_name:
                 class_name = inst.object_class or "Unknown"
                 # 函数对象的 outer 是 BlueprintGeneratedClass 时，

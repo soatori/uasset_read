@@ -118,3 +118,42 @@ def test_binary_or_native_still_returns_dict():
 
     assert isinstance(result, dict)
     assert result["kind"] == "binary_or_native_property"
+
+
+def test_known_property_handler_error_returns_fallback_in_tolerant_mode(monkeypatch):
+    """已知类型 handler 失败时，tolerant 模式应降级为 PropertyFallback。"""
+    tag = PropertyTag(name="BadInt", type="IntProperty", size=4)
+    archive = _make_archive(b"\x00" * 4)
+
+    def _raise(*args, **kwargs):
+        raise ValueError("bad int payload")
+
+    monkeypatch.setattr(
+        "uasset_read.parsers.property_parser._get_parse_functions",
+        lambda: {"IntProperty": _raise},
+    )
+
+    result = parse_property_value(tag, archive, [], [], tolerant=True)
+
+    assert isinstance(result, PropertyFallback)
+    assert result.reason == FallbackReason.PARSE_ERROR
+    assert "bad int payload" in result.error_message
+
+
+def test_known_property_handler_error_raises_in_strict_mode(monkeypatch):
+    """strict 模式保留快速失败行为。"""
+    import pytest
+
+    tag = PropertyTag(name="BadInt", type="IntProperty", size=4)
+    archive = _make_archive(b"\x00" * 4)
+
+    def _raise(*args, **kwargs):
+        raise ValueError("bad int payload")
+
+    monkeypatch.setattr(
+        "uasset_read.parsers.property_parser._get_parse_functions",
+        lambda: {"IntProperty": _raise},
+    )
+
+    with pytest.raises(ValueError, match="bad int payload"):
+        parse_property_value(tag, archive, [], [], tolerant=False)

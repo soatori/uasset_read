@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from uasset_read.exceptions import ErrorContext
     from uasset_read.models.properties import PropertyValue
 
 
@@ -43,6 +44,7 @@ class PropertyFallback:
     array_index: int = 0
     tag_data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    error_context: Optional["ErrorContext"] = None
 
     @property
     def kind(self) -> str:
@@ -67,6 +69,30 @@ class PropertyFallback:
             d["tag_data"] = self.tag_data
         if self.error_message:
             d["error_message"] = self.error_message
+        if self.error_context is not None:
+            d["error_context"] = self._serialize_error_context()
+        return d
+
+    def _serialize_error_context(self) -> Dict[str, Any]:
+        """将 ErrorContext 序列化为字典。"""
+        ctx = self.error_context
+        d: Dict[str, Any] = {
+            "offset": ctx.offset,
+            "phase": ctx.phase,
+            "operation": ctx.operation,
+        }
+        if ctx.context_name:
+            d["context_name"] = ctx.context_name
+        if ctx.export_index is not None:
+            d["export_index"] = ctx.export_index
+        if ctx.expected_offset is not None:
+            d["expected_offset"] = ctx.expected_offset
+        if ctx.actual_offset is not None:
+            d["actual_offset"] = ctx.actual_offset
+        if ctx.field_name:
+            d["field_name"] = ctx.field_name
+        if ctx.version_info:
+            d["version_info"] = ctx.version_info
         return d
 
 

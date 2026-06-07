@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.4.3 released** — Direct script execution (no pip install), IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
+> 📦 **v0.4.4-dev** — Direct script execution, IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. With 8 dedicated asset-type parsers (StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave); broader asset categories are partially supported via generic UObject/property fallback paths. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.3 |
+| Version | 0.4.4-dev |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 994 passed, 2 xfailed (54 test files, 12+ asset types) |
-| Modules | 137 source files across 13 subpackages |
+| Tests | 1172 passed, 2 skipped, 2 xfailed |
+| Modules | 145 source files across 14 subpackages |
 
 ## Features
 
@@ -56,9 +56,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
 
 ### File Format Support
-- **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB decryption
+- **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
 - **IoStore container** — Chunk ID, offset/size structures
-- **Asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -118,19 +118,33 @@ python -m uasset_read path/to/file.uasset --text
 
 ## Core API
 
-Simplified high-level API for programmatic use:
+Simplified high-level API for programmatic use — **recommended entry point**:
 
 ```python
 from uasset_read import parse_single, parse_batch, list_formats
 
-# Parse a single file
-result = parse_single("path/to/file.uasset")
+# Parse a single file (returns formatted string)
+json_str = parse_single("path/to/file.uasset", format="json")
+summary = parse_single("path/to/file.uasset", format="json_summary")
+text = parse_single("path/to/file.uasset", format="markdown")
 
 # Batch parse a directory
-results = parse_batch("path/to/directory")
+results = parse_batch("path/to/directory", format="json")
 
 # List available output formats
 formats = list_formats()
+```
+
+### Legacy formatters (deprecated)
+
+The following formatter functions are still exported for backward compatibility
+but are considered legacy. **Use `parse_single()` / `parse_batch()` instead** —
+they go through the unified IR → Renderer pipeline and produce the most complete
+output.
+
+```python
+from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
+# ⚠️ Legacy — prefer parse_single(format="json") over format_json_full()
 ```
 
 ### Module-level API
@@ -158,7 +172,7 @@ from uasset_read import (
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
 
-    # Formatters
+    # Formatters (legacy — prefer parse_single(format=...))
     format_json_full, format_json_summary,
     format_text_full, format_markdown,
 
@@ -216,11 +230,11 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | CLI | `cli.py` | argparse 入口点，委托 `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
-| **IR** | `ir.py` | Package-level intermediate representation builder |
+| **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, pin tracing |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |

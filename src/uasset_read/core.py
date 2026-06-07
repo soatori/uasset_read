@@ -12,6 +12,7 @@ from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
+from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -24,11 +25,6 @@ class BatchResult:
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
-
-
-class ParseError(Exception):
-    """解析失败。"""
-    pass
 
 
 def parse_single(
@@ -89,7 +85,7 @@ def parse_single(
             game=game,
         )
 
-    if not result.is_success:
+    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
     # 构建 IR
@@ -104,6 +100,22 @@ def parse_single(
         linker_result=result if format == "cpp_skeleton" else None,
     )
     return renderer.render(ir, options)
+
+
+def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
+    if not tolerant or format not in {"json", "json_summary"}:
+        return False
+    if getattr(result, "diagnostics", None):
+        return True
+    if getattr(result, "metadata", None):
+        return True
+    if getattr(result, "summary", None) is not None:
+        return True
+    if getattr(result, "name_map", None):
+        return True
+    if getattr(result, "import_map", None) or getattr(result, "export_map", None):
+        return True
+    return False
 
 
 def parse_batch(

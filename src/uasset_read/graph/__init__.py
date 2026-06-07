@@ -16,6 +16,11 @@ from .flow_builder import (
     is_function_graph,
     build_function_graphs,
     build_blueprint_node_index,
+    # Public API for cross-module consumers (kismet/semantic.py)
+    build_graph_indexes,
+    build_normalized_edge_indexes,
+    trace_execution_from_event,
+    node_member_name,
 )
 from .chain_builder import (
     build_execution_chains,

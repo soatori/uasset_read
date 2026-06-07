@@ -185,6 +185,16 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # AnimSequence 结构体（部分资产使用 tagged 格式）
     "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
     "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
+    # 编辑器结构体
+    "FEditorElement",    # 蓝图编辑器组合框选项（DisplayName/Value/bIsDefault）
+    "EditorElement",
+    # 材质参数结构体（材质实例资产使用 tagged 格式）
+    "ScalarParameterValue",
+    "FScalarParameterValue",
+    "FMaterialParameterInfo",
+    # 动画混合空间结构体（部分资产使用 tagged 格式）
+    "BlendSample",          # FBlendSample — BlendSpace 采样点（SampleValue/Time/RateScale/bIsValid）
+    "FBlendSample",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -220,6 +230,50 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "AnimNotifyTrack": [
         ("TrackIndex", "Int64Property"),
         ("TrackName", "NameProperty"),
+    ],
+    # 编辑器结构体
+    "FEditorElement": [
+        ("DisplayName", "TextProperty"),
+        ("Value", "StrProperty"),
+        ("bIsDefault", "BoolProperty"),
+    ],
+    "EditorElement": [
+        ("DisplayName", "TextProperty"),
+        ("Value", "StrProperty"),
+        ("bIsDefault", "BoolProperty"),
+    ],
+    # 材质参数结构体 tagged fallback schemas
+    # FMaterialParameterInfo: FName ParameterName + int32 Index + bool bOverride
+    "FMaterialParameterInfo": [
+        ("ParameterName", "NameProperty"),
+        ("Index", "IntProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    # FScalarParameterValue: FMaterialParameterInfo ParameterInfo + float ParameterValue + bool bOverride
+    "ScalarParameterValue": [
+        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterValue", "FloatProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    "FScalarParameterValue": [
+        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterValue", "FloatProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    # 动画混合空间结构体 tagged fallback schemas
+    # FBlendSample: FVector SampleValue + float Time + int32 RateScale + bool bIsValid
+    # 参考：Engine/Classes/Animation/BlendSpace.h — FBlendSample
+    "BlendSample": [
+        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
+        ("Time", "FloatProperty"),            # float — 动画时间值
+        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
+        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
+    ],
+    "FBlendSample": [
+        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
+        ("Time", "FloatProperty"),            # float — 动画时间值
+        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
+        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
     ],
 }
 

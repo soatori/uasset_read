@@ -12,11 +12,17 @@ if TYPE_CHECKING:
 
 
 def parse_texture2d(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
-    """解析 Texture2D 资产的核心属性。"""
+    """解析 Texture2D 资产的核心属性。
+
+    支持两种布局：
+    1. UT2D 格式：自定义魔术头 (b"UT2D")，含 MIP 级别元数据
+    2. 标准 UTexture2D 格式：ImportedSize → AddressX/Y → bCooked → PixelFormat
+    """
     result: Dict[str, Any] = {}
     start = archive.tell()
 
-    if archive.total_size() - start >= 20:
+    # 检查 UT2D 魔数（至少需要 16 字节：4 magic + 4*3 i32）
+    if archive.total_size() - start >= 16:
         magic = archive.read(4)
         if magic == b"UT2D":
             result["imported_size_x"] = archive.read_i32()
@@ -37,9 +43,16 @@ def parse_texture2d(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
             result["raw_offset"] = start
             result["raw_size"] = archive.tell() - start
             return result
+        # 非 UT2D：不 seek 回 start，因为前 4 字节已经是标准格式的
+        # imported_size_x（UE 资产数据不以魔数开头）
+
+    # 标准 UTexture2D 布局
+    # 注意：如果上面读了 magic（非 UT2D），前 4 字节就是 imported_size_x
+    # 如果没读 magic（文件 < 16 字节），从头读取
+    if magic != b"UT2D":
+        # 前 4 字节已作为 magic 读取，将其解释为 imported_size_x
         archive.seek(start)
 
-    # ImportedSize (FIntPoint)
     result["imported_size_x"] = archive.read_i32()
     result["imported_size_y"] = archive.read_i32()
 

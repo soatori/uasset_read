@@ -126,6 +126,16 @@ def test_reader_resolves_paths_like_package_provider(monkeypatch):
     assert reader.extract("Missing") is None
 
 
+def test_reader_rejects_traversal_path_before_exact_match():
+    reader = PakFileReader("unused.pak")
+    reader._entries = {
+        "../evil.uasset": FPakEntry(offset=0, uncompressed_size=7),
+    }
+
+    assert reader.get_entry("../evil.uasset") is None
+    assert reader.extract("../evil.uasset") is None
+
+
 def test_reader_rejects_out_of_range_compression_method_index():
     reader = PakFileReader("unused.pak")
     reader._file = BytesIO(b"payload")

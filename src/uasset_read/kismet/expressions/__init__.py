@@ -87,6 +87,7 @@ from uasset_read.kismet.expressions.special import (
     EX_InstrumentationEvent, EX_DeprecatedOp4A, EX_Breakpoint,
     EX_Tracepoint, EX_WireTracepoint, EX_FieldPathConst,
     EX_ObjectConst, EX_NameConst,
+    EX_Unknown6E, EX_Unknown6F, EX_MaxSentinel,
 )
 
 # RTFM
@@ -208,6 +209,11 @@ EXPR_CLASS_MAP: dict[EExprToken, type[KismetExpression]] = {
     EExprToken.EX_SwitchValue: EX_SwitchValue,
     EExprToken.EX_InstrumentationEvent: EX_InstrumentationEvent,
     EExprToken.EX_FieldPathConst: EX_FieldPathConst,
+    # Game-specific opcodes (placeholder — tolerant mode skips unknown data)
+    EExprToken.EX_6E: EX_Unknown6E,
+    EExprToken.EX_6F: EX_Unknown6F,
+    # Sentinel: EX_Max (0xFF) treated as end-of-script marker
+    EExprToken.EX_Max: EX_MaxSentinel,
     # RTFM
     EExprToken.EX_AutoRtfmTransact: EX_AutoRtfmTransact,
     EExprToken.EX_AutoRtfmStopTransact: EX_AutoRtfmStopTransact,
