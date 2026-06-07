@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器。专注于未烘焙/编辑器保存的资产（含完整蓝图数据）。
 
-- **版本**: 0.4.4-dev | **Python**: 3.10+ | **运行时依赖**: 零依赖
+- **版本**: 0.4.4 | **Python**: 3.10+ | **运行时依赖**: 零依赖
 - 构建系统: 直接脚本运行（src 布局），禁止 `pip install`
 - 详细开发指南见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md)
 
