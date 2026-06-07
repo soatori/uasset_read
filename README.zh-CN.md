@@ -56,7 +56,7 @@
 - **IR（中间表示）** — 包级 IR 构建器，实现解耦的渲染管线
 
 ### 文件格式支持
-- **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB 解密
+- **Pak 文件解析** — FPakInfo、标准库 Zlib 解压；安装 `lz4`、`zstandard` 或 `cryptography` 后支持 LZ4/Zstd/AES-ECB；Oodle 会明确报告暂不支持
 - **IoStore 容器** — Chunk ID、偏移/大小结构
 - **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
 - **Bulk Data** — BulkData 头部解析
@@ -119,19 +119,31 @@ python -m uasset_read path/to/file.uasset --text
 
 ## 核心 API（推荐）
 
-简化的高级编程接口：
+简化的高级编程接口 — **推荐入口**：
 
 ```python
 from uasset_read import parse_single, parse_batch, list_formats
 
-# 解析单个文件
-result = parse_single("path/to/file.uasset")
+# 解析单个文件（返回格式化字符串）
+json_str = parse_single("path/to/file.uasset", format="json")
+summary = parse_single("path/to/file.uasset", format="json_summary")
+text = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
-results = parse_batch("path/to/directory")
+results = parse_batch("path/to/directory", format="json")
 
 # 列出可用的输出格式
 formats = list_formats()
+```
+
+### 旧版格式化函数（已弃用）
+
+以下格式化函数仍可导入使用，但已标记为 legacy。
+**请使用 `parse_single()` / `parse_batch()`** — 它们走统一的 IR → Renderer 管线，输出最完整。
+
+```python
+from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
+# ⚠️ Legacy — 请改用 parse_single(format="json") 替代 format_json_full()
 ```
 
 ### Python API
@@ -144,6 +156,9 @@ formats = list_formats()
 import importlib
 
 from uasset_read import (
+    # 推荐入口
+    parse_single, parse_batch, list_formats,
+
     # 数据模型
     UEdGraph, UEdGraphNode, UEdGraphPin,
     ParseResult, BlueprintMetadata, BlueprintVariable,
@@ -159,7 +174,7 @@ from uasset_read import (
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
 
-    # 格式化
+    # 格式化（legacy — 推荐使用 parse_single(format=...)）
     format_json_full, format_json_summary,
     format_text_full, format_markdown,
 
@@ -181,11 +196,8 @@ from uasset_read import (
     UAssetError, ParseError, VersionError,
 )
 
-# 解析 .uasset 文件
-result = parse_uasset('BP_FirstPersonCharacter.uasset')
-
-# 输出 JSON
-json_output = format_json_full(result)
+# 推荐用法：通过 parse_single 解析并输出
+json_output = parse_single('BP_FirstPersonCharacter.uasset', format='json')
 
 parse_module = importlib.import_module("uasset_read.parse_uasset")
 ```

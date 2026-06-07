@@ -154,6 +154,13 @@ def _handle_batch(args) -> None:
             format=resolve_format(args),
             output_dir=output_dir,
             tolerant=not args.strict,
+            verbose=args.verbose,
+            include_schema=args.schema or args.verbose,
+            include_function_graphs=args.function_graphs,
+            include_parent_assets=args.include_parent_assets,
+            asset_roots=list(args.asset_root or []),
+            mappings_path=args.mappings,
+            game=args.game,
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)

@@ -82,18 +82,46 @@ class ExportIR:
 
 @dataclass
 class BlueprintFunctionIR:
-    """蓝图函数 IR。"""
+    """蓝图函数 IR（完整元数据，等价 UFunction 描述）。"""
     name: str
     return_type: str
     parameters: list[dict]
+    function_flags: int = 0
+    is_pure: bool = False
+    is_blueprint_callable: bool = False
+    is_const: bool = False
+    is_static: bool = False
+    is_net: bool = False
+    is_net_reliable: bool = False
+    is_blueprint_private: bool = False
+    access_specifier: str = "Public"
+    meta_data: dict = field(default_factory=dict)
+    implementation: dict | None = None
+    function_graph: dict | None = None
+    implementation_status: str = "missing"  # "decompiled"|"graph_only"|"metadata_only"|"missing"
 
 
 @dataclass
 class BlueprintEventIR:
-    """蓝图事件 IR。"""
+    """蓝图事件 IR（完整元数据，等价蓝图事件描述）。"""
     name: str
     event_type: str
     parameters: list[dict]
+    function_flags: int = 0
+    is_override: bool = False
+    override_parent_class: str = ""
+    override_parent_event: str = ""
+    is_interface_event: bool = False
+    interface_class: str = ""
+    is_net: bool = False
+    is_net_multicast: bool = False
+    is_replicated: bool = False
+    is_cosmetic: bool = False
+    is_static: bool = False
+    meta_data: dict = field(default_factory=dict)
+    implementation: dict | None = None
+    function_graph: dict | None = None
+    implementation_status: str = "missing"  # "decompiled"|"graph_only"|"metadata_only"|"missing"
 
 
 @dataclass
@@ -133,11 +161,28 @@ class LinkerSummaryIR:
 
 @dataclass
 class VariableIR:
-    """蓝图变量 IR。"""
+    """蓝图变量 IR（完整元数据，等价 FBPVariableDescription）。"""
     name: str
     type: str
     default_value: str | None
     kind: str = "user"  # "user" | "component" | "input_action" | "metadata"
+    guid: str | None = None
+    category: str = ""
+    property_flags: int = 0
+    replication_condition: int = 0
+    rep_notify_func: str = ""
+    friendly_name: str = ""
+    metadata: dict = field(default_factory=dict)
+    flags_labels: list[str] = field(default_factory=list)
+    edit_condition: str = ""
+    is_edit_anywhere: bool = False
+    is_visible_anywhere: bool = False
+    is_blueprint_read_only: bool = False
+    is_transient: bool = False
+    is_replicated: bool = False
+    is_rep_notify: bool = False
+    is_expose_on_spawn: bool = False
+    is_save_game: bool = False
 
 
 @dataclass
@@ -154,6 +199,10 @@ class PackageIR:
     variables: list[VariableIR] = field(default_factory=list)
     diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]
     function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
+    resolved_parent_assets: list[dict] = field(default_factory=list)
+    inherited_blueprint_graphs: list[dict] = field(default_factory=list)
+    logic_sources: list[dict] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None
     status_code: str | None = None

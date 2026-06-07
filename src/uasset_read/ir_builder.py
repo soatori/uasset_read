@@ -72,7 +72,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             if hasattr(result, "warnings"):
                 result.warnings.append(f"function_graphs generation skipped: {e}")
 
-    return PackageIR(
+    ir = PackageIR(
         header=header,
         name_map=list(result.name_map) if result.name_map else [],
         imports=_build_imports(result),
@@ -84,10 +84,20 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         variables=_build_variables_ir(result),
         diagnostics=result.diagnostics or [],
         function_graphs=function_graphs,
+        resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
+        inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
+        logic_sources=list(getattr(result, "logic_sources", None) or []),
+        errors=list(getattr(result, "errors", None) or []),
         status=_result_status(result),
         status_message=(result.errors[0] if getattr(result, "errors", None) else None),
         status_code=("PARSE_ERROR" if getattr(result, "errors", None) else None),
     )
+
+    # 绑定函数/事件实现关联
+    if ir.blueprint is not None:
+        _bind_implementations(ir.blueprint, ir.decompiled_functions, ir.function_graphs)
+
+    return ir
 
 
 def _result_status(result: "ParseResult | LinkerParseResult") -> str:
@@ -355,7 +365,7 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
 
 
 def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
-    """从 ParseResult.blueprint 构建 BlueprintIR。"""
+    """从 ParseResult.blueprint 构建 BlueprintIR（完整元数据）。"""
     bp = result.blueprint
     if bp is None:
         return None
@@ -372,6 +382,16 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
                 "is_input": p.is_input,
                 "is_output": p.is_output,
             } for p in func.parameters],
+            function_flags=getattr(func, "function_flags", 0) or 0,
+            is_pure=getattr(func, "is_pure", False),
+            is_blueprint_callable=getattr(func, "is_blueprint_callable", False),
+            is_const=getattr(func, "is_const", False),
+            is_static=getattr(func, "is_static", False),
+            is_net=getattr(func, "is_net", False),
+            is_net_reliable=getattr(func, "is_net_reliable", False),
+            is_blueprint_private=getattr(func, "is_blueprint_private", False),
+            access_specifier=getattr(func, "access_specifier", "Public") or "Public",
+            meta_data=dict(getattr(func, "meta_data", None) or {}),
         ))
 
     events = []
@@ -386,6 +406,18 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
                 "is_input": p.is_input,
                 "is_output": p.is_output,
             } for p in evt.parameters],
+            function_flags=getattr(evt, "function_flags", 0) or 0,
+            is_override=getattr(evt, "is_override", False),
+            override_parent_class=_safe_str(getattr(evt, "override_parent_class", None)),
+            override_parent_event=_safe_str(getattr(evt, "override_parent_event", None)),
+            is_interface_event=getattr(evt, "is_interface_event", False),
+            interface_class=_safe_str(getattr(evt, "interface_class", None)),
+            is_net=getattr(evt, "is_net", False),
+            is_net_multicast=getattr(evt, "is_net_multicast", False),
+            is_replicated=getattr(evt, "is_replicated", False),
+            is_cosmetic=getattr(evt, "is_cosmetic", False),
+            is_static=getattr(evt, "is_static", False),
+            meta_data=dict(getattr(evt, "meta_data", None) or {}),
         ))
 
     components = list(result.components) if result.components else []
@@ -505,7 +537,7 @@ def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
 
 
 def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
-    """从 ParseResult.blueprint.variables 构建 VariableIR 列表。"""
+    """从 ParseResult.blueprint.variables 构建 VariableIR 列表（完整元数据）。"""
     variables = []
     bp = result.blueprint
     if bp is None:
@@ -521,8 +553,124 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
             type=var_type,
             default_value=default_value,
             kind=kind,
+            guid=_normalize_guid(getattr(var, "var_guid", None)),
+            category=_safe_str(getattr(var, "category", None)),
+            property_flags=getattr(var, "property_flags", 0) or 0,
+            replication_condition=getattr(var, "replication_condition", 0) or 0,
+            rep_notify_func=_safe_str(getattr(var, "rep_notify_func", None)),
+            friendly_name=_safe_str(getattr(var, "friendly_name", None)),
+            metadata=dict(getattr(var, "metadata", None) or {}),
+            flags_labels=list(getattr(var, "flags_labels", None) or []),
+            edit_condition=_safe_str(getattr(var, "edit_condition", None)),
+            is_edit_anywhere=getattr(var, "is_edit_anywhere", False),
+            is_visible_anywhere=getattr(var, "is_visible_anywhere", False),
+            is_blueprint_read_only=getattr(var, "is_blueprint_read_only", False),
+            is_transient=getattr(var, "is_transient", False),
+            is_replicated=getattr(var, "is_replicated", False),
+            is_rep_notify=getattr(var, "is_rep_notify", False),
+            is_expose_on_spawn=getattr(var, "is_expose_on_spawn", False),
+            is_save_game=getattr(var, "is_save_game", False),
         ))
     return variables
+
+
+# 事件别名映射：Blueprint 事件名 → 常见 C++/蓝图实现函数名
+_EVENT_ALIASES: dict[str, list[str]] = {
+    "ReceiveBeginPlay": ["BeginPlay"],
+    "ReceiveTick": ["Tick"],
+    "ReceiveEndPlay": ["EndPlay"],
+    "ReceiveAnyDamage": ["AnyDamage"],
+    "ReceivePointDamage": ["PointDamage"],
+    "ReceiveRadialDamage": ["RadialDamage"],
+    "ReceiveActorBeginOverlap": ["ActorBeginOverlap"],
+    "ReceiveActorEndOverlap": ["ActorEndOverlap"],
+    "ReceiveActorBeginCursorOver": ["ActorBeginCursorOver"],
+    "ReceiveActorEndCursorOver": ["ActorEndCursorOver"],
+    "ReceiveHit": ["Hit"],
+    "ReceiveDestroyed": ["Destroyed"],
+}
+
+
+def _bind_implementations(
+    blueprint: BlueprintIR,
+    decompiled: list[DecompiledFunctionIR],
+    function_graphs: list[dict],
+) -> None:
+    """将 decompiled_functions 和 function_graphs 关联到 blueprint 的函数/事件。
+
+    匹配优先级：
+    1. 精确函数名匹配 decompiled_functions.name
+    2. 事件别名匹配（如 ReceiveBeginPlay → BeginPlay）
+    3. function_graphs[].function_name 匹配
+    4. 均未匹配 → implementation_status 保持 "missing"
+    """
+    # 构建查找索引
+    decompiled_by_name: dict[str, DecompiledFunctionIR] = {}
+    for f in decompiled:
+        if f.name not in decompiled_by_name:
+            decompiled_by_name[f.name] = f
+
+    graph_by_name: dict[str, dict] = {}
+    for g in function_graphs:
+        fn = g.get("function_name", "")
+        if fn and fn not in graph_by_name:
+            graph_by_name[fn] = g
+
+    for func in blueprint.functions:
+        _bind_single_implementation(func, decompiled_by_name, graph_by_name, [func.name])
+
+    for evt in blueprint.events:
+        candidates = [evt.name]
+        aliases = _EVENT_ALIASES.get(evt.name)
+        if aliases:
+            candidates.extend(aliases)
+        _bind_single_implementation(evt, decompiled_by_name, graph_by_name, candidates)
+
+
+def _bind_single_implementation(
+    item,
+    decompiled_by_name: dict[str, DecompiledFunctionIR],
+    graph_by_name: dict[str, dict],
+    candidate_names: list[str],
+) -> None:
+    """绑定单个函数/事件的实现。"""
+    matched_decompiled = None
+    match_count = 0
+
+    for name in candidate_names:
+        df = decompiled_by_name.get(name)
+        if df:
+            matched_decompiled = df
+            match_count += 1
+
+    if matched_decompiled:
+        item.implementation = {
+            "name": matched_decompiled.name,
+            "signature": matched_decompiled.signature,
+            "cpp_code": matched_decompiled.cpp_code,
+            "parameters": matched_decompiled.parameters,
+            "return_type": matched_decompiled.return_type,
+        }
+        if matched_decompiled.fallback_reasons:
+            item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
+        item.implementation_status = "decompiled"
+        if match_count > 1:
+            item.implementation["ambiguous_match"] = True
+        return
+
+    # 尝试 function_graphs
+    for name in candidate_names:
+        fg = graph_by_name.get(name)
+        if fg:
+            item.function_graph = {
+                "function_name": fg.get("function_name", ""),
+                "graph_source": fg.get("graph_source", ""),
+                "entry_node_guid": fg.get("entry_node_guid", ""),
+            }
+            item.implementation_status = "graph_only"
+            return
+
+    # 无匹配，保持 "missing"
 
 
 def _format_var_type(var) -> str:

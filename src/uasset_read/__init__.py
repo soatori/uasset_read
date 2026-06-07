@@ -270,19 +270,19 @@ from .graph import (
     write_phase75_diagnostic,
 )
 
-# 格式化模块
+# 格式化模块（legacy — 推荐使用 parse_single()/parse_batch() 统一入口）
 # 主解析管线
 from .formatters import (
-    # JSON 格式化
+    # JSON 格式化（legacy，保留兼容）
     format_json_full,
     format_json_summary,
     format_exports_list,
     format_properties_list,
     format_blueprint_dict,
-    # Text 格式化
+    # Text 格式化（legacy，保留兼容）
     format_text_full,
     format_text_summary,
-    # Markdown 格式化
+    # Markdown 格式化（legacy，保留兼容）
     format_markdown,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,

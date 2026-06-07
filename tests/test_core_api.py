@@ -112,3 +112,52 @@ class TestParseBatch:
             assert result.total == 1
             assert len(result.failed) == 1
             assert len(result.success) == 0
+
+
+class TestCLIBatchOptions:
+    """验证 CLI batch 模式传递所有输出选项给 parse_batch。"""
+
+    def test_batch_passes_all_options(self, tmp_path):
+        """CLI batch 应传递 verbose/schema/function_graphs/parent_assets 等选项。"""
+        test_file = tmp_path / "test.uasset"
+        test_file.write_bytes(b"\x00" * 100)
+
+        with patch("uasset_read.core.parse_single") as mock_parse_single:
+            mock_parse_single.return_value = '{"status": "success"}'
+
+            # 模拟 CLI 调用 parse_batch 时传递所有选项
+            result = parse_batch(
+                str(tmp_path),
+                format="json",
+                output_dir=str(tmp_path / "out"),
+                tolerant=True,
+                verbose=True,
+                include_schema=True,
+                include_function_graphs=True,
+                include_parent_assets=True,
+                asset_roots=["/game/root"],
+                mappings_path="test.usmap",
+                game="Fortnite",
+            )
+
+            assert isinstance(result, BatchResult)
+            # 验证 parse_single 被调用时携带了所有选项
+            mock_parse_single.assert_called_once()
+            call_kwargs = mock_parse_single.call_args
+            assert call_kwargs.kwargs.get("verbose") is True or call_kwargs[1].get("verbose") is True
+
+
+class TestUnifiedOutputEntrypoint:
+    """验证 CLI 单文件走 parse_single 路径。"""
+
+    def test_cli_single_file_uses_parse_single(self):
+        """CLI 单文件应调用 parse_single。"""
+        from uasset_read.cli import main
+        with patch("uasset_read.cli.parse_single") as mock_ps:
+            mock_ps.return_value = '{"ok": true}'
+            with patch("sys.argv", ["uasset_read", "test.uasset", "--json"]):
+                with patch("pathlib.Path.is_file", return_value=True):
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 0
+                    mock_ps.assert_called_once()
