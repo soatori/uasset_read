@@ -1408,6 +1408,7 @@ def read_k2node_event(
         "b_internal_event": b_internal_event if b_internal_event is not None else False,
         "custom_function_name": custom_function_name or "",
         "function_flags": function_flags if function_flags is not None else 0,
+        "is_event": True,
     }
 
 

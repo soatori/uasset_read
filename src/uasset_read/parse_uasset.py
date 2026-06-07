@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.kismet.result import KismetDecompiledResult
 
+from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
@@ -397,10 +398,19 @@ def _run_required_stage(
         return None
 
 
-def _should_use_lightweight_tolerant_parse(result, tolerant: bool) -> bool:
+def _should_use_lightweight_tolerant_parse(
+    result,
+    tolerant: bool,
+    lightweight_threshold: Optional[int] = None,
+) -> bool:
     if not tolerant or result.summary is None:
         return False
-    return getattr(result.summary, "export_count", 0) > 300
+    threshold = (
+        lightweight_threshold
+        if lightweight_threshold is not None
+        else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
+    )
+    return getattr(result.summary, "export_count", 0) > threshold
 
 
 def _build_lightweight_function_graphs(export_map) -> list[dict]:
@@ -435,6 +445,7 @@ def _parse_package_core(
     asset_roots: Optional[Sequence[str]] = None,
     extra_linker_setup: Optional[Callable] = None,
     check_aes_key: Optional[bytes] = None,
+    lightweight_threshold: Optional[int] = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -555,7 +566,7 @@ def _parse_package_core(
                 raise ParseError(f"Linker creation failed: {e}") from e
             result.errors.append(f"Linker creation failed: {e}")
 
-        if _should_use_lightweight_tolerant_parse(result, tolerant):
+        if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold):
             result.warnings.append(
                 "Lightweight tolerant parse used due to export complexity "
                 f"(exports={getattr(result.summary, 'export_count', 0)})"
@@ -650,6 +661,7 @@ def parse_package(
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
+    lightweight_threshold: Optional[int] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -683,6 +695,7 @@ def parse_package(
         mappings_path=mappings_path, game=game,
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
+        lightweight_threshold=lightweight_threshold,
     )
     return result
 
@@ -722,6 +735,7 @@ def parse_uasset_with_linker(
     provider: Optional[PackageProvider] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
+    lightweight_threshold: Optional[int] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -747,6 +761,7 @@ def parse_uasset_with_linker(
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
         extra_linker_setup=extra_linker_setup,
+        lightweight_threshold=lightweight_threshold,
     )
 
     if preload_all and result.linker:
