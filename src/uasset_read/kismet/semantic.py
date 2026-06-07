@@ -98,11 +98,11 @@ def _enrich_empty_function_from_graph(
     Returns:
         C++ 伪代码字符串，或 None（未找到匹配图）
     """
-    from uasset_read.graph.flow_builder import (
+    from uasset_read.graph import (
         build_execution_flow_entries,
-        _build_normalized_edge_indexes,
-        _build_graph_indexes,
-        _trace_execution_from_event,
+        build_graph_indexes,
+        build_normalized_edge_indexes,
+        trace_execution_from_event,
     )
 
     for graph in graphs:
@@ -112,7 +112,7 @@ def _enrich_empty_function_from_graph(
             continue
 
         # 构建 node_lookup 用于提取函数名
-        _, node_lookup, _ = _build_graph_indexes(graph)
+        _, node_lookup, _ = build_graph_indexes(graph)
         node_name_lookup = {
             n.node_guid: f"{n.class_name}_{idx}"
             for idx, n in enumerate(graph.nodes)
@@ -122,11 +122,11 @@ def _enrich_empty_function_from_graph(
         execution_flows = build_execution_flow_entries(graph)
         if not execution_flows:
             # 回退：直接从 FunctionEntry 追踪
-            pin_lookup, _, _ = _build_graph_indexes(graph)
-            edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
+            pin_lookup, _, _ = build_graph_indexes(graph)
+            edges_by_from_pin, source_edges_by_to_pin = build_normalized_edge_indexes(graph)
             execution_flows = [{
                 "start_event": f"FunctionEntry.{function_name}",
-                "nodes": _trace_execution_from_event(
+                "nodes": trace_execution_from_event(
                     entry_node, pin_lookup, node_lookup, node_name_lookup,
                     edges_by_from_pin, source_edges_by_to_pin,
                 ),
@@ -149,12 +149,12 @@ def _find_function_entry(graph: UEdGraph, function_name: str) -> Optional[Any]:
     Returns:
         匹配的 UEdGraphNode，或 None
     """
-    from uasset_read.graph.flow_builder import _node_member_name
+    from uasset_read.graph import node_member_name
 
     for node in graph.nodes:
         if node.class_name != "K2Node_FunctionEntry":
             continue
-        member_name = _node_member_name(node)
+        member_name = node_member_name(node)
         # 处理路径形式 "/Game/.../FunctionName"
         if '/' in member_name:
             member_name = member_name.split('/')[-1]
@@ -253,7 +253,7 @@ def _format_call_node(
     Returns:
         "FuncName(Arg1, Arg2)" 格式的调用字符串
     """
-    from uasset_read.graph.flow_builder import _node_member_name
+    from uasset_read.graph import node_member_name
 
     params = node_info.get("parameters", {})
     input_params = params.get("input_params", []) if isinstance(params, dict) else []
@@ -264,7 +264,7 @@ def _format_call_node(
     if node_guid and node_lookup:
         node = node_lookup.get(node_guid)
         if node:
-            func_name = _node_member_name(node)
+            func_name = node_member_name(node)
 
     # 回退：从 data_source 推断
     if not func_name:
@@ -385,8 +385,7 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
 
     提取每个事件节点下的所有 CallFunction 节点（不仅第一个）。
     """
-    from uasset_read.graph import build_execution_flow_entries
-    from uasset_read.graph.flow_builder import _node_member_name
+    from uasset_read.graph import build_execution_flow_entries, node_member_name
 
     graph_obj = next((graph for graph in graphs if graph.graph_name == "EventGraph"), None)
     if graph_obj is None:
@@ -413,7 +412,7 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
             function_name = ""
             node_guid = call_info.get("node_guid")
             if node_guid and node_guid in node_by_guid:
-                function_name = _node_member_name(node_by_guid[node_guid])
+                function_name = node_member_name(node_by_guid[node_guid])
 
             # 回退：从 flow 节点的 parameters 推断
             if not function_name:

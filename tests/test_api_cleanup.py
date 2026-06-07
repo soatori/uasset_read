@@ -7,7 +7,7 @@ import json
 import pytest
 
 from uasset_read.core import list_formats, parse_single, parse_batch, ParseError
-from uasset_read.cli import create_parser, resolve_format
+from uasset_read.cli import create_parser, resolve_format, _sanitize_error_message
 from uasset_read.graph.flow_builder import format_graphs_json, format_node_dict
 from uasset_read.iostore.reader import IoStoreReader
 from uasset_read.models.blueprint import BlueprintMetadata
@@ -54,6 +54,55 @@ def test_listed_cli_formats_are_parseable():
 
     for fmt in list_formats():
         parser.parse_args([f"--{fmt.replace('_', '-')}", "Asset.uasset"])
+
+
+def test_cli_error_sanitizer_handles_paths_with_spaces():
+    message = (
+        r"failed opening C:\Users\me\Top Secret\Nested Dir\asset.uasset: denied; "
+        r"unc=\\server\share\Sensitive Folder\other.umap failed; "
+        "unix=/home/me/Secret Folder/asset.pak: bad"
+    )
+
+    sanitized = _sanitize_error_message(message)
+
+    assert "asset.uasset" in sanitized
+    assert "other.umap" in sanitized
+    assert "asset.pak" in sanitized
+    assert "Top Secret" not in sanitized
+    assert "Nested Dir" not in sanitized
+    assert "Sensitive Folder" not in sanitized
+    assert "Secret Folder" not in sanitized
+
+
+def test_cli_error_sanitizer_keeps_context_between_unix_paths():
+    message = (
+        "trace /home/me/Secret Folder/asset.pak and "
+        "/tmp/Other Folder/out.json done"
+    )
+
+    sanitized = _sanitize_error_message(message)
+
+    assert "asset.pak" in sanitized
+    assert "out.json" in sanitized
+    assert " and " in sanitized
+    assert " done" in sanitized
+    assert "Secret Folder" not in sanitized
+    assert "Other Folder" not in sanitized
+
+
+def test_cli_error_sanitizer_preserves_unix_path_line_number():
+    sanitized = _sanitize_error_message(
+        "/home/me/Secret Folder/asset.pak:12: bad"
+    )
+
+    assert sanitized == "asset.pak:12: bad"
+    assert "Secret Folder" not in sanitized
+
+
+def test_cli_error_sanitizer_leaves_non_path_messages_readable():
+    assert _sanitize_error_message("ParseError: invalid export count") == (
+        "ParseError: invalid export count"
+    )
 
 
 def test_parse_uasset_with_linker_uses_provider():

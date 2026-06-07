@@ -75,6 +75,9 @@ class ExportIR:
     properties: list[PropertyIR]
     graphs: list[GraphIR]
     bulk_data: dict | None
+    parse_status: str = "success"
+    fallback_reason: str | None = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -151,3 +154,6 @@ class PackageIR:
     variables: list[VariableIR] = field(default_factory=list)
     diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]
     function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
+    status: str = "success"
+    status_message: str | None = None
+    status_code: str | None = None

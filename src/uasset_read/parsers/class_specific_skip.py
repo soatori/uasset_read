@@ -96,14 +96,14 @@ SKIP_CLASS_NAMES = {
     # Anim — 使用自定义序列化
     "AnimBlueprintGeneratedClass",
     "AnimBlueprintExtension",
-    "AnimSequence",
-    "AnimMontage",
+    # AnimSequence 和 AnimMontage 已降级为有限解析（见 asset_types/anim_sequence.py）
+    # AnimComposite, AnimPoseSnapshot 仍跳过
     "AnimComposite",
     "AnimPoseSnapshot",
     # Audio — ImpulseResponse 等使用特殊格式
     "ImpulseResponse",
-    "SoundWave",
-    "SoundCue",
+    # SoundWave 和 SoundCue 已降级为有限解析（见 asset_types/sound_wave.py）
+    # SoundAttenuation, SoundConcurrency 等仍跳过
     "SoundAttenuation",
     "SoundConcurrency",
     "SoundMix",

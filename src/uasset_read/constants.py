@@ -34,9 +34,11 @@ FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
 MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
+MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
+MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
 MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
                                       # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
 MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
@@ -76,6 +78,7 @@ MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
 MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
+MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节长度上限（UTF-16 码元对齐）
 
 # ============================================================================
 # FPropertyTypeName 最大节点数（UE 源码限制）

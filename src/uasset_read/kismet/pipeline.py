@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
     extract_and_parse,
@@ -67,7 +68,8 @@ def decompile_single_function(
             archive, export, summary, name_map, import_map, export_map,
             tolerant=tolerant,
         )
-    except Exception:
+    except (ParseError, ValueError, IndexError, KeyError):
+        # Expected failures from corrupted/malformed bytecode
         return None
 
     if error or not expressions:

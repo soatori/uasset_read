@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.3 已发布** — 直接脚本运行（无需 pip install）、IR → Renderer 架构重构、8 种输出格式、Kismet 反编译改进、C++ 骨架质量提升。994 个测试通过，覆盖 12+ 种资产类型。部分 UE4 旧版资产支持有限。
+> 📦 **v0.4.4-dev** — 直接脚本运行、IR → Renderer 架构重构、8 种输出格式、Kismet 反编译改进、C++ 骨架质量提升。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
 
 ## 为什么选择 uasset_read？
 
@@ -24,10 +24,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.3 |
+| 版本 | 0.4.4-dev |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 994 通过，2 xfail（54 个测试文件，覆盖 12+ 种资产类型） |
-| 模块 | 13 个子包，137 个源文件 |
+| 测试 | 1125 通过，2 skipped，2 xfail（71 个测试文件） |
+| 模块 | 14 个子包，145 个源文件 |
 
 ## 功能特性
 
@@ -58,7 +58,7 @@
 ### 文件格式支持
 - **Pak 文件解析** — FPakInfo、压缩（Zlib/LZ4/Zstd/Oodle）、AES-ECB 解密
 - **IoStore 容器** — Chunk ID、偏移/大小结构
-- **资产类型解析器** — SkeletalMesh、Texture2D、Material、MaterialInstanceConstant
+- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
 - **Bulk Data** — BulkData 头部解析
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
@@ -223,11 +223,11 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
-| **IR** | `ir.py` | 包级中间表示构建器 |
+| **IR** | `ir_builder.py` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
-| **资产类型** | `parsers/asset_types/` | SkeletalMesh、Texture2D、Material、MaterialInstanceConstant |
+| **资产类型** | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图** | `graph/` | 执行流/数据流追踪、链构建器、引脚追踪 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |

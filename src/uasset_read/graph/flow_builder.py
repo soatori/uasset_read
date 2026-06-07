@@ -1825,3 +1825,12 @@ def build_function_graphs(
             function_graphs.append(entry)
 
     return function_graphs
+
+
+# Public API aliases — internal functions exposed for cross-module consumers.
+# These allow other modules (e.g. kismet/semantic.py) to use graph traversal
+# without importing `_` prefixed internal functions directly.
+build_graph_indexes = _build_graph_indexes
+build_normalized_edge_indexes = _build_normalized_edge_indexes
+trace_execution_from_event = _trace_execution_from_event
+node_member_name = _node_member_name

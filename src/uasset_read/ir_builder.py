@@ -62,12 +62,15 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
     # 构建 function_graphs（从 result.graphs）
     function_graphs = []
-    if hasattr(result, 'graphs') and result.graphs:
-        from uasset_read.graph import build_function_graphs
-        blueprint_functions = None
-        if hasattr(result, 'blueprint') and result.blueprint:
-            blueprint_functions = getattr(result.blueprint, 'functions', None)
-        function_graphs = build_function_graphs(result.graphs, blueprint_functions)
+    fallback_graphs = getattr(result, "metadata", {}).get("function_graphs_fallback")
+    if fallback_graphs:
+        function_graphs = list(fallback_graphs)
+    elif hasattr(result, 'graphs') and result.graphs:
+        try:
+            function_graphs = _build_function_graphs_safe(result)
+        except Exception as e:
+            if hasattr(result, "warnings"):
+                result.warnings.append(f"function_graphs generation skipped: {e}")
 
     return PackageIR(
         header=header,
@@ -81,7 +84,76 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         variables=_build_variables_ir(result),
         diagnostics=result.diagnostics or [],
         function_graphs=function_graphs,
+        status=_result_status(result),
+        status_message=(result.errors[0] if getattr(result, "errors", None) else None),
+        status_code=("PARSE_ERROR" if getattr(result, "errors", None) else None),
     )
+
+
+def _result_status(result: "ParseResult | LinkerParseResult") -> str:
+    if getattr(result, "is_success", False):
+        return "partial" if getattr(result, "errors", None) else "success"
+    if (
+        getattr(result, "summary", None) is not None
+        or getattr(result, "name_map", None)
+        or getattr(result, "import_map", None)
+        or getattr(result, "export_map", None)
+    ):
+        return "partial"
+    return "failed"
+
+
+def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
+    """Build function_graphs with a simple complexity guard for large graphs."""
+    graphs = getattr(result, "graphs", None) or []
+    total_nodes = sum(len(getattr(graph, "nodes", None) or []) for graph in graphs)
+    total_pins = sum(
+        len(getattr(node, "pins", None) or [])
+        for graph in graphs
+        for node in (getattr(graph, "nodes", None) or [])
+    )
+    max_nodes = 900
+    max_pins = 12000
+    if total_nodes > max_nodes or total_pins > max_pins:
+        if hasattr(result, "warnings"):
+            result.warnings.append(
+                "function_graphs generation skipped due to graph complexity "
+                f"(nodes={total_nodes}, pins={total_pins})"
+            )
+        return _build_function_graph_summaries(result)
+
+    from uasset_read.graph import build_function_graphs
+    blueprint_functions = None
+    if hasattr(result, 'blueprint') and result.blueprint:
+        blueprint_functions = getattr(result.blueprint, 'functions', None)
+    return build_function_graphs(graphs, blueprint_functions)
+
+
+def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -> list[dict]:
+    entries = []
+    for graph in getattr(result, "graphs", None) or []:
+        for node in getattr(graph, "nodes", None) or []:
+            if getattr(node, "class_name", "") != "K2Node_FunctionEntry":
+                continue
+            function_name = "Unknown"
+            node_data = getattr(node, "node_data", None)
+            ref = None
+            if isinstance(node_data, dict):
+                ref = node_data.get("function_reference")
+            elif node_data is not None:
+                ref = getattr(node_data, "function_reference", None)
+            raw_name = getattr(ref, "member_name", None) if ref is not None else None
+            if raw_name and raw_name != "None":
+                function_name = raw_name.split("/")[-1]
+            entries.append({
+                "function_name": function_name,
+                "graph_source": getattr(graph, "graph_name", ""),
+                "entry_node_guid": getattr(node, "node_guid", ""),
+                "signature": {"return_type": "", "parameters": []},
+                "execution_flows": [],
+                "fallback_reason": "graph_complexity_limit",
+            })
+    return entries
 
 
 def _build_header(result: ParseResult) -> PackageHeaderIR:
@@ -170,6 +242,15 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         properties=properties,
         graphs=graphs,
         bulk_data=bulk_data,
+        parse_status=_safe_str(getattr(export, "parse_status", "success")) or "success",
+        fallback_reason=(
+            _safe_str(getattr(export, "fallback_reason", None))
+            if getattr(export, "fallback_reason", None) is not None else None
+        ),
+        error_message=(
+            _safe_str(getattr(export, "error_message", None))
+            if getattr(export, "error_message", None) is not None else None
+        ),
     )
 
 

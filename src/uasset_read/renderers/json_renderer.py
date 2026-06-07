@@ -16,6 +16,9 @@ class _JSONEncoder(json.JSONEncoder):
     """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
 
     def default(self, o):
+        to_dict = getattr(o, "to_dict", None)
+        if callable(to_dict):
+            return to_dict()
         if dataclasses.is_dataclass(o):
             return dataclasses.asdict(o)
         if isinstance(o, bytes):
@@ -28,7 +31,11 @@ class JSONRenderer(IRenderer):
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         data = {
-            "status": {"status": "success", "message": None, "code": None},
+            "status": {
+                "status": ir.status,
+                "message": ir.status_message,
+                "code": ir.status_code,
+            },
             "summary": {
                 "package_name": ir.header.package_name,
                 "package_class": ir.header.package_class,
@@ -73,6 +80,12 @@ class JSONRenderer(IRenderer):
         }
         if export.bulk_data is not None:
             d["bulk_data"] = export.bulk_data
+        if export.parse_status != "success":
+            d["parse_status"] = export.parse_status
+        if export.fallback_reason:
+            d["fallback_reason"] = export.fallback_reason
+        if export.error_message:
+            d["error_message"] = export.error_message
         return d
 
     def _property_to_dict(self, prop) -> dict[str, Any]:

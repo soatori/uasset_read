@@ -89,7 +89,12 @@ class FKismetArchive(FArchive):
         """Read ASCII null-terminated string (does NOT consume the null terminator)."""
         current_pos = self.tell()
         data = self._file.read()
-        null_idx = data.index(b'\x00')
+        null_idx = data.find(b'\x00')
+        if null_idx == -1:
+            raise ParseError(
+                f"ASCII string at offset {current_pos} has no null terminator "
+                f"(read {len(data)} bytes to EOF)"
+            )
         result = data[:null_idx].decode('ascii', errors='replace')
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
@@ -104,6 +109,12 @@ class FKismetArchive(FArchive):
             if data[idx] == 0 and data[idx + 1] == 0:
                 break
             idx += 2
+        else:
+            # No double-null found — loop exhausted data without break
+            raise ParseError(
+                f"UTF-16 string at offset {current_pos} has no null terminator "
+                f"(scanned {len(data)} bytes to EOF)"
+            )
         result = data[:idx].decode('utf-16-le', errors='replace')
         self.seek(current_pos + idx)  # position AT double-null
         return result

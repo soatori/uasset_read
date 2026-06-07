@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.4.3 released** — Direct script execution (no pip install), IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. 994 tests passing across 12+ asset types. Some UE4 legacy assets may have limited support.
+> 📦 **v0.4.4-dev** — Direct script execution, IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. With 8 dedicated asset-type parsers (StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave); broader asset categories are partially supported via generic UObject/property fallback paths. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.3 |
+| Version | 0.4.4-dev |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 994 passed, 2 xfailed (54 test files, 12+ asset types) |
-| Modules | 137 source files across 13 subpackages |
+| Tests | 1125 passed, 2 skipped, 2 xfailed (71 test files) |
+| Modules | 145 source files across 14 subpackages |
 
 ## Features
 
@@ -58,7 +58,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### File Format Support
 - **Pak file parsing** — FPakInfo, compression (Zlib/LZ4/Zstd/Oodle), AES-ECB decryption
 - **IoStore container** — Chunk ID, offset/size structures
-- **Asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -216,11 +216,11 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | CLI | `cli.py` | argparse 入口点，委托 `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
-| **IR** | `ir.py` | Package-level intermediate representation builder |
+| **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, pin tracing |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |

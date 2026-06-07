@@ -41,6 +41,10 @@ _PLAUSIBLE_SCRIPT_START_TOKENS = {
     # 产生裸数字（如 1509949440）等错误反编译输出。
 }
 
+# 扫描复杂度限制 — 防止大型蓝图组合爆炸导致超时
+_MAX_SCAN_ATTEMPTS = 500       # 单个函数最多尝试的 (start, end) 组合数
+_MAX_CANDIDATE_SIZE = 4096     # 单个候选字节流最大长度（字节）
+
 
 # ===========================================================================
 # UStruct type whitelist (per D-01, T-62-01 mitigation)
@@ -165,6 +169,9 @@ def _scan_export_serial_for_bytecode(
     Function body still contains a compact bytecode suffix. When the normal
     UStruct path and BPGC fallback both fail, scan the export serial bytes for a
     parseable expression stream ending in EX_EndOfScript.
+
+    Complexity guards: _MAX_SCAN_ATTEMPTS caps total (start, end) pairs,
+    _MAX_CANDIDATE_SIZE caps each candidate's byte length.
     """
     original_pos = archive.tell()
     try:
@@ -175,6 +182,7 @@ def _scan_export_serial_for_bytecode(
 
     best: tuple[int, bytes] | None = None
     end_positions = [idx for idx, b in enumerate(data) if b == 0x53]
+    attempts = 0
     for start, first in enumerate(data):
         if first not in _PLAUSIBLE_SCRIPT_START_TOKENS:
             continue
@@ -184,6 +192,16 @@ def _scan_export_serial_for_bytecode(
             candidate = data[start:end + 1]
             if len(candidate) < 2:
                 continue
+            if len(candidate) > _MAX_CANDIDATE_SIZE:
+                # Larger candidates are unlikely; skip further end positions
+                break
+            attempts += 1
+            if attempts > _MAX_SCAN_ATTEMPTS:
+                logger.debug(
+                    "Scan bytecode for '%s': hit _MAX_SCAN_ATTEMPTS (%d), stopping",
+                    export.object_name, _MAX_SCAN_ATTEMPTS,
+                )
+                return best[1] if best else None
             try:
                 expressions = parse_bytecode_stream(candidate, name_map, tolerant=tolerant)
             except Exception:
@@ -250,7 +268,7 @@ def _bpgc_fallback(
 
     # Populate cache on first fallback call
     if _bpgc_bytecode_cache is None:
-        logger.warning(
+        logger.debug(
             "Falling back to BPGC bytecode extraction for '%s'",
             export.object_name,
         )

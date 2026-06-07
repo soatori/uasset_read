@@ -166,6 +166,10 @@ class PackageLinker:
                     if super_inst is not None:
                         inst.super_object = super_inst
 
+    def export_objects(self) -> List[UObjectInstance]:
+        """返回导出对象列表的只读副本。"""
+        return list(self._export_objects)
+
     def resolve_package_index(
         self, pkg_idx: "PackageIndex"
     ) -> Optional[UObjectInstance]:

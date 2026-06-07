@@ -28,6 +28,7 @@ def _make_linker():
     """创建 mock linker。"""
     linker = MagicMock()
     linker._export_objects = []
+    linker.export_objects.return_value = []
     return linker
 
 
@@ -250,6 +251,7 @@ class TestResolveVirtualFunctionClass:
             outer=outer,
         )
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         resolver = FunctionRefResolver(linker)
         result = resolver.resolve_virtual_function_class("ReceiveBeginPlay")
@@ -260,6 +262,7 @@ class TestResolveVirtualFunctionClass:
         """无匹配时返回 None。"""
         linker = _make_linker()
         linker._export_objects = []
+        linker.export_objects.return_value = []
 
         resolver = FunctionRefResolver(linker)
         result = resolver.resolve_virtual_function_class("NonExistentFunc")
@@ -278,6 +281,7 @@ class TestResolveVirtualFunctionClass:
         linker = _make_linker()
         inst = _make_instance("TestFunc", object_class="TestClass")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         resolver = FunctionRefResolver(linker)
         result1 = resolver.resolve_virtual_function_class("TestFunc")
@@ -291,6 +295,7 @@ class TestResolveVirtualFunctionClass:
         linker = _make_linker()
         inst = _make_instance("Tick", object_class="Actor")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         resolver = FunctionRefResolver(linker)
         result = resolver.resolve_virtual_function_class("Tick")
@@ -302,6 +307,7 @@ class TestResolveVirtualFunctionClass:
         linker = _make_linker()
         inst = _make_instance("SomeFunc", object_class=None)
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         resolver = FunctionRefResolver(linker)
         result = resolver.resolve_virtual_function_class("SomeFunc")
@@ -403,6 +409,7 @@ class TestBuildCacheEnhanced:
         linker = _make_linker()
         inst = _make_instance("ReceiveTick", object_class="Actor")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         expr = EX_VirtualFunction(VirtualFunctionName="ReceiveTick")
         resolver = FunctionRefResolver(linker)
@@ -416,6 +423,7 @@ class TestBuildCacheEnhanced:
         linker = _make_linker()
         inst = _make_instance("CustomEvent", object_class="MyBP_C")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
 
         expr = EX_LocalVirtualFunction(VirtualFunctionName="CustomEvent")
         resolver = FunctionRefResolver(linker)
@@ -442,6 +450,7 @@ class TestBuildCacheEnhanced:
         vfunc_inst = _make_instance("OuterVFunc", object_class="OuterCls")
         linker.resolve_package_index.return_value = func_inst
         linker._export_objects = [vfunc_inst]
+        linker.export_objects.return_value = [vfunc_inst]
 
         inner = EX_FinalFunction(StackNode=5)
         outer = EX_VirtualFunction(
@@ -471,6 +480,7 @@ class TestBuildCacheEnhanced:
         linker._export_objects = [
             _make_instance("VirtualFunc", object_class="VirtualCls"),
         ]
+        linker.export_objects.return_value = linker._export_objects
 
         expressions = [
             EX_FinalFunction(StackNode=10),
@@ -505,6 +515,7 @@ class TestTranslatorIntegration:
         linker = _make_linker()
         inst = _make_instance("ReceiveBeginPlay", object_class="Actor")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
         linker.resolve_package_index.return_value = None
 
         translator = KismetTranslator(linker=linker)
@@ -579,6 +590,7 @@ class TestTranslatorIntegration:
 
         linker = _make_linker()
         linker._export_objects = []
+        linker.export_objects.return_value = []
 
         translator = KismetTranslator(linker=linker)
         expr = EX_VirtualFunction(VirtualFunctionName="UnknownFunc")
@@ -593,6 +605,7 @@ class TestTranslatorIntegration:
         linker = _make_linker()
         inst = _make_instance("CustomEvent", object_class="MyBP_C")
         linker._export_objects = [inst]
+        linker.export_objects.return_value = [inst]
         linker.resolve_package_index.return_value = None
 
         translator = KismetTranslator(linker=linker)

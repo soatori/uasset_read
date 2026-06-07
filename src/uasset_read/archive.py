@@ -454,10 +454,13 @@ class FArchive:
                     self._logger.warning(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "truncated at null (null_at=%d, nulls_total=%d), "
-                        "truncated_value=%r, preview_orig=%r, hex=%s, "
                         "consumed=%d bytes, end_pos=%d",
                         pos_before, length, first_null_idx, null_count,
-                        truncated, preview, data[:32].hex(), len(data), self.tell()
+                        len(data), self.tell()
+                    )
+                    self._logger.debug(
+                        "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
+                        pos_before, data[:32].hex(), preview, truncated
                     )
                     return truncated
                 else:
@@ -465,8 +468,12 @@ class FArchive:
                     self._logger.error(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "all nulls (completely corrupted), "
-                        "hex=%s, consumed=%d bytes, end_pos=%d",
-                        pos_before, length, data[:32].hex(), len(data), self.tell()
+                        "consumed=%d bytes, end_pos=%d",
+                        pos_before, length, len(data), self.tell()
+                    )
+                    self._logger.debug(
+                        "FString hex detail: pos=%d, hex=%s",
+                        pos_before, data[:32].hex()
                     )
                     return ""
 

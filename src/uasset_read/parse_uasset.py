@@ -32,6 +32,7 @@ from uasset_read.blueprint import (
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.link.result import LinkerParseResult
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,8 @@ def _post_process(
             export_map, import_map, asset_name
         )
         if main_bpgc:
-            temp_archive = archive_factory() if archive_factory else FArchive(path, tolerant=tolerant)
+            owned_archive = archive_factory is not None
+            temp_archive = archive_factory() if archive_factory else archive
             temp_archive.set_byte_swapping(archive._byte_swapping)
             try:
                 meta, warn = extract_blueprint_metadata(
@@ -136,7 +138,8 @@ def _post_process(
                 if hasattr(result, 'errors'):
                     result.errors.append(f"blueprint extraction error (BPGC): {e}")
             finally:
-                temp_archive.close()
+                if owned_archive:
+                    temp_archive.close()
 
     # UBlueprint 回退
     if not blueprint_metadata:
@@ -147,7 +150,8 @@ def _post_process(
             else:
                 is_bp = detect_blueprint(export, import_map, export_map)
             if is_bp:
-                temp_archive = archive_factory() if archive_factory else FArchive(path, tolerant=tolerant)
+                owned_archive = archive_factory is not None
+                temp_archive = archive_factory() if archive_factory else archive
                 temp_archive.set_byte_swapping(archive._byte_swapping)
                 try:
                     meta, warn = extract_blueprint_metadata(
@@ -164,7 +168,8 @@ def _post_process(
                     if hasattr(result, 'errors'):
                         result.errors.append(f"blueprint extraction error: {e}")
                 finally:
-                    temp_archive.close()
+                    if owned_archive:
+                        temp_archive.close()
                 break
 
     if hasattr(result, 'blueprint'):
@@ -337,6 +342,88 @@ def _package_metadata(bundle: PackageBundle) -> dict:
     }
 
 
+def _record_parse_stage_error(
+    result,
+    archive,
+    path: str,
+    stage: str,
+    field: str,
+    error: Exception,
+) -> None:
+    if str(error) not in result.errors:
+        result.errors.append(str(error))
+    file_size = 0
+    current_pos = 0
+    if archive is not None:
+        try:
+            file_size = archive.total_size()
+        except Exception:
+            file_size = getattr(archive, "_file_size", 0) or 0
+        try:
+            current_pos = archive.tell()
+        except Exception:
+            current_pos = 0
+    result.diagnostics.append(OffsetRangeDiagnostic(
+        kind="parse_stage_error",
+        asset_path=path,
+        module=stage,
+        field=field,
+        current_pos=current_pos,
+        file_size=file_size,
+        source="_parse_package_core",
+        error=str(error),
+        fallback_used=True,
+        fallback_result="partial" if getattr(result, "summary", None) is not None else "failed",
+    ))
+    result.is_success = False
+
+
+def _run_required_stage(
+    *,
+    result,
+    archive,
+    path: str,
+    tolerant: bool,
+    stage: str,
+    field: str,
+    reader,
+):
+    try:
+        return reader()
+    except (VersionError, ParseError, Exception) as e:
+        if not tolerant:
+            raise
+        _record_parse_stage_error(result, archive, path, stage, field, e)
+        return None
+
+
+def _should_use_lightweight_tolerant_parse(result, tolerant: bool) -> bool:
+    if not tolerant or result.summary is None:
+        return False
+    return getattr(result.summary, "export_count", 0) > 300
+
+
+def _build_lightweight_function_graphs(export_map) -> list[dict]:
+    entries = []
+    for export in export_map or []:
+        name = str(getattr(export, "object_name", "") or "")
+        if not name or name.endswith("_C") or name.startswith("Default__"):
+            continue
+        if name in {"EventGraph", "UberGraphPages", "SimpleConstructionScript"}:
+            continue
+        entries.append({
+            "function_name": name,
+            "graph_source": "export_map",
+            "entry_node_guid": "",
+            "signature": {"return_type": "", "parameters": []},
+            "execution_flows": [],
+            "fallback_reason": "lightweight_tolerant_parse",
+        })
+        if len(entries) >= 64:
+            break
+    return entries
+
+
 def _parse_package_core(
     path: str,
     result,
@@ -392,20 +479,55 @@ def _parse_package_core(
         result.mmap_warning = mmap_info["warning"]
 
         # 读取文件头
-        result.summary = read_package_summary(archive)
+        result.summary = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="package_summary", field="summary",
+            reader=lambda: read_package_summary(archive),
+        )
+        if result.summary is None:
+            return
         result.version_container = build_version_container(result.summary)
 
         # 截断文件检测：验证导出数据范围
-        validate_export_data_range(archive, result.summary)
+        try:
+            validate_export_data_range(archive, result.summary)
+        except Exception as e:
+            if not tolerant:
+                raise
+            _record_parse_stage_error(
+                result, archive, path, "package_summary", "export_data_range", e
+            )
+            return
 
         # 读取名称表
-        result.name_map = read_name_table(archive, result.summary)
+        result.name_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="name_table", field="name_map",
+            reader=lambda: read_name_table(archive, result.summary),
+        )
+        if result.name_map is None:
+            result.name_map = []
+            return
 
         # 读取导入表
-        result.import_map = read_import_map(archive, result.summary, result.name_map)
+        result.import_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="import_map", field="import_map",
+            reader=lambda: read_import_map(archive, result.summary, result.name_map),
+        )
+        if result.import_map is None:
+            result.import_map = []
+            return
 
         # 读取导出表
-        result.export_map = read_export_map(archive, result.summary, result.name_map)
+        result.export_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="export_map", field="export_map",
+            reader=lambda: read_export_map(archive, result.summary, result.name_map),
+        )
+        if result.export_map is None:
+            result.export_map = []
+            return
 
         # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
         if hasattr(result.summary, 'depends_offset'):
@@ -433,6 +555,16 @@ def _parse_package_core(
                 raise ParseError(f"Linker creation failed: {e}") from e
             result.errors.append(f"Linker creation failed: {e}")
 
+        if _should_use_lightweight_tolerant_parse(result, tolerant):
+            result.warnings.append(
+                "Lightweight tolerant parse used due to export complexity "
+                f"(exports={getattr(result.summary, 'export_count', 0)})"
+            )
+            result.metadata["lightweight_tolerant_parse"] = True
+            result.metadata["function_graphs_fallback"] = _build_lightweight_function_graphs(result.export_map)
+            result.is_success = True
+            return
+
         # 解析 ExportMap 属性（此时 result.linker 已可用）
         for export in result.export_map or []:
             if export.serial_size > 0:
@@ -443,12 +575,18 @@ def _parse_package_core(
                         linker=linker,
                         mappings=mappings_provider.mappings if mappings_provider else None,
                         game=game,
+                        tolerant=tolerant,
                     )
+                    if not getattr(export, "parse_status", None):
+                        setattr(export, "parse_status", "success")
                 except Exception as e:
                     if not tolerant:
                         raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
+                    setattr(export, "parse_status", "failed")
+                    setattr(export, "fallback_reason", "parse_error")
+                    setattr(export, "error_message", str(e))
 
                 # 提取组件变换属性
                 if export.properties:
@@ -463,12 +601,15 @@ def _parse_package_core(
             asset_roots=asset_roots,
             archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
         )
+        result.is_success = True
 
     except VersionError as e:
+        _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
         result.errors.append(str(e))
         result.is_success = False
 
     except ParseError as e:
+        _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
         result.errors.append(str(e))
         if e.partial_result:
             for key, value in e.partial_result.items():
@@ -477,6 +618,7 @@ def _parse_package_core(
         result.is_success = False
 
     except Exception as e:
+        _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
         result.errors.append(f"Unexpected error: {str(e)}")
         result.is_success = False
 
@@ -488,7 +630,7 @@ def _parse_package_core(
             # 收集 FArchive 诊断记录（截断检测、偏移越界等）
             archive_diagnostics = archive.get_diagnostics()
             if archive_diagnostics:
-                result.diagnostics.extend(archive_diagnostics)
+                result.diagnostics = archive_diagnostics + result.diagnostics
             archive.close()
 
 
