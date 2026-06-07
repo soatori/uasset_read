@@ -12,6 +12,8 @@ from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
+logger = logging.getLogger(__name__)
+
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
 PACKAGE_PAYLOAD_EXTENSIONS = (".uexp", ".ubulk", ".uptnl")

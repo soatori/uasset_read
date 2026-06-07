@@ -16,6 +16,7 @@ from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
     UE5_VERSION_MIN, UE5_LEGACY_VERSIONS,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
+    MAX_TOTAL_OBJECT_COUNT,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
     UE5_IMPORT_TYPE_HIERARCHIES,
@@ -257,6 +258,11 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         raise ParseError(f"Negative import count: {import_count}")
     if import_count > MAX_IMPORT_COUNT:
         raise ParseError(f"Import count exceeds maximum")
+    if export_count + import_count > MAX_TOTAL_OBJECT_COUNT:
+        raise ParseError(
+            f"Total object count ({export_count} + {import_count} = "
+            f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
+        )
     import_offset = archive.read_i32()
     archive.validate_offset(import_offset, "ImportOffset")
 

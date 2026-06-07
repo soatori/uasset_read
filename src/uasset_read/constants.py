@@ -34,9 +34,11 @@ FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
 MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
+MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
+MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
 MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
                                       # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
 MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
@@ -76,12 +78,31 @@ MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
 MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
+MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节长度上限（UTF-16 码元对齐）
+
+# ============================================================================
+# 轻量容错解析阈值
+# ============================================================================
+
+LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用轻量容错解析
 
 # ============================================================================
 # FPropertyTypeName 最大节点数（UE 源码限制）
 # ============================================================================
 
 MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
+
+# ============================================================================
+# PropertyTag extension flags
+# ============================================================================
+
+PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+
+# ============================================================================
+# FPropertyTypeName type node read limit (relaxed from MAX_TYPENODE_NODES for complex nested types)
+# ============================================================================
+
+MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name (relaxed from MAX_TYPENODE_NODES=20 for complex nested types)
 
 # ============================================================================
 # UE5版本常量（EUnrealEngineObjectUE5Version）
@@ -186,6 +207,16 @@ CONTROL_FLOW_NODES = frozenset({
     "K2Node_SwitchEnum",
     "K2Node_SwitchInteger",
     "K2Node_MacroInstance",
+    # 循环类宏
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    # 多门控
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    # 选择
+    "K2Node_Select",
+    "K2Node_ExecutionSequence",
 })
 
 # ============================================================================
@@ -231,6 +262,12 @@ BRANCH_TYPE_MAP = {
     "K2Node_SwitchEnum": "switch_enum",
     "K2Node_SwitchInteger": "switch_integer",
     "K2Node_MacroInstance": "macro_instance",
+    "K2Node_ForLoop": "for_loop",
+    "K2Node_WhileLoop": "while_loop",
+    "K2Node_DoOnce": "do_once",
+    "K2Node_Sequence": "sequence",
+    "K2Node_MultiGate": "multi_gate",
+    "K2Node_Select": "select",
 }
 
 # ============================================================================

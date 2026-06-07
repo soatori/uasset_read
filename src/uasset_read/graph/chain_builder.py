@@ -113,8 +113,9 @@ def build_execution_chains(
         if not valid_nodes:
             continue
 
-        # Convert to short IDs
+        # Convert to short IDs and collect pin names
         short_ids: List[str] = []
+        pin_names: List[str] = []
         for node_info in valid_nodes:
             guid = node_info["node_guid"]
             short_id = guid_to_short.get(guid)
@@ -123,6 +124,7 @@ def build_execution_chains(
                 short_id = f"N{len(guid_to_short)}"
                 guid_to_short[guid] = short_id
             short_ids.append(short_id)
+            pin_names.append(node_info.get("used_exec_pin_name", ""))
 
         if not short_ids:
             continue
@@ -152,25 +154,42 @@ def build_execution_chains(
             elif node_info.get("stopped_at"):
                 branch_indices.append(i)
 
+        def _build_chain_segment(ids: List[str], names: List[str]) -> str:
+            """构建带引脚名称的链式字符串: N0--exec-->N1--Completed-->N2"""
+            parts: List[str] = []
+            for i in range(len(ids)):
+                parts.append(ids[i])
+                if i < len(ids) - 1:
+                    pin_name = names[i + 1] if i + 1 < len(names) else ""
+                    if pin_name:
+                        parts.append(f"--{pin_name}-->")
+                    else:
+                        parts.append("->")
+            return "".join(parts)
+
         if branch_indices:
             # Split chains at branch points
-            # For each branch, create a chain up to that point
             last_end = -1
             for branch_idx in branch_indices:
-                # Chain from start to branch node
                 if branch_idx > last_end:
-                    chain = "->".join(short_ids[last_end + 1:branch_idx + 1])
+                    chain = _build_chain_segment(
+                        short_ids[last_end + 1:branch_idx + 1],
+                        pin_names[last_end + 1:branch_idx + 1],
+                    )
                     if chain:
                         chains.append(chain)
                 last_end = branch_idx
             # Add remaining chain after last branch (if any nodes remain)
             if len(short_ids) > last_end + 1:
-                remaining_chain = "->".join(short_ids[last_end + 1:])
+                remaining_chain = _build_chain_segment(
+                    short_ids[last_end + 1:],
+                    pin_names[last_end + 1:],
+                )
                 if remaining_chain:
                     chains.append(remaining_chain)
         else:
             # Linear chain
-            chain = "->".join(short_ids)
+            chain = _build_chain_segment(short_ids, pin_names)
             chains.append(chain)
 
         entry: Dict = {

@@ -199,3 +199,84 @@ def test_export_error_context_includes_offset():
     )
     assert str(offset) in fb.error_message
     assert "ParseError" in fb.error_message
+
+
+def test_property_fallback_with_error_context():
+    """PropertyFallback 应携带 ErrorContext 并在 to_dict 中序列化。"""
+    from uasset_read.exceptions import ErrorContext
+
+    ctx = ErrorContext(
+        offset=0x0800,
+        phase="properties",
+        operation="read_property_value",
+        context_name="MyStructProp",
+        export_index=3,
+        field_name="TemplateIndex",
+        version_info={"file_version_ue5": 500},
+    )
+    fb = PropertyFallback(
+        name="MyStructProp",
+        type="StructProperty",
+        size=128,
+        raw_bytes=b"",
+        reason=FallbackReason.PARSE_ERROR,
+        error_message="ParseError at offset 2048: bad data",
+        error_context=ctx,
+    )
+    assert fb.error_context is not None
+    assert fb.error_context.offset == 0x0800
+    assert fb.error_context.phase == "properties"
+    assert fb.error_context.export_index == 3
+    assert fb.error_context.field_name == "TemplateIndex"
+    assert fb.error_context.version_info == {"file_version_ue5": 500}
+
+    d = fb.to_dict()
+    assert "error_context" in d
+    ec = d["error_context"]
+    assert ec["offset"] == 0x0800
+    assert ec["phase"] == "properties"
+    assert ec["operation"] == "read_property_value"
+    assert ec["context_name"] == "MyStructProp"
+    assert ec["export_index"] == 3
+    assert ec["field_name"] == "TemplateIndex"
+    assert ec["version_info"] == {"file_version_ue5": 500}
+
+
+def test_property_fallback_without_error_context_omits_key():
+    """无 ErrorContext 时 to_dict 不应包含 error_context 键。"""
+    fb = PropertyFallback(
+        name="NoCtxProp",
+        type="IntProperty",
+        size=4,
+        raw_bytes=b"",
+        reason=FallbackReason.UNSUPPORTED_TYPE,
+    )
+    d = fb.to_dict()
+    assert "error_context" not in d
+
+
+def test_property_fallback_error_context_minimal():
+    """ErrorContext 仅含必填字段时，to_dict 应只序列化非空可选字段。"""
+    from uasset_read.exceptions import ErrorContext
+
+    ctx = ErrorContext(offset=0, phase="header", operation="read_magic")
+    fb = PropertyFallback(
+        name="TestProp",
+        type="IntProperty",
+        size=4,
+        raw_bytes=b"",
+        reason=FallbackReason.PARSE_ERROR,
+        error_context=ctx,
+    )
+    d = fb.to_dict()
+    ec = d["error_context"]
+    assert ec["offset"] == 0
+    assert ec["phase"] == "header"
+    assert ec["operation"] == "read_magic"
+    # 可选字段不应出现
+    assert "context_name" not in ec
+    assert "export_index" not in ec
+    assert "expected_offset" not in ec
+    assert "actual_offset" not in ec
+    assert "field_name" not in ec
+    assert "version_info" not in ec

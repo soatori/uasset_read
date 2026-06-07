@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import logging
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
@@ -9,9 +10,14 @@ from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 
+logger = logging.getLogger(__name__)
+
 
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
+
+    # 类级别去重集合：跨实例共享，同一偏移只打印一次警告
+    _warned_offsets: set[int] = set()
 
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
         self._path = name
@@ -23,8 +29,11 @@ class FKismetArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._name_map = name_map
-        import logging
-        self._logger = logging.getLogger(__name__)
+
+    @classmethod
+    def reset_warned_offsets(cls) -> None:
+        """重置类级别警告去重集合（在新资产反编译开始时调用）。"""
+        cls._warned_offsets = set()
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
@@ -42,9 +51,11 @@ class FKismetArchive(FArchive):
                         raise ParseError(
                             "Too many consecutive unknown tokens in tolerant mode"
                         )
-                    self._logger.warning(
-                        f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
-                    )
+                    if stmt_index not in self._warned_offsets:
+                        logger.warning(
+                            f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
+                        )
+                        self._warned_offsets.add(stmt_index)
                     # Skip back: we already consumed 1 byte, so seek to stmt_index + 1
                     self.seek(stmt_index + 1)
                     continue
@@ -78,7 +89,12 @@ class FKismetArchive(FArchive):
         """Read ASCII null-terminated string (does NOT consume the null terminator)."""
         current_pos = self.tell()
         data = self._file.read()
-        null_idx = data.index(b'\x00')
+        null_idx = data.find(b'\x00')
+        if null_idx == -1:
+            raise ParseError(
+                f"ASCII string at offset {current_pos} has no null terminator "
+                f"(read {len(data)} bytes to EOF)"
+            )
         result = data[:null_idx].decode('ascii', errors='replace')
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
@@ -93,6 +109,12 @@ class FKismetArchive(FArchive):
             if data[idx] == 0 and data[idx + 1] == 0:
                 break
             idx += 2
+        else:
+            # No double-null found — loop exhausted data without break
+            raise ParseError(
+                f"UTF-16 string at offset {current_pos} has no null terminator "
+                f"(scanned {len(data)} bytes to EOF)"
+            )
         result = data[:idx].decode('utf-16-le', errors='replace')
         self.seek(current_pos + idx)  # position AT double-null
         return result

@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +17,42 @@ EXIT_SUCCESS = 0
 EXIT_PARSE_ERROR = 1
 EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
+
+_logger = logging.getLogger(__name__)
+
+
+def _sanitize_error_message(message: str) -> str:
+    """清理异常消息中的内部路径，防止信息泄露。
+
+    将绝对路径替换为 basename，保留异常类型和关键信息。
+    详细原始消息可通过 DEBUG 级别日志获取。
+    """
+    def basename(path: str) -> str:
+        normalized = path.rstrip("\\/").replace("\\", "/")
+        return normalized.rsplit("/", 1)[-1] if "/" in normalized else normalized
+
+    sanitized = str(message)
+
+    # Prefer extension-anchored matches so paths with spaces followed by prose
+    # do not consume the following error text.
+    path_extensions = (
+        "uasset", "umap", "uexp", "ubulk", "uptnl", "pak",
+        "json", "txt", "bin", "dat", "log",
+    )
+    ext_group = "|".join(path_extensions)
+    # Fallback patterns for paths without extensions (stop at delimiters)
+    _close_delims = r"[\x29\x5d\x22\x27]"  # ) ] " '
+    patterns = [
+        rf"[A-Za-z]:\\[^:\r\n]*?\.({ext_group})(?::\d+)?",
+        rf"\\\\[^:\r\n]*?\.({ext_group})(?::\d+)?",
+        rf"/[^:\r\n;,)\]\"']*?\.({ext_group})(?::\d+)?",
+        rf"[A-Za-z]:\\[^:\r\n]+?(?=(?::\s|{_close_delims}|$))",
+        rf"\\\\[^:\r\n]+?(?=(?::\s|{_close_delims}|$))",
+        rf"/(?:[^/:\r\n;,)\]\"']+/)+[^/:\r\n;,)\]\"']+?(?=(?::\s|{_close_delims}|$))",
+    ]
+    for pattern in patterns:
+        sanitized = re.sub(pattern, lambda m: basename(m.group(0)), sanitized)
+    return sanitized
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -94,7 +132,8 @@ def _write_output(output_str: str, output_path: str | None) -> None:
                 f.write(output_str)
             print(f"Output written to {output_path}", file=sys.stderr)
         except IOError as e:
-            print(f"Error writing to file: {e}", file=sys.stderr)
+            _logger.debug("File write error (full): %s", e, exc_info=True)
+            print(f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
         print(output_str)
@@ -115,9 +154,17 @@ def _handle_batch(args) -> None:
             format=resolve_format(args),
             output_dir=output_dir,
             tolerant=not args.strict,
+            verbose=args.verbose,
+            include_schema=args.schema or args.verbose,
+            include_function_graphs=args.function_graphs,
+            include_parent_assets=args.include_parent_assets,
+            asset_roots=list(args.asset_root or []),
+            mappings_path=args.mappings,
+            game=args.game,
         )
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        _logger.debug("Batch export error (full): %s", e, exc_info=True)
+        print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
     print(f"Batch export complete: {result.total} files", file=sys.stderr)
@@ -127,7 +174,8 @@ def _handle_batch(args) -> None:
     if result.failed:
         print(f"  Failed: {len(result.failed)}", file=sys.stderr)
         for path, error in result.failed:
-            print(f"    - {Path(path).name}: {error}", file=sys.stderr)
+            _logger.debug("Batch file failed (full): %s — %s", path, error)
+            print(f"    - {Path(path).name}: {_sanitize_error_message(error)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
     sys.exit(EXIT_SUCCESS)
@@ -139,7 +187,8 @@ def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
     except Exception as e:
-        print(f"Error: Package discovery failed: {e}", file=sys.stderr)
+        _logger.debug("Package discovery error (full): %s", e, exc_info=True)
+        print(f"Error: Package discovery failed: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
     print(json.dumps({
         "package_kind": bundle.package_kind,
@@ -208,10 +257,12 @@ def main():
             game=args.game,
         )
     except ParseError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        _logger.debug("Parse error (full): %s", e, exc_info=True)
+        print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
     except Exception as e:
-        print(f"Error: Unexpected parse failure: {e}", file=sys.stderr)
+        _logger.debug("Unexpected parse failure (full): %s", e, exc_info=True)
+        print(f"Error: Unexpected parse failure: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
     _write_output(output_str, args.output)

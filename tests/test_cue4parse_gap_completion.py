@@ -60,7 +60,11 @@ def test_recursive_property_type_name_and_binary_flags(tmp_path):
         + value
     )
     ar = _archive(tmp_path, data)
-    tag = read_property_tag(ar, name_map)
+    # 使用 UE5 版本 >= 1012 的 mock summary 以触发新格式解析
+    from unittest.mock import Mock
+    mock_summary = Mock()
+    mock_summary.file_version_ue5 = 1012
+    tag = read_property_tag(ar, name_map, summary=mock_summary)
 
     assert tag.type == "MapProperty"
     assert tag.key_type == "NameProperty"

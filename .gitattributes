@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+*.uasset binary
+*.umap binary
+*.uexp binary
+*.ubulk binary
+*.pak binary

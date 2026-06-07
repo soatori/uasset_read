@@ -98,18 +98,24 @@ class StructuredControlFlow:
         while i < len(expressions):
             expr = expressions[i]
 
-            # --- if/else pattern: Push + JumpIfNot → then body → Pop → else body ---
-            # The else block starts right after Pop and ends at the next jump target
-            # or end of list.
-            if isinstance(expr, EX_PushExecutionFlow) and i + 1 < len(expressions):
-                next_expr = expressions[i + 1]
-                if isinstance(next_expr, EX_JumpIfNot):
-                    cond = next_expr.BooleanExpression
+            # --- if/else pattern: Push + (optional exprs) + JumpIfNot → then body → Pop → else body ---
+            # Allow up to 3 instructions between Push and JumpIfNot (condition loading).
+            if isinstance(expr, EX_PushExecutionFlow):
+                jump_if_not_idx = None
+                for k in range(i + 1, min(i + 4, len(expressions))):
+                    if isinstance(expressions[k], EX_JumpIfNot):
+                        jump_if_not_idx = k
+                        break
+                    # Stop if we hit another Push, Jump, or EndOfScript
+                    if isinstance(expressions[k], (EX_PushExecutionFlow, EX_Jump, EX_EndOfScript)):
+                        break
+                if jump_if_not_idx is not None:
+                    cond = expressions[jump_if_not_idx].BooleanExpression
 
                     # Find the Pop that ends the then-block
-                    # Search from i+2 until we find a Pop
+                    # Search from jump_if_not_idx+1 until we find a Pop
                     pop_idx = None
-                    for j in range(i + 2, len(expressions)):
+                    for j in range(jump_if_not_idx + 1, len(expressions)):
                         if isinstance(expressions[j], EX_PopExecutionFlow):
                             pop_idx = j
                             break

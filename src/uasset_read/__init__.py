@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.4.2（稳定发布）
+版本 0.4.4-dev（开发中）
 
 公共API通过__all__控制。
 """
-__version__ = "0.4.2"
+__version__ = "0.4.4-dev"
 
 # 导出常量模块
 from .constants import (
@@ -270,19 +270,19 @@ from .graph import (
     write_phase75_diagnostic,
 )
 
-# 格式化模块
+# 格式化模块（legacy — 推荐使用 parse_single()/parse_batch() 统一入口）
 # 主解析管线
 from .formatters import (
-    # JSON 格式化
+    # JSON 格式化（legacy，保留兼容）
     format_json_full,
     format_json_summary,
     format_exports_list,
     format_properties_list,
     format_blueprint_dict,
-    # Text 格式化
+    # Text 格式化（legacy，保留兼容）
     format_text_full,
     format_text_summary,
-    # Markdown 格式化
+    # Markdown 格式化（legacy，保留兼容）
     format_markdown,
     # Blueprint 翻译参考文本
     format_blueprint_translation_text,

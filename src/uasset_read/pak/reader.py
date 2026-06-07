@@ -7,6 +7,7 @@ PakFileReader — .pak 文件主读取器
 - 自动处理 FPakInfo 检测、索引解密、条目解析、解压缩
 """
 import logging
+from pathlib import PurePosixPath
 from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
@@ -157,10 +158,28 @@ class PakFileReader:
 
     def _resolve_entry_path(self, path: str) -> str | None:
         """Resolve full, mount-relative, case-insensitive, and stem paths."""
+        normalized = path.replace("\\", "/").strip("/")
+
+        # 路径遍历防护：拒绝包含 ".." 的路径组件
+        normalized_parts = PurePosixPath(normalized).parts
+        if ".." in normalized_parts:
+            logger.warning("路径遍历尝试被拒绝: %r", path)
+            return None
+
+        # 验证解析后的路径不会逃逸 mount_point 边界
+        if self._mount_point:
+            # 使用 "/" 的 replace 而非 os.path.join 保持跨平台一致
+            resolved = PurePosixPath(self._mount_point) / normalized
+            resolved_str = resolved.as_posix()
+            mount_str = self._mount_point.replace("\\", "/").strip("/")
+            if not resolved_str.startswith(mount_str + "/") and resolved_str != mount_str:
+                logger.warning("路径逃逸 mount_point 边界被拒绝: %r (mount_point=%r)",
+                               path, self._mount_point)
+                return None
+
         if path in self._entries:
             return path
 
-        normalized = path.replace("\\", "/").strip("/")
         if normalized in self._entries:
             return normalized
 

@@ -25,13 +25,12 @@ python -m pytest tests/test_pak_handling.py -v
 
 | 要求 | 说明 |
 |------|------|
-| **最小测试数** | ≥ 800 个单元测试 |
 | **通过率** | 100%（不包括预期的 xfail） |
 | **集成测试** | ≥ 40 个用例，使用 `@pytest.mark.integration` 标记 |
 | **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
 | **双模式** | 稳定资产必须在 strict 和 tolerant 两种模式下都通过 |
 
-> **当前状态** (v0.4.2): 994 passed, 2 xfail, 51 测试文件, 40+ 集成测试
+> **当前状态** (v0.4.4-dev): 1172 passed, 2 skipped, 2 xfail
 
 ### 样本资产
 
