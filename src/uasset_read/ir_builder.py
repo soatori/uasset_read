@@ -814,13 +814,18 @@ def _safe_str(value) -> str:
 
 
 def _safe_int(value, default: int = 0) -> int:
-    """安全地将值转为 int，非 int 类型返回 default。"""
+    """安全地将值转为 int，仅接受真实 int 和明确数字字符串，其他类型返回 default。
+
+    MagicMock 对象实现了 __int__ 返回 1，因此必须显式排除非 int 对象。
+    """
     if isinstance(value, int):
         return value
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
 
 
 def _normalize_guid(guid: str | None) -> str | None:
