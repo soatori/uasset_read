@@ -16,6 +16,8 @@ from uasset_read.models.result import ParseResult
 from uasset_read.package import FileSystemPackageProvider
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 
+pytestmark = pytest.mark.auxiliary
+
 
 def test_format_graphs_json_minimal_graph_does_not_crash():
     graph = UEdGraph(

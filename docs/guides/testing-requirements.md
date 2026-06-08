@@ -90,7 +90,6 @@
 这类测试不是主目标，但在回归历史问题上仍有价值：
 
 - `tests/test_api_cleanup.py`
-- `tests/test_flow_builder_deprecation.py`
 - `tests/test_cue4parse_gap_completion.py`
 - `tests/test_quality_stats.py`
 - `tests/test_diagnostic_output.py`
@@ -106,7 +105,7 @@
 
 我已经跑过当前全量测试，结果是：
 
-- `1219 passed`
+- `1226 passed`
 - `2 skipped`
 - `2 xfailed`
 
@@ -141,7 +140,6 @@
 这些测试通常与已有测试存在明显重叠，更适合改成更少但更强的验收点：
 
 - `test_api_cleanup.py`
-- `test_flow_builder_deprecation.py`
 - `test_quality_stats.py`
 - `test_cpp_quality_gate.py`
 - `test_cue4parse_gap_completion.py`
