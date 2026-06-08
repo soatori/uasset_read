@@ -203,6 +203,9 @@ class PackageIR:
     resolved_parent_assets: list[dict] = field(default_factory=list)
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
+    soft_object_paths: list[dict] = field(default_factory=list)
+    depends_map: list[list[int]] = field(default_factory=list)
+    asset_registry_data_offset: int = 0
     errors: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None
