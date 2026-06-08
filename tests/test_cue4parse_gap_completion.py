@@ -5,6 +5,8 @@ import zlib
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
     CPF_BlueprintCallable,
@@ -31,6 +33,8 @@ from uasset_read.parsers.property_types import (
     parse_soft_object_property,
 )
 from uasset_read.serializers.property_tags import read_property_tag
+
+pytestmark = pytest.mark.auxiliary
 
 
 def _archive(tmp_path: Path, data: bytes) -> FArchive:
