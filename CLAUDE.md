@@ -15,28 +15,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 构建系统: 直接脚本运行（src 布局），禁止 `pip install`
 - 详细开发指南见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md)
 
-## 常用命令
+## 运行解析器
+
+### CLI 命令
 
 ```bash
-# 运行解析器
+# 基础用法
 python run.py path/to/file.uasset              # JSON（默认）
 python run.py path/to/file.uasset --text       # 人类可读文本
 python run.py path/to/file.uasset --markdown   # Markdown + Mermaid
 python run.py path/to/file.uasset --cpp-skeleton  # C++ 类骨架
 python run.py path/to/file.uasset --blueprint-text  # 蓝图节点文本
+
+# 模式控制
 python run.py path/to/file.uasset --strict     # 遇警告停止
 python run.py path/to/file.uasset --verbose    # 调试日志
-python run.py --batch-dir path/to/dir/         # 批量导出
 
-# 测试
-python -m pytest tests/ -v                     # 全部测试（1172 passed）
+# 批量
+python run.py --batch-dir path/to/dir/         # 批量导出
+```
+
+### Windows 注意事项
+
+- 路径使用正斜杠 `E:/Develop/...` 或双反斜杠 `E:\\Develop\\...`，避免单反斜杠转义问题
+- Workflow 脚本中统一使用正斜杠：`const BASE = 'E:/Develop/lib/UnrealEngine/Samples'`
+- PowerShell 中调用时路径含空格需加引号：`python run.py "E:/path with spaces/file.uasset"`
+
+### Workflow 中调用解析器的规范
+
+在 Workflow agent prompt 中调用解析器时，使用以下模板：
+
+```
+运行命令：python run.py "<完整路径>" [选项]
+工作目录：E:/Develop/uasset_read
+返回格式：直接返回解析输出或错误信息
+```
+
+## 测试
+
+```bash
+# 运行测试
+python -m pytest tests/ -v                     # 全部测试
 python -m pytest tests/ -v -m integration      # 仅集成测试
 python -m pytest tests/test_pak_handling.py -v # 单个文件
 python -m pytest tests/ -v --cov=uasset_read   # + 覆盖率
-
-# API 验证
-python -m pytest tests/test_api_cleanup.py -v  # 验证 __all__ 导出完整性
+python -m pytest tests/test_api_cleanup.py -v  # API 导出验证
 ```
+
+- 位置: `tests/`（1172 用例通过，2 skipped，2 xfail）
+- 要求: 100% 通过率，≥ 12 种资产类型
+- 稳定资产必须在 strict 和 tolerant 双模式下通过
+- 样本资产路径: `E:\Develop\lib\UnrealEngine\Samples`
+- pytest 标记: `integration`（集成测试）、`quality`（质量门禁）、`regression`（回归）、`slow`（慢速）
 
 ## 架构
 
@@ -92,13 +122,30 @@ serializers/graph.py          读取 UEdGraph 原始节点和引脚
 - 必须参考 UE 源码（`E:\Develop\lib\UnrealEngine`），禁止猜测二进制格式
 - 临时文件放 `temp/`
 
-## 测试
+## CodeGraph 使用规范
 
-- 位置: `tests/`（1172 用例通过，2 skipped，2 xfail）
-- 要求: 100% 通过率，≥ 12 种资产类型
-- 稳定资产必须在 strict 和 tolerant 双模式下通过
-- 样本资产路径: `E:\Develop\lib\UnrealEngine\Samples`
-- pytest 标记: `integration`（集成测试）、`quality`（质量门禁）、`regression`（回归）、`slow`（慢速）
+本项目已配置 CodeGraph MCP 服务器（`codegraph_*` 工具），提供 tree-sitter 解析的符号知识图库。
+
+### 工具选择决策表
+
+| 问题 | 使用工具 | 不要用 |
+|---|---|---|
+| "X 在哪里定义？" / "查找符号 X" | `codegraph_search` | grep/read |
+| "谁调用了 Y？" | `codegraph_callers` | 手动 grep |
+| "Y 调用了什么？" | `codegraph_callees` | 手动 read |
+| "X 到 Y 的调用路径？" | `codegraph_trace` | 多次 search+callers |
+| "改 Z 会影响什么？" | `codegraph_impact` | 手动推导 |
+| "查看 Y 的签名/源码" | `codegraph_node` | read 文件 |
+| "给我任务相关的上下文" | `codegraph_context` | 多次 search+node |
+| "批量查看多个符号" | `codegraph_explore` | 逐个 node 调用 |
+| 字符串内容/注释/日志文字 | `grep` / Grep | codegraph |
+
+### 核心规则
+
+1. **结构性问题优先用 codegraph** — 调用链、定义位置、影响范围等，codegraph 比 grep 快且准确
+2. **不要重复 codegraph 已做的事** — `codegraph_context` 一次返回符号定义+调用者+被调用者+源码，无需再用 search+node 组合
+3. **检查索引新鲜度** — 如果返回结果含 "⚠️ Some files…were edited since the last index sync"，用 `codegraph_status` 查看待同步文件，对这些文件用 Read 获取最新内容
+4. **只有字面搜索才用 grep** — 查找日志文本、注释内容、硬编码字符串等
 
 ## 文档结构
 
@@ -118,6 +165,16 @@ temp/                    ← 临时文件、脚本、中间产物
 ```
 
 ## Agent skills
+
+项目 skills 位于 `.claude/skills/`，通过 `/skill-name` 调用。
+
+| Skill | 触发场景 |
+|---|---|
+| `test-runner` | 运行测试、更新文档统计 |
+| `code-quality-fix` | P0-P3 分级代码质量修复 |
+| `doc-consistency` | 文档一致性审计 |
+| `version-sync` | 跨文件版本号同步 |
+| `release-prep` | 发布前完整流程（版本同步→测试→文档→提交） |
 
 ### Issue tracker
 

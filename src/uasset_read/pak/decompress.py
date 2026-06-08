@@ -131,6 +131,11 @@ def decompress_entry(
     result = bytearray()
 
     for i, block in enumerate(entry.compression_blocks):
+        if block.compressed_end < block.compressed_start:
+            raise ParseError(
+                f"压缩块 {i}: compressed_end ({block.compressed_end}) < "
+                f"compressed_start ({block.compressed_start})"
+            )
         stream.seek(block.compressed_start)
         block_size = block.compressed_end - block.compressed_start
 
@@ -138,11 +143,21 @@ def decompress_entry(
         aligned_size = (block_size + alignment - 1) & ~(alignment - 1)
         raw = stream.read(aligned_size)
 
+        if len(raw) < block_size:
+            raise ParseError(
+                f"压缩块 {i}: 读取不足 ({len(raw)} < {block_size} bytes)"
+            )
+
         if entry.is_encrypted:
             raw = _decrypt_entry_data(raw, encryption_key)[:block_size]
 
         decompressed = decompress_block(raw[:block_size], entry.compression_block_size, compression_method)
         result.extend(decompressed)
+
+    if len(result) < entry.uncompressed_size:
+        raise ParseError(
+            f"解压结果过短: {len(result)} < {entry.uncompressed_size} bytes"
+        )
 
     return bytes(result)
 
