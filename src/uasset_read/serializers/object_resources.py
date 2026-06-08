@@ -79,8 +79,18 @@ class ObjectExport:
     b_not_always_loaded_for_editor_game: bool = False
     b_is_asset: bool = False
     b_generate_public_hash: bool = False
-    script_serial_size: int = 0
-    script_serial_offset: int = 0
+    script_serialization_end_offset: int = 0
+    script_serialization_start_offset: int = 0
+
+    @property
+    def script_serialization_size(self) -> int:
+        """脚本序列化区块大小（end_offset - start_offset）。"""
+        return self.script_serialization_end_offset - self.script_serialization_start_offset
+
+    @property
+    def has_script_serialization(self) -> bool:
+        """是否存在脚本序列化区块。"""
+        return self.script_serialization_end_offset > self.script_serialization_start_offset
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
     guid: str = ""  # 16 bytes GUID (版本 < 1005 时存在)
@@ -281,29 +291,30 @@ def read_export_map(
                 package_guid = guid_bytes.hex()
 
             # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
-            script_serial_offset = 0
-            script_serial_size = 0
+            # UE 存储两个相对偏移量：StartOffset 和 EndOffset（相对于 SerialOffset）
+            # 属性范围 = [serial_offset + start, serial_offset + end)
+            script_serialization_start_offset = 0
+            script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
             if (
                 not uses_unversioned
                 and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET
             ):
-                script_serial_offset = archive.read_i64()
-                script_serial_size = archive.read_i64()
-                # CR-05: 验证 script_serial_offset/size 非负
-                # Tolerant: 负数时设为 0 并记录 warning
-                if script_serial_offset < 0:
+                script_serialization_start_offset = archive.read_i64()
+                script_serialization_end_offset = archive.read_i64()
+                # CR-05: 验证非负（Tolerant: 负数时设为 0 并记录 warning）
+                if script_serialization_start_offset < 0:
                     logger.warning(
-                        "Export #%d script_serial_offset 为负数: %d, 设为 0",
-                        export_idx, script_serial_offset,
+                        "Export #%d ScriptSerializationStartOffset 为负数: %d, 设为 0",
+                        export_idx, script_serialization_start_offset,
                     )
-                    script_serial_offset = 0
-                if script_serial_size < 0:
+                    script_serialization_start_offset = 0
+                if script_serialization_end_offset < 0:
                     logger.warning(
-                        "Export #%d script_serial_size 为负数: %d, 设为 0",
-                        export_idx, script_serial_size,
+                        "Export #%d ScriptSerializationEndOffset 为负数: %d, 设为 0",
+                        export_idx, script_serialization_end_offset,
                     )
-                    script_serial_size = 0
+                    script_serialization_end_offset = 0
 
             export_map.append(ObjectExport(
                 class_index=class_index, super_index=super_index,
@@ -318,8 +329,8 @@ def read_export_map(
                 b_not_always_loaded_for_editor_game=b_not_always_loaded_for_editor_game,
                 b_is_asset=b_is_asset,
                 b_generate_public_hash=b_generate_public_hash,
-                script_serial_size=script_serial_size,
-                script_serial_offset=script_serial_offset,
+                script_serialization_end_offset=script_serialization_end_offset,
+                script_serialization_start_offset=script_serialization_start_offset,
                 guid=package_guid,
             ))
         except Exception as e:

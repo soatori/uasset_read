@@ -227,7 +227,7 @@ def test_supported_asset_type_parsers_can_read_representative_exports(
 
     archive = FArchive(str(path), tolerant=True)
     try:
-        archive.seek(export.serial_offset + export.script_serial_offset)
+        archive.seek(export.serial_offset + export.script_serialization_start_offset)
         parsed = parser(archive, result.name_map)
     finally:
         archive.close()
@@ -394,7 +394,7 @@ def _parse_representative_export(path: Path, category: str, export, name_map: li
     parser = _parser_for_category(category)
     archive = FArchive(str(path), tolerant=True)
     try:
-        archive.seek(export.serial_offset + export.script_serial_offset)
+        archive.seek(export.serial_offset + export.script_serialization_start_offset)
         return parser(archive, name_map)
     finally:
         archive.close()
