@@ -54,15 +54,23 @@ python run.py --batch-dir path/to/dir/         # 批量导出
 ## 测试
 
 ```bash
-# 运行测试
+# 分层测试矩阵（推荐）
+python scripts/test_matrix.py smoke           # L0 烟雾测试（最快）
+python scripts/test_matrix.py unit            # L0+L1 单元测试
+python scripts/test_matrix.py integration     # 集成测试
+python scripts/test_matrix.py regression      # 回归测试
+python scripts/test_matrix.py quality         # 质量门禁
+python scripts/test_matrix.py all             # 全量
+
+# 直接 pytest
 python -m pytest tests/ -v                     # 全部测试
 python -m pytest tests/ -v -m integration      # 仅集成测试
 python -m pytest tests/test_pak_handling.py -v # 单个文件
 python -m pytest tests/ -v --cov=uasset_read   # + 覆盖率
-python -m pytest tests/test_api_cleanup.py -v  # API 导出验证
 ```
 
-- 位置: `tests/`（1172 用例通过，2 skipped，2 xfail）
+- 位置: `tests/`（1228 用例通过，2 skipped，2 xfail）
+- 分层规范: 见 `docs/guides/testing-requirements.md`（L0-L4）
 - 要求: 100% 通过率，≥ 12 种资产类型
 - 稳定资产必须在 strict 和 tolerant 双模式下通过
 - 样本资产路径: `E:\Develop\lib\UnrealEngine\Samples`

@@ -1,176 +1,194 @@
 # 测试要求规范
 
-> 本文档定义 uasset_read 项目的测试要求，所有提交必须满足这些要求。
+> 目标：验证 `uasset_read` 是否真的满足项目主目标。
+>
+> 核心验收不是“能跑”，而是下面三件事都成立：
+> 1. 不打开 UE 编辑器，也能读取 `.uasset` / `.umap`。
+> 2. 输出统一的、可供 agent 理解的结构化内容。
+> 3. 蓝图输出能和对应的 C++ 类语义、编辑器节点文本对齐。
 
 ---
 
-## 一、测试结构
+## 一、测试分层
 
-```
-tests/
-├── test_pak_handling.py          # PAK 文件解析测试（集成测试）
-├── test_variable_extractor.py    # 变量提取器测试
-├── test_sample_assets_representative.py  # 真实资产测试（集成测试）
-├── test_tolerant_class_specific.py       # 容错模式类特定跳过测试
-├── test_binary_or_native_handlers.py     # 二进制/原生值处理器测试
-├── test_pak_structures.py                # PAK 结构体测试
-├── test_struct_lwc.py                    # 结构体 LWC 测试
-├── test_api_cleanup.py                   # API 清理测试
-├── test_flow_builder_deprecation.py      # 流程构建器废弃测试
-├── test_package_bundle.py                # 包捆绑测试
-├── test_package_summary_fields.py        # 包摘要字段测试
-├── test_raw_readers.py                   # 原始文件读取器测试
-└── test_cue4parse_gap_completion.py      # CUE4Parse 差异补充测试
-```
+### 1.1 L0: 目标验收烟雾测试
 
----
+这层必须在日常开发里最快跑完，覆盖最核心链路：
 
-## 二、测试要求
+- `parse_single()` 的入口和格式选择
+- `parse_uasset_with_linker()` 的容错与诊断传递
+- `PackageIR` / `NodeIR` / `GraphIR` 这类 IR 结构契约
+- `json` / `json_summary` / `text` / `markdown` / `blueprint_text` / `blueprint_ue_text` / `cpp_skeleton` 的渲染器注册和基础输出
+- 截断文件、非法版本、未知属性、容错早期失败
 
-### 2.1 基础要求
+建议保留文件：
 
-| 要求 | 说明 |
-|------|------|
-| **最小测试数** | ≥ 200 个单元测试 |
-| **通过率** | 100%（不包括预期的 xfail） |
-| **Python 版本** | 3.10+ |
-| **测试框架** | pytest |
-| **运行命令** | `python -m pytest tests/ -v` |
+- `tests/test_core_api.py`
+- `tests/test_renderers.py`
+- `tests/test_ir_structures.py`
+- `tests/test_truncated_file.py`
+- `tests/test_version_compatibility.py`
+- `tests/test_unknown_property_fallback.py`
+- `tests/test_tolerant_early_parse_diagnostics.py`
+- `tests/test_package_summary_fields.py`
+- `tests/test_parse_package_core.py`
 
-### 2.2 集成测试要求
+### 1.2 L1: 解析器与模型单元测试
 
-| 要求 | 说明 |
-|------|------|
-| **标记** | 使用 `@pytest.mark.integration` |
-| **样本资产** | 依赖 `E:\Develop\lib\UnrealEngine\Samples` 目录 |
-| **最小数量** | ≥ 40 个集成测试用例 |
-| **覆盖资产** | 至少覆盖 10 种资产类型 |
+这层验证内部实现是否稳定，属于核心逻辑保护，不直接依赖真实样本资产：
 
-### 2.3 真实资产测试要求
+- 包结构、导入导出表、属性解析
+- Kismet 反编译、节点清理、函数解析
+- Blueprint 节点文本清理和 C++ 映射
+- Pak / IoStore / BulkData / Archive 这类底层容器与读写保护
 
-**必须覆盖的资产类型**:
+建议保留文件：
 
-| 资产类型 | 最小测试数 | 验证内容 |
-|----------|-----------|----------|
-| Blueprint | 2 | 变量、Graphs、节点、Pins、GUID |
-| SkeletalMesh | 1 | 导出解析、元数据字段 |
-| Material | 1 | 导出解析、材质属性 |
-| MaterialInstance | 1 | 父材质索引、参数覆盖 |
-| StaticMesh | 1 | LOD 数、Section 数 |
-| Texture2D | 1 | 导入尺寸、cooked 标志 |
-| Niagara | 1 | 基础解析不崩溃 |
-| Map | 1 | 基础解析不崩溃 |
-| InputAction | 1 | 基础解析不崩溃 |
-| InputMappingContext | 1 | 基础解析不崩溃 |
-| AnimBlueprint | 1 | 变量、Graphs、GUID |
-| ParticleSystem | 0 (xfail) | 已知 UE4 版本缺陷 |
+- `tests/test_blueprint_node_cleaner.py`
+- `tests/test_function_resolver.py`
+- `tests/test_function_resolver_enhanced.py`
+- `tests/test_ir_builder.py`
+- `tests/test_json_completeness.py`
+- `tests/test_kismet_decompilation.py`
+- `tests/test_kismet_deprecated_tokens.py`
+- `tests/test_pak_handling.py`
+- `tests/test_pak_structures.py`
+- `tests/test_raw_readers.py`
+- `tests/test_archive_diagnostic.py`
+- `tests/test_array_count_check.py`
+- `tests/test_binary_or_native_handlers.py`
+- `tests/test_class_registry.py`
+- `tests/test_export_error_context.py`
+- `tests/test_linker_offset_check.py`
+- `tests/test_property_parser_error_handling.py`
+- `tests/test_variable_extractor.py`
 
-### 2.4 测试模式要求
+### 1.3 L2: 代表性样本资产集成测试
 
-| 模式 | 说明 |
-|------|------|
-| **Strict 模式** | `tolerant=False`，遇到错误应抛出异常 |
-| **Tolerant 模式** | `tolerant=True`，容错继续解析 |
-| **双重测试** | 稳定资产必须在两种模式下都通过 |
+这层验证“真实资产输入 -> 统一输出”是否成立，重点是覆盖主要资产类型和容错模式：
 
-### 2.5 验证内容要求
+- `tests/test_sample_assets_representative.py`
+- `tests/test_tolerant_class_specific.py`
+- `tests/test_compat_check.py`
+- `tests/test_cpp_quality_gate.py`
+- `tests/test_constructor_metadata.py`
+- `tests/test_event_execution_fix.py`
 
-**每个解析成功的资产必须验证**:
+这层是最接近项目目标的验证集，应该保持稳定，并持续补样本，不建议频繁删减。
 
-1. `result.is_success` 为 `True`
-2. `result.summary` 不为空
-3. `result.linker` 不为空
-4. `result.name_map` 不为空
-5. `result.export_map` 不为空
+### 1.4 L3: 真实资产回归测试
 
-**蓝图资产额外验证**:
+这层验证“真实蓝图和真实资产”是否满足目标定义，重点看输出是否能对照编辑器和 C++ 语义：
 
-1. `result.blueprint` 不为空
-2. `len(result.blueprint.variables) >= 1`
-3. `any(variable.var_guid for variable in result.blueprint.variables)` — 至少一个变量有 GUID
-4. `len(result.graphs) >= 1`
-5. `event_graph.graph_guid` 不为空
-6. `len(event_graph.nodes) >= 1`
-7. `sum(len(node.pins) for node in event_graph.nodes) >= 1`
-8. 至少一个 Pin 有 `persistent_guid`
-9. 至少一个 Pin 有连接关系（`linked_to_raw` 非空）
-10. 至少一个变量有默认值
+- `tests/test_real_asset_e2e.py`
+- `tests/test_sample_assets_representative.py` 中的真实资产项
 
-**资产类型解析器验证**:
+这层里允许保留已知缺陷的 `xfail`，但必须明确缺陷原因和适用范围。
 
-1. 导出解析返回 `dict` 类型
-2. 返回的 dict 不为空
-3. 包含预期的元数据字段（如 `imported_size_x`、`parent_material_index`、`lod_count` 等）
+### 1.5 L4: 辅助与历史回归测试
+
+这类测试不是主目标，但在回归历史问题上仍有价值：
+
+- `tests/test_api_cleanup.py`
+- `tests/test_flow_builder_deprecation.py`
+- `tests/test_cue4parse_gap_completion.py`
+- `tests/test_quality_stats.py`
+- `tests/test_diagnostic_output.py`
+- `tests/test_fallback_models.py`
+- `tests/test_pin_recovery.py`
+- `tests/test_jump_analyzer.py`
+
+如果某个测试只是在保护旧接口废弃路径，而且项目已经不再暴露该路径，可以考虑删除或并入更高层的验收测试。
 
 ---
 
-## 三、运行命令
+## 二、当前仓库里最重要的测试事实
+
+我已经跑过当前全量测试，结果是：
+
+- `1219 passed`
+- `2 skipped`
+- `2 xfailed`
+
+这说明仓库当前不是“测试不够”，而是“测试很散，缺少分层和归口”。
+
+从目标角度看，真正需要优先守住的是：
+
+1. `parse_single()` 到 renderer 的整条链路
+2. `parse_uasset_with_linker()` 的诊断、容错、失败模式
+3. 代表性资产是否能输出稳定的 IR / JSON / Blueprint 文本 / C++ skeleton
+4. 真实蓝图是否能和节点文本、C++ 语义对齐
+
+---
+
+## 三、建议清理原则
+
+### 3.1 不建议直接删的测试
+
+以下测试虽然看起来像“内部实现测试”，但实际在守核心能力：
+
+- `test_blueprint_node_cleaner.py`
+- `test_function_resolver.py`
+- `test_function_resolver_enhanced.py`
+- `test_kismet_decompilation.py`
+- `test_ir_builder.py`
+- `test_renderers.py`
+- `test_real_asset_e2e.py`
+- `test_sample_assets_representative.py`
+
+### 3.2 可以考虑合并或降级的测试
+
+这些测试通常与已有测试存在明显重叠，更适合改成更少但更强的验收点：
+
+- `test_api_cleanup.py`
+- `test_flow_builder_deprecation.py`
+- `test_quality_stats.py`
+- `test_cpp_quality_gate.py`
+- `test_cue4parse_gap_completion.py`
+
+### 3.3 需要重点审查是否过期的测试
+
+如果项目已经不再支持相应旧接口或旧路径，这些测试可以考虑删除：
+
+- 仅验证废弃 API 的 warning 测试
+- 只保护历史修补点、但没有继续使用场景的测试
+- 只验证输出字符串里某个实现细节、但不验证目标契约的测试
+
+这类测试不能靠名字判断，必须结合当前代码路径和产品目标判断。
+
+---
+
+## 四、体系化自动测试脚本建议
+
+建议补一个统一入口脚本，按场景跑不同测试层。推荐命令如下：
 
 ```bash
-# 运行所有测试
-python -m pytest tests/ -v
-
-# 运行所有测试 + 覆盖率
-python -m pytest tests/ -v --cov=uasset_read
-
-# 仅运行集成测试
-python -m pytest tests/ -v -m integration
-
-# 运行单个测试文件
-python -m pytest tests/test_sample_assets_representative.py -v
-
-# 运行真实资产集成测试
-python -m pytest tests/test_sample_assets_representative.py -v -m integration
+python scripts/test_matrix.py smoke
+python scripts/test_matrix.py unit
+python scripts/test_matrix.py integration
+python scripts/test_matrix.py regression
+python scripts/test_matrix.py quality
+python scripts/test_matrix.py all
 ```
+
+建议语义：
+
+- `smoke`：只跑 L0，最快，适合本地提交前
+- `unit`：L0 + L1，适合普通 PR
+- `integration`：样本资产集成测试
+- `regression`：真实资产和已知缺陷回归
+- `quality`：C++ 输出质量门禁
+- `all`：完整 pytest 套件
+
+脚本的职责不是重新实现测试逻辑，只是把仓库里的 pytest 约定统一起来，避免每个人记不同命令。
 
 ---
 
-## 四、提交前检查
+## 五、提交前检查
 
-提交代码前必须确认：
-
-- [ ] 所有单元测试通过（`python -m pytest tests/ -v`）
-- [ ] 所有集成测试通过（`python -m pytest tests/ -v -m integration`）
-- [ ] 无新的测试失败（xfail 除外）
-- [ ] 新增功能有对应的测试用例
-- [ ] Bug 修复有回归测试
-
----
-
-## 五、测试数据
-
-### 5.1 样本资产位置
-
-```
-E:\Develop\lib\UnrealEngine\Samples\
-├── FirstPerson\        # UE First Person 模板
-├── ThirtPerson\        # UE Third Person 模板（注意拼写）
-├── StarterContent\     # UE Starter Content
-└── Games\LyraStarterGame\  # UE Lyra 示例游戏
-```
-
-### 5.2 测试资产配置
-
-在 `tests/test_sample_assets_representative.py` 中配置：
-
-- `STABLE_ASSETS` — 已知可正常解析的资产
-- `DIAGNOSTIC_ASSETS` — 用于诊断的资产（可能有不完整功能）
-- `PARSER_ASSETS` — 用于测试特定资产类型解析器的资产
-
-### 5.3 已知缺陷资产
-
-| 资产 | 缺陷 | 标记 |
-|------|------|------|
-| `P_Fire.uasset` (ParticleSystem) | UE4 legacy_file_version=-3，当前仅支持 {-9, -8} | `xfail` |
-
----
-
-## 六、版本发布测试要求
-
-发布新版本前，除常规测试外还需：
-
-1. **真实资产随机测试** — 从 LyraStarterGame 随机抽取 ≥ 50 个资产验证
-2. **多类型蓝图验证** — 手动验证 ≥ 3 种不同类型蓝图的完整输出
-3. **事件函数执行追踪** — 验证至少 2 个蓝图的事件→函数调用链可正确追踪
-4. **版本号一致性** — 确认 `__init__.py`、文档版本号统一
-5. **文档同步** — 确认 CLAUDE.md、README.md、Wiki 文档与代码一致
+- [ ] L0 烟雾测试通过
+- [ ] L1 单元测试通过
+- [ ] L2 样本资产集成测试通过，或因样本缺失被明确跳过
+- [ ] L3 真实资产回归测试通过，或因环境缺失被明确跳过
+- [ ] `xfail` 只用于已知、可解释、可追踪的缺陷
+- [ ] 新增特性必须补对应层级的测试
