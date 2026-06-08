@@ -106,7 +106,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         logic_sources=list(getattr(result, "logic_sources", None) or []),
         soft_object_paths=list(getattr(result, "soft_references", None) or []),
         depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
-        asset_registry_data_offset=getattr(result.summary, "asset_registry_data_offset", 0) or 0 if result.summary else 0,
+        asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
         errors=errors,
         status=status,
         status_message=status_message,
@@ -199,9 +199,9 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
     return PackageHeaderIR(
         package_name=_safe_str(getattr(summary, "package_name", None)),
         package_class=_safe_str(getattr(summary, "package_class", None)),
-        package_flags=getattr(summary, "package_flags", 0) or 0,
-        total_export_count=getattr(summary, "export_count", 0) or 0,
-        total_import_count=getattr(summary, "import_count", 0) or 0,
+        package_flags=_safe_int(getattr(summary, "package_flags", 0)),
+        total_export_count=_safe_int(getattr(summary, "export_count", 0)),
+        total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
     )
 
@@ -811,6 +811,16 @@ def _safe_str(value) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    """安全地将值转为 int，非 int 类型返回 default。"""
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_guid(guid: str | None) -> str | None:
