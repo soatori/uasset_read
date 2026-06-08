@@ -80,6 +80,12 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.inherited_blueprint_graphs:
             data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
+        if ir.soft_object_paths:
+            data["soft_object_paths"] = ir.soft_object_paths
+        if ir.depends_map:
+            data["depends_map"] = ir.depends_map
+        if ir.asset_registry_data_offset > 0:
+            data["asset_registry_data_offset"] = ir.asset_registry_data_offset
         if ir.errors:
             data["errors"] = ir.errors
         if options.include_function_graphs:
