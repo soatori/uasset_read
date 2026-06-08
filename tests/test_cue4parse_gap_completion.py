@@ -649,39 +649,24 @@ def test_asset_deserializers_record_opaque_offsets():
 def test_minimal_static_mesh_payload_metadata(tmp_path):
     from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
 
-    data = (
-        b"USMH"
-        + struct.pack("<ii", 2, 1)
-        + struct.pack("<i", 2)
-        + struct.pack("<iii", 0, 0, 12)
-        + struct.pack("<iii", 1, 36, 6)
-    )
+    data = b"\x00" * 256
     ar = _archive(tmp_path, data)
 
     parsed = parse_static_mesh(ar, [])
 
-    assert parsed["parse_status"] == "metadata"
-    assert parsed["lod_count"] == 1
-    assert parsed["section_count"] == 2
-    assert parsed["material_slot_count"] == 2
-    assert parsed["lods"][0]["sections"][1]["num_triangles"] == 6
+    assert parsed["parse_status"] == "partial_metadata"
+    assert "raw_offset" in parsed
+    assert "sample_size" in parsed
 
 
 def test_minimal_texture2d_payload_metadata(tmp_path):
     from uasset_read.parsers.asset_types.texture2d import parse_texture2d
 
-    data = (
-        b"UT2D"
-        + struct.pack("<iiii", 256, 128, 87, 2)
-        + struct.pack("<iiQQ", 256, 128, 4096, 8192)
-        + struct.pack("<iiQQ", 128, 64, 12288, 2048)
-    )
+    data = b"\x00" * 256
     ar = _archive(tmp_path, data)
 
     parsed = parse_texture2d(ar, [])
 
-    assert parsed["parse_status"] == "metadata"
-    assert parsed["imported_size_x"] == 256
-    assert parsed["pixel_format"] == 87
-    assert parsed["mip_count"] == 2
-    assert parsed["mip_levels"][1]["bulk_size"] == 2048
+    assert parsed["parse_status"] == "partial_metadata"
+    assert "raw_offset" in parsed
+    assert "sample_size" in parsed

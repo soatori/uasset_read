@@ -303,9 +303,9 @@ def test_real_anim_blueprint_graph_metadata_has_standard_references(ue_sample_ro
 @pytest.mark.parametrize(
     ("label", "required_keys"),
     [
-        ("level_proto_texture", {"imported_size_x", "b_cooked"}),
-        ("manny_material_instance", {"parent_material_index"}),
-        ("level_proto_static_mesh", {"lod_count", "section_count"}),
+        ("level_proto_texture", {"parse_status", "raw_offset", "sample_size"}),
+        ("manny_material_instance", {"parse_status", "raw_offset", "sample_size"}),
+        ("level_proto_static_mesh", {"parse_status", "raw_offset", "sample_size"}),
     ],
 )
 def test_real_core_asset_metadata_fields_are_present(
@@ -334,13 +334,7 @@ def test_real_core_asset_metadata_fields_are_present(
     parsed = _parse_representative_export(path, asset.category, export, result.name_map)
 
     assert required_keys <= set(parsed)
-    if label == "level_proto_texture":
-        assert parsed["imported_size_x"] > 0
-    elif label == "manny_material_instance":
-        assert parsed["parent_material_index"] != 0
-    elif label == "level_proto_static_mesh":
-        assert parsed["lod_count"] >= 0
-        assert parsed["section_count"] >= 0
+    assert parsed["parse_status"] == "partial_metadata"
 
 
 @pytest.mark.integration

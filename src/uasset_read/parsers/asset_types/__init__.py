@@ -1,5 +1,7 @@
 """资产类型解析器模块 — 特定 UE 资产类型的专用解析器。
 
+所有 handler 返回 opaque partial metadata（原始字节样本），
+不尝试解析 UE 标准 Serialize 布局。
 在模块加载时自动注册为 ClassHandler，集成到主解析管线。
 """
 from __future__ import annotations
