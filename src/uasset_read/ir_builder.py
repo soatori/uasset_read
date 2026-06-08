@@ -263,6 +263,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         graphs.append(_build_graph_ir(graph))
 
     bulk_data = getattr(export, "bulk_data_header", None)
+    asset_type_data = getattr(export, "_asset_type_data", None)
 
     return ExportIR(
         index=idx,
@@ -275,6 +276,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         properties=properties,
         graphs=graphs,
         bulk_data=bulk_data,
+        asset_type_data=asset_type_data,
         parse_status=_safe_str(getattr(export, "parse_status", "success")) or "success",
         fallback_reason=(
             _safe_str(getattr(export, "fallback_reason", None))

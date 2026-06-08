@@ -78,6 +78,7 @@ class ExportIR:
     parse_status: str = "success"
     fallback_reason: str | None = None
     error_message: str | None = None
+    asset_type_data: dict | None = None
 
 
 @dataclass

@@ -375,6 +375,25 @@ def parse_properties_from_export(
                 property_end,
             )
 
+    # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
+    if uses_unversioned and mappings is None:
+        opaque_size = property_end - archive.tell()
+        if opaque_size > 0:
+            raw_bytes = archive.read(opaque_size)
+        else:
+            raw_bytes = b""
+        logger.debug(
+            "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
+            export.object_name, len(raw_bytes),
+        )
+        return [PropertyFallback(
+            name=export.object_name,
+            type="UnversionedOpaque",
+            size=len(raw_bytes),
+            raw_bytes=raw_bytes,
+            reason=FallbackReason.MISSING_MAPPING,
+        )]
+
     # Asset type handler dispatch: 对已注册 handler 的类型，提取原始二进制数据
     if _skip_class_name is not None:
         _try_asset_type_handler(export, archive, name_map, _skip_class_name)

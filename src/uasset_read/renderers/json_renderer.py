@@ -100,6 +100,8 @@ class JSONRenderer(IRenderer):
         }
         if export.bulk_data is not None:
             d["bulk_data"] = export.bulk_data
+        if export.asset_type_data is not None:
+            d["asset_type_data"] = export.asset_type_data
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
