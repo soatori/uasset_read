@@ -197,8 +197,8 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         package_name=_safe_str(getattr(summary, "package_name", None)),
         package_class=_safe_str(getattr(summary, "package_class", None)),
         package_flags=getattr(summary, "package_flags", 0) or 0,
-        total_export_count=getattr(summary, "total_export_count", 0) or 0,
-        total_import_count=getattr(summary, "total_import_count", 0) or 0,
+        total_export_count=getattr(summary, "export_count", 0) or 0,
+        total_import_count=getattr(summary, "import_count", 0) or 0,
         ue_version=version,
     )
 

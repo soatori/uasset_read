@@ -106,12 +106,12 @@ def extract_bytecode_bytes(
         return None, "none"
 
     # No script data
-    if export.script_serial_size <= 0:
+    if not export.has_script_serialization:
         return None, "none"
 
     # Calculate script start position
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        script_start = export.serial_offset + export.script_serial_offset
+        script_start = export.serial_offset + export.script_serialization_start_offset
     else:
         script_start = export.serial_offset
 
@@ -148,10 +148,10 @@ def extract_bytecode_bytes(
         reason = "serial_scan_recovery" if result is not None else "none"
         return result, reason
 
-    if serialized_script_size > export.script_serial_size:
+    if serialized_script_size > export.script_serialization_size:
         raise ParseError(
             f"serializedScriptSize ({serialized_script_size}) exceeds "
-            f"script_serial_size ({export.script_serial_size}) for '{export.object_name}'"
+            f"script_serialization_size ({export.script_serialization_size}) for '{export.object_name}'"
         )
 
     return archive.read_bytes(serialized_script_size), "function_export"
