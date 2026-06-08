@@ -476,6 +476,10 @@ class IoStoreReader:
             reader.seek(block_partition_offset)
 
             raw_data = reader.read(block.compressed_size)
+            if len(raw_data) < block.compressed_size:
+                raise ParseError(
+                    f"IoStore 压缩块 {block_index} 读取不足: {len(raw_data)} < {block.compressed_size} bytes"
+                )
             if self._header and self._header.is_encrypted:
                 aligned_size = (block.compressed_size + 15) & ~15
                 if len(raw_data) < aligned_size:
@@ -518,7 +522,10 @@ class IoStoreReader:
                 raw = decrypt_aes_ecb(raw, self._aes_key)[:readable]
             result.extend(raw)
             if len(raw) < readable:
-                break
+                raise ParseError(
+                    f"IoStore 分区读取不足: 读取 {len(raw)} < 预期 {readable} bytes "
+                    f"(分区 {current_partition})"
+                )
             remaining -= readable
             current_partition += 1
             current_offset = 0

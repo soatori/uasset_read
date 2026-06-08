@@ -122,6 +122,11 @@ def decompress_entry(
         if entry.is_encrypted:
             raw_size = (raw_size + 15) & ~15
         raw = stream.read(raw_size)
+        if len(raw) < raw_size:
+            raise ParseError(
+                f"Pak 非压缩短读: 读取 {len(raw)} < 预期 {raw_size} bytes "
+                f"(uncompressed_size={entry.uncompressed_size})"
+            )
         if entry.is_encrypted:
             raw = _decrypt_entry_data(raw, encryption_key)[:entry.uncompressed_size]
         return raw[:entry.uncompressed_size]
@@ -159,7 +164,7 @@ def decompress_entry(
             f"解压结果过短: {len(result)} < {entry.uncompressed_size} bytes"
         )
 
-    return bytes(result)
+    return bytes(result[:entry.uncompressed_size])
 
 
 def _decrypt_entry_data(data: bytes, encryption_key: bytes | None) -> bytes:
