@@ -101,6 +101,114 @@ STANDARD_MACROS: Dict[str, Dict[str, Any]] = {
         "is_loop": True,
         "is_standard": True,
     },
+    "Branch": {
+        "inputs": ["Condition"],
+        "outputs": ["True", "False"],
+        "is_loop": False,
+        "is_standard": True,
+    },
+    "Delay": {
+        "inputs": ["Duration"],
+        "outputs": ["Completed"],
+        "is_loop": False,
+        "is_standard": True,
+    },
+    "RetriggerableDelay": {
+        "inputs": ["Duration"],
+        "outputs": ["Completed"],
+        "is_loop": False,
+        "is_standard": True,
+    },
+    "Select": {
+        "inputs": ["Index", "A", "B"],
+        "outputs": ["ReturnValue"],
+        "is_loop": False,
+        "is_standard": True,
+    },
+    "SwitchOnInt": {
+        "inputs": ["Value"],
+        "outputs": ["0", "1", "2", "3", "4", "Default"],
+        "is_loop": False,
+        "is_standard": True,
+    },
+}
+
+
+# ──────────────────────────────────────────────────────
+# 标准宏 → C++ 控制流映射
+# ──────────────────────────────────────────────────────
+
+STANDARD_MACRO_CPP_MAPPING: Dict[str, Dict[str, Any]] = {
+    "ForLoop": {
+        "cpp_statement": "for",
+        "cpp_template": "for (int {LoopCounter} = {FirstIndex}; {LoopCounter} <= {LastIndex}; {LoopCounter} += {Increment})",
+        "loop_body_pin": "Loop Body",
+        "completed_pin": "Completed",
+    },
+    "ForLoopWithBreak": {
+        "cpp_statement": "for",
+        "cpp_template": "for (int {LoopCounter} = {FirstIndex}; {LoopCounter} <= {LastIndex}; {LoopCounter} += {Increment}) /* break */",
+        "loop_body_pin": "Loop Body",
+        "completed_pin": "Completed",
+    },
+    "WhileLoop": {
+        "cpp_statement": "while",
+        "cpp_template": "while ({Condition})",
+        "loop_body_pin": "Loop Body",
+        "completed_pin": "Completed",
+    },
+    "ForEachLoop": {
+        "cpp_statement": "for_each",
+        "cpp_template": "for (auto& {ArrayElement} : {Array})",
+        "loop_body_pin": "Loop Body",
+        "completed_pin": "Completed",
+    },
+    "ForEachLoopWithBreak": {
+        "cpp_statement": "for_each",
+        "cpp_template": "for (auto& {ArrayElement} : {Array}) /* break */",
+        "loop_body_pin": "Loop Body",
+        "completed_pin": "Completed",
+    },
+    "Gate": {
+        "cpp_statement": "gate",
+        "cpp_template": "// Gate: open/close control flow",
+    },
+    "Do N": {
+        "cpp_statement": "for",
+        "cpp_template": "for (int _counter = 0; _counter < {N}; _counter++)",
+    },
+    "DoOnce": {
+        "cpp_statement": "do_once",
+        "cpp_template": "/* DoOnce: executes once until reset */",
+    },
+    "IsValid": {
+        "cpp_statement": "if",
+        "cpp_template": "if (IsValid({Input}))",
+    },
+    "FlipFlop": {
+        "cpp_statement": "flipflop",
+        "cpp_template": "/* FlipFlop: alternates between A and B */",
+    },
+    "Branch": {
+        "cpp_statement": "if",
+        "cpp_template": "if ({Condition})",
+    },
+    "Delay": {
+        "cpp_statement": "delay",
+        "cpp_template": "/* Latent: Delay({Duration}) */",
+    },
+    "RetriggerableDelay": {
+        "cpp_statement": "delay",
+        "cpp_template": "/* Latent: RetriggerableDelay({Duration}) */",
+    },
+    "Select": {
+        "cpp_statement": "ternary",
+        "cpp_template": "auto {ReturnValue} = {Index} ? {A} : {B};",
+    },
+    "SwitchOnInt": {
+        "cpp_statement": "switch",
+        "cpp_template": "switch ({Value}) { /* cases */ }",
+    },
 }
 
 
@@ -273,13 +381,150 @@ class MacroExpander:
         internal_nodes: List[Dict[str, Any]],
         exit_tunnels: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """构建宏内部执行流（简化版）。
+        """构建宏内部执行流。
 
-        这里复用 flow_builder 的追踪逻辑，传入宏图的节点。
-        注意：需要将 internal_nodes 适配为 UEdGraphNode 列表。
+        从 entry_tunnels 的 exec output pin 出发，通过 linked_to_raw
+        找到连接的内部节点入口，然后沿 exec output pin 追踪执行链。
+
+        Returns:
+            List of flow dicts，每个包含:
+            - "entry_tunnel": 入口 Tunnel 引脚名
+            - "nodes": 按执行顺序排列的内部节点列表
         """
-        # TODO: 后续接入 flow_builder 的追踪逻辑
-        return []
+        if not entry_tunnels or not internal_nodes:
+            return []
+
+        # 构建内部节点的 pin_id → (node_guid, pin_name) 查找表
+        pin_lookup: Dict[str, Tuple[str, str]] = {}
+        node_by_guid: Dict[str, Dict[str, Any]] = {}
+        for node in internal_nodes:
+            guid = node.get("node_guid", "")
+            if guid:
+                node_by_guid[guid] = node
+            for pin in node.get("pins", []):
+                pid = pin.get("pin_id", "")
+                if pid:
+                    pin_lookup[pid] = (guid, pin.get("pin_name", ""))
+
+        # 收集 exit tunnel 的 exec input pin_id 用于终止检测
+        # 同时记录所有 exit tunnel 的 node_guid，避免误判内部节点
+        exit_pin_ids: Set[str] = set()
+        exit_node_guids: Set[str] = set()
+        for tunnel in exit_tunnels:
+            tunnel_guid = tunnel.get("node_guid", "")
+            if tunnel_guid:
+                exit_node_guids.add(tunnel_guid)
+            for pin in tunnel.get("pins", []):
+                if pin.get("direction") == 0:  # input pin
+                    pid = pin.get("pin_id", "")
+                    if pid:
+                        exit_pin_ids.add(pid)
+
+        flows: List[Dict[str, Any]] = []
+
+        for entry in entry_tunnels:
+            # 找 entry tunnel 的 exec output pin (direction=1)
+            for pin in entry.get("pins", []):
+                if pin.get("direction") != 1:
+                    continue
+                pt = pin.get("pin_type", {})
+                if pt.get("pin_category") != "exec":
+                    continue
+
+                pin_name = pin.get("pin_name", "")
+                start_pid = pin.get("pin_id", "")
+
+                # 通过 linked_to_raw 找到连接的第一个内部节点
+                first_node = None
+                for linked_ref in (pin.get("linked_to_raw") or []):
+                    if isinstance(linked_ref, str):
+                        target_pid = linked_ref
+                    elif isinstance(linked_ref, dict):
+                        target_pid = linked_ref.get("pin_id", "")
+                    else:
+                        continue
+                    if target_pid in pin_lookup:
+                        target_guid, _ = pin_lookup[target_pid]
+                        first_node = node_by_guid.get(target_guid)
+                        if first_node:
+                            break
+
+                if first_node is None:
+                    continue
+
+                # BFS 追踪 exec 链
+                flow_nodes: List[Dict[str, Any]] = []
+                visited: Set[str] = set()
+                # 待处理的 exec output pin 引用列表
+                pending_refs: List[str] = []
+
+                # 从第一个内部节点开始
+                first_guid = first_node.get("node_guid", "")
+                if first_guid:
+                    visited.add(first_guid)
+                    flow_nodes.append(first_node)
+                    # 收集该节点的 exec output pin 的 linked_to_raw
+                    for out_pin in first_node.get("pins", []):
+                        if out_pin.get("direction") != 1:
+                            continue
+                        out_pt = out_pin.get("pin_type", {})
+                        if out_pt.get("pin_category") != "exec":
+                            continue
+                        for ref in (out_pin.get("linked_to_raw") or []):
+                            if isinstance(ref, str):
+                                pending_refs.append(ref)
+                            elif isinstance(ref, dict):
+                                ref_id = ref.get("pin_id", "")
+                                if ref_id:
+                                    pending_refs.append(ref_id)
+
+                while pending_refs:
+                    next_refs: List[str] = []
+                    for ref_pid in pending_refs:
+                        if ref_pid in exit_pin_ids:
+                            continue
+                        if ref_pid not in pin_lookup:
+                            continue
+                        target_guid, _ = pin_lookup[ref_pid]
+                        if not target_guid or target_guid in visited:
+                            continue
+                        # 到达 exit tunnel 节点时终止
+                        if target_guid in exit_node_guids:
+                            continue
+                        visited.add(target_guid)
+
+                        node = node_by_guid.get(target_guid)
+                        if node is None:
+                            continue
+                        flow_nodes.append(node)
+
+                        # 收集该节点的 exec output pin 的 linked_to_raw
+                        for out_pin in node.get("pins", []):
+                            if out_pin.get("direction") != 1:
+                                continue
+                            out_pt = out_pin.get("pin_type", {})
+                            if out_pt.get("pin_category") != "exec":
+                                continue
+                            for ref in (out_pin.get("linked_to_raw") or []):
+                                if isinstance(ref, str):
+                                    if ref not in visited:
+                                        next_refs.append(ref)
+                                elif isinstance(ref, dict):
+                                    ref_id = ref.get("pin_id", "")
+                                    if ref_id and ref_id not in visited:
+                                        next_refs.append(ref_id)
+
+                    pending_refs = next_refs
+                    if len(visited) > 200:
+                        break
+
+                if flow_nodes:
+                    flows.append({
+                        "entry_tunnel": pin_name,
+                        "nodes": flow_nodes,
+                    })
+
+        return flows
 
     def _create_standard_expansion(
         self,

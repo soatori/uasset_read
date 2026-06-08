@@ -9,7 +9,9 @@ from uasset_read.constants import (
     CONTROL_FLOW_NODES,
     START_EVENT_TYPES,
 )
-from uasset_read.graph.macro_expander import MacroExpander, STANDARD_MACROS
+from uasset_read.graph.macro_expander import (
+    MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
+)
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
 
 from ._edge_traversal import (
@@ -63,6 +65,7 @@ def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict
             "pin_mapping": expansion.pin_mapping,
             "unresolved": expansion.unresolved,
             "is_standard": is_standard or expansion.context.macro_name in STANDARD_MACROS,
+            "internal_flows": expansion.internal_flows,
         }
     except Exception as e:
         return {
@@ -95,12 +98,30 @@ def _trace_execution_from_event(
     visited: Set[str] = set()
     flow: List[Dict] = []
     current_node = start_node
+    _MAX_EXEC_STEPS = 500
+    _steps = 0
+    # 为无 GUID 节点使用 id 做 visited，防止无限循环
+    _no_guid_visited: Set[int] = set()
 
     while current_node:
+        _steps += 1
+        if _steps > _MAX_EXEC_STEPS:
+            flow.append({"stopped_at": "max_steps_exceeded", "steps": _steps})
+            break
+
         # LOW-07: 处理 node_guid 为 None 的情况
         current_guid = current_node.node_guid
         if current_guid is None:
-            # node_guid 缺失时仍记录节点但跳过循环检测
+            node_id = id(current_node)
+            if node_id in _no_guid_visited:
+                flow.append({
+                    "node_type": current_node.class_name,
+                    "cycle_detected": True,
+                    "warning": "missing node_guid"
+                })
+                break
+            _no_guid_visited.add(node_id)
+            # node_guid 缺失时仍记录节点但跳过有 GUID 的循环检测
             flow.append({
                 "node_type": current_node.class_name,
                 "warning": "missing node_guid"
@@ -176,7 +197,15 @@ def _trace_execution_from_event(
             if current_node.class_name == "K2Node_MacroInstance":
                 # 宏实例：尝试展开并穿透，不终止执行链
                 ctx = asset_context or {}
-                node_info["macro_expansion"] = _try_expand_macro(current_node, ctx)
+                expansion = _try_expand_macro(current_node, ctx)
+                node_info["macro_expansion"] = expansion
+                macro_name = expansion.get("macro_name", "")
+                if macro_name in STANDARD_MACRO_CPP_MAPPING:
+                    node_info["cpp_macro_mapping"] = STANDARD_MACRO_CPP_MAPPING[macro_name]
+                if not expansion.get("is_standard") and not expansion.get("unresolved"):
+                    internal_flows = expansion.get("internal_flows", [])
+                    if internal_flows:
+                        node_info["macro_internal_flows"] = internal_flows
             else:
                 # 其他控制流节点：设置 branch_type 并终止
                 if "branch_type" not in node_info:

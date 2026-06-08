@@ -918,7 +918,8 @@ def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
 
 def _read_ftext_args(archive: FArchive) -> None:
     """读取 FText 参数字典并丢弃（仅消耗字节）。"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "FText args")
     for _ in range(count):
         archive.read_fstring()  # key
         archive.read_fstring()  # value
@@ -1008,7 +1009,8 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
     """解析 MulticastDelegateProperty"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
@@ -1038,7 +1040,8 @@ def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
     """解析 FieldPathProperty"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "FieldPath")
     path = []
     for _ in range(count):
         path.append(archive.read_fstring())

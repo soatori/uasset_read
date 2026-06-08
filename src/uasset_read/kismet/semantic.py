@@ -223,7 +223,18 @@ def _flow_to_cpp(
                     call_count += 1
 
             # 控制流节点（Branch 等）
-            elif node_type in ("K2Node_IfThenElse", "K2Node_MacroInstance"):
+            elif node_type == "K2Node_MacroInstance":
+                cpp_mapping = node_info.get("cpp_macro_mapping", {})
+                macro_expansion = node_info.get("macro_expansion", {})
+                macro_name = macro_expansion.get("macro_name", "")
+                if cpp_mapping:
+                    template = cpp_mapping.get("cpp_template", f"/* {macro_name} */")
+                    lines.append(f"    {template}")
+                else:
+                    lines.append(f"    // {macro_name or node_type}")
+                call_count += 1
+
+            elif node_type == "K2Node_IfThenElse":
                 branch_type = node_info.get("branch_type", "")
                 if branch_type:
                     lines.append(f"    // {node_type} ({branch_type})")

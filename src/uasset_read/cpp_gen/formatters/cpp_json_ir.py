@@ -404,6 +404,58 @@ class CppWhileStmt(CppStatement):
 
 
 @dataclass
+class CppForStmt(CppStatement):
+    """for 循环语句：for (init; condition; increment) { body }
+
+    Attributes:
+        init: 初始化表达式
+        condition: 循环条件
+        increment: 递增表达式
+        body: 循环体语句列表
+    """
+    init: str = ""
+    condition: str = ""
+    increment: str = ""
+    body: List["CppStatement"] = field(default_factory=list)
+    statement_type: str = "for"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "init": self.init,
+            "condition": self.condition,
+            "increment": self.increment,
+            "body": [s.to_dict() for s in self.body],
+        }
+
+
+@dataclass
+class CppForEachStmt(CppStatement):
+    """range-based for 循环：for (auto& elem : container) { body }
+
+    Attributes:
+        element: 循环变量名
+        element_type: 元素类型（默认 "auto&"）
+        container: 容器表达式
+        body: 循环体语句列表
+    """
+    element: str = ""
+    element_type: str = "auto&"
+    container: str = ""
+    body: List["CppStatement"] = field(default_factory=list)
+    statement_type: str = "for_each"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "statement_type": self.statement_type,
+            "element": self.element,
+            "element_type": self.element_type,
+            "container": self.container,
+            "body": [s.to_dict() for s in self.body],
+        }
+
+
+@dataclass
 class CppRawStmt(CppStatement):
     """未分类的原始 C++ 文本语句。
 
