@@ -13,6 +13,11 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION, MAX_LINKEDTO_PER_PIN,
+    FFRAMEWORK_OBJECT_VERSION_GUID,
+    FFRAMEWORK_VERSION_PINS_STORE_FNAME,
+    FUE5_MAINSTREAM_VERSION_GUID,
+    FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX,
+    PKG_FilterEditorOnly,
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.models.core import UEdGraphPin
@@ -165,6 +170,11 @@ def read_ue_graph_pin(
     """
     trace_mode = _pin_trace_enabled(trace_mode)
 
+    # 版本门控：获取 custom version
+    framework_version = int(summary.get_custom_version(FFRAMEWORK_OBJECT_VERSION_GUID, 0))
+    ue5main_version = int(summary.get_custom_version(FUE5_MAINSTREAM_VERSION_GUID, 0))
+    is_filter_editor_only = (int(getattr(summary, 'package_flags', 0)) & PKG_FilterEditorOnly) != 0
+
     # 诊断记录
     _trace_fields: Dict[str, Any] = {}
     if trace_mode:
@@ -209,42 +219,51 @@ def read_ue_graph_pin(
         _trace_fields["pin_start_pos"] = pin_start_pos
 
     _field_start = archive.tell()
-    pin_name = archive.read_name(name_map)
+    # 版本门控：FrameworkObjectVersion >= 19 使用 FName，否则使用 FString
+    if framework_version >= FFRAMEWORK_VERSION_PINS_STORE_FNAME:
+        pin_name = archive.read_name(name_map)
+    else:
+        # FString → 转为 name
+        pin_name = archive.read_fstring()
     if trace_mode:
         _trace_field("PinName", _field_start, archive.tell(), pin_name)
 
-    # 4. PinFriendlyName (FText)
+    # 4. PinFriendlyName (FText) — EditorOnly 字段
     # FText 安全网：记录解析前位置，限制最大消耗
     ftext_start_pos = archive.tell()
     pin_friendly_name: Optional[str] = None
-    try:
-        pin_friendly_name, flags, history_type, _ = _read_ftext_value(
-            archive, tolerant=True
-        )
-        # FText 安全网：验证消耗字节数
-        ftext_consumed = archive.tell() - ftext_start_pos
-        if ftext_consumed > MAX_FTEXT_CONSUMPTION:
-            logger.warning(
-                "[FTEXT-SAFETY] PinFriendlyName consumed %d bytes (> %d), "
-                "possible corruption, seeking back to %d",
-                ftext_consumed, MAX_FTEXT_CONSUMPTION, ftext_start_pos + 5
+    if not is_filter_editor_only:
+        try:
+            pin_friendly_name, flags, history_type, _ = _read_ftext_value(
+                archive, tolerant=True
             )
-            archive.seek(ftext_start_pos + 5)
-            # 标记解析失败，使用默认值
+            # FText 安全网：验证消耗字节数
+            ftext_consumed = archive.tell() - ftext_start_pos
+            if ftext_consumed > MAX_FTEXT_CONSUMPTION:
+                logger.warning(
+                    "[FTEXT-SAFETY] PinFriendlyName consumed %d bytes (> %d), "
+                    "possible corruption, seeking back to %d",
+                    ftext_consumed, MAX_FTEXT_CONSUMPTION, ftext_start_pos + 5
+                )
+                archive.seek(ftext_start_pos + 5)
+                # 标记解析失败，使用默认值
+                pin_friendly_name = None
+            if trace_mode:
+                _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                             f"flags={flags},htype={history_type}")
+        except Exception as e:
             pin_friendly_name = None
-        if trace_mode:
-            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
-                         f"flags={flags},htype={history_type}")
-    except Exception as e:
-        pin_friendly_name = None
-        archive.seek(ftext_start_pos + 5)
-        if trace_mode:
-            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
-                         "", is_exception=True, is_fallback=True)
+            archive.seek(ftext_start_pos + 5)
+            if trace_mode:
+                _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
+                             "", is_exception=True, is_fallback=True)
 
-    # 5. SourceIndex (UE5 始终存在)
+    # 5. SourceIndex — 版本门控：UE5MainStream >= 50 时存在
     _field_start = archive.tell()
-    source_index = archive.read_i32()
+    if ue5main_version >= FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX:
+        source_index = archive.read_i32()
+    else:
+        source_index = 0
     if trace_mode:
         _trace_field("SourceIndex", _field_start, archive.tell(), str(source_index))
 
@@ -445,7 +464,10 @@ def read_ue_graph_pin(
     # 17. PersistentGuid (EditorOnly)
     persistent_start = archive.tell()
     try:
-        persistent_guid = _read_guid(archive)
+        if not is_filter_editor_only:
+            persistent_guid = _read_guid(archive)
+        else:
+            persistent_guid = None
     except Exception:
         persistent_guid = None
     if trace_mode:
@@ -457,17 +479,18 @@ def read_ue_graph_pin(
     not_connectable = False
     advanced_view = False
     orphaned_pin = False
-    try:
-        bitfield_start = archive.tell()
-        bitfield = archive.read_u32()
-        hidden = bool(bitfield & (1 << 0))
-        not_connectable = bool(bitfield & (1 << 1))
-        advanced_view = bool(bitfield & (1 << 4))
-        orphaned_pin = bool(bitfield & (1 << 5))
-        if trace_mode:
-            _trace_field("BitField", bitfield_start, archive.tell(), str(bitfield))
-    except Exception:
-        pass
+    if not is_filter_editor_only:
+        try:
+            bitfield_start = archive.tell()
+            bitfield = archive.read_u32()
+            hidden = bool(bitfield & (1 << 0))
+            not_connectable = bool(bitfield & (1 << 1))
+            advanced_view = bool(bitfield & (1 << 4))
+            orphaned_pin = bool(bitfield & (1 << 5))
+            if trace_mode:
+                _trace_field("BitField", bitfield_start, archive.tell(), str(bitfield))
+        except Exception:
+            pass
 
     default_object_ref = None
     if linker is not None and default_object not in (None, 0):
