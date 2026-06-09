@@ -31,16 +31,12 @@ jobs:
           python -m pip install pytest pytest-cov
 
       - name: Run tests
-        env:
-          PYTHONPATH: src
         run: |
-          python -m pytest tests/ -v --tb=short
+          python scripts/test_matrix.py all -- -v --tb=short
 
       - name: Run tests with coverage
-        env:
-          PYTHONPATH: src
         run: |
-          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml
+          python scripts/test_matrix.py all -- -v --cov=uasset_read --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

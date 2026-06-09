@@ -13,6 +13,7 @@ from uasset_read.models.ir import (
     PackageHeaderIR,
     PropertyIR,
     ExportIR,
+    ExportRawIR,
     GraphIR,
     NodeIR,
     PinIR,
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 
 
 from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
+from uasset_read.serializers.object_resources import PackageIndex
 
 
 def _classify_variable(var) -> str:
@@ -105,7 +107,9 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
         logic_sources=list(getattr(result, "logic_sources", None) or []),
         soft_object_paths=list(getattr(result, "soft_references", None) or []),
+        soft_package_references=list(getattr(result, "soft_package_references", None) or []),
         depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
+        resolved_depends_map=_build_resolved_depends_map(result),
         asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
         errors=errors,
         status=status,
@@ -268,6 +272,9 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     bulk_data = getattr(export, "bulk_data_header", None)
     asset_type_data = getattr(export, "_asset_type_data", None)
 
+    # 构建 UE 原始导出表字段
+    raw = _build_export_raw_ir(export)
+
     return ExportIR(
         index=idx,
         object_name=_safe_str(getattr(export, "object_name", None)),
@@ -289,7 +296,47 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
             _safe_str(getattr(export, "error_message", None))
             if getattr(export, "error_message", None) is not None else None
         ),
+        ue_export_raw=raw,
+        diagnostics=_build_export_diagnostics(export),
     )
+
+
+def _build_export_raw_ir(export) -> ExportRawIR:
+    """从 ObjectExport 构建 UE 原始导出表字段。"""
+
+    def _pkg_index_raw(pi) -> int:
+        """提取 PackageIndex 原始整数值。"""
+        if pi is None:
+            return 0
+        return getattr(pi, "index", 0)
+
+    return ExportRawIR(
+        class_index=_pkg_index_raw(getattr(export, "class_index", None)),
+        super_index=_pkg_index_raw(getattr(export, "super_index", None)),
+        outer_index=_pkg_index_raw(getattr(export, "outer_index", None)),
+        template_index=_pkg_index_raw(getattr(export, "template_index", None)),
+        object_flags=getattr(export, "object_flags", 0) or 0,
+        serial_offset=getattr(export, "serial_offset", 0) or 0,
+        package_flags=getattr(export, "package_flags", 0) or 0,
+        b_forced_export=bool(getattr(export, "b_forced_export", False)),
+        b_not_for_client=bool(getattr(export, "b_not_for_client", False)),
+        b_not_for_server=bool(getattr(export, "b_not_for_server", False)),
+        b_is_inherited_instance=bool(getattr(export, "b_is_inherited_instance", False)),
+        b_not_always_loaded_for_editor_game=bool(getattr(export, "b_not_always_loaded_for_editor_game", True)),
+        b_is_asset=bool(getattr(export, "b_is_asset", False)),
+        b_generate_public_hash=bool(getattr(export, "b_generate_public_hash", False)),
+        script_serialization_start_offset=getattr(export, "script_serialization_start_offset", 0) or 0,
+        script_serialization_end_offset=getattr(export, "script_serialization_end_offset", 0) or 0,
+        guid=_safe_str(getattr(export, "guid", "")) or "",
+    )
+
+
+def _build_export_diagnostics(export) -> dict | None:
+    """从 ObjectExport.transforms 构建诊断信息。"""
+    transforms = getattr(export, "transforms", None) or {}
+    if not transforms:
+        return None
+    return dict(transforms)
 
 
 def _build_property_ir(prop) -> PropertyIR:
@@ -366,6 +413,29 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         return str(obj_ref)
     except Exception:
         return None
+
+
+def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
+    """将 DependsMap 的原始 PackageIndex 解析为可读路径。
+
+    Returns:
+        二维列表：外层按 export 索引，内层为 [{index, path}] 列表。
+    """
+    if not result.summary:
+        return []
+    raw_map = getattr(result.summary, "depends_map", None) or []
+    if not raw_map:
+        return []
+
+    resolved: list[list[dict]] = []
+    for dep_indices in raw_map:
+        row: list[dict] = []
+        for idx in dep_indices:
+            pkg_idx = PackageIndex(idx)
+            path = _resolve_package_index(result, pkg_idx)
+            row.append({"index": idx, "path": path})
+        resolved.append(row)
+    return resolved
 
 
 def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:

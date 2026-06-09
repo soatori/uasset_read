@@ -21,6 +21,9 @@ from uasset_read.constants import (
     UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID, UE5_TRACK_OBJECT_EXPORT_IS_INHERITED,
     UE5_OPTIONAL_RESOURCES, UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_ADD_SOFTOBJECTPATH_LIST, UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
+    UE4_NON_OUTER_PACKAGE_IMPORT, UE4_LOAD_FOR_EDITOR_GAME,
+    UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT, UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
+    UE4_TemplateIndex_IN_COOKED_EXPORTS, UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
 from uasset_read.exceptions import ParseError, ErrorContext
 
@@ -112,6 +115,9 @@ def read_import_map(
 
     is_filter_editor_only = (summary.package_flags & PKG_FilterEditorOnly) != 0
 
+    # UE4 version used for version gating (high value for UE5 assets)
+    file_version = summary.file_version_ue4
+
     import_map: List[ObjectImport] = []
     for _ in range(summary.import_count):
         class_package = archive.read_name(name_map)
@@ -119,13 +125,16 @@ def read_import_map(
         outer_index = PackageIndex(archive.read_i32())
         object_name = archive.read_name(name_map)
 
-        # PackageName: UE5 always has it when !FilterEditorOnly
+        # PackageName: VER_UE4_NON_OUTER_PACKAGE_IMPORT && !FilterEditorOnly
+        # UE5 WITH_EDITORONLY_DATA: only present when file_version >= 519 and not filter-editor-only
         package_name: Optional[str] = None
-        if not is_filter_editor_only:
+        if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT and not is_filter_editor_only:
             package_name = archive.read_name(name_map)
 
-        # bImportOptional: UE5 >= 1003 always present
-        b_import_optional = archive.read_bool()
+        # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES)
+        b_import_optional = False
+        if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+            b_import_optional = archive.read_bool()
 
         import_map.append(ObjectImport(
             class_package=class_package, class_name=class_name,
@@ -225,6 +234,9 @@ def read_export_map(
 
     archive.seek(summary.export_offset)
 
+    # UE4/UE5 version used for version gating
+    file_version = summary.file_version_ue4
+
     export_map: List[ObjectExport] = []
 
     for export_idx in range(summary.export_count):
@@ -233,16 +245,22 @@ def read_export_map(
             class_index = PackageIndex(archive.read_i32())
             super_index = PackageIndex(archive.read_i32())
 
-            # TemplateIndex (UE5 始终存在)
-            template_index = PackageIndex(archive.read_i32())
+            # TemplateIndex: VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (507)
+            template_index = PackageIndex(0)
+            if file_version >= UE4_TemplateIndex_IN_COOKED_EXPORTS:
+                template_index = PackageIndex(archive.read_i32())
 
             outer_index = PackageIndex(archive.read_i32())
             object_name = archive.read_name(name_map)
             object_flags = archive.read_u32()
 
-            # SerialSize/Offset (UE5 始终为 i64)
-            serial_size = archive.read_i64()
-            serial_offset = archive.read_i64()
+            # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (510), i64 after
+            if file_version < UE4_64BIT_EXPORTMAP_SERIALSIZES:
+                serial_size = archive.read_i32()
+                serial_offset = archive.read_i32()
+            else:
+                serial_size = archive.read_i64()
+                serial_offset = archive.read_i64()
 
             # CR-05: 验证 serial_size/serial_offset 非负
             # Tolerant: 负数时设为 0 并记录 warning，后续属性解析会因 size=0 被跳过
@@ -261,38 +279,48 @@ def read_export_map(
                 serial_offset = 0
                 serial_size = 0
 
-            # bool flags
+            # bool flags (always present)
             b_forced_export = archive.read_bool()
             b_not_for_client = archive.read_bool()
             b_not_for_server = archive.read_bool()
 
-            # bIsInheritedInstance (UE5 >= 1006)
+            # PackageGuid: removed in UE5 1005
+            package_guid = ""
+            if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
+                guid_bytes = archive.read(16)
+                package_guid = guid_bytes.hex()
+
+            # bIsInheritedInstance: UE5 >= 1006
             b_is_inherited_instance = False
             if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
                 b_is_inherited_instance = archive.read_bool()
 
             package_flags = archive.read_u32()
 
-            # Other bool flags (UE5 始终存在)
-            b_not_always_loaded_for_editor_game = archive.read_bool()
-            b_is_asset = archive.read_bool()
-            b_generate_public_hash = archive.read_bool()
+            # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (364)
+            b_not_always_loaded_for_editor_game = True
+            if file_version >= UE4_LOAD_FOR_EDITOR_GAME:
+                b_not_always_loaded_for_editor_game = archive.read_bool()
 
-            # Dependency arrays (UE5 始终存在)
-            archive.read_i32()  # first_export_dependency
-            archive.read_i32()  # serialization_before_serialization_deps
-            archive.read_i32()  # create_before_serialization_deps
-            archive.read_i32()  # serialization_before_create_deps
-            archive.read_i32()  # create_before_create_deps
+            # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (484)
+            b_is_asset = False
+            if file_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
+                b_is_asset = archive.read_bool()
 
-            package_guid = ""
-            if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
-                guid_bytes = archive.read(16)  # package_guid
-                package_guid = guid_bytes.hex()
+            # bGeneratePublicHash: UE5 >= 1003 (OPTIONAL_RESOURCES)
+            b_generate_public_hash = False
+            if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+                b_generate_public_hash = archive.read_bool()
 
-            # ScriptSerialization offsets (UE5 始终存在，但跳过 unversioned 属性)
-            # UE 存储两个相对偏移量：StartOffset 和 EndOffset（相对于 SerialOffset）
-            # 属性范围 = [serial_offset + start, serial_offset + end)
+            # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (506)
+            if file_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
+                archive.read_i32()  # first_export_dependency
+                archive.read_i32()  # serialization_before_serialization_deps
+                archive.read_i32()  # create_before_serialization_deps
+                archive.read_i32()  # serialization_before_create_deps
+                archive.read_i32()  # create_before_create_deps
+
+            # ScriptSerialization offsets (UE5 >= 1010, only for versioned properties)
             script_serialization_start_offset = 0
             script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0

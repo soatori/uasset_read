@@ -129,6 +129,12 @@
 - 至少 12 种资产类型覆盖
 - 稳定资产必须通过 strict 和 tolerant 双模式
 
+### 验收测试
+- 89 个验收用例覆盖 5 个维度
+- 9 种资产类型 × 8 种输出格式 = 72 个矩阵用例
+- 运行: `python scripts/test_matrix.py acceptance -q`
+- 详见 `docs/guides/acceptance-matrix.md`
+
 ### 测试资产
 依赖真实 UE 样本资产：
 ```

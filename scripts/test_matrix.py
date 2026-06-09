@@ -42,7 +42,7 @@ SUITES: dict[str, list[str]] = {
     "unit": [
         "tests",
         "-m",
-        "not integration and not quality and not regression and not slow and not auxiliary",
+        "not integration and not quality and not regression and not slow and not auxiliary and not acceptance",
     ],
     "integration": ["tests", "-m", "integration"],
     "regression": ["tests", "-m", "regression"],
@@ -51,6 +51,9 @@ SUITES: dict[str, list[str]] = {
         "tests/test_api_cleanup.py",
         "tests/test_quality_stats.py",
         "tests/test_cue4parse_gap_completion.py",
+    ],
+    "acceptance": [
+        "tests/test_acceptance.py",
     ],
     "all": ["tests"],
 }
