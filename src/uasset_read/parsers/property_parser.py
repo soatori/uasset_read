@@ -24,8 +24,26 @@ from uasset_read.constants import (
     UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_PROPERTY_TAG_EXTENSION,
 )
-from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded, parse_ctrl_flags
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+
+def _build_tag_info(tag: PropertyTag) -> dict:
+    """从 PropertyTag 提取元数据字典，保留到 PropertyValue.tag_info。"""
+    flag_names = parse_ctrl_flags(tag.flags) if tag.flags else {}
+    guid_str = None
+    if tag.property_guid:
+        guid_str = tag.property_guid.hex()
+    return {
+        "flags": tag.flags,
+        "flag_names": flag_names,
+        "serialize_type": tag.serialize_type,
+        "property_guid": guid_str,
+        "bool_val": tag.bool_val,
+        "tag_start_offset": tag.tag_start_offset,
+        "value_start_offset": tag.value_start_offset,
+        "size": tag.size,
+    }
 
 
 # Lazy imports to avoid circular dependency with property_types.py
@@ -547,7 +565,8 @@ def parse_properties_from_export(
                 name=tag.name,
                 type=tag.type,
                 value=value,
-                array_index=tag.array_index
+                array_index=tag.array_index,
+                tag_info=_build_tag_info(tag),
             ))
 
             # ObjectProperty 增强：优先通过 linker 解析，回退到 import_map 解析
@@ -592,6 +611,7 @@ def parse_properties_from_export(
                 type="Warning",
                 value=fb,
                 array_index=fb.array_index,
+                tag_info=_build_tag_info(tag) if tag else None,
             ))
 
     return properties
@@ -646,7 +666,7 @@ def _parse_unversioned_properties_from_mapping(
         )
         _apply_mapping_type_to_tag(tag, info.mapping_type)
         if is_zero:
-            out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type)))
+            out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type), tag_info=_build_tag_info(tag)))
             continue
         start = archive.tell()
         try:
@@ -663,11 +683,11 @@ def _parse_unversioned_properties_from_mapping(
                 array_index=0,
                 error_message=f"ParseError: {exc}",
             )
-            out.append(PropertyValue(info.name, "Warning", fb))
+            out.append(PropertyValue(info.name, "Warning", fb, tag_info=_build_tag_info(tag)))
             continue
         if tag.size <= 0:
             tag.size = archive.tell() - start
-        out.append(PropertyValue(info.name, tag.type, value))
+        out.append(PropertyValue(info.name, tag.type, value, tag_info=_build_tag_info(tag)))
     if archive.tell() < property_end:
         tail = archive.read(property_end - archive.tell())
         if tail:

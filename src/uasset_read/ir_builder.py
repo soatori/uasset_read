@@ -388,6 +388,7 @@ def _build_property_ir(prop) -> PropertyIR:
         value=getattr(prop, "value", None),
         array_index=getattr(prop, "array_index", -1) or -1,
         guid=_normalize_guid(getattr(prop, "guid", None)),
+        tag_info=getattr(prop, "tag_info", None),
     )
 
 

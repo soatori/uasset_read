@@ -70,6 +70,7 @@ class PropertyValue:
     type: str
     value: Any = None
     array_index: int = 0
+    tag_info: dict | None = None  # 保留原始 PropertyTag 元数据（flags、guid、serialize_type、offsets 等）
 
 
 @dataclass
