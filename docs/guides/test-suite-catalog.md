@@ -40,6 +40,7 @@ This report classifies the current test files against the project goal:
 - `tests/test_constructor_metadata.py`
 - `tests/test_event_execution_fix.py`
 - `tests/test_real_asset_e2e.py`
+- `tests/test_acceptance.py` — 最终验收测试（5 个维度，89 个用例）
 
 ## Keep, but treat as auxiliary
 

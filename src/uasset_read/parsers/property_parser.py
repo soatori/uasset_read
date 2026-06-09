@@ -125,9 +125,14 @@ def _try_asset_type_handler(
         if result.success and result.data:
             # 附加到 export 对象，供下游使用
             setattr(export, "_asset_type_data", result.data)
+            # 将 handler 的 parse_status 传播到 export 级别
+            # 确保 JSON 输出明确标识为 partial_metadata，而非完整 native data
+            handler_status = result.data.get("parse_status")
+            if handler_status and handler_status != "success":
+                setattr(export, "parse_status", handler_status)
             logger.debug(
-                "AssetTypeHandler '%s' extracted data for '%s'",
-                handler.handler_name, export.object_name,
+                "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
+                handler.handler_name, export.object_name, handler_status,
             )
     except Exception as e:
         logger.debug(
@@ -346,10 +351,30 @@ def parse_properties_from_export(
         return []
 
     # D-02: SerializationControlExtensions 头部处理
+    # UE5 >= 1011: 根级 overridable serialization 控制头
+    # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
+    # 未知位应降级为诊断信息，不要盲跳
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        control_offset = archive.tell()
         serialization_control = archive.read_u8()
+        overridden_operation = None
         if serialization_control & 0x02:
-            _overridden_operation = archive.read_u8()  # consume but not used
+            overridden_operation = archive.read_u8()
+        # 记录未知位（非 0x00 和非 0x02 的位）
+        unknown_bits = serialization_control & ~0x02
+        if unknown_bits:
+            logger.warning(
+                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
+                getattr(export, "object_name", ""), unknown_bits, control_offset,
+            )
+        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        if not hasattr(export, "transforms") or export.transforms is None:
+            export.transforms = {}
+        export.transforms["serialization_control"] = {
+            "value": serialization_control,
+            "overridden_operation": overridden_operation,
+            "offset": control_offset,
+        }
 
     # 计算属性数据边界
     # UE 存储 ScriptSerializationStartOffset/EndOffset（相对于 SerialOffset）
@@ -386,6 +411,9 @@ def parse_properties_from_export(
             "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
             export.object_name, len(raw_bytes),
         )
+        # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
+        setattr(export, "parse_status", "opaque_unversioned")
+        setattr(export, "fallback_reason", "missing_mapping")
         return [PropertyFallback(
             name=export.object_name,
             type="UnversionedOpaque",

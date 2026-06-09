@@ -19,6 +19,7 @@ from uasset_read.package import PackageBundle, PackageProvider, open_package_bun
 from uasset_read.serializers.package_summary import (
     read_package_summary, read_name_table, read_depends_map,
     read_preload_dependencies, validate_export_data_range,
+    read_soft_package_references,
 )
 from uasset_read.versioning import build_version_container, VersionContainer
 from uasset_read.serializers.object_resources import (
@@ -545,6 +546,10 @@ def _parse_package_core(
             result.summary.depends_map = read_depends_map(archive, result.summary)
         if hasattr(result.summary, 'preload_dependency_count'):
             result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
+
+        # 读取 SoftPackageReferences（软包引用表）
+        if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
+            result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
 
         # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
         linker: Optional["PackageLinker"] = None

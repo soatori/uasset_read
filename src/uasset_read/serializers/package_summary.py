@@ -632,6 +632,31 @@ def read_depends_map(archive: FArchive, summary: PackageFileSummary) -> List[Lis
     return depends_map
 
 
+def read_soft_package_references(
+    archive: FArchive,
+    summary: PackageFileSummary,
+    name_map: List[str],
+) -> List[str]:
+    """读取 SoftPackageReferences（软包引用表）。
+
+    UE 格式：TArray<FName> — 包路径名称列表。
+    仅当 file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP (516) 时存在。
+
+    Returns:
+        包路径名称列表（已从 FName 索引解析为字符串）
+    """
+    if summary.soft_package_references_count <= 0 or summary.soft_package_references_offset <= 0:
+        return []
+
+    archive.seek(summary.soft_package_references_offset)
+
+    refs: List[str] = []
+    for _ in range(summary.soft_package_references_count):
+        refs.append(archive.read_name(name_map))
+
+    return refs
+
+
 def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
     """读取 PreloadDependencies（预加载依赖）。
 

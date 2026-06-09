@@ -105,7 +105,7 @@
 
 我已经跑过当前全量测试，结果是：
 
-- `1226 passed`
+- `1315 passed`
 - `2 skipped`
 - `2 xfailed`
 
