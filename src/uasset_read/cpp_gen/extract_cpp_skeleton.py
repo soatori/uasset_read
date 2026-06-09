@@ -149,9 +149,9 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     if hasattr(result, 'decompiled_functions') and result.decompiled_functions:
         _backfill_missing_methods(methods, result.decompiled_functions)
 
-    # 6. 注入函数体（从 decompiled_functions）
+    # 6. 注入函数体（从 decompiled_functions，传入 graphs 用于参数名映射）
     if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
-        _inject_function_bodies(methods, result.decompiled_functions)
+        _inject_function_bodies(methods, result.decompiled_functions, result.graphs)
 
     # 6.1 设置 class_name（用于 .cpp 实现中 ClassName::Method 前缀）
     for method in methods:
@@ -303,27 +303,235 @@ def _simplify_class_name(raw_name: str) -> str:
 # 辅助函数
 # ============================================================================
 
-def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
-    """构建 {原始参数名模式 -> sanitized名} 映射。
+def _build_param_name_map(method: CppMethodIR, decompiled_func_name: str, graphs=None) -> Dict[str, str]:
+    """构建 {反编译变量名 -> 实际参数名} 映射。
 
-    Sanitizer 将 '/' 等非法字符替换为 '__'。例如：
-    - 'Left / Right' → 'Left__Right'
-    - 'Forward / Backward' → 'Forward__Backward'
+    处理两种情况：
+    1. Sanitizer 将 '/' 等非法字符替换为 '__'（如 'Left / Right' → 'Left__Right'）
+    2. 字节码反编译器使用 CallFunction pin 名（如 Val, ScaleValue）而非函数参数名
 
-    反向推导：如果 sanitized 名包含 '__'，构造对应的 ' / ' 模式。
+    Args:
+        method: CppMethodIR，包含正确的参数名
+        decompiled_func_name: 反编译函数名，用于匹配图
+        graphs: UEdGraph 列表，用于从数据流提取参数映射
+
+    Returns:
+        {反编译代码中的变量名 -> C++ 方法中使用的参数名}
     """
     name_map = {}
+
+    # 情况1：处理 ' / ' → '__' 的 sanitizer 反向映射
     for param in method.parameters:
         if '__' in param.name:
             # 反向推导原始名：'__' → ' / '
             original = param.name.replace('__', ' / ')
             name_map[original] = param.name
+
+    # 情况2：如果提供了 graphs，从数据流中提取 decompiled 变量名到参数名的映射
+    if graphs:
+        _build_decompiled_to_param_map(method, decompiled_func_name, graphs, name_map)
+
     return name_map
+
+
+def _build_decompiled_to_param_map(
+    method: CppMethodIR,
+    func_name: str,
+    graphs,
+    name_map: Dict[str, str],
+) -> None:
+    """从图数据流中构建反编译变量名到实际参数名的映射。
+
+    通过分析图中的连接关系，找到从 FunctionEntry 参数通过 Knot 链到 CallFunction
+    输入 pin 的数据流，建立映射关系。
+
+    Args:
+        method: CppMethodIR
+        func_name: 函数名
+        graphs: UEdGraph 列表
+        name_map: 输出映射字典（会被修改）
+    """
+    # 查找匹配的图
+    matching_graph = None
+    for graph in graphs:
+        if graph.graph_name == func_name:
+            matching_graph = graph
+            break
+
+    if not matching_graph:
+        return
+
+    # 找到 FunctionEntry 节点和所有 CallFunction 节点
+    function_entry_node = None
+    call_function_nodes = []
+
+    for node in matching_graph.nodes:
+        if node.class_name == "K2Node_FunctionEntry":
+            function_entry_node = node
+        elif node.class_name == "K2Node_CallFunction":
+            call_function_nodes.append(node)
+
+    if not function_entry_node or not call_function_nodes:
+        return
+
+    # 获取 FunctionEntry 的所有输出参数名
+    entry_params = {}  # pin_id -> param_name
+    for pin in function_entry_node.pins:
+        if pin.direction == 1:  # output pin
+            entry_params[pin.pin_id] = pin.pin_name
+
+    if not entry_params:
+        return
+
+    # 构建 pin_lookup
+    pin_lookup = {}
+    node_lookup = {}
+    for node in matching_graph.nodes:
+        node_lookup[node.node_guid] = node
+        for pin in node.pins:
+            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+
+    # 对于每个 CallFunction 节点的输入 pin，追踪回 FunctionEntry 参数
+    for cf_node in call_function_nodes:
+        for pin in cf_node.pins:
+            if pin.direction == 0:  # input pin
+                # 追踪这个 pin 的连接来源
+                source_param_name = _trace_pin_to_function_entry(
+                    pin.pin_id, pin_lookup, node_lookup, entry_params
+                )
+                if source_param_name:
+                    # 清理参数名为 C++ 兼容格式
+                    cpp_param_name = _sanitize_identifier(source_param_name)
+                    # 将 CallFunction 的 pin 名映射到实际参数名
+                    name_map[pin.pin_name] = cpp_param_name
+
+
+def _trace_pin_to_function_entry(
+    pin_id: str,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, Any],
+    entry_params: Dict[str, str],
+    max_depth: int = 20,
+) -> Optional[str]:
+    """从指定 pin 反向追踪到 FunctionEntry 参数。
+
+    通过反向追踪连接（包括穿透 Knot 链），找到源头是否为 FunctionEntry 的参数。
+
+    算法：
+    1. 从 CallFunction 的输入 pin 开始
+    2. 使用 _find_pins_connected_to 找到谁连接到这个 pin
+    3. 如果连接来自 Knot.OutputPin，找到 Knot.InputPin，继续追踪
+    4. 如果连接到 FunctionEntry 参数，返回参数名
+
+    Args:
+        pin_id: 起始 pin ID（通常是 CallFunction 的输入 pin）
+        pin_lookup: pin_id -> (node_guid, pin_name) 查找表
+        node_lookup: node_guid -> node 查找表
+        entry_params: FunctionEntry 的 pin_id -> param_name 映射
+        max_depth: 最大追踪深度
+
+    Returns:
+        FunctionEntry 参数名，或 None
+    """
+    visited_pins = set()
+    # 从目标 pin 开始，反向追踪
+    current_targets = [pin_id]
+
+    for _ in range(max_depth):
+        if not current_targets:
+            return None
+
+        next_targets = []
+        for current_pin_id in current_targets:
+            if current_pin_id in visited_pins:
+                continue
+            visited_pins.add(current_pin_id)
+
+            # 检查是否直接是 FunctionEntry 的参数
+            if current_pin_id in entry_params:
+                return entry_params[current_pin_id]
+
+            # 查找当前 pin 所属节点
+            if current_pin_id not in pin_lookup:
+                continue
+
+            node_guid, pin_name = pin_lookup[current_pin_id]
+            node = node_lookup.get(node_guid)
+            if not node:
+                continue
+
+            # 如果是 Knot 节点，找到其输入端并继续追踪
+            if node.class_name == "K2Node_Knot":
+                # 找到 Knot 的输入 pin
+                for knot_pin in node.pins:
+                    if knot_pin.direction == 0:  # input pin
+                        # 找谁连接到这个输入 pin
+                        sources = _find_pins_connected_to(knot_pin.pin_id, pin_lookup, node_lookup)
+                        next_targets.extend(sources)
+            else:
+                # 非 Knot 节点（如 CallFunction），找到谁连接到这个 pin
+                sources = _find_pins_connected_to(current_pin_id, pin_lookup, node_lookup)
+                for src_pin_id in sources:
+                    # 直接检查是否是 FunctionEntry 参数
+                    if src_pin_id in entry_params:
+                        return entry_params[src_pin_id]
+
+                    # 检查是否来自 Knot，继续追踪
+                    if src_pin_id in pin_lookup:
+                        src_node_guid, _ = pin_lookup[src_pin_id]
+                        src_node = node_lookup.get(src_node_guid)
+                        if src_node and src_node.class_name == "K2Node_Knot":
+                            next_targets.append(src_pin_id)
+
+        current_targets = next_targets
+
+    return None
+
+
+def _find_pins_connected_to(
+    target_pin_id: str,
+    pin_lookup: Dict[str, Tuple[str, str]],
+    node_lookup: Dict[str, Any],
+) -> list[str]:
+    """找到所有连接到指定目标 pin 的源 pin ID 列表。
+
+    遍历所有节点的输出 pin，检查它们的 linked_to_raw 是否包含 target_pin_id。
+
+    Args:
+        target_pin_id: 目标 pin ID（被连接的 pin）
+        pin_lookup: pin_id -> (node_guid, pin_name) 查找表
+        node_lookup: node_guid -> node 查找表
+
+    Returns:
+        源 pin ID 列表
+    """
+    normalized_target = target_pin_id.replace("-", "").upper()
+    sources = []
+
+    for node_guid, node in node_lookup.items():
+        for pin in node.pins:
+            if pin.direction == 1:  # output pin
+                for ref in (pin.linked_to_raw or []):
+                    # Handle different ref types
+                    if isinstance(ref, dict):
+                        ref_pin_id = ref.get("pin_guid") or ref.get("pin_id", "")
+                    elif isinstance(ref, str):
+                        ref_pin_id = ref
+                    else:
+                        ref_pin_id = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None) or ""
+
+                    if ref_pin_id:
+                        normalized_ref = ref_pin_id.replace("-", "").upper()
+                        if normalized_ref == normalized_target:
+                            sources.append(pin.pin_id)
+
+    return sources
 
 
 def _inject_function_bodies(
     methods: List[CppMethodIR],
     decompiled_functions: List[Any],
+    graphs=None,
 ) -> None:
     """将 KismetDecompiledResult 的 cpp_code 注入到 CppMethodIR.body_text。
 
@@ -337,6 +545,7 @@ def _inject_function_bodies(
     Args:
         methods: CppMethodIR 列表（已填充方法声明）
         decompiled_functions: KismetDecompiledResult 列表（含 cpp_code）
+        graphs: UEdGraph 列表（可选，用于构建参数名映射）
     """
     method_index: Dict[str, CppMethodIR] = {m.cpp_name: m for m in methods}
 
@@ -360,8 +569,9 @@ def _inject_function_bodies(
 
         if method and decompiled.cpp_code:
             body = decompiled.cpp_code
-            # 执行符号映射替换：原始参数名 → sanitized 名
-            for original, sanitized in _build_param_name_map(method).items():
+            # 执行符号映射替换：反编译变量名 → 实际参数名
+            param_map = _build_param_name_map(method, func_name, graphs)
+            for original, sanitized in param_map.items():
                 body = body.replace(original, sanitized)
             method.body_text = body
 

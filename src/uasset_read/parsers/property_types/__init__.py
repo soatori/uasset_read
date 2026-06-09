@@ -52,6 +52,12 @@ from uasset_read.parsers.property_types._all_types import (  # noqa: F401
     _extract_map_types_from_tag,
     _extract_set_type_from_tag,
     _extract_enum_type_from_tag,
+    _TAGGED_FALLBACK_STRUCTS,
+    _TAGGED_FALLBACK_STRUCT_SCHEMAS,
+    _EXPECTED_STRUCT_SIZES,
+    _LWC_TYPE_MAP,
+    _LWC_DOUBLE_TYPE_TO_BASE,
+    _LWC_FLOAT_TYPE_TO_BASE,
 )
 
 __all__ = [
@@ -98,4 +104,10 @@ __all__ = [
     "_extract_map_types_from_tag",
     "_extract_set_type_from_tag",
     "_extract_enum_type_from_tag",
+    "_TAGGED_FALLBACK_STRUCTS",
+    "_TAGGED_FALLBACK_STRUCT_SCHEMAS",
+    "_EXPECTED_STRUCT_SIZES",
+    "_LWC_TYPE_MAP",
+    "_LWC_DOUBLE_TYPE_TO_BASE",
+    "_LWC_FLOAT_TYPE_TO_BASE",
 ]
