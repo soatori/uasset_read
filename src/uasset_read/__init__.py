@@ -169,6 +169,7 @@ from .parsers import (
 from .blueprint import (
     extract_blueprint_variables, parse_component_transform,
     extract_blueprint_metadata, extract_components,
+    extract_scs_tree,
 )
 
 # 图解析模块
