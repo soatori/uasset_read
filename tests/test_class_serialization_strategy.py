@@ -98,10 +98,10 @@ class TestClassStrategyTable:
 class TestGetSerializationStrategy:
     """get_serialization_strategy() 函数测试。"""
 
-    def test_known_tagged_class(self):
-        """已知 tagged properties 类返回正确策略。"""
+    def test_known_uclass_native_class(self):
+        """已知 UClass-native 类返回正确策略。"""
         strategy = get_serialization_strategy("BlueprintGeneratedClass")
-        assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+        assert strategy == SerializationStrategy.UCLASS_NATIVE
 
     def test_known_opaque_class(self):
         """已知 opaque 类返回正确策略。"""
@@ -319,3 +319,67 @@ class TestUclassDerivedSetConsistency:
         # BlueprintGeneratedClass 和 WidgetBlueprintGeneratedClass 是 UClass 派生类
         assert "BlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES
         assert "WidgetBlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES
+
+
+class TestUeSerializeMethod:
+    """get_ue_serialize_method() 函数测试。"""
+
+    def test_uclass_native_method(self):
+        """UClass-native 类返回 native+tagged。"""
+        assert get_ue_serialize_method("BlueprintGeneratedClass") == "native+tagged"
+        assert get_ue_serialize_method("WidgetBlueprintGeneratedClass") == "native+tagged"
+
+    def test_tagged_only_method(self):
+        """Tagged properties 类返回 tagged_only。"""
+        assert get_ue_serialize_method("Function") == "tagged_only"
+        assert get_ue_serialize_method("UserDefinedStruct") == "tagged_only"
+        assert get_ue_serialize_method("EdGraph") == "tagged_only"
+
+    def test_opaque_bulk_method(self):
+        """Opaque 类返回 opaque_bulk。"""
+        assert get_ue_serialize_method("StaticMesh") == "opaque_bulk"
+        assert get_ue_serialize_method("SkeletalMesh") == "opaque_bulk"
+        assert get_ue_serialize_method("Texture2D") == "opaque_bulk"
+        assert get_ue_serialize_method("Material") == "opaque_bulk"
+        assert get_ue_serialize_method("AnimSequence") == "opaque_bulk"
+
+    def test_unsupported_method(self):
+        """Skip 类返回 unsupported。"""
+        assert get_ue_serialize_method("NiagaraGraph") == "unsupported"
+        assert get_ue_serialize_method("NiagaraScript") == "unsupported"
+
+    def test_unknown_class_defaults_to_tagged(self):
+        """未知类默认返回 tagged_only。"""
+        assert get_ue_serialize_method("UnknownCustomClass") == "tagged_only"
+
+
+class TestUeSerializeFidelity:
+    """get_ue_serialize_fidelity() 函数测试。"""
+
+    def test_uclass_native_fidelity(self):
+        """UClass-native 类返回 partial_native。"""
+        assert get_ue_serialize_fidelity("BlueprintGeneratedClass") == "partial_native"
+        assert get_ue_serialize_fidelity("WidgetBlueprintGeneratedClass") == "partial_native"
+
+    def test_tagged_only_fidelity(self):
+        """Tagged properties 类返回 tagged_properties。"""
+        assert get_ue_serialize_fidelity("Function") == "tagged_properties"
+        assert get_ue_serialize_fidelity("UserDefinedStruct") == "tagged_properties"
+        assert get_ue_serialize_fidelity("EdGraph") == "tagged_properties"
+
+    def test_opaque_bulk_fidelity(self):
+        """Opaque 类返回 opaque_payload。"""
+        assert get_ue_serialize_fidelity("StaticMesh") == "opaque_payload"
+        assert get_ue_serialize_fidelity("SkeletalMesh") == "opaque_payload"
+        assert get_ue_serialize_fidelity("Texture2D") == "opaque_payload"
+        assert get_ue_serialize_fidelity("Material") == "opaque_payload"
+        assert get_ue_serialize_fidelity("AnimSequence") == "opaque_payload"
+
+    def test_unsupported_fidelity(self):
+        """Skip 类返回 skipped。"""
+        assert get_ue_serialize_fidelity("NiagaraGraph") == "skipped"
+        assert get_ue_serialize_fidelity("NiagaraScript") == "skipped"
+
+    def test_unknown_class_defaults_to_tagged(self):
+        """未知类默认返回 tagged_properties。"""
+        assert get_ue_serialize_fidelity("UnknownCustomClass") == "tagged_properties"
