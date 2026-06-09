@@ -43,6 +43,7 @@ class PropertyTag:
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    property_extensions: int = 0          # EPropertyTagExtension flags (u8)
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
