@@ -97,6 +97,8 @@ class PackageFileSummary:
     import_type_hierarchies_offset: int = 0
     persistent_guid: str = ""
     owner_persistent_guid: str = ""  # 16 bytes GUID (UE4 519 or legacy -7/-8)
+    compressed_chunks: List[dict] = field(default_factory=list)  # 已废弃，保留用于偏移对齐
+    additional_packages_to_cook: List[str] = field(default_factory=list)  # 已废弃
     generations: List[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
     compatible_with_engine_version: EngineVersion = field(default_factory=EngineVersion)
