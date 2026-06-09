@@ -132,20 +132,45 @@ text = parse_single("path/to/file.uasset", format="markdown")
 results = parse_batch("path/to/directory", format="json")
 
 # List available output formats
-formats = list_formats()
+formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleton', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
 ```
+
+### Supported output formats
+
+| Format | Description | Renderer |
+|---|---|---|
+| `json` | Full structured JSON output | JSONRenderer |
+| `json_summary` | Machine-readable summary (minimal tokens) | JsonSummaryRenderer |
+| `text` | YAML-style human-readable text | TextRenderer |
+| `text_summary` | Compact YAML summary | TextSummaryRenderer |
+| `markdown` | Markdown with Mermaid flowcharts | MarkdownRenderer |
+| `blueprint_text` | Blueprint translation reference text | BlueprintTextRenderer |
+| `blueprint_ue_text` | UE Ctrl+C style blueprint text | BlueprintUERenderer |
+| `cpp_skeleton` | C++ class skeleton (.h + .cpp) | CppSkeletonRenderer |
 
 ### Legacy formatters (deprecated)
 
 The following formatter functions are still exported for backward compatibility
-but are considered legacy. **Use `parse_single()` / `parse_batch()` instead** —
+but emit `DeprecationWarning`. **Use `parse_single(format=...)` instead** —
 they go through the unified IR → Renderer pipeline and produce the most complete
 output.
 
 ```python
 from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Legacy — prefer parse_single(format="json") over format_json_full()
+# ⚠️ Deprecated — prefer parse_single(format="json") over format_json_full()
 ```
+
+All legacy formatters will be removed in a future release. Migration guide:
+
+| Legacy function | Replacement |
+|---|---|
+| `format_json_full(result)` | `parse_single(path, format='json')` |
+| `format_json_summary(result)` | `parse_single(path, format='json_summary')` |
+| `format_text_full(result)` | `parse_single(path, format='text')` |
+| `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
+| `format_markdown(result)` | `parse_single(path, format='markdown')` |
+| `format_blueprint_translation_text(result)` | `parse_single(path, format='blueprint_text')` |
+| `format_blueprint_ue_text(result)` | `parse_single(path, format='blueprint_ue_text')` |
 
 ### Module-level API
 

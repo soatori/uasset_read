@@ -133,18 +133,43 @@ text = parse_single("path/to/file.uasset", format="markdown")
 results = parse_batch("path/to/directory", format="json")
 
 # 列出可用的输出格式
-formats = list_formats()
+formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleton', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
 ```
+
+### 支持的输出格式
+
+| 格式 | 说明 | 渲染器 |
+|---|---|---|
+| `json` | 完整结构化 JSON 输出 | JSONRenderer |
+| `json_summary` | 机器可读摘要（最小 token） | JsonSummaryRenderer |
+| `text` | YAML 风格可读文本 | TextRenderer |
+| `text_summary` | 精简 YAML 摘要 | TextSummaryRenderer |
+| `markdown` | Markdown + Mermaid 流程图 | MarkdownRenderer |
+| `blueprint_text` | 蓝图翻译参考文本 | BlueprintTextRenderer |
+| `blueprint_ue_text` | UE Ctrl+C 风格蓝图文本 | BlueprintUERenderer |
+| `cpp_skeleton` | C++ 类骨架（.h + .cpp） | CppSkeletonRenderer |
 
 ### 旧版格式化函数（已弃用）
 
-以下格式化函数仍可导入使用，但已标记为 legacy。
-**请使用 `parse_single()` / `parse_batch()`** — 它们走统一的 IR → Renderer 管线，输出最完整。
+以下格式化函数仍可导入使用，但会触发 `DeprecationWarning`。
+**请使用 `parse_single(format=...)`** — 它们走统一的 IR → Renderer 管线，输出最完整。
 
 ```python
 from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Legacy — 请改用 parse_single(format="json") 替代 format_json_full()
+# ⚠️ 已弃用 — 请改用 parse_single(format="json") 替代 format_json_full()
 ```
+
+所有旧版格式化函数将在未来版本中移除。迁移指南：
+
+| 旧版函数 | 替代方案 |
+|---|---|
+| `format_json_full(result)` | `parse_single(path, format='json')` |
+| `format_json_summary(result)` | `parse_single(path, format='json_summary')` |
+| `format_text_full(result)` | `parse_single(path, format='text')` |
+| `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
+| `format_markdown(result)` | `parse_single(path, format='markdown')` |
+| `format_blueprint_translation_text(result)` | `parse_single(path, format='blueprint_text')` |
+| `format_blueprint_ue_text(result)` | `parse_single(path, format='blueprint_ue_text')` |
 
 ### Python API
 

@@ -1,6 +1,12 @@
-"""UE 原样风格蓝图节点文本格式化器。"""
+"""UE 原样风格蓝图节点文本格式化器。
+
+.. deprecated:: 0.4.5
+    推荐使用 parse_single(format='blueprint_ue_text') 统一入口，这些函数已转换为带
+    DeprecationWarning 的薄包装器，将在未来版本中移除。
+"""
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -24,9 +30,20 @@ _CONTAINER_LABELS = {
     3: "Map",
 }
 
+_BLUEPRINT_UE_TEXT_DEPRECATION_MSG = (
+    "format_blueprint_ue_text() 已弃用，推荐使用 "
+    "parse_single(file_path, format='blueprint_ue_text') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
 
 def format_blueprint_ue_text(result: "ParseResult") -> str:
-    """输出接近 UE 文本导出的 Begin Object / CustomProperties Pin 格式。"""
+    """输出接近 UE 文本导出的 Begin Object / CustomProperties Pin 格式。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='blueprint_ue_text') 统一入口。
+    """
+    warnings.warn(_BLUEPRINT_UE_TEXT_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     if not result.graphs or not result.summary:
         return ""
 

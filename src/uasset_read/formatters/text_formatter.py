@@ -1,9 +1,14 @@
 """Text 格式化 — YAML 风格完整输出、精简输出。
 
 等价迁移 uasset_read_legacy.py L7431-7571。
+
+.. deprecated:: 0.4.5
+    推荐使用 parse_single(format=...) 统一入口，这些函数已转换为带
+    DeprecationWarning 的薄包装器，将在未来版本中移除。
 """
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
@@ -13,10 +18,18 @@ if TYPE_CHECKING:
 from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from uasset_read.graph import build_connections_map, build_execution_chains
 
+_TEXT_FULL_DEPRECATION_MSG = (
+    "format_text_full() 已弃用，推荐使用 parse_single(file_path, format='text') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
 
 def format_text_full(result: ParseResult) -> str:
     """
     YAML 风格完整文本输出（OUT-02, OUT2-03）。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='text') 统一入口。
 
     Per D-17: YAML 风格层级，2 空格缩进
     Per D-19: ERRORS 区块在末尾
@@ -29,6 +42,7 @@ def format_text_full(result: ParseResult) -> str:
     Returns:
         str: YAML 风格文本输出
     """
+    warnings.warn(_TEXT_FULL_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     lines = []
 
     # Package header
@@ -145,9 +159,18 @@ def format_text_full(result: ParseResult) -> str:
     return "\n".join(lines)
 
 
+_TEXT_SUMMARY_DEPRECATION_MSG = (
+    "format_text_summary() 已弃用，推荐使用 parse_single(file_path, format='text_summary') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
+
 def format_text_summary(result: ParseResult) -> str:
     """
     精简 YAML 风格摘要（OUT-02）。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='text_summary') 统一入口。
 
     Per D-18: 每个 export 一行: "Name (Type)"
     Per D-22: YAML 缩进
@@ -158,6 +181,7 @@ def format_text_summary(result: ParseResult) -> str:
     Returns:
         str: 精简 YAML 风格摘要
     """
+    warnings.warn(_TEXT_SUMMARY_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     lines = []
 
     # Package header
