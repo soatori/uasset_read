@@ -51,17 +51,24 @@ class BlueprintTextRenderer(IRenderer):
                 lines.append(f"  {chain_ir.event}: {' -> '.join(chain_ir.chain)}")
             lines.append("")
 
-        # 反编译的事件函数实现
+        # 反编译的事件函数实现（仅输出 bytecode_status == "parsed" 的）
         if ir.decompiled_functions:
             lines.append("=== Event Function Implementations ===")
             for func in ir.decompiled_functions:
-                lines.append(f"  {func.signature}")
-                lines.append("  {")
-                if func.cpp_code:
-                    for code_line in func.cpp_code.splitlines():
-                        lines.append(f"    {code_line}")
-                lines.append("  }")
-                lines.append("")
+                bytecode_status = getattr(func, "bytecode_status", "parsed")
+                if bytecode_status == "fallback":
+                    # fallback scan 结果不可靠，不输出 C++ 代码
+                    lines.append(f"  {func.signature} [fallback — unreliable]")
+                    lines.append("  // Bytecode from fallback scan (unreliable, not output as real code)")
+                    lines.append("")
+                else:
+                    lines.append(f"  {func.signature}")
+                    lines.append("  {")
+                    if func.cpp_code:
+                        for code_line in func.cpp_code.splitlines():
+                            lines.append(f"    {code_line}")
+                    lines.append("  }")
+                    lines.append("")
 
         # 图节点详情
         for export in ir.exports:

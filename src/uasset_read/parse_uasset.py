@@ -456,7 +456,6 @@ def _parse_package_core(
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
     extra_linker_setup: Optional[Callable] = None,
-    check_aes_key: Optional[bytes] = None,
     lightweight_threshold: Optional[int] = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
@@ -471,7 +470,6 @@ def _parse_package_core(
         include_parent_assets: 是否解析父资产
         asset_roots: 资产根目录列表
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
-        check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
     """
     from uasset_read.link.linker import PackageLinker
 
@@ -480,11 +478,6 @@ def _parse_package_core(
     mappings_provider = None
 
     try:
-        if check_aes_key is not None:
-            raise ParseError(
-                "Unsupported argument: aes_key. Pass the key "
-                "when constructing the Pak/IoStore reader and provider"
-            )
         if mappings_path:
             from uasset_read.mappings import TypeMappingsProvider
             mappings_provider = TypeMappingsProvider.from_file(mappings_path)
@@ -728,11 +721,9 @@ def parse_package(
     tolerant: bool = True,
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
-    aes_key: Optional[bytes] = None,
     provider: Optional[PackageProvider] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
-    include_linker: bool = True,  # Deprecated: linker is now always created
     lightweight_threshold: Optional[int] = None,
 ) -> ParseResult:
     """
@@ -741,25 +732,15 @@ def parse_package(
     Args:
         path: .uasset/.umap 文件路径
         tolerant: 是否启用容错模式（默认开启）
-        aes_key: Deprecated. Construct encrypted container readers/providers with
-            their AES key instead; the parser no longer accepts an unused key.
         provider: 可选 package provider（filesystem/pak/iostore）
-        include_linker: Deprecated. Linker is now always created for complete
-            object graph resolution. Parameter retained for backward compatibility.
+        mappings_path: 类型映射文件路径
+        game: 游戏标识
+        lightweight_threshold: 轻量解析阈值
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
     result = ParseResult()
-
-    # Handle deprecated aes_key inline (don't pass to core)
-    if aes_key is not None:
-        result.errors.append(
-            "Unsupported argument: aes_key. Pass the key "
-            "when constructing the Pak/IoStore reader and provider"
-        )
-        result.is_success = False
-        return result
 
     _parse_package_core(
         path, result,
@@ -779,7 +760,6 @@ def parse_uasset(
     asset_roots: Optional[Sequence[str]] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
-    include_linker: bool = True,  # Deprecated: linker is now always created
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -794,7 +774,6 @@ def parse_uasset(
         asset_roots=asset_roots,
         mappings_path=mappings_path,
         game=game,
-        include_linker=include_linker,
     )
 
 

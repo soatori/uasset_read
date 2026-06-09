@@ -56,6 +56,10 @@ class _TrackingArchive:
         self._pos += 8  # u32 index + u32 number
         return name_map[0] if name_map else "TestPin"
 
+    def read_fstring(self):
+        self._pos += 8  # i32 length + 4 bytes data (mock)
+        return "TestPin"
+
     @property
     def seek_calls(self):
         return list(self._seek_calls)

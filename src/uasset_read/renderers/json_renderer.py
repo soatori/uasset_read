@@ -152,16 +152,48 @@ class JSONRenderer(IRenderer):
         return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
-        return {"graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "nodes": [self._node_to_dict(n) for n in graph.nodes], "execution_chains": graph.execution_chains}
+        d = {
+            "graph_name": graph.graph_name,
+            "graph_guid": graph.graph_guid,
+            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "execution_chains": graph.execution_chains,
+        }
+        if graph.parse_status != "success":
+            d["parse_status"] = graph.parse_status
+        if graph.fallback_reason:
+            d["fallback_reason"] = graph.fallback_reason
+        return d
 
     def _node_to_dict(self, node) -> dict[str, Any]:
-        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+        d = {
+            "node_guid": node.node_guid,
+            "node_class": node.node_class,
+            "node_comment": node.node_comment,
+            "pins": [self._pin_to_dict(p) for p in node.pins],
+            "execution_flow": node.execution_flow,
+        }
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
+        if node.parse_status != "success":
+            d["parse_status"] = node.parse_status
+        if node.fallback_reason:
+            d["fallback_reason"] = node.fallback_reason
         return d
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
-        return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}
+        d = {
+            "pin_name": pin.pin_name,
+            "pin_type": pin.pin_type,
+            "pin_type_value": pin.pin_type_value,
+            "linked_to": pin.linked_to,
+            "direction": pin.direction,
+            "default_value": pin.default_value,
+        }
+        if pin.parse_status != "success":
+            d["parse_status"] = pin.parse_status
+        if pin.fallback_source:
+            d["fallback_source"] = pin.fallback_source
+        return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
@@ -276,6 +308,8 @@ class JSONRenderer(IRenderer):
         d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
         if func.fallback_reasons:
             d["fallback_reasons"] = func.fallback_reasons
+        if func.bytecode_status != "parsed":
+            d["bytecode_status"] = func.bytecode_status
         return d
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:

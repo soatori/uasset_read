@@ -43,7 +43,7 @@ def build_schema_info() -> Dict[str, str]:
         Dict[str, str]: 字段描述映射
     """
     return {
-        "status": "解析结果状态（success/fail/error）",
+        "status": "解析结果状态（success/partial/failed）",
         "output_version": "输出格式 API 版本标识",
         "summary": "资产基本信息（版本、包名）",
         "exports": "导出对象列表（蓝图、组件等）",

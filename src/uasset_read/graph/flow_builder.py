@@ -244,22 +244,6 @@ def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     return {"graphs": [graph_dict]}
 
 
-def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """已弃用：请使用 build_execution_flow_entries()。
-
-    此函数保留用于向后兼容，会发出 DeprecationWarning。
-    """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. "
-        "Use build_execution_flow_entries() for internal calls, "
-        "or build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    return build_execution_flow_entries(graph)
-
-
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     """构建数据流图（D-19-06~09, LINK-03）。
 

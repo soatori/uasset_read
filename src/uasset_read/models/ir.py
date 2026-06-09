@@ -33,6 +33,8 @@ class PinIR:
     linked_to: list[str]
     direction: str
     default_value: str | None
+    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
+    fallback_source: str | None = None  # 非 success 时说明数据来源
 
 
 @dataclass
@@ -44,6 +46,8 @@ class NodeIR:
     pins: list[PinIR]
     execution_flow: list[dict]
     macro_expansion: dict | None = None
+    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
+    fallback_reason: str | None = None
 
 
 @dataclass
@@ -54,6 +58,8 @@ class GraphIR:
     graph_class: str
     nodes: list[NodeIR]
     execution_chains: list[list[str]]
+    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
+    fallback_reason: str | None = None
 
 
 @dataclass
@@ -249,6 +255,7 @@ class DecompiledFunctionIR:
     parameters: list[dict]
     return_type: str
     fallback_reasons: list[str] = field(default_factory=list)
+    bytecode_status: str = "parsed"  # "parsed" | "fallback"
 
 
 @dataclass

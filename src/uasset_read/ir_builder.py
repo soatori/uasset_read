@@ -396,12 +396,21 @@ def _build_graph_ir(graph) -> GraphIR:
     for node in getattr(graph, "nodes", None) or []:
         nodes.append(_build_node_ir(node))
 
+    # 从解析层传递 fallback/partial 状态
+    parse_status = _safe_str(getattr(graph, "parse_status", "success")) or "success"
+    fallback_reason = (
+        _safe_str(getattr(graph, "fallback_reason", None))
+        if getattr(graph, "fallback_reason", None) is not None else None
+    )
+
     return GraphIR(
         graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
         graph_name=_safe_str(getattr(graph, "graph_name", None)),
         graph_class=_safe_str(getattr(graph, "graph_class", None)),
         nodes=nodes,
         execution_chains=getattr(graph, "execution_chains", None) or [],
+        parse_status=parse_status,
+        fallback_reason=fallback_reason,
     )
 
 
@@ -410,6 +419,13 @@ def _build_node_ir(node) -> NodeIR:
     for pin in getattr(node, "pins", None) or []:
         pins.append(_build_pin_ir(pin))
 
+    # 从解析层传递 fallback/partial 状态
+    parse_status = _safe_str(getattr(node, "parse_status", "success")) or "success"
+    fallback_reason = (
+        _safe_str(getattr(node, "fallback_reason", None))
+        if getattr(node, "fallback_reason", None) is not None else None
+    )
+
     return NodeIR(
         node_guid=_normalize_guid(getattr(node, "node_guid", None)),
         node_class=_safe_str(getattr(node, "class_name", None)),
@@ -417,6 +433,8 @@ def _build_node_ir(node) -> NodeIR:
         pins=pins,
         execution_flow=getattr(node, "execution_flow", None) or [],
         macro_expansion=getattr(node, "macro_expansion", None),
+        parse_status=parse_status,
+        fallback_reason=fallback_reason,
     )
 
 
@@ -431,6 +449,13 @@ def _build_pin_ir(pin) -> PinIR:
     if getattr(pin, "direction", 0) == 1:
         direction = "EGPD_Output"
 
+    # 从解析层传递 fallback/partial 状态
+    parse_status = _safe_str(getattr(pin, "parse_status", "success")) or "success"
+    fallback_source = (
+        _safe_str(getattr(pin, "fallback_source", None))
+        if getattr(pin, "fallback_source", None) is not None else None
+    )
+
     return PinIR(
         pin_name=_safe_str(getattr(pin, "pin_name", None)),
         pin_type=_safe_str(getattr(pin, "pin_type", None)),
@@ -438,6 +463,8 @@ def _build_pin_ir(pin) -> PinIR:
         linked_to=linked_to,
         direction=direction,
         default_value=getattr(pin, "default_value", None),
+        parse_status=parse_status,
+        fallback_source=fallback_source,
     )
 
 
@@ -648,6 +675,7 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             parameters=parameters,
             return_type=return_type,
             fallback_reasons=func.fallback_reasons,
+            bytecode_status=getattr(func, "bytecode_status", "parsed"),
         ))
     return decompiled
 
@@ -857,7 +885,13 @@ def _bind_single_implementation(
         }
         if matched_decompiled.fallback_reasons:
             item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
-        item.implementation_status = "decompiled"
+        if matched_decompiled.bytecode_status != "parsed":
+            item.implementation["bytecode_status"] = matched_decompiled.bytecode_status
+        # 如果是 fallback scan，标记为 unreliable，不视为真正的反编译结果
+        if matched_decompiled.bytecode_status == "fallback":
+            item.implementation_status = "fallback_scan"
+        else:
+            item.implementation_status = "decompiled"
         if match_count > 1:
             item.implementation["ambiguous_match"] = True
         return
