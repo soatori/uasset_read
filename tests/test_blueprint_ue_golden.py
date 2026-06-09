@@ -327,3 +327,17 @@ def test_nested_struct_formatting():
     result = _format_ue_value(outer)
     assert "StructValue" not in result
     assert "Translation=" in result
+
+
+def test_unknown_type_fallback_no_repr():
+    """测试未知类型的 fallback 不产生 Python repr。"""
+    class CustomType:
+        def __init__(self):
+            self.x = 1
+            self.y = 2
+    result = _format_ue_value(CustomType())
+    assert "0x" not in result  # 无内存地址
+    assert "object" not in result.lower()  # 无 object at ...
+    assert "StructValue" not in result  # 无 ClassName(...) repr
+    assert "x=1" in result  # 应展开为 Key=Value 对
+    assert "y=2" in result
