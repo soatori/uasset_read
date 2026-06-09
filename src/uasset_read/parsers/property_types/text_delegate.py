@@ -128,23 +128,31 @@ def parse_delegate_property(
     return DelegateValue(object_ref=object_ref, function_name=function_name)
 
 
-def parse_multicast_delegate_property(tag: PropertyTag, archive: "FArchive") -> list:
-    """解析 MulticastDelegateProperty"""
+def parse_multicast_delegate_property(tag: PropertyTag, archive: "FArchive", name_map=None) -> list:
+    """解析 MulticastDelegateProperty（TMulticastScriptDelegate）。
+
+    UE 序列化格式：Count (int32) + Count × (Object FPackageIndex + FunctionName FName)
+    与 TScriptDelegate 一致，FunctionName 为 FName 而非 FString。
+    """
     from uasset_read.parsers.utils import read_validated_count
     count = read_validated_count(archive, 10_000, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
-        func_name = archive.read_fstring()
+        if name_map is not None:
+            func_name = archive.read_name(name_map)
+        else:
+            # Fallback: name_map 不可用时退化为 FString 读取
+            func_name = archive.read_fstring()
         delegates.append({"object": obj_index, "function": func_name})
     return delegates
 
 
-def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: "FArchive") -> list:
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: "FArchive", name_map=None) -> list:
     """解析 MulticastInlineDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
 
 
-def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: "FArchive") -> list:
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: "FArchive", name_map=None) -> list:
     """解析 MulticastSparseDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
