@@ -2,9 +2,14 @@
 
 输出面向 C++ 翻译理解的紧凑文本，而不是 UE 原始复制文本。
 保留节点语义、位置、GUID、关键引脚和连接关系，尽量去掉序列化噪声。
+
+.. deprecated:: 0.4.5
+    推荐使用 parse_single(format='blueprint_text') 统一入口，这些函数已转换为带
+    DeprecationWarning 的薄包装器，将在未来版本中移除。
 """
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
@@ -21,8 +26,19 @@ _CLASS_FRIENDLY_NAMES = {
     "EdGraphNode_Comment": "Comment",
 }
 
+_BLUEPRINT_TEXT_DEPRECATION_MSG = (
+    "format_blueprint_translation_text() 已弃用，推荐使用 "
+    "parse_single(file_path, format='blueprint_text') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
 def format_blueprint_translation_text(result: "ParseResult") -> str:
-    """将解析结果格式化为紧凑的蓝图翻译参考文本。"""
+    """将解析结果格式化为紧凑的蓝图翻译参考文本。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='blueprint_text') 统一入口。
+    """
+    warnings.warn(_BLUEPRINT_TEXT_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     lines: List[str] = []
 
     package_name = result.summary.package_name if result.summary else "Unknown"

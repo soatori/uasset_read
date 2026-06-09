@@ -1,9 +1,14 @@
 """JSON 格式化 — 完整输出、摘要输出、导出列表、属性列表、蓝图字典。
 
 等价迁移 uasset_read_legacy.py L7188-7428, L7251-7357, L7670-7807。
+
+.. deprecated:: 0.4.5
+    推荐使用 parse_single(format=...) 统一入口，这些函数已转换为带
+    DeprecationWarning 的薄包装器，将在未来版本中移除。
 """
 from __future__ import annotations
 
+import warnings
 from typing import Dict, List, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,10 +23,18 @@ from uasset_read.models.properties import StructValue, MapValue, SetValue, EnumV
 from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from .helpers import build_status_info, build_schema_info, resolve_fpackage_index
 
+_DEPRECATION_MSG = (
+    "format_json_full() 已弃用，推荐使用 parse_single(file_path, format='json') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
 
 def format_json_full(result: ParseResult, include_schema: bool = False, include_function_graphs: bool = False) -> Dict:
     """
     完整 JSON 输出（OUT-03）。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='json') 统一入口。
 
     Per D-01: 分层输出（完整详情）
     Per D-02: Package → Exports → Properties 层级结构
@@ -44,6 +57,7 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
         Dict: 包含 status, output_version, summary, exports, blueprint, errors
         当 include_function_graphs=True 时，额外包含 function_graphs 顶层数组
     """
+    warnings.warn(_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     summary_dict = {}
     if result.summary:
         summary_dict = {
@@ -145,9 +159,18 @@ def _collect_blueprint_warnings(result: ParseResult) -> List[str]:
     return list(dict.fromkeys(warnings))
 
 
+_EXPORTS_LIST_DEPRECATION_MSG = (
+    "format_exports_list() 已弃用，推荐使用 parse_single(file_path, format='json') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
+
 def format_exports_list(result: ParseResult) -> List[Dict]:
     """
     格式化导出列表用于 JSON 输出。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='json') 统一入口。
 
     Per D-11/D-12: ParentClass, SuperIndex 在解析阶段提取
     Per D-13: 解析失败时添加 Warning 字段
@@ -160,6 +183,7 @@ def format_exports_list(result: ParseResult) -> List[Dict]:
         List[Dict]: 每个元素包含 index, name, class, serial_size, properties,
                     outer_index, super_index, parent_class
     """
+    warnings.warn(_EXPORTS_LIST_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     exports_list = []
 
     # Extract linker for class resolution (may be None for legacy ParseResult)
@@ -270,9 +294,18 @@ def serialize_property_value(value: Any, depth: int = 0, max_depth: int = 10) ->
     return str(value)
 
 
+_PROPERTIES_LIST_DEPRECATION_MSG = (
+    "format_properties_list() 已弃用，推荐使用 parse_single(file_path, format='json') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
+
 def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     """
     格式化属性列表用于 JSON 输出。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='json') 统一入口。
 
     Per OUT-05: None → null in JSON（Python None 保留）
 
@@ -282,6 +315,7 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     Returns:
         List[Dict]: 每个元素包含 name, type, value, array_index
     """
+    warnings.warn(_PROPERTIES_LIST_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     props_list = []
 
     for prop in properties:
@@ -296,9 +330,18 @@ def format_properties_list(properties: List[PropertyValue]) -> List[Dict]:
     return props_list
 
 
+_SUMMARY_DEPRECATION_MSG = (
+    "format_json_summary() 已弃用，推荐使用 parse_single(file_path, format='json_summary') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
+
 def format_json_summary(result: ParseResult, include_schema: bool = False) -> Dict:
     """
     精简 JSON 摘要 — 70%+ token 减少（D-14-07~09, OUT-03）。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='json_summary') 统一入口。
 
     精简策略:
     - 移除: imports, soft_references, circular_deps, errors
@@ -317,6 +360,7 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     Returns:
         Dict: 精简摘要
     """
+    warnings.warn(_SUMMARY_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     version_dict = {}
     if result.summary:
         version_dict = {
@@ -366,9 +410,18 @@ def format_json_summary(result: ParseResult, include_schema: bool = False) -> Di
     return output
 
 
+_BLUEPRINT_DICT_DEPRECATION_MSG = (
+    "format_blueprint_dict() 已弃用，推荐使用 parse_single(file_path, format='json') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
+
 def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = None) -> Dict:
     """
     格式化 BlueprintMetadata 用于 JSON 输出（D-04, D-20-06）。
+
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='json') 统一入口。
 
     Per D-20-06: blueprint_name 从 package_name 或导出名提取
 
@@ -379,6 +432,7 @@ def format_blueprint_dict(blueprint: BlueprintMetadata, blueprint_name: str = No
     Returns:
         Dict: 包含 blueprint_name, parent_class, variables, functions, events, detection_warning
     """
+    warnings.warn(_BLUEPRINT_DICT_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     # 增强的变量输出
     variables_list = [_format_variable_enhanced(var) for var in blueprint.variables]
 

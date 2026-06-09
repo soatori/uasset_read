@@ -1,6 +1,10 @@
 """Markdown 格式化 — Markdown 输出 + Mermaid 流程图。
 
 等价迁移 uasset_read_legacy.py L7574-7667。
+
+.. deprecated:: 0.4.5
+    推荐使用 parse_single(format='markdown') 统一入口，这些函数已转换为带
+    DeprecationWarning 的薄包装器，将在未来版本中移除。
 """
 from __future__ import annotations
 
@@ -14,6 +18,11 @@ from uasset_read.serializers.object_resources import get_asset_class, get_asset_
 from uasset_read.graph import build_graphs_summary, build_execution_chains
 from .helpers import build_status_info
 
+_MARKDOWN_DEPRECATION_MSG = (
+    "format_markdown() 已弃用，推荐使用 parse_single(file_path, format='markdown') 统一入口。"
+    "此函数将在未来版本中移除。"
+)
+
 
 def _escape_md_cell(text: str) -> str:
     """Escape characters that break markdown table formatting."""
@@ -24,6 +33,9 @@ def format_markdown(result: ParseResult) -> str:
     """
     Markdown 输出（D-14-10~12, OUT-04）。
 
+    .. deprecated:: 0.4.5
+        推荐使用 parse_single(file_path, format='markdown') 统一入口。
+
     三节结构 + 表格优先 + Mermaid 流程图。
 
     Args:
@@ -32,6 +44,7 @@ def format_markdown(result: ParseResult) -> str:
     Returns:
         str: Markdown 格式文本
     """
+    warnings.warn(_MARKDOWN_DEPRECATION_MSG, DeprecationWarning, stacklevel=2)
     lines = []
 
     # 标题
