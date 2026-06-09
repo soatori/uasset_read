@@ -316,11 +316,19 @@ def parse_properties_from_export(
     if game is not None:
         setattr(summary, "_game", game)
 
-    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_start = export.serial_offset + export.script_serialization_start_offset
-    else:
-        property_start = export.serial_offset
+    # UE default: 始终从 SerialOffset 开始属性解析
+    # ScriptSerializationStartOffset 仅在特殊编辑器场景使用
+    # （property bag placeholder 或 class mismatch）— 参见 LinkerLoad.cpp:4793
+    property_start = export.serial_offset
+
+    # 存储 ScriptSerialization 绝对偏移用于诊断和 opt-in 策略
+    export._script_serialization_start_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
+    )
+    export._script_serialization_end_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
+    )
+
     archive.seek(property_start)
 
     # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
@@ -377,12 +385,8 @@ def parse_properties_from_export(
         }
 
     # 计算属性数据边界
-    # UE 存储 ScriptSerializationStartOffset/EndOffset（相对于 SerialOffset）
-    # 正确终点 = serial_offset + script_serialization_end_offset
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_end = export.serial_offset + export.script_serialization_end_offset
-    else:
-        property_end = export.serial_offset + export.serial_size
+    # UE default: 使用 SerialSize 作为属性边界
+    property_end = export.serial_offset + export.serial_size
 
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if uses_unversioned and mappings is not None:
