@@ -150,6 +150,14 @@ UE4_TemplateIndex_IN_COOKED_EXPORTS = 507
 UE4_64BIT_EXPORTMAP_SERIALSIZES = 510
 
 # ============================================================================
+# FEdGraphPinType 序列化版本常量（EUnrealEngineObjectUE4Version）
+# ============================================================================
+
+VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 323       # FEdGraphPinType 自定义序列化起点
+VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 354         # PinSubCategoryMemberReference 字段加入
+VER_UE4_SERIALIZE_PINTYPE_CONST = 455            # bIsConst 字段加入
+
+# ============================================================================
 # 更多 CustomVersion GUIDs
 # ============================================================================
 FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
