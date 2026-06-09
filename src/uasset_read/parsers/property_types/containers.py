@@ -363,7 +363,7 @@ def parse_optional_property(
     参考 UE 源码：PropertyOptional.cpp::SerializeItem
     """
     from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
-    from uasset_read.parsers._common import _build_version_container_from_summary
+    from uasset_read.parsers.property_types._common import _build_version_container_from_summary
 
     # 读取 has_value 标志（UE TryEnterField 在二进制中写入 1 byte bool）
     has_value = archive.read_bool()
