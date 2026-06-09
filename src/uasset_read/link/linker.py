@@ -215,8 +215,21 @@ class PackageLinker:
         all_objs = self._import_objects + self._export_objects
         return [inst for inst in all_objs if inst.outer is obj]
 
-    def preload(self, index: int) -> None:
-        """Lazily deserialize properties for export *index*."""
+    def preload(
+        self,
+        index: int,
+        mappings=None,
+        game: Optional[str] = None,
+        tolerant: bool = True,
+    ) -> None:
+        """Lazily deserialize properties for export *index*.
+
+        Args:
+            index: Export index to preload.
+            mappings: Type mappings provider (optional).
+            game: Game identifier (optional).
+            tolerant: Tolerant parsing mode (default True).
+        """
         if index in self._preload_cache:
             return
         if index < 0 or index >= len(self._export_objects):
@@ -280,6 +293,10 @@ class PackageLinker:
             self._name_map,
             self._export_map,
             self._import_map,
+            linker=self,
+            mappings=mappings,
+            game=game,
+            tolerant=tolerant,
         )
         instance._preloaded = True
         self._preload_cache[index] = True
