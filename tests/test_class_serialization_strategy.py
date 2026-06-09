@@ -7,7 +7,10 @@ from uasset_read.parsers.class_serialization_strategy import (
     should_skip_class,
     is_opaque_class,
     is_uclass_derived,
+    get_ue_serialize_method,
+    get_ue_serialize_fidelity,
     _UCLASS_DERIVED_CLASSES,
+    _UCLASS_NATIVE_CLASSES,
 )
 
 
@@ -17,6 +20,7 @@ class TestSerializationStrategy:
     def test_enum_values(self):
         """枚举值正确定义。"""
         assert SerializationStrategy.FULL_SERIALIZER.value == "full_serializer"
+        assert SerializationStrategy.UCLASS_NATIVE.value == "uclass_native"
         assert SerializationStrategy.TAGGED_PROPERTIES_ONLY.value == "tagged_properties_only"
         assert SerializationStrategy.OPAQUE_CLASS_PAYLOAD.value == "opaque_class_payload"
         assert SerializationStrategy.SKIP_UNSUPPORTED.value == "skip_unsupported"
@@ -34,11 +38,20 @@ class TestClassStrategyTable:
         """策略表非空。"""
         assert len(CLASS_STRATEGY_TABLE) > 0
 
+    def test_uclass_native_classes(self):
+        """UClass native 类正确映射。"""
+        uclass_native_classes = [
+            "BlueprintGeneratedClass",
+            "WidgetBlueprintGeneratedClass",
+        ]
+        for cls in uclass_native_classes:
+            assert cls in CLASS_STRATEGY_TABLE, f"{cls} 未在策略表中"
+            assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.UCLASS_NATIVE, \
+                f"{cls} 应为 UCLASS_NATIVE 策略"
+
     def test_tagged_properties_classes(self):
         """Tagged properties 类正确映射。"""
         tagged_classes = [
-            "BlueprintGeneratedClass",
-            "WidgetBlueprintGeneratedClass",
             "Function",
             "UserDefinedStruct",
             "UserDefinedEnum",
