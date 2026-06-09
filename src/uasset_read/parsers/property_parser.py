@@ -386,6 +386,35 @@ def parse_properties_from_export(
         setattr(export, "class_name", _skip_class_name or "")
         return []
 
+    # UClass 原生字段解析：对 UCLASS_NATIVE 策略的类，先解析 UStruct/UClass 原生字段
+    # 参考 UE 源码 Class.cpp:5987-6263
+    if _skip_class_name is not None:
+        from uasset_read.parsers.class_serialization_strategy import (
+            get_serialization_strategy,
+            SerializationStrategy,
+        )
+        _strategy = get_serialization_strategy(_skip_class_name)
+        if _strategy == SerializationStrategy.UCLASS_NATIVE:
+            try:
+                from uasset_read.parsers.asset_types.uclass import parse_uclass_fields
+                uclass_data = parse_uclass_fields(archive, name_map, summary)
+                setattr(export, "_uclass_native_fields", uclass_data)
+                logger.debug(
+                    "UClass native fields parsed for '%s': %d bytes read, status=%s",
+                    export.object_name,
+                    uclass_data.get("bytes_read", 0),
+                    uclass_data.get("parse_status", "unknown"),
+                )
+            except Exception as e:
+                logger.warning(
+                    "UClass native field parsing failed for '%s': %s",
+                    export.object_name, e,
+                )
+                setattr(export, "_uclass_native_fields", {
+                    "parse_status": "failed",
+                    "parse_error": str(e),
+                })
+
     # D-02: SerializationControlExtensions 头部处理
     # UE5 >= 1011: 根级 overridable serialization 控制头
     # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
