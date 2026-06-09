@@ -118,6 +118,32 @@ def should_skip_class(class_name: str) -> bool:
     )
 
 
+# UClass-derived classes — 只有 UClass 子类序列化 SerializationControlExtensions
+# UE 源码 Class.cpp:1624-1627: const bool bIsUClass = IsA<UClass>();
+# UClass : public UStruct，但 UStruct 子类（Function, UserDefinedStruct 等）不读取此 header
+# 命名表（import.object_name）中 UClass 派生类的名称集合
+_UCLASS_DERIVED_CLASSES = frozenset({
+    "BlueprintGeneratedClass",       # UE: UClass 派生，主序列化路径
+    "WidgetBlueprintGeneratedClass",  # UE: 继承自 UBlueprintGeneratedClass
+    "Class",                          # UE: UStruct 的 UClass 表示（元类导出）
+})
+
+
+def is_uclass_derived(class_name: Optional[str]) -> bool:
+    """判断该 class 是否为 UClass 派生类。
+
+    只有 UClass 派生类在 UStruct::SerializeTaggedProperties() 中
+    读取 SerializationControlExtensions header（Class.cpp:1624-1627）。
+
+    Args:
+        class_name: export 的 class name（来自 resolve_class_name()）
+
+    Returns:
+        True 表示为 UClass 派生类，False 表示非 UClass（如 UStruct 子类）
+    """
+    return class_name in _UCLASS_DERIVED_CLASSES
+
+
 def is_opaque_class(class_name: str) -> bool:
     """判断该 class 是否为 opaque payload（有专用 Serialize() 但不实现）。
 

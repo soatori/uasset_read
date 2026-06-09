@@ -238,18 +238,23 @@ def parse_property_value(
         elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
                          "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
                          "UInt64Property", "FloatProperty", "DoubleProperty",
-                         "StrProperty", "ObjectProperty", "TextProperty",
+                         "StrProperty", "ObjectProperty",
                          "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
                          "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
-                         "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
-                         "MulticastSparseDelegateProperty",
-                         "InterfaceProperty", "FieldPathProperty",
+                         "InterfaceProperty",
                          "VerseStringProperty", "VerseClassProperty",
                          "VerseFunctionProperty", "VerseDynamicProperty",
                          "AnsiStrProperty", "GuidProperty"):
             return handler(tag, archive)
         elif tag.type in ("NameProperty", "DelegateProperty"):
             return handler(tag, archive, name_map)
+        elif tag.type in ("MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+                          "MulticastSparseDelegateProperty"):
+            return handler(tag, archive, name_map)
+        elif tag.type == "FieldPathProperty":
+            return handler(tag, archive, name_map, summary)
+        elif tag.type == "TextProperty":
+            return handler(tag, archive, summary)
         elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
             # These need soft_object_path_list for UE5.7+ index-based resolution
             soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
@@ -366,27 +371,39 @@ def parse_properties_from_export(
     # UE5 >= 1011: 根级 overridable serialization 控制头
     # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
     # 未知位应降级为诊断信息，不要盲跳
+    #
+    # UE 源码 Class.cpp:1624-1627: 只有 UClass 派生类才序列化此 header：
+    #   const bool bIsUClass = IsA<UClass>();
+    #   if (bIsUClass && UEVer() >= PROPERTY_TAG_EXTENSION) { ... }
+    # UStruct 子类（Function, UserDefinedStruct 等）不包含此 header。
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        control_offset = archive.tell()
-        serialization_control = archive.read_u8()
-        overridden_operation = None
-        if serialization_control & 0x02:
-            overridden_operation = archive.read_u8()
-        # 记录未知位（非 0x00 和非 0x02 的位）
-        unknown_bits = serialization_control & ~0x02
-        if unknown_bits:
-            logger.warning(
-                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
-                getattr(export, "object_name", ""), unknown_bits, control_offset,
+        from uasset_read.parsers.class_serialization_strategy import is_uclass_derived
+        if is_uclass_derived(_skip_class_name):
+            control_offset = archive.tell()
+            serialization_control = archive.read_u8()
+            overridden_operation = None
+            if serialization_control & 0x02:
+                overridden_operation = archive.read_u8()
+            # 记录未知位（非 0x00 和非 0x02 的位）
+            unknown_bits = serialization_control & ~0x02
+            if unknown_bits:
+                logger.warning(
+                    "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
+                    getattr(export, "object_name", ""), unknown_bits, control_offset,
+                )
+            # 存储到 export 的 transforms 中，供 IR/JSON 输出
+            if not hasattr(export, "transforms") or export.transforms is None:
+                export.transforms = {}
+            export.transforms["serialization_control"] = {
+                "value": serialization_control,
+                "overridden_operation": overridden_operation,
+                "offset": control_offset,
+            }
+        elif _skip_class_name is not None:
+            logger.debug(
+                "D-02 跳过: export '%s' class '%s' 非 UClass 派生，不读取 SerializationControlExtensions",
+                getattr(export, "object_name", ""), _skip_class_name,
             )
-        # 存储到 export 的 transforms 中，供 IR/JSON 输出
-        if not hasattr(export, "transforms") or export.transforms is None:
-            export.transforms = {}
-        export.transforms["serialization_control"] = {
-            "value": serialization_control,
-            "overridden_operation": overridden_operation,
-            "offset": control_offset,
-        }
 
     # 计算属性数据边界
     # UE default: 使用 SerialSize 作为属性边界
