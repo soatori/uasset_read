@@ -125,22 +125,43 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
 
 def _result_status(result: "ParseResult | LinkerParseResult") -> str:
-    if getattr(result, "is_success", False):
-        if getattr(result, "errors", None):
+    # 非成功分支
+    if not getattr(result, "is_success", False):
+        if (
+            getattr(result, "summary", None) is not None
+            or getattr(result, "name_map", None)
+            or getattr(result, "import_map", None)
+            or getattr(result, "export_map", None)
+        ):
             return "partial"
-        # 轻量容错解析（大资产降级）也应标记为 partial
-        metadata = getattr(result, "metadata", None) or {}
-        if metadata.get("lightweight_tolerant_parse"):
-            return "partial"
-        return "success"
-    if (
-        getattr(result, "summary", None) is not None
-        or getattr(result, "name_map", None)
-        or getattr(result, "import_map", None)
-        or getattr(result, "export_map", None)
-    ):
+        return "failed"
+
+    # is_success=True 分支：综合检查 export 级 parse_status
+    if getattr(result, "errors", None):
         return "partial"
-    return "failed"
+    metadata = getattr(result, "metadata", None) or {}
+    if metadata.get("lightweight_tolerant_parse"):
+        return "partial"
+
+    # 检查 export 级状态
+    export_map = getattr(result, "export_map", None) or []
+    if export_map and isinstance(export_map, list):
+        _PARTIAL_STATUSES = {"opaque", "skipped", "partial_metadata", "opaque_unversioned", "fallback"}
+        _FAILED_STATUSES = {"failed"}
+        failed_count = 0
+        partial_count = 0
+        for exp in export_map:
+            status = getattr(exp, "parse_status", None)
+            if status in _FAILED_STATUSES:
+                failed_count += 1
+            elif status in _PARTIAL_STATUSES:
+                partial_count += 1
+        if failed_count == len(export_map):
+            return "failed"
+        if failed_count > 0 or partial_count > 0:
+            return "partial"
+
+    return "success"
 
 
 def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
