@@ -21,6 +21,11 @@ UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定�
 # -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
 UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
 
+# UE4 LegacyFileVersion 范围（-1 to -5 为 UE4，-6 边界情况）
+UE4_LEGACY_VERSIONS = frozenset({-1, -2, -3, -4, -5})
+# 支持的所有 LegacyFileVersion（UE4 + UE5）
+ALL_SUPPORTED_LEGACY_VERSIONS = UE4_LEGACY_VERSIONS | UE5_LEGACY_VERSIONS
+
 # ============================================================================
 # CustomVersion GUIDs
 # ============================================================================

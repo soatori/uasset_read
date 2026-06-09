@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
-    UE5_VERSION_MIN, UE5_LEGACY_VERSIONS,
+    UE5_VERSION_MIN, UE5_LEGACY_VERSIONS, UE4_LEGACY_VERSIONS,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     MAX_TOTAL_OBJECT_COUNT,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
@@ -124,7 +124,7 @@ class PackageFileSummary:
 
 
 def read_package_summary(archive: FArchive) -> PackageFileSummary:
-    """读取 PackageFileSummary 文件头（UE5.7 专用）。"""
+    """读取 PackageFileSummary 文件头（UE5/UE4 兼容）。"""
     # 截断文件检测：文件过小时直接报错
     file_size = archive.total_size()
     if file_size < MIN_UASSET_SIZE:
@@ -155,21 +155,350 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
     legacy_file_version = archive.read_i32()
-    if legacy_file_version not in UE5_LEGACY_VERSIONS:
-        supported_versions = ", ".join(str(v) for v in sorted(UE5_LEGACY_VERSIONS))
-        # 根据 legacy_file_version 提供更精确的错误提示
-        if legacy_file_version > -6:
-            raise VersionError(
-                f"Legacy file version {legacy_file_version} indicates UE4 asset. "
-                f"Current version supports UE5 only (legacy versions -6 to -9)."
-            )
-        raise VersionError(
-            f"Only UE5 files with legacy_file_version in {{{supported_versions}}} are supported, "
-            f"got {legacy_file_version}"
+
+    # 确定引擎家族并分发到对应的读取器
+    is_ue4 = _is_ue4_legacy(legacy_file_version)
+
+    if is_ue4:
+        return _read_package_summary_ue4(
+            archive, tag, legacy_file_version
+        )
+    else:
+        return _read_package_summary_ue5(
+            archive, tag, legacy_file_version
         )
 
-    legacy_ue3_version = archive.read_i32()
-    file_version_ue4 = archive.read_i32()  # kept for internal reference only
+
+def _is_ue4_legacy(legacy_file_version: int) -> bool:
+    """判断是否为 UE4 资产。
+
+    UE4 LegacyFileVersion 范围: -1 to -5 (以及部分 -6 情况)
+    UE5 LegacyFileVersion 范围: -6 to -9
+
+    对于 legacy -6，需要进一步检查 FileVersionUE4 值来区分。
+    """
+    from uasset_read.constants import UE4_LEGACY_VERSIONS, UE5_LEGACY_VERSIONS
+
+    if legacy_file_version in UE4_LEGACY_VERSIONS:
+        return True
+    if legacy_file_version in UE5_LEGACY_VERSIONS:
+        return False
+    # 其他情况默认为 UE4
+    return legacy_file_version > -6
+
+
+def _read_package_summary_ue4(
+    archive: FArchive,
+    tag: int,
+    legacy_file_version: int,
+) -> PackageFileSummary:
+    """读取 UE4 格式的 PackageFileSummary。
+
+    UE4 格式与 UE5 的主要区别：
+    - 没有 FileVersionUE5 字段
+    - 没有 SavedHash 字段
+    - 没有 SoftObjectPaths、CellExport/Import 等 UE5 特有字段
+    - 有 FolderName 字段（UE5 没有）
+    - PropertyTag 使用旧的 FName 类型格式
+    """
+    from uasset_read.constants import (
+        UE4_NON_OUTER_PACKAGE_IMPORT,
+        UE4_ADDED_PACKAGE_OWNER,
+        UE4_NAME_HASHES_SERIALIZED,
+    )
+
+    # UE3 version (仅 legacy > -4 时存在)
+    if legacy_file_version != -4:
+        legacy_ue3_version = archive.read_i32()
+    else:
+        legacy_ue3_version = 0
+
+    file_version_ue4 = archive.read_i32()
+    file_version_licensee = archive.read_i32()
+
+    # CustomVersions (格式取决于 legacy_file_version)
+    custom_versions = _read_custom_versions_ue4(archive, legacy_file_version)
+
+    total_header_size = archive.read_i32()
+
+    # FolderName (UE4 特有)
+    folder_name = archive.read_fstring()
+
+    package_flags = archive.read_u32()
+
+    has_filter_editor_only = (package_flags & PKG_FilterEditorOnly) != 0
+
+    # NameCount 和 NameOffset
+    name_count = archive.read_i32()
+    if name_count < 0:
+        raise ParseError(f"Negative name count: {name_count}")
+    if name_count > MAX_NAME_COUNT:
+        raise ParseError(f"Name count exceeds maximum")
+    name_offset = archive.read_i32()
+    archive.validate_offset(name_offset, "NameOffset")
+
+    # LocalizationId (UE4 516+)
+    localization_id = ""
+    if not has_filter_editor_only:
+        if file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
+            localization_id = archive.read_fstring()
+
+    # GatherableTextData (UE4 517+)
+    gatherable_text_data_count = 0
+    gatherable_text_data_offset = 0
+    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
+        gatherable_text_data_count = archive.read_i32()
+        gatherable_text_data_offset = archive.read_i32()
+        if gatherable_text_data_offset > 0:
+            archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
+
+    # ExportCount 和 ExportOffset
+    export_count = archive.read_i32()
+    if export_count < 0:
+        raise ParseError(f"Negative export count: {export_count}")
+    if export_count > MAX_EXPORT_COUNT:
+        raise ParseError(f"Export count exceeds maximum")
+    export_offset = archive.read_i32()
+    archive.validate_offset(export_offset, "ExportOffset")
+
+    # ImportCount 和 ImportOffset
+    import_count = archive.read_i32()
+    if import_count < 0:
+        raise ParseError(f"Negative import count: {import_count}")
+    if import_count > MAX_IMPORT_COUNT:
+        raise ParseError(f"Import count exceeds maximum")
+    if export_count + import_count > MAX_TOTAL_OBJECT_COUNT:
+        raise ParseError(
+            f"Total object count ({export_count} + {import_count} = "
+            f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
+        )
+    import_offset = archive.read_i32()
+    archive.validate_offset(import_offset, "ImportOffset")
+
+    # DependsOffset
+    depends_offset = archive.read_i32()
+
+    # SoftPackageReferences (UE4 516+)
+    soft_package_references_count = 0
+    soft_package_references_offset = 0
+    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
+        soft_package_references_count = archive.read_i32()
+        soft_package_references_offset = archive.read_i32()
+
+    # SearchableNames (UE4 518+)
+    searchable_names_offset = 0
+    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
+        searchable_names_offset = archive.read_i32()
+
+    # ThumbnailTableOffset
+    thumbnail_table_offset = archive.read_i32()
+    if thumbnail_table_offset > 0:
+        archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
+
+    # Guid (UE4 始终存在，位置在 ThumbnailTableOffset 之后)
+    guid_bytes = archive.read(16)
+    persistent_guid = guid_bytes.hex()
+
+    # OwnerPersistentGuid (UE4 519-520 之间)
+    owner_persistent_guid = ""
+    if (
+        not has_filter_editor_only
+        and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER
+        and file_version_ue4 < UE4_NON_OUTER_PACKAGE_IMPORT
+    ):
+        guid_bytes = archive.read(16)
+        owner_persistent_guid = guid_bytes.hex()
+
+    # Generations
+    generations_count = archive.read_i32()
+    if generations_count < 0:
+        raise ParseError(f"Negative generations count: {generations_count}")
+    generations = []
+    for _ in range(generations_count):
+        gen_export_count = archive.read_i32()
+        gen_name_count = archive.read_i32()
+        generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
+
+    # SavedByEngineVersion (UE4 使用对象格式从版本 513 开始)
+    saved_by_engine_version = EngineVersion(
+        major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
+        changelist=archive.read_u32(), branch=archive.read_fstring()
+    )
+
+    # CompatibleWithEngineVersion (UE4 从版本 514 开始)
+    if file_version_ue4 >= 514:  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
+        compatible_with_engine_version = EngineVersion(
+            major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
+            changelist=archive.read_u32(), branch=archive.read_fstring()
+        )
+    else:
+        compatible_with_engine_version = saved_by_engine_version
+
+    # CompressionFlags
+    compression_flags = archive.read_u32()
+
+    # CompressedChunks (已废弃)
+    compressed_chunks_count = archive.read_i32()
+    if compressed_chunks_count < 0:
+        raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
+    for _ in range(compressed_chunks_count):
+        archive.read(12)
+
+    # PackageSource
+    package_source = archive.read_u32()
+
+    # AdditionalPackagesToCook
+    additional_packages_count = archive.read_i32()
+    if additional_packages_count < 0:
+        raise ParseError(f"Negative additional packages count: {additional_packages_count}")
+    for _ in range(additional_packages_count):
+        archive.read_fstring()
+
+    # TextureAllocations (仅 legacy > -7 时存在)
+    if legacy_file_version > -7:
+        num_texture_allocations = archive.read_i32()
+
+    # AssetRegistryDataOffset
+    asset_registry_data_offset = archive.read_i32()
+    if asset_registry_data_offset > 0:
+        archive.validate_offset(asset_registry_data_offset, "AssetRegistryDataOffset")
+
+    # BulkDataStartOffset
+    bulk_data_start_offset = archive.read_i64()
+
+    # WorldTileInfoDataOffset (UE4 447+)
+    world_tile_info_data_offset = 0
+    if file_version_ue4 >= 447:  # VER_UE4_WORLD_LEVEL_INFO
+        world_tile_info_data_offset = archive.read_i32()
+        if world_tile_info_data_offset > 0:
+            archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
+
+    # ChunkIDs (UE4 459+ 为数组格式)
+    chunk_ids = []
+    if file_version_ue4 >= 459:  # VER_UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS
+        chunk_ids_count = archive.read_i32()
+        if chunk_ids_count < 0:
+            raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
+        for _ in range(chunk_ids_count):
+            guid_bytes = archive.read(16)
+            chunk_ids.append(guid_bytes.hex())
+    elif file_version_ue4 >= 443:  # VER_UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE
+        chunk_id = archive.read_i32()
+        if chunk_id >= 0:
+            chunk_ids.append(format(chunk_id, '032x'))
+
+    # PreloadDependencies (UE4 506+)
+    preload_dependency_count = 0
+    preload_dependency_offset = 0
+    if file_version_ue4 >= 506:  # VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
+        preload_dependency_count = archive.read_i32()
+        preload_dependency_offset = archive.read_i32()
+        if preload_dependency_offset > 0:
+            archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
+
+    return PackageFileSummary(
+        tag=tag, legacy_file_version=legacy_file_version,
+        file_version_ue4=file_version_ue4,
+        file_version_ue5=0,  # UE4 没有此字段
+        file_version_licensee=file_version_licensee,
+        saved_hash=b"",  # UE4 没有 SavedHash
+        total_header_size=total_header_size,
+        custom_versions=custom_versions, package_name="",  # UE4 没有 PackageName 在此位置
+        package_flags=package_flags, name_count=name_count, name_offset=name_offset,
+        soft_object_paths_count=0,  # UE4 没有 SoftObjectPaths
+        soft_object_paths_offset=0,
+        localization_id=localization_id,
+        gatherable_text_data_count=gatherable_text_data_count,
+        gatherable_text_data_offset=gatherable_text_data_offset,
+        export_count=export_count, export_offset=export_offset,
+        import_count=import_count, import_offset=import_offset,
+        cell_export_count=0, cell_export_offset=0,  # UE4 没有 CellExport
+        cell_import_count=0, cell_import_offset=0,  # UE4 没有 CellImport
+        metadata_offset=0, depends_offset=depends_offset,  # UE4 没有 MetadataOffset
+        soft_package_references_count=soft_package_references_count,
+        soft_package_references_offset=soft_package_references_offset,
+        searchable_names_offset=searchable_names_offset,
+        thumbnail_table_offset=thumbnail_table_offset,
+        import_type_hierarchies_count=0,  # UE4 没有 ImportTypeHierarchies
+        import_type_hierarchies_offset=0,
+        persistent_guid=persistent_guid,
+        owner_persistent_guid=owner_persistent_guid,
+        generations=generations,
+        saved_by_engine_version=saved_by_engine_version,
+        compatible_with_engine_version=compatible_with_engine_version,
+        compression_flags=compression_flags, package_source=package_source,
+        asset_registry_data_offset=asset_registry_data_offset,
+        bulk_data_start_offset=bulk_data_start_offset,
+        world_tile_info_data_offset=world_tile_info_data_offset,
+        chunk_ids=chunk_ids,
+        preload_dependency_count=preload_dependency_count,
+        preload_dependency_offset=preload_dependency_offset,
+        names_referenced_from_export_data_count=0,  # UE4 没有此字段
+        payload_toc_offset=0,  # UE4 没有 PayloadToc
+        data_resource_offset=0  # UE4 没有 DataResourceOffset
+    )
+
+
+def _read_custom_versions_ue4(
+    archive: FArchive,
+    legacy_file_version: int,
+) -> List[CustomVersion]:
+    """读取 UE4 格式的 CustomVersions。
+
+    格式取决于 legacy_file_version:
+    - legacy == -2: Enums 格式
+    - legacy -3 to -5: GUIDs 格式
+    - legacy < -5: Optimized 格式 (与 UE5 相同)
+    """
+    from uasset_read.constants import MAX_CUSTOM_VERSIONS
+
+    if legacy_file_version > -2:
+        # 太旧的版本，不支持自定义版本
+        return []
+
+    if legacy_file_version == -2:
+        # Enums 格式 - 暂不支持，跳过
+        logger.warning("CustomVersion Enums format (legacy -2) not fully supported")
+        return []
+    elif -5 <= legacy_file_version <= -3:
+        # GUIDs 格式
+        count = archive.read_i32()
+        if count < 0 or count > MAX_CUSTOM_VERSIONS:
+            return []
+        versions = []
+        for _ in range(count):
+            guid_bytes = archive.read(16)
+            version = archive.read_i32()
+            versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
+        return versions
+    else:
+        # Optimized 格式 (legacy < -5)，与 UE5 相同
+        count = archive.read_u32()
+        if count > MAX_CUSTOM_VERSIONS:
+            return []
+        versions = []
+        for _ in range(count):
+            guid_bytes = archive.read(16)
+            version = archive.read_i32()
+            versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
+        return versions
+
+
+def _read_package_summary_ue5(
+    archive: FArchive,
+    tag: int,
+    legacy_file_version: int,
+) -> PackageFileSummary:
+    """读取 UE5 格式的 PackageFileSummary（从原 read_package_summary 提取）。"""
+    # 注意：tag 和 legacy_file_version 已由调用者读取并传入
+
+    # UE3 version (仅 legacy > -4 时存在，UE5 始终为 -6 到 -9，所以跳过)
+    if legacy_file_version != -4:
+        legacy_ue3_version = archive.read_i32()
+    else:
+        legacy_ue3_version = 0
+
+    file_version_ue4 = archive.read_i32()
 
     # FileVersionUE5: only present when legacy_file_version <= -8
     # legacy -6/-7 files do NOT have this field (CUE4Parse reference: legacyFileVersion <= -8)

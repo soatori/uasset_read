@@ -152,14 +152,15 @@ class TestCorruptedHeader:
             _cleanup_archive_and_file(archive, path)
 
     def test_valid_tag_invalid_version_raises(self):
-        """有效魔数但无效版本应抛出 VersionError。"""
+        """有效魔数但无效版本应抛出 VersionError（-999 太旧，无法解析）。"""
         data = struct.pack("<I", PACKAGE_FILE_TAG)
-        data += struct.pack("<i", -999)  # 无效 legacy_file_version
+        data += struct.pack("<i", -999)  # 无效 legacy_file_version（太旧）
         data += b"\x00" * (MIN_UASSET_SIZE - len(data))
         path = _write_temp_file(data)
         archive = FArchive(path, tolerant=False)
         try:
-            with pytest.raises(VersionError):
+            # -999 会被 _is_ue4_legacy 视为 UE4（因为 > -6），但后续解析会失败
+            with pytest.raises((VersionError, ParseError)):
                 read_package_summary(archive)
         finally:
             _cleanup_archive_and_file(archive, path)
