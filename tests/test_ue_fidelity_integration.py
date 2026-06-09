@@ -56,15 +56,17 @@ class TestUEFidelityIntegration:
         """场景 2: StaticMesh 资产的 opaque 标记"""
         result = parse_uasset(STATICMESH_ASSET)
 
-        # StaticMesh export 应该被标记为 opaque（因为 Task 3 的类策略表）
+        # StaticMesh 有 class-specific Serialize()，因此不能标记为完整 success。
+        # 若 asset type handler 成功提取基础元数据，会从 opaque 提升为 partial_metadata。
         has_staticmesh = False
         for exp in result.export_map:
             class_name = resolve_class_name(exp.class_index, result.import_map, result.export_map)
             if class_name == "StaticMesh":
                 has_staticmesh = True
-                # 验证 opaque 标记
                 assert hasattr(exp, 'parse_status')
-                assert exp.parse_status == 'opaque', f"StaticMesh should be opaque, got {exp.parse_status}"
+                assert exp.parse_status in ('opaque', 'partial_metadata'), (
+                    f"StaticMesh should be opaque/partial_metadata, got {exp.parse_status}"
+                )
                 if hasattr(exp, 'fallback_reason'):
                     assert exp.fallback_reason is not None
 
