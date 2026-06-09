@@ -231,19 +231,99 @@ def parse_optional_property(
     export_map: List[Any] = None,
     summary: Optional[Any] = None
 ) -> dict:
-    """解析 OptionalProperty"""
+    """解析 OptionalProperty（Issue #62）。
+
+    UE structured optional 二进制格式：
+      - bool has_value (1 byte，表示值是否存在)
+      - if has_value:
+          * UE5 新版（file_version_ue5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME）：
+            直接按 inner_type 原生序列化（无额外 PropertyTag）
+          * 旧版：读取完整的 inner FPropertyTag，然后解析 tagged property
+
+    参考 UE 源码：PropertyOptional.cpp::SerializeItem
+    """
+    from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
+    from uasset_read.parsers._common import _build_version_container_from_summary
+
+    # 读取 has_value 标志（UE TryEnterField 在二进制中写入 1 byte bool）
     has_value = archive.read_bool()
-    if has_value:
-        parse_property_value = _get_parse_property_value()
-        inner_type = getattr(tag, "inner_type", None) or "Unknown"
+
+    if not has_value:
+        return {"has_value": False, "value": None}
+
+    # 获取版本信息以选择正确的解析路径
+    version_container = _build_version_container_from_summary(summary)
+    file_version_ue5 = getattr(version_container, 'file_version_ue5', 0) if version_container else 0
+    is_new_format = file_version_ue5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME
+
+    parse_property_value = _get_parse_property_value()
+    inner_type = getattr(tag, "inner_type", None) or "Unknown"
+
+    if is_new_format:
+        # UE5 新版：直接按 inner_type 原生序列化（无额外 PropertyTag）
+        # 参考 UE PropertyOptional.cpp:217
+        #   GetValueProperty()->SerializeItem(ValueSlot, ValueData, ValueDefaults)
         inner_tag = PropertyTag(
             name=f"{tag.name}.Value",
             type=inner_type,
-            size=max(0, (tag.size or 0) - 4),
+            size=0,  # 让解析函数按类型原生序列化
         )
-        inner_value = parse_property_value(inner_tag, archive, name_map or [], export_map or [], summary)
-        return {"has_value": True, "value": inner_value}
-    return {"has_value": False, "value": None}
+        # 传递完整 inner descriptor（struct_type, enum_type 等）
+        if inner_type == "StructProperty":
+            inner_tag.struct_type = getattr(tag, "inner_type_struct", None)
+        if inner_type in ("ByteProperty", "EnumProperty"):
+            inner_tag.enum_type = getattr(tag, "enum_type", None)
+
+        try:
+            inner_value = parse_property_value(
+                inner_tag, archive, name_map or [], export_map or [], summary
+            )
+            return {"has_value": True, "value": inner_value}
+        except Exception as e:
+            # unsupported inner value: bounded fallback 并上报 partial
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "OptionalProperty '%s': failed to parse inner type '%s': %s, using fallback",
+                tag.name, inner_type, e
+            )
+            # 跳过剩余字节（bounded by remaining data in this optional）
+            remaining = max(0, (tag.size or 0) - 1)  # 减去 has_value bool
+            if remaining > 0:
+                archive.read_bytes(remaining)
+            return {
+                "has_value": True,
+                "value": None,
+                "parse_status": "partial",
+                "error": f"Failed to parse inner type '{inner_type}': {e}"
+            }
+    else:
+        # 旧版：读取完整的 inner FPropertyTag
+        # 参考 UE PropertyOptional.cpp:221-249
+        read_property_tag = _get_read_property_tag()
+        try:
+            inner_tag = read_property_tag(archive, name_map or [])
+            inner_value = parse_property_value(
+                inner_tag, archive, name_map or [], export_map or [], summary
+            )
+            return {"has_value": True, "value": inner_value}
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "OptionalProperty '%s': failed to parse inner tag: %s, skipping",
+                tag.name, e
+            )
+            # bounded fallback：跳过剩余字节
+            remaining = max(0, (tag.size or 0) - 1)
+            if remaining > 0:
+                archive.read_bytes(remaining)
+            return {
+                "has_value": True,
+                "value": None,
+                "parse_status": "partial",
+                "error": f"Failed to parse inner tag: {e}"
+            }
 
 
 # ============================================================================
