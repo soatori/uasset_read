@@ -4,9 +4,13 @@
 
 ```text
 .claude/skills/
+├── asset-parse-compare/SKILL.md
 ├── code-quality-fix/SKILL.md
 ├── doc-consistency/SKILL.md
+├── fix-loop/SKILL.md
+├── git-branch-workflow/SKILL.md
 ├── release-prep/SKILL.md
+├── repo-cleanup/SKILL.md
 ├── test-runner/SKILL.md
 ├── ue-source-research/SKILL.md
 └── version-sync/SKILL.md
@@ -22,6 +26,10 @@
 | `version-sync` | 版本 | 跨 README、源码、docs、wiki 同步版本号 | 版本号一致性变更 |
 | `release-prep` | 编排 | 发布前完整流程 | 版本同步、测试、文档、changelog、tag |
 | `ue-source-research` | 研究 | 对照 UE C++ 源码确认 `.uasset` 格式和蓝图/Kismet 语义 | 源码证据、解析修复、回归测试 |
+| `fix-loop` | 自动化 | 错误报告→研究→计划→修复→验证 闭环迭代 | 修复报告、提交记录 |
+| `asset-parse-compare` | 测试 | 解析 uasset 并与 CUE4Parse/UE 对比 | 对比报告、差异数据 |
+| `git-branch-workflow` | Git | 分支创建/合并/清理/PR 一条命令完成 | 分支操作结果、PR 链接 |
+| `repo-cleanup` | 维护 | 自动清理临时文件、调试产物、CUE4Parse 痕迹 | 清理报告、.gitignore 更新 |
 
 ## 编排关系
 

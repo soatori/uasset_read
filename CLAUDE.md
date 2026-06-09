@@ -15,7 +15,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **专注领域**：未烘焙/编辑器保存的资产（含完整蓝图数据）
 - **版本**：0.4.5 | **Python**：3.10+
 - **构建系统**：直接脚本运行（src 布局），禁止 `pip install`
-- **详细开发指南**：[docs/guides/dev-guide.md](docs/guides/dev-guide.md)
 
 ## 快速开始
 
@@ -75,7 +74,8 @@ python -m pytest tests/ -v --cov=uasset_read   # 覆盖率
 
 **测试要求**：100% 通过率，≥12 种资产类型，稳定资产必须在 strict 和 tolerant 双模式下通过。
 **样本路径**：`E:\Develop\lib\UnrealEngine\Samples`
-**pytest 标记**：`integration`、`quality`、`regression`、`slow`
+**pytest 标记**：`integration`、`quality`、`regression`、`slow`、`auxiliary`、`acceptance`
+**测试组织**：测试文件命名 `test_*.py`，使用 pytest fixtures（见 `tests/conftest.py`）
 
 ## 核心架构
 

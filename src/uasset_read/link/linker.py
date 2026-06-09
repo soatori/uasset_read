@@ -177,6 +177,11 @@ class PackageLinker:
 
         Validates index bounds and records OffsetRangeDiagnostic on out-of-bounds.
         Returns None for null or out-of-bounds indices.
+
+        FPackageIndex 语义（ObjectResource.h）：
+        - Index > 0 → Export（实际下标 = Index - 1）
+        - Index < 0 → Import（实际下标 = -Index - 1）
+        - Index = 0 → Null
         """
         if pkg_idx.is_null:
             return None
@@ -185,13 +190,17 @@ class PackageLinker:
             if 0 <= idx < len(self._export_objects):
                 return self._export_objects[idx]
             # 越界诊断
+            resolved_type = pkg_idx.resolved_type
             self._diagnostics.append(OffsetRangeDiagnostic(
                 module="linker",
                 field="PackageIndex",
                 export_index=idx,
                 file_size=self._file_size,
                 source="resolve_package_index",
-                error=f"Export PackageIndex {pkg_idx.index} (idx={idx}) 越界，export 数量 {len(self._export_objects)}",
+                error=(
+                    f"Export PackageIndex {pkg_idx.index} (type={resolved_type}, idx={idx}) "
+                    f"越界，export 数量 {len(self._export_objects)}"
+                ),
             ))
             return None
         if pkg_idx.is_import:
@@ -199,13 +208,17 @@ class PackageLinker:
             if 0 <= idx < len(self._import_objects):
                 return self._import_objects[idx]
             # 越界诊断
+            resolved_type = pkg_idx.resolved_type
             self._diagnostics.append(OffsetRangeDiagnostic(
                 module="linker",
                 field="PackageIndex",
                 import_index=idx,
                 file_size=self._file_size,
                 source="resolve_package_index",
-                error=f"Import PackageIndex {pkg_idx.index} (idx={idx}) 越界，import 数量 {len(self._import_objects)}",
+                error=(
+                    f"Import PackageIndex {pkg_idx.index} (type={resolved_type}, idx={idx}) "
+                    f"越界，import 数量 {len(self._import_objects)}"
+                ),
             ))
             return None
         return None

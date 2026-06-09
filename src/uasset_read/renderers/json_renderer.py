@@ -172,6 +172,8 @@ class JSONRenderer(IRenderer):
             d["events"] = [self._event_to_dict(e) for e in blueprint.events]
         if blueprint.components:
             d["components"] = blueprint.components
+        if blueprint.scs_tree:
+            d["scs_tree"] = blueprint.scs_tree
         return d
 
     def _variable_to_dict(self, var) -> dict[str, Any]:
@@ -331,6 +333,7 @@ class JsonSummaryRenderer(IRenderer):
                 "function_count": len(ir.blueprint.functions),
                 "event_count": len(ir.blueprint.events),
                 "component_count": len(ir.blueprint.components),
+                "scs_node_count": len(ir.blueprint.scs_tree),
             }
         if ir.errors:
             data["errors"] = ir.errors
