@@ -403,12 +403,17 @@ def parse_soft_object_property(
     archive: FArchive,
     name_map: List[str],
     soft_object_path_list: Optional[List[Dict]] = None,
-) -> SoftObjectPathValue:
+) -> Any:
     """解析 SoftObjectProperty（FSoftObjectPath）。
 
     当 soft_object_path_list 存在时（UE5.7+），读取 int32 索引。
     否则读取 FString 对（传统格式）。
+
+    修复 #59：索引越界时返回 PropertyFallback 而不是 SoftObjectPathValue(error=...)。
+    UE 源码中这种情况会触发 SetCriticalError()，应该降级解析状态。
     """
+    from uasset_read.models.fallback import PropertyFallback, FallbackReason
+
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
         # UE5.7+ 索引格式
         index = archive.read_i32()
@@ -421,12 +426,15 @@ def parse_soft_object_property(
                 index=index,
             )
         else:
-            return SoftObjectPathValue(
-                raw_kind=tag.type,
-                asset_path='',
-                sub_path='',
-                index=index,
-                error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
+            # 修复 #59：索引越界返回 PropertyFallback，不是普通 SoftObjectPathValue
+            return PropertyFallback(
+                name=tag.name,
+                type=tag.type,
+                size=tag.size,
+                raw_bytes=b"",
+                reason=FallbackReason.PARSE_ERROR,
+                array_index=getattr(tag, "array_index", 0),
+                error_message=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
     else:
         # 传统 FString 格式

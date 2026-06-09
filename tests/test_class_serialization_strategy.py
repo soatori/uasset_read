@@ -6,6 +6,8 @@ from uasset_read.parsers.class_serialization_strategy import (
     get_serialization_strategy,
     should_skip_class,
     is_opaque_class,
+    is_uclass_derived,
+    _UCLASS_DERIVED_CLASSES,
 )
 
 
@@ -235,3 +237,72 @@ class TestLinkerIntegration:
         )
         strategy = get_serialization_strategy("SomeUnknownClass")
         assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+class TestIsUclassDerived:
+    """is_uclass_derived() 函数测试 — SerializationControlExtensions 条件。
+
+    UE 源码 Class.cpp:1624-1627: const bool bIsUClass = IsA<UClass>();
+    只有 UClass 派生类在 UStruct::SerializeTaggedProperties() 中
+    读取 SerializationControlExtensions header。
+    """
+
+    def test_uclass_derived_returns_true(self):
+        """UClass 派生类返回 True。"""
+        assert is_uclass_derived("BlueprintGeneratedClass") is True
+        assert is_uclass_derived("WidgetBlueprintGeneratedClass") is True
+        assert is_uclass_derived("Class") is True
+
+    def test_non_uclass_returns_false(self):
+        """非 UClass 类返回 False。"""
+        # UStruct 子类 — 有 tagged properties 但不是 UClass
+        assert is_uclass_derived("Function") is False
+        assert is_uclass_derived("UserDefinedStruct") is False
+        assert is_uclass_derived("UserDefinedEnum") is False
+        assert is_uclass_derived("EdGraph") is False
+        assert is_uclass_derived("EdGraphNode") is False
+        assert is_uclass_derived("K2Node") is False
+
+    def test_opaque_class_returns_false(self):
+        """Opaque 类返回 False。"""
+        assert is_uclass_derived("StaticMesh") is False
+        assert is_uclass_derived("Texture2D") is False
+        assert is_uclass_derived("Material") is False
+
+    def test_skip_class_returns_false(self):
+        """Skip 类返回 False。"""
+        assert is_uclass_derived("NiagaraGraph") is False
+        assert is_uclass_derived("NiagaraScript") is False
+
+    def test_unknown_class_returns_false(self):
+        """未知类返回 False（保守策略，不消费字节）。"""
+        assert is_uclass_derived("SomeUnknownClass") is False
+        assert is_uclass_derived("CustomUClass") is False
+
+    def test_none_returns_false(self):
+        """None 输入返回 False（class name 无法解析时的降级处理）。"""
+        assert is_uclass_derived(None) is False
+
+    def test_empty_string_returns_false(self):
+        """空字符串返回 False。"""
+        assert is_uclass_derived("") is False
+
+
+class TestUclassDerivedSetConsistency:
+    """UCLASS_DERIVED_CLASSES 集合一致性测试。"""
+
+    def test_uclass_set_not_empty(self):
+        """UCLASS_DERIVED_CLASSES 非空。"""
+        assert len(_UCLASS_DERIVED_CLASSES) > 0
+
+    def test_uclass_set_no_overlap_with_opaque(self):
+        """UCLASS_DERIVED_CLASSES 与 opaque 类无重叠。"""
+        # UCLASS_DERIVED_CLASSES 包含策略表中的类，但 opaque 类不应出现在其中
+        for cls in _UCLASS_DERIVED_CLASSES:
+            assert not is_opaque_class(cls), f"{cls} 不应同时在 UCLASS_DERIVED 和 opaque 中"
+
+    def test_all_tagged_uclass_derived_are_in_uclass_set(self):
+        """Tagged properties 中的 UClass 派生类在 UCLASS_DERIVED_CLASSES 中。"""
+        # BlueprintGeneratedClass 和 WidgetBlueprintGeneratedClass 是 UClass 派生类
+        assert "BlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES
+        assert "WidgetBlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES

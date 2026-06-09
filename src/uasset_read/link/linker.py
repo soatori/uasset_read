@@ -387,23 +387,35 @@ class PackageLinker:
         """将 ObjectProperty 的 FPackageIndex 解析为 UObjectInstance 引用。
 
         遍历所有已 preload 的 export 对象，填充 property_references 字段。
+
+        修复 #58：同时支持 PropertyValue dataclass 和旧 dict mock 输入。
         """
+        from uasset_read.models.properties import PropertyValue
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
             if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
+                # 支持 PropertyValue dataclass 和旧 dict
+                if isinstance(prop, PropertyValue):
+                    prop_name = prop.name
+                    prop_type = prop.type
+                    prop_value = prop.value
+                elif isinstance(prop, dict):
+                    prop_name = prop.get('name', '')
+                    prop_type = prop.get('type', '')
+                    prop_value = prop.get('value')
+                else:
                     continue
-                if prop.get('type') == 'ObjectProperty':
-                    pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
+
+                if prop_type == 'ObjectProperty':
+                    if isinstance(prop_value, int):
                         # 转换为 PackageIndex 并解析
                         from uasset_read.serializers.object_resources import PackageIndex
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
+                        resolved = self.resolve_package_index(PackageIndex(prop_value))
                         if resolved:
-                            prop_name = prop.get('name', '')
                             if not hasattr(inst, 'property_references'):
                                 inst.property_references = {}
                             inst.property_references[prop_name] = resolved
@@ -412,20 +424,31 @@ class PackageLinker:
         """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
 
         遍历所有已 preload 的 export 对象，填充 weak_references 字段。
+
+        修复 #58：同时支持 PropertyValue dataclass 和旧 dict mock 输入。
         """
+        from uasset_read.models.properties import PropertyValue
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
             if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
+                # 支持 PropertyValue dataclass 和旧 dict
+                if isinstance(prop, PropertyValue):
+                    prop_type = prop.type
+                    prop_value = prop.value
+                elif isinstance(prop, dict):
+                    prop_type = prop.get('type', '')
+                    prop_value = prop.get('value')
+                else:
                     continue
-                if prop.get('type') == 'WeakObjectProperty':
-                    pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
+
+                if prop_type == 'WeakObjectProperty':
+                    if isinstance(prop_value, int):
                         from uasset_read.serializers.object_resources import PackageIndex
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
+                        resolved = self.resolve_package_index(PackageIndex(prop_value))
                         if resolved:
                             inst.weak_references.append(resolved)
 
