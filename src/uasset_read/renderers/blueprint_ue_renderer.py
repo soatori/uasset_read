@@ -118,7 +118,15 @@ def _format_ue_value(value: Any) -> str:
 
 
 class BlueprintUERenderer(IRenderer):
-    """模拟 UE 编辑器 Ctrl+C 复制的蓝图文本格式。"""
+    """模拟 UE 编辑器 Ctrl+C 复制的蓝图文本格式。
+
+    与 blueprint_text 的区别：
+    - blueprint_ue_text: 输出 Begin Object / End Object 块、CustomProperties Pin、LinkedTo 引用
+    - blueprint_text: 输出执行链、反编译函数、紧凑节点列表
+
+    输出应避免 Python repr（如 StructValue(...)、TextValue(...)），
+    所有值通过 _format_ue_value() 格式化为 UE 风格字符串。
+    """
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         lines: list[str] = []

@@ -30,7 +30,12 @@ _CLASS_SHORT_NAMES = {
 
 
 class BlueprintTextRenderer(IRenderer):
-    """紧凑节点列表，用于蓝图翻译参考。"""
+    """蓝图文本格式渲染器 — 执行链 + 反编译函数摘要。
+
+    与 blueprint_ue_text 的区别：
+    - blueprint_text: 输出执行链、反编译 C++ 函数、紧凑节点列表（短类型名）
+    - blueprint_ue_text: 模拟 UE 编辑器 Ctrl+C 格式（Begin Object / CustomProperties Pin）
+    """
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         lines: list[str] = []
