@@ -152,7 +152,7 @@ def _trace_execution_from_event(
 
         # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
-            from uasset_read.formatters.json_formatter import _extract_call_function_parameters
+            from uasset_read.graph._node_format import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
