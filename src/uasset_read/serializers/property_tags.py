@@ -18,7 +18,7 @@ from uasset_read.constants import (
     PROP_TAG_HAS_BINARY_OR_NATIVE,
     PROP_TAG_BOOL_TRUE,
     PROP_TAG_SKIPPED_SERIALIZE,
-    PROP_EXT_SERIALIZE_CONTROL,
+    PROP_EXT_OVERRIDABLE_INFORMATION,
     MAX_PROPERTY_TYPE_NODES,
 )
 from uasset_read.models.properties import PropertyTag, PropertyTypeName
@@ -287,8 +287,8 @@ def _read_property_tag_ue5(
         tag.property_guid = archive.read_bytes(16)
 
     if tag.flags & PROP_TAG_HAS_EXTENSIONS:
-        property_extensions = archive.read_u8()
-        if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
+        tag.property_extensions = archive.read_u8()
+        if tag.property_extensions & PROP_EXT_OVERRIDABLE_INFORMATION:
             tag.override_operation = archive.read_u8()
             tag.experimental_overridable_logic = archive.read_u8()
 

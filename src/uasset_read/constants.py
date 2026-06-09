@@ -101,7 +101,7 @@ MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
 # PropertyTag extension flags
 # ============================================================================
 
-PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+PROP_EXT_OVERRIDABLE_INFORMATION = 0x02  # EPropertyTagExtension::OverridableInformation (UE5.3+)
 
 # ============================================================================
 # FPropertyTypeName type node read limit (relaxed from MAX_TYPENODE_NODES for complex nested types)
