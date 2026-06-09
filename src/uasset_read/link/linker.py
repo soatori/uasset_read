@@ -421,6 +421,104 @@ class PackageLinker:
         finally:
             self._preloading_in_progress.discard(index)
 
+    def _uses_script_serialization_offset(self, exp) -> bool:
+        """检查 export 是否应使用 ScriptSerializationStartOffset 偏移调整。
+
+        参考 UE 源码 LinkerLoad.cpp:4793-4802：
+        - UE 版本 >= SCRIPT_SERIALIZATION_OFFSET
+        - 未使用 unversioned properties
+        - script_serialization_start_offset > 0
+        """
+        if self._summary is None:
+            return False
+        file_version = getattr(self._summary, 'file_version_ue5', 0)
+        try:
+            if int(file_version) < UE5_SCRIPT_SERIALIZATION_OFFSET:
+                return False
+        except (TypeError, ValueError):
+            return False
+        # 检查是否使用 unversioned properties（unversioned 不使用 script serialization offset）
+        package_flags = getattr(self._summary, 'package_flags', 0)
+        try:
+            if (int(package_flags) & PKG_UnversionedProperties) != 0:
+                return False
+        except (TypeError, ValueError):
+            return False
+        sss_offset = getattr(exp, 'script_serialization_start_offset', 0)
+        try:
+            return int(sss_offset) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def _preload_super_chain(
+        self,
+        instance: UObjectInstance,
+        index: int,
+        mappings,
+        game: Optional[str],
+        tolerant: bool,
+        current_depth: int,
+    ) -> None:
+        """Issue #69: 递归预加载 SuperStruct 继承链。
+
+        如果当前 export 是 UStruct/UClass 相关类，且有 super_index 指向另一个 export，
+        则先递归 preload super 对象，确保父类属性在子类之前被解析。
+        最大递归深度 10 层。
+        """
+        exp = self._export_map[index] if index < len(self._export_map) else None
+        if exp is None:
+            return
+
+        super_index = getattr(exp, 'super_index', None)
+        if super_index is None or super_index.is_null:
+            return
+
+        # 仅对 export 指向的 super 递归加载（import 超类不递归）
+        if not super_index.is_export:
+            return
+
+        super_export_idx = super_index.to_export_index()
+        if super_export_idx < 0 or super_export_idx >= len(self._export_objects):
+            return
+
+        # 避免加载自身
+        if super_export_idx == index:
+            return
+
+        super_inst = self._export_objects[super_export_idx]
+        if super_inst._preloaded or super_export_idx in self._preloading_in_progress:
+            return
+
+        # 递归深度限制
+        if current_depth >= 10:
+            logger.debug(
+                "SuperStruct recursion depth limit reached at export #%d (%s)",
+                index, instance.object_name,
+            )
+            return
+
+        # 判断是否为 UStruct 相关类（UClass/UScriptStruct 等继承自 UStruct）
+        class_name = instance.object_class
+        is_struct_like = class_name is not None and any(
+            class_name.endswith(suffix) for suffix in (
+                "Class", "Struct", "Enum", "Function",
+                "BlueprintGeneratedClass",
+                "WidgetBlueprintGeneratedClass",
+                "AnimBlueprintGeneratedClass",
+            )
+        )
+        if not is_struct_like:
+            return
+
+        logger.debug(
+            "Preloading super chain: export #%d (%s) -> super #%d",
+            index, instance.object_name, super_export_idx,
+        )
+        self.preload(
+            super_export_idx, mappings=mappings, game=game,
+            tolerant=tolerant, _recursion_depth=current_depth + 1,
+        )
+
     def _collect_root_objects(self) -> None:
         """Collect objects with no outer into _root_objects."""
         self._root_objects = [

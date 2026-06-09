@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **语言**：所有对话、代码注释、错误提示、文档统一使用中文
 - **输出**：专业简洁，避免冗余
+- **无需向后兼容** — 纯输出脚本，不对外暴露 API，可直接修改/删除接口
 - **CodeGraph**：优先使用 `codegraph_*` 工具回答结构化问题（详见全局 CLAUDE.md）
 
 ## 项目概述
@@ -144,6 +145,8 @@ master 仅保留以下内容，开发辅助文件不进入 master：
 
 定期版本发布时，从 develop 合并到 master：
 
+执行前必须确认 `develop` 上 release commit/tag 已完成、`git status --short` 为空，并向用户列出将排除或清理的开发目录；只有用户明确确认后才执行选择性合并。
+
 ```bash
 git checkout master
 git merge develop --no-commit
@@ -155,8 +158,9 @@ git checkout HEAD -- wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/
 git clean -fd wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
     .claude/skills/ .claude/workflows/ .claude/agents/
 git commit -m "Merge develop (vX.Y.Z) into master"
-git push origin master
 ```
+
+远端推送仅在用户明确要求后执行：`git push origin develop`、`git push origin master`、`git push origin vX.Y.Z`。
 
 **CI 自动校验**：master 分支包含文件目录合规检查，违反白名单将被拒绝。
 
@@ -203,6 +207,8 @@ git push origin master
 | `doc-consistency` | 文档一致性审计 |
 | `version-sync` | 跨文件版本号同步 |
 | `release-prep` | 发布前完整流程（版本同步→测试→文档→提交） |
+| `ue-source-research` | 对照 UE C++ 源码确认解析语义 |
+| `ue-wiki-lookup` | 查询 UE wiki 上下文和源码路径 |
 
 ### Issue tracker
 

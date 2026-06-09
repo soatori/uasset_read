@@ -4,6 +4,7 @@
 
 - **仅支持未烘焙/编辑器保存的资产** — Cooked 资产的图数据已被剥离
 - **只读** — 仅解析，不支持修改或写入
+- **无向后兼容** — 纯输出脚本，不对外暴露 API，接口可直接修改/删除，无需版本过渡
 - **零运行时依赖** — 不向 `dependencies` 添加第三方包（PAK 可选依赖在 `optional-dependencies` 中）
 - **禁止 pip install** — 项目采用直接脚本运行（`python run.py`），禁止 `pip install -e .` 或 `pip install uasset_read`。CI 中的 `pip install pytest` 仅用于测试框架，不安装项目本身
 - **必须参考 UE 源码** — 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制

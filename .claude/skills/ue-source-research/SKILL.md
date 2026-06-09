@@ -81,6 +81,8 @@ E:\Develop\lib\UnrealEngine
 ## Verification
 
 - 最小复现：运行相关失败测试或新增回归测试。
+- 资产对比：需要验证解析正确性时，运行 `python run.py <file.uasset> --json > temp/actual.json`，再与 UE 源码行为、CUE4Parse 输出或用户提供的预期 JSON 对照。
+- 差异报告：记录缺失、多余、值不同、类型不同等差异；报告放 `docs/reports/`，临时 diff JSON 放 `temp/`。
 - 影响验证：涉及 `parse_uasset.py`、`ir_builder.py`、`graph/`、`kismet/`、`renderers/` 时运行相关测试目录。
 - 质量门禁：大范围解析行为变化后调用或参考 [test-runner](../test-runner/SKILL.md)。
 

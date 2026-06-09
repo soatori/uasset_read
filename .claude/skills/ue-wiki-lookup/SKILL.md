@@ -16,6 +16,17 @@ description: Use when the agent needs Unreal Engine source-guided knowledge,
 - UE 插件参考
 - 需要从 wiki 获取上下文后进一步查源码
 
+## 输入
+
+- 用户关于 UE 架构、模块、类、源码路径、编辑器扩展点或插件参考的问题。
+- 可选：目标 UE 版本、模块名、类名、函数名或希望检索的源码范围。
+
+## 输出
+
+- 命中的 wiki context pack 摘要、相关源码路径、模块或符号列表。
+- 需要进一步源码确认时，给出 CodeGraph 查询结果或建议继续使用 [ue-source-research](../ue-source-research/SKILL.md)。
+- 未命中或配置不可用时，明确说明缺失的配置、路径或索引状态。
+
 ## 执行步骤
 
 ### 1. 解析配置
@@ -72,3 +83,15 @@ python -m tools.uewiki.uewiki pack "<用户问题>" --budget 6000 --json
 
 结合 wiki context pack 和 CodeGraph 结果回答用户问题。
 引用源码路径时使用 wiki 中的相对路径格式（`Engine/Source/...`）。
+
+## Verification
+
+- 确认 `resolve_uewiki.py` 输出包含可用的 `uewiki_root` 或明确报告配置缺失。
+- 引用源码路径时确认路径来自 pack 输出或 CodeGraph 结果，不凭记忆编造。
+- 如果 CodeGraph 超时或不可用，在回答中标明只使用了 wiki context。
+
+## Boundaries
+
+- wiki context 只能作为定位和背景材料；涉及 `.uasset` 序列化行为、字段含义或解析器修改时，继续使用 [ue-source-research](../ue-source-research/SKILL.md)。
+- 不修改 wiki、UE 源码或本项目解析器文件。
+- 不把 pack 输出、查询日志或临时结果写入 skill 目录；需要保存时放入 `temp/`。
