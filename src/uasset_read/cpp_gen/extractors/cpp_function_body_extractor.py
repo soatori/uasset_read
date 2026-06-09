@@ -181,9 +181,18 @@ def _extract_call_args(
     method_ir: CppMethodIR,
     data_flows: List[Dict],
 ) -> List[str]:
-    """从 CallFunction 节点的 parameters 和 data_flows 推导参数列表。"""
+    """从 CallFunction 节点的 parameters 和 data_flows 推导参数列表。
+
+    优先通过 data_flows 解析参数来源（function_parameter → 函数签名参数名），
+    避免使用 CallFunction 节点自身的 pin 名（如 "Val"），而是追溯到数据源头
+    （如 FunctionEntry 的 "Pitch"）。
+    """
     params = node_info.get("parameters", {})
     param_list = params.get("parameters", []) if isinstance(params, dict) else []
+    node_guid = node_info.get("guid", "")
+
+    # 构建数据流查找表：(target_node_guid, input_pin) → 解析后的参数名
+    flow_lookup = _build_data_flow_lookup(data_flows)
 
     args: List[str] = []
     for param in param_list:
@@ -194,9 +203,17 @@ def _extract_call_args(
             if direction in ("exec", "return"):
                 continue
             if name:
-                args.append(_sanitize_identifier(name))
+                # 优先通过数据流解析
+                resolved = _resolve_param_via_data_flow(
+                    node_guid, name, flow_lookup
+                )
+                if resolved:
+                    args.append(resolved)
+                else:
+                    # 回退：使用原始 pin 名
+                    args.append(_sanitize_identifier(name))
 
-    # Fallback: 从 data_sources 推导
+    # Fallback: 从 data_sources 推导（当 param_list 为空时）
     if not args:
         data_sources = node_info.get("data_sources", [])
         for ds in data_sources:
@@ -217,6 +234,104 @@ def _extract_call_args(
                                 args.append(src.get("function_name", "Unknown"))
 
     return args
+
+
+def _build_data_flow_lookup(data_flows: List[Dict]) -> Dict:
+    """构建数据流查找表：(target_node_name, input_pin) → 解析后的参数名。
+
+    遍历所有 data_flows，提取每个目标节点的输入 pin 对应的数据源。
+    如果数据源是 function_parameter（来自 FunctionEntry），则记录其 pin 名。
+    支持通过 Knot 节点追溯数据源。
+    """
+    # 第一遍：构建直接连接和 Knot 节点的映射
+    direct_lookup = {}  # (target_node, target_pin) → source info
+    knot_outputs = {}   # knot_node → source info (from its OutputPin)
+
+    for flow in data_flows:
+        source = flow.get("source", {})
+        target = flow.get("target", {})
+
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            continue
+
+        source_node = source.get("node", "")
+        source_pin = source.get("pin", "")
+        target_node = target.get("node", "")
+        target_pin = target.get("pin", "")
+
+        # 检查是否是 FunctionEntry 的直接输出
+        if "FunctionEntry" in source_node:
+            key = (target_node, target_pin)
+            direct_lookup[key] = _sanitize_identifier(source_pin)
+
+        # 记录 Knot 节点的输出（用于后续追溯）
+        if "Knot" in source_node and source_pin == "OutputPin":
+            # 这个 Knot 的输出来自哪里？需要回溯
+            knot_outputs[target_node] = source_node  # 记录 Knot 的输入来源
+
+    # 第二遍：追溯通过 Knot 的连接
+    # 如果 target 是 Knot，我们需要找到 Knot 的 OutputPin 连接到哪里
+    knot_to_source = {}  # knot_node → ultimate source param name
+
+    for flow in data_flows:
+        source = flow.get("source", {})
+        target = flow.get("target", {})
+
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            continue
+
+        source_node = source.get("node", "")
+        source_pin = source.get("pin", "")
+        target_node = target.get("node", "")
+        target_pin = target.get("pin", "")
+
+        # 如果目标是 Knot 的 InputPin，记录这个 Knot 的来源
+        if "Knot" in target_node and target_pin == "InputPin":
+            if "FunctionEntry" in source_node:
+                knot_to_source[target_node] = _sanitize_identifier(source_pin)
+
+    # 第三遍：构建最终查找表，包括通过 Knot 的连接
+    lookup = dict(direct_lookup)
+
+    for flow in data_flows:
+        source = flow.get("source", {})
+        target = flow.get("target", {})
+
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            continue
+
+        source_node = source.get("node", "")
+        source_pin = source.get("pin", "")
+        target_node = target.get("node", "")
+        target_pin = target.get("pin", "")
+
+        # 如果来源是 Knot，追溯其 ultimate source
+        if "Knot" in source_node and source_pin == "OutputPin":
+            ultimate_source = knot_to_source.get(source_node, "")
+            if ultimate_source:
+                key = (target_node, target_pin)
+                lookup[key] = ultimate_source
+
+    return lookup
+
+
+def _resolve_param_via_data_flow(
+    node_guid: str,
+    pin_name: str,
+    flow_lookup: Dict,
+) -> Optional[str]:
+    """尝试通过数据流查找表解析参数名。
+
+    Args:
+        node_guid: 当前 CallFunction 节点的 GUID
+        pin_name: 输入 pin 名（如 "Val"）
+        flow_lookup: 数据流查找表
+
+    Returns:
+        解析后的参数名（如 "Pitch"），如果未找到则返回 None
+    """
+    key = (node_guid, pin_name)
+    return flow_lookup.get(key)
 
 
 # ============================================================================

@@ -21,6 +21,7 @@ from uasset_read.serializers.graph._common import (
     _read_guid, _get_thread_local, _pin_trace_enabled, _record_pin_recovery,
     _read_fstring_safe, _read_ftext_value,
     validate_pin_reference_at, _recover_pin_array_count, _try_recover_to_subpins,
+    peek_valid_pin_array_count,
 )
 from uasset_read.serializers.graph.pin_types import read_ed_graph_pin_type
 

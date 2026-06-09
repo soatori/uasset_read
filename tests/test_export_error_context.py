@@ -38,11 +38,12 @@ def _make_mock_export(serial_offset=0, serial_size=100, script_serialization_sta
     return export
 
 
-def _make_mock_summary(file_version_ue5=0, package_flags=0):
+def _make_mock_summary(file_version_ue5=0, package_flags=0, legacy_file_version=-7):
     """构造一个 mock PackageFileSummary。"""
     summary = MagicMock()
     summary.file_version_ue5 = file_version_ue5
     summary.package_flags = package_flags
+    summary.legacy_file_version = legacy_file_version
     return summary
 
 
