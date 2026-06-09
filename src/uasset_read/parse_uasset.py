@@ -618,6 +618,9 @@ def _parse_package_core(
                         )
                     if not getattr(export, "parse_status", None):
                         setattr(export, "parse_status", "success")
+                    elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
+                        # 保持 asset type handler 设置的状态，不覆盖为 success
+                        pass
                 except Exception as e:
                     if not tolerant:
                         raise ParseError(f"Property parse error in {export.object_name}: {e}") from e

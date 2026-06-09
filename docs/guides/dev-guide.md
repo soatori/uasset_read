@@ -30,7 +30,7 @@ python -m pytest tests/test_pak_handling.py -v
 | **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
 | **双模式** | 稳定资产必须在 strict 和 tolerant 两种模式下都通过 |
 
-> **当前状态** (v0.4.4-dev): 1172 passed, 2 skipped, 2 xfail
+> **当前状态** (v0.4.5-dev): 1389 passed, 2 skipped, 2 xfailed
 
 ### 样本资产
 

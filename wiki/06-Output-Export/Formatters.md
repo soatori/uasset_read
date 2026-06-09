@@ -54,7 +54,7 @@ section: formatters
 
 ```json
 {
-  "status": { "status": "success" | "fail" | "error", "message": "...", "code": "..." },
+  "status": { "status": "success" | "partial" | "failed", "message": "...", "code": "..." },
   "output_version": "4.0" | "5.0",
   "summary": { "version_ue5": ..., "legacy_version": ..., "package_flags": ..., "package_name": "..." },
   "exports": [ { "index": 0, "name": "...", "class": "...", "serial_size": ..., "properties": [...], "outer_index": {...}, "super_index": {...}, "parent_class": "..." } ],
@@ -178,7 +178,7 @@ Mermaid 流程图从 `execution_chains` 解析生成，链式字符串如 `"N1->
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
-| `build_status_info` | `(result: ParseResult) -> StatusInfo` | 构建状态信息，三元分类：success（无错误）、fail（部分结果可用）、error（严重错误） |
+| `build_status_info` | `(result: ParseResult) -> StatusInfo` | 构建状态信息，三元分类：success（无错误）、partial（部分结果可用）、failed（严重错误） |
 | `build_schema_info` | `() -> Dict[str, str]` | 构建字段语义注释，仅在 `--verbose` 或 `--schema` 时输出 |
 | `resolve_fpackage_index` | `(idx: PackageIndex, result: ParseResult) -> Dict` | 解析 FPackageIndex 到对象名称，返回 `{raw, resolved, kind}` 结构 |
 

@@ -246,8 +246,10 @@ class PackageLinker:
             return
 
         # === Class Serialization Strategy Check ===
-        # 在尝试解析前，根据 class 名称检查序列化策略
-        # （与 property_parser 内部的 class_specific_skip 互补，这是更早的拦截点）
+        # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
+        # 对 OPAQUE_CLASS_PAYLOAD 类，设置初始状态但不 early return，
+        # 让 parse_properties_from_export() 调用 asset type handler 提取元数据
+        # 参见 Issue #23: class serialization strategy 不应绕过 asset type handler
         from uasset_read.parsers.class_serialization_strategy import (
             get_serialization_strategy,
             SerializationStrategy,
@@ -255,14 +257,15 @@ class PackageLinker:
         class_name = instance.object_class
         if class_name is not None:
             strategy = get_serialization_strategy(class_name)
+            exp = self._export_map[index]
             if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
-                # 完全不支持的类，直接跳过
+                # 完全不支持的类，直接跳过（无 asset handler）
                 setattr(instance, "parse_status", "skipped")
                 setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
-                # 同时设置到 export 对象上
-                exp = self._export_map[index]
                 setattr(exp, "parse_status", "skipped")
                 setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
+                # 确保 properties 至少为空列表
+                exp.properties = []
                 logger.debug(
                     "Skipping export #%d (%s): unsupported class '%s'",
                     index,
@@ -273,13 +276,14 @@ class PackageLinker:
                 self._preload_cache[index] = True
                 return
             elif strategy == SerializationStrategy.OPAQUE_CLASS_PAYLOAD:
-                # Opaque payload — 有专用 Serialize() 但不实现，标记为 opaque
+                # Opaque payload — 设置初始状态，但不 early return
+                # 让 parse_properties_from_export() 调用 asset type handler
+                # handler 可能会更新 parse_status 为 partial_metadata
                 setattr(instance, "parse_status", "opaque")
                 setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
-                # 同时设置到 export 对象上
-                exp = self._export_map[index]
                 setattr(exp, "parse_status", "opaque")
                 setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
+                # 存储 ScriptSerialization 绝对偏移用于诊断
                 if hasattr(exp, 'script_serialization_start_offset'):
                     exp._script_serialization_start_absolute = (
                         exp.serial_offset + exp.script_serialization_start_offset
@@ -288,16 +292,13 @@ class PackageLinker:
                     exp._script_serialization_end_absolute = (
                         exp.serial_offset + exp.script_serialization_end_offset
                     )
-
                 logger.debug(
                     "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
                     index,
                     instance.object_name,
                     class_name,
                 )
-                instance._preloaded = True
-                self._preload_cache[index] = True
-                return
+                # 不 return，继续进入 parse_properties_from_export()
             # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
 
         # === Offset Validation ===
