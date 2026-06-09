@@ -131,13 +131,14 @@ master 仅保留以下内容，开发辅助文件不进入 master：
 
 | 允许 | 排除 |
 |---|---|
-| `src/uasset_read/` | `tests/` |
-| `.github/workflows/` | `docs/guides/` |
-| `README.md`、`README.zh-CN.md` | `docs/release-notes/` |
-| `CLAUDE.md`、`LICENSE` | `docs/superpowers/` |
-| `pytest.ini` | `wiki/` |
-| `.claude/rules/` | `scripts/` |
-| `docs/formats/`、`docs/designs/`、`docs/reference/`、`docs/agents/` | `temp/` |
+| `src/uasset_read/` | `wiki/` |
+| `.github/workflows/` | `docs/guides/`、`docs/superpowers/`、`docs/reports/` |
+| `README.md`、`README.zh-CN.md` | `scripts/` |
+| `CLAUDE.md`、`LICENSE` | `.claude/skills/`、`.claude/workflows/`、`.claude/agents/` |
+| `pytest.ini`、`run.py` | `temp/` |
+| `.claude/rules/` | |
+| `tests/`（CI 需要） | |
+| `docs/formats/`、`docs/designs/`、`docs/reference/`、`docs/agents/`、`docs/release-notes/` | |
 
 ### 版本发布流程
 
@@ -146,13 +147,18 @@ master 仅保留以下内容，开发辅助文件不进入 master：
 ```bash
 git checkout master
 git merge develop --no-commit
-# 排除开发文件
-git reset HEAD wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/ pytest.ini
-git checkout HEAD -- wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/ pytest.ini 2>/dev/null
-git clean -fd wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/
+# 排除仅开发文件
+git reset HEAD wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/
+git checkout HEAD -- wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/ 2>/dev/null
+git clean -fd wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/
 git commit -m "Merge develop (vX.Y.Z) into master"
 git push origin master
 ```
+
+**CI 自动校验**：master 分支包含文件目录合规检查，违反白名单将被拒绝。
 
 ### 提交信息格式
 
@@ -179,12 +185,11 @@ git push origin master
 
 ### 文档结构
 
-- `docs/guides/` — 开发规范（dev-guide、testing-requirements、development-scope）
+- `wiki/` — 开发指南（独立维护）
 - `docs/formats/uasset/` — UE .uasset 格式参考（60+ 文件）
 - `docs/designs/` — 永久设计规格
 - `docs/reference/` — 技术参考资料
 - `docs/release-notes/` — 版本发布说明
-- `wiki/` — 代码指南（独立维护）
 - `temp/` — 临时文件、脚本、中间产物
 
 ### Agent skills
