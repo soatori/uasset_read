@@ -232,14 +232,24 @@ class TestLinkerIntegration:
         assert should_skip_class("StaticMesh") is False
         assert is_opaque_class("StaticMesh") is True
 
+    def test_linker_preload_continues_for_uclass_native_class(self):
+        """UCLASS_NATIVE 类在 preload 中继续正常解析（使用 UClass 原生字段 + tagged properties）。"""
+        from uasset_read.parsers.class_serialization_strategy import (
+            get_serialization_strategy,
+            SerializationStrategy,
+        )
+        # BlueprintGeneratedClass 是 UCLASS_NATIVE
+        strategy = get_serialization_strategy("BlueprintGeneratedClass")
+        assert strategy == SerializationStrategy.UCLASS_NATIVE
+
     def test_linker_preload_continues_for_tagged_class(self):
         """TAGGED_PROPERTIES_ONLY 类在 preload 中继续正常解析。"""
         from uasset_read.parsers.class_serialization_strategy import (
             get_serialization_strategy,
             SerializationStrategy,
         )
-        # BlueprintGeneratedClass 是 TAGGED_PROPERTIES_ONLY
-        strategy = get_serialization_strategy("BlueprintGeneratedClass")
+        # Function 是 TAGGED_PROPERTIES_ONLY
+        strategy = get_serialization_strategy("Function")
         assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
     def test_linker_preload_defaults_for_unknown_class(self):
