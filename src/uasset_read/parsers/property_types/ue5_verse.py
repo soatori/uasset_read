@@ -74,11 +74,45 @@ def parse_verse_value_property(tag: PropertyTag, archive: "FArchive") -> dict:
     }
 
 
-def parse_field_path_property(tag: PropertyTag, archive: "FArchive") -> dict:
-    """解析 FieldPathProperty"""
+def parse_field_path_property(
+    tag: PropertyTag,
+    archive: "FArchive",
+    name_map: Optional[list] = None,
+    summary: Optional[Any] = None,
+) -> dict:
+    """解析 FieldPathProperty（FFieldPath）。
+
+    UE 序列化格式（FieldPath.cpp:316）:
+      - Path: TArray<FName>（count + count × FName）
+      - Owner: UStruct*（对象引用，版本控制：FFortniteMainBranchObjectVersion
+        >= FFieldPathOwnerSerialization 或 FReleaseObjectVersion 同版本）
+
+    name_map 为 None 时 fallback 到 read_fstring 并标记 partial。
+    """
     from uasset_read.parsers.utils import read_validated_count
+
+    result: Dict[str, Any] = {"path": [], "owner": None}
+    parse_status = "parsed"
+
     count = read_validated_count(archive, 10_000, "FieldPath")
-    path = []
+    path: List[str] = []
     for _ in range(count):
-        path.append(archive.read_fstring())
-    return {"path": path}
+        if name_map is not None:
+            path.append(archive.read_name(name_map))
+        else:
+            # Fallback: name_map 不可用时退化为 FString 读取
+            path.append(archive.read_fstring())
+            parse_status = "partial"
+    result["path"] = path
+
+    # 读取 owner 引用（UStruct* 序列化为 FPackageIndex i32）
+    # 版本控制由调用方/summary 决定；未烘焙资产通常包含此字段
+    try:
+        owner_index = archive.read_i32()
+        result["owner"] = owner_index
+    except Exception:
+        pass  # 旧格式可能没有 owner 字段
+
+    if parse_status != "parsed":
+        result["parse_status"] = parse_status
+    return result
