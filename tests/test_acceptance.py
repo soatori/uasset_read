@@ -103,8 +103,10 @@ class TestCrossFormatConsistency:
         text_out = parse_single(str(first_person_blueprint), format="text", tolerant=True)
         json_data = json.loads(json_out)
         export_count = json_data["summary"]["total_export_count"]
-        # text 输出应提及导出数量
-        assert str(export_count) in text_out or "export" in text_out.lower()
+        # text 输出必须包含包名和导出计数
+        pkg_name = json_data["summary"]["package_name"]
+        assert pkg_name in text_out, f"text 输出缺少包名 {pkg_name}"
+        assert str(export_count) in text_out, f"text 输出缺少导出计数 {export_count}"
 
     def test_json_and_markdown_report_same_package_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
@@ -112,7 +114,11 @@ class TestCrossFormatConsistency:
         json_data = json.loads(json_out)
         pkg_name = json_data["summary"]["package_name"]
         # markdown 应包含包名或其最后一段
-        assert "BP_FirstPersonCharacter" in md_out
+        assert "BP_FirstPersonCharacter" in md_out, "markdown 输出缺少包名"
+        # markdown 应包含关键章节：Event Graph、Functions、Variables
+        assert "Event Graph" in md_out or "事件图" in md_out, "markdown 缺少 Event Graph 章节"
+        assert "Functions" in md_out or "函数" in md_out, "markdown 缺少 Functions 章节"
+        assert "Variables" in md_out or "变量" in md_out, "markdown 缺少 Variables 章节"
 
     def test_json_and_cpp_skeleton_share_class_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
@@ -147,11 +153,13 @@ class TestBlueprintCppCorrespondence:
         bp_out = parse_single(str(first_person_blueprint), format="blueprint_text", tolerant=True)
         json_data = json.loads(json_out)
         bp = json_data.get("blueprint", {})
-        # 至少有一个函数名应出现在 blueprint_text 中
-        func_names = [f["name"] for f in bp.get("functions", [])]
+        # 验证所有有实现（非 graph_only）的函数都出现在 blueprint_text 中
+        func_names = [f["name"] for f in bp.get("functions", [])
+                      if f.get("implementation_status") != "graph_only"]
         if func_names:
-            assert any(name in bp_out for name in func_names), (
-                f"blueprint_text 未引用任何 JSON 函数: {func_names[:5]}"
+            missing_funcs = [name for name in func_names if name not in bp_out]
+            assert not missing_funcs, (
+                f"blueprint_text 缺少函数: {missing_funcs[:5]}"
             )
 
     def test_blueprint_text_references_json_events(self, first_person_blueprint):
@@ -159,11 +167,12 @@ class TestBlueprintCppCorrespondence:
         bp_out = parse_single(str(first_person_blueprint), format="blueprint_text", tolerant=True)
         json_data = json.loads(json_out)
         bp = json_data.get("blueprint", {})
+        # 验证所有事件都出现在 blueprint_text 中
         event_names = [e["name"] for e in bp.get("events", [])]
-        # 如果有事件，blueprint_text 应提及至少一个
         if event_names:
-            assert any(name in bp_out for name in event_names), (
-                f"blueprint_text 未引用任何 JSON 事件: {event_names[:5]}"
+            missing_events = [name for name in event_names if name not in bp_out]
+            assert not missing_events, (
+                f"blueprint_text 缺少事件: {missing_events[:5]}"
             )
 
     def test_cpp_skeleton_has_class_declaration(self, first_person_blueprint):
@@ -178,11 +187,12 @@ class TestBlueprintCppCorrespondence:
         cpp_out = parse_single(str(first_person_blueprint), format="cpp_skeleton", tolerant=True)
         json_data = json.loads(json_out)
         bp = json_data.get("blueprint", {})
-        # 至少一个组件名应出现在 C++ 骨架中
-        comp_names = [c["name"] for c in bp.get("components", [])]
-        if comp_names:
-            assert any(name in cpp_out for name in comp_names), (
-                f"C++ 骨架未声明组件 {comp_names[:5]}"
+        # 验证所有组件类型都出现在 C++ 骨架中（JSON 名称可能含后缀，如 CameraComponent_0__CCE3C0B4）
+        comp_classes = [c["class"] for c in bp.get("components", [])]
+        if comp_classes:
+            missing_comps = [cls for cls in comp_classes if cls not in cpp_out]
+            assert not missing_comps, (
+                f"C++ 骨架缺少组件类型: {missing_comps[:5]}"
             )
 
 
@@ -239,7 +249,8 @@ class TestKnownGapsDocumented:
         result = parse_uasset_with_linker(str(path), tolerant=True)
         # UE4 legacy_file_version=-3 的资产应产生警告或非完全成功
         # 如果未来支持 UE4，此测试应更新
-        assert result.warnings or result.errors or not result.is_success or True  # 当前 xfail 覆盖
+        assert result.warnings or result.errors or not result.is_success, \
+            "UE4 遗留资产应产生警告或错误，或解析不完全成功"
 
     def test_all_formats_listed(self):
         """应有 8 种已注册格式。"""
