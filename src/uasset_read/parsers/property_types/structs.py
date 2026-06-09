@@ -92,7 +92,7 @@ _LWC_TYPE_MAP: dict[str, tuple[int, int]] = {
     "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
     "Matrix":        (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (48, 48),   # FQuat + FVector + FVector（Transform 始终混用）
+    "Transform":     (48, 96),   # FQuat(16/32) + FVector(12/24) + FVector(12/24) + padding(8/16)
 }
 
 # LWC 双精度类型名 → 对应的基础类型名
@@ -588,11 +588,22 @@ def parse_struct_property(
             "Center": {"X": cx, "Y": cy, "Z": cz},
         })
 
-    # Transform: UE5 LWC uses double for FVector components
+    # Transform: UE5 LWC uses double for FVector components (LWC_VERSION = 1004)
     if struct_type == "Transform":
-        translation_x = archive.read_f64()
-        translation_y = archive.read_f64()
-        translation_z = archive.read_f64()
+        # Check LWC version: use double only when file_version_ue5 >= 1004
+        is_lwc = (version_container is not None
+                  and version_container.is_ue5
+                  and version_container.file_version_ue5 >= 1004)
+
+        if is_lwc:
+            translation_x = archive.read_f64()
+            translation_y = archive.read_f64()
+            translation_z = archive.read_f64()
+        else:
+            translation_x = archive.read_f32()
+            translation_y = archive.read_f32()
+            translation_z = archive.read_f32()
+
         rot_x = archive.read_f32()
         rot_y = archive.read_f32()
         rot_z = archive.read_f32()

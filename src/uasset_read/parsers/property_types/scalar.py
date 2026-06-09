@@ -91,7 +91,7 @@ _LWC_TYPE_MAP: dict[str, tuple[int, int]] = {
     "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
     "Matrix":        (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (48, 48),   # FQuat + FVector + FVector（Transform 始终混用）
+    "Transform":     (48, 96),   # FQuat(16/32) + FVector(12/24) + FVector(12/24) + padding(8/16)
 }
 
 # LWC 双精度类型名 → 对应的基础类型名
