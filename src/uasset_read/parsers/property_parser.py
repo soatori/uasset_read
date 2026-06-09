@@ -372,13 +372,14 @@ def parse_properties_from_export(
     # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
     # 未知位应降级为诊断信息，不要盲跳
     #
-    # UE 源码 Class.cpp:1624-1627: 只有 UClass 派生类才序列化此 header：
+    # UE 源码 Class.cpp:1624-1628:
     #   const bool bIsUClass = IsA<UClass>();
-    #   if (bIsUClass && UEVer() >= PROPERTY_TAG_EXTENSION) { ... }
-    # UStruct 子类（Function, UserDefinedStruct 等）不包含此 header。
+    #   if (bIsUClass && UnderlyingArchive.UEVer() >= PROPERTY_TAG_EXTENSION_AND_OVERRIDABLE_SERIALIZATION)
+    # D-02 字节仅在 UClass 对象中序列化，非 UClass 的 UStruct 不包含此 header。
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         from uasset_read.parsers.class_serialization_strategy import is_uclass_derived
-        if is_uclass_derived(_skip_class_name):
+        if _skip_class_name is not None and is_uclass_derived(_skip_class_name):
+            # UClass 派生类：正常读取 SerializationControlExtensions header
             control_offset = archive.tell()
             serialization_control = archive.read_u8()
             overridden_operation = None
@@ -399,9 +400,16 @@ def parse_properties_from_export(
                 "overridden_operation": overridden_operation,
                 "offset": control_offset,
             }
-        elif _skip_class_name is not None:
+        elif _skip_class_name is None:
+            # 类名无法解析：记录诊断，不消费字节（避免偏移错位）
             logger.debug(
-                "D-02 跳过: export '%s' class '%s' 非 UClass 派生，不读取 SerializationControlExtensions",
+                "D-02: export '%s' 类名未知，跳过 SerializationControlExtensions 读取",
+                getattr(export, "object_name", ""),
+            )
+        else:
+            # 非 UClass 派生类（Function、EdGraph 等）：按 UE 源码不序列化 D-02 字节
+            logger.debug(
+                "D-02: export '%s' class '%s' 非 UClass，跳过 SerializationControlExtensions",
                 getattr(export, "object_name", ""), _skip_class_name,
             )
 

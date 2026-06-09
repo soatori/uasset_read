@@ -118,6 +118,9 @@ def extract_bytecode_bytes(
     archive.seek(script_start)
 
     # T-62-02: SerializationControlExtensions header
+    # UE Class.cpp:1624-1628: 仅 UClass 对象序列化此 header，
+    # 但 bytecodes 位于 script_serial_region 末尾，偏移已由 script_serialization_start_offset 确定，
+    # 此处需跳过已写入的 D-02 字节以对齐 PropertyTag 序列化位置
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         ctrl = archive.read_u8()
         if ctrl & 0x02:

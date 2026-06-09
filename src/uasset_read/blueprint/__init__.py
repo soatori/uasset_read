@@ -20,6 +20,7 @@ from uasset_read.blueprint.transform_parser import (
 )
 from uasset_read.blueprint.component_extractor import (
     extract_components,
+    extract_scs_tree,
 )
 from uasset_read.blueprint.struct_extractor import (
     StructFieldIR,
@@ -48,6 +49,7 @@ __all__ = [
     "parse_scale_value",
     "format_transform_value",
     "extract_components",
+    "extract_scs_tree",
     # 结构体提取
     "StructFieldIR",
     "StructIR",
