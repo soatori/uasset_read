@@ -101,7 +101,7 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
     "Matrix":        (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (48, 48),   # FQuat + FVector + FVector（Transform 始终混用）
+    "Transform":     (48, 96),   # FQuat(16/32) + FVector(12/24) + FVector(12/24) + padding(8/16)
 }
 
 # LWC 双精度类型名 → 对应的基础类型名
@@ -788,21 +788,43 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             "Center": {"X": cx, "Y": cy, "Z": cz},
         })
 
-    # Transform: UE5 LWC uses double for FVector components
+    # Transform: UE5 LWC uses double for all components (LWC_VERSION = 1004)
+    # Pre-LWC: Quat(16) + Vector(12) + Vector(12) + padding(8) = 48 bytes
+    # LWC: Quat(32) + Vector(24) + Vector(24) + padding(16) = 96 bytes
     if struct_type == "Transform":
-        translation_x = archive.read_f64()
-        translation_y = archive.read_f64()
-        translation_z = archive.read_f64()
-        rot_x = archive.read_f32()
-        rot_y = archive.read_f32()
-        rot_z = archive.read_f32()
-        rot_w = archive.read_f32()
-        scale_x = archive.read_f32()
-        scale_y = archive.read_f32()
-        scale_z = archive.read_f32()
+        # Check LWC version: use double only when file_version_ue5 >= 1004
+        is_lwc = (version_container is not None
+                  and version_container.is_ue5
+                  and version_container.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES)
+
+        if is_lwc:
+            # LWC mode: all components are double precision
+            rot_x = archive.read_f64()
+            rot_y = archive.read_f64()
+            rot_z = archive.read_f64()
+            rot_w = archive.read_f64()
+            translation_x = archive.read_f64()
+            translation_y = archive.read_f64()
+            translation_z = archive.read_f64()
+            scale_x = archive.read_f64()
+            scale_y = archive.read_f64()
+            scale_z = archive.read_f64()
+        else:
+            # Pre-LWC mode: all components are single precision
+            rot_x = archive.read_f32()
+            rot_y = archive.read_f32()
+            rot_z = archive.read_f32()
+            rot_w = archive.read_f32()
+            translation_x = archive.read_f32()
+            translation_y = archive.read_f32()
+            translation_z = archive.read_f32()
+            scale_x = archive.read_f32()
+            scale_y = archive.read_f32()
+            scale_z = archive.read_f32()
+
         return StructValue(struct_type="Transform", fields={
-            "Translation": {"X": translation_x, "Y": translation_y, "Z": translation_z},
             "Rotation": {"X": rot_x, "Y": rot_y, "Z": rot_z, "W": rot_w},
+            "Translation": {"X": translation_x, "Y": translation_y, "Z": translation_z},
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
@@ -1049,26 +1071,34 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # Multicast delegate type parsers
 # ============================================================================
 
-def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
-    """解析 MulticastDelegateProperty"""
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map=None) -> list:
+    """解析 MulticastDelegateProperty（TMulticastScriptDelegate）。
+
+    UE 序列化格式：Count (int32) + Count × (Object FPackageIndex + FunctionName FName)
+    与 TScriptDelegate 一致，FunctionName 为 FName 而非 FString。
+    """
     from uasset_read.parsers.utils import read_validated_count
     count = read_validated_count(archive, 10_000, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
-        func_name = archive.read_fstring()
+        if name_map is not None:
+            func_name = archive.read_name(name_map)
+        else:
+            # Fallback: name_map 不可用时退化为 FString 读取
+            func_name = archive.read_fstring()
         delegates.append({"object": obj_index, "function": func_name})
     return delegates
 
 
-def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive, name_map=None) -> list:
     """解析 MulticastInlineDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
 
 
-def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive, name_map=None) -> list:
     """解析 MulticastSparseDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
 
 
 # ============================================================================
