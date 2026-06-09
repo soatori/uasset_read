@@ -72,6 +72,11 @@ class CppSkeletonRenderer(IRenderer):
         from uasset_read.cpp_gen.formatters import (
             format_cpp_header,
             format_full_cpp_implementation,
+            format_cpp_interfaces,
+            format_cpp_enums,
+            format_cpp_structs,
+            format_cpp_delegates,
+            format_cpp_replication,
         )
 
         try:
@@ -82,10 +87,39 @@ class CppSkeletonRenderer(IRenderer):
 
         sections: list[str] = []
 
+        # 对称语义输出：接口、枚举、结构体、委托（放在类定义之前）
+        blueprint = getattr(result, 'blueprint', None)
+        if blueprint:
+            # 接口
+            interfaces_text = format_cpp_interfaces(getattr(blueprint, 'interfaces', []))
+            if interfaces_text.strip():
+                sections.append(interfaces_text)
+
+            # 枚举
+            enums_text = format_cpp_enums(getattr(blueprint, 'enums', []))
+            if enums_text.strip():
+                sections.append(enums_text)
+
+            # 结构体
+            structs_text = format_cpp_structs(getattr(blueprint, 'structs', []))
+            if structs_text.strip():
+                sections.append(structs_text)
+
+            # 委托
+            delegates_text = format_cpp_delegates(getattr(blueprint, 'delegates', []))
+            if delegates_text.strip():
+                sections.append(delegates_text)
+
         # .h 头文件
         header_text = format_cpp_header(cpp_ir)
         sections.append(f"// {cpp_ir.name}.h")
         sections.append(header_text)
+
+        # 对称语义输出：复制（放在类声明之后）
+        if blueprint:
+            replication_text = format_cpp_replication(getattr(blueprint, 'replication', None))
+            if replication_text.strip():
+                sections.append(replication_text)
 
         # .cpp 实现文件（含函数体 + 构造函数）
         # format_full_cpp_implementation() 内部已输出 .cpp 标题，不再重复
@@ -103,6 +137,96 @@ class CppSkeletonRenderer(IRenderer):
     def _render_simple_header(self, ir: PackageIR) -> str:
         """从 PackageIR 生成简单的 .h 头文件（无函数体，回退模式）。"""
         lines: list[str] = []
+
+        # 对称语义输出：接口、枚举、结构体、委托（放在类定义之前）
+        if ir.blueprint:
+            # 接口
+            if ir.blueprint.interfaces:
+                lines.append("// Blueprint Interfaces")
+                for iface in ir.blueprint.interfaces:
+                    cpp_name = iface.cpp_type or iface.name
+                    if not cpp_name:
+                        continue
+                    lines.append(f"UINTERFACE(Blueprintable)")
+                    lines.append(f"class {cpp_name} : public UInterface")
+                    lines.append("{")
+                    lines.append("    GENERATED_BODY()")
+                    lines.append("};")
+                    lines.append("")
+
+                    # 对应的 I 前缀类
+                    i_name = cpp_name if cpp_name.startswith('I') else f"I{cpp_name}"
+                    lines.append(f"class {i_name}")
+                    lines.append("{")
+                    lines.append("    GENERATED_BODY()")
+                    lines.append("")
+                    lines.append("public:")
+                    lines.append("    // Add interface functions here")
+                    lines.append("};")
+                    lines.append("")
+
+            # 枚举
+            if ir.blueprint.enums:
+                lines.append("// Blueprint Enums")
+                for enum in ir.blueprint.enums:
+                    cpp_name = enum.cpp_type or enum.name
+                    if not cpp_name:
+                        continue
+                    lines.append(f"UENUM(BlueprintType)")
+                    lines.append(f"enum class {cpp_name} : uint8")
+                    lines.append("{")
+                    if enum.values:
+                        for i, val in enumerate(enum.values):
+                            comma = "," if i < len(enum.values) - 1 else ""
+                            if val.value is not None:
+                                lines.append(f"    {val.name} = {val.value}{comma}")
+                            else:
+                                lines.append(f"    {val.name}{comma}")
+                    else:
+                        lines.append("    UMETA(DisplayName = \"Default\")")
+                    lines.append("};")
+                    lines.append("")
+
+            # 结构体
+            if ir.blueprint.structs:
+                lines.append("// Blueprint Structs")
+                for struct in ir.blueprint.structs:
+                    cpp_name = struct.cpp_type or struct.name
+                    if not cpp_name:
+                        continue
+                    lines.append(f"USTRUCT(BlueprintType)")
+                    lines.append(f"struct {cpp_name}")
+                    lines.append("{")
+                    lines.append("    GENERATED_BODY()")
+                    lines.append("")
+                    if struct.fields:
+                        for field_item in struct.fields:
+                            if field_item.cpp_type and field_item.name:
+                                lines.append(f"    UPROPERTY(BlueprintReadWrite, EditAnywhere)")
+                                field_decl = f"    {field_item.cpp_type} {field_item.name}"
+                                if field_item.default_value:
+                                    field_decl += f" = {field_item.default_value}"
+                                field_decl += ";"
+                                lines.append(field_decl)
+                                lines.append("")
+                    else:
+                        lines.append("    // Add fields here")
+                        lines.append("")
+                    lines.append("};")
+                    lines.append("")
+
+            # 委托
+            if ir.blueprint.delegates:
+                lines.append("// Blueprint Delegates")
+                for delegate in ir.blueprint.delegates:
+                    cpp_name = delegate.cpp_type or delegate.name
+                    if not cpp_name:
+                        continue
+                    if delegate.is_multicast:
+                        lines.append(f"DECLARE_DYNAMIC_MULTICAST_DELEGATE({cpp_name});")
+                    else:
+                        lines.append(f"DECLARE_DYNAMIC_DELEGATE({cpp_name});")
+                lines.append("")
 
         # 从包名提取类名
         class_name = ir.header.package_name.split("/")[-1]
@@ -179,6 +303,27 @@ class CppSkeletonRenderer(IRenderer):
 
         lines.append("};")
         lines.append("")
+
+        # 对称语义输出：复制（放在类声明之后）
+        if ir.blueprint and ir.blueprint.replication:
+            replication = ir.blueprint.replication
+            if replication.replicated_vars or replication.on_rep_functions:
+                lines.append("// Replication")
+                lines.append("")
+                lines.append("virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;")
+                lines.append("")
+                if replication.replicated_vars:
+                    lines.append("// Replicated Properties:")
+                    for var in replication.replicated_vars:
+                        comment = f"// DOREPLIFETIME({var.name})"
+                        if var.on_rep_function:
+                            comment += f" with OnRep: {var.on_rep_function}"
+                        lines.append(comment)
+                    lines.append("")
+                for on_rep_func in replication.on_rep_functions:
+                    lines.append(f"UFUNCTION()")
+                    lines.append(f"void {on_rep_func}();")
+                    lines.append("")
 
         return "\n".join(lines)
 
