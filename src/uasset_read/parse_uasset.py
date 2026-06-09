@@ -551,6 +551,17 @@ def _parse_package_core(
         if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
             result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
 
+        # 读取 SoftObjectPathList（UE5.7+ 用于索引化 SoftObjectProperty 解析）
+        if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
+            result.soft_object_path_list = read_soft_object_paths(
+                archive, result.summary, result.name_map
+            )
+        else:
+            result.soft_object_path_list = []
+
+        # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
+        setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
+
         # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
         linker: Optional["PackageLinker"] = None
         try:

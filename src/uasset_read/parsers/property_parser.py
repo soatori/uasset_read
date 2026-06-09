@@ -248,8 +248,12 @@ def parse_property_value(
                          "VerseFunctionProperty", "VerseDynamicProperty",
                          "AnsiStrProperty", "GuidProperty"):
             return handler(tag, archive)
-        elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
+        elif tag.type in ("NameProperty", "DelegateProperty"):
             return handler(tag, archive, name_map)
+        elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
+            # These need soft_object_path_list for UE5.7+ index-based resolution
+            soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
+            return handler(tag, archive, name_map, soft_path_list)
         elif tag.type in ("ArrayProperty",):
             return handler(tag, archive, name_map, export_map, summary, depth)
         elif tag.type in ("StructProperty",):
