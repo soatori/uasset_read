@@ -73,6 +73,7 @@ class ExportRawIR:
     保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
     """
     class_index: int = 0
+    class_name: str = ""  # 语义解析：class_index 解析后的类名（如 "BlueprintGeneratedClass /Script/Engine.WidgetTree"）
     super_index: int = 0
     outer_index: int = 0
     template_index: int = 0
@@ -236,6 +237,7 @@ class BlueprintIR:
     structs: list[StructIR] = field(default_factory=list)
     delegates: list[DelegateIR] = field(default_factory=list)
     replication: ReplicationIR | None = None
+    scs_tree: list[dict] = field(default_factory=list)
 
 
 @dataclass

@@ -205,9 +205,20 @@ def _post_process(
 
     # Component property extraction
     try:
-        from uasset_read.blueprint.component_extractor import extract_components
+        from uasset_read.blueprint.component_extractor import extract_components, extract_scs_tree
         if hasattr(result, 'components'):
             result.components = extract_components(export_map, import_map)
+        # SCS 组件树提取 (Issue #70)
+        try:
+            scs_tree = extract_scs_tree(
+                export_map, import_map,
+                archive=archive, summary=summary, name_map=name_map,
+            )
+            if scs_tree and hasattr(result, 'metadata'):
+                result.metadata["scs_tree"] = scs_tree
+        except Exception as e:
+            if hasattr(result, 'warnings'):
+                result.warnings.append(f"SCS tree extraction error: {e}")
     except ImportError:
         pass  # component_extractor module does not exist yet
     except Exception as e:

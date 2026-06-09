@@ -306,7 +306,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     asset_type_data = getattr(export, "_asset_type_data", None)
 
     # 构建 UE 原始导出表字段
-    raw = _build_export_raw_ir(export)
+    raw = _build_export_raw_ir(export, result)
 
     return ExportIR(
         index=idx,
@@ -334,7 +334,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     )
 
 
-def _build_export_raw_ir(export) -> ExportRawIR:
+def _build_export_raw_ir(export, result: ParseResult = None) -> ExportRawIR:
     """从 ObjectExport 构建 UE 原始导出表字段。"""
 
     def _pkg_index_raw(pi) -> int:
@@ -343,8 +343,17 @@ def _build_export_raw_ir(export) -> ExportRawIR:
             return 0
         return getattr(pi, "index", 0)
 
+    # 解析 class_index 为可读类名（FPackageIndex 语义解析，#42）
+    class_name = ""
+    class_index_obj = getattr(export, "class_index", None)
+    if class_index_obj is not None and result is not None:
+        resolved = _resolve_package_index(result, class_index_obj)
+        if resolved:
+            class_name = resolved
+
     return ExportRawIR(
         class_index=_pkg_index_raw(getattr(export, "class_index", None)),
+        class_name=class_name,
         super_index=_pkg_index_raw(getattr(export, "super_index", None)),
         outer_index=_pkg_index_raw(getattr(export, "outer_index", None)),
         template_index=_pkg_index_raw(getattr(export, "template_index", None)),
@@ -621,6 +630,7 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
         structs=structs,
         delegates=delegates,
         replication=replication,
+        scs_tree=list(getattr(result, "metadata", {}).get("scs_tree", [])),
     )
 
 
