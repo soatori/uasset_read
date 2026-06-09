@@ -153,6 +153,40 @@ def test_for_loop_golden_structure():
     assert "Pin: Completed (Exec)" in golden
 
 
+def test_enhanced_input_action_golden_structure():
+    """验证 enhanced_input_action.txt golden fixture 结构。"""
+    golden = load_golden("enhanced_input_action.txt")
+    assert 'Class="/Script/BlueprintGraph.K2Node_Event"' in golden
+    assert "NodeGuid=11111111111111111111111111111111" in golden
+    assert "Pin: then (Exec)" in golden
+    assert "EnhancedInputActionValue" in golden
+
+
+def test_interface_call_golden_structure():
+    """验证 interface_call.txt golden fixture 结构。"""
+    golden = load_golden("interface_call.txt")
+    assert 'Class="/Script/BlueprintGraph.K2Node_CallInterfaceFunction"' in golden
+    assert "NodeGuid=33333333333333333333333333333333" in golden
+    assert "Pin: ReturnValue (Float)" in golden
+
+
+def test_macro_golden_structure():
+    """验证 macro.txt golden fixture 结构。"""
+    golden = load_golden("macro.txt")
+    assert 'Class="/Script/BlueprintGraph.K2Node_MacroInstance"' in golden
+    assert 'MacroGraphName="ForEachLoop"' in golden
+    assert "Pin: ArrayElement (Object)" in golden
+    assert "Pin: ArrayIndex (Int)" in golden
+
+
+def test_delegate_golden_structure():
+    """验证 delegate.txt golden fixture 结构。"""
+    golden = load_golden("delegate.txt")
+    assert 'Class="/Script/BlueprintGraph.K2Node_Event"' in golden
+    assert "DelegateOutput" in golden
+    assert 'PinCategory="delegate"' in golden
+
+
 # ── 渲染器输出验证 ───────────────────────────────────────────────────
 
 
