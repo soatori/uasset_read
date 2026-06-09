@@ -1,0 +1,5 @@
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\__ExternalActors__\Maps\L_Expanse_Blockout\F3\H2\COBV80K27VTOD70ZV3I19.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\__ExternalActors__\Maps\L_Expanse\44\PM\40P6TFXY4YT9E4PH17JWB.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\__ExternalActors__\Maps\L_Expanse\00\KH\ASE4TT6986XR2PGNEYY0E.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\__ExternalActors__\Maps\L_Convolution_Blockout\D\47\998IE9FU2GLAM7AINPL8WM.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\TopDownArena\Content\Maps\L_TopDown_LocalMultiplayer.umap
