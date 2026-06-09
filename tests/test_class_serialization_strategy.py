@@ -138,10 +138,15 @@ class TestShouldSkipClass:
         assert should_skip_class("StaticMesh") is False
         assert should_skip_class("Texture2D") is False
 
+    def test_uclass_native_class_returns_false(self):
+        """UClass native 类返回 False。"""
+        assert should_skip_class("BlueprintGeneratedClass") is False
+        assert should_skip_class("WidgetBlueprintGeneratedClass") is False
+
     def test_tagged_class_returns_false(self):
         """Tagged properties 类返回 False。"""
-        assert should_skip_class("BlueprintGeneratedClass") is False
         assert should_skip_class("Function") is False
+        assert should_skip_class("UserDefinedStruct") is False
 
     def test_unknown_class_returns_false(self):
         """未知类返回 False（默认尝试解析）。"""
@@ -164,10 +169,15 @@ class TestIsOpaqueClass:
         assert is_opaque_class("NiagaraGraph") is False
         assert is_opaque_class("NiagaraScript") is False
 
+    def test_uclass_native_class_returns_false(self):
+        """UClass native 类返回 False。"""
+        assert is_opaque_class("BlueprintGeneratedClass") is False
+        assert is_opaque_class("WidgetBlueprintGeneratedClass") is False
+
     def test_tagged_class_returns_false(self):
         """Tagged properties 类返回 False。"""
-        assert is_opaque_class("BlueprintGeneratedClass") is False
         assert is_opaque_class("Function") is False
+        assert is_opaque_class("UserDefinedStruct") is False
 
     def test_unknown_class_returns_false(self):
         """未知类返回 False。"""
@@ -179,6 +189,8 @@ class TestStrategyConsistency:
 
     def test_no_overlap_between_categories(self):
         """三个类别无重叠。"""
+        uclass_native = {cls for cls, s in CLASS_STRATEGY_TABLE.items()
+                         if s == SerializationStrategy.UCLASS_NATIVE}
         tagged = {cls for cls, s in CLASS_STRATEGY_TABLE.items()
                   if s == SerializationStrategy.TAGGED_PROPERTIES_ONLY}
         opaque = {cls for cls, s in CLASS_STRATEGY_TABLE.items()
@@ -187,6 +199,9 @@ class TestStrategyConsistency:
                 if s == SerializationStrategy.SKIP_UNSUPPORTED}
 
         # 无交集
+        assert len(uclass_native & tagged) == 0
+        assert len(uclass_native & opaque) == 0
+        assert len(uclass_native & skip) == 0
         assert len(tagged & opaque) == 0
         assert len(tagged & skip) == 0
         assert len(opaque & skip) == 0
@@ -324,8 +339,8 @@ class TestUclassDerivedSetConsistency:
         for cls in _UCLASS_DERIVED_CLASSES:
             assert not is_opaque_class(cls), f"{cls} 不应同时在 UCLASS_DERIVED 和 opaque 中"
 
-    def test_all_tagged_uclass_derived_are_in_uclass_set(self):
-        """Tagged properties 中的 UClass 派生类在 UCLASS_DERIVED_CLASSES 中。"""
+    def test_all_uclass_native_are_in_uclass_set(self):
+        """UCLASS_NATIVE 类在 UCLASS_DERIVED_CLASSES 中。"""
         # BlueprintGeneratedClass 和 WidgetBlueprintGeneratedClass 是 UClass 派生类
         assert "BlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES
         assert "WidgetBlueprintGeneratedClass" in _UCLASS_DERIVED_CLASSES
