@@ -1110,14 +1110,40 @@ def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
-def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
-    """解析 FieldPathProperty"""
+def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map=None, summary=None) -> dict:
+    """解析 FieldPathProperty（FFieldPath）。
+
+    UE 序列化格式（FieldPath.cpp:316）:
+      - Path: TArray<FName>（count + count × FName）
+      - Owner: UStruct*（对象引用，版本控制）
+
+    name_map 为 None 时 fallback 到 read_fstring 并标记 partial。
+    """
     from uasset_read.parsers.utils import read_validated_count
+
+    result = {"path": [], "owner": None}
+    parse_status = "parsed"
+
     count = read_validated_count(archive, 10_000, "FieldPath")
     path = []
     for _ in range(count):
-        path.append(archive.read_fstring())
-    return {"path": path}
+        if name_map is not None:
+            path.append(archive.read_name(name_map))
+        else:
+            path.append(archive.read_fstring())
+            parse_status = "partial"
+    result["path"] = path
+
+    # 读取 owner 引用（UStruct* 序列化为 FPackageIndex i32）
+    try:
+        owner_index = archive.read_i32()
+        result["owner"] = owner_index
+    except Exception:
+        pass
+
+    if parse_status != "parsed":
+        result["parse_status"] = parse_status
+    return result
 
 
 def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
