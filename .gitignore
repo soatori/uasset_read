@@ -30,8 +30,10 @@ output/
 debug/
 reports/
 /json
-# Session-local tool config
-.claude/
+# Session-local tool config (but track skills)
+.claude/*
+!.claude/skills/
+!.claude/rules/
 .qwen/
 .agents/
 .playwright-mcp/
