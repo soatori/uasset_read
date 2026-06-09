@@ -70,6 +70,7 @@ class PropertyIR:
     value: Any
     array_index: int
     guid: str | None
+    tag_info: dict | None = None
 
 
 @dataclass
