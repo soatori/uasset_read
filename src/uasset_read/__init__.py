@@ -175,7 +175,7 @@ from .blueprint import (
 # 图解析模块
 from .graph import (
     extract_blueprint_graphs, build_execution_flow_entries,
-    build_execution_flows, build_data_flows, build_connections_map,
+    build_data_flows, build_connections_map,
     build_graphs_summary, format_graphs_json, build_blueprint_node_index,
     build_execution_chains, format_pin_ref, _derive_node_name,
     write_pin_trace_report, is_function_graph, build_function_graphs,
@@ -260,24 +260,13 @@ from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
 
 # ============================================================================
-# 遗留 API（已弃用）
+# 辅助 API
 # ============================================================================
 
-# 格式化函数（遗留 — 推荐使用 parse_single()/parse_batch() 统一入口）
+# 格式化辅助函数
 from .formatters import (
-    format_json_full, format_json_summary, format_exports_list,
-    format_properties_list, format_blueprint_dict,
-    format_text_full, format_text_summary, format_markdown,
-    format_blueprint_translation_text, format_blueprint_ue_text,
     build_status_info, build_schema_info, resolve_fpackage_index,
 )
-
-# Bulk Data（已弃用）
-from .bulk import FBulkDataHeader, BulkDataFlags
-
-# UObject 类型体系（已弃用）
-from .objects import UObject, ObjectTypeRegistry
-from .objects.exports import UStaticMesh, USkeletalMesh, UTexture2D, UMaterial, UMaterialInstance
 
 # ============================================================================
 # 公共 API 导出控制 — 仅稳定根 API
