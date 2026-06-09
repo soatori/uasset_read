@@ -113,6 +113,55 @@ serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
 - **tolerant**（默认）：遇错继续，标记 partial
 - **轻量解析**：export_count > 300 时自动跳过完整蓝图解析
 
+## 分支管理与提交规范
+
+### 分支策略
+
+| 分支 | 用途 | 说明 |
+|---|---|---|
+| `develop` | **日常开发**（默认工作分支） | 所有开发任务基于此分支，包含完整文件（src、tests、docs、wiki、scripts） |
+| `master` | **发布分支** | 仅包含发布内容（src、CI、README、CLAUDE.md、pytest.ini），定期从 develop 同步 |
+| `wiki/master` | Wiki 专用 | 独立维护，不纳入主分支 |
+
+**默认工作分支为 `develop`**，所有功能开发、Bug 修复、测试编写均在 develop 上进行。
+
+### master 分支文件白名单
+
+master 仅保留以下内容，开发辅助文件不进入 master：
+
+| 允许 | 排除 |
+|---|---|
+| `src/uasset_read/` | `tests/` |
+| `.github/workflows/` | `docs/guides/` |
+| `README.md`、`README.zh-CN.md` | `docs/release-notes/` |
+| `CLAUDE.md`、`LICENSE` | `docs/superpowers/` |
+| `pytest.ini` | `wiki/` |
+| `.claude/rules/` | `scripts/` |
+| `docs/formats/`、`docs/designs/`、`docs/reference/`、`docs/agents/` | `temp/` |
+
+### 版本发布流程
+
+定期版本发布时，从 develop 合并到 master：
+
+```bash
+git checkout master
+git merge develop --no-commit
+# 排除开发文件
+git reset HEAD wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/ pytest.ini
+git checkout HEAD -- wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/ pytest.ini 2>/dev/null
+git clean -fd wiki/ tests/ docs/guides/ docs/release-notes/ docs/superpowers/ scripts/
+git commit -m "Merge develop (vX.Y.Z) into master"
+git push origin master
+```
+
+### 提交信息格式
+
+```
+<type>: <简要描述>
+```
+
+类型：`feat`、`fix`、`refactor`、`test`、`docs`、`chore`、`release`
+
 ## 关键约束
 
 见 [.claude/rules/constraints.md](.claude/rules/constraints.md)。核心：
