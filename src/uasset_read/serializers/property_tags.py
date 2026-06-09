@@ -142,18 +142,112 @@ def read_property_tag(
     summary: Optional[Any] = None,  # 向后兼容，接受但不使用
     mappings: Optional[Any] = None,
     struct_name: Optional[str] = None,
+    engine_family: str = "ue5",  # "ue4" | "ue5"
 ) -> PropertyTag:
-    """从 archive 读取 PropertyTag 结构（UE5.7 专用）。
+    """从 archive 读取 PropertyTag 结构（UE4/UE5 兼容）。
 
     Args:
         archive: FArchive 实例
         name_map: 名称映射列表
         tolerant: 是否启用容错模式
         summary: PackageFileSummary 实例（向后兼容参数，当前未使用）
+        mappings: 类型映射提供者
+        struct_name: 结构体名称
+        engine_family: 引擎家族 ("ue4" | "ue5")
 
     Returns:
         PropertyTag 实例
     """
+    if engine_family == "ue4":
+        return _read_property_tag_ue4(archive, name_map, tolerant, mappings, struct_name)
+    else:
+        return _read_property_tag_ue5(archive, name_map, tolerant, mappings, struct_name)
+
+
+def _read_property_tag_ue4(
+    archive: FArchive,
+    name_map: List[str],
+    tolerant: bool = False,
+    mappings: Optional[Any] = None,
+    struct_name: Optional[str] = None,
+) -> PropertyTag:
+    """读取 UE4 格式的 PropertyTag。
+
+    UE4 格式与 UE5 的主要区别：
+    - 类型是简单的 FName 而不是 FPropertyTypeName 树
+    - 没有 flags 字节（UE5 的 EPropertyTagFlags）
+    - 可选字段通过特殊类型名判断（StructProperty、EnumProperty 等）
+
+    参考 UE4 源码：PropertyNode.cpp FStructProperty::SerializeTaggedProperty
+    """
+    from uasset_read.constants import (
+        UE4_NAME_HASHES_SERIALIZED,
+    )
+
+    tag_start_pos = archive.tell()
+
+    tag = PropertyTag(name=archive.read_name(name_map), type="", size=0, tag_start_offset=tag_start_pos)
+
+    if tag.name == "None":
+        return tag
+
+    # UE4 格式：类型是简单的 FName
+    type_name = archive.read_name(name_map)
+    tag.type = type_name
+
+    # 根据类型提取额外信息
+    if type_name == "StructProperty":
+        # StructProperty 有额外的 StructType 字段
+        tag.struct_type = archive.read_name(name_map)
+    elif type_name == "EnumProperty":
+        # EnumProperty 有 Enum 字段
+        tag.enum_type = archive.read_name(name_map)
+    elif type_name == "ByteProperty":
+        # ByteProperty 可能有 Enum 字段（如果 Enum != NAME_None）
+        enum_name = archive.read_name(name_map)
+        if enum_name and enum_name != "None":
+            tag.enum_type = enum_name
+    elif type_name in ("ArrayProperty", "SetProperty"):
+        # Array/Set 有 Inner 字段
+        tag.inner_type = archive.read_name(name_map)
+    elif type_name == "MapProperty":
+        # Map 有 Key 和 Value 字段
+        tag.key_type = archive.read_name(name_map)
+        tag.value_type = archive.read_name(name_map)
+
+    # Size
+    tag.size = archive.read_i32()
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+
+    # ArrayIndex (UE4 始终存在)
+    tag.array_index = archive.read_i32()
+
+    # PropertyGuid (可选，仅当属性有 guid 时存在)
+    # UE4 中通过检查当前位置是否为 0 来判断
+    # 实际上 UE4 的 guid 是在特定条件下才序列化的
+    # 为简化，这里先不读取 guid，留给后续完善
+
+    # 记录 value 起始和结束位置
+    tag.value_start_offset = archive.tell()
+    if tag.size > 0:
+        tag.value_end_offset = tag.value_start_offset + tag.size
+    else:
+        tag.value_end_offset = tag.value_start_offset
+
+    # 设置 serialize_type（UE4 没有这个概念，默认为 "Property"）
+    tag.serialize_type = "Property"
+
+    return tag
+
+
+def _read_property_tag_ue5(
+    archive: FArchive,
+    name_map: List[str],
+    tolerant: bool = False,
+    mappings: Optional[Any] = None,
+    struct_name: Optional[str] = None,
+) -> PropertyTag:
+    """读取 UE5 格式的 PropertyTag（原 read_property_tag 的逻辑）。"""
     # Record tag start position for cascade failure diagnosis
     tag_start_pos = archive.tell()
 

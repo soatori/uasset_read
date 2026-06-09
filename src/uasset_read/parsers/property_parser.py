@@ -465,7 +465,17 @@ def parse_properties_from_export(
                 except Exception as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
-            tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
+
+            # Determine engine family from summary for UE4/UE5 dispatch
+            engine_family = "ue5"
+            if summary is not None:
+                file_version_ue5 = getattr(summary, 'file_version_ue5', 0)
+                legacy_file_version = getattr(summary, 'legacy_file_version', -9)
+                # UE4 assets have file_version_ue5 == 0 and legacy > -6
+                if file_version_ue5 == 0 and legacy_file_version > -6:
+                    engine_family = "ue4"
+
+            tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name, engine_family=engine_family)
 
             # 终止标记：Name == "None"
             if tag.name == "None":

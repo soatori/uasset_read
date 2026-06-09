@@ -498,6 +498,27 @@ def _parse_package_core(
         )
         if result.summary is None:
             return
+
+        # 设置引擎家族和版本配置（UE4/UE5 兼容性）
+        file_version_ue5 = getattr(result.summary, 'file_version_ue5', 0)
+        legacy_file_version = getattr(result.summary, 'legacy_file_version', -9)
+        file_version_ue4 = getattr(result.summary, 'file_version_ue4', 0)
+
+        if file_version_ue5 == 0 and legacy_file_version > -6:
+            result.engine_family = "ue4"
+            result.compatibility_mode = "compatibility"
+        else:
+            result.engine_family = "ue5"
+            result.compatibility_mode = "native"
+
+        # 构建版本配置
+        from uasset_read.package_version_profile import build_version_profile
+        result.version_profile = build_version_profile(
+            legacy_file_version=legacy_file_version,
+            file_version_ue4=file_version_ue4,
+            file_version_ue5=file_version_ue5,
+        )
+
         result.version_container = build_version_container(result.summary)
 
         # 截断文件检测：验证导出数据范围

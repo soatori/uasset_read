@@ -49,6 +49,11 @@ class ParseResult:
     linker: Optional["PackageLinker"] = None
     diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
 
+    # UE4/UE5 兼容性字段
+    engine_family: str = "ue5"  # "ue4" | "ue5"
+    version_profile: Optional["PackageVersionProfile"] = None
+    compatibility_mode: str = "native"  # "native" | "compatibility"
+
     @property
     def status(self) -> str:
         """Unified status: success | partial | failed.
