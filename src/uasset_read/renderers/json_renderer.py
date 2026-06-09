@@ -53,6 +53,10 @@ class JSONRenderer(IRenderer):
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
+                # 已废弃/版本门控字段
+                "owner_persistent_guid": ir.header.owner_persistent_guid or None,
+                "compressed_chunks": ir.header.compressed_chunks or None,
+                "additional_packages_to_cook": ir.header.additional_packages_to_cook or None,
             },
             "name_map": ir.name_map,
             "imports": ir.imports,
@@ -307,6 +311,10 @@ class JsonSummaryRenderer(IRenderer):
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
+                # 已废弃/版本门控字段
+                "owner_persistent_guid": ir.header.owner_persistent_guid or None,
+                "compressed_chunks": ir.header.compressed_chunks or None,
+                "additional_packages_to_cook": ir.header.additional_packages_to_cook or None,
             },
             "name_map": ir.name_map,
             "exports": [self._export_summary(e) for e in ir.exports],

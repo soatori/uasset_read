@@ -18,6 +18,10 @@ class PackageHeaderIR:
     total_export_count: int
     total_import_count: int
     ue_version: str
+    # 已废弃/版本门控字段（可选）
+    owner_persistent_guid: str = ""
+    compressed_chunks: list = field(default_factory=list)
+    additional_packages_to_cook: list = field(default_factory=list)
 
 
 @dataclass
