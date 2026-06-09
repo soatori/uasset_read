@@ -135,6 +135,60 @@ results = parse_batch("path/to/directory", format="json")
 formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleton', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
 ```
 
+### API Tiers
+
+uasset_read exports follow a three-tier stability model:
+
+| Tier | Description | Examples |
+|---|---|---|
+| **Stable root API** | Guaranteed stable interface; import directly from `uasset_read` | `parse_single`, `parse_batch`, `parse_package`, `ParseResult`, `PackageSummary`, `ExportEntry`, `ImportEntry`, `UAssetError`, `FArchive` |
+| **Focused submodule API** | Stable within submodules; may evolve with version bumps | `parsers.*`, `serializers.*`, `graph.*`, `kismet.*`, `cpp_gen.*`, `renderers.*` |
+| **Legacy API** | Deprecated; will be removed in v0.5.0 | `format_*` functions, `uasset_read.objects`, `uasset_read.bulk` |
+
+#### Stable Root API — Quick Reference
+
+```python
+# Core parsing functions
+from uasset_read import parse_single, parse_batch, parse_package
+
+# Result containers
+from uasset_read import ParseResult, PackageSummary, ExportEntry, ImportEntry
+
+# Error handling
+from uasset_read import UAssetError, FArchive
+```
+
+#### Submodule API — Advanced Usage
+
+For specialized tasks requiring deeper access:
+
+```python
+# Blueprint graph extraction
+from uasset_read.graph import extract_blueprint_graphs, build_execution_flow_entries
+
+# Kismet bytecode decompilation
+from uasset_read.kismet import decompile_uasset, KismetTranslator
+
+# C++ code generation
+from uasset_read.cpp_gen import format_cpp_header, kismet_to_cpp_body
+
+# Class handler registration
+from uasset_read.parsers.class_registry import get_class_registry, ClassHandler
+```
+
+#### Legacy API — Migration Guide
+
+The following are deprecated and emit `DeprecationWarning`:
+
+| Legacy | Replacement |
+|---|---|
+| `from uasset_read.objects import *` | Use `uasset_read.parsers.asset_types` |
+| `from uasset_read.bulk import *` | BulkData features will be redesigned |
+| `format_json_full(result)` | `parse_single(path, format='json')` |
+| `format_markdown(result)` | `parse_single(path, format='markdown')` |
+
+All legacy APIs will be removed in v0.5.0. Update your imports accordingly.
+
 ### Supported output formats
 
 | Format | Description | Renderer |
