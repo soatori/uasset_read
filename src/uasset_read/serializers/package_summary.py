@@ -96,6 +96,7 @@ class PackageFileSummary:
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
     persistent_guid: str = ""
+    owner_persistent_guid: str = ""  # 16 bytes GUID (UE4 519 or legacy -7/-8)
     generations: List[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
     compatible_with_engine_version: EngineVersion = field(default_factory=EngineVersion)
@@ -336,6 +337,7 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     # 第 16b 步：OwnerPersistentGuid
     # For legacy -7, both PersistentGuid and OwnerPersistentGuid are present
     # (same as legacy -8 format, just without FileVersionUE5)
+    owner_persistent_guid = ""
     if (
         not has_filter_editor_only
         and (
@@ -343,7 +345,8 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
             or legacy_file_version in (-8, -7)
         )
     ):
-        archive.read(16)  # 跳过 OwnerPersistentGuid
+        guid_bytes = archive.read(16)  # FGuid = 16 bytes
+        owner_persistent_guid = guid_bytes.hex()
 
     # 第 17 步：Generations
     generations_count = archive.read_i32()
@@ -477,7 +480,9 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         thumbnail_table_offset=thumbnail_table_offset,
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
-        persistent_guid=persistent_guid, generations=generations,
+        persistent_guid=persistent_guid,
+        owner_persistent_guid=owner_persistent_guid,
+        generations=generations,
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
         compression_flags=compression_flags, package_source=package_source,
