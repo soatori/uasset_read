@@ -112,6 +112,8 @@ class MapValue(AdvancedPropertyValue):
     value_type: str
     entries: List[Dict[str, Any]] = field(default_factory=list)
     property_type: str = "MapProperty"
+    parse_status: str = "parsed"  # parsed | partial | fallback
+    unsupported_reason: Optional[str] = None  # 不支持类型的原因
 
 
 @dataclass
@@ -120,6 +122,8 @@ class SetValue(AdvancedPropertyValue):
     element_type: str
     elements: List[Any] = field(default_factory=list)
     property_type: str = "SetProperty"
+    parse_status: str = "parsed"  # parsed | partial | fallback
+    unsupported_reason: Optional[str] = None  # 不支持类型的原因
 
 
 @dataclass

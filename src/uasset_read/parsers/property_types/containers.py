@@ -12,9 +12,47 @@ if TYPE_CHECKING:
 from uasset_read.models.properties import (
     PropertyTag, MapValue, SetValue,
 )
+from uasset_read.models.fallback import PropertyFallback, FallbackReason
 from uasset_read.parsers.utils import extract_inner_from_tag, read_validated_count
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 from uasset_read.exceptions import ParseError
+
+
+class _UnsupportedMapKeyType(ParseError):
+    """Map key 类型不受支持时内部抛出，由 parse_map_property 捕获并转为 fallback。"""
+    pass
+
+
+# ============================================================================
+# Supported type definitions for early detection
+# ============================================================================
+
+# Map key 支持的类型（UE TMap 支持的基础类型）
+_SUPPORTED_MAP_KEY_TYPES = frozenset([
+    "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
+    "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
+    "UInt16Property", "UInt32Property", "UInt64Property",
+    "ObjectProperty", "EnumProperty",
+])
+
+# Set element 支持的类型（所有 parse_property_value 能处理的类型）
+_SUPPORTED_SET_ELEMENT_TYPES = frozenset([
+    # 基础类型
+    "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
+    "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property",
+    "FloatProperty", "DoubleProperty",
+    "StrProperty", "Utf8StrProperty", "AnsiStrProperty", "NameProperty",
+    "ObjectProperty", "SoftObjectProperty", "WeakObjectProperty", "LazyObjectProperty",
+    "ClassProperty", "SoftClassProperty", "AssetObjectProperty", "AssetClassProperty",
+    "ArrayProperty", "StructProperty", "MapProperty", "SetProperty",
+    "EnumProperty", "TextProperty", "DelegateProperty",
+    "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+    "MulticastSparseDelegateProperty", "InterfaceProperty",
+    "FieldPathProperty", "OptionalProperty", "GuidProperty",
+    # Verse 类型
+    "VerseStringProperty", "VerseClassProperty", "VerseFunctionProperty",
+    "VerseDynamicProperty", "VerseCellProperty", "VerseValueProperty",
+])
 
 
 # ============================================================================
@@ -158,31 +196,73 @@ def parse_map_property(
       - int32 numEntries（实际条目数量）
       - 循环读取 key-value 对
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     key_type = getattr(tag, "key_type", None)
     value_type = getattr(tag, "value_type", None)
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 
-    # 读取待删除的键数量（UE 源码中用于增量更新）
-    num_keys_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
-    # 跳过待删除的键（按 key_type 序列化）
-    for _ in range(num_keys_to_remove):
-        _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+    # 早期检测：不支持的 key/value 类型
+    if key_type not in _SUPPORTED_MAP_KEY_TYPES:
+        logger.warning(
+            "MapProperty '%s': unsupported key type '%s', returning fallback",
+            tag.name, key_type
+        )
+        # 跳过整个 map 数据（bounded by tag.size）
+        if tag.size > 0:
+            archive.read(tag.size)
+        return MapValue(
+            key_type=key_type,
+            value_type=value_type,
+            entries=[],
+            parse_status="fallback",
+            unsupported_reason=f"Unsupported key type: {key_type}"
+        )
 
-    # 读取实际条目数量
-    num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
-    entries: List[Dict[str, Any]] = []
+    # 尝试解析，捕获 _UnsupportedMapKeyType 异常
+    try:
+        # 读取待删除的键数量（UE 源码中用于增量更新）
+        num_keys_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
+        # 跳过待删除的键（按 key_type 序列化）
+        for _ in range(num_keys_to_remove):
+            _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
 
-    for _ in range(num_entries):
-        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
-        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
-        entries.append({"key": key, "value": value})
+        # 读取实际条目数量
+        num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
+        entries: List[Dict[str, Any]] = []
 
-    return MapValue(
-        key_type=key_type,
-        value_type=value_type,
-        entries=entries
-    )
+        for _ in range(num_entries):
+            key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+            value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
+            entries.append({"key": key, "value": value})
+
+        return MapValue(
+            key_type=key_type,
+            value_type=value_type,
+            entries=entries,
+            parse_status="parsed"
+        )
+    except _UnsupportedMapKeyType as e:
+        # 不支持的类型：跳过剩余数据，返回 fallback
+        logger.warning(
+            "MapProperty '%s': %s, returning fallback",
+            tag.name, e
+        )
+        # 计算剩余字节并跳过
+        current_pos = archive.tell()
+        value_start = tag.value_start_offset if tag.value_start_offset is not None else current_pos
+        remaining = max(0, tag.size - (current_pos - value_start))
+        if remaining > 0:
+            archive.read(remaining)
+        return MapValue(
+            key_type=key_type,
+            value_type=value_type,
+            entries=[],
+            parse_status="fallback",
+            unsupported_reason=str(e)
+        )
 
 
 def parse_set_property(
@@ -199,29 +279,69 @@ def parse_set_property(
       - int32 numElements（实际元素数量）
       - 循环读取元素
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
-    # 读取待删除的元素数量（UE 源码中用于增量更新）
-    num_elements_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
-    # 跳过待删除的元素（按 element_type 序列化）
-    parse_property_value = _get_parse_property_value()
-    for _ in range(num_elements_to_remove):
-        dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
-        parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+    # 早期检测：不支持的 element 类型
+    if element_type not in _SUPPORTED_SET_ELEMENT_TYPES:
+        logger.warning(
+            "SetProperty '%s': unsupported element type '%s', returning fallback",
+            tag.name, element_type
+        )
+        # 跳过整个 set 数据（bounded by tag.size）
+        if tag.size > 0:
+            archive.read(tag.size)
+        return SetValue(
+            element_type=element_type,
+            elements=[],
+            parse_status="fallback",
+            unsupported_reason=f"Unsupported element type: {element_type}"
+        )
 
-    # 读取实际元素数量
-    num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
-    elements: List[Any] = []
+    # 正常解析流程
+    try:
+        # 读取待删除的元素数量（UE 源码中用于增量更新）
+        num_elements_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
+        # 跳过待删除的元素（按 element_type 序列化）
+        parse_property_value = _get_parse_property_value()
+        for _ in range(num_elements_to_remove):
+            dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
+            parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
-    for _ in range(num_elements):
-        dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
-        element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
-        elements.append(element)
+        # 读取实际元素数量
+        num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
+        elements: List[Any] = []
 
-    return SetValue(
-        element_type=element_type,
-        elements=elements
-    )
+        for _ in range(num_elements):
+            dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
+            element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+            elements.append(element)
+
+        return SetValue(
+            element_type=element_type,
+            elements=elements,
+            parse_status="parsed"
+        )
+    except Exception as e:
+        # 解析错误：跳过剩余数据，返回 fallback
+        logger.warning(
+            "SetProperty '%s': failed to parse element type '%s': %s, returning fallback",
+            tag.name, element_type, e
+        )
+        # 计算剩余字节并跳过
+        current_pos = archive.tell()
+        value_start = tag.value_start_offset if tag.value_start_offset is not None else current_pos
+        remaining = max(0, tag.size - (current_pos - value_start))
+        if remaining > 0:
+            archive.read(remaining)
+        return SetValue(
+            element_type=element_type,
+            elements=[],
+            parse_status="fallback",
+            unsupported_reason=f"Parse error: {e}"
+        )
 
 
 def parse_optional_property(
@@ -337,7 +457,10 @@ def _dispatch_key_parse(
     export_map: List[Any],
     summary: Optional[Any] = None
 ) -> Any:
-    """键类型分派解析（D-02b）。"""
+    """键类型分派解析（D-02b）。
+
+    不支持的类型抛出 _UnsupportedMapKeyType，由上层捕获并转为 PropertyFallback。
+    """
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
         "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
@@ -354,7 +477,8 @@ def _dispatch_key_parse(
     if key_type == "EnumProperty":
         return archive.read_name(name_map)
 
-    return None
+    # 不支持的 key 类型：抛出异常而非返回 None，避免偏移错位
+    raise _UnsupportedMapKeyType(f"Unsupported map key type: {key_type}")
 
 
 def _dispatch_value_parse(
