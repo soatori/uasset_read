@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.4.4-dev** — Direct script execution, IR → Renderer architecture, 8 output formats, Kismet decompiler improvements, and C++ skeleton quality enhancements. With 8 dedicated asset-type parsers (StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave); broader asset categories are partially supported via generic UObject/property fallback paths. Some UE4 legacy assets may have limited support.
+> 📦 **v0.4.5-dev** — UE fidelity improvements: unified status model (success|partial|failed), UE-style loading lifecycle, class serialization strategy table, SoftObjectPath index-based resolution, DependsMap FPackageIndex semantics. With 8 dedicated asset-type parsers (StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave); broader asset categories are partially supported via generic UObject/property fallback paths. Some UE4 legacy assets may have limited support.
 
 ## Why uasset_read?
 
@@ -24,9 +24,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.4-dev |
+| Version | 0.4.5-dev |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1172 passed, 2 skipped, 2 xfailed |
+| Tests | 1389 passed, 2 skipped, 2 xfailed |
 | Modules | 145 source files across 14 subpackages |
 
 ## Features

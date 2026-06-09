@@ -63,6 +63,31 @@ class PropertyIR:
 
 
 @dataclass
+class ExportRawIR:
+    """UE 原始导出表字段（FObjectExport 对应）。
+
+    保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
+    """
+    class_index: int = 0
+    super_index: int = 0
+    outer_index: int = 0
+    template_index: int = 0
+    object_flags: int = 0
+    serial_offset: int = 0
+    package_flags: int = 0
+    b_forced_export: bool = False
+    b_not_for_client: bool = False
+    b_not_for_server: bool = False
+    b_is_inherited_instance: bool = False
+    b_not_always_loaded_for_editor_game: bool = True
+    b_is_asset: bool = False
+    b_generate_public_hash: bool = False
+    script_serialization_start_offset: int = 0
+    script_serialization_end_offset: int = 0
+    guid: str = ""
+
+
+@dataclass
 class ExportIR:
     """单个导出对象的 IR 表示。"""
     index: int
@@ -78,6 +103,9 @@ class ExportIR:
     parse_status: str = "success"
     fallback_reason: str | None = None
     error_message: str | None = None
+    asset_type_data: dict | None = None
+    ue_export_raw: ExportRawIR | None = None
+    diagnostics: dict | None = None
 
 
 @dataclass
@@ -202,6 +230,11 @@ class PackageIR:
     resolved_parent_assets: list[dict] = field(default_factory=list)
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
+    soft_object_paths: list[dict] = field(default_factory=list)
+    soft_package_references: list[str] = field(default_factory=list)
+    depends_map: list[list[int]] = field(default_factory=list)
+    resolved_depends_map: list[list[dict]] = field(default_factory=list)
+    asset_registry_data_offset: int = 0
     errors: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None

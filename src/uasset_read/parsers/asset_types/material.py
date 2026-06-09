@@ -1,7 +1,8 @@
-"""Material 资产属性提取器。
+"""Material 资产元数据提取器（partial metadata）。
 
-参考 UMaterial.cs:
-  BlendMode, ShadingModel, MaterialExpressions, Parameters
+注意：本模块不尝试解析 UE 标准 UMaterial::Serialize 布局（该布局依赖
+版本、CustomVersion 和 FMaterialResource 结构）。
+仅提取原始字节样本供诊断使用。
 """
 from __future__ import annotations
 
@@ -12,22 +13,12 @@ if TYPE_CHECKING:
 
 
 def parse_material(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
-    """解析 Material 资产的核心属性。"""
-    result: Dict[str, Any] = {}
-
-    # MaterialInterface 基类字段
-    result["used_with_static_lighting"] = archive.read_u8() == 1
-
-    # BlendMode (EMaterialBlendMode enum)
-    blend_mode_idx = archive.read_i32()
-    result["blend_mode"] = blend_mode_idx
-
-    # ShadingModel (EMaterialShadingModel enum)
-    shading_model_idx = archive.read_i32()
-    result["shading_model"] = shading_model_idx
-
-    # MaterialExpression 列表（简化: 仅计数）
-    expression_count = archive.read_i32()
-    result["expression_count"] = expression_count
-
-    return result
+    """提取 Material 原始字节样本（opaque partial metadata）。"""
+    start = archive.tell()
+    remaining = max(0, archive.total_size() - start)
+    sample = archive.read(min(remaining, 256))
+    return {
+        "raw_offset": start,
+        "sample_size": len(sample),
+        "parse_status": "partial_metadata",
+    }

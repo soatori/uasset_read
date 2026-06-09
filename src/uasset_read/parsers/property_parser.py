@@ -125,9 +125,14 @@ def _try_asset_type_handler(
         if result.success and result.data:
             # 附加到 export 对象，供下游使用
             setattr(export, "_asset_type_data", result.data)
+            # 将 handler 的 parse_status 传播到 export 级别
+            # 确保 JSON 输出明确标识为 partial_metadata，而非完整 native data
+            handler_status = result.data.get("parse_status")
+            if handler_status and handler_status != "success":
+                setattr(export, "parse_status", handler_status)
             logger.debug(
-                "AssetTypeHandler '%s' extracted data for '%s'",
-                handler.handler_name, export.object_name,
+                "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
+                handler.handler_name, export.object_name, handler_status,
             )
     except Exception as e:
         logger.debug(
@@ -243,8 +248,12 @@ def parse_property_value(
                          "VerseFunctionProperty", "VerseDynamicProperty",
                          "AnsiStrProperty", "GuidProperty"):
             return handler(tag, archive)
-        elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
+        elif tag.type in ("NameProperty", "DelegateProperty"):
             return handler(tag, archive, name_map)
+        elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
+            # These need soft_object_path_list for UE5.7+ index-based resolution
+            soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
+            return handler(tag, archive, name_map, soft_path_list)
         elif tag.type in ("ArrayProperty",):
             return handler(tag, archive, name_map, export_map, summary, depth)
         elif tag.type in ("StructProperty",):
@@ -311,11 +320,19 @@ def parse_properties_from_export(
     if game is not None:
         setattr(summary, "_game", game)
 
-    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_start = export.serial_offset + export.script_serial_offset
-    else:
-        property_start = export.serial_offset
+    # UE default: 始终从 SerialOffset 开始属性解析
+    # ScriptSerializationStartOffset 仅在特殊编辑器场景使用
+    # （property bag placeholder 或 class mismatch）— 参见 LinkerLoad.cpp:4793
+    property_start = export.serial_offset
+
+    # 存储 ScriptSerialization 绝对偏移用于诊断和 opt-in 策略
+    export._script_serialization_start_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
+    )
+    export._script_serialization_end_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
+    )
+
     archive.seek(property_start)
 
     # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
@@ -346,18 +363,34 @@ def parse_properties_from_export(
         return []
 
     # D-02: SerializationControlExtensions 头部处理
+    # UE5 >= 1011: 根级 overridable serialization 控制头
+    # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
+    # 未知位应降级为诊断信息，不要盲跳
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        control_offset = archive.tell()
         serialization_control = archive.read_u8()
+        overridden_operation = None
         if serialization_control & 0x02:
-            _overridden_operation = archive.read_u8()  # consume but not used
+            overridden_operation = archive.read_u8()
+        # 记录未知位（非 0x00 和非 0x02 的位）
+        unknown_bits = serialization_control & ~0x02
+        if unknown_bits:
+            logger.warning(
+                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
+                getattr(export, "object_name", ""), unknown_bits, control_offset,
+            )
+        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        if not hasattr(export, "transforms") or export.transforms is None:
+            export.transforms = {}
+        export.transforms["serialization_control"] = {
+            "value": serialization_control,
+            "overridden_operation": overridden_operation,
+            "offset": control_offset,
+        }
 
     # 计算属性数据边界
-    # script_serial_offset 是相对于 serial_offset 的偏移量，script_serial_size 是该块的长度
-    # 正确终点 = serial_offset + script_serial_offset + script_serial_size
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_end = export.serial_offset + export.script_serial_offset + export.script_serial_size
-    else:
-        property_end = export.serial_offset + export.serial_size
+    # UE default: 使用 SerialSize 作为属性边界
+    property_end = export.serial_offset + export.serial_size
 
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if uses_unversioned and mappings is not None:
@@ -374,6 +407,28 @@ def parse_properties_from_export(
                 struct_name,
                 property_end,
             )
+
+    # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
+    if uses_unversioned and mappings is None:
+        opaque_size = property_end - archive.tell()
+        if opaque_size > 0:
+            raw_bytes = archive.read(opaque_size)
+        else:
+            raw_bytes = b""
+        logger.debug(
+            "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
+            export.object_name, len(raw_bytes),
+        )
+        # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
+        setattr(export, "parse_status", "opaque_unversioned")
+        setattr(export, "fallback_reason", "missing_mapping")
+        return [PropertyFallback(
+            name=export.object_name,
+            type="UnversionedOpaque",
+            size=len(raw_bytes),
+            raw_bytes=raw_bytes,
+            reason=FallbackReason.MISSING_MAPPING,
+        )]
 
     # Asset type handler dispatch: 对已注册 handler 的类型，提取原始二进制数据
     if _skip_class_name is not None:

@@ -80,6 +80,16 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.inherited_blueprint_graphs:
             data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
+        if ir.soft_object_paths:
+            data["soft_object_paths"] = ir.soft_object_paths
+        if ir.soft_package_references:
+            data["soft_package_references"] = ir.soft_package_references
+        if ir.depends_map:
+            data["depends_map"] = ir.depends_map
+        if ir.resolved_depends_map:
+            data["resolved_depends_map"] = ir.resolved_depends_map
+        if ir.asset_registry_data_offset > 0:
+            data["asset_registry_data_offset"] = ir.asset_registry_data_offset
         if ir.errors:
             data["errors"] = ir.errors
         if options.include_function_graphs:
@@ -100,12 +110,38 @@ class JSONRenderer(IRenderer):
         }
         if export.bulk_data is not None:
             d["bulk_data"] = export.bulk_data
+        if export.asset_type_data is not None:
+            d["asset_type_data"] = export.asset_type_data
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
             d["fallback_reason"] = export.fallback_reason
         if export.error_message:
             d["error_message"] = export.error_message
+        if export.ue_export_raw is not None:
+            raw = export.ue_export_raw
+            d["ue_export_raw"] = {
+                "class_index": raw.class_index,
+                "super_index": raw.super_index,
+                "outer_index": raw.outer_index,
+                "template_index": raw.template_index,
+                "object_flags": raw.object_flags,
+                "serial_offset": raw.serial_offset,
+                "package_flags": raw.package_flags,
+                "b_forced_export": raw.b_forced_export,
+                "b_not_for_client": raw.b_not_for_client,
+                "b_not_for_server": raw.b_not_for_server,
+                "b_is_inherited_instance": raw.b_is_inherited_instance,
+                "b_not_always_loaded_for_editor_game": raw.b_not_always_loaded_for_editor_game,
+                "b_is_asset": raw.b_is_asset,
+                "b_generate_public_hash": raw.b_generate_public_hash,
+                "script_serialization_start_offset": raw.script_serialization_start_offset,
+                "script_serialization_end_offset": raw.script_serialization_end_offset,
+            }
+            if raw.guid:
+                d["ue_export_raw"]["guid"] = raw.guid
+        if export.diagnostics:
+            d["diagnostics"] = export.diagnostics
         return d
 
     def _property_to_dict(self, prop) -> dict[str, Any]:

@@ -57,6 +57,7 @@ from .ir import (
     GraphIR,
     PropertyIR,
     ExportIR,
+    ExportRawIR,
     LinkerSummaryIR,
     PackageIR,
 )
@@ -119,6 +120,7 @@ __all__ = [
     "GraphIR",
     "PropertyIR",
     "ExportIR",
+    "ExportRawIR",
     "LinkerSummaryIR",
     "PackageIR",
     # Fallback 模型
