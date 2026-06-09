@@ -565,7 +565,7 @@ def _parse_package_core(
             if extra_linker_setup is not None:
                 extra_linker_setup(linker, result)
 
-            linker.post_load()
+            # NOTE: post_load() is deferred until after export preloading (link → preload → post_load)
         except Exception as e:
             if not tolerant:
                 raise ParseError(f"Linker creation failed: {e}") from e
@@ -578,21 +578,33 @@ def _parse_package_core(
             )
             result.metadata["lightweight_tolerant_parse"] = True
             result.metadata["function_graphs_fallback"] = _build_lightweight_function_graphs(result.export_map)
-            result.is_success = True
+            result.is_success = len(result.errors) == 0
             return
 
-        # 解析 ExportMap 属性（此时 result.linker 已可用）
-        for export in result.export_map or []:
+        # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
+        _mappings = mappings_provider.mappings if mappings_provider else None
+        for _exp_idx, export in enumerate(result.export_map or []):
             if export.serial_size > 0:
                 try:
-                    export.properties = parse_properties_from_export(
-                        export, archive, result.summary, result.name_map,
-                        result.export_map or [], result.import_map,
-                        linker=linker,
-                        mappings=mappings_provider.mappings if mappings_provider else None,
-                        game=game,
-                        tolerant=tolerant,
-                    )
+                    if linker is not None:
+                        linker.preload(
+                            _exp_idx,
+                            mappings=_mappings,
+                            game=game,
+                            tolerant=tolerant,
+                        )
+                        # 向后兼容：将 linker instance 的属性复制回 export.properties
+                        inst = linker._export_objects[_exp_idx]
+                        export.properties = inst.serialized_properties
+                    else:
+                        export.properties = parse_properties_from_export(
+                            export, archive, result.summary, result.name_map,
+                            result.export_map or [], result.import_map,
+                            linker=linker,
+                            mappings=_mappings,
+                            game=game,
+                            tolerant=tolerant,
+                        )
                     if not getattr(export, "parse_status", None):
                         setattr(export, "parse_status", "success")
                 except Exception as e:
@@ -608,6 +620,15 @@ def _parse_package_core(
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
+        # post_load — 在所有 export 预加载完成后执行（link → preload → post_load）
+        if linker is not None:
+            try:
+                linker.post_load()
+            except Exception as e:
+                if not tolerant:
+                    raise ParseError(f"Linker post_load failed: {e}") from e
+                result.errors.append(f"Linker post_load failed: {e}")
+
         # 共享后处理
         _post_process(
             path, archive, result.summary, result.name_map,
@@ -617,7 +638,7 @@ def _parse_package_core(
             asset_roots=asset_roots,
             archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
         )
-        result.is_success = True
+        result.is_success = len(result.errors) == 0
 
     except VersionError as e:
         _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
