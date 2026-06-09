@@ -1,0 +1,3 @@
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Audio\MetaSounds\sfx_ZoomOut_nl_meta_Preset.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Audio\Sounds\Weapons\Rifle\MSS_Weapons_Rifle_Fire.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Audio\MetaSounds\sfx_Character_FS_Concrete_nl_meta.uasset

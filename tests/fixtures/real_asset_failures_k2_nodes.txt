@@ -1,0 +1,4 @@
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\UI\Menu\W_UserLoginButton.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterCore\Content\Blueprint\B_Launcher_Up.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterCore\Content\UserInterface\ScoreBoard\W_UserConnectionStatus.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterExplorer\Content\UserInterface\W_ItemAcquiredList.uasset

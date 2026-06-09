@@ -1,0 +1,4 @@
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Animations\Locomotion\Pistol\MM_Pistol_TurnRight_90.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Animations\Locomotion\Unarmed\MM_Unarmed_Walk_Fwd_Start.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Animations\Locomotion\Pistol\MM_Pistol_Jog_Right.uasset
+E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Rig\Poses\Quinn\Quinn_upperarm_l_anim.uasset
