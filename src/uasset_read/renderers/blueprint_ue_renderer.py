@@ -108,8 +108,13 @@ def _format_ue_value(value: Any) -> str:
         parts = [f"{_escape_ue_value(str(k))}={_format_ue_value(v)}" for k, v in value.items()]
         return "(" + ",".join(parts) + ")"
 
-    # Fallback: avoid Python repr like ClassName(...)
-    return str(value)
+    # Fallback: 避免 Python repr（ClassName(...) 或 <object at 0x...>）
+    # 对未知类型使用安全的字符串表示
+    if hasattr(value, '__dict__'):
+        # dataclass 或普通对象 → 展开为 Key=Value 对
+        parts = [f"{k}={_format_ue_value(v)}" for k, v in value.__dict__.items()]
+        return "(" + ",".join(parts) + ")"
+    return _escape_ue_value(str(value))
 
 
 class BlueprintUERenderer(IRenderer):
