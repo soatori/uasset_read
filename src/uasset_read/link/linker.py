@@ -245,6 +245,57 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # === Class Serialization Strategy Check ===
+        # 在尝试解析前，根据 class 名称检查序列化策略
+        # （与 property_parser 内部的 class_specific_skip 互补，这是更早的拦截点）
+        from uasset_read.parsers.class_serialization_strategy import (
+            get_serialization_strategy,
+            SerializationStrategy,
+        )
+        class_name = instance.object_class
+        if class_name is not None:
+            strategy = get_serialization_strategy(class_name)
+            if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
+                # 完全不支持的类，直接跳过
+                setattr(instance, "parse_status", "skipped")
+                setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
+                logger.debug(
+                    "Skipping export #%d (%s): unsupported class '%s'",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+            elif strategy == SerializationStrategy.OPAQUE_CLASS_PAYLOAD:
+                # Opaque payload — 有专用 Serialize() 但不实现，标记为 opaque
+                setattr(instance, "parse_status", "opaque")
+                setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
+
+                # 设置诊断偏移字段（保持与 property_parser 一致）
+                exp = self._export_map[index]
+                if hasattr(exp, 'script_serialization_start_offset'):
+                    exp._script_serialization_start_absolute = (
+                        exp.serial_offset + exp.script_serialization_start_offset
+                    )
+                if hasattr(exp, 'script_serialization_end_offset'):
+                    exp._script_serialization_end_absolute = (
+                        exp.serial_offset + exp.script_serialization_end_offset
+                    )
+
+                logger.debug(
+                    "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+            # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
+
+        # === Offset Validation ===
         # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
         if instance.serial_offset < 0 or instance.serial_offset > self._file_size:
             self._diagnostics.append(OffsetRangeDiagnostic(
