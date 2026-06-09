@@ -143,6 +143,7 @@ def read_property_tag(
     mappings: Optional[Any] = None,
     struct_name: Optional[str] = None,
     engine_family: str = "ue5",  # "ue4" | "ue5"
+    legacy_file_version: int = -6,  # UE4 LegacyFileVersion
 ) -> PropertyTag:
     """从 archive 读取 PropertyTag 结构（UE4/UE5 兼容）。
 
@@ -154,12 +155,15 @@ def read_property_tag(
         mappings: 类型映射提供者
         struct_name: 结构体名称
         engine_family: 引擎家族 ("ue4" | "ue5")
+        legacy_file_version: UE4 LegacyFileVersion（用于版本门控）
 
     Returns:
         PropertyTag 实例
     """
     if engine_family == "ue4":
-        return _read_property_tag_ue4(archive, name_map, tolerant, mappings, struct_name)
+        return _read_property_tag_ue4(
+            archive, name_map, tolerant, mappings, struct_name, legacy_file_version
+        )
     else:
         return _read_property_tag_ue5(archive, name_map, tolerant, mappings, struct_name)
 
@@ -170,6 +174,7 @@ def _read_property_tag_ue4(
     tolerant: bool = False,
     mappings: Optional[Any] = None,
     struct_name: Optional[str] = None,
+    legacy_file_version: int = -6,  # UE4 LegacyFileVersion
 ) -> PropertyTag:
     """读取 UE4 格式的 PropertyTag。
 
@@ -177,11 +182,16 @@ def _read_property_tag_ue4(
     - 类型是简单的 FName 而不是 FPropertyTypeName 树
     - 没有 flags 字节（UE5 的 EPropertyTagFlags）
     - 可选字段通过特殊类型名判断（StructProperty、EnumProperty 等）
+    - 部分字段有条件版本门控（PropertyGuid、StructGuid、Set/Map 等）
 
     参考 UE4 源码：PropertyNode.cpp FStructProperty::SerializeTaggedProperty
     """
     from uasset_read.constants import (
         UE4_NAME_HASHES_SERIALIZED,
+        VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG,
+        VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG,
+        VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT,
+        VAR_UE4_ARRAY_PROPERTY_INNER_TAGS,
     )
 
     tag_start_pos = archive.tell()
@@ -199,21 +209,54 @@ def _read_property_tag_ue4(
     if type_name == "StructProperty":
         # StructProperty 有额外的 StructType 字段
         tag.struct_type = archive.read_name(name_map)
+
+        # StructGuid: VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG (336) 后存在
+        if legacy_file_version >= -VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG:
+            has_struct_guid = archive.read_u8()
+            if has_struct_guid:
+                tag.struct_guid = archive.read_bytes(16)
+
     elif type_name == "EnumProperty":
         # EnumProperty 有 Enum 字段
         tag.enum_type = archive.read_name(name_map)
+
     elif type_name == "ByteProperty":
         # ByteProperty 可能有 Enum 字段（如果 Enum != NAME_None）
         enum_name = archive.read_name(name_map)
         if enum_name and enum_name != "None":
             tag.enum_type = enum_name
+
     elif type_name in ("ArrayProperty", "SetProperty"):
         # Array/Set 有 Inner 字段
-        tag.inner_type = archive.read_name(name_map)
+        # VAR_UE4_ARRAY_PROPERTY_INNER_TAGS (247) 后才存在 inner type
+        if legacy_file_version >= -VAR_UE4_ARRAY_PROPERTY_INNER_TAGS:
+            tag.inner_type = archive.read_name(name_map)
+        else:
+            # 早期 UE4 版本不支持 inner type 字段
+            raise ParseError(
+                f"Array/Set inner type not supported in UE4 version {legacy_file_version} "
+                f"(requires >= {-VAR_UE4_ARRAY_PROPERTY_INNER_TAGS})"
+            )
+
     elif type_name == "MapProperty":
         # Map 有 Key 和 Value 字段
+        # VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (511) 后才存在
+        if legacy_file_version < -VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
+            raise ParseError(
+                f"MapProperty not supported in UE4 version {legacy_file_version} "
+                f"(requires >= {-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
+            )
         tag.key_type = archive.read_name(name_map)
         tag.value_type = archive.read_name(name_map)
+
+    elif type_name == "SetProperty":
+        # Set 在 VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (511) 后才支持
+        if legacy_file_version < -VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
+            raise ParseError(
+                f"SetProperty not supported in UE4 version {legacy_file_version} "
+                f"(requires >= {-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
+            )
+        # SetProperty 的 inner type 已在上面处理
 
     # Size
     tag.size = archive.read_i32()
@@ -222,10 +265,12 @@ def _read_property_tag_ue4(
     # ArrayIndex (UE4 始终存在)
     tag.array_index = archive.read_i32()
 
-    # PropertyGuid (可选，仅当属性有 guid 时存在)
-    # UE4 中通过检查当前位置是否为 0 来判断
-    # 实际上 UE4 的 guid 是在特定条件下才序列化的
-    # 为简化，这里先不读取 guid，留给后续完善
+    # PropertyGuid: VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (501) 后条件存在
+    # UE4 中通过检查下一个字节是否为 1 来判断是否有 guid
+    if legacy_file_version >= -VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG:
+        has_guid = archive.read_u8()
+        if has_guid:
+            tag.property_guid = archive.read_bytes(16)
 
     # 记录 value 起始和结束位置
     tag.value_start_offset = archive.tell()
