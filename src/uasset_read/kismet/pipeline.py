@@ -196,7 +196,7 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
             continue
 
         # Skip exports with no script data
-        if export.script_serial_size <= 0:
+        if not export.has_script_serialization:
             continue
 
         # Attempt decompilation

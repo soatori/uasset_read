@@ -78,6 +78,10 @@ class PackageArchive(FArchive):
         self._diagnostics: list[OffsetRangeDiagnostic] = []
 
     def read(self, size: int) -> bytes:
+        if size < 0:
+            raise ParseError(
+                f"read() received negative size ({size}) at position {self.tell()}"
+            )
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:

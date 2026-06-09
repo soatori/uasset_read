@@ -10,11 +10,16 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppAssignmentStmt,
     CppCallStmt,
+    CppForEachStmt,
+    CppForStmt,
     CppIfStmt,
     CppInlineExprStmt,
     CppMethodIR,
+    CppRawStmt,
     CppStatement,
+    CppWhileStmt,
 )
+from uasset_read.graph.macro_expander import STANDARD_MACRO_CPP_MAPPING
 
 logger = logging.getLogger(__name__)
 
@@ -114,8 +119,9 @@ def extract_function_body(
                 statements.append(if_stmt)
 
         elif node_type == "K2Node_MacroInstance":
-            logger.warning(f"Skipping MacroInstance node: {node_info.get('node_guid', 'unknown')}")
-            continue
+            stmt = _translate_macro_instance(node_info, method_ir, data_flows, node_lookup)
+            if stmt is not None:
+                statements.append(stmt)
 
         elif node_type == "K2Node_FunctionResult":
             # 函数返回点，在纯语句序列中不生成显式语句
@@ -264,8 +270,7 @@ def _translate_control_flow(
     condition = _derive_condition(node_info, data_flows)
 
     if node_type == "K2Node_MacroInstance":
-        logger.warning(f"Skipping MacroInstance control flow: {node_info.get('node_guid', 'unknown')}")
-        return None
+        return _translate_macro_instance(node_info, method_ir, data_flows, node_lookup)
 
     # K2Node_Switch* 暂时翻译为 if-else if-else 链
     # then_body 和 else_body 需要从执行流的分支中推导
@@ -304,3 +309,123 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
         return f"switch_{branch_type.split('_')[-1] if '_' in branch_type else 'value'}"
 
     return "condition"
+
+
+# ============================================================================
+# 宏实例翻译（蓝图宏 → C++ 控制流）
+# ============================================================================
+
+def _translate_macro_instance(
+    node_info: Dict,
+    method_ir: CppMethodIR,
+    data_flows: List[Dict],
+    node_lookup: Dict,
+) -> Optional[CppStatement]:
+    """翻译 MacroInstance 节点为 CppStatement。
+
+    策略：
+    1. 标准宏 → 根据 STANDARD_MACRO_CPP_MAPPING 生成对应 C++ 控制流 IR
+    2. 非标准宏 → 使用 macro_internal_flows 递归翻译内部节点
+    3. 未知宏 → 输出注释
+    """
+    expansion = node_info.get("macro_expansion", {})
+    macro_name = expansion.get("macro_name", "")
+    is_standard = expansion.get("is_standard", False)
+
+    if is_standard and macro_name in STANDARD_MACRO_CPP_MAPPING:
+        return _translate_standard_macro(macro_name, expansion, node_info, data_flows)
+
+    internal_flows = node_info.get("macro_internal_flows", [])
+    if internal_flows:
+        return _translate_user_macro(internal_flows, method_ir, data_flows, node_lookup)
+
+    return CppRawStmt(raw_text=f"/* macro: {macro_name or 'Unknown'} */")
+
+
+def _translate_standard_macro(
+    macro_name: str,
+    expansion: Dict,
+    node_info: Dict,
+    data_flows: List[Dict],
+) -> CppStatement:
+    """翻译标准宏为 C++ 控制流 IR。"""
+    mapping = STANDARD_MACRO_CPP_MAPPING.get(macro_name, {})
+    cpp_stmt_type = mapping.get("cpp_statement", "unknown")
+    condition = _derive_condition_from_macro(expansion, data_flows)
+
+    if cpp_stmt_type == "for":
+        pin_mapping = expansion.get("pin_mapping", {})
+        counter = "LoopCounter" if "Loop Counter" in pin_mapping else "_counter"
+        first = _get_pin_default(pin_mapping, "FirstIndex", "0")
+        last = _get_pin_default(pin_mapping, "LastIndex", "N")
+        inc = _get_pin_default(pin_mapping, "Increment", "1")
+        return CppForStmt(
+            init=f"int {counter} = {first}",
+            condition=f"{counter} <= {last}",
+            increment=f"{counter} += {inc}",
+        )
+
+    elif cpp_stmt_type == "while":
+        return CppWhileStmt(condition=condition)
+
+    elif cpp_stmt_type == "for_each":
+        pin_mapping = expansion.get("pin_mapping", {})
+        element = _get_pin_default(pin_mapping, "Array Element", "Element")
+        container = _get_pin_default(pin_mapping, "Array", "Array")
+        return CppForEachStmt(
+            element=element,
+            container=container,
+        )
+
+    elif cpp_stmt_type == "if":
+        return CppIfStmt(
+            condition=condition,
+            then_body=[],
+            else_body=[],
+        )
+
+    else:
+        template = mapping.get("cpp_template", f"/* {macro_name} */")
+        return CppRawStmt(raw_text=template)
+
+
+def _translate_user_macro(
+    internal_flows: List[Dict],
+    method_ir: CppMethodIR,
+    data_flows: List[Dict],
+    node_lookup: Dict,
+) -> CppStatement:
+    """翻译用户自定义宏的内部执行流为 CppStatement。"""
+    stmts: List[CppStatement] = []
+    for flow in internal_flows:
+        nodes = flow.get("nodes", [])
+        for node_info in nodes:
+            node_type = node_info.get("node_type", "")
+            if node_type == "K2Node_CallFunction":
+                stmt = _translate_call_function(node_info, method_ir, data_flows)
+                if stmt is not None:
+                    stmts.append(stmt)
+    if len(stmts) == 1:
+        return stmts[0]
+    return CppRawStmt(raw_text=f"/* user macro: {len(stmts)} statements */")
+
+
+def _derive_condition_from_macro(expansion: Dict, data_flows: List[Dict]) -> str:
+    """从宏展开的 pin_mapping 推导条件表达式。"""
+    pin_mapping = expansion.get("pin_mapping", {})
+    for key in ("Condition", "Input"):
+        if key in pin_mapping:
+            pin_info = pin_mapping[key]
+            default_val = pin_info.get("default_value", "")
+            if default_val:
+                return default_val
+    return "condition"
+
+
+def _get_pin_default(pin_mapping: Dict, pin_name: str, default: str) -> str:
+    """从 pin_mapping 获取引脚的默认值。"""
+    if pin_name in pin_mapping:
+        val = pin_mapping[pin_name].get("default_value", "")
+        if val:
+            return val
+    return default

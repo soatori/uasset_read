@@ -80,6 +80,8 @@ class SoftObjectPathValue:
     package_index: Optional[int] = None
     guid: Optional[str] = None
     property_type: str = "SoftObjectPath"
+    index: Optional[int] = None  # SoftObjectPathList 索引（UE5.7+）
+    error: Optional[str] = None  # 越界等诊断信息
 
 
 class AdvancedPropertyValue:

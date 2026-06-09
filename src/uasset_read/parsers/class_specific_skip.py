@@ -167,7 +167,7 @@ def skip_export_payload(
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        payload_end = export.serial_offset + export.script_serial_offset + export.script_serial_size
+        payload_end = export.serial_offset + export.script_serialization_end_offset
     else:
         payload_end = export.serial_offset + export.serial_size
 

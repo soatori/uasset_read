@@ -35,6 +35,9 @@ class ParseResult:
     warnings: List[str] = field(default_factory=list)
     imports: List[Dict] = field(default_factory=list)
     soft_references: List[Dict] = field(default_factory=list)
+    soft_package_references: List[str] = field(default_factory=list)
+    soft_object_path_list: List[Dict] = field(default_factory=list)
+    """SoftObjectPathList for index-based SoftObjectProperty resolution (UE5.7+)."""
     circular_deps: List[List[str]] = field(default_factory=list)
     components: List[Dict] = field(default_factory=list)
     decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
@@ -48,17 +51,32 @@ class ParseResult:
 
     @property
     def status(self) -> str:
-        """解析状态（success/fail/error）。
+        """Unified status: success | partial | failed.
 
-        代理到 build_status_info().status，保持 API 一致性。
-        与 result.is_success 行为一致：
-        - is_success=True, errors=[] → "success"
-        - is_success=True, errors non-empty → "fail"
-        - is_success=False → "error"
+        - success: No errors, all exports parsed successfully
+        - partial: Some errors or some exports are opaque/skipped, but core data available
+        - failed: Critical error, no usable data
         """
-        # 延迟导入避免循环依赖（result.py 被 helpers.py 导入）
-        from uasset_read.formatters.helpers import build_status_info
-        return build_status_info(self).status
+        # Failed if no core data
+        if not self.summary and not self.name_map and not self.export_map:
+            return "failed"
+
+        # Partial if there are errors
+        if self.errors:
+            return "partial"
+
+        # Partial if any export is not success
+        for export in self.export_map:
+            export_status = getattr(export, 'parse_status', 'success')
+            if export_status in ('opaque', 'partial', 'skipped', 'metadata', 'failed'):
+                return "partial"
+
+        # Check metadata for lightweight parse
+        if self.metadata.get('lightweight_tolerant_parse'):
+            return "partial"
+
+        # Success if no errors and all exports success
+        return "success"
 
 
 @dataclass

@@ -4,84 +4,114 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 行为规则
 
-- 所有对话、代码注释、错误提示、文档统一使用中文
-- 输出专业简洁
+- **语言**：所有对话、代码注释、错误提示、文档统一使用中文
+- **输出**：专业简洁，避免冗余
+- **CodeGraph**：优先使用 `codegraph_*` 工具回答结构化问题（详见全局 CLAUDE.md）
 
 ## 项目概述
 
-**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器。专注于未烘焙/编辑器保存的资产（含完整蓝图数据）。
+**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。
 
-- **版本**: 0.4.4 | **Python**: 3.10+ | **运行时依赖**: 零依赖
-- 构建系统: 直接脚本运行（src 布局），禁止 `pip install`
-- 详细开发指南见 [docs/guides/dev-guide.md](docs/guides/dev-guide.md)
+- **专注领域**：未烘焙/编辑器保存的资产（含完整蓝图数据）
+- **版本**：0.4.5 | **Python**：3.10+
+- **构建系统**：直接脚本运行（src 布局），禁止 `pip install`
+- **详细开发指南**：[docs/guides/dev-guide.md](docs/guides/dev-guide.md)
+
+## 快速开始
+
+```bash
+# 解析单个文件
+python run.py path/to/file.uasset              # JSON 输出（默认）
+python run.py path/to/file.uasset --text       # 人类可读文本
+python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
+python run.py path/to/file.uasset --cpp-skeleton  # C++ 类骨架
+
+# 运行测试
+python scripts/test_matrix.py smoke            # 快速烟雾测试
+python scripts/test_matrix.py unit             # 单元测试
+python scripts/test_matrix.py all              # 全量测试
+
+# 代码质量
+python scripts/test_matrix.py quality          # 质量门禁
+```
 
 ## 常用命令
 
+### 解析器 CLI
+
 ```bash
-# 运行解析器
-python run.py path/to/file.uasset              # JSON（默认）
-python run.py path/to/file.uasset --text       # 人类可读文本
-python run.py path/to/file.uasset --markdown   # Markdown + Mermaid
-python run.py path/to/file.uasset --cpp-skeleton  # C++ 类骨架
-python run.py path/to/file.uasset --blueprint-text  # 蓝图节点文本
-python run.py path/to/file.uasset --strict     # 遇警告停止
-python run.py path/to/file.uasset --verbose    # 调试日志
+# 输出格式
+python run.py file.uasset --summary            # 摘要
+python run.py file.uasset --blueprint-text     # 蓝图节点文本
+python run.py file.uasset --blueprint-ue-text  # UE 格式文本
+
+# 模式控制
+python run.py file.uasset --strict             # 遇警告停止
+python run.py file.uasset --tolerant           # 容错模式（默认）
+python run.py file.uasset --verbose            # 调试日志
+
+# 批量处理
 python run.py --batch-dir path/to/dir/         # 批量导出
+```
 
-# 测试
-python -m pytest tests/ -v                     # 全部测试（1172 passed）
-python -m pytest tests/ -v -m integration      # 仅集成测试
+**Windows 路径注意**：使用正斜杠 `E:/Develop/...` 或双反斜杠，避免单反斜杠转义问题。
+
+### 测试矩阵
+
+```bash
+python scripts/test_matrix.py smoke            # L0 烟雾测试（最快）
+python scripts/test_matrix.py unit             # L0+L1 单元测试
+python scripts/test_matrix.py integration      # 集成测试
+python scripts/test_matrix.py regression       # 回归测试
+python scripts/test_matrix.py quality          # 质量门禁
+python scripts/test_matrix.py acceptance       # 最终验收
+python scripts/test_matrix.py all              # 全量
+
+# 直接 pytest
 python -m pytest tests/test_pak_handling.py -v # 单个文件
-python -m pytest tests/ -v --cov=uasset_read   # + 覆盖率
-
-# API 验证
-python -m pytest tests/test_api_cleanup.py -v  # 验证 __all__ 导出完整性
+python -m pytest tests/ -v -m integration      # 仅集成测试
+python -m pytest tests/ -v --cov=uasset_read   # 覆盖率
 ```
 
-## 架构
+**测试要求**：100% 通过率，≥12 种资产类型，稳定资产必须在 strict 和 tolerant 双模式下通过。
+**样本路径**：`E:\Develop\lib\UnrealEngine\Samples`
+**pytest 标记**：`integration`、`quality`、`regression`、`slow`
 
-解析器镜像 UE 内部的 `FArchive` 序列化管线。数据流：
+## 核心架构
+
+解析器镜像 UE 内部的 `FArchive` 序列化管线：
 
 ```
-.uasset 文件
-  → FArchive（archive.py）二进制读取，字节交换、mmap
-  → 序列化层（serializers/）PackageFileSummary、ImportMap、ExportMap、PropertyTag
-  → 属性解析（parsers/）40+ 种属性类型解析器 + 分发器
-  → 对象图重建（link/）PackageLinker 两阶段链接
-  → IR 构建（ir_builder.py）统一中间表示 PackageIR
-  → 渲染器（renderers/）6 种格式输出（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton）
+.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers
 ```
 
-### 核心模块关系
+### 关键模块
 
-- **parse_uasset.py** — 主解析入口，编排整个管线。`parse_package()` 返回 `ParseResult`，`parse_uasset_with_linker()` 额外返回 `PackageLinker`
-- **core.py** — 纯函数高层 API（`parse_single`、`parse_batch`），CLI 和脚本共用
-- **ir_builder.py** — 将 `ParseResult` 转为 `PackageIR`，渲染器只接收 IR 不访问 ParseResult
+- **parse_uasset.py** — 主入口，`parse_package()` 返回 `ParseResult`
+- **core.py** — 高层 API（`parse_single`、`parse_batch`），CLI 和脚本共用
+- **ir_builder.py** — `ParseResult` → `PackageIR`，渲染器只接收 IR
 - **models/ir.py** — IR 数据结构：`PackageIR → ExportIR → GraphIR → NodeIR → PinIR`
-- **models/result.py** — `ParseResult`：解析结果容器（summary、linker、graphs、blueprint 等）
+- **models/result.py** — `ParseResult` 容器（summary、linker、graphs、blueprint）
 
 ### 蓝图解析链
 
 ```
-serializers/graph.py          读取 UEdGraph 原始节点和引脚
-  → graph/flow_builder.py     构建执行流/数据流
-  → graph/data_tracker.py     追踪数据依赖
-  → blueprint/variable_extractor.py  提取变量、事件、函数、元数据
-  → kismet/                   字节码 → AST → C++ 翻译
+serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
+  → blueprint/variable_extractor.py → kismet/（字节码 → AST → C++）
 ```
 
 ### 渲染器系统
 
-渲染器通过 `RENDERER_REGISTRY` 自动注册。新增格式需：
-1. 在 `renderers/` 下实现 `IRenderer` 子类
+渲染器通过 `RENDERER_REGISTRY` 自动注册。新增格式：
+1. 在 `renderers/` 实现 `IRenderer` 子类
 2. 调用 `register_renderer(format_name, RendererClass)`
-3. 在 `renderers/__init__.py` 添加 import 触发注册
+3. 在 `renderers/__init__.py` 添加 import
 
 ### 容错模式
 
-- **strict**：遇警告停止解析
-- **tolerant**（默认）：遇错继续，标记 partial 状态
-- **轻量解析**：export_count > 300 时自动跳过完整蓝图解析（`LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD`）
+- **strict**：遇警告停止
+- **tolerant**（默认）：遇错继续，标记 partial
+- **轻量解析**：export_count > 300 时自动跳过完整蓝图解析
 
 ## 关键约束
 
@@ -92,41 +122,38 @@ serializers/graph.py          读取 UEdGraph 原始节点和引脚
 - 必须参考 UE 源码（`E:\Develop\lib\UnrealEngine`），禁止猜测二进制格式
 - 临时文件放 `temp/`
 
-## 测试
+## CodeGraph
 
-- 位置: `tests/`（1172 用例通过，2 skipped，2 xfail）
-- 要求: 100% 通过率，≥ 12 种资产类型
-- 稳定资产必须在 strict 和 tolerant 双模式下通过
-- 样本资产路径: `E:\Develop\lib\UnrealEngine\Samples`
-- pytest 标记: `integration`（集成测试）、`quality`（质量门禁）、`regression`（回归）、`slow`（慢速）
+本项目已配置 CodeGraph MCP 服务器。工具选择和使用规则详见全局 CLAUDE.md。
 
-## 文档结构
+## 文档与工具
 
-```
-docs/
-├── guides/              ← 开发规范（活跃参考）
-│   ├── dev-guide.md           开发指南（架构、模块、CLI、测试）
-│   ├── development-scope.md   开发范围及限制
-│   └── testing-requirements.md  测试要求规范
-├── formats/uasset/      ← UE .uasset 格式参考（60+ 文件）
-├── designs/             ← 永久设计规格
-├── reference/           ← 技术参考资料
-└── release-notes/       ← 版本发布说明
+### 文档结构
 
-wiki/                    ← 代码指南（独立维护）
-temp/                    ← 临时文件、脚本、中间产物
-```
+- `docs/guides/` — 开发规范（dev-guide、testing-requirements、development-scope）
+- `docs/formats/uasset/` — UE .uasset 格式参考（60+ 文件）
+- `docs/designs/` — 永久设计规格
+- `docs/reference/` — 技术参考资料
+- `docs/release-notes/` — 版本发布说明
+- `wiki/` — 代码指南（独立维护）
+- `temp/` — 临时文件、脚本、中间产物
 
-## Agent skills
+### Agent skills
+
+项目 skills 位于 `.claude/skills/`，通过 `/skill-name` 调用：
+
+| Skill | 触发场景 |
+|---|---|
+| `test-runner` | 运行测试、更新文档统计 |
+| `code-quality-fix` | P0-P3 分级代码质量修复 |
+| `doc-consistency` | 文档一致性审计 |
+| `version-sync` | 跨文件版本号同步 |
+| `release-prep` | 发布前完整流程（版本同步→测试→文档→提交） |
 
 ### Issue tracker
 
 使用 GitHub Issues 跟踪任务（gh CLI）。详见 `docs/agents/issue-tracker.md`。
 
-### Triage labels
+**Triage labels**：needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix（详见 `docs/agents/triage-labels.md`）。
 
-五个标准角色标签：needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix。详见 `docs/agents/triage-labels.md`。
-
-### Domain docs
-
-单上下文布局。详见 `docs/agents/domain.md`。
+**Domain docs**：单上下文布局，详见 `docs/agents/domain.md`。

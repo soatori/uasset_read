@@ -15,31 +15,22 @@ from uasset_read.models.result import StatusInfo
 
 
 def build_status_info(result: ParseResult) -> StatusInfo:
+    """Build status field (unified model: success|partial|failed).
+
+    For backward compatibility, also supports legacy fail/error mapping:
+    - partial → fail (with message)
+    - failed → error (with message)
     """
-    构建 status 字段（D-14-01, OUT-01）。
+    status = result.status  # Use the unified status property
 
-    三元分类:
-    - success: is_success=True, errors=[]（解析成功，无错误）
-    - fail: is_success=True, errors non-empty（部分结果可用）
-    - error: is_success=False（严重错误）
-
-    Args:
-        result: ParseResult 对象
-
-    Returns:
-        StatusInfo: status 对象
-    """
-    if result.is_success:
-        if not result.errors:
-            return StatusInfo(status="success")
-        else:
-            # D-14-01: 有错误但部分结果可用 → fail
-            message = result.errors[0] if result.errors else None
-            return StatusInfo(status="fail", message=message, code="PARSE_ERROR")
-    else:
-        # is_success=False → error
+    if status == "success":
+        return StatusInfo(status="success")
+    elif status == "partial":
+        message = result.errors[0] if result.errors else "Partial result (some exports incomplete)"
+        return StatusInfo(status="partial", message=message, code="PARTIAL_PARSE")
+    else:  # failed
         message = result.errors[0] if result.errors else "Unknown error"
-        return StatusInfo(status="error", message=message, code="PARSE_ERROR")
+        return StatusInfo(status="failed", message=message, code="PARSE_ERROR")
 
 
 def build_schema_info() -> Dict[str, str]:

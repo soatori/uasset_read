@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.4-dev** — 直接脚本运行、IR → Renderer 架构重构、8 种输出格式、Kismet 反编译改进、C++ 骨架质量提升。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.4.5-dev** — UE 保真度改进：统一状态模型（success|partial|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
 
 ## 为什么选择 uasset_read？
 
@@ -24,9 +24,9 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.4-dev |
+| 版本 | 0.4.5-dev |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1172 通过，2 skipped，2 xfail |
+| 测试 | 1389 通过，2 skipped，2 xfailed |
 | 模块 | 14 个子包，145 个源文件 |
 
 ## 功能特性
