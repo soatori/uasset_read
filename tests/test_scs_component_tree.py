@@ -208,6 +208,173 @@ class TestExtractScsTree:
 
         import_map = []
 
+    def test_scs_node_variable_guid_extraction(self):
+        """Issue #70: SCS_Node 的 VariableGuid 字段解析。"""
+        from uasset_read.blueprint.component_extractor import (
+            _extract_scs_node_info,
+            _extract_guid,
+        )
+
+        # 测试 _extract_guid 辅助函数
+        assert _extract_guid("A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6") == "A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6"
+        assert _extract_guid({"value": "abc123"}) == "abc123"
+        assert _extract_guid({}) == ""
+
+        # 模拟 StructValue 格式的 FGuid
+        struct_value = MagicMock()
+        struct_value.fields = {"A": 0x12345678, "B": 0x9ABCDEF0, "C": 0x12345678, "D": 0x9ABCDEF0}
+        guid_result = _extract_guid(struct_value)
+        assert guid_result == "123456789abcdef0123456789abcdef0"
+
+        # 测试完整节点信息提取
+        import_map = []
+        export_map = []
+
+        node_export = _make_export("SCS_Mesh", 0, properties=[
+            _make_prop("ComponentClass", {
+                "type": "import",
+                "object_name": "StaticMeshComponent",
+                "full_name": "/Script/Engine.StaticMeshComponent",
+            }),
+            _make_prop("VariableGuid", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
+            _make_prop("InternalVariableName", "MyMeshComp", "NameProperty"),
+        ])
+
+        info = _extract_scs_node_info(node_export, export_map, import_map)
+        assert info["variable_guid"] == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+        assert info["class"] == "StaticMeshComponent"
+        assert info["variable_name"] == "MyMeshComp"
+
+    def test_scs_node_category_name_extraction(self):
+        """Issue #70: SCS_Node 的 CategoryName 字段解析（FText）。"""
+        from uasset_read.blueprint.component_extractor import (
+            _extract_scs_node_info,
+            _extract_text,
+        )
+
+        # 测试 _extract_text 辅助函数
+        assert _extract_text("MyCategory") == "MyCategory"
+        assert _extract_text({"SourceString": "Transform"}) == "Transform"
+        assert _extract_text({}) == ""
+
+        # 模拟 StructValue 格式的 FText
+        struct_value = MagicMock()
+        struct_value.fields = {"SourceString": "Rendering"}
+        assert _extract_text(struct_value) == "Rendering"
+
+        # 测试完整节点信息提取
+        import_map = []
+        export_map = []
+
+        node_export = _make_export("SCS_Light", 0, properties=[
+            _make_prop("ComponentClass", {
+                "type": "import",
+                "object_name": "PointLightComponent",
+                "full_name": "/Script/Engine.PointLightComponent",
+            }),
+            _make_prop("CategoryName", {"SourceString": "Lights"}, "StructProperty"),
+            _make_prop("InternalVariableName", "PointLight", "NameProperty"),
+        ])
+
+        info = _extract_scs_node_info(node_export, export_map, import_map)
+        assert info["category_name"] == "Lights"
+        assert info["class"] == "PointLightComponent"
+
+    def test_scs_node_metadata_array_extraction(self):
+        """Issue #70: SCS_Node 的 MetaDataArray 字段解析。"""
+        from uasset_read.blueprint.component_extractor import (
+            _extract_scs_node_info,
+            _extract_metadata_array,
+        )
+
+        # 测试 _extract_metadata_array 辅助函数
+        metadata_list = [
+            {"MetaDataEntryName": "DisplayName", "MetaDataEntryValue": "My Component"},
+            {"MetaDataEntryName": "Tooltip", "MetaDataEntryValue": "This is a tooltip"},
+        ]
+        result = _extract_metadata_array(metadata_list)
+        assert result == {
+            "DisplayName": "My Component",
+            "Tooltip": "This is a tooltip",
+        }
+        assert _extract_metadata_array([]) == {}
+        assert _extract_metadata_array("not_a_list") == {}
+
+        # 测试完整节点信息提取
+        import_map = []
+        export_map = []
+
+        node_export = _make_export("SCS_Camera", 0, properties=[
+            _make_prop("ComponentClass", {
+                "type": "import",
+                "object_name": "CameraComponent",
+                "full_name": "/Script/Engine.CameraComponent",
+            }),
+            _make_prop("MetaDataArray", [
+                {"MetaDataEntryName": "DisplayName", "MetaDataEntryValue": "Player Camera"},
+                {"MetaDataEntryName": "Category", "MetaDataEntryValue": "Viewpoint"},
+                {"MetaDataEntryName": "ToolTip", "MetaDataEntryValue": "Main player camera component"},
+            ], "ArrayProperty"),
+            _make_prop("InternalVariableName", "PlayerCamera", "NameProperty"),
+        ])
+
+        info = _extract_scs_node_info(node_export, export_map, import_map)
+        assert len(info["metadata"]) == 3
+        assert info["metadata"]["DisplayName"] == "Player Camera"
+        assert info["metadata"]["Category"] == "Viewpoint"
+        assert info["metadata"]["ToolTip"] == "Main player camera component"
+
+    def test_scs_node_complete_fields(self):
+        """Issue #70: SCS_Node 所有字段的完整性验证。"""
+        from uasset_read.blueprint.component_extractor import _extract_scs_node_info
+
+        import_map = [
+            _make_import("SceneComponent"),
+        ]
+        export_map = []
+
+        node_export = _make_export("SCS_Root", 0, properties=[
+            _make_prop("ComponentClass", PackageIndex(-1 - 0).index),
+            _make_prop("ComponentTemplate", {
+                "type": "import",
+                "object_name": "SceneComponent_0",
+                "full_name": "/Script/Engine.SceneComponent",
+            }),
+            _make_prop("AttachToName", "None", "NameProperty"),
+            _make_prop("ParentComponentOrVariableName", "", "NameProperty"),
+            _make_prop("ParentComponentOwnerClassName", "", "NameProperty"),
+            _make_prop("bIsParentComponentNative", False, "BoolProperty"),
+            _make_prop("InternalVariableName", "DefaultSceneRoot", "NameProperty"),
+            _make_prop("VariableGuid", "00000000000000000000000000000001"),
+            _make_prop("CategoryName", {"SourceString": "Default"}, "StructProperty"),
+            _make_prop("MetaDataArray", [
+                {"MetaDataEntryName": "DisplayName", "MetaDataEntryValue": "Scene Root"},
+            ], "ArrayProperty"),
+        ])
+
+        info = _extract_scs_node_info(node_export, export_map, import_map)
+
+        # 验证所有字段都存在
+        assert info["name"] == "SCS_Root"
+        assert info["class"] == "SceneComponent"
+        assert info["template"] == "SceneComponent_0"  # 应该被解析
+        assert info["attach_to"] == "None"
+        assert info["parent_component"] == ""
+        assert info["parent_owner_class"] == ""
+        assert info["is_parent_native"] is False
+        assert info["variable_name"] == "DefaultSceneRoot"
+        assert info["variable_guid"] == "00000000000000000000000000000001"
+        assert info["category_name"] == "Default"
+        assert len(info["metadata"]) == 1
+        assert info["metadata"]["DisplayName"] == "Scene Root"
+        assert info["children"] == []
+
+    def test_collect_scs_node_exports_by_outer(self):
+        """通过 outer 关系收集 SCS_Node 导出。"""
+        from uasset_read.blueprint.component_extractor import _collect_scs_node_exports
+
+        import_map = []
+
         scs_export = _make_export("SimpleConstructionScript", 0)
 
         # SCS_Node export, outer 指向 SCS
