@@ -50,3 +50,33 @@ class LinkerParseResult:
     logic_sources: List[Dict] = field(default_factory=list)
     metadata: Dict[str, object] = field(default_factory=dict)
     diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    soft_object_path_list: List[Dict] = field(default_factory=list)
+
+    @property
+    def status(self) -> str:
+        """Unified status: success | partial | failed.
+
+        - success: No errors, all exports parsed successfully
+        - partial: Some errors or some exports are opaque/skipped, but core data available
+        - failed: Critical error, no usable data
+        """
+        # Failed if no core data
+        if not self.summary and not self.name_map and not self.export_map:
+            return "failed"
+
+        # Partial if there are errors
+        if self.errors:
+            return "partial"
+
+        # Partial if any export is not success
+        for export in self.export_map:
+            export_status = getattr(export, 'parse_status', 'success')
+            if export_status in ('opaque', 'partial', 'skipped', 'metadata', 'failed'):
+                return "partial"
+
+        # Check metadata for lightweight parse
+        if self.metadata.get('lightweight_tolerant_parse'):
+            return "partial"
+
+        # Success if no errors and all exports success
+        return "success"

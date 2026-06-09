@@ -259,6 +259,10 @@ class PackageLinker:
                 # 完全不支持的类，直接跳过
                 setattr(instance, "parse_status", "skipped")
                 setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
+                # 同时设置到 export 对象上
+                exp = self._export_map[index]
+                setattr(exp, "parse_status", "skipped")
+                setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
                 logger.debug(
                     "Skipping export #%d (%s): unsupported class '%s'",
                     index,
@@ -272,9 +276,10 @@ class PackageLinker:
                 # Opaque payload — 有专用 Serialize() 但不实现，标记为 opaque
                 setattr(instance, "parse_status", "opaque")
                 setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
-
-                # 设置诊断偏移字段（保持与 property_parser 一致）
+                # 同时设置到 export 对象上
                 exp = self._export_map[index]
+                setattr(exp, "parse_status", "opaque")
+                setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
                 if hasattr(exp, 'script_serialization_start_offset'):
                     exp._script_serialization_start_absolute = (
                         exp.serial_offset + exp.script_serialization_start_offset
