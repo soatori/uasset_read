@@ -14,6 +14,8 @@ import pytest
 
 _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "quality_stats.py"
 
+pytestmark = pytest.mark.auxiliary
+
 
 def _run(args=None, cwd=None):
     """运行 quality_stats.py 并返回 (returncode, stdout, stderr)。"""

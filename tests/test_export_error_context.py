@@ -26,13 +26,13 @@ def _make_mock_archive(data: bytes):
     return archive
 
 
-def _make_mock_export(serial_offset=0, serial_size=100, script_serial_offset=0, script_serial_size=0):
+def _make_mock_export(serial_offset=0, serial_size=100, script_serialization_start_offset=0, script_serialization_end_offset=0):
     """构造一个 mock ObjectExport。"""
     export = MagicMock(spec=ObjectExport)
     export.serial_offset = serial_offset
     export.serial_size = serial_size
-    export.script_serial_offset = script_serial_offset
-    export.script_serial_size = script_serial_size
+    export.script_serialization_start_offset = script_serialization_start_offset
+    export.script_serialization_end_offset = script_serialization_end_offset
     export.object_name = "TestExport"
     export.class_index = PackageIndex(0)
     return export
