@@ -188,6 +188,8 @@ def parse_property_value(
     mappings = getattr(summary, "_mappings", None)
     game = getattr(summary, "_game", None)
 
+    # 防御性检查：SkippedSerialize / BinaryOrNative 应在主循环处理
+    # 但单独调用 parse_property_value() 时仍需处理
     if getattr(tag, "serialize_type", "Property") == "Skipped":
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
@@ -197,7 +199,6 @@ def parse_property_value(
             "raw_data": raw_data,
         }
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
-        # 尝试使用已知类型的解析器
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
         handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
         if handler is not None:
@@ -540,14 +541,42 @@ def parse_properties_from_export(
             # 记录起始位置用于边界验证
             start_pos = archive.tell()
 
-            # 分派到类型特定解析器
-            value = read_tag_value_bounded(
-                archive,
-                tag,
-                lambda: parse_property_value(
-                    tag, archive, name_map, export_map, summary, tolerant=tolerant
-                ),
-            )
+            # EPropertyTagFlags: SkippedSerialize / BinaryOrNative 在主循环分派
+            # 参考 UE PropertyTag.cpp:553 SerializeTaggedProperty
+            serialize_type = getattr(tag, "serialize_type", "Property")
+
+            if serialize_type == "Skipped":
+                # SkippedSerialize (0x20): 属性未序列化，无 value 数据
+                value = PropertyFallback(
+                    name=tag.name,
+                    type=tag.type,
+                    size=tag.size,
+                    raw_bytes=b"",
+                    reason=FallbackReason.UNSUPPORTED_TYPE,
+                    array_index=tag.array_index,
+                    error_message="SkippedSerialize",
+                )
+            elif serialize_type == "BinaryOrNative":
+                # BinaryOrNative (0x08): 原生二进制序列化，跳过标准 PropertyTag value 解析
+                raw_data = archive.read(tag.size) if tag.size > 0 else b""
+                value = PropertyFallback(
+                    name=tag.name,
+                    type=tag.type,
+                    size=tag.size,
+                    raw_bytes=raw_data,
+                    reason=FallbackReason.UNSUPPORTED_TYPE,
+                    array_index=tag.array_index,
+                    error_message="BinaryOrNative",
+                )
+            else:
+                # 标准 PropertyTag value 解析
+                value = read_tag_value_bounded(
+                    archive,
+                    tag,
+                    lambda: parse_property_value(
+                        tag, archive, name_map, export_map, summary, tolerant=tolerant
+                    ),
+                )
 
             # 如果解析返回 None（旧路径或 handler 显式返回 None），转为 PropertyFallback
             if value is None:
