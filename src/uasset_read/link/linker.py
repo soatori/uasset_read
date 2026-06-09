@@ -336,6 +336,18 @@ class PackageLinker:
                     class_name,
                 )
                 # 不 return，继续进入 parse_properties_from_export()
+            elif strategy == SerializationStrategy.UCLASS_NATIVE:
+                # UClass 原生字段 + tagged properties
+                # 标记为 uclass_native，让 parse_properties_from_export() 先解析原生字段
+                setattr(instance, "parse_status", "uclass_native")
+                setattr(exp, "parse_status", "uclass_native")
+                logger.debug(
+                    "Marking export #%d (%s) as uclass_native: class '%s' has native fields + tagged properties",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                # 不 return，继续进入 parse_properties_from_export()
             # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
 
         # === Offset Validation ===
