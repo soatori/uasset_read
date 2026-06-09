@@ -149,6 +149,12 @@ UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 506
 UE4_TemplateIndex_IN_COOKED_EXPORTS = 507
 UE4_64BIT_EXPORTMAP_SERIALSIZES = 510
 
+# UE4 PropertyTag 版本门控常量
+VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 501      # PropertyGuid 字段加入
+VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 336        # StructGuid 字段加入
+VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 511       # Set/MapProperty 支持
+VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 247          # ArrayProperty inner type 字段加入
+
 # ============================================================================
 # FEdGraphPinType 序列化版本常量（EUnrealEngineObjectUE4Version）
 # ============================================================================

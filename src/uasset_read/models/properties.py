@@ -42,6 +42,7 @@ class PropertyTag:
     array_index: int = 0              # 数组元素索引（默认 0）
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
+    struct_guid: Optional[bytes] = None    # 16 bytes GUID（UE4 StructProperty，VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG 后）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
     property_extensions: int = 0          # EPropertyTagExtension flags (u8)
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
