@@ -36,6 +36,8 @@ class ParseResult:
     imports: List[Dict] = field(default_factory=list)
     soft_references: List[Dict] = field(default_factory=list)
     soft_package_references: List[str] = field(default_factory=list)
+    soft_object_path_list: List[Dict] = field(default_factory=list)
+    """SoftObjectPathList for index-based SoftObjectProperty resolution (UE5.7+)."""
     circular_deps: List[List[str]] = field(default_factory=list)
     components: List[Dict] = field(default_factory=list)
     decompiled_functions: List["KismetDecompiledResult"] = field(default_factory=list)
