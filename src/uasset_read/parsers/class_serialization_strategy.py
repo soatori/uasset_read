@@ -31,38 +31,48 @@ class SerializationStrategy(str, Enum):
 # ========== 策略映射表 ==========
 
 # Tagged properties only — 通用 parser 可处理
+# 这些类在 UE 源码中未重写 Serialize()，或仅调用 Super::Serialize(Ar)
+# 依赖 UObject::Serialize() 的默认 tagged property 序列化机制
 _TAGGED_PROPERTIES_CLASSES = frozenset({
-    "BlueprintGeneratedClass",
-    "WidgetBlueprintGeneratedClass",
-    "Function",
-    "UserDefinedStruct",
-    "UserDefinedEnum",
-    "EdGraph",
-    "EdGraphNode",
-    "K2Node",
+    "BlueprintGeneratedClass",  # UE: BlueprintGeneratedClass.h:472 - 仅声明 Serialize()，实际依赖 UObject 默认实现
+    "WidgetBlueprintGeneratedClass",  # UE: 继承自 UBlueprintGeneratedClass，无自定义序列化
+    "Function",  # UE: UFunction.h - 继承自 UStruct，使用 tagged properties
+    "UserDefinedStruct",  # UE: UserDefinedStruct.h:586 - 仅声明 Serialize()，依赖 UObject 默认实现
+    "UserDefinedEnum",  # UE: UserDefinedEnum.h:46 - 仅声明 Serialize()，依赖 UObject 默认实现
+    "EdGraph",  # UE: EdGraph.h:126 - Serialize(FStructuredArchiveRecord)，标准 tagged properties
+    "EdGraphNode",  # UE: EdGraphNode.h:472 - Serialize(FArchive&)，标准 tagged properties
+    "K2Node",  # UE: K2Node.h - 继承自 UEdGraphNode，使用 tagged properties
 })
 
 # Opaque class payload — 有专用 Serialize() 但我们不实现
+# 这些类在 UE 源码中重写了 Serialize()，包含复杂的自定义序列化逻辑：
+# - 二进制数据块（FByteBulkData）
+# - 平台特定的 cooked data
+# - 复杂的版本控制和条件序列化
+# - 自定义数据结构（非 tagged properties）
+# 通用 tagged property parser 无法正确解析这些内容
 _OPAQUE_CLASSES = frozenset({
-    "StaticMesh",
-    "SkeletalMesh",
-    "Texture2D",
-    "TextureCube",
-    "Material",
-    "MaterialInstanceConstant",
-    "AnimSequence",
-    "AnimMontage",
-    "SoundWave",
-    "SoundCue",
-    "ParticleSystem",
-    "NiagaraSystem",
+    "StaticMesh",  # UE: StaticMesh.cpp:7195 - 包含 BodySetup、NavCollision、cooked LOD 数据、FStripDataFlags
+    "SkeletalMesh",  # UE: SkeletalMesh.cpp:1114 - 包含 LOD 模型、骨骼数据、cooked render data
+    "Texture2D",  # UE: Texture2D.cpp:462 - 包含 FStripDataFlags、bCooked 标志、SerializeCookedPlatformData
+    "TextureCube",  # UE: TextureCube.cpp:131 - 包含 FStripDataFlags、bCooked 标志、SerializeCookedPlatformData
+    "Material",  # UE: Material.cpp:3054 - 包含 SerializeInlineShaderMaps、LoadedMaterialResources、版本控制
+    "MaterialInstanceConstant",  # UE: MaterialInstance.cpp:3197 - 包含 ScalarParameterValues、VectorParameterValues、TextureParameterValues
+    "AnimSequence",  # UE: AnimSequence.cpp:609 - 包含 RawAnimationData、压缩动画数据、多个自定义版本
+    "AnimMontage",  # UE: AnimMontage.cpp:119 - 包含 BlendIn/BlendOut、SlotAnimTracks、CompositeSections
+    "SoundWave",  # UE: SoundWave.cpp:1199 - 包含压缩音频数据、CuePoints、平台特定格式
+    "SoundCue",  # UE: SoundCue.cpp:129 - 包含 SoundCueGraph、FirstNode 引用
+    "ParticleSystem",  # UE: ParticleSystem.cpp:643 - 包含 Emitters 数组、LODLevels、DetailMode 裁剪
+    "NiagaraSystem",  # UE: NiagaraSystem.cpp:1083 - 包含 EmitterHandles、EmitterCompiledData、自定义版本
 })
 
 # Skip entirely — 格式未知或风险过高
+# 这些类的序列化格式极其复杂，或包含大量动态生成的数据，
+# 解析风险高且收益低，因此完全跳过
 _SKIP_CLASSES = frozenset({
-    "NiagaraGraph",
-    "NiagaraScript",
-    "NiagaraDataInterface",
+    "NiagaraGraph",  # UE: NiagaraGraph.h - 包含复杂的节点图数据，依赖 NiagaraScript 编译结果
+    "NiagaraScript",  # UE: NiagaraScript.cpp:1769 - 包含 FNiagaraVMExecutableData（VM 字节码）、RapidIterationParameters
+    "NiagaraDataInterface",  # UE: NiagaraDataInterface.h - 基类，具体实现类众多，序列化逻辑各异
 })
 
 CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = {
