@@ -4,15 +4,12 @@
 
 ```text
 .claude/skills/
-├── asset-parse-compare/SKILL.md
 ├── code-quality-fix/SKILL.md
 ├── doc-consistency/SKILL.md
-├── fix-loop/SKILL.md
-├── git-branch-workflow/SKILL.md
 ├── release-prep/SKILL.md
-├── repo-cleanup/SKILL.md
 ├── test-runner/SKILL.md
 ├── ue-source-research/SKILL.md
+├── ue-wiki-lookup/SKILL.md
 └── version-sync/SKILL.md
 ```
 
@@ -26,10 +23,7 @@
 | `version-sync` | 版本 | 跨 README、源码、docs、wiki 同步版本号 | 版本号一致性变更 |
 | `release-prep` | 编排 | 发布前完整流程 | 版本同步、测试、文档、changelog、tag |
 | `ue-source-research` | 研究 | 对照 UE C++ 源码确认 `.uasset` 格式和蓝图/Kismet 语义 | 源码证据、解析修复、回归测试 |
-| `fix-loop` | 自动化 | 错误报告→研究→计划→修复→验证 闭环迭代 | 修复报告、提交记录 |
-| `asset-parse-compare` | 测试 | 解析 uasset 并与 CUE4Parse/UE 对比 | 对比报告、差异数据 |
-| `git-branch-workflow` | Git | 分支创建/合并/清理/PR 一条命令完成 | 分支操作结果、PR 链接 |
-| `repo-cleanup` | 维护 | 自动清理临时文件、调试产物、CUE4Parse 痕迹 | 清理报告、.gitignore 更新 |
+| `ue-wiki-lookup` | 研究 | 从 UE wiki 获取源码路径、模块和架构上下文 | wiki context、CodeGraph 查询建议 |
 
 ## 编排关系
 
@@ -44,6 +38,8 @@
 
 `ue-source-research` 是解析器功能开发和格式问题修复的前置 skill；当 `code-quality-fix` 涉及 `.uasset` 二进制格式、蓝图图结构或 Kismet 语义时，应先使用它确认源码依据。
 
+`ue-wiki-lookup` 用于先从 UE wiki 获取模块、源码路径或架构上下文；需要确认序列化行为或改解析器时，继续使用 `ue-source-research`。
+
 ## 维护规则
 
 - 保持目录名、frontmatter `name`、调用名一致。
@@ -52,3 +48,4 @@
 - 只记录项目专用约束；通用 Claude 行为放在根目录 `CLAUDE.md`。
 - 跨 skill 引用使用相对链接，例如 `../version-sync/SKILL.md`。
 - 不把临时计划、执行日志或一次性脚本放进 skill 目录；这些内容放入 `.claude/plans/`、`.claude/workflows/` 或 `temp/`。
+- 不为通用 Git 操作、一次性清理、宽泛自动化编排创建独立 skill；这些规则放入 `CLAUDE.md`、`.claude/rules/` 或任务计划。

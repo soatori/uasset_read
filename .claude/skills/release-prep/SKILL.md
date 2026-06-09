@@ -87,7 +87,13 @@ description: Use when preparing a release — version bump, test verification, d
 
 ### Phase 5: 合并到 master
 
-master 仅保留发布内容，执行选择性合并：
+master 仅保留发布内容。此流程只用于发布合并，不用于普通工作区清理。
+
+执行选择性合并前必须满足：
+
+1. `develop` 上 release commit 和 tag 已创建。
+2. `git status --short` 为空，没有未提交改动。
+3. 已列出将被排除或清理的开发目录，并获得用户明确确认。
 
 ```bash
 git checkout master
@@ -116,7 +122,6 @@ git clean -fd \
 
 # 提交合并
 git commit -m "Merge develop (vX.Y.Z) into master"
-git push origin master
 ```
 
 **master 白名单**（允许进入 master 的目录）：
@@ -136,8 +141,11 @@ git push origin master
 
 ### Phase 6: 推送
 
+仅在用户明确要求推送后执行：
+
 1. 推送 develop：`git push origin develop`
-2. 推送 tag：`git push origin vX.Y.Z`
+2. 推送 master：`git push origin master`
+3. 推送 tag：`git push origin vX.Y.Z`
 
 ## Verification
 
@@ -146,6 +154,7 @@ git push origin master
 - `git status --short` 只包含发布相关变更
 - `git tag --list "vX.Y.Z"` 确认 tag 存在
 - master 合规检查：`git ls-files | grep -E "^(wiki/|docs/guides/|docs/superpowers/|scripts/)"` 应为空
+- 推送前确认用户已明确要求推送 develop/master/tag
 
 ## Boundaries
 
@@ -200,10 +209,9 @@ git push origin master
 - [ ] 无未提交的临时文件（`temp/` 已清理）
 - [ ] commit message 格式：`release: vX.Y.Z`
 - [ ] tag 已创建
-- [ ] develop 已推送到 origin
 - [ ] master 合并完成（排除开发文件）
-- [ ] master 已推送到 origin
 - [ ] CI 目录合规检查通过
+- [ ] 用户明确要求后，develop/master/tag 已推送到 origin
 
 ## Common Mistakes
 
