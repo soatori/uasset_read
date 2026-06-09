@@ -1,0 +1,8 @@
+Begin Object Class="/Script/BlueprintGraph.K2Node_MacroInstance" Name="K2Node_MacroInstance_0"
+   NodeGuid=77777777777777777777777777777777
+   NodeComment=""
+   MacroGraphName="ForEachLoop"
+   Pin: then_0 (Exec) LinkedTo=(88888888)
+   Pin: ArrayElement (Object) LinkedTo=(99999999)
+   Pin: ArrayIndex (Int) LinkedTo=(aaaaaaaa)
+End Object
