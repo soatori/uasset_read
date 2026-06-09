@@ -237,6 +237,9 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_export_count=_safe_int(getattr(summary, "export_count", 0)),
         total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
+        owner_persistent_guid=_safe_str(getattr(summary, "owner_persistent_guid", "")),
+        compressed_chunks=list(getattr(summary, "compressed_chunks", None) or []),
+        additional_packages_to_cook=list(getattr(summary, "additional_packages_to_cook", None) or []),
     )
 
 

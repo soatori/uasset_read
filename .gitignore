@@ -45,6 +45,7 @@ tests/*
 !tests/test_*.py
 
 !tests/__init__.py
+!tests/fixtures/
 !tests/graph/
 !tests/graph/*.py
 !tests/renderers/
