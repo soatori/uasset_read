@@ -410,7 +410,17 @@ def _extract_scs_node_info(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
 ) -> Dict[str, Any]:
-    """从 SCS_Node 导出中提取节点信息。"""
+    """从 SCS_Node 导出中提取节点信息。
+
+    完整提取 UE SCS_Node.h 定义的所有关键字段：
+    - ComponentClass / ComponentTemplate (组件类/模板)
+    - AttachToName / ParentComponentOrVariableName (父子关系)
+    - InternalVariableName (内部变量名)
+    - VariableGuid (变量 GUID)
+    - MetaDataArray (元数据数组)
+    - CategoryName (分类名称，editor only)
+    - bIsParentComponentNative / ParentComponentOwnerClassName (父组件原生标志)
+    """
     info: Dict[str, Any] = {
         "name": export.object_name,
         "class": "",
@@ -418,9 +428,12 @@ def _extract_scs_node_info(
         "template": "",
         "attach_to": "",
         "variable_name": "",
+        "variable_guid": "",  # Issue #70: 新增 VariableGuid 字段
         "parent_component": "",
         "parent_owner_class": "",
         "is_parent_native": False,
+        "category_name": "",  # Issue #70: 新增 CategoryName 字段
+        "metadata": {},  # Issue #70: 新增 MetaDataArray 解析结果
         "children": [],
     }
 
@@ -459,7 +472,113 @@ def _extract_scs_node_info(
             if isinstance(prop.value, str):
                 info["variable_name"] = prop.value
 
+        # Issue #70: 新增 VariableGuid 字段解析
+        elif prop.name == "VariableGuid":
+            # FGuid 类型，可能是 StructValue 或字符串
+            guid_value = _extract_guid(prop.value)
+            if guid_value:
+                info["variable_guid"] = guid_value
+
+        # Issue #70: 新增 CategoryName 字段解析 (WITH_EDITORONLY_DATA)
+        elif prop.name == "CategoryName":
+            # FText 类型，需要提取 DisplayBase 或直接取字符串
+            category = _extract_text(prop.value)
+            if category:
+                info["category_name"] = category
+
+        # Issue #70: 新增 MetaDataArray 字段解析
+        elif prop.name == "MetaDataArray":
+            # TArray<FBPVariableMetaDataEntry> 类型
+            metadata = _extract_metadata_array(prop.value)
+            if metadata:
+                info["metadata"] = metadata
+
     return info
+
+
+def _extract_guid(value: Any) -> str:
+    """从属性值中提取 GUID 字符串。
+
+    FGuid 在序列化中可能是：
+    - StructValue (包含 A/B/C/D 字段)
+    - 字典格式
+    - 已经是字符串格式
+    """
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, dict):
+        # linker 解析后的格式，可能有 'value' 或 'guid' 键
+        return value.get("value", value.get("guid", ""))
+
+    # StructValue 或其他对象
+    if hasattr(value, "fields"):
+        # StructValue 格式：{A: int, B: int, C: int, D: int}
+        fields = getattr(value, "fields", {})
+        try:
+            a = fields.get("A", 0)
+            b = fields.get("B", 0)
+            c = fields.get("C", 0)
+            d = fields.get("D", 0)
+            # FGuid 是 16 字节，序列化为 32 位 hex
+            return f"{a:08X}{b:08X}{c:08X}{d:08X}".lower()
+        except (AttributeError, TypeError):
+            pass
+
+    return ""
+
+
+def _extract_text(value: Any) -> str:
+    """从 FText 属性值中提取文本字符串。
+
+    FText 在序列化中可能是：
+    - StructValue (包含 Flags, HistoryType, Namespace, Key, SourceString)
+    - 字典格式
+    - 直接字符串
+    """
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, dict):
+        # linker 解析后的格式
+        return value.get("SourceString", value.get("value", ""))
+
+    # StructValue 格式
+    if hasattr(value, "fields"):
+        fields = getattr(value, "fields", {})
+        return fields.get("SourceString", "")
+
+    return ""
+
+
+def _extract_metadata_array(value: Any) -> Dict[str, str]:
+    """从 MetaDataArray 属性值中提取元数据字典。
+
+    TArray<FBPVariableMetaDataEntry> 每个元素包含：
+    - MetaDataEntryName (FName)
+    - MetaDataEntryValue (FString)
+    """
+    result: Dict[str, str] = {}
+
+    if not isinstance(value, list):
+        return result
+
+    for entry in value:
+        if isinstance(entry, dict):
+            # linker 解析后的格式
+            name = entry.get("MetaDataEntryName", entry.get("name", ""))
+            val = entry.get("MetaDataEntryValue", entry.get("value", ""))
+            if name and val:
+                result[name] = val
+        elif hasattr(entry, "fields"):
+            # StructValue 格式
+            fields = getattr(entry, "fields", {})
+            name = fields.get("MetaDataEntryName", "")
+            val = fields.get("MetaDataEntryValue", "")
+            if name and val:
+                result[name] = val
+
+    return result
 
 
 def _resolve_object_property(
