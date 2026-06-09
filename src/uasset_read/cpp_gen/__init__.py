@@ -56,6 +56,12 @@ from uasset_read.cpp_gen.formatters import (
     format_cpp_class_json,
     format_cpp_header,
     format_cpp_call_statements,
+    # 对称语义输出
+    format_cpp_interfaces,
+    format_cpp_enums,
+    format_cpp_structs,
+    format_cpp_delegates,
+    format_cpp_replication,
     # Method/Call IR
     CppCallParameter,
     CppMethodIR,
@@ -137,4 +143,10 @@ __all__ = [
     "extract_cpp_constructor",
     # C++ 标识符清理
     "sanitize_identifier",
+    # 对称语义输出
+    "format_cpp_interfaces",
+    "format_cpp_enums",
+    "format_cpp_structs",
+    "format_cpp_delegates",
+    "format_cpp_replication",
 ]

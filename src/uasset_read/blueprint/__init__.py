@@ -21,6 +21,20 @@ from uasset_read.blueprint.transform_parser import (
 from uasset_read.blueprint.component_extractor import (
     extract_components,
 )
+from uasset_read.blueprint.struct_extractor import (
+    StructFieldIR,
+    StructIR,
+    extract_structs,
+)
+from uasset_read.blueprint.delegate_extractor import (
+    DelegateIR,
+    extract_delegates,
+)
+from uasset_read.blueprint.replication_extractor import (
+    ReplicatedVarIR,
+    ReplicationIR,
+    extract_replication,
+)
 
 __all__ = [
     "extract_blueprint_variables",
@@ -34,4 +48,15 @@ __all__ = [
     "parse_scale_value",
     "format_transform_value",
     "extract_components",
+    # 结构体提取
+    "StructFieldIR",
+    "StructIR",
+    "extract_structs",
+    # 委托提取
+    "DelegateIR",
+    "extract_delegates",
+    # 复制提取
+    "ReplicatedVarIR",
+    "ReplicationIR",
+    "extract_replication",
 ]

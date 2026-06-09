@@ -397,10 +397,276 @@ def format_cpp_call_statements(statements: List["CppCallStatement"]) -> str:
 
 
 # ============================================================================
+# 对称语义输出：接口、枚举、结构体、委托、复制
+# ============================================================================
+
+def format_cpp_interfaces(interfaces: list) -> str:
+    """将接口 IR 列表格式化为 C++ UINTERFACE 声明。
+
+    Args:
+        interfaces: InterfaceIR 列表
+
+    Returns:
+        C++ 接口声明文本
+    """
+    if not interfaces:
+        return ""
+
+    lines = ["// Blueprint Interfaces"]
+    for iface in interfaces:
+        cpp_name = getattr(iface, 'cpp_type', '') or getattr(iface, 'name', '')
+        if not cpp_name:
+            continue
+
+        # UINTERFACE 声明
+        lines.append(f"UINTERFACE(Blueprintable)")
+        lines.append(f"class {cpp_name} : public UInterface")
+        lines.append("{")
+        lines.append("    GENERATED_BODY()")
+        lines.append("};")
+        lines.append("")
+
+        # 对应的 I 前缀类
+        i_name = cpp_name if cpp_name.startswith('I') else f"I{cpp_name}"
+        lines.append(f"class {i_name}")
+        lines.append("{")
+        lines.append("    GENERATED_BODY()")
+        lines.append("")
+        lines.append("public:")
+        lines.append("    // Add interface functions here")
+        lines.append("};")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_cpp_enums(enums: list) -> str:
+    """将枚举 IR 列表格式化为 C++ UENUM enum class 声明。
+
+    Args:
+        enums: EnumIR 列表
+
+    Returns:
+        C++ 枚举声明文本
+    """
+    if not enums:
+        return ""
+
+    lines = ["// Blueprint Enums"]
+    for enum in enums:
+        cpp_name = getattr(enum, 'cpp_type', '') or getattr(enum, 'name', '')
+        if not cpp_name:
+            continue
+
+        lines.append(f"UENUM(BlueprintType)")
+        lines.append(f"enum class {cpp_name} : uint8")
+        lines.append("{")
+
+        values = getattr(enum, 'values', [])
+        if values:
+            for i, val in enumerate(values):
+                val_name = getattr(val, 'name', '')
+                val_value = getattr(val, 'value', None)
+                comma = "," if i < len(values) - 1 else ""
+                if val_value is not None:
+                    lines.append(f"    {val_name} = {val_value}{comma}")
+                else:
+                    lines.append(f"    {val_name}{comma}")
+        else:
+            lines.append("    UMETA(DisplayName = \"Default\")")
+
+        lines.append("};")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_cpp_structs(structs: list) -> str:
+    """将结构体 IR 列表格式化为 C++ USTRUCT 声明。
+
+    Args:
+        structs: StructIR 列表
+
+    Returns:
+        C++ 结构体声明文本
+    """
+    if not structs:
+        return ""
+
+    lines = ["// Blueprint Structs"]
+    for struct in structs:
+        cpp_name = getattr(struct, 'cpp_type', '') or getattr(struct, 'name', '')
+        if not cpp_name:
+            continue
+
+        lines.append(f"USTRUCT(BlueprintType)")
+        lines.append(f"struct {cpp_name}")
+        lines.append("{")
+        lines.append("    GENERATED_BODY()")
+        lines.append("")
+
+        fields = getattr(struct, 'fields', [])
+        if fields:
+            for field_item in fields:
+                field_name = getattr(field_item, 'name', '')
+                field_type = getattr(field_item, 'cpp_type', '')
+                default_val = getattr(field_item, 'default_value', '')
+
+                if field_type and field_name:
+                    decl = f"    UPROPERTY(BlueprintReadWrite, EditAnywhere)"
+                    lines.append(decl)
+                    field_decl = f"    {field_type} {field_name}"
+                    if default_val:
+                        field_decl += f" = {default_val}"
+                    field_decl += ";"
+                    lines.append(field_decl)
+                    lines.append("")
+        else:
+            lines.append("    // Add fields here")
+            lines.append("")
+
+        lines.append("};")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_cpp_delegates(delegates: list) -> str:
+    """将委托 IR 列表格式化为 C++ DECLARE_DYNAMIC_DELEGATE 宏。
+
+    Args:
+        delegates: DelegateIR 列表
+
+    Returns:
+        C++ 委托声明文本
+    """
+    if not delegates:
+        return ""
+
+    lines = ["// Blueprint Delegates"]
+    for delegate in delegates:
+        cpp_name = getattr(delegate, 'cpp_type', '') or getattr(delegate, 'name', '')
+        if not cpp_name:
+            continue
+
+        is_multicast = getattr(delegate, 'is_multicast', False)
+        signature = getattr(delegate, 'signature', '')
+
+        if is_multicast:
+            lines.append(f"DECLARE_DYNAMIC_MULTICAST_DELEGATE({cpp_name});")
+        else:
+            # 解析签名提取返回类型和参数
+            return_type, params = _parse_delegate_signature(signature)
+            param_count = len(params)
+
+            # 根据参数数量选择宏
+            macro_suffix = ""
+            if param_count > 0:
+                macro_suffix = f"_{param_count}"
+
+            macro_name = f"DECLARE_DYNAMIC_DELEGATE{macro_suffix}"
+            param_str = ", ".join([f"{p[0]} {p[1]}" for p in params]) if params else ""
+
+            if param_str:
+                lines.append(f"{macro_name}({cpp_name}, {return_type}, {param_str});")
+            else:
+                lines.append(f"{macro_name}({cpp_name}, {return_type});")
+
+    return "\n".join(lines)
+
+
+def format_cpp_replication(replication) -> str:
+    """将复制 IR 格式化为 C++ GetLifetimeReplicatedProps 实现。
+
+    Args:
+        replication: ReplicationIR 实例
+
+    Returns:
+        C++ 复制实现文本
+    """
+    if not replication:
+        return ""
+
+    replicated_vars = getattr(replication, 'replicated_vars', [])
+    on_rep_functions = getattr(replication, 'on_rep_functions', [])
+
+    if not replicated_vars and not on_rep_functions:
+        return ""
+
+    lines = ["// Replication"]
+    lines.append("")
+
+    # GetLifetimeReplicatedProps 声明
+    lines.append("virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;")
+    lines.append("")
+
+    # 复制变量声明（带 DOREPLIFETIME 注释）
+    if replicated_vars:
+        lines.append("// Replicated Properties:")
+        for var in replicated_vars:
+            var_name = getattr(var, 'name', '')
+            cpp_type = getattr(var, 'cpp_type', '')
+            on_rep = getattr(var, 'on_rep_function', '')
+
+            if var_name:
+                comment = f"// DOREPLIFETIME({var_name})"
+                if on_rep:
+                    comment += f" with OnRep: {on_rep}"
+                lines.append(comment)
+        lines.append("")
+
+    # OnRep 函数声明
+    for on_rep_func in on_rep_functions:
+        lines.append(f"UFUNCTION()")
+        lines.append(f"void {on_rep_func}();")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _parse_delegate_signature(signature: str) -> tuple:
+    """解析委托签名字符串。
+
+    Args:
+        signature: 签名字符串（如 "void(int32, float)"）
+
+    Returns:
+        (return_type, [(type, name), ...])
+    """
+    if not signature:
+        return ("void", [])
+
+    # 匹配 "ReturnType(param1, param2, ...)"
+    import re
+    match = re.match(r'(\w+)\((.*)\)', signature)
+    if not match:
+        return ("void", [])
+
+    return_type = match.group(1)
+    params_str = match.group(2).strip()
+
+    if not params_str:
+        return (return_type, [])
+
+    params = []
+    for i, param in enumerate(params_str.split(',')):
+        param = param.strip()
+        if param:
+            params.append((param, f"Param{i}"))
+
+    return (return_type, params)
+
+
+# ============================================================================
 # 导出列表
 # ============================================================================
 
 __all__ = [
     "format_cpp_header",
     "format_cpp_call_statements",
+    "format_cpp_interfaces",
+    "format_cpp_enums",
+    "format_cpp_structs",
+    "format_cpp_delegates",
+    "format_cpp_replication",
 ]
