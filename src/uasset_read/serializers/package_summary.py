@@ -354,22 +354,34 @@ def _read_package_summary_ue4(
     # CompressionFlags
     compression_flags = archive.read_u32()
 
-    # CompressedChunks (已废弃)
+    # CompressedChunks (已废弃，保留用于偏移对齐)
     compressed_chunks_count = archive.read_i32()
     if compressed_chunks_count < 0:
         raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
+    compressed_chunks = []
     for _ in range(compressed_chunks_count):
-        archive.read(12)
+        chunk_data = archive.read(16)  # FCompressedChunk: 4 × int32 = 16 bytes
+        uncompressed_offset = int.from_bytes(chunk_data[0:4], 'little', signed=True)
+        uncompressed_size = int.from_bytes(chunk_data[4:8], 'little', signed=True)
+        compressed_offset = int.from_bytes(chunk_data[8:12], 'little', signed=True)
+        compressed_size = int.from_bytes(chunk_data[12:16], 'little', signed=True)
+        compressed_chunks.append({
+            "uncompressed_offset": uncompressed_offset,
+            "uncompressed_size": uncompressed_size,
+            "compressed_offset": compressed_offset,
+            "compressed_size": compressed_size,
+        })
 
     # PackageSource
     package_source = archive.read_u32()
 
-    # AdditionalPackagesToCook
+    # AdditionalPackagesToCook (已废弃)
     additional_packages_count = archive.read_i32()
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
+    additional_packages_to_cook = []
     for _ in range(additional_packages_count):
-        archive.read_fstring()
+        additional_packages_to_cook.append(archive.read_fstring())
 
     # TextureAllocations (仅 legacy > -7 时存在)
     if legacy_file_version > -7:
@@ -444,6 +456,8 @@ def _read_package_summary_ue4(
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
         compression_flags=compression_flags, package_source=package_source,
+        compressed_chunks=compressed_chunks,
+        additional_packages_to_cook=additional_packages_to_cook,
         asset_registry_data_offset=asset_registry_data_offset,
         bulk_data_start_offset=bulk_data_start_offset,
         world_tile_info_data_offset=world_tile_info_data_offset,
@@ -719,22 +733,34 @@ def _read_package_summary_ue5(
     # 第 20 步：CompressionFlags
     compression_flags = archive.read_u32()
 
-    # 第 21 步：CompressedChunks（已废弃）
+    # 第 21 步：CompressedChunks（已废弃，保留用于偏移对齐）
     compressed_chunks_count = archive.read_i32()
     if compressed_chunks_count < 0:
         raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
+    compressed_chunks = []
     for _ in range(compressed_chunks_count):
-        archive.read(12)
+        chunk_data = archive.read(16)  # FCompressedChunk: 4 × int32 = 16 bytes
+        uncompressed_offset = int.from_bytes(chunk_data[0:4], 'little', signed=True)
+        uncompressed_size = int.from_bytes(chunk_data[4:8], 'little', signed=True)
+        compressed_offset = int.from_bytes(chunk_data[8:12], 'little', signed=True)
+        compressed_size = int.from_bytes(chunk_data[12:16], 'little', signed=True)
+        compressed_chunks.append({
+            "uncompressed_offset": uncompressed_offset,
+            "uncompressed_size": uncompressed_size,
+            "compressed_offset": compressed_offset,
+            "compressed_size": compressed_size,
+        })
 
     # 第 22 步：PackageSource
     package_source = archive.read_u32()
 
-    # 第 23 步：AdditionalPackagesToCook
+    # 第 23 步：AdditionalPackagesToCook (已废弃)
     additional_packages_count = archive.read_i32()
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
+    additional_packages_to_cook = []
     for _ in range(additional_packages_count):
-        archive.read_fstring()
+        additional_packages_to_cook.append(archive.read_fstring())
 
     # 第 24 步：AssetRegistryDataOffset
     asset_registry_data_offset = archive.read_i32()
@@ -836,6 +862,8 @@ def _read_package_summary_ue5(
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
         compression_flags=compression_flags, package_source=package_source,
+        compressed_chunks=compressed_chunks,
+        additional_packages_to_cook=additional_packages_to_cook,
         asset_registry_data_offset=asset_registry_data_offset,
         bulk_data_start_offset=bulk_data_start_offset,
         world_tile_info_data_offset=world_tile_info_data_offset,
