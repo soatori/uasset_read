@@ -71,7 +71,10 @@ class LinkerParseResult:
         # Partial if any export is not success
         for export in self.export_map:
             export_status = getattr(export, 'parse_status', 'success')
-            if export_status in ('opaque', 'partial', 'skipped', 'metadata', 'failed'):
+            if export_status in (
+                'opaque', 'partial', 'partial_metadata', 'opaque_unversioned',
+                'skipped', 'metadata', 'fallback', 'failed',
+            ):
                 return "partial"
 
         # Check metadata for lightweight parse
