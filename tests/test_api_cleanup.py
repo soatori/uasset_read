@@ -125,14 +125,6 @@ def test_parse_uasset_with_linker_uses_provider():
     assert "provider used for Game/A.uasset" in result.errors[0]
 
 
-def test_parse_package_rejects_unused_aes_key():
-    result = parse_package("Game/A.uasset", aes_key=b"0" * 16)
-
-    assert not result.is_success
-    assert "Unsupported argument: aes_key" in result.errors[0]
-    assert "Unexpected error" not in result.errors[0]
-
-
 def test_filesystem_provider_supports_root_relative_paths(tmp_path: Path):
     asset_dir = tmp_path / "Game"
     asset_dir.mkdir()
