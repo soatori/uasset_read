@@ -466,16 +466,44 @@ class PackageLinker:
     def _build_dependency_graph(self) -> None:
         """将 DependsMap 转换为 UObjectInstance 之间的依赖链接。
 
-        DependsMap[export_index] = [依赖的 export_index 列表]
+        DependsMap values are FPackageIndex (int32):
+        - Positive: export index (1-based)
+        - Negative: import index (-1 based)
+        - Zero: null
+
+        DependsMap[export_index] = [FPackageIndex 列表]
         """
         if not hasattr(self._summary, 'depends_map') or not self._summary.depends_map:
             return
 
+        from uasset_read.serializers.object_resources import PackageIndex
+
         depends_map = self._summary.depends_map
         for exp_idx, dep_indices in enumerate(depends_map):
-            if exp_idx < len(self._export_objects):
-                inst = self._export_objects[exp_idx]
-                inst.dependencies = []
-                for dep_idx in dep_indices:
-                    if 0 <= dep_idx < len(self._export_objects):
-                        inst.dependencies.append(self._export_objects[dep_idx])
+            if exp_idx >= len(self._export_objects):
+                continue
+
+            inst = self._export_objects[exp_idx]
+            inst.dependencies = []
+
+            for raw_dep in dep_indices:
+                if raw_dep == 0:
+                    # Null dependency, skip
+                    continue
+
+                # Convert FPackageIndex to UObjectInstance
+                pkg_idx = PackageIndex(raw_dep)
+                resolved = self.resolve_package_index(pkg_idx)
+
+                if resolved is not None:
+                    inst.dependencies.append(resolved)
+                else:
+                    # Record diagnostic for unresolvable dependency
+                    self._diagnostics.append(OffsetRangeDiagnostic(
+                        module="linker",
+                        field="DependsMap",
+                        export_index=exp_idx,
+                        target_offset=raw_dep,
+                        source="_build_dependency_graph",
+                        error=f"Export #{exp_idx} dependency {raw_dep} could not be resolved",
+                    ))
