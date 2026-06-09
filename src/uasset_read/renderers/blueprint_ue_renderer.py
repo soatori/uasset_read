@@ -8,6 +8,7 @@ from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
+    from uasset_read.models.properties import StructValue, TextValue, EnumValue
 
 
 def _escape_ue_value(value: str) -> str:
@@ -15,8 +16,68 @@ def _escape_ue_value(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+def _format_struct_ue(struct_val: "StructValue") -> str:
+    """将 StructValue 格式化为 UE 风格：(Field1=Value1,Field2=Value2)。"""
+    from uasset_read.models.properties import StructValue
+
+    if not isinstance(struct_val, StructValue):
+        return str(struct_val)
+
+    fields = struct_val.fields if hasattr(struct_val, "fields") else {}
+    if not fields:
+        return "()"
+
+    parts = []
+    for k, v in fields.items():
+        formatted = _format_ue_value(v)
+        parts.append(f"{k}={formatted}")
+    return "(" + ",".join(parts) + ")"
+
+
+def _format_text_ue(text_val: "TextValue") -> str:
+    """将 TextValue 格式化为 UE FText 风格。"""
+    from uasset_read.models.properties import TextValue
+
+    if not isinstance(text_val, TextValue):
+        return str(text_val)
+
+    source = text_val.source_string if hasattr(text_val, "source_string") and text_val.source_string else ""
+    key = text_val.key if hasattr(text_val, "key") and text_val.key else ""
+    ns = text_val.namespace if hasattr(text_val, "namespace") and text_val.namespace else ""
+
+    # UE Ctrl+C 通常显示为 Inv( Namespace="...", Key="...", SourceString="..." )
+    inv_parts = []
+    if ns:
+        inv_parts.append(f'Namespace="{_escape_ue_value(ns)}"')
+    if key:
+        inv_parts.append(f'Key="{_escape_ue_value(key)}"')
+    if source:
+        inv_parts.append(f'SourceString="{_escape_ue_value(source)}"')
+
+    return 'Inv(' + ",".join(inv_parts) + ')' if inv_parts else '""'
+
+
+def _format_enum_ue(enum_val: "EnumValue") -> str:
+    """将 EnumValue 格式化为 UE 风格：EnumType::ValueName。"""
+    from uasset_read.models.properties import EnumValue
+
+    if not isinstance(enum_val, EnumValue):
+        return str(enum_val)
+
+    enum_type = getattr(enum_val, "enum_type", "") or ""
+    value_name = getattr(enum_val, "value_name", "") or ""
+
+    if enum_type and value_name:
+        return f"{enum_type}::{value_name}"
+    return value_name or enum_type or "None"
+
+
 def _format_ue_value(value: Any) -> str:
-    """格式化值为 UE 风格字符串。"""
+    """格式化值为 UE 风格字符串，处理复杂属性类型。"""
+    from uasset_read.models.properties import (
+        StructValue, TextValue, EnumValue, MapValue, SetValue, DelegateValue, SoftObjectPathValue
+    )
+
     if value is None:
         return "None"
     if isinstance(value, bool):
@@ -25,6 +86,29 @@ def _format_ue_value(value: Any) -> str:
         return str(value)
     if isinstance(value, str):
         return _escape_ue_value(value)
+
+    # 高级属性类型
+    if isinstance(value, StructValue):
+        return _format_struct_ue(value)
+    if isinstance(value, TextValue):
+        return _format_text_ue(value)
+    if isinstance(value, EnumValue):
+        return _format_enum_ue(value)
+    if isinstance(value, SoftObjectPathValue):
+        path = getattr(value, "asset_path", "") or ""
+        sub = getattr(value, "sub_path", "") or ""
+        full = path
+        if sub:
+            full = f"{full}.{sub}" if full else sub
+        return f'"{_escape_ue_value(full)}"' if full else '""'
+    if isinstance(value, (list, tuple)):
+        items = [_format_ue_value(item) for item in value]
+        return "(" + ",".join(items) + ")"
+    if isinstance(value, dict):
+        parts = [f"{_escape_ue_value(str(k))}={_format_ue_value(v)}" for k, v in value.items()]
+        return "(" + ",".join(parts) + ")"
+
+    # Fallback: avoid Python repr like ClassName(...)
     return str(value)
 
 
