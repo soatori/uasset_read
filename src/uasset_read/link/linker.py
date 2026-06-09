@@ -19,6 +19,10 @@ if TYPE_CHECKING:
 from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.constants import (
+    PKG_UnversionedProperties,
+    UE5_SCRIPT_SERIALIZATION_OFFSET,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,7 @@ class PackageLinker:
         self._export_objects: List[UObjectInstance] = []
         self._root_objects: List[UObjectInstance] = []
         self._preload_cache: dict[int, bool] = {}
+        self._preloading_in_progress: set[int] = set()
         self._diagnostics: List[OffsetRangeDiagnostic] = []
         self._file_size: int = getattr(archive, '_file_size', 0)
 
@@ -234,6 +239,7 @@ class PackageLinker:
         mappings=None,
         game: Optional[str] = None,
         tolerant: bool = True,
+        _recursion_depth: int = 0,
     ) -> None:
         """Lazily deserialize properties for export *index*.
 
@@ -242,6 +248,7 @@ class PackageLinker:
             mappings: Type mappings provider (optional).
             game: Game identifier (optional).
             tolerant: Tolerant parsing mode (default True).
+            _recursion_depth: Internal recursion depth counter (max 10).
         """
         if index in self._preload_cache:
             return
@@ -253,10 +260,27 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # Issue #68: 循环依赖 defer 机制
+        if index in self._preloading_in_progress:
+            instance.parse_status = "deferred"
+            exp = self._export_map[index]
+            setattr(exp, "parse_status", "deferred")
+            setattr(exp, "fallback_reason", "circular_dependency_deferred")
+            logger.debug(
+                "Circular dependency detected for export #%d (%s), deferring",
+                index,
+                instance.object_name,
+            )
+            return
+
         if instance.serial_size == 0:
             instance._preloaded = True
             self._preload_cache[index] = True
             return
+
+        # Issue #69: 递归加载 SuperStruct 链（UStruct/UClass 继承链）
+        if _recursion_depth < 10:
+            self._preload_super_chain(instance, index, mappings, game, tolerant, _recursion_depth)
 
         # === Class Serialization Strategy Check ===
         # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
@@ -348,28 +372,54 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
-        self._archive.seek(instance.serial_offset)
+        # Issue #68: 标记正在预加载，用于循环依赖检测
+        self._preloading_in_progress.add(index)
+        try:
+            # Issue #67: ScriptSerializationStartOffset 偏移调整
+            # 参考 UE 源码 LinkerLoad.cpp:4793-4802
+            seek_offset = instance.serial_offset
+            effective_serial_size = instance.serial_size
+            exp = self._export_map[index]
+            if self._uses_script_serialization_offset(exp):
+                sss_offset = getattr(exp, 'script_serialization_start_offset', 0)
+                sse_offset = getattr(exp, 'script_serialization_end_offset', 0)
+                if sss_offset > 0:
+                    seek_offset = instance.serial_offset + sss_offset
+                    effective_serial_size = sse_offset - sss_offset
 
-        # Delayed import to avoid circular dependency at module load time.
-        from uasset_read.parsers.property_parser import (
-            parse_properties_from_export,
-        )
+            self._archive.seek(seek_offset)
 
-        exp = self._export_map[index]
-        instance.serialized_properties = parse_properties_from_export(
-            exp,
-            self._archive,
-            self._summary,
-            self._name_map,
-            self._export_map,
-            self._import_map,
-            linker=self,
-            mappings=mappings,
-            game=game,
-            tolerant=tolerant,
-        )
-        instance._preloaded = True
-        self._preload_cache[index] = True
+            # Delayed import to avoid circular dependency at module load time.
+            from uasset_read.parsers.property_parser import (
+                parse_properties_from_export,
+            )
+
+            # 临时覆盖 serial_size 用于 parse_properties_from_export
+            original_serial_size = instance.serial_size
+            if effective_serial_size != original_serial_size:
+                instance.serial_size = effective_serial_size
+
+            instance.serialized_properties = parse_properties_from_export(
+                exp,
+                self._archive,
+                self._summary,
+                self._name_map,
+                self._export_map,
+                self._import_map,
+                linker=self,
+                mappings=mappings,
+                game=game,
+                tolerant=tolerant,
+            )
+
+            # 恢复原始 serial_size
+            if effective_serial_size != original_serial_size:
+                instance.serial_size = original_serial_size
+
+            instance._preloaded = True
+            self._preload_cache[index] = True
+        finally:
+            self._preloading_in_progress.discard(index)
 
     def _collect_root_objects(self) -> None:
         """Collect objects with no outer into _root_objects."""
