@@ -35,6 +35,12 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
 from uasset_read.cpp_gen.formatters.cpp_header_formatter import (
     format_cpp_header,
     format_cpp_call_statements,
+    # 对称语义输出
+    format_cpp_interfaces,
+    format_cpp_enums,
+    format_cpp_structs,
+    format_cpp_delegates,
+    format_cpp_replication,
 )
 from uasset_read.cpp_gen.formatters.cpp_function_body_formatter import (
     format_cpp_function_body,
@@ -66,4 +72,10 @@ __all__ = [
     "kismet_to_cpp_body",
     "format_cpp_function_body",
     "format_full_cpp_implementation",
+    # 对称语义输出
+    "format_cpp_interfaces",
+    "format_cpp_enums",
+    "format_cpp_structs",
+    "format_cpp_delegates",
+    "format_cpp_replication",
 ]
