@@ -73,7 +73,7 @@ class TestSingleAssetCheck:
 
         report = run_single_check(asset, timeout=30)
         assert report.is_valid_json, f"Invalid JSON: {report.error_message}"
-        assert report.status in ("success", "failed"), f"Unexpected status: {report.status}"
+        assert report.status in ("success", "partial", "failed"), f"Unexpected status: {report.status}"
 
     def test_timeout_field_is_set(self):
         """超时时应正确标记。"""

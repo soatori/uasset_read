@@ -113,6 +113,61 @@ serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
 - **tolerant**（默认）：遇错继续，标记 partial
 - **轻量解析**：export_count > 300 时自动跳过完整蓝图解析
 
+## 分支管理与提交规范
+
+### 分支策略
+
+| 分支 | 用途 | 说明 |
+|---|---|---|
+| `develop` | **日常开发**（默认工作分支） | 所有开发任务基于此分支，包含完整文件（src、tests、docs、wiki、scripts） |
+| `master` | **发布分支** | 仅包含发布内容（src、CI、README、CLAUDE.md、pytest.ini），定期从 develop 同步 |
+| `wiki/master` | Wiki 专用 | 独立维护，不纳入主分支 |
+
+**默认工作分支为 `develop`**，所有功能开发、Bug 修复、测试编写均在 develop 上进行。
+
+### master 分支文件白名单
+
+master 仅保留以下内容，开发辅助文件不进入 master：
+
+| 允许 | 排除 |
+|---|---|
+| `src/uasset_read/` | `wiki/` |
+| `.github/workflows/` | `docs/guides/`、`docs/superpowers/`、`docs/reports/` |
+| `README.md`、`README.zh-CN.md` | `scripts/` |
+| `CLAUDE.md`、`LICENSE` | `.claude/skills/`、`.claude/workflows/`、`.claude/agents/` |
+| `pytest.ini`、`run.py` | `temp/` |
+| `.claude/rules/` | |
+| `tests/`（CI 需要） | |
+| `docs/formats/`、`docs/designs/`、`docs/reference/`、`docs/agents/`、`docs/release-notes/` | |
+
+### 版本发布流程
+
+定期版本发布时，从 develop 合并到 master：
+
+```bash
+git checkout master
+git merge develop --no-commit
+# 排除仅开发文件
+git reset HEAD wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/
+git checkout HEAD -- wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/ 2>/dev/null
+git clean -fd wiki/ docs/guides/ docs/superpowers/ docs/reports/ scripts/ \
+    .claude/skills/ .claude/workflows/ .claude/agents/
+git commit -m "Merge develop (vX.Y.Z) into master"
+git push origin master
+```
+
+**CI 自动校验**：master 分支包含文件目录合规检查，违反白名单将被拒绝。
+
+### 提交信息格式
+
+```
+<type>: <简要描述>
+```
+
+类型：`feat`、`fix`、`refactor`、`test`、`docs`、`chore`、`release`
+
 ## 关键约束
 
 见 [.claude/rules/constraints.md](.claude/rules/constraints.md)。核心：
@@ -130,12 +185,11 @@ serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
 
 ### 文档结构
 
-- `docs/guides/` — 开发规范（dev-guide、testing-requirements、development-scope）
+- `wiki/` — 开发指南（独立维护）
 - `docs/formats/uasset/` — UE .uasset 格式参考（60+ 文件）
 - `docs/designs/` — 永久设计规格
 - `docs/reference/` — 技术参考资料
 - `docs/release-notes/` — 版本发布说明
-- `wiki/` — 代码指南（独立维护）
 - `temp/` — 临时文件、脚本、中间产物
 
 ### Agent skills

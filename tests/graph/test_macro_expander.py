@@ -148,5 +148,7 @@ def test_all_standard_macros_documented():
         "ForLoop", "ForLoopWithBreak", "WhileLoop",
         "Gate", "Do N", "DoOnce", "IsValid",
         "FlipFlop", "ForEachLoop", "ForEachLoopWithBreak",
+        "Branch", "Delay", "RetriggerableDelay",
+        "Select", "SwitchOnInt",
     }
     assert set(STANDARD_MACROS.keys()) == expected_macros

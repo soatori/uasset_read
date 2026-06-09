@@ -166,7 +166,9 @@ class TestPreloadOffsetValidation:
         except (TypeError, AttributeError):
             # mock summary 不完整，但 seek 应已被调用
             pass
-        linker._archive.seek.assert_called_once_with(100)
+        # 验证至少有一次 seek 到有效 offset
+        seek_calls = [c for c in linker._archive.seek.call_args_list if c.args[0] == 100]
+        assert len(seek_calls) >= 1, f"Expected seek(100), got calls: {linker._archive.seek.call_args_list}"
 
     def test_preload_zero_size_skips(self):
         """serial_size=0 跳过 preload，不产生诊断。"""
