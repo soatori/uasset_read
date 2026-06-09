@@ -106,13 +106,28 @@ class PackageFileSummary:
     bulk_data_start_offset: int = 0
     world_tile_info_data_offset: int = 0
     chunk_ids: List[str] = field(default_factory=list)
-    preload_dependency_count: int = 0
-    preload_dependency_offset: int = 0
+    preload_dependency_count: int = -1   # UE sentinel: -1 = absent
+    preload_dependency_offset: int = 0   # UE: 0 = absent (与 -1 配合)
     names_referenced_from_export_data_count: int = 0
-    payload_toc_offset: int = 0
-    data_resource_offset: int = 0
+    payload_toc_offset: int = -1         # UE: INDEX_NONE = -1
+    data_resource_offset: int = -1       # UE: -1 = absent
     depends_map: List[List[int]] = field(default_factory=list)
     preload_dependencies: List[int] = field(default_factory=list)
+
+    @property
+    def has_preload_dependencies(self) -> bool:
+        """是否包含预加载依赖表（区分 absent 和 empty）。"""
+        return self.preload_dependency_count >= 0
+
+    @property
+    def has_payload_toc(self) -> bool:
+        """是否包含 PayloadToc（-1 = absent）。"""
+        return self.payload_toc_offset >= 0
+
+    @property
+    def has_data_resources(self) -> bool:
+        """是否包含 DataResource（-1 = absent）。"""
+        return self.data_resource_offset >= 0
 
     def get_custom_version(self, guid: str, default: int = 0) -> int:
         """查找 CustomVersion 版本值。"""
@@ -434,8 +449,8 @@ def _read_package_summary_ue4(
         preload_dependency_count=preload_dependency_count,
         preload_dependency_offset=preload_dependency_offset,
         names_referenced_from_export_data_count=0,  # UE4 没有此字段
-        payload_toc_offset=0,  # UE4 没有 PayloadToc
-        data_resource_offset=0  # UE4 没有 DataResourceOffset
+        payload_toc_offset=-1,  # UE4 没有 PayloadToc，用 INDEX_NONE sentinel
+        data_resource_offset=-1  # UE4 没有 DataResourceOffset，用 absent sentinel
     )
 
 
@@ -755,11 +770,15 @@ def _read_package_summary_ue5(
 
     # Tolerant: 检查 payload_toc_offset 是否合理
     if payload_toc_offset < 0:
-        logger.warning(
-            "PayloadTocOffset 为负数: %d, 设为 0",
-            payload_toc_offset,
-        )
-        payload_toc_offset = 0
+        # -1 是 UE INDEX_NONE sentinel，表示 absent，保留
+        # 其他负值视为异常
+        if payload_toc_offset != -1:
+            logger.warning(
+                "PayloadTocOffset 异常负值: %d, 设为 INDEX_NONE (-1)",
+                payload_toc_offset,
+            )
+            payload_toc_offset = -1
+        # -1 保留为 sentinel，不 coerce 到 0
     elif payload_toc_offset > 0:
         file_size = archive.total_size()
         # 超过文件大小 10 倍说明值明显无效
@@ -780,7 +799,7 @@ def _read_package_summary_ue5(
             archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
 
     # 第 31 步：DataResourceOffset
-    data_resource_offset = 0
+    data_resource_offset = -1  # 默认 absent，UE sentinel
     if file_version_ue5 >= UE5_DATA_RESOURCES:
         data_resource_offset = archive.read_i32()
         if data_resource_offset > 0:
