@@ -202,3 +202,66 @@ class TestParseBatchMemoryManagement:
         )
         assert call_count >= 1
         assert result.success == []
+
+
+# ---------------------------------------------------------------------------
+# parse_single 单文件入口保护
+# ---------------------------------------------------------------------------
+
+class TestParseSingleSizeProtection:
+    """验证 parse_single() 的文件大小保护。"""
+
+    def test_rejects_file_over_max_size(self, tmp_path: Path):
+        """超过 max_file_size_mb 的文件应抛 ParseError。"""
+        from uasset_read.core import parse_single
+        from uasset_read.exceptions import ParseError
+
+        fake = tmp_path / "big.uasset"
+        fake.write_bytes(b"\x00" * (2 * 1024 * 1024))
+
+        with pytest.raises(ParseError, match="too large"):
+            parse_single(str(fake), max_file_size_mb=1.0)
+
+    def test_none_disables_check(self, tmp_path: Path):
+        """max_file_size_mb=None 应禁用大小检查（不抛 'too large' ParseError）。
+        文件内容无效可能导致其他行为（容错模式返回字符串），但不应是 'too large'。"""
+        from uasset_read.core import parse_single
+        from uasset_read.exceptions import ParseError
+
+        fake = tmp_path / "big2.uasset"
+        fake.write_bytes(b"\x00" * (2 * 1024 * 1024))
+
+        try:
+            result = parse_single(str(fake), max_file_size_mb=None)
+            # 容错模式可能返回字符串而不是抛异常
+            assert isinstance(result, str)
+        except ParseError as e:
+            # 如果抛出了 ParseError，不应是 'too large'
+            assert "too large" not in str(e).lower()
+
+    def test_warns_for_file_over_warn_threshold(self, tmp_path: Path, caplog):
+        """≥ WARN_FILE_SIZE_MB 的文件应产生 warning 日志。"""
+        import logging
+        from uasset_read.core import parse_single
+        from uasset_read.constants import WARN_FILE_SIZE_MB
+
+        fake = tmp_path / "warn.uasset"
+        fake.write_bytes(b"\x00" * ((WARN_FILE_SIZE_MB + 1) * 1024 * 1024))
+
+        with caplog.at_level(logging.WARNING, logger="uasset_read.core"):
+            # 容错模式下不会抛异常，只验证警告日志
+            result = parse_single(str(fake), max_file_size_mb=500)
+            assert isinstance(result, str)
+
+        assert any("large" in r.message.lower() or "size" in r.message.lower()
+                    for r in caplog.records)
+
+    def test_default_max_is_1000_mb(self):
+        """默认 max_file_size_mb 应为 1000 MB。"""
+        from uasset_read.constants import DEFAULT_MAX_PARSE_SIZE_MB
+        assert DEFAULT_MAX_PARSE_SIZE_MB == 1000
+
+    def test_warn_threshold_is_100_mb(self):
+        """WARN_FILE_SIZE_MB 应为 100 MB。"""
+        from uasset_read.constants import WARN_FILE_SIZE_MB
+        assert WARN_FILE_SIZE_MB == 100
