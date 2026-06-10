@@ -443,45 +443,35 @@ def parse_properties_from_export(
     # 未知位应降级为诊断信息，不要盲跳
     #
     # UE 源码 Class.cpp:1624-1628:
-    #   const bool bIsUClass = IsA<UClass>();
+    #   const bool bIsUClass = IsA<UClass>();  // 'this' 是 ObjClass（对象的类）
     #   if (bIsUClass && UnderlyingArchive.UEVer() >= PROPERTY_TAG_EXTENSION_AND_OVERRIDABLE_SERIALIZATION)
-    # D-02 字节仅在 UClass 对象中序列化，非 UClass 的 UStruct 不包含此 header。
+    #
+    # 关键发现：对于任何 export，ObjClass（对象所属的类）总是 UClass 或 UClass 派生类，
+    # 因此 D-02 字节对所有 export payload 都会序列化，而非仅对 UClass 派生类的 export 对象。
+    # 参考 UE 源码：SerializeTaggedProperties 在 ObjClass（UClass）上调用，IsA<UClass>() 检查
+    # ObjClass 是否为 UClass（永远为 true），而非检查 export 对象本身。
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        from uasset_read.parsers.class_serialization_strategy import is_uclass_derived
-        if _skip_class_name is not None and is_uclass_derived(_skip_class_name):
-            # UClass 派生类：正常读取 SerializationControlExtensions header
-            control_offset = archive.tell()
-            serialization_control = archive.read_u8()
-            overridden_operation = None
-            if serialization_control & 0x02:
-                overridden_operation = archive.read_u8()
-            # 记录未知位（非 0x00 和非 0x02 的位）
-            unknown_bits = serialization_control & ~0x02
-            if unknown_bits:
-                logger.warning(
-                    "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
-                    getattr(export, "object_name", ""), unknown_bits, control_offset,
-                )
-            # 存储到 export 的 transforms 中，供 IR/JSON 输出
-            if not hasattr(export, "transforms") or export.transforms is None:
-                export.transforms = {}
-            export.transforms["serialization_control"] = {
-                "value": serialization_control,
-                "overridden_operation": overridden_operation,
-                "offset": control_offset,
-            }
-        elif _skip_class_name is None:
-            # 类名无法解析：记录诊断，不消费字节（避免偏移错位）
-            logger.debug(
-                "D-02: export '%s' 类名未知，跳过 SerializationControlExtensions 读取",
-                getattr(export, "object_name", ""),
+        # 所有 UE5 >= 1011 的 export payload 都包含 D-02 SerializationControlExtensions header
+        control_offset = archive.tell()
+        serialization_control = archive.read_u8()
+        overridden_operation = None
+        if serialization_control & 0x02:
+            overridden_operation = archive.read_u8()
+        # 记录未知位（非 0x00 和非 0x02 的位）
+        unknown_bits = serialization_control & ~0x02
+        if unknown_bits:
+            logger.warning(
+                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
+                getattr(export, "object_name", ""), unknown_bits, control_offset,
             )
-        else:
-            # 非 UClass 派生类（Function、EdGraph 等）：按 UE 源码不序列化 D-02 字节
-            logger.debug(
-                "D-02: export '%s' class '%s' 非 UClass，跳过 SerializationControlExtensions",
-                getattr(export, "object_name", ""), _skip_class_name,
-            )
+        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        if not hasattr(export, "transforms") or export.transforms is None:
+            export.transforms = {}
+        export.transforms["serialization_control"] = {
+            "value": serialization_control,
+            "overridden_operation": overridden_operation,
+            "offset": control_offset,
+        }
 
     # 计算属性数据边界
     # UE default: 使用 SerialSize 作为属性边界
