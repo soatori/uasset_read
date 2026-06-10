@@ -70,8 +70,8 @@ class JSONRenderer(IRenderer):
             }
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
-        if ir.decompiled_functions:
-            data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
+        # 始终输出 decompiled_functions 字段，即使为空列表
+        data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
         if ir.execution_chains:
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if ir.variables:
