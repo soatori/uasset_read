@@ -90,12 +90,6 @@ class FIoChunkId:
     """
     bytes: bytes  # 12 bytes
 
-    @staticmethod
-    def from_hash(chunk_hash: int) -> FIoChunkId:
-        """从 64 位哈希创建（低 12 字节）"""
-        data = struct.pack('<Q', chunk_hash) + b'\x00' * 4
-        return FIoChunkId(bytes=data[:12])
-
     @property
     def id(self) -> int:
         """返回 64 位 ID（低 8 字节）"""

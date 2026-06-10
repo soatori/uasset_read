@@ -497,35 +497,3 @@ def _expr_to_tree_node(expr: KismetExpression) -> dict:
         result["children"] = children
 
     return result
-
-
-def expressions_to_flat_list(expressions: list[KismetExpression]) -> list[dict]:
-    """
-    Convert expression list to flat dict list.
-
-    Each dict contains: StatementIndex, Token (name), type (class name),
-    plus any additional fields from to_dict().
-
-    Does NOT recurse into nested child expressions.
-    """
-    result = []
-    for expr in expressions:
-        item = {
-            "StatementIndex": expr.StatementIndex,
-            "Token": expr.Token.name if hasattr(expr.Token, 'name') else str(expr.Token),
-            "type": type(expr).__name__,
-        }
-        item.update(expr.to_dict())
-        result.append(item)
-    return result
-
-
-def expressions_to_tree(expressions: list[KismetExpression]) -> list[dict]:
-    """
-    Convert expression list to tree structure with children.
-
-    Each dict contains: StatementIndex, Token, type, children (nested
-    sub-expressions). Recursively processes nested KismetExpression
-    instances found as attributes or in to_dict() values.
-    """
-    return [_expr_to_tree_node(expr) for expr in expressions]

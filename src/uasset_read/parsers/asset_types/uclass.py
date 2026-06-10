@@ -258,20 +258,3 @@ def parse_uclass_fields(
         result["bytes_read"] = archive.tell() - start_pos
 
     return result
-
-
-def parse_uclass_handler(
-    archive: "FArchive", name_map: List[str]
-) -> Dict[str, Any]:
-    """UClass handler 入口函数（供 ClassHandler 调用）。
-
-    仅解析原生字段，不处理 tagged properties。
-
-    Args:
-        archive: FArchive 实例
-        name_map: 名称表
-
-    Returns:
-        dict: 解析结果
-    """
-    return parse_uclass_fields(archive, name_map)

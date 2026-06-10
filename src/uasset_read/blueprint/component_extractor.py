@@ -174,27 +174,6 @@ def _find_bpgc_export(
     return None
 
 
-def _find_scs_property_on_bpgc(bpgc_export: ObjectExport) -> Optional[ObjectExport]:
-    """从 BPGC export 的属性中找到 SimpleConstructionScript 引用。
-
-    SimpleConstructionScript 是一个 ObjectProperty，
-    其值（解析后）指向一个 USimpleConstructionScript 导出。
-    """
-    for prop in bpgc_export.properties:
-        if prop.name == "SimpleConstructionScript":
-            value = prop.value
-            if isinstance(value, dict):
-                # linker 解析后的格式
-                if value.get("type") == "export":
-                    return None  # 需要找到 export 对象
-            elif isinstance(value, int):
-                # PackageIndex raw 值
-                pkg_idx = PackageIndex(value)
-                if pkg_idx.is_export:
-                    return None  # 需要 export_map 来查找
-    return None
-
-
 def _find_scs_export_from_bpgc(
     bpgc_export: ObjectExport,
     export_map: List[ObjectExport],
