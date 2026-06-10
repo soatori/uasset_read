@@ -9,9 +9,6 @@ from typing import Dict, List, Optional
 
 from uasset_read.models.core import UEdGraph
 
-MAX_CHAIN_DEPTH = 1000
-
-
 def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
     """DFS 环检测。
 
