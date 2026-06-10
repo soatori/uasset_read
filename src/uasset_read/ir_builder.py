@@ -374,11 +374,30 @@ def _build_export_raw_ir(export, result: ParseResult = None) -> ExportRawIR:
 
 
 def _build_export_diagnostics(export) -> dict | None:
-    """从 ObjectExport.transforms 构建诊断信息。"""
+    """从 ObjectExport.transforms 和 _uclass_native_fields 构建诊断信息。"""
     transforms = getattr(export, "transforms", None) or {}
-    if not transforms:
-        return None
-    return dict(transforms)
+    uclass_fields = getattr(export, "_uclass_native_fields", None)
+
+    diagnostics = {}
+    if transforms:
+        diagnostics.update(transforms)
+
+    # 添加 UClass 原生字段到 diagnostics（#82, #83）
+    if uclass_fields is not None:
+        diagnostics["uclass_native"] = {
+            "func_map_count": uclass_fields.get("func_map", {}).get("count", 0),
+            "class_flags": uclass_fields.get("class_flags", 0),
+            "interfaces_count": uclass_fields.get("interfaces", {}).get("count", 0),
+            "has_cdo": not uclass_fields.get("class_default_object", {}).get("is_null", True),
+            "parse_status": uclass_fields.get("parse_status", "unknown"),
+            "bytes_read": uclass_fields.get("bytes_read", 0),
+        }
+        # 如果有解析错误，也包含
+        parse_error = uclass_fields.get("parse_error")
+        if parse_error:
+            diagnostics["uclass_native"]["parse_error"] = parse_error
+
+    return diagnostics if diagnostics else None
 
 
 def _build_property_ir(prop) -> PropertyIR:
