@@ -54,7 +54,6 @@ class FArchive:
 
     def read(self, size: int) -> bytes:
         """基础读取方法 - 不对原始字节进行交换。"""
-        import struct as _struct
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:

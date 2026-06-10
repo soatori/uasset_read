@@ -5,7 +5,6 @@ Pak 文件数据结构
 """
 import struct
 from dataclasses import dataclass, field
-from io import BytesIO
 from typing import Any, BinaryIO, Dict, Optional
 
 from uasset_read.exceptions import ParseError
@@ -18,7 +17,7 @@ from uasset_read.pak.constants import (
     Flag_Encrypted,
     Flag_Deleted,
 )
-from uasset_read.pak.game_versions import detect_game_from_magic, get_game_info, EGame
+from uasset_read.pak.game_versions import detect_game_from_magic, EGame
 
 
 # ============================================================================

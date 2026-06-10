@@ -1,12 +1,11 @@
 """Shared utilities for graph serialization — GUID, FText, thread-local helpers."""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import struct
 import threading
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
     from uasset_read.link.linker import PackageLinker
 
-from uasset_read.constants import MAX_FTEXT_CONSUMPTION
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.property_tags import read_tag_value_bounded
 

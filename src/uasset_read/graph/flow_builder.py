@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple, Set, Any, Iterable
+from typing import Dict, List, Optional, Tuple, Set, Any
 
 from uasset_read.constants import (
     START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
@@ -18,7 +18,6 @@ from uasset_read.models.node_types import (
 )
 
 # Import deduplicated helpers from split modules
-from ._sanitize import _sanitize_string, _sanitize_pin_dict, _sanitize_recursive
 from ._pin_helpers import (
     _derive_node_name, format_pin_ref, _pin_ref_guid, _pin_direction_text,
     _pin_category, _pin_subcategory, _pin_container_type, _format_blueprint_pin_dto,
