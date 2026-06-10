@@ -54,10 +54,6 @@ class PackageVersionProfile:
     def is_ue5(self) -> bool:
         return self.engine_family == "ue5"
 
-    def needs_legacy_guid_position(self) -> bool:
-        """UE4 legacy -6 的 Guid 字段位置不同，需要特殊处理。"""
-        return self.is_ue4 and self.legacy_file_version == -6
-
 
 def build_version_profile(
     legacy_file_version: int,

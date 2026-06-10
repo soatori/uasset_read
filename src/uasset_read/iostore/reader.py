@@ -259,25 +259,6 @@ class IoStoreReader:
         """列出所有文件路径（需要目录索引）"""
         return list(self._directory_index.keys())
 
-    def does_chunk_exist(self, chunk_id: FIoChunkId) -> bool:
-        """检查 ChunkId 是否存在"""
-        offset_length = self._resolve_chunk(chunk_id)
-        return offset_length is not None
-
-    def try_resolve(self, chunk_id: FIoChunkId) -> Optional[Tuple[int, int]]:
-        """尝试解析 ChunkId 到 (offset, length)
-
-        Args:
-            chunk_id: Chunk 标识符
-
-        Returns:
-            (offset, length) 元组，未找到返回 None
-        """
-        offset_length = self._resolve_chunk(chunk_id)
-        if offset_length is not None:
-            return (offset_length.offset, offset_length.length)
-        return None
-
     def extract(self, chunk_id_bytes: bytes) -> bytes:
         """根据 ChunkId 原始字节提取数据
 

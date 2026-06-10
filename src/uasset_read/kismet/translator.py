@@ -77,56 +77,6 @@ class TypeRegistry:
         """Look up the C++ type for a variable. Returns None if not found."""
         return self._types.get(name)
 
-    def resolve_type(self, name: str) -> str:
-        """Resolve type for a variable, falling back to 'auto' if unknown."""
-        return self._types.get(name, "auto")
-
-    def populate_from_metadata(self, metadata: dict) -> None:
-        """
-        Batch-initialize from BlueprintMetadata / BlueprintVariable data.
-
-        Expected metadata format:
-        {
-            "variables": [
-                {"name": "MyVar", "type": "IntProperty", ...},
-                ...
-            ],
-            "functions": [
-                {"name": "MyFunc", "params": [{"name": "Param1", "type": "FloatProperty"}], ...},
-                ...
-            ]
-        }
-        """
-        # Process variables
-        for var in metadata.get("variables", []):
-            var_name = var.get("name")
-            var_type = var.get("type", "")
-            if var_name and var_type:
-                cpp_type = _UE_TO_CPP_TYPES.get(var_type, var_type)
-                self.register_variable(var_name, cpp_type)
-
-        # Process function parameters and return values
-        for func in metadata.get("functions", []):
-            for param in func.get("params", []):
-                param_name = param.get("name")
-                param_type = param.get("type", "")
-                if param_name and param_type:
-                    cpp_type = _UE_TO_CPP_TYPES.get(param_type, param_type)
-                    if param.get("flags") and "OutParm" in param.get("flags", ""):
-                        cpp_type += "&"
-                    self.register_variable(param_name, cpp_type)
-
-            # Return value
-            ret = func.get("return_value")
-            if ret and ret.get("name"):
-                ret_type = ret.get("type", "")
-                cpp_type = _UE_TO_CPP_TYPES.get(ret_type, ret_type)
-                self.register_variable(ret["name"], cpp_type)
-
-    def ue_to_cpp(self, ue_type: str) -> str:
-        """Convert a single UE property type to C++ type string."""
-        return _UE_TO_CPP_TYPES.get(ue_type, ue_type)
-
 
 # ===========================================================================
 # MathFunctionCleaner — beautify Kismet library calls (Decision D-04, D-05)

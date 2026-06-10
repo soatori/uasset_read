@@ -138,12 +138,6 @@ class FKismetArchive(FArchive):
             return f"{base_name}_{number}"
         return base_name
 
-    def read_fname_kismet(self) -> str:
-        """Read FName in Kismet context: index + number → look up in name_map."""
-        index = self.read_i32()
-        number = self.read_i32()
-        return self.resolve_fname(index, number)
-
     def skip(self, n: int) -> None:
         """Skip n bytes forward."""
         current = self.tell()

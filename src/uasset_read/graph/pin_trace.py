@@ -86,30 +86,6 @@ def write_pin_trace_report(
 # 字段级诊断基线
 # ============================================================================
 
-def _classify_node(node) -> str:
-    """返回节点的语义分类标签。"""
-    class_name = getattr(node, "class_name", "")
-    data = getattr(node, "node_data", {}) or {}
-    if class_name == "K2Node_EnhancedInputAction":
-        return data.get("input_action_path", class_name)
-    if class_name == "K2Node_Event":
-        ref = data.get("event_reference")
-        if ref:
-            member = getattr(ref, "member_name", "") or str(ref)
-            return f"Event:{member}"
-        return class_name
-    if class_name == "K2Node_FunctionEntry":
-        ref = data.get("function_reference")
-        if ref:
-            member = getattr(ref, "member_name", "") or str(ref)
-            return f"FunctionEntry:{member}"
-        return class_name
-    if class_name == "EdGraphNode_Comment":
-        comment = data.get("node_comment", "") or getattr(node, "node_comment", "")
-        return f"Comment:{comment}" if comment else class_name
-    return class_name
-
-
 def _pin_direction_label(direction) -> str:
     """将 direction 整数转换为标签，标注异常值。"""
     labels = {0: "Input", 1: "Output"}
