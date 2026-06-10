@@ -16,6 +16,7 @@ class SampleAsset:
     label: str
     category: str
     relative_path: str
+    size_class: str = "small"  # "small" (<10MB), "medium" (10-100MB), "large" (>100MB)
     known_current_defect: str | None = None
 
 
@@ -25,7 +26,12 @@ LEGACY_VERSION_DEFECT = (
 )
 
 
+# 大小分级标准：
+# - "small":  < 10 MB  — 无限制
+# - "medium": 10-100 MB — batch 处理时产生警告
+# - "large":  > 100 MB — 需要 --include-large 才能运行测试
 STABLE_ASSETS = [
+    # 所有当前资产均为 small，保持默认 size_class="small"
     SampleAsset(
         "first_person_blueprint",
         "Blueprint",

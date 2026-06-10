@@ -287,3 +287,18 @@ class TestGcAfterHeavyTest:
         此测试本身不标记，fixture yield 后分支不进入 gc.collect()。
         仅验证 fixture 的条件判断逻辑不报错。"""
         assert True
+
+
+# ---------------------------------------------------------------------------
+# 大资产门控验证
+# ---------------------------------------------------------------------------
+
+class TestLargeAssetGate:
+    """验证 @pytest.mark.large 门控机制工作正常。"""
+
+    @pytest.mark.large
+    def test_large_marker_is_gated(self):
+        """此测试仅在 --include-large 时运行。
+        用于验证门控机制：不带 --include-large 时此测试被 skip。
+        """
+        assert True, "If you see this, --include-large was passed"

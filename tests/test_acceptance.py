@@ -19,6 +19,11 @@ from uasset_read.core import parse_single
 from uasset_read.parse_uasset import parse_uasset_with_linker
 from uasset_read.renderers import list_formats
 
+# 大资产测试门控说明：
+# 若新增 > 100 MB 的样本资产到 ASSET_TYPE_SAMPLES，
+# 需要为对应的 parametrize 项添加 @pytest.mark.large 标记。
+# 用法：pytest.param(asset_type, rel_path, marks=pytest.mark.large)
+
 pytestmark = pytest.mark.acceptance
 
 DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")

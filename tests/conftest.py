@@ -31,7 +31,7 @@ def pytest_collection_modifyitems(
         reason="large asset test (pass --include-large to enable)"
     )
     for item in items:
-        if "large" in item.iter_markers():
+        if any(m.name == "large" for m in item.iter_markers()):
             item.add_marker(skip_large)
 
 
