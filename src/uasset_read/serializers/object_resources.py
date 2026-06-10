@@ -615,17 +615,21 @@ def resolve_parent_class_with_linker(
     linker: "PackageLinker",
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Resolve ParentClass FPackageIndex to object name (通过 linker)。
+    Resolve ParentClass FPackageIndex to full UE path (通过 linker)。
 
     Returns:
-        Tuple of (resolved_name, warning_if_any)
-        - (class_name, None) on success
+        Tuple of (resolved_path, warning_if_any)
+        - (full_path, None) on success, e.g. "/Script/Engine.Character"
         - (None, warning_string) on failure
     """
     if super_index.is_null:
         return None, None
     inst = linker.resolve_package_index(super_index)
     if inst is not None:
+        # 构建完整 UE 路径：class_package.object_name
+        # 例如 /Script/Engine.Character
+        if inst.class_package:
+            return f"{inst.class_package}.{inst.object_name}", None
         return inst.object_name, None
     return None, f"Parent resolution failed for index {super_index.index}"
 
@@ -666,15 +670,15 @@ def resolve_parent_class(
     export_map: List[ObjectExport]
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Resolve ParentClass FPackageIndex to object name (BLUE-02).
+    Resolve ParentClass FPackageIndex to full UE path (BLUE-02).
 
     Per D-09: only direct parent (no inheritance chain).
     Per D-10: resolve to ImportMap/ExportMap object name.
     Per D-11: return raw index + warning on resolution failure.
 
     Returns:
-        Tuple of (resolved_name, warning_if_any)
-        - (class_name, None) on success
+        Tuple of (resolved_path, warning_if_any)
+        - (full_path, None) on success, e.g. "/Script/Engine.Character"
         - (None, warning_string) on failure
     """
     if super_index.is_null:
@@ -683,13 +687,19 @@ def resolve_parent_class(
     if super_index.is_import:
         import_idx = super_index.to_import_index()
         if 0 <= import_idx < len(import_map):
-            return import_map[import_idx].object_name, None
+            imp = import_map[import_idx]
+            # 构建完整 UE 路径：class_package.object_name
+            if imp.class_package:
+                return f"{imp.class_package}.{imp.object_name}", None
+            return imp.object_name, None
         else:
             return None, f"Parent import index out of range: {super_index.index}"
 
     elif super_index.is_export:
         export_idx = super_index.to_export_index()
         if 0 <= export_idx < len(export_map):
+            # 对于 export，返回 object_name
+            # export 的 class 信息在 class_index 中，需要额外解析
             return export_map[export_idx].object_name, None
         else:
             return None, f"Parent export index out of range: {super_index.index}"
