@@ -124,6 +124,12 @@ def _get_parse_property_value():
     return parse_property_value
 
 
+def _get_read_property_tag():
+    """Lazy import to avoid circular dependency."""
+    from uasset_read.serializers.property_tags import read_property_tag
+    return read_property_tag
+
+
 # ============================================================================
 # Container parsers
 # ============================================================================
