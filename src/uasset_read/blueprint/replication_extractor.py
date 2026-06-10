@@ -7,39 +7,12 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
+
+from uasset_read.models.ir import ReplicatedVarIR, ReplicationIR
 
 if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
-
-
-@dataclass
-class ReplicatedVarIR:
-    """复制变量的 IR 表示。
-
-    Attributes:
-        name: 变量名称
-        cpp_type: C++ 类型名
-        on_rep_function: OnRep 函数名（如果有）
-        replication_condition: 复制条件
-    """
-    name: str
-    cpp_type: str = ""
-    on_rep_function: str = ""
-    replication_condition: int = 0
-
-
-@dataclass
-class ReplicationIR:
-    """蓝图复制信息的 IR 表示。
-
-    Attributes:
-        replicated_vars: 复制变量列表
-        on_rep_functions: OnRep 函数列表
-    """
-    replicated_vars: List[ReplicatedVarIR] = field(default_factory=list)
-    on_rep_functions: List[str] = field(default_factory=list)
 
 
 def extract_replication(blueprint: Optional["BlueprintMetadata"]) -> ReplicationIR:

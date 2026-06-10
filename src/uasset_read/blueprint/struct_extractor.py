@@ -7,41 +7,12 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
+
+from uasset_read.models.ir import StructFieldIR, StructIR
 
 if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
-
-
-@dataclass
-class StructFieldIR:
-    """结构体字段的 IR 表示。
-
-    Attributes:
-        name: 字段名称
-        cpp_type: C++ 类型名
-        default_value: 默认值
-    """
-    name: str
-    cpp_type: str = ""
-    default_value: str = ""
-
-
-@dataclass
-class StructIR:
-    """蓝图结构体的 IR 表示。
-
-    Attributes:
-        name: 结构体名称（如 "FMyStruct"）
-        cpp_type: C++ 类型名（带 F 前缀）
-        fields: 字段列表
-        ue_path: UE 完整路径
-    """
-    name: str
-    cpp_type: str = ""
-    fields: List[StructFieldIR] = field(default_factory=list)
-    ue_path: str = ""
 
 
 def extract_structs(blueprint: Optional["BlueprintMetadata"]) -> List[StructIR]:

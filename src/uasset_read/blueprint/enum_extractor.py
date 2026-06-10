@@ -7,41 +7,12 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
+
+from uasset_read.models.ir import EnumValueIR, EnumIR
 
 if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
-
-
-@dataclass
-class EnumValueIR:
-    """枚举值的 IR 表示。
-
-    Attributes:
-        name: 枚举值名称（如 "E_MyValue"）
-        value: 枚举值（整数）
-        display_name: 显示名称（可选）
-    """
-    name: str
-    value: int = 0
-    display_name: str = ""
-
-
-@dataclass
-class EnumIR:
-    """蓝图枚举的 IR 表示。
-
-    Attributes:
-        name: 枚举名称（如 "EMyEnum"）
-        cpp_type: C++ 类型名（带 E 前缀）
-        values: 枚举值列表
-        ue_path: UE 完整路径
-    """
-    name: str
-    cpp_type: str = ""
-    values: List[EnumValueIR] = field(default_factory=list)
-    ue_path: str = ""
 
 
 def extract_enums(blueprint: Optional["BlueprintMetadata"]) -> List[EnumIR]:
