@@ -273,7 +273,7 @@ def parse_property_value(
         elif tag.type == "FieldPathProperty":
             return handler(tag, archive, name_map, summary)
         elif tag.type == "TextProperty":
-            return handler(tag, archive, summary)
+            return handler(tag, archive)
         elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
             # These need soft_object_path_list for UE5.7+ index-based resolution
             soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
