@@ -96,6 +96,7 @@ from .constants import (
     CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
     CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
+    DEFAULT_MAX_PARSE_SIZE_MB, WARN_FILE_SIZE_MB,
 )
 
 # ============================================================================
@@ -363,4 +364,7 @@ __all__ = [
     "CPF_Transient",
     "CPF_SaveGame",
     "CPF_ExposeOnSpawn",
+    # 内存安全常量
+    "DEFAULT_MAX_PARSE_SIZE_MB",
+    "WARN_FILE_SIZE_MB",
 ]

@@ -124,33 +124,43 @@ UE5_IMPORT_TYPE_HIERARCHIES = 1018
 
 # ============================================================================
 # UE4 版本常量（对应 EUnrealEngineObjectUE4Version）
+# 来源: Engine/Source/Runtime/Core/Public/UObject/ObjectVersion.h
+# 基准: VER_UE4_OLDEST_LOADABLE_PACKAGE = 214, VER_UE4_AUTOMATIC_VERSION = 522
 # ============================================================================
 
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516
-UE4_ADD_STRING_ASSET_REFERENCES_MAP = 516
-UE4_SERIALIZE_TEXT_IN_PACKAGES = 517
-UE4_ADDED_SEARCHABLE_NAMES = 518
-UE4_ADDED_PACKAGE_OWNER = 519
+UE4_ADD_STRING_ASSET_REFERENCES_MAP = 384
+UE4_SERIALIZE_TEXT_IN_PACKAGES = 459
+UE4_ADDED_SEARCHABLE_NAMES = 510
+UE4_ADDED_PACKAGE_OWNER = 518
 UE4_NON_OUTER_PACKAGE_IMPORT = 520
-UE4_NAME_HASHES_SERIALIZED = 514  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
-UE4_LOAD_FOR_EDITOR_GAME = 364
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 484
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 506
-UE4_TemplateIndex_IN_COOKED_EXPORTS = 507
-UE4_64BIT_EXPORTMAP_SERIALSIZES = 510
+UE4_NAME_HASHES_SERIALIZED = 504  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希
+UE4_LOAD_FOR_EDITOR_GAME = 365
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
+UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
+UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
+UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
 
 # UE4 PropertyTag 版本门控常量
-VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 501      # PropertyGuid 字段加入
-VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 336        # StructGuid 字段加入
-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 511       # Set/MapProperty 支持
-VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 247          # ArrayProperty inner type 字段加入
+VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503      # PropertyGuid 字段加入
+VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441        # StructGuid 字段加入
+VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509       # Set/MapProperty 支持
+VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 282          # ArrayProperty inner type 字段加入
 
 # ============================================================================
 # FEdGraphPinType 序列化版本常量（EUnrealEngineObjectUE4Version）
 # ============================================================================
 
-VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 354         # PinSubCategoryMemberReference 字段加入
-VER_UE4_SERIALIZE_PINTYPE_CONST = 455            # bIsConst 字段加入
+VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 355         # PinSubCategoryMemberReference 字段加入
+VER_UE4_SERIALIZE_PINTYPE_CONST = 456            # bIsConst 字段加入
+
+# ============================================================================
+# 更多 UE4 版本常量（用于 Kismet 字节码和 FText 序列化）
+# ============================================================================
+
+VER_UE4_CHANGE_SETARRAY_BYTECODE = 303           # EX_SetArray 字节码格式切换
+VER_UE4_FTEXT_HISTORY = 368                      # FText 历史数据序列化
+VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT = 389       # FText AsCurrency 添加 CurrencyCode 字段
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
@@ -366,3 +376,13 @@ CPF_ReferenceOnly = CPF_ReferencePersisted
 CPF_Replicated = CPF_Net
 
 
+# ---------------------------------------------------------------------------
+# 内存安全限制（parse_single / parse_batch 共用）
+# ---------------------------------------------------------------------------
+
+# 单文件解析硬上限（MB）。超过此值 parse_single() 直接抛 ParseError。
+# parse_batch() 的默认值更低（500 MB），可通过参数覆盖。
+DEFAULT_MAX_PARSE_SIZE_MB: int = 1000
+
+# 软警告阈值（MB）。超过此值 parse_single() 写 warning，不阻止解析。
+WARN_FILE_SIZE_MB: int = 100

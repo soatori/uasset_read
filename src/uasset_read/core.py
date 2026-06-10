@@ -41,6 +41,8 @@ def parse_single(
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
+    *,
+    max_file_size_mb: float | None = None,
 ) -> str:
     """解析单个 .uasset/.umap，返回格式化字符串。
 
@@ -66,6 +68,32 @@ def parse_single(
         ParseError: 解析失败
         ValueError: 渲染格式不存在
     """
+    from uasset_read.constants import DEFAULT_MAX_PARSE_SIZE_MB, WARN_FILE_SIZE_MB
+    from uasset_read.memory import get_file_size_mb
+
+    # --- 文件大小保护 ---
+    # 解析有效限制值：None → 默认值，0/inf → 禁用
+    effective_limit = (
+        DEFAULT_MAX_PARSE_SIZE_MB if max_file_size_mb is None else max_file_size_mb
+    )
+    check_enabled = effective_limit not in (0, float("inf"))
+
+    if check_enabled:
+        file_size_mb = get_file_size_mb(file_path)
+        if file_size_mb > effective_limit:
+            raise ParseError(
+                f"File too large: {file_size_mb:.1f} MB exceeds "
+                f"max_file_size_mb={effective_limit:.0f} MB. "
+                f"Increase max_file_size_mb or pass max_file_size_mb=0 to disable this check."
+            )
+        if file_size_mb >= WARN_FILE_SIZE_MB:
+            _logger.warning(
+                "Parsing large file: %s (%.1f MB). "
+                "Memory usage will be high. Consider using parse_batch() with memory guards.",
+                Path(file_path).name,
+                file_size_mb,
+            )
+
     # 需要 linker 的格式
     linker_formats = {"json", "json_summary", "cpp_skeleton"}
 
@@ -210,6 +238,7 @@ def parse_batch(
                 asset_roots=asset_roots,
                 mappings_path=mappings_path,
                 game=game,
+                max_file_size_mb=effective_max_file_size,
             )
             # 确定输出文件扩展名
             if format.startswith("json"):
