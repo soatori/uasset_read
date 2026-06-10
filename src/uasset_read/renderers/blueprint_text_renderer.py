@@ -44,6 +44,24 @@ class BlueprintTextRenderer(IRenderer):
         lines.append(f"Class: {ir.header.package_class}")
         lines.append("")
 
+        # 蓝图函数和事件列表（从 BlueprintIR 提取）
+        if ir.blueprint:
+            if ir.blueprint.functions:
+                lines.append("=== Functions ===")
+                for func in ir.blueprint.functions:
+                    status = func.implementation_status if hasattr(func, "implementation_status") else "unknown"
+                    params = ", ".join(p.get("name", "") for p in func.parameters) if func.parameters else ""
+                    lines.append(f"  {func.name}({params}) [{status}]")
+                lines.append("")
+
+            if ir.blueprint.events:
+                lines.append("=== Events ===")
+                for event in ir.blueprint.events:
+                    status = event.implementation_status if hasattr(event, "implementation_status") else "unknown"
+                    event_type = event.event_type if hasattr(event, "event_type") else "unknown"
+                    lines.append(f"  {event.name} [{event_type}, {status}]")
+                lines.append("")
+
         # 执行链概览
         if ir.execution_chains:
             lines.append("=== Execution Chains ===")
