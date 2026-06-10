@@ -114,10 +114,48 @@ def _post_process(
             result.errors.append(f"graph extraction error: {e}")
 
     # Blueprint 元数据提取（使用 graphs 填充 functions）
+    # 关键发现：NewVariables 属性存储在 UBlueprint export（蓝图资产本身）
+    # 而非 BlueprintGeneratedClass export（生成的类实例）
+    # 参考 UE 源码：UBlueprint::Serialize() 中 NewVariables 是 UPROPERTY
     blueprint_metadata = None
     asset_name = name_map[0] if name_map else None
 
+    # 首先查找 UBlueprint export（包含 NewVariables）
+    main_blueprint = None
     if asset_name:
+        # 查找主 Blueprint export（名称匹配 asset_name，不含 "_C"）
+        for export in export_map:
+            is_bp = detect_blueprint(export, import_map, export_map) if import_map else False
+            if is_bp and export.object_name:
+                simple_asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+                if export.object_name == simple_asset_name:
+                    main_blueprint = export
+                    break
+
+    if main_blueprint:
+        owned_archive = archive_factory is not None
+        temp_archive = archive_factory() if archive_factory else archive
+        temp_archive.set_byte_swapping(archive._byte_swapping)
+        try:
+            meta, warn = extract_blueprint_metadata(
+                main_blueprint, temp_archive, import_map,
+                export_map, name_map, summary,
+                linker=linker,
+                graphs=graphs_list,
+            )
+            if meta:
+                blueprint_metadata = meta
+                if hasattr(result, 'errors') and warn:
+                    result.errors.append(f"blueprint parent warning: {warn}")
+        except ParseError as e:
+            if hasattr(result, 'errors'):
+                result.errors.append(f"blueprint extraction error: {e}")
+        finally:
+            if owned_archive:
+                temp_archive.close()
+
+    # BPGC 回退（不包含 NewVariables，仅用于获取 ParentClass 等元数据）
+    if not blueprint_metadata and asset_name:
         main_bpgc = find_main_blueprint_generated_class(
             export_map, import_map, asset_name
         )
@@ -142,37 +180,6 @@ def _post_process(
             finally:
                 if owned_archive:
                     temp_archive.close()
-
-    # UBlueprint 回退
-    if not blueprint_metadata:
-        for export in export_map:
-            if linker is not None:
-                from uasset_read.serializers.object_resources import detect_blueprint_with_linker
-                is_bp = detect_blueprint_with_linker(export, linker)
-            else:
-                is_bp = detect_blueprint(export, import_map, export_map)
-            if is_bp:
-                owned_archive = archive_factory is not None
-                temp_archive = archive_factory() if archive_factory else archive
-                temp_archive.set_byte_swapping(archive._byte_swapping)
-                try:
-                    meta, warn = extract_blueprint_metadata(
-                        export, temp_archive, import_map,
-                        export_map, name_map, summary,
-                        linker=linker,
-                        graphs=graphs_list,
-                    )
-                    if meta:
-                        blueprint_metadata = meta
-                        if hasattr(result, 'errors') and warn:
-                            result.errors.append(f"blueprint parent warning: {warn}")
-                except ParseError as e:
-                    if hasattr(result, 'errors'):
-                        result.errors.append(f"blueprint extraction error: {e}")
-                finally:
-                    if owned_archive:
-                        temp_archive.close()
-                break
 
     if hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
