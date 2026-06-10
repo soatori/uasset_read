@@ -132,3 +132,73 @@ def _make_mock_mem(available_gb: float, total_gb: float):
         used=int(used_gb * gb),
         free=int(available_gb * gb),
     )
+
+
+# ---------------------------------------------------------------------------
+# parse_batch 内存管理
+# ---------------------------------------------------------------------------
+
+class TestParseBatchMemoryManagement:
+    """验证 parse_batch() 的内存安全行为。"""
+
+    def test_batch_result_has_skipped_large(self):
+        from uasset_read.core import BatchResult
+        result = BatchResult()
+        assert hasattr(result, "skipped_large")
+        assert result.skipped_large == []
+
+    def test_batch_skips_oversized_file(self, tmp_path: Path):
+        """大于 max_file_size_mb 的文件应被跳过并记录到 skipped_large。"""
+        from uasset_read.core import parse_batch
+        from uasset_read.constants import PACKAGE_FILE_TAG
+        fake_uasset = tmp_path / "huge.uasset"
+        header = PACKAGE_FILE_TAG.to_bytes(4, "little")
+        fake_uasset.write_bytes(header + b"\x00" * (2 * 1024 * 1024))
+
+        result = parse_batch(
+            str(tmp_path),
+            output_dir=str(tmp_path / "out"),
+            max_file_size_mb=1.0,
+        )
+        assert len(result.skipped_large) == 1
+        assert "huge.uasset" in result.skipped_large[0][0]
+        assert result.success == []
+
+    def test_batch_accepts_batch_size_parameter(self, tmp_path: Path):
+        """batch_size 参数应被接受，空目录抛 ValueError。"""
+        from uasset_read.core import parse_batch
+        with pytest.raises(ValueError, match="No .uasset/.umap files"):
+            parse_batch(
+                str(tmp_path),
+                output_dir=str(tmp_path / "out"),
+                batch_size=10,
+            )
+
+    def test_batch_memory_check_callback(self, tmp_path: Path):
+        """自定义 memory_check 回调可以阻止处理。"""
+        from uasset_read.core import parse_batch
+        from uasset_read.constants import PACKAGE_FILE_TAG
+
+        fake = tmp_path / "test.uasset"
+        fake.write_bytes(PACKAGE_FILE_TAG.to_bytes(4, "little") + b"\x00" * 1024)
+
+        call_count = 0
+
+        def always_critical():
+            nonlocal call_count
+            call_count += 1
+            from uasset_read.memory import MemoryCheckResult, MemoryStatus
+            return MemoryCheckResult(
+                state=MemoryStatus.CRITICAL,
+                available_gb=0.5,
+                used_percent=95.0,
+                warning="simulated critical",
+            )
+
+        result = parse_batch(
+            str(tmp_path),
+            output_dir=str(tmp_path / "out"),
+            memory_check=always_critical,
+        )
+        assert call_count >= 1
+        assert result.success == []

@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
+import logging
+_logger = logging.getLogger(__name__)
 
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
@@ -24,6 +26,7 @@ class BatchResult:
     total: int = 0
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
+    skipped_large: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
 
 
@@ -130,28 +133,31 @@ def parse_batch(
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
+    *,
+    max_file_size_mb: float | None = None,
+    batch_size: int = 50,
+    max_memory_percent: float = 70.0,
+    memory_check: Callable[[], Any] | None = None,
 ) -> BatchResult:
     """批量解析目录下所有 .uasset/.umap。
 
-    Args:
-        input_dir: 输入目录
-        format: 输出格式
-        output_dir: 输出目录（默认为 input_dir/output）
-        tolerant: 容错模式
-        verbose: 详细输出
-        include_schema: 包含 JSON Schema
-        include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产
-        asset_roots: 资产根目录列表
-        mappings_path: .usmap 映射文件路径
-        game: 游戏名称
+    内存安全参数:
+        max_file_size_mb: 单文件最大 MB，超过则跳过。
+            None → 使用 batch 默认值 500 MB（比单文件的 1000 MB 更保守）。
+            设为 0 或 float('inf') 禁用检查。
+        batch_size: 每批处理文件数，批间执行 GC（默认 50）
+        max_memory_percent: 系统内存已用百分比上限（默认 70%）
+        memory_check: 自定义内存检查回调，返回 MemoryCheckResult。
+            为 None 时使用内置 MemoryMonitor。设为 lambda: None 跳过检查。
 
     Returns:
-        BatchResult 包含成功、跳过、失败的文件列表
-
-    Raises:
-        ValueError: 目录不存在或没有资产文件
+        BatchResult 包含成功、跳过、跳过（超大）、失败的文件列表
     """
+    from uasset_read.memory import MemoryMonitor, MemoryStatus, force_gc, get_file_size_mb
+
+    # None → batch 保守默认值（比 parse_single 的 1000 MB 更保守）
+    effective_max_file_size = 500.0 if max_file_size_mb is None else max_file_size_mb
+
     input_path = Path(input_dir)
     if not input_path.is_dir():
         raise ValueError(f"Not a directory: {input_dir}")
@@ -167,7 +173,31 @@ def parse_batch(
 
     result = BatchResult(total=len(package_files))
 
+    # 内存监控初始化
+    if memory_check is None:
+        monitor = MemoryMonitor(max_memory_percent=max_memory_percent)
+        memory_check = monitor.check
+
+    processed_in_batch = 0
+
     for pf in package_files:
+        # 1. 大文件检查（effective_max_file_size <= 0 或 inf 时禁用）
+        file_size_mb = get_file_size_mb(pf)
+        check_size = effective_max_file_size not in (0, float("inf"))
+        if check_size and file_size_mb > effective_max_file_size:
+            reason = f"file too large: {file_size_mb:.1f} MB > {effective_max_file_size:.0f} MB limit"
+            result.skipped_large.append((str(pf), reason))
+            continue
+
+        # 2. 内存检查
+        check_result = memory_check()
+        if check_result is not None and hasattr(check_result, "state"):
+            if check_result.state == MemoryStatus.CRITICAL:
+                reason = f"memory critical: {check_result.used_percent:.0f}% used"
+                result.skipped.append((str(pf), reason))
+                continue
+
+        # 3. 解析文件
         try:
             output_str = parse_single(
                 str(pf),
@@ -196,6 +226,15 @@ def parse_batch(
             result.success.append(str(out_file))
         except Exception as e:
             result.failed.append((str(pf), str(e)))
+
+        # 4. 分批 GC
+        processed_in_batch += 1
+        if processed_in_batch >= batch_size:
+            force_gc()
+            processed_in_batch = 0
+
+    # 最终 GC
+    force_gc()
 
     return result
 
