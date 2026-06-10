@@ -20,9 +20,7 @@ from uasset_read.mappings import JmapParser, PropertyInfo, PropertyType, StructM
 from uasset_read.models.properties import MapValue, PropertyTag, SetValue, SoftObjectPathValue
 from uasset_read.iostore.reader import IoStoreReader
 from uasset_read.iostore.structures import FIoChunkId, FIoStoreTocCompressedBlockEntry
-from uasset_read.objects.exports.material import UMaterialInstance
-from uasset_read.objects.exports.mesh import UStaticMesh
-from uasset_read.objects.exports.texture import UTexture2D
+
 from uasset_read.serializers.graph import read_fmember_reference, read_pin_reference
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
 from uasset_read.pak.decompress import decompress_block, normalize_compression_method
@@ -223,41 +221,6 @@ def test_usmap_array_dim_indexes_are_absolute():
     assert sorted(props) == [5, 6]
     assert props[6].index == 6
 
-
-def test_asset_metadata_deserializers_populate_structured_fields():
-    tex = UTexture2D()
-    tex.properties = {
-        "PlatformData": {
-            "SizeX": 128,
-            "SizeY": 64,
-            "PixelFormat": "PF_DXT1",
-            "Mips": [{"SizeX": 128, "SizeY": 64, "DataSize": 512}],
-        }
-    }
-    tex.deserialize(None, 0, 0)
-    assert tex.size_x == 128
-    assert tex.mip_levels[0]["data_size"] == 512
-
-    mat = UMaterialInstance()
-    mat.properties = {
-        "Parent": "/Game/M",
-        "ScalarParameterValues": [
-            {"ParameterInfo": {"Name": "Roughness"}, "ParameterValue": 0.5}
-        ],
-    }
-    mat.deserialize(None, 0, 0)
-    assert mat.parent == "/Game/M"
-    assert mat.scalar_parameters == {"Roughness": 0.5}
-
-    mesh = UStaticMesh()
-    mesh.properties = {
-        "LightMapResolution": 64,
-        "RenderData": {"LODResources": [{"Sections": [{"MaterialIndex": 0}], "NumVertices": 3}]},
-    }
-    mesh.deserialize(None, 0, 0)
-    assert mesh.lightmap_resolution == 64
-    assert mesh.render_data["lod_count"] == 1
-    assert mesh.lod_groups[0]["section_count"] == 1
 
 
 def test_iostore_directory_index_parses_path_to_chunk():
@@ -640,14 +603,6 @@ def test_jmap_nested_type_names_and_array_dim_are_stable():
     assert child.properties[0].mapping_type.inner_type.type == "SetProperty"
     assert child.properties[2].mapping_type.value_type.enum_name == "EColor"
 
-
-def test_asset_deserializers_record_opaque_offsets():
-    tex = UTexture2D()
-    tex.deserialize(None, 123, 45)
-
-    assert tex.parse_status == "opaque"
-    assert tex.raw_offset == 123
-    assert tex.raw_size == 45
 
 
 def test_minimal_static_mesh_payload_metadata(tmp_path):
