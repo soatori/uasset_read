@@ -23,8 +23,6 @@ UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 U
 
 # UE4 LegacyFileVersion 范围（-1 to -5 为 UE4，-6 边界情况）
 UE4_LEGACY_VERSIONS = frozenset({-1, -2, -3, -4, -5})
-# 支持的所有 LegacyFileVersion（UE4 + UE5）
-ALL_SUPPORTED_LEGACY_VERSIONS = UE4_LEGACY_VERSIONS | UE5_LEGACY_VERSIONS
 
 # ============================================================================
 # CustomVersion GUIDs
@@ -92,12 +90,6 @@ MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节�
 LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用轻量容错解析
 
 # ============================================================================
-# FPropertyTypeName 最大节点数（UE 源码限制）
-# ============================================================================
-
-MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
-
-# ============================================================================
 # PropertyTag extension flags
 # ============================================================================
 
@@ -159,7 +151,6 @@ VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 247          # ArrayProperty inner type 字�
 # FEdGraphPinType 序列化版本常量（EUnrealEngineObjectUE4Version）
 # ============================================================================
 
-VER_UE4_EDGRAPHPINTYPE_SERIALIZATION = 323       # FEdGraphPinType 自定义序列化起点
 VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 354         # PinSubCategoryMemberReference 字段加入
 VER_UE4_SERIALIZE_PINTYPE_CONST = 455            # bIsConst 字段加入
 
@@ -375,14 +366,5 @@ CPF_InstancedReference = 0x0040000000000000
 CPF_EditInstanceOnly = CPF_EditAnywhere
 CPF_ReferenceOnly = CPF_ReferencePersisted
 CPF_Replicated = CPF_Net
-
-# ============================================================================
-# CLI退出代码
-# ============================================================================
-
-EXIT_SUCCESS = 0
-EXIT_PARSE_ERROR = 1
-EXIT_FILE_NOT_FOUND = 2
-EXIT_ARGUMENT_ERROR = 3
 
 
