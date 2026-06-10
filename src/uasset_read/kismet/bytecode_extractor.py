@@ -12,7 +12,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.expressions.base import KismetExpression

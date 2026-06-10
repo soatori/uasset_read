@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from uasset_read.models.transforms import RotatorValue, ScaleValue, VectorValue
+from uasset_read.models.transforms import RotatorValue
 
 # ============================================================================
 # 安全常量（T-059-03）

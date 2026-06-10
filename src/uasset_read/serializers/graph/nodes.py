@@ -19,7 +19,6 @@ from uasset_read.serializers.graph._common import (
     _rcn, _gac, _read_tag_bool, _read_tag_i32, _read_tag_fname,
     read_ftext_with_history, _get_thread_local,
 )
-from uasset_read.serializers.graph.members import read_fmember_reference
 from uasset_read.serializers.graph.pins import read_ue_graph_pin
 from uasset_read.serializers.graph.k2_nodes import (
     read_k2node_call_function,

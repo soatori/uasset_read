@@ -9,7 +9,7 @@ PackageVersionProfile — 版本特性配置，区分 UE4/UE5 序列化差异。
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

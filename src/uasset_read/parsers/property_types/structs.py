@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 from uasset_read.models.properties import (
     PropertyTag, StructValue,
 )
-from uasset_read.parsers.utils import extract_inner_from_tag, read_validated_count
+from uasset_read.parsers.utils import extract_inner_from_tag
 from uasset_read.constants import MAX_PROPERTY_COUNT
 from uasset_read.exceptions import ParseError
 

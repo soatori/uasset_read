@@ -21,7 +21,7 @@ from uasset_read.serializers.package_summary import (
     read_preload_dependencies, validate_export_data_range,
     read_soft_package_references,
 )
-from uasset_read.versioning import build_version_container, VersionContainer
+from uasset_read.versioning import build_version_container
 from uasset_read.serializers.object_resources import (
     read_import_map, read_export_map,
     find_main_blueprint_generated_class, detect_blueprint,

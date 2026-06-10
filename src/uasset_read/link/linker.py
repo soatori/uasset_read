@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
     from uasset_read.versioning import VersionContainer
 
-from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
+from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.constants import (

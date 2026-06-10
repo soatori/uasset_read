@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 from uasset_read.models.properties import (
     PropertyTag, MapValue, SetValue,
 )
-from uasset_read.models.fallback import PropertyFallback, FallbackReason
+from uasset_read.models.fallback import PropertyFallback
 from uasset_read.parsers.utils import extract_inner_from_tag, read_validated_count
 from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT
 from uasset_read.exceptions import ParseError

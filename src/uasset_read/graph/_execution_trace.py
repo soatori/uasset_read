@@ -12,14 +12,13 @@ from uasset_read.constants import (
 from uasset_read.graph.macro_expander import (
     MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
 )
-from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
+from uasset_read.models.core import UEdGraphNode, UEdGraphPin
 
 from ._edge_traversal import (
     _build_normalized_edge_indexes,
     _find_next_exec_node,
     _pin_ref_guid,
 )
-from ._node_format import _derive_node_name, _get_start_event_name
 
 logger = logging.getLogger(__name__)
 

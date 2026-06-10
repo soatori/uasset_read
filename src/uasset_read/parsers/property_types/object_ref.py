@@ -1,7 +1,7 @@
 """对象引用属性解析器：object, soft_object, weak_object, lazy_object, class, interface 等。"""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, List
 import struct
 
 
