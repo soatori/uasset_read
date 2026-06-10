@@ -82,6 +82,11 @@ class MemoryMonitor:
         self._critical_threshold = min(max_memory_percent + 20.0, 95.0)
         self._force_unavailable = _force_unavailable
         self._psutil = None if _force_unavailable else _try_import_psutil()
+        if self._psutil is None and not _force_unavailable:
+            _logger.info(
+                "psutil not installed — memory monitoring disabled. "
+                "Install with: pip install psutil"
+            )
 
     @property
     def is_available(self) -> bool:
