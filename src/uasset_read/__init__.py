@@ -21,6 +21,15 @@ from .models.result import ParseResult, StatusInfo
 from .exceptions import UAssetError, VersionError, ErrorContext, ParseError
 from .archive import FArchive
 
+# 内存管理
+from .memory import (
+    MemoryMonitor,
+    MemoryStatus,
+    force_gc,
+    get_file_size_mb,
+    get_available_memory_gb,
+)
+
 # 稳定 API 别名（统一命名）
 from .serializers.package_summary import PackageFileSummary as PackageSummary
 from .serializers.object_resources import ObjectExport as ExportEntry
@@ -284,6 +293,12 @@ __all__ = [
     "VersionError",
     "ErrorContext",
     "ParseError",
+    # 内存管理
+    "MemoryMonitor",
+    "MemoryStatus",
+    "force_gc",
+    "get_file_size_mb",
+    "get_available_memory_gb",
     # 常量（稳定）
     "PACKAGE_FILE_TAG",
     "PACKAGE_FILE_TAG_SWAPPED",
