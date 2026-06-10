@@ -100,6 +100,34 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
 
+    # 内存安全参数（单文件和批量模式共用）
+    parser.add_argument(
+        '--max-file-size',
+        type=float,
+        default=None,
+        metavar='MB',
+        help=(
+            'Reject files larger than MB. '
+            'Single-file mode: raises error (default: 1000 MB). '
+            'Batch mode: skips file (default: 500 MB). '
+            'Pass 0 to disable.'
+        ),
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=50,
+        metavar='N',
+        help='GC every N files in batch mode (default: 50)',
+    )
+    parser.add_argument(
+        '--max-memory',
+        type=float,
+        default=70.0,
+        metavar='PCT',
+        help='Skip files when system memory usage exceeds PCT%% (default: 70, batch only)',
+    )
+
     return parser
 
 
@@ -161,6 +189,9 @@ def _handle_batch(args) -> None:
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            max_file_size_mb=args.max_file_size,  # None → batch 默认 500 MB
+            batch_size=args.batch_size,
+            max_memory_percent=args.max_memory,
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)
@@ -169,8 +200,14 @@ def _handle_batch(args) -> None:
 
     print(f"Batch export complete: {result.total} files", file=sys.stderr)
     print(f"  Success: {len(result.success)}", file=sys.stderr)
+    if result.skipped_large:
+        print(f"  Skipped (large): {len(result.skipped_large)}", file=sys.stderr)
+        for path, reason in result.skipped_large:
+            print(f"    - {Path(path).name}: {reason}", file=sys.stderr)
     if result.skipped:
-        print(f"  Skipped: {len(result.skipped)}", file=sys.stderr)
+        print(f"  Skipped (memory): {len(result.skipped)}", file=sys.stderr)
+        for path, reason in result.skipped:
+            print(f"    - {Path(path).name}: {reason}", file=sys.stderr)
     if result.failed:
         print(f"  Failed: {len(result.failed)}", file=sys.stderr)
         for path, error in result.failed:
@@ -255,6 +292,7 @@ def main():
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            max_file_size_mb=args.max_file_size,  # None → API 默认值 1000 MB
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)
