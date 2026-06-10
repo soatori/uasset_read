@@ -50,6 +50,7 @@ tests/*
 !tests/graph/*.py
 !tests/renderers/
 !tests/renderers/*.py
+!tests/conftest.py
 QWEN.md
 
 # AI agent reports (local only)
