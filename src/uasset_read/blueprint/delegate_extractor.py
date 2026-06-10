@@ -6,29 +6,12 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
+
+from uasset_read.models.ir import DelegateIR
 
 if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
-
-
-@dataclass
-class DelegateIR:
-    """蓝图委托的 IR 表示。
-
-    Attributes:
-        name: 委托名称（如 "FMyDelegate"）
-        cpp_type: C++ 类型名（带 F 前缀）
-        signature: 签名字符串（参数和返回类型）
-        is_multicast: 是否为多播委托
-        ue_path: UE 完整路径
-    """
-    name: str
-    cpp_type: str = ""
-    signature: str = ""
-    is_multicast: bool = False
-    ue_path: str = ""
 
 
 def extract_delegates(blueprint: Optional["BlueprintMetadata"]) -> List[DelegateIR]:

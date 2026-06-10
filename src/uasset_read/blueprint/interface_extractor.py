@@ -6,25 +6,12 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
+
+from uasset_read.models.ir import InterfaceIR
 
 if TYPE_CHECKING:
     from uasset_read.models.blueprint import BlueprintMetadata
-
-
-@dataclass
-class InterfaceIR:
-    """蓝图实现接口的 IR 表示。
-
-    Attributes:
-        name: 接口名称（如 "IBPI_FirstPersonInterface"）
-        cpp_type: C++ 类型名（带 I 前缀，如 "IBPI_FirstPersonInterface"）
-        ue_path: UE 完整路径（如 "/Game/Interfaces/BPI_FirstPersonInterface"）
-    """
-    name: str
-    cpp_type: str = ""
-    ue_path: str = ""
 
 
 def extract_interfaces(blueprint: Optional["BlueprintMetadata"]) -> List[InterfaceIR]:

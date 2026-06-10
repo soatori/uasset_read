@@ -597,56 +597,11 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
     from uasset_read.blueprint.delegate_extractor import extract_delegates
     from uasset_read.blueprint.replication_extractor import extract_replication
 
-    interfaces_raw = extract_interfaces(bp)
-    interfaces = [InterfaceIR(
-        name=i.name,
-        cpp_type=i.cpp_type,
-        ue_path=i.ue_path,
-    ) for i in interfaces_raw]
-
-    enums_raw = extract_enums(bp)
-    enums = [EnumIR(
-        name=e.name,
-        cpp_type=e.cpp_type,
-        values=[EnumValueIR(
-            name=v.name,
-            value=v.value,
-            display_name=v.display_name,
-        ) for v in e.values],
-        ue_path=e.ue_path,
-    ) for e in enums_raw]
-
-    structs_raw = extract_structs(bp)
-    structs = [StructIR(
-        name=s.name,
-        cpp_type=s.cpp_type,
-        fields=[StructFieldIR(
-            name=f.name,
-            cpp_type=f.cpp_type,
-            default_value=f.default_value,
-        ) for f in s.fields],
-        ue_path=s.ue_path,
-    ) for s in structs_raw]
-
-    delegates_raw = extract_delegates(bp)
-    delegates = [DelegateIR(
-        name=d.name,
-        cpp_type=d.cpp_type,
-        signature=d.signature,
-        is_multicast=d.is_multicast,
-        ue_path=d.ue_path,
-    ) for d in delegates_raw]
-
-    replication_raw = extract_replication(bp)
-    replication = ReplicationIR(
-        replicated_vars=[ReplicatedVarIR(
-            name=v.name,
-            cpp_type=v.cpp_type,
-            on_rep_function=v.on_rep_function,
-            replication_condition=v.replication_condition,
-        ) for v in replication_raw.replicated_vars],
-        on_rep_functions=list(replication_raw.on_rep_functions),
-    )
+    interfaces = extract_interfaces(bp)
+    enums = extract_enums(bp)
+    structs = extract_structs(bp)
+    delegates = extract_delegates(bp)
+    replication = extract_replication(bp)
 
     return BlueprintIR(
         parent_class=bp.parent_class,
