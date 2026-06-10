@@ -368,7 +368,7 @@ def parse_optional_property(
 
     参考 UE 源码：PropertyOptional.cpp::SerializeItem
     """
-    from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
+    from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME, PKG_UnversionedProperties
     from uasset_read.parsers.property_types._common import _build_version_container_from_summary
 
     # 读取 has_value 标志（UE TryEnterField 在二进制中写入 1 byte bool）
@@ -378,9 +378,15 @@ def parse_optional_property(
         return {"has_value": False, "value": None}
 
     # 获取版本信息以选择正确的解析路径
+    # PKG_UnversionedProperties 设置时，属性直接序列化（无 PropertyTag），与新版格式行为一致
+    # 参考 UE PropertyOptional.cpp::SerializeItem
     version_container = _build_version_container_from_summary(summary)
     file_version_ue5 = getattr(version_container, 'file_version_ue5', 0) if version_container else 0
-    is_new_format = file_version_ue5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME
+    package_flags = getattr(summary, 'package_flags', 0) if summary else 0
+    is_new_format = (
+        bool(package_flags & PKG_UnversionedProperties)
+        or file_version_ue5 >= PROPERTY_TAG_COMPLETE_TYPE_NAME
+    )
 
     parse_property_value = _get_parse_property_value()
     inner_type = getattr(tag, "inner_type", None) or "Unknown"
