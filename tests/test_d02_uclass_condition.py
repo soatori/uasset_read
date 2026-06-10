@@ -1,11 +1,8 @@
-"""tests/test_d02_uclass_condition.py — D-02 SerializationControlExtensions 测试。
+"""tests/test_d02_uclass_condition.py — D-02 SerializationControlExtensions UClass 条件测试。
 
-Issue #55: UE 源码 Class.cpp:1624-1628 中 IsA<UClass>() 检查的是 ObjClass（对象的类）
-而非对象本身。对于任何 export，ObjClass（GetClass()）总是 UClass 或 UClass 派生类，
-因此 D-02 字节对所有 UE5 >= 1011 的 export payload 都会序列化。
-
-重要发现：D-02 SerializationControlExtensions header 在 SerializeTaggedProperties 中
-由 ObjClass（UClass）序列化，而非由 export 对象本身的类型决定。
+Issue #55: 验证 D-02 字节仅在 UClass 派生类 export 中被读取。
+UE 源码 Class.cpp:1624-1628: const bool bIsUClass = IsA<UClass>();
+非 UClass 的 UStruct（Function、EdGraph 等）不应消费 D-02 字节。
 """
 import struct
 from unittest.mock import MagicMock, patch
@@ -58,7 +55,7 @@ _RESOLVE_PATCH = "uasset_read.serializers.object_resources.resolve_class_name"
 
 
 class TestD02UclassCondition:
-    """D-02 SerializationControlExtensions 对所有 export payload 读取（UE5 >= 1011）。"""
+    """D-02 SerializationControlExtensions 仅在 UClass 派生类中读取。"""
 
     def test_uclass_derived_reads_d02(self):
         """UClass 派生类（BlueprintGeneratedClass）应读取 D-02 字节。"""
@@ -77,10 +74,10 @@ class TestD02UclassCondition:
         # 应调用 read_u8 读取 D-02 字节
         archive.read_u8.assert_called()
 
-    def test_non_uclass_reads_d02(self):
-        """非 UClass 类（Function）也应读取 D-02 字节（因为 ObjClass 是 UClass）。"""
+    def test_non_uclass_skips_d02(self):
+        """非 UClass 类（Function）不应读取 D-02 字节。"""
         none_fname = struct.pack("<ii", 0, 0)
-        data = bytes([0x00]) + none_fname  # D-02 = 0x00 (NoExtension)
+        data = none_fname  # 仅 "None" 终止标记（不含 D-02 字节）
         archive = _make_archive_with_data(data)
         export = _make_export()
         summary = _make_summary()
@@ -91,13 +88,12 @@ class TestD02UclassCondition:
                 name_map=["None"], export_map=[], import_map=[MagicMock()],
             )
 
-        # D-02 字节对所有 export payload 都读取（因为 ObjClass 是 UClass）
-        archive.read_u8.assert_called()
+        archive.read_u8.assert_not_called()
 
-    def test_unknown_class_reads_d02(self):
-        """类名未知时仍应读取 D-02 字节（避免偏移错位）。"""
+    def test_unknown_class_skips_d02(self):
+        """类名未知（resolve 返回 None）时不应读取 D-02 字节（降级处理）。"""
         none_fname = struct.pack("<ii", 0, 0)
-        data = bytes([0x00]) + none_fname
+        data = none_fname
         archive = _make_archive_with_data(data)
         export = _make_export()
         summary = _make_summary()
@@ -108,8 +104,7 @@ class TestD02UclassCondition:
                 name_map=["None"], export_map=[], import_map=[MagicMock()],
             )
 
-        # 类名未知时仍读取 D-02（避免偏移错位）
-        archive.read_u8.assert_called()
+        archive.read_u8.assert_not_called()
 
     def test_uclass_with_overridable_reads_both_bytes(self):
         """UClass 派生类且 D-02=0x02 时应读取两个字节（control + operation）。"""
@@ -128,10 +123,10 @@ class TestD02UclassCondition:
         # read_u8 应调用 2 次：D-02 字节 + OverriddenOperation
         assert archive.read_u8.call_count == 2
 
-    def test_no_import_map_reads_d02(self):
-        """import_map 为 None 时仍应读取 D-02 字节（避免偏移错位）。"""
+    def test_no_import_map_skips_d02(self):
+        """import_map 为 None 时 class_name 无法解析，不应读取 D-02 字节。"""
         none_fname = struct.pack("<ii", 0, 0)
-        data = bytes([0x00]) + none_fname
+        data = none_fname
         archive = _make_archive_with_data(data)
         export = _make_export()
         summary = _make_summary()
@@ -141,8 +136,7 @@ class TestD02UclassCondition:
             name_map=["None"], export_map=[], import_map=None,
         )
 
-        # 无 import_map 时仍读取 D-02（避免偏移错位）
-        archive.read_u8.assert_called()
+        archive.read_u8.assert_not_called()
 
     def test_old_ue_version_skips_d02(self):
         """UE5 < 1011 版本不应读取 D-02 字节。"""
@@ -176,10 +170,10 @@ class TestD02UclassCondition:
 
         archive.read_u8.assert_called()
 
-    def test_edgraph_reads_d02(self):
-        """EdGraph export 也读取 D-02（因为 ObjClass 是 UClass）。"""
+    def test_edgraph_skips_d02(self):
+        """EdGraph 是 UStruct 子类，不应读取 D-02。"""
         none_fname = struct.pack("<ii", 0, 0)
-        data = bytes([0x00]) + none_fname
+        data = none_fname
         archive = _make_archive_with_data(data)
         export = _make_export()
         summary = _make_summary()
@@ -190,13 +184,12 @@ class TestD02UclassCondition:
                 name_map=["None"], export_map=[], import_map=[MagicMock()],
             )
 
-        # EdGraph export 的 ObjClass 是 UClass，所以也读取 D-02
-        archive.read_u8.assert_called()
+        archive.read_u8.assert_not_called()
 
-    def test_user_defined_struct_reads_d02(self):
-        """UserDefinedStruct export 也读取 D-02（因为 ObjClass 是 UClass）。"""
+    def test_user_defined_struct_skips_d02(self):
+        """UserDefinedStruct 是 UStruct 子类，不应读取 D-02。"""
         none_fname = struct.pack("<ii", 0, 0)
-        data = bytes([0x00]) + none_fname
+        data = none_fname
         archive = _make_archive_with_data(data)
         export = _make_export()
         summary = _make_summary()
@@ -207,8 +200,7 @@ class TestD02UclassCondition:
                 name_map=["None"], export_map=[], import_map=[MagicMock()],
             )
 
-        # UserDefinedStruct export 的 ObjClass 是 UClass，所以也读取 D-02
-        archive.read_u8.assert_called()
+        archive.read_u8.assert_not_called()
 
     def test_uclass_d02_transforms_stored(self):
         """UClass 派生类的 D-02 数据应存储到 export.transforms 中。"""
