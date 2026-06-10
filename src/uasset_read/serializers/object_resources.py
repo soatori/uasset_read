@@ -646,6 +646,15 @@ def find_main_blueprint_generated_class(
         if detect_blueprint_generated_class(export, import_map, export_map):
             if export.object_name and export.object_name.startswith(asset_name):
                 candidates.append(export)
+
+    # Fallback: try matching by simple name (strip path prefix from asset_name)
+    if not candidates:
+        simple_asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
+        for export in export_map:
+            if detect_blueprint_generated_class(export, import_map, export_map):
+                if export.object_name and (export.object_name == simple_asset_name or export.object_name == simple_asset_name + "_C"):
+                    candidates.append(export)
+
     if candidates:
         return max(candidates, key=lambda e: e.serial_size)
     return None

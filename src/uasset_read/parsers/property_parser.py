@@ -395,25 +395,47 @@ def parse_properties_from_export(
         )
         _strategy = get_serialization_strategy(_skip_class_name)
         if _strategy == SerializationStrategy.UCLASS_NATIVE:
-            try:
-                from uasset_read.parsers.asset_types.uclass import parse_uclass_fields
-                uclass_data = parse_uclass_fields(archive, name_map, summary)
-                setattr(export, "_uclass_native_fields", uclass_data)
-                logger.debug(
-                    "UClass native fields parsed for '%s': %d bytes read, status=%s",
-                    export.object_name,
-                    uclass_data.get("bytes_read", 0),
-                    uclass_data.get("parse_status", "unknown"),
-                )
-            except Exception as e:
-                logger.warning(
-                    "UClass native field parsing failed for '%s': %s",
-                    export.object_name, e,
-                )
-                setattr(export, "_uclass_native_fields", {
-                    "parse_status": "failed",
-                    "parse_error": str(e),
-                })
+            # 验证是否真的包含 UClass 原生字段
+            # UE5 >= 1011 的 BlueprintGeneratedClass 可能不包含原生字段
+            should_parse_native = True
+
+            # 检查 SuperStruct 是否匹配
+            if hasattr(export, 'super_index') and export.super_index is not None:
+                archive_pos = archive.tell()
+                try:
+                    super_struct_raw = archive.read_i32()
+                    # 如果读取的值与 export.super_index 不匹配，说明数据格式不对
+                    if super_struct_raw != export.super_index:
+                        should_parse_native = False
+                        logger.debug(
+                            "Skipping UClass native fields for '%s': SuperStruct mismatch "
+                            "(expected %d, got %d) - likely UE5 BPGC without native fields",
+                            export.object_name, export.super_index, super_struct_raw
+                        )
+                    archive.seek(archive_pos)  # 恢复位置
+                except Exception:
+                    archive.seek(archive_pos)  # 恢复位置
+
+            if should_parse_native:
+                try:
+                    from uasset_read.parsers.asset_types.uclass import parse_uclass_fields
+                    uclass_data = parse_uclass_fields(archive, name_map, summary)
+                    setattr(export, "_uclass_native_fields", uclass_data)
+                    logger.debug(
+                        "UClass native fields parsed for '%s': %d bytes read, status=%s",
+                        export.object_name,
+                        uclass_data.get("bytes_read", 0),
+                        uclass_data.get("parse_status", "unknown"),
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "UClass native field parsing failed for '%s': %s",
+                        export.object_name, e,
+                    )
+                    setattr(export, "_uclass_native_fields", {
+                        "parse_status": "failed",
+                        "parse_error": str(e),
+                    })
 
     # D-02: SerializationControlExtensions 头部处理
     # UE5 >= 1011: 根级 overridable serialization 控制头
