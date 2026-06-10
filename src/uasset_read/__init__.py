@@ -7,7 +7,7 @@ API 分层：
 - 稳定根 API: parse_single, parse_batch, parse_package, ParseResult,
   PackageSummary, ExportEntry, ImportEntry, UAssetError, FArchive
 - 子模块 API: parsers, serializers, graph, kismet, cpp_gen, renderers
-- 遗留 API: format_* 函数, objects, bulk（已弃用）
+- renderers: JSON, text, markdown, C++ skeleton 输出
 """
 __version__ = "0.4.5"
 
@@ -258,15 +258,6 @@ from .blueprint.transform_parser import (
 from .serializers.property_tags import read_property_tag, parse_ctrl_flags, parse_ue511_ctrl_flags
 from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
-
-# ============================================================================
-# 辅助 API
-# ============================================================================
-
-# 格式化辅助函数
-from .formatters import (
-    build_status_info, build_schema_info, resolve_fpackage_index,
-)
 
 # ============================================================================
 # 公共 API 导出控制 — 仅稳定根 API
