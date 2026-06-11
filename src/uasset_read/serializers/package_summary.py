@@ -29,6 +29,7 @@ from uasset_read.constants import (
     UE4_SERIALIZE_TEXT_IN_PACKAGES,
     UE4_ADDED_PACKAGE_OWNER,
     UE4_NAME_HASHES_SERIALIZED,
+    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
 )
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
@@ -784,11 +785,15 @@ def _read_package_summary_ue5(
         guid_bytes = archive.read(16)
         chunk_ids.append(guid_bytes.hex())
 
-    # 第 28 步：PreloadDependencies
-    preload_dependency_count = archive.read_i32()
-    preload_dependency_offset = archive.read_i32()
-    if preload_dependency_offset > 0:
-        archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
+    # 第 28 步：PreloadDependencies (UE4 >= 512)
+    # UE 源码: PackageFileSummary.cpp L503-511
+    preload_dependency_count = 0
+    preload_dependency_offset = 0
+    if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:  # 512
+        preload_dependency_count = archive.read_i32()
+        preload_dependency_offset = archive.read_i32()
+        if preload_dependency_offset > 0:
+            archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
 
     # 第 29 步：NamesReferencedFromExportData（UE5 >= 1001）
     names_referenced_from_export_data_count = 0
