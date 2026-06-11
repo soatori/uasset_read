@@ -24,7 +24,7 @@ class TestRendererRegistry:
         assert r.format_name == "json"
 
     def test_get_renderer_unknown(self):
-        with pytest.raises(ValueError, match="Unknown render format"):
+        with pytest.raises(KeyError, match="Unknown render format"):
             get_renderer("nonexistent")
 
     def test_list_formats(self):
@@ -313,10 +313,11 @@ class TestBlueprintUERenderer:
 
 
 class TestCppSkeletonRenderer:
+    """cpp_skeleton 已拆分为独立管线，测试其 fallback 路径（基于 PackageIR）。"""
+
     def test_render_minimal_ir(self):
-        from uasset_read.renderers import get_renderer
+        from uasset_read.renderers.cpp_skeleton_renderer import CppSkeletonRenderer
         from uasset_read.models.ir import PackageIR, PackageHeaderIR
-        from uasset_read.renderers.base import RenderOptions
 
         header = PackageHeaderIR(
             package_name="/Game/TestBP", package_class="TestBP_C",
@@ -324,8 +325,8 @@ class TestCppSkeletonRenderer:
             ue_version="5.x")
         ir = PackageIR(header=header, name_map=["TestBP"], imports=[], exports=[], linker=None)
 
-        renderer = get_renderer("cpp_skeleton")
-        output = renderer.render(ir, RenderOptions())
+        pipeline = CppSkeletonRenderer()
+        output = pipeline.generate_fallback(ir)
 
         assert "#pragma once" in output
         assert '#include "CoreMinimal.h"' in output
@@ -334,11 +335,10 @@ class TestCppSkeletonRenderer:
         assert "UCLASS()" in output
 
     def test_render_with_properties(self):
-        from uasset_read.renderers import get_renderer
+        from uasset_read.renderers.cpp_skeleton_renderer import CppSkeletonRenderer
         from uasset_read.models.ir import (
             PackageIR, PackageHeaderIR, ExportIR, PropertyIR,
         )
-        from uasset_read.renderers.base import RenderOptions
 
         props = [
             PropertyIR(name="Health", type="FloatProperty", value=100.0, array_index=0, guid=None),
@@ -355,8 +355,8 @@ class TestCppSkeletonRenderer:
             ue_version="5.3")
         ir = PackageIR(header=header, name_map=["TestBP"], imports=[], exports=[export], linker=None)
 
-        renderer = get_renderer("cpp_skeleton")
-        output = renderer.render(ir, RenderOptions())
+        pipeline = CppSkeletonRenderer()
+        output = pipeline.generate_fallback(ir)
 
         assert "float Health" in output
         assert "bool bIsAlive" in output
@@ -375,14 +375,15 @@ class TestRendererListFormats:
         assert "markdown" in fmts
         assert "blueprint_text" in fmts
         assert "blueprint_ue_text" in fmts
-        assert "cpp_skeleton" in fmts
-        assert len(fmts) == 8
+        # 注意：cpp_skeleton 已拆分为独立管线，不再注册到 RENDERER_REGISTRY
+        assert "cpp_skeleton" not in fmts
+        assert len(fmts) == 7
 
     def test_get_renderer_all_registered(self):
         from uasset_read.renderers import get_renderer
         formats = [
             "json", "json_summary", "text", "text_summary",
-            "markdown", "blueprint_text", "blueprint_ue_text", "cpp_skeleton",
+            "markdown", "blueprint_text", "blueprint_ue_text",
         ]
         for fmt in formats:
             r = get_renderer(fmt)

@@ -1,4 +1,7 @@
-"""C++ 骨架渲染器 — 使用 cpp_gen 模块生成完整的 .h 头文件和 .cpp 实现。
+"""C++ 骨架独立管线 — 直接使用 LinkerParseResult 生成 C++ 类骨架。
+
+cpp_skeleton 不走标准渲染器管线（IRenderer + RenderOptions），
+而是直接接收 LinkerParseResult，通过 cpp_gen 模块生成完整的 .h/.cpp 输出。
 
 输出结构：
     1. // {ClassName}.h 头文件（声明 + UPROPERTY + 方法签名）
@@ -8,9 +11,6 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-
-from uasset_read.renderers.base import IRenderer, RenderOptions
-from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -46,28 +46,28 @@ _UE_TO_CPP_TYPE = {
 }
 
 
-class CppSkeletonRenderer(IRenderer):
-    """C++ 骨架生成器 — 输出 .h 头文件声明和 .cpp 函数体实现。"""
+class CppSkeletonRenderer:
+    """C++ 骨架独立管线 — 直接消费 LinkerParseResult，输出 .h 声明和 .cpp 实现。
 
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        """渲染 C++ 骨架输出。
+    注意：该类不再继承 IRenderer，也不注册到 RENDERER_REGISTRY。
+    core.parse_single 在标准渲染器分发之前拦截 format=="cpp_skeleton"，
+    直接实例化此类并调用 generate(result)。
 
-        优先使用 cpp_gen 管线（extract_cpp_class_skeleton → format_cpp_header +
-        format_full_cpp_implementation），输出完整的 .h 声明和 .cpp 函数体。
-        如果 linker_result 不可用，回退到基于 PackageIR 的简单输出。
+    保留旧类名 CppSkeletonRenderer 仅为向后兼容导入（测试文件使用）。
+    """
+
+    # ------------------------------------------------------------------
+    # 主入口
+    # ------------------------------------------------------------------
+    def generate(self, result) -> str:
+        """使用 cpp_gen 管线从 LinkerParseResult 生成完整 C++ 骨架。
+
+        Args:
+            result: LinkerParseResult（parse_uasset_with_linker 的返回值）
+
+        Returns:
+            C++ 骨架字符串（.h 声明 + .cpp 实现）
         """
-        linker_result = options.linker_result
-        if linker_result is not None:
-            return self._render_from_linker_result(linker_result)
-
-        # 回退：从 PackageIR 生成简单头文件（无函数体）
-        logger.warning(
-            "linker_result 不可用，回退到简单属性骨架（无函数体）"
-        )
-        return self._render_simple_header(ir)
-
-    def _render_from_linker_result(self, result) -> str:
-        """使用 cpp_gen 管线从 LinkerParseResult 生成完整 C++ 骨架。"""
         from uasset_read.cpp_gen import extract_cpp_class_skeleton
         from uasset_read.cpp_gen.formatters import (
             format_cpp_header,
@@ -133,6 +133,22 @@ class CppSkeletonRenderer(IRenderer):
                 sections.append(ctor_text)
 
         return "\n".join(sections)
+
+    def generate_fallback(self, ir: "PackageIR") -> str:
+        """回退路径：从 PackageIR 生成简单的 .h 头文件（无函数体）。
+
+        仅在 LinkerParseResult 不可用时使用（例如仅构建了 IR 的场景）。
+        """
+        return self._render_simple_header(ir)
+
+    # 向后兼容：旧 render(ir, options) 接口转发到 fallback
+    def render(self, ir: "PackageIR", options) -> str:
+        """保留旧 render 签名以兼容历史调用（转发到 generate_fallback）。"""
+        logger.warning(
+            "CppSkeletonRenderer.render(ir, options) 已废弃，"
+            "请使用 generate(result) 走独立管线"
+        )
+        return self.generate_fallback(ir)
 
     def _render_simple_header(self, ir: PackageIR) -> str:
         """从 PackageIR 生成简单的 .h 头文件（无函数体，回退模式）。"""
@@ -364,10 +380,3 @@ class CppSkeletonRenderer(IRenderer):
         if isinstance(value, str):
             return f'TEXT("{value}")'
         return ""
-
-    @property
-    def format_name(self) -> str:
-        return "cpp_skeleton"
-
-
-register_renderer("cpp_skeleton", CppSkeletonRenderer)

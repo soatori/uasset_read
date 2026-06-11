@@ -24,7 +24,7 @@ def get_renderer(format_name: str) -> IRenderer:
     renderer_class = RENDERER_REGISTRY.get(format_name)
     if renderer_class is None:
         available = ", ".join(sorted(RENDERER_REGISTRY.keys()))
-        raise ValueError(f"Unknown render format: '{format_name}'. Available: {available}")
+        raise KeyError(f"Unknown render format: '{format_name}'. Available: {available}")
     return renderer_class()
 
 
@@ -39,4 +39,4 @@ from uasset_read.renderers import text_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402
 from uasset_read.renderers import blueprint_text_renderer  # noqa: F401, E402
 from uasset_read.renderers import blueprint_ue_renderer  # noqa: F401, E402
-from uasset_read.renderers import cpp_skeleton_renderer  # noqa: F401, E402
+# 注意：cpp_skeleton 已拆分为独立管线，不再通过渲染器注册表分发
