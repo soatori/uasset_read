@@ -140,3 +140,27 @@ class TestFEdGraphPinTypeVersionConstants:
         """
         from uasset_read.constants import VER_UE4_SERIALIZE_PINTYPE_CONST
         assert VER_UE4_SERIALIZE_PINTYPE_CONST == 456
+
+
+class TestFTextVersionConstants:
+    """验证 FText 序列化版本常量。"""
+
+    def test_ver_ue4_ftext_history(self):
+        """VER_UE4_FTEXT_HISTORY = 428"""
+        from uasset_read.constants import VER_UE4_FTEXT_HISTORY
+        assert VER_UE4_FTEXT_HISTORY == 428
+
+    def test_ver_ue4_added_currency_code_to_ftext(self):
+        """VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT = 470"""
+        from uasset_read.constants import VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT
+        assert VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT == 470
+
+    def test_ver_ue4_added_namespace_and_key_data_to_ftext(self):
+        """VER_UE4_ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT = 139"""
+        from uasset_read.constants import VER_UE4_ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT
+        assert VER_UE4_ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT == 139
+
+    def test_ver_ue4_ftext_history_date_timezone(self):
+        """VER_UE4_FTEXT_HISTORY_DATE_TIMEZONE = 539"""
+        from uasset_read.constants import VER_UE4_FTEXT_HISTORY_DATE_TIMEZONE
+        assert VER_UE4_FTEXT_HISTORY_DATE_TIMEZONE == 539

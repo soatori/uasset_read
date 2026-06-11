@@ -412,7 +412,7 @@ def read_ftext(archive, summary=None) -> str:
 
     UE FText 序列化格式 (Text.cpp:845-964):
       - flags: i32 (4 bytes)
-      - history_type: i8 (1 byte) — 版本门控 (VER_UE4_FTEXT_HISTORY = 368)
+      - history_type: i8 (1 byte) — 版本门控 (VER_UE4_FTEXT_HISTORY = 428)
       - body: 根据 history_type 不同而不同
 
     简化实现：提取 source_string 作为结果。

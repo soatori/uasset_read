@@ -158,9 +158,16 @@ VER_UE4_SERIALIZE_PINTYPE_CONST = 456            # bIsConst 字段加入
 # 更多 UE4 版本常量（用于 Kismet 字节码和 FText 序列化）
 # ============================================================================
 
+# ============================================================================
+# FText 序列化版本常量（EUnrealEngineObjectUE4Version）
+# 来源: Engine/Source/Runtime/Core/Private/Internationalization/Text.cpp
+# ============================================================================
+
 VER_UE4_CHANGE_SETARRAY_BYTECODE = 303           # EX_SetArray 字节码格式切换
-VER_UE4_FTEXT_HISTORY = 368                      # FText 历史数据序列化
-VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT = 389       # FText AsCurrency 添加 CurrencyCode 字段
+VER_UE4_ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT = 139  # Pre-FTEXT_HISTORY namespace/key
+VER_UE4_FTEXT_HISTORY = 428                      # FText 历史数据序列化
+VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT = 470       # AsCurrency CurrencyCode 字段
+VER_UE4_FTEXT_HISTORY_DATE_TIMEZONE = 539        # AsDate/AsTime TimeZone 字段
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
