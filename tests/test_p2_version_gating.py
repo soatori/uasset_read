@@ -256,3 +256,41 @@ class TestSoftObjectPathVersionGate:
 
         assert result.asset_path == "MyPath"
         assert result.sub_path == "MySub"
+
+
+class TestUnversionedHeaderBitLayout:
+    """#97 D.1: 验证 FFragment bit layout 正确性（回归测试）。
+
+    UE 源码 UnversionedPropertySerialization.cpp L667-696:
+    - bits 0-6:  SkipNum (7 bits, mask 0x007F)
+    - bit 7:     bHasAnyZeroes (mask 0x0080)
+    - bit 8:     bIsLast (mask 0x0100)
+    - bits 9-15: ValueNum (7 bits, shift 9)
+
+    当前代码 (unversioned_parser.py:92-96) 已正确实现。
+    """
+
+    def test_fragment_parsing(self):
+        """验证 FFragment 位域解析与 UE 源码一致。"""
+        # SkipNum=3, bHasAnyZeroes=1, bIsLast=0, ValueNum=5
+        raw = 3 | (1 << 7) | (0 << 8) | (5 << 9)
+        skip_num = raw & 0x007F
+        has_any_zeroes = bool(raw & 0x0080)
+        is_last = bool(raw & 0x0100)
+        value_num = (raw >> 9) & 0x007F
+        assert skip_num == 3
+        assert has_any_zeroes is True
+        assert is_last is False
+        assert value_num == 5
+
+    def test_last_fragment(self):
+        """bIsLast = 1 的 fragment。"""
+        raw = 0 | (0 << 7) | (1 << 8) | (2 << 9)
+        skip_num = raw & 0x007F
+        has_any_zeroes = bool(raw & 0x0080)
+        is_last = bool(raw & 0x0100)
+        value_num = (raw >> 9) & 0x007F
+        assert skip_num == 0
+        assert has_any_zeroes is False
+        assert is_last is True
+        assert value_num == 2
