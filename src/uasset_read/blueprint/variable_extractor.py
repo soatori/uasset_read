@@ -953,7 +953,7 @@ def read_blueprint_variable(
     2. VarGuid (FGuid - 16 bytes) — 跳过
     3. VarType (FEdGraphPinType)
     4. FriendlyName (FString)
-    5. Category (FText — 简化为 FString)
+    5. Category (FText)
     6. PropertyFlags (uint64)
     7. RepNotifyFunc (FName) — 跳过
     8. ReplicationCondition (uint8) — 跳过
@@ -972,8 +972,8 @@ def read_blueprint_variable(
     # FriendlyName (FString)
     var.friendly_name = archive.read_fstring()
 
-    # Category (FText) — 简化为 FString
-    var.category = archive.read_fstring()
+    # Category (FText) — 使用 read_ftext() 完整读取（Issue #102 3.4）
+    var.category = read_ftext(archive, summary)
 
     var.property_flags = archive.read_u64()
 
