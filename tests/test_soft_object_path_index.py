@@ -133,7 +133,7 @@ class TestLegacyFStringResolution:
     """测试传统 FString 格式解析。"""
 
     def test_legacy_format_with_empty_list(self):
-        """空列表应回退到 FString 格式。"""
+        """空列表应回退到 FString 格式（版本未知时读取 FString + FString）。"""
         tag = PropertyTag(name="Test", type="SoftObjectProperty", size=20)
         archive = MockArchive(_fstring("/Game/Legacy") + _fstring("SubPath"))
 
