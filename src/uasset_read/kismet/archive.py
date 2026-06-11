@@ -12,6 +12,10 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 
 logger = logging.getLogger(__name__)
 
+# 内存安全常量
+MAX_STRING_READ_SIZE = 64 * 1024  # 64KB — xfer_string 单次最大读取
+MAX_EXPRESSIONS_PER_ARRAY = 100_000  # read_expression_array 最大迭代次数
+
 
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
@@ -85,24 +89,38 @@ class FKismetArchive(FArchive):
             result.append(expr)
         return result
 
-    def xfer_string(self) -> str:
-        """Read ASCII null-terminated string (does NOT consume the null terminator)."""
+    def xfer_string(self, max_len: int = MAX_STRING_READ_SIZE) -> str:
+        """Read ASCII null-terminated string (does NOT consume the null terminator).
+
+        Args:
+            max_len: 最大读取字节数，防止无界读取。默认 64KB。
+        """
         current_pos = self.tell()
-        data = self._file.read()
+        remaining = self._file_size - current_pos
+        read_size = min(max_len, remaining)
+        data = self._file.read(read_size)
         null_idx = data.find(b'\x00')
         if null_idx == -1:
             raise ParseError(
                 f"ASCII string at offset {current_pos} has no null terminator "
-                f"(read {len(data)} bytes to EOF)"
+                f"(read {len(data)} bytes, max {max_len})"
             )
         result = data[:null_idx].decode('ascii', errors='replace')
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
 
-    def xfer_unicode_string(self) -> str:
-        """Read UTF-16 null-terminated string (does NOT consume the double-null terminator)."""
+    def xfer_unicode_string(self, max_len: int = MAX_STRING_READ_SIZE) -> str:
+        """Read UTF-16 null-terminated string (does NOT consume the double-null terminator).
+
+        Args:
+            max_len: 最大读取字节数，防止无界读取。默认 64KB。
+        """
         current_pos = self.tell()
-        data = self._file.read()
+        remaining = self._file_size - current_pos
+        read_size = min(max_len, remaining)
+        # 确保读取偶数字节（UTF-16 对齐）
+        read_size = read_size & ~1
+        data = self._file.read(read_size)
         # Find first double-null (\x00\x00) at even offset (UTF-16 code unit boundary)
         idx = 0
         while idx + 1 < len(data):
@@ -113,7 +131,7 @@ class FKismetArchive(FArchive):
             # No double-null found — loop exhausted data without break
             raise ParseError(
                 f"UTF-16 string at offset {current_pos} has no null terminator "
-                f"(scanned {len(data)} bytes to EOF)"
+                f"(scanned {len(data)} bytes, max {max_len})"
             )
         result = data[:idx].decode('utf-16-le', errors='replace')
         self.seek(current_pos + idx)  # position AT double-null
