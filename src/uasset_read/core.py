@@ -265,7 +265,9 @@ def parse_batch(
             else:
                 ext = f".{format}"
 
-            out_file = output_path / f"{pf.stem}{ext}"
+            # 清理 stem 中的路径分隔符，防止路径遍历
+            safe_stem = pf.stem.replace("/", "_").replace("\\", "_").replace("..", "_")
+            out_file = output_path / f"{safe_stem}{ext}"
             out_file.write_text(output_str, encoding="utf-8")
             result.success.append(str(out_file))
         except Exception as e:
