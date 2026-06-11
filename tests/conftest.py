@@ -24,15 +24,27 @@ def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """未传 --include-large 时，跳过 @pytest.mark.large 标记的测试。"""
-    if config.getoption("--include-large"):
-        return
-    skip_large = pytest.mark.skip(
-        reason="large asset test (pass --include-large to enable)"
-    )
+    """未传 --include-large 时，跳过 @pytest.mark.large 标记的测试。
+    根据测试文件所在目录自动添加 contract/unit/e2e 标记。
+    """
+    # --include-large 门控
+    if not config.getoption("--include-large"):
+        skip_large = pytest.mark.skip(
+            reason="large asset test (pass --include-large to enable)"
+        )
+        for item in items:
+            if any(m.name == "large" for m in item.iter_markers()):
+                item.add_marker(skip_large)
+
+    # 按目录自动添加标记
     for item in items:
-        if any(m.name == "large" for m in item.iter_markers()):
-            item.add_marker(skip_large)
+        parts = item.path.parts
+        if "contracts" in parts:
+            item.add_marker(pytest.mark.contract)
+        elif "units" in parts:
+            item.add_marker(pytest.mark.unit)
+        elif "e2e" in parts:
+            item.add_marker(pytest.mark.e2e)
 
 
 # ---------------------------------------------------------------------------
