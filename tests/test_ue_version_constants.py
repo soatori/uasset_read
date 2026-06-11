@@ -120,3 +120,23 @@ class TestUE4VersionConstants:
         """UE4_SERIALIZE_TEXT_IN_PACKAGES = 464"""
         from uasset_read.constants import UE4_SERIALIZE_TEXT_IN_PACKAGES
         assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 464
+
+
+class TestFEdGraphPinTypeVersionConstants:
+    """验证 FEdGraphPinType 序列化版本常量。"""
+
+    def test_ver_ue4_memberreference_in_pintype(self):
+        """VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 355
+
+        PinSubCategoryMemberReference 字段加入。
+        """
+        from uasset_read.constants import VER_UE4_MEMBERREFERENCE_IN_PINTYPE
+        assert VER_UE4_MEMBERREFERENCE_IN_PINTYPE == 355
+
+    def test_ver_ue4_serialize_pintype_const(self):
+        """VER_UE4_SERIALIZE_PINTYPE_CONST = 456
+
+        bIsConst 字段加入。
+        """
+        from uasset_read.constants import VER_UE4_SERIALIZE_PINTYPE_CONST
+        assert VER_UE4_SERIALIZE_PINTYPE_CONST == 456
