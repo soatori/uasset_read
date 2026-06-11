@@ -194,6 +194,9 @@ def _read_property_tag_ue4(
         VAR_UE4_ARRAY_PROPERTY_INNER_TAGS,
     )
 
+    # 将 legacy_file_version 转换为正数 UE4 版本号（-500 → 500）
+    ue4_version = abs(legacy_file_version)
+
     tag_start_pos = archive.tell()
 
     tag = PropertyTag(name=archive.read_name(name_map), type="", size=0, tag_start_offset=tag_start_pos)
@@ -210,8 +213,8 @@ def _read_property_tag_ue4(
         # StructProperty 有额外的 StructType 字段
         tag.struct_type = archive.read_name(name_map)
 
-        # StructGuid: VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG (336) 后存在
-        if legacy_file_version >= -VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG:
+        # StructGuid: VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG (446) 后存在
+        if ue4_version >= VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG:
             has_struct_guid = archive.read_u8()
             if has_struct_guid:
                 tag.struct_guid = archive.read_bytes(16)
@@ -228,33 +231,33 @@ def _read_property_tag_ue4(
 
     elif type_name in ("ArrayProperty", "SetProperty"):
         # Array/Set 有 Inner 字段
-        # VAR_UE4_ARRAY_PROPERTY_INNER_TAGS (247) 后才存在 inner type
-        if legacy_file_version >= -VAR_UE4_ARRAY_PROPERTY_INNER_TAGS:
+        # VAR_UE4_ARRAY_PROPERTY_INNER_TAGS (253) 后才存在 inner type
+        if ue4_version >= VAR_UE4_ARRAY_PROPERTY_INNER_TAGS:
             tag.inner_type = archive.read_name(name_map)
         else:
             # 早期 UE4 版本不支持 inner type 字段
             raise ParseError(
-                f"Array/Set inner type not supported in UE4 version {legacy_file_version} "
-                f"(requires >= {-VAR_UE4_ARRAY_PROPERTY_INNER_TAGS})"
+                f"Array/Set inner type not supported in UE4 version {ue4_version} "
+                f"(requires >= {VAR_UE4_ARRAY_PROPERTY_INNER_TAGS})"
             )
 
     elif type_name == "MapProperty":
         # Map 有 Key 和 Value 字段
-        # VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (511) 后才存在
-        if legacy_file_version < -VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
+        # VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (514) 后才存在
+        if ue4_version < VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             raise ParseError(
-                f"MapProperty not supported in UE4 version {legacy_file_version} "
-                f"(requires >= {-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
+                f"MapProperty not supported in UE4 version {ue4_version} "
+                f"(requires >= {VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
             )
         tag.key_type = archive.read_name(name_map)
         tag.value_type = archive.read_name(name_map)
 
     elif type_name == "SetProperty":
-        # Set 在 VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (511) 后才支持
-        if legacy_file_version < -VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
+        # Set 在 VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (514) 后才支持
+        if ue4_version < VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             raise ParseError(
-                f"SetProperty not supported in UE4 version {legacy_file_version} "
-                f"(requires >= {-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
+                f"SetProperty not supported in UE4 version {ue4_version} "
+                f"(requires >= {VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT})"
             )
         # SetProperty 的 inner type 已在上面处理
 
@@ -265,9 +268,9 @@ def _read_property_tag_ue4(
     # ArrayIndex (UE4 始终存在)
     tag.array_index = archive.read_i32()
 
-    # PropertyGuid: VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (501) 后条件存在
+    # PropertyGuid: VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (508) 后条件存在
     # UE4 中通过检查下一个字节是否为 1 来判断是否有 guid
-    if legacy_file_version >= -VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG:
+    if ue4_version >= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG:
         has_guid = archive.read_u8()
         if has_guid:
             tag.property_guid = archive.read_bytes(16)

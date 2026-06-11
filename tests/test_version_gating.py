@@ -55,6 +55,9 @@ def _make_archive(data: bytes):
     # 文件大小（用于边界检查）
     archive._file_size = len(data)
 
+    # validate_size（property_tags 使用）
+    archive.validate_size = lambda size, name, tolerant=False: None
+
     return archive
 
 
@@ -572,3 +575,124 @@ class TestFEdGraphPinTypeVersionGating:
         assert pin_type.is_const is True
         assert pin_type.is_uobject_wrapper is False
         assert pin_type.b_serialize_as_single_precision_float is True
+
+
+class TestPropertyTagVersionGating:
+    """验证 PropertyTag UE4 路径版本门控。"""
+
+    def test_struct_guid_in_property_tag_gating(self):
+        """>= VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG (446): 读取 StructGuid"""
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        # legacy_file_version = -500 (UE4 version 500 >= 446)
+        name_map = ["TestProp", "StructProperty", "Vector", "None"]
+        data = (
+            b'\x00\x00\x00\x00\x00\x00\x00\x00'  # Name (FName index=0, number=0)
+            + b'\x01\x00\x00\x00\x00\x00\x00\x00'  # Type (FName index=1 = "StructProperty")
+            + b'\x02\x00\x00\x00\x00\x00\x00\x00'  # StructType (FName index=2 = "Vector")
+            + b'\x01'              # has_struct_guid = true
+            + b'\x00' * 16         # StructGuid (16 bytes)
+            + b'\x0c\x00\x00\x00'  # Size (12)
+            + b'\x00\x00\x00\x00'  # ArrayIndex
+            + b'\x00'              # has_guid = false
+        )
+        archive = _make_archive(data)
+
+        tag = read_property_tag(
+            archive, name_map,
+            engine_family="ue4",
+            legacy_file_version=-500,  # UE4 version 500
+        )
+        assert tag.name == "TestProp"
+        assert tag.type == "StructProperty"
+        assert tag.struct_type == "Vector"
+        assert tag.struct_guid is not None
+
+    def test_struct_guid_skipped_for_old_version(self):
+        """< VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG (446): 跳过 StructGuid"""
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        # legacy_file_version = -400 (UE4 version 400 < 446)
+        name_map = ["TestProp", "StructProperty", "Vector", "None"]
+        data = (
+            b'\x00\x00\x00\x00\x00\x00\x00\x00'  # Name
+            + b'\x01\x00\x00\x00\x00\x00\x00\x00'  # Type = "StructProperty"
+            + b'\x02\x00\x00\x00\x00\x00\x00\x00'  # StructType = "Vector"
+            # 无 StructGuid（版本 < 446）
+            + b'\x0c\x00\x00\x00'  # Size
+            + b'\x00\x00\x00\x00'  # ArrayIndex
+        )
+        archive = _make_archive(data)
+
+        tag = read_property_tag(
+            archive, name_map,
+            engine_family="ue4",
+            legacy_file_version=-400,  # UE4 version 400
+        )
+        assert tag.struct_guid is None
+
+    def test_property_guid_in_property_tag_gating(self):
+        """>= VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (508): 读取 PropertyGuid"""
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        name_map = ["TestProp", "IntProperty", "None"]
+        data = (
+            b'\x00\x00\x00\x00\x00\x00\x00\x00'  # Name
+            + b'\x01\x00\x00\x00\x00\x00\x00\x00'  # Type = "IntProperty"
+            + b'\x04\x00\x00\x00'  # Size (4)
+            + b'\x00\x00\x00\x00'  # ArrayIndex
+            + b'\x01'              # has_guid = true
+            + b'\x00' * 16         # PropertyGuid
+        )
+        archive = _make_archive(data)
+
+        tag = read_property_tag(
+            archive, name_map,
+            engine_family="ue4",
+            legacy_file_version=-520,  # UE4 version 520 >= 508
+        )
+        assert tag.property_guid is not None
+
+    def test_set_map_support_gating(self):
+        """>= VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT (514): 支持 MapProperty"""
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        name_map = ["TestMap", "MapProperty", "StrProperty", "IntProperty", "None"]
+        data = (
+            b'\x00\x00\x00\x00\x00\x00\x00\x00'  # Name
+            + b'\x01\x00\x00\x00\x00\x00\x00\x00'  # Type = "MapProperty"
+            + b'\x02\x00\x00\x00\x00\x00\x00\x00'  # KeyType = "StrProperty"
+            + b'\x03\x00\x00\x00\x00\x00\x00\x00'  # ValueType = "IntProperty"
+            + b'\x00\x00\x00\x00'  # Size
+            + b'\x00\x00\x00\x00'  # ArrayIndex
+        )
+        archive = _make_archive(data)
+
+        tag = read_property_tag(
+            archive, name_map,
+            engine_family="ue4",
+            legacy_file_version=-520,  # UE4 version 520 >= 514
+        )
+        assert tag.key_type == "StrProperty"
+        assert tag.value_type == "IntProperty"
+
+    def test_array_inner_tags_gating(self):
+        """>= VAR_UE4_ARRAY_PROPERTY_INNER_TAGS (253): 读取 ArrayProperty InnerType"""
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        name_map = ["TestArray", "ArrayProperty", "IntProperty", "None"]
+        data = (
+            b'\x00\x00\x00\x00\x00\x00\x00\x00'  # Name
+            + b'\x01\x00\x00\x00\x00\x00\x00\x00'  # Type = "ArrayProperty"
+            + b'\x02\x00\x00\x00\x00\x00\x00\x00'  # InnerType = "IntProperty"
+            + b'\x00\x00\x00\x00'  # Size
+            + b'\x00\x00\x00\x00'  # ArrayIndex
+        )
+        archive = _make_archive(data)
+
+        tag = read_property_tag(
+            archive, name_map,
+            engine_family="ue4",
+            legacy_file_version=-300,  # UE4 version 300 >= 253
+        )
+        assert tag.inner_type == "IntProperty"
