@@ -33,6 +33,18 @@ class FEdGraphTerminalType:
 
 
 @dataclass
+class FSimpleMemberReference:
+    """简单成员引用（UE CoreMinimal.h）。
+
+    用于 FEdGraphPinType::PinSubCategoryMemberReference。
+    表示结构成员或函数引用。
+    """
+    member_parent_class: Optional[int] = None  # FPackageIndex
+    member_name: str = ""
+    member_guid: str = ""
+
+
+@dataclass
 class FEdGraphPinType:
     """蓝图引脚类型结构。"""
     pin_category: str = ""
@@ -41,6 +53,7 @@ class FEdGraphPinType:
     pin_subcategory_object_name: Optional[str] = None
     pin_subcategory_object_ref: Optional["UObjectInstance"] = None
     pin_value_type: Optional["FEdGraphTerminalType"] = None  # Map value 类型
+    pin_subcategory_member_reference: Optional["FSimpleMemberReference"] = None  # 成员引用
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
