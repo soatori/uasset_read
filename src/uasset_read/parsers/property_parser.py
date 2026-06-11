@@ -276,8 +276,11 @@ def parse_property_value(
             return handler(tag, archive)
         elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
             # These need soft_object_path_list for UE5.7+ index-based resolution
+            # 以及版本参数用于三阶段版本门控（#97 D.4）
             soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
-            return handler(tag, archive, name_map, soft_path_list)
+            fv_ue4 = getattr(summary, 'file_version_ue4', 0) if summary is not None else 0
+            fv_ue5 = getattr(summary, 'file_version_ue5', 0) if summary is not None else 0
+            return handler(tag, archive, name_map, soft_path_list, fv_ue4, fv_ue5)
         elif tag.type in ("ArrayProperty",):
             return handler(tag, archive, name_map, export_map, summary, depth)
         elif tag.type in ("StructProperty",):

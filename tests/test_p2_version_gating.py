@@ -79,3 +79,203 @@ class TestFScriptTextInvariant:
 
         assert text.TextLiteralType == EBlueprintTextLiteralType.LiteralString
         assert text.SourceString == source_str
+
+
+class TestSoftObjectPathVersionGate:
+    """#97 D.4: SoftObjectPath 应有三阶段版本门控。
+
+    UE 源码 FSoftObjectPath operator<< 序列化格式随版本演变：
+    - Phase 4 (>= 1008): SoftObjectPathList 索引
+    - Phase 3 (>= 1007): FUtf8String + FUtf8String
+    - Phase 2 (>= 514):  FName(AssetPath) + WideString(SubPath)
+    - Phase 1 (< 514):   单一 FString (legacy)
+    """
+
+    def test_version_gate_logic(self):
+        """验证版本门控逻辑正确性。"""
+        def get_soft_object_format(file_version_ue4: int, file_version_ue5: int, has_list: bool):
+            if has_list:
+                return "index"
+            if file_version_ue5 >= 1007:
+                return "utf8"
+            if file_version_ue4 >= 514:
+                return "fname_wide"
+            return "legacy_single"
+
+        # Phase 1: Legacy < 514
+        assert get_soft_object_format(500, 0, False) == "legacy_single"
+        assert get_soft_object_format(513, 0, False) == "legacy_single"
+        # Phase 2: UE4 >= 514
+        assert get_soft_object_format(514, 0, False) == "fname_wide"
+        assert get_soft_object_format(1006, 0, False) == "fname_wide"
+        # Phase 3: UE5 >= 1007
+        assert get_soft_object_format(0, 1007, False) == "utf8"
+        assert get_soft_object_format(0, 1010, False) == "utf8"
+        # Phase 4: UE5 >= 1008 with list
+        assert get_soft_object_format(0, 1008, True) == "index"
+        assert get_soft_object_format(0, 1010, True) == "index"
+
+    def test_legacy_single_string_reads_one_fstring(self):
+        """验证 Phase 1 (legacy < 514) 只读取一个 FString。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        # 构造一个 FString: len(4) + "Path" + null(1)
+        buf = io.BytesIO()
+        path_str = b"Path\x00"
+        buf.write(struct.pack('<i', len(path_str)))
+        buf.write(path_str)
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        result = parse_soft_object_property(tag, archive, [], file_version_ue4=500, file_version_ue5=0)
+
+        assert result.asset_path == "Path"
+        assert result.sub_path == ""
+
+    def test_fname_wide_reads_fname_and_fstring(self):
+        """验证 Phase 2 (UE4 >= 514) 读取 FName + FString。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        name_map = ["AssetName", "OtherName"]
+        # FName: index=0 (AssetName), number=0
+        # FString: "SubPath"
+        buf = io.BytesIO()
+        buf.write(struct.pack('<i', 0))   # asset_path_index -> "AssetName"
+        buf.write(struct.pack('<i', 0))   # number component
+        sub_path = b"SubPath\x00"
+        buf.write(struct.pack('<i', len(sub_path)))
+        buf.write(sub_path)
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        result = parse_soft_object_property(tag, archive, name_map, file_version_ue4=514, file_version_ue5=0)
+
+        assert result.asset_path == "AssetName"
+        assert result.sub_path == "SubPath"
+
+    def test_utf8_reads_two_fstrings(self):
+        """验证 Phase 3 (UE5 >= 1007) 读取两个 FUtf8String。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        # FUtf8String asset_path + FUtf8String sub_path
+        buf = io.BytesIO()
+        asset = b"AssetPath\x00"
+        sub = b"SubPath\x00"
+        buf.write(struct.pack('<i', len(asset)))
+        buf.write(asset)
+        buf.write(struct.pack('<i', len(sub)))
+        buf.write(sub)
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        result = parse_soft_object_property(tag, archive, [], file_version_ue4=0, file_version_ue5=1007)
+
+        assert result.asset_path == "AssetPath"
+        assert result.sub_path == "SubPath"
+
+    def test_index_format_uses_list(self):
+        """验证 Phase 4 (UE5 >= 1008) 使用 SoftObjectPathList 索引。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        soft_list = [
+            {'asset_path': '/Game/Asset1', 'sub_path': ''},
+            {'asset_path': '/Game/Asset2', 'sub_path': 'Component'},
+        ]
+        # 写入索引 1
+        buf = io.BytesIO()
+        buf.write(struct.pack('<i', 1))
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        result = parse_soft_object_property(tag, archive, [], soft_list, file_version_ue4=0, file_version_ue5=1008)
+
+        assert result.asset_path == '/Game/Asset2'
+        assert result.sub_path == 'Component'
+        assert result.index == 1
+
+    def test_index_out_of_bounds_returns_error(self):
+        """验证 Phase 4 索引越界时返回错误信息。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        soft_list = [{'asset_path': '/Game/Asset1', 'sub_path': ''}]
+        buf = io.BytesIO()
+        buf.write(struct.pack('<i', 99))  # 越界索引
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        result = parse_soft_object_property(tag, archive, [], soft_list, file_version_ue4=0, file_version_ue5=1008)
+
+        assert result.error is not None
+        assert "out of bounds" in result.error
+        assert result.index == 99
+
+    def test_soft_class_prop_propagates_version(self):
+        """验证 SoftClassProperty 透传版本参数到 SoftObjectProperty。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_class_property
+
+        name_map = ["ClassName"]
+        buf = io.BytesIO()
+        buf.write(struct.pack('<i', 0))   # FName index
+        buf.write(struct.pack('<i', 0))   # number
+        sub = b"Sub\x00"
+        buf.write(struct.pack('<i', len(sub)))
+        buf.write(sub)
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftClassProperty", size=0)
+        result = parse_soft_class_property(tag, archive, name_map, file_version_ue4=600, file_version_ue5=0)
+
+        assert result.asset_path == "ClassName"
+        assert result.sub_path == "Sub"
+
+    def test_default_version_falls_to_legacy(self):
+        """验证默认版本参数（0, 0）回退到 legacy 路径。"""
+        import io
+        import struct
+        from uasset_read.archive import FArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
+
+        buf = io.BytesIO()
+        path = b"MyPath\x00"
+        buf.write(struct.pack('<i', len(path)))
+        buf.write(path)
+        buf.seek(0)
+
+        archive = FArchive(buf)
+        tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
+        # 不传版本参数 — 使用默认值 0
+        result = parse_soft_object_property(tag, archive, [])
+
+        assert result.asset_path == "MyPath"
+        assert result.sub_path == ""
