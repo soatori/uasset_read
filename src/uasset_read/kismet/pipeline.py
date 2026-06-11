@@ -9,7 +9,10 @@ BPGC bytecode fallback with cache reset.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
@@ -128,6 +131,7 @@ def decompile_single_function(
         bytecode_status=bytecode_status,
         warnings=warnings,
         fallback_reasons=fallback_reasons,
+        logic_source=extraction_reason,
         function_ref_stats=func_ref_stats,
     )
 
