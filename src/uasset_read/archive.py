@@ -225,6 +225,15 @@ class FArchive:
             self._file = None
         self._use_mmap = False
 
+    def __enter__(self) -> "FArchive":
+        """支持 with 语句"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        """退出时自动关闭"""
+        self.close()
+        return False  # 不抑制异常
+
     def __del__(self) -> None:
         """安全网：确保文件句柄被释放。"""
         try:
