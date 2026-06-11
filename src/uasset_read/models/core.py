@@ -20,6 +20,19 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class FEdGraphTerminalType:
+    """Map value 类型（UE EdGraphPin.h:50-70）。
+
+    FEdGraphTerminalType 用于表示 Map 的 value 类型。
+    例如 TMap<FString, int> 的 pin_value_type.pin_category = "int"。
+    """
+    pin_category: str = ""
+    pin_subcategory: str = ""
+    pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
+    pin_subcategory_object_name: Optional[str] = None
+
+
+@dataclass
 class FEdGraphPinType:
     """蓝图引脚类型结构。"""
     pin_category: str = ""
@@ -27,6 +40,7 @@ class FEdGraphPinType:
     pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
     pin_subcategory_object_name: Optional[str] = None
     pin_subcategory_object_ref: Optional["UObjectInstance"] = None
+    pin_value_type: Optional["FEdGraphTerminalType"] = None  # Map value 类型
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
