@@ -2,7 +2,7 @@
 
 ## 概述
 
-`uasset_read` 是一个纯输出脚本项目，**不提供向后兼容保证**。但为了 clarity，我们明确区分：
+`uasset_read` 是一个纯输出脚本项目，**不提供向后兼容保证**。但为了清晰起见，我们明确区分：
 - **稳定根 API**：推荐外部使用的符号，通过 `from uasset_read import ...` 访问
 - **子模块 API**：内部实现细节，通过 `from uasset_read.xxx import ...` 访问，不保证稳定
 
@@ -120,10 +120,10 @@ from uasset_read.serializers import read_package_summary, ObjectExport
 
 1. **最小稳定 API**：`__all__` 只包含最高层、最常用的符号
 2. **子模块即内部**：所有实现细节通过子模块访问，不保证稳定
-3. **无向后兼容**：即使是稳定 API，也可能在版本间发生变化（但会通过 changelog 说明）
-4. **Clarity 优先**：明确区分"推荐使用"和"内部实现"，避免误导
+3. **稳定 API 也会演进**：稳定 API 是当前推荐的使用方式，但项目整体遵循"无向后兼容"原则。重大变更会在 changelog 中说明，并提供迁移路径
+4. **清晰性优先**：明确区分"推荐使用"和"内部实现"，避免误导
 
 ## 参见
 
-- [任务 #116](https://github.com/.../issues/116) — 收缩根 API 的讨论
+- [Issue #116](https://github.com/soatori/uasset_read/issues/116) — 收缩根 API 的讨论
 - [项目约束](../.claude/rules/constraints.md) — "无向后兼容"原则
