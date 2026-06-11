@@ -7,6 +7,7 @@ from uasset_read.models.result import ParseResult
 def _make_result(parse_status: str) -> ParseResult:
     """构造含指定 parse_status 导出的 ParseResult。"""
     result = ParseResult()
+    result.is_success = True
     result.summary = MagicMock()
     mock_export = MagicMock()
     mock_export.parse_status = parse_status
@@ -32,6 +33,7 @@ def test_status_fallback():
 def test_status_mixed_success_and_partial():
     """混合 success + partial_metadata → partial"""
     result = ParseResult()
+    result.is_success = True
     result.summary = MagicMock()
     s1 = MagicMock(); s1.parse_status = "success"
     s2 = MagicMock(); s2.parse_status = "partial_metadata"

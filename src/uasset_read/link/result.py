@@ -56,30 +56,7 @@ class LinkerParseResult:
     def status(self) -> str:
         """Unified status: success | partial | failed.
 
-        - success: No errors, all exports parsed successfully
-        - partial: Some errors or some exports are opaque/skipped, but core data available
-        - failed: Critical error, no usable data
+        委托到 uasset_read.status.compute_result_status() — 单一权威实现。
         """
-        # Failed if no core data
-        if not self.summary and not self.name_map and not self.export_map:
-            return "failed"
-
-        # Partial if there are errors
-        if self.errors:
-            return "partial"
-
-        # Partial if any export is not success
-        for export in self.export_map:
-            export_status = getattr(export, 'parse_status', 'success')
-            if export_status in (
-                'opaque', 'partial', 'partial_metadata', 'opaque_unversioned',
-                'skipped', 'metadata', 'fallback', 'failed',
-            ):
-                return "partial"
-
-        # Check metadata for lightweight parse
-        if self.metadata.get('lightweight_tolerant_parse'):
-            return "partial"
-
-        # Success if no errors and all exports success
-        return "success"
+        from uasset_read.status import compute_result_status
+        return compute_result_status(self)
