@@ -115,22 +115,52 @@ class TestSoftObjectPathVersionGate:
         assert get_soft_object_format(0, 1008, True) == "index"
         assert get_soft_object_format(0, 1010, True) == "index"
 
+    @staticmethod
+    def _make_archive(data: bytes):
+        """构造 MockArchive（复用 test_soft_object_path_index 的模式）。"""
+        import struct
+        from io import BytesIO
+
+        class _MockArchive:
+            def __init__(self, raw: bytes):
+                self._stream = BytesIO(raw)
+
+            def read_i32(self) -> int:
+                return struct.unpack('<i', self._stream.read(4))[0]
+
+            def read_fstring(self) -> str:
+                length = struct.unpack('<i', self._stream.read(4))[0]
+                if length == 0:
+                    return ""
+                raw = self._stream.read(length - 1)
+                self._stream.read(1)  # null terminator
+                return raw.decode('utf-8')
+
+            def tell(self) -> int:
+                return self._stream.tell()
+
+            def seek(self, pos: int) -> None:
+                self._stream.seek(pos)
+
+        return _MockArchive(data)
+
+    @staticmethod
+    def _fstring(s: str) -> bytes:
+        """序列化 FString。"""
+        import struct
+        if not s:
+            return struct.pack('<i', 0)
+        encoded = s.encode('utf-8')
+        return struct.pack('<i', len(encoded) + 1) + encoded + b'\x00'
+
     def test_legacy_single_string_reads_one_fstring(self):
         """验证 Phase 1 (legacy < 514) 只读取一个 FString。"""
-        import io
         import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
-        # 构造一个 FString: len(4) + "Path" + null(1)
-        buf = io.BytesIO()
-        path_str = b"Path\x00"
-        buf.write(struct.pack('<i', len(path_str)))
-        buf.write(path_str)
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        data = self._fstring("Path")
+        archive = self._make_archive(data)
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         result = parse_soft_object_property(tag, archive, [], file_version_ue4=500, file_version_ue5=0)
 
@@ -139,24 +169,13 @@ class TestSoftObjectPathVersionGate:
 
     def test_fname_wide_reads_fname_and_fstring(self):
         """验证 Phase 2 (UE4 >= 514) 读取 FName + FString。"""
-        import io
         import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
         name_map = ["AssetName", "OtherName"]
-        # FName: index=0 (AssetName), number=0
-        # FString: "SubPath"
-        buf = io.BytesIO()
-        buf.write(struct.pack('<i', 0))   # asset_path_index -> "AssetName"
-        buf.write(struct.pack('<i', 0))   # number component
-        sub_path = b"SubPath\x00"
-        buf.write(struct.pack('<i', len(sub_path)))
-        buf.write(sub_path)
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        data = struct.pack('<i', 0) + struct.pack('<i', 0) + self._fstring("SubPath")
+        archive = self._make_archive(data)
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         result = parse_soft_object_property(tag, archive, name_map, file_version_ue4=514, file_version_ue5=0)
 
@@ -165,23 +184,11 @@ class TestSoftObjectPathVersionGate:
 
     def test_utf8_reads_two_fstrings(self):
         """验证 Phase 3 (UE5 >= 1007) 读取两个 FUtf8String。"""
-        import io
-        import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
-        # FUtf8String asset_path + FUtf8String sub_path
-        buf = io.BytesIO()
-        asset = b"AssetPath\x00"
-        sub = b"SubPath\x00"
-        buf.write(struct.pack('<i', len(asset)))
-        buf.write(asset)
-        buf.write(struct.pack('<i', len(sub)))
-        buf.write(sub)
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        data = self._fstring("AssetPath") + self._fstring("SubPath")
+        archive = self._make_archive(data)
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         result = parse_soft_object_property(tag, archive, [], file_version_ue4=0, file_version_ue5=1007)
 
@@ -190,9 +197,7 @@ class TestSoftObjectPathVersionGate:
 
     def test_index_format_uses_list(self):
         """验证 Phase 4 (UE5 >= 1008) 使用 SoftObjectPathList 索引。"""
-        import io
         import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
@@ -200,12 +205,7 @@ class TestSoftObjectPathVersionGate:
             {'asset_path': '/Game/Asset1', 'sub_path': ''},
             {'asset_path': '/Game/Asset2', 'sub_path': 'Component'},
         ]
-        # 写入索引 1
-        buf = io.BytesIO()
-        buf.write(struct.pack('<i', 1))
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        archive = self._make_archive(struct.pack('<i', 1))
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         result = parse_soft_object_property(tag, archive, [], soft_list, file_version_ue4=0, file_version_ue5=1008)
 
@@ -215,18 +215,12 @@ class TestSoftObjectPathVersionGate:
 
     def test_index_out_of_bounds_returns_error(self):
         """验证 Phase 4 索引越界时返回错误信息。"""
-        import io
         import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
         soft_list = [{'asset_path': '/Game/Asset1', 'sub_path': ''}]
-        buf = io.BytesIO()
-        buf.write(struct.pack('<i', 99))  # 越界索引
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        archive = self._make_archive(struct.pack('<i', 99))
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         result = parse_soft_object_property(tag, archive, [], soft_list, file_version_ue4=0, file_version_ue5=1008)
 
@@ -236,22 +230,13 @@ class TestSoftObjectPathVersionGate:
 
     def test_soft_class_prop_propagates_version(self):
         """验证 SoftClassProperty 透传版本参数到 SoftObjectProperty。"""
-        import io
         import struct
-        from uasset_read.archive import FArchive
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_class_property
 
         name_map = ["ClassName"]
-        buf = io.BytesIO()
-        buf.write(struct.pack('<i', 0))   # FName index
-        buf.write(struct.pack('<i', 0))   # number
-        sub = b"Sub\x00"
-        buf.write(struct.pack('<i', len(sub)))
-        buf.write(sub)
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        data = struct.pack('<i', 0) + struct.pack('<i', 0) + self._fstring("Sub")
+        archive = self._make_archive(data)
         tag = PropertyTag(name="TestProp", type="SoftClassProperty", size=0)
         result = parse_soft_class_property(tag, archive, name_map, file_version_ue4=600, file_version_ue5=0)
 
@@ -259,23 +244,15 @@ class TestSoftObjectPathVersionGate:
         assert result.sub_path == "Sub"
 
     def test_default_version_falls_to_legacy(self):
-        """验证默认版本参数（0, 0）回退到 legacy 路径。"""
-        import io
-        import struct
-        from uasset_read.archive import FArchive
+        """验证默认版本参数（0, 0）回退到向后兼容格式（FString + FString）。"""
         from uasset_read.models.properties import PropertyTag
         from uasset_read.parsers.property_types.object_ref import parse_soft_object_property
 
-        buf = io.BytesIO()
-        path = b"MyPath\x00"
-        buf.write(struct.pack('<i', len(path)))
-        buf.write(path)
-        buf.seek(0)
-
-        archive = FArchive(buf)
+        # 版本未知时提供两个 FString（向后兼容默认行为）
+        archive = self._make_archive(self._fstring("MyPath") + self._fstring("MySub"))
         tag = PropertyTag(name="TestProp", type="SoftObjectProperty", size=0)
         # 不传版本参数 — 使用默认值 0
         result = parse_soft_object_property(tag, archive, [])
 
         assert result.asset_path == "MyPath"
-        assert result.sub_path == ""
+        assert result.sub_path == "MySub"

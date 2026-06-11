@@ -27,8 +27,9 @@ def parse_soft_object_property(
     序列化格式随引擎版本演变（参考 UE 源码 FSoftObjectPath operator<<）：
     - Phase 4 (UE5 >= 1008): SoftObjectPathList 索引格式
     - Phase 3 (UE5 >= 1007): FUtf8String + FUtf8String (REMOVE_ASSET_PATH_FNAMES)
-    - Phase 2 (UE4 >= 514): FName(AssetPath) + WideString(SubPath)
-    - Phase 1 (Legacy < 514): 单一 FString
+    - Phase 2 (UE4 >= 514 或 UE5 < 1007): FName(AssetPath) + WideString(SubPath)
+    - Phase 1 (Legacy UE4 < 514): 单一 FString
+    - Fallback (版本未知 0,0): FString + FString（向后兼容默认格式）
     """
     # Phase 4: UE5 >= 1008 — SoftObjectPathList 索引格式（最高优先级）
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
@@ -56,8 +57,9 @@ def parse_soft_object_property(
         sub_path = archive.read_fstring()
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
-    # Phase 2: UE4 >= 514 — FName(AssetPath) + WideString(SubPath)
-    if file_version_ue4 >= 514:
+    # Phase 2: FName(AssetPath) + WideString(SubPath)
+    # 适用条件：UE4 >= 514 或 UE5 (0 < ue5 < 1007)
+    if file_version_ue4 >= 514 or file_version_ue5 > 0:
         # FName: int32 index into name map + int32 number
         asset_path_index = archive.read_i32()
         _asset_path_number = archive.read_i32()  # number 分量，通常未使用
@@ -68,9 +70,16 @@ def parse_soft_object_property(
         sub_path = archive.read_fstring()
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
-    # Phase 1: Legacy (< 514) — 单一 FString
+    # Phase 1: Legacy UE4 (1 <= ue4 < 514) — 单一 FString
+    if file_version_ue4 > 0:
+        asset_path = archive.read_fstring()
+        return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path)
+
+    # Fallback: 版本未知 (0, 0) — 向后兼容默认格式 (FString + FString)
+    # 未传递版本参数时保留原始行为，确保现有调用方正常工作
     asset_path = archive.read_fstring()
-    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path)
+    sub_path = archive.read_fstring()
+    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
 def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
