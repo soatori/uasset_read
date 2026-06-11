@@ -141,15 +141,6 @@ class CppSkeletonRenderer:
         """
         return self._render_simple_header(ir)
 
-    # 向后兼容：旧 render(ir, options) 接口转发到 fallback
-    def render(self, ir: "PackageIR", options) -> str:
-        """保留旧 render 签名以兼容历史调用（转发到 generate_fallback）。"""
-        logger.warning(
-            "CppSkeletonRenderer.render(ir, options) 已废弃，"
-            "请使用 generate(result) 走独立管线"
-        )
-        return self.generate_fallback(ir)
-
     def _render_simple_header(self, ir: PackageIR) -> str:
         """从 PackageIR 生成简单的 .h 头文件（无函数体，回退模式）。"""
         lines: list[str] = []
