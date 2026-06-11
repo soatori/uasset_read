@@ -60,3 +60,27 @@ class TestFSimpleMemberReference:
         """FEdGraphPinType.pin_subcategory_member_reference 默认为 None。"""
         pin_type = FEdGraphPinType()
         assert pin_type.pin_subcategory_member_reference is None
+
+
+class TestFEdGraphPinTypeFieldRemoval:
+    """验证 FEdGraphPinType 错误字段已移除。"""
+
+    def test_is_map_key_removed(self):
+        """is_map_key 字段已移除。"""
+        pin_type = FEdGraphPinType()
+        assert not hasattr(pin_type, 'is_map_key')
+
+    def test_is_map_value_removed(self):
+        """is_map_value 字段已移除。"""
+        pin_type = FEdGraphPinType()
+        assert not hasattr(pin_type, 'is_map_value')
+
+    def test_map_expressed_via_pin_value_type(self):
+        """Map 类型通过 pin_value_type 表达。"""
+        pin_type = FEdGraphPinType(
+            pin_category="map",
+            container_type=3,  # Map
+            pin_value_type=FEdGraphTerminalType(pin_category="int"),
+        )
+        assert pin_type.container_type == 3
+        assert pin_type.pin_value_type.pin_category == "int"
