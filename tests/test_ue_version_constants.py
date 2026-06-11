@@ -66,3 +66,57 @@ class TestCustomVersionGUIDs:
     def test_fue5releasestream_object_version_guid(self):
         a, b, c, d = _parse_guid(FUE5RELEASESTREAM_OBJECT_VERSION_GUID)
         assert (a, b, c, d) == (0xD89B5E42, 0x24BD4D46, 0x8412ACA8, 0xDF641779)
+
+
+class TestUE4VersionConstants:
+    """验证 UE4 版本常量与 UE ObjectVersion.h enum 一致。"""
+
+    def test_ver_ue4_struct_guid_in_property_tag(self):
+        """VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 446"""
+        from uasset_read.constants import VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG
+        assert VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG == 446
+
+    def test_ver_ue4_property_guid_in_property_tag(self):
+        """VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 508"""
+        from uasset_read.constants import VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG
+        assert VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG == 508
+
+    def test_ver_ue4_property_tag_set_map_support(self):
+        """VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 514"""
+        from uasset_read.constants import VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT
+        assert VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT == 514
+
+    def test_var_ue4_array_property_inner_tags(self):
+        """VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 253"""
+        from uasset_read.constants import VAR_UE4_ARRAY_PROPERTY_INNER_TAGS
+        assert VAR_UE4_ARRAY_PROPERTY_INNER_TAGS == 253
+
+    def test_ue4_name_hashes_serialized(self):
+        """UE4_NAME_HASHES_SERIALIZED = 509"""
+        from uasset_read.constants import UE4_NAME_HASHES_SERIALIZED
+        assert UE4_NAME_HASHES_SERIALIZED == 509
+
+    def test_ue4_preload_dependencies_in_cooked_exports(self):
+        """UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 512"""
+        from uasset_read.constants import UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS
+        assert UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS == 512
+
+    def test_ue4_templateindex_in_cooked_exports(self):
+        """UE4_TemplateIndex_IN_COOKED_EXPORTS = 513"""
+        from uasset_read.constants import UE4_TemplateIndex_IN_COOKED_EXPORTS
+        assert UE4_TemplateIndex_IN_COOKED_EXPORTS == 513
+
+    def test_ue4_64bit_exportmap_serialsizes(self):
+        """UE4_64BIT_EXPORTMAP_SERIALSIZES = 516"""
+        from uasset_read.constants import UE4_64BIT_EXPORTMAP_SERIALSIZES
+        assert UE4_64BIT_EXPORTMAP_SERIALSIZES == 516
+
+    def test_ue4_non_outer_package_import(self):
+        """UE4_NON_OUTER_PACKAGE_IMPORT = 525"""
+        from uasset_read.constants import UE4_NON_OUTER_PACKAGE_IMPORT
+        assert UE4_NON_OUTER_PACKAGE_IMPORT == 525
+
+    def test_ue4_serialize_text_in_packages(self):
+        """UE4_SERIALIZE_TEXT_IN_PACKAGES = 464"""
+        from uasset_read.constants import UE4_SERIALIZE_TEXT_IN_PACKAGES
+        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 464
