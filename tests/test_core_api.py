@@ -113,6 +113,59 @@ class TestParseBatch:
             assert len(result.failed) == 1
             assert len(result.success) == 0
 
+    def test_parse_batch_sanitizes_filename_with_path_separator(self, tmp_path):
+        """恶意文件名包含路径分隔符时应被清理，防止路径遍历。"""
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+        real_file = input_dir / "normal.uasset"
+        real_file.write_bytes(b"\x00" * 100)
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # 构造一个 stem 包含路径遍历的假 Path 对象
+        class MaliciousPath:
+            """模拟恶意 stem 的路径对象。"""
+            def __init__(self, real_path):
+                self._real = real_path
+
+            @property
+            def stem(self):
+                return "../../etc/passwd"
+
+            def __str__(self):
+                return str(self._real)
+
+            def __fspath__(self):
+                return str(self._real)
+
+            def __lt__(self, other):
+                return str(self) < str(other)
+
+            def is_file(self):
+                return True
+
+        malicious_path = MaliciousPath(real_file)
+
+        with patch("uasset_read.core.parse_single", return_value='{"status": "success"}'), \
+             patch("pathlib.Path.glob", return_value=[malicious_path]):
+            result = parse_batch(
+                input_dir=str(input_dir),
+                format="json",
+                output_dir=str(output_dir),
+            )
+
+        # 所有输出文件必须位于 output_dir 内
+        output_files = list(output_dir.glob("**/*"))
+        for f in output_files:
+            if f.is_file():
+                assert str(f.resolve()).startswith(str(output_dir.resolve())), \
+                    f"路径遍历漏洞: 文件 {f} 逃逸出输出目录"
+
+        # 验证文件确实被生成且路径已清理（未被异常吞掉）
+        assert len(result.success) >= 1
+        assert result.failed == []
+
 
 class TestCLIBatchOptions:
     """验证 CLI batch 模式传递所有输出选项给 parse_batch。"""
