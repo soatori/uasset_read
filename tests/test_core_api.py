@@ -28,7 +28,7 @@ class TestParseSingle:
                 parse_single("nonexistent.uasset", format="text")
 
     def test_parse_single_raises_on_render_failure(self):
-        """parse_single 在渲染器不存在时抛出 ValueError。"""
+        """parse_single 在渲染器不存在时抛出 KeyError。"""
         with patch("uasset_read.core.parse_package") as mock_parse:
             mock_result = MagicMock()
             mock_result.is_success = True
@@ -36,7 +36,7 @@ class TestParseSingle:
             with patch("uasset_read.core.build_package_ir") as mock_build:
                 mock_ir = MagicMock()
                 mock_build.return_value = mock_ir
-                with pytest.raises(ValueError):
+                with pytest.raises(KeyError):
                     parse_single("test.uasset", format="nonexistent_format")
 
     def test_parse_single_uses_linker_for_json_format(self):

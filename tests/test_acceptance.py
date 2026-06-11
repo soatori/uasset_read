@@ -258,10 +258,10 @@ class TestKnownGapsDocumented:
             "UE4 遗留资产应产生警告或错误，或解析不完全成功"
 
     def test_all_formats_listed(self):
-        """应有 8 种已注册格式。"""
+        """应有 7 种已注册渲染器格式（cpp_skeleton 已拆分为独立管线）。"""
         fmts = list_formats()
         expected = {"json", "json_summary", "text", "text_summary",
-                    "markdown", "blueprint_text", "blueprint_ue_text", "cpp_skeleton"}
+                    "markdown", "blueprint_text", "blueprint_ue_text"}
         assert expected <= set(fmts), f"缺少格式: {expected - set(fmts)}"
 
     def test_strict_and_tolerant_both_work(self, first_person_blueprint):
