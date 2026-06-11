@@ -44,7 +44,7 @@ class TestCppSkeletonPipelineContract:
 
     def test_get_renderer_raises_for_cpp_skeleton(self):
         """get_renderer('cpp_skeleton') 应抛出异常。"""
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(KeyError):
             get_renderer("cpp_skeleton")
 
     def test_render_options_has_no_linker_result_field(self):
