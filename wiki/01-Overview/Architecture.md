@@ -63,6 +63,26 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 | 格式化器 | `formatters/` | 底层格式化函数（JSON/Text/Markdown/蓝图文本等） |
 | CLI | `cli.py` | argparse 入口，委托 core.py 核心 API |
 
+## 独立管线（不经过 PackageIR）
+
+**`cpp_skeleton`** — C++ 类骨架生成
+
+`cpp_skeleton` 不是标准 `IRenderer`，因为它需要 `LinkerParseResult` 而非 `PackageIR`。
+它通过独立的 `CppSkeletonRenderer.generate()` 方法生成输出，直接消费 linker 结果以获取完整的
+类型解析、组件列表和图数据。
+
+```
+.uasset → parse_uasset_with_linker() → LinkerParseResult
+         → CppSkeletonRenderer.generate() → C++ 骨架输出
+```
+
+这种设计选择是因为 C++ 骨架生成需要：
+- `PackageLinker` 实例进行类型解析
+- 原始 `components` 列表（未转换为 IR）
+- `UEdGraph` 列表（用于方法提取）
+
+这些数据在 `PackageIR` 转换过程中会被简化或丢失。
+
 > [!TIP]
 > **架构变更（0.4.1）**：`exporter/`、`n2c/`、`agent/` 模块已移除，被 IR + Renderers 架构替代。
 >

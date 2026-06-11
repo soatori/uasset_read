@@ -19,14 +19,19 @@ def parse_soft_object_property(
     archive: FArchive,
     name_map: List[str],
     soft_object_path_list: Optional[List[Dict]] = None,
+    file_version_ue4: int = 0,
+    file_version_ue5: int = 0,
 ) -> SoftObjectPathValue:
-    """解析 SoftObjectProperty（FSoftObjectPath）。
+    """解析 SoftObjectProperty（FSoftObjectPath）— 三阶段版本门控。
 
-    当 soft_object_path_list 存在时（UE5.7+），读取 int32 索引。
-    否则读取 FString 对（传统格式）。
+    序列化格式随引擎版本演变（参考 UE 源码 FSoftObjectPath operator<<）：
+    - Phase 4 (UE5 >= 1008): SoftObjectPathList 索引格式
+    - Phase 3 (UE5 >= 1007): FUtf8String + FUtf8String (REMOVE_ASSET_PATH_FNAMES)
+    - Phase 2 (UE4 >= 514): FName(AssetPath) + WideString(SubPath)
+    - Phase 1 (Legacy < 514): 单一 FString
     """
+    # Phase 4: UE5 >= 1008 — SoftObjectPathList 索引格式（最高优先级）
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
-        # UE5.7+ 索引格式
         index = archive.read_i32()
         if 0 <= index < len(soft_object_path_list):
             entry = soft_object_path_list[index]
@@ -44,11 +49,28 @@ def parse_soft_object_property(
                 index=index,
                 error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
-    else:
-        # 传统 FString 格式
+
+    # Phase 3: UE5 >= 1007 — FUtf8String + FUtf8String
+    if file_version_ue5 >= 1007:
         asset_path = archive.read_fstring()
         sub_path = archive.read_fstring()
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
+
+    # Phase 2: UE4 >= 514 — FName(AssetPath) + WideString(SubPath)
+    if file_version_ue4 >= 514:
+        # FName: int32 index into name map + int32 number
+        asset_path_index = archive.read_i32()
+        _asset_path_number = archive.read_i32()  # number 分量，通常未使用
+        if 0 <= asset_path_index < len(name_map):
+            asset_path = name_map[asset_path_index]
+        else:
+            asset_path = ""
+        sub_path = archive.read_fstring()
+        return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
+
+    # Phase 1: Legacy (< 514) — 单一 FString
+    asset_path = archive.read_fstring()
+    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path)
 
 
 def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
@@ -73,9 +95,15 @@ def parse_soft_class_property(
     archive: FArchive,
     name_map: List[str] = None,
     soft_object_path_list: Optional[List[Dict]] = None,
+    file_version_ue4: int = 0,
+    file_version_ue5: int = 0,
 ) -> SoftObjectPathValue:
-    """解析 SoftClassProperty — 与 SoftObjectProperty 解析方式相同。"""
-    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
+    """解析 SoftClassProperty — 与 SoftObjectProperty 解析方式相同，版本参数透传。"""
+    return parse_soft_object_property(
+        tag, archive, name_map or [], soft_object_path_list,
+        file_version_ue4=file_version_ue4,
+        file_version_ue5=file_version_ue5,
+    )
 
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:

@@ -64,6 +64,16 @@ parse_uasset_with_linker(path: str, tolerant: bool = True, preload_all: bool = F
 12. renderer.render(ir, options) → str       ← 新增：渲染
 ```
 
+## cpp_skeleton 独立路径
+
+```
+parse_single(format="cpp_skeleton")
+  → parse_uasset_with_linker() → LinkerParseResult
+  → CppSkeletonRenderer.generate(result) → C++ 骨架字符串
+```
+
+注意：`cpp_skeleton` 不通过 `RENDERER_REGISTRY`，也不使用 `RenderOptions.linker_result`。
+
 ## 关键设计
 
 - **三层架构**：ParseResult → PackageIR → Renderers（解析、数据、输出完全分离）
