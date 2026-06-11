@@ -3,11 +3,12 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 版本 0.4.5
 
-API 分层：
-- 稳定根 API: parse_single, parse_batch, parse_package, ParseResult,
-  PackageSummary, ExportEntry, ImportEntry, UAssetError, FArchive
-- 子模块 API: parsers, serializers, graph, kismet, cpp_gen, renderers
-- renderers: JSON, text, markdown, C++ skeleton 输出
+API 稳定性策略（详见 docs/api-stability.md）：
+- 稳定根 API: __all__ 中列出的符号，面向外部使用者
+- 子模块 API: parsers, serializers, graph, kismet, cpp_gen, renderers 等
+  通过 ``from uasset_read.serializers import ...`` 访问，不保证稳定
+- 根模块仍导入大量内部符号（向后兼容），但它们不在 __all__ 中，
+  使用者不应直接依赖
 """
 __version__ = "0.4.5"
 
@@ -29,6 +30,9 @@ from .memory import (
     get_file_size_mb,
     get_available_memory_gb,
 )
+
+# IR 模型
+from .models.ir import PackageIR, ExportIR, GraphIR, NodeIR, PinIR
 
 # 稳定 API 别名（统一命名）
 from .serializers.package_summary import PackageFileSummary as PackageSummary
@@ -270,101 +274,36 @@ from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
 
 # ============================================================================
-# 公共 API 导出控制 — 仅稳定根 API
+# 稳定公共 API — 仅包含推荐外部使用的符号
 # ============================================================================
 __all__ = [
     # 版本号
     "__version__",
-    # 稳定根 API — 核心入口
+    # 核心入口
     "parse_single",
     "parse_batch",
     "parse_package",
+    "parse_uasset",
+    "parse_uasset_with_linker",
+    "list_formats",
+    # 结果模型
     "ParseResult",
     "PackageSummary",
     "ExportEntry",
     "ImportEntry",
-    "UAssetError",
-    "FArchive",
-    # 稳定根 API — 辅助
-    "list_formats",
     "BatchResult",
-    "parse_uasset",
-    "parse_uasset_with_linker",
-    "StatusInfo",
-    "VersionError",
-    "ErrorContext",
+    # IR 模型
+    "PackageIR",
+    "ExportIR",
+    "GraphIR",
+    "NodeIR",
+    "PinIR",
+    # 异常
+    "UAssetError",
     "ParseError",
-    # 内存管理
-    "MemoryMonitor",
-    "MemoryStatus",
-    "force_gc",
-    "get_file_size_mb",
-    "get_available_memory_gb",
-    # 常量（稳定）
-    "PACKAGE_FILE_TAG",
-    "PACKAGE_FILE_TAG_SWAPPED",
-    "UE5_VERSION_MIN",
-    "UE5_LEGACY_VERSION",
-    "MAX_NAME_COUNT",
-    "MAX_IMPORT_COUNT",
-    "MAX_EXPORT_COUNT",
-    "MAX_CUSTOM_VERSIONS",
-    "MMAP_THRESHOLD",
-    "MAX_PROPERTY_COUNT",
-    "PROPERTY_TAG_COMPLETE_TYPE_NAME",
-    "MAX_PINS_PER_NODE",
-    "MAX_NODES_PER_GRAPH",
-    "MAX_LINKEDTO_PER_PIN",
-    "PROP_TAG_NONE",
-    "PROP_TAG_HAS_ARRAY_INDEX",
-    "PROP_TAG_HAS_PROPERTY_GUID",
-    "PROP_TAG_HAS_EXTENSIONS",
-    "PROP_TAG_HAS_BINARY_OR_NATIVE",
-    "PROP_TAG_BOOL_TRUE",
-    "PROP_TAG_SKIPPED_SERIALIZE",
-    "CONTROL_FLOW_NODES",
-    "START_EVENT_TYPES",
-    "BRANCH_TYPE_MAP",
-    "PKG_Cooked",
-    "PKG_UnversionedProperties",
-    "PKG_FilterEditorOnly",
-    "UE5_SCRIPT_SERIALIZATION_OFFSET",
-    "UE5_PROPERTY_TAG_EXTENSION",
-    "UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME",
-    "UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID",
-    "UE5_TRACK_OBJECT_EXPORT_IS_INHERITED",
-    "UE5_OPTIONAL_RESOURCES",
-    "UE5_NAMES_REFERENCED_FROM_EXPORT_DATA",
-    "UE5_PAYLOAD_TOC",
-    "UE5_LARGE_WORLD_COORDINATES",
-    "UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES",
-    "UE5_ADD_SOFTOBJECTPATH_LIST",
-    "UE5_DATA_RESOURCES",
-    "UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES",
-    "UE5_METADATA_SERIALIZATION_OFFSET",
-    "UE5_VERSE_CELLS",
-    "UE5_PACKAGE_SAVED_HASH",
-    "UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION",
-    "UE5_IMPORT_TYPE_HIERARCHIES",
-    "FFRAMEWORK_OBJECT_VERSION_GUID",
-    "FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE",
-    "FFRAMEWORK_VERSION_PINS_STORE_FNAME",
-    "FUE5_MAINSTREAM_VERSION_GUID",
-    "FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX",
-    "FRELEASE_OBJECT_VERSION_GUID",
-    "FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER",
-    "FORMAT_CONFIG",
-    "CPF_Edit",
-    "CPF_BlueprintVisible",
-    "CPF_InstancedReference",
-    "CPF_EditAnywhere",
-    "CPF_EditInstanceOnly",
-    "CPF_BlueprintReadWrite",
-    "CPF_BlueprintReadOnly",
-    "CPF_Transient",
-    "CPF_SaveGame",
-    "CPF_ExposeOnSpawn",
-    # 内存安全常量
-    "DEFAULT_MAX_PARSE_SIZE_MB",
-    "WARN_FILE_SIZE_MB",
+    "VersionError",
+    # 高级工具
+    "FArchive",
+    "PackageBundle",
+    "PackageLinker",
 ]
