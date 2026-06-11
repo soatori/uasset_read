@@ -1,10 +1,17 @@
 """可选高级功能模块
 
 使用方式：
-    from uasset_read.extras.graph import extract_blueprint_graphs
-    from uasset_read.extras.kismet import decompile_uasset
-    from uasset_read.extras.cpp_gen import extract_cpp_class_skeleton
-    from uasset_read.extras.blueprint import extract_blueprint_metadata
+    from uasset_read.extras import graph
+    graph.extract_blueprint_graphs(...)
+
+    from uasset_read.extras import kismet
+    kismet.decompile_uasset(...)
+
+    from uasset_read.extras import cpp_gen
+    cpp_gen.extract_cpp_class_skeleton(...)
+
+    from uasset_read.extras import blueprint
+    blueprint.extract_blueprint_metadata(...)
 
 当前为占位实现，实际模块仍在原位置。
 """

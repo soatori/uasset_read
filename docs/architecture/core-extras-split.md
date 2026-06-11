@@ -40,13 +40,20 @@ uasset_read 包含从基础 .uasset 解析到蓝图字节码反编译、C++ 骨�
 
 ## 导入路径
 
-Extras 模块通过 `uasset_read.extras.*` 命名空间访问：
+Extras 模块通过 `uasset_read.extras` 命名空间访问：
 
 ```python
-from uasset_read.extras.graph import extract_blueprint_graphs
-from uasset_read.extras.kismet import decompile_uasset
-from uasset_read.extras.cpp_gen import extract_cpp_class_skeleton
-from uasset_read.extras.blueprint import extract_blueprint_metadata
+from uasset_read.extras import graph
+graph.extract_blueprint_graphs(...)
+
+from uasset_read.extras import kismet
+kismet.decompile_uasset(...)
+
+from uasset_read.extras import cpp_gen
+cpp_gen.extract_cpp_class_skeleton(...)
+
+from uasset_read.extras import blueprint
+blueprint.extract_blueprint_metadata(...)
 ```
 
 原路径 `uasset_read.graph` 等仍然可用（向后兼容）。
