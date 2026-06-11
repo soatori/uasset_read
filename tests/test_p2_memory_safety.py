@@ -4,6 +4,31 @@ from __future__ import annotations
 import pytest
 
 
+class TestCacheCleanup:
+    """#108 P1: 缓存应有清理机制。"""
+
+    def test_function_ref_resolver_has_reset(self):
+        """FunctionRefResolver 应有 reset() 方法。"""
+        from uasset_read.kismet.function_resolver import FunctionRefResolver
+        assert hasattr(FunctionRefResolver, 'reset')
+
+    def test_class_registry_has_reset_cache(self):
+        """ClassHandlerRegistry 应有 reset_cache() 方法。"""
+        from uasset_read.parsers.class_registry import ClassHandlerRegistry
+        registry = ClassHandlerRegistry()
+        assert hasattr(registry, 'reset_cache')
+
+    def test_class_registry_global_reset(self):
+        """全局 registry 的 reset_default_registry_cache() 应清空缓存。"""
+        from uasset_read.parsers.class_registry import (
+            get_class_registry, reset_default_registry_cache,
+        )
+        registry = get_class_registry()
+        registry._cache["test"] = None
+        reset_default_registry_cache()
+        assert len(registry._cache) == 0
+
+
 class TestFileHandleSafety:
     """#108 P0: 文件处理类应有 __del__ 安全网。"""
 

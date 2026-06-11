@@ -718,6 +718,10 @@ def _stage_cleanup(ctx: _ParseContext) -> None:
     from uasset_read.kismet.bytecode_extractor import reset_bpgc_cache
     reset_bpgc_cache()
 
+    # Task 11: 清理 ClassHandlerRegistry 缓存 (#108)
+    from uasset_read.parsers.class_registry import reset_default_registry_cache
+    reset_default_registry_cache()
+
 
 def _parse_package_core(
     path: str,
