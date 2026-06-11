@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -307,275 +308,243 @@ def parse_property_value(
         )
 
 
+@dataclass
+class ExportPayloadContext:
+    """Export payload 解析上下文 — 在各策略之间传递状态。"""
+    export: Any
+    archive: Any
+    summary: Any
+    name_map: List[str]
+    export_map: List[Any]
+    import_map: Optional[List[Any]] = None
+    linker: Optional[Any] = None
+    mappings: Optional[Any] = None
+    game: Optional[str] = None
+    tolerant: bool = True
+    class_name: Optional[str] = None
+    property_count: int = 0
+    property_end: int = 0
 
-def parse_properties_from_export(
-    export: ObjectExport,
-    archive: FArchive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    export_map: List[Any],
-    import_map: Optional[List[ObjectImport]] = None,
-    linker: Optional[Any] = None,
-    mappings: Optional[Any] = None,
-    game: Optional[str] = None,
-    tolerant: bool = True,
-) -> List[PropertyValue]:
-    """从 export 条目读取所有属性（PROP-01）。
 
-    参考 Class.cpp SerializeVersionedTaggedProperties 模式：
-    1. Seek 到属性起始位置
-    2. 循环读取 PropertyTag 直到 Name == "None"
-    3. 分派到类型特定解析函数
-    4. 边界验证（seek 到 start + tag.size）
+def _apply_class_specific_skip(ctx: ExportPayloadContext) -> Optional[List[PropertyValue]]:
+    """Strategy 1: Tolerant skip for known incompatible classes.
 
-    Args:
-        export: ObjectExport 实例
-        archive: FArchive 实例
-        summary: PackageFileSummary 实例（版本信息）
-        name_map: 名称表
-        export_map: 导出表
-        import_map: 导入表（ObjectProperty 解析需要，linker 未提供时使用）
-        linker: PackageLinker 实例（可选，优先用于 ObjectProperty 解析）
-
-    Returns:
-        List[PropertyValue] 属性值列表
+    Returns [] if skipped, None to continue.
     """
-    properties: List[PropertyValue] = []
-    property_count = 0
-    if mappings is not None:
-        setattr(summary, "_mappings", mappings)
-    if game is not None:
-        setattr(summary, "_game", game)
-
-    # UE default: 始终从 SerialOffset 开始属性解析
-    # ScriptSerializationStartOffset 仅在特殊编辑器场景使用
-    # （property bag placeholder 或 class mismatch）— 参见 LinkerLoad.cpp:4793
-    property_start = export.serial_offset
-
-    # 存储 ScriptSerialization 绝对偏移用于诊断和 opt-in 策略
-    export._script_serialization_start_absolute = (
-        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
-    )
-    export._script_serialization_end_absolute = (
-        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
-    )
-
-    archive.seek(property_start)
-
-    # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
     from uasset_read.parsers.class_specific_skip import (
         should_skip_export_for_tolerant_parsing,
         skip_export_payload,
     )
-    # 解析 export 的 class name 用于 skip 检查
-    _skip_class_name = None
-    if import_map is not None:
-        try:
-            from uasset_read.serializers.object_resources import resolve_class_name
-            _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except Exception as e:
-            logger.debug("Failed to resolve class name for export: %s", e)
-    if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
+    if should_skip_export_for_tolerant_parsing(ctx.export, class_name=ctx.class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
-            export.object_name,
+            ctx.export.object_name,
         )
         try:
-            skip_export_payload(archive, export, summary)
+            skip_export_payload(ctx.archive, ctx.export, ctx.summary)
         except Exception as e:
-            logger.warning("Failed to skip export '%s' payload: %s", export.object_name, e)
-        setattr(export, "parse_status", "skipped")
-        setattr(export, "fallback_reason", "unsupported_type")
-        setattr(export, "class_name", _skip_class_name or "")
+            logger.warning("Failed to skip export '%s' payload: %s", ctx.export.object_name, e)
+        setattr(ctx.export, "parse_status", "skipped")
+        setattr(ctx.export, "fallback_reason", "unsupported_type")
+        setattr(ctx.export, "class_name", ctx.class_name or "")
         return []
+    return None
 
-    # UClass 原生字段解析：对 UCLASS_NATIVE 策略的类，先解析 UStruct/UClass 原生字段
-    # 参考 UE 源码 Class.cpp:5987-6263
-    if _skip_class_name is not None:
+
+def _apply_uclass_native_strategy(ctx: ExportPayloadContext) -> None:
+    """Strategy 2: UClass native field parsing."""
+    if ctx.class_name is not None:
         from uasset_read.parsers.class_serialization_strategy import (
             get_serialization_strategy,
             SerializationStrategy,
         )
-        _strategy = get_serialization_strategy(_skip_class_name)
+        _strategy = get_serialization_strategy(ctx.class_name)
         if _strategy == SerializationStrategy.UCLASS_NATIVE:
             # 验证是否真的包含 UClass 原生字段
             # UE5 >= 1011 的 BlueprintGeneratedClass 可能不包含原生字段
             should_parse_native = True
 
             # 检查 SuperStruct 是否匹配
-            if hasattr(export, 'super_index') and export.super_index is not None:
-                archive_pos = archive.tell()
+            if hasattr(ctx.export, 'super_index') and ctx.export.super_index is not None:
+                archive_pos = ctx.archive.tell()
                 try:
-                    super_struct_raw = archive.read_i32()
+                    super_struct_raw = ctx.archive.read_i32()
                     # 如果读取的值与 export.super_index 不匹配，说明数据格式不对
-                    if super_struct_raw != export.super_index:
+                    if super_struct_raw != ctx.export.super_index:
                         should_parse_native = False
                         logger.debug(
                             "Skipping UClass native fields for '%s': SuperStruct mismatch "
                             "(expected %d, got %d) - likely UE5 BPGC without native fields",
-                            export.object_name, export.super_index, super_struct_raw
+                            ctx.export.object_name, ctx.export.super_index, super_struct_raw
                         )
-                    archive.seek(archive_pos)  # 恢复位置
+                    ctx.archive.seek(archive_pos)  # 恢复位置
                 except Exception:
-                    archive.seek(archive_pos)  # 恢复位置
+                    ctx.archive.seek(archive_pos)  # 恢复位置
 
             if should_parse_native:
                 try:
                     from uasset_read.parsers.asset_types.uclass import parse_uclass_fields
-                    uclass_data = parse_uclass_fields(archive, name_map, summary)
-                    setattr(export, "_uclass_native_fields", uclass_data)
+                    uclass_data = parse_uclass_fields(ctx.archive, ctx.name_map, ctx.summary)
+                    setattr(ctx.export, "_uclass_native_fields", uclass_data)
                     logger.debug(
                         "UClass native fields parsed for '%s': %d bytes read, status=%s",
-                        export.object_name,
+                        ctx.export.object_name,
                         uclass_data.get("bytes_read", 0),
                         uclass_data.get("parse_status", "unknown"),
                     )
                 except Exception as e:
                     logger.warning(
                         "UClass native field parsing failed for '%s': %s",
-                        export.object_name, e,
+                        ctx.export.object_name, e,
                     )
-                    setattr(export, "_uclass_native_fields", {
+                    setattr(ctx.export, "_uclass_native_fields", {
                         "parse_status": "failed",
                         "parse_error": str(e),
                     })
 
-    # D-02: SerializationControlExtensions 头部处理
-    # UE5 >= 1011: 根级 overridable serialization 控制头
-    # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
-    # 未知位应降级为诊断信息，不要盲跳
-    #
-    # UE 源码 Class.cpp:1624-1628:
-    #   const bool bIsUClass = IsA<UClass>();  // 'this' 是 ObjClass（对象的类）
-    #   if (bIsUClass && UnderlyingArchive.UEVer() >= PROPERTY_TAG_EXTENSION_AND_OVERRIDABLE_SERIALIZATION)
-    #
-    # 关键发现：对于任何 export，ObjClass（对象所属的类）总是 UClass 或 UClass 派生类，
-    # 因此 D-02 字节对所有 export payload 都会序列化，而非仅对 UClass 派生类的 export 对象。
-    # 参考 UE 源码：SerializeTaggedProperties 在 ObjClass（UClass）上调用，IsA<UClass>() 检查
-    # ObjClass 是否为 UClass（永远为 true），而非检查 export 对象本身。
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+
+def _apply_serialization_control_header(ctx: ExportPayloadContext) -> None:
+    """Strategy 3: UE5 SerializationControlExtensions header."""
+    if ctx.summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         # 所有 UE5 >= 1011 的 export payload 都包含 D-02 SerializationControlExtensions header
-        control_offset = archive.tell()
-        serialization_control = archive.read_u8()
+        control_offset = ctx.archive.tell()
+        serialization_control = ctx.archive.read_u8()
         overridden_operation = None
         if serialization_control & 0x02:
-            overridden_operation = archive.read_u8()
+            overridden_operation = ctx.archive.read_u8()
         # 记录未知位（非 0x00 和非 0x02 的位）
         unknown_bits = serialization_control & ~0x02
         if unknown_bits:
             logger.warning(
                 "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
-                getattr(export, "object_name", ""), unknown_bits, control_offset,
+                getattr(ctx.export, "object_name", ""), unknown_bits, control_offset,
             )
         # 存储到 export 的 transforms 中，供 IR/JSON 输出
-        if not hasattr(export, "transforms") or export.transforms is None:
-            export.transforms = {}
-        export.transforms["serialization_control"] = {
+        if not hasattr(ctx.export, "transforms") or ctx.export.transforms is None:
+            ctx.export.transforms = {}
+        ctx.export.transforms["serialization_control"] = {
             "value": serialization_control,
             "overridden_operation": overridden_operation,
             "offset": control_offset,
         }
 
+
+def _apply_unversioned_properties_strategy(ctx: ExportPayloadContext) -> Optional[List[PropertyValue]]:
+    """Strategy 4: Unversioned properties.
+
+    Returns list if handled, None to continue.
+    """
     # 计算属性数据边界
     # UE default: 使用 SerialSize 作为属性边界
-    property_end = export.serial_offset + export.serial_size
+    property_end = ctx.export.serial_offset + ctx.export.serial_size
+    ctx.property_end = property_end
 
-    uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
-    if uses_unversioned and mappings is not None:
-        struct_name = _resolve_mapping_struct_name(export, import_map, export_map)
-        mapped = getattr(mappings, "mappings", mappings)
+    uses_unversioned = bool(getattr(ctx.summary, "package_flags", 0) & PKG_UnversionedProperties)
+    if uses_unversioned and ctx.mappings is not None:
+        struct_name = _resolve_mapping_struct_name(ctx.export, ctx.import_map, ctx.export_map)
+        mapped = getattr(ctx.mappings, "mappings", ctx.mappings)
         if hasattr(mapped, "get_struct") and mapped.get_struct(struct_name) is not None:
             return _parse_unversioned_properties_from_mapping(
-                export,
-                archive,
-                summary,
-                name_map,
-                export_map,
+                ctx.export,
+                ctx.archive,
+                ctx.summary,
+                ctx.name_map,
+                ctx.export_map,
                 mapped,
                 struct_name,
                 property_end,
             )
 
-    # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
-    if uses_unversioned and mappings is None:
-        opaque_size = property_end - archive.tell()
+    # Unversioned 包无可靠 mapping -> 输出 opaque 区块，不猜测字段
+    if uses_unversioned and ctx.mappings is None:
+        opaque_size = property_end - ctx.archive.tell()
         if opaque_size > 0:
-            raw_bytes = archive.read(opaque_size)
+            raw_bytes = ctx.archive.read(opaque_size)
         else:
             raw_bytes = b""
         logger.debug(
             "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
-            export.object_name, len(raw_bytes),
+            ctx.export.object_name, len(raw_bytes),
         )
         # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
-        setattr(export, "parse_status", "opaque_unversioned")
-        setattr(export, "fallback_reason", "missing_mapping")
+        setattr(ctx.export, "parse_status", "opaque_unversioned")
+        setattr(ctx.export, "fallback_reason", "missing_mapping")
         return [PropertyFallback(
-            name=export.object_name,
+            name=ctx.export.object_name,
             type="UnversionedOpaque",
             size=len(raw_bytes),
             raw_bytes=raw_bytes,
             reason=FallbackReason.MISSING_MAPPING,
         )]
 
-    # Asset type handler dispatch: 对已注册 handler 的类型，提取原始二进制数据
-    if _skip_class_name is not None:
-        _try_asset_type_handler(export, archive, name_map, _skip_class_name)
+    return None
+
+
+def _apply_asset_type_handler(ctx: ExportPayloadContext) -> None:
+    """Strategy 5: Asset type handler dispatch."""
+    if ctx.class_name is not None:
+        _try_asset_type_handler(ctx.export, ctx.archive, ctx.name_map, ctx.class_name)
+
+
+def _run_tagged_property_loop(ctx: ExportPayloadContext) -> List[PropertyValue]:
+    """Strategy 6: Main tagged property loop."""
+    properties: List[PropertyValue] = []
+    property_end = ctx.property_end
 
     while True:
         # D-08/D-09: Property loop limit check
-        if property_count >= MAX_PROPERTY_COUNT:
+        if ctx.property_count >= MAX_PROPERTY_COUNT:
             raise ParseError(
                 f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})",
                 context=ErrorContext(
-                    offset=archive.tell(),
+                    offset=ctx.archive.tell(),
                     phase="properties",
                     operation="property_count_check",
-                    context_name=str(export.object_name),
+                    context_name=str(ctx.export.object_name),
                 )
             )
-        property_count += 1
+        ctx.property_count += 1
 
         tag = None
         start_pos = None
 
         try:
             # 边界检查：当前位置不应超过属性数据范围
-            current_pos = archive.tell()
+            current_pos = ctx.archive.tell()
             if current_pos >= property_end:
                 break
 
             struct_name = None
-            if mappings is not None and import_map is not None:
+            if ctx.mappings is not None and ctx.import_map is not None:
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
-                    struct_name = resolve_class_name(export.class_index, import_map, export_map)
+                    struct_name = resolve_class_name(ctx.export.class_index, ctx.import_map, ctx.export_map)
                 except Exception as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
-                    struct_name = export.object_name
+                    struct_name = ctx.export.object_name
 
             # Determine engine family from summary for UE4/UE5 dispatch
             engine_family = "ue5"
-            if summary is not None:
-                file_version_ue5 = getattr(summary, 'file_version_ue5', 0)
-                legacy_file_version = getattr(summary, 'legacy_file_version', -9)
+            if ctx.summary is not None:
+                file_version_ue5 = getattr(ctx.summary, 'file_version_ue5', 0)
+                legacy_file_version = getattr(ctx.summary, 'legacy_file_version', -9)
                 # UE4 assets have file_version_ue5 == 0 and legacy > -6
                 if file_version_ue5 == 0 and legacy_file_version > -6:
                     engine_family = "ue4"
 
-            tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name, engine_family=engine_family)
+            tag = read_property_tag(ctx.archive, ctx.name_map, mappings=ctx.mappings, struct_name=struct_name, engine_family=engine_family)
 
             # 终止标记：Name == "None"
             if tag.name == "None":
                 break
 
             # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
-            remaining = property_end - archive.tell()
+            remaining = property_end - ctx.archive.tell()
             if tag.size > remaining:
                 raise ParseError(
                     f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'",
                     context=ErrorContext(
-                        offset=archive.tell(),
+                        offset=ctx.archive.tell(),
                         phase="properties",
                         operation="property_tag_size_check",
                         context_name=str(tag.name),
@@ -583,7 +552,7 @@ def parse_properties_from_export(
                 )
 
             # 记录起始位置用于边界验证
-            start_pos = archive.tell()
+            start_pos = ctx.archive.tell()
 
             # EPropertyTagFlags: SkippedSerialize / BinaryOrNative 在主循环分派
             # 参考 UE PropertyTag.cpp:553 SerializeTaggedProperty
@@ -602,7 +571,7 @@ def parse_properties_from_export(
                 )
             elif serialize_type == "BinaryOrNative":
                 # BinaryOrNative (0x08): 原生二进制序列化，跳过标准 PropertyTag value 解析
-                raw_data = archive.read(tag.size) if tag.size > 0 else b""
+                raw_data = ctx.archive.read(tag.size) if tag.size > 0 else b""
                 value = PropertyFallback(
                     name=tag.name,
                     type=tag.type,
@@ -615,10 +584,10 @@ def parse_properties_from_export(
             else:
                 # 标准 PropertyTag value 解析
                 value = read_tag_value_bounded(
-                    archive,
+                    ctx.archive,
                     tag,
                     lambda: parse_property_value(
-                        tag, archive, name_map, export_map, summary, tolerant=tolerant
+                        tag, ctx.archive, ctx.name_map, ctx.export_map, ctx.summary, tolerant=ctx.tolerant
                     ),
                 )
 
@@ -645,9 +614,9 @@ def parse_properties_from_export(
             # ObjectProperty 增强：优先通过 linker 解析，回退到 import_map 解析
             if tag.type == "ObjectProperty" and isinstance(value, int):
                 resolved = None
-                if linker is not None:
+                if ctx.linker is not None:
                     pkg_idx = PackageIndex(value)
-                    inst = linker.resolve_package_index(pkg_idx)
+                    inst = ctx.linker.resolve_package_index(pkg_idx)
                     if inst is not None:
                         resolved = {
                             "type": "import" if inst.is_import else "export",
@@ -655,10 +624,10 @@ def parse_properties_from_export(
                             "object_class": inst.object_class,
                             "full_name": inst.get_full_name(),
                         }
-                elif import_map is not None:
+                elif ctx.import_map is not None:
                     from uasset_read.serializers.object_resources import resolve_package_index_to_reference
                     pkg_idx = PackageIndex(value)
-                    ref = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
+                    ref = resolve_package_index_to_reference(pkg_idx, ctx.import_map, ctx.export_map, ctx.name_map)
                     if ref and ref.get("source") == "import_map":
                         resolved = ref
                 if resolved is not None:
@@ -667,7 +636,7 @@ def parse_properties_from_export(
         except ParseError as e:
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
             if tag is not None and start_pos is not None:
-                archive.seek(start_pos + tag.size)
+                ctx.archive.seek(start_pos + tag.size)
 
             # 使用 PropertyFallback 替代纯字符串错误信息
             fb = PropertyFallback(
@@ -688,6 +657,71 @@ def parse_properties_from_export(
             ))
 
     return properties
+
+
+def parse_properties_from_export(
+    export: ObjectExport,
+    archive: FArchive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    export_map: List[Any],
+    import_map: Optional[List[ObjectImport]] = None,
+    linker: Optional[Any] = None,
+    mappings: Optional[Any] = None,
+    game: Optional[str] = None,
+    tolerant: bool = True,
+) -> List[PropertyValue]:
+    """从 export 条目读取所有属性 -- 编排 6 个策略。"""
+    if mappings is not None:
+        setattr(summary, "_mappings", mappings)
+    if game is not None:
+        setattr(summary, "_game", game)
+
+    ctx = ExportPayloadContext(
+        export=export, archive=archive, summary=summary,
+        name_map=name_map, export_map=export_map, import_map=import_map,
+        linker=linker, mappings=mappings, game=game, tolerant=tolerant,
+    )
+
+    # Resolve class name
+    if import_map is not None:
+        try:
+            from uasset_read.serializers.object_resources import resolve_class_name
+            ctx.class_name = resolve_class_name(export.class_index, import_map, export_map)
+        except Exception as e:
+            logger.debug("Failed to resolve class name for export: %s", e)
+
+    # Setup property start
+    property_start = export.serial_offset
+    export._script_serialization_start_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
+    )
+    export._script_serialization_end_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
+    )
+    archive.seek(property_start)
+
+    # Strategy 1: class-specific skip
+    result = _apply_class_specific_skip(ctx)
+    if result is not None:
+        return result
+
+    # Strategy 2: UClass native fields
+    _apply_uclass_native_strategy(ctx)
+
+    # Strategy 3: SerializationControlExtensions
+    _apply_serialization_control_header(ctx)
+
+    # Strategy 4: unversioned properties
+    result = _apply_unversioned_properties_strategy(ctx)
+    if result is not None:
+        return result
+
+    # Strategy 5: asset type handler
+    _apply_asset_type_handler(ctx)
+
+    # Strategy 6: tagged property loop
+    return _run_tagged_property_loop(ctx)
 
 
 def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List[ObjectImport]], export_map: List[Any]) -> str:
