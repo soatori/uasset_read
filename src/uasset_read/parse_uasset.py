@@ -94,172 +94,28 @@ def _post_process(
     asset_roots: Optional[Sequence[str]] = None,
     archive_factory=None,
 ) -> None:
-    """共享后处理：blueprint 元数据、图提取、依赖分析。
+    """共享后处理：通过 PostProcessPipeline 执行 7 个 stage。
 
     通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
     """
-    # Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数）
-    graphs_list = None
-    try:
-        from uasset_read.graph import extract_blueprint_graphs
-        if hasattr(result, 'graphs'):
-            result.graphs = extract_blueprint_graphs(
-                archive, summary, name_map, import_map, export_map,
-                linker=linker,
-            )
-            graphs_list = result.graphs
-    except ImportError:
-        pass  # graph 模块不存在时静默跳过
-    except ParseError as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"graph extraction error: {e}")
+    from uasset_read.post_process import PostProcessContext, build_default_pipeline
 
-    # Blueprint 元数据提取（使用 graphs 填充 functions）
-    # 关键发现：NewVariables 属性存储在 UBlueprint export（蓝图资产本身）
-    # 而非 BlueprintGeneratedClass export（生成的类实例）
-    # 参考 UE 源码：UBlueprint::Serialize() 中 NewVariables 是 UPROPERTY
-    blueprint_metadata = None
-    asset_name = name_map[0] if name_map else None
-
-    # 首先查找 UBlueprint export（包含 NewVariables）
-    main_blueprint = None
-    if asset_name:
-        # 查找主 Blueprint export（名称匹配 asset_name，不含 "_C"）
-        for export in export_map:
-            is_bp = detect_blueprint(export, import_map, export_map) if import_map else False
-            if is_bp and export.object_name:
-                simple_asset_name = asset_name.split("/")[-1] if "/" in asset_name else asset_name
-                if export.object_name == simple_asset_name:
-                    main_blueprint = export
-                    break
-
-    if main_blueprint:
-        owned_archive = archive_factory is not None
-        temp_archive = archive_factory() if archive_factory else archive
-        temp_archive.set_byte_swapping(archive._byte_swapping)
-        try:
-            meta, warn = extract_blueprint_metadata(
-                main_blueprint, temp_archive, import_map,
-                export_map, name_map, summary,
-                linker=linker,
-                graphs=graphs_list,
-            )
-            if meta:
-                blueprint_metadata = meta
-                if hasattr(result, 'errors') and warn:
-                    result.errors.append(f"blueprint parent warning: {warn}")
-        except ParseError as e:
-            if hasattr(result, 'errors'):
-                result.errors.append(f"blueprint extraction error: {e}")
-        finally:
-            if owned_archive:
-                temp_archive.close()
-
-    # BPGC 回退（不包含 NewVariables，仅用于获取 ParentClass 等元数据）
-    if not blueprint_metadata and asset_name:
-        main_bpgc = find_main_blueprint_generated_class(
-            export_map, import_map, asset_name
-        )
-        if main_bpgc:
-            owned_archive = archive_factory is not None
-            temp_archive = archive_factory() if archive_factory else archive
-            temp_archive.set_byte_swapping(archive._byte_swapping)
-            try:
-                meta, warn = extract_blueprint_metadata(
-                    main_bpgc, temp_archive, import_map,
-                    export_map, name_map, summary,
-                    linker=linker,
-                    graphs=graphs_list,
-                )
-                if meta:
-                    blueprint_metadata = meta
-                    if hasattr(result, 'errors') and warn:
-                        result.errors.append(f"blueprint parent warning: {warn}")
-            except ParseError as e:
-                if hasattr(result, 'errors'):
-                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
-            finally:
-                if owned_archive:
-                    temp_archive.close()
-
-    if hasattr(result, 'blueprint'):
-        result.blueprint = blueprint_metadata
-
-    # Kismet decompilation (per D-02, D-10)
-    try:
-        from uasset_read.kismet.pipeline import decompile_single_function
-        if hasattr(result, 'decompiled_functions'):
-            decompiled = _extract_kismet_decompiled(
-                path, archive, summary, name_map,
-                import_map, export_map, tolerant, linker=linker,
-            )
-            result.decompiled_functions = decompiled
-            if decompiled and getattr(result, "graphs", None):
-                from uasset_read.kismet.semantic import enrich_decompiled_functions
-                enrich_decompiled_functions(decompiled, result.graphs)
-            # If extraction produced errors that were caught internally,
-            # and result has no decompiled functions but blueprint was found,
-            # add a warning so the user knows decompilation was attempted
-            if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
-                result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
-    except ImportError:
-        pass  # kismet/pipeline.py does not exist yet — silent skip
-    except Exception as e:
-        if hasattr(result, 'warnings'):
-            result.warnings.append(f"Kismet decompilation error: {e}")
-
-    if include_parent_assets:
-        _resolve_parent_assets(path, result, tolerant, asset_roots)
-
-    # Component property extraction
-    try:
-        from uasset_read.blueprint.component_extractor import extract_components, extract_scs_tree
-        if hasattr(result, 'components'):
-            result.components = extract_components(export_map, import_map)
-        # SCS 组件树提取 (Issue #70)
-        try:
-            scs_tree = extract_scs_tree(
-                export_map, import_map,
-                archive=archive, summary=summary, name_map=name_map,
-            )
-            if scs_tree and hasattr(result, 'metadata'):
-                result.metadata["scs_tree"] = scs_tree
-        except Exception as e:
-            if hasattr(result, 'warnings'):
-                result.warnings.append(f"SCS tree extraction error: {e}")
-    except ImportError:
-        pass  # component_extractor module does not exist yet
-    except Exception as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"component extraction error: {e}")
-
-    # 依赖分析
-    try:
-        if hasattr(result, 'imports'):
-            result.imports = build_imports_list(import_map)
-        if hasattr(result, 'soft_references'):
-            result.soft_references = read_soft_object_paths(
-                archive, summary, name_map,
-            )
-        if hasattr(result, 'circular_deps'):
-            result.circular_deps = detect_circular_deps(import_map)
-    except ParseError as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"dependency analysis error: {e}")
-
-    # name_map 一致性检查：如果 summary.name_count > 0 但 name_map 为空，
-    # 说明名称表读取失败或为空，这不应该在成功的解析中出现。
-    # 添加错误以确保集成测试的 name_map 验证通过。
-    if hasattr(result, 'name_map') and not result.name_map:
-        if summary is not None and getattr(summary, 'name_count', 0) > 0:
-            if hasattr(result, 'errors'):
-                result.errors.append(
-                    f"name_map 为空（summary.name_count={summary.name_count}），"
-                    f"名称表读取失败"
-                )
-
-    # 设置成功标志
-    result.is_success = len(result.errors) == 0
+    ctx = PostProcessContext(
+        path=path,
+        archive=archive,
+        summary=summary,
+        name_map=name_map,
+        import_map=import_map,
+        export_map=export_map,
+        result=result,
+        tolerant=tolerant,
+        linker=linker,
+        include_parent_assets=include_parent_assets,
+        asset_roots=asset_roots,
+        archive_factory=archive_factory,
+    )
+    pipeline = build_default_pipeline()
+    pipeline.execute(ctx)
 
 
 def _resolve_parent_assets(
