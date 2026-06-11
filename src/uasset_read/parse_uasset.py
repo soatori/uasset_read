@@ -187,6 +187,18 @@ def _resolve_parent_assets(
 
 
 def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optional[Path]:
+    """查找父资产文件
+
+    安全检查：拒绝包含路径遍历字符的 parent_class
+    """
+    # 安全校验：拒绝路径遍历字符，防止越权访问
+    if ".." in parent_class or "/" in parent_class or "\\" in parent_class:
+        logger.debug(
+            "Rejecting parent_class with path traversal characters: %r",
+            parent_class,
+        )
+        return None
+
     target_name = f"{parent_class}.uasset"
     seen: set[Path] = set()
     for root in roots:
