@@ -696,3 +696,98 @@ class TestPropertyTagVersionGating:
             legacy_file_version=-300,  # UE4 version 300 >= 253
         )
         assert tag.inner_type == "IntProperty"
+
+
+class TestFTextVersionGating:
+    """验证 FText 序列化版本门控。
+
+    FText 序列化根据 UE4 版本决定是否读取 history_type 字段：
+    - >= VER_UE4_FTEXT_HISTORY (428): 读取 history_type (i8)
+    - < 428: 跳过 history_type，直接读取 Base 格式
+    """
+
+    def test_ftext_history_gating(self):
+        """>= VER_UE4_FTEXT_HISTORY (428): 读取 history_type"""
+        from uasset_read.blueprint.variable_extractor import read_ftext
+
+        # ue4_version = 500 >= 428，应读取 history_type
+        data = (
+            b'\x00\x00\x00\x00'          # flags
+            b'\x00'                       # history_type = 0 (Base)
+            b'\x00\x00\x00\x00'          # namespace (empty FString)
+            b'\x00\x00\x00\x00'          # key (empty FString)
+            b'\x06\x00\x00\x00Hello\x00'  # source_string (6 bytes including null)
+        )
+        archive = _make_archive(data)
+        summary = _make_summary(ue4_version=500)
+
+        result = read_ftext(archive, summary)
+        assert result == "Hello"
+
+    def test_ftext_no_history_for_old_version(self):
+        """< VER_UE4_FTEXT_HISTORY (428): 跳过 history_type，直接读 Base 格式"""
+        from uasset_read.blueprint.variable_extractor import read_ftext
+
+        # ue4_version = 400 < 428，无 history_type
+        data = (
+            b'\x00\x00\x00\x00'          # flags
+            # 无 history_type（旧版本）
+            b'\x00\x00\x00\x00'          # namespace
+            b'\x00\x00\x00\x00'          # key
+            b'\x06\x00\x00\x00World\x00'  # source_string
+        )
+        archive = _make_archive(data)
+        summary = _make_summary(ue4_version=400)
+
+        result = read_ftext(archive, summary)
+        assert result == "World"
+
+    def test_ftext_boundary_version_428(self):
+        """ue4_version == 428 (VER_UE4_FTEXT_HISTORY): 应读取 history_type"""
+        from uasset_read.blueprint.variable_extractor import read_ftext
+
+        data = (
+            b'\x00\x00\x00\x00'          # flags
+            b'\x00'                       # history_type = 0 (Base)
+            b'\x00\x00\x00\x00'          # namespace
+            b'\x00\x00\x00\x00'          # key
+            b'\x04\x00\x00\x00test\x00'  # source_string
+        )
+        archive = _make_archive(data)
+        summary = _make_summary(ue4_version=428)
+
+        result = read_ftext(archive, summary)
+        assert result == "test"
+
+    def test_ftext_boundary_version_427(self):
+        """ue4_version == 427 (< 428): 不读取 history_type"""
+        from uasset_read.blueprint.variable_extractor import read_ftext
+
+        data = (
+            b'\x00\x00\x00\x00'          # flags
+            # 无 history_type
+            b'\x00\x00\x00\x00'          # namespace
+            b'\x00\x00\x00\x00'          # key
+            b'\x04\x00\x00\x00test\x00'  # source_string
+        )
+        archive = _make_archive(data)
+        summary = _make_summary(ue4_version=427)
+
+        result = read_ftext(archive, summary)
+        assert result == "test"
+
+    def test_ftext_no_summary_defaults_to_modern(self):
+        """summary=None 时默认 ue4_version=500 (现代格式)，读取 history_type"""
+        from uasset_read.blueprint.variable_extractor import read_ftext
+
+        data = (
+            b'\x00\x00\x00\x00'          # flags
+            b'\x00'                       # history_type = 0 (Base)
+            b'\x00\x00\x00\x00'          # namespace
+            b'\x00\x00\x00\x00'          # key
+            b'\x02\x00\x00\x00AB\x00'    # source_string
+        )
+        archive = _make_archive(data)
+
+        result = read_ftext(archive, summary=None)
+        assert result == "AB"
