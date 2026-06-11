@@ -110,6 +110,7 @@ class TestStatusModelUnitTests:
         """ParseResult with all success exports should be success."""
         from uasset_read.models.result import ParseResult
         result = ParseResult()
+        result.is_success = True
         result.summary = object()
 
         # Mock export with success status
