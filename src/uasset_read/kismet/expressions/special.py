@@ -10,12 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+from uasset_read.exceptions import ParseError
 from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
 from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
     from uasset_read.kismet.property_pointer import FKismetPropertyPointer
+
+# 内存安全常量
+MAX_SWITCH_CASES = 1_000  # EX_SwitchValue 最大 case 数量
 
 
 @dataclass
@@ -139,6 +143,11 @@ class EX_SwitchValue(KismetExpression):
         end_offset = archive.read_u32()
         index = archive.read_expression()
         case_count = archive.read_u32()
+        if case_count > MAX_SWITCH_CASES:
+            raise ParseError(
+                f"EX_SwitchValue case_count {case_count} exceeds limit ({MAX_SWITCH_CASES}) "
+                f"at offset {archive.tell()}"
+            )
         cases = []
         for _ in range(case_count):
             case = FKismetSwitchCase.from_archive(archive, name_map)
