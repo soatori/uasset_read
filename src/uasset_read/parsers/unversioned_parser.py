@@ -89,7 +89,7 @@ def read_unversioned_header(archive) -> UnversionedHeader:
                 f"read_unversioned_header exceeded fragment limit ({MAX_UNVERSIONED_FRAGMENTS}) "
                 f"at offset {archive.tell()}"
             )
-        raw = archive.read_uint16()
+        raw = archive.read_u16()
         skip_num = raw & 0x007F             # bits 0-6
         has_any_zeroes = bool(raw & 0x0080) # bit 7
         is_last = bool(raw & 0x0100)        # bit 8
@@ -115,7 +115,7 @@ def read_unversioned_header(archive) -> UnversionedHeader:
         if total_zero_bits <= 8:
             zero_mask = archive.read_u8()
         elif total_zero_bits <= 16:
-            zero_mask = archive.read_uint16()
+            zero_mask = archive.read_u16()
         else:
             zero_mask = archive.read_u32()
 

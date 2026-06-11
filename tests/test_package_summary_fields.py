@@ -31,7 +31,11 @@ class TestConstants:
         assert UE5_PACKAGE_SAVED_HASH == 1016
 
     def test_ue4_version_constants(self):
-        """UE4 版本常量与 CUE4Parse EUnrealEngineObjectUE4Version 一致。"""
+        """UE4 版本常量与 UE 源码 EUnrealEngineObjectUE4Version 一致。
+
+        来源: Engine/Source/Runtime/Core/Public/UObject/ObjectVersion.h
+        基准: VER_UE4_OLDEST_LOADABLE_PACKAGE = 214, VER_UE4_AUTOMATIC_VERSION = 522
+        """
         from uasset_read.constants import (
             UE4_ADD_STRING_ASSET_REFERENCES_MAP,
             UE4_ADDED_SEARCHABLE_NAMES,
@@ -40,11 +44,12 @@ class TestConstants:
             UE4_ADDED_PACKAGE_OWNER,
             UE4_NON_OUTER_PACKAGE_IMPORT,
         )
-        assert UE4_ADD_STRING_ASSET_REFERENCES_MAP == 516
+        # 以下值从 UE 源码枚举自动递增计算得出
+        assert UE4_ADD_STRING_ASSET_REFERENCES_MAP == 384
         assert UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID == 516
-        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 517
-        assert UE4_ADDED_SEARCHABLE_NAMES == 518
-        assert UE4_ADDED_PACKAGE_OWNER == 519
+        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 459
+        assert UE4_ADDED_SEARCHABLE_NAMES == 510
+        assert UE4_ADDED_PACKAGE_OWNER == 518
         assert UE4_NON_OUTER_PACKAGE_IMPORT == 520
 
 

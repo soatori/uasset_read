@@ -209,13 +209,16 @@ def _read_ftext_fstring(archive: FArchive) -> str:
 def _read_ftext_value(
     archive: FArchive,
     tolerant: bool = True,
+    _depth: int = 0,
 ) -> tuple[str, int, int, int]:
     """读取完整 FText，返回 (value, flags, history_type, consumed)。"""
+    if _depth > 10:
+        raise ParseError(f"FText recursion depth {_depth} exceeds limit (10)")
     start_pos = archive.tell()
     flags = archive.read_i32()
     history_type_raw = archive.read_u8()
     history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant)
+    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant, _depth=_depth)
     return value, flags, history_type, archive.tell() - start_pos
 
 
@@ -223,6 +226,7 @@ def read_ftext_with_history(
     archive: FArchive,
     history_type: int,
     tolerant: bool = True,
+    _depth: int = 0,
 ) -> tuple[str, int]:
     """读取 FText，返回 (值, 消耗字节数)。
 
@@ -253,7 +257,7 @@ def read_ftext_with_history(
         _key = _read_ftext_fstring(archive)
         value = _read_ftext_fstring(archive)
     elif history_type == 1:
-        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, _depth=_depth + 1)
         arg_count = archive.read_i32()
         if arg_count < 0 or arg_count > 100:
             raise ParseError(f"Invalid FText NamedFormat arg_count={arg_count}")
@@ -271,7 +275,7 @@ def read_ftext_with_history(
             elif arg_type == 3:
                 arg_value = str(archive.read_f64())
             elif arg_type == 4:
-                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, _depth=_depth + 1)
             elif arg_type == 5:
                 arg_value = str(archive.read_u8())
             else:

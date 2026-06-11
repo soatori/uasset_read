@@ -14,6 +14,9 @@ from uasset_read.pak.structures import FPakInfo, FPakEntry, read_fstring
 
 logger = logging.getLogger(__name__)
 
+# 内存安全上限
+MAX_PAK_ENTRIES = 10_000_000  # PAK 索引最大条目数
+
 
 def parse_primary_index(
     stream: BinaryIO,
@@ -69,6 +72,8 @@ def parse_primary_index(
 
     if num_entries < 0:
         raise ParseError(f"Invalid entry count: {num_entries}")
+    if num_entries > MAX_PAK_ENTRIES:
+        raise ParseError(f"PAK entry count {num_entries} exceeds limit ({MAX_PAK_ENTRIES})")
 
     # Step 5: Branch by version
     if pak_info.version < PakFileVersion.PathHashIndex:

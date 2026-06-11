@@ -72,34 +72,41 @@ def read_ue_graph(
     if graph_export_idx > 0:
         if len(nodes) > 0:
             logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
-        collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
-        for node_export in export_map:
-            if node_export.outer_index.index == graph_export_idx:
-                node_class = _gac(node_export, import_map, export_map, linker)
-                if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
-                    # Skip if already collected by main path (same export index)
-                    node_idx = export_map.index(node_export) + 1
-                    already_collected = any(
-                        getattr(n, '_export_index', None) == node_idx
-                        for n in nodes
-                    )
-                    if already_collected:
-                        continue
-                    try:
-                        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
-                        node._export_index = node_idx  # tag for dedup
-                        nodes.append(node)
-                    except ParseError:
-                        nodes.append(UEdGraphNode(
-                            node_guid="",
-                            node_pos_x=0,
-                            node_pos_y=0,
-                            node_comment="",
-                            pins=[],
-                            class_name=node_class or "",
-                            node_data={"_parse_error": True, "node_name": node_export.object_name},
-                        ))
-                        nodes[-1]._export_object_name = node_export.object_name
+
+        # Build outer_index -> exports mapping for O(1) lookup
+        outer_to_exports: Dict[int, List[Tuple[int, Any]]] = {}
+        for idx, node_export in enumerate(export_map):
+            outer_idx = node_export.outer_index.index
+            if outer_idx not in outer_to_exports:
+                outer_to_exports[outer_idx] = []
+            outer_to_exports[outer_idx].append((idx + 1, node_export))
+
+        # Use pre-built mapping instead of O(N) scan
+        for node_idx, node_export in outer_to_exports.get(graph_export_idx, []):
+            node_class = _gac(node_export, import_map, export_map, linker)
+            if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+                # Skip if already collected by main path (same export index)
+                already_collected = any(
+                    getattr(n, '_export_index', None) == node_idx
+                    for n in nodes
+                )
+                if already_collected:
+                    continue
+                try:
+                    node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                    node._export_index = node_idx  # tag for dedup
+                    nodes.append(node)
+                except ParseError:
+                    nodes.append(UEdGraphNode(
+                        node_guid="",
+                        node_pos_x=0,
+                        node_pos_y=0,
+                        node_comment="",
+                        pins=[],
+                        class_name=node_class or "",
+                        node_data={"_parse_error": True, "node_name": node_export.object_name},
+                    ))
+                    nodes[-1]._export_object_name = node_export.object_name
 
     # 3. GraphGuid
     graph_guid = _read_guid(archive, uppercase=False)

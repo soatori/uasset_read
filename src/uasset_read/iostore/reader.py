@@ -32,6 +32,10 @@ from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
+# 内存安全常量
+MAX_CHUNK_READ_SIZE = 512 * 1024 * 1024  # 512MB — 单次 chunk 读取上限
+MAX_CHUNK_COUNT = 5_000_000  # IoStore 最大 chunk 数量
+
 
 class IoStoreInfo:
     """IoStore TOC 解析后的摘要信息"""
@@ -385,7 +389,14 @@ class IoStoreReader:
 
         当前仅支持未加密、未压缩块。遇到加密/压缩时明确失败，
         避免返回无法解析的原始压缩或加密数据。
+
+        Raises:
+            ParseError: length 超过 MAX_CHUNK_READ_SIZE 上限。
         """
+        if length > MAX_CHUNK_READ_SIZE:
+            raise ParseError(
+                f"IoStore chunk read size {length} exceeds limit ({MAX_CHUNK_READ_SIZE})"
+            )
         if not self._ucas_files:
             raise RuntimeError("容器文件未打开")
         if self._header and self._header.is_encrypted and self._aes_key is None:
@@ -522,6 +533,10 @@ class IoStoreReader:
             return
 
         count = self._header.toc_entry_count
+        if count > MAX_CHUNK_COUNT:
+            raise ParseError(
+                f"IoStore chunk count {count} exceeds limit ({MAX_CHUNK_COUNT})"
+            )
         self._chunk_ids = []
         for _ in range(count):
             data = self._utoc_file.read(12)
@@ -537,6 +552,10 @@ class IoStoreReader:
             return
 
         count = self._header.toc_entry_count
+        if count > MAX_CHUNK_COUNT:
+            raise ParseError(
+                f"IoStore chunk count {count} exceeds limit ({MAX_CHUNK_COUNT})"
+            )
         self._chunk_offsets = []
         for _ in range(count):
             data = self._utoc_file.read(10)
@@ -713,6 +732,9 @@ class IoStoreReader:
 
         read_index(0, self._mount_point)
         logger.debug("解析目录索引: %d 个文件", len(self._directory_index))
+
+        # 释放原始 buffer（解析完成后不再需要）
+        self._directory_index_buffer = None
 
     def _compression_method_name(self, index: int) -> str:
         if index == 0:

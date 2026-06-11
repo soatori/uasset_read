@@ -11,7 +11,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_SetArray(KismetExpression):
-    """SetArray — version-dependent: with CHANGE_SETARRAY_BYTECODE has AssigningProperty."""
+    """SetArray — version-dependent format.
+
+    UE 源码: ScriptSerialization.h L512-527
+
+    Pre-VER_UE4_CHANGE_SETARRAY_BYTECODE (303):
+      - 直接读取 FProperty* (FKismetPropertyPointer)
+    >= VER_UE4_CHANGE_SETARRAY_BYTECODE (303):
+      - 读取表达式 (SerializeExpr) 作为目标
+      - 然后读取元素直到 EX_EndArray
+    """
     AssigningProperty: Optional[FKismetPropertyPointer] = None
     ArrayInnerProp: Optional[FKismetPropertyPointer] = None
     Elements: list[KismetExpression] = None
@@ -22,10 +31,20 @@ class EX_SetArray(KismetExpression):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
-        # In UE5, SetArray reads a property then elements
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
-        elements = archive.read_expression_array(EExprToken.EX_EndArray)
-        return cls(ArrayInnerProp=prop, Elements=elements)
+        from uasset_read.constants import VER_UE4_CHANGE_SETARRAY_BYTECODE
+
+        file_version_ue4 = getattr(archive, 'file_version_ue4', 0)
+
+        if file_version_ue4 >= VER_UE4_CHANGE_SETARRAY_BYTECODE:
+            # 新格式：读取表达式作为目标
+            target_expr = archive.read_expression()
+            elements = archive.read_expression_array(EExprToken.EX_EndArray)
+            return cls(AssigningProperty=target_expr, Elements=elements)
+        else:
+            # 旧格式：直接读取属性指针
+            prop = FKismetPropertyPointer.from_archive(archive, name_map)
+            elements = archive.read_expression_array(EExprToken.EX_EndArray)
+            return cls(ArrayInnerProp=prop, Elements=elements)
 
 
 @dataclass

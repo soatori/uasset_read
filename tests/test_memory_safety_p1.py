@@ -106,6 +106,7 @@ class TestIoStoreDirectoryIndexRelease:
 
     def test_directory_index_buffer_released_after_parse(self):
         """解析完成后 _directory_index_buffer 应被释放。"""
+        from unittest.mock import patch
         from uasset_read.iostore.reader import IoStoreReader
 
         reader = IoStoreReader("dummy.utoc")
@@ -113,8 +114,12 @@ class TestIoStoreDirectoryIndexRelease:
         reader._directory_index_buffer = b"test data"
         reader._directory_index = {"file.txt": b"chunk_id"}
 
-        # 调用 _parse_directory_index 后应释放 buffer
-        reader._parse_directory_index()
+        # Mock 解析过程，避免构造复杂的二进制数据
+        with patch.object(reader, '_read_fstring_from', return_value=""):
+            with patch.object(reader, '_read_array_from', return_value=[]):
+                with patch.object(reader, '_read_string_table_from', return_value=[]):
+                    # 调用 _parse_directory_index 后应释放 buffer
+                    reader._parse_directory_index()
 
         assert reader._directory_index_buffer is None
 
