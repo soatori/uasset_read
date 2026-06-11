@@ -3,6 +3,12 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 版本 0.4.5
 
+Core / Extras 分层（详见 docs/architecture/core-extras-split.md）：
+- Core: archive, constants, exceptions, core, parse_uasset, package,
+  models, serializers, parsers, link — 基础解析管线
+- Extras: graph, kismet, cpp_gen, blueprint — 可选高级分析，
+  可通过 ``from uasset_read.extras.graph import ...`` 访问
+
 API 稳定性策略（详见 docs/api-stability.md）：
 - 稳定根 API: __all__ 中列出的符号，面向外部使用者
 - 子模块 API: parsers, serializers, graph, kismet, cpp_gen, renderers 等
