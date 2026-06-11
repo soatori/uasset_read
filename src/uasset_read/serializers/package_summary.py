@@ -790,41 +790,45 @@ def _read_package_summary_ue5(
     if preload_dependency_offset > 0:
         archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
 
-    # 第 29 步：NamesReferencedFromExportData（UE5.7 始终存在）
-    names_referenced_from_export_data_count = archive.read_i32()
+    # 第 29 步：NamesReferencedFromExportData（UE5 >= 1001）
+    names_referenced_from_export_data_count = 0
+    if file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
+        names_referenced_from_export_data_count = archive.read_i32()
 
-    # 第 30 步：PayloadTocOffset（UE5.7 始终存在，但值可能无效）
-    payload_toc_offset = archive.read_i64()
+    # 第 30 步：PayloadTocOffset（UE5 >= 1002）
+    payload_toc_offset = -1  # UE: INDEX_NONE = -1
+    if file_version_ue5 >= UE5_PAYLOAD_TOC:
+        payload_toc_offset = archive.read_i64()
 
-    # Tolerant: 检查 payload_toc_offset 是否合理
-    if payload_toc_offset < 0:
-        # -1 是 UE INDEX_NONE sentinel，表示 absent，保留
-        # 其他负值视为异常
-        if payload_toc_offset != -1:
-            logger.warning(
-                "PayloadTocOffset 异常负值: %d, 设为 INDEX_NONE (-1)",
-                payload_toc_offset,
-            )
-            payload_toc_offset = -1
-        # -1 保留为 sentinel，不 coerce 到 0
-    elif payload_toc_offset > 0:
-        file_size = archive.total_size()
-        # 超过文件大小 10 倍说明值明显无效
-        if file_size > 0 and payload_toc_offset > file_size * 10:
-            logger.warning(
-                "PayloadTocOffset %d 明显越界（文件大小 %d），设为 0",
-                payload_toc_offset, file_size,
-            )
-            payload_toc_offset = 0
-        elif file_size > 0 and payload_toc_offset > file_size:
-            # 在文件大小之外但不极端，可能是 virtualized payload
-            logger.debug(
-                "PayloadTocOffset %d 超过文件大小 %d，可能是 virtualized payload",
-                payload_toc_offset, file_size,
-            )
-            # 不 validate，留给后续逻辑处理
-        else:
-            archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
+        # Tolerant: 检查 payload_toc_offset 是否合理
+        if payload_toc_offset < 0:
+            # -1 是 UE INDEX_NONE sentinel，表示 absent，保留
+            # 其他负值视为异常
+            if payload_toc_offset != -1:
+                logger.warning(
+                    "PayloadTocOffset 异常负值: %d, 设为 INDEX_NONE (-1)",
+                    payload_toc_offset,
+                )
+                payload_toc_offset = -1
+            # -1 保留为 sentinel，不 coerce 到 0
+        elif payload_toc_offset > 0:
+            file_size = archive.total_size()
+            # 超过文件大小 10 倍说明值明显无效
+            if file_size > 0 and payload_toc_offset > file_size * 10:
+                logger.warning(
+                    "PayloadTocOffset %d 明显越界（文件大小 %d），设为 0",
+                    payload_toc_offset, file_size,
+                )
+                payload_toc_offset = 0
+            elif file_size > 0 and payload_toc_offset > file_size:
+                # 在文件大小之外但不极端，可能是 virtualized payload
+                logger.debug(
+                    "PayloadTocOffset %d 超过文件大小 %d，可能是 virtualized payload",
+                    payload_toc_offset, file_size,
+                )
+                # 不 validate，留给后续逻辑处理
+            else:
+                archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
 
     # 第 31 步：DataResourceOffset
     data_resource_offset = -1  # 默认 absent，UE sentinel

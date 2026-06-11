@@ -722,6 +722,18 @@ def _parse_package_core(
                 result.diagnostics = archive_diagnostics + result.diagnostics
             archive.close()
 
+        # Task 8: 释放 linker 对 archive 的引用，允许 GC 回收 (#107-6)
+        if result.linker is not None:
+            result.linker._archive = None
+
+        # Task 9: 重置 Kismet 类级别缓存，防止批量解析时无界增长 (#107-7)
+        from uasset_read.kismet.archive import FKismetArchive
+        FKismetArchive.reset_warned_offsets()
+
+        # Task 10: 重置 BPGC 字节码缓存 (#107-9)
+        from uasset_read.kismet.bytecode_extractor import reset_bpgc_cache
+        reset_bpgc_cache()
+
 
 def parse_package(
     path: str,

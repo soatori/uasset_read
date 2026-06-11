@@ -10,6 +10,12 @@ from typing import Dict, Optional, Any
 
 from uasset_read.exceptions import ParseError
 
+# Usmap 内存安全上限
+MAX_USMAP_NAMES = 1_000_000  # 最大名称数量
+MAX_USMAP_ENUMS = 100_000  # 最大枚举数量
+MAX_USMAP_STRUCTS = 100_000  # 最大结构体数量
+MAX_PROPERTY_TYPE_DEPTH = 10  # 属性类型最大嵌套深度
+
 
 _PROPERTY_TYPE_NAMES = {
     0: "ByteProperty",
@@ -189,6 +195,8 @@ class UsmapParser:
         ar = _BytesReader(data)
 
         name_count = ar.u32()
+        if name_count > MAX_USMAP_NAMES:
+            raise ParseError(f"Usmap name count {name_count} exceeds limit ({MAX_USMAP_NAMES})")
         name_lut: list[str] = []
         for _ in range(name_count):
             length = ar.u16() if version >= 2 else ar.u8()
@@ -196,6 +204,8 @@ class UsmapParser:
 
         mappings = TypeMappings()
         enum_count = ar.u32()
+        if enum_count > MAX_USMAP_ENUMS:
+            raise ParseError(f"Usmap enum count {enum_count} exceeds limit ({MAX_USMAP_ENUMS})")
         for _ in range(enum_count):
             enum_name = ar.name(name_lut) or ""
             value_count = ar.u16() if version >= 3 else ar.u8()
@@ -211,6 +221,8 @@ class UsmapParser:
             mappings.enums.setdefault(enum_name, values)
 
         struct_count = ar.u32()
+        if struct_count > MAX_USMAP_STRUCTS:
+            raise ParseError(f"Usmap struct count {struct_count} exceeds limit ({MAX_USMAP_STRUCTS})")
         for _ in range(struct_count):
             struct = self._parse_struct(ar, name_lut)
             mappings.types[struct.name] = struct
@@ -253,20 +265,22 @@ class UsmapParser:
         index = ar.u16()
         array_dim = ar.u8()
         name = ar.name(lut) or ""
-        return PropertyInfo(index=index, name=name, mapping_type=self._parse_property_type(ar, lut), array_size=array_dim)
+        return PropertyInfo(index=index, name=name, mapping_type=self._parse_property_type(ar, lut, 0), array_size=array_dim)
 
-    def _parse_property_type(self, ar: _BytesReader, lut: list[str]) -> PropertyType:
+    def _parse_property_type(self, ar: _BytesReader, lut: list[str], depth: int = 0) -> PropertyType:
+        if depth > MAX_PROPERTY_TYPE_DEPTH:
+            raise ParseError(f"Property type nesting depth {depth} exceeds limit ({MAX_PROPERTY_TYPE_DEPTH})")
         type_id = ar.u8()
         type_name = _PROPERTY_TYPE_NAMES.get(type_id, "Unknown")
         if type_name == "EnumProperty":
-            inner = self._parse_property_type(ar, lut)
+            inner = self._parse_property_type(ar, lut, depth + 1)
             return PropertyType(type_name, inner_type=inner, enum_name=ar.name(lut))
         if type_name == "StructProperty":
             return PropertyType(type_name, struct_type=ar.name(lut))
         if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"}:
-            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut))
+            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1))
         if type_name == "MapProperty":
-            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut), value_type=self._parse_property_type(ar, lut))
+            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1), value_type=self._parse_property_type(ar, lut, depth + 1))
         return PropertyType(type_name)
 
 

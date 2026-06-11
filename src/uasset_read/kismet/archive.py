@@ -80,9 +80,20 @@ class FKismetArchive(FArchive):
             return expr
 
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
-        """Read expressions until end_token is encountered. The end_token expression is NOT included."""
+        """Read expressions until end_token is encountered. The end_token expression is NOT included.
+
+        Raises:
+            ParseError: 超过 MAX_EXPRESSIONS_PER_ARRAY 上限（防止损坏字节码无限循环）。
+        """
         result = []
+        iterations = 0
         while True:
+            iterations += 1
+            if iterations > MAX_EXPRESSIONS_PER_ARRAY:
+                raise ParseError(
+                    f"read_expression_array exceeded limit ({MAX_EXPRESSIONS_PER_ARRAY}) "
+                    f"at offset {self.tell()}"
+                )
             expr = self.read_expression()
             if expr.Token == end_token:
                 break
