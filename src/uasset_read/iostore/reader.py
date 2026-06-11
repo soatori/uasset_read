@@ -252,6 +252,13 @@ class IoStoreReader:
                 pass
         self._ucas_files.clear()
 
+    def __del__(self) -> None:
+        """安全网：确保文件句柄被释放。"""
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def __enter__(self) -> IoStoreReader:
         self.open()
         return self
