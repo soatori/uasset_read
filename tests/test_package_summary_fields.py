@@ -47,10 +47,10 @@ class TestConstants:
         # 以下值从 UE 源码枚举自动递增计算得出
         assert UE4_ADD_STRING_ASSET_REFERENCES_MAP == 384
         assert UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID == 516
-        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 459
+        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 464
         assert UE4_ADDED_SEARCHABLE_NAMES == 510
         assert UE4_ADDED_PACKAGE_OWNER == 518
-        assert UE4_NON_OUTER_PACKAGE_IMPORT == 520
+        assert UE4_NON_OUTER_PACKAGE_IMPORT == 525
 
 
 class TestMissingFields:
