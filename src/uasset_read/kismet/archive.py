@@ -23,7 +23,7 @@ class FKismetArchive(FArchive):
     # 类级别去重集合：跨实例共享，同一偏移只打印一次警告
     _warned_offsets: set[int] = set()
 
-    def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
+    def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False, file_version_ue5: int = 0):
         self._path = name
         self._file = io.BytesIO(data)
         self._file_size = len(data)
@@ -33,6 +33,12 @@ class FKismetArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._name_map = name_map
+        self.file_version_ue5 = file_version_ue5
+
+    @property
+    def is_lwc(self) -> bool:
+        """是否启用 Large World Coordinates（UE5 >= 1004）。"""
+        return self.file_version_ue5 >= 1004
 
     @classmethod
     def reset_warned_offsets(cls) -> None:

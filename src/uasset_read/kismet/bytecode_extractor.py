@@ -345,6 +345,7 @@ def parse_bytecode_stream(
     bytecode_bytes: bytes,
     name_map: list[str],
     tolerant: bool = False,
+    file_version_ue5: int = 0,
 ) -> list[KismetExpression]:
     """
     Parse raw bytecode bytes into a list of KismetExpression trees.
@@ -357,6 +358,7 @@ def parse_bytecode_stream(
         bytecode_bytes: Raw ScriptBytecode data
         name_map: Name table for expression resolution
         tolerant: If True, skip unknown tokens instead of raising ParseError
+        file_version_ue5: UE5 文件版本号，用于 LWC 门控
 
     Returns:
         List of KismetExpression (may include EX_EndOfScript as last element)
@@ -364,7 +366,11 @@ def parse_bytecode_stream(
     if not bytecode_bytes:
         return []
 
-    archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
+    archive = FKismetArchive(
+        bytecode_bytes, "ScriptBytecode", name_map,
+        tolerant=tolerant,
+        file_version_ue5=file_version_ue5,
+    )
     expressions: list[KismetExpression] = []
 
     while archive.tell() < len(bytecode_bytes):
@@ -426,7 +432,11 @@ def extract_and_parse(
         return ([], None, fallback_reason)
 
     try:
-        expressions = parse_bytecode_stream(bytecode_bytes, name_map, tolerant=tolerant)
+        expressions = parse_bytecode_stream(
+            bytecode_bytes, name_map,
+            tolerant=tolerant,
+            file_version_ue5=summary.file_version_ue5 if summary else 0,
+        )
         return (expressions, None, fallback_reason)
     except ParseError as e:
         return ([], str(e), fallback_reason)
