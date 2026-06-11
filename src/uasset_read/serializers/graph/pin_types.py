@@ -20,7 +20,7 @@ from uasset_read.constants import (
     VER_UE4_MEMBERREFERENCE_IN_PINTYPE,
     VER_UE4_SERIALIZE_PINTYPE_CONST,
 )
-from uasset_read.models.core import FEdGraphPinType
+from uasset_read.models.core import FEdGraphPinType, FEdGraphTerminalType
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.serializers.graph._common import _rcn
 
@@ -90,18 +90,22 @@ def read_ed_graph_pin_type(
         pin_type.container_type = archive.read_u8()
         if pin_type.container_type == 3:  # Map
             # 读取 FEdGraphTerminalType (PinValueType)
-            archive.read_name(name_map)   # TerminalCategory
-            archive.read_name(name_map)   # TerminalSubCategory
-            archive.read_i32()            # TerminalSubCategoryObject
+            pin_type.pin_value_type = FEdGraphTerminalType(
+                pin_category=archive.read_name(name_map),
+                pin_subcategory=archive.read_name(name_map),
+                pin_subcategory_object=archive.read_i32(),
+            )
     else:
         # UE4 旧格式：3 个 bool
         bIsMap = archive.read_bool()
         bIsSet = archive.read_bool()
         if bIsMap:
             # 读取 FEdGraphTerminalType (PinValueType)
-            archive.read_name(name_map)   # TerminalCategory
-            archive.read_name(name_map)   # TerminalSubCategory
-            archive.read_i32()            # TerminalSubCategoryObject
+            pin_type.pin_value_type = FEdGraphTerminalType(
+                pin_category=archive.read_name(name_map),
+                pin_subcategory=archive.read_name(name_map),
+                pin_subcategory_object=archive.read_i32(),
+            )
         # bIsArray 在 bIsSet 之后读取
         bIsArray = archive.read_bool()
 

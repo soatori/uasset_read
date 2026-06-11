@@ -55,8 +55,7 @@ class FEdGraphPinType:
     pin_value_type: Optional["FEdGraphTerminalType"] = None  # Map value 类型
     pin_subcategory_member_reference: Optional["FSimpleMemberReference"] = None  # 成员引用
     container_type: int = 0
-    is_map_key: bool = False
-    is_map_value: bool = False
+    # 已移除: is_map_key, is_map_value（UE 中不存在，Map 通过 pin_value_type 表达）
     is_reference: bool = False
     is_weak_pointer: bool = False
     is_const: bool = False
