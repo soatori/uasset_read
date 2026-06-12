@@ -77,10 +77,10 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Matrix44f": 64,         # 4 * Plane4f(16)
     "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
     # 动画/混合空间高频结构体（报告补充）
-    "FrameRate": 8,          # float Numerator + int32 Denominator（紧凑格式）
-                             # 部分资产使用 tagged 格式（size=37），通过 tagged fallback 解析
+    "FrameRate": 8,          # 紧凑格式：int32 Numerator + int32 Denominator
+                             # tagged 格式 size 不固定（实测 37），通过 tagged fallback 静默解析
     "AnimNotifyTrack": 8,    # 紧凑格式大小
-                             # 部分资产使用 tagged 格式（size=0），通过 tagged fallback 解析
+                             # tagged 格式 size=0，通过 tagged fallback 静默解析（数据实际存在）
     "GuidProperty": 16,      # FGuid 标准大小
 }
 
@@ -195,6 +195,10 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # 动画混合空间结构体（部分资产使用 tagged 格式）
     "BlendSample",          # FBlendSample — BlendSpace 采样点（SampleValue/Time/RateScale/bIsValid）
     "FBlendSample",
+    # 材质实例参数结构体（MaterialInstanceConstant 资产，tag.size=0 的 tagged 格式）
+    "VectorParameterValue",     # FVectorParameterValue — 向量参数（ParameterInfo/ParameterValue）
+    "TextureParameterValue",    # FTextureParameterValue — 纹理参数（ParameterInfo/ParameterValue）
+    "MaterialTextureInfo",      # FMaterialTextureInfo — 纹理流送信息（UVChannelIndex 等）
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -224,8 +228,8 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     # AnimSequence 结构体 tagged fallback schemas
     "FrameRate": [
-        ("Numerator", "FloatProperty"),
-        ("Denominator", "IntProperty"),
+        ("Numerator", "IntProperty"),      # UE 源码: int32 Numerator（非 float）
+        # Denominator 在部分资产中未被序列化，由 tagged 循环自然处理
     ],
     "AnimNotifyTrack": [
         ("TrackIndex", "Int64Property"),
@@ -541,24 +545,29 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     version_container = _build_version_container_from_summary(summary)
     expected_size = get_struct_size(struct_type, version_container)
     if expected_size is not None and tag.size != expected_size:
-        # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
-        lwc_entry = _LWC_TYPE_MAP.get(struct_type)
-        if lwc_entry is not None:
-            float_size, double_size = lwc_entry
-            if tag.size not in (float_size, double_size):
+        # Tagged fallback 结构体：size 不匹配是预期行为（tagged 格式 vs 紧凑格式），
+        # 静默跳过 fast-path，直接进入 tagged 解析，不产生警告。
+        if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
+            struct_type = None  # Skip all fast-path branches
+        else:
+            # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
+            lwc_entry = _LWC_TYPE_MAP.get(struct_type)
+            if lwc_entry is not None:
+                float_size, double_size = lwc_entry
+                if tag.size not in (float_size, double_size):
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
+                        struct_type, tag.size, float_size, double_size,
+                    )
+                    struct_type = None  # Skip all fast-path branches
+            else:
                 import logging
                 logging.getLogger(__name__).warning(
-                    "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
-                    struct_type, tag.size, float_size, double_size,
+                    "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
+                    struct_type, tag.size, expected_size,
                 )
                 struct_type = None  # Skip all fast-path branches
-        else:
-            import logging
-            logging.getLogger(__name__).warning(
-                "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
-                struct_type, tag.size, expected_size,
-            )
-            struct_type = None  # Skip all fast-path branches
 
     # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
@@ -818,10 +827,18 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     # Track expected struct end position for recovery
     struct_start = archive.tell()
     struct_end = struct_start + tag.size if tag.size > 0 else None
+    # tag.size=0 的 tagged 格式结构体：无已知边界，使用安全字节上限防止偏移级联
+    # （对应 issue #134: PackageIndex out of bounds 的潜在根因之一）
+    _MAX_TAGGED_FALLBACK_BYTES = 4096
+    tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
     try:
         while property_count < MAX_PROPERTY_COUNT:
             property_count += 1
+
+            # 字节安全上限：防止 tag.size=0 时无边界循环吞没后续属性
+            if tagged_byte_limit is not None and archive.tell() >= tagged_byte_limit:
+                break
 
             inner_tag = read_property_tag(archive, name_map)
 
