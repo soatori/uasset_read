@@ -38,7 +38,6 @@ section: ue-reference
 | `FBlueprintCompileReinstancer` | `Engine/Private/Kismet2/KismetReinstanceUtilities.cpp` | `blueprint/` |
 | `FPakFile` | `Runtime/PakFile/Public/IPlatformFilePak.h` | `pak/` |
 | `FIoStoreReader` | `Runtime/Core/Public/Serialization/IoStoreReader.h` | `iostore/` |
-| `FBulkData` | `Runtime/CoreUObject/Public/Serialization/BulkData.h` | `bulk/` |
 | `FPackageFileVersion` | `Runtime/CoreUObject/Public/UObject/PackageFileSummary.h` | `versioning.py` — `FPackageFileVersion` |
 | `FCustomVersion` | `Runtime/Core/Public/Serialization/CustomVersion.h` | `versioning.py` — `VersionContainer` |
 | `FObjectExport` | `Runtime/CoreUObject/Public/UObject/ObjectResource.h` | `serializers/export_map.py` |

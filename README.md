@@ -1,6 +1,6 @@
 # uasset_read
 
-> **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
+> **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode — all without the UE editor.
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code.
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.5-dev |
+| Version | 0.4.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1389 passed, 2 skipped, 2 xfailed |
-| Modules | 145 source files across 14 subpackages |
+| Tests | 29 tests (contracts/units/e2e) |
+| Modules | 153 source files across 17 subpackages |
 
 ## Features
 
@@ -50,7 +50,6 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### Advanced Features
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
 - **PackageLinker** — two-phase object graph reconstruction
-- **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping, constructor formatting, default value generation, identifier sanitization
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 - **Circular dependency detection** — mutual reference detection
 - **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
@@ -68,10 +67,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Text** — human-readable format
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
 - **Blueprint UE Text** — UE-editor-style format
-- **C++ Skeleton** — ready-to-use class boilerplate with constructor init lists
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE)
 - **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 ## Installation
@@ -97,7 +95,6 @@ python run.py path/to/file.uasset --text         # Readable text
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
 python run.py path/to/file.uasset --blueprint-text  # Blueprint node text
 python run.py path/to/file.uasset --blueprint-ue-text  # UE-format text
-python run.py path/to/file.uasset --cpp-skeleton  # C++ class skeleton
 
 # Batch export
 python run.py --batch-dir path/to/dir/            # Batch export directory
@@ -132,7 +129,7 @@ text = parse_single("path/to/file.uasset", format="markdown")
 results = parse_batch("path/to/directory", format="json")
 
 # List available output formats
-formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleton', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
+formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
 ```
 
 ### API Tiers
@@ -142,7 +139,7 @@ uasset_read exports follow a three-tier stability model:
 | Tier | Description | Examples |
 |---|---|---|
 | **Stable root API** | Guaranteed stable interface; import directly from `uasset_read` | `parse_single`, `parse_batch`, `parse_package`, `ParseResult`, `PackageSummary`, `ExportEntry`, `ImportEntry`, `UAssetError`, `FArchive` |
-| **Focused submodule API** | Stable within submodules; may evolve with version bumps | `parsers.*`, `serializers.*`, `graph.*`, `kismet.*`, `cpp_gen.*`, `renderers.*` |
+| **Focused submodule API** | Stable within submodules; may evolve with version bumps | `parsers.*`, `serializers.*`, `graph.*`, `kismet.*`, `renderers.*` |
 | **Legacy API** | Deprecated; will be removed in v0.5.0 | `format_*` functions, `uasset_read.objects`, `uasset_read.bulk` |
 
 #### Stable Root API — Quick Reference
@@ -168,9 +165,6 @@ from uasset_read.graph import extract_blueprint_graphs, build_execution_flow_ent
 
 # Kismet bytecode decompilation
 from uasset_read.kismet import decompile_uasset, KismetTranslator
-
-# C++ code generation
-from uasset_read.cpp_gen import format_cpp_header, kismet_to_cpp_body
 
 # Class handler registration
 from uasset_read.parsers.class_registry import get_class_registry, ClassHandler
@@ -200,7 +194,6 @@ All legacy APIs will be removed in v0.5.0. Update your imports accordingly.
 | `markdown` | Markdown with Mermaid flowcharts | MarkdownRenderer |
 | `blueprint_text` | Blueprint translation reference text | BlueprintTextRenderer |
 | `blueprint_ue_text` | UE Ctrl+C style blueprint text | BlueprintUERenderer |
-| `cpp_skeleton` | C++ class skeleton (.h + .cpp) | CppSkeletonRenderer |
 
 ### Legacy formatters (deprecated)
 
@@ -223,8 +216,6 @@ All legacy formatters will be removed in a future release. Migration guide:
 | `format_text_full(result)` | `parse_single(path, format='text')` |
 | `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
 | `format_markdown(result)` | `parse_single(path, format='markdown')` |
-| `format_blueprint_translation_text(result)` | `parse_single(path, format='blueprint_text')` |
-| `format_blueprint_ue_text(result)` | `parse_single(path, format='blueprint_ue_text')` |
 
 ### Module-level API
 
@@ -250,10 +241,6 @@ from uasset_read import (
     # Flow tracing
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
-
-    # Formatters (legacy — prefer parse_single(format=...))
-    format_json_full, format_json_summary,
-    format_text_full, format_markdown,
 
     # Linker
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
@@ -283,7 +270,7 @@ Full API list: see `src/uasset_read/__init__.py`.
 FArchive pipeline pattern mirroring UE's internal structure:
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -319,13 +306,9 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
 | ├ 表达式 | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
-| **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (6 renderers) |
-| **Formatters** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint text/UE format output generation |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (5 renderers) |
 
 ## Testing
 
@@ -346,7 +329,6 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 | Scenario | How uasset_read helps |
 |----------|----------------------|
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
-| **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
 | **Dependency auditing** | Build import/export graphs → detect circular references → find orphaned assets |
 | **Mod development** | Read blueprint variables from `.pak` files → understand mod behavior without source |
 | **Asset pipeline automation** | Batch-parse thousands of `.uasset` files → extract metadata → build searchable index |

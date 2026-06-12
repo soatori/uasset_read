@@ -18,7 +18,7 @@ section: contributing
 解析器镜像 UE 内部的 `FArchive` 序列化管线：
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
           PackageLinker · KismetDecompiler · PakFileReader
@@ -41,12 +41,10 @@ section: contributing
 | 图分析 | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
 | Kismet | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器 |
 | 链接器 | `link/` | `PackageLinker` 两阶段对象图重建 |
-| C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射 |
 | PAK | `pak/` | `FPakInfo/PakEntry`、`PakFileReader`、AES 解密 |
 | IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | IR | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器 |
-| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（6 种渲染器） |
-| 格式化器 | `formatters/` | JSON/Text/Markdown(with Mermaid)/蓝图翻译文本/UE 格式输出生成器 |
+| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（5 种渲染器） |
 
 ## 临时文件
 
