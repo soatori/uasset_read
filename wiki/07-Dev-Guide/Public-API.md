@@ -18,12 +18,12 @@ from uasset_read import PakFileReader
 
 # 新代码优先使用聚焦导入
 from uasset_read.pak import PakFileReader
-from uasset_read.cpp_gen import extract_cpp_class_skeleton
 from uasset_read.renderers import get_renderer, list_formats
 ```
 
 > [!NOTE] 架构变更
 > **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。旧 `export()` 函数被 `parse_single()` 替代。
+> **0.4.5 变更**：`cpp_gen/` 模块已移除。C++ 骨架生成功能不再可用。
 > 根包仍重新导出高级子模块供现有用户使用。新代码应优先使用聚焦导入。
 
 ## 核心 API（0.4.1+ 新增）
@@ -470,45 +470,11 @@ from uasset_read.renderers import get_renderer, list_formats
 | `build_function_graphs` | 构建函数图 |
 | `write_phase75_diagnostic` | 写入 Phase 75 诊断 |
 
-## 格式化模块 (formatters)
+## ~~格式化模块 (formatters)~~ — 已移除
 
-### JSON 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_json_full` | 完整 JSON 输出 |
-| `format_json_summary` | 摘要 JSON 输出 |
-| `format_exports_list` | 导出列表格式化 |
-| `format_properties_list` | 属性列表格式化 |
-| `format_blueprint_dict` | 蓝图字典格式化 |
-
-### Text 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_text_full` | 完整文本输出 |
-| `format_text_summary` | 摘要文本输出 |
-
-### Markdown 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_markdown` | Markdown 输出 |
-
-### 蓝图翻译文本
-
-| 符号 | 说明 |
-|------|------|
-| `format_blueprint_translation_text` | 蓝图翻译参考文本 |
-| `format_blueprint_ue_text` | UE 格式文本 |
-
-### 辅助函数
-
-| 符号 | 说明 |
-|------|------|
-| `build_status_info` | 构建状态信息 |
-| `build_schema_info` | 构建 Schema 信息 |
-| `resolve_fpackage_index` | 解析 FPackageIndex |
+> [!WARNING] 已移除
+> `formatters/` 模块已在 0.4.5 整体删除。所有格式化通过渲染器系统（`renderers/`）完成。
+> 旧 `format_*` 函数仍通过根包导出（向后兼容），但新代码应使用 `parse_single(format=...)`。
 
 ## Kismet 字节码模块 (kismet)
 
@@ -620,45 +586,10 @@ from uasset_read.renderers import get_renderer, list_formats
 | `BatchExporter` | 已移除 → 使用 `parse_batch()` |
 | `BatchExportResult` | 已移除 → 使用 `BatchResult` |
 
-## C++ 代码生成 (cpp_gen)
+## ~~C++ 代码生成 (cpp_gen)~~ — 已移除
 
-### IR 类型
-
-| 符号 | 说明 |
-|------|------|
-| `CppProperty` | C++ 属性 IR |
-| `CppHeaderMeta` | C++ 头文件元数据 |
-| `CppClassIR` | C++ 类 IR |
-| `CppMethodIR` | C++ 方法 IR |
-| `CppCallParameter` | C++ 调用参数 |
-| `CppCallStatement` | C++ 调用语句 |
-
-### 格式化函数
-
-| 符号 | 说明 |
-|------|------|
-| `format_cpp_class_json` | 格式化 C++ 类为 JSON |
-| `format_cpp_header` | 格式化 C++ 头文件 |
-| `format_cpp_call_statements` | 格式化 C++ 调用语句 |
-| `format_cpp_default_value` | 格式化 C++ 默认值 |
-| `format_cpp_transform` | 格式化 C++ 变换 |
-| `format_cpp_component_init` | 格式化 C++ 组件初始化 |
-| `format_cpp_input_action_load` | 格式化 C++ 输入动作加载 |
-| `build_constructor_sections` | 构建构造函数段 |
-| `format_cpp_constructor` | 格式化 C++ 构造函数 |
-| `extract_cpp_class_skeleton` | 提取 C++ 类骨架 |
-| `extract_cpp_constructor` | 提取 C++ 构造函数 |
-
-### 类型映射
-
-| 符号 | 说明 |
-|------|------|
-| `UE_TO_CPP_TYPE_MAP` | UE → C++ 类型映射 |
-| `ENGINE_CLASS_PATHS` | 引擎类路径 |
-| `ue_path_to_cpp_type` | UE 路径转 C++ 类型 |
-| `ue_package_path_to_cpp_class` | UE 包路径转 C++ 类 |
-| `CPF_TO_UPROPERTY_MAP` | CPF → UPROPERTY 映射 |
-| `cpf_flags_to_uproperty_marks` | CPF 标志转 UPROPERTY 标记 |
+> [!WARNING] 已移除
+> `cpp_gen/` 模块已在 0.4.5 整体删除。C++ 骨架生成功能不再可用。
 
 ## 版本管理 (versioning)
 
@@ -745,3 +676,5 @@ from uasset_read.renderers import get_renderer, list_formats
 | `bulk/` | 已废弃 | 0.3.6 从公共 API 移除 |
 | `objects/` | 已废弃 | 0.3.6 从公共 API 移除 |
 | `parsers/asset_types/` | 已废弃 | 0.4.0 将移除 |
+| `cpp_gen/` | 已移除 | 0.4.5 移除 |
+| `formatters/` | 已移除 | 0.4.5 移除 |
