@@ -1,6 +1,6 @@
 # uasset_read
 
-> **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码、生成 C++ 类骨架 — 无需启动 UE 编辑器。
+> **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码 — 无需启动 UE 编辑器。
 
 一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。
 
@@ -24,10 +24,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.5-dev |
+| 版本 | 0.4.5 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1389 通过，2 skipped，2 xfailed |
-| 模块 | 14 个子包，145 个源文件 |
+| 测试 | 29 个测试（contracts/units/e2e） |
+| 模块 | 17 个子包，153 个源文件 |
 
 ## 功能特性
 
@@ -50,7 +50,6 @@
 ### 高级功能
 - **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码，支持结构化控制流
 - **PackageLinker** — 两阶段对象图重建
-- **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射、构造函数格式化、默认值生成、标识符清理
 - **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
 - **循环依赖检测** — 导入映射相互引用检测
 - **IR（中间表示）** — 包级 IR 构建器，实现解耦的渲染管线
@@ -68,10 +67,9 @@
 - **Text** — 人类可读格式
 - **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
 - **Blueprint UE Text** — UE 编辑器风格格式
-- **C++ Skeleton** — 可直接使用的类骨架代码，含构造函数初始化列表
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（6 种渲染器）
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（5 种渲染器）
 - **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
@@ -98,7 +96,6 @@ python run.py path/to/file.uasset --text             # 可读文本
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
 python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
 python run.py path/to/file.uasset --blueprint-ue-text # UE 格式文本
-python run.py path/to/file.uasset --cpp-skeleton     # C++ 类骨架
 
 # 批量导出
 python run.py --batch-dir path/to/dir/               # 批量导出目录
@@ -133,7 +130,7 @@ text = parse_single("path/to/file.uasset", format="markdown")
 results = parse_batch("path/to/directory", format="json")
 
 # 列出可用的输出格式
-formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleton', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
+formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
 ```
 
 ### 支持的输出格式
@@ -147,7 +144,6 @@ formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'cpp_skeleto
 | `markdown` | Markdown + Mermaid 流程图 | MarkdownRenderer |
 | `blueprint_text` | 蓝图翻译参考文本 | BlueprintTextRenderer |
 | `blueprint_ue_text` | UE Ctrl+C 风格蓝图文本 | BlueprintUERenderer |
-| `cpp_skeleton` | C++ 类骨架（.h + .cpp） | CppSkeletonRenderer |
 
 ### 旧版格式化函数（已弃用）
 
@@ -168,8 +164,6 @@ from uasset_read import format_json_full, format_json_summary, format_text_full,
 | `format_text_full(result)` | `parse_single(path, format='text')` |
 | `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
 | `format_markdown(result)` | `parse_single(path, format='markdown')` |
-| `format_blueprint_translation_text(result)` | `parse_single(path, format='blueprint_text')` |
-| `format_blueprint_ue_text(result)` | `parse_single(path, format='blueprint_ue_text')` |
 
 ### Python API
 
@@ -198,10 +192,6 @@ from uasset_read import (
     # 流追踪
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
-
-    # 格式化（legacy — 推荐使用 parse_single(format=...)）
-    format_json_full, format_json_summary,
-    format_text_full, format_markdown,
 
     # 链接器
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
@@ -234,7 +224,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 采用镜像 UE 的 FArchive 管道模式：
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -269,15 +259,11 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **图** | `graph/` | 执行流/数据流追踪、链构建器、引脚追踪 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 构造函数格式化 |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
 | **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
 | **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
-| **Bulk Data** | `bulk/` | BulkData 头部解析 |
-| **UObject** | `objects/` | UObject 类型体系、类型注册表 |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint 文本/UE 格式输出 |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（5 种渲染器） |
 
 ## 测试
 

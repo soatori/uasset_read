@@ -19,8 +19,7 @@ ParseResult → build_package_ir() → PackageIR → Renderer → Output String
                                   ├── text_summary
                                   ├── markdown
                                   ├── blueprint_text
-                                  ├── blueprint_ue_text
-                                  └── cpp_skeleton
+                                  └── blueprint_ue_text
 ```
 
 ## 核心类
@@ -75,7 +74,6 @@ def list_formats() -> list[str]:
 | `markdown` | `MarkdownRenderer` | `markdown_renderer.py` | Markdown + Mermaid |
 | `blueprint_text` | `BlueprintTextRenderer` | `blueprint_text_renderer.py` | 蓝图翻译参考文本 |
 | `blueprint_ue_text` | `BlueprintUERenderer` | `blueprint_ue_renderer.py` | UE 风格蓝图文本 |
-| `cpp_skeleton` | `CppSkeletonRenderer` | `cpp_skeleton_renderer.py` | C++ 类骨架 |
 
 ## 使用方式
 
@@ -122,7 +120,6 @@ from . import text_renderer        # 自动注册 "text" 和 "text_summary"
 from . import markdown_renderer    # 自动注册 "markdown"
 from . import blueprint_text_renderer    # 自动注册 "blueprint_text"
 from . import blueprint_ue_renderer      # 自动注册 "blueprint_ue_text"
-from . import cpp_skeleton_renderer  # 自动注册 "cpp_skeleton"
 ```
 
 ## 与旧 Exporter 的区别
@@ -148,6 +145,5 @@ from . import cpp_skeleton_renderer  # 自动注册 "cpp_skeleton"
 | Markdown 渲染器 | `renderers/markdown_renderer.py` |
 | 蓝图文本渲染器 | `renderers/blueprint_text_renderer.py` |
 | 蓝图 UE 渲染器 | `renderers/blueprint_ue_renderer.py` |
-| C++ 骨架渲染器 | `renderers/cpp_skeleton_renderer.py` |
 
 **相关章节**: [[IR 中间表示]] · [[CLI 接口]] · [[格式化器]]

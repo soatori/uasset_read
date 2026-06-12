@@ -13,7 +13,7 @@ section: overview
 
 | 项目 | 详情 |
 |------|------|
-| 版本信息 | `0.4.5-dev` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
+| 版本信息 | `0.4.5` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
 | 构建系统 | Setuptools（src 布局） · 直接 `python run.py file.uasset` 调用 · PAK 可选依赖 |
 | 支持资产 | 18+ 种类型：Blueprint、SkeletalMesh、Material、Texture2D、AnimSequence、Map 等 · 容器：文件系统 / PAK / IoStore |
 
@@ -24,7 +24,7 @@ section: overview
 - **Kismet 反编译**：字节码 → AST → C++ 代码翻译，结构化控制流
 - **对象链接器**：两阶段对象图重建，跨包引用解析
 - **IR 中间表示**：统一数据结构层（PackageIR/ExportIR/GraphIR/NodeIR/PinIR），渲染器只接收 IR 不访问 ParseResult
-- **渲染器系统**：6 个自动注册渲染器（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton），通过 RENDERER_REGISTRY 分发
+- **渲染器系统**：5 个自动注册渲染器（JSON/Text/Markdown/BlueprintText/BlueprintUE），通过 RENDERER_REGISTRY 分发
 - **容器支持**：PAK（AES 解密、LZ4/Zstd 压缩）、IoStore 容器
 - **Core API**：`parse_single`、`parse_batch`、`list_formats` 纯函数入口，无 argparse/sys.exit/print
 
@@ -34,7 +34,7 @@ section: overview
 |------|------|------|
 | ≤ 0.3.8 | ParseResult → Exporter → Output | 导出器直接访问 ParseResult |
 | 0.4.1 | ParseResult → IR Builder → PackageIR → Renderers → Output | IR 层引入，解析与输出解耦 |
-| **0.4.5-dev** | UE 保真度改进：统一状态模型（success\|partial\|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义、Payload 偏移默认策略对齐 | 当前开发版 |
+| **0.4.5** | UE 保真度改进：统一状态模型（success\|partial\|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义、Payload 偏移默认策略对齐 | 当前版本 |
 
 ## 关键约束
 

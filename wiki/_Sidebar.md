@@ -1,4 +1,4 @@
-## uasset_read 开发文档 v0.4.5-dev
+## uasset_read 开发文档 v0.4.5
 
 ### 概览
 - [项目介绍](Overview)
@@ -23,7 +23,6 @@
 - [图分析](Graph)
 - [Kismet 反编译](Kismet)
 - [对象链接器](Linker)
-- [C++ 代码生成](CPP-Generator)
 
 ### 容器系统
 - [PAK 文件读取](PAK)
@@ -32,7 +31,6 @@
 
 ### 输出与导出
 - [渲染器系统](Renderers)
-- [格式化器](Formatters)
 - [CLI 接口](CLI)
 
 ### 开发指南
