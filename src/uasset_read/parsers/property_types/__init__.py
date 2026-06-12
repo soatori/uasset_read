@@ -61,8 +61,10 @@ from uasset_read.parsers.property_types.containers import (
 from uasset_read.parsers.property_types.structs import (
     parse_struct_property,
     _extract_struct_type_from_tag,
-    _TAGGED_FALLBACK_STRUCTS,
-    _TAGGED_FALLBACK_STRUCT_SCHEMAS,
+)
+from uasset_read.parsers.property_types._struct_schemas import (
+    TAGGED_FALLBACK_STRUCTS as _TAGGED_FALLBACK_STRUCTS,
+    TAGGED_FALLBACK_STRUCT_SCHEMAS as _TAGGED_FALLBACK_STRUCT_SCHEMAS,
 )
 
 # --- text_delegate.py ---
