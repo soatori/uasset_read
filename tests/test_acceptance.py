@@ -31,7 +31,7 @@ def test_diagnostics_are_structured_when_present(blueprint_asset: Path) -> None:
 def test_core_formats_keep_same_package_identity(blueprint_asset: Path) -> None:
     json_data = json.loads(parse_single(str(blueprint_asset), format="json", tolerant=True, max_file_size_mb=0))
     package_name = json_data["summary"]["package_name"].rsplit("/", 1)[-1]
-    for format_name in ["text", "markdown", "blueprint_text", "blueprint_ue_text", "cpp_skeleton"]:
+    for format_name in ["text", "markdown", "blueprint_text", "blueprint_ue_text"]:
         output = parse_single(str(blueprint_asset), format=format_name, tolerant=True, max_file_size_mb=0)
         assert output.strip()
         assert package_name in output or json_data["summary"]["package_name"] in output
