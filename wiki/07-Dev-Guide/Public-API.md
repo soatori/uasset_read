@@ -534,7 +534,7 @@ from uasset_read.renderers import get_renderer, list_formats
 ## ~~Agent 模块 (agent)~~ — 已移除
 
 > [!WARNING] 已移除
-> `agent/` 模块已在 0.4.1 整体删除。请通过 `parse_single(format="cpp_skeleton")` 获取 C++ 输出。
+> `agent/` 模块已在 0.4.1 整体删除。C++ 输出路径已在 0.4.5 移除。
 
 ## ~~N2C 中间格式 (n2c)~~ — 已移除
 
@@ -657,7 +657,7 @@ from uasset_read.renderers import get_renderer, list_formats
 ## UObject 类型体系 (objects)
 
 > [!WARNING] 已废弃
-> `bulk/` 和 `objects/` 模块已废弃，0.3.6 已从公共 API 移除（保留向后兼容导出）。`parsers/asset_types/` 将在 0.4.0 移除。
+> `bulk/` 和 `objects/` 模块已从公共 API 移除。当前资产类型解析保留在 `parsers/asset_types/`。
 
 | 符号 | 说明 |
 |------|------|
@@ -675,6 +675,6 @@ from uasset_read.renderers import get_renderer, list_formats
 |------|------|------|
 | `bulk/` | 已废弃 | 0.3.6 从公共 API 移除 |
 | `objects/` | 已废弃 | 0.3.6 从公共 API 移除 |
-| `parsers/asset_types/` | 已废弃 | 0.4.0 将移除 |
+| `parsers/asset_types/` | 当前使用 | 有限资产类型解析器 |
 | `cpp_gen/` | 已移除 | 0.4.5 移除 |
 | `formatters/` | 已移除 | 0.4.5 移除 |

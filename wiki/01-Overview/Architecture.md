@@ -42,14 +42,14 @@ read_import_map → read_export_map → link() → preload(idx) × N → post_lo
 | 层级 | 路径 | 职责 |
 |------|------|------|
 | 核心层 | `archive.py` / `constants.py` / `exceptions.py` | 二进制读取、常量、异常体系 |
-| 包管理 | `package.py` / `parse_uasset.py` | 包捆绑、Provider 抽象、解析管线 |
+| 包管理 | `package.py` / `parse_uasset/` | 包捆绑、Provider 抽象、解析管线 |
 | 版本管理 | `versioning.py` | VersionContainer、build_version_container、EUEVersion |
 | 类型映射 | `mappings.py` | UE 类型映射（.usmap/.jmap 解析） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 文件解析 |
 | Core API | `core.py` | parse_single / parse_batch / list_formats 纯函数入口 |
 | IR 模型 | `models/ir.py` | PackageIR、ExportIR、GraphIR、NodeIR、PinIR 等中间表示 |
 | IR 构建器 | `ir_builder.py` | build_package_ir：从 ParseResult 构建 PackageIR |
-| 渲染器 | `renderers/` | 5 个渲染器，自动注册到 RENDERER_REGISTRY |
+| 渲染器 | `renderers/` | JSON/Markdown 渲染器，自动注册到 RENDERER_REGISTRY |
 | 序列化 | `serializers/` | Summary/Import/Export/PropertyTag/图序列化 |
 | 解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
 | ├ 资产类型 | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC 专用解析器 |

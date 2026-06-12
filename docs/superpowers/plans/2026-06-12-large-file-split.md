@@ -1,5 +1,12 @@
 # 大文件拆分重构 Implementation Plan
 
+> **Superseded:** This plan is retained as historical context only. Do not
+> execute it as-is: file paths, line counts, and output-format assumptions are
+> stale after the source slimming work. Use
+> `docs/designs/2026-06-12-src-slimming-architecture.md` and
+> `docs/guides/src-slimming-constraints.md` for the current architecture and
+> constraints.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 src/ 下 6 个超千行文件拆分为职责清晰的小模块，降低单文件体量，提升可维护性。

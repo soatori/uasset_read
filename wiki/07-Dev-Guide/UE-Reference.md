@@ -42,7 +42,7 @@ section: ue-reference
 | `FCustomVersion` | `Runtime/Core/Public/Serialization/CustomVersion.h` | `versioning.py` — `VersionContainer` |
 | `FObjectExport` | `Runtime/CoreUObject/Public/UObject/ObjectResource.h` | `serializers/export_map.py` |
 | `FObjectImport` | `Runtime/CoreUObject/Public/UObject/ObjectResource.h` | `serializers/import_map.py` |
-| `FNameMap` | `Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp` | `parse_uasset.py` — 内置 NameMap |
+| `FNameMap` | `Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp` | `parse_uasset/` — 内置 NameMap |
 
 ## 版本对应关系
 

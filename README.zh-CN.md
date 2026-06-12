@@ -2,7 +2,7 @@
 
 > **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码 — 无需启动 UE 编辑器。
 
-一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。
+一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON 和 Markdown。
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
@@ -26,8 +26,8 @@
 |------|-----|
 | 版本 | 0.4.5 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 29 个测试（contracts/units/e2e） |
-| 模块 | 17 个子包，153 个源文件 |
+| 测试 | 27 个测试（contracts/units/e2e） |
+| 模块 | `src/uasset_read` 下 160 个 Python 源文件 |
 
 ## 功能特性
 
@@ -62,14 +62,12 @@
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
 
-### 多种输出格式
-- **JSON** — 完整结构化输出或摘要（基于渲染器，无 blueprint 包装层）
-- **Text** — 人类可读格式
+### 输出格式
+- **JSON** — 完整结构化机器可读输出
 - **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
-- **Blueprint UE Text** — UE 编辑器风格格式
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（5 种渲染器）
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON/Markdown）
 - **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
@@ -91,11 +89,7 @@ python run.py path/to/file.uasset                    # JSON 输出到 stdout
 python run.py path/to/file.uasset --output output.json   # 保存到文件
 
 # 输出模式
-python run.py path/to/file.uasset --summary          # 仅摘要
-python run.py path/to/file.uasset --text             # 可读文本
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
-python run.py path/to/file.uasset --blueprint-ue-text # UE 格式文本
 
 # 批量导出
 python run.py --batch-dir path/to/dir/               # 批量导出目录
@@ -111,7 +105,7 @@ python run.py path/to/file.uasset --verbose          # 启用详细日志
 或通过模块调用：
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --markdown
 ```
 
 ## 核心 API（推荐）
@@ -123,14 +117,13 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # 解析单个文件（返回格式化字符串）
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
-text = parse_single("path/to/file.uasset", format="markdown")
+markdown = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
 results = parse_batch("path/to/directory", format="json")
 
 # 列出可用的输出格式
-formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
+formats = list_formats()  # ['json', 'markdown']
 ```
 
 ### 支持的输出格式
@@ -138,32 +131,7 @@ formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'json', 'jso
 | 格式 | 说明 | 渲染器 |
 |---|---|---|
 | `json` | 完整结构化 JSON 输出 | JSONRenderer |
-| `json_summary` | 机器可读摘要（最小 token） | JsonSummaryRenderer |
-| `text` | YAML 风格可读文本 | TextRenderer |
-| `text_summary` | 精简 YAML 摘要 | TextSummaryRenderer |
 | `markdown` | Markdown + Mermaid 流程图 | MarkdownRenderer |
-| `blueprint_text` | 蓝图翻译参考文本 | BlueprintTextRenderer |
-| `blueprint_ue_text` | UE Ctrl+C 风格蓝图文本 | BlueprintUERenderer |
-
-### 旧版格式化函数（已弃用）
-
-以下格式化函数仍可导入使用，但会触发 `DeprecationWarning`。
-**请使用 `parse_single(format=...)`** — 它们走统一的 IR → Renderer 管线，输出最完整。
-
-```python
-from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ 已弃用 — 请改用 parse_single(format="json") 替代 format_json_full()
-```
-
-所有旧版格式化函数将在未来版本中移除。迁移指南：
-
-| 旧版函数 | 替代方案 |
-|---|---|
-| `format_json_full(result)` | `parse_single(path, format='json')` |
-| `format_json_summary(result)` | `parse_single(path, format='json_summary')` |
-| `format_text_full(result)` | `parse_single(path, format='text')` |
-| `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
-| `format_markdown(result)` | `parse_single(path, format='markdown')` |
 
 ### Python API
 
@@ -243,14 +211,14 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
 | 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
-| 主解析器 | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| 主解析器 | `parse_uasset/` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
 | 核心 API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
 | CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
-| **IR** | `ir_builder.py` | 包级中间表示构建器 |
+| **IR** | `ir_builder/` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
@@ -263,7 +231,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
 | **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（5 种渲染器） |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与 JSON/Markdown 渲染器 |
 
 ## 测试
 

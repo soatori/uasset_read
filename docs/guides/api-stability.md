@@ -70,15 +70,9 @@
 - `uasset_read.kismet.expression` — Kismet 表达式
 - `uasset_read.kismet.translator` — 字节码到 AST 转换
 
-### C++ 代码生成
-- `uasset_read.cpp_gen` — C++ 类骨架生成
-- `uasset_read.cpp_gen.skeleton` — 骨架提取
-- `uasset_read.cpp_gen.call_graph` — 调用图生成
-
 ### 渲染器模块
-- `uasset_read.renderers` — 输出格式渲染器（JSON、text、markdown、cpp-skeleton）
+- `uasset_read.renderers` — 输出格式渲染器（JSON、Markdown）
 - `uasset_read.renderers.json_renderer` — JSON 渲染
-- `uasset_read.renderers.text_renderer` — 文本渲染
 - `uasset_read.renderers.markdown_renderer` — Markdown 渲染
 
 ### 其他模块

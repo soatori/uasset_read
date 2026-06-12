@@ -24,7 +24,7 @@ section: overview
 - **Kismet 反编译**：字节码 → AST → C++ 代码翻译，结构化控制流
 - **对象链接器**：两阶段对象图重建，跨包引用解析
 - **IR 中间表示**：统一数据结构层（PackageIR/ExportIR/GraphIR/NodeIR/PinIR），渲染器只接收 IR 不访问 ParseResult
-- **渲染器系统**：5 个自动注册渲染器（JSON/Text/Markdown/BlueprintText/BlueprintUE），通过 RENDERER_REGISTRY 分发
+- **渲染器系统**：JSON/Markdown 两个公开渲染器，通过 RENDERER_REGISTRY 分发
 - **容器支持**：PAK（AES 解密、LZ4/Zstd 压缩）、IoStore 容器
 - **Core API**：`parse_single`、`parse_batch`、`list_formats` 纯函数入口，无 argparse/sys.exit/print
 

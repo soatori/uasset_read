@@ -32,7 +32,7 @@ section: contributing
 | FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
 | 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | `UAssetError`、`VersionError`、`ParseError`、`ErrorContext` |
-| 主解析器 | `parse_uasset.py` | `parse_package()`、`parse_uasset()` 入口 |
+| 主解析器 | `parse_uasset/` | `parse_package()`、`parse_uasset()` 入口 |
 | 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
 | 序列化 | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag` |
 | 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、IR 中间表示 |

@@ -14,7 +14,7 @@ section: agent-index
 
 | Agent 任务 | 定位章节 | 关键文件 |
 |------------|----------|----------|
-| 解析 .uasset 文件 | [[解析管线]] | `parse_uasset.py` / `core.py` |
+| 解析 .uasset 文件 | [[解析管线]] | `parse_uasset/` / `core.py` |
 | 读取二进制字段 | [[FArchive]] | `archive.py` |
 | 新增属性类型解析器 | [[属性解析器]] | `parsers/` |
 | 修改蓝图输出格式 | [[蓝图解析]] | `blueprint/` |
@@ -104,37 +104,11 @@ section: agent-index
 
 ### 格式化与渲染（0.4.1+）
 
-#### JSON
-`format_json_full` · `format_json_summary` · `format_exports_list` · `format_properties_list` · `format_blueprint_dict`
-
-#### 文本
-`format_text_full` · `format_text_summary`
-
-#### Markdown/蓝图
-`format_markdown` · `format_blueprint_translation_text` · `format_blueprint_ue_text`
-
-#### 辅助
-`build_status_info` · `build_schema_info` · `resolve_fpackage_index`
-
 #### 核心 API
 `parse_single` · `parse_batch` · `list_formats` · `BatchResult`
 
 #### 渲染器系统
-`IRenderer` · `RenderOptions` · `get_renderer` · `list_formats` · `register_renderer` · `RENDERER_REGISTRY`
-
-### C++ 代码生成 (15+)
-
-#### IR
-`CppClassIR` · `CppProperty` · `CppMethodIR` · `CppHeaderMeta` · `CppCallParameter` · `CppCallStatement`
-
-#### 提取
-`extract_cpp_class_skeleton` · `extract_cpp_constructor` · `extract_cpp_functions`
-
-#### 格式化
-`format_cpp_header` · `format_cpp_class_json` · `format_cpp_call_statements` · `format_cpp_default_value` · `format_cpp_transform` · `format_cpp_component_init` · `format_cpp_input_action_load` · `format_cpp_constructor` · `build_constructor_sections`
-
-#### 类型映射
-`ue_path_to_cpp_type` · `ue_package_path_to_cpp_class` · `cpf_flags_to_uproperty_marks` · `UE_TO_CPP_TYPE_MAP` · `ENGINE_CLASS_PATHS` · `CPF_TO_UPROPERTY_MAP`
+`IRenderer` · `RenderOptions` · `get_renderer` · `list_formats` · `register_renderer` · `RENDERER_REGISTRY` · `JsonRenderer` · `MarkdownRenderer`
 
 ### 容器与原始文件 (12+)
 

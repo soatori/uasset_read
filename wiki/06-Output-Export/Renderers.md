@@ -14,12 +14,7 @@ ParseResult → build_package_ir() → PackageIR → Renderer → Output String
                                           ↓
                                   RENDERER_REGISTRY
                                   ├── json
-                                  ├── json_summary
-                                  ├── text
-                                  ├── text_summary
-                                  ├── markdown
-                                  ├── blueprint_text
-                                  └── blueprint_ue_text
+                                  └── markdown
 ```
 
 ## 核心类
@@ -68,12 +63,7 @@ def list_formats() -> list[str]:
 | 格式名 | 渲染器类 | 文件 | 说明 |
 |--------|----------|------|------|
 | `json` | `JsonRenderer` | `json_renderer.py` | 完整 JSON 输出 |
-| `json_summary` | `JsonRenderer` | `json_renderer.py` | JSON 摘要输出 |
-| `text` | `TextRenderer` | `text_renderer.py` | YAML 风格全文 |
-| `text_summary` | `TextRenderer` | `text_renderer.py` | YAML 风格摘要 |
 | `markdown` | `MarkdownRenderer` | `markdown_renderer.py` | Markdown + Mermaid |
-| `blueprint_text` | `BlueprintTextRenderer` | `blueprint_text_renderer.py` | 蓝图翻译参考文本 |
-| `blueprint_ue_text` | `BlueprintUERenderer` | `blueprint_ue_renderer.py` | UE 风格蓝图文本 |
 
 ## 使用方式
 
@@ -115,11 +105,8 @@ output = renderer.render(ir, options)
 
 ```python
 # src/uasset_read/renderers/__init__.py
-from . import json_renderer        # 自动注册 "json" 和 "json_summary"
-from . import text_renderer        # 自动注册 "text" 和 "text_summary"
+from . import json_renderer        # 自动注册 "json"
 from . import markdown_renderer    # 自动注册 "markdown"
-from . import blueprint_text_renderer    # 自动注册 "blueprint_text"
-from . import blueprint_ue_renderer      # 自动注册 "blueprint_ue_text"
 ```
 
 ## 与旧 Exporter 的区别
@@ -141,9 +128,6 @@ from . import blueprint_ue_renderer      # 自动注册 "blueprint_ue_text"
 | 模块根目录 | `src/uasset_read/renderers/` |
 | 基类 | `renderers/base.py` |
 | JSON 渲染器 | `renderers/json_renderer.py` |
-| 文本渲染器 | `renderers/text_renderer.py` |
 | Markdown 渲染器 | `renderers/markdown_renderer.py` |
-| 蓝图文本渲染器 | `renderers/blueprint_text_renderer.py` |
-| 蓝图 UE 渲染器 | `renderers/blueprint_ue_renderer.py` |
 
 **相关章节**: [[IR 中间表示]] · [[CLI 接口]]
