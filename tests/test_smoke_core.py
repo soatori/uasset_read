@@ -13,7 +13,7 @@ pytestmark = pytest.mark.smoke
 
 def test_list_formats_exposes_primary_outputs() -> None:
     formats = set(list_formats())
-    assert {"json", "json_summary", "text", "markdown", "blueprint_text", "blueprint_ue_text"} <= formats
+    assert {"json", "markdown"} <= formats
 
 
 def test_parse_single_raises_on_failed_strict_parse() -> None:

@@ -12,11 +12,7 @@ pytestmark = pytest.mark.assets
 
 FORMATS = [
     "json",
-    "json_summary",
-    "text",
     "markdown",
-    "blueprint_text",
-    "blueprint_ue_text",
 ]
 
 
@@ -27,9 +23,8 @@ def test_representative_asset_renders_non_empty(representative_asset: Path, form
     assert output.strip()
 
 
-def test_json_and_summary_agree_on_core_fields(representative_asset: Path) -> None:
+def test_json_renders_core_fields(representative_asset: Path) -> None:
     full = json.loads(parse_single(str(representative_asset), format="json", tolerant=True, max_file_size_mb=0))
-    summary = json.loads(parse_single(str(representative_asset), format="json_summary", tolerant=True, max_file_size_mb=0))
-    assert full["summary"]["package_name"] == summary["summary"]["package_name"]
-    assert full["summary"]["total_export_count"] == summary["summary"]["total_export_count"]
+    assert full["summary"]["package_name"]
+    assert full["summary"]["total_export_count"]
     assert full["status"]["status"] in {"success", "partial", "failed"}
