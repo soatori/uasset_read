@@ -54,6 +54,7 @@ class FArchive:
 
     def read(self, size: int) -> bytes:
         """基础读取方法 - 不对原始字节进行交换。"""
+        import struct as _struct
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
@@ -225,22 +226,6 @@ class FArchive:
             self._file = None
         self._use_mmap = False
 
-    def __enter__(self) -> "FArchive":
-        """支持 with 语句"""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        """退出时自动关闭"""
-        self.close()
-        return False  # 不抑制异常
-
-    def __del__(self) -> None:
-        """安全网：确保文件句柄被释放。"""
-        try:
-            self.close()
-        except Exception:
-            pass
-
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志"""
         self._byte_swapping = enabled
@@ -308,6 +293,20 @@ class FArchive:
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'i', self.read(4))[0]
 
+    def peek_i32(self) -> int:
+        """预读 signed 32-bit integer（不移动位置）"""
+        import struct
+        current_pos = self.tell()
+        try:
+            fmt = '>' if self._byte_swapping else '<'
+            data = self.read(4)
+            result = struct.unpack(fmt + 'i', data)[0]
+            self.seek(current_pos)
+            return result
+        except Exception:
+            self.seek(current_pos)
+            raise
+
     def read_u16(self) -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
         import struct
@@ -368,6 +367,33 @@ class FArchive:
         import struct
         fmt = '>' if self._byte_swapping else '<'
         return struct.unpack(fmt + 'd', self.read(8))[0]
+
+    def serialize_int(self, value: int) -> bytes:
+        """序列化 32 位整数（用于 SerializeInt 兼容）。
+
+        UE FArchive::SerializeInt 通常用于将整数写入存档。
+        此方法提供对称的序列化能力。
+        """
+        import struct
+        fmt = '>' if self._byte_swapping else '<'
+        return struct.pack(fmt + 'i', value)
+
+    def serialize_bits(self, value: int, num_bits: int) -> bytes:
+        """序列化指定位数的值（用于 SerializeBits 兼容）。
+
+        UE FArchive::SerializeBits 用于位级别的序列化。
+        此方法将值打包为指定字节数。
+
+        Args:
+            value: 要序列化的值
+            num_bits: 位数（将向上取整到字节）
+
+        Returns:
+            序列化后的字节
+        """
+        import math
+        num_bytes = math.ceil(num_bits / 8)
+        return value.to_bytes(num_bytes, byteorder='big', signed=False)
 
     def read_fstring(self) -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
@@ -439,13 +465,10 @@ class FArchive:
                     return truncated
                 else:
                     # All nulls from start — cannot recover, return empty
-                    # Structured diagnostic with corruption code
                     self._logger.error(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "all nulls (completely corrupted), "
-                        "consumed=%d bytes, end_pos=%d, "
-                        "diagnostic_code=CORRUPTED_FSTRING_ALL_NULLS, "
-                        "likely_cause=data_corruption_or_offset_drift",
+                        "consumed=%d bytes, end_pos=%d",
                         pos_before, length, len(data), self.tell()
                     )
                     self._logger.debug(
@@ -463,6 +486,14 @@ class FArchive:
             name_map: 名称表列表
         """
         self._name_map = name_map
+
+    def get_name_map(self) -> Optional[list]:
+        """获取当前缓存的名称表。
+
+        Returns:
+            名称表列表，未设置时返回 None
+        """
+        return self._name_map
 
     def read_name(self, name_map: Optional[list] = None) -> str:
         """读取 FName（名称表索引 + 实例编号）。

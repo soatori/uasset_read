@@ -70,5 +70,9 @@ class KismetDecompiledResult:
         """JSON string view (D-08)."""
         return json.dumps(self.to_dict(), indent=indent)
 
+    def to_cpp_string(self) -> str:
+        """C++ pseudocode string view (D-08). Returns cpp_code directly."""
+        return self.cpp_code
+
 
 __all__ = ["KismetDecompiledResult"]

@@ -18,10 +18,6 @@ class PackageHeaderIR:
     total_export_count: int
     total_import_count: int
     ue_version: str
-    # 已废弃/版本门控字段（可选）
-    owner_persistent_guid: str = ""
-    compressed_chunks: list = field(default_factory=list)
-    additional_packages_to_cook: list = field(default_factory=list)
 
 
 @dataclass
@@ -33,8 +29,6 @@ class PinIR:
     linked_to: list[str]
     direction: str
     default_value: str | None
-    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
-    fallback_source: str | None = None  # 非 success 时说明数据来源
 
 
 @dataclass
@@ -46,8 +40,6 @@ class NodeIR:
     pins: list[PinIR]
     execution_flow: list[dict]
     macro_expansion: dict | None = None
-    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
-    fallback_reason: str | None = None
 
 
 @dataclass
@@ -58,8 +50,6 @@ class GraphIR:
     graph_class: str
     nodes: list[NodeIR]
     execution_chains: list[list[str]]
-    parse_status: str = "success"  # "success" | "partial" | "fallback" | "failed"
-    fallback_reason: str | None = None
 
 
 @dataclass
@@ -70,7 +60,6 @@ class PropertyIR:
     value: Any
     array_index: int
     guid: str | None
-    tag_info: dict | None = None
 
 
 @dataclass
@@ -80,7 +69,6 @@ class ExportRawIR:
     保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
     """
     class_index: int = 0
-    class_name: str = ""  # 语义解析：class_index 解析后的类名（如 "BlueprintGeneratedClass /Script/Engine.WidgetTree"）
     super_index: int = 0
     outer_index: int = 0
     template_index: int = 0
@@ -165,86 +153,12 @@ class BlueprintEventIR:
 
 
 @dataclass
-class InterfaceIR:
-    """蓝图实现接口的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    ue_path: str = ""
-
-
-@dataclass
-class EnumValueIR:
-    """枚举值的 IR 表示。"""
-    name: str
-    value: int = 0
-    display_name: str = ""
-
-
-@dataclass
-class EnumIR:
-    """蓝图枚举的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    values: list[EnumValueIR] = field(default_factory=list)
-    ue_path: str = ""
-
-
-@dataclass
-class StructFieldIR:
-    """结构体字段的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    default_value: str = ""
-
-
-@dataclass
-class StructIR:
-    """蓝图结构体的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    fields: list[StructFieldIR] = field(default_factory=list)
-    ue_path: str = ""
-
-
-@dataclass
-class DelegateIR:
-    """蓝图委托的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    signature: str = ""
-    is_multicast: bool = False
-    ue_path: str = ""
-
-
-@dataclass
-class ReplicatedVarIR:
-    """复制变量的 IR 表示。"""
-    name: str
-    cpp_type: str = ""
-    on_rep_function: str = ""
-    replication_condition: int = 0
-
-
-@dataclass
-class ReplicationIR:
-    """蓝图复制信息的 IR 表示。"""
-    replicated_vars: list[ReplicatedVarIR] = field(default_factory=list)
-    on_rep_functions: list[str] = field(default_factory=list)
-
-
-@dataclass
 class BlueprintIR:
     """蓝图元数据 IR（来自 BlueprintMetadata）。"""
     parent_class: str | None
     functions: list[BlueprintFunctionIR]
     events: list[BlueprintEventIR]
     components: list[dict]
-    interfaces: list[InterfaceIR] = field(default_factory=list)
-    enums: list[EnumIR] = field(default_factory=list)
-    structs: list[StructIR] = field(default_factory=list)
-    delegates: list[DelegateIR] = field(default_factory=list)
-    replication: ReplicationIR | None = None
-    scs_tree: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -256,7 +170,6 @@ class DecompiledFunctionIR:
     parameters: list[dict]
     return_type: str
     fallback_reasons: list[str] = field(default_factory=list)
-    bytecode_status: str = "parsed"  # "parsed" | "fallback"
 
 
 @dataclass

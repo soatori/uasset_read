@@ -12,7 +12,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken

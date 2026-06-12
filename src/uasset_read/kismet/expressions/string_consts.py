@@ -71,15 +71,15 @@ class FScriptText:
                 KeyString=key,
                 SourceString=source,
             )
-        elif lit_type == EBlueprintTextLiteralType.InvariantText:
-            # UE XFERTEXT: InvariantText 只读取 1 个 expression（source string）
+        elif lit_type == EBlueprintTextLiteralType.Invariant:
+            key = archive.xfer_string()
+            archive.skip(1)
             source = archive.xfer_string()
-            archive.skip(1)  # skip null terminator
-            return cls(TextLiteralType=lit_type, SourceString=source)
-        elif lit_type == EBlueprintTextLiteralType.LiteralString:
-            # UE XFERTEXT: LiteralString 读取 1 个 FString
+            archive.skip(1)
+            return cls(TextLiteralType=lit_type, KeyString=key, SourceString=source)
+        elif lit_type == EBlueprintTextLiteralType.CultureInvariant:
             source = archive.xfer_string()
-            archive.skip(1)  # skip null terminator
+            archive.skip(1)
             return cls(TextLiteralType=lit_type, SourceString=source)
         elif lit_type == EBlueprintTextLiteralType.StringTableEntry:
             asset = archive.xfer_string()
