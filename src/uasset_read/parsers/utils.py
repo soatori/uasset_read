@@ -2,7 +2,7 @@
 from typing import Any, List, Optional
 import logging
 
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ErrorContext
 
 logger = logging.getLogger(__name__)
 

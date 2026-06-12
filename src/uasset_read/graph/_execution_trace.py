@@ -12,13 +12,14 @@ from uasset_read.constants import (
 from uasset_read.graph.macro_expander import (
     MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
 )
-from uasset_read.models.core import UEdGraphNode, UEdGraphPin
+from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
 
 from ._edge_traversal import (
     _build_normalized_edge_indexes,
     _find_next_exec_node,
     _pin_ref_guid,
 )
+from ._node_format import _derive_node_name, _get_start_event_name
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ def _trace_execution_from_event(
 
         # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
-            from uasset_read.graph._node_format import _extract_call_function_parameters
+            from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
