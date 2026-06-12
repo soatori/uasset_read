@@ -77,7 +77,6 @@ def create_parser() -> argparse.ArgumentParser:
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
     group.add_argument('--blueprint-text', action='store_true', help='Output blueprint translation reference text')
     group.add_argument('--blueprint-ue-text', action='store_true', help='Output UE-style blueprint text')
-    group.add_argument('--cpp-skeleton', action='store_true', help='Output C++ class skeleton')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -137,8 +136,6 @@ def resolve_format(args) -> str:
         return "blueprint_text"
     if args.blueprint_ue_text:
         return "blueprint_ue_text"
-    if args.cpp_skeleton:
-        return "cpp_skeleton"
     if args.markdown:
         return "markdown"
     if args.summary or args.json_summary:

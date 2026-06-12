@@ -116,21 +116,12 @@ def parse_single(
                 file_size_mb,
             )
 
-    # cpp_skeleton 走独立管线（不经过标准渲染器注册表）
+    # cpp_skeleton 已移除（v0.4.5+），项目聚焦 uasset 解析
     if format == "cpp_skeleton":
-        from uasset_read.renderers.cpp_skeleton_renderer import CppSkeletonRenderer
-        result = parse_uasset_with_linker(
-            file_path,
-            tolerant=tolerant,
-            include_parent_assets=include_parent_assets,
-            asset_roots=asset_roots,
-            mappings_path=mappings_path,
-            game=game,
+        raise ValueError(
+            "cpp_skeleton format has been removed in v0.4.5+. "
+            "The project now focuses on .uasset parsing only."
         )
-        if not result.is_success and not tolerant:
-            raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
-        pipeline = CppSkeletonRenderer()
-        return pipeline.generate(result)
 
     # 需要 linker 的格式
     linker_formats = {"json", "json_summary"}

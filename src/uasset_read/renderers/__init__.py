@@ -39,4 +39,4 @@ from uasset_read.renderers import text_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402
 from uasset_read.renderers import blueprint_text_renderer  # noqa: F401, E402
 from uasset_read.renderers import blueprint_ue_renderer  # noqa: F401, E402
-# 注意：cpp_skeleton 已拆分为独立管线，不再通过渲染器注册表分发
+# 注意：cpp_skeleton 已移除（v0.4.5+），项目聚焦 uasset 解析
