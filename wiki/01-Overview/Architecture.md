@@ -30,8 +30,12 @@ open_package_bundle → read_package_summary → build_version_container → rea
 ```
 
 ```
-read_import_map → read_export_map → parse_properties → post_process → build_package_ir → renderers
+read_import_map → read_export_map → link() → preload(idx) × N → post_load()
+→ parse_properties → post_process → build_package_ir → renderers
 ```
+
+> **v0.4.5 变更**: 加载生命周期现在遵循 UE 风格：`link() → preload(idx) × N → post_load()`。
+> `post_load()` 在所有 export 预加载之后调用，确保 ObjectProperty 引用能正确解析。
 
 ## 模块结构
 

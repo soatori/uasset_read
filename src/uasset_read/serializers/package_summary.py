@@ -28,8 +28,11 @@ from uasset_read.constants import (
     UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID,
     UE4_SERIALIZE_TEXT_IN_PACKAGES,
     UE4_ADDED_PACKAGE_OWNER,
+    UE4_NON_OUTER_PACKAGE_IMPORT,
     UE4_NAME_HASHES_SERIALIZED,
     UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
+    VER_UE4_ENGINE_VERSION_OBJECT,
+    VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION,
 )
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
@@ -175,7 +178,17 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     legacy_file_version = archive.read_i32()
 
     # 确定引擎家族并分发到对应的读取器
-    is_ue4 = _is_ue4_legacy(legacy_file_version)
+    # 对于 legacy=-6，需要通过 FileVersionUE4 来区分 UE4/UE5：
+    # - FileVersionUE4 > 0 → UE4 资产（如 UE4.9 的 StarterContent）
+    # - FileVersionUE4 == 0 → UE5 资产
+    if legacy_file_version == -6:
+        saved_pos = archive.tell()
+        archive.read_i32()  # LegacyUE3Version
+        file_version_ue4_peek = archive.read_i32()
+        archive.seek(saved_pos)
+        is_ue4 = file_version_ue4_peek > 0
+    else:
+        is_ue4 = _is_ue4_legacy(legacy_file_version)
 
     if is_ue4:
         return _read_package_summary_ue4(
@@ -219,12 +232,6 @@ def _read_package_summary_ue4(
     - 有 FolderName 字段（UE5 没有）
     - PropertyTag 使用旧的 FName 类型格式
     """
-    from uasset_read.constants import (
-        UE4_NON_OUTER_PACKAGE_IMPORT,
-        UE4_ADDED_PACKAGE_OWNER,
-        UE4_NAME_HASHES_SERIALIZED,
-    )
-
     # UE3 version (仅 legacy > -4 时存在)
     if legacy_file_version != -4:
         legacy_ue3_version = archive.read_i32()
@@ -239,8 +246,9 @@ def _read_package_summary_ue4(
 
     total_header_size = archive.read_i32()
 
-    # FolderName (UE4 特有)
-    folder_name = archive.read_fstring()
+    # PackageName (UE4 特有，在 TotalHeaderSize 之后)
+    # 注：UE 源码中此字段原为 FolderName，后改为 PackageName（已废弃但保留序列化）
+    package_name = archive.read_fstring()
 
     package_flags = archive.read_u32()
 
@@ -337,14 +345,21 @@ def _read_package_summary_ue4(
         gen_name_count = archive.read_i32()
         generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
 
-    # SavedByEngineVersion (UE4 使用对象格式从版本 513 开始)
-    saved_by_engine_version = EngineVersion(
-        major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
-        changelist=archive.read_u32(), branch=archive.read_fstring()
-    )
+    # SavedByEngineVersion (UE4 >= VER_UE4_ENGINE_VERSION_OBJECT) 使用 FEngineVersion 对象
+    if file_version_ue4 >= VER_UE4_ENGINE_VERSION_OBJECT:
+        saved_by_engine_version = EngineVersion(
+            major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
+            changelist=archive.read_u32(), branch=archive.read_fstring()
+        )
+    else:
+        # UE4 < 361: 只有 int32 changelist
+        engine_changelist = archive.read_i32()
+        saved_by_engine_version = EngineVersion(
+            major=4, minor=0, patch=0, changelist=engine_changelist, branch=""
+        )
 
-    # CompatibleWithEngineVersion (UE4 从版本 514 开始)
-    if file_version_ue4 >= 514:  # VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION
+    # CompatibleWithEngineVersion (UE4 >= VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION)
+    if file_version_ue4 >= VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION:
         compatible_with_engine_version = EngineVersion(
             major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
             changelist=archive.read_u32(), branch=archive.read_fstring()
@@ -359,6 +374,8 @@ def _read_package_summary_ue4(
     compressed_chunks_count = archive.read_i32()
     if compressed_chunks_count < 0:
         raise ParseError(f"Negative compressed chunks count: {compressed_chunks_count}")
+    if compressed_chunks_count > 10000:
+        raise ParseError(f"CompressedChunks count exceeds maximum: {compressed_chunks_count}")
     compressed_chunks = []
     for _ in range(compressed_chunks_count):
         chunk_data = archive.read(16)  # FCompressedChunk: 4 × int32 = 16 bytes
@@ -433,7 +450,7 @@ def _read_package_summary_ue4(
         file_version_licensee=file_version_licensee,
         saved_hash=b"",  # UE4 没有 SavedHash
         total_header_size=total_header_size,
-        custom_versions=custom_versions, package_name="",  # UE4 没有 PackageName 在此位置
+        custom_versions=custom_versions, package_name=package_name,
         package_flags=package_flags, name_count=name_count, name_offset=name_offset,
         soft_object_paths_count=0,  # UE4 没有 SoftObjectPaths
         soft_object_paths_offset=0,

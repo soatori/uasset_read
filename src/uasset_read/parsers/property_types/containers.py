@@ -27,12 +27,13 @@ class _UnsupportedMapKeyType(ParseError):
 # Supported type definitions for early detection
 # ============================================================================
 
-# Map key 支持的类型（UE TMap 支持的基础类型）
+# Map key 支持的类型（UE TMap 支持的基础类型 + StructProperty）
 _SUPPORTED_MAP_KEY_TYPES = frozenset([
     "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
     "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
     "UInt16Property", "UInt32Property", "UInt64Property",
     "ObjectProperty", "EnumProperty",
+    "StructProperty",  # 支持 StructProperty key（如 FAnimCurveIdentifier）
 ])
 
 # Set element 支持的类型（所有 parse_property_value 能处理的类型）
@@ -156,6 +157,31 @@ def parse_array_property(
             f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
         )
 
+    # 特殊处理 tag.size=0：可能是空数组或省略编码
+    if tag.size == 0:
+        # 尝试读取 count，如果失败则视为空数组
+        try:
+            count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
+            if count == 0:
+                # 确实是空数组
+                return []
+            else:
+                # count > 0 但 tag.size=0，这是异常情况
+                import logging
+                logging.getLogger(__name__).warning(
+                    "ArrayProperty '%s': tag.size=0 but count=%d, treating as empty array (omitted payload)",
+                    tag.name, count,
+                )
+                return []
+        except Exception:
+            # 无法读取 count，视为空数组
+            import logging
+            logging.getLogger(__name__).debug(
+                "ArrayProperty '%s': tag.size=0, cannot read count, treating as empty array",
+                tag.name,
+            )
+            return []
+
     count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
@@ -163,7 +189,7 @@ def parse_array_property(
     if tag.size < 4:
         import logging
         logging.getLogger(__name__).warning(
-            "ArrayProperty '%s': tag.size=%d < 4, 无法计算剩余数据大小",
+            "ArrayProperty '%s': tag.size=%d < 4, treating as empty array",
             tag.name, tag.size,
         )
         return elements
@@ -488,6 +514,17 @@ def _dispatch_key_parse(
 
     if key_type == "EnumProperty":
         return archive.read_name(name_map)
+
+    if key_type == "StructProperty":
+        # 支持 StructProperty key（如 FAnimCurveIdentifier）
+        # 创建临时 tag 并调用 parse_struct_property
+        dummy_tag = PropertyTag(name="Key", type="StructProperty", size=0)
+        # 尝试从 tag 属性中获取 struct_type（key_type_struct 字段）
+        struct_type = getattr(tag, "key_type_struct", None)
+        if struct_type:
+            dummy_tag.struct_type = struct_type
+        from uasset_read.parsers.property_types.structs import parse_struct_property
+        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     # 不支持的 key 类型：抛出异常而非返回 None，避免偏移错位
     raise _UnsupportedMapKeyType(f"Unsupported map key type: {key_type}")

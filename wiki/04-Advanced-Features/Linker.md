@@ -15,20 +15,25 @@ PackageLinker(archive, summary, name_map, import_map, export_map, version_contai
 ## 两阶段加载
 
 ```
-link() -- Phase 1
+link() -- Phase 1: 创建对象实例
 ├── _create_import_instances() → _import_objects[]
 ├── _create_export_instances() → _export_objects[]
 ├── build_outer_tree() → 解析 outer_index
 └── _collect_root_objects()
 
-preload(index) -- Phase 2 (延迟)
-└── parse_properties_from_export() → serialized_properties
+preload(index) × N -- Phase 2: 序列化属性
+├── 检查类序列化策略（ClassSerializationStrategy）
+├── parse_properties_from_export() → serialized_properties
+└── 标记 opaque/skipped 类
 
-post_load() -- Stage 4
+post_load() -- Phase 3: 解析引用
 ├── _resolve_property_references() + _resolve_weak_references()
 ├── _verify_imports() + _resolve_template_objects()
 └── _build_dependency_graph()
 ```
+
+> **v0.4.5 变更**: 执行顺序为 `link() → preload(idx) × N → post_load()`。
+> `post_load()` 在所有 export 预加载之后调用，确保 ObjectProperty 引用能正确解析。
 
 ## UObjectInstance 字段
 
