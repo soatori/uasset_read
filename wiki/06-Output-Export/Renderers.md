@@ -146,4 +146,4 @@ from . import blueprint_ue_renderer      # 自动注册 "blueprint_ue_text"
 | 蓝图文本渲染器 | `renderers/blueprint_text_renderer.py` |
 | 蓝图 UE 渲染器 | `renderers/blueprint_ue_renderer.py` |
 
-**相关章节**: [[IR 中间表示]] · [[CLI 接口]] · [[格式化器]]
+**相关章节**: [[IR 中间表示]] · [[CLI 接口]]
