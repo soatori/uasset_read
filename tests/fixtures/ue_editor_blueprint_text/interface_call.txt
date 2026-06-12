@@ -1,8 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_CallInterfaceFunction" Name="K2Node_CallInterfaceFunction_0"
-   NodeGuid=33333333333333333333333333333333
-   NodeComment=""
-   Pin: execute (Exec) LinkedTo=(44444444)
-   Pin: self (Object) LinkedTo=(55555555)
-   Pin: ReturnValue (Float) LinkedTo=(66666666)
-   CustomProperties Pin: PinName="ReturnValue" PinType=(PinCategory="float") IsArray=False IsRef=False
-End Object

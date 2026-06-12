@@ -1,8 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_IfThenElse" Name="K2Node_IfThenElse_0"
-   NodeGuid=FEDCBA9876543210FEDCBA9876543210
-   NodeComment="Check Valid Target"
-   Pin: execute (Exec) LinkedTo=(ABCD1234)
-   Pin: Condition (Bool)
-   Pin: True (Exec) LinkedTo=(EFGH9012)
-   Pin: False (Exec) LinkedTo=(IJKL3456)
-End Object

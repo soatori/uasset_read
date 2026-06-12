@@ -1,6 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_Event" Name="K2Node_Event_0"
-   NodeGuid=ABCD1234567890ABCDEF1234567890AB
-   NodeComment="Event BeginPlay"
-   EventReference=(MemberParent=Class'"/Script/Engine.Actor"',MemberName="ReceiveBeginPlay")
-   bOverrideFunction=True
-End Object

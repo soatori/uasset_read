@@ -1,6 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_Event" Name="K2Node_Event_0"
-   NodeGuid=11111111111111111111111111111111
-   NodeComment=""
-   Pin: then (Exec) LinkedTo=(22222222)
-   CustomProperties Pin: PinName="EnhancedInputActionValue" PinType=() IsArray=False IsRef=False
-End Object

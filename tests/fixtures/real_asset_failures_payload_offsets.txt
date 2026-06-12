@@ -1,3 +1,0 @@
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\GameplayCues\GC_Collect_Effect.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Tools\BakedGeneratedMeshSystem\GeneratedMeshColdStorage.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\LyraExampleContent\Content\MSPresets\M_MS_Surface_Material\Functions\MF_Transmission.uasset
