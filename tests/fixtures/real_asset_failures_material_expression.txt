@@ -1,3 +1,0 @@
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Effects\Materials\FootSteps\M_Flipbook_Pyro_Lit.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Effects\MaterialFunctions\MF_AnimatedSquareTexture.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Effects\Materials\Cubes\M_Character_Cubes.uasset

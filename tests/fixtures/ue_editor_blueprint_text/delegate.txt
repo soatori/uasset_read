@@ -1,6 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_Event" Name="K2Node_Event_Delegate"
-   NodeGuid=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-   NodeComment=""
-   Pin: then (Exec) LinkedTo=(cccccccc)
-   CustomProperties Pin: PinName="DelegateOutput" PinType=(PinCategory="delegate") IsArray=False IsRef=False
-End Object

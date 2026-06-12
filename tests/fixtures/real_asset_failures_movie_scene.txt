@@ -1,4 +1,0 @@
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Animations\Actions\MM_Shotgun_Reload.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\Characters\Heroes\Mannequin\Animations\Interactions\Bench\int_sit_bench_sit_idle_loop.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Content\UI\Hud\Art\C_UI_DashCooldown.uasset
-E:\Develop\lib\UnrealEngine\Samples\Games\LyraStarterGame\Plugins\GameFeatures\ShooterMaps\Content\LevelSequence\SEQ_LobbyScreenAnim.uasset

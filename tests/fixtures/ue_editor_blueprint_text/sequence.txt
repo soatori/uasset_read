@@ -1,7 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_Sequence" Name="K2Node_Sequence_0"
-   NodeGuid=11112222333344445555666677778888
-   Pin: execute (Exec) LinkedTo=(ABCD1234)
-   Pin: then_0 (Exec) LinkedTo=(EFGH9012)
-   Pin: then_1 (Exec) LinkedTo=(IJKL3456)
-   Pin: then_2 (Exec) LinkedTo=(MNOP7890)
-End Object

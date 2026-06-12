@@ -1,9 +1,0 @@
-Begin Object Class="/Script/BlueprintGraph.K2Node_ForLoop" Name="K2Node_ForLoop_0"
-   NodeGuid=AABBCCDD11223344AABBCCDD11223344
-   Pin: execute (Exec) LinkedTo=(ABCD1234)
-   Pin: FirstIndex (Int)
-   Pin: LastIndex (Int)
-   Pin: Index (Int)
-   Pin: LoopBody (Exec) LinkedTo=(EFGH5678)
-   Pin: Completed (Exec) LinkedTo=(IJKL9012)
-End Object
