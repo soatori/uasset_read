@@ -1,7 +1,7 @@
 """真实资产端到端测试 — 验证 parse_single() 高层入口和诊断传递。
 
 覆盖 Gap Report P0-1 验收标准：
-- json / json_summary / cpp_skeleton 不抛异常
+- json / markdown 不抛异常
 - 截断文件返回诊断结果
 - linker 诊断在 JSON 输出中可见
 """
@@ -43,7 +43,7 @@ def truncated_file(tmp_path):
 @pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestRealAssetHighLevelFormats:
-    """验证真实蓝图的 json / json_summary / cpp_skeleton 输出不崩溃。"""
+    """验证真实蓝图的 json / markdown 输出不崩溃。"""
 
     def test_json_format_does_not_crash(self):
         output = parse_single(_REAL_BLUEPRINT, format="json", tolerant=True)
@@ -52,25 +52,10 @@ class TestRealAssetHighLevelFormats:
         # JSON 顶层键包含 status 和 summary
         assert "status" in data or "summary" in data
 
-    def test_json_summary_format_does_not_crash(self):
-        output = parse_single(_REAL_BLUEPRINT, format="json_summary", tolerant=True)
-        assert output
-        data = json.loads(output)
-        assert "status" in data or "summary" in data
-
-    def test_cpp_skeleton_format_does_not_crash(self):
-        output = parse_single(_REAL_BLUEPRINT, format="cpp_skeleton", tolerant=True)
-        assert output
-        assert "BP_FirstPersonCharacter" in output
-
     def test_markdown_format_does_not_crash(self):
         output = parse_single(_REAL_BLUEPRINT, format="markdown", tolerant=True)
         assert output
         assert "BP_FirstPersonCharacter" in output
-
-    def test_text_format_does_not_crash(self):
-        output = parse_single(_REAL_BLUEPRINT, format="text", tolerant=True)
-        assert output
 
 
 # ---------------------------------------------------------------------------

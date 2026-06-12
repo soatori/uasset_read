@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.5.0** — 解析器模块拆分与 IR 统一输出架构。支持 7 种输出格式（JSON、文本、Markdown、蓝图文本、UE 格式文本、C++ 骨架、摘要）。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.5.0** — 解析器模块拆分与 IR 统一输出架构。最终发布版输出格式仅保留 JSON 和 Markdown。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
 
 ## 为什么选择 uasset_read？
 
