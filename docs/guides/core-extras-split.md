@@ -2,7 +2,7 @@
 
 ## 背景
 
-uasset_read 包含从基础 .uasset 解析到蓝图字节码反编译、C++ 骨架生成等
+uasset_read 包含从基础 .uasset 解析到蓝图图分析、Kismet 字节码反编译等
 多层次功能。许多使用者只需要核心解析能力，不需要高级分析模块。
 
 将模块划分为 **core** 和 **extras** 两个命名空间，帮助使用者理解依赖关系，
@@ -35,7 +35,6 @@ uasset_read 包含从基础 .uasset 解析到蓝图字节码反编译、C++ 骨�
 |---|---|
 | `graph` | 蓝图图解析（执行流、数据流、连接映射） |
 | `kismet` | 字节码反编译（表达式 → AST → C++ 伪代码） |
-| `cpp_gen` | C++ 类骨架生成 |
 | `blueprint` | 蓝图元数据提取（变量、组件、SCS） |
 
 ## 导入路径
@@ -48,9 +47,6 @@ graph.extract_blueprint_graphs(...)
 
 from uasset_read.extras import kismet
 kismet.decompile_uasset(...)
-
-from uasset_read.extras import cpp_gen
-cpp_gen.extract_cpp_class_skeleton(...)
 
 from uasset_read.extras import blueprint
 blueprint.extract_blueprint_metadata(...)

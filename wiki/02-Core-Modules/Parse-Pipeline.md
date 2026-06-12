@@ -5,7 +5,7 @@ section: parse-pipeline
 
 # 解析管线
 
-`parse_uasset.py` 提供三个入口函数，`core.py` 提供新的高级 API。
+`parse_uasset/` 提供三个入口函数，`core.py` 提供新的高级 API。
 
 ## 新 Core API（0.4.1+ 推荐）
 
@@ -69,15 +69,9 @@ parse_uasset_with_linker(path: str, tolerant: bool = True, preload_all: bool = F
 > **v0.4.5 变更**: 加载生命周期现在遵循 UE 风格：`link() → preload(idx) × N → post_load()`。
 > 这确保 ObjectProperty 引用在 `post_load()` 阶段能正确解析为已预加载的 UObjectInstance。
 
-## cpp_skeleton 独立路径
+## 输出路径
 
-```
-parse_single(format="cpp_skeleton")
-  → parse_uasset_with_linker() → LinkerParseResult
-  → CppSkeletonRenderer.generate(result) → C++ 骨架字符串
-```
-
-注意：`cpp_skeleton` 不通过 `RENDERER_REGISTRY`，也不使用 `RenderOptions.linker_result`。
+当前公开输出格式只保留 `json` 和 `markdown`。蓝图、图分析和 Kismet 数据仍在解析/IR 层构建，但不再作为独立输出格式暴露。
 
 ## 关键设计
 
@@ -85,15 +79,15 @@ parse_single(format="cpp_skeleton")
 - **Core API**：parse_single/parse_batch 是纯函数，CLI/脚本/Skill 共享
 - **容错优先**：可选功能失败不影响主管线，错误收集到 result.errors
 - **Provider 抽象**：filesystem/pak/iostore 三种来源
-- **Linker 自动选择**：parse_single 对 cpp_skeleton 等需要 linker 的格式自动使用 parse_uasset_with_linker
+- **Linker 支持**：需要对象图引用时通过 parse_uasset_with_linker 进入完整 Linker 路径
 
 ## 模块位置
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 旧解析入口 | `parse_uasset.py` | parse_package / parse_uasset / parse_uasset_with_linker |
+| 解析入口 | `parse_uasset/` | parse_package / parse_uasset / parse_uasset_with_linker |
 | 新 Core API | `core.py` | parse_single / parse_batch / list_formats / BatchResult |
-| IR 构建器 | `ir_builder.py` | build_package_ir：ParseResult → PackageIR |
+| IR 构建器 | `ir_builder/` | build_package_ir：ParseResult → PackageIR |
 | IR 模型 | `models/ir.py` | PackageIR / ExportIR / GraphIR / NodeIR / PinIR 等 |
 
 > [!TIP]

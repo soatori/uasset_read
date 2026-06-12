@@ -12,7 +12,7 @@ section: serializers
 | 模块 | 职责 | 关键函数/类 |
 |------|------|-------------|
 | `package_summary.py` | PackageFileSummary、NameTable | `read_package_summary` `read_name_table` |
-| `object_resources.py` | ImportMap、ExportMap、PackageIndex | `read_import_map` `read_export_map` `resolve_class_name` |
+| `object_resources/` | ImportMap、ExportMap、PackageIndex | `read_import_map` `read_export_map` `resolve_class_name` |
 | `property_tags.py` | PropertyTag 读取、控制标志 | `read_property_tag` `parse_ctrl_flags` |
 | `graph.py` | UEdGraph/Node/Pin 读取 | `read_ue_graph` `read_ue_graph_node` `read_ue_graph_pin` |
 

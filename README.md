@@ -2,7 +2,7 @@
 
 > **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode — all without the UE editor.
 
-A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code.
+A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and Markdown.
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
@@ -26,8 +26,8 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 |--------|-------|
 | Version | 0.4.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 29 tests (contracts/units/e2e) |
-| Modules | 153 source files across 17 subpackages |
+| Tests | 27 tests (contracts/units/e2e) |
+| Modules | 160 Python source files across `src/uasset_read` |
 
 ## Features
 
@@ -62,14 +62,12 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
 
-### Multiple Output Formats
-- **JSON** — full structured output or summary (renderer-based, no blueprint wrapper)
-- **Text** — human-readable format
+### Output Formats
+- **JSON** — full structured machine-readable output
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
-- **Blueprint UE Text** — UE-editor-style format
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE)
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Markdown)
 - **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 ## Installation
@@ -90,11 +88,7 @@ python run.py path/to/file.uasset              # JSON output to stdout
 python run.py path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
-python run.py path/to/file.uasset --summary      # Summary only
-python run.py path/to/file.uasset --text         # Readable text
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text  # Blueprint node text
-python run.py path/to/file.uasset --blueprint-ue-text  # UE-format text
 
 # Batch export
 python run.py --batch-dir path/to/dir/            # Batch export directory
@@ -110,7 +104,7 @@ python run.py path/to/file.uasset --verbose      # Enable verbose logging
 Or via module:
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --markdown
 ```
 
 ## Core API
@@ -122,14 +116,13 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # Parse a single file (returns formatted string)
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
-text = parse_single("path/to/file.uasset", format="markdown")
+markdown = parse_single("path/to/file.uasset", format="markdown")
 
 # Batch parse a directory
 results = parse_batch("path/to/directory", format="json")
 
 # List available output formats
-formats = list_formats()  # ['blueprint_text', 'blueprint_ue_text', 'json', 'json_summary', 'markdown', 'text', 'text_summary']
+formats = list_formats()  # ['json', 'markdown']
 ```
 
 ### API Tiers
@@ -140,7 +133,7 @@ uasset_read exports follow a three-tier stability model:
 |---|---|---|
 | **Stable root API** | Guaranteed stable interface; import directly from `uasset_read` | `parse_single`, `parse_batch`, `parse_package`, `ParseResult`, `PackageSummary`, `ExportEntry`, `ImportEntry`, `UAssetError`, `FArchive` |
 | **Focused submodule API** | Stable within submodules; may evolve with version bumps | `parsers.*`, `serializers.*`, `graph.*`, `kismet.*`, `renderers.*` |
-| **Legacy API** | Deprecated; will be removed in v0.5.0 | `format_*` functions, `uasset_read.objects`, `uasset_read.bulk` |
+| **Internal modules** | Implementation details; prefer documented root or focused submodule imports | Parser internals, serializers, graph helpers, Kismet helpers |
 
 #### Stable Root API — Quick Reference
 
@@ -170,52 +163,12 @@ from uasset_read.kismet import decompile_uasset, KismetTranslator
 from uasset_read.parsers.class_registry import get_class_registry, ClassHandler
 ```
 
-#### Legacy API — Migration Guide
-
-The following are deprecated and emit `DeprecationWarning`:
-
-| Legacy | Replacement |
-|---|---|
-| `from uasset_read.objects import *` | Use `uasset_read.parsers.asset_types` |
-| `from uasset_read.bulk import *` | BulkData features will be redesigned |
-| `format_json_full(result)` | `parse_single(path, format='json')` |
-| `format_markdown(result)` | `parse_single(path, format='markdown')` |
-
-All legacy APIs will be removed in v0.5.0. Update your imports accordingly.
-
 ### Supported output formats
 
 | Format | Description | Renderer |
 |---|---|---|
 | `json` | Full structured JSON output | JSONRenderer |
-| `json_summary` | Machine-readable summary (minimal tokens) | JsonSummaryRenderer |
-| `text` | YAML-style human-readable text | TextRenderer |
-| `text_summary` | Compact YAML summary | TextSummaryRenderer |
 | `markdown` | Markdown with Mermaid flowcharts | MarkdownRenderer |
-| `blueprint_text` | Blueprint translation reference text | BlueprintTextRenderer |
-| `blueprint_ue_text` | UE Ctrl+C style blueprint text | BlueprintUERenderer |
-
-### Legacy formatters (deprecated)
-
-The following formatter functions are still exported for backward compatibility
-but emit `DeprecationWarning`. **Use `parse_single(format=...)` instead** —
-they go through the unified IR → Renderer pipeline and produce the most complete
-output.
-
-```python
-from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Deprecated — prefer parse_single(format="json") over format_json_full()
-```
-
-All legacy formatters will be removed in a future release. Migration guide:
-
-| Legacy function | Replacement |
-|---|---|
-| `format_json_full(result)` | `parse_single(path, format='json')` |
-| `format_json_summary(result)` | `parse_single(path, format='json_summary')` |
-| `format_text_full(result)` | `parse_single(path, format='text')` |
-| `format_text_summary(result)` | `parse_single(path, format='text_summary')` |
-| `format_markdown(result)` | `parse_single(path, format='markdown')` |
 
 ### Module-level API
 
@@ -289,14 +242,14 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
-| Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| Main Parser | `parse_uasset/` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
 | Core API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
 | Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
 | CLI | `cli.py` | argparse 入口点，委托 `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
-| **IR** | `ir_builder.py` | Package-level intermediate representation builder |
+| **IR** | `ir_builder/` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
@@ -308,7 +261,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (5 renderers) |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with JSON and Markdown renderers |
 
 ## Testing
 

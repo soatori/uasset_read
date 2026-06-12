@@ -1,5 +1,10 @@
 # 修复剩余 GitHub Issues 实施计划
 
+> **Historical:** This plan records the issue-fix scope before source slimming.
+> References to removed output formats are historical and must not be used as
+> the current public CLI/API contract. Current output constraints are documented
+> in `docs/guides/src-slimming-constraints.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复/关闭全部 6 个 open GitHub issues（#128 #125 #124 #120 + 关闭过时 #130 #131）

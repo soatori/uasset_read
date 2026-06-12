@@ -5,7 +5,7 @@ section: cli
 
 # CLI 接口
 
-通过 `python run.py` 或 `python -m uasset_read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式输出能力。
+通过 `python run.py` 或 `python -m uasset_read` 提供对 `.uasset`/`.umap` 文件的解析和 JSON/Markdown 输出能力。
 
 ## 架构变更（0.4.1）
 
@@ -15,7 +15,7 @@ CLI 在 0.4.1 进行了重构，核心逻辑委托给 `core.py` 的纯函数 API
 CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Output
 ```
 
-`--n2c` 和 `--cpp-json-ir` 标志已移除（N2C 模块整体删除）。
+`--n2c`、`--cpp-json-ir`、`--cpp-skeleton` 和旧文本/摘要输出标志已移除。
 
 ## 模块信息
 
@@ -30,9 +30,8 @@ CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Out
 ## 基本用法
 
 ```bash
-python run.py path/to/file.uasset              # YAML 风格文本（默认）
+python run.py path/to/file.uasset              # JSON 输出（默认）
 python run.py path/to/file.uasset --json       # 完整 JSON 输出
-python run.py path/to/file.uasset --summary    # JSON 摘要
 python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 
@@ -51,23 +50,20 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 | 标志 | 格式名 | 说明 |
 |------|--------|------|
 | `--json` | `json` | 完整 JSON 结构输出 |
-| `--json-summary` | `json_summary` | 精简 JSON 摘要 |
-| `--text` | `text` | YAML 风格全文（默认） |
-| `--text-summary` | `text_summary` | YAML 风格精简摘要 |
-| `--summary` | `json_summary` | 同 `--json-summary`，紧凑摘要 |
 | `--markdown` | `markdown` | Markdown + Mermaid 流程图 |
-| `--blueprint-text` | `blueprint_text` | 蓝图节点翻译参考文本 |
-| `--blueprint-ue-text` | `blueprint_ue_text` | UE 编辑器风格蓝图节点文本 |
 
 ### 已移除的标志
 
 | 标志 | 说明 |
 |------|------|
 | `--n2c` | N2C 模块已整体删除 |
-| `--cpp-json-ir` | 合并到 cpp_skeleton |
+| `--cpp-json-ir` | C++/N2C 输出路径已移除 |
 | `--cpp-skeleton` | C++ 骨架生成功能已移除（v0.4.5） |
 | `--validate` | N2C 验证已移除 |
 | `--graph` | 旧版兼容标志已移除 |
+| `--text` / `--text-summary` | 文本输出已移除，使用 `--markdown` |
+| `--summary` / `--json-summary` | 摘要输出已移除，使用 `--json` |
+| `--blueprint-text` / `--blueprint-ue-text` | 蓝图文本输出已移除，使用 JSON/Markdown 中的结构化数据 |
 
 ### 解析控制标志
 
@@ -118,19 +114,13 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 `resolve_format()` 函数将 CLI 标志映射到内部格式名：
 
 ```
---blueprint-text  → blueprint_text
---blueprint-ue-text → blueprint_ue_text
 --markdown        → markdown
---summary         → json_summary
---json-summary    → json_summary
 --json            → json
---text-summary    → text_summary
---text            → text
-(无标志)          → text（默认）
+(无标志)          → json（默认）
 ```
 
 > [!WARNING]
-> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--cpp-skeleton`、`--graph`
+> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--cpp-skeleton`、`--graph`、`--text`、`--summary`、`--blueprint-text`、`--blueprint-ue-text`
 
 ## 解析路径
 
@@ -205,4 +195,4 @@ CLI 可通过以下方式调用：
 
 这允许用户通过管道将数据与其他工具连接，同时保留人类可读的错误信息。
 
-**相关章节**: [[渲染器系统]] · [[格式化器]]
+**相关章节**: [[渲染器系统]]

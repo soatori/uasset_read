@@ -18,12 +18,7 @@ cd uasset_read
 
 ```bash
 python run.py file.uasset                  # JSON 输出到 stdout
-python run.py file.uasset --text           # 可读文本
 python run.py file.uasset --markdown       # Markdown + Mermaid
-python run.py file.uasset --blueprint-text # 蓝图节点翻译文本
-python run.py file.uasset --blueprint-ue-text  # UE 风格蓝图文本
-python run.py file.uasset --cpp-skeleton   # C++ 类骨架
-python run.py file.uasset --summary        # 仅摘要
 python run.py file.uasset --output out.json  # 保存到文件
 python run.py file.uasset --verbose        # 调试日志
 python run.py --batch-dir path/to/dir/     # 批量模式
@@ -49,7 +44,7 @@ print(f"成功: {len(result.success)}, 失败: {len(result.failed)}")
 
 # 查看可用格式
 from uasset_read import list_formats
-print(list_formats())  # ['json', 'json_summary', 'text', 'text_summary', 'markdown', 'blueprint_text', 'blueprint_ue_text', 'cpp_skeleton']
+print(list_formats())  # ['json', 'markdown']
 ```
 
 ### 旧 API（向后兼容）
