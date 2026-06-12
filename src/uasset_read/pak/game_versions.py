@@ -4,7 +4,7 @@
 参考 external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs 实现。
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from uasset_read.pak.constants import PakFileVersion
 
 

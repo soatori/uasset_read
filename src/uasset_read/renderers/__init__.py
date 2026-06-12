@@ -24,7 +24,7 @@ def get_renderer(format_name: str) -> IRenderer:
     renderer_class = RENDERER_REGISTRY.get(format_name)
     if renderer_class is None:
         available = ", ".join(sorted(RENDERER_REGISTRY.keys()))
-        raise KeyError(f"Unknown render format: '{format_name}'. Available: {available}")
+        raise ValueError(f"Unknown render format: '{format_name}'. Available: {available}")
     return renderer_class()
 
 
@@ -35,6 +35,8 @@ def list_formats() -> list[str]:
 
 # 导入具体渲染器模块以触发注册
 from uasset_read.renderers import json_renderer  # noqa: F401, E402
+from uasset_read.renderers import text_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402
-# 注意：text_renderer、blueprint_text_renderer、blueprint_ue_renderer 已移除（v0.4.5+）
-# 注意：cpp_skeleton 已移除（v0.4.5+），项目聚焦 uasset 解析
+from uasset_read.renderers import blueprint_text_renderer  # noqa: F401, E402
+from uasset_read.renderers import blueprint_ue_renderer  # noqa: F401, E402
+from uasset_read.renderers import cpp_skeleton_renderer  # noqa: F401, E402

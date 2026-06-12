@@ -21,9 +21,6 @@ UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定�
 # -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
 UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
 
-# UE4 LegacyFileVersion 范围（-1 to -5 为 UE4，-6 边界情况）
-UE4_LEGACY_VERSIONS = frozenset({-1, -2, -3, -4, -5})
-
 # ============================================================================
 # CustomVersion GUIDs
 # ============================================================================
@@ -41,6 +38,7 @@ MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 MMAP_THRESHOLD = 50 * 1024 * 1024  # 50MB - switch to mmap above this
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
+MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
 MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
                                       # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
 MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
@@ -57,15 +55,6 @@ PROP_TAG_HAS_EXTENSIONS = 0x04       # Extension data
 PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
 PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
-
-# SerializationControlExtensions 完整位定义（与 PROP_TAG 共用位值，语义不同）
-CTRL_HAS_ARRAY_INDEX = 0x01
-CTRL_HAS_PROPERTY_GUID = 0x02
-CTRL_HAS_EXTENSIONS = 0x04
-CTRL_HAS_BINARY_OR_NATIVE = 0x08
-CTRL_BOOL_TRUE = 0x10
-CTRL_SKIPPED_SERIALIZE = 0x20
-CTRL_KNOWN_MASK = 0x3F  # 所有已知位的掩码
 
 # ============================================================================
 # PropertyTag版本阈值
@@ -89,6 +78,7 @@ MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
 MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
+MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节长度上限（UTF-16 码元对齐）
 
 # ============================================================================
 # 轻量容错解析阈值
@@ -97,10 +87,16 @@ MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大�
 LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用轻量容错解析
 
 # ============================================================================
+# FPropertyTypeName 最大节点数（UE 源码限制）
+# ============================================================================
+
+MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
+
+# ============================================================================
 # PropertyTag extension flags
 # ============================================================================
 
-PROP_EXT_OVERRIDABLE_INFORMATION = 0x02  # EPropertyTagExtension::OverridableInformation (UE5.3+)
+PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
 
 # ============================================================================
 # FPropertyTypeName type node read limit (relaxed from MAX_TYPENODE_NODES for complex nested types)
@@ -133,52 +129,20 @@ UE5_IMPORT_TYPE_HIERARCHIES = 1018
 
 # ============================================================================
 # UE4 版本常量（对应 EUnrealEngineObjectUE4Version）
-# 来源: Engine/Source/Runtime/Core/Public/UObject/ObjectVersion.h
-# 基准: VER_UE4_OLDEST_LOADABLE_PACKAGE = 214, VER_UE4_AUTOMATIC_VERSION = 522
 # ============================================================================
 
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516
-UE4_ADD_STRING_ASSET_REFERENCES_MAP = 384
-UE4_SERIALIZE_TEXT_IN_PACKAGES = 464
-UE4_ADDED_SEARCHABLE_NAMES = 510
-UE4_ADDED_PACKAGE_OWNER = 518
-UE4_NON_OUTER_PACKAGE_IMPORT = 525
-UE4_NAME_HASHES_SERIALIZED = 509  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希
-UE4_LOAD_FOR_EDITOR_GAME = 365
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 512
-UE4_TemplateIndex_IN_COOKED_EXPORTS = 513
-UE4_64BIT_EXPORTMAP_SERIALSIZES = 516
-VER_UE4_ENGINE_VERSION_OBJECT = 336  # SavedByEngineVersion 从 int32 changelist 改为 FEngineVersion 对象
-VER_UE4_PACKAGE_SUMMARY_HAS_COMPATIBLE_ENGINE_VERSION = 444  # CompatibleWithEngineVersion 字段加入
-
-# UE4 PropertyTag 版本门控常量
-VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 508      # PropertyGuid 字段加入
-VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG = 446        # StructGuid 字段加入
-VER_UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 514       # Set/MapProperty 支持
-VAR_UE4_ARRAY_PROPERTY_INNER_TAGS = 253          # ArrayProperty inner type 字段加入
-
-# ============================================================================
-# FEdGraphPinType 序列化版本常量（EUnrealEngineObjectUE4Version）
-# ============================================================================
-
-VER_UE4_MEMBERREFERENCE_IN_PINTYPE = 355         # PinSubCategoryMemberReference 字段加入
-VER_UE4_SERIALIZE_PINTYPE_CONST = 456            # bIsConst 字段加入
-
-# ============================================================================
-# 更多 UE4 版本常量（用于 Kismet 字节码和 FText 序列化）
-# ============================================================================
-
-# ============================================================================
-# FText 序列化版本常量（EUnrealEngineObjectUE4Version）
-# 来源: Engine/Source/Runtime/Core/Private/Internationalization/Text.cpp
-# ============================================================================
-
-VER_UE4_CHANGE_SETARRAY_BYTECODE = 303           # EX_SetArray 字节码格式切换
-VER_UE4_ADDED_NAMESPACE_AND_KEY_DATA_TO_FTEXT = 139  # Pre-FTEXT_HISTORY namespace/key
-VER_UE4_FTEXT_HISTORY = 428                      # FText 历史数据序列化
-VER_UE4_ADDED_CURRENCY_CODE_TO_FTEXT = 470       # AsCurrency CurrencyCode 字段
-VER_UE4_FTEXT_HISTORY_DATE_TIMEZONE = 539        # AsDate/AsTime TimeZone 字段
+UE4_ADD_STRING_ASSET_REFERENCES_MAP = 516
+UE4_SERIALIZE_TEXT_IN_PACKAGES = 517
+UE4_ADDED_SEARCHABLE_NAMES = 518
+UE4_ADDED_PACKAGE_OWNER = 519
+UE4_NON_OUTER_PACKAGE_IMPORT = 520
+UE4_NAME_HASHES_SERIALIZED = 514  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
+UE4_LOAD_FOR_EDITOR_GAME = 364
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 484
+UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 506
+UE4_TemplateIndex_IN_COOKED_EXPORTS = 507
+UE4_64BIT_EXPORTMAP_SERIALSIZES = 510
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
@@ -188,13 +152,12 @@ FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
 FUE5RELEASESTREAM_OBJECT_VERSION_GUID = "D89B5E42-24BD4D46-8412ACA8-DF641779"
 
 # 子系统版本 GUIDs（扩展版本系统覆盖）
-# Source: Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp
-FBLUEPRINTS_OBJECT_VERSION_GUID = "B0D832E4-1F894F0D-ACCF7EB7-36FD4AA2"
-FCORE_OBJECT_VERSION_GUID = "375EC13C-06E448FB-B50084F0-262A717E"
-FEDITOR_OBJECT_VERSION_GUID = "E4B068ED-F49442E9-A231DA0B-2E46BB41"
-FANIM_OBJECT_VERSION_GUID = "AF43A65D-7FD34947-98733E8E-D9C1BB05"
-FPHYSICS_OBJECT_VERSION_GUID = "78F01B33-EBEA4F98-B9B484EA-CCB95AA2"
-FRENDERING_OBJECT_VERSION_GUID = "12F88B9F-88754AFC-A67CD90C-383ABD29"
+FBLUEPRINTS_OBJECT_VERSION_GUID = "B0D832E4-1F89-4D06-B39A-8F1B5E1B2A4B"
+FCORE_OBJECT_VERSION_GUID = "371EC2EE-4CD7-4C38-AEB1-B7D6F539A54B"
+FEDITOR_OBJECT_VERSION_GUID = "E4B068ED-F494-42E9-A231-DA0B0E4C5E56"
+FANIM_OBJECT_VERSION_GUID = "29E575DD-E0A3-4682-9C20-D1CF1B5E8DEF"
+FPHYSICS_OBJECT_VERSION_GUID = "78F01B33-BEA0-46A0-8BAF-6C4F4E23F8C1"
+FRENDERING_OBJECT_VERSION_GUID = "645F75DB-7F54-4C64-A1E2-2F6F3B4B8A5E"
 
 # ============================================================================
 # FrameworkObjectVersion阈值
@@ -393,14 +356,13 @@ CPF_EditInstanceOnly = CPF_EditAnywhere
 CPF_ReferenceOnly = CPF_ReferencePersisted
 CPF_Replicated = CPF_Net
 
+# ============================================================================
+# CLI退出代码
+# ============================================================================
 
-# ---------------------------------------------------------------------------
-# 内存安全限制（parse_single / parse_batch 共用）
-# ---------------------------------------------------------------------------
+EXIT_SUCCESS = 0
+EXIT_PARSE_ERROR = 1
+EXIT_FILE_NOT_FOUND = 2
+EXIT_ARGUMENT_ERROR = 3
 
-# 单文件解析硬上限（MB）。超过此值 parse_single() 直接抛 ParseError。
-# parse_batch() 的默认值更低（500 MB），可通过参数覆盖。
-DEFAULT_MAX_PARSE_SIZE_MB: int = 1000
 
-# 软警告阈值（MB）。超过此值 parse_single() 写 warning，不阻止解析。
-WARN_FILE_SIZE_MB: int = 100
