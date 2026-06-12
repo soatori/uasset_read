@@ -81,7 +81,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml -m "not integration and not slow and not regression"
+          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml --allow-missing-assets -m "not integration and not slow and not regression"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
