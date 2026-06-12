@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
-from typing import BinaryIO, List, Optional
+from typing import BinaryIO, List
 import struct
 
 
@@ -89,12 +89,6 @@ class FIoChunkId:
     比较使用完整 12 字节，与 UE 源码一致。
     """
     bytes: bytes  # 12 bytes
-
-    @staticmethod
-    def from_hash(chunk_hash: int) -> FIoChunkId:
-        """从 64 位哈希创建（低 12 字节）"""
-        data = struct.pack('<Q', chunk_hash) + b'\x00' * 4
-        return FIoChunkId(bytes=data[:12])
 
     @property
     def id(self) -> int:

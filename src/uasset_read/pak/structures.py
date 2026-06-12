@@ -5,7 +5,6 @@ Pak 文件数据结构
 """
 import struct
 from dataclasses import dataclass, field
-from io import BytesIO
 from typing import Any, BinaryIO, Dict, Optional
 
 from uasset_read.exceptions import ParseError
@@ -18,7 +17,7 @@ from uasset_read.pak.constants import (
     Flag_Encrypted,
     Flag_Deleted,
 )
-from uasset_read.pak.game_versions import detect_game_from_magic, get_game_info, EGame
+from uasset_read.pak.game_versions import detect_game_from_magic, EGame
 
 
 # ============================================================================
@@ -487,37 +486,3 @@ class FPakDirectoryEntry:
     path: str                    # 目录路径
     filename: str                # 文件名
     entry: FPakEntry             # 实际的条目数据
-
-def decode_encoded_pak_entry(data: bytes, is_enabled: bool) -> Optional[Dict[str, Any]]:
-    """解码 v10+ 编码 Pak 条目
-    
-    等价实现 FPakEntry 的编码条目解码逻辑
-    
-    Args:
-        data: 编码的条目数据
-        is_enabled: 是否启用编码
-        
-    Returns:
-        解码后的条目信息字典，或 None
-    """
-    if not is_enabled or len(data) < 4:
-        return None
-    
-    value = struct.unpack('<I', data[:4])[0]
-    
-    # 解析位域
-    compression_method_index = value & 0x3F  # 6 位
-    is_encrypted = bool((value >> 6) & 1)  # 1 位
-    is_compressed = bool((value >> 7) & 1)  # 1 位
-    compression_block_count = (value >> 8) & 0x3FF  # 10 位
-    
-    # 检查 64 位大小标志
-    has_64bit_size = bool((value >> 22) & 1)
-    
-    return {
-        'compression_method_index': compression_method_index,
-        'is_encrypted': is_encrypted,
-        'is_compressed': is_compressed,
-        'compression_block_count': compression_block_count,
-        'has_64bit_size': has_64bit_size,
-    }

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from uasset_read.constants import DATA_BOUNDARY_NODES
 from uasset_read.models.core import UEdGraph, UEdGraphNode
@@ -11,6 +11,63 @@ from ._pin_helpers import _derive_node_name
 from ._sanitize import _sanitize_pin_dict, _sanitize_recursive
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_call_function_parameters(
+    node: Any,
+    pin_lookup: Optional[Dict] = None,
+    node_lookup: Optional[Dict] = None,
+    node_name_lookup: Optional[Dict] = None
+) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数。
+
+    过滤 exec pins，将输入/输出参数分离为结构化数组。
+    增强 input_params 的 data_source 字段（数据来源追踪）。
+
+    Args:
+        node: K2Node_CallFunction 节点
+        pin_lookup: pin_id → (node_guid, pin_name) 查找表（可选，用于 data_source）
+        node_lookup: node_guid → node 查找表（可选，用于 data_source）
+        node_name_lookup: node_guid → node_name 查找表（可选，用于 data_source）
+
+    Returns:
+        Dict: {"input_params": [...], "output_params": [...]}
+    """
+    input_params: List[Dict] = []
+    output_params: List[Dict] = []
+
+    for pin in node.pins:
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        param: Dict[str, Any] = {
+            "name": pin.pin_name,
+            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+        }
+        if pin.pin_type:
+            if pin.pin_type.pin_subcategory:
+                param["pin_subcategory"] = pin.pin_type.pin_subcategory
+            if pin.pin_type.is_reference:
+                param["is_reference"] = True
+        if pin.default_value is not None and pin.default_value != "":
+            param["default_value"] = pin.default_value
+
+        if pin.direction == 0:  # Input
+            # 添加 data_source 字段（仅当 lookup 可用时）
+            if pin_lookup and node_lookup and node_name_lookup:
+                from uasset_read.graph.flow_builder import _trace_data_source
+                try:
+                    data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
+                    if data_source:
+                        param["data_source"] = data_source
+                except Exception:
+                    pass  # 追踪失败时不影响基本参数提取
+
+            input_params.append(param)
+        else:  # Output
+            output_params.append(param)
+
+    return {"input_params": input_params, "output_params": output_params}
 
 
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
@@ -58,7 +115,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     # CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
-        from uasset_read.formatters.json_formatter import _extract_call_function_parameters
         result["parameters"] = _extract_call_function_parameters(node)
 
     return result

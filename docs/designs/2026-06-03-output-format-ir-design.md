@@ -1,5 +1,11 @@
 # 输出格式统一化与 CLI 核心分离设计
 
+> **Superseded:** This design describes the earlier multi-renderer output
+> architecture. The current source slimming decision keeps only the public
+> `json` and `markdown` render formats. Use
+> `docs/designs/2026-06-12-src-slimming-architecture.md` and
+> `docs/guides/src-slimming-constraints.md` for current output constraints.
+
 **日期**: 2026-06-03 | **版本**: 0.4.0-dev | **状态**: 已批准
 
 ## 1. 问题与目标

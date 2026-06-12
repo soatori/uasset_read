@@ -9,7 +9,10 @@ BPGC bytecode fallback with cache reset.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
@@ -80,6 +83,15 @@ def decompile_single_function(
     if extraction_reason != "function_export":
         fallback_reasons.append(extraction_reason)
 
+    # 判断字节码状态：serial_scan_recovery 是启发式扫描，不应当作真实字节码
+    bytecode_status = "parsed" if extraction_reason == "function_export" else "fallback"
+    if extraction_reason == "serial_scan_recovery":
+        logger.warning(
+            "Kismet bytecode for '%s' uses serial scan recovery (heuristic, unreliable). "
+            "Marking as fallback — will not output as valid C++ code.",
+            export.object_name,
+        )
+
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
     builder = FunctionBodyBuilder(type_registry, linker=linker)
@@ -116,9 +128,10 @@ def decompile_single_function(
         cpp_code=cpp_code,
         expressions=expressions,
         bytecode_source=("function_export" if extraction_reason == "function_export" else "fallback_or_serial_scan"),
-        bytecode_status="parsed",
+        bytecode_status=bytecode_status,
         warnings=warnings,
         fallback_reasons=fallback_reasons,
+        logic_source=extraction_reason,
         function_ref_stats=func_ref_stats,
     )
 

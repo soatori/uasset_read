@@ -10,13 +10,38 @@ Per D-12: 静态 from_archive 方法。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any, Dict, TYPE_CHECKING
+from typing import Optional, List, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
     from uasset_read.link.object_instance import UObjectInstance
+
+
+@dataclass
+class FEdGraphTerminalType:
+    """Map value 类型（UE EdGraphPin.h:50-70）。
+
+    FEdGraphTerminalType 用于表示 Map 的 value 类型。
+    例如 TMap<FString, int> 的 pin_value_type.pin_category = "int"。
+    """
+    pin_category: str = ""
+    pin_subcategory: str = ""
+    pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
+    pin_subcategory_object_name: Optional[str] = None
+
+
+@dataclass
+class FSimpleMemberReference:
+    """简单成员引用（UE CoreMinimal.h）。
+
+    用于 FEdGraphPinType::PinSubCategoryMemberReference。
+    表示结构成员或函数引用。
+    """
+    member_parent_class: Optional[int] = None  # FPackageIndex
+    member_name: str = ""
+    member_guid: str = ""
 
 
 @dataclass
@@ -27,9 +52,10 @@ class FEdGraphPinType:
     pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
     pin_subcategory_object_name: Optional[str] = None
     pin_subcategory_object_ref: Optional["UObjectInstance"] = None
+    pin_value_type: Optional["FEdGraphTerminalType"] = None  # Map value 类型
+    pin_subcategory_member_reference: Optional["FSimpleMemberReference"] = None  # 成员引用
     container_type: int = 0
-    is_map_key: bool = False
-    is_map_value: bool = False
+    # 已移除: is_map_key, is_map_value（UE 中不存在，Map 通过 pin_value_type 表达）
     is_reference: bool = False
     is_weak_pointer: bool = False
     is_const: bool = False

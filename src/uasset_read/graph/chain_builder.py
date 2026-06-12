@@ -5,14 +5,9 @@
 """
 from __future__ import annotations
 
-import warnings
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
-from uasset_read.constants import CONTROL_FLOW_NODES
-from uasset_read.models.core import UEdGraph, UEdGraphNode
-
-MAX_CHAIN_DEPTH = 1000
-
+from uasset_read.models.core import UEdGraph
 
 def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
     """DFS 环检测。

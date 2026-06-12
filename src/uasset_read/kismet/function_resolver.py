@@ -202,6 +202,14 @@ class FunctionRefResolver:
             "local_function_count": local_count,
         }
 
+    def reset(self) -> None:
+        """重置所有缓存和计数器（批量解析时在新资产开始前调用）。"""
+        self._cache.clear()
+        self._virtual_class_cache.clear()
+        self._unresolved_refs.clear()
+        self._resolve_attempts = 0
+        self._resolve_failures = 0
+
     def get_unresolved_report(self) -> str:
         """返回未解析函数引用的格式化报告。
 

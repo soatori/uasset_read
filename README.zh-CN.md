@@ -1,12 +1,12 @@
 # uasset_read
 
-> **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码、生成 C++ 类骨架 — 无需启动 UE 编辑器。
+> **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码 — 无需启动 UE 编辑器。
 
-一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。
+一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON 和 Markdown。
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.5-dev** — UE 保真度改进：统一状态模型（success|partial|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.5.0** — 解析器模块拆分与输出格式精简。输出格式精简为 JSON/Markdown。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
 
 ## 为什么选择 uasset_read？
 
@@ -24,10 +24,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.5-dev |
+| 版本 | 0.5.0 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1389 通过，2 skipped，2 xfailed |
-| 模块 | 14 个子包，145 个源文件 |
+| 测试 | 27 个测试（contracts/units/e2e） |
+| 模块 | `src/uasset_read` 下 160 个 Python 源文件 |
 
 ## 功能特性
 
@@ -50,7 +50,6 @@
 ### 高级功能
 - **Kismet 字节码反编译** — EExprToken → AST → C++ 伪代码，支持结构化控制流
 - **PackageLinker** — 两阶段对象图重建
-- **C++ 骨架提取** — 组件声明、函数签名、UPROPERTY 映射、构造函数格式化、默认值生成、标识符清理
 - **依赖分析** — ImportMap + SoftObjectPaths 依赖图构建
 - **循环依赖检测** — 导入映射相互引用检测
 - **IR（中间表示）** — 包级 IR 构建器，实现解耦的渲染管线
@@ -63,15 +62,12 @@
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
 
-### 多种输出格式
-- **JSON** — 完整结构化输出或摘要（基于渲染器，无 blueprint 包装层）
-- **Text** — 人类可读格式
+### 输出格式
+- **JSON** — 完整结构化机器可读输出
 - **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
-- **Blueprint UE Text** — UE 编辑器风格格式
-- **C++ Skeleton** — 可直接使用的类骨架代码，含构造函数初始化列表
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（6 种渲染器）
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON/Markdown）
 - **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
@@ -93,12 +89,7 @@ python run.py path/to/file.uasset                    # JSON 输出到 stdout
 python run.py path/to/file.uasset --output output.json   # 保存到文件
 
 # 输出模式
-python run.py path/to/file.uasset --summary          # 仅摘要
-python run.py path/to/file.uasset --text             # 可读文本
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
-python run.py path/to/file.uasset --blueprint-ue-text # UE 格式文本
-python run.py path/to/file.uasset --cpp-skeleton     # C++ 类骨架
 
 # 批量导出
 python run.py --batch-dir path/to/dir/               # 批量导出目录
@@ -114,7 +105,7 @@ python run.py path/to/file.uasset --verbose          # 启用详细日志
 或通过模块调用：
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --markdown
 ```
 
 ## 核心 API（推荐）
@@ -126,25 +117,21 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # 解析单个文件（返回格式化字符串）
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
-text = parse_single("path/to/file.uasset", format="markdown")
+markdown = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
 results = parse_batch("path/to/directory", format="json")
 
 # 列出可用的输出格式
-formats = list_formats()
+formats = list_formats()  # ['json', 'markdown']
 ```
 
-### 旧版格式化函数（已弃用）
+### 支持的输出格式
 
-以下格式化函数仍可导入使用，但已标记为 legacy。
-**请使用 `parse_single()` / `parse_batch()`** — 它们走统一的 IR → Renderer 管线，输出最完整。
-
-```python
-from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Legacy — 请改用 parse_single(format="json") 替代 format_json_full()
-```
+| 格式 | 说明 | 渲染器 |
+|---|---|---|
+| `json` | 完整结构化 JSON 输出 | JSONRenderer |
+| `markdown` | Markdown + Mermaid 流程图 | MarkdownRenderer |
 
 ### Python API
 
@@ -173,10 +160,6 @@ from uasset_read import (
     # 流追踪
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
-
-    # 格式化（legacy — 推荐使用 parse_single(format=...)）
-    format_json_full, format_json_summary,
-    format_text_full, format_markdown,
 
     # 链接器
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
@@ -209,7 +192,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 采用镜像 UE 的 FArchive 管道模式：
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -228,14 +211,14 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
 | 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
-| 主解析器 | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
+| 主解析器 | `parse_uasset/` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
 | 核心 API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
 | CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
-| **IR** | `ir_builder.py` | 包级中间表示构建器 |
+| **IR** | `ir_builder/` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
 | **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
@@ -244,15 +227,11 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **图** | `graph/` | 执行流/数据流追踪、链构建器、引脚追踪 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 构造函数格式化 |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
 | **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
 | **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
-| **Bulk Data** | `bulk/` | BulkData 头部解析 |
-| **UObject** | `objects/` | UObject 类型体系、类型注册表 |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint 文本/UE 格式输出 |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与 JSON/Markdown 渲染器 |
 
 ## 测试
 

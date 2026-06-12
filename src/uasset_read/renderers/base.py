@@ -3,12 +3,15 @@
 渲染器只接收 PackageIR，不访问 ParseResult。
 渲染器不做数据转换（GUID 格式化等在 IR 构建时完成）。
 渲染器不拼接业务逻辑，只负责格式排版。
+
+注意：cpp_skeleton 已拆分为独立管线（CppSkeletonPipeline），
+不再通过 RenderOptions.linker_result 绕过 PackageIR。
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -21,7 +24,6 @@ class RenderOptions:
     indent: int = 2
     include_schema: bool = False
     include_function_graphs: bool = False
-    linker_result: Any = None  # LinkerParseResult，供需要 linker 数据的格式使用
 
 
 class IRenderer(ABC):
