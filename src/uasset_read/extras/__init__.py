@@ -7,9 +7,6 @@
     from uasset_read.extras import kismet
     kismet.decompile_uasset(...)
 
-    from uasset_read.extras import cpp_gen
-    cpp_gen.extract_cpp_class_skeleton(...)
-
     from uasset_read.extras import blueprint
     blueprint.extract_blueprint_metadata(...)
 
@@ -25,13 +22,10 @@ def __getattr__(name):
     elif name == "kismet":
         from uasset_read import kismet
         return kismet
-    elif name == "cpp_gen":
-        from uasset_read import cpp_gen
-        return cpp_gen
     elif name == "blueprint":
         from uasset_read import blueprint
         return blueprint
     raise AttributeError(f"module 'uasset_read.extras' has no attribute {name!r}")
 
 
-__all__ = ["graph", "kismet", "cpp_gen", "blueprint"]
+__all__ = ["graph", "kismet", "blueprint"]

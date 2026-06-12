@@ -6,12 +6,12 @@ uasset_read - Unreal Engine .uasset 文件解析器
 Core / Extras 分层（详见 docs/architecture/core-extras-split.md）：
 - Core: archive, constants, exceptions, core, parse_uasset, package,
   models, serializers, parsers, link — 基础解析管线
-- Extras: graph, kismet, cpp_gen, blueprint — 可选高级分析，
+- Extras: graph, kismet, blueprint — 可选高级分析，
   可通过 ``from uasset_read.extras.graph import ...`` 访问
 
 API 稳定性策略（详见 docs/api-stability.md）：
 - 稳定根 API: __all__ 中列出的符号，面向外部使用者
-- 子模块 API: parsers, serializers, graph, kismet, cpp_gen, renderers 等
+- 子模块 API: parsers, serializers, graph, kismet, renderers 等
   通过 ``from uasset_read.serializers import ...`` 访问，不保证稳定
 - 根模块仍导入大量内部符号（向后兼容），但它们不在 __all__ 中，
   使用者不应直接依赖
@@ -215,22 +215,6 @@ from .kismet import (
     KismetDecompiledResult, decompile_uasset, decompile_single_function,
 )
 
-# C++ 代码生成
-from .cpp_gen import (
-    CppProperty, CppHeaderMeta, CppClassIR,
-    format_cpp_class_json, format_cpp_header,
-    UE_TO_CPP_TYPE_MAP, ENGINE_CLASS_PATHS,
-    ue_path_to_cpp_type, ue_package_path_to_cpp_class,
-    infer_class_prefix, resolve_ue_type,
-    CPF_TO_UPROPERTY_MAP, cpf_flags_to_uproperty_marks,
-    extract_cpp_class_skeleton, extract_cpp_constructor,
-    format_cpp_call_statements, CppCallParameter, CppMethodIR, CppCallStatement,
-    CppStatement, CppCallStmt, CppAssignmentStmt, CppIfStmt,
-    CppInlineExprStmt, CppReturnStmt, CppWhileStmt, CppRawStmt,
-    kismet_to_cpp_body, format_cpp_default_value, format_cpp_transform,
-    format_cpp_component_init, format_cpp_input_action_load,
-    build_constructor_sections, sanitize_identifier,
-)
 
 # 版本管理
 from .versioning import VersionContainer, build_version_container, EUEVersion
