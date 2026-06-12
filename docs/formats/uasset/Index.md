@@ -5,7 +5,7 @@ description: Use when working with Unreal Engine .uasset files, parsing UE asset
 
 # UE .uasset 文件格式参考
 
-> **版本**: 0.4.5-dev | **最后更新**: 2026-06-12
+> **版本**: 0.5.0 | **最后更新**: 2026-06-12
 
 ## Overview
 

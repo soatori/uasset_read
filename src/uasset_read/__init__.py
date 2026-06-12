@@ -1,7 +1,7 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.4.5
+版本 0.5.0
 
 Core / Extras 分层（详见 docs/architecture/core-extras-split.md）：
 - Core: archive, constants, exceptions, core, parse_uasset, package,
@@ -16,7 +16,7 @@ API 稳定性策略（详见 docs/api-stability.md）：
 - 根模块仍导入大量内部符号（向后兼容），但它们不在 __all__ 中，
   使用者不应直接依赖
 """
-__version__ = "0.4.5"
+__version__ = "0.5.0"
 
 # ============================================================================
 # 稳定根 API — 推荐入口

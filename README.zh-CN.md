@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.5-dev** — UE 保真度改进：统一状态模型（success|partial|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.5.0** — 解析器模块拆分与输出格式精简。输出格式精简为 JSON/Markdown。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
 
 ## 为什么选择 uasset_read？
 
@@ -24,7 +24,7 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.5 |
+| 版本 | 0.5.0 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
 | 测试 | 27 个测试（contracts/units/e2e） |
 | 模块 | `src/uasset_read` 下 160 个 Python 源文件 |
