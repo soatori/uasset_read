@@ -12,7 +12,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.expressions.base import KismetExpression
@@ -118,9 +118,6 @@ def extract_bytecode_bytes(
     archive.seek(script_start)
 
     # T-62-02: SerializationControlExtensions header
-    # UE Class.cpp:1624-1628: 仅 UClass 对象序列化此 header，
-    # 但 bytecodes 位于 script_serial_region 末尾，偏移已由 script_serialization_start_offset 确定，
-    # 此处需跳过已写入的 D-02 字节以对齐 PropertyTag 序列化位置
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         ctrl = archive.read_u8()
         if ctrl & 0x02:
@@ -345,7 +342,6 @@ def parse_bytecode_stream(
     bytecode_bytes: bytes,
     name_map: list[str],
     tolerant: bool = False,
-    file_version_ue5: int = 0,
 ) -> list[KismetExpression]:
     """
     Parse raw bytecode bytes into a list of KismetExpression trees.
@@ -358,7 +354,6 @@ def parse_bytecode_stream(
         bytecode_bytes: Raw ScriptBytecode data
         name_map: Name table for expression resolution
         tolerant: If True, skip unknown tokens instead of raising ParseError
-        file_version_ue5: UE5 文件版本号，用于 LWC 门控
 
     Returns:
         List of KismetExpression (may include EX_EndOfScript as last element)
@@ -366,11 +361,7 @@ def parse_bytecode_stream(
     if not bytecode_bytes:
         return []
 
-    archive = FKismetArchive(
-        bytecode_bytes, "ScriptBytecode", name_map,
-        tolerant=tolerant,
-        file_version_ue5=file_version_ue5,
-    )
+    archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
     expressions: list[KismetExpression] = []
 
     while archive.tell() < len(bytecode_bytes):
@@ -432,11 +423,7 @@ def extract_and_parse(
         return ([], None, fallback_reason)
 
     try:
-        expressions = parse_bytecode_stream(
-            bytecode_bytes, name_map,
-            tolerant=tolerant,
-            file_version_ue5=summary.file_version_ue5 if summary else 0,
-        )
+        expressions = parse_bytecode_stream(bytecode_bytes, name_map, tolerant=tolerant)
         return (expressions, None, fallback_reason)
     except ParseError as e:
         return ([], str(e), fallback_reason)
@@ -507,3 +494,35 @@ def _expr_to_tree_node(expr: KismetExpression) -> dict:
         result["children"] = children
 
     return result
+
+
+def expressions_to_flat_list(expressions: list[KismetExpression]) -> list[dict]:
+    """
+    Convert expression list to flat dict list.
+
+    Each dict contains: StatementIndex, Token (name), type (class name),
+    plus any additional fields from to_dict().
+
+    Does NOT recurse into nested child expressions.
+    """
+    result = []
+    for expr in expressions:
+        item = {
+            "StatementIndex": expr.StatementIndex,
+            "Token": expr.Token.name if hasattr(expr.Token, 'name') else str(expr.Token),
+            "type": type(expr).__name__,
+        }
+        item.update(expr.to_dict())
+        result.append(item)
+    return result
+
+
+def expressions_to_tree(expressions: list[KismetExpression]) -> list[dict]:
+    """
+    Convert expression list to tree structure with children.
+
+    Each dict contains: StatementIndex, Token, type, children (nested
+    sub-expressions). Recursively processes nested KismetExpression
+    instances found as attributes or in to_dict() values.
+    """
+    return [_expr_to_tree_node(expr) for expr in expressions]

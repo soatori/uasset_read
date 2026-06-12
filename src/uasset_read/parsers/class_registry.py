@@ -109,10 +109,6 @@ class ClassHandlerRegistry:
         self._handlers.clear()
         self._cache.clear()
 
-    def reset_cache(self) -> None:
-        """清空查找缓存（保留 handler 注册）。"""
-        self._cache.clear()
-
 
 # 全局默认 registry 实例
 _default_registry: Optional[ClassHandlerRegistry] = None
@@ -130,10 +126,3 @@ def reset_class_registry() -> None:
     """重置全局默认 registry（测试用）。"""
     global _default_registry
     _default_registry = None
-
-
-def reset_default_registry_cache() -> None:
-    """清空全局默认 registry 的缓存（批量解析时调用）。"""
-    global _default_registry
-    if _default_registry is not None:
-        _default_registry.reset_cache()

@@ -106,6 +106,11 @@ class ECompressionFlags(IntFlag):
 # Pak Entry Flags
 # ============================================================================
 
+PAK_ENTRY_FLAGS = {
+    "Flag_Encrypted": 0x01,
+    "Flag_Deleted": 0x02,
+}
+
 Flag_Encrypted = 0x01
 Flag_Deleted = 0x02
 

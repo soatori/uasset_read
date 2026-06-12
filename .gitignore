@@ -45,17 +45,13 @@ tests/*
 !tests/test_*.py
 
 !tests/__init__.py
-!tests/fixtures/
 !tests/graph/
 !tests/graph/*.py
 !tests/renderers/
 !tests/renderers/*.py
-!tests/conftest.py
 QWEN.md
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
 
-.worktrees/
-.mimocode/

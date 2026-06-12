@@ -163,6 +163,16 @@ class PackageBundle:
         uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.package_files else None
         return PackageArchive(main, uexp, tolerant=tolerant)
 
+    def read_payload(self, extension: str) -> Optional[bytes]:
+        extension = _normalize_ext(extension)
+        if extension in self.payloads:
+            return self.payloads[extension]
+        path = self.files.get(extension)
+        if path is None:
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+
     def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
         extension = _normalize_ext(extension)
         if extension in self.payloads:
