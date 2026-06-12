@@ -16,6 +16,7 @@ from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
     UE5_VERSION_MIN, UE5_LEGACY_VERSIONS,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
+    MAX_TOTAL_OBJECT_COUNT,
     UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
     UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
     UE5_IMPORT_TYPE_HIERARCHIES,
@@ -257,6 +258,11 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         raise ParseError(f"Negative import count: {import_count}")
     if import_count > MAX_IMPORT_COUNT:
         raise ParseError(f"Import count exceeds maximum")
+    if export_count + import_count > MAX_TOTAL_OBJECT_COUNT:
+        raise ParseError(
+            f"Total object count ({export_count} + {import_count} = "
+            f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
+        )
     import_offset = archive.read_i32()
     archive.validate_offset(import_offset, "ImportOffset")
 
@@ -624,6 +630,31 @@ def read_depends_map(archive: FArchive, summary: PackageFileSummary) -> List[Lis
         depends_map.append(deps)
 
     return depends_map
+
+
+def read_soft_package_references(
+    archive: FArchive,
+    summary: PackageFileSummary,
+    name_map: List[str],
+) -> List[str]:
+    """读取 SoftPackageReferences（软包引用表）。
+
+    UE 格式：TArray<FName> — 包路径名称列表。
+    仅当 file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP (516) 时存在。
+
+    Returns:
+        包路径名称列表（已从 FName 索引解析为字符串）
+    """
+    if summary.soft_package_references_count <= 0 or summary.soft_package_references_offset <= 0:
+        return []
+
+    archive.seek(summary.soft_package_references_offset)
+
+    refs: List[str] = []
+    for _ in range(summary.soft_package_references_count):
+        refs.append(archive.read_name(name_map))
+
+    return refs
 
 
 def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:

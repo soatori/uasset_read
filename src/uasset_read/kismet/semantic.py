@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 _EMPTY_BODY_THRESHOLD = 3
 
 
+def _sanitize_cpp_name(name: str) -> str:
+    """将 UE pin 名清理为 C++ 兼容标识符。"""
+    cleaned = name.replace(" ", "").replace("/", "").replace("-", "_")
+    return cleaned if cleaned else "unnamed"
+
+
 def enrich_decompiled_functions(
     functions: List[KismetDecompiledResult],
     graphs: List[UEdGraph],
@@ -92,11 +98,11 @@ def _enrich_empty_function_from_graph(
     Returns:
         C++ 伪代码字符串，或 None（未找到匹配图）
     """
-    from uasset_read.graph.flow_builder import (
+    from uasset_read.graph import (
         build_execution_flow_entries,
-        _build_normalized_edge_indexes,
-        _build_graph_indexes,
-        _trace_execution_from_event,
+        build_graph_indexes,
+        build_normalized_edge_indexes,
+        trace_execution_from_event,
     )
 
     for graph in graphs:
@@ -106,7 +112,7 @@ def _enrich_empty_function_from_graph(
             continue
 
         # 构建 node_lookup 用于提取函数名
-        _, node_lookup, _ = _build_graph_indexes(graph)
+        _, node_lookup, _ = build_graph_indexes(graph)
         node_name_lookup = {
             n.node_guid: f"{n.class_name}_{idx}"
             for idx, n in enumerate(graph.nodes)
@@ -116,11 +122,11 @@ def _enrich_empty_function_from_graph(
         execution_flows = build_execution_flow_entries(graph)
         if not execution_flows:
             # 回退：直接从 FunctionEntry 追踪
-            pin_lookup, _, _ = _build_graph_indexes(graph)
-            edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
+            pin_lookup, _, _ = build_graph_indexes(graph)
+            edges_by_from_pin, source_edges_by_to_pin = build_normalized_edge_indexes(graph)
             execution_flows = [{
                 "start_event": f"FunctionEntry.{function_name}",
-                "nodes": _trace_execution_from_event(
+                "nodes": trace_execution_from_event(
                     entry_node, pin_lookup, node_lookup, node_name_lookup,
                     edges_by_from_pin, source_edges_by_to_pin,
                 ),
@@ -143,12 +149,12 @@ def _find_function_entry(graph: UEdGraph, function_name: str) -> Optional[Any]:
     Returns:
         匹配的 UEdGraphNode，或 None
     """
-    from uasset_read.graph.flow_builder import _node_member_name
+    from uasset_read.graph import node_member_name
 
     for node in graph.nodes:
         if node.class_name != "K2Node_FunctionEntry":
             continue
-        member_name = _node_member_name(node)
+        member_name = node_member_name(node)
         # 处理路径形式 "/Game/.../FunctionName"
         if '/' in member_name:
             member_name = member_name.split('/')[-1]
@@ -202,8 +208,33 @@ def _flow_to_cpp(
                     lines.append(f"    {call_str};")
                     call_count += 1
 
+            # VariableSet 节点：变量赋值
+            elif node_type == "K2Node_VariableSet":
+                var_name = _variable_name_from_node(node_info, node_lookup)
+                if var_name:
+                    lines.append(f"    {var_name} = <value>;")
+                    call_count += 1
+
+            # VariableGet 节点：变量读取
+            elif node_type == "K2Node_VariableGet":
+                var_name = _variable_name_from_node(node_info, node_lookup)
+                if var_name:
+                    lines.append(f"    // read {var_name}")
+                    call_count += 1
+
             # 控制流节点（Branch 等）
-            elif node_type in ("K2Node_IfThenElse", "K2Node_MacroInstance"):
+            elif node_type == "K2Node_MacroInstance":
+                cpp_mapping = node_info.get("cpp_macro_mapping", {})
+                macro_expansion = node_info.get("macro_expansion", {})
+                macro_name = macro_expansion.get("macro_name", "")
+                if cpp_mapping:
+                    template = cpp_mapping.get("cpp_template", f"/* {macro_name} */")
+                    lines.append(f"    {template}")
+                else:
+                    lines.append(f"    // {macro_name or node_type}")
+                call_count += 1
+
+            elif node_type == "K2Node_IfThenElse":
                 branch_type = node_info.get("branch_type", "")
                 if branch_type:
                     lines.append(f"    // {node_type} ({branch_type})")
@@ -233,7 +264,7 @@ def _format_call_node(
     Returns:
         "FuncName(Arg1, Arg2)" 格式的调用字符串
     """
-    from uasset_read.graph.flow_builder import _node_member_name
+    from uasset_read.graph import node_member_name
 
     params = node_info.get("parameters", {})
     input_params = params.get("input_params", []) if isinstance(params, dict) else []
@@ -244,7 +275,7 @@ def _format_call_node(
     if node_guid and node_lookup:
         node = node_lookup.get(node_guid)
         if node:
-            func_name = _node_member_name(node)
+            func_name = node_member_name(node)
 
     # 回退：从 data_source 推断
     if not func_name:
@@ -279,9 +310,40 @@ def _format_call_node(
 
         # 优先使用 data_source 追踪到的真实参数名
         resolved_name = _resolve_param_name(param)
-        args.append(resolved_name or name)
+        final_name = resolved_name if resolved_name else _sanitize_cpp_name(name)
+        args.append(final_name)
 
     return f"{func_name}({', '.join(args)})"
+
+
+def _variable_name_from_node(
+    node_info: Dict[str, Any],
+    node_lookup: Optional[Dict[str, Any]] = None,
+) -> str:
+    """从 VariableSet/VariableGet 节点信息中提取变量名。
+
+    优先从 node_lookup 中的真实节点数据提取（node_data.variable_name），
+    回退到 node_info 字典中的 variable_name 字段。
+
+    Args:
+        node_info: 执行流中的节点字典
+        node_lookup: node_guid → UEdGraphNode 查找表（可选）
+
+    Returns:
+        变量名，或空字符串
+    """
+    # 从 node_lookup 提取真实变量名
+    node_guid = node_info.get("node_guid")
+    if node_guid and node_lookup:
+        node = node_lookup.get(node_guid)
+        if node:
+            data = node.node_data if isinstance(node.node_data, dict) else {}
+            var_name = data.get("variable_name", "")
+            if var_name:
+                return var_name
+
+    # 回退：直接从 node_info 字典提取
+    return node_info.get("variable_name", "")
 
 
 def _resolve_param_name(param: Dict[str, Any]) -> str:
@@ -312,7 +374,7 @@ def _resolve_param_name(param: Dict[str, Any]) -> str:
 
     if source_type == "function_parameter":
         # FunctionEntry 参数 → 使用 pin 名（如 "Yaw", "Pitch"）
-        return src.get("pin", "")
+        return _sanitize_cpp_name(src.get("pin", ""))
 
     if source_type == "default_value":
         # 默认值字面量
@@ -330,8 +392,11 @@ def _resolve_param_name(param: Dict[str, Any]) -> str:
 
 
 def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, Any]]:
-    """Extract readable event -> function call mappings from EventGraph."""
-    from uasset_read.graph import build_execution_flow_entries
+    """Extract readable event -> function call mappings from EventGraph.
+
+    提取每个事件节点下的所有 CallFunction 节点（不仅第一个）。
+    """
+    from uasset_read.graph import build_execution_flow_entries, node_member_name
 
     graph_obj = next((graph for graph in graphs if graph.graph_name == "EventGraph"), None)
     if graph_obj is None:
@@ -342,24 +407,55 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
     for flow in build_execution_flow_entries(graph_obj):
         nodes = flow.get("nodes", [])
         event_info = next((node for node in nodes if node.get("node_type") == "K2Node_Event"), None)
-        call_info = next((node for node in nodes if node.get("node_type") == "K2Node_CallFunction"), None)
-        if event_info is None or call_info is None:
-            continue
-        event_name = event_info.get("event_name") or str(flow.get("start_event", "")).removeprefix("Event.")
-        event_parent = _event_parent(node_by_guid.get(event_info.get("node_guid")))
-        function_name = call_info.get("function_name") or ""
-        if not function_name:
+        if event_info is None:
             continue
 
-        args = _call_args_from_flow(call_info)
-        results.append({
-            "event_name": event_name,
-            "event_parent": event_parent,
-            "function_name": function_name,
-            "arguments": args,
-            "call": f"{function_name}({', '.join(args)})",
-            "source": "current_asset",
-        })
+        # 提取该事件下的所有 CallFunction 节点（不仅取第一个）
+        call_nodes = [node for node in nodes if node.get("node_type") == "K2Node_CallFunction"]
+        if not call_nodes:
+            continue
+
+        event_name = event_info.get("event_name") or str(flow.get("start_event", "")).removeprefix("Event.")
+        event_parent = _event_parent(node_by_guid.get(event_info.get("node_guid")))
+
+        for call_info in call_nodes:
+            # 从 node_by_guid 查找真实节点以提取函数名
+            function_name = ""
+            node_guid = call_info.get("node_guid")
+            if node_guid and node_guid in node_by_guid:
+                function_name = node_member_name(node_by_guid[node_guid])
+
+            # 回退：从 flow 节点的 parameters 推断
+            if not function_name:
+                params = call_info.get("parameters") or {}
+                input_params = params.get("input_params") or []
+                for param in input_params:
+                    if not isinstance(param, dict):
+                        continue
+                    ds = param.get("data_source")
+                    if isinstance(ds, dict):
+                        for src in ds.get("data_sources", []):
+                            if src.get("source_type") in ("pure_function", "function_output") and src.get("function_name"):
+                                function_name = src["function_name"]
+                                break
+                    if function_name:
+                        break
+
+            # 最终回退
+            if not function_name:
+                function_name = call_info.get("function_name") or ""
+            if not function_name:
+                continue
+
+            args = _call_args_from_flow(call_info)
+            results.append({
+                "event_name": event_name,
+                "event_parent": event_parent,
+                "function_name": function_name,
+                "arguments": args,
+                "call": f"{function_name}({', '.join(args)})",
+                "source": "current_asset",
+            })
 
     return results
 
@@ -383,7 +479,7 @@ def _call_args_from_flow(call_info: Dict[str, Any]) -> List[str]:
         category = param.get("pin_category") if isinstance(param, dict) else None
         if not name or name in ("self", "Target") or category == "exec":
             continue
-        args.append(name)
+        args.append(_sanitize_cpp_name(name))
     return args
 
 

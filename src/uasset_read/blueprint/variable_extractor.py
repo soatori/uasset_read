@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport
     from uasset_read.serializers.package_summary import PackageFileSummary
 
-from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, FunctionParameter
+from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, BlueprintEvent, FunctionParameter
 from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.parsers.property_types import parse_default_value
@@ -555,84 +555,116 @@ def _resolve_property_to_function_name(value: Any) -> Optional[str]:
 
 
 def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
-    """从 EventGraph 的 K2Node_FunctionEntry 节点提取函数元数据（Fallback 路径）。
+    """从图的 K2Node_FunctionEntry 和 K2Node_Event 节点提取函数元数据（Fallback 路径）。
 
-    遍历图列表，查找 K2Node_FunctionEntry 节点，从 node_data 和 pins 提取函数签名。
+    遍历图列表，查找 K2Node_FunctionEntry / K2Node_Event 节点，
+    从 node_data 和 pins 提取函数签名。
     """
     if not graphs:
         return []
     functions: List[BlueprintFunction] = []
     for graph in graphs:
         for node in getattr(graph, 'nodes', []):
-            if getattr(node, 'class_name', '') == "K2Node_FunctionEntry":
-                nd = node.node_data or {}
-                if not isinstance(nd, dict):
-                    continue
+            class_name = getattr(node, 'class_name', '')
+            if class_name not in ("K2Node_FunctionEntry", "K2Node_Event"):
+                continue
+
+            nd = node.node_data or {}
+            if not isinstance(nd, dict):
+                continue
+
+            is_event_node = class_name == "K2Node_Event"
+
+            # 提取函数名
+            func_name = "Unknown"
+            if is_event_node:
+                er = nd.get("event_reference")
+                if er and hasattr(er, 'member_name'):
+                    mn = er.member_name
+                    func_name = mn.split('/')[-1] if '/' in mn else mn
+                    if func_name == "None":
+                        func_name = nd.get("custom_function_name", "Unknown")
+                elif nd.get("custom_function_name"):
+                    func_name = nd["custom_function_name"]
+            else:
                 fr = nd.get("function_reference")
-                func_name = "Unknown"
                 if fr and hasattr(fr, 'member_name'):
                     func_name = fr.member_name if fr.member_name != "None" else "Unknown"
-                elif isinstance(nd, dict):
+                else:
                     func_name = nd.get("function_name", nd.get("custom_function_name", "Unknown"))
 
-                # 从 pins 提取参数和返回值
-                parameters: List[FunctionParameter] = []
-                return_type = ""
-                is_function_entry = getattr(node, 'class_name', '') == "K2Node_FunctionEntry"
+            # 从 pins 提取参数和返回值
+            parameters: List[FunctionParameter] = []
+            return_type = ""
 
-                for pin in getattr(node, 'pins', []):
-                    pin_dir = getattr(pin, 'direction', '')
-                    pin_type_obj = getattr(pin, 'pin_type', None)
-                    pin_type_name = ""
-                    if pin_type_obj and hasattr(pin_type_obj, 'pin_category'):
-                        pin_type_name = getattr(pin_type_obj, 'pin_category', '') or ""
-                    elif isinstance(pin_type_obj, dict):
-                        pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
+            for pin in getattr(node, 'pins', []):
+                pin_dir = getattr(pin, 'direction', '')
+                pin_type_obj = getattr(pin, 'pin_type', None)
+                pin_type_name = ""
+                if pin_type_obj and hasattr(pin_type_obj, 'pin_category'):
+                    pin_type_name = getattr(pin_type_obj, 'pin_category', '') or ""
+                elif isinstance(pin_type_obj, dict):
+                    pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
 
-                    if isinstance(pin_dir, int):
-                        is_output = pin_dir == 1
-                        is_input = pin_dir == 0
+                if isinstance(pin_dir, int):
+                    is_output = pin_dir == 1
+                    is_input = pin_dir == 0
+                else:
+                    is_output = pin_dir == "EGPD_Output"
+                    is_input = pin_dir == "EGPD_Input"
+
+                # 跳过执行流 pin（exec）和委托 pin
+                if pin_type_name.lower() in ("exec", "delegate", "multicastdelegate"):
+                    continue
+
+                pin_name = getattr(pin, 'pin_name', '')
+                pin_name_lower = pin_name.lower()
+
+                if not is_event_node and is_output:
+                    # FunctionEntry: 输出引脚中含 "return" 的是返回值，其余是输出参数
+                    if "return" in pin_name_lower:
+                        if return_type == "":
+                            return_type = _map_pin_category_to_cpp_type(pin_type_name)
                     else:
-                        is_output = pin_dir == "EGPD_Output"
-                        is_input = pin_dir == "EGPD_Input"
-
-                    # 跳过执行流 pin（exec）和委托 pin
-                    if pin_type_name.lower() in ("exec", "delegate", "multicastdelegate"):
-                        continue
-
-                    if is_output and pin_type_name:
-                        if is_function_entry:
-                            # FunctionEntry 节点：输出引脚是函数参数
-                            cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
-                            parameters.append(FunctionParameter(
-                                name=getattr(pin, 'pin_name', ''),
-                                param_type=cpp_type,
-                                is_input=False,
-                                is_output=True,
-                            ))
-                        else:
-                            # 其他节点：第一个非 exec 输出引脚是返回类型
-                            if return_type == "":
-                                return_type = _map_pin_category_to_cpp_type(pin_type_name)
-                    elif is_input and pin_type_name:
-                        # 输入引脚作为参数
                         cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
                         parameters.append(FunctionParameter(
-                            name=getattr(pin, 'pin_name', ''),
+                            name=pin_name,
                             param_type=cpp_type,
-                            is_input=True,
-                            is_output=False,
+                            is_input=False,
+                            is_output=True,
                         ))
+                elif is_input:
+                    # 输入引脚作为参数（排除 self/target）
+                    if pin_name_lower in ("self", "target", "worldcontext"):
+                        continue
+                    cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
+                    parameters.append(FunctionParameter(
+                        name=pin_name,
+                        param_type=cpp_type,
+                        is_input=True,
+                        is_output=False,
+                    ))
+                elif is_output and is_event_node:
+                    # K2Node_Event 输出引脚（非 exec/delegate）= 事件参数
+                    cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
+                    parameters.append(FunctionParameter(
+                        name=pin_name,
+                        param_type=cpp_type,
+                        is_input=False,
+                        is_output=True,
+                    ))
 
-                func = BlueprintFunction(
-                    name=func_name,
-                    return_type=return_type,
-                    parameters=parameters,
-                )
-                # 从 node_data 提取事件标记
-                if nd.get("is_event", False) or nd.get("is_custom_event", False):
-                    func.is_blueprint_implementable_event = True
-                functions.append(func)
+            func = BlueprintFunction(
+                name=func_name,
+                return_type=return_type,
+                parameters=parameters,
+            )
+            # 标记事件节点
+            if is_event_node:
+                func.is_blueprint_implementable_event = True
+                if nd.get("b_override_function", False):
+                    func.is_blueprint_event = True
+            functions.append(func)
     return functions
 
 
@@ -745,7 +777,17 @@ def extract_blueprint_metadata(
         if func.name not in seen_names:
             seen_names.add(func.name)
             functions.append(func)
-    events = [f for f in functions if f.is_blueprint_implementable_event]
+    events: List[BlueprintEvent] = []
+    for f in functions:
+        if f.is_blueprint_implementable_event or f.is_blueprint_event:
+            events.append(BlueprintEvent(
+                name=f.name,
+                event_type="Override" if f.is_blueprint_event else "Event",
+                function_flags=f.function_flags,
+                is_blueprint_event=f.is_blueprint_event,
+                is_blueprint_implementable_event=f.is_blueprint_implementable_event,
+                parameters=f.parameters,
+            ))
 
     meta = BlueprintMetadata(
         is_blueprint=True,

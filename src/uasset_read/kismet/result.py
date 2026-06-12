@@ -36,6 +36,7 @@ class KismetDecompiledResult:
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
     warnings: list[str] = field(default_factory=list)
+    fallback_reasons: list[str] = field(default_factory=list)
     semantic_calls: list[dict[str, Any]] = field(default_factory=list)
     logic_source: str = "current_asset"
     function_ref_stats: dict[str, Any] = field(default_factory=dict)
@@ -55,6 +56,7 @@ class KismetDecompiledResult:
             "bytecode_source": self.bytecode_source,
             "bytecode_status": self.bytecode_status,
             "warnings": self.warnings,
+            "fallback_reasons": self.fallback_reasons,
             "semantic_calls": self.semantic_calls,
             "logic_source": self.logic_source,
             "function_ref_stats": self.function_ref_stats,

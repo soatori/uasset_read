@@ -96,14 +96,14 @@ SKIP_CLASS_NAMES = {
     # Anim — 使用自定义序列化
     "AnimBlueprintGeneratedClass",
     "AnimBlueprintExtension",
-    "AnimSequence",
-    "AnimMontage",
+    # AnimSequence 和 AnimMontage 已降级为有限解析（见 asset_types/anim_sequence.py）
+    # AnimComposite, AnimPoseSnapshot 仍跳过
     "AnimComposite",
     "AnimPoseSnapshot",
     # Audio — ImpulseResponse 等使用特殊格式
     "ImpulseResponse",
-    "SoundWave",
-    "SoundCue",
+    # SoundWave 和 SoundCue 已降级为有限解析（见 asset_types/sound_wave.py）
+    # SoundAttenuation, SoundConcurrency 等仍跳过
     "SoundAttenuation",
     "SoundConcurrency",
     "SoundMix",
@@ -167,7 +167,7 @@ def skip_export_payload(
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        payload_end = export.serial_offset + export.script_serial_offset + export.script_serial_size
+        payload_end = export.serial_offset + export.script_serialization_end_offset
     else:
         payload_end = export.serial_offset + export.serial_size
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
     extract_and_parse,
@@ -63,15 +64,21 @@ def decompile_single_function(
     """
     # 复用 extract_and_parse() 提取和解析字节码
     try:
-        expressions, error = extract_and_parse(
+        expressions, error, extraction_reason = extract_and_parse(
             archive, export, summary, name_map, import_map, export_map,
             tolerant=tolerant,
         )
-    except Exception:
+    except (ParseError, ValueError, IndexError, KeyError):
+        # Expected failures from corrupted/malformed bytecode
         return None
 
     if error or not expressions:
         return None
+
+    # 构建退回原因列表
+    fallback_reasons: list[str] = []
+    if extraction_reason != "function_export":
+        fallback_reasons.append(extraction_reason)
 
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
@@ -108,9 +115,10 @@ def decompile_single_function(
         local_variables=local_vars,
         cpp_code=cpp_code,
         expressions=expressions,
-        bytecode_source=("function_export" if export.script_serial_size > 9 else "fallback_or_serial_scan"),
+        bytecode_source=("function_export" if extraction_reason == "function_export" else "fallback_or_serial_scan"),
         bytecode_status="parsed",
         warnings=warnings,
+        fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
     )
 
@@ -188,7 +196,7 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
             continue
 
         # Skip exports with no script data
-        if export.script_serial_size <= 0:
+        if not export.has_script_serialization:
             continue
 
         # Attempt decompilation

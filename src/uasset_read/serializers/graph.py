@@ -1408,6 +1408,7 @@ def read_k2node_event(
         "b_internal_event": b_internal_event if b_internal_event is not None else False,
         "custom_function_name": custom_function_name or "",
         "function_flags": function_flags if function_flags is not None else 0,
+        "is_event": True,
     }
 
 
@@ -1694,6 +1695,16 @@ def read_k2node_macro_instance(
     if macro is not None:
         result["macro_name"] = macro
 
+    # MacroGraphReference 结构化解析（新格式：FGraphReference）
+    macro_graph_ref = raw_properties.get("MacroGraphReference")
+    if macro_graph_ref is not None:
+        result["macro_graph_reference"] = macro_graph_ref
+
+    # ResolvedWildcardType — 通配符引脚解析后的类型
+    resolved_wildcard = raw_properties.get("ResolvedWildcardType")
+    if resolved_wildcard is not None:
+        result["resolved_wildcard_type"] = resolved_wildcard
+
     return result
 
 
@@ -1927,9 +1938,9 @@ def read_ue_graph_node(
     raw_properties: Dict[str, Any] = {}  # 收集未知 PropertyTags（用于未知节点类型）
 
     # 解析 script_serial 中的 tagged properties
-    if node_export.script_serial_size > 0:
-        script_start = node_export.serial_offset + node_export.script_serial_offset
-        script_end = script_start + node_export.script_serial_size
+    if node_export.has_script_serialization:
+        script_start = node_export.serial_offset + node_export.script_serialization_start_offset
+        script_end = node_export.serial_offset + node_export.script_serialization_end_offset
         archive.seek(script_start)
 
         # UE5 >= 1011: SerializationControlExtensions
@@ -1938,8 +1949,8 @@ def read_ue_graph_node(
             if ctrl & 0x02:
                 archive.read_u8()
 
-        # 边界保护：防止 script_serial_size 不正确导致无限循环
-        max_property_iterations = max(1000, node_export.script_serial_size)
+        # 边界保护：防止 script_serialization 不正确导致无限循环
+        max_property_iterations = max(1000, node_export.script_serialization_size)
         _property_iterations = 0
 
         while archive.tell() < script_end:
@@ -2165,7 +2176,7 @@ def read_ue_graph_node(
     #   - End marker (4 bytes, value=0) after script_serial
     #   - pins_count (i32)
     #   - TArray<UEdGraphPin> elements with header (b_null_ptr + owning_node + pin_guid)
-    pins_offset = node_export.script_serial_offset + node_export.script_serial_size + 4  # Skip end marker
+    pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
     archive.seek(node_export.serial_offset + pins_offset)
 
     pins_count = archive.read_i32()

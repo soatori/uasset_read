@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, List, Optional, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectImport
+    from uasset_read.serializers.package_summary import PackageFileSummary
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
 from uasset_read.models.fallback import PropertyFallback, FallbackReason
@@ -95,10 +96,65 @@ def _get_parse_functions():
     }
 
 
-def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> Any:
+def _try_asset_type_handler(
+    export: ObjectExport,
+    archive: FArchive,
+    name_map: List[str],
+    class_name: str,
+) -> None:
+    """尝试使用已注册的 ClassHandler 提取原始二进制数据。
+
+    对 StaticMesh、SkeletalMesh、Material、Texture2D 等资产类型，
+    handler 从 serial_offset 读取原始布局（非 PropertyTag），
+    结果附加到 export 对象的 _asset_type_data 属性上。
+    """
+    # 延迟导入确保 handlers 在首次调用时注册
+    from uasset_read.parsers import asset_types  # noqa: F401
+    from uasset_read.parsers.class_registry import get_class_registry
+
+    registry = get_class_registry()
+    handler = registry.find_handler(class_name)
+    if handler is None:
+        return
+
+    saved_pos = archive.tell()
+    try:
+        # seek 到原始序列化数据起始位置
+        archive.seek(export.serial_offset)
+        result = handler.parse(export, archive, context=name_map)
+        if result.success and result.data:
+            # 附加到 export 对象，供下游使用
+            setattr(export, "_asset_type_data", result.data)
+            # 将 handler 的 parse_status 传播到 export 级别
+            # 确保 JSON 输出明确标识为 partial_metadata，而非完整 native data
+            handler_status = result.data.get("parse_status")
+            if handler_status and handler_status != "success":
+                setattr(export, "parse_status", handler_status)
+            logger.debug(
+                "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
+                handler.handler_name, export.object_name, handler_status,
+            )
+    except Exception as e:
+        logger.debug(
+            "AssetTypeHandler failed for '%s' (%s): %s",
+            export.object_name, class_name, e,
+        )
+    finally:
+        archive.seek(saved_pos)
+
+
+def parse_property_value(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Optional[Any] = None,
+    depth: int = 0,
+    tolerant: bool = True,
+) -> Any:
     """分派属性值解析（PROP-02 至 PROP-06, ADVP-01 至 ADVP-06）。
 
-    Unknown types return None (per D-05).
+    Unknown types return PropertyFallback (per D-05).
 
     Args:
         tag: PropertyTag 实例
@@ -109,7 +165,7 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         depth: 递归深度（默认 0）
 
     Returns:
-        解析后的属性值，未知类型返回 None
+        解析后的属性值，未知类型返回 PropertyFallback
     """
     mappings = getattr(summary, "_mappings", None)
     game = getattr(summary, "_game", None)
@@ -129,8 +185,8 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
         if handler is not None:
             try:
                 return handler(tag, archive, name_map, export_map, summary)
-            except Exception:
-                pass  # 解析失败，回退到原始字节
+            except Exception as e:
+                logger.warning("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
             "kind": "binary_or_native_property",
@@ -153,14 +209,14 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
             if custom_id is not None:
                 try:
                     return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-                except Exception:
-                    pass  # fallback 到 PropertyFallback
+                except Exception as e:
+                    logger.warning("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-            except Exception:
-                pass  # fallback 到 PropertyFallback
+            except Exception as e:
+                logger.warning("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
         # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
@@ -174,48 +230,68 @@ def parse_property_value(tag: PropertyTag, archive: FArchive, name_map: List[str
             tag_data=getattr(tag, "tag_data", None),
         )
 
-    # Dispatch based on handler signature
-    # Special case: ByteProperty with enum backing needs name_map (reads FName)
-    if tag.type == "ByteProperty" and tag.enum_type is not None:
-        return handler(tag, archive, name_map)
-    elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
-                     "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
-                     "UInt64Property", "FloatProperty", "DoubleProperty",
-                     "StrProperty", "ObjectProperty", "TextProperty",
-                     "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
-                     "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
-                     "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
-                     "MulticastSparseDelegateProperty",
-                     "InterfaceProperty", "FieldPathProperty",
-                     "VerseStringProperty", "VerseClassProperty",
-                     "VerseFunctionProperty", "VerseDynamicProperty",
-                     "AnsiStrProperty", "GuidProperty"):
-        return handler(tag, archive)
-    elif tag.type in ("NameProperty", "SoftObjectProperty", "DelegateProperty", "SoftClassProperty"):
-        return handler(tag, archive, name_map)
-    elif tag.type in ("ArrayProperty",):
-        return handler(tag, archive, name_map, export_map, summary, depth)
-    elif tag.type in ("StructProperty",):
-        return handler(tag, archive, name_map, export_map, summary, depth)
-    elif tag.type in ("MapProperty", "SetProperty", "OptionalProperty"):
-        return handler(tag, archive, name_map, export_map, summary)
-    elif tag.type in ("EnumProperty",):
-        return handler(tag, archive, name_map, summary)
-    elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
-        return handler(tag, archive)
+    try:
+        # Dispatch based on handler signature
+        # Special case: ByteProperty with enum backing needs name_map (reads FName)
+        if tag.type == "ByteProperty" and tag.enum_type is not None:
+            return handler(tag, archive, name_map)
+        elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
+                         "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
+                         "UInt64Property", "FloatProperty", "DoubleProperty",
+                         "StrProperty", "ObjectProperty", "TextProperty",
+                         "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
+                         "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
+                         "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+                         "MulticastSparseDelegateProperty",
+                         "InterfaceProperty", "FieldPathProperty",
+                         "VerseStringProperty", "VerseClassProperty",
+                         "VerseFunctionProperty", "VerseDynamicProperty",
+                         "AnsiStrProperty", "GuidProperty"):
+            return handler(tag, archive)
+        elif tag.type in ("NameProperty", "DelegateProperty"):
+            return handler(tag, archive, name_map)
+        elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
+            # These need soft_object_path_list for UE5.7+ index-based resolution
+            soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
+            return handler(tag, archive, name_map, soft_path_list)
+        elif tag.type in ("ArrayProperty",):
+            return handler(tag, archive, name_map, export_map, summary, depth)
+        elif tag.type in ("StructProperty",):
+            return handler(tag, archive, name_map, export_map, summary, depth)
+        elif tag.type in ("MapProperty", "SetProperty", "OptionalProperty"):
+            return handler(tag, archive, name_map, export_map, summary)
+        elif tag.type in ("EnumProperty",):
+            return handler(tag, archive, name_map, summary)
+        elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
+            return handler(tag, archive)
+    except Exception as e:
+        if not tolerant:
+            raise
+        logger.warning("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
+        return PropertyFallback(
+            name=tag.name,
+            type=tag.type,
+            size=tag.size,
+            raw_bytes=b"",
+            reason=FallbackReason.PARSE_ERROR,
+            array_index=getattr(tag, "array_index", 0),
+            tag_data=getattr(tag, "tag_data", None),
+            error_message=str(e),
+        )
 
 
 
 def parse_properties_from_export(
     export: ObjectExport,
     archive: FArchive,
-    summary: Any,
+    summary: "PackageFileSummary",
     name_map: List[str],
     export_map: List[Any],
     import_map: Optional[List[ObjectImport]] = None,
     linker: Optional[Any] = None,
     mappings: Optional[Any] = None,
     game: Optional[str] = None,
+    tolerant: bool = True,
 ) -> List[PropertyValue]:
     """从 export 条目读取所有属性（PROP-01）。
 
@@ -244,11 +320,19 @@ def parse_properties_from_export(
     if game is not None:
         setattr(summary, "_game", game)
 
-    # D-01: UE 5.10+ ScriptSerializationStartOffset 是相对偏移
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_start = export.serial_offset + export.script_serial_offset
-    else:
-        property_start = export.serial_offset
+    # UE default: 始终从 SerialOffset 开始属性解析
+    # ScriptSerializationStartOffset 仅在特殊编辑器场景使用
+    # （property bag placeholder 或 class mismatch）— 参见 LinkerLoad.cpp:4793
+    property_start = export.serial_offset
+
+    # 存储 ScriptSerialization 绝对偏移用于诊断和 opt-in 策略
+    export._script_serialization_start_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
+    )
+    export._script_serialization_end_absolute = (
+        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
+    )
+
     archive.seek(property_start)
 
     # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
@@ -262,8 +346,8 @@ def parse_properties_from_export(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve class name for export: %s", e)
     if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
@@ -273,21 +357,40 @@ def parse_properties_from_export(
             skip_export_payload(archive, export, summary)
         except Exception as e:
             logger.warning("Failed to skip export '%s' payload: %s", export.object_name, e)
+        setattr(export, "parse_status", "skipped")
+        setattr(export, "fallback_reason", "unsupported_type")
+        setattr(export, "class_name", _skip_class_name or "")
         return []
 
     # D-02: SerializationControlExtensions 头部处理
+    # UE5 >= 1011: 根级 overridable serialization 控制头
+    # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
+    # 未知位应降级为诊断信息，不要盲跳
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+        control_offset = archive.tell()
         serialization_control = archive.read_u8()
+        overridden_operation = None
         if serialization_control & 0x02:
-            _overridden_operation = archive.read_u8()  # consume but not used
+            overridden_operation = archive.read_u8()
+        # 记录未知位（非 0x00 和非 0x02 的位）
+        unknown_bits = serialization_control & ~0x02
+        if unknown_bits:
+            logger.warning(
+                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
+                getattr(export, "object_name", ""), unknown_bits, control_offset,
+            )
+        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        if not hasattr(export, "transforms") or export.transforms is None:
+            export.transforms = {}
+        export.transforms["serialization_control"] = {
+            "value": serialization_control,
+            "overridden_operation": overridden_operation,
+            "offset": control_offset,
+        }
 
     # 计算属性数据边界
-    # script_serial_offset 是相对于 serial_offset 的偏移量，script_serial_size 是该块的长度
-    # 正确终点 = serial_offset + script_serial_offset + script_serial_size
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        property_end = export.serial_offset + export.script_serial_offset + export.script_serial_size
-    else:
-        property_end = export.serial_offset + export.serial_size
+    # UE default: 使用 SerialSize 作为属性边界
+    property_end = export.serial_offset + export.serial_size
 
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if uses_unversioned and mappings is not None:
@@ -304,6 +407,32 @@ def parse_properties_from_export(
                 struct_name,
                 property_end,
             )
+
+    # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
+    if uses_unversioned and mappings is None:
+        opaque_size = property_end - archive.tell()
+        if opaque_size > 0:
+            raw_bytes = archive.read(opaque_size)
+        else:
+            raw_bytes = b""
+        logger.debug(
+            "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
+            export.object_name, len(raw_bytes),
+        )
+        # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
+        setattr(export, "parse_status", "opaque_unversioned")
+        setattr(export, "fallback_reason", "missing_mapping")
+        return [PropertyFallback(
+            name=export.object_name,
+            type="UnversionedOpaque",
+            size=len(raw_bytes),
+            raw_bytes=raw_bytes,
+            reason=FallbackReason.MISSING_MAPPING,
+        )]
+
+    # Asset type handler dispatch: 对已注册 handler 的类型，提取原始二进制数据
+    if _skip_class_name is not None:
+        _try_asset_type_handler(export, archive, name_map, _skip_class_name)
 
     while True:
         # D-08/D-09: Property loop limit check
@@ -333,7 +462,8 @@ def parse_properties_from_export(
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
 
@@ -361,7 +491,9 @@ def parse_properties_from_export(
             value = read_tag_value_bounded(
                 archive,
                 tag,
-                lambda: parse_property_value(tag, archive, name_map, export_map, summary),
+                lambda: parse_property_value(
+                    tag, archive, name_map, export_map, summary, tolerant=tolerant
+                ),
             )
 
             # 如果解析返回 None（旧路径或 handler 显式返回 None），转为 PropertyFallback
@@ -435,15 +567,15 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             return resolve_class_name(export.class_index, import_map, export_map)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
 
 
 def _parse_unversioned_properties_from_mapping(
     export: ObjectExport,
     archive: FArchive,
-    summary: Any,
+    summary: "PackageFileSummary",
     name_map: List[str],
     export_map: List[Any],
     mappings: Any,
@@ -569,7 +701,8 @@ def _try_read_unversioned_header(
         if archive.tell() >= property_end and not all(is_zero for _index, is_zero in selected):
             raise ParseError("unversioned header consumes entire property payload")
         return selected
-    except Exception:
+    except Exception as e:
+        logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
         archive.seek(start)
         return None
 
@@ -665,7 +798,8 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
             if inner_size <= 0:
                 return 0
             return min(remaining, 4 + inner_size)
-    except Exception:
+    except Exception as e:
+        logger.debug("Unversioned variable size estimation failed: %s", e)
         return 0
     finally:
         archive.seek(current)
