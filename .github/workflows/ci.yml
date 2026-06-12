@@ -81,7 +81,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml
+          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml --allow-missing-assets
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
