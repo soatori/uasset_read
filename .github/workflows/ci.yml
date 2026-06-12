@@ -26,7 +26,6 @@ jobs:
           # 禁止出现在 master 的目录
           FORBIDDEN_PATTERNS=(
             "^wiki/"
-            "^docs/guides/"
             "^docs/superpowers/"
             "^docs/reports/"
             "^scripts/"
