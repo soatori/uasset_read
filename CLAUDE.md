@@ -17,6 +17,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **版本**：0.4.5 | **Python**：3.10+
 - **构建系统**：直接脚本运行（src 布局），禁止 `pip install`
 
+### 项目目标
+
+**核心使命**：在不开启 UE 编辑器的情况下，读取并解析 `.uasset` 等 UE 二进制资产文件。
+
+- **统一输出架构**：所有解析结果经过统一 IR 层，可输出 JSON 或 Markdown 格式
+- **版本优先级**：主要支持 UE5+，UE4 仅兼容部分主要资产类型
+- **输出质量标准**：不直接输出 C++ 代码，但解析输出的质量必须与对照的 C++ 类定义和蓝图节点文本相匹配——即读者能从输出中准确还原资产的结构、逻辑和语义
+- **序列化策略**：优先遵从 UE 编辑器源码的序列化加载方式（`FArchive` 管线），仅在语言环境、本地化环境等特殊场景才使用替代加载方式
+- **测试策略**：优先随机查找真实资产进行抽测验证，而非仅依赖固定样本；必须特别关注大文件的内存安全，防止 OOM 和内存泄漏
+
 ## 快速开始
 
 ```bash
@@ -80,19 +90,30 @@ python -m pytest tests/ -v --cov=uasset_read   # 覆盖率
 
 ## 核心架构
 
-解析器镜像 UE 内部的 `FArchive` 序列化管线：
+解析器镜像 UE 内部的 `FArchive` 序列化管线，采用**两层架构**：
+
+### 数据流
 
 ```
-.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers
+第一层：二进制解析
+.uasset → FArchive → Serializers → Parsers → Linker → ParseResult
+
+第二层：IR 转换与渲染
+ParseResult → IR Builder → PackageIR → Renderers → JSON/Text/Markdown/C++
 ```
+
+**核心设计理念**：`ParseResult` 是原始解析结果的容器，包含 summary、linker、graphs、blueprint 等数据；`PackageIR` 是经过 IR Builder 转换后的统一中间表示，所有渲染器只接收 IR，实现解析与输出的解耦。
 
 ### 关键模块
 
-- **parse_uasset.py** — 主入口，`parse_package()` 返回 `ParseResult`
-- **core.py** — 高层 API（`parse_single`、`parse_batch`），CLI 和脚本共用
-- **ir_builder.py** — `ParseResult` → `PackageIR`，渲染器只接收 IR
+**入口层**：
+- **parse_uasset.py** — 底层入口，`parse_package()` 返回 `ParseResult`
+- **core.py** — 高层 API（`parse_single`、`parse_batch`），CLI 和脚本共用，内部调用 parse_uasset 并转换为 IR
+
+**数据模型**：
+- **models/result.py** — `ParseResult` 容器（原始解析结果）
 - **models/ir.py** — IR 数据结构：`PackageIR → ExportIR → GraphIR → NodeIR → PinIR`
-- **models/result.py** — `ParseResult` 容器（summary、linker、graphs、blueprint）
+- **ir_builder.py** — `ParseResult` → `PackageIR` 转换器
 
 ### 蓝图解析链
 
@@ -107,6 +128,40 @@ serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
 1. 在 `renderers/` 实现 `IRenderer` 子类
 2. 调用 `register_renderer(format_name, RendererClass)`
 3. 在 `renderers/__init__.py` 添加 import
+
+**可用渲染器**：JSON、Text、Markdown、BlueprintText、BlueprintUE、CppSkeleton
+
+### 程序化 API
+
+```python
+from uasset_read import parse_single, parse_batch, list_formats
+
+# 解析单个文件
+result = parse_single("path/to/file.uasset", format="json")
+if result.success:
+    print(result.output)
+
+# 批量解析
+results = parse_batch(["file1.uasset", "file2.uasset"], format="markdown")
+
+# 查看可用格式
+formats = list_formats()  # ['json', 'text', 'markdown', ...]
+```
+
+### 类处理注册表
+
+通过 `ClassHandlerRegistry` 为特定 UE 类定制序列化行为：
+
+```python
+from uasset_read.parsers.class_registry import get_class_registry
+
+registry = get_class_registry()
+# 注册自定义处理器或查询已注册的类策略
+```
+
+### 属性回退系统
+
+未知属性返回 `PropertyFallback` 而非失败，包含诊断信息（偏移范围、原因）。`StructFallback` 用于结构体内部的未知字段。
 
 ### 容错模式
 

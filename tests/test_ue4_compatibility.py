@@ -24,6 +24,7 @@ from uasset_read.serializers.property_tags import (
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.package_version_profile import build_version_profile
+from uasset_read.exceptions import ParseError
 
 
 class TestUE4Detection:
@@ -134,6 +135,19 @@ class TestUE4PropertyTag:
         # 注意：当前实现需要完整 archive，这里仅测试基本逻辑
         # 实际测试需要真实的 UE4 样本文件
         pass  # 跳过需要真实文件的测试
+
+    def test_old_array_property_raises_parse_error_not_name_error(self):
+        """旧 UE4 ArrayProperty inner type 门控应抛 ParseError，而不是 NameError。"""
+        mock_archive = MagicMock()
+        mock_archive.tell.return_value = 0
+        mock_archive.read_name.side_effect = ["MyArray", "ArrayProperty"]
+
+        with pytest.raises(ParseError, match="Array/Set inner type not supported"):
+            _read_property_tag_ue4(
+                mock_archive,
+                ["PackageName", "MyArray", "ArrayProperty"],
+                legacy_file_version=-252,
+            )
 
 
 class TestUE5Regression:

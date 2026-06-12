@@ -21,6 +21,7 @@ from uasset_read.constants import (
     PROP_EXT_OVERRIDABLE_INFORMATION,
     MAX_PROPERTY_TYPE_NODES,
 )
+from uasset_read.exceptions import ParseError
 from uasset_read.models.properties import PropertyTag, PropertyTypeName
 
 T = TypeVar("T")
@@ -104,8 +105,24 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
         value = child_type(1)
         if key is not None:
             tag.key_type = getattr(key, "name", None) or getattr(key, "type", None)
+            # Map key 为 StructProperty 时，提取 key_type_struct
+            if tag.key_type == "StructProperty":
+                key_children = getattr(key, "children", None)
+                if key_children and len(key_children) > 0:
+                    struct_name_node = key_children[0]
+                    struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
+                    if struct_name:
+                        tag.key_type_struct = struct_name.split(".")[-1]
         if value is not None:
             tag.value_type = getattr(value, "name", None) or getattr(value, "type", None)
+            # Map value 为 StructProperty 时，提取 value_type_struct
+            if tag.value_type == "StructProperty":
+                value_children = getattr(value, "children", None)
+                if value_children and len(value_children) > 0:
+                    struct_name_node = value_children[0]
+                    struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
+                    if struct_name:
+                        tag.value_type_struct = struct_name.split(".")[-1]
     elif tag.type in ("ByteProperty", "EnumProperty"):
         enum_child = child_type(0)
         if enum_child is not None:

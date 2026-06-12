@@ -40,6 +40,14 @@ from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 logger = logging.getLogger(__name__)
 
 
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def _extract_kismet_decompiled(
     path: str,
     archive: FArchive,
@@ -210,11 +218,18 @@ def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optiona
             continue
         seen.add(root)
         direct = root / target_name
-        if direct.is_file():
+        if direct.is_file() and _is_relative_to(direct, root):
             return direct
         if root.is_dir():
             try:
-                match = next(root.rglob(target_name), None)
+                match = next(
+                    (
+                        candidate
+                        for candidate in root.rglob(target_name)
+                        if _is_relative_to(candidate, root)
+                    ),
+                    None,
+                )
             except OSError:
                 match = None
             if match is not None and match.is_file():

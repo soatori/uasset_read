@@ -30,6 +30,28 @@ class BatchResult:
     failed: list[tuple[str, str]] = field(default_factory=list)
 
 
+def _sanitize_filename_component(value: object, fallback: str) -> str:
+    """Return a single safe filename component."""
+    safe = "".join(
+        ch if ch.isalnum() or ch in {".", "_", "-"} else "_"
+        for ch in str(value)
+    )
+    safe = safe.replace("..", "_").strip("._-")
+    return safe or fallback
+
+
+def _safe_output_path(output_path: Path, stem: object, ext: str) -> Path:
+    safe_stem = _sanitize_filename_component(stem, "asset")
+    safe_ext = _sanitize_filename_component(ext.lstrip("."), "out")
+    candidate = (output_path / f"{safe_stem}.{safe_ext}").resolve()
+    output_root = output_path.resolve()
+    try:
+        candidate.relative_to(output_root)
+    except ValueError as exc:
+        raise ValueError(f"Unsafe output path escaped output directory: {candidate}") from exc
+    return candidate
+
+
 def parse_single(
     file_path: str,
     format: str = "json",
@@ -265,9 +287,7 @@ def parse_batch(
             else:
                 ext = f".{format}"
 
-            # 清理 stem 中的路径分隔符，防止路径遍历
-            safe_stem = pf.stem.replace("/", "_").replace("\\", "_").replace("..", "_")
-            out_file = output_path / f"{safe_stem}{ext}"
+            out_file = _safe_output_path(output_path, pf.stem, ext)
             out_file.write_text(output_str, encoding="utf-8")
             result.success.append(str(out_file))
         except Exception as e:

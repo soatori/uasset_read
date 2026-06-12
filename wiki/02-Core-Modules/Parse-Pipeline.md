@@ -47,7 +47,7 @@ parse_uasset(...) -> ParseResult  # 委托给 parse_package
 parse_uasset_with_linker(path: str, tolerant: bool = True, preload_all: bool = False, ...) -> LinkerParseResult
 ```
 
-## 完整解析流程（0.4.1+）
+## 完整解析流程（0.4.5+）
 
 ```
 1. open_package_bundle() → PackageBundle
@@ -57,12 +57,17 @@ parse_uasset_with_linker(path: str, tolerant: bool = True, preload_all: bool = F
 5. read_name_table() → List[str]
 6. read_import_map() → List[ObjectImport]
 7. read_export_map() → List[ObjectExport]
-8. parse_properties_from_export() (每个 export)
-9. [linker only] PackageLinker.link() + post_load()
-10. _post_process() → 蓝图/图/Kismet/组件
-11. build_package_ir() → PackageIR          ← 新增：IR 构建
-12. renderer.render(ir, options) → str       ← 新增：渲染
+8. [linker only] PackageLinker.link() — Phase 1: 创建对象实例
+9. [linker only] PackageLinker.preload(idx) × N — Phase 2: 序列化属性
+10. [linker only] PackageLinker.post_load() — Phase 3: 解析引用
+11. parse_properties_from_export() (每个 export)
+12. _post_process() → 蓝图/图/Kismet/组件
+13. build_package_ir() → PackageIR
+14. renderer.render(ir, options) → str
 ```
+
+> **v0.4.5 变更**: 加载生命周期现在遵循 UE 风格：`link() → preload(idx) × N → post_load()`。
+> 这确保 ObjectProperty 引用在 `post_load()` 阶段能正确解析为已预加载的 UObjectInstance。
 
 ## cpp_skeleton 独立路径
 

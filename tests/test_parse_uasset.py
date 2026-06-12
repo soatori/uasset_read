@@ -47,3 +47,24 @@ class TestFindParentAssetFileSecurity:
 
         assert result is not None
         assert result.name == "MyParentClass.uasset"
+
+    def test_rejects_match_resolving_outside_root(self, tmp_path):
+        """拒绝 root 内指向外部文件的匹配结果。"""
+        root = tmp_path / "root"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        outside_file = outside / "ExternalParent.uasset"
+        outside_file.write_bytes(b"\x00" * 10)
+        link = root / "ExternalParent.uasset"
+        try:
+            link.symlink_to(outside_file)
+        except OSError as exc:
+            pytest.skip(f"symlink unavailable in this environment: {exc}")
+
+        result = _find_parent_asset_file(
+            parent_class="ExternalParent",
+            roots=[root],
+        )
+
+        assert result is None

@@ -439,10 +439,13 @@ class FArchive:
                     return truncated
                 else:
                     # All nulls from start — cannot recover, return empty
+                    # Structured diagnostic with corruption code
                     self._logger.error(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "all nulls (completely corrupted), "
-                        "consumed=%d bytes, end_pos=%d",
+                        "consumed=%d bytes, end_pos=%d, "
+                        "diagnostic_code=CORRUPTED_FSTRING_ALL_NULLS, "
+                        "likely_cause=data_corruption_or_offset_drift",
                         pos_before, length, len(data), self.tell()
                     )
                     self._logger.debug(

@@ -18,4 +18,13 @@
 
 - **版本**: 0.4.5-dev (当前分支: 0.4.5-dev)
 - **Python**: 3.10+
+- **测试**: 1837 tests (contracts/units/e2e 三层架构)
 - **仓库**: [GitHub](https://github.com/soatori/uasset_read)
+
+## v0.4.5 新特性
+
+- **UE 风格加载生命周期**: `link() → preload(idx) × N → post_load()`
+- **类序列化策略表**: 4 种策略（FULL_SERIALIZER / TAGGED_PROPERTIES_ONLY / OPAQUE_CLASS_PAYLOAD / SKIP_UNSUPPORTED）
+- **统一状态模型**: `success | partial | failed` 三态
+- **Payload 偏移策略**: 默认使用 `SerialOffset/SerialSize`（与 UE LinkerLoad.cpp:4793 对齐）
+- **SoftObjectPath 索引化**: UE5.7+ 支持索引模式解析

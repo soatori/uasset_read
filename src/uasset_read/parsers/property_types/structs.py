@@ -348,25 +348,40 @@ def parse_struct_property(
     # 使用 get_struct_size 进行版本感知的尺寸验证（支持 LWC 双精度）。
     version_container = _build_version_container_from_summary(summary)
     expected_size = get_struct_size(struct_type, version_container)
+    size_mismatch = False
     if expected_size is not None and tag.size != expected_size:
         # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
         lwc_entry = _LWC_TYPE_MAP.get(struct_type)
         if lwc_entry is not None:
             float_size, double_size = lwc_entry
             if tag.size not in (float_size, double_size):
-                import logging
-                logging.getLogger(__name__).warning(
-                    "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
-                    struct_type, tag.size, float_size, double_size,
-                )
-                struct_type = None  # Skip all fast-path branches
+                size_mismatch = True
         else:
-            import logging
-            logging.getLogger(__name__).warning(
-                "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
-                struct_type, tag.size, expected_size,
-            )
-            struct_type = None  # Skip all fast-path branches
+            size_mismatch = True
+
+        if size_mismatch:
+            # 对于已知支持 tagged fallback 的结构体，或 tag.size=0 的情况，
+            # 允许继续尝试 tagged 解析而不是直接 fallback
+            if struct_type in _TAGGED_FALLBACK_STRUCTS or tag.size == 0:
+                import logging
+                logging.getLogger(__name__).debug(
+                    "StructProperty '%s': tag.size=%d != expected=%d, will try tagged fallback",
+                    struct_type, tag.size, expected_size,
+                )
+                # 不设置 struct_type = None，让后续逻辑尝试 tagged fallback
+            else:
+                import logging
+                if lwc_entry is not None:
+                    logging.getLogger(__name__).warning(
+                        "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
+                        struct_type, tag.size, float_size, double_size,
+                    )
+                else:
+                    logging.getLogger(__name__).warning(
+                        "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
+                        struct_type, tag.size, expected_size,
+                    )
+                struct_type = None  # Skip all fast-path branches
 
     # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:

@@ -1,5 +1,6 @@
 """core.py API 测试。"""
 import pytest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError, BatchResult
@@ -165,6 +166,25 @@ class TestParseBatch:
         # 验证文件确实被生成且路径已清理（未被异常吞掉）
         assert len(result.success) >= 1
         assert result.failed == []
+
+    def test_parse_batch_sanitizes_output_extension(self, tmp_path):
+        """恶意 format 名称不能通过扩展名逃逸输出目录。"""
+        test_file = tmp_path / "normal.uasset"
+        test_file.write_bytes(b"\x00" * 100)
+        output_dir = tmp_path / "output"
+
+        with patch("uasset_read.core.parse_single", return_value="ok"):
+            result = parse_batch(
+                str(tmp_path),
+                format="../escape",
+                output_dir=str(output_dir),
+            )
+
+        assert result.failed == []
+        assert len(result.success) == 1
+        output_file = Path(result.success[0]).resolve()
+        assert output_file.parent == output_dir.resolve()
+        assert output_file.name == "normal.escape"
 
 
 class TestCLIBatchOptions:

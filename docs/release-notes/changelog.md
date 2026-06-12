@@ -1,5 +1,49 @@
 # 变更日志
 
+## [0.4.5] — 2026-06-09
+
+### 新增
+- UE 风格加载生命周期（`link() → preload(idx) × N → post_load()`）
+- 类序列化策略表（`class_serialization_strategy.py`）
+- SoftObjectPath 索引化解析（UE5.7+）
+- DependsMap FPackageIndex 语义
+- 统一状态模型（`success | partial | failed`）
+- Payload 偏移策略默认使用 `SerialOffset/SerialSize`
+
+### 改进
+- 74 个新测试覆盖 UE 保真度改进
+- Archive 生命周期管理重构
+- StaticMesh 等类正确标记为 opaque
+
+### 修复
+- `parse_uasset_with_linker(preload_all=True)` 生命周期问题
+- LinkerParseResult 缺少 status 属性
+- Opaque 类状态同步到 export 对象
+
+## [0.4.4] — 2026-06-07
+
+### 新增
+- 测试重组为 contracts/units/e2e 三层架构
+- 源码大小预算检查和报告
+- extras 模块用于可选高级功能
+- FArchive 上下文管理器支持
+
+### 改进
+- 根 API 精简为稳定公共接口
+- `_parse_package_core` 拆分为 7 个显式阶段
+- export payload 策略层提取
+- 统一状态模型实现
+- `_post_process` 拆为显式 stage pipeline
+
+### 修复
+- Kismet 字节码 LWC 版本门控
+- SoftObjectPath 三阶段版本门控
+- UE5 路径 PreloadDependencies 版本门控
+- 缓存清理机制（FunctionRefResolver + ClassHandlerRegistry）
+- 文件处理类 `__del__` 安全网
+- 路径遍历安全检查
+- 批量处理路径分隔符清理
+
 ## [0.4.3] — 2026-06-05
 
 ### 新增
