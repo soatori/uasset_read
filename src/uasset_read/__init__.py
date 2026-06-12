@@ -28,15 +28,6 @@ from .models.result import ParseResult, StatusInfo
 from .exceptions import UAssetError, VersionError, ErrorContext, ParseError
 from .archive import FArchive
 
-# 内存管理
-from .memory import (
-    MemoryMonitor,
-    MemoryStatus,
-    force_gc,
-    get_file_size_mb,
-    get_available_memory_gb,
-)
-
 # IR 模型
 from .models.ir import PackageIR, ExportIR, GraphIR, NodeIR, PinIR
 
@@ -106,7 +97,6 @@ from .constants import (
     CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
     CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
-    DEFAULT_MAX_PARSE_SIZE_MB, WARN_FILE_SIZE_MB,
 )
 
 # ============================================================================
@@ -189,7 +179,6 @@ from .parsers import (
 from .blueprint import (
     extract_blueprint_variables, parse_component_transform,
     extract_blueprint_metadata, extract_components,
-    extract_scs_tree,
 )
 
 # 图解析模块
@@ -218,6 +207,9 @@ from .kismet import (
 
 # 版本管理
 from .versioning import VersionContainer, build_version_container, EUEVersion
+
+# C++ 代码生成辅助
+from .cpp_gen import sanitize_identifier
 
 # Link 模块
 from .link import PackageLinker, UObjectInstance, LinkerParseResult
@@ -296,4 +288,5 @@ __all__ = [
     "FArchive",
     "PackageBundle",
     "PackageLinker",
+    "sanitize_identifier",
 ]
