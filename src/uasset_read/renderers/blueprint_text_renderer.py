@@ -88,6 +88,23 @@ class BlueprintTextRenderer(IRenderer):
                     lines.append("  }")
                     lines.append("")
 
+        # 函数图概览
+        if ir.function_graphs:
+            lines.append("=== Function Graphs ===")
+            for fg in ir.function_graphs:
+                func_name = fg.get("function_name", "Unknown")
+                sig = fg.get("signature", {})
+                params = ", ".join(
+                    f"{p.get('name', '')} {p.get('type', '')}"
+                    for p in sig.get("parameters", [])
+                )
+                lines.append(f"  {func_name}({params})")
+                if fg.get("execution_flow"):
+                    nodes = fg["execution_flow"]
+                    if nodes:
+                        lines.append(f"    Flow: {' -> '.join(str(n) for n in nodes[:5])}")
+            lines.append("")
+
         # 图节点详情
         for export in ir.exports:
             if not export.graphs:

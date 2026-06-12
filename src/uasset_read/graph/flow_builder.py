@@ -590,7 +590,7 @@ def build_function_graphs(
         edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
 
         # 收集所有 FunctionEntry 节点
-        function_entries = [n for n in graph.nodes if n.class_name == "K2Node_FunctionEntry"]
+        function_entries = [n for n in graph.nodes if n.class_name.startswith("K2Node_FunctionEntry")]
 
         for fe_node in function_entries:
             # 提取 function_name

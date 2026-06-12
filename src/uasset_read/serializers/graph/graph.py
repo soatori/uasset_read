@@ -81,10 +81,16 @@ def read_ue_graph(
                 outer_to_exports[outer_idx] = []
             outer_to_exports[outer_idx].append((idx + 1, node_export))
 
-        # Use pre-built mapping instead of O(N) scan
+        # outer_index.index uses the same indexing as export_map (1-based for positive values)
         for node_idx, node_export in outer_to_exports.get(graph_export_idx, []):
             node_class = _gac(node_export, import_map, export_map, linker)
-            if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+            node_name = node_export.object_name or ""
+            is_node = (
+                (node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class))
+                or node_name.startswith("K2Node")
+                or node_name.startswith("EdGraphNode")
+            )
+            if is_node:
                 # Skip if already collected by main path (same export index)
                 already_collected = any(
                     getattr(n, '_export_index', None) == node_idx

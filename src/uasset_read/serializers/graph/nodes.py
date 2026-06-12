@@ -473,6 +473,16 @@ def read_ue_graph_node(
 
     class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
 
+    # Fallback: 如果 class_name 不匹配 export object_name 中的更具体类型，优先使用 object_name
+    obj_name = node_export.object_name or ""
+    if obj_name:
+        import re
+        m = re.match(r'(K2Node_\w+|EdGraphNode_\w+)', obj_name)
+        if m:
+            obj_class = m.group(1)
+            if class_name != obj_class and not class_name.startswith(obj_class):
+                class_name = obj_class
+
     base_node = UEdGraphNode(
         node_guid=node_guid,
         node_pos_x=node_pos_x,
