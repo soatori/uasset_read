@@ -6,7 +6,6 @@
 
 from uasset_read.blueprint.variable_extractor import (
     extract_blueprint_variables,
-    parse_component_transform,
     extract_blueprint_metadata,
     parse_property_flags_to_labels,
     read_blueprint_variable,
@@ -18,6 +17,7 @@ from uasset_read.blueprint.transform_parser import (
     parse_scale_value,
     format_transform_value,
 )
+from uasset_read.blueprint._transform_utils import parse_component_transform
 from uasset_read.blueprint.component_extractor import (
     extract_components,
     extract_scs_tree,

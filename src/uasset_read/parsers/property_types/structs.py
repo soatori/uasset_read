@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, List, Dict, Any, Optional
 
 if TYPE_CHECKING:
@@ -17,104 +18,16 @@ from uasset_read.parsers.utils import extract_inner_from_tag
 from uasset_read.constants import MAX_PROPERTY_COUNT
 from uasset_read.exceptions import ParseError
 
+from ._struct_schemas import (
+    EXPECTED_STRUCT_SIZES,
+    LWC_TYPE_MAP,
+    LWC_DOUBLE_TYPE_TO_BASE,
+    LWC_FLOAT_TYPE_TO_BASE,
+    TAGGED_FALLBACK_STRUCTS,
+    TAGGED_FALLBACK_STRUCT_SCHEMAS,
+)
 
-# Expected byte sizes for fixed-layout structs (used for fast-path validation)
-_EXPECTED_STRUCT_SIZES: dict[str, int] = {
-    "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
-    "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
-    "Guid": 16, "IntPoint": 8, "IntVector": 12,
-    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
-    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
-    "Transform": 48,
-    "TopLevelAssetPath": 16,
-    # 时间/帧类型
-    "Timespan": 8,           # int64
-    "DateTime": 8,           # uint64
-    "FrameNumber": 4,        # int32
-    # 整数向量类型
-    "IntVector2": 8,         # 2 * int32
-    "Int32Vector2": 8,       # 别名
-    "IntVector4": 16,        # 4 * int32
-    "UintVector": 12,        # 3 * uint32
-    "UintVector2": 8,        # 2 * uint32
-    "Uint32Point": 8,        # 别名
-    "UintVector4": 16,       # 4 * uint32
-    # 64 位整数向量类型
-    "Int64Vector2": 16,      # 2 * int64
-    "Int64Point": 16,        # 别名
-    "Int64Vector": 24,       # 3 * int64
-    "Int64Vector4": 32,      # 4 * int64
-    "UInt64Vector2": 16,     # 2 * uint64
-    "UInt64Point": 16,       # 别名
-    "UInt64Vector": 24,      # 3 * uint64
-    "UInt64Vector4": 32,     # 4 * uint64
-    # 别名类型
-    "DeprecateSlateVector2D": 16,  # 别名 Vector2D
-    "VectorDouble": 24,            # Wuthering Waves 别名 Vector3d
-    "Int32Point": 8,               # 别名 IntPoint
-    # UE5 LWC 数学类型
-    "Vector2f": 8,           # 2 * float32
-    "Vector3f": 12,          # 3 * float32
-    "Vector3d": 24,          # 3 * float64
-    "Vector4f": 16,          # 4 * float32
-    "Vector4d": 32,          # 4 * float64
-    "Rotator3f": 12,         # 3 * float32
-    "Rotator3d": 24,         # 3 * float64
-    "Quat4f": 16,            # 4 * float32
-    "Quat4d": 32,            # 4 * float64
-    "Plane4f": 16,           # 4 * float32
-    "Plane4d": 32,           # 4 * float64
-    "Sphere3f": 16,          # 4 * float32
-    "Sphere3d": 32,          # 4 * float64
-    "Box2f": 16,             # 2 * Vector2f(8)
-    "Box3f": 24,             # 2 * Vector3f(12)
-    "Matrix44f": 64,         # 4 * Plane4f(16)
-    "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
-    # 动画/混合空间高频结构体（报告补充）
-    "FrameRate": 8,          # float Numerator + int32 Denominator（紧凑格式）
-                             # 部分资产使用 tagged 格式（size=37），通过 tagged fallback 解析
-    "AnimNotifyTrack": 8,    # 紧凑格式大小
-                             # 部分资产使用 tagged 格式（size=0），通过 tagged fallback 解析
-    "GuidProperty": 16,      # FGuid 标准大小
-}
-
-
-# LWC（Large World Coordinates）类型映射
-_LWC_TYPE_MAP: dict[str, tuple[int, int]] = {
-    "Vector":        (12, 24),   # FVector3f → FVector3d
-    "Rotator":       (12, 24),   # FRotator3f → FRotator3d
-    "Vector2D":      (8, 16),    # FVector2f → FVector2d
-    "Vector4":       (16, 32),   # FVector4f → FVector4d
-    "Quat":          (16, 32),   # FQuat4f → FQuat4d
-    "Plane":         (16, 32),   # FPlane4f → FPlane4d
-    "Sphere":        (16, 32),   # FSphere3f → FSphere3d
-    "Box":           (28, 56),   # 2 * FVector + bool (float → double)
-    "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
-    "Matrix":        (64, 128),  # 4 * FPlane (float → double)
-    "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (48, 96),   # FQuat(16/32) + FVector(12/24) + FVector(12/24) + padding(8/16)
-}
-
-# LWC 双精度类型名 → 对应的基础类型名
-_LWC_DOUBLE_TYPE_TO_BASE: dict[str, str] = {
-    "Vector3d":    "Vector",
-    "Vector4d":    "Vector4",
-    "Rotator3d":   "Rotator",
-    "Quat4d":      "Quat",
-    "Plane4d":     "Plane",
-    "Sphere3d":    "Sphere",
-}
-
-# LWC 单精度类型名 → 对应的基础类型名
-_LWC_FLOAT_TYPE_TO_BASE: dict[str, str] = {
-    "Vector3f":    "Vector",
-    "Vector4f":    "Vector4",
-    "Rotator3f":   "Rotator",
-    "Quat4f":      "Quat",
-    "Plane4f":     "Plane",
-    "Sphere3f":    "Sphere",
-    "Vector2f":    "Vector2D",
-}
+logger = logging.getLogger(__name__)
 
 
 def get_struct_size(
@@ -136,128 +49,27 @@ def get_struct_size(
         预期字节大小，未知类型返回 None
     """
     # 显式双精度变体：直接返回 double 大小，不看版本
-    base_for_double = _LWC_DOUBLE_TYPE_TO_BASE.get(struct_type)
+    base_for_double = LWC_DOUBLE_TYPE_TO_BASE.get(struct_type)
     if base_for_double is not None:
-        _, double_size = _LWC_TYPE_MAP[base_for_double]
+        _, double_size = LWC_TYPE_MAP[base_for_double]
         return double_size
 
     # 显式单精度变体：直接返回 float 大小，不看版本
-    base_for_float = _LWC_FLOAT_TYPE_TO_BASE.get(struct_type)
+    base_for_float = LWC_FLOAT_TYPE_TO_BASE.get(struct_type)
     if base_for_float is not None:
-        float_size, _ = _LWC_TYPE_MAP[base_for_float]
+        float_size, _ = LWC_TYPE_MAP[base_for_float]
         return float_size
 
     # LWC 感知的基础类型：根据版本判断
-    if struct_type in _LWC_TYPE_MAP:
-        float_size, double_size = _LWC_TYPE_MAP[struct_type]
+    if struct_type in LWC_TYPE_MAP:
+        float_size, double_size = LWC_TYPE_MAP[struct_type]
         if version_container is not None and version_container.is_ue5:
             if version_container.file_version_ue5 >= 1004:  # UE5_LARGE_WORLD_COORDINATES
                 return double_size
         return float_size
 
     # 非 LWC 类型：直接查表
-    return _EXPECTED_STRUCT_SIZES.get(struct_type)
-
-
-# Tagged fallback structs and schemas
-_TAGGED_FALLBACK_STRUCTS: set[str] = {
-    "MemberReference",
-    "SimpleMemberReference",
-    # Blueprint 变量描述 struct（ArrayProperty 内层，size=0 时仍需 tagged 解析）
-    "FBPVariableDescription",
-    "BPVariableDescription",
-    "EdGraphPinType",
-    "FEdGraphPinType",
-    "BPVariableDescriptionHelper",
-    # Blueprint 相关 struct
-    "ImplementedInterfaces",
-    "LastEditedDocuments",
-    "CategorySorting",
-    # AnimSequence 结构体（部分资产使用 tagged 格式）
-    "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
-    "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
-    # 编辑器结构体
-    "FEditorElement",    # 蓝图编辑器组合框选项（DisplayName/Value/bIsDefault）
-    "EditorElement",
-    # 材质参数结构体（材质实例资产使用 tagged 格式）
-    "ScalarParameterValue",
-    "FScalarParameterValue",
-    "FMaterialParameterInfo",
-    # 动画混合空间结构体（部分资产使用 tagged 格式）
-    "BlendSample",          # FBlendSample — BlendSpace 采样点（SampleValue/Time/RateScale/bIsValid）
-    "FBlendSample",
-}
-"""需要 tagged fallback 解析的结构体名称集合。"""
-
-_TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
-    "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
-    "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
-    # 新增 UE5.5 结构体
-    "NewVariables": [
-        ("VarName", "NameProperty"),
-        ("VarGuid", "GuidProperty"),
-        ("VarType", "StructProperty"),  # FEdGraphPinType
-    ],
-    "ImplementedInterfaces": [
-        ("InterfaceName", "NameProperty"),
-        ("InterfaceGuid", "GuidProperty"),
-    ],
-    "LastEditedDocuments": [
-        ("DocumentName", "NameProperty"),
-    ],
-    "CategorySorting": [
-        ("CategoryName", "NameProperty"),
-    ],
-    # AnimSequence 结构体 tagged fallback schemas
-    "FrameRate": [
-        ("Numerator", "FloatProperty"),
-        ("Denominator", "IntProperty"),
-    ],
-    "AnimNotifyTrack": [
-        ("TrackIndex", "Int64Property"),
-        ("TrackName", "NameProperty"),
-    ],
-    # 编辑器结构体
-    "FEditorElement": [
-        ("DisplayName", "TextProperty"),
-        ("Value", "StrProperty"),
-        ("bIsDefault", "BoolProperty"),
-    ],
-    "EditorElement": [
-        ("DisplayName", "TextProperty"),
-        ("Value", "StrProperty"),
-        ("bIsDefault", "BoolProperty"),
-    ],
-    # 材质参数结构体 tagged fallback schemas
-    "FMaterialParameterInfo": [
-        ("ParameterName", "NameProperty"),
-        ("Index", "IntProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
-    "ScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
-        ("ParameterValue", "FloatProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
-    "FScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
-        ("ParameterValue", "FloatProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
-    # 动画混合空间结构体 tagged fallback schemas
-    "BlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
-        ("Time", "FloatProperty"),            # float — 动画时间值
-        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
-        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
-    ],
-    "FBlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
-        ("Time", "FloatProperty"),            # float — 动画时间值
-        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
-        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
-    ],
-}
+    return EXPECTED_STRUCT_SIZES.get(struct_type)
 
 
 # ============================================================================
@@ -351,7 +163,7 @@ def parse_struct_property(
     size_mismatch = False
     if expected_size is not None and tag.size != expected_size:
         # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
-        lwc_entry = _LWC_TYPE_MAP.get(struct_type)
+        lwc_entry = LWC_TYPE_MAP.get(struct_type)
         if lwc_entry is not None:
             float_size, double_size = lwc_entry
             if tag.size not in (float_size, double_size):
@@ -362,22 +174,20 @@ def parse_struct_property(
         if size_mismatch:
             # 对于已知支持 tagged fallback 的结构体，或 tag.size=0 的情况，
             # 允许继续尝试 tagged 解析而不是直接 fallback
-            if struct_type in _TAGGED_FALLBACK_STRUCTS or tag.size == 0:
-                import logging
-                logging.getLogger(__name__).debug(
+            if struct_type in TAGGED_FALLBACK_STRUCTS or tag.size == 0:
+                logger.debug(
                     "StructProperty '%s': tag.size=%d != expected=%d, will try tagged fallback",
                     struct_type, tag.size, expected_size,
                 )
                 # 不设置 struct_type = None，让后续逻辑尝试 tagged fallback
             else:
-                import logging
                 if lwc_entry is not None:
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
                         struct_type, tag.size, float_size, double_size,
                     )
                 else:
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
                         struct_type, tag.size, expected_size,
                     )
@@ -385,8 +195,7 @@ def parse_struct_property(
 
     # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "StructProperty '%s': negative size %d, treating as unsigned",
             declared_struct_type, tag.size,
         )
@@ -633,7 +442,7 @@ def parse_struct_property(
             "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
         })
 
-    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
+    if declared_struct_type not in TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
             fields={},
@@ -679,7 +488,7 @@ def parse_struct_property(
             )
             fields[inner_tag.name] = field_value
     except Exception as e:
-        if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
+        if declared_struct_type in TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
             archive.seek(struct_end)
