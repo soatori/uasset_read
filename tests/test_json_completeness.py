@@ -580,112 +580,6 @@ class TestOutputVersionAndErrors:
 
 
 # ===========================================================================
-# json_summary 精简测试
-# ===========================================================================
-
-from uasset_read.renderers.json_renderer import JsonSummaryRenderer
-
-
-def _render_summary(ir: PackageIR) -> dict:
-    """渲染 IR 为 json_summary 字典。"""
-    renderer = JsonSummaryRenderer()
-    options = RenderOptions()
-    output = renderer.render(ir, options)
-    return json.loads(output)
-
-
-class TestJsonSummaryIsCompact:
-    """验证 json_summary 输出是精简的。"""
-
-    def test_summary_output_version_is_4(self):
-        """json_summary 的 output_version 应为 4.0。"""
-        ir = _make_minimal_ir()
-        data = _render_summary(ir)
-        assert data["output_version"] == "4.0"
-
-    def test_summary_exports_simplified(self):
-        """json_summary exports 仅含 name/class/parent_class。"""
-        from uasset_read.models.ir import ExportIR
-        export = ExportIR(
-            index=0, object_name="BP_Test", object_class="Blueprint",
-            serial_size=1024, outer_index_resolved=None, super_index_resolved=None,
-            parent_class="/Script/Engine.Character",
-            properties=[PropertyIR(name="X", type="float", value="1.0", array_index=0, guid=None)],
-            graphs=[], bulk_data=None,
-        )
-        ir = _make_minimal_ir(exports=[export])
-        data = _render_summary(ir)
-        assert len(data["exports"]) == 1
-        exp = data["exports"][0]
-        assert set(exp.keys()) == {"name", "class", "parent_class"}
-        assert exp["name"] == "BP_Test"
-        assert exp["parent_class"] == "/Script/Engine.Character"
-
-    def test_summary_no_imports(self):
-        """json_summary 不应包含 imports。"""
-        ir = _make_minimal_ir(imports=[{"class_package": "Engine", "class_name": "Actor", "object_name": "Actor"}])
-        data = _render_summary(ir)
-        assert "imports" not in data
-
-    def test_summary_no_decompiled_functions(self):
-        """json_summary 不应包含 decompiled_functions。"""
-        ir = _make_minimal_ir(decompiled_functions=[
-            DecompiledFunctionIR(name="F", signature="void F()", cpp_code="void F(){}", parameters=[], return_type="void"),
-        ])
-        data = _render_summary(ir)
-        assert "decompiled_functions" not in data
-
-    def test_summary_no_variables(self):
-        """json_summary 不应包含 variables。"""
-        ir = _make_minimal_ir(variables=[VariableIR(name="X", type="float", default_value=None, kind="user")])
-        data = _render_summary(ir)
-        assert "variables" not in data
-
-    def test_summary_blueprint_counts_only(self):
-        """json_summary blueprint 仅输出计数，不输出完整 functions/events。"""
-        func = BlueprintFunctionIR(name="Fire", return_type="void", parameters=[])
-        bp = BlueprintIR(parent_class="/Script/Engine.Character", functions=[func], events=[], components=[{"name": "M", "class": "C", "properties": {}, "transforms": {}}])
-        ir = _make_minimal_ir(blueprint=bp)
-        data = _render_summary(ir)
-        assert data["blueprint"]["parent_class"] == "/Script/Engine.Character"
-        assert data["blueprint"]["function_count"] == 1
-        assert data["blueprint"]["event_count"] == 0
-        assert data["blueprint"]["component_count"] == 1
-        assert "functions" not in data["blueprint"]
-        assert "events" not in data["blueprint"]
-
-    def test_summary_diagnostics_kept(self):
-        """json_summary 应保留 diagnostics（容错模式需要）。"""
-        diag = MagicMock()
-        diag.to_dict.return_value = {"kind": "parse_stage_error", "offset": 0, "type": "error"}
-        ir = _make_minimal_ir(diagnostics=[diag])
-        data = _render_summary(ir)
-        assert "diagnostics" in data
-        assert len(data["diagnostics"]) == 1
-
-    def test_summary_not_equal_to_full_json(self):
-        """json_summary 输出应明显不同于完整 json。"""
-        func = BlueprintFunctionIR(name="Fire", return_type="void", parameters=[])
-        bp = BlueprintIR(parent_class=None, functions=[func], events=[], components=[])
-        ir = _make_minimal_ir(
-            blueprint=bp,
-            variables=[VariableIR(name="X", type="float", default_value=None, kind="user")],
-            imports=[{"class_package": "Engine", "class_name": "Actor", "object_name": "Actor"}],
-        )
-        full = _render_json(ir)
-        summary = _render_summary(ir)
-        # summary 不应包含 imports
-        assert "imports" not in summary
-        # summary 不应包含 variables
-        assert "variables" not in summary
-        # summary exports 应更精简
-        assert len(summary["exports"]) == len(full["exports"])  # same count
-        # full 有 output_version 5.0, summary 有 4.0
-        assert full["output_version"] == "5.0"
-        assert summary["output_version"] == "4.0"
-
-
-# ===========================================================================
 # 格式契约测试 — 所有格式处理同一 IR 不崩溃
 # ===========================================================================
 
@@ -728,10 +622,7 @@ class TestFormatFieldContracts:
             status_code="PARSE_ERROR",
         )
 
-    @pytest.mark.parametrize("format_name", [
-        "json", "json_summary", "text", "text_summary", "markdown",
-        "blueprint_text", "blueprint_ue_text",
-    ])
+    @pytest.mark.parametrize("format_name", ["json", "markdown"])
     def test_format_handles_full_ir(self, format_name):
         """所有格式应能处理包含所有字段的 PackageIR 而不崩溃。"""
         from uasset_read.renderers import get_renderer

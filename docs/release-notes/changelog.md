@@ -8,9 +8,9 @@
 - Core / Extras 分层架构（稳定根 API + 子模块 API）
 - 精简 `__init__.py` 公共 API（299 行，__all__ 仅含核心符号）
 
-### 保留
-- 7 种输出格式全部保留：JSON / Text / Markdown / BlueprintText / BlueprintUE / CppSkeleton / Summaries
-- 6 个渲染器通过 RENDERER_REGISTRY 自动注册
+### 输出
+- 最终发布版公开输出格式仅保留 JSON 和 Markdown
+- `RENDERER_REGISTRY` 仅注册 `json` / `markdown`
 
 ### 改进
 - 大文件拆分为子模块，改善代码组织结构
@@ -20,7 +20,7 @@
 ### 修复
 - Kismet fallback class detection 和 self-referencing parent_class
 - Graph detection fallback 和 node class_name resolution
-- blueprint_text 渲染改进
+- Markdown 渲染改进
 - SerializationControlExtensions 语义映射与结构化诊断
 - partial/opaque 状态必须附带可追踪诊断原因
 

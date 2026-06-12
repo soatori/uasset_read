@@ -31,7 +31,7 @@ python -m pytest tests/test_pak_handling.py -v
 | **资产覆盖** | 至少 12 种资产类型（Blueprint、SkeletalMesh、Material、MaterialInstance、StaticMesh、Texture2D、Niagara、Map、InputAction、InputMappingContext、AnimBlueprint、ParticleSystem） |
 | **双模式** | 稳定资产必须在 strict 和 tolerant 两种模式下都通过 |
 
-> **当前状态** (v0.5.0): 解析器模块拆分完成，Core/Extras 分层架构，7 种输出格式
+> **当前状态** (v0.5.0): 解析器模块拆分完成，Core/Extras 分层架构，公开输出格式仅保留 JSON / Markdown
 
 ### 样本资产
 
@@ -94,14 +94,14 @@ E:\Develop\lib\UnrealEngine\Samples\
 ### 直接调用
 
 ```bash
-python run.py path/to/file.uasset --text
-python run.py path/to/file.uasset --cpp-skeleton
+python run.py path/to/file.uasset --json
+python run.py path/to/file.uasset --markdown
 ```
 
 或通过模块：
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --json
 ```
 
 ### 测试
@@ -118,12 +118,7 @@ python -m pytest tests/ -v -m integration   # 仅集成测试
 ```bash
 python run.py path/to/file.uasset              # JSON 输出（默认）
 python run.py path/to/file.uasset --output out.json   # 保存到文件
-python run.py path/to/file.uasset --summary      # 仅摘要
-python run.py path/to/file.uasset --text       # 人类可读文本
 python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
-python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
-python run.py path/to/file.uasset --blueprint-ue-text  # UE 格式文本
-python run.py path/to/file.uasset --cpp-skeleton       # C++ 类骨架
 python run.py --batch-dir path/to/dir/           # 批量导出目录
 python run.py path/to/file.uasset --strict     # 遇到警告时停止
 python run.py path/to/file.uasset --tolerant   # 容错模式（默认）
@@ -139,7 +134,7 @@ python run.py path/to/file.uasset --verbose    # 启用调试日志
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
           PackageLinker · KismetDecompiler · PakFileReader
-          IR Builder → Renderers (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
+          IR Builder → Renderers (JSON/Markdown)
 ```
 
 ### 模块结构 (`src/uasset_read/`)
@@ -173,8 +168,8 @@ python run.py path/to/file.uasset --verbose    # 启用调试日志
 | **Bulk Data** | `bulk/` | BulkData 头部解析、标志定义 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material） |
 | **IR** | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器、`PackageIR`、`ExportIR`、`PropertyIR` |
-| **Renderer** | `renderers/` | 可插拔 `IRenderer` ABC + format registry（JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton，6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/蓝图翻译文本/UE 格式文本输出生成器 |
+| **Renderer** | `renderers/` | 可插拔 `IRenderer` ABC + format registry（JSON/Markdown） |
+| **格式化器** | `formatters/` | JSON/Markdown(with Mermaid) 输出生成器 |
 | **Core API** | `core.py` | `parse_single()`、`parse_batch()`、`list_formats()` — 简化高层 API |
 | **Simple API** | `simple.py` | 更简化的单文件解析入口 |
 
