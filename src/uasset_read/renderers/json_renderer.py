@@ -1,8 +1,7 @@
 """JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
 
-提供两种注册格式：
+提供格式：
 - json: 完整分析格式，字段最全
-- json_summary: 机器可读摘要，精简 exports、省略大体积字段
 """
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
 
 # 输出格式版本号
 _OUTPUT_VERSION_FULL = "5.0"
-_OUTPUT_VERSION_SUMMARY = "4.0"
 
 
 class _JSONEncoder(json.JSONEncoder):
@@ -321,72 +319,4 @@ class JSONRenderer(IRenderer):
         return "json"
 
 
-class JsonSummaryRenderer(IRenderer):
-    """JSON 摘要渲染器 — 机器可读精简格式。
-
-    精简策略（对齐旧 format_json_summary）：
-    - exports 仅保留 name/class/parent_class
-    - 省略 imports, decompiled_functions, execution_chains, variables
-    - 省略 function_graphs, resolved_parent_assets, inherited_blueprint_graphs, logic_sources
-    - 保留 status, output_version, summary, name_map, linker, blueprint (精简)
-    - 保留 diagnostics（容错模式诊断需要）和 errors
-    """
-
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        data: dict[str, Any] = {
-            "status": {
-                "status": ir.status,
-                "message": ir.status_message,
-                "code": ir.status_code,
-            },
-            "output_version": _OUTPUT_VERSION_SUMMARY,
-            "summary": {
-                "package_name": ir.header.package_name,
-                "package_class": ir.header.package_class,
-                "package_flags": ir.header.package_flags,
-                "total_export_count": ir.header.total_export_count,
-                "total_import_count": ir.header.total_import_count,
-                "ue_version": ir.header.ue_version,
-                # 已废弃/版本门控字段
-                "owner_persistent_guid": ir.header.owner_persistent_guid or None,
-                "compressed_chunks": ir.header.compressed_chunks or None,
-                "additional_packages_to_cook": ir.header.additional_packages_to_cook or None,
-            },
-            "name_map": ir.name_map,
-            "exports": [self._export_summary(e) for e in ir.exports],
-        }
-        if ir.linker is not None:
-            data["linker"] = {
-                "has_linker": ir.linker.has_linker,
-                "import_paths": ir.linker.import_paths,
-                "export_paths": ir.linker.export_paths,
-            }
-        if ir.blueprint is not None:
-            data["blueprint"] = {
-                "parent_class": ir.blueprint.parent_class,
-                "function_count": len(ir.blueprint.functions),
-                "event_count": len(ir.blueprint.events),
-                "component_count": len(ir.blueprint.components),
-                "scs_node_count": len(ir.blueprint.scs_tree),
-            }
-        if ir.errors:
-            data["errors"] = ir.errors
-        if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
-        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
-
-    def _export_summary(self, export) -> dict[str, Any]:
-        """精简 export — 仅 name/class/parent_class。"""
-        return {
-            "name": export.object_name,
-            "class": export.object_class,
-            "parent_class": export.parent_class,
-        }
-
-    @property
-    def format_name(self) -> str:
-        return "json_summary"
-
-
 register_renderer("json", JSONRenderer)
-register_renderer("json_summary", JsonSummaryRenderer)
