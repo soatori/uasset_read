@@ -104,6 +104,7 @@ class StructValue(AdvancedPropertyValue):
     raw_size: Optional[int] = None
     parse_status: str = "parsed"
     property_type: str = "StructProperty"
+    unsupported_reason: str = ""
 
 
 @dataclass

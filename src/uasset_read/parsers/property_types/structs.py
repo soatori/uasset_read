@@ -401,6 +401,7 @@ def parse_struct_property(
             fields={},
             raw_size=tag.size,
             parse_status="opaque",
+            unsupported_reason=f"negative_struct_size:{tag.size}",
         )
 
     # Fast-path for simple structs (FScriptStruct.cs L174-178)
@@ -638,6 +639,7 @@ def parse_struct_property(
             fields={},
             raw_size=tag.size,
             parse_status="opaque",
+            unsupported_reason="zero_struct_size",
         )
 
     # Unknown structs may still be tagged FStructFallback payloads. Try the
@@ -676,7 +678,7 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
-    except Exception:
+    except Exception as e:
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
@@ -688,6 +690,7 @@ def parse_struct_property(
             fields={},
             raw_size=tag.size,
             parse_status="opaque",
+            unsupported_reason=f"struct_parse_exception:{type(e).__name__}:{e}",
         )
 
     if struct_end is not None and archive.tell() != struct_end:
