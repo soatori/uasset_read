@@ -58,7 +58,6 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 | `--markdown` | `markdown` | Markdown + Mermaid 流程图 |
 | `--blueprint-text` | `blueprint_text` | 蓝图节点翻译参考文本 |
 | `--blueprint-ue-text` | `blueprint_ue_text` | UE 编辑器风格蓝图节点文本 |
-| `--cpp-skeleton` | `cpp_skeleton` | C++ 类骨架 `.h` 头文件（需要 Blueprint） |
 
 ### 已移除的标志
 
@@ -66,6 +65,7 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 |------|------|
 | `--n2c` | N2C 模块已整体删除 |
 | `--cpp-json-ir` | 合并到 cpp_skeleton |
+| `--cpp-skeleton` | C++ 骨架生成功能已移除（v0.4.5） |
 | `--validate` | N2C 验证已移除 |
 | `--graph` | 旧版兼容标志已移除 |
 
@@ -120,7 +120,6 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 --blueprint-text  → blueprint_text
 --blueprint-ue-text → blueprint_ue_text
---cpp-skeleton    → cpp_skeleton
 --markdown        → markdown
 --summary         → json_summary
 --json-summary    → json_summary
@@ -131,15 +130,14 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 
 > [!WARNING]
-> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--graph`
+> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--cpp-skeleton`、`--graph`
 
 ## 解析路径
 
 CLI 通过 `core.py` 的 `parse_single()` 进行解析：
 
-1. 根据格式判断是否需要 linker（`cpp_skeleton` 需要，其他不需要）
-2. 调用 `parse_single()` → 内部自动完成：解析 → IR 构建 → 渲染
-3. 写入 stdout 或文件
+1. 调用 `parse_single()` → 内部自动完成：解析 → IR 构建 → 渲染
+2. 写入 stdout 或文件
 
 ## 批量模式
 
@@ -175,22 +173,19 @@ python run.py MyBlueprint.uasset --json
 # 3. 输出到文件
 python run.py MyBlueprint.uasset --json --output result.json
 
-# 4. C++ 骨架生成（需要 Blueprint）
-python run.py MyBlueprint.uasset --cpp-skeleton --output MyBlueprint.h
-
-# 5. Markdown + Mermaid 文档
+# 4. Markdown + Mermaid 文档
 python run.py MyBlueprint.uasset --markdown --output report.md
 
-# 6. 包含父级资产解析
+# 5. 包含父级资产解析
 python run.py MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
 
-# 7. 使用类型映射
+# 6. 使用类型映射
 python run.py MyBlueprint.uasset --json --mappings mappings.usmap
 
-# 8. 列出包文件
+# 7. 列出包文件
 python run.py MyBlueprint.uasset --list-package-files
 
-# 9. 列出所有可用格式
+# 8. 列出所有可用格式
 python run.py --list-formats
 ```
 
