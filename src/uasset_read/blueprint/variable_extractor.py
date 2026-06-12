@@ -838,6 +838,7 @@ def extract_blueprint_metadata(
                         else:
                             # 未知类，使用 object_name 作为父类名
                             parent_class = object_name
+            break
 
     # 推断父类（从 export 的 super_index）
     if not parent_class and hasattr(export, 'super_index'):
@@ -849,6 +850,13 @@ def extract_blueprint_metadata(
             parent_name, warn = _rpc(export.super_index, import_map, export_map)
         if parent_name:
             parent_class = parent_name
+
+    # 检测自引用父类（多文件分区 UE5 资产的 super_index/ParentClass 可能指向自身）
+    if parent_class:
+        obj_name = getattr(export, 'object_name', '') or ''
+        bp_name = obj_name.replace('_C', '').replace('Default__', '')
+        if bp_name and bp_name in parent_class:
+            parent_class = None
 
     # Merge primary BPGC path + fallback graph path
     functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
