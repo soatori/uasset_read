@@ -41,6 +41,10 @@ _PLAUSIBLE_SCRIPT_START_TOKENS = {
     # 产生裸数字（如 1509949440）等错误反编译输出。
 }
 
+# 扫描复杂度限制 — 防止大型蓝图组合爆炸导致超时
+_MAX_SCAN_ATTEMPTS = 500       # 单个函数最多尝试的 (start, end) 组合数
+_MAX_CANDIDATE_SIZE = 4096     # 单个候选字节流最大长度（字节）
+
 
 # ===========================================================================
 # UStruct type whitelist (per D-01, T-62-01 mitigation)
@@ -64,7 +68,7 @@ def extract_bytecode_bytes(
     name_map: list[str],
     import_map: list,
     export_map: list,
-) -> bytes | None:
+) -> tuple[bytes | None, str]:
     """
     Extract ScriptBytecode raw bytes from a UStruct export.
 
@@ -85,7 +89,9 @@ def extract_bytecode_bytes(
         export_map: Export table for class name resolution
 
     Returns:
-        Raw bytecode bytes, or None if export has no bytecode
+        Tuple of (bytecode_bytes, fallback_reason).
+        fallback_reason is one of: "function_export", "bpgc_bytecode_extraction",
+        "serial_scan_recovery", "none"
 
     Raises:
         ParseError: If serializedScriptSize is out of bounds
@@ -97,15 +103,15 @@ def extract_bytecode_bytes(
     # T-62-01: Verify class is in UStruct whitelist
     class_name = resolve_class_name(export.class_index, import_map, export_map)
     if class_name not in USTRUCT_TYPES:
-        return None
+        return None, "none"
 
     # No script data
-    if export.script_serial_size <= 0:
-        return None
+    if not export.has_script_serialization:
+        return None, "none"
 
     # Calculate script start position
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        script_start = export.serial_offset + export.script_serial_offset
+        script_start = export.serial_offset + export.script_serialization_start_offset
     else:
         script_start = export.serial_offset
 
@@ -135,18 +141,20 @@ def extract_bytecode_bytes(
             archive, export, summary, name_map, import_map, export_map
         )
         if fallback is not None:
-            return fallback
-        return _scan_export_serial_for_bytecode(
+            return fallback, "bpgc_bytecode_extraction"
+        result = _scan_export_serial_for_bytecode(
             archive, export, name_map, tolerant=getattr(archive, "_tolerant", False)
         )
+        reason = "serial_scan_recovery" if result is not None else "none"
+        return result, reason
 
-    if serialized_script_size > export.script_serial_size:
+    if serialized_script_size > export.script_serialization_size:
         raise ParseError(
             f"serializedScriptSize ({serialized_script_size}) exceeds "
-            f"script_serial_size ({export.script_serial_size}) for '{export.object_name}'"
+            f"script_serialization_size ({export.script_serialization_size}) for '{export.object_name}'"
         )
 
-    return archive.read_bytes(serialized_script_size)
+    return archive.read_bytes(serialized_script_size), "function_export"
 
 
 def _scan_export_serial_for_bytecode(
@@ -161,6 +169,9 @@ def _scan_export_serial_for_bytecode(
     Function body still contains a compact bytecode suffix. When the normal
     UStruct path and BPGC fallback both fail, scan the export serial bytes for a
     parseable expression stream ending in EX_EndOfScript.
+
+    Complexity guards: _MAX_SCAN_ATTEMPTS caps total (start, end) pairs,
+    _MAX_CANDIDATE_SIZE caps each candidate's byte length.
     """
     original_pos = archive.tell()
     try:
@@ -171,6 +182,7 @@ def _scan_export_serial_for_bytecode(
 
     best: tuple[int, bytes] | None = None
     end_positions = [idx for idx, b in enumerate(data) if b == 0x53]
+    attempts = 0
     for start, first in enumerate(data):
         if first not in _PLAUSIBLE_SCRIPT_START_TOKENS:
             continue
@@ -180,6 +192,16 @@ def _scan_export_serial_for_bytecode(
             candidate = data[start:end + 1]
             if len(candidate) < 2:
                 continue
+            if len(candidate) > _MAX_CANDIDATE_SIZE:
+                # Larger candidates are unlikely; skip further end positions
+                break
+            attempts += 1
+            if attempts > _MAX_SCAN_ATTEMPTS:
+                logger.debug(
+                    "Scan bytecode for '%s': hit _MAX_SCAN_ATTEMPTS (%d), stopping",
+                    export.object_name, _MAX_SCAN_ATTEMPTS,
+                )
+                return best[1] if best else None
             try:
                 expressions = parse_bytecode_stream(candidate, name_map, tolerant=tolerant)
             except Exception:
@@ -246,7 +268,7 @@ def _bpgc_fallback(
 
     # Populate cache on first fallback call
     if _bpgc_bytecode_cache is None:
-        logger.warning(
+        logger.debug(
             "Falling back to BPGC bytecode extraction for '%s'",
             export.object_name,
         )
@@ -306,6 +328,9 @@ def reset_bpgc_cache() -> None:
     """
     global _bpgc_bytecode_cache
     _bpgc_bytecode_cache = None
+    # 同时重置 FKismetArchive 的警告去重集合
+    from uasset_read.kismet.archive import FKismetArchive
+    FKismetArchive.reset_warned_offsets()
 
 
 # ===========================================================================
@@ -359,7 +384,7 @@ def extract_and_parse(
     import_map: list,
     export_map: list,
     tolerant: bool = False,
-) -> tuple[list[KismetExpression], str | None]:
+) -> tuple[list[KismetExpression], str | None, str]:
     """
     Extract ScriptBytecode from a UStruct export and parse into expressions.
 
@@ -375,33 +400,33 @@ def extract_and_parse(
         tolerant: If True, use tolerant mode for FKismetArchive
 
     Returns:
-        Tuple of (expressions, error_message).
-        - On success: (list[KismetExpression], None)
-        - On non-UStruct or no bytecode: ([], None)
-        - On ParseError: ([], str(error))
+        Tuple of (expressions, error_message, fallback_reason).
+        - On success: (list[KismetExpression], None, reason)
+        - On non-UStruct or no bytecode: ([], None, "none")
+        - On ParseError: ([], str(error), "none")
     """
     # Check if this is a UStruct type
     from uasset_read.serializers.object_resources import resolve_class_name
 
     class_name = resolve_class_name(export.class_index, import_map, export_map)
     if class_name not in USTRUCT_TYPES:
-        return ([], None)
+        return ([], None, "none")
 
     try:
-        bytecode_bytes = extract_bytecode_bytes(
+        bytecode_bytes, fallback_reason = extract_bytecode_bytes(
             archive, export, summary, name_map, import_map, export_map
         )
     except ParseError as e:
-        return ([], str(e))
+        return ([], str(e), "none")
 
     if bytecode_bytes is None:
-        return ([], None)
+        return ([], None, fallback_reason)
 
     try:
         expressions = parse_bytecode_stream(bytecode_bytes, name_map, tolerant=tolerant)
-        return (expressions, None)
+        return (expressions, None, fallback_reason)
     except ParseError as e:
-        return ([], str(e))
+        return ([], str(e), fallback_reason)
 
 
 # ===========================================================================

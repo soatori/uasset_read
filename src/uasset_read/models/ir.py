@@ -39,6 +39,7 @@ class NodeIR:
     node_comment: str | None
     pins: list[PinIR]
     execution_flow: list[dict]
+    macro_expansion: dict | None = None
 
 
 @dataclass
@@ -62,6 +63,31 @@ class PropertyIR:
 
 
 @dataclass
+class ExportRawIR:
+    """UE 原始导出表字段（FObjectExport 对应）。
+
+    保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
+    """
+    class_index: int = 0
+    super_index: int = 0
+    outer_index: int = 0
+    template_index: int = 0
+    object_flags: int = 0
+    serial_offset: int = 0
+    package_flags: int = 0
+    b_forced_export: bool = False
+    b_not_for_client: bool = False
+    b_not_for_server: bool = False
+    b_is_inherited_instance: bool = False
+    b_not_always_loaded_for_editor_game: bool = True
+    b_is_asset: bool = False
+    b_generate_public_hash: bool = False
+    script_serialization_start_offset: int = 0
+    script_serialization_end_offset: int = 0
+    guid: str = ""
+
+
+@dataclass
 class ExportIR:
     """单个导出对象的 IR 表示。"""
     index: int
@@ -74,22 +100,56 @@ class ExportIR:
     properties: list[PropertyIR]
     graphs: list[GraphIR]
     bulk_data: dict | None
+    parse_status: str = "success"
+    fallback_reason: str | None = None
+    error_message: str | None = None
+    asset_type_data: dict | None = None
+    ue_export_raw: ExportRawIR | None = None
+    diagnostics: dict | None = None
 
 
 @dataclass
 class BlueprintFunctionIR:
-    """蓝图函数 IR。"""
+    """蓝图函数 IR（完整元数据，等价 UFunction 描述）。"""
     name: str
     return_type: str
     parameters: list[dict]
+    function_flags: int = 0
+    is_pure: bool = False
+    is_blueprint_callable: bool = False
+    is_const: bool = False
+    is_static: bool = False
+    is_net: bool = False
+    is_net_reliable: bool = False
+    is_blueprint_private: bool = False
+    access_specifier: str = "Public"
+    meta_data: dict = field(default_factory=dict)
+    implementation: dict | None = None
+    function_graph: dict | None = None
+    implementation_status: str = "missing"  # "decompiled"|"graph_only"|"metadata_only"|"missing"
 
 
 @dataclass
 class BlueprintEventIR:
-    """蓝图事件 IR。"""
+    """蓝图事件 IR（完整元数据，等价蓝图事件描述）。"""
     name: str
     event_type: str
     parameters: list[dict]
+    function_flags: int = 0
+    is_override: bool = False
+    override_parent_class: str = ""
+    override_parent_event: str = ""
+    is_interface_event: bool = False
+    interface_class: str = ""
+    is_net: bool = False
+    is_net_multicast: bool = False
+    is_replicated: bool = False
+    is_cosmetic: bool = False
+    is_static: bool = False
+    meta_data: dict = field(default_factory=dict)
+    implementation: dict | None = None
+    function_graph: dict | None = None
+    implementation_status: str = "missing"  # "decompiled"|"graph_only"|"metadata_only"|"missing"
 
 
 @dataclass
@@ -109,6 +169,7 @@ class DecompiledFunctionIR:
     cpp_code: str
     parameters: list[dict]
     return_type: str
+    fallback_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -128,11 +189,28 @@ class LinkerSummaryIR:
 
 @dataclass
 class VariableIR:
-    """蓝图变量 IR。"""
+    """蓝图变量 IR（完整元数据，等价 FBPVariableDescription）。"""
     name: str
     type: str
     default_value: str | None
     kind: str = "user"  # "user" | "component" | "input_action" | "metadata"
+    guid: str | None = None
+    category: str = ""
+    property_flags: int = 0
+    replication_condition: int = 0
+    rep_notify_func: str = ""
+    friendly_name: str = ""
+    metadata: dict = field(default_factory=dict)
+    flags_labels: list[str] = field(default_factory=list)
+    edit_condition: str = ""
+    is_edit_anywhere: bool = False
+    is_visible_anywhere: bool = False
+    is_blueprint_read_only: bool = False
+    is_transient: bool = False
+    is_replicated: bool = False
+    is_rep_notify: bool = False
+    is_expose_on_spawn: bool = False
+    is_save_game: bool = False
 
 
 @dataclass
@@ -148,3 +226,16 @@ class PackageIR:
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
     diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
+    resolved_parent_assets: list[dict] = field(default_factory=list)
+    inherited_blueprint_graphs: list[dict] = field(default_factory=list)
+    logic_sources: list[dict] = field(default_factory=list)
+    soft_object_paths: list[dict] = field(default_factory=list)
+    soft_package_references: list[str] = field(default_factory=list)
+    depends_map: list[list[int]] = field(default_factory=list)
+    resolved_depends_map: list[list[dict]] = field(default_factory=list)
+    asset_registry_data_offset: int = 0
+    errors: list[str] = field(default_factory=list)
+    status: str = "success"
+    status_message: str | None = None
+    status_code: str | None = None

@@ -6,10 +6,10 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 """
 import logging
 import mmap
-from typing import Optional, Dict, BinaryIO
+from typing import Optional, Dict, BinaryIO, Callable, Any
 
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH
+from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
@@ -45,7 +45,7 @@ class FArchive:
                         access=mmap.ACCESS_READ
                     )
                     self._use_mmap = True
-                except (OSError, ValueError, PermissionError) as e:
+                except (OSError, ValueError, PermissionError, MemoryError) as e:
                     self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
                     self._use_mmap = False
         except BaseException:
@@ -454,10 +454,13 @@ class FArchive:
                     self._logger.warning(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "truncated at null (null_at=%d, nulls_total=%d), "
-                        "truncated_value=%r, preview_orig=%r, hex=%s, "
                         "consumed=%d bytes, end_pos=%d",
                         pos_before, length, first_null_idx, null_count,
-                        truncated, preview, data[:32].hex(), len(data), self.tell()
+                        len(data), self.tell()
+                    )
+                    self._logger.debug(
+                        "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
+                        pos_before, data[:32].hex(), preview, truncated
                     )
                     return truncated
                 else:
@@ -465,8 +468,12 @@ class FArchive:
                     self._logger.error(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "all nulls (completely corrupted), "
-                        "hex=%s, consumed=%d bytes, end_pos=%d",
-                        pos_before, length, data[:32].hex(), len(data), self.tell()
+                        "consumed=%d bytes, end_pos=%d",
+                        pos_before, length, len(data), self.tell()
+                    )
+                    self._logger.debug(
+                        "FString hex detail: pos=%d, hex=%s",
+                        pos_before, data[:32].hex()
                     )
                     return ""
 
@@ -522,7 +529,7 @@ class FArchive:
         )
         return "None"
 
-    def read_array(self, count: int, element_reader) -> list:
+    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any]) -> list:
         """读取指定数量的元素数组。
 
         泛型数组读取方法，等价于 UE 的 ReadArray<T>。
@@ -543,7 +550,7 @@ class FArchive:
         """
         if count < 0:
             raise ParseError(f"read_array: 负数元素数量 {count}")
-        if count > 1_000_000:  # 防御性检查
+        if count > MAX_ARRAY_COUNT:  # 防御性检查
             raise ParseError(f"read_array: 元素数量 {count} 超过最大限制")
 
         result = []

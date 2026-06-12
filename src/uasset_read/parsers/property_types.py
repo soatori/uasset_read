@@ -185,6 +185,16 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # AnimSequence 结构体（部分资产使用 tagged 格式）
     "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
     "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
+    # 编辑器结构体
+    "FEditorElement",    # 蓝图编辑器组合框选项（DisplayName/Value/bIsDefault）
+    "EditorElement",
+    # 材质参数结构体（材质实例资产使用 tagged 格式）
+    "ScalarParameterValue",
+    "FScalarParameterValue",
+    "FMaterialParameterInfo",
+    # 动画混合空间结构体（部分资产使用 tagged 格式）
+    "BlendSample",          # FBlendSample — BlendSpace 采样点（SampleValue/Time/RateScale/bIsValid）
+    "FBlendSample",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -220,6 +230,50 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "AnimNotifyTrack": [
         ("TrackIndex", "Int64Property"),
         ("TrackName", "NameProperty"),
+    ],
+    # 编辑器结构体
+    "FEditorElement": [
+        ("DisplayName", "TextProperty"),
+        ("Value", "StrProperty"),
+        ("bIsDefault", "BoolProperty"),
+    ],
+    "EditorElement": [
+        ("DisplayName", "TextProperty"),
+        ("Value", "StrProperty"),
+        ("bIsDefault", "BoolProperty"),
+    ],
+    # 材质参数结构体 tagged fallback schemas
+    # FMaterialParameterInfo: FName ParameterName + int32 Index + bool bOverride
+    "FMaterialParameterInfo": [
+        ("ParameterName", "NameProperty"),
+        ("Index", "IntProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    # FScalarParameterValue: FMaterialParameterInfo ParameterInfo + float ParameterValue + bool bOverride
+    "ScalarParameterValue": [
+        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterValue", "FloatProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    "FScalarParameterValue": [
+        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterValue", "FloatProperty"),
+        ("bOverride", "BoolProperty"),
+    ],
+    # 动画混合空间结构体 tagged fallback schemas
+    # FBlendSample: FVector SampleValue + float Time + int32 RateScale + bool bIsValid
+    # 参考：Engine/Classes/Animation/BlendSpace.h — FBlendSample
+    "BlendSample": [
+        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
+        ("Time", "FloatProperty"),            # float — 动画时间值
+        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
+        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
+    ],
+    "FBlendSample": [
+        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
+        ("Time", "FloatProperty"),            # float — 动画时间值
+        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
+        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
     ],
 }
 
@@ -344,11 +398,41 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
-def parse_soft_object_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> SoftObjectPathValue:
-    """解析 SoftObjectProperty（FSoftObjectPath）。"""
-    asset_path = archive.read_fstring()
-    sub_path = archive.read_fstring()
-    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
+def parse_soft_object_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    soft_object_path_list: Optional[List[Dict]] = None,
+) -> SoftObjectPathValue:
+    """解析 SoftObjectProperty（FSoftObjectPath）。
+
+    当 soft_object_path_list 存在时（UE5.7+），读取 int32 索引。
+    否则读取 FString 对（传统格式）。
+    """
+    if soft_object_path_list is not None and len(soft_object_path_list) > 0:
+        # UE5.7+ 索引格式
+        index = archive.read_i32()
+        if 0 <= index < len(soft_object_path_list):
+            entry = soft_object_path_list[index]
+            return SoftObjectPathValue(
+                raw_kind=tag.type,
+                asset_path=entry.get('asset_path', ''),
+                sub_path=entry.get('sub_path', ''),
+                index=index,
+            )
+        else:
+            return SoftObjectPathValue(
+                raw_kind=tag.type,
+                asset_path='',
+                sub_path='',
+                index=index,
+                error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
+            )
+    else:
+        # 传统 FString 格式
+        asset_path = archive.read_fstring()
+        sub_path = archive.read_fstring()
+        return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
 def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
@@ -373,10 +457,14 @@ def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
     return archive.read_i32()
 
 
-def parse_soft_class_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
-    """解析 SoftClassProperty"""
-    # 与 SoftObjectProperty 解析方式相同
-    return parse_soft_object_property(tag, archive, name_map or [])
+def parse_soft_class_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str] = None,
+    soft_object_path_list: Optional[List[Dict]] = None,
+) -> SoftObjectPathValue:
+    """解析 SoftClassProperty — 与 SoftObjectProperty 解析方式相同。"""
+    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
 
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
@@ -864,7 +952,8 @@ def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
 
 def _read_ftext_args(archive: FArchive) -> None:
     """读取 FText 参数字典并丢弃（仅消耗字节）。"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "FText args")
     for _ in range(count):
         archive.read_fstring()  # key
         archive.read_fstring()  # value
@@ -954,7 +1043,8 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
     """解析 MulticastDelegateProperty"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
@@ -984,7 +1074,8 @@ def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
     """解析 FieldPathProperty"""
-    count = archive.read_i32()
+    from uasset_read.parsers.utils import read_validated_count
+    count = read_validated_count(archive, 10_000, "FieldPath")
     path = []
     for _ in range(count):
         path.append(archive.read_fstring())

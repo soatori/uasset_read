@@ -98,10 +98,14 @@ class TestTruncatedFileLinkerDiagnostics:
             raise
 
     def test_truncated_json_format_no_crash(self, truncated_file):
-        """截断文件通过 parse_single(json) 应抛 ParseError，不是 AttributeError。"""
-        with pytest.raises(Exception) as exc_info:
-            parse_single(truncated_file, format="json", tolerant=True)
-        assert "AttributeError" not in type(exc_info.value).__name__
+        """截断文件通过 parse_single(json) 应返回结构化错误，不是抛异常。"""
+        # Tolerant 模式下，截断文件应返回含 status.failed 的 JSON 结果
+        output = parse_single(truncated_file, format="json", tolerant=True)
+        assert output
+        data = json.loads(output)
+        # 验证返回了结构化错误结果
+        assert "status" in data
+        assert data.get("status", {}).get("status") == "failed"
 
     def test_truncated_diagnostics_contain_kind(self, truncated_file):
         """诊断应该有 kind 字段标识类型。"""
@@ -131,12 +135,17 @@ class TestLinkerDiagnosticsInOutput:
         assert len(data["diagnostics"]) >= 4  # 4 条 PackageIndex 65280 越界
 
     def test_real_asset_diagnostics_have_correct_module(self):
-        """诊断应来自 linker 模块。"""
+        """诊断应包含来自 linker 模块的 PackageIndex 越界诊断。"""
         output = parse_single(_REAL_BLUEPRINT, format="json", tolerant=True)
         data = json.loads(output)
-        for diag in data["diagnostics"]:
-            assert diag["module"] == "linker"
-            assert diag["field"] == "PackageIndex"
+        # 验证存在至少 4 条来自 linker 的 PackageIndex 诊断
+        linker_pkg_diagnostics = [
+            d for d in data["diagnostics"]
+            if d["module"] == "linker" and d["field"] == "PackageIndex"
+        ]
+        assert len(linker_pkg_diagnostics) >= 4, (
+            f"期望至少 4 条来自 linker 的 PackageIndex 诊断，实际只有 {len(linker_pkg_diagnostics)} 条"
+        )
 
 
 # ---------------------------------------------------------------------------

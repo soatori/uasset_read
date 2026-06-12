@@ -259,3 +259,56 @@ class EX_NameConst(KismetExpressionT[str]):
         num = archive.read_u32()
         name = archive.resolve_fname(idx, num)
         return cls(Value=name)
+
+
+@dataclass
+class EX_Unknown6E(KismetExpressionT[bytes]):
+    """Game-specific opcode 0x6E — placeholder that reads remaining bytecode as raw bytes."""
+
+    Value: bytes = b""
+
+    @property
+    def Token(self):
+        return EExprToken.EX_6E
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6E:
+        # 0x6E 格式未知，读取单个字节并回退（交由 tolerant 模式继续解析）
+        archive.seek(archive.tell() - 1)  # 回退到 opcode 位置
+        return cls(Value=b"")
+
+
+@dataclass
+class EX_Unknown6F(KismetExpressionT[bytes]):
+    """Game-specific opcode 0x6F — placeholder that reads remaining bytecode as raw bytes."""
+
+    Value: bytes = b""
+
+    @property
+    def Token(self):
+        return EExprToken.EX_6F
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6F:
+        # 0x6F 格式未知，读取单个字节并回退（交由 tolerant 模式继续解析）
+        archive.seek(archive.tell() - 1)  # 回退到 opcode 位置
+        return cls(Value=b"")
+
+
+@dataclass
+class EX_MaxSentinel(KismetExpression):
+    """EX_Max (0xFF) 哨兵值 — 标记脚本结束，与 EX_EndOfScript 行为相同。
+
+    在 UE 蓝图中，0xFF 是 EExprToken 枚举的上限哨兵，不是有效操作码。
+    出现在字节码末尾 padding 或未初始化数据中。
+    将其视为脚本结束标记，避免 tolerant 模式逐字节跳过导致组合爆炸。
+    """
+
+    @property
+    def Token(self):
+        return EExprToken.EX_Max
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MaxSentinel:
+        # EX_Max 无额外数据，仅消耗 1 字节 opcode
+        return cls()

@@ -134,14 +134,14 @@ def extract_bpgc_bytecode(
         logger.debug("Export '%s' is not a BlueprintGeneratedClass, skipping", bpgc_export.object_name)
         return {}
 
-    # Step 2: Check script_serial_size
-    if bpgc_export.script_serial_size <= 0:
+    # Step 2: Check script_serialization
+    if not bpgc_export.has_script_serialization:
         logger.debug("BPGC '%s' has no script_serial_region data", bpgc_export.object_name)
         return {}
 
     # Step 3: Calculate script start position
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        script_start = bpgc_export.serial_offset + bpgc_export.script_serial_offset
+        script_start = bpgc_export.serial_offset + bpgc_export.script_serialization_start_offset
     else:
         script_start = bpgc_export.serial_offset
 
@@ -176,9 +176,9 @@ def extract_bpgc_bytecode(
         logger.warning("BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name)
         return {}
 
-    if remaining_bytes > bpgc_export.script_serial_size:
+    if remaining_bytes > bpgc_export.script_serialization_size:
         # Clamp to script_serial_region bounds
-        remaining_bytes = bpgc_export.script_serial_size - (current_pos - script_start)
+        remaining_bytes = bpgc_export.script_serialization_size - (current_pos - script_start)
         if remaining_bytes <= 0:
             return {}
 

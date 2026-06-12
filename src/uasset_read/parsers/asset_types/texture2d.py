@@ -1,7 +1,8 @@
-"""Texture2D 资产属性提取器。
+"""Texture2D 资产元数据提取器（partial metadata）。
 
-参考 UTexture2D.cs:
-  ImportedSize → AddressX/Y → bCooked → PixelFormat → BulkData per MIP
+注意：本模块不尝试解析 UE 标准 UTexture2D::Serialize 布局（该布局依赖
+版本、CustomVersion 和 FTexturePlatformData 结构）。
+仅提取原始字节样本供诊断使用。
 """
 from __future__ import annotations
 
@@ -12,59 +13,12 @@ if TYPE_CHECKING:
 
 
 def parse_texture2d(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
-    """解析 Texture2D 资产的核心属性。"""
-    result: Dict[str, Any] = {}
+    """提取 Texture2D 原始字节样本（opaque partial metadata）。"""
     start = archive.tell()
-
-    if archive.total_size() - start >= 20:
-        magic = archive.read(4)
-        if magic == b"UT2D":
-            result["imported_size_x"] = archive.read_i32()
-            result["imported_size_y"] = archive.read_i32()
-            result["pixel_format"] = archive.read_i32()
-            mip_count = archive.read_i32()
-            result["mip_count"] = mip_count
-            mips = []
-            for _ in range(max(0, mip_count)):
-                mips.append({
-                    "size_x": archive.read_i32(),
-                    "size_y": archive.read_i32(),
-                    "bulk_offset": archive.read_u64(),
-                    "bulk_size": archive.read_u64(),
-                })
-            result["mip_levels"] = mips
-            result["parse_status"] = "metadata"
-            result["raw_offset"] = start
-            result["raw_size"] = archive.tell() - start
-            return result
-        archive.seek(start)
-
-    # ImportedSize (FIntPoint)
-    result["imported_size_x"] = archive.read_i32()
-    result["imported_size_y"] = archive.read_i32()
-
-    # AddressX, AddressY (纹理寻址模式)
-    result["address_x"] = archive.read_i32()
-    result["address_y"] = archive.read_i32()
-
-    # bCooked
-    b_cooked = archive.read_u8() == 1
-    result["b_cooked"] = b_cooked
-
-    if not b_cooked:
-        return result
-
-    # 每个像素格式块
-    format_count = archive.read_i32()
-    result["format_count"] = format_count
-
-    for _ in range(format_count):
-        # PixelFormat enum
-        pf_value = archive.read_i32()
-        result["pixel_format"] = pf_value
-
-        # bIsSrgb
-        b_srgb = archive.read_u8() == 1
-        result["b_srgb"] = b_srgb
-
-    return result
+    remaining = max(0, archive.total_size() - start)
+    sample = archive.read(min(remaining, 256))
+    return {
+        "raw_offset": start,
+        "sample_size": len(sample),
+        "parse_status": "partial_metadata",
+    }

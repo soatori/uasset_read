@@ -166,6 +166,10 @@ class PackageLinker:
                     if super_inst is not None:
                         inst.super_object = super_inst
 
+    def export_objects(self) -> List[UObjectInstance]:
+        """返回导出对象列表的只读副本。"""
+        return list(self._export_objects)
+
     def resolve_package_index(
         self, pkg_idx: "PackageIndex"
     ) -> Optional[UObjectInstance]:
@@ -211,8 +215,21 @@ class PackageLinker:
         all_objs = self._import_objects + self._export_objects
         return [inst for inst in all_objs if inst.outer is obj]
 
-    def preload(self, index: int) -> None:
-        """Lazily deserialize properties for export *index*."""
+    def preload(
+        self,
+        index: int,
+        mappings=None,
+        game: Optional[str] = None,
+        tolerant: bool = True,
+    ) -> None:
+        """Lazily deserialize properties for export *index*.
+
+        Args:
+            index: Export index to preload.
+            mappings: Type mappings provider (optional).
+            game: Game identifier (optional).
+            tolerant: Tolerant parsing mode (default True).
+        """
         if index in self._preload_cache:
             return
         if index < 0 or index >= len(self._export_objects):
@@ -228,6 +245,63 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # === Class Serialization Strategy Check ===
+        # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
+        # 对 OPAQUE_CLASS_PAYLOAD 类，设置初始状态但不 early return，
+        # 让 parse_properties_from_export() 调用 asset type handler 提取元数据
+        # 参见 Issue #23: class serialization strategy 不应绕过 asset type handler
+        from uasset_read.parsers.class_serialization_strategy import (
+            get_serialization_strategy,
+            SerializationStrategy,
+        )
+        class_name = instance.object_class
+        if class_name is not None:
+            strategy = get_serialization_strategy(class_name)
+            exp = self._export_map[index]
+            if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
+                # 完全不支持的类，直接跳过（无 asset handler）
+                setattr(instance, "parse_status", "skipped")
+                setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
+                setattr(exp, "parse_status", "skipped")
+                setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
+                # 确保 properties 至少为空列表
+                exp.properties = []
+                logger.debug(
+                    "Skipping export #%d (%s): unsupported class '%s'",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+            elif strategy == SerializationStrategy.OPAQUE_CLASS_PAYLOAD:
+                # Opaque payload — 设置初始状态，但不 early return
+                # 让 parse_properties_from_export() 调用 asset type handler
+                # handler 可能会更新 parse_status 为 partial_metadata
+                setattr(instance, "parse_status", "opaque")
+                setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
+                setattr(exp, "parse_status", "opaque")
+                setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
+                # 存储 ScriptSerialization 绝对偏移用于诊断
+                if hasattr(exp, 'script_serialization_start_offset'):
+                    exp._script_serialization_start_absolute = (
+                        exp.serial_offset + exp.script_serialization_start_offset
+                    )
+                if hasattr(exp, 'script_serialization_end_offset'):
+                    exp._script_serialization_end_absolute = (
+                        exp.serial_offset + exp.script_serialization_end_offset
+                    )
+                logger.debug(
+                    "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                # 不 return，继续进入 parse_properties_from_export()
+            # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
+
+        # === Offset Validation ===
         # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
         if instance.serial_offset < 0 or instance.serial_offset > self._file_size:
             self._diagnostics.append(OffsetRangeDiagnostic(
@@ -276,6 +350,10 @@ class PackageLinker:
             self._name_map,
             self._export_map,
             self._import_map,
+            linker=self,
+            mappings=mappings,
+            game=game,
+            tolerant=tolerant,
         )
         instance._preloaded = True
         self._preload_cache[index] = True
@@ -394,16 +472,44 @@ class PackageLinker:
     def _build_dependency_graph(self) -> None:
         """将 DependsMap 转换为 UObjectInstance 之间的依赖链接。
 
-        DependsMap[export_index] = [依赖的 export_index 列表]
+        DependsMap values are FPackageIndex (int32):
+        - Positive: export index (1-based)
+        - Negative: import index (-1 based)
+        - Zero: null
+
+        DependsMap[export_index] = [FPackageIndex 列表]
         """
         if not hasattr(self._summary, 'depends_map') or not self._summary.depends_map:
             return
 
+        from uasset_read.serializers.object_resources import PackageIndex
+
         depends_map = self._summary.depends_map
         for exp_idx, dep_indices in enumerate(depends_map):
-            if exp_idx < len(self._export_objects):
-                inst = self._export_objects[exp_idx]
-                inst.dependencies = []
-                for dep_idx in dep_indices:
-                    if 0 <= dep_idx < len(self._export_objects):
-                        inst.dependencies.append(self._export_objects[dep_idx])
+            if exp_idx >= len(self._export_objects):
+                continue
+
+            inst = self._export_objects[exp_idx]
+            inst.dependencies = []
+
+            for raw_dep in dep_indices:
+                if raw_dep == 0:
+                    # Null dependency, skip
+                    continue
+
+                # Convert FPackageIndex to UObjectInstance
+                pkg_idx = PackageIndex(raw_dep)
+                resolved = self.resolve_package_index(pkg_idx)
+
+                if resolved is not None:
+                    inst.dependencies.append(resolved)
+                else:
+                    # Record diagnostic for unresolvable dependency
+                    self._diagnostics.append(OffsetRangeDiagnostic(
+                        module="linker",
+                        field="DependsMap",
+                        export_index=exp_idx,
+                        target_offset=raw_dep,
+                        source="_build_dependency_graph",
+                        error=f"Export #{exp_idx} dependency {raw_dep} could not be resolved",
+                    ))
