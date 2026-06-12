@@ -24,7 +24,7 @@ from uasset_read.constants import (
     PKG_UnversionedProperties,
     UE5_PROPERTY_TAG_EXTENSION,
 )
-from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded, parse_ue511_ctrl_flags
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
 
 from dataclasses import dataclass
@@ -143,11 +143,18 @@ def parse_properties_from_export(
         if serialization_control & 0x02:
             overridden_operation = archive.read_u8()
         # 记录未知位（非 0x00 和非 0x02 的位）
-        unknown_bits = serialization_control & ~0x02
+        ctrl_info = parse_ue511_ctrl_flags(serialization_control)
+        unknown_bits = serialization_control & ~0x3F  # 0x3F = all known bits
         if unknown_bits:
             logger.warning(
-                "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
-                getattr(export, "object_name", ""), unknown_bits, control_offset,
+                "Export '%s' SerializationControlExtensions 未知位: 0x%02X "
+                "(已知位: has_array_index=%s, serialize_control=%s, has_extensions=%s, "
+                "has_binary_or_native=%s, bool_true=%s, skipped_serialize=%s; offset %d)",
+                getattr(export, "object_name", ""), serialization_control,
+                ctrl_info["has_array_index"], ctrl_info["serialize_control"],
+                ctrl_info["has_extensions"], ctrl_info["has_binary_or_native"],
+                ctrl_info["bool_true"], ctrl_info["skipped_serialize"],
+                control_offset,
             )
         # 存储到 export 的 transforms 中，供 IR/JSON 输出
         if not hasattr(export, "transforms") or export.transforms is None:
