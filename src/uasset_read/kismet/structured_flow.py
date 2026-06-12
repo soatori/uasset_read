@@ -10,20 +10,12 @@ falls back to goto for edge cases.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.link.linker import PackageLinker
-
-
-@dataclass
-class _Block:
-    """Represents a structured block of code."""
-    lines: list[str] = field(default_factory=list)
-    start: int = 0
-    end: int = 0
 
 
 class StructuredControlFlow:
@@ -161,19 +153,6 @@ class StructuredControlFlow:
             i += 1
 
         return regions
-
-    def _find_matching_pop(
-        self,
-        expressions: list["KismetExpression"],
-        search_from: int,
-        before_idx: int,
-    ) -> int | None:
-        """Find EX_PopExecutionFlow between search_from and before_idx."""
-        from uasset_read.kismet.expressions import EX_PopExecutionFlow
-        for i in range(search_from, min(before_idx, len(expressions))):
-            if isinstance(expressions[i], EX_PopExecutionFlow):
-                return i
-        return None
 
     def _find_back_jump(
         self,

@@ -16,9 +16,13 @@ if TYPE_CHECKING:
     )
     from uasset_read.versioning import VersionContainer
 
-from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
+from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.constants import (
+    PKG_UnversionedProperties,
+    UE5_SCRIPT_SERIALIZATION_OFFSET,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,7 @@ class PackageLinker:
         self._export_objects: List[UObjectInstance] = []
         self._root_objects: List[UObjectInstance] = []
         self._preload_cache: dict[int, bool] = {}
+        self._preloading_in_progress: set[int] = set()
         self._diagnostics: List[OffsetRangeDiagnostic] = []
         self._file_size: int = getattr(archive, '_file_size', 0)
 
@@ -177,6 +182,11 @@ class PackageLinker:
 
         Validates index bounds and records OffsetRangeDiagnostic on out-of-bounds.
         Returns None for null or out-of-bounds indices.
+
+        FPackageIndex 语义（ObjectResource.h）：
+        - Index > 0 → Export（实际下标 = Index - 1）
+        - Index < 0 → Import（实际下标 = -Index - 1）
+        - Index = 0 → Null
         """
         if pkg_idx.is_null:
             return None
@@ -185,13 +195,17 @@ class PackageLinker:
             if 0 <= idx < len(self._export_objects):
                 return self._export_objects[idx]
             # 越界诊断
+            resolved_type = pkg_idx.resolved_type
             self._diagnostics.append(OffsetRangeDiagnostic(
                 module="linker",
                 field="PackageIndex",
                 export_index=idx,
                 file_size=self._file_size,
                 source="resolve_package_index",
-                error=f"Export PackageIndex {pkg_idx.index} (idx={idx}) 越界，export 数量 {len(self._export_objects)}",
+                error=(
+                    f"Export PackageIndex {pkg_idx.index} (type={resolved_type}, idx={idx}) "
+                    f"越界，export 数量 {len(self._export_objects)}"
+                ),
             ))
             return None
         if pkg_idx.is_import:
@@ -199,13 +213,17 @@ class PackageLinker:
             if 0 <= idx < len(self._import_objects):
                 return self._import_objects[idx]
             # 越界诊断
+            resolved_type = pkg_idx.resolved_type
             self._diagnostics.append(OffsetRangeDiagnostic(
                 module="linker",
                 field="PackageIndex",
                 import_index=idx,
                 file_size=self._file_size,
                 source="resolve_package_index",
-                error=f"Import PackageIndex {pkg_idx.index} (idx={idx}) 越界，import 数量 {len(self._import_objects)}",
+                error=(
+                    f"Import PackageIndex {pkg_idx.index} (type={resolved_type}, idx={idx}) "
+                    f"越界，import 数量 {len(self._import_objects)}"
+                ),
             ))
             return None
         return None
@@ -221,6 +239,7 @@ class PackageLinker:
         mappings=None,
         game: Optional[str] = None,
         tolerant: bool = True,
+        _recursion_depth: int = 0,
     ) -> None:
         """Lazily deserialize properties for export *index*.
 
@@ -229,6 +248,7 @@ class PackageLinker:
             mappings: Type mappings provider (optional).
             game: Game identifier (optional).
             tolerant: Tolerant parsing mode (default True).
+            _recursion_depth: Internal recursion depth counter (max 10).
         """
         if index in self._preload_cache:
             return
@@ -240,10 +260,27 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # Issue #68: 循环依赖 defer 机制
+        if index in self._preloading_in_progress:
+            instance.parse_status = "deferred"
+            exp = self._export_map[index]
+            setattr(exp, "parse_status", "deferred")
+            setattr(exp, "fallback_reason", "circular_dependency_deferred")
+            logger.debug(
+                "Circular dependency detected for export #%d (%s), deferring",
+                index,
+                instance.object_name,
+            )
+            return
+
         if instance.serial_size == 0:
             instance._preloaded = True
             self._preload_cache[index] = True
             return
+
+        # Issue #69: 递归加载 SuperStruct 链（UStruct/UClass 继承链）
+        if _recursion_depth < 10:
+            self._preload_super_chain(instance, index, mappings, game, tolerant, _recursion_depth)
 
         # === Class Serialization Strategy Check ===
         # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
@@ -299,6 +336,18 @@ class PackageLinker:
                     class_name,
                 )
                 # 不 return，继续进入 parse_properties_from_export()
+            elif strategy == SerializationStrategy.UCLASS_NATIVE:
+                # UClass 原生字段 + tagged properties
+                # 标记为 uclass_native，让 parse_properties_from_export() 先解析原生字段
+                setattr(instance, "parse_status", "uclass_native")
+                setattr(exp, "parse_status", "uclass_native")
+                logger.debug(
+                    "Marking export #%d (%s) as uclass_native: class '%s' has native fields + tagged properties",
+                    index,
+                    instance.object_name,
+                    class_name,
+                )
+                # 不 return，继续进入 parse_properties_from_export()
             # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
 
         # === Offset Validation ===
@@ -335,28 +384,152 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
-        self._archive.seek(instance.serial_offset)
+        # Issue #68: 标记正在预加载，用于循环依赖检测
+        self._preloading_in_progress.add(index)
+        try:
+            # Issue #67: ScriptSerializationStartOffset 偏移调整
+            # 参考 UE 源码 LinkerLoad.cpp:4793-4802
+            seek_offset = instance.serial_offset
+            effective_serial_size = instance.serial_size
+            exp = self._export_map[index]
+            if self._uses_script_serialization_offset(exp):
+                sss_offset = getattr(exp, 'script_serialization_start_offset', 0)
+                sse_offset = getattr(exp, 'script_serialization_end_offset', 0)
+                if sss_offset > 0:
+                    seek_offset = instance.serial_offset + sss_offset
+                    effective_serial_size = sse_offset - sss_offset
 
-        # Delayed import to avoid circular dependency at module load time.
-        from uasset_read.parsers.property_parser import (
-            parse_properties_from_export,
-        )
+            self._archive.seek(seek_offset)
 
-        exp = self._export_map[index]
-        instance.serialized_properties = parse_properties_from_export(
-            exp,
-            self._archive,
-            self._summary,
-            self._name_map,
-            self._export_map,
-            self._import_map,
-            linker=self,
-            mappings=mappings,
-            game=game,
-            tolerant=tolerant,
+            # Delayed import to avoid circular dependency at module load time.
+            from uasset_read.parsers.property_parser import (
+                parse_properties_from_export,
+            )
+
+            # 临时覆盖 serial_size 用于 parse_properties_from_export
+            original_serial_size = instance.serial_size
+            if effective_serial_size != original_serial_size:
+                instance.serial_size = effective_serial_size
+
+            instance.serialized_properties = parse_properties_from_export(
+                exp,
+                self._archive,
+                self._summary,
+                self._name_map,
+                self._export_map,
+                self._import_map,
+                linker=self,
+                mappings=mappings,
+                game=game,
+                tolerant=tolerant,
+            )
+
+            # 恢复原始 serial_size
+            if effective_serial_size != original_serial_size:
+                instance.serial_size = original_serial_size
+
+            instance._preloaded = True
+            self._preload_cache[index] = True
+        finally:
+            self._preloading_in_progress.discard(index)
+
+    def _uses_script_serialization_offset(self, exp) -> bool:
+        """检查 export 是否应使用 ScriptSerializationStartOffset 偏移调整。
+
+        参考 UE 源码 LinkerLoad.cpp:4793-4802：
+        - UE 版本 >= SCRIPT_SERIALIZATION_OFFSET
+        - 未使用 unversioned properties
+        - script_serialization_start_offset > 0
+        """
+        if self._summary is None:
+            return False
+        file_version = getattr(self._summary, 'file_version_ue5', 0)
+        try:
+            if int(file_version) < UE5_SCRIPT_SERIALIZATION_OFFSET:
+                return False
+        except (TypeError, ValueError):
+            return False
+        # 检查是否使用 unversioned properties（unversioned 不使用 script serialization offset）
+        package_flags = getattr(self._summary, 'package_flags', 0)
+        try:
+            if (int(package_flags) & PKG_UnversionedProperties) != 0:
+                return False
+        except (TypeError, ValueError):
+            return False
+        sss_offset = getattr(exp, 'script_serialization_start_offset', 0)
+        try:
+            return int(sss_offset) > 0
+        except (TypeError, ValueError):
+            return False
+
+    def _preload_super_chain(
+        self,
+        instance: UObjectInstance,
+        index: int,
+        mappings,
+        game: Optional[str],
+        tolerant: bool,
+        current_depth: int,
+    ) -> None:
+        """Issue #69: 递归预加载 SuperStruct 继承链。
+
+        如果当前 export 是 UStruct/UClass 相关类，且有 super_index 指向另一个 export，
+        则先递归 preload super 对象，确保父类属性在子类之前被解析。
+        最大递归深度 10 层。
+        """
+        exp = self._export_map[index] if index < len(self._export_map) else None
+        if exp is None:
+            return
+
+        super_index = getattr(exp, 'super_index', None)
+        if super_index is None or super_index.is_null:
+            return
+
+        # 仅对 export 指向的 super 递归加载（import 超类不递归）
+        if not super_index.is_export:
+            return
+
+        super_export_idx = super_index.to_export_index()
+        if super_export_idx < 0 or super_export_idx >= len(self._export_objects):
+            return
+
+        # 避免加载自身
+        if super_export_idx == index:
+            return
+
+        super_inst = self._export_objects[super_export_idx]
+        if super_inst._preloaded or super_export_idx in self._preloading_in_progress:
+            return
+
+        # 递归深度限制
+        if current_depth >= 10:
+            logger.debug(
+                "SuperStruct recursion depth limit reached at export #%d (%s)",
+                index, instance.object_name,
+            )
+            return
+
+        # 判断是否为 UStruct 相关类（UClass/UScriptStruct 等继承自 UStruct）
+        class_name = instance.object_class
+        is_struct_like = class_name is not None and any(
+            class_name.endswith(suffix) for suffix in (
+                "Class", "Struct", "Enum", "Function",
+                "BlueprintGeneratedClass",
+                "WidgetBlueprintGeneratedClass",
+                "AnimBlueprintGeneratedClass",
+            )
         )
-        instance._preloaded = True
-        self._preload_cache[index] = True
+        if not is_struct_like:
+            return
+
+        logger.debug(
+            "Preloading super chain: export #%d (%s) -> super #%d",
+            index, instance.object_name, super_export_idx,
+        )
+        self.preload(
+            super_export_idx, mappings=mappings, game=game,
+            tolerant=tolerant, _recursion_depth=current_depth + 1,
+        )
 
     def _collect_root_objects(self) -> None:
         """Collect objects with no outer into _root_objects."""
@@ -387,23 +560,35 @@ class PackageLinker:
         """将 ObjectProperty 的 FPackageIndex 解析为 UObjectInstance 引用。
 
         遍历所有已 preload 的 export 对象，填充 property_references 字段。
+
+        修复 #58：同时支持 PropertyValue dataclass 和旧 dict mock 输入。
         """
+        from uasset_read.models.properties import PropertyValue
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
             if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
+                # 支持 PropertyValue dataclass 和旧 dict
+                if isinstance(prop, PropertyValue):
+                    prop_name = prop.name
+                    prop_type = prop.type
+                    prop_value = prop.value
+                elif isinstance(prop, dict):
+                    prop_name = prop.get('name', '')
+                    prop_type = prop.get('type', '')
+                    prop_value = prop.get('value')
+                else:
                     continue
-                if prop.get('type') == 'ObjectProperty':
-                    pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
+
+                if prop_type == 'ObjectProperty':
+                    if isinstance(prop_value, int):
                         # 转换为 PackageIndex 并解析
                         from uasset_read.serializers.object_resources import PackageIndex
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
+                        resolved = self.resolve_package_index(PackageIndex(prop_value))
                         if resolved:
-                            prop_name = prop.get('name', '')
                             if not hasattr(inst, 'property_references'):
                                 inst.property_references = {}
                             inst.property_references[prop_name] = resolved
@@ -412,20 +597,31 @@ class PackageLinker:
         """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
 
         遍历所有已 preload 的 export 对象，填充 weak_references 字段。
+
+        修复 #58：同时支持 PropertyValue dataclass 和旧 dict mock 输入。
         """
+        from uasset_read.models.properties import PropertyValue
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
             if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
+                # 支持 PropertyValue dataclass 和旧 dict
+                if isinstance(prop, PropertyValue):
+                    prop_type = prop.type
+                    prop_value = prop.value
+                elif isinstance(prop, dict):
+                    prop_type = prop.get('type', '')
+                    prop_value = prop.get('value')
+                else:
                     continue
-                if prop.get('type') == 'WeakObjectProperty':
-                    pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
+
+                if prop_type == 'WeakObjectProperty':
+                    if isinstance(prop_value, int):
                         from uasset_read.serializers.object_resources import PackageIndex
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
+                        resolved = self.resolve_package_index(PackageIndex(prop_value))
                         if resolved:
                             inst.weak_references.append(resolved)
 

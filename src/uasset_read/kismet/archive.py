@@ -12,6 +12,10 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 
 logger = logging.getLogger(__name__)
 
+# 内存安全常量
+MAX_STRING_READ_SIZE = 64 * 1024  # 64KB — xfer_string 单次最大读取
+MAX_EXPRESSIONS_PER_ARRAY = 100_000  # read_expression_array 最大迭代次数
+
 
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
@@ -19,7 +23,7 @@ class FKismetArchive(FArchive):
     # 类级别去重集合：跨实例共享，同一偏移只打印一次警告
     _warned_offsets: set[int] = set()
 
-    def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
+    def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False, file_version_ue5: int = 0):
         self._path = name
         self._file = io.BytesIO(data)
         self._file_size = len(data)
@@ -29,6 +33,12 @@ class FKismetArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._name_map = name_map
+        self.file_version_ue5 = file_version_ue5
+
+    @property
+    def is_lwc(self) -> bool:
+        """是否启用 Large World Coordinates（UE5 >= 1004）。"""
+        return self.file_version_ue5 >= 1004
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
@@ -76,33 +86,58 @@ class FKismetArchive(FArchive):
             return expr
 
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
-        """Read expressions until end_token is encountered. The end_token expression is NOT included."""
+        """Read expressions until end_token is encountered. The end_token expression is NOT included.
+
+        Raises:
+            ParseError: 超过 MAX_EXPRESSIONS_PER_ARRAY 上限（防止损坏字节码无限循环）。
+        """
         result = []
+        iterations = 0
         while True:
+            iterations += 1
+            if iterations > MAX_EXPRESSIONS_PER_ARRAY:
+                raise ParseError(
+                    f"read_expression_array exceeded limit ({MAX_EXPRESSIONS_PER_ARRAY}) "
+                    f"at offset {self.tell()}"
+                )
             expr = self.read_expression()
             if expr.Token == end_token:
                 break
             result.append(expr)
         return result
 
-    def xfer_string(self) -> str:
-        """Read ASCII null-terminated string (does NOT consume the null terminator)."""
+    def xfer_string(self, max_len: int = MAX_STRING_READ_SIZE) -> str:
+        """Read ASCII null-terminated string (does NOT consume the null terminator).
+
+        Args:
+            max_len: 最大读取字节数，防止无界读取。默认 64KB。
+        """
         current_pos = self.tell()
-        data = self._file.read()
+        remaining = self._file_size - current_pos
+        read_size = min(max_len, remaining)
+        data = self._file.read(read_size)
         null_idx = data.find(b'\x00')
         if null_idx == -1:
             raise ParseError(
                 f"ASCII string at offset {current_pos} has no null terminator "
-                f"(read {len(data)} bytes to EOF)"
+                f"(read {len(data)} bytes, max {max_len})"
             )
         result = data[:null_idx].decode('ascii', errors='replace')
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
 
-    def xfer_unicode_string(self) -> str:
-        """Read UTF-16 null-terminated string (does NOT consume the double-null terminator)."""
+    def xfer_unicode_string(self, max_len: int = MAX_STRING_READ_SIZE) -> str:
+        """Read UTF-16 null-terminated string (does NOT consume the double-null terminator).
+
+        Args:
+            max_len: 最大读取字节数，防止无界读取。默认 64KB。
+        """
         current_pos = self.tell()
-        data = self._file.read()
+        remaining = self._file_size - current_pos
+        read_size = min(max_len, remaining)
+        # 确保读取偶数字节（UTF-16 对齐）
+        read_size = read_size & ~1
+        data = self._file.read(read_size)
         # Find first double-null (\x00\x00) at even offset (UTF-16 code unit boundary)
         idx = 0
         while idx + 1 < len(data):
@@ -113,7 +148,7 @@ class FKismetArchive(FArchive):
             # No double-null found — loop exhausted data without break
             raise ParseError(
                 f"UTF-16 string at offset {current_pos} has no null terminator "
-                f"(scanned {len(data)} bytes to EOF)"
+                f"(scanned {len(data)} bytes, max {max_len})"
             )
         result = data[:idx].decode('utf-16-le', errors='replace')
         self.seek(current_pos + idx)  # position AT double-null
@@ -137,12 +172,6 @@ class FKismetArchive(FArchive):
         if number > 0:
             return f"{base_name}_{number}"
         return base_name
-
-    def read_fname_kismet(self) -> str:
-        """Read FName in Kismet context: index + number → look up in name_map."""
-        index = self.read_i32()
-        number = self.read_i32()
-        return self.resolve_fname(index, number)
 
     def skip(self, n: int) -> None:
         """Skip n bytes forward."""

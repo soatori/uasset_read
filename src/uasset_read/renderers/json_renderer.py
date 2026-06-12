@@ -1,8 +1,7 @@
 """JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
 
-提供两种注册格式：
+提供格式：
 - json: 完整分析格式，字段最全
-- json_summary: 机器可读摘要，精简 exports、省略大体积字段
 """
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
 
 # 输出格式版本号
 _OUTPUT_VERSION_FULL = "5.0"
-_OUTPUT_VERSION_SUMMARY = "4.0"
 
 
 class _JSONEncoder(json.JSONEncoder):
@@ -53,6 +51,10 @@ class JSONRenderer(IRenderer):
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
+                # 已废弃/版本门控字段
+                "owner_persistent_guid": ir.header.owner_persistent_guid or None,
+                "compressed_chunks": ir.header.compressed_chunks or None,
+                "additional_packages_to_cook": ir.header.additional_packages_to_cook or None,
             },
             "name_map": ir.name_map,
             "imports": ir.imports,
@@ -66,8 +68,8 @@ class JSONRenderer(IRenderer):
             }
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
-        if ir.decompiled_functions:
-            data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
+        # 始终输出 decompiled_functions 字段，即使为空列表
+        data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
         if ir.execution_chains:
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if ir.variables:
@@ -148,16 +150,48 @@ class JSONRenderer(IRenderer):
         return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
-        return {"graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "nodes": [self._node_to_dict(n) for n in graph.nodes], "execution_chains": graph.execution_chains}
+        d = {
+            "graph_name": graph.graph_name,
+            "graph_guid": graph.graph_guid,
+            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "execution_chains": graph.execution_chains,
+        }
+        if graph.parse_status != "success":
+            d["parse_status"] = graph.parse_status
+        if graph.fallback_reason:
+            d["fallback_reason"] = graph.fallback_reason
+        return d
 
     def _node_to_dict(self, node) -> dict[str, Any]:
-        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+        d = {
+            "node_guid": node.node_guid,
+            "node_class": node.node_class,
+            "node_comment": node.node_comment,
+            "pins": [self._pin_to_dict(p) for p in node.pins],
+            "execution_flow": node.execution_flow,
+        }
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
+        if node.parse_status != "success":
+            d["parse_status"] = node.parse_status
+        if node.fallback_reason:
+            d["fallback_reason"] = node.fallback_reason
         return d
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
-        return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}
+        d = {
+            "pin_name": pin.pin_name,
+            "pin_type": pin.pin_type,
+            "pin_type_value": pin.pin_type_value,
+            "linked_to": pin.linked_to,
+            "direction": pin.direction,
+            "default_value": pin.default_value,
+        }
+        if pin.parse_status != "success":
+            d["parse_status"] = pin.parse_status
+        if pin.fallback_source:
+            d["fallback_source"] = pin.fallback_source
+        return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
@@ -168,6 +202,8 @@ class JSONRenderer(IRenderer):
             d["events"] = [self._event_to_dict(e) for e in blueprint.events]
         if blueprint.components:
             d["components"] = blueprint.components
+        if blueprint.scs_tree:
+            d["scs_tree"] = blueprint.scs_tree
         return d
 
     def _variable_to_dict(self, var) -> dict[str, Any]:
@@ -270,6 +306,8 @@ class JSONRenderer(IRenderer):
         d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
         if func.fallback_reasons:
             d["fallback_reasons"] = func.fallback_reasons
+        if func.bytecode_status != "parsed":
+            d["bytecode_status"] = func.bytecode_status
         return d
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
@@ -281,67 +319,4 @@ class JSONRenderer(IRenderer):
         return "json"
 
 
-class JsonSummaryRenderer(IRenderer):
-    """JSON 摘要渲染器 — 机器可读精简格式。
-
-    精简策略（对齐旧 format_json_summary）：
-    - exports 仅保留 name/class/parent_class
-    - 省略 imports, decompiled_functions, execution_chains, variables
-    - 省略 function_graphs, resolved_parent_assets, inherited_blueprint_graphs, logic_sources
-    - 保留 status, output_version, summary, name_map, linker, blueprint (精简)
-    - 保留 diagnostics（容错模式诊断需要）和 errors
-    """
-
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        data: dict[str, Any] = {
-            "status": {
-                "status": ir.status,
-                "message": ir.status_message,
-                "code": ir.status_code,
-            },
-            "output_version": _OUTPUT_VERSION_SUMMARY,
-            "summary": {
-                "package_name": ir.header.package_name,
-                "package_class": ir.header.package_class,
-                "package_flags": ir.header.package_flags,
-                "total_export_count": ir.header.total_export_count,
-                "total_import_count": ir.header.total_import_count,
-                "ue_version": ir.header.ue_version,
-            },
-            "name_map": ir.name_map,
-            "exports": [self._export_summary(e) for e in ir.exports],
-        }
-        if ir.linker is not None:
-            data["linker"] = {
-                "has_linker": ir.linker.has_linker,
-                "import_paths": ir.linker.import_paths,
-                "export_paths": ir.linker.export_paths,
-            }
-        if ir.blueprint is not None:
-            data["blueprint"] = {
-                "parent_class": ir.blueprint.parent_class,
-                "function_count": len(ir.blueprint.functions),
-                "event_count": len(ir.blueprint.events),
-                "component_count": len(ir.blueprint.components),
-            }
-        if ir.errors:
-            data["errors"] = ir.errors
-        if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
-        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
-
-    def _export_summary(self, export) -> dict[str, Any]:
-        """精简 export — 仅 name/class/parent_class。"""
-        return {
-            "name": export.object_name,
-            "class": export.object_class,
-            "parent_class": export.parent_class,
-        }
-
-    @property
-    def format_name(self) -> str:
-        return "json_summary"
-
-
 register_renderer("json", JSONRenderer)
-register_renderer("json_summary", JsonSummaryRenderer)

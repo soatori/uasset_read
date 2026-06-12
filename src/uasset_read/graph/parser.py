@@ -4,7 +4,8 @@
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+import logging
+from typing import TYPE_CHECKING, List, Optional, Set
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -16,6 +17,36 @@ from uasset_read.constants import PKG_Cooked
 from uasset_read.serializers.object_resources import get_asset_class
 from uasset_read.serializers.graph import read_ue_graph
 from uasset_read.models.core import UEdGraph
+
+logger = logging.getLogger(__name__)
+
+_KNOWN_GRAPH_NAMES: Set[str] = {
+    "EventGraph", "Move", "UserConstructionScript", "AnimGraph",
+    "UberGraph", "TransitionGraph", "ConduitGraph",
+}
+
+
+def _is_known_graph_export(export: "ObjectExport") -> bool:
+    name = export.object_name or ""
+    if name in _KNOWN_GRAPH_NAMES:
+        return True
+    if name.endswith("_GEN_VARIABLE") or name.endswith("_GEN_FUNC"):
+        return True
+    return False
+
+
+def _has_k2node_children(
+    export_idx: int,
+    export_map: List["ObjectExport"],
+    import_map: List["ObjectImport"],
+) -> bool:
+    one_based = export_idx + 1
+    for child in export_map:
+        if child.outer_index.index == one_based:
+            child_name = child.object_name or ""
+            if "K2Node" in child_name or "EdGraphNode" in child_name:
+                return True
+    return False
 
 
 def extract_blueprint_graphs(
@@ -32,34 +63,36 @@ def extract_blueprint_graphs(
     遍历 ExportMap，ClassIndex 解析后包含 "EdGraph" 或 "UberEdGraph" 的导出视为图对象。
     对每个图调用 read_ue_graph 完整解析 Graph→Node→Pin 三层结构。
 
+    Fallback：当 class_index 未解析为 EdGraph 时，按名称模式或 K2Node 子导出检测。
+
     安全检查：PKG_Cooked 检查避免解析已剥离资产。
-
-    Args:
-        archive: FArchive 二进制读取器
-        summary: PackageFileSummary 包含 package_flags
-        name_map: 名称表列表
-        import_map: 导入表列表（用于 ClassIndex 解析）
-        export_map: 导出表列表（用于 ClassIndex 解析）
-
-    Returns:
-        List[UEdGraph]: 检测到的图列表
     """
     graphs: List[UEdGraph] = []
 
-    # PKG_Cooked 检查 — cooked 资产无图数据
     is_cooked = (summary.package_flags & PKG_Cooked) != 0
     if is_cooked:
         return []
 
-    # 遍历 ExportMap 寻找 EdGraph/UberEdGraph 类型导出
     for export_idx, export in enumerate(export_map):
         class_name = get_asset_class(export, import_map, export_map)
+        is_graph = class_name in ('EdGraph', 'UberEdGraph')
 
-        if class_name and class_name in ('EdGraph', 'UberEdGraph'):
+        if not is_graph:
+            if _is_known_graph_export(export) or _has_k2node_children(
+                export_idx, export_map, import_map
+            ):
+                is_graph = True
+                class_name = 'EdGraph'
+                logger.debug(
+                    "Graph fallback detected: export[%d] '%s' (class=%s) by name/children",
+                    export_idx, export.object_name, class_name,
+                )
+
+        if is_graph:
             graph = read_ue_graph(
                 archive, name_map, summary,
                 export_map, import_map,
-                export, class_name, export_idx + 1, linker  # 1-based index
+                export, class_name, export_idx + 1, linker
             )
             graphs.append(graph)
 

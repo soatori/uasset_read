@@ -130,14 +130,21 @@ class MarkdownRenderer(IRenderer):
             # 查找匹配的反编译函数
             decompiled = self._find_decompiled(ir, event.name)
             if decompiled:
-                lines.append(f"```cpp")
-                lines.append(decompiled.signature)
-                lines.append("{")
-                if decompiled.cpp_code.strip():
-                    for code_line in decompiled.cpp_code.strip().splitlines():
-                        lines.append(f"    {code_line}")
-                lines.append("}")
-                lines.append("```")
+                # 如果是 fallback scan，不输出 C++ 代码（不可靠）
+                if getattr(decompiled, "bytecode_status", "parsed") == "fallback":
+                    lines.append("```cpp")
+                    lines.append(f"// {event.name} — bytecode from fallback scan (unreliable)")
+                    lines.append("// Original bytecode not available")
+                    lines.append("```")
+                else:
+                    lines.append(f"```cpp")
+                    lines.append(decompiled.signature)
+                    lines.append("{")
+                    if decompiled.cpp_code.strip():
+                        for code_line in decompiled.cpp_code.strip().splitlines():
+                            lines.append(f"    {code_line}")
+                    lines.append("}")
+                    lines.append("```")
             else:
                 # 生成事件 override 签名
                 lines.append("```cpp")
@@ -240,12 +247,21 @@ class MarkdownRenderer(IRenderer):
                     lines.append(f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |")
                 lines.append("")
 
-            # C++ 实现代码块
+            # C++ 实现代码块（仅当 bytecode_status 为 parsed 时输出）
             if func_info["cpp_code"] and func_info["cpp_code"].strip():
-                lines.append("```cpp")
-                lines.append(func_info["cpp_code"].strip())
-                lines.append("```")
-                lines.append("")
+                # 查找对应的反编译函数以检查 bytecode_status
+                decompiled_func = self._find_decompiled(ir, func_info["name"])
+                bytecode_status = getattr(decompiled_func, "bytecode_status", "parsed") if decompiled_func else "parsed"
+
+                if bytecode_status == "fallback":
+                    # fallback scan 结果不可靠，不输出 C++ 代码
+                    lines.append("*Bytecode from fallback scan — C++ code not available (unreliable)*")
+                    lines.append("")
+                else:
+                    lines.append("```cpp")
+                    lines.append(func_info["cpp_code"].strip())
+                    lines.append("```")
+                    lines.append("")
 
     def _render_variables(self, lines: list[str], ir: PackageIR) -> None:
         """渲染 Variables 章节 — 变量表格，包含名称、类型、默认值。"""

@@ -26,9 +26,14 @@ class EX_VectorConst(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VectorConst:
-        x = archive.read_f32()
-        y = archive.read_f32()
-        z = archive.read_f32()
+        if archive.is_lwc:
+            x = archive.read_f64()
+            y = archive.read_f64()
+            z = archive.read_f64()
+        else:
+            x = archive.read_f32()
+            y = archive.read_f32()
+            z = archive.read_f32()
         return cls(X=x, Y=y, Z=z)
 
     def to_dict(self) -> dict:
@@ -51,9 +56,14 @@ class EX_RotationConst(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_RotationConst:
-        p = archive.read_f32()
-        y = archive.read_f32()
-        r = archive.read_f32()
+        if archive.is_lwc:
+            p = archive.read_i64()
+            y = archive.read_i64()
+            r = archive.read_i64()
+        else:
+            p = archive.read_i32()
+            y = archive.read_i32()
+            r = archive.read_i32()
         return cls(Pitch=p, Yaw=y, Roll=r)
 
     def to_dict(self) -> dict:
@@ -87,16 +97,21 @@ class EX_TransformConst(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TransformConst:
-        # Rotation (quat): X, Y, Z, W
+        # Rotation (quat): always float32 × 4
         rx = archive.read_f32()
         ry = archive.read_f32()
         rz = archive.read_f32()
         rw = archive.read_f32()
-        # Translation: X, Y, Z
-        tx = archive.read_f32()
-        ty = archive.read_f32()
-        tz = archive.read_f32()
-        # Scale: X, Y, Z
+        # Translation: LWC aware
+        if archive.is_lwc:
+            tx = archive.read_f64()
+            ty = archive.read_f64()
+            tz = archive.read_f64()
+        else:
+            tx = archive.read_f32()
+            ty = archive.read_f32()
+            tz = archive.read_f32()
+        # Scale: always float32 × 3
         sx = archive.read_f32()
         sy = archive.read_f32()
         sz = archive.read_f32()

@@ -42,7 +42,9 @@ class PropertyTag:
     array_index: int = 0              # 数组元素索引（默认 0）
     flags: int = 0                    # EPropertyTagFlags 标志位
     property_guid: Optional[bytes] = None  # 16 bytes GUID（HasPropertyGuid 时）
+    struct_guid: Optional[bytes] = None    # 16 bytes GUID（UE4 StructProperty，VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG 后）
     bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    property_extensions: int = 0          # EPropertyTagExtension flags (u8)
     override_operation: Optional[int] = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: Optional[int] = None  # bExperimentalOverridableLogic (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
@@ -69,6 +71,7 @@ class PropertyValue:
     type: str
     value: Any = None
     array_index: int = 0
+    tag_info: dict | None = None  # 保留原始 PropertyTag 元数据（flags、guid、serialize_type、offsets 等）
 
 
 @dataclass
@@ -101,6 +104,7 @@ class StructValue(AdvancedPropertyValue):
     raw_size: Optional[int] = None
     parse_status: str = "parsed"
     property_type: str = "StructProperty"
+    unsupported_reason: str = ""
 
 
 @dataclass
@@ -110,6 +114,8 @@ class MapValue(AdvancedPropertyValue):
     value_type: str
     entries: List[Dict[str, Any]] = field(default_factory=list)
     property_type: str = "MapProperty"
+    parse_status: str = "parsed"  # parsed | partial | fallback
+    unsupported_reason: Optional[str] = None  # 不支持类型的原因
 
 
 @dataclass
@@ -118,6 +124,8 @@ class SetValue(AdvancedPropertyValue):
     element_type: str
     elements: List[Any] = field(default_factory=list)
     property_type: str = "SetProperty"
+    parse_status: str = "parsed"  # parsed | partial | fallback
+    unsupported_reason: Optional[str] = None  # 不支持类型的原因
 
 
 @dataclass
