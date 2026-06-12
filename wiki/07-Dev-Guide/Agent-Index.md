@@ -20,7 +20,6 @@ section: agent-index
 | 修改蓝图输出格式 | [[蓝图解析]] | `blueprint/` |
 | 修改图分析逻辑 | [[图分析]] | `graph/` |
 | 修复 Kismet 反编译 | [[Kismet 反编译]] | `kismet/` |
-| 修改 C++ 代码生成 | [[C++ 代码生成]] | `cpp_gen/` |
 | 新增输出格式 | [[渲染器系统]] | `renderers/` |
 | 版本兼容性适配 | [[版本管理]] | `versioning.py` |
 | 跨包引用修复 | [[对象链接器]] | `link/` |
@@ -30,6 +29,7 @@ section: agent-index
 
 > [!WARNING] 已移除任务
 > - ~~N2C Schema 变更~~ → `n2c/` 已整体删除
+> - ~~C++ 代码生成~~ → `cpp_gen/` 已在 0.4.5 删除
 > - ~~新增导出格式（旧）~~ → 使用 [[渲染器系统]] 替代
 
 ## 完整 API 分类索引
