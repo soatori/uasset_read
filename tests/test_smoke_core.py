@@ -81,3 +81,22 @@ def test_cli_single_file_delegates_to_parse_single() -> None:
                     main()
     assert exc.value.code == 0
     parse.assert_called_once()
+
+
+def test_serialization_control_flags_parsed():
+    """SerializationControlExtensions 已知位应被结构化解析"""
+    from uasset_read.serializers.property_tags import parse_ue511_ctrl_flags
+
+    # 0x03 = has_array_index + serialize_control
+    result = parse_ue511_ctrl_flags(0x03)
+    assert result["has_array_index"] is True
+    assert result["serialize_control"] is True
+    assert result["has_extensions"] is False
+
+    # 0x00 = 无扩展
+    result = parse_ue511_ctrl_flags(0x00)
+    assert all(v is False for v in result.values())
+
+    # 0x3F = 所有已知位
+    result = parse_ue511_ctrl_flags(0x3F)
+    assert all(v is True for v in result.values())

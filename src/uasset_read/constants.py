@@ -58,6 +58,15 @@ PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
 PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 
+# SerializationControlExtensions 完整位定义（与 PROP_TAG 共用位值，语义不同）
+CTRL_HAS_ARRAY_INDEX = 0x01
+CTRL_HAS_PROPERTY_GUID = 0x02
+CTRL_HAS_EXTENSIONS = 0x04
+CTRL_HAS_BINARY_OR_NATIVE = 0x08
+CTRL_BOOL_TRUE = 0x10
+CTRL_SKIPPED_SERIALIZE = 0x20
+CTRL_KNOWN_MASK = 0x3F  # 所有已知位的掩码
+
 # ============================================================================
 # PropertyTag版本阈值
 # ============================================================================
