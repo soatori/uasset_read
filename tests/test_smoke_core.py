@@ -54,6 +54,23 @@ def test_parse_batch_sanitizes_output_paths(tmp_path: Path) -> None:
     assert output_path.name == "normal.escape"
 
 
+def test_partial_status_has_diagnostic_reason():
+    """partial/opaque 状态必须附带可追踪原因"""
+    from uasset_read.models.properties import StructValue
+
+    # 构造一个 opaque struct
+    sv = StructValue(
+        struct_type="TestStruct",
+        fields={},
+        raw_size=-1,
+        parse_status="opaque",
+        unsupported_reason="negative_struct_size:-1",
+    )
+    assert sv.parse_status == "opaque"
+    assert sv.unsupported_reason != ""
+    assert "negative_struct_size" in sv.unsupported_reason
+
+
 def test_cli_single_file_delegates_to_parse_single() -> None:
     from uasset_read.cli import main
 

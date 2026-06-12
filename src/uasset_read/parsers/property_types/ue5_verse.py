@@ -115,4 +115,5 @@ def parse_field_path_property(
 
     if parse_status != "parsed":
         result["parse_status"] = parse_status
+        result["unsupported_reason"] = "fieldpath_missing_name_map"
     return result
