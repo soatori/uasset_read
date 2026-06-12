@@ -20,7 +20,7 @@ BlueprintParser    GraphParser    PackageLinker    KismetDecompiler
         ↓ IR 构建
 PackageIR → ExportIR → GraphIR → NodeIR → PinIR
         ↓ 渲染
-JSON    Text    Markdown    BlueprintText    BlueprintUE
+JSON    Markdown
 ```
 
 ## 解析管线

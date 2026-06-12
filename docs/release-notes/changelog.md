@@ -1,5 +1,28 @@
 # 变更日志
 
+## [0.5.0] — 2026-06-12
+
+### 新增
+- 解析器模块拆分：blueprint/cpp_gen/kismet/parsers/serializers 独立子包
+- IR Builder 增强，更完整的中间表示构建
+
+### 变更
+- **输出格式精简**：仅保留 JSON/Markdown 两种输出格式，移除 Text/BlueprintText/BlueprintUE/CppSkeleton
+- 移除 cpp_gen/cpp_skeleton C++ 代码生成能力
+- 移除 formatters/ 模块，所有格式化通过渲染器系统完成
+
+### 改进
+- 大文件拆分为子模块，改善代码组织结构
+- 文档清理：移除已废弃模块的引用
+- 测试重组为 contracts/units/e2e 三层架构
+
+### 修复
+- Kismet fallback class detection 和 self-referencing parent_class
+- Graph detection fallback 和 node class_name resolution
+- blueprint_text 渲染改进
+- SerializationControlExtensions 语义映射与结构化诊断
+- partial/opaque 状态必须附带可追踪诊断原因
+
 ## [0.4.5] — 2026-06-09
 
 ### 新增

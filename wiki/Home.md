@@ -16,16 +16,15 @@
 
 ## 项目信息
 
-- **版本**: 0.4.5 (当前分支: develop)
+- **版本**: 0.5.0 (当前分支: develop)
 - **Python**: 3.10+
 - **测试**: 29 个测试（contracts/units/e2e 三层架构）
 - **模块**: 153 个源文件，17 个子包
 - **仓库**: [GitHub](https://github.com/soatori/uasset_read)
 
-## v0.4.5 新特性
+## v0.5.0 新特性
 
-- **UE 风格加载生命周期**: `link() → preload(idx) × N → post_load()`
-- **类序列化策略表**: 4 种策略（FULL_SERIALIZER / TAGGED_PROPERTIES_ONLY / OPAQUE_CLASS_PAYLOAD / SKIP_UNSUPPORTED）
-- **统一状态模型**: `success | partial | failed` 三态
-- **Payload 偏移策略**: 默认使用 `SerialOffset/SerialSize`（与 UE LinkerLoad.cpp:4793 对齐）
-- **SoftObjectPath 索引化**: UE5.7+ 支持索引模式解析
+- **解析器模块拆分**: blueprint/cpp_gen/kismet/parsers/serializers 独立子包
+- **输出格式精简**: 仅保留 JSON/Markdown 两种输出格式
+- **IR Builder 增强**: 更完整的中间表示构建
+- **文档清理**: 移除已废弃模块的引用
