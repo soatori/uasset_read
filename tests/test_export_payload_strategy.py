@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 class TestExportPayloadContext:
     def test_has_required_fields(self):
-        from uasset_read.parsers.property_parser import ExportPayloadContext
+        from uasset_read.parsers._unversioned_parser import ExportPayloadContext
         ctx = ExportPayloadContext(
             export=MagicMock(), archive=MagicMock(), summary=MagicMock(),
             name_map=[], export_map=[], import_map=[],

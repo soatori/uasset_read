@@ -708,7 +708,7 @@ class TestFTextVersionGating:
 
     def test_ftext_history_gating(self):
         """>= VER_UE4_FTEXT_HISTORY (428): 读取 history_type"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         # ue4_version = 500 >= 428，应读取 history_type
         data = (
@@ -726,7 +726,7 @@ class TestFTextVersionGating:
 
     def test_ftext_no_history_for_old_version(self):
         """< VER_UE4_FTEXT_HISTORY (428): 跳过 history_type，直接读 Base 格式"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         # ue4_version = 400 < 428，无 history_type
         data = (
@@ -744,7 +744,7 @@ class TestFTextVersionGating:
 
     def test_ftext_boundary_version_428(self):
         """ue4_version == 428 (VER_UE4_FTEXT_HISTORY): 应读取 history_type"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         data = (
             b'\x00\x00\x00\x00'          # flags
@@ -761,7 +761,7 @@ class TestFTextVersionGating:
 
     def test_ftext_boundary_version_427(self):
         """ue4_version == 427 (< 428): 不读取 history_type"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         data = (
             b'\x00\x00\x00\x00'          # flags
@@ -778,7 +778,7 @@ class TestFTextVersionGating:
 
     def test_ftext_no_summary_defaults_to_modern(self):
         """summary=None 时默认 ue4_version=500 (现代格式)，读取 history_type"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         data = (
             b'\x00\x00\x00\x00'          # flags
