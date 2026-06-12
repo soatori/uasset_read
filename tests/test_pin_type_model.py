@@ -163,7 +163,7 @@ class TestBlueprintVariableFTextCategory:
 
     def test_category_is_ftext(self):
         """Category 字段应使用 read_ftext() 读取。"""
-        from uasset_read.blueprint.variable_extractor import read_ftext
+        from uasset_read.blueprint._ftext import read_ftext
 
         # 验证 read_ftext() 可正确读取 Category
         data = (
