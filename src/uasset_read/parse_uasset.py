@@ -73,7 +73,13 @@ def _extract_kismet_decompiled(
     for export in export_map:
         class_name = resolve_class_name(export.class_index, import_map, export_map)
         if class_name not in USTRUCT_TYPES:
-            continue
+            obj_name = export.object_name
+            if obj_name.startswith("K2Node_FunctionEntry"):
+                class_name = "K2Node_FunctionEntry"
+            elif obj_name.startswith("K2Node_FunctionResult"):
+                class_name = "K2Node_FunctionResult"
+            else:
+                continue
         try:
             result = decompile_single_function(
                 archive, export, summary, name_map, import_map, export_map,
