@@ -384,6 +384,21 @@ def _guid_from_description(value: Any) -> str:
         raw = value.get("raw_data")
         if isinstance(raw, bytes) and len(raw) == 16:
             return _format_guid_bytes(raw)
+    # #143: struct_binary_decoded 格式的 Guid
+    if isinstance(value, dict) and value.get("kind") == "struct_binary_decoded":
+        if value.get("struct_type") == "Guid":
+            fields = value.get("fields", {})
+            a = int(fields.get("A", 0))
+            b = int(fields.get("B", 0))
+            c = int(fields.get("C", 0))
+            d = int(fields.get("D", 0))
+            raw = (
+                a.to_bytes(4, byteorder="little")
+                + b.to_bytes(4, byteorder="little")
+                + c.to_bytes(4, byteorder="little")
+                + d.to_bytes(4, byteorder="little")
+            )
+            return _format_guid_bytes(raw)
     if isinstance(value, bytes) and len(value) == 16:
         return _format_guid_bytes(value)
     if isinstance(value, str):
