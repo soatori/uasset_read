@@ -67,6 +67,79 @@ def format_markdown(result: ParseResult) -> str:
         lines.append(f"| Variables | {_escape_md_cell(f'{var_count} ({comp_count} components, {var_count - comp_count} regular)')} |")
         lines.append("")
 
+        # === Component Hierarchy ===
+        if result.components:
+            lines.append("### Component Hierarchy")
+            lines.append("")
+            lines.append("```mermaid")
+            lines.append("graph TD")
+            # Root node (blueprint itself)
+            root_name = asset_name.replace(" ", "_")
+            lines.append(f"  {root_name}[\"{asset_name}\"]")
+            for comp in result.components:
+                comp_name = comp.get("name", "Unknown")
+                comp_class = comp.get("class", "Unknown")
+                safe_name = comp_name.replace(" ", "_").replace("-", "_").replace(".", "_")
+                # Sanitize for mermaid
+                safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in safe_name)
+                lines.append(f"  {root_name} --> {safe_name}[\"{comp_name}<br/><i>{comp_class}</i>\"]")
+            lines.append("```")
+            lines.append("")
+
+            # Component details table
+            lines.append("| Component | Class | Transform |")
+            lines.append("|-----------|-------|-----------|")
+            for comp in result.components:
+                comp_name = _escape_md_cell(comp.get("name", "Unknown"))
+                comp_class = _escape_md_cell(comp.get("class", "Unknown"))
+                transforms = comp.get("transforms", {})
+                transform_str = ""
+                if transforms:
+                    loc = transforms.get("relative_location")
+                    rot = transforms.get("relative_rotation")
+                    scale = transforms.get("relative_scale")
+                    parts = []
+                    if loc:
+                        parts.append(f"Loc({loc.x:.1f},{loc.y:.1f},{loc.z:.1f})")
+                    if rot:
+                        parts.append(f"Rot({rot.pitch:.1f},{rot.yaw:.1f},{rot.roll:.1f})")
+                    if scale:
+                        parts.append(f"Scale({scale.x:.1f},{scale.y:.1f},{scale.z:.1f})")
+                    transform_str = " ".join(parts) if parts else "Identity"
+                else:
+                    transform_str = "Identity"
+                lines.append(f"| {comp_name} | {comp_class} | {transform_str} |")
+            lines.append("")
+
+        # === Input Action Bindings ===
+        input_actions = []
+        for graph in result.graphs:
+            for node in graph.nodes:
+                if node.class_name == "K2Node_EnhancedInputAction":
+                    data = node.node_data
+                    if isinstance(data, dict):
+                        path = data.get("input_action_path", "?")
+                        triggers = data.get("trigger_events", {})
+                        input_actions.append((path, triggers))
+        if input_actions:
+            lines.append("### Input Action Bindings")
+            lines.append("")
+            lines.append("| Input Action | Trigger | Event Type |")
+            lines.append("|--------------|---------|------------|")
+            for path, triggers in input_actions:
+                action_name = _escape_md_cell(path)
+                if triggers:
+                    first_trigger = True
+                    for trigger_name, event_type in triggers.items():
+                        if first_trigger:
+                            lines.append(f"| {action_name} | {trigger_name} | {event_type} |")
+                            first_trigger = False
+                        else:
+                            lines.append(f"| | {trigger_name} | {event_type} |")
+                else:
+                    lines.append(f"| {action_name} | — | — |")
+            lines.append("")
+
     # === Graph Summary ===
     graphs_summary = build_graphs_summary(result.graphs)
     if graphs_summary:
