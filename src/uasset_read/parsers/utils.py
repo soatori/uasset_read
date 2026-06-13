@@ -78,9 +78,14 @@ def make_enum_value(enum_type: str, value_name: str) -> dict:
     Returns:
         EnumValue 字典
     """
+    # #143: 当 enum_type 未知时，不添加 "UnknownEnum::" 前缀
+    if enum_type and enum_type != "UnknownEnum":
+        full_name = f"{enum_type}::{value_name}"
+    else:
+        full_name = value_name
     return {
         "enum_type": enum_type,
-        "value_name": f"{enum_type}::{value_name}",
+        "value_name": full_name,
     }
 
 
