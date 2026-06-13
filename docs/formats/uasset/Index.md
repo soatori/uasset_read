@@ -38,7 +38,9 @@ Unreal Engine .uasset 文件格式知识库。核心原则：**解析 .uasset �
 |------|------|----------|
 | [linker-load.md](serialization/linker-load.md) | 加载流程 | 4 阶段：Header → Tables → Objects → PostProcess |
 | [linker-save.md](serialization/linker-save.md) | 保存流程 | 序列化写入机制 |
-| [property-tag.md](serialization/property-tag.md) | FPropertyTag | 20 种属性类型、版本差异 |
+| [property-tag.md](serialization/property-tag.md) | FPropertyTag | 完整字段表、BoolProperty 特殊处理、EPropertyTagFlags |
+| [uproperty-specifiers.md](serialization/uproperty-specifiers.md) | UPROPERTY 说明符 | CPF_* 标志、元数据说明符、序列化行为 |
+| [class-default-object.md](serialization/class-default-object.md) | CDO 机制 | Class Default Object 序列化、Delta 差异、蓝图 CDO |
 | [bulkdata.md](serialization/bulkdata.md) | BulkData 机制 | 运行时加载、流式传输 |
 | [version-compatibility.md](serialization/version-compatibility.md) | 版本判断 | UE4/UE5 双版本机制 |
 
