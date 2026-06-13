@@ -112,7 +112,11 @@ def format_markdown(result: ParseResult) -> str:
             lines.append("")
 
         # === Input Action Bindings ===
+        import re
         input_actions = []
+        seen_actions = set()
+
+        # 来源1: graphs 中的节点（保留兼容）
         for graph in result.graphs:
             for node in graph.nodes:
                 if node.class_name == "K2Node_EnhancedInputAction":
@@ -121,6 +125,17 @@ def format_markdown(result: ParseResult) -> str:
                         path = data.get("input_action_path", "?")
                         triggers = data.get("trigger_events", {})
                         input_actions.append((path, triggers))
+
+        # 来源2: decompiled_functions 中的函数名
+        # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
+        pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
+        for func in (result.decompiled_functions or []):
+            match = pattern.match(func.name)
+            if match:
+                action_name = match.group(1)
+                if action_name not in seen_actions:
+                    seen_actions.add(action_name)
+                    input_actions.append((action_name, {}))
         if input_actions:
             lines.append("### Input Action Bindings")
             lines.append("")

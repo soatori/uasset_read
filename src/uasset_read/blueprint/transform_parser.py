@@ -32,21 +32,31 @@ def _decode_raw_vector(raw_data: bytes) -> Optional[VectorValue]:
 def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
     """从 PropertyValue.value 提取 {X, Y, Z} 或 {Pitch, Yaw, Roll} 字段。
 
-    支持两种存储格式：
+    支持三种存储格式：
     1. StructValue 对象（标准解析路径）
     2. binary_or_native_property dict（LWC fast-path 跳过时的 raw_data）
+    3. struct_binary_decoded dict（#143 新格式，已解码的 struct fields）
     """
     # 标准路径: StructValue 对象
     if isinstance(prop_value, StructValue):
         return prop_value.fields
 
-    # binary_or_native_property dict（#143: raw_data 解码）
-    if isinstance(prop_value, dict) and prop_value.get('kind') == 'binary_or_native_property':
-        raw = prop_value.get('raw_data')
-        if isinstance(raw, bytes):
-            vec = _decode_raw_vector(raw)
-            if vec is not None:
-                return {"X": vec.x, "Y": vec.y, "Z": vec.z}
+    if isinstance(prop_value, dict):
+        kind = prop_value.get('kind')
+
+        # binary_or_native_property dict（#143: raw_data 解码）
+        if kind == 'binary_or_native_property':
+            raw = prop_value.get('raw_data')
+            if isinstance(raw, bytes):
+                vec = _decode_raw_vector(raw)
+                if vec is not None:
+                    return {"X": vec.x, "Y": vec.y, "Z": vec.z}
+
+        # struct_binary_decoded dict（#143: 已解码的 struct fields）
+        elif kind == 'struct_binary_decoded':
+            fields = prop_value.get('fields')
+            if isinstance(fields, dict):
+                return fields
 
     return None
 

@@ -42,8 +42,17 @@ def _format_transforms(transforms) -> str:
 
 
 def _collect_input_actions(ir) -> list[tuple[str, dict]]:
-    """从 PackageIR 的 graphs 中收集 Enhanced Input Action 绑定。"""
+    """从 PackageIR 收集 Enhanced Input Action 绑定。
+
+    支持两种来源：
+    1. graphs 中的 K2Node_EnhancedInputAction 节点（当前未使用，graphs 通常为空）
+    2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名
+    """
+    import re
     input_actions: list[tuple[str, dict]] = []
+    seen_actions: set[str] = set()
+
+    # 来源1: graphs 中的节点（保留兼容）
     for export in ir.exports:
         for graph in export.graphs:
             for node in graph.nodes:
@@ -53,6 +62,19 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
                         path = data.get("input_action_path", "?")
                         triggers = data.get("trigger_events", {})
                         input_actions.append((path, triggers))
+
+    # 来源2: decompiled_functions 中的函数名
+    # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
+    pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
+    for func in (ir.decompiled_functions or []):
+        match = pattern.match(func.name)
+        if match:
+            action_name = match.group(1)
+            if action_name not in seen_actions:
+                seen_actions.add(action_name)
+                # 从函数名解析 action path（简化处理）
+                input_actions.append((action_name, {}))
+
     return input_actions
 
 
