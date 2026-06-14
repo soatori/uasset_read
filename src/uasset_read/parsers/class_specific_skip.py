@@ -45,8 +45,12 @@ SKIP_CLASS_PREFIXES = (
     "K2Node_FunctionEntry",
     "K2Node_FormatText",
     # P2: Material
-    "MaterialExpressionDynamicParameter",
-    "MaterialExpression",
+    # MaterialExpressionDynamicParameter 已从 skip 列表移除（#136 延伸）：
+    # 通用 tagged property parser 可处理，失败时由 generic fallback 兜底。
+    # MaterialExpression 已从 skip 列表移除（#136）：
+    # 通用 tagged property parser 可处理大部分 MaterialExpression 子类。
+    # 解析失败的子类由 generic fallback（opaque/partial）兜底。
+    # "MaterialExpression",
     # P3: 其他
     "SkySphereMesh",
     "InheritableComponentHandler",

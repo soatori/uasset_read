@@ -414,6 +414,7 @@ class TestHandlerRegistry:
             "FVector2MaterialInput",
             "FExpressionOutput",
             "FInstancedStruct",
+            "StructProperty",  # #143: 二进制 StructProperty 解码
         }
         assert set(BINARY_OR_NATIVE_HANDLERS.keys()) == expected_keys
 
