@@ -364,18 +364,21 @@ def parse_properties_from_export(
 
     # D-02: SerializationControlExtensions 头部处理
     # UE5 >= 1011: 根级 overridable serialization 控制头
-    # 已知值：0x00 = 无扩展, 0x02 = OverridableInformation
-    # 未知位应降级为诊断信息，不要盲跳
+    # 对所有 UObject export 序列化（通过 UObject::SerializeScriptProperties → ObjClass->SerializeTaggedProperties）
+    # ObjClass 是 UClass*，故 IsA<UClass>() 始终为 true
+    # 已知位：0x01 = ReserveForFutureUse, 0x02 = OverridableSerializationInformation
+    # 未知高位（0x04+）可能是 UE5.6+ 新增标志，记录为诊断信息但不影响偏移
+    _KNOWN_SERIALIZATION_CONTROL_BITS = 0x03  # 0x01 | 0x02
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         control_offset = archive.tell()
         serialization_control = archive.read_u8()
         overridden_operation = None
         if serialization_control & 0x02:
             overridden_operation = archive.read_u8()
-        # 记录未知位（非 0x00 和非 0x02 的位）
-        unknown_bits = serialization_control & ~0x02
+        # 记录未知位（非已知位 0x01|0x02 的位）— 降级为 debug 而非 warning
+        unknown_bits = serialization_control & ~_KNOWN_SERIALIZATION_CONTROL_BITS
         if unknown_bits:
-            logger.warning(
+            logger.debug(
                 "Export '%s' SerializationControlExtensions 未知位: 0x%02X (offset %d)",
                 getattr(export, "object_name", ""), unknown_bits, control_offset,
             )

@@ -26,6 +26,7 @@ jobs:
           # 禁止出现在 master 的目录
           FORBIDDEN_PATTERNS=(
             "^wiki/"
+            "^docs/guides/"
             "^docs/superpowers/"
             "^docs/reports/"
             "^scripts/"
@@ -80,7 +81,11 @@ jobs:
 
       - name: Run unit tests
         run: |
+<<<<<<< HEAD
+          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml --allow-missing-assets
+=======
           python -m pytest tests/ -v --cov=uasset_read --cov-report=xml --allow-missing-assets -m "not integration and not slow and not regression"
+>>>>>>> origin/master
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

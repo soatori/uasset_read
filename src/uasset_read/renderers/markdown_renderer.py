@@ -15,6 +15,69 @@ def _escape_md_cell(text: str) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
+def _format_transforms(transforms) -> str:
+    """格式化 Transform 字典为紧凑字符串。"""
+    if not transforms:
+        return "Identity"
+    parts = []
+    loc = transforms.get("relative_location") if isinstance(transforms, dict) else getattr(transforms, "relative_location", None)
+    rot = transforms.get("relative_rotation") if isinstance(transforms, dict) else getattr(transforms, "relative_rotation", None)
+    scale = transforms.get("relative_scale") if isinstance(transforms, dict) else getattr(transforms, "relative_scale", None)
+    if loc:
+        x = getattr(loc, "x", 0) if not isinstance(loc, dict) else loc.get("x", 0)
+        y = getattr(loc, "y", 0) if not isinstance(loc, dict) else loc.get("y", 0)
+        z = getattr(loc, "z", 0) if not isinstance(loc, dict) else loc.get("z", 0)
+        parts.append(f"Loc({x:.1f},{y:.1f},{z:.1f})")
+    if rot:
+        p = getattr(rot, "pitch", 0) if not isinstance(rot, dict) else rot.get("pitch", 0)
+        y = getattr(rot, "yaw", 0) if not isinstance(rot, dict) else rot.get("yaw", 0)
+        r = getattr(rot, "roll", 0) if not isinstance(rot, dict) else rot.get("roll", 0)
+        parts.append(f"Rot({p:.1f},{y:.1f},{r:.1f})")
+    if scale:
+        x = getattr(scale, "x", 1) if not isinstance(scale, dict) else scale.get("x", 1)
+        y = getattr(scale, "y", 1) if not isinstance(scale, dict) else scale.get("y", 1)
+        z = getattr(scale, "z", 1) if not isinstance(scale, dict) else scale.get("z", 1)
+        parts.append(f"Scale({x:.1f},{y:.1f},{z:.1f})")
+    return " ".join(parts) if parts else "Identity"
+
+
+def _collect_input_actions(ir) -> list[tuple[str, dict]]:
+    """从 PackageIR 收集 Enhanced Input Action 绑定。
+
+    支持两种来源：
+    1. graphs 中的 K2Node_EnhancedInputAction 节点（当前未使用，graphs 通常为空）
+    2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名
+    """
+    import re
+    input_actions: list[tuple[str, dict]] = []
+    seen_actions: set[str] = set()
+
+    # 来源1: graphs 中的节点（保留兼容）
+    for export in ir.exports:
+        for graph in export.graphs:
+            for node in graph.nodes:
+                if node.node_class == "K2Node_EnhancedInputAction":
+                    data = node.node_data
+                    if isinstance(data, dict):
+                        path = data.get("input_action_path", "?")
+                        triggers = data.get("trigger_events", {})
+                        input_actions.append((path, triggers))
+
+    # 来源2: decompiled_functions 中的函数名
+    # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
+    pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
+    for func in (ir.decompiled_functions or []):
+        match = pattern.match(func.name)
+        if match:
+            action_name = match.group(1)
+            if action_name not in seen_actions:
+                seen_actions.add(action_name)
+                # 从函数名解析 action path（简化处理）
+                input_actions.append((action_name, {}))
+
+    return input_actions
+
+
 class MarkdownRenderer(IRenderer):
     """Markdown + Mermaid 流程图渲染器。"""
 
@@ -37,6 +100,71 @@ class MarkdownRenderer(IRenderer):
         lines.append(f"| Imports | {ir.header.total_import_count} |")
         lines.append(f"| UE Version | {_escape_md_cell(ir.header.ue_version)} |")
         lines.append("")
+
+        # === Blueprint Details（仅蓝图资产） ===
+        if ir.blueprint:
+            lines.append("## Blueprint Details")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
+            if ir.blueprint.parent_class:
+                lines.append(f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |")
+            var_count = len(ir.variables) if ir.variables else 0
+            comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
+            lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+            lines.append("")
+
+            # === Component Hierarchy Mermaid 图 ===
+            if ir.blueprint.components:
+                lines.append("### Component Hierarchy")
+                lines.append("")
+                lines.append("```mermaid")
+                lines.append("graph TD")
+                root_name = asset_name.replace(" ", "_")
+                lines.append(f"  {root_name}[\"{asset_name}\"]")
+                for comp in ir.blueprint.components:
+                    comp_name = comp.get("name", "Unknown") if isinstance(comp, dict) else getattr(comp, "name", "Unknown")
+                    comp_class = comp.get("class", "Unknown") if isinstance(comp, dict) else getattr(comp, "class_name", "Unknown")
+                    safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in comp_name)
+                    lines.append(f"  {root_name} --> {safe_name}[\"{comp_name}<br/><i>{comp_class}</i>\"]")
+                lines.append("```")
+                lines.append("")
+
+                # 组件详情表
+                lines.append("| Component | Class | Transform |")
+                lines.append("|-----------|-------|-----------|")
+                for comp in ir.blueprint.components:
+                    if isinstance(comp, dict):
+                        comp_name = comp.get("name", "Unknown")
+                        comp_class = comp.get("class", "Unknown")
+                        transforms = comp.get("transforms", {})
+                    else:
+                        comp_name = getattr(comp, "name", "Unknown")
+                        comp_class = getattr(comp, "class_name", "Unknown")
+                        transforms = getattr(comp, "transforms", {}) or {}
+                    transform_str = _format_transforms(transforms)
+                    lines.append(f"| {_escape_md_cell(comp_name)} | {_escape_md_cell(comp_class)} | {transform_str} |")
+                lines.append("")
+
+            # === Input Action Bindings ===
+            input_actions = _collect_input_actions(ir)
+            if input_actions:
+                lines.append("### Input Action Bindings")
+                lines.append("")
+                lines.append("| Input Action | Trigger | Event Type |")
+                lines.append("|--------------|---------|------------|")
+                for path, triggers in input_actions:
+                    action_name = _escape_md_cell(path)
+                    if triggers:
+                        first_trigger = True
+                        for trigger_name, event_type in triggers.items():
+                            if first_trigger:
+                                lines.append(f"| {action_name} | {trigger_name} | {event_type} |")
+                                first_trigger = False
+                            else:
+                                lines.append(f"| | {trigger_name} | {event_type} |")
+                    else:
+                        lines.append(f"| {action_name} | — | — |")
+                lines.append("")
 
         # 导出
         if ir.exports:

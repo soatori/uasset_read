@@ -464,8 +464,10 @@ class FArchive:
                     )
                     return truncated
                 else:
-                    # All nulls from start — cannot recover, return empty
-                    self._logger.error(
+                    # All nulls from start — likely file tail padding (zero-filled region).
+                    # Check if remaining file data is also mostly zeros (padding zone).
+                    # If so, advance to file end to prevent offset cascade (#138).
+                    self._logger.warning(
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "all nulls (completely corrupted), "
                         "consumed=%d bytes, end_pos=%d",
@@ -475,6 +477,22 @@ class FArchive:
                         "FString hex detail: pos=%d, hex=%s",
                         pos_before, data[:32].hex()
                     )
+                    # Padding zone detection: scan ahead up to 1KB for non-zero data
+                    current_pos = self.tell()
+                    remaining = self._file_size - current_pos
+                    if remaining > 0:
+                        scan_size = min(remaining, 1024)
+                        scan_data = self.read(scan_size)
+                        self.seek(current_pos)
+                        non_zero = sum(1 for b in scan_data if b != 0)
+                        # If less than 5% non-zero bytes → padding zone
+                        if scan_size > 0 and non_zero / scan_size < 0.05:
+                            self._logger.debug(
+                                "FString padding zone detected at pos %d: "
+                                "%d/%d non-zero bytes in next %d bytes, seeking to file end",
+                                current_pos, non_zero, scan_size, scan_size,
+                            )
+                            self.seek(self._file_size)
                     return ""
 
         return result
