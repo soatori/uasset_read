@@ -184,7 +184,10 @@ def parse_property_value(
         handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
         if handler is not None:
             try:
-                return handler(tag, archive, name_map, export_map, summary)
+                result = handler(tag, archive, name_map, export_map, summary)
+                if result is not None:
+                    return result
+                # Handler 返回 None（未知类型/解析失败），继续回退到 raw_data
             except Exception as e:
                 logger.warning("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""

@@ -242,9 +242,14 @@ def _parse_struct_binary(
         x, y, z, w = _struct.unpack(fmt, raw[:size])
         fields = {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
     else:
-        # 未知结构体类型，保留原始字节（不含 raw_data 以避免 hex 泄漏）
-        archive.seek(start_pos)
-        return None
+        # 未知结构体类型 — 返回 raw bytes 供下游保留，避免丢失数据
+        return {
+            "kind": "binary_or_native_property",
+            "type": tag.type,
+            "size": size,
+            "raw_data": raw,
+            "struct_type": struct_type,
+        }
 
     return {
         "kind": "struct_binary_decoded",

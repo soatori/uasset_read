@@ -500,6 +500,11 @@ def _parse_package_core(
             return
         result.version_container = build_version_container(result.summary)
 
+        # 将 UE5 版本号附加到 archive 供下游属性标签解析器使用
+        # read_property_tag 根据此版本号选择简单 FName（ue5 < 1012）
+        # 或完整 FPropertyTypeName 树（ue5 >= 1012）
+        archive._file_version_ue5 = result.summary.file_version_ue5
+
         # 截断文件检测：验证导出数据范围
         try:
             validate_export_data_range(archive, result.summary)
