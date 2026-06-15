@@ -296,6 +296,57 @@ class EX_Unknown6F(KismetExpressionT[bytes]):
 
 
 @dataclass
+class EX_UnknownF9(KismetExpressionT[bytes]):
+    """Game-specific opcode 0xF9 — Borderlands 4 私有扩展。
+
+    UE 源码未定义此操作码。格式未知，交由 tolerant 模式处理。
+    """
+
+    Value: bytes = b""
+
+    @property
+    def Token(self):
+        return EExprToken.EX_F9
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownF9:
+        archive.seek(archive.tell() - 1)
+        return cls(Value=b"")
+
+
+@dataclass
+class EX_UnknownFD(KismetExpressionT[bytes]):
+    """Game-specific opcode 0xFD — Borderlands 4, 2XKO 私有扩展。"""
+
+    Value: bytes = b""
+
+    @property
+    def Token(self):
+        return EExprToken.EX_FD
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownFD:
+        archive.seek(archive.tell() - 1)
+        return cls(Value=b"")
+
+
+@dataclass
+class EX_UnknownFE(KismetExpressionT[bytes]):
+    """Game-specific opcode 0xFE — Borderlands 4 私有扩展。"""
+
+    Value: bytes = b""
+
+    @property
+    def Token(self):
+        return EExprToken.EX_FE
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownFE:
+        archive.seek(archive.tell() - 1)
+        return cls(Value=b"")
+
+
+@dataclass
 class EX_MaxSentinel(KismetExpression):
     """EX_Max (0xFF) 哨兵值 — 标记脚本结束，与 EX_EndOfScript 行为相同。
 
