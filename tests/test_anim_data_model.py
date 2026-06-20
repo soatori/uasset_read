@@ -20,3 +20,13 @@ def test_parse_anim_data_model_returns_dict():
     assert result["parse_status"] == "partial_metadata"
     assert "raw_offset" in result
     assert "sample_size" in result
+
+
+def test_anim_data_model_handler_registered():
+    """验证 AnimationDataModel handler 已注册到 registry。"""
+    from uasset_read.parsers.class_registry import get_class_registry
+
+    registry = get_class_registry()
+    handler = registry.find_handler("AnimationDataModel")
+    assert handler is not None
+    assert handler.handler_name == "AnimDataModelHandler"

@@ -37,7 +37,6 @@ __all__ = [
     "parse_texture_cube",
     "parse_anim_sequence",
     "parse_sound_wave",
-    "parse_sound_attenuation",
     "register_asset_type_handlers",
 ]
 
@@ -130,6 +129,7 @@ def register_asset_type_handlers() -> None:
         ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
         ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
+        ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
