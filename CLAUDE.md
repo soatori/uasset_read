@@ -74,7 +74,7 @@ python -m pytest tests/ -v --cov=uasset_read   # 覆盖率
 ```
 
 **测试要求**：100% 通过率，≥12 种资产类型，稳定资产必须在 strict 和 tolerant 双模式下通过。
-**样本路径**：`E:\Develop\lib\UnrealEngine\Samples`
+**样本路径**：`E:\Develop\lib\Samples`
 **pytest 标记**：`integration`、`quality`、`regression`、`slow`
 
 ## 核心架构

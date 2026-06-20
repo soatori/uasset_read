@@ -21,7 +21,7 @@ from uasset_read.renderers import list_formats
 
 pytestmark = pytest.mark.acceptance
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 
 @pytest.fixture(scope="module")

@@ -8,7 +8,7 @@ from typing import Callable
 import pytest
 
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 
 @dataclass(frozen=True)

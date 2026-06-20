@@ -20,7 +20,7 @@ export const meta = {
 
 // 路径统一使用正斜杠（Windows Python/PowerShell/Node.js 均支持）
 const PROJECT_ROOT = 'E:/Develop/uasset_read'
-const SAMPLES_DIR = 'E:/Develop/lib/UnrealEngine/Samples'
+const SAMPLES_DIR = 'E:/Develop/lib/Samples'
 
 // ============================================================
 // 共享工具函数

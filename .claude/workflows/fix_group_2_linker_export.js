@@ -16,7 +16,7 @@ export const meta = {
 // 常量
 // ============================================================
 const PROJECT_ROOT = 'E:/Develop/uasset_read'
-const SAMPLES_DIR = 'E:/Develop/lib/UnrealEngine/Samples'
+const SAMPLES_DIR = 'E:/Develop/lib/Samples'
 
 function parseAgentJson(text) {
   if (!text || typeof text !== 'string') return null

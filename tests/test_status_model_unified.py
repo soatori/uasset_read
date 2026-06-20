@@ -5,8 +5,8 @@ from uasset_read.parse_uasset import parse_uasset
 
 
 # Sample assets
-STATIC_MESH = Path("E:/Develop/lib/UnrealEngine/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
-BLUEPRINT = Path("E:/Develop/lib/UnrealEngine/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
+STATIC_MESH = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
+BLUEPRINT = Path("E:/Develop/lib/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
 
 
 class TestUnifiedStatusModel:

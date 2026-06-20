@@ -1,5 +1,27 @@
 # 变更日志
 
+## [0.4.5] — 2026-06-20
+
+### 修复
+- PackageFileSummary UE 5.8 对齐：修复 LegacyGuid 缺失读取（UE5 < 1016 资产偏移错位根因）
+- 修正 OwnerPersistentGuid 条件：FileVersionUE4 >= 519 && < 520
+- 修正 ChunkIDs 读取：TArray\<int32\>（4 bytes/元素）替代误用的 16 bytes
+- 两个偏移 bug 相互抵消的隐性问题修复
+
+### 改进
+- UE 5.8 ObjectVersion.h 版本常量对齐（18 项全部确认一致）
+- UE 5.8 样本验收：Blueprint、StaticMesh、Material、SkeletalMesh、Animation、DataTable 全部通过
+- StructProperty size mismatch 警告消除
+- FString 损坏恢复、Texture2D 边界检查
+- Transform struct_binary_decoded 支持 + Input Action 绑定收集
+- BinaryOrNative handler None 返回修复 + UE5 旧格式 PropertyTag 支持
+- SerializationControlExtensions 虚假未知位警告消除
+
+### 文档
+- 新增 ue5-evolution.md UE 5.8 对齐修复记录
+- 补充 FPropertyTag 完整字段表 + UPROPERTY 说明符 + CDO 机制文档
+- 补充 K2Node 语义参考 + 蓝图通信机制 + UE 模块映射文档
+
 ## [0.4.3] — 2026-06-05
 
 ### 新增

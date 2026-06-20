@@ -8,7 +8,7 @@ export const meta = {
   ],
 };
 
-const SAMPLE_ROOT = 'E:/Develop/lib/UnrealEngine/Samples';
+const SAMPLE_ROOT = 'E:/Develop/lib/Samples';
 const BATCH_SIZE = 5;
 const MAX_ROUNDS = 10;
 

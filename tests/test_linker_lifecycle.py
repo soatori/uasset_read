@@ -405,7 +405,7 @@ class TestPreloadPopulatesProperties:
 # Integration tests with real UE sample assets
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 STATIC_MESH = DEFAULT_SAMPLE_ROOT / (
     "StarterContent/Content/StarterContent/Architecture/"

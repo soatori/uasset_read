@@ -13,7 +13,7 @@ export const meta = {
   ],
 }
 
-const BASE = 'E:/Develop/lib/UnrealEngine/Samples'
+const BASE = 'E:/Develop/lib/Samples'
 const TEMP_DIR = 'E:/Develop/uasset_read/temp'
 const PROJECTS = [
   'CiciToonCharacterShaderPa',
@@ -32,11 +32,11 @@ phase('发现资产')
 // 使用 agent 扫描各项目的资产
 const scanResults = await parallel([
   ...PROJECTS.map((proj, idx) => () => agent(
-    `在目录 ${BASE}/${proj}/Content 中递归查找最多200个 .uasset 文件路径。返回 JSON 数组格式的文件路径列表。使用 PowerShell: Get-ChildItem -Path 'E:\\Develop\\lib\\UnrealEngine\\Samples\\${proj}\\Content' -Recurse -Filter '*.uasset' -File | Select-Object -First 200 -ExpandProperty FullName`,
+    `在目录 ${BASE}/${proj}/Content 中递归查找最多200个 .uasset 文件路径。返回 JSON 数组格式的文件路径列表。使用 PowerShell: Get-ChildItem -Path 'E:\\Develop\\lib\\Samples\\${proj}\\Content' -Recurse -Filter '*.uasset' -File | Select-Object -First 200 -ExpandProperty FullName`,
     { label: `scan:${proj}`, phase: '发现资产' }
   )),
   () => agent(
-    `在目录 ${BASE}/Games/LyraStarterGame/Content 中递归查找最多500个 .uasset 文件路径。返回 JSON 数组格式。使用 PowerShell 命令: Get-ChildItem -Path 'E:\\Develop\\lib\\UnrealEngine\\Samples\\Games\\LyraStarterGame\\Content' -Recurse -Filter '*.uasset' -File | Select-Object -First 500 -ExpandProperty FullName`,
+    `在目录 ${BASE}/Games/LyraStarterGame/Content 中递归查找最多500个 .uasset 文件路径。返回 JSON 数组格式。使用 PowerShell 命令: Get-ChildItem -Path 'E:\\Develop\\lib\\Samples\\Games\\LyraStarterGame\\Content' -Recurse -Filter '*.uasset' -File | Select-Object -First 500 -ExpandProperty FullName`,
     { label: 'scan:Lyra', phase: '发现资产' }
   )
 ])

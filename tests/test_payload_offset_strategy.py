@@ -10,8 +10,8 @@ from pathlib import Path
 
 
 # 测试样本路径
-BLUEPRINT_SAMPLE = Path("E:/Develop/lib/UnrealEngine/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
-STATICMESH_SAMPLE = Path("E:/Develop/lib/UnrealEngine/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
+BLUEPRINT_SAMPLE = Path("E:/Develop/lib/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
+STATICMESH_SAMPLE = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
 
 
 def skip_if_sample_missing(sample_path: Path):

@@ -125,7 +125,7 @@ pytest tests/test_formatter_outputs.py -v
 
 ## 环境变量
 
-- `UE_SAMPLE_ROOT` — Samples 根目录（默认 `E:\Develop\lib\UnrealEngine\Samples`）
+- `UE_SAMPLE_ROOT` — Samples 根目录（默认 `E:\Develop\lib\Samples`）
 - `UE_ENGINE_CONTENT_ROOT` — Engine 内容根目录（默认 `E:\Develop\lib\UnrealEngine\Engine\Content`）
 
 ## 文件位置

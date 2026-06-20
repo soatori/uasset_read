@@ -51,7 +51,7 @@ class TestConstants:
 class TestMissingFields:
     """验证 M_Mannequin 材质资产能正确解析。"""
 
-    SAMPLE = r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Materials\M_Mannequin.uasset"
+    SAMPLE = r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Materials\M_Mannequin.uasset"
 
     @pytest.fixture(scope="class")
     def result(self):
@@ -153,8 +153,8 @@ class TestSkeletalMeshParsing:
     """验证骨骼网格资产解析（此前因 Negative generations count 失败）。"""
 
     SAMPLES = [
-        r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Manny_Simple.uasset",
-        r"E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Quinn_Simple.uasset",
+        r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Manny_Simple.uasset",
+        r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Quinn_Simple.uasset",
     ]
 
     @pytest.mark.parametrize("path", SAMPLES, ids=lambda p: os.path.basename(p))

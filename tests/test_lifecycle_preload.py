@@ -6,7 +6,7 @@ import os
 import pytest
 from pathlib import Path
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 
 @pytest.fixture(scope="module")

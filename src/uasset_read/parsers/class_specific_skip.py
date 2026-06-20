@@ -34,13 +34,13 @@ SKIP_CLASS_PREFIXES = (
     "NiagaraNodeParameterMapGet",
     "NiagaraNode",
     "NiagaraSystem",
-    # P1: MovieScene
-    "MovieScene",
-    "MovieSceneSceneCaptureParams",
-    # P2: MetaSound
-    "MetasoundEditorGraph",
-    "MetasoundEditorGraphInputObjectArray",
-    "MetasoundEditorGraphMemberDefaultObjectArray",
+    # P1: MovieScene — 已移至 opaque 白名单（#164）
+    # "MovieScene",
+    # "MovieSceneSceneCaptureParams",
+    # P2: MetaSound — 已移至 opaque 白名单（#165）
+    # "MetasoundEditorGraph",
+    # "MetasoundEditorGraphInputObjectArray",
+    # "MetasoundEditorGraphMemberDefaultObjectArray",
     # P2: K2Node
     "K2Node_FunctionEntry",
     "K2Node_FormatText",

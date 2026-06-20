@@ -15,9 +15,9 @@ from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.serializers.object_resources import resolve_class_name
 
 # 测试资产路径
-BLUEPRINT_ASSET = "E:/Develop/lib/UnrealEngine/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
-STATICMESH_ASSET = "E:/Develop/lib/UnrealEngine/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
-TEXTURE_ASSET = "E:/Develop/lib/UnrealEngine/Samples/StarterContent/Content/StarterContent/Textures/T_Brick_Clay_Beveled_D.uasset"
+BLUEPRINT_ASSET = "E:/Develop/lib/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
+STATICMESH_ASSET = "E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+TEXTURE_ASSET = "E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Textures/T_Brick_Clay_Beveled_D.uasset"
 
 
 def asset_exists(path: str) -> bool:

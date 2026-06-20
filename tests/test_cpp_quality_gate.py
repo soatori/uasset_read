@@ -16,7 +16,7 @@ import pytest
 from uasset_read.core import parse_single
 
 _REAL_BLUEPRINT = os.path.join(
-    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\UnrealEngine\Samples"),
+    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\Samples"),
     "FirstPerson", "Content", "FirstPerson", "Blueprints",
     "BP_FirstPersonCharacter.uasset",
 )

@@ -1,0 +1,4 @@
+interface:
+  display_name: "UE 5.8 Unreal MCP"
+  short_description: "Use Unreal MCP and ToolsetRegistry safely."
+  default_prompt: "Use $ue-mcp to inspect available Unreal toolsets and perform the requested editor task safely."

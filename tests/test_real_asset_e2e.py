@@ -17,7 +17,7 @@ from uasset_read.parse_uasset import parse_uasset_with_linker
 
 # 真实蓝图资产路径
 _REAL_BLUEPRINT = os.path.join(
-    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\UnrealEngine\Samples"),
+    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\Samples"),
     "FirstPerson", "Content", "FirstPerson", "Blueprints",
     "BP_FirstPersonCharacter.uasset",
 )

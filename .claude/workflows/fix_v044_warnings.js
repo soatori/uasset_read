@@ -187,8 +187,8 @@ const verifyResult = await agent(`
 1. 运行项目完整测试套件：python -m pytest tests/ -x --tb=short 2>&1 | tail -20
 2. 检查是否有新增的测试失败
 3. 用几个实际资产验证解析结果：
-   - python run.py "E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Anims\Rifle\AO_Rifle.uasset" 2>&1 | head -50
-   - python run.py "E:\Develop\lib\UnrealEngine\Samples\FirstPerson\Content\Characters\Mannequins\Materials\Manny\MI_Manny_01_New.uasset" 2>&1 | head -50
+   - python run.py "E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Anims\Rifle\AO_Rifle.uasset" 2>&1 | head -50
+   - python run.py "E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Materials\Manny\MI_Manny_01_New.uasset" 2>&1 | head -50
 4. 确认测试通过率
 
 返回纯文本 JSON：

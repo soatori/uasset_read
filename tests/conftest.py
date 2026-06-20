@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
