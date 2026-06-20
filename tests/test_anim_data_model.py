@@ -1,0 +1,22 @@
+"""UAnimDataModel 解析器测试。"""
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+
+def test_parse_anim_data_model_returns_dict():
+    """验证 parse_anim_data_model 返回正确的字典结构。"""
+    from uasset_read.parsers.asset_types.anim_data_model import parse_anim_data_model
+
+    archive = MagicMock()
+    archive.tell.return_value = 0
+    archive.total_size.return_value = 1024
+    archive.read.return_value = b"\x00" * 256
+
+    result = parse_anim_data_model(archive, [])
+
+    assert isinstance(result, dict)
+    assert "parse_status" in result
+    assert result["parse_status"] == "partial_metadata"
+    assert "raw_offset" in result
+    assert "sample_size" in result
