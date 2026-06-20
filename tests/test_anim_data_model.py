@@ -42,3 +42,14 @@ def test_anim_data_model_not_skipped():
     # class_name 参数传入 "AnimationDataModel"
     result = should_skip_export_for_tolerant_parsing(export, class_name="AnimationDataModel")
     assert result is False
+
+
+def test_anim_data_model_strategy_is_tagged():
+    """验证 AnimationDataModel 策略为 TAGGED_PROPERTIES_ONLY。"""
+    from uasset_read.parsers.class_serialization_strategy import (
+        SerializationStrategy,
+        get_serialization_strategy,
+    )
+
+    strategy = get_serialization_strategy("AnimationDataModel")
+    assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY

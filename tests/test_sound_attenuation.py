@@ -32,3 +32,14 @@ def test_sound_attenuation_not_skipped():
     # class_name 参数传入 "SoundAttenuation"
     result = should_skip_export_for_tolerant_parsing(export, class_name="SoundAttenuation")
     assert result is False
+
+
+def test_sound_attenuation_strategy_is_tagged():
+    """验证 SoundAttenuation 策略为 TAGGED_PROPERTIES_ONLY。"""
+    from uasset_read.parsers.class_serialization_strategy import (
+        SerializationStrategy,
+        get_serialization_strategy,
+    )
+
+    strategy = get_serialization_strategy("SoundAttenuation")
+    assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY

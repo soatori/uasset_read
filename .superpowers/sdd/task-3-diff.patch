@@ -1,0 +1,38 @@
+diff --git a/src/uasset_read/parsers/asset_types/__init__.py b/src/uasset_read/parsers/asset_types/__init__.py
+index b63fc93..db61e50 100644
+--- a/src/uasset_read/parsers/asset_types/__init__.py
++++ b/src/uasset_read/parsers/asset_types/__init__.py
+@@ -37,7 +37,6 @@ __all__ = [
+     "parse_texture_cube",
+     "parse_anim_sequence",
+     "parse_sound_wave",
+-    "parse_sound_attenuation",
+     "register_asset_type_handlers",
+ ]
+ 
+@@ -130,6 +129,7 @@ def register_asset_type_handlers() -> None:
+         ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
+         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
+         ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
++        ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
+     ]
+     for module, func_name, class_names, handler_name in _optional:
+         try:
+diff --git a/tests/test_anim_data_model.py b/tests/test_anim_data_model.py
+index 9b05c39..fdf3112 100644
+--- a/tests/test_anim_data_model.py
++++ b/tests/test_anim_data_model.py
+@@ -20,3 +20,13 @@ def test_parse_anim_data_model_returns_dict():
+     assert result["parse_status"] == "partial_metadata"
+     assert "raw_offset" in result
+     assert "sample_size" in result
++
++
++def test_anim_data_model_handler_registered():
++    """验证 AnimationDataModel handler 已注册到 registry。"""
++    from uasset_read.parsers.class_registry import get_class_registry
++
++    registry = get_class_registry()
++    handler = registry.find_handler("AnimationDataModel")
++    assert handler is not None
++    assert handler.handler_name == "AnimDataModelHandler"
