@@ -56,3 +56,9 @@ QWEN.md
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
 
+# Superpowers workflow artifacts (local only)
+.superpowers/sdd/
+
+# Accidentally added submodule (no .gitmodules mapping)
+.claude/skills/unreal-mcp-skills
+

@@ -47,6 +47,16 @@ def test_sound_attenuation_strategy_is_tagged():
     assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
 
+def test_sound_attenuation_handler_registered():
+    """验证 SoundAttenuation handler 已注册到 registry。"""
+    from uasset_read.parsers.class_registry import get_class_registry
+
+    registry = get_class_registry()
+    handler = registry.find_handler("SoundAttenuation")
+    assert handler is not None
+    assert handler.handler_name == "SoundAttenuationHandler"
+
+
 @pytest.mark.integration
 def test_parse_att_footstep_pc():
     """验证 ATT_Footstep_PC.uasset 不再被 skipped。"""
