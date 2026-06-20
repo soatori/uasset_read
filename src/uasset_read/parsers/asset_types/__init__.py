@@ -28,8 +28,6 @@ from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
 from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
 from uasset_read.parsers.asset_types.texture2d import parse_texture2d
-from uasset_read.parsers.asset_types.sound_attenuation import parse_sound_attenuation
-
 __all__ = [
     "parse_static_mesh",
     "parse_skeletal_mesh",

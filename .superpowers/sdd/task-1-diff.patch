@@ -1,0 +1,87 @@
+diff --git a/src/uasset_read/parsers/asset_types/__init__.py b/src/uasset_read/parsers/asset_types/__init__.py
+index 792b4b5..7ae4462 100644
+--- a/src/uasset_read/parsers/asset_types/__init__.py
++++ b/src/uasset_read/parsers/asset_types/__init__.py
+@@ -28,6 +28,7 @@ from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
+ from uasset_read.parsers.asset_types.material import parse_material
+ from uasset_read.parsers.asset_types.material_instance import parse_material_instance
+ from uasset_read.parsers.asset_types.texture2d import parse_texture2d
++from uasset_read.parsers.asset_types.sound_attenuation import parse_sound_attenuation
+ 
+ __all__ = [
+     "parse_static_mesh",
+@@ -38,6 +39,7 @@ __all__ = [
+     "parse_texture_cube",
+     "parse_anim_sequence",
+     "parse_sound_wave",
++    "parse_sound_attenuation",
+     "register_asset_type_handlers",
+ ]
+ 
+@@ -129,6 +131,7 @@ def register_asset_type_handlers() -> None:
+         ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
+         ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
+         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
++        ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
+     ]
+     for module, func_name, class_names, handler_name in _optional:
+         try:
+diff --git a/src/uasset_read/parsers/asset_types/sound_attenuation.py b/src/uasset_read/parsers/asset_types/sound_attenuation.py
+new file mode 100644
+index 0000000..a0607e4
+--- /dev/null
++++ b/src/uasset_read/parsers/asset_types/sound_attenuation.py
+@@ -0,0 +1,23 @@
++"""SoundAttenuation 资产元数据提取器（partial metadata）。
++
++USoundAttenuation 使用标准 UPROPERTY 序列化（无自定义 Serialize()），
++当前仅提取原始字节样本供诊断使用。
++"""
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++if TYPE_CHECKING:
++    from uasset_read.archive import FArchive
++
++
++def parse_sound_attenuation(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
++    """提取 SoundAttenuation 原始字节样本（opaque partial metadata）。"""
++    start = archive.tell()
++    remaining = max(0, archive.total_size() - start)
++    sample = archive.read(min(remaining, 256))
++    return {
++        "raw_offset": start,
++        "sample_size": len(sample),
++        "parse_status": "partial_metadata",
++    }
+diff --git a/tests/test_sound_attenuation.py b/tests/test_sound_attenuation.py
+new file mode 100644
+index 0000000..a05d5fb
+--- /dev/null
++++ b/tests/test_sound_attenuation.py
+@@ -0,0 +1,24 @@
++"""USoundAttenuation 解析器测试。"""
++from __future__ import annotations
++
++from unittest.mock import MagicMock
++
++import pytest
++
++
++def test_parse_sound_attenuation_returns_dict():
++    """验证 parse_sound_attenuation 返回正确的字典结构。"""
++    from uasset_read.parsers.asset_types.sound_attenuation import parse_sound_attenuation
++
++    archive = MagicMock()
++    archive.tell.return_value = 0
++    archive.total_size.return_value = 512
++    archive.read.return_value = b"\x00" * 256
++
++    result = parse_sound_attenuation(archive, [])
++
++    assert isinstance(result, dict)
++    assert "parse_status" in result
++    assert result["parse_status"] == "partial_metadata"
++    assert "raw_offset" in result
++    assert "sample_size" in result

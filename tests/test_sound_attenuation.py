@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def test_parse_sound_attenuation_returns_dict():
     """验证 parse_sound_attenuation 返回正确的字典结构。"""
