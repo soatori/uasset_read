@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_parse_anim_data_model_returns_dict():
     """验证 parse_anim_data_model 返回正确的字典结构。"""
@@ -53,3 +55,25 @@ def test_anim_data_model_strategy_is_tagged():
 
     strategy = get_serialization_strategy("AnimationDataModel")
     assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+@pytest.mark.integration
+def test_parse_am_mm_rifle_dryfire():
+    """验证 MM_Rifle_DryFire.uasset 的 AnimDataModel 不再被 skipped。"""
+    from uasset_read.parse_uasset import parse_uasset_with_linker
+
+    r = parse_uasset_with_linker(
+        r"E:\Develop\lib\Samples\FirstPersonC\Content\Characters\Mannequins\Anims\Rifle\MM_Rifle_DryFire.uasset",
+        tolerant=True,
+    )
+
+    # 验证不再是 failed
+    assert r.status != "failed"
+
+    # 验证 AnimDataModel export 不再是 skipped
+    for export in r.export_map:
+        resolved = r.linker.resolve_package_index(export.class_index)
+        class_name = resolved.object_name if resolved else ""
+        if "AnimationDataModel" in class_name:
+            assert export.parse_status != "skipped"
+            break

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_parse_sound_attenuation_returns_dict():
     """验证 parse_sound_attenuation 返回正确的字典结构。"""
@@ -43,3 +45,25 @@ def test_sound_attenuation_strategy_is_tagged():
 
     strategy = get_serialization_strategy("SoundAttenuation")
     assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+@pytest.mark.integration
+def test_parse_att_footstep_pc():
+    """验证 ATT_Footstep_PC.uasset 不再被 skipped。"""
+    from uasset_read.parse_uasset import parse_uasset_with_linker
+
+    r = parse_uasset_with_linker(
+        r"E:\Develop\lib\Samples\LyraStarterGame\Content\Audio\AttenuationPresets\ATT_Footstep_PC.uasset",
+        tolerant=True,
+    )
+
+    # 验证不再是 failed
+    assert r.status != "failed"
+
+    # 验证 SoundAttenuation export 不再是 skipped
+    for export in r.export_map:
+        resolved = r.linker.resolve_package_index(export.class_index)
+        class_name = resolved.object_name if resolved else ""
+        if class_name == "SoundAttenuation":
+            assert export.parse_status != "skipped"
+            break
