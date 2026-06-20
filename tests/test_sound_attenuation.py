@@ -20,3 +20,15 @@ def test_parse_sound_attenuation_returns_dict():
     assert result["parse_status"] == "partial_metadata"
     assert "raw_offset" in result
     assert "sample_size" in result
+
+
+def test_sound_attenuation_not_skipped():
+    """验证 SoundAttenuation 不再被 tolerant skip。"""
+    from uasset_read.parsers.class_specific_skip import should_skip_export_for_tolerant_parsing
+
+    export = MagicMock()
+    export.object_name = "ATT_Footstep_PC"
+
+    # class_name 参数传入 "SoundAttenuation"
+    result = should_skip_export_for_tolerant_parsing(export, class_name="SoundAttenuation")
+    assert result is False

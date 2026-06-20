@@ -30,3 +30,15 @@ def test_anim_data_model_handler_registered():
     handler = registry.find_handler("AnimationDataModel")
     assert handler is not None
     assert handler.handler_name == "AnimDataModelHandler"
+
+
+def test_anim_data_model_not_skipped():
+    """验证 AnimationDataModel 不再被 tolerant skip。"""
+    from uasset_read.parsers.class_specific_skip import should_skip_export_for_tolerant_parsing
+
+    export = MagicMock()
+    export.object_name = "AM_MM_Rifle_DryFire"
+
+    # class_name 参数传入 "AnimationDataModel"
+    result = should_skip_export_for_tolerant_parsing(export, class_name="AnimationDataModel")
+    assert result is False
