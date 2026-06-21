@@ -428,6 +428,198 @@ class TestRendererListFormats:
             assert r.format_name in formats
 
 
+class TestJSONOnlyBlueprintExports:
+    """验证 JSON 输出只包含蓝图相关 export。"""
+
+    def test_json_only_blueprint_exports(self):
+        """JSON 输出应只包含蓝图相关 export（类名以 _C 结尾或有 graphs）"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import (
+            PackageIR, PackageHeaderIR, ExportIR, GraphIR,
+        )
+
+        # 创建两个 export：一个蓝图，一个非蓝图
+        bp_export = ExportIR(
+            index=0,
+            object_name="BP_Test_C",
+            object_class="",
+            serial_size=100,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class="/Script/Engine.Actor",
+            properties=[],
+            graphs=[GraphIR(graph_guid="abc", graph_name="EventGraph", graph_class="EdGraph", nodes=[], execution_chains=[])],
+            bulk_data=None,
+            asset_type_data=None,
+            parse_status="success",
+            fallback_reason=None,
+            error_message=None,
+            ue_export_raw=None,
+            diagnostics={},
+        )
+
+        non_bp_export = ExportIR(
+            index=1,
+            object_name="BodySetup",
+            object_class="",
+            serial_size=200,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+            asset_type_data=None,
+            parse_status="success",
+            fallback_reason=None,
+            error_message=None,
+            ue_export_raw=None,
+            diagnostics={},
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=2,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[],
+            imports=[],
+            exports=[bp_export, non_bp_export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        options = RenderOptions()
+        result = renderer.render(ir, options)
+        data = json.loads(result)
+
+        # 验证只包含蓝图 export
+        assert len(data["exports"]) == 1, f"应只有 1 个蓝图 export，实际有 {len(data['exports'])}"
+        assert data["exports"][0]["object_name"] == "BP_Test_C", "应保留蓝图 export"
+
+    def test_export_name_ends_with_c_is_blueprint(self):
+        """类名以 _C 结尾的 export 应被视为蓝图 export"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR
+
+        export = ExportIR(
+            index=0,
+            object_name="Default__MyBP_C",
+            object_class="BlueprintGeneratedClass",
+            serial_size=512,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class="Actor",
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/MyBP", package_class="MyBP_C",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+
+        assert len(data["exports"]) == 1, "以 _C 结尾的 export 应保留"
+        assert data["exports"][0]["object_name"] == "Default__MyBP_C"
+
+    def test_export_with_graphs_is_blueprint(self):
+        """有 graphs 数据的 export 即使不以 _C 结尾也应保留"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import (
+            PackageIR, PackageHeaderIR, ExportIR, GraphIR,
+        )
+
+        export = ExportIR(
+            index=0,
+            object_name="SomeFunc",
+            object_class="",
+            serial_size=256,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[GraphIR(graph_guid="g1", graph_name="FuncGraph", graph_class="EdGraph", nodes=[], execution_chains=[])],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test", package_class="",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+
+        assert len(data["exports"]) == 1, "有 graphs 的 export 应保留"
+        assert data["exports"][0]["object_name"] == "SomeFunc"
+
+    def test_no_blueprint_exports_empty_list(self):
+        """如果没有蓝图 export，exports 应为空列表"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR
+
+        export = ExportIR(
+            index=0,
+            object_name="TextureAsset",
+            object_class="Texture2D",
+            serial_size=1024,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Tex", package_class="",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+
+        assert len(data["exports"]) == 0, "无蓝图 export 时应为空列表"
+
+
 class TestJSONExportExcludesRawFields:
     """验证 JSON export 不包含冗余字段。"""
 
@@ -440,10 +632,10 @@ class TestJSONExportExcludesRawFields:
             PackageIR, PackageHeaderIR, ExportIR, ExportRawIR,
         )
 
-        # 创建带 export 的 IR
+        # 创建带 export 的 IR（使用蓝图类名以通过过滤）
         export = ExportIR(
             index=0,
-            object_name="TestExport",
+            object_name="TestExport_C",
             object_class="",
             serial_size=100,
             outer_index_resolved="/Game/Test",

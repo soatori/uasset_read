@@ -38,7 +38,24 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
+    @staticmethod
+    def _is_blueprint_export(export) -> bool:
+        """判断是否为蓝图相关 export。
+
+        蓝图 export 的判定条件（满足任一即可）：
+        - 类名以 _C 结尾（UE 蓝图生成类的命名约定）
+        - 包含 graphs 数据（蓝图逻辑图）
+        """
+        if export.object_name.endswith("_C"):
+            return True
+        if export.graphs:
+            return True
+        return False
+
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
+        # 过滤只保留蓝图相关 export
+        blueprint_exports = [e for e in ir.exports if self._is_blueprint_export(e)]
+
         data = {
             "status": {
                 "status": ir.status,
@@ -56,7 +73,7 @@ class JSONRenderer(IRenderer):
             },
             # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
             # imports 已移除 — C++ 翻译不需要原始导入索引
-            "exports": [self._export_to_dict(e, options) for e in ir.exports],
+            "exports": [self._export_to_dict(e, options) for e in blueprint_exports],
         }
         # linker 已移除 — linker 元数据对 C++ 翻译无用
         if ir.blueprint is not None:
