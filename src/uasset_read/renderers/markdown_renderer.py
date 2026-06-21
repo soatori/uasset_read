@@ -226,15 +226,6 @@ class MarkdownRenderer(IRenderer):
         # === Variables ===
         self._render_variables(lines, ir)
 
-        if ir.linker is not None:
-            lines.append("## Linker")
-            lines.append(f"- **Has Linker**: {ir.linker.has_linker}")
-            if ir.linker.import_paths:
-                lines.append(f"- **Imports**: {len(ir.linker.import_paths)}")
-            if ir.linker.export_paths:
-                lines.append(f"- **Exports**: {len(ir.linker.export_paths)}")
-            lines.append("")
-
         # === 诊断信息 ===
         self._render_diagnostics(lines, ir)
 

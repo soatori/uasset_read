@@ -873,3 +873,41 @@ class TestJSONExportExcludesRawFields:
         assert "index" not in export_data, "index 应被移除（无用）"
         assert "bulk_data" not in export_data, "bulk_data 应被移除"
         assert "asset_type_data" not in export_data, "asset_type_data 应被移除"
+
+
+class TestMarkdownExcludesLinkerSection:
+    """验证 Markdown 输出不包含冗余的 Linker 小节。"""
+
+    def test_markdown_excludes_linker_section(self):
+        """Markdown 输出不应包含 Linker 小节"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, LinkerSummaryIR
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=0,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[],
+            imports=[],
+            exports=[],
+            linker=LinkerSummaryIR(
+                has_linker=True,
+                import_paths=["/Script/Engine"],
+                export_paths=["/Game/Test"],
+            ),
+        )
+        ir.status = "success"
+
+        renderer = MarkdownRenderer()
+        options = RenderOptions()
+        result = renderer.render(ir, options)
+
+        # 验证不包含 Linker 小节
+        assert "## Linker" not in result, "Linker 小节应被移除"
+        assert "Has Linker" not in result, "Has Linker 应被移除"
