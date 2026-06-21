@@ -620,6 +620,188 @@ class TestJSONOnlyBlueprintExports:
         assert len(data["exports"]) == 0, "无蓝图 export 时应为空列表"
 
 
+class TestMarkdownOnlyBlueprintExports:
+    """验证 Markdown 输出只包含蓝图相关 export。"""
+
+    def test_markdown_only_blueprint_exports(self):
+        """Markdown Export 表格应只包含蓝图相关 export"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import (
+            PackageIR, PackageHeaderIR, ExportIR, GraphIR,
+        )
+
+        bp_export = ExportIR(
+            index=0,
+            object_name="BP_Test_C",
+            object_class="",
+            serial_size=100,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class="/Script/Engine.Actor",
+            properties=[],
+            graphs=[GraphIR(graph_guid="abc", graph_name="EventGraph", graph_class="EdGraph", nodes=[], execution_chains=[])],
+            bulk_data=None,
+            asset_type_data=None,
+            parse_status="success",
+            fallback_reason=None,
+            error_message=None,
+            ue_export_raw=None,
+            diagnostics={},
+        )
+
+        non_bp_export = ExportIR(
+            index=1,
+            object_name="BodySetup",
+            object_class="",
+            serial_size=200,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+            asset_type_data=None,
+            parse_status="success",
+            fallback_reason=None,
+            error_message=None,
+            ue_export_raw=None,
+            diagnostics={},
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=2,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[],
+            imports=[],
+            exports=[bp_export, non_bp_export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = MarkdownRenderer()
+        options = RenderOptions()
+        result = renderer.render(ir, options)
+
+        # 验证只包含蓝图 export
+        assert "BP_Test_C" in result, "应包含蓝图 export"
+        assert "BodySetup" not in result, "不应包含非蓝图 export"
+
+    def test_export_name_ends_with_c_is_blueprint(self):
+        """类名以 _C 结尾的 export 应被视为蓝图 export"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR
+
+        export = ExportIR(
+            index=0,
+            object_name="Default__MyBP_C",
+            object_class="BlueprintGeneratedClass",
+            serial_size=512,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class="Actor",
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/MyBP", package_class="MyBP_C",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = MarkdownRenderer()
+        result = renderer.render(ir, RenderOptions())
+
+        assert "Default__MyBP_C" in result, "以 _C 结尾的 export 应在 Markdown 中保留"
+
+    def test_export_with_graphs_is_blueprint(self):
+        """有 graphs 数据的 export 即使不以 _C 结尾也应保留"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import (
+            PackageIR, PackageHeaderIR, ExportIR, GraphIR,
+        )
+
+        export = ExportIR(
+            index=0,
+            object_name="SomeFunc",
+            object_class="",
+            serial_size=256,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[GraphIR(graph_guid="g1", graph_name="FuncGraph", graph_class="EdGraph", nodes=[], execution_chains=[])],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test", package_class="",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = MarkdownRenderer()
+        result = renderer.render(ir, RenderOptions())
+
+        assert "SomeFunc" in result, "有 graphs 的 export 应在 Markdown 中保留"
+
+    def test_no_blueprint_exports_no_exports_table(self):
+        """如果没有蓝图 export，不应输出 Exports 表格"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR
+
+        export = ExportIR(
+            index=0,
+            object_name="TextureAsset",
+            object_class="Texture2D",
+            serial_size=1024,
+            outer_index_resolved=None,
+            super_index_resolved=None,
+            parent_class=None,
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Tex", package_class="",
+                package_flags=0, total_export_count=1, total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[], imports=[], exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = MarkdownRenderer()
+        result = renderer.render(ir, RenderOptions())
+
+        assert "## Exports" not in result, "无蓝图 export 时不应输出 Exports 表格"
+        assert "TextureAsset" not in result, "非蓝图 export 不应出现在输出中"
+
+
 class TestJSONExportExcludesRawFields:
     """验证 JSON export 不包含冗余字段。"""
 
