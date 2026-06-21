@@ -75,50 +75,19 @@ class JSONRenderer(IRenderer):
 
     def _export_to_dict(self, export, options: RenderOptions) -> dict[str, Any]:
         d = {
-            "index": export.index,
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
-            "outer_index_resolved": export.outer_index_resolved,
-            "super_index_resolved": export.super_index_resolved,
             "parent_class": export.parent_class,
             "properties": [self._property_to_dict(p) for p in export.properties],
             "graphs": [self._graph_to_dict(g, options) for g in export.graphs],
         }
-        if export.bulk_data is not None:
-            d["bulk_data"] = export.bulk_data
-        if export.asset_type_data is not None:
-            d["asset_type_data"] = export.asset_type_data
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
             d["fallback_reason"] = export.fallback_reason
         if export.error_message:
             d["error_message"] = export.error_message
-        if export.ue_export_raw is not None:
-            raw = export.ue_export_raw
-            d["ue_export_raw"] = {
-                "class_index": raw.class_index,
-                "super_index": raw.super_index,
-                "outer_index": raw.outer_index,
-                "template_index": raw.template_index,
-                "object_flags": raw.object_flags,
-                "serial_offset": raw.serial_offset,
-                "package_flags": raw.package_flags,
-                "b_forced_export": raw.b_forced_export,
-                "b_not_for_client": raw.b_not_for_client,
-                "b_not_for_server": raw.b_not_for_server,
-                "b_is_inherited_instance": raw.b_is_inherited_instance,
-                "b_not_always_loaded_for_editor_game": raw.b_not_always_loaded_for_editor_game,
-                "b_is_asset": raw.b_is_asset,
-                "b_generate_public_hash": raw.b_generate_public_hash,
-                "script_serialization_start_offset": raw.script_serialization_start_offset,
-                "script_serialization_end_offset": raw.script_serialization_end_offset,
-            }
-            if raw.guid:
-                d["ue_export_raw"]["guid"] = raw.guid
-        if export.diagnostics:
-            d["diagnostics"] = export.diagnostics
         return d
 
     def _property_to_dict(self, prop) -> dict[str, Any]:

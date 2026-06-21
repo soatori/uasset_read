@@ -426,3 +426,76 @@ class TestRendererListFormats:
             # Aliased formats (json_summary -> json, text_summary -> text_summary class)
             # may have different format_name than the registry key
             assert r.format_name in formats
+
+
+class TestJSONExportExcludesRawFields:
+    """验证 JSON export 不包含冗余字段。"""
+
+    def test_json_export_excludes_raw_fields(self):
+        """JSON export 不应包含 ue_export_raw, diagnostics, outer_index_resolved 等"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import (
+            PackageIR, PackageHeaderIR, ExportIR, ExportRawIR,
+        )
+
+        # 创建带 export 的 IR
+        export = ExportIR(
+            index=0,
+            object_name="TestExport",
+            object_class="",
+            serial_size=100,
+            outer_index_resolved="/Game/Test",
+            super_index_resolved="/Script/Engine.Actor",
+            parent_class="/Script/Engine.Actor",
+            properties=[],
+            graphs=[],
+            bulk_data=None,
+            asset_type_data=None,
+            parse_status="success",
+            fallback_reason=None,
+            error_message=None,
+            ue_export_raw=ExportRawIR(),
+            diagnostics={"test": "data"},
+        )
+
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=1,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[],
+            imports=[],
+            exports=[export],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        options = RenderOptions()
+        result = renderer.render(ir, options)
+        data = json.loads(result)
+
+        export_data = data["exports"][0]
+
+        # 验证保留的字段
+        assert "object_name" in export_data
+        assert "object_class" in export_data
+        assert "serial_size" in export_data
+        assert "parent_class" in export_data
+        assert "properties" in export_data
+        assert "graphs" in export_data
+
+        # 验证移除的字段
+        assert "ue_export_raw" not in export_data, "ue_export_raw 应被移除"
+        assert "diagnostics" not in export_data, "diagnostics 应被移除"
+        assert "outer_index_resolved" not in export_data, "outer_index_resolved 应被移除"
+        assert "super_index_resolved" not in export_data, "super_index_resolved 应被移除"
+        assert "index" not in export_data, "index 应被移除（无用）"
+        assert "bulk_data" not in export_data, "bulk_data 应被移除"
+        assert "asset_type_data" not in export_data, "asset_type_data 应被移除"
