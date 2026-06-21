@@ -22,9 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # 解析单个文件
 python run.py path/to/file.uasset              # JSON 输出（默认）
-python run.py path/to/file.uasset --text       # 人类可读文本
 python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
-python run.py path/to/file.uasset --cpp-skeleton  # C++ 类骨架
 
 # 运行测试
 python scripts/test_matrix.py smoke            # 快速烟雾测试
@@ -41,9 +39,8 @@ python scripts/test_matrix.py quality          # 质量门禁
 
 ```bash
 # 输出格式
-python run.py file.uasset --summary            # 摘要
-python run.py file.uasset --blueprint-text     # 蓝图节点文本
-python run.py file.uasset --blueprint-ue-text  # UE 格式文本
+python run.py file.uasset --json               # JSON 输出（默认）
+python run.py file.uasset --markdown           # Markdown + Mermaid 图表
 
 # 模式控制
 python run.py file.uasset --strict             # 遇警告停止

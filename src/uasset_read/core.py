@@ -46,7 +46,7 @@ def parse_single(
 
     Args:
         file_path: .uasset/.umap 文件路径
-        format: 输出格式（json, json_summary, text, markdown 等）
+        format: 输出格式（json, markdown）
         tolerant: 容错模式，遇到错误继续解析
         verbose: 详细输出
         include_schema: 包含 JSON Schema
@@ -64,7 +64,7 @@ def parse_single(
         ValueError: 渲染格式不存在
     """
     # 需要 linker 的格式
-    linker_formats = {"json", "json_summary", "cpp_skeleton"}
+    linker_formats = {"json"}
 
     if format in linker_formats:
         result = parse_uasset_with_linker(
@@ -97,13 +97,13 @@ def parse_single(
         verbose=verbose,
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
-        linker_result=result if format == "cpp_skeleton" else None,
+        linker_result=None,
     )
     return renderer.render(ir, options)
 
 
 def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
-    if not tolerant or format not in {"json", "json_summary"}:
+    if not tolerant or format not in {"json"}:
         return False
     if getattr(result, "diagnostics", None):
         return True
@@ -186,8 +186,6 @@ def parse_batch(
                 ext = ".json"
             elif format == "markdown":
                 ext = ".md"
-            elif format == "text":
-                ext = ".txt"
             else:
                 ext = f".{format}"
 

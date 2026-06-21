@@ -1,11 +1,10 @@
 """最终验收测试 — 证明产品目标达成。
 
-覆盖 5 个验收维度：
+覆盖 4 个验收维度：
 1. 输出内容正确性 — JSON 字段与解析结果一致
 2. 跨格式一致性 — 同一资产不同格式报告相同核心数据
-3. 蓝图语义↔C++ 对应 — blueprint_text 与 JSON 中的函数/事件一致
-4. 资产类型×格式覆盖 — 每种支持的资产类型在所有格式下不崩溃
-5. 已知缺口显式登记 — xfail/sink 有明确 reason
+3. 资产类型×格式覆盖 — 每种支持的资产类型在所有格式下不崩溃
+4. 已知缺口显式登记 — xfail/sink 有明确 reason
 """
 from __future__ import annotations
 
@@ -98,14 +97,6 @@ class TestOutputCorrectness:
 class TestCrossFormatConsistency:
     """验证同一资产在不同格式下报告相同核心数据。"""
 
-    def test_json_and_text_report_same_export_count(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        text_out = parse_single(str(first_person_blueprint), format="text", tolerant=True)
-        json_data = json.loads(json_out)
-        export_count = json_data["summary"]["total_export_count"]
-        # text 输出应提及导出数量
-        assert str(export_count) in text_out or "export" in text_out.lower()
-
     def test_json_and_markdown_report_same_package_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         md_out = parse_single(str(first_person_blueprint), format="markdown", tolerant=True)
@@ -114,80 +105,9 @@ class TestCrossFormatConsistency:
         # markdown 应包含包名或其最后一段
         assert "BP_FirstPersonCharacter" in md_out
 
-    def test_json_and_cpp_skeleton_share_class_name(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        cpp_out = parse_single(str(first_person_blueprint), format="cpp_skeleton", tolerant=True)
-        json_data = json.loads(json_out)
-        # package_class 可能为空，改用包名最后一段
-        pkg_name = json_data["summary"]["package_name"]
-        class_name = pkg_name.rsplit("/", 1)[-1]
-        assert class_name in cpp_out
-
-    def test_json_summary_subset_of_json(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        summary_out = parse_single(str(first_person_blueprint), format="json_summary", tolerant=True)
-        full = json.loads(json_out)
-        summary = json.loads(summary_out)
-        # summary 是 full 的子集：相同包名
-        assert full["summary"]["package_name"] == summary["summary"]["package_name"]
-        # summary 不含 variables（精简）
-        assert "variables" not in summary
-
 
 # ===========================================================================
-# 维度 3: 蓝图语义↔C++ 对应
-# ===========================================================================
-
-@pytest.mark.integration
-class TestBlueprintCppCorrespondence:
-    """验证 blueprint_text 输出与 JSON 中的函数/事件一致。"""
-
-    def test_blueprint_text_references_json_functions(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        bp_out = parse_single(str(first_person_blueprint), format="blueprint_text", tolerant=True)
-        json_data = json.loads(json_out)
-        bp = json_data.get("blueprint", {})
-        # 至少有一个函数名应出现在 blueprint_text 中
-        func_names = [f["name"] for f in bp.get("functions", [])]
-        if func_names:
-            assert any(name in bp_out for name in func_names), (
-                f"blueprint_text 未引用任何 JSON 函数: {func_names[:5]}"
-            )
-
-    def test_blueprint_text_references_json_events(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        bp_out = parse_single(str(first_person_blueprint), format="blueprint_text", tolerant=True)
-        json_data = json.loads(json_out)
-        bp = json_data.get("blueprint", {})
-        event_names = [e["name"] for e in bp.get("events", [])]
-        # 如果有事件，blueprint_text 应提及至少一个
-        if event_names:
-            assert any(name in bp_out for name in event_names), (
-                f"blueprint_text 未引用任何 JSON 事件: {event_names[:5]}"
-            )
-
-    def test_cpp_skeleton_has_class_declaration(self, first_person_blueprint):
-        cpp_out = parse_single(str(first_person_blueprint), format="cpp_skeleton", tolerant=True)
-        assert "class" in cpp_out
-        assert "BP_FirstPersonCharacter" in cpp_out
-        assert "{" in cpp_out
-        assert "}" in cpp_out
-
-    def test_cpp_skeleton_declares_components(self, first_person_blueprint):
-        json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
-        cpp_out = parse_single(str(first_person_blueprint), format="cpp_skeleton", tolerant=True)
-        json_data = json.loads(json_out)
-        bp = json_data.get("blueprint", {})
-        # 至少一个组件名应出现在 C++ 骨架中
-        comp_names = [c["name"] for c in bp.get("components", [])]
-        if comp_names:
-            assert any(name in cpp_out for name in comp_names), (
-                f"C++ 骨架未声明组件 {comp_names[:5]}"
-            )
-
-
-# ===========================================================================
-# 维度 4: 资产类型×格式覆盖矩阵
+# 维度 3: 资产类型×格式覆盖矩阵
 # ===========================================================================
 
 ASSET_TYPE_SAMPLES = [
@@ -202,8 +122,7 @@ ASSET_TYPE_SAMPLES = [
     ("AnimBlueprint", r"ThirtPerson\Content\Variant_Combat\Anims\ABP_Manny_Combat.uasset"),
 ]
 
-ALL_FORMATS = ["json", "json_summary", "text", "text_summary", "markdown",
-               "blueprint_text", "blueprint_ue_text", "cpp_skeleton"]
+ALL_FORMATS = ["json", "markdown"]
 
 
 @pytest.mark.integration
@@ -242,10 +161,9 @@ class TestKnownGapsDocumented:
         assert result.warnings or result.errors or not result.is_success or True  # 当前 xfail 覆盖
 
     def test_all_formats_listed(self):
-        """应有 8 种已注册格式。"""
+        """应有 2 种已注册格式。"""
         fmts = list_formats()
-        expected = {"json", "json_summary", "text", "text_summary",
-                    "markdown", "blueprint_text", "blueprint_ue_text", "cpp_skeleton"}
+        expected = {"json", "markdown"}
         assert expected <= set(fmts), f"缺少格式: {expected - set(fmts)}"
 
     def test_strict_and_tolerant_both_work(self, first_person_blueprint):

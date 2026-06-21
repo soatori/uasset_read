@@ -10,22 +10,22 @@ class TestListFormats:
         fmts = list_formats()
         assert "json" in fmts
 
-    def test_json_summary_in_formats(self):
+    def test_markdown_in_formats(self):
         fmts = list_formats()
-        assert "json_summary" in fmts
+        assert "markdown" in fmts
 
 
 class TestParseSingle:
     def test_parse_single_raises_on_parse_failure(self):
         """parse_single 在解析失败时抛出 ParseError。"""
-        with patch("uasset_read.core.parse_package") as mock_parse:
+        with patch("uasset_read.core.parse_uasset_with_linker") as mock_parse:
             mock_result = MagicMock()
             mock_result.is_success = False
             mock_result.errors = ["test error"]
             mock_parse.return_value = mock_result
 
             with pytest.raises(ParseError, match="Parse failed"):
-                parse_single("nonexistent.uasset", format="text")
+                parse_single("nonexistent.uasset", format="json")
 
     def test_parse_single_raises_on_render_failure(self):
         """parse_single 在渲染器不存在时抛出 ValueError。"""
@@ -54,23 +54,6 @@ class TestParseSingle:
                     mock_get_renderer.return_value = mock_renderer
 
                     parse_single("test.uasset", format="json")
-                    mock_linker_parse.assert_called_once()
-
-    def test_parse_single_uses_linker_for_json_summary_format(self):
-        """parse_single 对 json_summary 格式使用 parse_uasset_with_linker。"""
-        with patch("uasset_read.core.parse_uasset_with_linker") as mock_linker_parse:
-            mock_result = MagicMock()
-            mock_result.is_success = True
-            mock_linker_parse.return_value = mock_result
-            with patch("uasset_read.core.build_package_ir") as mock_build:
-                mock_ir = MagicMock()
-                mock_build.return_value = mock_ir
-                with patch("uasset_read.core.get_renderer") as mock_get_renderer:
-                    mock_renderer = MagicMock()
-                    mock_renderer.render.return_value = "{}"
-                    mock_get_renderer.return_value = mock_renderer
-
-                    parse_single("test.uasset", format="json_summary")
                     mock_linker_parse.assert_called_once()
 
 

@@ -66,20 +66,24 @@ python run.py file.uasset --cpp-skeleton > temp/output.cpp
 
 ### Step 4: 人工对照验证（可选）
 
-当有参考 C++ 代码或蓝图复制文本时：
+系统性对照验证使用专门的 **bp-cpp-comparison** skill，支持解析器 vs C++ vs MCP 三方对照。详细工作流见 `.claude/skills/bp-cpp-comparison/SKILL.md`。
 
-1. **蓝图复制文本**：从 UE 编辑器复制节点文本，对照验证：
-   - 组件属性值（CapsuleHalfHeight、FOV 等）
-   - 事件图连线（IA_X → Function）
-   - 触控事件覆盖（Primary/Secondary Thumbstick、Jump Start/End）
+快速对照要点：
 
-2. **参考 C++ 代码**：对照验证：
+1. **参考 C++ 代码**：对照验证：
    - 组件声明策略（复用基类 vs 新建）
    - 输入绑定位置（SetupPlayerInputComponent vs BeginPlay）
    - 函数签名（virtual BlueprintCallable 分层）
    - 属性值差异（有意重构 vs 解析错误）
 
-**注意**：参考 C++ 通常是蓝图的简化版（移除触控、合并输入路径、省略资产引用），差异不等于解析错误。以蓝图复制文本为最终真相源。
+2. **蓝图复制文本**：从 UE 编辑器复制节点文本，对照验证：
+   - 组件属性值（CapsuleHalfHeight、FOV 等）
+   - 事件图连线（IA_X → Function）
+   - 触控事件覆盖（Primary/Secondary Thumbstick、Jump Start/End）
+
+3. **MCP 对照**（推荐）：当 Unreal MCP 可用时，使用 `BlueprintTools` 作为实时真相源验证解析准确性。
+
+**注意**：参考 C++ 通常是蓝图的简化版（移除触控、合并输入路径、省略资产引用），差异不等于解析错误。以 MCP 数据或蓝图复制文本为最终真相源。
 
 ### Step 5: 生成报告
 
