@@ -123,28 +123,23 @@ class TestTruncatedFileLinkerDiagnostics:
 @pytest.mark.integration
 @pytest.mark.regression
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
-class TestLinkerDiagnosticsInOutput:
-    """验证 linker 诊断最终出现在 JSON 输出中。"""
+class TestLinkerDiagnosticsRemovedFromJson:
+    """验证 linker 诊断已从 JSON 输出中移除（输出精简）。"""
 
-    def test_real_asset_json_has_diagnostics(self):
-        """真实蓝图 JSON 输出应包含 linker 诊断（4 条 PackageIndex 越界）。"""
+    def test_real_asset_json_no_diagnostics_field(self):
+        """精简后 JSON 输出不应包含 diagnostics 字段。"""
         output = parse_single(_REAL_BLUEPRINT, format="json", tolerant=True)
         data = json.loads(output)
-        assert "diagnostics" in data
-        assert isinstance(data["diagnostics"], list)
-        assert len(data["diagnostics"]) >= 4  # 4 条 PackageIndex 65280 越界
+        assert "diagnostics" not in data, (
+            "diagnostics 字段已从 JSON 输出中移除，不应出现"
+        )
 
-    def test_real_asset_diagnostics_have_correct_module(self):
-        """诊断应包含来自 linker 模块的 PackageIndex 越界诊断。"""
+    def test_real_asset_json_no_linker_field(self):
+        """精简后 JSON 输出不应包含 linker 字段。"""
         output = parse_single(_REAL_BLUEPRINT, format="json", tolerant=True)
         data = json.loads(output)
-        # 验证存在至少 4 条来自 linker 的 PackageIndex 诊断
-        linker_pkg_diagnostics = [
-            d for d in data["diagnostics"]
-            if d["module"] == "linker" and d["field"] == "PackageIndex"
-        ]
-        assert len(linker_pkg_diagnostics) >= 4, (
-            f"期望至少 4 条来自 linker 的 PackageIndex 诊断，实际只有 {len(linker_pkg_diagnostics)} 条"
+        assert "linker" not in data, (
+            "linker 字段已从 JSON 输出中移除，不应出现"
         )
 
 
