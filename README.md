@@ -66,14 +66,11 @@ Active update plan: [UE 5.8 anchor plan](docs/PLAN.md).
 - **Binary/native handlers** — binary or native property serialization support
 
 ### Multiple Output Formats
-- **JSON** — full structured output or summary (renderer-based, no blueprint wrapper)
-- **Text** — human-readable format
+- **JSON** — structured output optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
-- **Blueprint UE Text** — UE-editor-style format
-- **C++ Skeleton** — ready-to-use class boilerplate with constructor init lists
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown)
 - **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 ## Installation
@@ -94,12 +91,8 @@ python run.py path/to/file.uasset              # JSON output to stdout
 python run.py path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
-python run.py path/to/file.uasset --summary      # Summary only
-python run.py path/to/file.uasset --text         # Readable text
+python run.py path/to/file.uasset --json         # JSON output (default)
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text  # Blueprint node text
-python run.py path/to/file.uasset --blueprint-ue-text  # UE-format text
-python run.py path/to/file.uasset --cpp-skeleton  # C++ class skeleton
 
 # Batch export
 python run.py --batch-dir path/to/dir/            # Batch export directory
@@ -247,8 +240,8 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
 | **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (6 renderers) |
-| **Formatters** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint text/UE format output generation |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (2 renderers: JSON, Markdown) |
+| **Formatters** | `formatters/` | JSON output helpers and formatting utilities |
 
 ## Testing
 
