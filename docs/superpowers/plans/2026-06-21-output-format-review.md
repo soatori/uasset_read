@@ -21,9 +21,15 @@
 
 | 文件 | 职责 |
 |------|------|
-| `src/uasset_read/renderers/json_renderer.py` | 修改：去掉冗余字段 |
+| `src/uasset_read/renderers/json_renderer.py` | 修改：去掉冗余字段，删除 JsonSummaryRenderer |
 | `src/uasset_read/renderers/markdown_renderer.py` | 修改：去掉重复 Linker 小节 |
-| `tests/test_renderers.py` | 修改：更新 JSON 输出断言 |
+| `src/uasset_read/renderers/text_renderer.py` | 删除 |
+| `src/uasset_read/renderers/blueprint_text_renderer.py` | 删除 |
+| `src/uasset_read/renderers/blueprint_ue_renderer.py` | 删除 |
+| `src/uasset_read/renderers/cpp_skeleton_renderer.py` | 删除 |
+| `src/uasset_read/renderers/__init__.py` | 修改：移除不需要的 import |
+| `src/uasset_read/cli.py` | 修改：移除不需要的 CLI 选项 |
+| `tests/test_renderers.py` | 修改：更新测试断言 |
 | `tests/renderers/test_json_macro_output.py` | 修改：更新宏输出测试 |
 
 ---
@@ -675,7 +681,116 @@ git commit -m "test: 验证输出格式精简效果"
 
 ---
 
-### Task 7: 更新文档
+### Task 7: 删除非 JSON/Markdown 的输出格式
+
+**Files:**
+- Delete: `src/uasset_read/renderers/text_renderer.py`
+- Delete: `src/uasset_read/renderers/blueprint_text_renderer.py`
+- Delete: `src/uasset_read/renderers/blueprint_ue_renderer.py`
+- Delete: `src/uasset_read/renderers/cpp_skeleton_renderer.py`
+- Modify: `src/uasset_read/renderers/__init__.py:37-42`
+- Modify: `src/uasset_read/cli.py:71-80, 106-124`
+- Test: `tests/test_renderers.py`
+
+**Interfaces:**
+- Consumes: 无
+- Produces: 仅保留 json 和 markdown 格式
+
+- [ ] **Step 1: 编写测试 — 验证只支持 json 和 markdown**
+
+```python
+# tests/test_renderers.py 添加测试
+def test_only_json_and_markdown_formats():
+    """应只支持 json 和 markdown 两种格式"""
+    from uasset_read.renderers import list_formats
+
+    formats = list_formats()
+    assert "json" in formats, "json 格式应存在"
+    assert "markdown" in formats, "markdown 格式应存在"
+    assert "text" not in formats, "text 格式应被移除"
+    assert "text_summary" not in formats, "text_summary 格式应被移除"
+    assert "blueprint_text" not in formats, "blueprint_text 格式应被移除"
+    assert "blueprint_ue_text" not in formats, "blueprint_ue_text 格式应被移除"
+    assert "cpp_skeleton" not in formats, "cpp_skeleton 格式应被移除"
+    assert "json_summary" not in formats, "json_summary 格式应被移除"
+```
+
+- [ ] **Step 2: 运行测试验证失败**
+
+Run: `python -m pytest tests/test_renderers.py::test_only_json_and_markdown_formats -v`
+Expected: FAIL
+
+- [ ] **Step 3: 删除不需要的渲染器文件**
+
+```bash
+rm src/uasset_read/renderers/text_renderer.py
+rm src/uasset_read/renderers/blueprint_text_renderer.py
+rm src/uasset_read/renderers/blueprint_ue_renderer.py
+rm src/uasset_read/renderers/cpp_skeleton_renderer.py
+```
+
+- [ ] **Step 4: 更新 __init__.py — 移除不需要的 import**
+
+```python
+# src/uasset_read/renderers/__init__.py
+# 删除以下行：
+# from uasset_read.renderers import text_renderer  # noqa: F401, E402
+# from uasset_read.renderers import blueprint_text_renderer  # noqa: F401, E402
+# from uasset_read.renderers import blueprint_ue_renderer  # noqa: F401, E402
+# from uasset_read.renderers import cpp_skeleton_renderer  # noqa: F401, E402
+```
+
+- [ ] **Step 5: 更新 cli.py — 移除不需要的 CLI 选项**
+
+```python
+# src/uasset_read/cli.py
+# 在 create_parser() 中，删除以下参数：
+# group.add_argument('--text', ...)
+# group.add_argument('--text-summary', ...)
+# group.add_argument('--summary', ...)
+# group.add_argument('--blueprint-text', ...)
+# group.add_argument('--blueprint-ue-text', ...)
+# group.add_argument('--cpp-skeleton', ...)
+
+# 在 resolve_format() 中，删除以下分支：
+# if args.blueprint_text:
+#     return "blueprint_text"
+# if args.blueprint_ue_text:
+#     return "blueprint_ue_text"
+# if args.cpp_skeleton:
+#     return "cpp_skeleton"
+# if args.summary or args.json_summary:
+#     return "json_summary"
+# if args.text_summary:
+#     return "text_summary"
+# if args.text:
+#     return "text"
+# return "text"  # 改为 return "json"
+```
+
+- [ ] **Step 6: 更新 json_renderer.py — 移除 JsonSummaryRenderer**
+
+```python
+# src/uasset_read/renderers/json_renderer.py
+# 删除 JsonSummaryRenderer 类（约 284-343 行）
+# 删除 register_renderer("json_summary", JsonSummaryRenderer)
+```
+
+- [ ] **Step 7: 运行测试验证通过**
+
+Run: `python -m pytest tests/test_renderers.py::test_only_json_and_markdown_formats -v`
+Expected: PASS
+
+- [ ] **Step 8: 提交**
+
+```bash
+git add -A
+git commit -m "refactor: 删除非 JSON/Markdown 的输出格式"
+```
+
+---
+
+### Task 8: 更新文档
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-06-21-output-format-review-design.md`
