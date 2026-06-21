@@ -54,16 +54,11 @@ class JSONRenderer(IRenderer):
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
             },
-            "name_map": ir.name_map,
-            "imports": ir.imports,
+            # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
+            # imports 已移除 — C++ 翻译不需要原始导入索引
             "exports": [self._export_to_dict(e, options) for e in ir.exports],
         }
-        if ir.linker is not None:
-            data["linker"] = {
-                "has_linker": ir.linker.has_linker,
-                "import_paths": ir.linker.import_paths,
-                "export_paths": ir.linker.export_paths,
-            }
+        # linker 已移除 — linker 元数据对 C++ 翻译无用
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:
@@ -72,24 +67,6 @@ class JSONRenderer(IRenderer):
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if ir.variables:
             data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
-        if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
-        if ir.resolved_parent_assets:
-            data["resolved_parent_assets"] = ir.resolved_parent_assets
-        if ir.logic_sources:
-            data["logic_sources"] = ir.logic_sources
-        if ir.inherited_blueprint_graphs:
-            data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
-        if ir.soft_object_paths:
-            data["soft_object_paths"] = ir.soft_object_paths
-        if ir.soft_package_references:
-            data["soft_package_references"] = ir.soft_package_references
-        if ir.depends_map:
-            data["depends_map"] = ir.depends_map
-        if ir.resolved_depends_map:
-            data["resolved_depends_map"] = ir.resolved_depends_map
-        if ir.asset_registry_data_offset > 0:
-            data["asset_registry_data_offset"] = ir.asset_registry_data_offset
         if ir.errors:
             data["errors"] = ir.errors
         if options.include_function_graphs:

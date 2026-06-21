@@ -50,6 +50,43 @@ class TestRendererRegistry:
 
 
 class TestJSONRenderer:
+    def test_json_excludes_redundant_fields(self):
+        """JSON 输出不应包含 name_map, imports, linker 等冗余字段"""
+        import json
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR
+
+        # 创建最小 IR
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=0,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=["test"],
+            imports=[],
+            exports=[],
+            linker=None,
+        )
+        ir.status = "success"
+
+        renderer = JSONRenderer()
+        options = RenderOptions()
+        result = renderer.render(ir, options)
+        data = json.loads(result)
+
+        # 验证不包含冗余字段
+        assert "name_map" not in data, "name_map 应被移除"
+        assert "imports" not in data, "imports 应被移除"
+        assert "linker" not in data, "linker 应被移除"
+        assert "resolved_depends_map" not in data, "resolved_depends_map 应被移除"
+        assert "depends_map" not in data, "depends_map 应被移除"
+        assert "soft_package_references" not in data, "soft_package_references 应被移除"
+
     def test_render_minimal_ir(self):
         import json
         from uasset_read.renderers import get_renderer
