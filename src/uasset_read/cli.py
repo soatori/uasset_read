@@ -69,15 +69,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--json', action='store_true', help='Output full JSON structure')
-    group.add_argument('--json-summary', action='store_true', help='Output compact JSON summary')
-    group.add_argument('--text', action='store_true', help='Output YAML-style text (default)')
-    group.add_argument('--text-summary', action='store_true', help='Output compact text summary')
-    group.add_argument('--summary', action='store_true', help='Output compact summary')
+    group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
-    group.add_argument('--blueprint-text', action='store_true', help='Output blueprint translation reference text')
-    group.add_argument('--blueprint-ue-text', action='store_true', help='Output UE-style blueprint text')
-    group.add_argument('--cpp-skeleton', action='store_true', help='Output C++ class skeleton')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -105,23 +98,11 @@ def create_parser() -> argparse.ArgumentParser:
 
 def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
-    if args.blueprint_text:
-        return "blueprint_text"
-    if args.blueprint_ue_text:
-        return "blueprint_ue_text"
-    if args.cpp_skeleton:
-        return "cpp_skeleton"
     if args.markdown:
         return "markdown"
-    if args.summary or args.json_summary:
-        return "json_summary"
     if args.json:
         return "json"
-    if args.text_summary:
-        return "text_summary"
-    if args.text:
-        return "text"
-    return "text"
+    return "json"
 
 
 def _write_output(output_str: str, output_path: str | None) -> None:
