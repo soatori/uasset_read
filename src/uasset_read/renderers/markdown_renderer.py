@@ -191,7 +191,7 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
         # 图 + Mermaid
-        for export in ir.exports:
+        for export in blueprint_exports:
             for graph in export.graphs:
                 lines.append(f"## Graph: {graph.graph_name}")
                 lines.append(f"- **Nodes**: {len(graph.nodes)}")
