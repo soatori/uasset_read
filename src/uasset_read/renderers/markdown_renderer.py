@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.renderers.base import IRenderer, RenderOptions
+from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
 from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
@@ -80,14 +80,6 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
 
 class MarkdownRenderer(IRenderer):
     """Markdown + Mermaid 流程图渲染器。"""
-
-    def _is_blueprint_export(self, export) -> bool:
-        """判断是否为蓝图相关 export（类名以 _C 结尾或有 graphs）。"""
-        if export.object_name.endswith("_C"):
-            return True
-        if export.graphs:
-            return True
-        return False
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         lines: list[str] = []
@@ -175,7 +167,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append("")
 
         # 导出 — 只显示蓝图 export
-        blueprint_exports = [e for e in ir.exports if self._is_blueprint_export(e)]
+        blueprint_exports = [e for e in ir.exports if is_blueprint_export(e)]
         if blueprint_exports:
             lines.append("## Exports")
             lines.append("| Name | Class | Size | Properties |")

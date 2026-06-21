@@ -8,7 +8,7 @@ import json
 import dataclasses
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.renderers.base import IRenderer, RenderOptions
+from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
 from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
@@ -35,23 +35,9 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
-    @staticmethod
-    def _is_blueprint_export(export) -> bool:
-        """判断是否为蓝图相关 export。
-
-        蓝图 export 的判定条件（满足任一即可）：
-        - 类名以 _C 结尾（UE 蓝图生成类的命名约定）
-        - 包含 graphs 数据（蓝图逻辑图）
-        """
-        if export.object_name.endswith("_C"):
-            return True
-        if export.graphs:
-            return True
-        return False
-
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         # 过滤只保留蓝图相关 export
-        blueprint_exports = [e for e in ir.exports if self._is_blueprint_export(e)]
+        blueprint_exports = [e for e in ir.exports if is_blueprint_export(e)]
 
         data = {
             "status": {
