@@ -30,9 +30,7 @@ CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Out
 ## 基本用法
 
 ```bash
-python run.py path/to/file.uasset              # YAML 风格文本（默认）
-python run.py path/to/file.uasset --json       # 完整 JSON 输出
-python run.py path/to/file.uasset --summary    # JSON 摘要
+python run.py path/to/file.uasset              # JSON 输出（默认）
 python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 ```
 
@@ -50,15 +48,8 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 
 | 标志 | 格式名 | 说明 |
 |------|--------|------|
-| `--json` | `json` | 完整 JSON 结构输出 |
-| `--json-summary` | `json_summary` | 精简 JSON 摘要 |
-| `--text` | `text` | YAML 风格全文（默认） |
-| `--text-summary` | `text_summary` | YAML 风格精简摘要 |
-| `--summary` | `json_summary` | 同 `--json-summary`，紧凑摘要 |
+| `--json` | `json` | 结构化 JSON 输出（C++ 翻译参考，默认） |
 | `--markdown` | `markdown` | Markdown + Mermaid 流程图 |
-| `--blueprint-text` | `blueprint_text` | 蓝图节点翻译参考文本 |
-| `--blueprint-ue-text` | `blueprint_ue_text` | UE 编辑器风格蓝图节点文本 |
-| `--cpp-skeleton` | `cpp_skeleton` | C++ 类骨架 `.h` 头文件（需要 Blueprint） |
 
 ### 已移除的标志
 
@@ -68,6 +59,13 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 | `--cpp-json-ir` | 合并到 cpp_skeleton |
 | `--validate` | N2C 验证已移除 |
 | `--graph` | 旧版兼容标志已移除 |
+| `--json-summary` | 输出格式精简时移除 |
+| `--text` | 输出格式精简时移除 |
+| `--text-summary` | 输出格式精简时移除 |
+| `--summary` | 输出格式精简时移除 |
+| `--blueprint-text` | 输出格式精简时移除 |
+| `--blueprint-ue-text` | 输出格式精简时移除 |
+| `--cpp-skeleton` | 输出格式精简时移除 |
 
 ### 解析控制标志
 
@@ -118,20 +116,13 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 `resolve_format()` 函数将 CLI 标志映射到内部格式名：
 
 ```
---blueprint-text  → blueprint_text
---blueprint-ue-text → blueprint_ue_text
---cpp-skeleton    → cpp_skeleton
 --markdown        → markdown
---summary         → json_summary
---json-summary    → json_summary
 --json            → json
---text-summary    → text_summary
---text            → text
-(无标志)          → text（默认）
+(无标志)          → json（默认）
 ```
 
 > [!WARNING]
-> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--graph`
+> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--graph`、`--text`、`--summary`、`--blueprint-text`、`--blueprint-ue-text`、`--cpp-skeleton`
 
 ## 解析路径
 
@@ -169,28 +160,25 @@ Batch export complete: 10 files
 # 1. 解析单个文件，输出到 stdout
 python run.py MyBlueprint.uasset
 
-# 2. 完整 JSON 输出
+# 2. JSON 输出
 python run.py MyBlueprint.uasset --json
 
 # 3. 输出到文件
 python run.py MyBlueprint.uasset --json --output result.json
 
-# 4. C++ 骨架生成（需要 Blueprint）
-python run.py MyBlueprint.uasset --cpp-skeleton --output MyBlueprint.h
-
-# 5. Markdown + Mermaid 文档
+# 4. Markdown + Mermaid 文档
 python run.py MyBlueprint.uasset --markdown --output report.md
 
-# 6. 包含父级资产解析
+# 5. 包含父级资产解析
 python run.py MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
 
-# 7. 使用类型映射
+# 6. 使用类型映射
 python run.py MyBlueprint.uasset --json --mappings mappings.usmap
 
-# 8. 列出包文件
+# 7. 列出包文件
 python run.py MyBlueprint.uasset --list-package-files
 
-# 9. 列出所有可用格式
+# 8. 列出所有可用格式
 python run.py --list-formats
 ```
 
