@@ -2,6 +2,7 @@
 """变量分类测试 — 验证 PackageIR.variables 不包含元数据变量。"""
 from __future__ import annotations
 
+import gc
 import os
 
 import pytest
@@ -43,3 +44,5 @@ class TestVariableClassification:
         assert len(metadata_found) == 0, (
             f"PackageIR.variables 包含元数据变量: {metadata_found}"
         )
+        del result, ir
+        gc.collect()

@@ -44,6 +44,8 @@ memory/
 # Test files
 tests/*
 !tests/test_*.py
+!tests/conftest.py
+!tests/README.md
 
 !tests/__init__.py
 !tests/graph/

@@ -24,6 +24,8 @@ def bp_result():
     """解析 BP_FirstPersonCharacter 资产。"""
     if not ASSET_PATH.exists():
         pytest.skip(f"资产不存在: {ASSET_PATH}")
+    from tests.conftest import skip_if_too_large
+    skip_if_too_large(ASSET_PATH)
     result = parse_uasset_with_linker(str(ASSET_PATH), tolerant=True)
     return result
 

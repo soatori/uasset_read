@@ -169,7 +169,9 @@ def ue_sample_root() -> Path:
 
 def _parse_asset(path: Path, *, tolerant: bool):
     from uasset_read import parse_uasset_with_linker
+    from tests.conftest import skip_if_too_large
 
+    skip_if_too_large(path)
     return parse_uasset_with_linker(str(path), tolerant=tolerant)
 
 

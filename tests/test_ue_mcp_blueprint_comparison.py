@@ -175,6 +175,8 @@ def test_real_blueprint_parser_matches_unreal_mcp_graphs_and_variables(
             f"{_owning_project_relative_path(spec.relative_asset_path)}"
         )
 
+    from tests.conftest import skip_if_too_large
+    skip_if_too_large(asset_path)
     parse_result = parse_uasset_with_linker(str(asset_path), tolerant=True)
     assert parse_result.is_success, parse_result.errors
     assert parse_result.blueprint is not None

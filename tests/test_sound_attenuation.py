@@ -1,6 +1,7 @@
 """USoundAttenuation 解析器测试。"""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -61,11 +62,14 @@ def test_sound_attenuation_handler_registered():
 def test_parse_att_footstep_pc():
     """验证 ATT_Footstep_PC.uasset 不再被 skipped。"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
+    from tests.conftest import skip_if_too_large
 
-    r = parse_uasset_with_linker(
-        r"E:\Develop\lib\Samples\LyraStarterGame\Content\Audio\AttenuationPresets\ATT_Footstep_PC.uasset",
-        tolerant=True,
-    )
+    asset_path = Path(r"E:\Develop\lib\Samples\LyraStarterGame\Content\Audio\AttenuationPresets\ATT_Footstep_PC.uasset")
+    if not asset_path.exists():
+        pytest.skip("asset not found")
+    skip_if_too_large(asset_path)
+
+    r = parse_uasset_with_linker(str(asset_path), tolerant=True)
 
     # 验证不再是 failed
     assert r.status != "failed"

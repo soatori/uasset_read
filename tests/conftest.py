@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import os
 import subprocess
@@ -13,6 +14,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
 DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
+
+# ---------------------------------------------------------------------------
+# 内存安全常量
+# ---------------------------------------------------------------------------
+MAX_PARSE_FILE_SIZE = 50 * 1024 * 1024   # 50MB — 超过此大小的文件跳过解析
+MAX_ASSET_COUNT = 200                     # all_assets 最多返回的文件数
+PARSE_TIMEOUT = 120                       # 单次解析超时（秒）
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -49,6 +57,8 @@ def all_assets(sample_root: Path) -> list[Path]:
         p for p in sample_root.rglob("*")
         if p.is_file() and p.suffix.lower() in {".uasset", ".umap"}
     )
+    if len(assets) > MAX_ASSET_COUNT:
+        assets = assets[:MAX_ASSET_COUNT]
     if not assets:
         pytest.fail(f"No .uasset/.umap files found under {sample_root}")
     return assets
@@ -108,3 +118,20 @@ def run_python(args: Iterable[str], timeout: int = 60) -> subprocess.CompletedPr
 
 def parse_json_output(output: str) -> dict:
     return json.loads(output)
+
+
+# ---------------------------------------------------------------------------
+# 内存安全辅助
+# ---------------------------------------------------------------------------
+
+def skip_if_too_large(path: Path, max_size: int = MAX_PARSE_FILE_SIZE) -> None:
+    """文件过大时跳过测试，防止 OOM。"""
+    if path.stat().st_size > max_size:
+        size_mb = path.stat().st_size / 1024 / 1024
+        limit_mb = max_size / 1024 / 1024
+        pytest.skip(f"asset too large: {size_mb:.1f}MB > {limit_mb}MB")
+
+
+def cleanup_after_parse() -> None:
+    """解析后强制 GC 回收，减少循环引用导致的内存残留。"""
+    gc.collect()

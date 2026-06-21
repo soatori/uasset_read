@@ -138,6 +138,11 @@ class TestUEFidelityIntegration:
             assert hasattr(result, 'export_map')
             assert result.export_map is not None
 
+            # 每次迭代后清理，防止内存累积
+            del result
+            from tests.conftest import cleanup_after_parse
+            cleanup_after_parse()
+
         assert len(results) == len(assets)
 
     @pytest.mark.skipif(not asset_exists(TEXTURE_ASSET), reason="Texture asset not found")

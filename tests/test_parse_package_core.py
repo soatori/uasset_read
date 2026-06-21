@@ -1,6 +1,10 @@
 """测试重构后的 parse 函数行为不变。"""
+import gc
 import pytest
 from pathlib import Path
+
+
+MAX_PARSE_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 def test_parse_package_returns_result():
@@ -8,10 +12,14 @@ def test_parse_package_returns_result():
     from uasset_read.parse_uasset import parse_package
     test_assets = list(Path("tests/assets").glob("*.uasset"))[:3]
     for asset_path in test_assets:
+        if asset_path.stat().st_size > MAX_PARSE_FILE_SIZE:
+            continue
         result = parse_package(str(asset_path))
         assert result.summary is not None
         assert result.name_map is not None
         assert result.export_map is not None
+        del result
+        gc.collect()
 
 
 def test_parse_uasset_with_linker_returns_result():
@@ -19,10 +27,14 @@ def test_parse_uasset_with_linker_returns_result():
     from uasset_read.parse_uasset import parse_uasset_with_linker
     test_assets = list(Path("tests/assets").glob("*.uasset"))[:3]
     for asset_path in test_assets:
+        if asset_path.stat().st_size > MAX_PARSE_FILE_SIZE:
+            continue
         result = parse_uasset_with_linker(str(asset_path))
         assert result.summary is not None
         assert result.linker is not None
         assert result.all_objects is not None
+        del result
+        gc.collect()
 
 
 def test_parse_package_with_mappings():

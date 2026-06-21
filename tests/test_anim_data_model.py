@@ -1,6 +1,7 @@
 """UAnimDataModel 解析器测试。"""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -61,11 +62,14 @@ def test_anim_data_model_strategy_is_tagged():
 def test_parse_am_mm_rifle_dryfire():
     """验证 MM_Rifle_DryFire.uasset 的 AnimDataModel 不再被 skipped。"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
+    from tests.conftest import skip_if_too_large
 
-    r = parse_uasset_with_linker(
-        r"E:\Develop\lib\Samples\FirstPersonC\Content\Characters\Mannequins\Anims\Rifle\MM_Rifle_DryFire.uasset",
-        tolerant=True,
-    )
+    asset_path = Path(r"E:\Develop\lib\Samples\FirstPersonC\Content\Characters\Mannequins\Anims\Rifle\MM_Rifle_DryFire.uasset")
+    if not asset_path.exists():
+        pytest.skip("asset not found")
+    skip_if_too_large(asset_path)
+
+    r = parse_uasset_with_linker(str(asset_path), tolerant=True)
 
     # 验证不再是 failed
     assert r.status != "failed"

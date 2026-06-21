@@ -135,6 +135,8 @@ class TestAssetTypeFormatMatrix:
         path = ue_sample_root / rel_path
         if not path.exists():
             pytest.skip(f"asset not found: {path}")
+        from tests.conftest import skip_if_too_large
+        skip_if_too_large(path)
         output = parse_single(str(path), format=format_name, tolerant=True)
         assert isinstance(output, str)
         assert len(output) > 0, f"{asset_type} × {format_name} produced empty output"

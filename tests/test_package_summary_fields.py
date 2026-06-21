@@ -59,6 +59,8 @@ class TestMissingFields:
         if not os.path.exists(self.SAMPLE):
             pytest.skip("sample asset not found")
         from uasset_read import parse_uasset_with_linker
+        from tests.conftest import skip_if_too_large
+        skip_if_too_large(Path(self.SAMPLE))
         return parse_uasset_with_linker(self.SAMPLE, tolerant=True)
 
     def test_m_mannequin_parses_successfully(self, result):

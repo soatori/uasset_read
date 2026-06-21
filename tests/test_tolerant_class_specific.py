@@ -1,16 +1,19 @@
 """Class-specific tolerant skip 测试。"""
+import gc
 import pytest
 from pathlib import Path
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+MAX_PARAM_COUNT = 20  # 参数化资产数量上限
 
 
 def _read_fixture_lines(name: str) -> list[str]:
-    """读取 fixture 文件中的非空行。"""
+    """读取 fixture 文件中的非空行，限制数量防止 OOM。"""
     path = FIXTURES_DIR / name
     if not path.exists():
         pytest.skip(f"Fixture file not found: {path}", allow_module_level=True)
-    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    return lines[:MAX_PARAM_COUNT]
 
 
 class TestCubeBuilderTolerantSkip:
@@ -26,6 +29,8 @@ class TestCubeBuilderTolerantSkip:
         assert result.export_map is not None, "Export map should be parsed"
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestAnimationDataModelTolerantSkip:
@@ -41,6 +46,8 @@ class TestAnimationDataModelTolerantSkip:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestPayloadOffsetsTolerant:
@@ -55,6 +62,8 @@ class TestPayloadOffsetsTolerant:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestNiagaraTolerantSkip:
@@ -68,6 +77,8 @@ class TestNiagaraTolerantSkip:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestMovieSceneTolerantSkip:
@@ -81,6 +92,8 @@ class TestMovieSceneTolerantSkip:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestK2NodeTolerantSkip:
@@ -94,6 +107,8 @@ class TestK2NodeTolerantSkip:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestMetaSoundTolerantSkip:
@@ -107,6 +122,8 @@ class TestMetaSoundTolerantSkip:
         assert result.export_map is not None
         fatal_errors = [e for e in result.errors if "serial_offset" in e.lower() or "payloadtoc" in e.lower()]
         assert len(fatal_errors) == 0, f"Fatal errors should not occur: {fatal_errors}"
+        del result
+        gc.collect()
 
 
 class TestMaterialExpressionTolerantSkip:

@@ -28,6 +28,8 @@ class TestPayloadOffsetStrategy:
         # 使用 StaticMesh 而非 Blueprint，因为 Blueprint 样本超过 300 exports
         # 会触发 lightweight tolerant parse，跳过完整属性解析
         skip_if_sample_missing(STATICMESH_SAMPLE)
+        from tests.conftest import skip_if_too_large
+        skip_if_too_large(STATICMESH_SAMPLE)
 
         from uasset_read.parse_uasset import parse_package
 
@@ -49,6 +51,8 @@ class TestPayloadOffsetStrategy:
     def test_script_serialization_offsets_preserved_as_diagnostics(self):
         """验证 ScriptSerialization 偏移被保存为诊断字段。"""
         skip_if_sample_missing(STATICMESH_SAMPLE)
+        from tests.conftest import skip_if_too_large
+        skip_if_too_large(STATICMESH_SAMPLE)
 
         from uasset_read.parse_uasset import parse_package
 

@@ -8,6 +8,7 @@ Issue #28: 验证 PackageLinker 的两阶段加载流程正确性。
 3. test_weak_references_resolved — WeakObjectProperty 引用被正确解析
 4. test_preload_populates_properties — preload 后 properties 被填充
 """
+import gc
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch, call
@@ -445,6 +446,8 @@ class TestLinkerLifecycleIntegration:
         for inst in linker._export_objects:
             assert hasattr(inst, "property_references")
             assert hasattr(inst, "weak_references")
+        del result
+        gc.collect()
 
     @pytest.mark.skipif(not STATIC_MESH.exists(), reason="StaticMesh sample not found")
     def test_preload_populates_real_properties(self):
@@ -461,6 +464,8 @@ class TestLinkerLifecycleIntegration:
             if inst._preloaded
         )
         assert has_properties, "StaticMesh 资产应包含属性数据"
+        del result
+        gc.collect()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_property_references_real_resolution(self):
@@ -484,6 +489,8 @@ class TestLinkerLifecycleIntegration:
                     assert hasattr(inst, "property_references")
 
         # 注意：某些资产可能没有 ObjectProperty，不强制断言
+        del result
+        gc.collect()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_post_load_order_preload_dependency(self):
@@ -518,3 +525,5 @@ class TestLinkerLifecycleIntegration:
         for i, inst in enumerate(linker._export_objects):
             if i != preloaded_idx and not inst._preloaded:
                 assert inst.property_references == {}
+        del result
+        gc.collect()
