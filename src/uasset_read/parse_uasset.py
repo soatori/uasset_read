@@ -414,6 +414,34 @@ def _should_use_lightweight_tolerant_parse(
     return getattr(result.summary, "export_count", 0) > threshold
 
 
+def _build_lightweight_graphs(result) -> list:
+    """在轻量模式下提取基本图信息（仅名称）。"""
+    from uasset_read.serializers.object_resources import get_asset_class
+    from uasset_read.models.core import UEdGraph
+    
+    graphs = []
+    if not result.export_map or not result.import_map:
+        return graphs
+    
+    for export in result.export_map:
+        name = str(getattr(export, "object_name", "") or "")
+        if not name:
+            continue
+        
+        # 检测 EdGraph 类型导出
+        class_name = get_asset_class(export, result.import_map, result.export_map)
+        if class_name in ("EdGraph", "UberEdGraph"):
+            # 创建最小化的 UEdGraph，仅包含名称
+            graph = UEdGraph(
+                graph_name=name,
+                graph_class=class_name,
+                nodes=[],
+            )
+            graphs.append(graph)
+    
+    return graphs
+
+
 def _build_lightweight_function_graphs(export_map) -> list[dict]:
     entries = []
     for export in export_map or []:
@@ -594,6 +622,15 @@ def _parse_package_core(
             )
             result.metadata["lightweight_tolerant_parse"] = True
             result.metadata["function_graphs_fallback"] = _build_lightweight_function_graphs(result.export_map)
+            # 在轻量模式下提取基本图信息
+            result.graphs = _build_lightweight_graphs(result)
+            # 将图关联到蓝图导出（第一个以 _C 结尾的导出）
+            if result.graphs and result.export_map:
+                for export in result.export_map:
+                    name = str(getattr(export, "object_name", "") or "")
+                    if name.endswith("_C") and not name.startswith("Default__"):
+                        export.graphs = result.graphs
+                        break
             result.is_success = len(result.errors) == 0
             return
 

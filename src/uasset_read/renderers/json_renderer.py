@@ -8,7 +8,7 @@ import json
 import dataclasses
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
+from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
@@ -36,8 +36,8 @@ class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        # 过滤只保留蓝图相关 export
-        blueprint_exports = [e for e in ir.exports if is_blueprint_export(e)]
+        # 输出所有 exports，不过滤（蓝图过滤由调用方按需处理）
+        all_exports = ir.exports
 
         data = {
             "status": {
@@ -56,7 +56,7 @@ class JSONRenderer(IRenderer):
             },
             # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
             # imports 已移除 — C++ 翻译不需要原始导入索引
-            "exports": [self._export_to_dict(e, options) for e in blueprint_exports],
+            "exports": [self._export_to_dict(e, options) for e in all_exports],
         }
         # linker 已移除 — linker 元数据对 C++ 翻译无用
         if ir.blueprint is not None:
@@ -67,6 +67,12 @@ class JSONRenderer(IRenderer):
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if ir.variables:
             data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
+        if ir.resolved_parent_assets:
+            data["resolved_parent_assets"] = ir.resolved_parent_assets
+        if ir.inherited_blueprint_graphs:
+            data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
+        if ir.logic_sources:
+            data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
         if options.include_function_graphs:
