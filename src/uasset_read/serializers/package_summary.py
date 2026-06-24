@@ -208,6 +208,10 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 4 步：PackageName 和 PackageFlags
     package_name = archive.read_fstring()
+    # UE 的 FName::None 是默认值，部分资产二进制中存储字面量 "None"
+    # 规范化为空字符串，由上层从文件路径推导
+    if package_name == "None":
+        package_name = ""
     package_flags = archive.read_u32()
 
     # 第 5 步：NameCount 和 NameOffset

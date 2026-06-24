@@ -554,6 +554,26 @@ def _parse_package_core(
             result.name_map = []
             return
 
+        # package_name 为空时从文件路径推导（UE FName::None 或缺失时）
+        if not result.summary.package_name:
+            from pathlib import Path as _Path
+            _p = _Path(path)
+            # 尝试从路径中提取 /Game/... 形式的包名
+            _path_str = _p.as_posix()
+            _content_idx = _path_str.lower().find("/content/")
+            if _content_idx >= 0:
+                # /Game/Content/... → /Game/... （去掉 Content/ 层级）
+                _relative = _path_str[_content_idx + len("/content/"):]
+                if _relative.startswith("/"):
+                    _relative = _relative[1:]
+                # 去掉 .uasset 扩展名
+                if _relative.lower().endswith(".uasset"):
+                    _relative = _relative[:-len(".uasset")]
+                result.summary.package_name = f"/Game/{_relative}"
+            else:
+                # 回退：使用文件名（不含扩展名）
+                result.summary.package_name = f"/Game/{_p.stem}"
+
         # 读取导入表
         result.import_map = _run_required_stage(
             result=result, archive=archive, path=path, tolerant=tolerant,
