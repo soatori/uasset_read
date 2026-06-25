@@ -86,6 +86,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--game', metavar='NAME', help='Enable game-specific property readers')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode (default)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
+    parser.add_argument('--full-parse', action='store_true', default=False,
+                        help='Force full parse for large blueprints (skip lightweight mode)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
@@ -142,6 +144,7 @@ def _handle_batch(args) -> None:
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            force_full_parse=args.full_parse,
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)
@@ -236,6 +239,7 @@ def main():
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            force_full_parse=args.full_parse,
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)

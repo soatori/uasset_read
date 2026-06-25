@@ -38,6 +38,7 @@ def parse_single(
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
+    force_full_parse: bool = False,
 ) -> str:
     """解析单个 .uasset/.umap，返回格式化字符串。
 
@@ -55,6 +56,7 @@ def parse_single(
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
 
     Returns:
         格式化后的字符串
@@ -74,6 +76,7 @@ def parse_single(
             asset_roots=asset_roots,
             mappings_path=mappings_path,
             game=game,
+            force_full_parse=force_full_parse,
         )
     else:
         result = parse_package(
@@ -83,6 +86,7 @@ def parse_single(
             asset_roots=asset_roots,
             mappings_path=mappings_path,
             game=game,
+            force_full_parse=force_full_parse,
         )
 
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
@@ -130,6 +134,7 @@ def parse_batch(
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
+    force_full_parse: bool = False,
 ) -> BatchResult:
     """批量解析目录下所有 .uasset/.umap。
 
@@ -145,6 +150,7 @@ def parse_batch(
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
 
     Returns:
         BatchResult 包含成功、跳过、失败的文件列表
@@ -180,6 +186,7 @@ def parse_batch(
                 asset_roots=asset_roots,
                 mappings_path=mappings_path,
                 game=game,
+                force_full_parse=force_full_parse,
             )
             # 确定输出文件扩展名
             if format.startswith("json"):
