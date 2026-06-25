@@ -199,6 +199,11 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "VectorParameterValue",     # FVectorParameterValue — 向量参数（ParameterInfo/ParameterValue）
     "TextureParameterValue",    # FTextureParameterValue — 纹理参数（ParameterInfo/ParameterValue）
     "MaterialTextureInfo",      # FMaterialTextureInfo — 纹理流送信息（UVChannelIndex 等）
+    # BoxSphereBounds（FBoxSphereBounds UPROPERTY 结构体始终使用 tagged 格式，
+    # 因为 TBoxSphereBoundsStructOpsTypeTraits 未设置 WithSerialize）
+    "BoxSphereBounds",
+    "BoxSphereBounds3f",
+    "BoxSphereBounds3d",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -727,17 +732,59 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         })
 
     if struct_type == "BoxSphereBounds":
-        ox = archive.read_f32()
-        oy = archive.read_f32()
-        oz = archive.read_f32()
-        bx = archive.read_f32()
-        by = archive.read_f32()
-        bz = archive.read_f32()
-        sr = archive.read_f32()
-        # UE5.5 扩展格式：标准 28 bytes 后可能有额外 padding
-        remaining = tag.size - 28
-        if remaining > 0:
-            archive.read_bytes(remaining)
+        # 紧凑格式布局（UE 源码: BoxSphereBounds.h operator<<）：
+        # - 28 bytes: FBoxSphereBounds3f — Origin(3f) + BoxExtent(3f) + SphereRadius(f)
+        # - 56 bytes: FBoxSphereBounds3d (LWC) — Origin(3d) + BoxExtent(3d) + SphereRadius(d)
+        # - 52 bytes: FBoxSphereBounds3d (pre-LWC) — Origin(3d) + BoxExtent(3d) + SphereRadius(f)
+        # - 40 bytes: FCompactBoxSphereBounds3d — Origin(3d) + BoxExtent(3f) + SphereRadius(f)
+        if tag.size == 28:
+            # FBoxSphereBounds3f: all float
+            ox = archive.read_f32()
+            oy = archive.read_f32()
+            oz = archive.read_f32()
+            bx = archive.read_f32()
+            by = archive.read_f32()
+            bz = archive.read_f32()
+            sr = archive.read_f32()
+        elif tag.size == 56:
+            # FBoxSphereBounds3d (LWC): all double
+            ox = archive.read_f64()
+            oy = archive.read_f64()
+            oz = archive.read_f64()
+            bx = archive.read_f64()
+            by = archive.read_f64()
+            bz = archive.read_f64()
+            sr = archive.read_f64()
+        elif tag.size == 52:
+            # FBoxSphereBounds3d (pre-LWC): double Origin/BoxExtent, float SphereRadius
+            ox = archive.read_f64()
+            oy = archive.read_f64()
+            oz = archive.read_f64()
+            bx = archive.read_f64()
+            by = archive.read_f64()
+            bz = archive.read_f64()
+            sr = archive.read_f32()
+        elif tag.size == 40:
+            # FCompactBoxSphereBounds3d: double Origin, float BoxExtent/SphereRadius
+            ox = archive.read_f64()
+            oy = archive.read_f64()
+            oz = archive.read_f64()
+            bx = archive.read_f32()
+            by = archive.read_f32()
+            bz = archive.read_f32()
+            sr = archive.read_f32()
+        else:
+            # 未知大小，使用 float 读取并跳过剩余字节
+            ox = archive.read_f32()
+            oy = archive.read_f32()
+            oz = archive.read_f32()
+            bx = archive.read_f32()
+            by = archive.read_f32()
+            bz = archive.read_f32()
+            sr = archive.read_f32()
+            remaining = tag.size - 28
+            if remaining > 0:
+                archive.read_bytes(remaining)
         return StructValue(struct_type="BoxSphereBounds", fields={
             "Origin": {"X": ox, "Y": oy, "Z": oz},
             "BoxExtent": {"X": bx, "Y": by, "Z": bz},
