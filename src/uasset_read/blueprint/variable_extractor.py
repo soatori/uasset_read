@@ -129,6 +129,7 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "SuperClass",
     "BlueprintGuid",
     "BlueprintCategory",
+    "BlueprintDescription",
     "BlueprintType",
     "IsBlueprintBase",
     "KismetSchemaDeprecationWarning",
@@ -204,6 +205,17 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
                     pin_subcategory_object = value["PinSubcategoryObject"]
                 elif "pin_subcategory_object" in value:
                     pin_subcategory_object = value["pin_subcategory_object"]
+
+        # dict 是属性值（含 object_class / struct_type）而非 pin 类型 dict 时，
+        # 从 prop.type 和 dict 内容推断类型信息
+        prop_type = getattr(prop, 'type', None)
+        if not pin_category and prop_type:
+            pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, "")
+        if not pin_subcategory and prop_type:
+            if prop_type in ("ObjectProperty", "ClassProperty"):
+                pin_subcategory = value.get("object_class", value.get("object_name", ""))
+            elif prop_type == "StructProperty":
+                pin_subcategory = value.get("struct_type", "")
 
         # 标准化 pin_category：将 "BoolProperty" 等 UE 内部类型名转换为 "bool" 等标准名
         if pin_category in _PROPERTY_TYPE_TO_PIN_CATEGORY:

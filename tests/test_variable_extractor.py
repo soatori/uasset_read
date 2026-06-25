@@ -1,7 +1,7 @@
 """Blueprint 变量提取器测试。"""
 import pytest
-from uasset_read.models.properties import StructValue
-from uasset_read.blueprint.variable_extractor import _guid_from_description
+from uasset_read.models.properties import StructValue, PropertyValue
+from uasset_read.blueprint.variable_extractor import _guid_from_description, _extract_pin_type_from_property
 
 
 class TestGuidFromDescription:
@@ -50,3 +50,83 @@ class TestGuidFromDescription:
     def test_int_returns_empty(self):
         """非预期类型应返回空字符串。"""
         assert _guid_from_description(0) == ""
+
+
+class TestExtractPinTypeFromProperty:
+    """_extract_pin_type_from_property 从 PropertyValue 提取 FEdGraphPinType。"""
+
+    def test_object_property_with_object_class(self):
+        """ObjectProperty dict 含 object_class 时应提取为 pin_subcategory。"""
+        prop = PropertyValue(
+            name="Target Touch UI",
+            type="ObjectProperty",
+            value={
+                "type": "import",
+                "object_name": "UI_TouchSimple_C",
+                "object_class": "WidgetBlueprintGeneratedClass",
+            },
+        )
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "object"
+        assert result.pin_subcategory == "WidgetBlueprintGeneratedClass"
+
+    def test_object_property_with_object_name_fallback(self):
+        """ObjectProperty dict 无 object_class 时回退到 object_name。"""
+        prop = PropertyValue(
+            name="SomeRef",
+            type="ObjectProperty",
+            value={
+                "type": "export",
+                "object_name": "MyActor",
+            },
+        )
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "object"
+        assert result.pin_subcategory == "MyActor"
+
+    def test_struct_property_with_struct_type(self):
+        """StructProperty dict 含 struct_type 时应提取为 pin_subcategory。"""
+        prop = PropertyValue(
+            name="RelativeLocation",
+            type="StructProperty",
+            value={
+                "kind": "struct_binary_decoded",
+                "struct_type": "Vector",
+                "fields": {"X": 0.0, "Y": 0.0, "Z": 0.0},
+            },
+        )
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "struct"
+        assert result.pin_subcategory == "Vector"
+
+    def test_dict_with_existing_pin_category(self):
+        """dict 已含 pin_category/pin_subcategory 时应直接使用。"""
+        prop = PropertyValue(
+            name="SomePin",
+            type="StructProperty",
+            value={
+                "pin_category": "int",
+                "pin_subcategory": "custom_sub",
+            },
+        )
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "int"
+        assert result.pin_subcategory == "custom_sub"
+
+    def test_simple_type_mapping(self):
+        """非 dict 值应通过 type_mapping 返回标准 pin_category。"""
+        prop = PropertyValue(name="Health", type="FloatProperty", value=100.0)
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "float"
+
+    def test_bool_property(self):
+        """BoolProperty 应返回 pin_category=bool。"""
+        prop = PropertyValue(name="bActive", type="BoolProperty", value=True)
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "bool"
+
+    def test_unknown_type_fallback(self):
+        """未知属性类型应回退到 prop_type 原始名。"""
+        prop = PropertyValue(name="Weird", type="CustomProperty", value="x")
+        result = _extract_pin_type_from_property(prop)
+        assert result.pin_category == "CustomProperty"
