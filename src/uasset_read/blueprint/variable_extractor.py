@@ -592,7 +592,7 @@ def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[Bluep
         if prop_name == "UbergraphFunction":
             func_name = _resolve_property_to_function_name(prop.value)
             if func_name:
-                functions.append(BlueprintFunction(name=func_name))
+                functions.append(BlueprintFunction(name=func_name, is_implemented=False))
         elif prop_name == "FunctionList" and isinstance(prop.value, (list, tuple)):
             for item in prop.value:
                 func_name = _resolve_property_to_function_name(item)
@@ -727,6 +727,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 name=func_name,
                 return_type=return_type,
                 parameters=parameters,
+                is_implemented=not is_event_node,
             )
             # 标记事件节点
             if is_event_node:

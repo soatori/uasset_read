@@ -1,7 +1,13 @@
 """Blueprint 变量提取器测试。"""
 import pytest
+from unittest.mock import MagicMock
 from uasset_read.models.properties import StructValue, PropertyValue
-from uasset_read.blueprint.variable_extractor import _guid_from_description, _extract_pin_type_from_property
+from uasset_read.blueprint.variable_extractor import (
+    _guid_from_description,
+    _extract_pin_type_from_property,
+    _extract_functions_from_graphs,
+    _extract_functions_from_bpgc_properties,
+)
 
 
 class TestGuidFromDescription:
@@ -130,3 +136,113 @@ class TestExtractPinTypeFromProperty:
         prop = PropertyValue(name="Weird", type="CustomProperty", value="x")
         result = _extract_pin_type_from_property(prop)
         assert result.pin_category == "CustomProperty"
+
+
+def _make_event_node(name="ReceiveBeginPlay", b_override=False):
+    """创建 K2Node_Event mock 节点。"""
+    node = MagicMock()
+    node.class_name = "K2Node_Event"
+    node.node_data = {
+        "event_reference": MagicMock(member_name=name),
+        "b_override_function": b_override,
+    }
+    node.pins = []
+    return node
+
+
+def _make_function_entry_node(name="MyFunction"):
+    """创建 K2Node_FunctionEntry mock 节点。"""
+    node = MagicMock()
+    node.class_name = "K2Node_FunctionEntry"
+    node.node_data = {
+        "function_reference": MagicMock(member_name=name),
+    }
+    node.pins = []
+    return node
+
+
+def _make_graph(nodes):
+    """创建包含指定节点的 mock 图。"""
+    graph = MagicMock()
+    graph.nodes = nodes
+    return graph
+
+
+class TestEventClassification:
+    """K2Node_Event 与 K2Node_FunctionEntry 的 is_implemented 区分。"""
+
+    def test_event_node_is_not_implemented(self):
+        """K2Node_Event 节点应标记 is_implemented=False。"""
+        graph = _make_graph([_make_event_node("ReceiveBeginPlay")])
+        funcs = _extract_functions_from_graphs([graph])
+        assert len(funcs) == 1
+        assert funcs[0].name == "ReceiveBeginPlay"
+        assert funcs[0].is_implemented is False
+
+    def test_function_entry_is_implemented(self):
+        """K2Node_FunctionEntry 节点应标记 is_implemented=True。"""
+        graph = _make_graph([_make_function_entry_node("MyCustomFunc")])
+        funcs = _extract_functions_from_graphs([graph])
+        assert len(funcs) == 1
+        assert funcs[0].name == "MyCustomFunc"
+        assert funcs[0].is_implemented is True
+
+    def test_mixed_nodes_classification(self):
+        """混合图中事件和函数应正确分类。"""
+        graph = _make_graph([
+            _make_event_node("ReceiveBeginPlay"),
+            _make_function_entry_node("ShouldUseTouchControls"),
+        ])
+        funcs = _extract_functions_from_graphs([graph])
+        by_name = {f.name: f for f in funcs}
+        assert by_name["ReceiveBeginPlay"].is_implemented is False
+        assert by_name["ShouldUseTouchControls"].is_implemented is True
+
+    def test_override_event_still_not_implemented(self):
+        """即使 b_override_function=True，K2Node_Event 仍标记 is_implemented=False。"""
+        graph = _make_graph([_make_event_node("ReceiveBeginPlay", b_override=True)])
+        funcs = _extract_functions_from_graphs([graph])
+        assert funcs[0].is_implemented is False
+        assert funcs[0].is_blueprint_event is True
+
+    def test_empty_graphs_returns_empty(self):
+        """空图列表应返回空列表。"""
+        assert _extract_functions_from_graphs([]) == []
+        assert _extract_functions_from_graphs(None) == []
+
+
+class TestBpgcFunctionClassification:
+    """BPGC 属性路径的 is_implemented 区分。"""
+
+    def testUbergraphFunction_not_implemented(self):
+        """UbergraphFunction 条目标记 is_implemented=False。"""
+        prop = MagicMock()
+        prop.name = "UbergraphFunction"
+        prop.value = "/Game/Blueprints/BP.BP_C:ReceiveBeginPlay"
+        funcs = _extract_functions_from_bpgc_properties([prop])
+        assert len(funcs) == 1
+        assert funcs[0].name == "ReceiveBeginPlay"
+        assert funcs[0].is_implemented is False
+
+    def testFunctionList_is_implemented(self):
+        """FunctionList 条目标记 is_implemented=True。"""
+        prop = MagicMock()
+        prop.name = "FunctionList"
+        prop.value = ["/Game/Blueprints/BP.BP_C:MyFunction"]
+        funcs = _extract_functions_from_bpgc_properties([prop])
+        assert len(funcs) == 1
+        assert funcs[0].name == "MyFunction"
+        assert funcs[0].is_implemented is True
+
+    def test_mixed_bpgc_properties(self):
+        """UbergraphFunction 和 FunctionList 混合时应正确分类。"""
+        ubergraph = MagicMock()
+        ubergraph.name = "UbergraphFunction"
+        ubergraph.value = "/Game/Blueprints/BP.BP_C.ReceiveBeginPlay"
+        funclist = MagicMock()
+        funclist.name = "FunctionList"
+        funclist.value = ["/Game/Blueprints/BP.BP_C.MyFunc"]
+        funcs = _extract_functions_from_bpgc_properties([ubergraph, funclist])
+        by_name = {f.name: f for f in funcs}
+        assert by_name["ReceiveBeginPlay"].is_implemented is False
+        assert by_name["MyFunc"].is_implemented is True
