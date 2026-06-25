@@ -270,7 +270,7 @@ def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
                 archive.seek(archive.tell() - 4)
             return ""
         data = archive.read(utf16_len)
-        return data.decode('utf-16', errors='replace').rstrip('\x00')
+        return data.decode('utf-16-le', errors='replace').rstrip('\x00')
     data = archive.read(length)
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
@@ -289,7 +289,7 @@ def _read_ftext_fstring(archive: FArchive) -> str:
         raise ParseError(f"Invalid FText FString length: {length}")
     if length < -1:
         data = archive.read(-length * 2)
-        return data.decode('utf-16', errors='replace').rstrip('\x00')
+        return data.decode('utf-16-le', errors='replace').rstrip('\x00')
     data = archive.read(length)
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
