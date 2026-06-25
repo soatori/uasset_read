@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
 from uasset_read.renderers import register_renderer
+from uasset_read.constants import decode_package_flags
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -95,7 +96,8 @@ class MarkdownRenderer(IRenderer):
         lines.append("|-------|-------|")
         lines.append(f"| Package | {_escape_md_cell(ir.header.package_name)} |")
         lines.append(f"| Class | {_escape_md_cell(ir.header.package_class)} |")
-        lines.append(f"| Flags | {ir.header.package_flags} |")
+        flag_names = ", ".join(decode_package_flags(ir.header.package_flags))
+        lines.append(f"| Flags | {ir.header.package_flags} ({flag_names}) |")
         lines.append(f"| Exports | {ir.header.total_export_count} |")
         lines.append(f"| Imports | {ir.header.total_import_count} |")
         lines.append(f"| UE Version | {_escape_md_cell(ir.header.ue_version)} |")

@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 from dataclasses import asdict, is_dataclass
 
+from uasset_read.constants import decode_package_flags
+
 from uasset_read.models.properties import StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue
 from uasset_read.serializers.object_resources import get_asset_class, get_asset_class_with_linker
 from .helpers import build_status_info, build_schema_info, resolve_fpackage_index
@@ -50,6 +52,7 @@ def format_json_full(result: ParseResult, include_schema: bool = False, include_
             "version_ue5": result.summary.file_version_ue5,
             "legacy_version": result.summary.legacy_file_version,
             "package_flags": result.summary.package_flags,  # D-08: raw u32
+            "package_flags_decoded": decode_package_flags(result.summary.package_flags),
             "package_name": result.summary.package_name
         }
 
