@@ -204,6 +204,8 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "BoxSphereBounds",
     "BoxSphereBounds3f",
     "BoxSphereBounds3d",
+    # BPInterfaceDescription（ImplementedInterfaces 数组元素）
+    "BPInterfaceDescription",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -222,6 +224,10 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("VarType", "StructProperty"),  # FEdGraphPinType
     ],
     "ImplementedInterfaces": [
+        ("InterfaceName", "NameProperty"),
+        ("InterfaceGuid", "GuidProperty"),
+    ],
+    "BPInterfaceDescription": [
         ("InterfaceName", "NameProperty"),
         ("InterfaceGuid", "GuidProperty"),
     ],

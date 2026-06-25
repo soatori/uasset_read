@@ -114,6 +114,11 @@ class JSONRenderer(IRenderer):
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
         d: dict[str, Any] = {"parent_class": blueprint.parent_class}
+        if getattr(blueprint, "description", ""):
+            d["description"] = blueprint.description
+        if getattr(blueprint, "interfaces", []):
+            # interfaces 已经是 dict 列表（来自 IR builder）
+            d["interfaces"] = blueprint.interfaces
         if blueprint.functions:
             d["functions"] = [self._function_to_dict(f) for f in blueprint.functions]
         if blueprint.events:
@@ -164,6 +169,8 @@ class JSONRenderer(IRenderer):
         }
         if func.function_flags:
             d["function_flags"] = func.function_flags
+        if not getattr(func, "is_implemented", True):
+            d["is_implemented"] = False
         for flag in (
             "is_pure", "is_blueprint_callable", "is_const", "is_static",
             "is_net", "is_net_reliable", "is_blueprint_private",

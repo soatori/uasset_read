@@ -502,6 +502,7 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
                 "is_output": p.is_output,
             } for p in func.parameters],
             function_flags=getattr(func, "function_flags", 0) or 0,
+            is_implemented=getattr(func, "is_implemented", True),
             is_pure=getattr(func, "is_pure", False),
             is_blueprint_callable=getattr(func, "is_blueprint_callable", False),
             is_const=getattr(func, "is_const", False),
@@ -541,8 +542,17 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
 
     components = list(result.components) if result.components else []
 
+    # 提取 description 和 interfaces
+    description = getattr(bp, "description", "") or ""
+    interfaces = [
+        {"name": iface.name, "guid": iface.guid}
+        for iface in getattr(bp, "interfaces", []) or []
+    ]
+
     return BlueprintIR(
         parent_class=bp.parent_class,
+        description=description,
+        interfaces=interfaces,
         functions=functions,
         events=events,
         components=components,

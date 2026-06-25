@@ -124,7 +124,6 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
 
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
-    "BlueprintDescription",
     "ParentClass",
     "ParentClassProperty",
     "SuperClass",
@@ -847,9 +846,73 @@ def extract_blueprint_metadata(
                 parameters=f.parameters,
             ))
 
+    # 提取 BlueprintDescription
+    description = ""
+    for prop in properties:
+        if prop.name == "BlueprintDescription":
+            description = str(prop.value) if prop.value else ""
+            break
+
+    # 提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）
+    from uasset_read.models.blueprint import BlueprintInterface
+    interfaces: List[BlueprintInterface] = []
+
+    def _extract_interfaces_from_props(props_list):
+        """从属性列表中提取 ImplementedInterfaces。"""
+        result = []
+        for prop in props_list:
+            if prop.name == "ImplementedInterfaces" and isinstance(prop.value, list):
+                for item in prop.value:
+                    # FBPInterfaceDescription: {Interface: object_ref, Graphs: [...]}
+                    # item 可能是 dict 或 StructValue
+                    fields = {}
+                    if isinstance(item, dict):
+                        fields = item
+                    elif hasattr(item, "fields"):
+                        fields = getattr(item, "fields", {})
+
+                    # Interface 是对象引用索引，需要解析为接口名
+                    iface_ref = fields.get("Interface", None)
+                    iface_name = ""
+                    if isinstance(iface_ref, int) and import_map and iface_ref < 0:
+                        # 负索引表示导入表引用
+                        idx = -iface_ref - 1
+                        if idx < len(import_map):
+                            imp = import_map[idx]
+                            iface_name = str(getattr(imp, "object_name", ""))
+                    elif isinstance(iface_ref, str):
+                        iface_name = iface_ref
+                    if iface_name:
+                        result.append(BlueprintInterface(name=iface_name))
+                break
+        return result
+
+    interfaces = _extract_interfaces_from_props(properties)
+
+    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
+    if not interfaces and export_map:
+        from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
+        for other_export in export_map:
+            if other_export is export:
+                continue
+            is_bp = _dbl(other_export, linker) if linker else False
+            if not is_bp:
+                continue
+            try:
+                other_props = parse_properties_from_export(
+                    other_export, archive, summary, name_map, export_map, import_map,
+                )
+                interfaces = _extract_interfaces_from_props(other_props)
+            except Exception:
+                pass
+            if interfaces:
+                break
+
     meta = BlueprintMetadata(
         is_blueprint=True,
         parent_class=parent_class,
+        description=description,
+        interfaces=interfaces,
         variables=variables,
         functions=functions,
         events=events,

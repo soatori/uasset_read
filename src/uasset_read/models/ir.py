@@ -115,6 +115,7 @@ class BlueprintFunctionIR:
     return_type: str
     parameters: list[dict]
     function_flags: int = 0
+    is_implemented: bool = True  # False = 继承事件占位（如 ReceiveBeginPlay）
     is_pure: bool = False
     is_blueprint_callable: bool = False
     is_const: bool = False
@@ -156,9 +157,11 @@ class BlueprintEventIR:
 class BlueprintIR:
     """蓝图元数据 IR（来自 BlueprintMetadata）。"""
     parent_class: str | None
-    functions: list[BlueprintFunctionIR]
-    events: list[BlueprintEventIR]
-    components: list[dict]
+    description: str = ""
+    interfaces: list[dict] = field(default_factory=list)
+    functions: list[BlueprintFunctionIR] = field(default_factory=list)
+    events: list[BlueprintEventIR] = field(default_factory=list)
+    components: list[dict] = field(default_factory=list)
 
 
 @dataclass
