@@ -75,6 +75,8 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        if ir.asset_registry_data:
+            data["asset_registry_data"] = ir.asset_registry_data
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)

@@ -28,6 +28,7 @@ from uasset_read.serializers.object_resources import (
     build_imports_list, read_soft_object_paths, detect_circular_deps,
 )
 from uasset_read.parsers.property_parser import parse_properties_from_export
+from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
 from uasset_read.blueprint import (
     extract_blueprint_metadata,
     extract_component_transforms,
@@ -403,7 +404,10 @@ def _should_use_lightweight_tolerant_parse(
     result,
     tolerant: bool,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
 ) -> bool:
+    if force_full_parse:
+        return False
     if not tolerant or result.summary is None:
         return False
     threshold = (
@@ -475,6 +479,7 @@ def _parse_package_core(
     extra_linker_setup: Optional[Callable] = None,
     check_aes_key: Optional[bytes] = None,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -489,6 +494,7 @@ def _parse_package_core(
         asset_roots: 资产根目录列表
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
         check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
     """
     from uasset_read.link.linker import PackageLinker
 
@@ -615,6 +621,21 @@ def _parse_package_core(
         # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
         setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
 
+        # 读取 AssetRegistryData（资产元数据标签）
+        try:
+            is_cooked = bool(result.summary.package_flags & 0x00000100)  # PKG_FilterEditorOnly
+            result.asset_registry_data = read_asset_registry_data(
+                archive,
+                result.summary.asset_registry_data_offset,
+                file_version_ue4=result.summary.file_version_ue4,
+                is_cooked=is_cooked,
+            )
+        except Exception as e:
+            if not tolerant:
+                raise ParseError(f"AssetRegistryData 解析失败: {e}") from e
+            result.warnings.append(f"AssetRegistryData 解析失败: {e}")
+            result.asset_registry_data = None
+
         # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
         linker: Optional["PackageLinker"] = None
         try:
@@ -635,7 +656,7 @@ def _parse_package_core(
                 raise ParseError(f"Linker creation failed: {e}") from e
             result.errors.append(f"Linker creation failed: {e}")
 
-        if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold):
+        if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold, force_full_parse):
             result.warnings.append(
                 "Lightweight tolerant parse used due to export complexity "
                 f"(exports={getattr(result.summary, 'export_count', 0)})"
@@ -764,6 +785,7 @@ def parse_package(
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -776,6 +798,7 @@ def parse_package(
         provider: 可选 package provider（filesystem/pak/iostore）
         include_linker: Deprecated. Linker is now always created for complete
             object graph resolution. Parameter retained for backward compatibility.
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
@@ -798,6 +821,7 @@ def parse_package(
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
         lightweight_threshold=lightweight_threshold,
+        force_full_parse=force_full_parse,
     )
     return result
 
@@ -810,6 +834,7 @@ def parse_uasset(
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
+    force_full_parse: bool = False,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -825,6 +850,7 @@ def parse_uasset(
         mappings_path=mappings_path,
         game=game,
         include_linker=include_linker,
+        force_full_parse=force_full_parse,
     )
 
 
@@ -838,6 +864,7 @@ def parse_uasset_with_linker(
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -846,6 +873,7 @@ def parse_uasset_with_linker(
         tolerant: 是否启用容错模式（默认开启）
         preload_all: 是否预加载所有 exports（默认 False，惰性加载）
         provider: 可选 package provider（filesystem/pak/iostore）
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
@@ -864,6 +892,7 @@ def parse_uasset_with_linker(
         asset_roots=asset_roots,
         extra_linker_setup=extra_linker_setup,
         lightweight_threshold=lightweight_threshold,
+        force_full_parse=force_full_parse,
     )
 
     if preload_all and result.linker:

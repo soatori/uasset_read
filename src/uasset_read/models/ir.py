@@ -238,6 +238,7 @@ class PackageIR:
     depends_map: list[list[int]] = field(default_factory=list)
     resolved_depends_map: list[list[dict]] = field(default_factory=list)
     asset_registry_data_offset: int = 0
+    asset_registry_data: dict | None = None
     errors: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None

@@ -111,6 +111,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
         resolved_depends_map=_build_resolved_depends_map(result),
         asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
+        asset_registry_data=_build_asset_registry_data(result),
         errors=errors,
         status=status,
         status_message=status_message,
@@ -955,3 +956,14 @@ def _extract_pin_guid(ref) -> str | None:
         return _normalize_guid(ref)
     raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
     return _normalize_guid(raw) if raw else None
+
+
+def _build_asset_registry_data(result) -> dict | None:
+    """从 ParseResult 构建 asset_registry_data 字典。"""
+    asset_registry_data = getattr(result, "asset_registry_data", None)
+    if asset_registry_data is None:
+        return None
+    try:
+        return asset_registry_data.to_dict()
+    except Exception:
+        return None
