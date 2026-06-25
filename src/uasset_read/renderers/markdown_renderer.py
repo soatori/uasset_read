@@ -108,6 +108,11 @@ class MarkdownRenderer(IRenderer):
             lines.append("|-------|-------|")
             if ir.blueprint.parent_class:
                 lines.append(f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |")
+            if ir.blueprint.description:
+                lines.append(f"| Description | {_escape_md_cell(ir.blueprint.description)} |")
+            if ir.blueprint.interfaces:
+                ifaces = ", ".join(i.get("name", "") for i in ir.blueprint.interfaces)
+                lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
             comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
             lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
@@ -217,6 +222,9 @@ class MarkdownRenderer(IRenderer):
 
         # === Variables ===
         self._render_variables(lines, ir)
+
+        # === Asset Registry Data ===
+        self._render_asset_registry(lines, ir)
 
         # === 诊断信息 ===
         self._render_diagnostics(lines, ir)
@@ -380,6 +388,36 @@ class MarkdownRenderer(IRenderer):
             default_str = _escape_md_cell(str(var.default_value)) if var.default_value is not None else "-"
             lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
         lines.append("")
+
+    def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
+        """渲染 Asset Registry Data 章节 — 资产元数据标签。"""
+        data = ir.asset_registry_data
+        if not data:
+            return
+
+        objects = data.get("objects", [])
+        if not objects:
+            return
+
+        lines.append("## Asset Registry Data")
+        lines.append("")
+
+        for obj in objects:
+            obj_path = obj.get("object_path", "")
+            obj_class = obj.get("object_class_name", "")
+            tags = obj.get("tags", {})
+
+            lines.append(f"### {_escape_md_cell(obj_path)}")
+            lines.append("")
+            lines.append(f"**Class:** `{_escape_md_cell(obj_class)}`")
+            lines.append("")
+
+            if tags:
+                lines.append("| Tag | Value |")
+                lines.append("|-----|-------|")
+                for key, value in tags.items():
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
         """渲染诊断信息章节 — 偏移范围诊断表格。"""

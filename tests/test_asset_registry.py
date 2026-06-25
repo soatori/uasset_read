@@ -293,3 +293,36 @@ class TestAssetRegistryIntegration:
         data = json.loads(output)
         assert "asset_registry_data" in data
         assert "object_count" in data["asset_registry_data"]
+
+    def test_parse_markdown_output_includes_asset_registry(self):
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR
+        ir = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Test/Asset",
+                package_class="Texture2D",
+                package_flags=0,
+                total_export_count=1,
+                total_import_count=0,
+                ue_version="5.x",
+            ),
+            name_map=[],
+            imports=[],
+            exports=[],
+            linker=None,
+            asset_registry_data={
+                "dependency_data_offset": 0,
+                "object_count": 1,
+                "objects": [{
+                    "object_path": "/Test/Asset",
+                    "object_class_name": "Texture2D",
+                    "tags": {"bIsCooked": "True", "AssetImportData": "test"},
+                }],
+            },
+        )
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "Asset Registry Data" in output
+        assert "Texture2D" in output
+        assert "bIsCooked" in output
