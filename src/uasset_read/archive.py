@@ -13,11 +13,6 @@ from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
-def _try_import_hex_view():
-    """延迟导入 HexViewEntry（避免循环导入）。"""
-    from uasset_read.debug.hex_view import HexViewEntry
-    return HexViewEntry
-
 
 class FArchive:
     """
@@ -516,6 +511,8 @@ class FArchive:
         pos_before = self.tell()
         length = self.read_i32()
         if length == 0:
+            if key:
+                self._record_hex_view(key, "fstring", "", pos_before, self.tell())
             return ""
 
         if length < 0:
