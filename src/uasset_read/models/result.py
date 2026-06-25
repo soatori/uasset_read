@@ -49,6 +49,7 @@ class ParseResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
     linker: Optional["PackageLinker"] = None
     diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    hex_view_entries: List = field(default_factory=list)  # List[HexViewEntry]
     asset_registry_data: Optional["AssetRegistryData"] = None
 
     @property

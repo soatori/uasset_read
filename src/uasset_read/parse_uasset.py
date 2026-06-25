@@ -480,6 +480,7 @@ def _parse_package_core(
     check_aes_key: Optional[bytes] = None,
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -495,6 +496,7 @@ def _parse_package_core(
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
         check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
     """
     from uasset_read.link.linker import PackageLinker
 
@@ -517,6 +519,8 @@ def _parse_package_core(
 
         bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
         archive = bundle.open_archive(tolerant=tolerant)
+        if hex_view:
+            archive.enable_hex_view(True)
         result.metadata.update(_package_metadata(bundle))
 
         # Extract mmap info
@@ -771,6 +775,9 @@ def _parse_package_core(
             archive_diagnostics = archive.get_diagnostics()
             if archive_diagnostics:
                 result.diagnostics = archive_diagnostics + result.diagnostics
+            # 收集 hex_view 条目
+            if archive.is_hex_view_enabled():
+                result.hex_view_entries = archive.get_hex_view_entries()
             archive.close()
 
 
@@ -786,6 +793,7 @@ def parse_package(
     include_linker: bool = True,  # Deprecated: linker is now always created
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -799,6 +807,7 @@ def parse_package(
         include_linker: Deprecated. Linker is now always created for complete
             object graph resolution. Parameter retained for backward compatibility.
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
@@ -822,6 +831,7 @@ def parse_package(
         asset_roots=asset_roots,
         lightweight_threshold=lightweight_threshold,
         force_full_parse=force_full_parse,
+        hex_view=hex_view,
     )
     return result
 
@@ -865,6 +875,7 @@ def parse_uasset_with_linker(
     game: Optional[str] = None,
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -874,6 +885,7 @@ def parse_uasset_with_linker(
         preload_all: 是否预加载所有 exports（默认 False，惰性加载）
         provider: 可选 package provider（filesystem/pak/iostore）
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
@@ -893,6 +905,7 @@ def parse_uasset_with_linker(
         extra_linker_setup=extra_linker_setup,
         lightweight_threshold=lightweight_threshold,
         force_full_parse=force_full_parse,
+        hex_view=hex_view,
     )
 
     if preload_all and result.linker:

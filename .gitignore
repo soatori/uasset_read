@@ -27,7 +27,7 @@ Thumbs.db
 temp/
 test/
 output/
-debug/
+/debug/
 reports/
 /json
 # Session-local tool config (but track skills)

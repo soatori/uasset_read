@@ -88,6 +88,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
     parser.add_argument('--full-parse', action='store_true', default=False,
                         help='Force full parse for large blueprints (skip lightweight mode)')
+    parser.add_argument('--hex-view', action='store_true', default=False,
+                        help='Enable HexView byte offset tracking (debug)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
@@ -240,6 +242,7 @@ def main():
             mappings_path=args.mappings,
             game=args.game,
             force_full_parse=args.full_parse,
+            hex_view=args.hex_view,
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)

@@ -39,6 +39,7 @@ def parse_single(
     mappings_path: str | None = None,
     game: str | None = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
 ) -> str:
     """解析单个 .uasset/.umap，返回格式化字符串。
 
@@ -57,6 +58,7 @@ def parse_single(
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
 
     Returns:
         格式化后的字符串
@@ -77,6 +79,7 @@ def parse_single(
             mappings_path=mappings_path,
             game=game,
             force_full_parse=force_full_parse,
+            hex_view=hex_view,
         )
     else:
         result = parse_package(
@@ -87,10 +90,19 @@ def parse_single(
             mappings_path=mappings_path,
             game=game,
             force_full_parse=force_full_parse,
+            hex_view=hex_view,
         )
 
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
+
+    # HexView 模式：直接输出 hex view，不走常规渲染器
+    if hex_view and result.hex_view_entries:
+        from uasset_read.debug.hex_view import format_hex_view
+        return format_hex_view(
+            result.hex_view_entries,
+            file_size=result.summary.uncompressed_size if result.summary else 0,
+        )
 
     # 构建 IR
     ir = build_package_ir(result)

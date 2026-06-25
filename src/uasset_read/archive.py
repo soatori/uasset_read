@@ -13,13 +13,19 @@ from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
+def _try_import_hex_view():
+    """延迟导入 HexViewEntry（避免循环导入）。"""
+    from uasset_read.debug.hex_view import HexViewEntry
+    return HexViewEntry
+
+
 class FArchive:
     """
     二进制读取类，镜像 UE 的 FArchive 模式。
     支持字节序检测和交换、边界验证。
     """
 
-    def __init__(self, path: str, tolerant: bool = False):
+    def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
         self._path = path
         # Initialize all attributes before try block for safe close() on exception
         self._file: Optional[BinaryIO] = None
@@ -32,6 +38,9 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
         self._diagnostics: list[OffsetRangeDiagnostic] = []  # 偏移诊断记录
+        self._hex_view_enabled: bool = hex_view
+        self._hex_view_entries: list = []  # list[HexViewEntry]，延迟导入避免循环
+        self._hex_view_context: str = ""  # 当前上下文前缀（如 "Summary."）
 
         try:
             self._file = open(path, 'rb')
@@ -276,24 +285,89 @@ class FArchive:
         """返回收集到的偏移诊断记录。"""
         return list(self._diagnostics)
 
+    # HexView 支持
+
+    def enable_hex_view(self, enabled: bool = True) -> None:
+        """启用或禁用 hex_view 记录。"""
+        self._hex_view_enabled = enabled
+
+    def is_hex_view_enabled(self) -> bool:
+        """返回 hex_view 是否启用。"""
+        return self._hex_view_enabled
+
+    def set_hex_view_context(self, context: str) -> None:
+        """设置当前字段上下文前缀（如 "Summary.", "NameTable[0]."）。
+
+        Args:
+            context: 上下文前缀，会自动加到字段名前面
+        """
+        self._hex_view_context = context
+
+    def get_hex_view_context(self) -> str:
+        """返回当前 hex_view 上下文前缀。"""
+        return self._hex_view_context
+
+    def clear_hex_view_context(self) -> None:
+        """清除当前 hex_view 上下文前缀。"""
+        self._hex_view_context = ""
+
+    def _record_hex_view(self, key: str, type_name: str, value: Any,
+                         start: int, stop: int) -> None:
+        """记录一次读取操作到 hex_view。
+
+        仅在 hex_view 启用时调用，避免性能损失。
+        """
+        if not self._hex_view_enabled:
+            return
+        from uasset_read.debug.hex_view import HexViewEntry
+        full_key = f"{self._hex_view_context}{key}" if self._hex_view_context else key
+        self._hex_view_entries.append(HexViewEntry(
+            key=full_key,
+            type=type_name,
+            value=value,
+            start=start,
+            stop=stop,
+        ))
+
+    def get_hex_view_entries(self) -> list:
+        """返回收集到的 hex_view 条目列表。"""
+        return list(self._hex_view_entries)
+
+    def get_hex_view_entries_raw(self) -> list:
+        """返回原始 hex_view 条目列表（不复制）。"""
+        return self._hex_view_entries
+
     # 类型读取方法
 
-    def read_u8(self) -> int:
+    def read_u8(self, key: str = "") -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
         import struct
-        return struct.unpack('<B', self.read(1))[0]
+        start = self.tell()
+        data = self.read(1)
+        value = struct.unpack('<B', data)[0]
+        if key:
+            self._record_hex_view(key, "u8", value, start, start + 1)
+        return value
 
-    def read_bytes(self, n: int) -> bytes:
+    def read_bytes(self, n: int, key: str = "") -> bytes:
         """读取原始字节（无字节序交换）"""
-        return self.read(n)
+        start = self.tell()
+        data = self.read(n)
+        if key:
+            self._record_hex_view(key, "bytes", data, start, start + n)
+        return data
 
-    def read_i32(self) -> int:
+    def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'i', self.read(4))[0]
+        value = struct.unpack(fmt + 'i', self.read(4))[0]
+        if key:
+            self._record_hex_view(key, "i32", value, start, start + 4)
+        return value
 
-    def peek_i32(self) -> int:
+    def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
         import struct
         current_pos = self.tell()
@@ -302,39 +376,57 @@ class FArchive:
             data = self.read(4)
             result = struct.unpack(fmt + 'i', data)[0]
             self.seek(current_pos)
+            if key:
+                self._record_hex_view(key, "i32(peek)", result, current_pos, current_pos + 4)
             return result
         except Exception:
             self.seek(current_pos)
             raise
 
-    def read_u16(self) -> int:
+    def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'H', self.read(2))[0]
+        value = struct.unpack(fmt + 'H', self.read(2))[0]
+        if key:
+            self._record_hex_view(key, "u16", value, start, start + 2)
+        return value
 
-    def read_i16(self) -> int:
+    def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'h', self.read(2))[0]
+        value = struct.unpack(fmt + 'h', self.read(2))[0]
+        if key:
+            self._record_hex_view(key, "i16", value, start, start + 2)
+        return value
 
-    def read_u32(self) -> int:
+    def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'I', self.read(4))[0]
+        value = struct.unpack(fmt + 'I', self.read(4))[0]
+        if key:
+            self._record_hex_view(key, "u32", value, start, start + 4)
+        return value
 
-    def read_bool(self) -> bool:
+    def read_bool(self, key: str = "") -> bool:
         """读取 UE bool 值（序列化为 uint32，4 bytes）。
 
         UE 标准 FArchive bool 序列化格式。在 UE4 和 UE5 中，
         FArchive::operator<<(bool&) 都序列化为 uint32（4 bytes）。
         这适用于大多数场景，包括 FText、ObjectExport 等。
         """
-        return self.read_u32() != 0
+        start = self.tell()
+        value = self.read_u32() != 0
+        if key:
+            self._record_hex_view(key, "bool", value, start, start + 4)
+        return value
 
-    def read_bool_1byte(self) -> bool:
+    def read_bool_1byte(self, key: str = "") -> bool:
         """读取 UE5 1-byte bool 值（序列化为 uint8）。
 
         UE5 在特定结构（如 FEdGraphPinType）中使用 1-byte bool 序列化。
@@ -342,31 +434,51 @@ class FArchive:
 
         使用场景：FEdGraphPinType 序列化中的 bool 字段。
         """
-        return self.read_u8() != 0
+        start = self.tell()
+        value = self.read_u8() != 0
+        if key:
+            self._record_hex_view(key, "bool8", value, start, start + 1)
+        return value
 
-    def read_i64(self) -> int:
+    def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'q', self.read(8))[0]
+        value = struct.unpack(fmt + 'q', self.read(8))[0]
+        if key:
+            self._record_hex_view(key, "i64", value, start, start + 8)
+        return value
 
-    def read_u64(self) -> int:
+    def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'Q', self.read(8))[0]
+        value = struct.unpack(fmt + 'Q', self.read(8))[0]
+        if key:
+            self._record_hex_view(key, "u64", value, start, start + 8)
+        return value
 
-    def read_f32(self) -> float:
+    def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'f', self.read(4))[0]
+        value = struct.unpack(fmt + 'f', self.read(4))[0]
+        if key:
+            self._record_hex_view(key, "f32", value, start, start + 4)
+        return value
 
-    def read_f64(self) -> float:
+    def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
         import struct
+        start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
-        return struct.unpack(fmt + 'd', self.read(8))[0]
+        value = struct.unpack(fmt + 'd', self.read(8))[0]
+        if key:
+            self._record_hex_view(key, "f64", value, start, start + 8)
+        return value
 
     def serialize_int(self, value: int) -> bytes:
         """序列化 32 位整数（用于 SerializeInt 兼容）。
@@ -395,7 +507,7 @@ class FArchive:
         num_bytes = math.ceil(num_bits / 8)
         return value.to_bytes(num_bytes, byteorder='big', signed=False)
 
-    def read_fstring(self) -> str:
+    def read_fstring(self, key: str = "") -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
 
         增加边界防卫和指针回退。失败时 seek 回入口位置，
@@ -451,7 +563,7 @@ class FArchive:
                 null_count = result.count('\x00')
                 first_null_idx = result.index('\x00')
                 preview = result[:80] if len(result) > 80 else result
-                
+
                 if first_null_idx > 0:
                     # Has real content before first null — truncate and continue
                     truncated = result[:first_null_idx]
@@ -466,6 +578,9 @@ class FArchive:
                         "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
                         pos_before, data[:32].hex(), preview, truncated
                     )
+                    if key:
+                        self._record_hex_view(key, "fstring", truncated,
+                                              pos_before, self.tell())
                     return truncated
                 else:
                     # All nulls from start — likely file tail padding (zero-filled region).
@@ -497,8 +612,14 @@ class FArchive:
                                 current_pos, non_zero, scan_size, scan_size,
                             )
                             self.seek(self._file_size)
+                    if key:
+                        self._record_hex_view(key, "fstring", "",
+                                              pos_before, self.tell())
                     return ""
 
+        if key:
+            self._record_hex_view(key, "fstring", result,
+                                  pos_before, self.tell())
         return result
 
     def set_name_map(self, name_map: list) -> None:
@@ -517,11 +638,12 @@ class FArchive:
         """
         return self._name_map
 
-    def read_name(self, name_map: Optional[list] = None) -> str:
+    def read_name(self, name_map: Optional[list] = None, key: str = "") -> str:
         """读取 FName（名称表索引 + 实例编号）。
 
         Args:
             name_map: 名称表列表。如果为 None，使用内部缓存的名称表。
+            key: hex_view 字段名（可选）
 
         Returns:
             解析后的名称字符串
@@ -529,6 +651,7 @@ class FArchive:
         Raises:
             ParseError: 如果 name_map 为 None 且未设置内部缓存
         """
+        start = self.tell()
         if name_map is None:
             name_map = self._name_map
             if name_map is None:
@@ -541,17 +664,23 @@ class FArchive:
         if 0 <= index < len(name_map):
             base_name = name_map[index]
             if number > 0:
-                return f"{base_name}_{number}"
-            return base_name
-        # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
-        # 添加日志帮助诊断索引越界问题
-        self._logger.debug(
-            "read_name: index %d out of range (name_map len=%d) at pos %d",
-            index, len(name_map), self.tell() - 8
-        )
-        return "None"
+                result = f"{base_name}_{number}"
+            else:
+                result = base_name
+        else:
+            # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
+            # 添加日志帮助诊断索引越界问题
+            self._logger.debug(
+                "read_name: index %d out of range (name_map len=%d) at pos %d",
+                index, len(name_map), self.tell() - 8
+            )
+            result = "None"
+        if key:
+            self._record_hex_view(key, "fname", result, start, self.tell())
+        return result
 
-    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any]) -> list:
+    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any],
+                   key: str = "") -> list:
         """读取指定数量的元素数组。
 
         泛型数组读取方法，等价于 UE 的 ReadArray<T>。
@@ -559,6 +688,7 @@ class FArchive:
         Args:
             count: 元素数量
             element_reader: 元素读取函数，接受 archive 参数，返回单个元素
+            key: hex_view 字段名（可选）
 
         Returns:
             元素列表
@@ -570,6 +700,7 @@ class FArchive:
             # 读取 FString 数组
             strings = archive.read_array(3, lambda ar: ar.read_fstring())
         """
+        start = self.tell()
         if count < 0:
             raise ParseError(f"read_array: 负数元素数量 {count}")
         if count > MAX_ARRAY_COUNT:  # 防御性检查
@@ -578,6 +709,9 @@ class FArchive:
         result = []
         for _ in range(count):
             result.append(element_reader(self))
+        if key:
+            self._record_hex_view(key, f"array[{count}]", len(result),
+                                  start, self.tell())
         return result
 
 

@@ -76,6 +76,10 @@ class PackageArchive(FArchive):
         self._mmap_warning = None
         self._logger = logging.getLogger(__name__)
         self._diagnostics: list[OffsetRangeDiagnostic] = []
+        self._hex_view_enabled: bool = False
+        self._hex_view_entries: list = []
+        self._hex_view_context: str = ""
+        self._name_map: Optional[list] = None
 
     def read(self, size: int) -> bytes:
         if size < 0:
