@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
+from uasset_read.constants import decode_package_flags
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -50,6 +51,7 @@ class JSONRenderer(IRenderer):
                 "package_name": ir.header.package_name,
                 "package_class": ir.header.package_class,
                 "package_flags": ir.header.package_flags,
+                "package_flags_decoded": decode_package_flags(ir.header.package_flags),
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
