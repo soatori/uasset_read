@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
-from uasset_read.serializers.object_resources import PackageIndex
+from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 
 
 def _classify_variable(var) -> str:
@@ -296,10 +296,17 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     # 构建 UE 原始导出表字段
     raw = _build_export_raw_ir(export)
 
+    # ObjectExport 没有 object_class 字段，需从 class_index 解析
+    resolved_class = getattr(export, "object_class", None)
+    if not resolved_class and hasattr(export, "class_index"):
+        resolved_class = resolve_class_name(
+            export.class_index, result.import_map or [], result.export_map or []
+        )
+
     return ExportIR(
         index=idx,
         object_name=_safe_str(getattr(export, "object_name", None)),
-        object_class=_safe_str(getattr(export, "object_class", None)),
+        object_class=_safe_str(resolved_class),
         serial_size=getattr(export, "serial_size", 0) or 0,
         outer_index_resolved=outer_resolved,
         super_index_resolved=super_resolved,
