@@ -128,7 +128,7 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 
 CLI 通过 `core.py` 的 `parse_single()` 进行解析：
 
-1. 根据格式判断是否需要 linker（`cpp_skeleton` 需要，其他不需要）
+1. 根据格式判断是否需要 linker（当前格式均不需要）
 2. 调用 `parse_single()` → 内部自动完成：解析 → IR 构建 → 渲染
 3. 写入 stdout 或文件
 
@@ -198,4 +198,4 @@ CLI 可通过以下方式调用：
 
 这允许用户通过管道将数据与其他工具连接，同时保留人类可读的错误信息。
 
-**相关章节**: [[渲染器系统]] · [[格式化器]]
+**相关章节**: [[渲染器系统]] · [[IR 中间表示]]

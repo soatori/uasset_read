@@ -20,7 +20,7 @@ BlueprintParser    GraphParser    PackageLinker    KismetDecompiler
         ↓ IR 构建
 PackageIR → ExportIR → GraphIR → NodeIR → PinIR
         ↓ 渲染
-JSON    Text    Markdown    BlueprintText    BlueprintUE    CppSkeleton
+JSON    Markdown
 ```
 
 ## 解析管线
@@ -43,15 +43,16 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 | 类型映射 | `mappings.py` | UE 类型映射（.usmap/.jmap 解析） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 文件解析 |
 | Core API | `core.py` | parse_single / parse_batch / list_formats 纯函数入口 |
+| 调试 | `debug/hex_view.py` | HexView 调试系统 |
 | IR 模型 | `models/ir.py` | PackageIR、ExportIR、GraphIR、NodeIR、PinIR 等中间表示 |
 | IR 构建器 | `ir_builder.py` | build_package_ir：从 ParseResult 构建 PackageIR |
-| 渲染器 | `renderers/` | 6 个渲染器，自动注册到 RENDERER_REGISTRY |
+| 渲染器 | `renderers/` | 2 个渲染器，自动注册到 RENDERER_REGISTRY |
 | 序列化 | `serializers/` | Summary/Import/Export/PropertyTag/图序列化 |
 | 解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
 | ├ 资产类型 | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC 专用解析器 |
 | 数据模型 | `models/` | UEdGraph/Node/Pin、属性值、变换、蓝图模型、ParseResult |
 | 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
-| 图分析 | `graph/` | 执行流/数据流/链构建器、Pin 追踪报告 |
+| 图分析 | `graph/` | 执行流/数据流/链构建器 |
 | Kismet | `kismet/` | 字节码提取、EExprToken → AST → C++ 翻译、BPGC 回退、结构化控制流 |
 | ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | 链接器 | `link/` | PackageLinker 两阶段对象图重建、UObjectInstance |
@@ -60,7 +61,6 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 | IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
 | Bulk Data | `bulk/` | BulkData 头部解析、标志定义 |
 | UObject | `objects/` | UObject 类型体系、类型注册表、导出类型 |
-| 格式化器 | `formatters/` | 底层格式化函数（JSON/Text/Markdown/蓝图文本等） |
 | CLI | `cli.py` | argparse 入口，委托 core.py 核心 API |
 
 > [!TIP]

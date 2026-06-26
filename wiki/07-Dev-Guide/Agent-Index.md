@@ -9,6 +9,7 @@ section: agent-index
 > 本文档已为 AI Agent 优化。所有表格采用结构化格式，API 签名使用 `data-api` 注释标记。Agent 可通过 grep `<!-- data-api="函数名" -->` 定位 API。
 >
 > **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。新增 `core.py`（parse_single/parse_batch）、`renderers/`、`models/ir.py`。
+> **0.5.0 变更**：`formatters/` 目录已清空，所有格式化功能迁移到 `renderers/` 系统。
 
 ## 按任务类型快速定位
 
@@ -31,6 +32,7 @@ section: agent-index
 > [!WARNING] 已移除任务
 > - ~~N2C Schema 变更~~ → `n2c/` 已整体删除
 > - ~~新增导出格式（旧）~~ → 使用 [[渲染器系统]] 替代
+> - ~~格式化器相关~~ → `formatters/` 已清空，功能迁移到 `renderers/`
 
 ## 完整 API 分类索引
 
@@ -69,10 +71,10 @@ section: agent-index
 `extract_blueprint_metadata` · `extract_blueprint_variables` · `extract_components` · `parse_component_transform` · `extract_component_transforms` · `read_blueprint_variable` · `parse_property_flags_to_labels`
 
 #### 图提取
-`extract_blueprint_graphs` · `build_execution_flow_entries` · `build_data_flows` · `build_connections_map` · `build_execution_chains` · `build_graphs_summary` · `format_graphs_json` · `build_blueprint_node_index` · `format_pin_ref`
+`extract_blueprint_graphs` · `build_execution_flow_entries` · `build_data_flows` · `build_connections_map` · `build_execution_chains` · `format_graphs_json` · `format_pin_ref`
 
-#### 兼容层
-`build_execution_flows` · `write_pin_trace_report` · `is_function_graph` · `build_function_graphs` · `write_phase75_diagnostic`
+#### 图格式化
+`build_function_graphs`
 
 ### Kismet 反编译 (11+)
 
@@ -104,23 +106,19 @@ section: agent-index
 
 ### 格式化与渲染（0.4.1+）
 
-#### JSON
-`format_json_full` · `format_json_summary` · `format_exports_list` · `format_properties_list` · `format_blueprint_dict`
-
-#### 文本
-`format_text_full` · `format_text_summary`
-
-#### Markdown/蓝图
-`format_markdown` · `format_blueprint_translation_text` · `format_blueprint_ue_text`
-
-#### 辅助
-`build_status_info` · `build_schema_info` · `resolve_fpackage_index`
-
 #### 核心 API
 `parse_single` · `parse_batch` · `list_formats` · `BatchResult`
 
 #### 渲染器系统
 `IRenderer` · `RenderOptions` · `get_renderer` · `list_formats` · `register_renderer` · `RENDERER_REGISTRY`
+
+#### 渲染器实现
+`JSONRenderer` · `MarkdownRenderer`
+
+#### 格式化器（已废弃）
+`format_json_full` · `format_json_summary` · `format_text_full` · `format_markdown` · `format_blueprint_translation_text` · `format_blueprint_ue_text`
+> [!WARNING] 已废弃
+> 以上函数仍通过根包导出供向后兼容，但新代码应使用 `parse_single()` 或渲染器系统。
 
 ### C++ 代码生成 (15+)
 

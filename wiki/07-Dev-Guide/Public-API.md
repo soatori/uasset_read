@@ -24,7 +24,8 @@ from uasset_read.renderers import get_renderer, list_formats
 
 > [!NOTE] 架构变更
 > **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。旧 `export()` 函数被 `parse_single()` 替代。
-> 根包仍重新导出高级子模块供现有用户使用。新代码应优先使用聚焦导入。
+> `formatters/` 模块已清空，所有格式化功能迁移到 `renderers/` 系统。
+> 新代码应优先使用聚焦导入。
 
 ## 核心 API（0.4.1+ 新增）
 
@@ -455,60 +456,19 @@ from uasset_read.renderers import get_renderer, list_formats
 |------|------|
 | `extract_blueprint_graphs` | 提取蓝图图数据 |
 | `build_execution_flow_entries` | 构建执行流条目 |
-| `build_execution_flows` | 构建执行流（已废弃兼容包装） |
 | `build_data_flows` | 构建数据流 |
 | `build_connections_map` | 构建连接映射 |
-| `build_graphs_summary` | 构建图摘要 |
 | `format_graphs_json` | 格式化图为 JSON |
-| `build_blueprint_node_index` | 构建蓝图节点索引 |
 | `build_execution_chains` | 构建执行链 |
 | `format_pin_ref` | 格式化 Pin 引用 |
 | `_derive_node_name` | 推导节点名称 |
-| `build_execution_chains_from_flows` | 从流构建执行链 |
-| `write_pin_trace_report` | 写入 Pin 追踪报告 |
-| `is_function_graph` | 判断是否为函数图 |
 | `build_function_graphs` | 构建函数图 |
-| `write_phase75_diagnostic` | 写入 Phase 75 诊断 |
 
-## 格式化模块 (formatters)
+## ~~格式化模块 (formatters)~~ — 已废弃
 
-### JSON 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_json_full` | 完整 JSON 输出 |
-| `format_json_summary` | 摘要 JSON 输出 |
-| `format_exports_list` | 导出列表格式化 |
-| `format_properties_list` | 属性列表格式化 |
-| `format_blueprint_dict` | 蓝图字典格式化 |
-
-### Text 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_text_full` | 完整文本输出 |
-| `format_text_summary` | 摘要文本输出 |
-
-### Markdown 格式化
-
-| 符号 | 说明 |
-|------|------|
-| `format_markdown` | Markdown 输出 |
-
-### 蓝图翻译文本
-
-| 符号 | 说明 |
-|------|------|
-| `format_blueprint_translation_text` | 蓝图翻译参考文本 |
-| `format_blueprint_ue_text` | UE 格式文本 |
-
-### 辅助函数
-
-| 符号 | 说明 |
-|------|------|
-| `build_status_info` | 构建状态信息 |
-| `build_schema_info` | 构建 Schema 信息 |
-| `resolve_fpackage_index` | 解析 FPackageIndex |
+> [!WARNING] 已废弃
+> `formatters/` 目录已清空，所有格式化功能已迁移到 `renderers/` 系统。
+> 请使用 `parse_single(format="json")` 或 `parse_single(format="markdown")` 替代。
 
 ## Kismet 字节码模块 (kismet)
 
@@ -565,60 +525,14 @@ from uasset_read.renderers import get_renderer, list_formats
 | `decompile_uasset` | 反编译整个 uasset |
 | `decompile_single_function` | 反编译单个函数 |
 
-## ~~Agent 模块 (agent)~~ — 已移除
+## ~~已移除模块~~
 
 > [!WARNING] 已移除
-> `agent/` 模块已在 0.4.1 整体删除。请通过 `parse_single(format="cpp_skeleton")` 获取 C++ 输出。
-
-## ~~N2C 中间格式 (n2c)~~ — 已移除
-
-> [!WARNING] 已移除
-> `n2c/` 模块已在 0.4.1 整体删除。N2C 中间格式不再提供。
-
-### 旧 N2C 数据结构（仅供参考）
-
-| 符号 | 说明 |
-|------|------|
-| `N2CStruct` | N2C 结构体 |
-| `N2CGraph` | N2C 图 |
-| `N2CNode` | N2C 节点 |
-| `N2CPin` | N2C Pin |
-| `N2CIdMapper` | N2C ID 映射器 |
-
-### 旧 N2C 序列化（仅供参考）
-
-| 符号 | 说明 |
-|------|------|
-| `to_n2c_json` | 导出为 N2C JSON |
-| `from_n2c_json` | 从 N2C JSON 导入 |
-| `N2C_JSON_SCHEMA` | N2C JSON Schema |
-| `validate_n2c_json` | 验证 N2C JSON |
-
-### 旧 N2C 节点处理器（仅供参考）
-
-| 符号 | 说明 |
-|------|------|
-| `N2CNodeDefinition` | N2C 节点定义 |
-| `N2CNodeType` | N2C 节点类型枚举 |
-| `N2CNodeProcessor` | N2C 节点处理器基类 |
-| `N2CProcessorRegistry` | N2C 处理器注册表 |
-| `N2CNodeTypeRegistry` | N2C 节点类型注册表 |
-| `extract_data_flow_map` | 提取数据流映射 |
-
-## ~~导出系统 (exporter)~~ — 已移除
-
-> [!WARNING] 已移除
-> `exporter/` 模块已在 0.4.1 整体删除。请使用 `parse_single()` + 渲染器系统。
-
-| 符号 | 状态 |
-|------|------|
-| `ExportOptions` | 已移除 → 使用 `RenderOptions` |
-| `IExporter` | 已移除 → 使用 `IRenderer` |
-| `ExportValidationError` | 已移除 |
-| `ExporterRegistry` | 已移除 → 使用 `RENDERER_REGISTRY` |
-| `export` | 已移除 → 使用 `parse_single()` |
-| `BatchExporter` | 已移除 → 使用 `parse_batch()` |
-| `BatchExportResult` | 已移除 → 使用 `BatchResult` |
+> 以下模块已在 0.4.1 整体删除，当前版本中不存在：
+> - `agent/` — 请通过 `parse_single(format="cpp_skeleton")` 获取 C++ 输出
+> - `n2c/` — N2C 中间格式不再提供
+> - `exporter/` — 请使用 `parse_single()` + 渲染器系统
+> - `formatters/` — 已清空，所有功能迁移到 `renderers/` 系统
 
 ## C++ 代码生成 (cpp_gen)
 

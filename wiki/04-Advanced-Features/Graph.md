@@ -16,7 +16,7 @@ section: graph
 | `parser.py` | 图提取入口 — 从 ExportMap 发现 EdGraph/UberEdGraph |
 | `flow_builder.py` | 执行流、数据流、连接映射构建（核心逻辑） |
 | `chain_builder.py` | 执行流链式表达（N1→N2→N3 格式） |
-| `pin_trace.py` | Pin 字段级诊断（Phase 73/75） |
+| `macro_expander.py` | 宏实例展开处理 |
 
 ## 核心 API
 
@@ -128,21 +128,7 @@ build_execution_chains(
 - **字符串清理**: `_sanitize_string` 移除 null 和控制字符，确保 JSON 安全
 - **循环引用防护**: `_sanitize_recursive` 使用 visited 集合防止无限递归
 
-## 图摘要与格式化
-
-### build_graphs_summary
-
-<!-- data-api="build_graphs_summary" -->
-```python
-build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]
-```
-
-构建所有图的摘要，每个图包含：
-- `graph_name`, `graph_type`, `node_count`, `schema`
-- `execution_chains` — 链式执行流
-- `connections` — 连接映射
-- `data_flows` — 数据流
-- `warnings` — 诊断警告
+## 图格式化
 
 ### format_graphs_json
 
@@ -163,63 +149,12 @@ build_function_graphs(
 ) -> List[Dict]
 ```
 
-构建顶层 `function_graphs` 数组（Phase 55）。每个 FunctionEntry 节点对应一个条目，包含签名（从 blueprint_functions 或 Pin fallback 提取）、执行流和数据流内嵌标注。
-
-### build_blueprint_node_index
-
-<!-- data-api="build_blueprint_node_index" -->
-```python
-build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]
-```
-
-构建标准 Blueprint 节点索引，包含 Graphs 元数据和 Nodes 列表，用于 JSON 输出。
-
-## 诊断工具
-
-### write_pin_trace_report
-
-<!-- data-api="write_pin_trace_report" -->
-```python
-write_pin_trace_report(
-    asset_path: str,
-    output_path: Optional[str] = None,
-    *,
-    tolerant: bool = True,
-) -> Dict[str, Any]
-```
-
-Phase 73 Pin 字段 offset 诊断。解析资产并写出 Pin 字段 offset 追踪报告，包含成功/失败事件、LinkedTo 引用、SubPins 引用、recovery 事件统计。诊断产物默认写入 `temp/` 目录。
-
-### write_phase75_diagnostic
-
-<!-- data-api="write_phase75_diagnostic" -->
-```python
-write_phase75_diagnostic(
-    asset_path: str,
-    output_dir: Optional[str] = None,
-    *,
-    tolerant: bool = True,
-) -> Dict[str, Any]
-```
-
-Phase 75 字段级诊断基线。输出到 `temp/phase75/` 目录：
-
-| 文件 | 内容 |
-|------|------|
-| `graph_node_counts.json` | 每个 graph 的节点类型计数 |
-| `enhanced_input_nodes.json` | K2Node_EnhancedInputAction 字段详情 |
-| `event_nodes.json` | K2Node_Event 字段详情（EventReference、bOverrideFunction） |
-| `function_entry_nodes.json` | K2Node_FunctionEntry 字段详情 |
-| `pin_diagnostics.json` | 每个 pin 的 LinkedTo 起点 offset、失败、recovery |
-| `linkedto_recovery_summary.txt` | LinkedTo read failed 汇总 |
-| `event_node_fields.json` | Pin body offset 和 recovery reason |
-| `pin_body_offsets.json` | 字段 offset 详情 |
+构建顶层 `function_graphs` 数组。每个 FunctionEntry 节点对应一个条目，包含签名（从 blueprint_functions 或 Pin fallback 提取）、执行流和数据流内嵌标注。
 
 ## 辅助函数
 
 | 函数 | 说明 |
 |------|------|
-| `is_function_graph` | 判断图是否为函数图（K2Node_FunctionEntry → Function Graph） |
 | `is_boundary_node` | 判断是否为数据流边界节点（DATA_BOUNDARY_NODES + self/Target） |
 | `_derive_node_name` | 从节点派生用户友好的节点名（`class_name_idx` 格式） |
 | `format_pin_ref` | 格式化 Pin 引用（name 或 guid 模式） |

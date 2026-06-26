@@ -283,34 +283,15 @@ from .blueprint import (
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flow_entries,
-    build_execution_flows,  # deprecated compatibility wrapper; use build_execution_flow_entries
     build_data_flows,
     build_connections_map,
-    build_graphs_summary,
     format_graphs_json,
-    build_blueprint_node_index,
     build_execution_chains,
     format_pin_ref,
     _derive_node_name,
-    write_pin_trace_report,
-    is_function_graph,
     build_function_graphs,
-    write_phase75_diagnostic,
 )
 
-# 格式化模块（legacy — 推荐使用 parse_single()/parse_batch() 统一入口）
-# 主解析管线
-from .formatters import (
-    # JSON 格式化（legacy，保留兼容）
-    format_json_full,
-    format_exports_list,
-    format_properties_list,
-    format_blueprint_dict,
-    # 辅助函数
-    build_status_info,
-    build_schema_info,
-    resolve_fpackage_index,
-)
 # Core API (parse_single, parse_batch, list_formats)
 from .core import parse_single, parse_batch, list_formats, BatchResult
 
@@ -704,26 +685,13 @@ __all__ = [
     # 图解析辅助函数
     "extract_blueprint_graphs",
     "build_execution_flow_entries",
-    "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
-    "build_graphs_summary",
-    "build_blueprint_node_index",
-    "build_execution_chains",
-    "write_pin_trace_report",
-    "is_function_graph",
-    "build_function_graphs",
-    "write_phase75_diagnostic",
-    # 格式化函数
-    "format_json_full",
-    "format_exports_list",
-    "format_properties_list",
-    "format_blueprint_dict",
     "format_graphs_json",
-    "build_schema_info",
-    "resolve_fpackage_index",
+    "build_execution_chains",
     "format_pin_ref",
-    "build_status_info",
+    "build_function_graphs",
+    "format_pin_ref",
     # 辅助函数
     "find_main_blueprint_generated_class",
     "resolve_parent_class",

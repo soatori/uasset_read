@@ -4,16 +4,12 @@
 直接调用：
 
     python run.py path/to/file.uasset
-    python run.py path/to/file.uasset --text
     python run.py path/to/file.uasset --markdown
-    python run.py path/to/file.uasset --cpp-skeleton
-    python run.py path/to/file.uasset --blueprint-text
-    python run.py path/to/file.uasset --blueprint-ue-text
-    python run.py path/to/file.uasset --batch-dir path/to/dir/
     python run.py path/to/file.uasset --output output.json
-    python run.py path/to/file.uasset --tolerant
-    python run.py path/to/file.uasset --strict
     python run.py path/to/file.uasset --verbose
+    python run.py path/to/file.uasset --strict
+    python run.py --batch-dir path/to/dir/
+    python run.py --list-formats
 """
 import sys
 from pathlib import Path

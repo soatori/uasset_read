@@ -32,7 +32,7 @@
 
 ### 输出与导出
 - [渲染器系统](Renderers)
-- [格式化器](Formatters)
+- [IR 中间表示](IR)
 - [CLI 接口](CLI)
 
 ### 开发指南

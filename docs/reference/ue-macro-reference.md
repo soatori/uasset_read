@@ -1022,7 +1022,7 @@ bool UK2Node_MacroInstance::CanPasteHere(const UEdGraph* TargetGraph) const
 | 常量定义 | `constants.py` `CONTROL_FLOW_NODES` | 🔴 终止 | `K2Node_MacroInstance` 被标记为控制流终止节点 |
 | 执行链追踪 | `graph/flow_builder.py` | 🔴 终止 | 遇到 MacroInstance 标记 `stopped_at` 后停止 |
 | 链构建 | `graph/chain_builder.py` | 🔴 终止 | MacroInstance 后的节点不进入执行链 |
-| 数据流 | `graph/pin_trace.py` | 🟢 可用 | 引脚连接追踪不受 MacroInstance 影响 |
+| 数据流 | `graph/flow_builder.py` | 🟢 可用 | 引脚连接追踪不受 MacroInstance 影响 |
 
 ### 8.2 完整展开方案
 

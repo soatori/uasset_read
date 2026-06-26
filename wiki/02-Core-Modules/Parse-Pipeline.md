@@ -70,7 +70,7 @@ parse_uasset_with_linker(path: str, tolerant: bool = True, preload_all: bool = F
 - **Core API**：parse_single/parse_batch 是纯函数，CLI/脚本/Skill 共享
 - **容错优先**：可选功能失败不影响主管线，错误收集到 result.errors
 - **Provider 抽象**：filesystem/pak/iostore 三种来源
-- **Linker 自动选择**：parse_single 对 cpp_skeleton 等需要 linker 的格式自动使用 parse_uasset_with_linker
+- **Linker 自动选择**：parse_single 对 json 等需要 linker 的格式自动使用 parse_uasset_with_linker
 
 ## 模块位置
 

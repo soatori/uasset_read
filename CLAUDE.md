@@ -56,7 +56,7 @@ python scripts/test_matrix.py quality            # 质量门禁
 ### 蓝图解析链
 
 ```
-serializers/graph.py → graph/flow_builder.py → graph/data_tracker.py
+serializers/graph.py → graph/flow_builder.py
   → blueprint/variable_extractor.py → kismet/（字节码 → AST → C++）
 ```
 

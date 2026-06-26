@@ -38,15 +38,15 @@ section: contributing
 | 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、IR 中间表示 |
 | 属性解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
 | 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
-| 图分析 | `graph/` | 执行流/数据流追踪、链构建器、Pin 追踪报告 |
+| 图分析 | `graph/` | 执行流/数据流追踪、链构建器 |
 | Kismet | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器 |
 | 链接器 | `link/` | `PackageLinker` 两阶段对象图重建 |
 | C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射 |
 | PAK | `pak/` | `FPakInfo/PakEntry`、`PakFileReader`、AES 解密 |
 | IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
+| 调试 | `debug/hex_view.py` | HexView 调试系统 |
 | IR | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器 |
-| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（6 种渲染器） |
-| 格式化器 | `formatters/` | JSON/Text/Markdown(with Mermaid)/蓝图翻译文本/UE 格式输出生成器 |
+| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（JSON、Markdown） |
 
 ## 临时文件
 

@@ -109,18 +109,6 @@ from . import json_renderer        # 自动注册 "json"
 from . import markdown_renderer    # 自动注册 "markdown"
 ```
 
-## 与旧 Exporter 的区别
-
-| 特性 | 旧 Exporter | 新 Renderer |
-|------|-------------|-------------|
-| 数据源 | ParseResult | PackageIR |
-| 配置 | ExportOptions dataclass | RenderOptions dataclass |
-| 返回类型 | str | str |
-| 注册表 | ExporterRegistry | RENDERER_REGISTRY |
-| 验证支持 | validate() 方法 | 无（验证在 IR 构建层） |
-| N2C 支持 | N2CExporter + 验证 | 已移除 |
-| 批量导出 | BatchExporter | parse_batch() in core.py |
-
 ## 文件位置
 
 | 文件 | 路径 |
@@ -130,4 +118,4 @@ from . import markdown_renderer    # 自动注册 "markdown"
 | JSON 渲染器 | `renderers/json_renderer.py` |
 | Markdown 渲染器 | `renderers/markdown_renderer.py` |
 
-**相关章节**: [[IR 中间表示]] · [[CLI 接口]] · [[格式化器]]
+**相关章节**: [[IR 中间表示]] · [[CLI 接口]]
