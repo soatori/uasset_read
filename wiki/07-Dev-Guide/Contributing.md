@@ -55,7 +55,7 @@ section: contributing
 
 ## Git 工作流
 
-- **开发分支**: `0.3.8-dev`（随版本更新）
+- **开发分支**: `develop`
 - **主分支**: `master`
 - **提交前**: 运行 `python -m pytest tests/ -v` 确保测试通过
 - **PR 要求**: 包含测试覆盖

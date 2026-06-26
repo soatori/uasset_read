@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.4.5
+版本 0.5.1
 
 公共API通过__all__控制。
 """
-__version__ = "0.4.5"
+__version__ = "0.5.1.18"
 
 # 导出常量模块
 from .constants import (

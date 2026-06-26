@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.5-dev** — UE 保真度改进：统一状态模型（success|partial|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.5.1.18** — 自 v0.5.0 以来修复 18 个 issue：PackageFlags 完整定义、HexView 调试系统、AssetRegistryData 解析、FString UTF-16 修复、BoxSphereBounds 多格式支持、BlueprintVariable var_type 提取、AnimGraph 嵌套子图解析等。
 
 ## 为什么选择 uasset_read？
 
@@ -24,7 +24,7 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.5-dev |
+| 版本 | 0.5.1.18 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
 | 测试 | 1176 通过，192 skipped |
 | 模块 | 14 个子包，146 个源文件 |
