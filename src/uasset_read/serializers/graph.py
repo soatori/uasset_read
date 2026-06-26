@@ -1789,6 +1789,78 @@ def read_k2node_spawn_actor_from_class(
 
 
 # ============================================================================
+# AnimGraphNode 读取
+# ============================================================================
+
+def _read_anim_graph_node(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"],
+    class_name: str,
+    raw_properties: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """读取 AnimGraphNode 类型节点的数据。
+
+    关键属性：
+    - EditorStateMachineGraph: 状态机的子图 (UAnimationStateMachineGraph)
+    - BoundGraph: 状态的子图 (UEdGraph)
+    - Node: 动画节点运行时数据 (FAnimNode_StateMachine 等)
+    """
+    result: Dict[str, Any] = {
+        "node_type": class_name,
+    }
+
+    if not raw_properties:
+        return result
+
+    # 提取子图引用
+    subgraph_refs = {}
+    for key in ("EditorStateMachineGraph", "BoundGraph"):
+        pkg_idx = raw_properties.get(key)
+        if pkg_idx and isinstance(pkg_idx, int) and pkg_idx != 0:
+            # 解析 PackageIndex 为对象引用
+            try:
+                from uasset_read.serializers.object_resources import PackageIndex
+                from uasset_read.link.object_instance import UObjectInstance
+                if linker is not None:
+                    obj_ref = linker.resolve_package_index(PackageIndex(pkg_idx))
+                    if obj_ref is not None:
+                        subgraph_refs[key] = {
+                            "package_index": pkg_idx,
+                            "object_name": getattr(obj_ref, "object_name", ""),
+                            "class_name": getattr(obj_ref, "class_name", ""),
+                        }
+                else:
+                    # 无 linker 时，尝试从 export_map 解析
+                    if pkg_idx > 0 and pkg_idx <= len(export_map):
+                        obj_export = export_map[pkg_idx - 1]
+                        subgraph_refs[key] = {
+                            "package_index": pkg_idx,
+                            "object_name": obj_export.object_name,
+                            "class_name": _gac(obj_export, import_map, export_map, linker) or "",
+                        }
+            except Exception:
+                subgraph_refs[key] = {"package_index": pkg_idx, "error": "resolve_failed"}
+
+    if subgraph_refs:
+        result["subgraph_references"] = subgraph_refs
+
+    # 提取其他 AnimGraphNode 特有属性
+    node_data = raw_properties.get("Node")
+    if node_data and isinstance(node_data, dict):
+        result["anim_node_data"] = node_data
+
+    # 状态机特有属性
+    if "StateMachineIndexInClass" in raw_properties:
+        result["state_machine_index"] = raw_properties["StateMachineIndexInClass"]
+
+    return result
+
+
+# ============================================================================
 # 节点工厂
 # ============================================================================
 
@@ -1897,6 +1969,12 @@ def create_node_from_archive(
     elif class_name == "K2Node_SpawnActorFromClass":
         base_node.node_data = read_k2node_spawn_actor_from_class(
             archive, name_map, raw_properties=raw_properties,
+        )
+    # AnimGraphNode 类型处理
+    elif class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
+        base_node.node_data = _read_anim_graph_node(
+            archive, name_map, summary, export_map, import_map, linker,
+            class_name, raw_properties,
         )
     elif raw_properties:
         # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
@@ -2147,6 +2225,13 @@ def read_ue_graph_node(
                 raw_properties[tag.name] = function_flags
             elif tag.name == "CustomGeneratedFunctionName":
                 raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
+            # AnimGraphNode 子图引用属性
+            elif tag.name in ("EditorStateMachineGraph", "BoundGraph") and tag.size > 0:
+                pkg_idx = archive.read_i32()
+                raw_properties[tag.name] = pkg_idx
+                raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
+                if archive.tell() < tag.value_end_offset:
+                    archive.seek(tag.value_end_offset)
             elif tag.name == "MoveMode" and tag.size > 0:
                 # MoveMode 通常为 byte/int
                 raw_val = archive.read_u8() if tag.size >= 1 else 0
@@ -2341,6 +2426,39 @@ def read_ue_graph(
     # 4. bEditable
     b_editable = archive.read_u8() != 0
 
+    # 5. 递归解析子图（AnimGraphNode 嵌套子图）
+    subgraphs: List[UEdGraph] = []
+    for node in nodes:
+        node_data = getattr(node, "node_data", None)
+        if not isinstance(node_data, dict):
+            continue
+
+        subgraph_refs = node_data.get("subgraph_references", {})
+        for ref_key, ref_info in subgraph_refs.items():
+            if not isinstance(ref_info, dict) or "error" in ref_info:
+                continue
+
+            pkg_idx = ref_info.get("package_index", 0)
+            if pkg_idx <= 0 or pkg_idx > len(export_map):
+                continue
+
+            subgraph_export = export_map[pkg_idx - 1]
+            subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
+
+            # 检查是否为图类型
+            if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
+                continue
+
+            try:
+                subgraph = read_ue_graph(
+                    archive, name_map, summary, export_map, import_map,
+                    subgraph_export, subgraph_class, pkg_idx, linker,
+                )
+                subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
+                subgraphs.append(subgraph)
+            except Exception as e:
+                logger.warning("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
+
     return UEdGraph(
         graph_name=graph_export.object_name,
         graph_class=graph_class,
@@ -2348,4 +2466,5 @@ def read_ue_graph(
         nodes=nodes,
         graph_guid=graph_guid,
         b_editable=b_editable,
+        subgraphs=subgraphs,
     )

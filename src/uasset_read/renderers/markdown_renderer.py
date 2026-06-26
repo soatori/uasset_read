@@ -196,6 +196,10 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"- **Nodes**: {len(graph.nodes)}")
                 if graph.execution_chains:
                     lines.append(f"- **Execution Chains**: {len(graph.execution_chains)}")
+                if graph.subgraphs:
+                    lines.append(f"- **Subgraphs**: {len(graph.subgraphs)}")
+                if graph.graph_type:
+                    lines.append(f"- **Type**: {graph.graph_type}")
                 lines.append("")
 
                 if graph.nodes:
@@ -456,13 +460,15 @@ class MarkdownRenderer(IRenderer):
         param_str = ", ".join(params)
         return f"void {event.name}({param_str}) override"
 
-    def _render_mermaid_nodes(self, lines: list[str], graph) -> None:
-        """渲染 Mermaid 节点和连接。"""
+    def _render_mermaid_nodes(self, lines: list[str], graph, indent: int = 0) -> None:
+        """渲染 Mermaid 节点和连接（递归支持嵌套子图）。"""
+        prefix = "    " * indent
+
         # 定义节点
         for node in graph.nodes:
             label = node.node_comment or node.node_class
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
-            lines.append(f'    {safe_guid}["{label}"]')
+            lines.append(f'{prefix}    {safe_guid}["{label}"]')
 
         # 定义连接
         for node in graph.nodes:
@@ -470,7 +476,15 @@ class MarkdownRenderer(IRenderer):
                 for target in (pin.linked_to or []):
                     source_guid = (node.node_guid or "")[:8]
                     target_guid = target[:8] if len(target) >= 8 else target
-                    lines.append(f"    {source_guid} --> {target_guid}")
+                    lines.append(f"{prefix}    {source_guid} --> {target_guid}")
+
+        # 递归渲染嵌套子图
+        for subgraph in graph.subgraphs or []:
+            sg_name = subgraph.graph_name or "subgraph"
+            safe_sg_name = sg_name.replace(" ", "_").replace(".", "_")[:20]
+            lines.append(f"{prefix}    subgraph {safe_sg_name}")
+            self._render_mermaid_nodes(lines, subgraph, indent + 1)
+            lines.append(f"{prefix}    end")
 
     @property
     def format_name(self) -> str:

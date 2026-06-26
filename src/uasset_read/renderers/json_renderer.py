@@ -55,6 +55,7 @@ class JSONRenderer(IRenderer):
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
+                "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
             },
             # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
             # imports 已移除 — C++ 翻译不需要原始导入索引
@@ -104,7 +105,17 @@ class JSONRenderer(IRenderer):
         return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
-        return {"graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "nodes": [self._node_to_dict(n) for n in graph.nodes], "execution_chains": graph.execution_chains}
+        result = {
+            "graph_name": graph.graph_name,
+            "graph_guid": graph.graph_guid,
+            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "execution_chains": graph.execution_chains,
+        }
+        if graph.graph_type:
+            result["graph_type"] = graph.graph_type
+        if graph.subgraphs:
+            result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
+        return result
 
     def _node_to_dict(self, node) -> dict[str, Any]:
         d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}

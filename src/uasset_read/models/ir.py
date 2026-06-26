@@ -18,6 +18,7 @@ class PackageHeaderIR:
     total_export_count: int
     total_import_count: int
     ue_version: str
+    saved_hash: bytes = field(default_factory=lambda: b'')
 
 
 @dataclass
@@ -50,6 +51,8 @@ class GraphIR:
     graph_class: str
     nodes: list[NodeIR]
     execution_chains: list[list[str]]
+    subgraphs: list["GraphIR"] = field(default_factory=list)
+    graph_type: str | None = None
 
 
 @dataclass

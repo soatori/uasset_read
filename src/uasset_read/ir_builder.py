@@ -229,6 +229,7 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_export_count=_safe_int(getattr(summary, "export_count", 0)),
         total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
+        saved_hash=getattr(summary, "saved_hash", b'') or b'',
     )
 
 
@@ -383,12 +384,32 @@ def _build_graph_ir(graph) -> GraphIR:
     for node in getattr(graph, "nodes", None) or []:
         nodes.append(_build_node_ir(node))
 
+    # 递归构建嵌套子图
+    subgraphs = []
+    for subgraph in getattr(graph, "subgraphs", None) or []:
+        subgraphs.append(_build_graph_ir(subgraph))
+
+    # 推断图类型
+    graph_type = None
+    graph_class = _safe_str(getattr(graph, "graph_class", None))
+    if graph_class:
+        if "StateMachine" in graph_class:
+            graph_type = "state_machine"
+        elif "State" in graph_class:
+            graph_type = "state"
+        elif "Transition" in graph_class:
+            graph_type = "transition"
+        elif "AnimGraph" in graph_class or "Animation" in graph_class:
+            graph_type = "animation"
+
     return GraphIR(
         graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
         graph_name=_safe_str(getattr(graph, "graph_name", None)),
-        graph_class=_safe_str(getattr(graph, "graph_class", None)),
+        graph_class=graph_class,
         nodes=nodes,
         execution_chains=getattr(graph, "execution_chains", None) or [],
+        subgraphs=subgraphs,
+        graph_type=graph_type,
     )
 
 
