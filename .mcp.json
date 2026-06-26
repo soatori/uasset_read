@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "unreal-mcp": {
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp",
-      "description": "UE 5.8 Unreal MCP Server - 编辑器自动化、代码分析、测试自动化"
-    }
-  }
-}

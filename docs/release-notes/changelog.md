@@ -1,5 +1,29 @@
 # 变更日志
 
+## [0.4.5-dev] — 2026-06-26
+
+### 新增
+- PackageFlags 完整定义：从 UE 源码 ObjectMacros.h 迁移 30 个 PKG_ 常量（Issue #179）
+- PackageFlags 解码输出：JSON 和 Markdown 渲染器新增 `package_flags_decoded` 字段
+- AssetRegistryData 解析：提取资产元数据标签（ObjectPath、ObjectClassName、Tags）
+- HexView 调试系统：结构化字节偏移追踪，支持所有读取方法（u8/u16/u32/i32/f32/f64/fstring 等）
+- BlueprintDescription 提取：从蓝图元数据中提取描述信息（Issue #169）
+- ImplementedInterfaces 提取：接口列表暴露到输出（Issue #169）
+- --full-parse CLI 标志：强制完整蓝图解析（跳过 export_count > 300 的轻量解析）
+
+### 修复
+- BlueprintVariable.var_type 字段：从泛型属性中正确提取 pin_category 和 pin_subcategory（Issue #172）
+- ReceiveBeginPlay 事件分类：K2Node_Event 标记 is_implemented=False，与 MCP 语义对齐（Issue #171）
+- 非蓝图资产 JSON 输出：修复 exports 为空的问题（Issue #175）
+- package_name 填充：修复 summary.package_name 为字符串 "None" 的问题（Issue #175）
+- BoxSphereBounds 多格式支持：3f/3d/LWC/pre-LWC/compact 格式（Issue #175）
+- FString UTF-16 解码：使用 utf-16-le 显式字节序，修复代理对解码错误（Issue #183）
+- HexView 空字符串条目：修复 read_fstring 空字符串时的记录问题
+
+### 改进
+- 继承事件与实现函数区分：解析器现在正确区分 K2Node_Event 和 K2Node_FunctionEntry
+- IR 构建器：object_class 正确解析非蓝图 export
+
 ## [0.4.5] — 2026-06-20
 
 ### 修复
