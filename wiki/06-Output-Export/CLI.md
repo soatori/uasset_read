@@ -101,6 +101,8 @@ python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
 | `--output FILE` | 将输出写入文件而非 stdout |
 | `--list-formats` | 列出所有可用导出格式并退出 |
 | `--list-package-files` | 列出发现的包侧车/载荷文件并退出 |
+| `--full-parse` | 完整解析（含蓝图反编译、Kismet 字节码提取） |
+| `--hex-view` | 十六进制视图调试模式 |
 
 ## 退出代码
 

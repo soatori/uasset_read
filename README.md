@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.5.1.18** — 18 issues resolved since v0.5.0: PackageFlags complete definitions, HexView debug system, AssetRegistryData parsing, FString UTF-16 fix, BoxSphereBounds multi-format support, BlueprintVariable var_type extraction, AnimGraph nested subgraph parsing, and more.
+> 📦 **v0.5.1.18** — 18 issues resolved since v0.5.0: PackageFlags complete definitions, HexView debug system, AssetRegistryData parsing, FString UTF-16 fix, BoxSphereBounds multi-format support, BlueprintVariable var_type extraction, AnimGraph nested subgraph parsing, BlueprintDescription + Interfaces classification, and more.
 
 ## Why uasset_read?
 
@@ -26,8 +26,8 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 |--------|-------|
 | Version | 0.5.1.18 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1176 passed, 192 skipped |
-| Modules | 146 source files across 14 subpackages |
+| Tests | 1424 collected (integration tests skip when sample assets unavailable) |
+| Modules | 134 source files across 14 subpackages |
 
 ## Features
 
@@ -58,7 +58,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### File Format Support
 - **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
 - **IoStore container** — Chunk ID, offset/size structures
-- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -92,6 +92,7 @@ python run.py path/to/file.uasset --output output.json   # Save to file
 # Output modes
 python run.py path/to/file.uasset --json         # JSON output (default)
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
+python run.py path/to/file.uasset --list-formats # List available formats
 
 # Batch export
 python run.py --batch-dir path/to/dir/            # Batch export directory
@@ -102,6 +103,8 @@ python run.py path/to/file.uasset --tolerant     # Continue on recoverable error
 
 # Debug
 python run.py path/to/file.uasset --verbose      # Enable verbose logging
+python run.py path/to/file.uasset --hex-view     # Enable HexView binary inspection
+python run.py path/to/file.uasset --full-parse   # Force full parse for large blueprints
 ```
 
 Or via module:
@@ -181,7 +184,7 @@ Full API list: see `src/uasset_read/__init__.py`.
 FArchive pipeline pattern mirroring UE's internal structure:
 
 ```
-.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
+.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -210,18 +213,18 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
-| ├ Asset Types | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave |
+| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
+| ├ Asset Types | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
-| ├ Expressions | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
+| ├ Expressions | `kismet/expressions/` | 15 expression types (assignment, control flow, function calls, literals) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting |
+| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting, body extraction |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
+| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance) |
 | **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (2 renderers: JSON, Markdown) |
 
 ## Testing

@@ -24,7 +24,7 @@ from uasset_read.renderers import get_renderer, list_formats
 
 > [!NOTE] 架构变更
 > **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。旧 `export()` 函数被 `parse_single()` 替代。
-> `formatters/` 模块已清空，所有格式化功能迁移到 `renderers/` 系统。
+> **0.5.0 变更**：`formatters/` 模块已清空，所有格式化功能迁移到 `renderers/` 系统。
 > 新代码应优先使用聚焦导入。
 
 ## 核心 API（0.4.1+ 新增）
@@ -467,7 +467,7 @@ from uasset_read.renderers import get_renderer, list_formats
 ## ~~格式化模块 (formatters)~~ — 已废弃
 
 > [!WARNING] 已废弃
-> `formatters/` 目录已清空，所有格式化功能已迁移到 `renderers/` 系统。
+> `formatters/` 目录在 0.5.0 已清空，所有格式化功能已迁移到 `renderers/` 系统。
 > 请使用 `parse_single(format="json")` 或 `parse_single(format="markdown")` 替代。
 
 ## Kismet 字节码模块 (kismet)
@@ -532,7 +532,9 @@ from uasset_read.renderers import get_renderer, list_formats
 > - `agent/` — 请通过 `parse_single(format="cpp_skeleton")` 获取 C++ 输出
 > - `n2c/` — N2C 中间格式不再提供
 > - `exporter/` — 请使用 `parse_single()` + 渲染器系统
-> - `formatters/` — 已清空，所有功能迁移到 `renderers/` 系统
+>
+> 以下模块在 0.5.0 清空：
+> - `formatters/` — 所有功能迁移到 `renderers/` 系统
 
 ## C++ 代码生成 (cpp_gen)
 
@@ -640,7 +642,7 @@ from uasset_read.renderers import get_renderer, list_formats
 ## UObject 类型体系 (objects)
 
 > [!WARNING] 已废弃
-> `bulk/` 和 `objects/` 模块已废弃，0.3.6 已从公共 API 移除（保留向后兼容导出）。`parsers/asset_types/` 将在 0.4.0 移除。
+> `bulk/` 和 `objects/` 模块已废弃，0.3.6 已从公共 API 移除（保留向后兼容导出）。
 
 | 符号 | 说明 |
 |------|------|
@@ -658,4 +660,4 @@ from uasset_read.renderers import get_renderer, list_formats
 |------|------|------|
 | `bulk/` | 已废弃 | 0.3.6 从公共 API 移除 |
 | `objects/` | 已废弃 | 0.3.6 从公共 API 移除 |
-| `parsers/asset_types/` | 已废弃 | 0.4.0 将移除 |
+| `formatters/` | 已废弃 | 0.5.0 清空，功能迁移到 `renderers/` |

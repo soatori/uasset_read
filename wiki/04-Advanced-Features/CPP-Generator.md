@@ -388,4 +388,4 @@ Kismet 反编译的 `cpp_code` 会自动注入到 `CppMethodIR.body_text`，匹�
 - [[Kismet]] — Kismet 字节码反编译
 - [[Blueprint]] — 蓝图变量/组件/元数据提取
 - [[Linker]] — 对象链接器与 PackageLinker
-- [[Formatters]] — 格式化器与输出
+- [[渲染器系统]] — 渲染器与输出格式

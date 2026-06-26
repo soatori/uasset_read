@@ -49,12 +49,12 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 | 渲染器 | `renderers/` | 2 个渲染器，自动注册到 RENDERER_REGISTRY |
 | 序列化 | `serializers/` | Summary/Import/Export/PropertyTag/图序列化 |
 | 解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC 专用解析器 |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC/TextureCube/AnimSequence/AnimDataModel/SoundWave/SoundAttenuation 专用解析器 |
 | 数据模型 | `models/` | UEdGraph/Node/Pin、属性值、变换、蓝图模型、ParseResult |
 | 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
 | 图分析 | `graph/` | 执行流/数据流/链构建器 |
 | Kismet | `kismet/` | 字节码提取、EExprToken → AST → C++ 翻译、BPGC 回退、结构化控制流 |
-| ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
+| ├ 表达式 | `kismet/expressions/` | 15 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | 链接器 | `link/` | PackageLinker 两阶段对象图重建、UObjectInstance |
 | C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射 |
 | Pak | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry、PakFileReader、索引、压缩、AES 解密 |
@@ -65,5 +65,6 @@ read_import_map → read_export_map → parse_properties → post_process → bu
 
 > [!TIP]
 > **架构变更（0.4.1）**：`exporter/`、`n2c/`、`agent/` 模块已移除，被 IR + Renderers 架构替代。
+> **架构变更（0.5.0）**：`formatters/` 目录已清空，所有格式化功能迁移到 `renderers/` 系统。
 >
 > **相关章节**: [[FArchive]] · [[解析管线]] · [[渲染器系统]] · [[IR 中间表示]]

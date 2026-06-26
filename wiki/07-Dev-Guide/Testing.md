@@ -11,12 +11,12 @@ section: testing
 tests/
 ├── 单元测试（无外部依赖，CI 每次运行）
 ├── 集成测试（@pytest.mark.integration，需要真实资产文件）
-│   ├── test_real_asset_coverage.py    — 20 资产 / 18 类型
-│   ├── test_engine_content.py         — 12 Engine 内置资产
-│   ├── test_known_failures.py         — 8 类已知失败回归
-│   ├── test_formatter_outputs.py      — 6 资产 × 7 格式化器
-│   └── test_asset_type_depth.py       — 6 类型深度字段验证
-└── fixtures/                          — 已知失败记录（8 个 txt）
+│   ├── test_real_asset_coverage.py    — 20+ 资产 / 10+ 类型
+│   ├── test_engine_content.py         — Engine 内置资产
+│   ├── test_known_failures.py         — 已知失败回归
+│   ├── test_formatter_outputs.py      — 多资产 × 多格式化器
+│   └── test_asset_type_depth.py       — 多类型深度字段验证
+└── fixtures/                          — 已知失败记录
 ```
 
 ## 运行测试

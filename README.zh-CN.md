@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.5.1.18** — 自 v0.5.0 以来修复 18 个 issue：PackageFlags 完整定义、HexView 调试系统、AssetRegistryData 解析、FString UTF-16 修复、BoxSphereBounds 多格式支持、BlueprintVariable var_type 提取、AnimGraph 嵌套子图解析等。
+> 📦 **v0.5.1.18** — 自 v0.5.0 以来修复 18 个 issue：PackageFlags 完整定义、HexView 调试系统、AssetRegistryData 解析、FString UTF-16 修复、BoxSphereBounds 多格式支持、BlueprintVariable var_type 提取、AnimGraph 嵌套子图解析、BlueprintDescription + Interfaces 分类等。
 
 ## 为什么选择 uasset_read？
 
@@ -26,8 +26,8 @@
 |------|-----|
 | 版本 | 0.5.1.18 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1176 通过，192 skipped |
-| 模块 | 14 个子包，146 个源文件 |
+| 测试 | 1424 个测试用例（集成测试在样本资产不可用时自动跳过） |
+| 模块 | 14 个子包，134 个源文件 |
 
 ## 功能特性
 
@@ -58,7 +58,7 @@
 ### 文件格式支持
 - **Pak 文件解析** — FPakInfo、标准库 Zlib 解压；安装 `lz4`、`zstandard` 或 `cryptography` 后支持 LZ4/Zstd/AES-ECB；Oodle 会明确报告暂不支持
 - **IoStore 容器** — Chunk ID、偏移/大小结构
-- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
+- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
 - **Bulk Data** — BulkData 头部解析
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
@@ -92,6 +92,7 @@ python run.py path/to/file.uasset --output output.json   # 保存到文件
 # 输出模式
 python run.py path/to/file.uasset --json             # JSON 输出（默认）
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
+python run.py path/to/file.uasset --list-formats     # 列出可用格式
 
 # 批量导出
 python run.py --batch-dir path/to/dir/               # 批量导出目录
@@ -102,6 +103,8 @@ python run.py path/to/file.uasset --tolerant         # 容错模式（默认）
 
 # 调试
 python run.py path/to/file.uasset --verbose          # 启用详细日志
+python run.py path/to/file.uasset --hex-view         # 启用 HexView 二进制检查
+python run.py path/to/file.uasset --full-parse       # 强制完整解析大型蓝图
 ```
 
 或通过模块调用：
@@ -119,7 +122,6 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # 解析单个文件（返回格式化字符串）
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
 text = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
@@ -182,7 +184,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 采用镜像 UE 的 FArchive 管道模式：
 
 ```
-.uasset → FArchive → Deserializer → Models → IR Builder → Renderers → Output
+.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -211,18 +213,18 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **IR** | `ir_builder.py` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave |
+| **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 + AssetRegistry 解析器 + 类序列化策略 |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
 | **图** | `graph/` | 执行流/数据流追踪、链构建器 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
-| ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
+| ├ 表达式 | `kismet/expressions/` | 15 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 类型映射, UPROPERTY 映射, 构造函数格式化 |
+| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 类型映射, UPROPERTY 映射, 构造函数格式化, 函数体提取 |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader, 索引解析, 压缩, AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析 |
-| **UObject** | `objects/` | UObject 类型体系、类型注册表 |
+| **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance） |
 | **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（2 个渲染器：JSON、Markdown） |
 
 ## 测试

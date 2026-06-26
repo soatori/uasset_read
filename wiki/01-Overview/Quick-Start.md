@@ -21,8 +21,11 @@ python run.py file.uasset                  # JSON 输出到 stdout
 python run.py file.uasset --markdown       # Markdown + Mermaid
 python run.py file.uasset --output out.json  # 保存到文件
 python run.py file.uasset --verbose        # 调试日志
+python run.py file.uasset --full-parse     # 完整解析（含蓝图反编译）
+python run.py file.uasset --hex-view       # 十六进制视图调试
 python run.py --batch-dir path/to/dir/     # 批量模式
 python run.py file.uasset --strict         # 严格模式（默认容错）
+python run.py --list-formats               # 列出所有可用格式
 ```
 
 所有参数同样适用于 `python -m uasset_read`。
@@ -44,7 +47,7 @@ print(f"成功: {len(result.success)}, 失败: {len(result.failed)}")
 
 # 查看可用格式
 from uasset_read import list_formats
-print(list_formats())  # ['json', 'json_summary', 'markdown']
+print(list_formats())  # ['json', 'markdown']
 ```
 
 ### 底层 API
@@ -60,7 +63,8 @@ print(result.graphs)       # 图结构
 ## PAK 解析
 
 ```python
-from uasset_read import parse_package, PakFileReader
+from uasset_read import parse_package
+from uasset_read.pak import PakFileReader
 reader = PakFileReader("game.pak")
 result = parse_package("Game/Content/MyAsset.uasset", provider=reader)
 ```

@@ -18,11 +18,10 @@ section: contributing
 解析器镜像 UE 内部的 `FArchive` 序列化管线：
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Serializers → Parsers → Models → IR Builder → Renderers → Output
                 ↓
           GraphParser · BlueprintParser · DependencyGraphBuilder
           PackageLinker · KismetDecompiler · PakFileReader
-          IR Builder → Renderers
 ```
 
 ### 模块职责
@@ -36,7 +35,7 @@ section: contributing
 | 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
 | 序列化 | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag` |
 | 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、IR 中间表示 |
-| 属性解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
+| 属性解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 10 种资产类型专用解析器 |
 | 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
 | 图分析 | `graph/` | 执行流/数据流追踪、链构建器 |
 | Kismet | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器 |
