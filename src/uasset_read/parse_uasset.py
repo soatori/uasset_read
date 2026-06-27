@@ -724,35 +724,22 @@ def _parse_package_core(
             # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
             _mappings = mappings_provider.mappings if mappings_provider else None
             from uasset_read.memory_safety import (
-                should_skip_export as _should_skip_export,
-                check_process_rss_limit as _check_rss,
+                get_export_processing_strategy as _get_export_strategy,
+                should_wait_for_memory as _should_wait,
+                wait_and_cleanup as _wait_cleanup,
                 cleanup_after_parse as _mem_cleanup,
                 force_gc as _force_gc,
             )
             for _exp_idx, export in enumerate(result.export_map or []):
-                # 每个 export 解析前检查进程内存
-                _rss_warn = _check_rss()
-                if _rss_warn:
+                # 每个 export 解析前检查内存，必要时清理等待
+                if _should_wait():
                     _force_gc()
-                    _rss_warn = _check_rss()
-                    if _rss_warn:
-                        logger.warning("Skipping remaining exports: %s", _rss_warn)
-                        for _remaining in result.export_map[_exp_idx:]:
-                            setattr(_remaining, "parse_status", "skipped_memory")
-                            setattr(_remaining, "fallback_reason", "memory_limit")
-                        break
+                    if _should_wait():
+                        _wait_cleanup(max_wait_seconds=5)
 
                 if export.serial_size > 0:
-                    # 单 export 大小检查：超大 export 跳过属性解析
-                    _skip, _reason = _should_skip_export(export.serial_size)
-                    if _skip:
-                        setattr(export, "parse_status", "skipped_large")
-                        setattr(export, "fallback_reason", _reason)
-                        logger.debug(
-                            "Skipping export %s (serial_size=%d): %s",
-                            getattr(export, "object_name", "?"), export.serial_size, _reason
-                        )
-                        continue
+                    # 获取 export 处理策略：normal/chunked
+                    _strategy, _reason = _get_export_strategy(export.serial_size)
 
                     try:
                         if linker is not None:
@@ -773,6 +760,7 @@ def _parse_package_core(
                                 mappings=_mappings,
                                 game=game,
                                 tolerant=tolerant,
+                                chunked=_strategy == "chunked",  # 传递分段标志
                             )
                         if not getattr(export, "parse_status", None):
                             setattr(export, "parse_status", "success")
@@ -784,11 +772,12 @@ def _parse_package_core(
                             "MemoryError parsing export %s: %s",
                             getattr(export, "object_name", "?"), e
                         )
-                        export.properties = []
-                        setattr(export, "parse_status", "failed")
-                        setattr(export, "fallback_reason", "memory_error")
-                        setattr(export, "error_message", str(e))
+                        # 内存错误时尝试清理后标记为 partial，而非跳过
                         _force_gc()
+                        export.properties = []
+                        setattr(export, "parse_status", "partial")
+                        setattr(export, "fallback_reason", "memory_error_partial")
+                        setattr(export, "error_message", str(e))
                         if not tolerant:
                             raise
                     except Exception as e:

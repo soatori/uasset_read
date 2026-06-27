@@ -177,11 +177,12 @@ def parse_batch(
     from uasset_read.memory_safety import (
         MemoryGuard,
         check_memory_pressure,
-        check_process_rss_limit,
+        get_file_processing_strategy,
+        should_wait_for_memory,
+        wait_and_cleanup,
         cleanup_after_parse,
         emergency_cleanup,
         get_memory_stats,
-        should_skip_file,
         MEMORY_CHECK_INTERVAL,
         PROCESS_RSS_CRITICAL_MB,
     )
@@ -194,29 +195,6 @@ def parse_batch(
     if not package_files:
         raise ValueError(f"No .uasset/.umap files found in {input_dir}")
 
-    # 过滤大文件
-    if skip_large_files:
-        original_count = len(package_files)
-        filtered_files = []
-        skipped_count = 0
-
-        for pf in package_files:
-            should_skip, reason = should_skip_file(pf)
-            if should_skip:
-                skipped_count += 1
-                continue
-            filtered_files.append(pf)
-
-        if skipped_count > 0:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                "Batch: skipped %d large files to prevent OOM",
-                skipped_count
-            )
-
-        package_files = filtered_files
-
     if output_dir is None:
         output_dir = str(input_path / "output")
     output_path = Path(output_dir)
@@ -227,20 +205,17 @@ def parse_batch(
     # 使用内存保护上下文管理器
     with MemoryGuard("batch_parse"):
         for idx, pf in enumerate(package_files):
-            # 每个文件开始前检查进程 RSS（不只在间隔时检查）
-            rss_warning = check_process_rss_limit()
-            if rss_warning:
+            # 每个文件开始前检查内存，必要时清理等待
+            if should_wait_for_memory():
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning("Batch: %s, stopping", rss_warning)
+                logger.warning("Batch: memory pressure before %s, cleaning up", pf.name)
                 emergency_cleanup()
-                # GC 后再检查一次
-                rss_warning = check_process_rss_limit()
-                if rss_warning:
-                    result.skipped.append((str(pf), rss_warning))
-                    for remaining in package_files[idx + 1:]:
-                        result.skipped.append((str(remaining), rss_warning))
-                    break
+                if should_wait_for_memory():
+                    wait_and_cleanup(max_wait_seconds=10)
+                # 清理后仍紧张，记录并继续（不跳过）
+                if should_wait_for_memory():
+                    logger.warning("Batch: memory still high after cleanup, proceeding anyway")
 
             # 定期检查系统内存使用
             if idx % MEMORY_CHECK_INTERVAL == 0:
@@ -249,14 +224,12 @@ def parse_batch(
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.warning(
-                        "Batch: memory usage %.1f%% exceeds limit %.1f%%, stopping",
+                        "Batch: memory usage %.1f%% exceeds limit %.1f%%, cleaning up",
                         stats.usage_percent * 100,
                         max_memory_usage * 100
                     )
-                    result.skipped.append((str(pf), "Memory limit exceeded"))
-                    for remaining in package_files[idx + 1:]:
-                        result.skipped.append((str(remaining), "Memory limit exceeded"))
-                    break
+                    emergency_cleanup()
+                    # 清理后继续，不跳过
 
             try:
                 output_str = parse_single(

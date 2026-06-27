@@ -1,7 +1,7 @@
 """内存安全保护模块 — 防止解析大文件时 OOM。
 
 提供文件大小检查、内存监控、进程级内存限制和批量处理限制。
-核心防护：进程 RSS 硬上限 + 单文件/单 export 大小限制 + 解析中实时检查。
+核心策略：拆分处理大文件/大export，而非跳过拒绝。
 """
 from __future__ import annotations
 
@@ -16,20 +16,20 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 内存安全常量
+# 内存安全常量 — 拆分处理策略
 # ---------------------------------------------------------------------------
-# 文件大小限制
-MAX_PARSE_FILE_SIZE = 50 * 1024 * 1024   # 50MB — 超过此大小跳过解析
-LARGE_FILE_THRESHOLD = 20 * 1024 * 1024   # 20MB — 大文件阈值，启用轻量模式
-CRITICAL_FILE_SIZE = 100 * 1024 * 1024    # 100MB — 临界大小，强制拒绝
+# 文件大小阈值
+LARGE_FILE_THRESHOLD = 20 * 1024 * 1024   # 20MB — 大文件阈值，启用分块读取
+CRITICAL_FILE_SIZE = 100 * 1024 * 1024    # 100MB — 临界大小，强制分块处理
 
-# 单 export 内存限制
-MAX_EXPORT_PARSE_SIZE = 30 * 1024 * 1024  # 30MB — 单个 export 超过此大小跳过属性解析
+# 单 export 拆分阈值
+LARGE_EXPORT_THRESHOLD = 10 * 1024 * 1024  # 10MB — 大 export 阈值，分段解析属性
+EXPORT_CHUNK_SIZE = 5 * 1024 * 1024        # 5MB — export 分段大小
 
 # 批量处理限制
 MAX_ASSET_COUNT = 200                     # 单次批量最多处理文件数
 BATCH_MEMORY_LIMIT_MB = 1024              # 批量处理内存限制（1GB）
-MEMORY_CHECK_INTERVAL = 3                 # 每处理 N 个文件检查一次内存（从10降为3）
+MEMORY_CHECK_INTERVAL = 3                 # 每处理 N 个文件检查一次内存
 
 # 超时设置
 PARSE_TIMEOUT = 120                       # 单次解析超时（秒）
@@ -38,12 +38,12 @@ PARSE_TIMEOUT = 120                       # 单次解析超时（秒）
 PROCESS_RSS_LIMIT_MB = 4 * 1024           # 4GB — 进程 RSS 超过此值触发紧急清理
 
 # 内存水位线（基于系统可用内存百分比）
-MEMORY_HIGH_WATERMARK = 0.7               # 70% — 触发 GC（从80%降为70%）
-MEMORY_CRITICAL_WATERMARK = 0.8           # 80% — 触发紧急清理/拒绝新任务（从90%降为80%）
+MEMORY_HIGH_WATERMARK = 0.7               # 70% — 触发 GC
+MEMORY_CRITICAL_WATERMARK = 0.85          # 85% — 触发紧急清理
 
 # 进程 RSS 水位线（基于进程自身内存）
 PROCESS_RSS_HIGH_WATERMARK_MB = 2 * 1024  # 2GB — 进程 RSS 高水位，触发 GC
-PROCESS_RSS_CRITICAL_MB = 3 * 1024        # 3GB — 进程 RSS 临界值，拒绝新任务
+PROCESS_RSS_CRITICAL_MB = 3 * 1024        # 3GB — 进程 RSS 临界值，暂停等待清理
 
 
 @dataclass
@@ -173,70 +173,99 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
     )
 
 
-def check_file_size(path: Path, max_size: int = MAX_PARSE_FILE_SIZE) -> bool:
-    """检查文件大小是否超过限制。
+def check_file_size(path: Path) -> int:
+    """获取文件大小（字节）。
 
     Args:
         path: 文件路径
-        max_size: 最大允许大小（字节）
 
     Returns:
-        True 如果文件大小在限制内，False 如果超出限制
+        文件大小（字节）
 
     Raises:
         ValueError: 如果文件不存在
     """
     if not path.exists():
         raise ValueError(f"File not found: {path}")
-
-    file_size = path.stat().st_size
-    if file_size > max_size:
-        size_mb = file_size / 1024 / 1024
-        limit_mb = max_size / 1024 / 1024
-        logger.warning(
-            "File too large: %s (%.1fMB > %.1fMB limit)",
-            path.name, size_mb, limit_mb
-        )
-        return False
-
-    return True
+    return path.stat().st_size
 
 
-def should_skip_file(path: Path) -> tuple[bool, str]:
-    """判断是否应该跳过文件解析。
+def get_file_processing_strategy(path: Path) -> tuple[str, str]:
+    """获取文件处理策略：normal/chunked/critical。
 
     Args:
         path: 文件路径
 
     Returns:
-        (should_skip, reason) 元组
+        (strategy, reason) 元组
+        - normal: 正常解析
+        - chunked: 分块读取
+        - critical: 需要特殊处理（超大文件）
     """
     if not path.exists():
-        return True, f"File not found: {path}"
+        return "skip", f"File not found: {path}"
 
     file_size = path.stat().st_size
+    size_mb = file_size / 1024 / 1024
 
-    # 临界大小：强制拒绝
+    # 临界大小：强制分块处理
     if file_size > CRITICAL_FILE_SIZE:
-        size_mb = file_size / 1024 / 1024
-        return True, f"Critical size: {size_mb:.1f}MB > {CRITICAL_FILE_SIZE/1024/1024}MB"
+        return "critical", f"Critical size: {size_mb:.1f}MB, need chunked processing"
 
-    # 超大文件：跳过解析
-    if file_size > MAX_PARSE_FILE_SIZE:
-        size_mb = file_size / 1024 / 1024
-        return True, f"File too large: {size_mb:.1f}MB > {MAX_PARSE_FILE_SIZE/1024/1024}MB"
+    # 大文件：分块读取
+    if file_size > LARGE_FILE_THRESHOLD:
+        return "chunked", f"Large file: {size_mb:.1f}MB, using chunked reading"
 
-    # 检查进程 RSS
+    # 检查进程 RSS — 如果内存紧张，也用分块
+    process_rss = _get_process_rss_mb()
+    if process_rss > PROCESS_RSS_HIGH_WATERMARK_MB:
+        return "chunked", f"Process RSS high: {process_rss:.0f}MB, using chunked reading"
+
+    return "normal", ""
+
+
+def should_wait_for_memory() -> bool:
+    """检查是否需要等待内存释放。
+
+    Returns:
+        True 如果内存紧张需要等待
+    """
     process_rss = _get_process_rss_mb()
     if process_rss > PROCESS_RSS_CRITICAL_MB:
-        return True, f"Process RSS critical: {process_rss:.0f}MB > {PROCESS_RSS_CRITICAL_MB}MB"
+        return True
 
-    # 检查系统内存使用
     stats = get_memory_stats()
     if stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
-        return True, f"Memory critical: {stats.usage_percent*100:.1f}% used"
+        return True
 
-    return False, ""
+    return False
+
+
+def wait_and_cleanup(max_wait_seconds: int = 30) -> bool:
+    """等待内存释放，执行清理。
+
+    Args:
+        max_wait_seconds: 最大等待时间（秒）
+
+    Returns:
+        True 如果内存已释放到安全水平
+    """
+    import time
+
+    start_time = time.time()
+    while time.time() - start_time < max_wait_seconds:
+        # 执行清理
+        emergency_cleanup()
+
+        # 检查是否已释放
+        if not should_wait_for_memory():
+            return True
+
+        # 短暂等待
+        time.sleep(0.5)
+
+    # 超时，返回当前状态
+    return not should_wait_for_memory()
 
 
 def check_memory_pressure() -> bool:
@@ -268,25 +297,29 @@ def check_process_rss_limit() -> Optional[str]:
     return None
 
 
-def should_skip_export(serial_size: int) -> tuple[bool, str]:
-    """判断是否应该跳过单个 export 的属性解析。
+def get_export_processing_strategy(serial_size: int) -> tuple[str, str]:
+    """获取 export 处理策略：normal/chunked。
 
     Args:
         serial_size: export 的序列化数据大小（字节）
 
     Returns:
-        (should_skip, reason) 元组
+        (strategy, reason) 元组
+        - normal: 正常解析
+        - chunked: 分段解析属性
     """
-    if serial_size > MAX_EXPORT_PARSE_SIZE:
-        size_mb = serial_size / 1024 / 1024
-        return True, f"Export too large: {size_mb:.1f}MB > {MAX_EXPORT_PARSE_SIZE/1024/1024}MB"
+    size_mb = serial_size / 1024 / 1024
 
-    # 检查进程 RSS
+    # 大 export：分段解析
+    if serial_size > LARGE_EXPORT_THRESHOLD:
+        return "chunked", f"Large export: {size_mb:.1f}MB, using chunked parsing"
+
+    # 检查进程 RSS — 如果内存紧张，也用分段
     process_rss = _get_process_rss_mb()
-    if process_rss > PROCESS_RSS_CRITICAL_MB:
-        return True, f"Process RSS critical: {process_rss:.0f}MB"
+    if process_rss > PROCESS_RSS_HIGH_WATERMARK_MB:
+        return "chunked", f"Process RSS high: {process_rss:.0f}MB, using chunked parsing"
 
-    return False, ""
+    return "normal", ""
 
 
 def force_gc() -> None:
@@ -396,8 +429,8 @@ def get_safe_batch_size(total_files: int) -> int:
 class MemoryGuard:
     """内存保护上下文管理器。
 
-    在进入时检查内存状态（系统级 + 进程级），退出时清理。
-    内存超标时抛出 MemoryError。
+    在进入时检查内存状态，内存紧张时自动清理等待。
+    退出时执行清理。
     """
 
     def __init__(self, operation_name: str = "operation", rss_limit_mb: float = PROCESS_RSS_LIMIT_MB):
@@ -414,30 +447,17 @@ class MemoryGuard:
             self.start_stats.usage_percent * 100
         )
 
-        # 检查进程 RSS
-        if self.start_stats.process_rss_mb > PROCESS_RSS_CRITICAL_MB:
+        # 检查进程 RSS — 内存紧张时清理等待
+        if self.start_stats.process_rss_mb > PROCESS_RSS_HIGH_WATERMARK_MB:
             logger.warning(
-                "MemoryGuard: process RSS %.0fMB critical before %s, forcing GC",
+                "MemoryGuard: process RSS %.0fMB high before %s, cleaning up",
                 self.start_stats.process_rss_mb,
                 self.operation_name
             )
-            force_gc()
-            # GC 后再检查
-            rss_after = _get_process_rss_mb()
-            if rss_after > PROCESS_RSS_CRITICAL_MB:
-                raise MemoryError(
-                    f"Process RSS {rss_after:.0f}MB exceeds critical limit "
-                    f"{PROCESS_RSS_CRITICAL_MB}MB before {self.operation_name}"
+            if not wait_and_cleanup(max_wait_seconds=10):
+                logger.warning(
+                    "MemoryGuard: memory cleanup did not reach safe level, proceeding anyway"
                 )
-
-        # 检查系统内存
-        if self.start_stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
-            logger.warning(
-                "MemoryGuard: system memory %.1f%% critical before %s, forcing GC",
-                self.start_stats.usage_percent * 100,
-                self.operation_name
-            )
-            force_gc()
 
         return self
 
@@ -460,15 +480,17 @@ class MemoryGuard:
         return False  # 不抑制异常
 
 
-def validate_parse_input(path: str) -> None:
-    """验证解析输入参数。
+def validate_parse_input(path: str) -> str:
+    """验证解析输入参数并返回处理策略。
 
     Args:
         path: 文件路径
 
+    Returns:
+        处理策略：normal/chunked/critical/skip
+
     Raises:
-        ValueError: 输入无效
-        MemoryError: 内存不足无法处理
+        ValueError: 输入无效（文件不存在）
     """
     file_path = Path(path)
 
@@ -476,23 +498,14 @@ def validate_parse_input(path: str) -> None:
     if not file_path.exists():
         raise ValueError(f"File not found: {path}")
 
-    # 检查文件大小
-    should_skip, reason = should_skip_file(file_path)
-    if should_skip:
-        raise MemoryError(f"Cannot parse file: {reason}")
+    # 获取处理策略
+    strategy, reason = get_file_processing_strategy(file_path)
+    if reason:
+        logger.info("File strategy: %s - %s", strategy, reason)
 
-    # 检查进程 RSS
-    process_rss = _get_process_rss_mb()
-    if process_rss > PROCESS_RSS_CRITICAL_MB:
-        raise MemoryError(
-            f"Process RSS {process_rss:.0f}MB exceeds critical limit "
-            f"{PROCESS_RSS_CRITICAL_MB}MB"
-        )
+    # 内存紧张时尝试清理
+    if should_wait_for_memory():
+        logger.info("Memory pressure detected, cleaning up before parse")
+        wait_and_cleanup(max_wait_seconds=5)
 
-    # 检查系统内存
-    stats = get_memory_stats()
-    if stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
-        raise MemoryError(
-            f"Insufficient memory: {stats.usage_percent*100:.1f}% used, "
-            f"{stats.available_mb:.1f}MB available"
-        )
+    return strategy

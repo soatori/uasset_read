@@ -19,9 +19,10 @@ from uasset_read.memory_safety import (
     emergency_cleanup,
     force_gc,
     get_memory_stats,
-    should_skip_file,
-    check_process_rss_limit,
-    MAX_PARSE_FILE_SIZE,
+    get_file_processing_strategy,
+    should_wait_for_memory,
+    wait_and_cleanup,
+    LARGE_FILE_THRESHOLD,
     MAX_ASSET_COUNT,
     PARSE_TIMEOUT,
     MEMORY_CRITICAL_WATERMARK,
@@ -38,7 +39,7 @@ DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 # 内存安全常量（从 memory_safety 模块导入）
 # ---------------------------------------------------------------------------
 # 保留向后兼容的本地别名
-MAX_PARSE_FILE_SIZE_LOCAL = MAX_PARSE_FILE_SIZE
+LARGE_FILE_THRESHOLD_LOCAL = LARGE_FILE_THRESHOLD
 MAX_ASSET_COUNT_LOCAL = MAX_ASSET_COUNT
 
 
@@ -72,30 +73,17 @@ def sample_root(pytestconfig: pytest.Config) -> Path:
 
 @pytest.fixture(scope="session")
 def all_assets(sample_root: Path) -> list[Path]:
-    """收集所有资产文件，自动过滤大文件防止 OOM。"""
+    """收集所有资产文件，大文件标记为分块处理而非跳过。"""
     all_files = sorted(
         p for p in sample_root.rglob("*")
         if p.is_file() and p.suffix.lower() in {".uasset", ".umap"}
     )
 
-    # 过滤大文件，防止内存溢出
-    assets = []
-    skipped_large = 0
-    for p in all_files:
-        should_skip, reason = should_skip_file(p)
-        if should_skip:
-            skipped_large += 1
-            continue
-        assets.append(p)
-
     # 限制总数
-    if len(assets) > MAX_ASSET_COUNT:
-        assets = assets[:MAX_ASSET_COUNT]
+    if len(all_files) > MAX_ASSET_COUNT:
+        all_files = all_files[:MAX_ASSET_COUNT]
 
-    if skipped_large > 0:
-        print(f"\n[MemorySafety] Skipped {skipped_large} large files to prevent OOM")
-
-    if not assets:
+    if not all_files:
         pytest.fail(f"No .uasset/.umap files found under {sample_root}")
 
     # 检查内存状态
@@ -105,7 +93,12 @@ def all_assets(sample_root: Path) -> list[Path]:
         f"system {stats.used_mb:.0f}MB used, {stats.available_mb:.0f}MB available ({stats.usage_percent*100:.1f}%)"
     )
 
-    return assets
+    # 统计大文件数量
+    large_count = sum(1 for p in all_files if p.stat().st_size > LARGE_FILE_THRESHOLD)
+    if large_count > 0:
+        print(f"[MemorySafety] {large_count} large files will use chunked processing")
+
+    return all_files
 
 
 @pytest.fixture(scope="session")
@@ -168,28 +161,28 @@ def parse_json_output(output: str) -> dict:
 # 内存安全辅助
 # ---------------------------------------------------------------------------
 
-def skip_if_too_large(path: Path, max_size: int = MAX_PARSE_FILE_SIZE) -> None:
-    """文件过大时跳过测试，防止 OOM。
-
-    使用 memory_safety 模块的完整检查逻辑。
-    """
-    should_skip, reason = should_skip_file(path)
-    if should_skip:
+def skip_if_too_large(path: Path) -> None:
+    """检查文件处理策略，超大文件（>100MB）跳过测试。"""
+    strategy, reason = get_file_processing_strategy(path)
+    if strategy == "skip":
         pytest.skip(f"asset too large: {reason}")
+    # 对于 chunked/critical 策略，不跳过，让解析器处理
 
 
 def check_memory_before_test() -> None:
-    """测试开始前检查内存状态（系统级 + 进程级），必要时跳过测试。"""
-    # 检查进程 RSS（更直接的 OOM 指标）
-    rss_warning = check_process_rss_limit()
-    if rss_warning:
-        pytest.skip(f"[MemorySafety] {rss_warning}")
+    """测试开始前检查内存状态，内存紧张时尝试清理而非跳过。"""
+    # 如果内存紧张，先尝试清理
+    if should_wait_for_memory():
+        print("[MemorySafety] Memory pressure detected, cleaning up...")
+        wait_and_cleanup(max_wait_seconds=5)
 
+    # 清理后检查进程 RSS
     stats = get_memory_stats()
-    if stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
+    if stats.process_rss_mb > PROCESS_RSS_CRITICAL_MB and stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
+        # 只有在进程RSS和系统内存都超限时才跳过
         pytest.skip(
-            f"[MemorySafety] System memory critical: {stats.usage_percent*100:.1f}% used, "
-            f"process RSS {stats.process_rss_mb:.0f}MB"
+            f"[MemorySafety] Memory critical: process RSS {stats.process_rss_mb:.0f}MB, "
+            f"system {stats.usage_percent*100:.1f}% used"
         )
 
 

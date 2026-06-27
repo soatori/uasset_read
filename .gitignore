@@ -52,6 +52,12 @@ tests/*
 !tests/graph/*.py
 !tests/renderers/
 !tests/renderers/*.py
+!tests/blueprint/
+!tests/blueprint/*.py
+!tests/integration/
+!tests/integration/*.py
+!tests/linker/
+!tests/linker/*.py
 QWEN.md
 
 # AI agent reports (local only)
