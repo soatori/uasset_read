@@ -3,6 +3,7 @@ UnrealEngine/
 LyraStarterGame/
 UnrealProjects/
 external/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -11,47 +12,81 @@ __pycache__/
 .Python
 lib/
 lib64/
+*.egg-info/
+*.egg
+dist/
+build/
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.coverage.*
+
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
 # Temp and output
 temp/
 test/
 output/
-debug/
+/debug/
 reports/
 /json
+
 # Session-local tool config (but track skills)
 .claude/*
 !.claude/skills/
 !.claude/rules/
+!.claude/workflows/
 .qwen/
 .agents/
 .playwright-mcp/
 memory/
+
 # CodeGraph local data
 .codegraph/
-# Test files
-tests/*
-!tests/test_*.py
 
+# Test files - track test Python files and directories
+tests/*
 !tests/__init__.py
+!tests/conftest.py
+!tests/README.md
+!tests/test_*.py
 !tests/graph/
-!tests/graph/*.py
+!tests/core/
+!tests/kismet/
 !tests/renderers/
-!tests/renderers/*.py
-QWEN.md
+!tests/blueprint/
+!tests/integration/
+!tests/linker/
+!tests/archive/
+!tests/ir/
+!tests/structs/
+!tests/misc/
+!tests/serialization/
+!tests/asset/
+!tests/cpp/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
 
+# Superpowers workflow artifacts (local only)
+.superpowers/sdd/
+
+# Accidentally added submodule (no .gitmodules mapping)
+.claude/skills/unreal-mcp-skills
+
+# Documentation build artifacts
+docs/superpowers/
+.mimocode/

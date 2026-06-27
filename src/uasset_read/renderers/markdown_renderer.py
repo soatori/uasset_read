@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.renderers.base import IRenderer, RenderOptions
+from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
 from uasset_read.renderers import register_renderer
+from uasset_read.constants import decode_package_flags
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -95,7 +96,8 @@ class MarkdownRenderer(IRenderer):
         lines.append("|-------|-------|")
         lines.append(f"| Package | {_escape_md_cell(ir.header.package_name)} |")
         lines.append(f"| Class | {_escape_md_cell(ir.header.package_class)} |")
-        lines.append(f"| Flags | {ir.header.package_flags} |")
+        flag_names = ", ".join(decode_package_flags(ir.header.package_flags))
+        lines.append(f"| Flags | {ir.header.package_flags} ({flag_names}) |")
         lines.append(f"| Exports | {ir.header.total_export_count} |")
         lines.append(f"| Imports | {ir.header.total_import_count} |")
         lines.append(f"| UE Version | {_escape_md_cell(ir.header.ue_version)} |")
@@ -108,6 +110,11 @@ class MarkdownRenderer(IRenderer):
             lines.append("|-------|-------|")
             if ir.blueprint.parent_class:
                 lines.append(f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |")
+            if ir.blueprint.description:
+                lines.append(f"| Description | {_escape_md_cell(ir.blueprint.description)} |")
+            if ir.blueprint.interfaces:
+                ifaces = ", ".join(i.get("name", "") for i in ir.blueprint.interfaces)
+                lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
             comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
             lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
@@ -166,12 +173,13 @@ class MarkdownRenderer(IRenderer):
                         lines.append(f"| {action_name} | — | — |")
                 lines.append("")
 
-        # 导出
-        if ir.exports:
+        # 导出 — 只显示蓝图 export
+        blueprint_exports = [e for e in ir.exports if is_blueprint_export(e)]
+        if blueprint_exports:
             lines.append("## Exports")
             lines.append("| Name | Class | Size | Properties |")
             lines.append("|------|-------|------|------------|")
-            for export in ir.exports:
+            for export in blueprint_exports:
                 prop_count = len(export.properties) if export.properties else 0
                 lines.append(
                     f"| {_escape_md_cell(export.object_name)} "
@@ -182,12 +190,16 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
         # 图 + Mermaid
-        for export in ir.exports:
+        for export in blueprint_exports:
             for graph in export.graphs:
                 lines.append(f"## Graph: {graph.graph_name}")
                 lines.append(f"- **Nodes**: {len(graph.nodes)}")
                 if graph.execution_chains:
                     lines.append(f"- **Execution Chains**: {len(graph.execution_chains)}")
+                if graph.subgraphs:
+                    lines.append(f"- **Subgraphs**: {len(graph.subgraphs)}")
+                if graph.graph_type:
+                    lines.append(f"- **Type**: {graph.graph_type}")
                 lines.append("")
 
                 if graph.nodes:
@@ -217,14 +229,8 @@ class MarkdownRenderer(IRenderer):
         # === Variables ===
         self._render_variables(lines, ir)
 
-        if ir.linker is not None:
-            lines.append("## Linker")
-            lines.append(f"- **Has Linker**: {ir.linker.has_linker}")
-            if ir.linker.import_paths:
-                lines.append(f"- **Imports**: {len(ir.linker.import_paths)}")
-            if ir.linker.export_paths:
-                lines.append(f"- **Exports**: {len(ir.linker.export_paths)}")
-            lines.append("")
+        # === Asset Registry Data ===
+        self._render_asset_registry(lines, ir)
 
         # === 诊断信息 ===
         self._render_diagnostics(lines, ir)
@@ -389,6 +395,36 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
         lines.append("")
 
+    def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
+        """渲染 Asset Registry Data 章节 — 资产元数据标签。"""
+        data = ir.asset_registry_data
+        if not data:
+            return
+
+        objects = data.get("objects", [])
+        if not objects:
+            return
+
+        lines.append("## Asset Registry Data")
+        lines.append("")
+
+        for obj in objects:
+            obj_path = obj.get("object_path", "")
+            obj_class = obj.get("object_class_name", "")
+            tags = obj.get("tags", {})
+
+            lines.append(f"### {_escape_md_cell(obj_path)}")
+            lines.append("")
+            lines.append(f"**Class:** `{_escape_md_cell(obj_class)}`")
+            lines.append("")
+
+            if tags:
+                lines.append("| Tag | Value |")
+                lines.append("|-----|-------|")
+                for key, value in tags.items():
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                lines.append("")
+
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
         """渲染诊断信息章节 — 偏移范围诊断表格。"""
         if not ir.diagnostics:
@@ -424,13 +460,15 @@ class MarkdownRenderer(IRenderer):
         param_str = ", ".join(params)
         return f"void {event.name}({param_str}) override"
 
-    def _render_mermaid_nodes(self, lines: list[str], graph) -> None:
-        """渲染 Mermaid 节点和连接。"""
+    def _render_mermaid_nodes(self, lines: list[str], graph, indent: int = 0) -> None:
+        """渲染 Mermaid 节点和连接（递归支持嵌套子图）。"""
+        prefix = "    " * indent
+
         # 定义节点
         for node in graph.nodes:
             label = node.node_comment or node.node_class
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
-            lines.append(f'    {safe_guid}["{label}"]')
+            lines.append(f'{prefix}    {safe_guid}["{label}"]')
 
         # 定义连接
         for node in graph.nodes:
@@ -438,7 +476,15 @@ class MarkdownRenderer(IRenderer):
                 for target in (pin.linked_to or []):
                     source_guid = (node.node_guid or "")[:8]
                     target_guid = target[:8] if len(target) >= 8 else target
-                    lines.append(f"    {source_guid} --> {target_guid}")
+                    lines.append(f"{prefix}    {source_guid} --> {target_guid}")
+
+        # 递归渲染嵌套子图
+        for subgraph in graph.subgraphs or []:
+            sg_name = subgraph.graph_name or "subgraph"
+            safe_sg_name = sg_name.replace(" ", "_").replace(".", "_")[:20]
+            lines.append(f"{prefix}    subgraph {safe_sg_name}")
+            self._render_mermaid_nodes(lines, subgraph, indent + 1)
+            lines.append(f"{prefix}    end")
 
     @property
     def format_name(self) -> str:

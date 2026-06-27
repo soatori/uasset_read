@@ -18,6 +18,7 @@ class PackageHeaderIR:
     total_export_count: int
     total_import_count: int
     ue_version: str
+    saved_hash: bytes = field(default_factory=lambda: b'')
 
 
 @dataclass
@@ -50,6 +51,8 @@ class GraphIR:
     graph_class: str
     nodes: list[NodeIR]
     execution_chains: list[list[str]]
+    subgraphs: list["GraphIR"] = field(default_factory=list)
+    graph_type: str | None = None
 
 
 @dataclass
@@ -115,6 +118,7 @@ class BlueprintFunctionIR:
     return_type: str
     parameters: list[dict]
     function_flags: int = 0
+    is_implemented: bool = True  # False = 继承事件占位（如 ReceiveBeginPlay）
     is_pure: bool = False
     is_blueprint_callable: bool = False
     is_const: bool = False
@@ -156,9 +160,11 @@ class BlueprintEventIR:
 class BlueprintIR:
     """蓝图元数据 IR（来自 BlueprintMetadata）。"""
     parent_class: str | None
-    functions: list[BlueprintFunctionIR]
-    events: list[BlueprintEventIR]
-    components: list[dict]
+    description: str = ""
+    interfaces: list[dict] = field(default_factory=list)
+    functions: list[BlueprintFunctionIR] = field(default_factory=list)
+    events: list[BlueprintEventIR] = field(default_factory=list)
+    components: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -235,6 +241,7 @@ class PackageIR:
     depends_map: list[list[int]] = field(default_factory=list)
     resolved_depends_map: list[list[dict]] = field(default_factory=list)
     asset_registry_data_offset: int = 0
+    asset_registry_data: dict | None = None
     errors: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None

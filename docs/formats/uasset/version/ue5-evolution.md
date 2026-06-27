@@ -18,7 +18,7 @@ UE5 版本演进通过独立的 `EUnrealEngineObjectUE5Version` 枚举管理（`
 
 ## 完整版本表格
 
-> **源码同步状态**: 基于 `ObjectVersion.h` `EUnrealEngineObjectUE5Version` 枚举（INITIAL_VERSION 至 IMPORT_TYPE_HIERARCHIES）。
+> **源码同步状态**: 基于 UE 5.8.0 `ObjectVersion.h` `EUnrealEngineObjectUE5Version` 枚举（INITIAL_VERSION 至 IMPORT_TYPE_HIERARCHIES）。UE 5.8 当前仍以 `IMPORT_TYPE_HIERARCHIES = 1018` 作为 `AUTOMATIC_VERSION`。
 
 | 版本号 | 版本名 | 变更描述 | 影响资产 |
 |-------|--------|---------|----------|
@@ -113,8 +113,18 @@ UE5 除全局版本外，还使用基于 GUID 的 CustomVersion 系统管理模�
 | FBlueprintsObjectVersion | BlueprintsObjectVersion.h | 蓝图系统版本（函数标志、容器支持等） |
 | FCoreObjectVersion | CoreObjectVersion.h | 核心版本（材质输入、属性系统等） |
 
+### UE 5.8 解析器对齐修复（2026-06-20）
+
+| 修复项 | 问题描述 | 影响范围 |
+|--------|---------|---------|
+| LegacyGuid 缺失 | UE5 < 1016 文件在 ImportTypeHierarchies 和 PersistentGuid 之间有 16 字节 LegacyGuid，旧代码跳过导致偏移错位 | 所有 UE5 < 1016 资产 |
+| OwnerPersistentGuid 条件 | 旧条件 `legacy_file_version in (-8, -7)` 过宽，应为 `FileVersionUE4 >= 519 && < 520` | UE5 资产（file_version_ue4=522+） |
+| ChunkIDs 格式 | 误按 FGuid（16 bytes）读取，实际为 `TArray<int32>`（4 bytes/元素） | 含 ChunkIDs 的资产 |
+
+两个偏移 bug（缺少 LegacyGuid + 错误读取 OwnerPersistentGuid）的 16 字节偏移恰好抵消，使旧代码"碰巧"正确解析了大多数资产。
+
 ---
 
 *Phase: 07-版本演进历史*
 *Created: 2026-04-29*
-*Updated: 2026-06-01 — 基于 UE ObjectVersion.h EUnrealEngineObjectUE5Version 枚举同步，确认全部 18 个版本条目*
+*Updated: 2026-06-20 — UE 5.8.0 ObjectVersion.h 同步 + PackageFileSummary 偏移修复（LegacyGuid/OwnerPersistentGuid/ChunkIDs）。*

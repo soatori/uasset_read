@@ -56,6 +56,18 @@ _OPAQUE_CLASSES = frozenset({
     "SoundCue",
     "ParticleSystem",
     "NiagaraSystem",
+    # #164: MovieScene/Sequencer 类
+    "MovieScene",
+    "MovieSceneBuiltInEasingFunction",
+    "MovieSceneControlRigParameterSection",
+    "MovieSceneControlRigParameterTrack",
+    # #165: MetaSound 编辑器元数据类
+    "MetasoundEditorGraphMemberDefaultBool",
+    "MetasoundEditorGraphMemberDefaultInt",
+    "MetasoundEditorGraphMemberDefaultFloat",
+    "MetasoundEditorGraphMemberDefaultString",
+    "MetasoundEditorGraphMemberDefaultLiteral",
+    "MetasoundEditorGraphMemberDefaultObjectArray",
 })
 
 # Skip entirely — 格式未知或风险过高

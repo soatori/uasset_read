@@ -1,8 +1,6 @@
 """JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
 
-提供两种注册格式：
-- json: 完整分析格式，字段最全
-- json_summary: 机器可读摘要，精简 exports、省略大体积字段
+仅注册 json 格式：完整分析格式，字段最全。
 """
 from __future__ import annotations
 
@@ -12,22 +10,22 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
+from uasset_read.constants import decode_package_flags
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
 
 # 输出格式版本号
 _OUTPUT_VERSION_FULL = "5.0"
-_OUTPUT_VERSION_SUMMARY = "4.0"
 
 
 class _JSONEncoder(json.JSONEncoder):
     """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
 
     def default(self, o):
-        to_dict = getattr(o, "to_dict", None)
+        to_dict = getattr(type(o), "to_dict", None)
         if callable(to_dict):
-            return to_dict()
+            return to_dict(o)
         if dataclasses.is_dataclass(o):
             return dataclasses.asdict(o)
         if isinstance(o, bytes):
@@ -39,6 +37,8 @@ class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
+        all_exports = ir.exports
+
         data = {
             "status": {
                 "status": ir.status,
@@ -50,20 +50,17 @@ class JSONRenderer(IRenderer):
                 "package_name": ir.header.package_name,
                 "package_class": ir.header.package_class,
                 "package_flags": ir.header.package_flags,
+                "package_flags_decoded": decode_package_flags(ir.header.package_flags),
                 "total_export_count": ir.header.total_export_count,
                 "total_import_count": ir.header.total_import_count,
                 "ue_version": ir.header.ue_version,
+                "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
             },
-            "name_map": ir.name_map,
-            "imports": ir.imports,
-            "exports": [self._export_to_dict(e, options) for e in ir.exports],
+            # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
+            # imports 已移除 — C++ 翻译不需要原始导入索引
+            "exports": [self._export_to_dict(e, options) for e in all_exports],
         }
-        if ir.linker is not None:
-            data["linker"] = {
-                "has_linker": ir.linker.has_linker,
-                "import_paths": ir.linker.import_paths,
-                "export_paths": ir.linker.export_paths,
-            }
+        # linker 已移除 — linker 元数据对 C++ 翻译无用
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:
@@ -72,83 +69,54 @@ class JSONRenderer(IRenderer):
             data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
         if ir.variables:
             data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
-        if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
         if ir.resolved_parent_assets:
             data["resolved_parent_assets"] = ir.resolved_parent_assets
-        if ir.logic_sources:
-            data["logic_sources"] = ir.logic_sources
         if ir.inherited_blueprint_graphs:
             data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
-        if ir.soft_object_paths:
-            data["soft_object_paths"] = ir.soft_object_paths
-        if ir.soft_package_references:
-            data["soft_package_references"] = ir.soft_package_references
-        if ir.depends_map:
-            data["depends_map"] = ir.depends_map
-        if ir.resolved_depends_map:
-            data["resolved_depends_map"] = ir.resolved_depends_map
-        if ir.asset_registry_data_offset > 0:
-            data["asset_registry_data_offset"] = ir.asset_registry_data_offset
+        if ir.logic_sources:
+            data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        if ir.diagnostics:
+            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
+        if ir.asset_registry_data:
+            data["asset_registry_data"] = ir.asset_registry_data
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
     def _export_to_dict(self, export, options: RenderOptions) -> dict[str, Any]:
         d = {
-            "index": export.index,
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
-            "outer_index_resolved": export.outer_index_resolved,
-            "super_index_resolved": export.super_index_resolved,
             "parent_class": export.parent_class,
             "properties": [self._property_to_dict(p) for p in export.properties],
             "graphs": [self._graph_to_dict(g, options) for g in export.graphs],
         }
-        if export.bulk_data is not None:
-            d["bulk_data"] = export.bulk_data
-        if export.asset_type_data is not None:
-            d["asset_type_data"] = export.asset_type_data
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
             d["fallback_reason"] = export.fallback_reason
         if export.error_message:
             d["error_message"] = export.error_message
-        if export.ue_export_raw is not None:
-            raw = export.ue_export_raw
-            d["ue_export_raw"] = {
-                "class_index": raw.class_index,
-                "super_index": raw.super_index,
-                "outer_index": raw.outer_index,
-                "template_index": raw.template_index,
-                "object_flags": raw.object_flags,
-                "serial_offset": raw.serial_offset,
-                "package_flags": raw.package_flags,
-                "b_forced_export": raw.b_forced_export,
-                "b_not_for_client": raw.b_not_for_client,
-                "b_not_for_server": raw.b_not_for_server,
-                "b_is_inherited_instance": raw.b_is_inherited_instance,
-                "b_not_always_loaded_for_editor_game": raw.b_not_always_loaded_for_editor_game,
-                "b_is_asset": raw.b_is_asset,
-                "b_generate_public_hash": raw.b_generate_public_hash,
-                "script_serialization_start_offset": raw.script_serialization_start_offset,
-                "script_serialization_end_offset": raw.script_serialization_end_offset,
-            }
-            if raw.guid:
-                d["ue_export_raw"]["guid"] = raw.guid
-        if export.diagnostics:
-            d["diagnostics"] = export.diagnostics
         return d
 
     def _property_to_dict(self, prop) -> dict[str, Any]:
         return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
-        return {"graph_name": graph.graph_name, "graph_guid": graph.graph_guid, "nodes": [self._node_to_dict(n) for n in graph.nodes], "execution_chains": graph.execution_chains}
+        result = {
+            "graph_name": graph.graph_name,
+            "graph_guid": graph.graph_guid,
+            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "execution_chains": graph.execution_chains,
+        }
+        if graph.graph_type:
+            result["graph_type"] = graph.graph_type
+        if graph.subgraphs:
+            result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
+        return result
 
     def _node_to_dict(self, node) -> dict[str, Any]:
         d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
@@ -162,6 +130,11 @@ class JSONRenderer(IRenderer):
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
         d: dict[str, Any] = {"parent_class": blueprint.parent_class}
+        if getattr(blueprint, "description", ""):
+            d["description"] = blueprint.description
+        if getattr(blueprint, "interfaces", []):
+            # interfaces 已经是 dict 列表（来自 IR builder）
+            d["interfaces"] = blueprint.interfaces
         if blueprint.functions:
             d["functions"] = [self._function_to_dict(f) for f in blueprint.functions]
         if blueprint.events:
@@ -212,6 +185,8 @@ class JSONRenderer(IRenderer):
         }
         if func.function_flags:
             d["function_flags"] = func.function_flags
+        if not getattr(func, "is_implemented", True):
+            d["is_implemented"] = False
         for flag in (
             "is_pure", "is_blueprint_callable", "is_const", "is_static",
             "is_net", "is_net_reliable", "is_blueprint_private",
@@ -281,67 +256,4 @@ class JSONRenderer(IRenderer):
         return "json"
 
 
-class JsonSummaryRenderer(IRenderer):
-    """JSON 摘要渲染器 — 机器可读精简格式。
-
-    精简策略（对齐旧 format_json_summary）：
-    - exports 仅保留 name/class/parent_class
-    - 省略 imports, decompiled_functions, execution_chains, variables
-    - 省略 function_graphs, resolved_parent_assets, inherited_blueprint_graphs, logic_sources
-    - 保留 status, output_version, summary, name_map, linker, blueprint (精简)
-    - 保留 diagnostics（容错模式诊断需要）和 errors
-    """
-
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        data: dict[str, Any] = {
-            "status": {
-                "status": ir.status,
-                "message": ir.status_message,
-                "code": ir.status_code,
-            },
-            "output_version": _OUTPUT_VERSION_SUMMARY,
-            "summary": {
-                "package_name": ir.header.package_name,
-                "package_class": ir.header.package_class,
-                "package_flags": ir.header.package_flags,
-                "total_export_count": ir.header.total_export_count,
-                "total_import_count": ir.header.total_import_count,
-                "ue_version": ir.header.ue_version,
-            },
-            "name_map": ir.name_map,
-            "exports": [self._export_summary(e) for e in ir.exports],
-        }
-        if ir.linker is not None:
-            data["linker"] = {
-                "has_linker": ir.linker.has_linker,
-                "import_paths": ir.linker.import_paths,
-                "export_paths": ir.linker.export_paths,
-            }
-        if ir.blueprint is not None:
-            data["blueprint"] = {
-                "parent_class": ir.blueprint.parent_class,
-                "function_count": len(ir.blueprint.functions),
-                "event_count": len(ir.blueprint.events),
-                "component_count": len(ir.blueprint.components),
-            }
-        if ir.errors:
-            data["errors"] = ir.errors
-        if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
-        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
-
-    def _export_summary(self, export) -> dict[str, Any]:
-        """精简 export — 仅 name/class/parent_class。"""
-        return {
-            "name": export.object_name,
-            "class": export.object_class,
-            "parent_class": export.parent_class,
-        }
-
-    @property
-    def format_name(self) -> str:
-        return "json_summary"
-
-
 register_renderer("json", JSONRenderer)
-register_renderer("json_summary", JsonSummaryRenderer)

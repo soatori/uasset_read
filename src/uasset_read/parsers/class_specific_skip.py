@@ -27,20 +27,20 @@ SKIP_CLASS_PREFIXES = (
     "CubeBuilder",
     "GeomModifier_",
     "BrushBuilder",
-    # P0: Animation
-    "AnimationDataModel",
+    # P0: Animation — 已移至 opaque 白名单（#166）
+    # "AnimationDataModel",
     # P1: Niagara
     "NiagaraMeshRendererProperties",
     "NiagaraNodeParameterMapGet",
     "NiagaraNode",
     "NiagaraSystem",
-    # P1: MovieScene
-    "MovieScene",
-    "MovieSceneSceneCaptureParams",
-    # P2: MetaSound
-    "MetasoundEditorGraph",
-    "MetasoundEditorGraphInputObjectArray",
-    "MetasoundEditorGraphMemberDefaultObjectArray",
+    # P1: MovieScene — 已移至 opaque 白名单（#164）
+    # "MovieScene",
+    # "MovieSceneSceneCaptureParams",
+    # P2: MetaSound — 已移至 opaque 白名单（#165）
+    # "MetasoundEditorGraph",
+    # "MetasoundEditorGraphInputObjectArray",
+    # "MetasoundEditorGraphMemberDefaultObjectArray",
     # P2: K2Node
     "K2Node_FunctionEntry",
     "K2Node_FormatText",
@@ -107,8 +107,9 @@ SKIP_CLASS_NAMES = {
     # Audio — ImpulseResponse 等使用特殊格式
     "ImpulseResponse",
     # SoundWave 和 SoundCue 已降级为有限解析（见 asset_types/sound_wave.py）
-    # SoundAttenuation, SoundConcurrency 等仍跳过
-    "SoundAttenuation",
+    # SoundAttenuation 已移至 opaque 白名单（#166）
+    # SoundConcurrency 等仍跳过
+    # "SoundAttenuation",
     "SoundConcurrency",
     "SoundMix",
     "SoundClass",

@@ -11,7 +11,21 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from uasset_read.models.ir import PackageIR
+    from uasset_read.models.ir import PackageIR, ExportIR
+
+
+def is_blueprint_export(export: ExportIR) -> bool:
+    """判断是否为蓝图相关 export。
+
+    蓝图 export 定义：
+    - 类名以 _C 结尾（如 BP_Character_C）
+    - 或有 graphs 数据
+    """
+    if export.object_name.endswith("_C"):
+        return True
+    if export.graphs:
+        return True
+    return False
 
 
 @dataclass

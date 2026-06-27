@@ -11,7 +11,7 @@
 - **FText 偏移安全网** — 图序列化器包含 safety net 检测偏移错位，遇到时自动校正
 - **临时文件放 `temp/`** — 脚本、中间输出、调试日志、测试产物一律放在项目根目录 `temp/` 子目录
 
-## v0.4.5 新增约束
+## v0.5.1 新增约束
 
 - **统一状态模型** — 所有输出格式使用 `success | partial | failed`，禁止使用旧的 `fail`/`error`
 - **UE 风格加载生命周期** — 执行顺序必须为 `link() → preload(idx) × N → post_load()`，禁止在 export 解析前调用 post_load

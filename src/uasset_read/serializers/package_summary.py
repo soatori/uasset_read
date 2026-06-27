@@ -28,6 +28,7 @@ from uasset_read.constants import (
     UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID,
     UE4_SERIALIZE_TEXT_IN_PACKAGES,
     UE4_ADDED_PACKAGE_OWNER,
+    UE4_NON_OUTER_PACKAGE_IMPORT,
     UE4_NAME_HASHES_SERIALIZED,
 )
 from uasset_read.exceptions import VersionError, ParseError
@@ -207,6 +208,10 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
 
     # 第 4 步：PackageName 和 PackageFlags
     package_name = archive.read_fstring()
+    # UE 的 FName::None 是默认值，部分资产二进制中存储字面量 "None"
+    # 规范化为空字符串，由上层从文件路径推导
+    if package_name == "None":
+        package_name = ""
     package_flags = archive.read_u32()
 
     # 第 5 步：NameCount 和 NameOffset
@@ -324,7 +329,13 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         import_type_hierarchies_count = 0
         import_type_hierarchies_offset = 0
 
-    # 第 16 步：PersistentGuid（非 FilterEditorOnly 文件，UE4 519+）
+    # 第 16 步：LegacyGuid（UE5 < 1016 时存在，被 SavedHash 替代）
+    # UE 源码: FileVersionUE < PACKAGE_SAVED_HASH (1016) 时读取 16 字节 FGuid
+    # 之后被 FIoHash SavedHash（20 bytes）替代，保存在文件头前部
+    if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
+        archive.read(16)  # LegacyGuid — 读取但不存储（旧格式兼容）
+
+    # 第 16a 步：PersistentGuid（非 FilterEditorOnly 文件，UE4 519+）
     # For legacy -6, the Guid field is at a different position. Skip for -6 only.
     persistent_guid = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
@@ -334,14 +345,13 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
         # else: legacy -6: Guid is at a different position, skip here
 
     # 第 16b 步：OwnerPersistentGuid
-    # For legacy -7, both PersistentGuid and OwnerPersistentGuid are present
-    # (same as legacy -8 format, just without FileVersionUE5)
+    # UE 源码: VER_UE4_ADDED_PACKAGE_OWNER (519) 时添加, VER_UE4_NON_OUTER_PACKAGE_IMPORT (520) 时移除
+    # 仅当 FileVersionUE4 >= 519 && FileVersionUE4 < 520 时存在（即恰好等于 519）
+    # UE5 资产的 FileVersionUE4 通常为 522+, 不应读取此字段
     if (
         not has_filter_editor_only
-        and (
-            file_version_ue4 == UE4_ADDED_PACKAGE_OWNER
-            or legacy_file_version in (-8, -7)
-        )
+        and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER
+        and file_version_ue4 < UE4_NON_OUTER_PACKAGE_IMPORT
     ):
         archive.read(16)  # 跳过 OwnerPersistentGuid
 
@@ -400,14 +410,14 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if world_tile_info_data_offset > 0:
         archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
 
-    # 第 27 步：ChunkIDs（UE5 始终为数组格式）
+    # 第 27 步：ChunkIDs — TArray<int32>（UE5 始终为数组格式）
+    # UE 源码: PackageFileSummary.h — TArray<int32> ChunkIDs
     chunk_ids = []
     chunk_ids_count = archive.read_i32()
     if chunk_ids_count < 0:
         raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
     for _ in range(chunk_ids_count):
-        guid_bytes = archive.read(16)
-        chunk_ids.append(guid_bytes.hex())
+        chunk_ids.append(archive.read_i32())
 
     # 第 28 步：PreloadDependencies
     preload_dependency_count = archive.read_i32()

@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.4.5-dev** — UE 保真度改进：统一状态模型（success|partial|failed）、UE 风格加载生命周期、类序列化策略表、SoftObjectPath 索引化解析、DependsMap FPackageIndex 语义。8 个专用资产类型解析器（StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave）；更多资产类别通过通用 UObject/属性 fallback 路径部分支持。部分 UE4 旧版资产支持有限。
+> 📦 **v0.5.1.19** — 自 v0.5.0 以来修复 18 个 issue：PackageFlags 完整定义、HexView 调试系统、AssetRegistryData 解析、FString UTF-16 修复、BoxSphereBounds 多格式支持、BlueprintVariable var_type 提取、AnimGraph 嵌套子图解析、BlueprintDescription + Interfaces 分类等。
 
 ## 为什么选择 uasset_read？
 
@@ -24,10 +24,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.4.5-dev |
+| 版本 | 0.5.1.19 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1389 通过，2 skipped，2 xfailed |
-| 模块 | 14 个子包，145 个源文件 |
+| 测试 | 1424 个测试用例（集成测试在样本资产不可用时自动跳过） |
+| 模块 | 14 个子包，134 个源文件 |
 
 ## 功能特性
 
@@ -58,20 +58,17 @@
 ### 文件格式支持
 - **Pak 文件解析** — FPakInfo、标准库 Zlib 解压；安装 `lz4`、`zstandard` 或 `cryptography` 后支持 LZ4/Zstd/AES-ECB；Oodle 会明确报告暂不支持
 - **IoStore 容器** — Chunk ID、偏移/大小结构
-- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
+- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
 - **Bulk Data** — BulkData 头部解析
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
 
-### 多种输出格式
-- **JSON** — 完整结构化输出或摘要（基于渲染器，无 blueprint 包装层）
-- **Text** — 人类可读格式
+### 输出格式
+- **JSON** — 完整结构化输出（C++ 翻译参考）
 - **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
-- **Blueprint UE Text** — UE 编辑器风格格式
-- **C++ Skeleton** — 可直接使用的类骨架代码，含构造函数初始化列表
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（6 种渲染器）
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON、Markdown）
 - **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
@@ -93,12 +90,9 @@ python run.py path/to/file.uasset                    # JSON 输出到 stdout
 python run.py path/to/file.uasset --output output.json   # 保存到文件
 
 # 输出模式
-python run.py path/to/file.uasset --summary          # 仅摘要
-python run.py path/to/file.uasset --text             # 可读文本
+python run.py path/to/file.uasset --json             # JSON 输出（默认）
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text   # 蓝图节点文本
-python run.py path/to/file.uasset --blueprint-ue-text # UE 格式文本
-python run.py path/to/file.uasset --cpp-skeleton     # C++ 类骨架
+python run.py path/to/file.uasset --list-formats     # 列出可用格式
 
 # 批量导出
 python run.py --batch-dir path/to/dir/               # 批量导出目录
@@ -109,15 +103,17 @@ python run.py path/to/file.uasset --tolerant         # 容错模式（默认）
 
 # 调试
 python run.py path/to/file.uasset --verbose          # 启用详细日志
+python run.py path/to/file.uasset --hex-view         # 启用 HexView 二进制检查
+python run.py path/to/file.uasset --full-parse       # 强制完整解析大型蓝图
 ```
 
 或通过模块调用：
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --json
 ```
 
-## 核心 API（推荐）
+## 核心 API
 
 简化的高级编程接口 — **推荐入口**：
 
@@ -126,7 +122,6 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # 解析单个文件（返回格式化字符串）
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
 text = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
@@ -136,17 +131,7 @@ results = parse_batch("path/to/directory", format="json")
 formats = list_formats()
 ```
 
-### 旧版格式化函数（已弃用）
-
-以下格式化函数仍可导入使用，但已标记为 legacy。
-**请使用 `parse_single()` / `parse_batch()`** — 它们走统一的 IR → Renderer 管线，输出最完整。
-
-```python
-from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Legacy — 请改用 parse_single(format="json") 替代 format_json_full()
-```
-
-### Python API
+### 模块级 API
 
 解析函数建议直接从包根导入。如果需要 `uasset_read.parse_uasset`
 模块对象，请使用 `importlib.import_module()`，避免与包根同名
@@ -156,9 +141,6 @@ from uasset_read import format_json_full, format_json_summary, format_text_full,
 import importlib
 
 from uasset_read import (
-    # 推荐入口
-    parse_single, parse_batch, list_formats,
-
     # 数据模型
     UEdGraph, UEdGraphNode, UEdGraphPin,
     ParseResult, BlueprintMetadata, BlueprintVariable,
@@ -173,10 +155,6 @@ from uasset_read import (
     # 流追踪
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
-
-    # 格式化（legacy — 推荐使用 parse_single(format=...)）
-    format_json_full, format_json_summary,
-    format_text_full, format_markdown,
 
     # 链接器
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
@@ -196,9 +174,6 @@ from uasset_read import (
     UAssetError, ParseError, VersionError,
 )
 
-# 推荐用法：通过 parse_single 解析并输出
-json_output = parse_single('BP_FirstPersonCharacter.uasset', format='json')
-
 parse_module = importlib.import_module("uasset_read.parse_uasset")
 ```
 
@@ -209,7 +184,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 采用镜像 UE 的 FArchive 管道模式：
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -217,7 +192,6 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
           PackageLinker
           KismetDecompiler
           PakFileReader
-          IR Builder → Renderers
 ```
 
 ### 模块结构 (`src/uasset_read/`)
@@ -235,24 +209,23 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
+| 调试 | `debug/hex_view.py` | HexView 调试系统，用于二进制字段检查 |
 | **IR** | `ir_builder.py` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 |
-| **资产类型** | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、SoundWave |
+| **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 + AssetRegistry 解析器 + 类序列化策略 |
+| ├ 资产类型 | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
-| **图** | `graph/` | 执行流/数据流追踪、链构建器、引脚追踪 |
+| **图** | `graph/` | 执行流/数据流追踪、链构建器 |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
+| ├ 表达式 | `kismet/expressions/` | 15 种表达式类型（赋值、控制流、函数调用、字面量等） |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 构造函数格式化 |
-| **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader |
-| **压缩** | `pak/decompress.py` | Zlib/LZ4/Zstd/Oodle 分派 + 优雅降级 |
-| **加密** | `pak/crypto.py` | AES-ECB 解密辅助函数 |
+| **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 类型映射, UPROPERTY 映射, 构造函数格式化, 函数体提取 |
+| **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader, 索引解析, 压缩, AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析 |
-| **UObject** | `objects/` | UObject 类型体系、类型注册表 |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（6 种渲染器） |
-| **格式化器** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint 文本/UE 格式输出 |
+| **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance） |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（2 个渲染器：JSON、Markdown） |
 
 ## 测试
 
@@ -267,17 +240,6 @@ python -m pytest tests/ -v --cov=uasset_read  # 带覆盖率
 - **依赖**: 零运行时依赖
 - **构建**: 直接脚本（src layout）
 - **测试**: pytest
-
-## 文档
-
-| 文档 | 路径 |
-|------|------|
-| 开发指南 | [docs/guides/dev-guide.md](docs/guides/dev-guide.md) |
-| 开发范围 | [docs/guides/development-scope.md](docs/guides/development-scope.md) |
-| 测试要求 | [docs/guides/testing-requirements.md](docs/guides/testing-requirements.md) |
-| 格式参考 | [docs/formats/uasset/Index.md](docs/formats/uasset/Index.md) |
-| 参考资料 | [docs/reference/](docs/reference/) |
-| 设计规格 | [docs/designs/](docs/designs/) |
 
 ## 应用场景
 

@@ -11,6 +11,7 @@ from pathlib import Path
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.kismet.result import KismetDecompiledResult
+    from uasset_read.memory_safety import MemoryPolicy
 
 from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
@@ -28,6 +29,7 @@ from uasset_read.serializers.object_resources import (
     build_imports_list, read_soft_object_paths, detect_circular_deps,
 )
 from uasset_read.parsers.property_parser import parse_properties_from_export
+from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
 from uasset_read.blueprint import (
     extract_blueprint_metadata,
     extract_component_transforms,
@@ -92,6 +94,7 @@ def _post_process(
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
     archive_factory=None,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """共享后处理：blueprint 元数据、图提取、依赖分析。
 
@@ -201,7 +204,13 @@ def _post_process(
             result.warnings.append(f"Kismet decompilation error: {e}")
 
     if include_parent_assets:
-        _resolve_parent_assets(path, result, tolerant, asset_roots)
+        _resolve_parent_assets(
+            path,
+            result,
+            tolerant,
+            asset_roots,
+            memory_policy=memory_policy,
+        )
 
     # Component property extraction
     try:
@@ -248,6 +257,7 @@ def _resolve_parent_assets(
     result: "Union[ParseResult, LinkerParseResult]",
     tolerant: bool,
     asset_roots: Optional[Sequence[str]],
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """Best-effort parent Blueprint lookup used by cross-asset parsing."""
     if not getattr(result, "blueprint", None):
@@ -281,6 +291,7 @@ def _resolve_parent_assets(
             str(parent_file),
             tolerant=tolerant,
             include_parent_assets=False,
+            memory_policy=memory_policy,
         )
     except Exception as exc:
         result.logic_sources.append({
@@ -403,7 +414,10 @@ def _should_use_lightweight_tolerant_parse(
     result,
     tolerant: bool,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
 ) -> bool:
+    if force_full_parse:
+        return False
     if not tolerant or result.summary is None:
         return False
     threshold = (
@@ -412,6 +426,34 @@ def _should_use_lightweight_tolerant_parse(
         else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
     )
     return getattr(result.summary, "export_count", 0) > threshold
+
+
+def _build_lightweight_graphs(result) -> list:
+    """在轻量模式下提取基本图信息（仅名称）。"""
+    from uasset_read.serializers.object_resources import get_asset_class
+    from uasset_read.models.core import UEdGraph
+    
+    graphs = []
+    if not result.export_map or not result.import_map:
+        return graphs
+    
+    for export in result.export_map:
+        name = str(getattr(export, "object_name", "") or "")
+        if not name:
+            continue
+        
+        # 检测 EdGraph 类型导出
+        class_name = get_asset_class(export, result.import_map, result.export_map)
+        if class_name in ("EdGraph", "UberEdGraph"):
+            # 创建最小化的 UEdGraph，仅包含名称
+            graph = UEdGraph(
+                graph_name=name,
+                graph_class=class_name,
+                nodes=[],
+            )
+            graphs.append(graph)
+    
+    return graphs
 
 
 def _build_lightweight_function_graphs(export_map) -> list[dict]:
@@ -447,6 +489,9 @@ def _parse_package_core(
     extra_linker_setup: Optional[Callable] = None,
     check_aes_key: Optional[bytes] = None,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
+    hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -461,234 +506,336 @@ def _parse_package_core(
         asset_roots: 资产根目录列表
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
         check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
     """
     from uasset_read.link.linker import PackageLinker
+    from uasset_read.memory_safety import (
+        MemoryLimitExceeded,
+        MemoryMonitor,
+        MemoryPolicy,
+    )
 
     archive = None
     bundle = None
     mappings_provider = None
 
-    try:
-        if check_aes_key is not None:
-            raise ParseError(
-                "Unsupported argument: aes_key. Pass the key "
-                "when constructing the Pak/IoStore reader and provider"
-            )
-        if mappings_path:
-            from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
-            result.metadata["mappings_path"] = mappings_path
-        if game:
-            result.metadata["game"] = game
+    file_path = Path(path)
+    file_size = file_path.stat().st_size if file_path.is_file() else 0
+    policy = memory_policy or MemoryPolicy()
+    memory_monitor = MemoryMonitor(
+        asset_path=path,
+        limits=policy.limits_for_size(file_size),
+    )
 
-        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
-        archive = bundle.open_archive(tolerant=tolerant)
-        result.metadata.update(_package_metadata(bundle))
-
-        # Extract mmap info
-        mmap_info = archive.get_mmap_info()
-        result.mmap_used = mmap_info["used"]
-        result.mmap_warning = mmap_info["warning"]
-
-        # 读取文件头
-        result.summary = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="package_summary", field="summary",
-            reader=lambda: read_package_summary(archive),
-        )
-        if result.summary is None:
-            return
-        result.version_container = build_version_container(result.summary)
-
-        # 截断文件检测：验证导出数据范围
+    with memory_monitor:
         try:
-            validate_export_data_range(archive, result.summary)
-        except Exception as e:
-            if not tolerant:
-                raise
-            _record_parse_stage_error(
-                result, archive, path, "package_summary", "export_data_range", e
+            if check_aes_key is not None:
+                raise ParseError(
+                    "Unsupported argument: aes_key. Pass the key "
+                    "when constructing the Pak/IoStore reader and provider"
+                )
+            if mappings_path:
+                from uasset_read.mappings import TypeMappingsProvider
+                mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+                result.metadata["mappings_path"] = mappings_path
+            if game:
+                result.metadata["game"] = game
+
+            bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+            archive = bundle.open_archive(tolerant=tolerant)
+            if hex_view:
+                archive.enable_hex_view(True)
+            result.metadata.update(_package_metadata(bundle))
+
+            # Extract mmap info
+            mmap_info = archive.get_mmap_info()
+            result.mmap_used = mmap_info["used"]
+            result.mmap_warning = mmap_info["warning"]
+
+            # 读取文件头
+            result.summary = _run_required_stage(
+                result=result, archive=archive, path=path, tolerant=tolerant,
+                stage="package_summary", field="summary",
+                reader=lambda: read_package_summary(archive),
             )
-            return
+            if result.summary is None:
+                return
+            memory_monitor.checkpoint("package_summary")
+            result.version_container = build_version_container(result.summary)
 
-        # 读取名称表
-        result.name_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="name_table", field="name_map",
-            reader=lambda: read_name_table(archive, result.summary),
-        )
-        if result.name_map is None:
-            result.name_map = []
-            return
+            # 将 UE5 版本号附加到 archive 供下游属性标签解析器使用
+            # read_property_tag 根据此版本号选择简单 FName（ue5 < 1012）
+            # 或完整 FPropertyTypeName 树（ue5 >= 1012）
+            archive._file_version_ue5 = result.summary.file_version_ue5
 
-        # 读取导入表
-        result.import_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="import_map", field="import_map",
-            reader=lambda: read_import_map(archive, result.summary, result.name_map),
-        )
-        if result.import_map is None:
-            result.import_map = []
-            return
-
-        # 读取导出表
-        result.export_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="export_map", field="export_map",
-            reader=lambda: read_export_map(archive, result.summary, result.name_map),
-        )
-        if result.export_map is None:
-            result.export_map = []
-            return
-
-        # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
-        if hasattr(result.summary, 'depends_offset'):
-            result.summary.depends_map = read_depends_map(archive, result.summary)
-        if hasattr(result.summary, 'preload_dependency_count'):
-            result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
-
-        # 读取 SoftPackageReferences（软包引用表）
-        if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
-            result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
-
-        # 读取 SoftObjectPathList（UE5.7+ 用于索引化 SoftObjectProperty 解析）
-        if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
-            result.soft_object_path_list = read_soft_object_paths(
-                archive, result.summary, result.name_map
-            )
-        else:
-            result.soft_object_path_list = []
-
-        # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
-        setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
-
-        # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
-        linker: Optional["PackageLinker"] = None
-        try:
-            linker = PackageLinker(
-                archive, result.summary, result.name_map,
-                result.import_map, result.export_map or [],
-                version_container=result.version_container,
-            )
-            linker.link()
-            result.linker = linker
-
-            if extra_linker_setup is not None:
-                extra_linker_setup(linker, result)
-
-            # NOTE: post_load() is deferred until after export preloading (link → preload → post_load)
-        except Exception as e:
-            if not tolerant:
-                raise ParseError(f"Linker creation failed: {e}") from e
-            result.errors.append(f"Linker creation failed: {e}")
-
-        if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold):
-            result.warnings.append(
-                "Lightweight tolerant parse used due to export complexity "
-                f"(exports={getattr(result.summary, 'export_count', 0)})"
-            )
-            result.metadata["lightweight_tolerant_parse"] = True
-            result.metadata["function_graphs_fallback"] = _build_lightweight_function_graphs(result.export_map)
-            result.is_success = len(result.errors) == 0
-            return
-
-        # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
-        _mappings = mappings_provider.mappings if mappings_provider else None
-        for _exp_idx, export in enumerate(result.export_map or []):
-            if export.serial_size > 0:
-                try:
-                    if linker is not None:
-                        linker.preload(
-                            _exp_idx,
-                            mappings=_mappings,
-                            game=game,
-                            tolerant=tolerant,
-                        )
-                        # 向后兼容：将 linker instance 的属性复制回 export.properties
-                        inst = linker._export_objects[_exp_idx]
-                        export.properties = inst.serialized_properties
-                    else:
-                        export.properties = parse_properties_from_export(
-                            export, archive, result.summary, result.name_map,
-                            result.export_map or [], result.import_map,
-                            linker=linker,
-                            mappings=_mappings,
-                            game=game,
-                            tolerant=tolerant,
-                        )
-                    if not getattr(export, "parse_status", None):
-                        setattr(export, "parse_status", "success")
-                    elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
-                        # 保持 asset type handler 设置的状态，不覆盖为 success
-                        pass
-                except Exception as e:
-                    if not tolerant:
-                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
-                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
-                    export.properties = []
-                    setattr(export, "parse_status", "failed")
-                    setattr(export, "fallback_reason", "parse_error")
-                    setattr(export, "error_message", str(e))
-
-                # 提取组件变换属性
-                if export.properties:
-                    export.transforms = extract_component_transforms(export.properties)
-
-        # post_load — 在所有 export 预加载完成后执行（link → preload → post_load）
-        if linker is not None:
+            # 截断文件检测：验证导出数据范围
             try:
-                linker.post_load()
+                validate_export_data_range(archive, result.summary)
             except Exception as e:
                 if not tolerant:
-                    raise ParseError(f"Linker post_load failed: {e}") from e
-                result.errors.append(f"Linker post_load failed: {e}")
+                    raise
+                _record_parse_stage_error(
+                    result, archive, path, "package_summary", "export_data_range", e
+                )
+                return
 
-        # 共享后处理
-        _post_process(
-            path, archive, result.summary, result.name_map,
-            result.import_map, result.export_map or [], result, tolerant,
-            linker=linker,
-            include_parent_assets=include_parent_assets,
-            asset_roots=asset_roots,
-            archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
-        )
-        result.is_success = len(result.errors) == 0
+            # 读取名称表
+            result.name_map = _run_required_stage(
+                result=result, archive=archive, path=path, tolerant=tolerant,
+                stage="name_table", field="name_map",
+                reader=lambda: read_name_table(archive, result.summary),
+            )
+            if result.name_map is None:
+                result.name_map = []
+                return
+            memory_monitor.checkpoint("name_map")
 
-    except VersionError as e:
-        _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
-        result.errors.append(str(e))
-        result.is_success = False
-        if not tolerant:
+            # package_name 为空时从文件路径推导（UE FName::None 或缺失时）
+            if not result.summary.package_name:
+                from pathlib import Path as _Path
+                _p = _Path(path)
+                # 尝试从路径中提取 /Game/... 形式的包名
+                _path_str = _p.as_posix()
+                _content_idx = _path_str.lower().find("/content/")
+                if _content_idx >= 0:
+                    # /Game/Content/... → /Game/... （去掉 Content/ 层级）
+                    _relative = _path_str[_content_idx + len("/content/"):]
+                    if _relative.startswith("/"):
+                        _relative = _relative[1:]
+                    # 去掉 .uasset 扩展名
+                    if _relative.lower().endswith(".uasset"):
+                        _relative = _relative[:-len(".uasset")]
+                    result.summary.package_name = f"/Game/{_relative}"
+                else:
+                    # 回退：使用文件名（不含扩展名）
+                    result.summary.package_name = f"/Game/{_p.stem}"
+
+            # 读取导入表
+            result.import_map = _run_required_stage(
+                result=result, archive=archive, path=path, tolerant=tolerant,
+                stage="import_map", field="import_map",
+                reader=lambda: read_import_map(archive, result.summary, result.name_map),
+            )
+            if result.import_map is None:
+                result.import_map = []
+                return
+            memory_monitor.checkpoint("import_map")
+
+            # 读取导出表
+            result.export_map = _run_required_stage(
+                result=result, archive=archive, path=path, tolerant=tolerant,
+                stage="export_map", field="export_map",
+                reader=lambda: read_export_map(archive, result.summary, result.name_map),
+            )
+            if result.export_map is None:
+                result.export_map = []
+                return
+            memory_monitor.checkpoint("export_map")
+
+            # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
+            if hasattr(result.summary, 'depends_offset'):
+                result.summary.depends_map = read_depends_map(archive, result.summary)
+            if hasattr(result.summary, 'preload_dependency_count'):
+                result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
+
+            # 读取 SoftPackageReferences（软包引用表）
+            if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
+                result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
+
+            # 读取 SoftObjectPathList（UE5.7+ 用于索引化 SoftObjectProperty 解析）
+            if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
+                result.soft_object_path_list = read_soft_object_paths(
+                    archive, result.summary, result.name_map
+                )
+            else:
+                result.soft_object_path_list = []
+
+            # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
+            setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
+
+            # 读取 AssetRegistryData（资产元数据标签）
+            try:
+                is_cooked = bool(result.summary.package_flags & 0x00000100)  # PKG_FilterEditorOnly
+                result.asset_registry_data = read_asset_registry_data(
+                    archive,
+                    result.summary.asset_registry_data_offset,
+                    file_version_ue4=result.summary.file_version_ue4,
+                    is_cooked=is_cooked,
+                )
+            except Exception as e:
+                if not tolerant:
+                    raise ParseError(f"AssetRegistryData 解析失败: {e}") from e
+                result.warnings.append(f"AssetRegistryData 解析失败: {e}")
+                result.asset_registry_data = None
+
+            # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
+            linker: Optional["PackageLinker"] = None
+            try:
+                linker = PackageLinker(
+                    archive, result.summary, result.name_map,
+                    result.import_map, result.export_map or [],
+                    version_container=result.version_container,
+                )
+                linker.link()
+                result.linker = linker
+
+                if extra_linker_setup is not None:
+                    extra_linker_setup(linker, result)
+
+                # NOTE: post_load() is deferred until after export preloading (link → preload → post_load)
+            except Exception as e:
+                if not tolerant:
+                    raise ParseError(f"Linker creation failed: {e}") from e
+                result.errors.append(f"Linker creation failed: {e}")
+
+            if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold, force_full_parse):
+                result.warnings.append(
+                    "Lightweight tolerant parse used due to export complexity "
+                    f"(exports={getattr(result.summary, 'export_count', 0)})"
+                )
+                result.metadata["lightweight_tolerant_parse"] = True
+                result.metadata["function_graphs_fallback"] = _build_lightweight_function_graphs(result.export_map)
+                # 在轻量模式下提取基本图信息
+                result.graphs = _build_lightweight_graphs(result)
+                # 将图关联到蓝图导出（第一个以 _C 结尾的导出）
+                if result.graphs and result.export_map:
+                    for export in result.export_map:
+                        name = str(getattr(export, "object_name", "") or "")
+                        if name.endswith("_C") and not name.startswith("Default__"):
+                            export.graphs = result.graphs
+                            break
+                result.is_success = len(result.errors) == 0
+                return
+
+            # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
+            _mappings = mappings_provider.mappings if mappings_provider else None
+            for _exp_idx, export in enumerate(result.export_map or []):
+                memory_monitor.checkpoint(f"export[{_exp_idx}]")
+
+                if export.serial_size > 0:
+                    try:
+                        if linker is not None:
+                            linker.preload(
+                                _exp_idx,
+                                mappings=_mappings,
+                                game=game,
+                                tolerant=tolerant,
+                            )
+                            # 向后兼容：将 linker instance 的属性复制回 export.properties
+                            inst = linker._export_objects[_exp_idx]
+                            export.properties = inst.serialized_properties
+                        else:
+                            export.properties = parse_properties_from_export(
+                                export, archive, result.summary, result.name_map,
+                                result.export_map or [], result.import_map,
+                                linker=linker,
+                                mappings=_mappings,
+                                game=game,
+                                tolerant=tolerant,
+                            )
+                        if not getattr(export, "parse_status", None):
+                            setattr(export, "parse_status", "success")
+                        elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
+                            # 保持 asset type handler 设置的状态，不覆盖为 success
+                            pass
+                    except MemoryLimitExceeded:
+                        raise
+                    except MemoryError as e:
+                        logger.error(
+                            "MemoryError parsing export %s: %s",
+                            getattr(export, "object_name", "?"), e
+                        )
+                        export.properties = []
+                        setattr(export, "parse_status", "partial")
+                        setattr(export, "fallback_reason", "memory_error_partial")
+                        setattr(export, "error_message", str(e))
+                        if not tolerant:
+                            raise
+                    except Exception as e:
+                        if not tolerant:
+                            raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
+                        result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                        export.properties = []
+                        setattr(export, "parse_status", "failed")
+                        setattr(export, "fallback_reason", "parse_error")
+                        setattr(export, "error_message", str(e))
+
+                    # 提取组件变换属性
+                    if export.properties:
+                        export.transforms = extract_component_transforms(export.properties)
+
+            memory_monitor.checkpoint("post_load")
+
+            # post_load — 在所有 export 预加载完成后执行（link → preload → post_load）
+            if linker is not None:
+                try:
+                    linker.post_load()
+                except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Linker post_load failed: {e}") from e
+                    result.errors.append(f"Linker post_load failed: {e}")
+
+            memory_monitor.checkpoint("post_process")
+
+            # 共享后处理
+            _post_process(
+                path, archive, result.summary, result.name_map,
+                result.import_map, result.export_map or [], result, tolerant,
+                linker=linker,
+                include_parent_assets=include_parent_assets,
+                asset_roots=asset_roots,
+                archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
+                memory_policy=policy,
+            )
+            result.is_success = len(result.errors) == 0
+
+        except VersionError as e:
+            _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
+            result.errors.append(str(e))
+            result.is_success = False
+            if not tolerant:
+                raise
+
+        except ParseError as e:
+            _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
+            result.errors.append(str(e))
+            if e.partial_result:
+                for key, value in e.partial_result.items():
+                    if hasattr(result, key):
+                        setattr(result, key, value)
+            result.is_success = False
+            if not tolerant:
+                raise
+
+        except MemoryLimitExceeded:
             raise
+        except MemoryError as e:
+            result.errors.append(f"MemoryError: {e}")
+            result.is_success = False
+            if not tolerant:
+                raise
 
-    except ParseError as e:
-        _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
-        result.errors.append(str(e))
-        if e.partial_result:
-            for key, value in e.partial_result.items():
-                if hasattr(result, key):
-                    setattr(result, key, value)
-        result.is_success = False
-        if not tolerant:
-            raise
+        except Exception as e:
+            _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
+            result.errors.append(f"Unexpected error: {str(e)}")
+            result.is_success = False
+            if not tolerant:
+                raise
 
-    except Exception as e:
-        _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
-        result.errors.append(f"Unexpected error: {str(e)}")
-        result.is_success = False
-        if not tolerant:
-            raise
-
-    finally:
-        # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
-        if result.linker and getattr(result.linker, 'diagnostics', None):
-            result.diagnostics.extend(result.linker.diagnostics)
-        if archive:
-            # 收集 FArchive 诊断记录（截断检测、偏移越界等）
-            archive_diagnostics = archive.get_diagnostics()
-            if archive_diagnostics:
-                result.diagnostics = archive_diagnostics + result.diagnostics
-            archive.close()
+        finally:
+            # 收集 linker 诊断（PackageIndex 越界、serial_offset/size 异常等）
+            if result.linker and getattr(result.linker, 'diagnostics', None):
+                result.diagnostics.extend(result.linker.diagnostics)
+            if archive:
+                # 收集 FArchive 诊断记录（截断检测、偏移越界等）
+                archive_diagnostics = archive.get_diagnostics()
+                if archive_diagnostics:
+                    result.diagnostics = archive_diagnostics + result.diagnostics
+                # 收集 hex_view 条目
+                if archive.is_hex_view_enabled():
+                    result.hex_view_entries = archive.get_hex_view_entries()
+                archive.close()
 
 
 def parse_package(
@@ -702,6 +849,9 @@ def parse_package(
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
+    hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -714,6 +864,8 @@ def parse_package(
         provider: 可选 package provider（filesystem/pak/iostore）
         include_linker: Deprecated. Linker is now always created for complete
             object graph resolution. Parameter retained for backward compatibility.
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
@@ -736,6 +888,9 @@ def parse_package(
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
         lightweight_threshold=lightweight_threshold,
+        force_full_parse=force_full_parse,
+        hex_view=hex_view,
+        memory_policy=memory_policy,
     )
     return result
 
@@ -748,6 +903,8 @@ def parse_uasset(
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
+    force_full_parse: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -763,6 +920,8 @@ def parse_uasset(
         mappings_path=mappings_path,
         game=game,
         include_linker=include_linker,
+        force_full_parse=force_full_parse,
+        memory_policy=memory_policy,
     )
 
 
@@ -776,6 +935,9 @@ def parse_uasset_with_linker(
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
     lightweight_threshold: Optional[int] = None,
+    force_full_parse: bool = False,
+    hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -784,6 +946,8 @@ def parse_uasset_with_linker(
         tolerant: 是否启用容错模式（默认开启）
         preload_all: 是否预加载所有 exports（默认 False，惰性加载）
         provider: 可选 package provider（filesystem/pak/iostore）
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
@@ -802,6 +966,9 @@ def parse_uasset_with_linker(
         asset_roots=asset_roots,
         extra_linker_setup=extra_linker_setup,
         lightweight_threshold=lightweight_threshold,
+        force_full_parse=force_full_parse,
+        hex_view=hex_view,
+        memory_policy=memory_policy,
     )
 
     if preload_all and result.linker:

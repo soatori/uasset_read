@@ -84,12 +84,20 @@ class BlueprintEvent:
 
 
 @dataclass
+class BlueprintInterface:
+    """蓝图实现的接口。"""
+    name: str = ""
+    guid: str = ""
+
+
+@dataclass
 class BlueprintFunction:
     """蓝图函数元数据。"""
     name: str = ""
     return_type: str = ""
     parameters: List[FunctionParameter] = field(default_factory=list)
     function_flags: int = 0
+    is_implemented: bool = True  # False = 继承事件占位（如 ReceiveBeginPlay）
     is_pure: bool = False
     is_blueprint_callable: bool = False
     is_blueprint_event: bool = False
@@ -175,6 +183,8 @@ class BlueprintMetadata:
     """Blueprint 元数据，从 ExportMap 提取。"""
     is_blueprint: bool
     parent_class: Optional[str] = None
+    description: str = ""
+    interfaces: List[BlueprintInterface] = field(default_factory=list)
     variables: List[BlueprintVariable] = field(default_factory=list)
     detection_warning: Optional[str] = None
     functions: List[BlueprintFunction] = field(default_factory=list)
