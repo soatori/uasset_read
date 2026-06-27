@@ -127,6 +127,7 @@ def register_asset_type_handlers() -> None:
     _optional = [
         ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
         ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
+        ("anim_blueprint", "AnimBlueprintHandler", ["AnimBlueprintGeneratedClass"], "AnimBlueprintHandler"),
         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
         ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
         ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
@@ -138,13 +139,24 @@ def register_asset_type_handlers() -> None:
                 fromlist=[func_name],
             )
             parse_func = getattr(mod, func_name)
-            handlers.append(
-                AssetTypeHandler(
-                    class_names=class_names,
-                    parse_func=parse_func,
-                    handler_name=handler_name,
-                ),
-            )
+            # 检查是否是类（如 AnimBlueprintHandler）
+            if isinstance(parse_func, type):
+                # 类需要实例化
+                handlers.append(
+                    AssetTypeHandler(
+                        class_names=class_names,
+                        parse_func=lambda archive, name_map, handler=parse_func: handler().handle(archive, name_map),
+                        handler_name=handler_name,
+                    ),
+                )
+            else:
+                handlers.append(
+                    AssetTypeHandler(
+                        class_names=class_names,
+                        parse_func=parse_func,
+                        handler_name=handler_name,
+                    ),
+                )
         except ImportError:
             pass
 

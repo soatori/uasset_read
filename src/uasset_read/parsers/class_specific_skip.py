@@ -98,7 +98,6 @@ SKIP_CLASS_NAMES = {
     "NiagaraRendererProperties",
     "NiagaraEmitterProperties",
     # Anim — 使用自定义序列化
-    "AnimBlueprintGeneratedClass",
     "AnimBlueprintExtension",
     # AnimSequence 和 AnimMontage 已降级为有限解析（见 asset_types/anim_sequence.py）
     # AnimComposite, AnimPoseSnapshot 仍跳过
