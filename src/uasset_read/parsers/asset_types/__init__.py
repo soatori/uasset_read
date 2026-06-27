@@ -22,6 +22,85 @@ from uasset_read.parsers.class_registry import (
 
 logger = logging.getLogger(__name__)
 
+
+class HandlerClassAdapter(ClassHandler):
+    """将 Handler 类（如 AnimBlueprintHandler）适配为 ClassHandler 接口。
+
+    Handler 类的 handle(export, context) 方法与 ClassHandler.parse(export, archive, context)
+    接口不匹配，此类负责桥接两者。
+    """
+
+    def __init__(self, handler_instance: Any, handler_name: str) -> None:
+        self._handler = handler_instance
+        self._handler_name = handler_name
+        # 从 Handler 类名推断支持的 class names
+        # 例如 AnimBlueprintHandler -> AnimBlueprintGeneratedClass
+        self._class_names = self._infer_class_names(handler_instance)
+
+    def _infer_class_names(self, handler_instance: Any) -> set[str]:
+        """从 Handler 实例推断支持的 class names。"""
+        # 映射表：Handler 类名 -> 支持的 UE class names
+        handler_class_map = {
+            "AnimBlueprintHandler": {"AnimBlueprintGeneratedClass"},
+            "AnimSequenceHandler": {"AnimSequence"},
+            "AnimMontageHandler": {"AnimMontage"},
+        }
+        class_name = type(handler_instance).__name__
+        return handler_class_map.get(class_name, set())
+
+    def can_handle(self, class_name: str) -> bool:
+        return class_name in self._class_names
+
+    @property
+    def handler_name(self) -> str:
+        return self._handler_name
+
+    @property
+    def fallback_policy(self) -> FallbackPolicy:
+        return FallbackPolicy.GENERIC_UOBJECT
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """调用 Handler.handle(export, context) 并转换为 HandlerResult。"""
+        try:
+            status = self._handler.handle(export, context)
+            # 将 ParseStatus 转换为 HandlerResult
+            success = status.value in ("success", "partial")
+
+            # 从 export.custom_data 提取实际数据
+            # Handler 会将数据存储在 export.custom_data 中
+            custom_data = getattr(export, "custom_data", {})
+            data = {}
+            if custom_data:
+                # 根据 handler 类型提取对应的数据
+                for key in ["anim_blueprint", "anim_sequence", "anim_montage"]:
+                    if key in custom_data:
+                        data[key] = custom_data[key]
+
+            # 添加 parse_status
+            data["parse_status"] = status.value
+
+            return HandlerResult(
+                success=success,
+                data=data,
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
+        except Exception as e:
+            logger.debug(
+                "HandlerClassAdapter '%s' failed for '%s': %s",
+                self._handler_name, export.object_name, e,
+            )
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
+
+
 # 导入专用解析函数
 from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
 from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
@@ -38,6 +117,8 @@ __all__ = [
     "parse_anim_sequence",
     "parse_sound_wave",
     "register_asset_type_handlers",
+    "AnimSequenceHandler",
+    "HandlerClassAdapter",
 ]
 
 
@@ -126,7 +207,7 @@ def register_asset_type_handlers() -> None:
     # 可选解析器（导入成功则注册）
     _optional = [
         ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
-        ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
+        ("anim_sequence", "AnimSequenceHandler", ["AnimSequence"], "AnimSequenceHandler"),
         ("anim_blueprint", "AnimBlueprintHandler", ["AnimBlueprintGeneratedClass"], "AnimBlueprintHandler"),
         ("anim_montage", "AnimMontageHandler", ["AnimMontage"], "AnimMontageHandler"),
         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
@@ -142,14 +223,12 @@ def register_asset_type_handlers() -> None:
             parse_func = getattr(mod, func_name)
             # 检查是否是类（如 AnimBlueprintHandler）
             if isinstance(parse_func, type):
-                # 类需要实例化
-                handlers.append(
-                    AssetTypeHandler(
-                        class_names=class_names,
-                        parse_func=lambda archive, name_map, handler=parse_func: handler().handle(archive, name_map),
-                        handler_name=handler_name,
-                    ),
-                )
+                # 类需要实例化，创建适配器包装
+                handler_instance = parse_func()
+                # 创建适配器：将 ClassHandler.parse(export, archive, context)
+                # 转换为 Handler.handle(export, context)
+                adapter = HandlerClassAdapter(handler_instance, handler_name)
+                handlers.append(adapter)
             else:
                 handlers.append(
                     AssetTypeHandler(

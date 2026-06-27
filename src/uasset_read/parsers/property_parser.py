@@ -101,12 +101,17 @@ def _try_asset_type_handler(
     archive: FArchive,
     name_map: List[str],
     class_name: str,
+    parsed_properties: Optional[List["PropertyValue"]] = None,
 ) -> None:
     """尝试使用已注册的 ClassHandler 提取原始二进制数据。
 
     对 StaticMesh、SkeletalMesh、Material、Texture2D 等资产类型，
     handler 从 serial_offset 读取原始布局（非 PropertyTag），
     结果附加到 export 对象的 _asset_type_data 属性上。
+
+    对动画类型（AnimBlueprint/AnimSequence/AnimMontage），
+    将已解析的 properties 列表设置到 export.properties，
+    以便 handler 提取结构化元数据。
     """
     # 延迟导入确保 handlers 在首次调用时注册
     from uasset_read.parsers import asset_types  # noqa: F401
@@ -117,6 +122,11 @@ def _try_asset_type_handler(
     if handler is None:
         return
 
+    # 将已解析的 properties 设置到 export 对象上
+    # 供动画 handler（AnimBlueprint/AnimSequence/AnimMontage）提取元数据
+    if parsed_properties is not None:
+        export.properties = parsed_properties
+
     saved_pos = archive.tell()
     try:
         # seek 到原始序列化数据起始位置
@@ -125,6 +135,17 @@ def _try_asset_type_handler(
         if result.success and result.data:
             # 附加到 export 对象，供下游使用
             setattr(export, "_asset_type_data", result.data)
+            # 同步动画数据到 custom_data（供 ir_builder 使用）
+            # HandlerClassAdapter 会将数据存储在 export.custom_data 中
+            # 这里确保 _asset_type_data 中的动画字段也同步到 custom_data
+            custom_data = getattr(export, "custom_data", {})
+            if not custom_data:
+                custom_data = {}
+            for key in ["anim_blueprint", "anim_sequence", "anim_montage"]:
+                if key in result.data and key not in custom_data:
+                    custom_data[key] = result.data[key]
+            if custom_data:
+                setattr(export, "custom_data", custom_data)
             # 将 handler 的 parse_status 传播到 export 级别
             # 确保 JSON 输出明确标识为 partial_metadata，而非完整 native data
             handler_status = result.data.get("parse_status")
@@ -436,10 +457,6 @@ def parse_properties_from_export(
             reason=FallbackReason.MISSING_MAPPING,
         )]
 
-    # Asset type handler dispatch: 对已注册 handler 的类型，提取原始二进制数据
-    if _skip_class_name is not None:
-        _try_asset_type_handler(export, archive, name_map, _skip_class_name)
-
     while True:
         # D-08/D-09: Property loop limit check
         if property_count >= MAX_PROPERTY_COUNT:
@@ -564,6 +581,11 @@ def parse_properties_from_export(
                 value=fb,
                 array_index=fb.array_index,
             ))
+
+    # Asset type handler dispatch: 在属性解析完成后调用
+    # 此时 properties 已解析完成，handler 可以正确提取数据
+    if _skip_class_name is not None:
+        _try_asset_type_handler(export, archive, name_map, _skip_class_name, parsed_properties=properties)
 
     return properties
 
