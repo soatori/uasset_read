@@ -41,3 +41,11 @@ def test_conftest_teardown_calls_cleanup():
     from tests.conftest import pytest_runtest_teardown
     source = inspect.getsource(pytest_runtest_teardown)
     assert "cleanup_after_parse" in source, "teardown 应调用 cleanup_after_parse"
+
+
+def test_export_loop_checks_memory_periodically():
+    """export 循环应定期检查内存（每 3 个 export）。"""
+    import inspect
+    from uasset_read.parse_uasset import _parse_package_core
+    source = inspect.getsource(_parse_package_core)
+    assert "should_wait_for_memory" in source or "_should_wait" in source

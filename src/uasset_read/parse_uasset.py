@@ -731,11 +731,16 @@ def _parse_package_core(
                 force_gc as _force_gc,
             )
             for _exp_idx, export in enumerate(result.export_map or []):
-                # 每个 export 解析前检查内存，必要时清理等待
-                if _should_wait():
+                # 每 3 个 export 检查一次内存，必要时清理等待
+                if _exp_idx % 3 == 0 and _should_wait():
                     _force_gc()
                     if _should_wait():
                         _wait_cleanup(max_wait_seconds=5)
+                    if _should_wait():
+                        logger.warning(
+                            "Memory still high after cleanup at export %d/%d, continuing",
+                            _exp_idx, len(result.export_map or [])
+                        )
 
                 if export.serial_size > 0:
                     # 获取 export 处理策略：normal/chunked
