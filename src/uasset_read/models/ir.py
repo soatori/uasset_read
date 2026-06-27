@@ -107,6 +107,9 @@ class ExportIR:
     fallback_reason: str | None = None
     error_message: str | None = None
     asset_type_data: dict | None = None
+    anim_blueprint: AnimBlueprintIR | None = None
+    anim_sequence: AnimSequenceIR | None = None
+    anim_montage: AnimMontageIR | None = None
     ue_export_raw: ExportRawIR | None = None
     diagnostics: dict | None = None
 
