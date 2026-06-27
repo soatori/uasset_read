@@ -440,6 +440,34 @@ class MarkdownRenderer(IRenderer):
             if ir.anim_blueprint.sync_group_names:
                 lines.append(f"**Sync Groups**: {', '.join(ir.anim_blueprint.sync_group_names)}")
                 lines.append("")
+            if ir.anim_blueprint.graph_asset_player_info:
+                lines.append("### Graph Asset Player Info")
+                lines.append("")
+                lines.append("| Key | Value |")
+                lines.append("|-----|-------|")
+                for key, value in ir.anim_blueprint.graph_asset_player_info.items():
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                lines.append("")
+            if ir.anim_blueprint.graph_blend_options:
+                lines.append("### Graph Blend Options")
+                lines.append("")
+                lines.append("| Key | Value |")
+                lines.append("|-----|-------|")
+                for key, value in ir.anim_blueprint.graph_blend_options.items():
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                lines.append("")
+            if ir.anim_blueprint.anim_node_data:
+                lines.append("### Anim Node Data")
+                lines.append("")
+                for idx, node_data in enumerate(ir.anim_blueprint.anim_node_data):
+                    lines.append(f"**Node {idx}**:")
+                    lines.append("")
+                    if isinstance(node_data, dict):
+                        for key, value in node_data.items():
+                            lines.append(f"- **{key}**: {value}")
+                    else:
+                        lines.append(f"- {node_data}")
+                    lines.append("")
             for sm in ir.anim_blueprint.baked_state_machines:
                 lines.append(f"### State Machine: {sm.machine_name}")
                 lines.append("")

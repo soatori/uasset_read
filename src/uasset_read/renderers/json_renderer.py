@@ -276,6 +276,12 @@ class JSONRenderer(IRenderer):
             ]
         if anim_ir.sync_group_names:
             d["sync_group_names"] = anim_ir.sync_group_names
+        if anim_ir.graph_asset_player_info:
+            d["graph_asset_player_info"] = anim_ir.graph_asset_player_info
+        if anim_ir.graph_blend_options:
+            d["graph_blend_options"] = anim_ir.graph_blend_options
+        if anim_ir.anim_node_data:
+            d["anim_node_data"] = anim_ir.anim_node_data
         return d
 
     def _baked_state_machine_to_dict(self, sm) -> dict[str, Any]:
