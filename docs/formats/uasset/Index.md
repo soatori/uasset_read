@@ -5,6 +5,8 @@ description: Use when working with Unreal Engine .uasset files, parsing UE asset
 
 # UE .uasset 文件格式参考
 
+> **版本**: 0.5.0 | **最后更新**: 2026-06-12
+
 ## Overview
 
 Unreal Engine .uasset 文件格式知识库。核心原则：**解析 .uasset 必须先查 UE 源码理解结构，不能直接猜测二进制**。所有字段定义必须能追溯到 UE C++ 源码。
@@ -139,3 +141,49 @@ FPackageIndex: 正数 = Export, 负数 = Import, 0 = Null
 2. **字段表**: 字段名、类型、用途、源码位置、版本差异
 3. **源码引用**: UE C++ 定义文件路径
 4. **版本差异**: UE4/UE5 变更历史
+
+## v0.4.5 关键变更
+
+### 1. 状态模型统一
+
+**之前**: `success | fail | error`
+**之后**: `success | partial | failed`
+
+- `success`: 无错误，所有 export 解析成功
+- `partial`: 部分错误或某些 export 为 opaque/skipped，但核心数据可用
+- `failed`: 严重错误，无可用数据
+
+### 2. UE 风格加载生命周期
+
+执行顺序: `link() → preload(idx) × N → post_load()`
+
+- `post_load()` 在所有 export 预加载之后调用
+- 确保 ObjectProperty 引用能正确解析为 UObjectInstance
+
+### 3. 类序列化策略表
+
+4 种策略:
+- `FULL_SERIALIZER`: 完整序列化（默认）
+- `TAGGED_PROPERTIES_ONLY`: 仅解析属性标签
+- `OPAQUE_CLASS_PAYLOAD`: 标记为 opaque（如 StaticMesh、Texture2D）
+- `SKIP_UNSUPPORTED`: 跳过不支持的类
+
+### 4. Payload 偏移策略
+
+默认使用 `SerialOffset/SerialSize`（与 UE LinkerLoad.cpp:4793 对齐）
+
+- ScriptSerialization 偏移保留为诊断字段
+- 对于包含 class-specific payload 的资产，现在会解析更多数据
+
+### 5. SoftObjectPath 索引化解析
+
+UE5.7+ 支持索引模式:
+- 当存在 `SoftObjectPathList` 时，`SoftObjectProperty` 读取 int32 索引
+- 越界索引产生诊断信息，不崩溃
+
+### 6. DependsMap FPackageIndex 语义
+
+DependsMap 值现在使用 FPackageIndex 语义:
+- 正值 = export (1-based)
+- 负值 = import (-1-based)
+- 零 = null
