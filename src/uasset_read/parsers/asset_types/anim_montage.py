@@ -28,14 +28,17 @@ class AnimMontageHandler:
             ParseStatus: SUCCESS 或 PARTIAL
         """
         try:
-            # 从 export.instance 提取动画数据
-            instance = getattr(export, "instance", None)
-            if instance is None:
+            # 从 export 提取属性数据
+            # ObjectExport 有 properties 属性（解析后的属性列表）
+            properties_list = getattr(export, "properties", [])
+            if not properties_list:
                 return ParseStatus.PARTIAL
 
-            properties = getattr(instance, "properties", {})
-            if not properties:
-                return ParseStatus.PARTIAL
+            # 将属性列表转换为字典格式（name -> value）
+            properties = {}
+            for prop in properties_list:
+                if hasattr(prop, "name") and hasattr(prop, "value"):
+                    properties[prop.name] = prop.value
 
             # 构建 AnimMontageIR
             anim_ir = AnimMontageIR()
@@ -67,6 +70,40 @@ class AnimMontageHandler:
             # 提取 AnimNotifies
             if "AnimNotifies" in properties:
                 anim_ir.notifies = self._parse_anim_notifies(properties["AnimNotifies"])
+
+            # 提取 CompositeSections
+            if "CompositeSections" in properties:
+                anim_ir.composite_sections = self._parse_composite_sections(
+                    properties["CompositeSections"]
+                )
+
+            # 提取 SlotAnimTracks
+            if "SlotAnimTracks" in properties:
+                anim_ir.slot_anim_tracks = self._parse_slot_anim_tracks(
+                    properties["SlotAnimTracks"]
+                )
+
+            # 提取 BranchingPointMarkers
+            if "BranchingPointMarkers" in properties:
+                anim_ir.branching_point_markers = self._parse_branching_point_markers(
+                    properties["BranchingPointMarkers"]
+                )
+
+            # 提取 BlendInOption/BlendOutOption
+            if "BlendInOption" in properties:
+                blend_in = properties["BlendInOption"]
+                if isinstance(blend_in, dict):
+                    anim_ir.blend_in_option = blend_in.get("BlendOption")
+            if "BlendOutOption" in properties:
+                blend_out = properties["BlendOutOption"]
+                if isinstance(blend_out, dict):
+                    anim_ir.blend_out_option = blend_out.get("BlendOption")
+
+            # 提取 FloatCurveNames
+            if "RawCurveData" in properties:
+                anim_ir.float_curve_names = self._parse_float_curve_names(
+                    properties["RawCurveData"]
+                )
 
             # 存储到 export 的自定义数据
             if not hasattr(export, "custom_data"):
@@ -100,4 +137,59 @@ class AnimMontageHandler:
             )
             result.append(notify)
 
+        return result
+
+    def _parse_composite_sections(self, data: Any) -> list[dict]:
+        """解析 CompositeSections 数组"""
+        result = []
+        if not isinstance(data, list):
+            return result
+        for section in data:
+            if isinstance(section, dict):
+                result.append({
+                    "section_name": section.get("SectionName", ""),
+                    "next_section_name": section.get("NextSectionName", ""),
+                })
+        return result
+
+    def _parse_slot_anim_tracks(self, data: Any) -> list[dict]:
+        """解析 SlotAnimTracks 数组"""
+        result = []
+        if not isinstance(data, list):
+            return result
+        for track in data:
+            if isinstance(track, dict):
+                result.append({
+                    "slot_node_name": track.get("SlotNodeName", ""),
+                })
+        return result
+
+    def _parse_branching_point_markers(self, data: Any) -> list[dict]:
+        """解析 BranchingPointMarkers 数组"""
+        result = []
+        if not isinstance(data, list):
+            return result
+        for marker in data:
+            if isinstance(marker, dict):
+                result.append({
+                    "notify_index": marker.get("NotifyIndex", -1),
+                    "trigger_time": marker.get("TriggerTime", 0.0),
+                })
+        return result
+
+    def _parse_float_curve_names(self, data: Any) -> list[str]:
+        """解析浮点曲线名称列表"""
+        result = []
+        if not isinstance(data, dict):
+            return result
+        float_curves = data.get("FloatCurves", [])
+        if not isinstance(float_curves, list):
+            return result
+        for curve in float_curves:
+            if isinstance(curve, dict):
+                name_data = curve.get("Name", {})
+                if isinstance(name_data, dict):
+                    curve_name = name_data.get("Name", "")
+                    if curve_name:
+                        result.append(curve_name)
         return result
