@@ -1,21 +1,21 @@
 ---
-title: 开发规范
+title: Contributing Guidelines
 section: contributing
 ---
 
-# 开发规范
+# Contributing Guidelines
 
-## 代码风格
+## Code Style
 
-- **Python 版本**: 3.10+，使用 `match/case`、类型注解
-- **代码注释**: 使用中文
-- **错误提示**: 使用中文
-- **文档格式**: 统一使用中文 Markdown 格式
-- **布局规范**: 遵循 src 布局（`src/uasset_read/`）
+- **Python Version**: 3.10+, using `match/case`, type annotations
+- **Code Comments**: Use English
+- **Error Messages**: Use English
+- **Documentation Format**: Unified English Markdown format
+- **Layout Convention**: Follow src layout (`src/uasset_read/`)
 
-## 项目结构
+## Project Structure
 
-解析器镜像 UE 内部的 `FArchive` 序列化管线：
+The parser mirrors UE's internal `FArchive` serialization pipeline:
 
 ```
 .uasset → FArchive → Serializers → Parsers → Models → IR Builder → Renderers → Output
@@ -24,90 +24,90 @@ section: contributing
           PackageLinker · KismetDecompiler · PakFileReader
 ```
 
-### 模块职责
+### Module Responsibilities
 
-| 模块 | 路径 | 职责 |
-|------|------|------|
-| FArchive | `archive.py` | 二进制读取器，支持字节交换、mmap |
-| 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
-| 异常 | `exceptions.py` | `UAssetError`、`VersionError`、`ParseError`、`ErrorContext` |
-| 主解析器 | `parse_uasset.py` | `parse_package()`、`parse_uasset()` 入口 |
-| 包管理 | `package.py` | `PackageBundle`、`PackageProvider`（文件系统/Pak/IoStore） |
-| 序列化 | `serializers/` | `PackageFileSummary`、`ImportMap`、`ExportMap`、`PropertyTag` |
-| 数据模型 | `models/` | `UEdGraph/Node/Pin`、属性值模型、`ParseResult`、IR 中间表示 |
-| 属性解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 + 10 种资产类型专用解析器 |
-| 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
-| 图分析 | `graph/` | 执行流/数据流追踪、链构建器 |
-| Kismet | `kismet/` | 字节码提取器、`EExprToken` → AST → C++ 翻译器 |
-| 链接器 | `link/` | `PackageLinker` 两阶段对象图重建 |
-| C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射 |
-| PAK | `pak/` | `FPakInfo/PakEntry`、`PakFileReader`、AES 解密 |
-| IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
-| 调试 | `debug/hex_view.py` | HexView 调试系统 |
-| IR | `ir_builder.py`、`models/ir.py` | 包级中间表示构建器 |
-| 渲染器 | `renderers/` | 可插拔 `IRenderer` ABC + 格式注册表（JSON、Markdown） |
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| FArchive | `archive.py` | Binary reader, supports byte swapping, mmap |
+| Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
+| Exceptions | `exceptions.py` | `UAssetError`, `VersionError`, `ParseError`, `ErrorContext` |
+| Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()` entry points |
+| Package | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
+| Serializers | `serializers/` | `PackageFileSummary`, `ImportMap`, `ExportMap`, `PropertyTag` |
+| Data Models | `models/` | `UEdGraph/Node/Pin`, property value models, `ParseResult`, IR intermediate representation |
+| Property Parsers | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + 10 asset type specialized parsers |
+| Blueprint | `blueprint/` | Variable/transform/component/metadata extraction |
+| Graph Analysis | `graph/` | Execution/data flow tracing, chain builders |
+| Kismet | `kismet/` | Bytecode extractor, `EExprToken` → AST → C++ translator |
+| Linker | `link/` | `PackageLinker` two-phase object graph reconstruction |
+| C++ Generation | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping |
+| PAK | `pak/` | `FPakInfo/PakEntry`, `PakFileReader`, AES decryption |
+| IoStore | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
+| Debug | `debug/hex_view.py` | HexView debug system |
+| IR | `ir_builder.py`, `models/ir.py` | Package-level intermediate representation builder |
+| Renderers | `renderers/` | Pluggable `IRenderer` ABC + format registry (JSON, Markdown) |
 
-## 临时文件
+## Temporary Files
 
 > [!IMPORTANT]
-> 临时文件必须放在 `temp/` 目录下，禁止放在项目根目录。根目录只保留项目源码、配置文件和文档。
+> Temporary files must be placed in the `temp/` directory; placing them in the project root is prohibited. The root directory should only contain project source code, configuration files, and documentation.
 
-## Git 工作流
+## Git Workflow
 
-- **开发分支**: `develop`
-- **主分支**: `master`
-- **提交前**: 运行 `python -m pytest tests/ -v` 确保测试通过
-- **PR 要求**: 包含测试覆盖
+- **Development branch**: `develop`
+- **Main branch**: `master`
+- **Before committing**: Run `python -m pytest tests/ -v` to ensure tests pass
+- **PR Requirements**: Include test coverage
 
-## 依赖管理
+## Dependency Management
 
-- **运行时依赖**: 零依赖
-- **PAK 支持**: AES 解密需要 `cryptography`，LZ4/Zstd 解压需要 `lz4`/`zstandard`（均为可选）
-- **禁止添加**: 不要向主 `dependencies` 添加第三方包
+- **Runtime Dependencies**: Zero dependencies
+- **PAK Support**: AES decryption requires `cryptography`, LZ4/Zstd decompression requires `lz4`/`zstandard` (both optional)
+- **Prohibited**: Do not add third-party packages to the main `dependencies`
 
-## 开发命令
+## Development Commands
 
 ```bash
-# 运行所有测试
+# Run all tests
 python -m pytest tests/ -v
 
-# 运行测试并生成覆盖率报告
+# Run tests with coverage report
 python -m pytest tests/ -v --cov=uasset_read
 
-# 仅运行集成测试
+# Run integration tests only
 python -m pytest tests/ -v -m integration
 ```
 
-## CodeGraph 使用规范
+## CodeGraph Usage Guidelines
 
-本项目使用 CodeGraph MCP 服务器进行代码智能检索。
+This project uses the CodeGraph MCP server for intelligent code retrieval.
 
-| 问题 | 工具 |
-|------|------|
-| "X 在哪里定义？" | `codegraph_search` |
-| "谁调用了 Y？" | `codegraph_callers` |
-| "Y 调用了什么？" | `codegraph_callees` |
-| "X 如何到达 Y？" | `codegraph_trace` |
-| "改了 Z 会影响什么？" | `codegraph_impact` |
-| "看 Y 的签名/源码" | `codegraph_node` |
-| "一次性看多个相关符号" | `codegraph_explore` |
-| "获取某任务/区域的上下文" | `codegraph_context` |
+| Question | Tool |
+|----------|------|
+| "Where is X defined?" | `codegraph_search` |
+| "Who calls Y?" | `codegraph_callers` |
+| "What does Y call?" | `codegraph_callees` |
+| "How does X reach Y?" | `codegraph_trace` |
+| "What would break if I changed Z?" | `codegraph_impact` |
+| "Show me Y's signature/source" | `codegraph_node` |
+| "View multiple related symbols at once" | `codegraph_explore` |
+| "Get context for a task/area" | `codegraph_context` |
 
-**使用原则：**
-- 回答结构化问题先用 `codegraph_context`，再用一次 `codegraph_explore` 获取源码
-- 追踪调用链用 `codegraph_trace`（一次调用返回完整路径）
-- 不要对已确认的 codegraph 结果再用 grep 验证
-- 索引延迟时读具体文件而非猜测
+**Usage Principles:**
+- For structural questions, use `codegraph_context` first, then one `codegraph_explore` to get source code
+- For call chain tracing, use `codegraph_trace` (returns the complete path in one call)
+- Do not re-verify confirmed codegraph results with grep
+- When index is stale, read specific files rather than guessing
 
-## 外部参考
+## External References
 
-- `docs/formats/uasset/` — UE .uasset 格式文档（60+ 个 Markdown 文件）
-- `external/CUE4Parse/` — 参考 C# 实现，用于交叉验证解析逻辑
-- `docs/reference/` — 蓝图节点文本参考、UE 加载流程、CUE4Parse 对照索引
+- `docs/formats/uasset/` — UE .uasset format documentation (60+ Markdown files)
+- `external/CUE4Parse/` — Reference C# implementation for cross-validation of parsing logic
+- `docs/reference/` — Blueprint node text reference, UE loading flow, CUE4Parse comparison index
 
-## 关键约束
+## Key Constraints
 
 > [!WARNING]
-> - **仅支持未烘焙/编辑器保存的资产**: Cooked 资产的图数据已被剥离
-> - **只读**: 仅解析，不支持修改或写入
-> - **必须参考 UE 源码**: 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制格式
+> - **Uncooked/editor-saved assets only**: Cooked assets have their graph data stripped
+> - **Read-only**: Parsing only, no modification or writing supported
+> - **Must reference UE source code**: Format understanding must be traced back to UE C++ source code; guessing binary formats is prohibited

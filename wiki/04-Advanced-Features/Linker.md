@@ -1,27 +1,27 @@
 ---
-title: 对象链接器
+title: Object Linker
 section: linker
 ---
 
-# 对象链接器
+# Object Linker
 
-`link/` 实现 FLinkerLoad 风格的两阶段对象图重建。
+`link/` implements FLinkerLoad-style two-phase object graph reconstruction.
 
 <!-- data-api="PackageLinker" -->
 ```python
 PackageLinker(archive, summary, name_map, import_map, export_map, version_container)
 ```
 
-## 两阶段加载
+## Two-Phase Loading
 
 ```
 link() -- Phase 1
 ├── _create_import_instances() → _import_objects[]
 ├── _create_export_instances() → _export_objects[]
-├── build_outer_tree() → 解析 outer_index
+├── build_outer_tree() → resolve outer_index
 └── _collect_root_objects()
 
-preload(index) -- Phase 2 (延迟)
+preload(index) -- Phase 2 (deferred)
 └── parse_properties_from_export() → serialized_properties
 
 post_load() -- Stage 4
@@ -30,17 +30,17 @@ post_load() -- Stage 4
 └── _build_dependency_graph()
 ```
 
-## UObjectInstance 字段
+## UObjectInstance Fields
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `package_index` | int | +导出, -导入, 0=null |
-| `object_name / object_class` | str | 对象名/类 |
-| `outer_index / super_object` | PackageIndex / UObjectInstance | 外部对象/父类 |
-| `template_object` | UObjectInstance | CDO 引用 |
-| `serialized_properties` | List[Any] | 序列化属性 |
-| `property_references` | Dict[str, UObjectInstance] | 属性引用 |
-| `dependencies` | List[UObjectInstance] | 依赖列表 |
+| Field | Type | Description |
+|-------|------|-------------|
+| `package_index` | int | +export, -import, 0=null |
+| `object_name / object_class` | str | Object name/class |
+| `outer_index / super_object` | PackageIndex / UObjectInstance | Outer object/parent class |
+| `template_object` | UObjectInstance | CDO reference |
+| `serialized_properties` | List[Any] | Serialized properties |
+| `property_references` | Dict[str, UObjectInstance] | Property references |
+| `dependencies` | List[UObjectInstance] | Dependency list |
 
 ## PackageRegistry
 
@@ -51,4 +51,4 @@ resolve_import_across_packages(path, name, provider) → UObjectInstance
 ```
 
 > [!TIP]
-> **相关章节**: [[解析管线]] · [[序列化模块]]
+> **Related Sections**: [[Parse Pipeline]] · [[Serializers]]

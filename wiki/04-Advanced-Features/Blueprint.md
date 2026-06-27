@@ -1,14 +1,14 @@
 ---
-title: 蓝图解析
+title: Blueprint Parsing
 section: blueprint
 ---
 
-# 蓝图解析
+# Blueprint Parsing
 
-> **模块路径**: `blueprint/`
-> **职责**: 提取蓝图变量、变换、组件和元数据。
+> **Module path**: `blueprint/`
+> **Responsibility**: Extract blueprint variables, transforms, components, and metadata.
 
-## 核心 API
+## Core API
 
 ### extract_blueprint_variables
 
@@ -17,7 +17,7 @@ section: blueprint
 extract_blueprint_variables(properties: List[PropertyValue]) → List[BlueprintVariable]
 ```
 
-从属性列表中提取蓝图变量。
+Extracts blueprint variables from a list of properties.
 
 ### extract_blueprint_metadata
 
@@ -26,7 +26,7 @@ extract_blueprint_variables(properties: List[PropertyValue]) → List[BlueprintV
 extract_blueprint_metadata(export, archive, import_map, export_map, name_map, summary, linker, graphs) → Tuple[BlueprintMetadata, str]
 ```
 
-提取蓝图完整元数据，包括变量、函数、事件等信息。
+Extracts complete blueprint metadata, including variables, functions, events, and other information.
 
 ### parse_component_transform
 
@@ -35,14 +35,14 @@ extract_blueprint_metadata(export, archive, import_map, export_map, name_map, su
 parse_component_transform(properties: List[PropertyValue]) → Dict[str, Any]
 ```
 
-解析组件变换数据。
+Parses component transform data.
 
-## 变量提取路径
+## Variable Extraction Paths
 
-- **主要路径**：从 `UBlueprint.NewVariables` 解析 FBPVariableDescription 结构
-- **回退路径**：从属性迭代推断类型和标志
+- **Primary path**: Parse FBPVariableDescription structures from `UBlueprint.NewVariables`
+- **Fallback path**: Infer types and flags by iterating over properties
 
-## 组件相关
+## Component-Related
 
 ### extract_components
 
@@ -51,7 +51,7 @@ parse_component_transform(properties: List[PropertyValue]) → Dict[str, Any]
 extract_components(export_map, import_map) → List[Dict]
 ```
 
-从 ExportMap 中发现 SCS（SimpleConstructionScript）组件。
+Discovers SCS (SimpleConstructionScript) components from the ExportMap.
 
 ### extract_component_transforms
 
@@ -60,12 +60,12 @@ extract_components(export_map, import_map) → List[Dict]
 extract_component_transforms(export_properties, component_name) → Dict
 ```
 
-提取组件的变换信息：
-- `RelativeLocation` - 相对位置
-- `RelativeRotation` - 相对旋转
-- `RelativeScale3D` - 相对缩放
+Extracts transform information for a component:
+- `RelativeLocation` - Relative location
+- `RelativeRotation` - Relative rotation
+- `RelativeScale3D` - Relative scale
 
-## 相关章节
+## Related Sections
 
-- [[Graph]] - 图分析
-- [[Kismet]] - Kismet 反编译
+- [[Graph]] - Graph Analysis
+- [[Kismet]] - Kismet Decompilation

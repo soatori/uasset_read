@@ -1,11 +1,11 @@
 ---
-title: 异常体系
+title: Exception Hierarchy
 section: exceptions
 ---
 
-# 异常体系
+# Exception Hierarchy
 
-## 异常类层次
+## Exception Class Hierarchy
 
 ```
 UAssetError (Exception)
@@ -22,10 +22,10 @@ UAssetError (Exception)
 
 ## ErrorContext
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `offset` | int | 文件偏移 |
-| `phase` | str | 解析阶段 |
-| `operation` | str | 操作类型 |
-| `export_index` | Optional[int] | 导出索引 |
-| `expected_offset` | Optional[int] | 预期偏移 |
+| Field | Type | Description |
+|------|------|-------------|
+| `offset` | int | File offset |
+| `phase` | str | Parse phase |
+| `operation` | str | Operation type |
+| `export_index` | Optional[int] | Export index |
+| `expected_offset` | Optional[int] | Expected offset |

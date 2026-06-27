@@ -1,57 +1,57 @@
 ---
-title: UE 源码对照
+title: UE Source Code Reference
 section: ue-reference
 ---
 
-# UE 源码对照
+# UE Source Code Reference
 
-本文档建立 uasset_read 模块与 Unreal Engine C++ 源码的对应关系，确保每个解析逻辑都能追溯到 UE 源码定义。
+This document establishes the mapping between uasset_read modules and Unreal Engine C++ source code, ensuring that every parsing logic can be traced back to its UE source definition.
 
-## 核心原则
+## Core Principles
 
 ```
-禁止直接读取/猜测二进制格式
-├── ❌ 错误：读二进制 → 猜字段含义 → 实现
-└── ✅ 正确：查 UE 源码 → 理解结构定义 → 实现
+Directly reading/guessing binary formats is forbidden
+├── ❌ Wrong: read binary -> guess field meaning -> implement
+└── ✅ Correct: look up UE source -> understand struct definition -> implement
 
-输出必须可追溯到 C++ 定义
-├── 每个解析字段必须对应 UE 源码字段
-└── 文档必须标注源码位置
+Output must be traceable to C++ definitions
+├── Every parsed field must correspond to a UE source field
+└── Documentation must note source locations
 ```
 
-## UE 5.8 MCP 实时参考
+## UE 5.8 MCP Live Reference
 
-UE 5.8 的官方 Experimental Unreal MCP server 可以作为 Editor 可见状态的实时参考层。它不替代 UE C++ 源码对二进制格式的定义，但可以验证解析器输出是否与正在运行的 Editor 中的真实资产状态一致。
+The UE 5.8 official Experimental Unreal MCP server can serve as a live reference layer for Editor-visible state. It does not replace UE C++ source definitions for binary formats, but can verify that parser output matches the actual asset state in a running Editor.
 
-本地安装对照：
+Local installation reference:
 
-| 项 | 路径/值 | 用途 |
+| Item | Path/Value | Purpose |
 |----|---------|------|
-| UE 5.8 Engine | `D:\Program Files\Epic Games\Engine\UE_5.8` | 本地源码与插件基线 |
-| Unreal MCP server | `Engine\Plugins\Experimental\ModelContextProtocol` | Editor/Runtime 内 MCP server |
-| MCP Client Toolset | `Engine\Plugins\Experimental\Toolsets\MCPClientToolset` | Editor 连接外部 MCP server 的 toolset client |
-| All Toolsets | `Engine\Plugins\Experimental\Toolsets\AllToolsets` | 聚合启用多个 Experimental Toolsets |
-| 默认 endpoint | `http://127.0.0.1:8000/mcp` | 本机 Streamable HTTP MCP endpoint |
+| UE 5.8 Engine | `D:\Program Files\Epic Games\Engine\UE_5.8` | Local source and plugin baseline |
+| Unreal MCP server | `Engine\Plugins\Experimental\ModelContextProtocol` | MCP server within Editor/Runtime |
+| MCP Client Toolset | `Engine\Plugins\Experimental\Toolsets\MCPClientToolset` | Toolset client for Editor to connect to external MCP servers |
+| All Toolsets | `Engine\Plugins\Experimental\Toolsets\AllToolsets` | Aggregates and enables multiple Experimental Toolsets |
+| Default endpoint | `http://127.0.0.1:8000/mcp` | Local Streamable HTTP MCP endpoint |
 
-关键行为：
+Key behaviors:
 
-- `ModelContextProtocol.uplugin` 是 Experimental，默认不启用。
-- `ModelContextProtocolSettings` 默认 `ServerPortNumber = 8000`、`ServerUrlPath = "/mcp"`、`bAutoStartServer = false`、`bEnableToolSearch = true`。
-- Tool-search 模式下，`tools/list` 只返回 `list_toolsets`、`describe_toolset`、`call_tool`。实际资产/编辑器工具必须先从 `list_toolsets` 和 `describe_toolset` 发现。
-- `ModelContextProtocolEditor` 通过 Toolset Registry 适配 toolsets；只有已启用并已注册的 toolset 才会出现在运行时目录中。
-- 官方限制包括 HTTP/SSE only、loopback 安全边界、无认证、shipping toolset 不发布 MCP Resources/Prompts。
+- `ModelContextProtocol.uplugin` is Experimental and not enabled by default.
+- `ModelContextProtocolSettings` defaults to `ServerPortNumber = 8000`, `ServerUrlPath = "/mcp"`, `bAutoStartServer = false`, `bEnableToolSearch = true`.
+- In tool-search mode, `tools/list` only returns `list_toolsets`, `describe_toolset`, and `call_tool`. Actual asset/Editor tools must first be discovered via `list_toolsets` and `describe_toolset`.
+- `ModelContextProtocolEditor` adapts toolsets through the Toolset Registry; only enabled and registered toolsets will appear in the runtime directory.
+- Official limitations include HTTP/SSE only, loopback security boundary, no authentication, and shipping toolsets do not publish MCP Resources/Prompts.
 
-对本项目的使用准则：
+Usage guidelines for this project:
 
-- 对 `.uasset` 二进制字段实现，仍以 UE C++ 源码为第一依据。
-- 对 Editor 可见结果验收，优先用 MCP 采集 live data，尤其是 Blueprint 图、组件、Transform、Input Action 和引用关系。
-- 如果本地已安装但运行时 `list_toolsets` 没有目标工具，先启用 `AllToolsets` 或对应 Toolset 插件并执行 `ModelContextProtocol.RefreshTools`。
-- 若官方/现有 toolset 无法只读导出所需字段，应创建项目专用只读 toolset；禁止用会修改资产的工具作为验收采集路径。
-- MCP 证据必须记录 toolset schema 和调用参数，确保同一资产可复查。
+- For `.uasset` binary field implementations, UE C++ source remains the primary reference.
+- For Editor-visible result verification, prefer MCP to collect live data, especially for Blueprint graphs, components, Transform, Input Action, and reference relationships.
+- If the toolset is installed locally but `list_toolsets` does not show the target tool at runtime, enable `AllToolsets` or the corresponding Toolset plugin and execute `ModelContextProtocol.RefreshTools`.
+- If official/existing toolsets cannot read-only export the required fields, a project-specific read-only toolset should be created; tools that modify assets must not be used as verification collection paths.
+- MCP evidence must record toolset schema and call parameters to ensure the same asset can be reviewed.
 
-## UE 类对应关系
+## UE Class Mapping
 
-| UE 类 | 源码位置 | 本包对应模块 |
+| UE Class | Source Location | Corresponding Module in This Package |
 |-------|----------|--------------|
 | `FArchive` | `Runtime/Core/Public/Serialization/Archive.h` | `archive.py` |
 | `FPackageFileSummary` | `Runtime/CoreUObject/Public/UObject/PackageFileSummary.h` | `serializers/package_file_summary.py` |
@@ -73,175 +73,175 @@ UE 5.8 的官方 Experimental Unreal MCP server 可以作为 Editor 可见状态
 | `FCustomVersion` | `Runtime/Core/Public/Serialization/CustomVersion.h` | `versioning.py` — `VersionContainer` |
 | `FObjectExport` | `Runtime/CoreUObject/Public/UObject/ObjectResource.h` | `serializers/export_map.py` |
 | `FObjectImport` | `Runtime/CoreUObject/Public/UObject/ObjectResource.h` | `serializers/import_map.py` |
-| `FNameMap` | `Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp` | `parse_uasset.py` — 内置 NameMap |
+| `FNameMap` | `Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp` | `parse_uasset.py` — Built-in NameMap |
 
-## 版本对应关系
+## Version Mapping
 
-### UE5 文件版本（FileVersionUE5）
+### UE5 File Version (FileVersionUE5)
 
-| 版本值 | UE 版本 | 关键特性 | 常量名 |
+| Version Value | UE Version | Key Feature | Constant Name |
 |--------|---------|----------|--------|
-| 1000 | UE 5.0 | 大世界坐标（LWC）基础 | `UE5_VERSION_MIN` |
-| 1001 | UE 5.1 | SoftObjectPath 列表、名称引用 | `UE5_NAMES_REFERENCED_FROM_EXPORT_DATA` |
-| 1002 | UE 5.2 | PayloadTOC 支持 | `UE5_PAYLOAD_TOC` |
-| 1003 | UE 5.3 | 可选资源 | `UE5_OPTIONAL_RESOURCES` |
-| 1004 | UE 5.4 | 大世界坐标完全体 | `UE5_LARGE_WORLD_COORDINATES` |
-| 1005 | UE 5.5 | 移除 ObjectExport PackageGuid | `UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID` |
+| 1000 | UE 5.0 | Large World Coordinates (LWC) baseline | `UE5_VERSION_MIN` |
+| 1001 | UE 5.1 | SoftObjectPath list, name references | `UE5_NAMES_REFERENCED_FROM_EXPORT_DATA` |
+| 1002 | UE 5.2 | PayloadTOC support | `UE5_PAYLOAD_TOC` |
+| 1003 | UE 5.3 | Optional resources | `UE5_OPTIONAL_RESOURCES` |
+| 1004 | UE 5.4 | Large World Coordinates complete | `UE5_LARGE_WORLD_COORDINATES` |
+| 1005 | UE 5.5 | Remove ObjectExport PackageGuid | `UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID` |
 | 1006 | UE 5.5+ | Track ObjectExport IsInherited | `UE5_TRACK_OBJECT_EXPORT_IS_INHERITED` |
-| 1007 | UE 5.5+ | FSoftObjectPath 移除 AssetPath FNames | `UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES` |
-| 1008 | UE 5.5+ | Add SoftObjectPath List 完全体 | `UE5_ADD_SOFTOBJECTPATH_LIST` |
-| 1009 | UE 5.4+ | 数据资源 | `UE5_DATA_RESOURCES` |
-| 1010 | UE 5.4+ | 脚本序列化偏移 | `UE5_SCRIPT_SERIALIZATION_OFFSET` |
-| 1011 | UE 5.4+ | PropertyTag 扩展 | `UE5_PROPERTY_TAG_EXTENSION` |
-| 1012 | UE 5.5+ | PropertyTag 完整类型名 | `UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME` |
+| 1007 | UE 5.5+ | FSoftObjectPath remove AssetPath FNames | `UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES` |
+| 1008 | UE 5.5+ | Add SoftObjectPath List complete | `UE5_ADD_SOFTOBJECTPATH_LIST` |
+| 1009 | UE 5.4+ | Data resources | `UE5_DATA_RESOURCES` |
+| 1010 | UE 5.4+ | Script serialization offset | `UE5_SCRIPT_SERIALIZATION_OFFSET` |
+| 1011 | UE 5.4+ | PropertyTag extension | `UE5_PROPERTY_TAG_EXTENSION` |
+| 1012 | UE 5.5+ | PropertyTag complete type name | `UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME` |
 | 1013 | UE 5.5+ | AssetRegistry PackageBuildDependencies | `UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES` |
-| 1014 | UE 5.5+ | 元数据序列化偏移 | `UE5_METADATA_SERIALIZATION_OFFSET` |
+| 1014 | UE 5.5+ | Metadata serialization offset | `UE5_METADATA_SERIALIZATION_OFFSET` |
 | 1015 | UE 5.6 | Verse Cells | `UE5_VERSE_CELLS` |
 | 1016 | UE 5.6+ | Package Saved Hash | `UE5_PACKAGE_SAVED_HASH` |
 | 1017 | UE 5.6+ | OS Sub-Object Shadow Serialization | `UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION` |
 | 1018 | UE 5.6+ | Import Type Hierarchies | `UE5_IMPORT_TYPE_HIERARCHIES` |
 
-### UE4 文件版本（FileVersionUE4）
+### UE4 File Version (FileVersionUE4)
 
-| 版本值 | UE 版本 | 关键特性 | 常量名 |
+| Version Value | UE Version | Key Feature | Constant Name |
 |--------|---------|----------|--------|
-| 516 | UE 4.23 | 包摘要本地化 ID、字符串资产引用映射 | `UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID` |
-| 517 | UE 4.24 | 包内文本序列化 | `UE4_SERIALIZE_TEXT_IN_PACKAGES` |
-| 518 | UE 4.25 | 可搜索名称 | `UE4_ADDED_SEARCHABLE_NAMES` |
-| 519 | UE 4.26 | 包所有者 | `UE4_ADDED_PACKAGE_OWNER` |
-| 520 | UE 4.27 | 非外部包导入 | `UE4_NON_OUTER_PACKAGE_IMPORT` |
+| 516 | UE 4.23 | Package summary localization ID, string asset reference mapping | `UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID` |
+| 517 | UE 4.24 | In-package text serialization | `UE4_SERIALIZE_TEXT_IN_PACKAGES` |
+| 518 | UE 4.25 | Searchable names | `UE4_ADDED_SEARCHABLE_NAMES` |
+| 519 | UE 4.26 | Package owner | `UE4_ADDED_PACKAGE_OWNER` |
+| 520 | UE 4.27 | Non-outer package import | `UE4_NON_OUTER_PACKAGE_IMPORT` |
 
-### CustomVersion 版本流
+### CustomVersion Stream
 
-| 版本流 | GUID | 说明 |
+| Stream | GUID | Description |
 |--------|------|------|
-| Framework | `CFFC743F-43B04480-939114DF-171D2073` | 图/引脚序列化版本 |
-| UE5 Mainstream | `697DD581-E64F41AB-AA4A51EC-BEB7B628` | UE5 主流程版本 |
-| Release | `9C54D522-A8264FBE-94210746-61B482D0` | 发布版本流 |
-| UE5 Release Stream | `D89B5E42-24BD4D46-8412ACA8-DF641779` | UE5 发布流 |
-| Blueprints | `B0D832E4-1F89-4D06-B39A-8F1B5E1B2A4B` | 蓝图子系统版本 |
-| Core | `371EC2EE-4CD7-4C38-AEB1-B7D6F539A54B` | 核心子系统版本 |
-| Editor | `E4B068ED-F494-42E9-A231-DA0B0E4C5E56` | 编辑器版本 |
-| Anim | `29E575DD-E0A3-4682-9C20-D1CF1B5E8DEF` | 动画子系统版本 |
-| Physics | `78F01B33-BEA0-46A0-8BAF-6C4F4E23F8C1` | 物理子系统版本 |
-| Rendering | `645F75DB-7F54-4C64-A1E2-2F6F3B4B8A5E` | 渲染子系统版本 |
+| Framework | `CFFC743F-43B04480-939114DF-171D2073` | Graph/pin serialization version |
+| UE5 Mainstream | `697DD581-E64F41AB-AA4A51EC-BEB7B628` | UE5 main flow version |
+| Release | `9C54D522-A8264FBE-94210746-61B482D0` | Release stream |
+| UE5 Release Stream | `D89B5E42-24BD4D46-8412ACA8-DF641779` | UE5 release stream |
+| Blueprints | `B0D832E4-1F89-4D06-B39A-8F1B5E1B2A4B` | Blueprint subsystem version |
+| Core | `371EC2EE-4CD7-4C38-AEB1-B7D6F539A54B` | Core subsystem version |
+| Editor | `E4B068ED-F494-42E9-A231-DA0B0E4C5E56` | Editor version |
+| Anim | `29E575DD-E0A3-4682-9C20-D1CF1B5E8DEF` | Animation subsystem version |
+| Physics | `78F01B33-BEA0-46A0-8BAF-6C4F4E23F8C1` | Physics subsystem version |
+| Rendering | `645F75DB-7F54-4C64-A1E2-2F6F3B4B8A5E` | Rendering subsystem version |
 
-### 关键版本阈值
+### Key Version Thresholds
 
-| 常量 | 值 | 说明 |
+| Constant | Value | Description |
 |------|-----|------|
-| `UE5_LEGACY_VERSION` | -9 | UE5.6+ 文件的 LegacyFileVersion 固定值 |
-| `PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | PropertyTag 使用完整类型名的切换阈值 |
-| `FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE` | 15 | 引脚容器类型序列化版本 |
-| `FFRAMEWORK_VERSION_PINS_STORE_FNAME` | 19 | 引脚存储 FName 版本 |
-| `FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX` | 50 | 引脚 SourceIndex 版本 |
-| `FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER` | 10 | 引脚类型 UObjectWrapper 版本 |
+| `UE5_LEGACY_VERSION` | -9 | Fixed LegacyFileVersion for UE5.6+ files |
+| `PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | Threshold for PropertyTag to use complete type names |
+| `FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE` | 15 | Pin container type serialization version |
+| `FFRAMEWORK_VERSION_PINS_STORE_FNAME` | 19 | Pin FName storage version |
+| `FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX` | 50 | Pin SourceIndex version |
+| `FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER` | 10 | Pin type UObjectWrapper version |
 
-## 包标志（Package Flags）
+## Package Flags
 
-| 标志 | 值 | UE 源码 | 说明 |
+| Flag | Value | UE Source | Description |
 |------|-----|---------|------|
-| `PKG_Cooked` | `0x200` | `EPackageFlags::PKG_Cooked` | 已烘焙包（数据已被剥离） |
-| `PKG_UnversionedProperties` | `0x2000` | `EPackageFlags::PKG_UnversionedProperties` | 使用无版本属性序列化 |
-| `PKG_FilterEditorOnly` | `0x80000000` | `EPackageFlags::PKG_FilterEditorOnly` | 过滤编辑器专属对象 |
+| `PKG_Cooked` | `0x200` | `EPackageFlags::PKG_Cooked` | Cooked package (data has been stripped) |
+| `PKG_UnversionedProperties` | `0x2000` | `EPackageFlags::PKG_UnversionedProperties` | Uses unversioned property serialization |
+| `PKG_FilterEditorOnly` | `0x80000000` | `EPackageFlags::PKG_FilterEditorOnly` | Filter editor-only objects |
 
-## PropertyTag 标志
+## PropertyTag Flags
 
-| 标志 | 值 | 说明 |
+| Flag | Value | Description |
 |------|-----|------|
-| `PROP_TAG_NONE` | `0x00` | 无标志 |
-| `PROP_TAG_HAS_ARRAY_INDEX` | `0x01` | ArrayIndex 字段存在 |
-| `PROP_TAG_HAS_PROPERTY_GUID` | `0x02` | PropertyGuid 字段存在 |
-| `PROP_TAG_HAS_EXTENSIONS` | `0x04` | 扩展数据存在 |
-| `PROP_TAG_HAS_BINARY_OR_NATIVE` | `0x08` | 二进制/原生序列化 |
-| `PROP_TAG_BOOL_TRUE` | `0x10` | Bool 值为 true |
-| `PROP_TAG_SKIPPED_SERIALIZE` | `0x20` | 跳过序列化 |
+| `PROP_TAG_NONE` | `0x00` | No flags |
+| `PROP_TAG_HAS_ARRAY_INDEX` | `0x01` | ArrayIndex field present |
+| `PROP_TAG_HAS_PROPERTY_GUID` | `0x02` | PropertyGuid field present |
+| `PROP_TAG_HAS_EXTENSIONS` | `0x04` | Extension data present |
+| `PROP_TAG_HAS_BINARY_OR_NATIVE` | `0x08` | Binary/native serialization |
+| `PROP_TAG_BOOL_TRUE` | `0x10` | Bool value is true |
+| `PROP_TAG_SKIPPED_SERIALIZE` | `0x20` | Serialization skipped |
 
-## 文件魔术标签
+## File Magic Tags
 
-| 常量 | 值 | 说明 |
+| Constant | Value | Description |
 |------|-----|------|
-| `PACKAGE_FILE_TAG` | `0x9E2A83C1` | 正确字节序魔术标签 |
-| `PACKAGE_FILE_TAG_SWAPPED` | `0xC1832A9E` | 字节序交换后的魔术标签 |
+| `PACKAGE_FILE_TAG` | `0x9E2A83C1` | Correct byte-order magic tag |
+| `PACKAGE_FILE_TAG_SWAPPED` | `0xC1832A9E` | Byte-swapped magic tag |
 
-## UE 加载流程
+## UE Loading Pipeline
 
 ```
-用户双击 Content Browser 中的资产
-        │
-        ▼
+User double-clicks asset in Content Browser
+        |
+        v
 SContentBrowser::OnItemsActivated()
-        │
-        ▼
+        |
+        v
 IAssetTypeActions::OpenAssetEditor() / AssetDefinition::OpenAssets()
-        │
-        ▼
-FAssetData::GetAsset() 或 LoadPackage()
-        │
-        ▼
-LoadPackageInternal() → FLinkerLoad::CreateLinkerAsync()
-        │
-        ▼
-FLinkerLoad::ProcessPackageSummary()  ← 读取文件头、验证版本
-        │
-        ▼
-FLinkerLoad::Tick() → LoadAllObjects() → 序列化导出表
-        │
-        ▼
-FinalizeCreation() → PostLoad() → 资产就绪
+        |
+        v
+FAssetData::GetAsset() or LoadPackage()
+        |
+        v
+LoadPackageInternal() -> FLinkerLoad::CreateLinkerAsync()
+        |
+        v
+FLinkerLoad::ProcessPackageSummary()  <- Read file header, verify version
+        |
+        v
+FLinkerLoad::Tick() -> LoadAllObjects() -> Serialize export table
+        |
+        v
+FinalizeCreation() -> PostLoad() -> Asset ready
 ```
 
-### 加载阶段详解
+### Loading Phase Details
 
-| 阶段 | UE 函数 | 说明 |
+| Phase | UE Function | Description |
 |------|---------|------|
-| 1. 包摘要处理 | `ProcessPackageSummary()` | 读取并验证包文件头、引擎版本、文件格式 |
-| 2. 导入表加载 | — | 加载所有导入表条目（引用的外部对象） |
-| 3. 导出表处理 | — | 读取导出表条目（本包内存储的对象），创建 UObject 实例 |
-| 4. 对象序列化 | `Tick()` / `LoadAllObjects()` | 序列化所有对象数据，调用 `Preload()` 序列化属性 |
-| 5. 创建完成 | `FinalizeCreation()` | 连接对象图，标记包为完全加载 |
+| 1. Package summary processing | `ProcessPackageSummary()` | Read and verify package file header, engine version, file format |
+| 2. Import table loading | — | Load all import table entries (referenced external objects) |
+| 3. Export table processing | — | Read export table entries (objects stored in this package), create UObject instances |
+| 4. Object serialization | `Tick()` / `LoadAllObjects()` | Serialize all object data, call `Preload()` to serialize properties |
+| 5. Creation complete | `FinalizeCreation()` | Connect object graph, mark package as fully loaded |
 
-## 关键源码路径索引
+## Key Source File Path Index
 
-| 文件 | UE 源码路径 | 说明 |
+| File | UE Source Path | Description |
 |------|-------------|------|
-| PackageFileSummary.h | `Runtime/CoreUObject/Public/UObject/` | 文件头结构 |
-| ObjectVersion.h | `Runtime/Core/Public/UObject/` | 版本号定义 |
-| ObjectResource.h | `Runtime/CoreUObject/Public/UObject/` | Import/Export 表结构 |
-| LinkerLoad.h | `Runtime/CoreUObject/Public/UObject/` | 加载逻辑 |
-| LinkerLoad.cpp | `Runtime/CoreUObject/Private/UObject/` | 274KB 核心实现 |
-| PropertyTag.h | `Runtime/CoreUObject/Public/UObject/` | 属性标签 |
-| BulkData.h | `Runtime/CoreUObject/Public/Serialization/` | BulkData 结构 |
-| Archive.h | `Runtime/Core/Public/Serialization/` | FArchive 基类 |
-| CustomVersion.h | `Runtime/Core/Public/Serialization/` | 自定义版本系统 |
-| Package.h | `Runtime/CoreUObject/Public/UObject/` | UPackage 定义 |
-| Blueprint.h | `Engine/Classes/Engine/` | UBlueprint 定义 |
-| EdGraph.h | `Engine/Classes/EdGraph/` | UEdGraph 定义 |
-| EdGraphPin.h | `Engine/Classes/EdGraph/` | UEdGraphPin 定义 |
-| ScriptStack.cpp | `Engine/Private/Kismet/` | Kismet VM 执行 |
+| PackageFileSummary.h | `Runtime/CoreUObject/Public/UObject/` | File header structure |
+| ObjectVersion.h | `Runtime/Core/Public/UObject/` | Version number definitions |
+| ObjectResource.h | `Runtime/CoreUObject/Public/UObject/` | Import/Export table structures |
+| LinkerLoad.h | `Runtime/CoreUObject/Public/UObject/` | Loading logic |
+| LinkerLoad.cpp | `Runtime/CoreUObject/Private/UObject/` | 274KB core implementation |
+| PropertyTag.h | `Runtime/CoreUObject/Public/UObject/` | Property tags |
+| BulkData.h | `Runtime/CoreUObject/Public/Serialization/` | BulkData structures |
+| Archive.h | `Runtime/Core/Public/Serialization/` | FArchive base class |
+| CustomVersion.h | `Runtime/Core/Public/Serialization/` | Custom version system |
+| Package.h | `Runtime/CoreUObject/Public/UObject/` | UPackage definition |
+| Blueprint.h | `Engine/Classes/Engine/` | UBlueprint definition |
+| EdGraph.h | `Engine/Classes/EdGraph/` | UEdGraph definition |
+| EdGraphPin.h | `Engine/Classes/EdGraph/` | UEdGraphPin definition |
+| ScriptStack.cpp | `Engine/Private/Kismet/` | Kismet VM execution |
 
-## 安全边界常量
+## Safety Boundary Constants
 
-| 常量 | 值 | 说明 |
+| Constant | Value | Description |
 |------|-----|------|
-| `MAX_NAME_COUNT` | 10,000,000 | 名称表最大条目数 |
-| `MAX_IMPORT_COUNT` | 1,000,000 | 导入表最大条目数 |
-| `MAX_EXPORT_COUNT` | 1,000,000 | 导出表最大条目数 |
-| `MAX_CUSTOM_VERSIONS` | 10,000 | 自定义版本最大条目数 |
-| `MAX_PROPERTY_COUNT` | 10,000 | 属性循环上限 |
-| `MAX_ARRAY_COUNT` | 1,000,000 | ArrayProperty 最大元素数 |
-| `MAX_FSTRING_LENGTH` | 10 MB | FString 最大长度 |
-| `MAX_PINS_PER_NODE` | 1,000 | 单节点最大引脚数 |
-| `MAX_NODES_PER_GRAPH` | 5,000 | 单图最大节点数 |
-| `MAX_LINKEDTO_PER_PIN` | 100 | 单引脚最大连接数 |
-| `MAX_TYPENODE_NODES` | 20 | FPropertyTypeName 最大节点数 |
+| `MAX_NAME_COUNT` | 10,000,000 | Maximum name table entries |
+| `MAX_IMPORT_COUNT` | 1,000,000 | Maximum import table entries |
+| `MAX_EXPORT_COUNT` | 1,000,000 | Maximum export table entries |
+| `MAX_CUSTOM_VERSIONS` | 10,000 | Maximum custom version entries |
+| `MAX_PROPERTY_COUNT` | 10,000 | Property iteration limit |
+| `MAX_ARRAY_COUNT` | 1,000,000 | Maximum ArrayProperty elements |
+| `MAX_FSTRING_LENGTH` | 10 MB | Maximum FString length |
+| `MAX_PINS_PER_NODE` | 1,000 | Maximum pins per node |
+| `MAX_NODES_PER_GRAPH` | 5,000 | Maximum nodes per graph |
+| `MAX_LINKEDTO_PER_PIN` | 100 | Maximum connections per pin |
+| `MAX_TYPENODE_NODES` | 20 | Maximum FPropertyTypeName nodes |
 
-## 外部参考
+## External References
 
-- `docs/formats/uasset/` — UE .uasset 格式文档（60+ Markdown 文件），`Index.md` 为主索引
-- `docs/formats/uasset/serialization/` — 序列化机制参考
-- `docs/formats/uasset/cooked/` — Cooked 格式参考
-- `docs/formats/uasset/version/` — 版本演进参考
-- `docs/formats/uasset/assets/` — 资产类型参考
-- `docs/reference/` — 蓝图节点文本参考、UE 加载流程、蓝图转 C++ 指南
-- `external/CUE4Parse/` — C# 参考实现，用于交叉验证解析逻辑
+- `docs/formats/uasset/` — UE .uasset format documentation (60+ Markdown files), `Index.md` is the main index
+- `docs/formats/uasset/serialization/` — Serialization mechanism reference
+- `docs/formats/uasset/cooked/` — Cooked format reference
+- `docs/formats/uasset/version/` — Version evolution reference
+- `docs/formats/uasset/assets/` — Asset type reference
+- `docs/reference/` — Blueprint node text reference, UE loading pipeline, Blueprint-to-C++ guide
+- `external/CUE4Parse/` — C# reference implementation for cross-validation of parsing logic

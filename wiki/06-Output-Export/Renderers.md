@@ -1,13 +1,13 @@
 ---
-title: 渲染器系统
+title: Renderer System
 section: renderers
 ---
 
-# 渲染器系统
+# Renderer System
 
-渲染器（Renderers）是 0.4.1 引入的新输出系统，替代了原有的 Exporter 架构。渲染器接收 `PackageIR`（中间表示），不直接访问 `ParseResult`，实现了解析与输出的完全解耦。
+Renderers are a new output system introduced in 0.4.1, replacing the previous Exporter architecture. Renderers receive `PackageIR` (Intermediate Representation) without directly accessing `ParseResult`, achieving complete decoupling between parsing and output.
 
-## 架构概览
+## Architecture Overview
 
 ```
 ParseResult → build_package_ir() → PackageIR → Renderer → Output String
@@ -17,20 +17,20 @@ ParseResult → build_package_ir() → PackageIR → Renderer → Output String
                                   └── markdown
 ```
 
-## 核心类
+## Core Classes
 
 <!-- data-api="IRenderer" -->
 ```python
 class IRenderer(ABC):
     @abstractmethod
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        """将 PackageIR 渲染为字符串。"""
+        """Render PackageIR to a string."""
         ...
 
     @property
     @abstractmethod
     def format_name(self) -> str:
-        """渲染器处理的格式名。"""
+        """The format name handled by this renderer."""
         ...
 ```
 
@@ -49,37 +49,37 @@ class RenderOptions:
 RENDERER_REGISTRY: dict[str, type[IRenderer]] = {}
 
 def register_renderer(format_name: str, renderer_class: type[IRenderer]) -> None:
-    """注册渲染器。"""
+    """Register a renderer."""
 
 def get_renderer(format_name: str) -> IRenderer:
-    """获取渲染器实例。"""
+    """Get a renderer instance."""
 
 def list_formats() -> list[str]:
-    """返回所有已注册的格式名。"""
+    """Return all registered format names."""
 ```
 
-## 已注册的渲染器
+## Registered Renderers
 
-| 格式名 | 渲染器类 | 文件 | 说明 |
-|--------|----------|------|------|
-| `json` | `JSONRenderer` | `json_renderer.py` | 结构化 JSON 输出（C++ 翻译参考） |
-| `markdown` | `MarkdownRenderer` | `markdown_renderer.py` | Markdown + Mermaid 文档 |
+| Format Name | Renderer Class | File | Description |
+|-------------|----------------|------|-------------|
+| `json` | `JSONRenderer` | `json_renderer.py` | Structured JSON output (C++ translation reference) |
+| `markdown` | `MarkdownRenderer` | `markdown_renderer.py` | Markdown + Mermaid documentation |
 
-## 使用方式
+## Usage
 
-### 通过 Core API（推荐）
+### Via Core API (Recommended)
 
 ```python
 from uasset_read import parse_single, list_formats
 
-# 直接渲染为 JSON
+# Render directly as JSON
 output = parse_single("MyBlueprint.uasset", format="json")
 
-# 查看所有可用格式
+# View all available formats
 print(list_formats())
 ```
 
-### 直接使用渲染器
+### Direct Renderer Usage
 
 ```python
 from uasset_read.renderers import get_renderer, list_formats
@@ -87,35 +87,35 @@ from uasset_read.renderers.base import RenderOptions
 from uasset_read.ir_builder import build_package_ir
 from uasset_read import parse_uasset
 
-# 解析
+# Parse
 result = parse_uasset("MyBlueprint.uasset")
 
-# 构建 IR
+# Build IR
 ir = build_package_ir(result)
 
-# 获取渲染器并渲染
+# Get renderer and render
 renderer = get_renderer("markdown")
 options = RenderOptions(verbose=True, include_schema=False)
 output = renderer.render(ir, options)
 ```
 
-## 自动注册机制
+## Auto-Registration Mechanism
 
-渲染器在模块导入时自动注册：
+Renderers are automatically registered upon module import:
 
 ```python
 # src/uasset_read/renderers/__init__.py
-from . import json_renderer        # 自动注册 "json"
-from . import markdown_renderer    # 自动注册 "markdown"
+from . import json_renderer        # Auto-registers "json"
+from . import markdown_renderer    # Auto-registers "markdown"
 ```
 
-## 文件位置
+## File Locations
 
-| 文件 | 路径 |
+| File | Path |
 |------|------|
-| 模块根目录 | `src/uasset_read/renderers/` |
-| 基类 | `renderers/base.py` |
-| JSON 渲染器 | `renderers/json_renderer.py` |
-| Markdown 渲染器 | `renderers/markdown_renderer.py` |
+| Module root | `src/uasset_read/renderers/` |
+| Base class | `renderers/base.py` |
+| JSON renderer | `renderers/json_renderer.py` |
+| Markdown renderer | `renderers/markdown_renderer.py` |
 
-**相关章节**: [[IR 中间表示]] · [[CLI 接口]]
+**Related sections**: [[IR Intermediate Representation]] · [[CLI Interface]]

@@ -1,29 +1,29 @@
 ---
-title: 架构设计
+title: Architecture Design
 section: architecture
 ---
 
-# 架构设计
+# Architecture Design
 
-## 整体架构
+## Overall Architecture
 
 ```
 .uasset / .umap    .pak    .iostore
-        ↓ 文件来源
+        ↓ File Source
 PackageBundle    PackageArchive    FArchive
-        ↓ 二进制读取
+        ↓ Binary Reading
 PackageFileSummary    NameTable    ImportMap    ExportMap
-        ↓ 序列化
+        ↓ Serialization
 PropertyTag    PropertyParser    TypeMappings
-        ↓ 属性解析
+        ↓ Property Parsing
 BlueprintParser    GraphParser    PackageLinker    KismetDecompiler
-        ↓ IR 构建
+        ↓ IR Construction
 PackageIR → ExportIR → GraphIR → NodeIR → PinIR
-        ↓ 渲染
+        ↓ Rendering
 JSON    Markdown
 ```
 
-## 解析管线
+## Parsing Pipeline
 
 ```
 open_package_bundle → read_package_summary → build_version_container → read_name_table
@@ -33,38 +33,38 @@ open_package_bundle → read_package_summary → build_version_container → rea
 read_import_map → read_export_map → parse_properties → post_process → build_package_ir → renderers
 ```
 
-## 模块结构
+## Module Structure
 
-| 层级 | 路径 | 职责 |
-|------|------|------|
-| 核心层 | `archive.py` / `constants.py` / `exceptions.py` | 二进制读取、常量、异常体系 |
-| 包管理 | `package.py` / `parse_uasset.py` | 包捆绑、Provider 抽象、解析管线 |
-| 版本管理 | `versioning.py` | VersionContainer、build_version_container、EUEVersion |
-| 类型映射 | `mappings.py` | UE 类型映射（.usmap/.jmap 解析） |
-| 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 文件解析 |
-| Core API | `core.py` | parse_single / parse_batch / list_formats 纯函数入口 |
-| 调试 | `debug/hex_view.py` | HexView 调试系统 |
-| IR 模型 | `models/ir.py` | PackageIR、ExportIR、GraphIR、NodeIR、PinIR 等中间表示 |
-| IR 构建器 | `ir_builder.py` | build_package_ir：从 ParseResult 构建 PackageIR |
-| 渲染器 | `renderers/` | 2 个渲染器，自动注册到 RENDERER_REGISTRY |
-| 序列化 | `serializers/` | Summary/Import/Export/PropertyTag/图序列化 |
-| 解析器 | `parsers/` | 40+ 种属性类型解析器 + 分发器 + 自定义属性注册表 |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC/TextureCube/AnimSequence/AnimDataModel/SoundWave/SoundAttenuation 专用解析器 |
-| 数据模型 | `models/` | UEdGraph/Node/Pin、属性值、变换、蓝图模型、ParseResult |
-| 蓝图 | `blueprint/` | 变量/变换/组件/元数据提取 |
-| 图分析 | `graph/` | 执行流/数据流/链构建器 |
-| Kismet | `kismet/` | 字节码提取、EExprToken → AST → C++ 翻译、BPGC 回退、结构化控制流 |
-| ├ 表达式 | `kismet/expressions/` | 15 种表达式类型（赋值、控制流、函数调用、字面量等） |
-| 链接器 | `link/` | PackageLinker 两阶段对象图重建、UObjectInstance |
-| C++ 生成 | `cpp_gen/` | C++ 骨架/函数提取、IR 格式化器、类型映射、UPROPERTY 映射 |
-| Pak | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry、PakFileReader、索引、压缩、AES 解密 |
-| IoStore | `iostore/` | IoStore 容器读取器、Chunk ID、偏移/大小结构 |
-| Bulk Data | `bulk/` | BulkData 头部解析、标志定义 |
-| UObject | `objects/` | UObject 类型体系、类型注册表、导出类型 |
-| CLI | `cli.py` | argparse 入口，委托 core.py 核心 API |
+| Layer | Path | Responsibility |
+|-------|------|----------------|
+| Core Layer | `archive.py` / `constants.py` / `exceptions.py` | Binary reading, constants, exception system |
+| Package Management | `package.py` / `parse_uasset.py` | Package bundling, Provider abstraction, parsing pipeline |
+| Version Management | `versioning.py` | VersionContainer, build_version_container, EUEVersion |
+| Type Mapping | `mappings.py` | UE type mapping (.usmap/.jmap parsing) |
+| Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset file parsing |
+| Core API | `core.py` | parse_single / parse_batch / list_formats pure function entry points |
+| Debug | `debug/hex_view.py` | HexView debug system |
+| IR Model | `models/ir.py` | PackageIR, ExportIR, GraphIR, NodeIR, PinIR and other intermediate representations |
+| IR Builder | `ir_builder.py` | build_package_ir: construct PackageIR from ParseResult |
+| Renderers | `renderers/` | 2 renderers, auto-registered to RENDERER_REGISTRY |
+| Serializers | `serializers/` | Summary/Import/Export/PropertyTag/graph serialization |
+| Parsers | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
+| ├ Asset Types | `parsers/asset_types/` | StaticMesh/SkeletalMesh/Texture2D/Material/MIC/TextureCube/AnimSequence/AnimDataModel/SoundWave/SoundAttenuation dedicated parsers |
+| Data Models | `models/` | UEdGraph/Node/Pin, property values, transformations, blueprint models, ParseResult |
+| Blueprint | `blueprint/` | Variable/transformation/component/metadata extraction |
+| Graph Analysis | `graph/` | Execution flow/data flow/chain builders |
+| Kismet | `kismet/` | Bytecode extraction, EExprToken → AST → C++ translation, BPGC fallback, structured control flow |
+| ├ Expressions | `kismet/expressions/` | 15 expression types (assignment, control flow, function calls, literals, etc.) |
+| Linker | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
+| C++ Generation | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping |
+| Pak | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index, compression, AES decryption |
+| IoStore | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
+| Bulk Data | `bulk/` | BulkData header parsing, flag definitions |
+| UObject | `objects/` | UObject type system, type registry, export types |
+| CLI | `cli.py` | argparse entry point, delegates to core.py core API |
 
 > [!TIP]
-> **架构变更（0.4.1）**：`exporter/`、`n2c/`、`agent/` 模块已移除，被 IR + Renderers 架构替代。
-> **架构变更（0.5.0）**：`formatters/` 目录已清空，所有格式化功能迁移到 `renderers/` 系统。
+> **Architecture Change (0.4.1)**: `exporter/`, `n2c/`, `agent/` modules have been removed, replaced by the IR + Renderers architecture.
+> **Architecture Change (0.5.0)**: `formatters/` directory has been emptied, all formatting functionality migrated to the `renderers/` system.
 >
-> **相关章节**: [[FArchive]] · [[解析管线]] · [[渲染器系统]] · [[IR 中间表示]]
+> **Related Sections**: [[FArchive]] · [[Parsing Pipeline]] · [[Renderer System]] · [[IR Intermediate Representation]]

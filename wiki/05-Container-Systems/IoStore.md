@@ -1,26 +1,26 @@
 ---
-title: IoStore 容器
+title: IoStore Container
 section: iostore
 ---
 
-# IoStore 容器
+# IoStore Container
 
-UE5.3+ 引入的新型容器格式，使用 `.utoc`（目录表）+ `.ucas`（数据容器）双文件结构替代传统 PAK 格式。IoStore 提供了 O(1) 的 Chunk 查找能力（Perfect Hash）、多分区支持、可选压缩/加密/签名，以及目录索引（按路径查找）。
+A new container format introduced in UE5.3+, using a dual-file structure of `.utoc` (table of contents) + `.ucas` (data container) to replace the traditional PAK format. IoStore provides O(1) Chunk lookup capability (Perfect Hash), multi-partition support, optional compression/encryption/signing, and directory indexing (path-based lookup).
 
 > [!NOTE]
-> IoStore 仅在 UE5.0+ 中可用，UE4 使用不同的存储机制。未烘焙/编辑器保存的资产可能仍使用传统 PAK 格式。
+> IoStore is only available in UE5.0+. UE4 uses a different storage mechanism. Unbaked/editor-saved assets may still use the traditional PAK format.
 
-## 核心 API
+## Core API
 
 ```python
-# 使用上下文管理器（推荐）
+# Using context manager (recommended)
 with IoStoreReader("game.utoc", "game.ucas") as reader:
     data = reader.read_chunk(FIoChunkId(bytes=chunk_id_bytes))
 
-# 按路径提取（需要目录索引）
+# Extract by path (requires directory index)
 data = reader.extract_path("/Game/Maps/Level1.uasset")
 
-# 列出所有文件
+# List all files
 files = reader.list_files()
 ```
 
@@ -28,320 +28,320 @@ files = reader.list_files()
 
 ```python
 IoStoreReader(
-    utoc_path: str,          # .utoc 文件路径（必需）
-    ucas_path: str | None,   # .ucas 文件路径（可选，自动推导）
-    aes_key: bytes | None,   # AES 解密密钥（可选）
-    tolerant: bool = False,  # 宽容模式
+    utoc_path: str,          # .utoc file path (required)
+    ucas_path: str | None,   # .ucas file path (optional, auto-derived)
+    aes_key: bytes | None,   # AES decryption key (optional)
+    tolerant: bool = False,  # Tolerant mode
     read_options: int = EIoStoreTocReadOptions.Default,
 )
 
-# 方法
-.open()           -> None    # 打开容器，解析 TOC 头部、Chunk 数组、压缩块、目录索引
-.close()          -> None    # 关闭所有文件句柄
-.list_files()     -> List[str]          # 列出所有文件路径（需目录索引）
-.does_chunk_exist(chunk_id) -> bool     # 检查 Chunk 是否存在
-.try_resolve(chunk_id) -> Optional[Tuple[int, int]]  # 解析 Chunk -> (offset, length)
-.extract(chunk_id_bytes) -> bytes        # 按 12 字节 ChunkId 提取数据
-.extract_path(path: str) -> Optional[bytes]  # 按路径提取数据
-.read_chunk(chunk_id) -> bytes           # 按 FIoChunkId 读取解压后数据
+# Methods
+.open()           -> None    # Open container, parse TOC header, chunk array, compressed blocks, directory index
+.close()          -> None    # Close all file handles
+.list_files()     -> List[str]          # List all file paths (requires directory index)
+.does_chunk_exist(chunk_id) -> bool     # Check if a chunk exists
+.try_resolve(chunk_id) -> Optional[Tuple[int, int]]  # Resolve chunk -> (offset, length)
+.extract(chunk_id_bytes) -> bytes        # Extract data by 12-byte ChunkId
+.extract_path(path: str) -> Optional[bytes]  # Extract data by path
+.read_chunk(chunk_id) -> bytes           # Read decompressed data by FIoChunkId
 ```
 
 ### IoStoreInfo
 
-解析后的 TOC 摘要信息：
+Parsed TOC summary information:
 
 ```python
-info.version                    # TOC 版本（1-8）
-info.toc_entry_count            # Chunk 数量
-info.compressed_block_count     # 压缩块数量
-info.compression_method_count   # 压缩方法数量
-info.compression_block_size     # 压缩块大小（字节）
-info.directory_index_size       # 目录索引大小
-info.partition_count            # 分区数量
-info.partition_size             # 分区大小
-info.container_flags            # 容器标志（EIoContainerFlags）
-info.is_encrypted               # 是否加密
-info.is_compressed              # 是否压缩
+info.version                    # TOC version (1-8)
+info.toc_entry_count            # Number of chunks
+info.compressed_block_count     # Number of compressed blocks
+info.compression_method_count   # Number of compression methods
+info.compression_block_size     # Compressed block size (bytes)
+info.directory_index_size       # Directory index size
+info.partition_count            # Number of partitions
+info.partition_size             # Partition size
+info.container_flags            # Container flags (EIoContainerFlags)
+info.is_encrypted               # Whether encrypted
+info.is_compressed              # Whether compressed
 info.chunk_ids                  # List[FIoChunkId]
 info.chunk_offsets              # List[FIoOffsetAndLength]
 ```
 
-## 核心结构
+## Core Structures
 
-### FIoChunkId（12 字节）
+### FIoChunkId (12 bytes)
 
-Chunk 标识符，与 UE 源码 `FIoChunkId` 一致：
+Chunk identifier, consistent with UE source code `FIoChunkId`:
 
-| 字节范围 | 字段 | 说明 |
-|----------|------|------|
-| 0-7 | ChunkId (uint64 LE) | 64 位 ID |
-| 8-9 | ChunkIndex (uint16 BE) | Chunk 索引（大端序） |
-| 10 | ChunkGroup (uint8) | Chunk 组 |
+| Byte Range | Field | Description |
+|------------|-------|-------------|
+| 0-7 | ChunkId (uint64 LE) | 64-bit ID |
+| 8-9 | ChunkIndex (uint16 BE) | Chunk index (big-endian) |
+| 10 | ChunkGroup (uint8) | Chunk group |
 | 11 | ChunkType (uint8) | EIoChunkType |
 
 ```python
 chunk_id = FIoChunkId(bytes=chunk_id_bytes)
-chunk_id.id           # 64 位 ID
-chunk_id.chunk_index  # Chunk 索引
-chunk_id.chunk_group  # Chunk 组
-chunk_id.chunk_type   # Chunk 类型
+chunk_id.id           # 64-bit ID
+chunk_id.chunk_index  # Chunk index
+chunk_id.chunk_group  # Chunk group
+chunk_id.chunk_type   # Chunk type
 ```
 
-### FIoOffsetAndLength（10 字节）
+### FIoOffsetAndLength (10 bytes)
 
-IoStore 标准偏移/大小组合格式，10 字节大端编码：
+Standard IoStore offset/length combination format, 10-byte big-endian encoded:
 
-| 字节范围 | 字段 | 说明 |
-|----------|------|------|
-| 0-4 | Offset (大端序) | 40 位偏移 |
-| 5-9 | Length (大端序) | 40 位长度 |
+| Byte Range | Field | Description |
+|------------|-------|-------------|
+| 0-4 | Offset (big-endian) | 40-bit offset |
+| 5-9 | Length (big-endian) | 40-bit length |
 
 ```python
-offset_length = FIoOffsetAndLength.from_bytes(data)  # 10 字节
-offset_length.offset  # 偏移
-offset_length.length  # 长度
+offset_length = FIoOffsetAndLength.from_bytes(data)  # 10 bytes
+offset_length.offset  # Offset
+offset_length.length  # Length
 ```
 
-### FIoOffsetAndSize（8 字节，旧版兼容）
+### FIoOffsetAndSize (8 bytes, legacy compatibility)
 
-40 位偏移 + 24 位大小，小端打包：
+40-bit offset + 24-bit size, little-endian packed:
 
 ```python
-packed = FIoOffsetAndSize(offset=xxx, size=xxx).pack()   # 8 字节
-ofs = FIoOffsetAndSize.unpack(data)                       # 解包
+packed = FIoOffsetAndSize(offset=xxx, size=xxx).pack()   # 8 bytes
+ofs = FIoOffsetAndSize.unpack(data)                       # Unpack
 ```
 
-## 枚举
+## Enums
 
-### EIoStoreTocVersion（TOC 版本）
+### EIoStoreTocVersion (TOC Version)
 
-| 版本 | 名称 | 新增特性 |
-|------|------|----------|
-| 1 | Initial | 初始版本 |
-| 2 | DirectoryIndex | 目录索引 |
-| 3 | PartitionSize | 多分区支持 |
-| 4 | PerfectHash | Perfect Hash 优化 |
-| 5 | PerfectHashWithOverflow | Perfect Hash + 溢出处理 |
-| 6 | OnDemandMetaData | 按需元数据 |
-| 7 | RemovedOnDemandMetaData | 移除按需元数据 |
-| 8 | ReplaceIoChunkHashWithIoHash | 使用 FIoHash 替代 FIoChunkHash |
+| Version | Name | New Features |
+|---------|------|--------------|
+| 1 | Initial | Initial version |
+| 2 | DirectoryIndex | Directory index |
+| 3 | PartitionSize | Multi-partition support |
+| 4 | PerfectHash | Perfect Hash optimization |
+| 5 | PerfectHashWithOverflow | Perfect Hash + overflow handling |
+| 6 | OnDemandMetaData | On-demand metadata |
+| 7 | RemovedOnDemandMetaData | Removed on-demand metadata |
+| 8 | ReplaceIoChunkHashWithIoHash | Use FIoHash instead of FIoChunkHash |
 
-### EIoChunkType（数据块类型）
+### EIoChunkType (Chunk Data Type)
 
-| 类型值 | 名称 | 说明 | 最低版本 |
-|--------|------|------|----------|
-| 0 | Invalid | 无效 | — |
-| 1 | ExportBundleData | 导出包数据 | UE5.0 |
-| 2 | BulkData | 批量数据 | UE5.0 |
-| 3 | OptionalBulkData | 可选批量数据 | UE5.0 |
-| 4 | MemoryMappedBulkData | 内存映射批量数据 | UE5.0 |
-| 5 | ScriptObjects | 脚本对象 | UE5.0 |
-| 6 | ContainerHeader | 容器头部 | UE5.0 |
-| 7 | ExternalFile | 外部文件引用 | UE5.1 |
-| 8 | ShaderCodeLibrary | 着色器代码库 | UE5.1 |
-| 9 | ShaderCode | 着色器代码 | UE5.1 |
-| 10 | PackageStoreEntry | 包存储条目 | UE5.2 |
-| 11 | DerivedData | 派生数据 | UE5.3 |
-| 12 | EditorDerivedData | 编辑器派生数据 | UE5.4 |
-| 13 | PackageResource | 包资源 | UE5.5 |
+| Type Value | Name | Description | Minimum Version |
+|------------|------|-------------|-----------------|
+| 0 | Invalid | Invalid | — |
+| 1 | ExportBundleData | Export bundle data | UE5.0 |
+| 2 | BulkData | Bulk data | UE5.0 |
+| 3 | OptionalBulkData | Optional bulk data | UE5.0 |
+| 4 | MemoryMappedBulkData | Memory-mapped bulk data | UE5.0 |
+| 5 | ScriptObjects | Script objects | UE5.0 |
+| 6 | ContainerHeader | Container header | UE5.0 |
+| 7 | ExternalFile | External file reference | UE5.1 |
+| 8 | ShaderCodeLibrary | Shader code library | UE5.1 |
+| 9 | ShaderCode | Shader code | UE5.1 |
+| 10 | PackageStoreEntry | Package store entry | UE5.2 |
+| 11 | DerivedData | Derived data | UE5.3 |
+| 12 | EditorDerivedData | Editor derived data | UE5.4 |
+| 13 | PackageResource | Package resource | UE5.5 |
 
-### EIoContainerFlags（容器标志）
+### EIoContainerFlags (Container Flags)
 
-| 标志 | 值 | 说明 |
-|------|-----|------|
-| None_ | 0 | 无标志 |
-| Compressed | 1 << 0 | 容器使用压缩 |
-| Encrypted | 1 << 1 | 容器使用加密 |
-| Signed | 1 << 2 | 容器使用签名 |
-| Indexed | 1 << 3 | 容器有目录索引 |
-| OnDemand | 1 << 4 | 按需加载 |
+| Flag | Value | Description |
+|------|-------|-------------|
+| None_ | 0 | No flags |
+| Compressed | 1 << 0 | Container uses compression |
+| Encrypted | 1 << 1 | Container uses encryption |
+| Signed | 1 << 2 | Container uses signing |
+| Indexed | 1 << 3 | Container has a directory index |
+| OnDemand | 1 << 4 | On-demand loading |
 
-## TOC 文件结构
+## TOC File Structure
 
-`.utoc` 文件的完整布局（自顶向下读取）：
+Complete layout of the `.utoc` file (read top-to-bottom):
 
 ```
 +───────────────────────────────────+
-│ FIoStoreTocHeader (144 字节)      │  ← 魔数 + 版本 + 计数 + 标志
+│ FIoStoreTocHeader (144 bytes)     │  ← Magic number + version + counts + flags
 +───────────────────────────────────+
-│ 对齐到 4 字节边界                 │
+│ Aligned to 4-byte boundary        │
 +───────────────────────────────────+
-│ ChunkId 数组 (12 字节 × N)        │  ← N = toc_entry_count
+│ ChunkId array (12 bytes × N)      │  ← N = toc_entry_count
 +───────────────────────────────────+
-│ OffsetAndLength 数组 (10 字节 × N)│
+│ OffsetAndLength array (10 bytes × N)│
 +───────────────────────────────────+
-│ Perfect Hash 种子 (Version 4+)    │  ← 4 字节 × seed_count
+│ Perfect Hash seeds (Version 4+)   │  ← 4 bytes × seed_count
 +───────────────────────────────────+
-│ 无 Perfect Hash 索引 (V5+)        │  ← 4 字节 × count
+│ Non-Perfect Hash indices (V5+)    │  ← 4 bytes × count
 +───────────────────────────────────+
-│ 压缩块条目 (12 字节 × M)          │  ← M = compressed_block_count
+│ Compressed block entries (12 bytes × M)│  ← M = compressed_block_count
 +───────────────────────────────────+
-│ 压缩方法名 (name_count × length)  │  ← ASCII 定长字符串
+│ Compression method names (name_count × length)│  ← Fixed-length ASCII strings
 +───────────────────────────────────+
-│ 签名数据（如 Signed）             │  ← 可选，跳过
+│ Signature data (if Signed)        │  ← Optional, skipped
 +───────────────────────────────────+
-│ 目录索引缓冲区（如 Indexed）      │  ← 可变长度
+│ Directory index buffer (if Indexed)│  ← Variable length
 +───────────────────────────────────+
 ```
 
-### FIoStoreTocHeader（144 字节）
+### FIoStoreTocHeader (144 bytes)
 
-| 偏移 | 大小 | 字段 | 说明 |
-|------|------|------|------|
-| 0 | 16 | toc_magic | 魔数 `-==--==--==--==-` |
-| 16 | 1 | version | TOC 版本（EIoStoreTocVersion） |
-| 17 | 1 | reserved0 | 保留 |
-| 18 | 2 | reserved1 | 保留 |
-| 20 | 4 | toc_header_size | 头部大小 |
-| 24 | 4 | toc_entry_count | Chunk 条目数 |
-| 28 | 4 | toc_compressed_block_entry_count | 压缩块数 |
-| 32 | 4 | toc_compressed_block_entry_size | 压缩块大小 |
-| 36 | 4 | compression_method_name_count | 压缩方法名数量 |
-| 40 | 4 | compression_method_name_length | 压缩方法名长度 |
-| 44 | 4 | compression_block_size | 压缩块大小（字节） |
-| 48 | 4 | directory_index_size | 目录索引大小 |
-| 52 | 4 | partition_count | 分区数 |
-| 64 | 8 | container_id (FIoContainerId) | 容器 ID |
-| 72 | 16 | encryption_key_guid (FGuid) | 加密密钥 GUID |
-| 88 | 4 | container_flags (EIoContainerFlags) | 容器标志 |
-| 92 | 4 | toc_chunk_perfect_hash_seeds_count | Perfect Hash 种子数 |
-| 96 | 8 | partition_size | 分区大小 |
-| 104 | 4 | toc_chunks_without_perfect_hash_count | 无 Perfect Hash 的 Chunk 数 |
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0 | 16 | toc_magic | Magic number `-==--==--==--==-` |
+| 16 | 1 | version | TOC version (EIoStoreTocVersion) |
+| 17 | 1 | reserved0 | Reserved |
+| 18 | 2 | reserved1 | Reserved |
+| 20 | 4 | toc_header_size | Header size |
+| 24 | 4 | toc_entry_count | Number of chunk entries |
+| 28 | 4 | toc_compressed_block_entry_count | Number of compressed blocks |
+| 32 | 4 | toc_compressed_block_entry_size | Compressed block size |
+| 36 | 4 | compression_method_name_count | Number of compression method names |
+| 40 | 4 | compression_method_name_length | Compression method name length |
+| 44 | 4 | compression_block_size | Compressed block size (bytes) |
+| 48 | 4 | directory_index_size | Directory index size |
+| 52 | 4 | partition_count | Number of partitions |
+| 64 | 8 | container_id (FIoContainerId) | Container ID |
+| 72 | 16 | encryption_key_guid (FGuid) | Encryption key GUID |
+| 88 | 4 | container_flags (EIoContainerFlags) | Container flags |
+| 92 | 4 | toc_chunk_perfect_hash_seeds_count | Number of Perfect Hash seeds |
+| 96 | 8 | partition_size | Partition size |
+| 104 | 4 | toc_chunks_without_perfect_hash_count | Number of chunks without Perfect Hash |
 
 > [!NOTE]
-> Version 3 之前无分区支持，partition_count 强制为 1，partition_size 为 ulong.MaxValue。
+> Before version 3, there was no partition support. `partition_count` is forced to 1, and `partition_size` is set to `ulong.MaxValue`.
 
-### FIoStoreTocCompressedBlockEntry（12 字节）
+### FIoStoreTocCompressedBlockEntry (12 bytes)
 
-| 字节 | 字段 | 说明 |
-|------|------|------|
-| 0-4 | Offset (5 字节 LE) | 偏移 |
-| 5-7 | CompressedSize (3 字节) | 压缩大小 |
-| 8-10 | UncompressedSize (3 字节) | 解压大小 |
-| 11 | CompressionMethodIndex (1 字节) | 压缩方法索引 |
+| Bytes | Field | Description |
+|-------|-------|-------------|
+| 0-4 | Offset (5 bytes LE) | Offset |
+| 5-7 | CompressedSize (3 bytes) | Compressed size |
+| 8-10 | UncompressedSize (3 bytes) | Uncompressed size |
+| 11 | CompressionMethodIndex (1 byte) | Compression method index |
 
-## 目录索引
+## Directory Index
 
-当容器带有 `Indexed` 标志时，`.utoc` 末尾包含目录索引缓冲区，支持按文件路径直接定位 Chunk。
+When the container has the `Indexed` flag set, the `.utoc` file contains a directory index buffer at the end, enabling direct Chunk lookup by file path.
 
-### 索引结构
+### Index Structure
 
 ```
 +───────────────────────────────────+
-│ MountPoint (FString)              │  ← 挂载点路径
+│ MountPoint (FString)              │  ← Mount point path
 +───────────────────────────────────+
-│ DirectoryEntries[] (FString 计数) │  ← 目录树
+│ DirectoryEntries[] (FString count)│  ← Directory tree
 +───────────────────────────────────+
-│ FileEntries[] (FString 计数)      │  ← 文件条目
+│ FileEntries[] (FString count)     │  ← File entries
 +───────────────────────────────────+
-│ StringTable[] (FString 计数)      │  ← 字符串池
+│ StringTable[] (FString count)     │  ← String pool
 +───────────────────────────────────+
 ```
 
-### FIoDirectoryIndexEntry（16 字节）
+### FIoDirectoryIndexEntry (16 bytes)
 
-| 偏移 | 字段 | 说明 |
-|------|------|------|
-| 0 | name | 名称索引（指向 StringTable） |
-| 4 | first_child_entry | 首个子目录索引 |
-| 8 | next_sibling_entry | 下一个兄弟目录索引 |
-| 12 | first_file_entry | 首个文件条目索引 |
+| Offset | Field | Description |
+|--------|-------|-------------|
+| 0 | name | Name index (points to StringTable) |
+| 4 | first_child_entry | First child directory index |
+| 8 | next_sibling_entry | Next sibling directory index |
+| 12 | first_file_entry | First file entry index |
 
-### FIoFileIndexEntry（12 字节）
+### FIoFileIndexEntry (12 bytes)
 
-| 偏移 | 字段 | 说明 |
-|------|------|------|
-| 0 | name | 文件名索引 |
-| 4 | next_file_entry | 下一个文件条目索引 |
-| 8 | user_data | Chunk 索引（指向 ChunkId 数组） |
+| Offset | Field | Description |
+|--------|-------|-------------|
+| 0 | name | File name index |
+| 4 | next_file_entry | Next file entry index |
+| 8 | user_data | Chunk index (points to ChunkId array) |
 
 > [!TIP]
-> 目录索引使用递归树遍历：从根目录开始，先遍历文件条目，再递归子目录，最后移动到兄弟目录。
+> The directory index uses recursive tree traversal: starting from the root directory, it first iterates over file entries, then recursively processes child directories, and finally moves to sibling directories.
 
-## Chunk 查找机制
+## Chunk Lookup Mechanism
 
-### Perfect Hash（O(1)，Version 4+）
+### Perfect Hash (O(1), Version 4+)
 
-使用 64 位 FNV-1a 哈希算法 + 种子数组实现 O(1) 查找：
+Uses 64-bit FNV-1a hashing with a seed array for O(1) lookup:
 
-1. 根据种子索引找到种子值
-2. 若种子为正：`slot = hash_with_seed(chunk_id, seed) % chunk_count`
-3. 若种子为负：表示不完美哈希条目，转换为索引回退
-4. 若种子为零：该位置无条目
+1. Look up the seed value by seed index
+2. If seed is positive: `slot = hash_with_seed(chunk_id, seed) % chunk_count`
+3. If seed is negative: indicates an imperfect hash entry, convert to index fallback
+4. If seed is zero: no entry at that position
 
 ```python
-# FNV-1a 哈希（与 UE 源码一致）
+# FNV-1a hash (consistent with UE source code)
 hash_val = 0xcbf29ce484222325 ^ seed  # offset basis
 for byte in chunk_id.bytes:
     hash_val ^= byte
     hash_val = (hash_val * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF  # FNV prime
 ```
 
-### 不完美哈希回退
+### Imperfect Hash Fallback
 
-Perfect Hash 无法覆盖的 Chunk 使用字典回退或线性搜索：
+Chunks not covered by Perfect Hash use dictionary fallback or linear search:
 
 ```python
-# 方法 1：字典查找（预构建回退表）
+# Method 1: Dictionary lookup (pre-built fallback table)
 self._toc_imperfect_hash_map.get(chunk_id)
 
-# 方法 2：线性搜索
+# Method 2: Linear search
 for i, cid in enumerate(self._chunk_ids):
     if cid == chunk_id:
         return self._chunk_offsets[i]
 ```
 
-## 数据读取
+## Data Reading
 
-### 无压缩直接读取
+### Uncompressed Direct Read
 
 ```python
 reader.seek(partition_offset)
 data = reader.read(length)
 ```
 
-### 压缩块读取
+### Compressed Block Read
 
-1. 计算起始和结束压缩块索引
-2. 逐块读取 → 解密（如加密）→ 解压
-3. 从解压后的块中提取所需字节范围并拼接
+1. Calculate the start and end compressed block indices
+2. Read each block sequentially -> decrypt (if encrypted) -> decompress
+3. Extract the required byte range from the decompressed blocks and concatenate
 
-支持的压缩方法由 TOC 中的压缩方法名指定（如 `LZ4`、`Zlib`、`Zstandard`）。
+Supported compression methods are specified by the compression method names in the TOC (e.g., `LZ4`, `Zlib`, `Zstandard`).
 
-### 多分区读取
+### Multi-Partition Read
 
-当 `partition_count > 1` 时：
+When `partition_count > 1`:
 
-- 分区文件命名：`game.ucas`、`game_s1.ucas`、`game_s2.ucas` ...
-- 分区索引：`partition_index = offset // partition_size`
-- 分区内偏移：`partition_offset = offset % partition_size`
-- 支持跨分区连续读取
+- Partition file naming: `game.ucas`, `game_s1.ucas`, `game_s2.ucas` ...
+- Partition index: `partition_index = offset // partition_size`
+- Offset within partition: `partition_offset = offset % partition_size`
+- Supports cross-partition sequential reading
 
-## 加密与签名
+## Encryption and Signing
 
-### 加密
+### Encryption
 
-当 `EIoContainerFlags.Encrypted` 设置时：
+When `EIoContainerFlags.Encrypted` is set:
 
-- 数据块使用 AES-ECB 解密
-- 目录索引缓冲区使用 AES-ECB 解密
-- 需要对齐到 16 字节边界
-- 需提供 AES 密钥
+- Data blocks are decrypted using AES-ECB
+- Directory index buffer is decrypted using AES-ECB
+- Alignment to 16-byte boundary is required
+- AES key must be provided
 
-### 签名
+### Signing
 
-当 `EIoContainerFlags.Signed` 设置时：
+When `EIoContainerFlags.Signed` is set:
 
-- TOC 中包含 `tocSignature`、`blockSignature` 和每个压缩块的 FSHAHash
-- 签名数据在解析时被跳过
+- The TOC contains `tocSignature`, `blockSignature`, and an FSHAHash for each compressed block
+- Signature data is skipped during parsing
 
-## 与 PAK 格式对比
+## Comparison with PAK Format
 
-| 特性 | PAK | IoStore |
-|------|-----|---------|
-| 文件结构 | 单文件 | 双文件（.utoc + .ucas） |
-| 查找方式 | 字典/线性 | Perfect Hash O(1) |
-| 压缩粒度 | 按条目 | 按压缩块（可跨 Chunk 共享） |
-| 多分区 | 不支持 | 支持 |
-| 目录索引 | 无 | 有（支持按路径查找） |
-| 版本 | UE4/UE5 | UE5.0+ |
+| Feature | PAK | IoStore |
+|---------|-----|---------|
+| File Structure | Single file | Dual file (.utoc + .ucas) |
+| Lookup Method | Dictionary/Linear | Perfect Hash O(1) |
+| Compression Granularity | Per entry | Per compressed block (can span chunks) |
+| Multi-Partition | Not supported | Supported |
+| Directory Index | None | Yes (supports path-based lookup) |
+| Version | UE4/UE5 | UE5.0+ |

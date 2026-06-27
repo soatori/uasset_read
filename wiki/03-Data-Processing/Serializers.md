@@ -1,27 +1,27 @@
 ---
-title: 序列化模块
+title: Serializer Module
 section: serializers
 ---
 
-# 序列化模块
+# Serializer Module
 
-> 序列化模块负责从二进制流中读取包的 Summary、导入/导出表、属性标签和图结构。
+> The serializer module is responsible for reading the package Summary, Import/Export tables, Property Tags, and graph structures from the binary stream.
 
-## 模块概览
+## Module Overview
 
-| 模块 | 职责 | 关键函数/类 |
-|------|------|-------------|
-| `package_summary.py` | PackageFileSummary、NameTable | `read_package_summary` `read_name_table` |
-| `object_resources.py` | ImportMap、ExportMap、PackageIndex | `read_import_map` `read_export_map` `resolve_class_name` |
-| `property_tags.py` | PropertyTag 读取、控制标志 | `read_property_tag` `parse_ctrl_flags` |
-| `graph.py` | UEdGraph/Node/Pin 读取 | `read_ue_graph` `read_ue_graph_node` `read_ue_graph_pin` |
+| Module | Responsibility | Key Functions/Classes |
+|--------|---------------|----------------------|
+| `package_summary.py` | PackageFileSummary, NameTable | `read_package_summary` `read_name_table` |
+| `object_resources.py` | ImportMap, ExportMap, PackageIndex | `read_import_map` `read_export_map` `resolve_class_name` |
+| `property_tags.py` | PropertyTag reading, control flags | `read_property_tag` `parse_ctrl_flags` |
+| `graph.py` | UEdGraph/Node/Pin reading | `read_ue_graph` `read_ue_graph_node` `read_ue_graph_pin` |
 
-## PackageIndex 编码
+## PackageIndex Encoding
 
-- **正数**：导出索引（1-based）
-- **负数**：导入索引（-1-based）
-- **零**：空引用
+- **Positive**: Export index (1-based)
+- **Negative**: Import index (-1-based)
+- **Zero**: Null reference
 
 ---
 
-**相关章节**: [[解析管线]] · [[属性解析器]] · [[数据模型]] · [[对象链接器]]
+**Related sections**: [[Parsing Pipeline]] · [[Property Parser]] · [[Data Model]] · [[Object Linker]]

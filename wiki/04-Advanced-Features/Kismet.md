@@ -1,11 +1,11 @@
 ---
-title: Kismet 反编译
+title: Kismet Decompilation
 section: kismet
 ---
 
-# Kismet 反编译
+# Kismet Decompilation
 
-`kismet/` 实现 Kismet 字节码提取、AST 解析和 C++ 代码翻译。
+`kismet/` implements Kismet bytecode extraction, AST parsing, and C++ code translation.
 
 <!-- data-api="decompile_uasset" -->
 ```python
@@ -22,26 +22,26 @@ extract_bytecode_bytes(archive, export, summary, name_map, import_map, export_ma
 parse_bytecode_stream(bytecode_bytes, name_map, tolerant) → List[KismetExpression]
 ```
 
-## 表达式类层次
+## Expression Class Hierarchy
 
 ```
-KismetExpression (抽象基类)
-├── KismetExpressionT[T] (带值)
+KismetExpression (abstract base class)
+├── KismetExpressionT[T] (with value)
 ├── EX_VariableBase → EX_LocalVariable, EX_InstanceVariable, EX_DefaultVariable
-├── EX_LetBase (赋值) → EX_Let, EX_LetBool, EX_LetDelegate
-├── EX_FinalFunction (调用) → EX_CallMath, EX_LocalFinalFunction
+├── EX_LetBase (assignment) → EX_Let, EX_LetBool, EX_LetDelegate
+├── EX_FinalFunction (call) → EX_CallMath, EX_LocalFinalFunction
 ├── EX_CastBase → EX_Cast, EX_DynamicCast, EX_MetaCast
 ├── EX_ContextBase → EX_Context, EX_Context_FailSilent, EX_ClassContext
-├── 字面量: EX_IntConst, EX_FloatConst, EX_StringConst, EX_VectorConst
-└── 控制流: EX_Jump, EX_JumpIfNot, EX_Return, EX_EndOfScript
+├── Literals: EX_IntConst, EX_FloatConst, EX_StringConst, EX_VectorConst
+└── Control flow: EX_Jump, EX_JumpIfNot, EX_Return, EX_EndOfScript
 ```
 
-## 关键设计
+## Key Design
 
-- **两阶段翻译**：Phase 62 二进制→AST，Phase 63 AST→C++
-- **MathFunctionCleaner**：美化 `UKismetMathLibrary::Add_IntInt(a,b)` → `a + b`
-- **BPGC 回退**：UE5 烘焙蓝图字节码在 BlueprintGeneratedClass.script_serial_region
-- **结构化流 vs Goto**：StructuredControlFlow 检测 Push/Pop 模式，失败时回退 goto
+- **Two-phase translation**: Phase 62 binary→AST, Phase 63 AST→C++
+- **MathFunctionCleaner**: beautifies `UKismetMathLibrary::Add_IntInt(a,b)` → `a + b`
+- **BPGC fallback**: UE5 baked blueprint bytecode is in BlueprintGeneratedClass.script_serial_region
+- **Structured flow vs Goto**: StructuredControlFlow detects Push/Pop patterns, falls back to goto on failure
 
 > [!TIP]
-> **相关章节**: [[Blueprint]] · [[CPP-Generator]]
+> **Related sections**: [[Blueprint]] · [[CPP-Generator]]

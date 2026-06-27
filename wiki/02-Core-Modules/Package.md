@@ -1,13 +1,13 @@
 ---
-title: 包管理
+title: Package Management
 section: package
 ---
 
-# 包管理
+# Package Management
 
-`package.py` 管理 .uasset + .uexp 文件捆绑。
+`package.py` manages .uasset + .uexp file bundling.
 
-## 核心类
+## Core Classes
 
 <!-- data-api="PackageBundle" -->
 ```python
@@ -16,15 +16,15 @@ PackageBundle — main_path, package_kind, container, files, payloads, provider
 
 <!-- data-api="PackageArchive" -->
 ```python
-PackageArchive(main_archive, uexp_archive, tolerant)  # .uasset + .uexp 合并
+PackageArchive(main_archive, uexp_archive, tolerant)  # .uasset + .uexp merged
 ```
 
-## Provider 类型
+## Provider Types
 
-| Provider | 容器 | 说明 |
-|----------|------|------|
-| `FileSystemPackageProvider` | filesystem | 直接文件系统 |
-| `PakPackageProvider` | pak | PAK 容器 |
-| `IoStorePackageProvider` | iostore | IoStore 容器 |
+| Provider | Container | Description |
+|----------|-----------|-------------|
+| `FileSystemPackageProvider` | filesystem | Direct file system |
+| `PakPackageProvider` | pak | PAK container |
+| `IoStorePackageProvider` | iostore | IoStore container |
 
-**相关章节**: [[解析管线]] · [[PAK]]
+**Related Sections**: [[Parsing Pipeline]] · [[PAK]]

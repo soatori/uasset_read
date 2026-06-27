@@ -1,34 +1,34 @@
 ---
-title: IR 中间表示
+title: IR Intermediate Representation
 section: ir
 ---
 
-# IR 中间表示
+# IR Intermediate Representation
 
-IR（Intermediate Representation，中间表示）是 0.4.1 引入的统一数据层，位于 `ParseResult` 和渲染器之间。渲染器只接收 `PackageIR`，不访问 `ParseResult`。
+IR (Intermediate Representation) is the unified data layer introduced in 0.4.1, positioned between `ParseResult` and renderers. Renderers only receive `PackageIR` and do not access `ParseResult`.
 
-## 设计目标
+## Design Goals
 
-1. **解耦**：解析逻辑和输出格式完全独立
-2. **精简**：IR 只保留渲染器需要的数据，去除冗余
-3. **统一**：所有渲染器共享同一数据结构
-4. **GUID 标准化**：所有 Node/Pin GUID 统一为 32 位小写 hex
+1. **Decoupling**: Parsing logic and output format are completely independent
+2. **Minimalism**: IR only retains data needed by renderers, removing redundancy
+3. **Unification**: All renderers share the same data structure
+4. **GUID Standardization**: All Node/Pin GUIDs are unified to 32-bit lowercase hex
 
-## 数据类型
+## Data Types
 
-所有 IR 类型定义在 `src/uasset_read/models/ir.py`。
+All IR types are defined in `src/uasset_read/models/ir.py`.
 
 ### PackageHeaderIR
 
 ```python
 @dataclass
 class PackageHeaderIR:
-    package_name: str          # 包名
-    package_class: str         # 包类
-    package_flags: int         # 包标志
-    total_export_count: int    # 导出数量
-    total_import_count: int    # 导入数量
-    ue_version: str            # UE 版本
+    package_name: str          # Package name
+    package_class: str         # Package class
+    package_flags: int         # Package flags
+    total_export_count: int    # Export count
+    total_import_count: int    # Import count
+    ue_version: str            # UE version
 ```
 
 ### PinIR
@@ -36,12 +36,12 @@ class PackageHeaderIR:
 ```python
 @dataclass
 class PinIR:
-    pin_name: str              # Pin 名称
-    pin_type: str              # Pin 类型
-    pin_type_value: str | None # Pin 类型值
-    linked_to: list[str]       # 连接目标
-    direction: str             # 方向（输入/输出）
-    default_value: str | None  # 默认值
+    pin_name: str              # Pin name
+    pin_type: str              # Pin type
+    pin_type_value: str | None # Pin type value
+    linked_to: list[str]       # Connection targets
+    direction: str             # Direction (input/output)
+    default_value: str | None  # Default value
 ```
 
 ### NodeIR
@@ -49,11 +49,11 @@ class PinIR:
 ```python
 @dataclass
 class NodeIR:
-    node_guid: str             # 节点 GUID（32 位小写 hex）
-    node_class: str            # 节点类
-    node_comment: str | None   # 注释
+    node_guid: str             # Node GUID (32-bit lowercase hex)
+    node_class: str            # Node class
+    node_comment: str | None   # Comment
     pins: list[PinIR]          # Pins
-    execution_flow: list[dict] # 执行流
+    execution_flow: list[dict] # Execution flow
 ```
 
 ### GraphIR
@@ -61,11 +61,11 @@ class NodeIR:
 ```python
 @dataclass
 class GraphIR:
-    graph_guid: str            # 图 GUID
-    graph_name: str            # 图名称
-    graph_class: str           # 图类
-    nodes: list[NodeIR]        # 节点列表
-    execution_chains: list[list[str]]  # 执行链
+    graph_guid: str            # Graph GUID
+    graph_name: str            # Graph name
+    graph_class: str           # Graph class
+    nodes: list[NodeIR]        # Node list
+    execution_chains: list[list[str]]  # Execution chains
 ```
 
 ### PropertyIR
@@ -73,11 +73,11 @@ class GraphIR:
 ```python
 @dataclass
 class PropertyIR:
-    name: str                  # 属性名
-    type: str                  # 属性类型
-    value: Any                 # 属性值
-    array_index: int           # 数组索引
-    guid: str | None           # 属性 GUID
+    name: str                  # Property name
+    type: str                  # Property type
+    value: Any                 # Property value
+    array_index: int           # Array index
+    guid: str | None           # Property GUID
 ```
 
 ### ExportIR
@@ -85,16 +85,16 @@ class PropertyIR:
 ```python
 @dataclass
 class ExportIR:
-    index: int                 # 导出索引
-    object_name: str           # 对象名
-    object_class: str          # 对象类
-    serial_size: int           # 序列化大小
-    outer_index_resolved: str | None    # 外部索引解析
-    super_index_resolved: str | None    # 父级索引解析
-    parent_class: str | None   # 父类
-    properties: list[PropertyIR]  # 属性列表
-    graphs: list[GraphIR]      # 图列表
-    bulk_data: dict | None     # Bulk 数据
+    index: int                 # Export index
+    object_name: str           # Object name
+    object_class: str          # Object class
+    serial_size: int           # Serialized size
+    outer_index_resolved: str | None    # Outer index resolution
+    super_index_resolved: str | None    # Parent index resolution
+    parent_class: str | None   # Parent class
+    properties: list[PropertyIR]  # Property list
+    graphs: list[GraphIR]      # Graph list
+    bulk_data: dict | None     # Bulk data
 ```
 
 ### BlueprintIR
@@ -102,10 +102,10 @@ class ExportIR:
 ```python
 @dataclass
 class BlueprintIR:
-    parent_class: str | None           # 父类
-    functions: list[BlueprintFunctionIR]  # 函数列表
-    events: list[BlueprintEventIR]     # 事件列表
-    components: list[dict]             # 组件列表
+    parent_class: str | None           # Parent class
+    functions: list[BlueprintFunctionIR]  # Function list
+    events: list[BlueprintEventIR]     # Event list
+    components: list[dict]             # Component list
 ```
 
 ### BlueprintFunctionIR / BlueprintEventIR
@@ -113,15 +113,15 @@ class BlueprintIR:
 ```python
 @dataclass
 class BlueprintFunctionIR:
-    name: str                  # 函数名
-    return_type: str           # 返回类型
-    parameters: list[dict]     # 参数列表
+    name: str                  # Function name
+    return_type: str           # Return type
+    parameters: list[dict]     # Parameter list
 
 @dataclass
 class BlueprintEventIR:
-    name: str                  # 事件名
-    event_type: str            # 事件类型
-    parameters: list[dict]     # 参数列表
+    name: str                  # Event name
+    event_type: str            # Event type
+    parameters: list[dict]     # Parameter list
 ```
 
 ### DecompiledFunctionIR
@@ -129,11 +129,11 @@ class BlueprintEventIR:
 ```python
 @dataclass
 class DecompiledFunctionIR:
-    name: str                  # 函数名
-    signature: str             # 签名
-    cpp_code: str              # C++ 代码
-    parameters: list[dict]     # 参数列表
-    return_type: str           # 返回类型
+    name: str                  # Function name
+    signature: str             # Signature
+    cpp_code: str              # C++ code
+    parameters: list[dict]     # Parameter list
+    return_type: str           # Return type
 ```
 
 ### ExecutionChainIR
@@ -141,8 +141,8 @@ class DecompiledFunctionIR:
 ```python
 @dataclass
 class ExecutionChainIR:
-    event: str                 # 起始事件
-    chain: list[str]           # 执行链
+    event: str                 # Starting event
+    chain: list[str]           # Execution chain
 ```
 
 ### LinkerSummaryIR
@@ -150,9 +150,9 @@ class ExecutionChainIR:
 ```python
 @dataclass
 class LinkerSummaryIR:
-    has_linker: bool           # 是否有 linker
-    import_paths: list[str]    # 导入路径
-    export_paths: list[str]    # 导出路径
+    has_linker: bool           # Whether linker exists
+    import_paths: list[str]    # Import paths
+    export_paths: list[str]    # Export paths
 ```
 
 ### VariableIR
@@ -160,30 +160,30 @@ class LinkerSummaryIR:
 ```python
 @dataclass
 class VariableIR:
-    name: str                  # 变量名
-    type: str                  # 变量类型
-    default_value: str | None  # 默认值
+    name: str                  # Variable name
+    type: str                  # Variable type
+    default_value: str | None  # Default value
 ```
 
-### PackageIR（顶层结构）
+### PackageIR (Top-level Structure)
 
 ```python
 @dataclass
 class PackageIR:
-    header: PackageHeaderIR                    # 包头部
-    name_map: list[str]                        # 名称表
-    imports: list[dict]                        # 导入表
-    exports: list[ExportIR]                    # 导出表
-    linker: LinkerSummaryIR | None             # 链接摘要
-    blueprint: BlueprintIR | None = None       # 蓝图元数据
+    header: PackageHeaderIR                    # Package header
+    name_map: list[str]                        # Name table
+    imports: list[dict]                        # Import table
+    exports: list[ExportIR]                    # Export table
+    linker: LinkerSummaryIR | None             # Linker summary
+    blueprint: BlueprintIR | None = None       # Blueprint metadata
     decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
 ```
 
-## IR 构建器
+## IR Builder
 
-`ir_builder.py` 中的 `build_package_ir(result)` 函数负责从 `ParseResult` 构建 `PackageIR`。
+The `build_package_ir(result)` function in `ir_builder.py` is responsible for constructing `PackageIR` from `ParseResult`.
 
 ```python
 from uasset_read.ir_builder import build_package_ir
@@ -191,14 +191,14 @@ from uasset_read.ir_builder import build_package_ir
 ir = build_package_ir(result)
 ```
 
-## 数据流
+## Data Flow
 
 ```
-ParseResult（原始解析结果）
+ParseResult (raw parsing result)
     ↓ build_package_ir()
-PackageIR（统一中间表示）
+PackageIR (unified intermediate representation)
     ↓ renderer.render()
-Output String（最终输出）
+Output String (final output)
 ```
 
-**相关章节**: [[渲染器系统]] · [[解析管线]]
+**Related sections**: [[Renderer System]] · [[Parsing Pipeline]]

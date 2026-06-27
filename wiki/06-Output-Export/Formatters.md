@@ -1,21 +1,21 @@
 ---
-title: 格式化器
+title: Formatters
 section: formatters
 ---
 
-# 格式化器 (Formatters)
+# Formatters
 
-> [!WARNING] 已废弃
+> [!WARNING] Deprecated
 >
-> `formatters/` 目录在 v0.5.0 后已清空，所有格式化功能已迁移到 `renderers/` 系统。本文档保留作为历史参考。
+> The `formatters/` directory has been emptied since v0.5.0. All formatting functionality has been migrated to the `renderers/` system. This document is retained for historical reference.
 
-## 废弃说明
+## Deprecation Notice
 
-在 0.4.1 的 IR 架构中，格式化器被渲染器内部调用。当前版本中，`formatters/` 目录已无 Python 文件，所有输出格式化逻辑已完全迁移到渲染器系统。
+In the 0.4.1 IR architecture, formatters were called internally by renderers. In the current version, the `formatters/` directory contains no Python files. All output formatting logic has been fully migrated to the renderer system.
 
-**推荐使用**：
-- `parse_single(format="json")` — JSON 输出
-- `parse_single(format="markdown")` — Markdown 输出
-- `get_renderer("json")` / `get_renderer("markdown")` — 直接使用渲染器
+**Recommended usage**:
+- `parse_single(format="json")` — JSON output
+- `parse_single(format="markdown")` — Markdown output
+- `get_renderer("json")` / `get_renderer("markdown")` — Use renderers directly
 
-**相关章节**: [[渲染器系统]] · [[CLI 接口]]
+**Related sections**: [[Renderer System]] · [[CLI Interface]]

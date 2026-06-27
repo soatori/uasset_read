@@ -1,178 +1,178 @@
 ---
-title: PAK 文件读取
+title: PAK File Reading
 section: pak
 ---
 
-# PAK 文件读取
+# PAK File Reading
 
-PAK 模块提供对 Unreal Engine `.pak` 容器文件的完整解析能力，支持从 v1 到 v12 的所有文件格式，涵盖索引解密、bitfield 编码条目解析、多种压缩算法和 AES-ECB 加密。
+The PAK module provides complete parsing capabilities for Unreal Engine `.pak` container files, supporting all file formats from v1 to v12, covering index decryption, bitfield-encoded entry parsing, multiple compression algorithms, and AES-ECB encryption.
 
-**源码**: `src/uasset_read/pak/`
+**Source**: `src/uasset_read/pak/`
 
-## 核心 API
+## Core API
 
 ### PakFileReader
 
 ```python
 PakFileReader(path: str, aes_key: bytes | None = None, tolerant: bool = False)
-  .open() -> None              # 打开文件并解析 FPakInfo + Primary Index
-  .close() -> None             # 关闭文件句柄
-  .list_files() -> list[str]   # 返回所有非删除条目的路径
-  .get_entry(path: str) -> FPakEntry | None  # 获取条目信息
-  .extract(path: str) -> bytes | None        # 提取并解压文件数据
+  .open() -> None              # Open file and parse FPakInfo + Primary Index
+  .close() -> None             # Close file handle
+  .list_files() -> list[str]   # Return paths of all non-deleted entries
+  .get_entry(path: str) -> FPakEntry | None  # Get entry information
+  .extract(path: str) -> bytes | None        # Extract and decompress file data
 
-# 上下文管理器
+# Context manager
 with PakFileReader("game.pak") as reader:
     info = reader.info           # FPakInfo
     files = reader.list_files()
     data = reader.extract("path/to/file.uasset")
 ```
 
-### 模块公共 API
+### Module Public API
 
 ```python
-# 常量
+# Constants
 PAK_FILE_MAGIC                     # 0x5A6F12E1
-PakFileVersion                       # v1~v12 版本枚举
-ECompressionFlags                   # 压缩标志（v8 前使用）
-Flag_Encrypted, Flag_Deleted         # 条目标志
+PakFileVersion                       # v1~v12 version enum
+ECompressionFlags                   # Compression flags (used before v8)
+Flag_Encrypted, Flag_Deleted         # Entry flags
 
-# 数据结构
-FPakInfo                            # PAK 尾部信息（版本、索引偏移、加密 GUID）
-FPakEntry                           # 文件条目（偏移、大小、压缩块、哈希）
-FPakDirectoryEntry                  # 目录条目（路径 + 文件名 + 条目数据）
-FPakCompressedBlock                 # 压缩块（起始/结束偏移）
-read_fstream(stream, version)       # FString 反序列化
+# Data structures
+FPakInfo                            # PAK trailer info (version, index offset, encryption GUID)
+FPakEntry                           # File entry (offset, size, compression blocks, hash)
+FPakDirectoryEntry                  # Directory entry (path + filename + entry data)
+FPakCompressedBlock                 # Compression block (start/end offset)
+read_fstream(stream, version)       # FString deserialization
 
-# 索引解析
+# Index parsing
 parse_primary_index(stream, pak_info, aes_key) -> (mount_point, entries, extra)
 parse_path_hash_index(file_stream, offset, size, pak_info) -> dict
 parse_directory_index(file_stream, offset, size, pak_info) -> dict
 
-# 压缩
+# Compression
 decompress_block(data, uncompressed_size, method) -> bytes
 decompress_entry(stream, entry, compression_method, encryption_key) -> bytes
 
-# 加密
+# Encryption
 decrypt_aes_ecb(data, key) -> bytes
 validate_index_hash(decrypted_blob, expected_hash) -> bool
 decrypt_index_blob(index_data, key, expected_hash) -> bytes
 
-# 游戏检测
+# Game detection
 detect_game_from_magic(magic) -> EGame
 get_game_info(game) -> (name, version)
 ```
 
-## 文件结构
+## File Structure
 
-### 模块文件
+### Module Files
 
-| 文件 | 职责 |
-|------|------|
-| `pak/__init__.py` | 公共 API 导出 |
-| `pak/constants.py` | 魔数、版本枚举、标志位、大小常量 |
-| `pak/structures.py` | FPakInfo、FPakEntry、FPakDirectoryEntry 数据结构 + FString 读取 |
-| `pak/reader.py` | PakFileReader 主读取器（上下文管理器、条目解析、解压缩调度） |
-| `pak/index.py` | Primary Index 解析（legacy v<10 和 v10+ PathHashIndex） |
-| `pak/decompress.py` | 压缩块解压缩调度（Zlib/Gzip/LZ4/Zstd/Oodle） |
-| `pak/crypto.py` | AES-ECB 解密、索引哈希验证 |
-| `pak/game_versions.py` | 游戏标识检测（魔数 → 游戏 → PAK 版本映射） |
+| File | Responsibility |
+|------|----------------|
+| `pak/__init__.py` | Public API exports |
+| `pak/constants.py` | Magic numbers, version enums, flags, size constants |
+| `pak/structures.py` | FPakInfo, FPakEntry, FPakDirectoryEntry data structures + FString reading |
+| `pak/reader.py` | PakFileReader main reader (context manager, entry parsing, decompression dispatch) |
+| `pak/index.py` | Primary Index parsing (legacy v<10 and v10+ PathHashIndex) |
+| `pak/decompress.py` | Compression block decompression dispatch (Zlib/Gzip/LZ4/Zstd/Oodle) |
+| `pak/crypto.py` | AES-ECB decryption, index hash validation |
+| `pak/game_versions.py` | Game identity detection (magic number → game → PAK version mapping) |
 
-### 二进制布局
+### Binary Layout
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                     .pak 文件                         │
+│                     .pak file                        │
 ├─────────────────────────────────────────────────────┤
 │  Mount Point (FString)                              │
 │  Index Blob (Primary Index)                          │
 │    ├─ v<10: N × (FString path + FPakEntry)           │
 │    └─ v10+: PathHashSeed + PathHashIndex             │
 │             + DirectoryIndex + Encoded Entries        │
-│  ... 文件数据区域 ...                                 │
+│  ... File data region ...                            │
 ├─────────────────────────────────────────────────────┤
-│  FPakInfo Trailer（文件尾部）                          │
+│  FPakInfo Trailer (file end)                         │
 │    ├─ v<7: Magic(4) + Version(4) + IndexOffset(8)    │
 │    │         + IndexSize(8) + IndexHash(20)          │
 │    ├─ v7:  + EncryptionKeyGuid(16) + bEncrypted(1)   │
 │    ├─ v8:  + CompressionMethods(32×5)               │
 │    └─ v9:  + FrozenIndex(1)                          │
-│    └─ v10+: - FrozenIndex（移除）                     │
+│    └─ v10+: - FrozenIndex (removed)                  │
 └─────────────────────────────────────────────────────┘
 ```
 
-## 数据结构
+## Data Structures
 
 ### FPakInfo
 
-PAK 文件尾部信息结构，位于文件末尾，通过从尾部反向扫描检测。
+PAK file trailer information structure, located at the end of the file, detected by reverse scanning from the tail.
 
 ```python
 @dataclass
 class FPakInfo:
-    magic: int                      # 魔数（标准或游戏特定）
-    version: int                    # 文件格式版本 (1~12)
-    index_offset: int               # Primary Index 在文件中的偏移
-    index_size: int                 # Index blob 大小
+    magic: int                      # Magic number (standard or game-specific)
+    version: int                    # File format version (1~12)
+    index_offset: int               # Primary Index offset in file
+    index_size: int                 # Index blob size
     index_hash: bytes               # SHA1 of index blob (20 bytes)
-    encryption_key_guid: bytes      # 加密密钥 GUID (16 bytes, v7+)
-    encrypted_index: bool           # 索引是否加密 (v7+)
-    compression_methods: list       # 压缩方法名称表 (最多 5 个, v8+)
-    index_is_frozen: bool           # FrozenIndex 标志 (v9 only)
-    detected_game: int              # 检测到的游戏标识
+    encryption_key_guid: bytes      # Encryption key GUID (16 bytes, v7+)
+    encrypted_index: bool           # Whether index is encrypted (v7+)
+    compression_methods: list       # Compression method name table (max 5, v8+)
+    index_is_frozen: bool           # FrozenIndex flag (v9 only)
+    detected_game: int              # Detected game identity
 ```
 
-**各版本序列化大小**:
+**Serialized Size by Version**:
 
-| 版本范围 | 大小 | 字段 |
-|----------|------|------|
+| Version Range | Size | Fields |
+|---------------|------|--------|
 | v1~6 | 44 bytes | Magic + Version + IndexOffset + IndexSize + IndexHash |
 | v7 | 61 bytes | + EncryptionKeyGuid(16) + bEncryptedIndex(1) |
 | v8 | 221 bytes | + CompressionMethods(32×5=160) |
 | v9 | 222 bytes | + FrozenIndex(1) |
-| v10+ | 221 bytes | - FrozenIndex（移除） |
+| v10+ | 221 bytes | - FrozenIndex (removed) |
 
 ### FPakEntry
 
-描述 PAK 中单个文件的偏移、大小、压缩、加密和哈希信息。
+Describes offset, size, compression, encryption, and hash information for a single file in the PAK.
 
 ```python
 @dataclass
 class FPakEntry:
-    offset: int                     # 条目数据起始偏移 (int64)
-    uncompressed_size: int          # 解压后大小 (int64)
-    size: int                       # 压缩大小 (int64, 未压缩时 == uncompressed_size)
-    compression_method_index: int   # 在 FPakInfo.compression_methods 中的索引 (uint32)
-    is_encrypted: bool              # 是否加密
-    is_compressed: bool             # 是否压缩 (derived)
-    compression_block_count: int    # 压缩块数量
-    compression_block_size: int     # 每个压缩块的大小 (uint32)
+    offset: int                     # Entry data start offset (int64)
+    uncompressed_size: int          # Uncompressed size (int64)
+    size: int                       # Compressed size (int64, equals uncompressed_size when not compressed)
+    compression_method_index: int   # Index in FPakInfo.compression_methods (uint32)
+    is_encrypted: bool              # Whether encrypted
+    is_compressed: bool             # Whether compressed (derived)
+    compression_block_count: int    # Number of compression blocks
+    compression_block_size: int     # Size of each compression block (uint32)
     compression_blocks: list        # list[FPakCompressedBlock]
     hash: bytes                     # SHA1 of uncompressed data (20 bytes)
-    flags: int                      # 原始标志位
-    is_deleted: bool                # 是否已删除 (derived from flags)
-    serialized_size: int            # v10+ bitfield 编码时的条目大小
+    flags: int                      # Raw flags
+    is_deleted: bool                # Whether deleted (derived from flags)
+    serialized_size: int            # Entry size in v10+ bitfield encoding
 ```
 
-**v10+ Bitfield 编码布局**:
+**v10+ Bitfield Encoding Layout**:
 
-| 位 | 字段 | 说明 |
-|----|------|------|
-| 31 | Offset fits 32-bit | 为 1 时 Offset 用 uint32 存储 |
-| 30 | UncompressedSize fits 32-bit | 为 1 时用 uint32 |
-| 29 | Size fits 32-bit | 为 1 时用 uint32 |
-| 23~28 | Compression method index | 6 位，索引值 |
-| 22 | Encrypted flag | 1 位 |
-| 6~21 | Compression block count | 16 位 |
-| 0~5 | Compression block size index | 6 位，0x3F 表示从流中读取 |
+| Bit | Field | Description |
+|-----|-------|-------------|
+| 31 | Offset fits 32-bit | When 1, Offset stored as uint32 |
+| 30 | UncompressedSize fits 32-bit | When 1, stored as uint32 |
+| 29 | Size fits 32-bit | When 1, stored as uint32 |
+| 23~28 | Compression method index | 6 bits, index value |
+| 22 | Encrypted flag | 1 bit |
+| 6~21 | Compression block count | 16 bits |
+| 0~5 | Compression block size index | 6 bits, 0x3F means read from stream |
 
 ### FPakCompressedBlock
 
 ```python
 @dataclass
 class FPakCompressedBlock:
-    compressed_start: int     # 绝对文件偏移 (int64)
-    compressed_end: int       # 独占结束偏移 (int64)
+    compressed_start: int     # Absolute file offset (int64)
+    compressed_end: int       # Exclusive end offset (int64)
 ```
 
 ### FPakDirectoryEntry
@@ -180,45 +180,45 @@ class FPakCompressedBlock:
 ```python
 @dataclass
 class FPakDirectoryEntry:
-    path: str             # 目录路径
-    filename: str         # 文件名
-    entry: FPakEntry      # 条目数据
+    path: str             # Directory path
+    filename: str         # Filename
+    entry: FPakEntry      # Entry data
 ```
 
-## 文件版本
+## File Versions
 
 ```
-v1   Initial — 初始版本
-v2   NoTimestamps — 移除 FPakEntry 中的 Timestamp 字段
-v3   CompressionEncryption — 压缩加密支持（旧格式）
-v4   IndexEncryption — 索引加密支持（旧格式）
-v5   RelativeChunkOffsets — 压缩块偏移改为相对值
-v6   DeleteRecords — 添加 Flag_Deleted 支持
-v7   EncryptionKeyGuid — 添加 EncryptionKeyGuid 和 bEncryptedIndex
-v8   FNameBasedCompressionMethod — 添加 CompressionMethods 名称表（替代位标志）
-v9   FrozenIndex — 添加 FrozenIndex 标志（已废弃）
-v10  PathHashIndex — 引入 PathHashIndex、DirectoryIndex、bitfield 编码条目
-v11  Fnv64BugFix — FNV64 哈希碰撞修复（Frostbite 游戏特定）
-v12  Utf8PakDirectory — 目录名称使用 FUtf8String（uint32 长度 + UTF-8）
+v1   Initial — Initial version
+v2   NoTimestamps — Removed Timestamp field from FPakEntry
+v3   CompressionEncryption — Compression encryption support (legacy format)
+v4   IndexEncryption — Index encryption support (legacy format)
+v5   RelativeChunkOffsets — Compression block offsets changed to relative values
+v6   DeleteRecords — Added Flag_Deleted support
+v7   EncryptionKeyGuid — Added EncryptionKeyGuid and bEncryptedIndex
+v8   FNameBasedCompressionMethod — Added CompressionMethods name table (replaces bit flags)
+v9   FrozenIndex — Added FrozenIndex flag (deprecated)
+v10  PathHashIndex — Introduced PathHashIndex, DirectoryIndex, bitfield-encoded entries
+v11  Fnv64BugFix — FNV64 hash collision fix (Frostbite game-specific)
+v12  Utf8PakDirectory — Directory names use FUtf8String (uint32 length + UTF-8)
 ```
 
-## 压缩与加密
+## Compression and Encryption
 
-### 压缩方法
+### Compression Methods
 
-| 方法 | 说明 | 依赖 |
-|------|------|------|
-| None | 无压缩 | 无 |
-| Zlib | raw deflate (wbits=-15) | 无（stdlib） |
-| Gzip | gzip 格式 | 无（stdlib） |
-| LZ4 | LZ4 块压缩 | `lz4`（可选） |
-| Zstd | Zstandard 压缩 | `zstandard`（可选） |
-| Oodle | Oodle 压缩（专有） | `oo2core`（不支持） |
+| Method | Description | Dependency |
+|--------|-------------|------------|
+| None | No compression | None |
+| Zlib | raw deflate (wbits=-15) | None (stdlib) |
+| Gzip | gzip format | None (stdlib) |
+| LZ4 | LZ4 block compression | `lz4` (optional) |
+| Zstd | Zstandard compression | `zstandard` (optional) |
+| Oodle | Oodle compression (proprietary) | `oo2core` (not supported) |
 
-**压缩方法映射**:
+**Compression Method Mapping**:
 
-| 索引 | 名称 |
-|------|------|
+| Index | Name |
+|-------|------|
 | 0 | None |
 | 1 | Zlib |
 | 2 | Gzip |
@@ -226,23 +226,23 @@ v12  Utf8PakDirectory — 目录名称使用 FUtf8String（uint32 长度 + UTF-8
 | 4 | LZ4 |
 | 5 | Zstd |
 
-### AES 加密
+### AES Encryption
 
-- **算法**: AES-ECB（无填充）
-- **密钥长度**: 16 bytes（128-bit）
-- **对齐**: 16 字节对齐
-- **依赖**: `cryptography`（可选）
-- **应用范围**: 文件条目数据 + 索引 blob（v7+）
+- **Algorithm**: AES-ECB (no padding)
+- **Key Length**: 16 bytes (128-bit)
+- **Alignment**: 16-byte aligned
+- **Dependency**: `cryptography` (optional)
+- **Scope**: File entry data + index blob (v7+)
 
-### 魔数
+### Magic Numbers
 
-标准魔数: `0x5A6F12E1`
+Standard magic number: `0x5A6F12E1`
 
-游戏特定魔数:
+Game-specific magic numbers:
 
-| 魔数 | 游戏 | 对应 PAK 版本 |
-|------|------|---------------|
-| `0x5A6F12E1` | Standard (默认) | v12 |
+| Magic Number | Game | PAK Version |
+|--------------|------|-------------|
+| `0x5A6F12E1` | Standard (default) | v12 |
 | `0xA590ED1E` | Outlast Trials | v10 |
 | `0x6B2A56B8` | Torchlight Infinite | v10 |
 | `0xA4CCD123` | Wild Assault | v10 |
@@ -257,30 +257,30 @@ v12  Utf8PakDirectory — 目录名称使用 FUtf8String（uint32 长度 + UTF-8
 | `0x53647586` | Arena Breakout Infinite | v10 |
 | `0x4F6FAE86` | Assault Fire Future | v10 |
 
-## 索引格式
+## Index Format
 
-### Legacy 格式（v<10）
+### Legacy Format (v<10)
 
 ```
 Mount Point (FString)
 Entry Count (int32)
-├─ 对于每个条目:
+├─ For each entry:
 │  ├─ Path (FString)
-│  └─ FPakEntry (legacy 反序列化)
+│  └─ FPakEntry (legacy deserialization)
 ```
 
-### v10+ 格式
+### v10+ Format
 
 ```
 Mount Point (FString)
 Entry Count (int32)
 PathHashSeed (uint64)
 bHasPathHashIndex (bool)
-├─ 如果为 true:
+├─ If true:
 │  ├─ PathHashIndexOffset (int64)
 │  └─ PathHashIndexSize (int64)
 bHasDirectoryIndex (bool)
-├─ 如果为 true:
+├─ If true:
 │  ├─ DirectoryIndexOffset (int64)
 │  └─ DirectoryIndexSize (int64)
 EncodedPakEntries: Count (uint32) + N × (serialized_size + bitfield data)
@@ -291,67 +291,67 @@ NonEncodedEntries: Count (uint32) + N × (FString path + serialized_size + bitfi
 
 ```
 Entry Count (uint32)
-├─ 对于每个条目:
+├─ For each entry:
 │  ├─ PathHash (uint64)
 │  ├─ FileOffset (int64)
 │  └─ EntrySize (int64)
 ```
 
-映射: `path_hash -> (file_offset, size)`
+Mapping: `path_hash -> (file_offset, size)`
 
 ### DirectoryIndex
 
 ```
 Directory Count (uint32)
-├─ 对于每个目录:
+├─ For each directory:
 │  ├─ DirName (FString)
 │  ├─ File Count (uint32)
-│  └─ 对于每个文件:
+│  └─ For each file:
 │     ├─ FileName (FString)
 │     ├─ FileOffset (int64)
 │     └─ FileSize (int64)
 ```
 
-映射: `directory -> {filename -> (file_offset, size)}`
+Mapping: `directory -> {filename -> (file_offset, size)}`
 
-## FString 读取
+## FString Reading
 
-UE FString 格式（带长度前缀，null-terminated）:
+UE FString format (length-prefixed, null-terminated):
 
-| 长度值 | 编码 | 数据长度 | 终止符 |
-|--------|------|----------|--------|
-| 0 | 空字符串 | — | — |
-| >0 | ANSI/UTF-8 | length 字节 | 1 字节 `\x00` |
-| <0 | UTF-16LE | abs(length) × 2 字节 | 2 字节 `\x00\x00` |
-| v12+ uint32 | UTF-8 | length 字节 | 1 字节 `\x00` |
+| Length Value | Encoding | Data Length | Terminator |
+|--------------|----------|-------------|------------|
+| 0 | Empty string | — | — |
+| >0 | ANSI/UTF-8 | length bytes | 1 byte `\x00` |
+| <0 | UTF-16LE | abs(length) × 2 bytes | 2 bytes `\x00\x00` |
+| v12+ uint32 | UTF-8 | length bytes | 1 byte `\x00` |
 
-**安全限制**: 字符串长度不超过 `MAX_FSTRING_LENGTH`。
+**Safety Limit**: String length does not exceed `MAX_FSTRING_LENGTH`.
 
-## 使用示例
+## Usage Examples
 
-### 基本读取
+### Basic Reading
 
 ```python
 from uasset_read.pak import PakFileReader
 
 with PakFileReader("game.pak") as reader:
-    # 查看 PAK 信息
+    # View PAK info
     print(f"Version: {reader.info.version}")
     print(f"Mount point: {reader.mount_point}")
     print(f"Entries: {len(reader.entries)}")
 
-    # 列出所有文件
+    # List all files
     for path in reader.list_files():
         print(path)
 
-    # 提取文件
+    # Extract a file
     data = reader.extract("Game/Content/MyBlueprint.uasset")
     if data:
         with open("MyBlueprint.uasset", "wb") as f:
             f.write(data)
 ```
 
-### 加密 PAK 读取
+### Encrypted PAK Reading
 
 ```python
 aes_key = bytes.fromhex("0123456789abcdef0123456789abcdef")
@@ -364,7 +364,7 @@ with PakFileReader("encrypted.pak", aes_key=aes_key) as reader:
     data = reader.extract("Game/Content/EncryptedAsset.uasset")
 ```
 
-### 手动解析 FPakInfo
+### Manual FPakInfo Parsing
 
 ```python
 from uasset_read.pak import FPakInfo
@@ -382,16 +382,16 @@ with open("game.pak", "rb") as f:
     print(f"Methods: {info.compression_methods}")
 ```
 
-## 依赖
+## Dependencies
 
-| 功能 | 包 | 必需 |
-|------|------|------|
-| 基本解析 | Python stdlib | 是 |
-| LZ4 解压 | `lz4` | 可选 |
-| Zstd 解压 | `zstandard` | 可选 |
-| AES 解密 | `cryptography` | 可选 |
-| Oodle 解压 | `oo2core` | 不支持（专有） |
+| Feature | Package | Required |
+|---------|---------|----------|
+| Basic parsing | Python stdlib | Yes |
+| LZ4 decompression | `lz4` | Optional |
+| Zstd decompression | `zstandard` | Optional |
+| AES decryption | `cryptography` | Optional |
+| Oodle decompression | `oo2core` | Not supported (proprietary) |
 
-## 相关章节
+## Related Sections
 
-[[包管理]] · [[IoStore 容器]] · [[原始文件解析]]
+[[Package Management]] · [[IoStore Containers]] · [[Raw File Parsing]]

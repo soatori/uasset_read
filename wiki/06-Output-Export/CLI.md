@@ -1,153 +1,153 @@
 ---
-title: CLI 接口
+title: CLI Interface
 section: cli
 ---
 
-# CLI 接口
+# CLI Interface
 
-通过 `python run.py` 或 `python -m uasset_read` 提供对 `.uasset`/`.umap` 文件的解析和多种格式输出能力。
+Provides parsing and multi-format output capabilities for `.uasset`/`.umap` files via `python run.py` or `python -m uasset_read`.
 
-## 架构变更（0.4.1）
+## Architecture Changes (0.4.1)
 
-CLI 在 0.4.1 进行了重构，核心逻辑委托给 `core.py` 的纯函数 API，CLI 仅负责参数解析和输出写入。
+CLI was refactored in 0.4.1, delegating core logic to the pure-function API in `core.py`. CLI is only responsible for argument parsing and output writing.
 
 ```
 CLI (cli.py) → core.py (parse_single/parse_batch) → IR → Renderers → Output
 ```
 
-`--n2c` 和 `--cpp-json-ir` 标志已移除（N2C 模块整体删除）。
+The `--n2c` and `--cpp-json-ir` flags have been removed (N2C module entirely deleted).
 
-## 模块信息
+## Module Information
 
-| 项目 | 值 |
+| Item | Value |
 |------|------|
-| 文件路径 | `src/uasset_read/cli.py` |
-| 入口函数 | `main()` |
-| 参数解析 | `create_parser()` |
-| 格式路由 | `resolve_format()` |
-| 核心委托 | `core.py`（parse_single / parse_batch / list_formats） |
+| File path | `src/uasset_read/cli.py` |
+| Entry function | `main()` |
+| Argument parsing | `create_parser()` |
+| Format routing | `resolve_format()` |
+| Core delegation | `core.py` (parse_single / parse_batch / list_formats) |
 
-## 基本用法
+## Basic Usage
 
 ```bash
-python run.py path/to/file.uasset              # JSON 输出（默认）
-python run.py path/to/file.uasset --markdown   # Markdown + Mermaid 图表
+python run.py path/to/file.uasset              # JSON output (default)
+python run.py path/to/file.uasset --markdown   # Markdown + Mermaid diagrams
 ```
 
-## 命令行参数
+## Command-Line Arguments
 
-### 位置参数
+### Positional Arguments
 
-| 参数 | 说明 |
-|------|------|
-| `file` | `.uasset`/`.umap` 文件路径（必需；批量模式下为目录路径） |
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `.uasset`/`.umap` file (required; in batch mode, this is a directory path) |
 
-### 输出格式标志（互斥）
+### Output Format Flags (Mutually Exclusive)
 
-以下标志位于互斥组中，同一时间只能使用一个：
+The following flags are in a mutually exclusive group -- only one may be used at a time:
 
-| 标志 | 格式名 | 说明 |
-|------|--------|------|
-| `--json` | `json` | 结构化 JSON 输出（C++ 翻译参考，默认） |
-| `--markdown` | `markdown` | Markdown + Mermaid 流程图 |
+| Flag | Format Name | Description |
+|------|-------------|-------------|
+| `--json` | `json` | Structured JSON output (C++ translation reference, default) |
+| `--markdown` | `markdown` | Markdown + Mermaid flowcharts |
 
-### 已移除的标志
+### Removed Flags
 
-| 标志 | 说明 |
-|------|------|
-| `--n2c` | N2C 模块已整体删除 |
-| `--cpp-json-ir` | 合并到 cpp_skeleton |
-| `--validate` | N2C 验证已移除 |
-| `--graph` | 旧版兼容标志已移除 |
-| `--json-summary` | 输出格式精简时移除 |
-| `--text` | 输出格式精简时移除 |
-| `--text-summary` | 输出格式精简时移除 |
-| `--summary` | 输出格式精简时移除 |
-| `--blueprint-text` | 输出格式精简时移除 |
-| `--blueprint-ue-text` | 输出格式精简时移除 |
-| `--cpp-skeleton` | 输出格式精简时移除 |
+| Flag | Description |
+|------|-------------|
+| `--n2c` | N2C module entirely deleted |
+| `--cpp-json-ir` | Merged into cpp_skeleton |
+| `--validate` | N2C validation removed |
+| `--graph` | Legacy compatibility flag removed |
+| `--json-summary` | Removed during output format streamlining |
+| `--text` | Removed during output format streamlining |
+| `--text-summary` | Removed during output format streamlining |
+| `--summary` | Removed during output format streamlining |
+| `--blueprint-text` | Removed during output format streamlining |
+| `--blueprint-ue-text` | Removed during output format streamlining |
+| `--cpp-skeleton` | Removed during output format streamlining |
 
-### 解析控制标志
+### Parse Control Flags
 
-| 标志 | 说明 |
-|------|------|
-| `--verbose` | 输出额外详细字段 |
-| `--function-graphs` | 在输出中包含 `function_graphs` |
-| `--tolerant` | 容错模式（默认开启） |
-| `--strict` | 禁用容错模式：序列化问题抛出 ParseError |
-| `--export INDEX` | 仅输出指定索引的 export |
-| `--schema` | 包含字段语义注解 |
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Output additional detailed fields |
+| `--function-graphs` | Include `function_graphs` in output |
+| `--tolerant` | Tolerant mode (enabled by default) |
+| `--strict` | Disable tolerant mode: serialization issues raise ParseError |
+| `--export INDEX` | Output only the export at the specified index |
+| `--schema` | Include field semantic annotations |
 
-### 资源解析标志
+### Resource Parsing Flags
 
-| 标志 | 说明 |
-|------|------|
-| `--asset-root DIR` | 搜索父级 `.uasset` 文件的根目录（可重复使用） |
-| `--include-parent-assets` | 解析并包含父级 Blueprint 资产 |
-| `--mappings FILE` | 加载 `.usmap`/`.jmap`/`.jmap.gz` 类型映射 |
-| `--game NAME` | 启用游戏专用属性读取器（如 `Borderlands4`） |
+| Flag | Description |
+|------|-------------|
+| `--asset-root DIR` | Root directory for searching parent `.uasset` files (can be repeated) |
+| `--include-parent-assets` | Parse and include parent Blueprint assets |
+| `--mappings FILE` | Load `.usmap`/`.jmap`/`.jmap.gz` type mappings |
+| `--game NAME` | Enable game-specific property readers (e.g., `Borderlands4`) |
 
-### 批量模式标志
+### Batch Mode Flags
 
-| 标志 | 说明 |
-|------|------|
-| `--batch` | 启用批量模式：将位置参数视为 `.uasset` 文件目录 |
-| `--batch-dir DIR` | 批量模式输出目录（默认：`{input_dir}/output`） |
+| Flag | Description |
+|------|-------------|
+| `--batch` | Enable batch mode: treat the positional argument as a directory of `.uasset` files |
+| `--batch-dir DIR` | Batch mode output directory (default: `{input_dir}/output`) |
 
-### 调试和工具标志
+### Debug and Utility Flags
 
-| 标志 | 说明 |
-|------|------|
-| `--output FILE` | 将输出写入文件而非 stdout |
-| `--list-formats` | 列出所有可用导出格式并退出 |
-| `--list-package-files` | 列出发现的包侧车/载荷文件并退出 |
-| `--full-parse` | 完整解析（含蓝图反编译、Kismet 字节码提取） |
-| `--hex-view` | 十六进制视图调试模式 |
+| Flag | Description |
+|------|-------------|
+| `--output FILE` | Write output to a file instead of stdout |
+| `--list-formats` | List all available export formats and exit |
+| `--list-package-files` | List discovered package sidecar/payload files and exit |
+| `--full-parse` | Full parse (includes Blueprint decompilation, Kismet bytecode extraction) |
+| `--hex-view` | Hex view debug mode |
 
-## 退出代码
+## Exit Codes
 
-| 代码 | 常量 | 说明 |
-|------|------|------|
-| `0` | `EXIT_SUCCESS` | 成功 |
-| `1` | `EXIT_PARSE_ERROR` | 解析错误 |
-| `2` | `EXIT_FILE_NOT_FOUND` | 文件不存在或不是文件 |
-| `3` | `EXIT_ARGUMENT_ERROR` | 参数错误 |
+| Code | Constant | Description |
+|------|----------|-------------|
+| `0` | `EXIT_SUCCESS` | Success |
+| `1` | `EXIT_PARSE_ERROR` | Parse error |
+| `2` | `EXIT_FILE_NOT_FOUND` | File does not exist or is not a file |
+| `3` | `EXIT_ARGUMENT_ERROR` | Argument error |
 
-## 格式路由逻辑
+## Format Routing Logic
 
-`resolve_format()` 函数将 CLI 标志映射到内部格式名：
+The `resolve_format()` function maps CLI flags to internal format names:
 
 ```
 --markdown        → markdown
 --json            → json
-(无标志)          → json（默认）
+(no flag)         → json (default)
 ```
 
 > [!WARNING]
-> 以下旧路由已移除：`--n2c`、`--cpp-json-ir`、`--graph`、`--text`、`--summary`、`--blueprint-text`、`--blueprint-ue-text`、`--cpp-skeleton`
+> The following legacy routes have been removed: `--n2c`, `--cpp-json-ir`, `--graph`, `--text`, `--summary`, `--blueprint-text`, `--blueprint-ue-text`, `--cpp-skeleton`
 
-## 解析路径
+## Parse Path
 
-CLI 通过 `core.py` 的 `parse_single()` 进行解析：
+CLI parses via `core.py`'s `parse_single()`:
 
-1. 根据格式判断是否需要 linker（当前格式均不需要）
-2. 调用 `parse_single()` → 内部自动完成：解析 → IR 构建 → 渲染
-3. 写入 stdout 或文件
+1. Determine whether a linker is needed based on format (current formats do not require one)
+2. Call `parse_single()` → internally performs: parsing → IR construction → rendering
+3. Write to stdout or file
 
-## 批量模式
+## Batch Mode
 
 ```bash
-# 处理目录中所有 .uasset/.umap 文件
+# Process all .uasset/.umap files in a directory
 python run.py /path/to/assets/ --batch
 
-# 指定输出目录
+# Specify output directory
 python run.py /path/to/assets/ --batch --batch-dir /path/to/output/
 
-# 批量导出为 JSON
+# Batch export as JSON
 python run.py /path/to/assets/ --batch --json
 ```
 
-批量结果报告输出到 stderr：
+Batch result reports are output to stderr:
 
 ```
 Batch export complete: 10 files
@@ -156,48 +156,48 @@ Batch export complete: 10 files
     - BP_Error.uasset: ParseError: ...
 ```
 
-## 完整示例
+## Complete Examples
 
 ```bash
-# 1. 解析单个文件，输出到 stdout
+# 1. Parse a single file, output to stdout
 python run.py MyBlueprint.uasset
 
-# 2. JSON 输出
+# 2. JSON output
 python run.py MyBlueprint.uasset --json
 
-# 3. 输出到文件
+# 3. Output to file
 python run.py MyBlueprint.uasset --json --output result.json
 
-# 4. Markdown + Mermaid 文档
+# 4. Markdown + Mermaid documentation
 python run.py MyBlueprint.uasset --markdown --output report.md
 
-# 5. 包含父级资产解析
+# 5. Include parent asset parsing
 python run.py MyBlueprint.uasset --json --include-parent-assets --asset-root /Game/Content
 
-# 6. 使用类型映射
+# 6. Use type mappings
 python run.py MyBlueprint.uasset --json --mappings mappings.usmap
 
-# 7. 列出包文件
+# 7. List package files
 python run.py MyBlueprint.uasset --list-package-files
 
-# 8. 列出所有可用格式
+# 8. List all available formats
 python run.py --list-formats
 ```
 
-## 调用方式
+## Invocation Methods
 
-CLI 可通过以下方式调用：
+CLI can be invoked via:
 
-- **脚本**: `python run.py ...`（项目根目录）
-- **模块**: `python -m uasset_read ...`（`__main__.py` 入口）
+- **Script**: `python run.py ...` (from project root)
+- **Module**: `python -m uasset_read ...` (`__main__.py` entry point)
 
-两者都调用同一个 `main()` 函数。
+Both call the same `main()` function.
 
-## 输出流约定
+## Output Stream Conventions
 
-- **stdout**: 仅用于数据输出
-- **stderr**: 用于错误消息、状态信息和批量报告
+- **stdout**: Data output only
+- **stderr**: Error messages, status information, and batch reports
 
-这允许用户通过管道将数据与其他工具连接，同时保留人类可读的错误信息。
+This allows users to pipe data to other tools while retaining human-readable error messages.
 
-**相关章节**: [[渲染器系统]] · [[IR 中间表示]]
+**Related Sections**: [[Renderer System]] · [[IR Intermediate Representation]]

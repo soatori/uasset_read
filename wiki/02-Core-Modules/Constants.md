@@ -1,101 +1,101 @@
 ---
-title: 常量与配置
+title: Constants and Configuration
 section: constants
 ---
 
-# Constants 常量与配置
+# Constants and Configuration
 
-**模块路径**: `src/uasset_read/constants.py`
+**Module path**: `src/uasset_read/constants.py`
 
-> 定义所有版本号、属性类型阈值、边界验证常量、PropertyTag 标志位、CPF 标志位等。从 UE 源码迁移而来，禁止猜测二进制行为。
+> Defines all version numbers, property type thresholds, boundary validation constants, PropertyTag flags, CPF flags, etc. Migrated from UE source code. Guessing binary behavior is prohibited.
 
-## 包文件魔术标签
+## Package File Magic Tags
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `PACKAGE_FILE_TAG` | `0x9E2A83C1` | UE 包文件魔术标签（正确字节序） |
-| `PACKAGE_FILE_TAG_SWAPPED` | `0xC1832A9E` | UE 包文件魔术标签（交换字节序） |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `PACKAGE_FILE_TAG` | `0x9E2A83C1` | UE package file magic tag (correct byte order) |
+| `PACKAGE_FILE_TAG_SWAPPED` | `0xC1832A9E` | UE package file magic tag (swapped byte order) |
 
-## 边界验证常量
+## Boundary Validation Constants
 
-防御性编程常量，用于防止恶意或损坏文件导致的无限循环/内存耗尽。
+Defensive programming constants used to prevent infinite loops / memory exhaustion caused by malicious or corrupted files.
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `MAX_NAME_COUNT` | 10,000,000 | 名称表最大条目数 |
-| `MAX_IMPORT_COUNT` | 1,000,000 | 导入表最大条目数 |
-| `MAX_EXPORT_COUNT` | 1,000,000 | 导出表最大条目数 |
-| `MAX_CUSTOM_VERSIONS` | 10,000 | 自定义版本最大条目数 |
-| `MMAP_THRESHOLD` | 50 MB | 启用 mmap 的文件大小阈值 |
-| `MAX_PROPERTY_COUNT` | 10,000 | 属性循环上限 |
-| `MAX_ARRAY_COUNT` | 1,000,000 | 数组元素上限 |
-| `MAX_FSTRING_LENGTH` | 10 MB | FString 最大长度（UTF-8/UTF-16） |
-| `MAX_PINS_PER_NODE` | 1,000 | 单节点最大引脚数 |
-| `MAX_NODES_PER_GRAPH` | 5,000 | 单图最大节点数 |
-| `MAX_LINKEDTO_PER_PIN` | 100 | 单引脚最大连接数 |
-| `MAX_TYPENODE_NODES` | 20 | FPropertyTypeName 最大节点数 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_NAME_COUNT` | 10,000,000 | Maximum name table entries |
+| `MAX_IMPORT_COUNT` | 1,000,000 | Maximum import table entries |
+| `MAX_EXPORT_COUNT` | 1,000,000 | Maximum export table entries |
+| `MAX_CUSTOM_VERSIONS` | 10,000 | Maximum custom version entries |
+| `MMAP_THRESHOLD` | 50 MB | File size threshold to enable mmap |
+| `MAX_PROPERTY_COUNT` | 10,000 | Property loop limit |
+| `MAX_ARRAY_COUNT` | 1,000,000 | Array element limit |
+| `MAX_FSTRING_LENGTH` | 10 MB | Maximum FString length (UTF-8/UTF-16) |
+| `MAX_PINS_PER_NODE` | 1,000 | Maximum pins per node |
+| `MAX_NODES_PER_GRAPH` | 5,000 | Maximum nodes per graph |
+| `MAX_LINKEDTO_PER_PIN` | 100 | Maximum connections per pin |
+| `MAX_TYPENODE_NODES` | 20 | Maximum FPropertyTypeName nodes |
 
-## PropertyTag 标志位
+## PropertyTag Flags
 
-| 标志 | 值 | 说明 |
-|------|-----|------|
-| `PROP_TAG_NONE` | `0x00` | 无标志 |
-| `PROP_TAG_HAS_ARRAY_INDEX` | `0x01` | 有数组索引 |
-| `PROP_TAG_HAS_PROPERTY_GUID` | `0x02` | 有属性 GUID |
-| `PROP_TAG_HAS_EXTENSIONS` | `0x04` | 扩展数据 |
-| `PROP_TAG_HAS_BINARY_OR_NATIVE` | `0x08` | 二进制/本地化序列化 |
-| `PROP_TAG_BOOL_TRUE` | `0x10` | 布尔值为真 |
-| `PROP_TAG_SKIPPED_SERIALIZE` | `0x20` | 跳过序列化 |
+| Flag | Value | Description |
+|------|-------|-------------|
+| `PROP_TAG_NONE` | `0x00` | No flag |
+| `PROP_TAG_HAS_ARRAY_INDEX` | `0x01` | Has array index |
+| `PROP_TAG_HAS_PROPERTY_GUID` | `0x02` | Has property GUID |
+| `PROP_TAG_HAS_EXTENSIONS` | `0x04` | Extension data |
+| `PROP_TAG_HAS_BINARY_OR_NATIVE` | `0x08` | Binary / native serialization |
+| `PROP_TAG_BOOL_TRUE` | `0x10` | Boolean value is true |
+| `PROP_TAG_SKIPPED_SERIALIZE` | `0x20` | Serialization skipped |
 
-## PropertyTag 版本阈值
+## PropertyTag Version Thresholds
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | UE5 格式切换阈值 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | UE5 format switch threshold |
 
-## UE5 版本常量
+## UE5 Version Constants
 
-对应 `EUnrealEngineObjectUE5Version`。
+Corresponds to `EUnrealEngineObjectUE5Version`.
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `UE5_VERSION_MIN` | 0 | UE5 版本最低值 |
-| `UE5_LEGACY_VERSION` | -9 | UE5.6+ 文件的 LegacyFileVersion 固定值 |
-| `UE5_NAMES_REFERENCED_FROM_EXPORT_DATA` | 1001 | 导出数据引用名称 |
-| `UE5_PAYLOAD_TOC` | 1002 | 载荷目录表 |
-| `UE5_OPTIONAL_RESOURCES` | 1003 | 可选资源 |
-| `UE5_LARGE_WORLD_COORDINATES` | 1004 | 大世界坐标（LWC） |
-| `UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID` | 1005 | 移除对象导出包 GUID |
-| `UE5_TRACK_OBJECT_EXPORT_IS_INHERITED` | 1006 | 追踪对象导出继承 |
-| `UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES` | 1007 | 移除资产路径 FName |
-| `UE5_ADD_SOFTOBJECTPATH_LIST` | 1008 | 添加软对象路径列表 |
-| `UE5_DATA_RESOURCES` | 1009 | 数据资源 |
-| `UE5_SCRIPT_SERIALIZATION_OFFSET` | 1010 | 脚本序列化偏移 |
-| `UE5_PROPERTY_TAG_EXTENSION` | 1011 | PropertyTag 扩展 |
-| `UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | 完整类型名称（别名） |
-| `UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES` | 1013 | 资产注册表包构建依赖 |
-| `UE5_METADATA_SERIALIZATION_OFFSET` | 1014 | 元数据序列化偏移 |
-| `UE5_VERSE_CELLS` | 1015 | Verse 单元格 |
-| `UE5_PACKAGE_SAVED_HASH` | 1016 | 包保存哈希 |
-| `UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION` | 1017 | 子对象阴影序列化 |
-| `UE5_IMPORT_TYPE_HIERARCHIES` | 1018 | 导入类型层次 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `UE5_VERSION_MIN` | 0 | UE5 minimum version |
+| `UE5_LEGACY_VERSION` | -9 | Fixed LegacyFileVersion for UE5.6+ files |
+| `UE5_NAMES_REFERENCED_FROM_EXPORT_DATA` | 1001 | Names referenced from export data |
+| `UE5_PAYLOAD_TOC` | 1002 | Payload table of contents |
+| `UE5_OPTIONAL_RESOURCES` | 1003 | Optional resources |
+| `UE5_LARGE_WORLD_COORDINATES` | 1004 | Large World Coordinates (LWC) |
+| `UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID` | 1005 | Remove object export package GUID |
+| `UE5_TRACK_OBJECT_EXPORT_IS_INHERITED` | 1006 | Track object export inheritance |
+| `UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES` | 1007 | Remove asset path FNames |
+| `UE5_ADD_SOFTOBJECTPATH_LIST` | 1008 | Add soft object path list |
+| `UE5_DATA_RESOURCES` | 1009 | Data resources |
+| `UE5_SCRIPT_SERIALIZATION_OFFSET` | 1010 | Script serialization offset |
+| `UE5_PROPERTY_TAG_EXTENSION` | 1011 | PropertyTag extension |
+| `UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME` | 1012 | Complete type name (alias) |
+| `UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES` | 1013 | Asset registry package build dependencies |
+| `UE5_METADATA_SERIALIZATION_OFFSET` | 1014 | Metadata serialization offset |
+| `UE5_VERSE_CELLS` | 1015 | Verse cells |
+| `UE5_PACKAGE_SAVED_HASH` | 1016 | Package saved hash |
+| `UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION` | 1017 | Sub-object shadow serialization |
+| `UE5_IMPORT_TYPE_HIERARCHIES` | 1018 | Import type hierarchies |
 
-## UE4 版本常量
+## UE4 Version Constants
 
-对应 `EUnrealEngineObjectUE4Version`。
+Corresponds to `EUnrealEngineObjectUE4Version`.
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID` | 516 | 添加包摘要本地化 ID |
-| `UE4_ADD_STRING_ASSET_REFERENCES_MAP` | 516 | 添加字符串资产引用映射 |
-| `UE4_SERIALIZE_TEXT_IN_PACKAGES` | 517 | 包中序列化文本 |
-| `UE4_ADDED_SEARCHABLE_NAMES` | 518 | 添加可搜索名称 |
-| `UE4_ADDED_PACKAGE_OWNER` | 519 | 添加包所有者 |
-| `UE4_NON_OUTER_PACKAGE_IMPORT` | 520 | 非外部包导入 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID` | 516 | Added package summary localization ID |
+| `UE4_ADD_STRING_ASSET_REFERENCES_MAP` | 516 | Added string asset references map |
+| `UE4_SERIALIZE_TEXT_IN_PACKAGES` | 517 | Serialize text in packages |
+| `UE4_ADDED_SEARCHABLE_NAMES` | 518 | Added searchable names |
+| `UE4_ADDED_PACKAGE_OWNER` | 519 | Added package owner |
+| `UE4_NON_OUTER_PACKAGE_IMPORT` | 520 | Non-outer package import |
 
 ## CustomVersion GUIDs
 
-| GUID | 名称 |
+| GUID | Name |
 |------|------|
 | `CFFC743F-43B04480-939114DF-171D2073` | `FFRAMEWORK_OBJECT_VERSION_GUID` |
 | `697DD581-E64F41AB-AA4A51EC-BEB7B628` | `FUE5_MAINSTREAM_VERSION_GUID` |
@@ -108,112 +108,112 @@ section: constants
 | `78F01B33-BEA0-46A0-8BAF-6C4F4E23F8C1` | `FPHYSICS_OBJECT_VERSION_GUID` |
 | `645F75DB-7F54-4C64-A1E2-2F6F3B4B8A5E` | `FRENDERING_OBJECT_VERSION_GUID` |
 
-## 子系统版本阈值
+## Subsystem Version Thresholds
 
 ### FrameworkObjectVersion
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE` | 15 | 图引脚容器类型 |
-| `FFRAMEWORK_VERSION_PINS_STORE_FNAME` | 19 | 引脚存储 FName |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE` | 15 | Graph pin container type |
+| `FFRAMEWORK_VERSION_PINS_STORE_FNAME` | 19 | Pins store FName |
 
 ### FUE5MainStreamObjectVersion
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX` | 50 | 图引脚源索引 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX` | 50 | Graph pin source index |
 
 ### FReleaseObjectVersion
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER` | 10 | 引脚类型 UObject 包装器 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER` | 10 | Pin type UObject wrapper |
 
 ### FUE5ReleaseStreamObjectVersion
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION` | 36 | 浮点引脚默认单精度序列化 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION` | 36 | Float pin defaults serialized as single precision |
 
-## Package 标志位
+## Package Flags
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `PKG_Cooked` | `0x200` | 包已烘焙 |
-| `PKG_UnversionedProperties` | `0x2000` | 使用无版本属性序列化 |
-| `PKG_FilterEditorOnly` | `0x80000000` | 过滤编辑器专属对象 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `PKG_Cooked` | `0x200` | Package is cooked |
+| `PKG_UnversionedProperties` | `0x2000` | Uses unversioned property serialization |
+| `PKG_FilterEditorOnly` | `0x80000000` | Filter editor-only objects |
 
-## CPF_* 属性标志位
+## CPF_* Property Flags
 
-Class Property Flags，用于属性元数据。
+Class Property Flags, used for property metadata.
 
-| 常量 | 值（十六进制） | 说明 |
-|------|---------------|------|
-| `CPF_Edit` | `0x0000000000000001` | 可编辑 |
-| `CPF_ConstParm` | `0x0000000000000002` | 常量参数 |
-| `CPF_BlueprintVisible` | `0x0000000000000004` | 蓝图可见 |
-| `CPF_ExportObject` | `0x0000000000000008` | 可导出对象 |
-| `CPF_BlueprintReadOnly` | `0x0000000000000010` | 蓝图只读 |
-| `CPF_BlueprintAuthorityOnly` | `0x0000000000000020` | 仅蓝图授权 |
-| `CPF_EditFixedSize` | `0x0000000000000040` | 编辑固定大小 |
-| `CPF_Parm` | `0x0000000000000080` | 参数 |
-| `CPF_OutParm` | `0x0000000000000100` | 输出参数 |
-| `CPF_ZeroConstructor` | `0x0000000000000200` | 零构造函数 |
-| `CPF_ReturnParm` | `0x0000000000000400` | 返回参数 |
-| `CPF_Net` | `0x0000000000000800` | 网络复制 |
-| `CPF_EditAnywhere` | `0x0000000000001000` | 任意位置编辑 |
-| `CPF_Transient` | `0x0000000000002000` | 临时 |
-| `CPF_Config` | `0x0000000000004000` | 配置 |
-| `CPF_DisableEditOnTemplate` | `0x0000000000008000` | 模板上禁用编辑 |
-| `CPF_BlueprintReadWrite` | `0x0000000000010000` | 蓝图可读写 |
-| `CPF_DuplicateTransient` | `0x0000000000020000` | 复制临时 |
-| `CPF_NonPIEDuplicateTransient` | `0x0000000000040000` | 非 PIE 复制临时 |
-| `CPF_EditConst` | `0x0000000000080000` | 编辑常量 |
-| `CPF_NoClear` | `0x0000000000200000` | 不可清除 |
-| `CPF_ReferencePersisted` | `0x0000000000400000` | 引用持久化 |
-| `CPF_SaveGame` | `0x0000000001000000` | 存档游戏 |
-| `CPF_BlueprintAssignable` | `0x0000000002000000` | 蓝图可分配 |
-| `CPF_BlueprintCallable` | `0x0000000004000000` | 蓝图可调用 |
-| `CPF_BlueprintPure` | `0x0000000008000000` | 蓝图纯函数 |
-| `CPF_BlueprintCompilerGenerated` | `0x0000000010000000` | 蓝图编译器生成 |
-| `CPF_NetSerialize` | `0x0000000020000000` | 网络序列化 |
-| `CPF_RepNotify` | `0x0000000040000000` | 复制通知 |
-| `CPF_RepRetry` | `0x0000000080000000` | 复制重试 |
-| `CPF_Interp` | `0x0000000100000000` | 插值 |
-| `CPF_Constructed` | `0x0000000200000000` | 已构造 |
-| `CPF_Protected` | `0x0000000400000000` | 受保护 |
-| `CPF_AdvancedDisplay` | `0x0000000800000000` | 高级显示 |
-| `CPF_AssetRegistrySearchable` | `0x0000001000000000` | 资产注册表可搜索 |
-| `CPF_ContainsInstancedReference` | `0x0000002000000000` | 包含实例引用 |
-| `CPF_Deprecated` | `0x0000004000000000` | 已弃用 |
-| `CPF_IsPlainOldData` | `0x0000008000000000` | 简单数据类型 |
-| `CPF_NoDestructor` | `0x0000010000000000` | 无析构函数 |
-| `CPF_HasGetValueTypeHash` | `0x0000020000000000` | 有 GetValue Hash |
-| `CPF_NativeAccessSpecifierPublic` | `0x0000040000000000` | 原生公开访问 |
-| `CPF_NativeAccessSpecifierProtected` | `0x0000080000000000` | 原生受保护访问 |
-| `CPF_NativeAccessSpecifierPrivate` | `0x0000100000000000` | 原生私有访问 |
-| `CPF_SkipSerialization` | `0x0000200000000000` | 跳过序列化 |
-| `CPF_TextExportTransient` | `0x0000400000000000` | 文本导出临时 |
-| `CPF_NonTransactional` | `0x0000800000000000` | 非事务性 |
-| `CPF_Required` | `0x0001000000000000` | 必需 |
-| `CPF_ExposeOnSpawn` | `0x0002000000000000` | 生成时暴露 |
-| `CPF_PersistentInstance` | `0x0004000000000000` | 持久实例 |
+| Constant | Value (hex) | Description |
+|----------|-------------|-------------|
+| `CPF_Edit` | `0x0000000000000001` | Editable |
+| `CPF_ConstParm` | `0x0000000000000002` | Constant parameter |
+| `CPF_BlueprintVisible` | `0x0000000000000004` | Blueprint visible |
+| `CPF_ExportObject` | `0x0000000000000008` | Exportable object |
+| `CPF_BlueprintReadOnly` | `0x0000000000000010` | Blueprint read-only |
+| `CPF_BlueprintAuthorityOnly` | `0x0000000000000020` | Blueprint authority only |
+| `CPF_EditFixedSize` | `0x0000000000000040` | Edit fixed size |
+| `CPF_Parm` | `0x0000000000000080` | Parameter |
+| `CPF_OutParm` | `0x0000000000000100` | Output parameter |
+| `CPF_ZeroConstructor` | `0x0000000000000200` | Zero constructor |
+| `CPF_ReturnParm` | `0x0000000000000400` | Return parameter |
+| `CPF_Net` | `0x0000000000000800` | Network replication |
+| `CPF_EditAnywhere` | `0x0000000000001000` | Edit anywhere |
+| `CPF_Transient` | `0x0000000000002000` | Transient |
+| `CPF_Config` | `0x0000000000004000` | Config |
+| `CPF_DisableEditOnTemplate` | `0x0000000000008000` | Disable edit on template |
+| `CPF_BlueprintReadWrite` | `0x0000000000010000` | Blueprint read-write |
+| `CPF_DuplicateTransient` | `0x0000000000020000` | Duplicate transient |
+| `CPF_NonPIEDuplicateTransient` | `0x0000000000040000` | Non-PIE duplicate transient |
+| `CPF_EditConst` | `0x0000000000080000` | Edit const |
+| `CPF_NoClear` | `0x0000000000200000` | No clear |
+| `CPF_ReferencePersisted` | `0x0000000000400000` | Reference persisted |
+| `CPF_SaveGame` | `0x0000000001000000` | Save game |
+| `CPF_BlueprintAssignable` | `0x0000000002000000` | Blueprint assignable |
+| `CPF_BlueprintCallable` | `0x0000000004000000` | Blueprint callable |
+| `CPF_BlueprintPure` | `0x0000000008000000` | Blueprint pure |
+| `CPF_BlueprintCompilerGenerated` | `0x0000000010000000` | Blueprint compiler generated |
+| `CPF_NetSerialize` | `0x0000000020000000` | Network serialize |
+| `CPF_RepNotify` | `0x0000000040000000` | Rep notify |
+| `CPF_RepRetry` | `0x0000000080000000` | Rep retry |
+| `CPF_Interp` | `0x0000000100000000` | Interpolation |
+| `CPF_Constructed` | `0x0000000200000000` | Constructed |
+| `CPF_Protected` | `0x0000000400000000` | Protected |
+| `CPF_AdvancedDisplay` | `0x0000000800000000` | Advanced display |
+| `CPF_AssetRegistrySearchable` | `0x0000001000000000` | Asset registry searchable |
+| `CPF_ContainsInstancedReference` | `0x0000002000000000` | Contains instanced reference |
+| `CPF_Deprecated` | `0x0000004000000000` | Deprecated |
+| `CPF_IsPlainOldData` | `0x0000008000000000` | Plain old data type |
+| `CPF_NoDestructor` | `0x0000010000000000` | No destructor |
+| `CPF_HasGetValueTypeHash` | `0x0000020000000000` | Has GetValue hash |
+| `CPF_NativeAccessSpecifierPublic` | `0x0000040000000000` | Native public access |
+| `CPF_NativeAccessSpecifierProtected` | `0x0000080000000000` | Native protected access |
+| `CPF_NativeAccessSpecifierPrivate` | `0x0000100000000000` | Native private access |
+| `CPF_SkipSerialization` | `0x0000200000000000` | Skip serialization |
+| `CPF_TextExportTransient` | `0x0000400000000000` | Text export transient |
+| `CPF_NonTransactional` | `0x0000800000000000` | Non-transactional |
+| `CPF_Required` | `0x0001000000000000` | Required |
+| `CPF_ExposeOnSpawn` | `0x0002000000000000` | Expose on spawn |
+| `CPF_PersistentInstance` | `0x0004000000000000` | Persistent instance |
 | `CPF_TObjectPtr` | `0x0008000000000000` | TObjectPtr |
-| `CPF_UObjectWrapper` | `0x0010000000000000` | UObject 包装器 |
-| `CPF_NaturalizePropertyIndex` | `0x0020000000000000` | 自然化属性索引 |
-| `CPF_InstancedReference` | `0x0040000000000000` | 实例引用 |
+| `CPF_UObjectWrapper` | `0x0010000000000000` | UObject wrapper |
+| `CPF_NaturalizePropertyIndex` | `0x0020000000000000` | Naturalize property index |
+| `CPF_InstancedReference` | `0x0040000000000000` | Instanced reference |
 
-### CPF 别名
+### CPF Aliases
 
-| 别名 | 映射到 | 说明 |
-|------|--------|------|
-| `CPF_EditInstanceOnly` | `CPF_EditAnywhere` | 仅实例编辑（旧 API） |
-| `CPF_ReferenceOnly` | `CPF_ReferencePersisted` | 仅引用（旧 API） |
-| `CPF_Replicated` | `CPF_Net` | 已复制（旧 API） |
+| Alias | Maps To | Description |
+|-------|---------|-------------|
+| `CPF_EditInstanceOnly` | `CPF_EditAnywhere` | Edit instance only (legacy API) |
+| `CPF_ReferenceOnly` | `CPF_ReferencePersisted` | Reference only (legacy API) |
+| `CPF_Replicated` | `CPF_Net` | Replicated (legacy API) |
 
-## 蓝图图解析集合
+## Blueprint Graph Parsing Collections
 
-### 控制流节点
+### Control Flow Nodes
 
 ```python
 CONTROL_FLOW_NODES = frozenset({
@@ -226,7 +226,7 @@ CONTROL_FLOW_NODES = frozenset({
 })
 ```
 
-### 开始事件类型
+### Start Event Types
 
 ```python
 START_EVENT_TYPES = frozenset({
@@ -238,7 +238,7 @@ START_EVENT_TYPES = frozenset({
 })
 ```
 
-### 数据流边界节点
+### Data Boundary Nodes
 
 ```python
 DATA_BOUNDARY_NODES = frozenset({
@@ -247,9 +247,9 @@ DATA_BOUNDARY_NODES = frozenset({
 })
 ```
 
-## 映射与配置
+## Mappings and Configuration
 
-### EnhancedInput TriggerEvent 引脚映射
+### EnhancedInput TriggerEvent Pin Mapping
 
 ```python
 ETRIGGER_EVENT_PIN_MAP = {
@@ -260,7 +260,7 @@ ETRIGGER_EVENT_PIN_MAP = {
 }
 ```
 
-### 分支类型映射
+### Branch Type Mapping
 
 ```python
 BRANCH_TYPE_MAP = {
@@ -273,7 +273,7 @@ BRANCH_TYPE_MAP = {
 }
 ```
 
-### 图类型映射
+### Graph Type Mapping
 
 ```python
 GRAPH_TYPE_MAP = {
@@ -282,7 +282,7 @@ GRAPH_TYPE_MAP = {
 }
 ```
 
-### 输出格式配置
+### Output Format Configuration
 
 ```python
 FORMAT_CONFIG = {
@@ -290,11 +290,11 @@ FORMAT_CONFIG = {
 }
 ```
 
-## CLI 退出代码
+## CLI Exit Codes
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `EXIT_SUCCESS` | 0 | 成功 |
-| `EXIT_PARSE_ERROR` | 1 | 解析错误 |
-| `EXIT_FILE_NOT_FOUND` | 2 | 文件未找到 |
-| `EXIT_ARGUMENT_ERROR` | 3 | 参数错误 |
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `EXIT_SUCCESS` | 0 | Success |
+| `EXIT_PARSE_ERROR` | 1 | Parse error |
+| `EXIT_FILE_NOT_FOUND` | 2 | File not found |
+| `EXIT_ARGUMENT_ERROR` | 3 | Argument error |
