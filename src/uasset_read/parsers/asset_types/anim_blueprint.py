@@ -35,14 +35,17 @@ class AnimBlueprintHandler:
             ParseStatus: SUCCESS 或 PARTIAL
         """
         try:
-            # 从 export.instance（CDO）提取动画数据
-            instance = getattr(export, "instance", None)
-            if instance is None:
+            # 从 export 提取属性数据
+            # ObjectExport 有 properties 属性（解析后的属性列表）
+            properties_list = getattr(export, "properties", [])
+            if not properties_list:
                 return ParseStatus.PARTIAL
 
-            properties = getattr(instance, "properties", {})
-            if not properties:
-                return ParseStatus.PARTIAL
+            # 将属性列表转换为字典格式（name -> value）
+            properties = {}
+            for prop in properties_list:
+                if hasattr(prop, "name") and hasattr(prop, "value"):
+                    properties[prop.name] = prop.value
 
             # 构建 AnimBlueprintIR
             anim_ir = AnimBlueprintIR()
@@ -70,6 +73,18 @@ class AnimBlueprintHandler:
                 anim_ir.sync_group_names = self._parse_sync_group_names(
                     properties["SyncGroupNames"]
                 )
+
+            # 提取 GraphAssetPlayerInformation
+            if "GraphAssetPlayerInformation" in properties:
+                anim_ir.graph_asset_player_info = properties["GraphAssetPlayerInformation"]
+
+            # 提取 GraphBlendOptions
+            if "GraphBlendOptions" in properties:
+                anim_ir.graph_blend_options = properties["GraphBlendOptions"]
+
+            # 提取 AnimNodeData
+            if "AnimNodeData" in properties:
+                anim_ir.anim_node_data = properties["AnimNodeData"]
 
             # 存储到 export 的自定义数据
             if not hasattr(export, "custom_data"):
