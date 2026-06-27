@@ -38,12 +38,12 @@ PARSE_TIMEOUT = 120                       # 单次解析超时（秒）
 PROCESS_RSS_LIMIT_MB = 4 * 1024           # 4GB — 进程 RSS 超过此值触发紧急清理
 
 # 内存水位线（基于系统可用内存百分比）
-MEMORY_HIGH_WATERMARK = 0.7               # 70% — 触发 GC
-MEMORY_CRITICAL_WATERMARK = 0.85          # 85% — 触发紧急清理
+MEMORY_HIGH_WATERMARK = 0.6               # 60% — 触发 GC
+MEMORY_CRITICAL_WATERMARK = 0.75          # 75% — 触发紧急清理
 
 # 进程 RSS 水位线（基于进程自身内存）
-PROCESS_RSS_HIGH_WATERMARK_MB = 2 * 1024  # 2GB — 进程 RSS 高水位，触发 GC
-PROCESS_RSS_CRITICAL_MB = 3 * 1024        # 3GB — 进程 RSS 临界值，暂停等待清理
+PROCESS_RSS_HIGH_WATERMARK_MB = 1 * 1024  # 1GB — 进程 RSS 高水位，触发 GC
+PROCESS_RSS_CRITICAL_MB = 2 * 1024        # 2GB — 进程 RSS 临界值，暂停等待清理
 
 
 @dataclass
