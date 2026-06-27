@@ -13,11 +13,15 @@ UE5 中 FBoxSphereBounds UPROPERTY 结构体没有 STRUCT_SerializeNative 标志
 FBoxSphereBounds（UPROPERTY 版本）始终使用 tagged 格式，因为
 TBoxSphereBoundsStructOpsTypeTraits 没有设置 WithSerialize 标志。
 """
+import os
 from pathlib import Path
 
 import pytest
 
 from tests.conftest import asset_path, ASSET_MESH_CHAIR
+
+# 样本文件完整路径
+CHAIR_PATH = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Props/SM_Chair.uasset")
 
 
 @pytest.mark.integration
