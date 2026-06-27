@@ -196,14 +196,28 @@ def pytest_runtest_setup(item):
 
 
 def pytest_runtest_teardown(item):
-    """每个测试结束后清理内存。"""
+    """每个测试结束后强制释放内存。"""
+    import gc
+
+    # 强制释放测试函数的局部变量
+    if hasattr(item, "_request") and hasattr(item._request, "_funcobj"):
+        try:
+            item._request._funcobj = None
+        except Exception:
+            pass
+
+    # 多轮 GC + 内存检查
     _cleanup_after_parse()
+    force_gc()
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """测试会话结束时输出内存统计。"""
+    """测试会话结束时输出内存统计并强制清理。"""
+    import gc
+
     stats = get_memory_stats()
     print(
         f"\n[MemorySafety] Final memory: process RSS={stats.process_rss_mb:.0f}MB, "
         f"system {stats.usage_percent*100:.1f}% used, {stats.available_mb:.0f}MB available"
     )
+    emergency_cleanup()

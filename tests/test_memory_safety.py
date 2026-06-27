@@ -33,3 +33,11 @@ def test_parse_single_uses_memory_guard():
     from uasset_read.core import parse_single
     source = inspect.getsource(parse_single)
     assert "MemoryGuard" in source, "parse_single 应引用 MemoryGuard"
+
+
+def test_conftest_teardown_calls_cleanup():
+    """conftest 的 pytest_runtest_teardown 应调用 cleanup_after_parse。"""
+    import inspect
+    from tests.conftest import pytest_runtest_teardown
+    source = inspect.getsource(pytest_runtest_teardown)
+    assert "cleanup_after_parse" in source, "teardown 应调用 cleanup_after_parse"
