@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import struct
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -270,26 +271,30 @@ class TestReadAssetRegistryData:
 class TestAssetRegistryIntegration:
     """集成测试 — 使用真实 .uasset 文件。"""
 
-    SAMPLE_TEXTURE = "E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Textures/T_Brick_Clay_New_D.uasset"
-
-    def test_parse_returns_asset_registry_data(self):
+    def test_parse_returns_asset_registry_data(self, sample_root: Path):
         from uasset_read.parse_uasset import parse_package
-        result = parse_package(self.SAMPLE_TEXTURE, tolerant=True)
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        result = parse_package(str(texture_path), tolerant=True)
         assert result.asset_registry_data is not None
         assert isinstance(result.asset_registry_data, AssetRegistryData)
 
-    def test_parse_asset_registry_in_ir(self):
+    def test_parse_asset_registry_in_ir(self, sample_root: Path):
         from uasset_read.parse_uasset import parse_package
         from uasset_read.ir_builder import build_package_ir
-        result = parse_package(self.SAMPLE_TEXTURE, tolerant=True)
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        result = parse_package(str(texture_path), tolerant=True)
         ir = build_package_ir(result)
         assert ir.asset_registry_data is not None
         assert "object_count" in ir.asset_registry_data
 
-    def test_parse_json_output_includes_asset_registry(self):
+    def test_parse_json_output_includes_asset_registry(self, sample_root: Path):
         from uasset_read.core import parse_single
         import json
-        output = parse_single(self.SAMPLE_TEXTURE, format="json")
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        output = parse_single(str(texture_path), format="json")
         data = json.loads(output)
         assert "asset_registry_data" in data
         assert "object_count" in data["asset_registry_data"]

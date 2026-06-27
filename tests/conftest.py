@@ -146,6 +146,23 @@ def skip_if_too_large(path: Path) -> None:
         pytest.skip(f"asset not found: {path}")
 
 
+def asset_path(sample_root: Path, relative_path: str) -> Path:
+    """Build full asset path from sample_root and relative path."""
+    full_path = sample_root / relative_path
+    if not full_path.is_file():
+        pytest.skip(f"Asset not found: {full_path}")
+    return full_path
+
+
+# Common asset relative paths
+ASSET_TEXTURE_BRICK = "StarterContent/Content/StarterContent/Textures/T_Brick_Clay_New_D.uasset"
+ASSET_MATERIAL_ROCK = "StarterContent/Content/StarterContent/Materials/M_Rock_Basalt.uasset"
+ASSET_MESH_CHAIR = "StarterContent/Content/StarterContent/Props/SM_Chair.uasset"
+ASSET_MESH_MANNY = "Content/Characters/Mannequins/Meshes/SKM_Manny.uasset"
+ASSET_BLUEPRINT_FIRST_PERSON = "FirstPersonBP/Content/FirstPersonBP/Blueprints/BP_FirstPersonCharacter.uasset"
+ASSET_BLUEPRINT_THIRD_PERSON = "Content/ThirdPersonBP/Blueprints/BP_ThirdPersonCharacter.uasset"
+
+
 # ---------------------------------------------------------------------------
 # pytest hooks
 # ---------------------------------------------------------------------------

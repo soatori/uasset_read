@@ -15,25 +15,21 @@ from pathlib import Path
 from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.memory_safety import cleanup_after_parse
+from tests.conftest import asset_path, ASSET_MESH_CHAIR
 
-# 测试资产路径
-BLUEPRINT_ASSET = "E:/Develop/lib/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
-STATICMESH_ASSET = "E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
-TEXTURE_ASSET = "E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Textures/T_Brick_Clay_Beveled_D.uasset"
-
-
-def asset_exists(path: str) -> bool:
-    """检查资产文件是否存在"""
-    return Path(path).exists()
+# 测试资产相对路径
+BLUEPRINT_ASSET_REL = "FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
+STATICMESH_ASSET_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+TEXTURE_ASSET_REL = "StarterContent/Content/StarterContent/Textures/T_Brick_Clay_Beveled_D.uasset"
 
 
 class TestUEFidelityIntegration:
     """UE 保真度改进集成测试"""
 
-    @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
-    def test_blueprint_full_pipeline(self):
+    def test_blueprint_full_pipeline(self, sample_root: Path):
         """场景 1: Blueprint 资产的完整解析流程"""
-        result = parse_uasset_with_linker(BLUEPRINT_ASSET, preload_all=True)
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
 
         assert result.linker is not None, "Linker should be created"
         assert len(result.linker._export_objects) > 0, "Should have export objects"
@@ -53,10 +49,10 @@ class TestUEFidelityIntegration:
         if result.errors:
             assert result.status == 'partial'
 
-    @pytest.mark.skipif(not asset_exists(STATICMESH_ASSET), reason="StaticMesh asset not found")
-    def test_staticmesh_opaque_marking(self):
+    def test_staticmesh_opaque_marking(self, sample_root: Path):
         """场景 2: StaticMesh 资产的 opaque 标记"""
-        result = parse_uasset(STATICMESH_ASSET)
+        mesh_path = asset_path(sample_root, STATICMESH_ASSET_REL)
+        result = parse_uasset(str(mesh_path))
 
         # StaticMesh 有 class-specific Serialize()，因此不能标记为完整 success。
         # 若 asset type handler 成功提取基础元数据，会从 opaque 提升为 partial_metadata。
@@ -75,10 +71,10 @@ class TestUEFidelityIntegration:
         assert has_staticmesh, "Should have at least one StaticMesh export"
         assert result.status in ['success', 'partial', 'failed']
 
-    @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
-    def test_dependency_graph_correctness(self):
+    def test_dependency_graph_correctness(self, sample_root: Path):
         """场景 3: 依赖解析的正确性"""
-        result = parse_uasset_with_linker(BLUEPRINT_ASSET, preload_all=True)
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
 
         assert hasattr(result.summary, 'depends_map')
         assert result.summary.depends_map is not None
@@ -90,10 +86,10 @@ class TestUEFidelityIntegration:
                 assert hasattr(dep, 'object_name'),                     f"Dependency should be UObjectInstance, got {type(dep)}"
                 assert hasattr(dep, 'package_index')
 
-    @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
-    def test_soft_object_path_resolution(self):
+    def test_soft_object_path_resolution(self, sample_root: Path):
         """场景 4: 软引用解析"""
-        result = parse_uasset(BLUEPRINT_ASSET)
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
+        result = parse_uasset(str(bp_path))
 
         assert hasattr(result, 'soft_object_path_list')
 
@@ -108,10 +104,10 @@ class TestUEFidelityIntegration:
                         if hasattr(prop.value, 'index') and prop.value.index is not None:
                             assert 0 <= prop.value.index < len(result.soft_object_path_list)
 
-    @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
-    def test_serial_offset_default(self):
+    def test_serial_offset_default(self, sample_root: Path):
         """场景 2 补充: 验证默认使用 SerialOffset"""
-        result = parse_uasset(BLUEPRINT_ASSET)
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
+        result = parse_uasset(str(bp_path))
 
         has_script_offset = False
         for export in result.export_map:
@@ -121,17 +117,15 @@ class TestUEFidelityIntegration:
                     assert hasattr(export, '_script_serialization_start_absolute')
                     assert hasattr(export, '_script_serialization_end_absolute')
 
-    @pytest.mark.skipif(
-        not asset_exists(BLUEPRINT_ASSET) or not asset_exists(STATICMESH_ASSET),
-        reason="Required assets not found"
-    )
-    def test_batch_parsing_consistency(self):
+    def test_batch_parsing_consistency(self, sample_root: Path):
         """场景 5: 多资产批量解析的一致性"""
-        assets = [BLUEPRINT_ASSET, STATICMESH_ASSET]
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
+        mesh_path = asset_path(sample_root, STATICMESH_ASSET_REL)
+        assets = [str(bp_path), str(mesh_path)]
         parsed_count = 0
 
-        for asset_path in assets:
-            result = parse_uasset(asset_path)
+        for ap in assets:
+            result = parse_uasset(ap)
 
             assert hasattr(result, 'status')
             assert result.status in ['success', 'partial', 'failed']
@@ -146,10 +140,10 @@ class TestUEFidelityIntegration:
 
         assert parsed_count == len(assets)
 
-    @pytest.mark.skipif(not asset_exists(TEXTURE_ASSET), reason="Texture asset not found")
-    def test_texture_opaque_handling(self):
+    def test_texture_opaque_handling(self, sample_root: Path):
         """场景 2 补充: Texture2D 资产的 opaque 处理"""
-        result = parse_uasset(TEXTURE_ASSET)
+        texture_path = asset_path(sample_root, TEXTURE_ASSET_REL)
+        result = parse_uasset(str(texture_path))
 
         texture_exports = [
             exp for exp in result.export_map
@@ -164,12 +158,11 @@ class TestUEFidelityIntegration:
 
         assert result.status in ['success', 'partial', 'failed']
 
-    def test_all_improvements_together(self):
+    def test_all_improvements_together(self, sample_root: Path):
         """综合测试: 验证所有改进协同工作"""
-        if not asset_exists(BLUEPRINT_ASSET):
-            pytest.skip("Blueprint asset not found")
+        bp_path = asset_path(sample_root, BLUEPRINT_ASSET_REL)
 
-        result = parse_uasset_with_linker(BLUEPRINT_ASSET, preload_all=True)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
 
         assert result.linker is not None
         assert all(exp._preloaded for exp in result.linker._export_objects)

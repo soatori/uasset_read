@@ -8,21 +8,14 @@
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 import pytest
 
-# 测试资产路径
-_BP_FIRST_PERSON = "E:/Develop/lib/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
-_BP_FIRST_PERSON_PLAYER_CONTROLLER = "E:/Develop/lib/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonPlayerController.uasset"
+from tests.conftest import asset_path, ASSET_BLUEPRINT_FIRST_PERSON
 
-_REAL_BLUEPRINT = os.path.join(
-    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\Samples"),
-    "FirstPerson", "Content", "FirstPerson", "Blueprints",
-    "BP_FirstPersonCharacter.uasset",
-)
-
-_has_real_asset = os.path.isfile(_REAL_BLUEPRINT)
+# 测试资产相对路径
+_BP_FIRST_PERSON_PLAYER_CONTROLLER_REL = "FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonPlayerController.uasset"
 
 # 已知元数据键（不应出现在构造函数中）
 _METADATA_KEYS = {
@@ -40,10 +33,11 @@ def _cleanup_result(result):
 
 # === test_interfaces.py ===
 
-def test_blueprint_has_interfaces():
+def test_blueprint_has_interfaces(sample_root: Path):
     """蓝图应包含 interfaces 列表"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
-    result = parse_uasset_with_linker(_BP_FIRST_PERSON, tolerant=True)
+    bp_path = asset_path(sample_root, ASSET_BLUEPRINT_FIRST_PERSON)
+    result = parse_uasset_with_linker(str(bp_path), tolerant=True)
     try:
         assert result.is_success, f"解析失败: {result.errors}"
         blueprint = result.blueprint
@@ -60,10 +54,11 @@ def test_blueprint_has_interfaces():
 
 # === test_blueprint_description.py ===
 
-def test_blueprint_has_description():
+def test_blueprint_has_description(sample_root: Path):
     """蓝图应包含 description 字段"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
-    result = parse_uasset_with_linker(_BP_FIRST_PERSON, tolerant=True)
+    bp_path = asset_path(sample_root, ASSET_BLUEPRINT_FIRST_PERSON)
+    result = parse_uasset_with_linker(str(bp_path), tolerant=True)
     try:
         assert result.is_success, f"解析失败: {result.errors}"
         blueprint = result.blueprint
@@ -80,10 +75,11 @@ def test_blueprint_has_description():
 class TestVariableVarType:
     """验证 BlueprintVariable.var_type 不为 None。"""
 
-    def test_variable_has_var_type(self):
+    def test_variable_has_var_type(self, sample_root: Path):
         """变量应包含 var_type 类型信息"""
         from uasset_read.parse_uasset import parse_uasset_with_linker
-        result = parse_uasset_with_linker(_BP_FIRST_PERSON, tolerant=True)
+        bp_path = asset_path(sample_root, ASSET_BLUEPRINT_FIRST_PERSON)
+        result = parse_uasset_with_linker(str(bp_path), tolerant=True)
         try:
             assert result.is_success, f"解析失败: {result.errors}"
             blueprint = result.blueprint
@@ -106,10 +102,11 @@ class TestVariableVarType:
 
 # === test_ftext_category.py ===
 
-def test_category_not_property_fallback():
+def test_category_not_property_fallback(sample_root: Path):
     """变量 Category 不应为 PropertyFallback（已知损坏数据除外）"""
     from uasset_read.parse_uasset import parse_package
-    result = parse_package(_BP_FIRST_PERSON_PLAYER_CONTROLLER)
+    bp_path = asset_path(sample_root, _BP_FIRST_PERSON_PLAYER_CONTROLLER_REL)
+    result = parse_package(str(bp_path))
     try:
         blueprint = result.blueprint
         assert blueprint is not None, "蓝图数据为空"
@@ -126,10 +123,11 @@ def test_category_not_property_fallback():
         _cleanup_result(result)
 
 
-def test_category_not_empty_or_garbled():
+def test_category_not_empty_or_garbled(sample_root: Path):
     """变量 Category 不应为空或乱码"""
     from uasset_read.parse_uasset import parse_package
-    result = parse_package(_BP_FIRST_PERSON_PLAYER_CONTROLLER)
+    bp_path = asset_path(sample_root, _BP_FIRST_PERSON_PLAYER_CONTROLLER_REL)
+    result = parse_package(str(bp_path))
     try:
         blueprint = result.blueprint
         assert blueprint is not None, "蓝图数据为空"
@@ -144,16 +142,16 @@ def test_category_not_empty_or_garbled():
 
 @pytest.mark.integration
 @pytest.mark.quality
-@pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestVariableClassification:
     """验证 PackageIR.variables 不包含元数据变量。"""
 
-    def test_no_metadata_variables_in_ir(self):
+    def test_no_metadata_variables_in_ir(self, sample_root: Path):
         """PackageIR.variables 不应包含 BlueprintSystemVersion 等。"""
         from uasset_read.parse_uasset import parse_uasset_with_linker
         from uasset_read.ir_builder import build_package_ir
 
-        result = parse_uasset_with_linker(_REAL_BLUEPRINT, tolerant=True)
+        bp_path = asset_path(sample_root, ASSET_BLUEPRINT_FIRST_PERSON)
+        result = parse_uasset_with_linker(str(bp_path), tolerant=True)
         try:
             ir = build_package_ir(result)
             var_names = {v.name for v in ir.variables}
