@@ -520,10 +520,32 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"**Blend In Mode**: {ir.anim_montage.blend_mode_in}")
             if ir.anim_montage.blend_mode_out:
                 lines.append(f"**Blend Out Mode**: {ir.anim_montage.blend_mode_out}")
+            if ir.anim_montage.blend_in_option:
+                lines.append(f"**Blend In Option**: {ir.anim_montage.blend_in_option}")
+            if ir.anim_montage.blend_out_option:
+                lines.append(f"**Blend Out Option**: {ir.anim_montage.blend_out_option}")
             if ir.anim_montage.sync_group:
                 lines.append(f"**Sync Group**: {ir.anim_montage.sync_group}")
             if ir.anim_montage.rate_scale != 1.0:
                 lines.append(f"**Rate Scale**: {ir.anim_montage.rate_scale}")
+            if ir.anim_montage.composite_sections:
+                lines.append("")
+                lines.append("### Composite Sections")
+                lines.append("")
+                for i, section in enumerate(ir.anim_montage.composite_sections):
+                    lines.append(f"{i}. {section}")
+            if ir.anim_montage.slot_anim_tracks:
+                lines.append("")
+                lines.append("### Slot Anim Tracks")
+                lines.append("")
+                for i, track in enumerate(ir.anim_montage.slot_anim_tracks):
+                    lines.append(f"{i}. {track}")
+            if ir.anim_montage.branching_point_markers:
+                lines.append("")
+                lines.append("### Branching Point Markers")
+                lines.append("")
+                for marker in ir.anim_montage.branching_point_markers:
+                    lines.append(f"- {marker}")
             if ir.anim_montage.notifies:
                 lines.append("")
                 lines.append("### Anim Notifies")
@@ -532,6 +554,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("|------|-------|---------------|----------|")
                 for notify in ir.anim_montage.notifies:
                     lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+            if ir.anim_montage.float_curve_names:
+                lines.append("")
+                lines.append(f"**Float Curves**: {', '.join(ir.anim_montage.float_curve_names)}")
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:

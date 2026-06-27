@@ -343,12 +343,24 @@ class JSONRenderer(IRenderer):
             d["blend_mode_in"] = anim_ir.blend_mode_in
         if anim_ir.blend_mode_out:
             d["blend_mode_out"] = anim_ir.blend_mode_out
+        if anim_ir.blend_in_option:
+            d["blend_in_option"] = anim_ir.blend_in_option
+        if anim_ir.blend_out_option:
+            d["blend_out_option"] = anim_ir.blend_out_option
         if anim_ir.sync_group:
             d["sync_group"] = anim_ir.sync_group
         if anim_ir.rate_scale:
             d["rate_scale"] = anim_ir.rate_scale
+        if anim_ir.composite_sections:
+            d["composite_sections"] = anim_ir.composite_sections
+        if anim_ir.slot_anim_tracks:
+            d["slot_anim_tracks"] = anim_ir.slot_anim_tracks
+        if anim_ir.branching_point_markers:
+            d["branching_point_markers"] = anim_ir.branching_point_markers
         if anim_ir.notifies:
             d["notifies"] = [self._anim_notify_to_dict(n) for n in anim_ir.notifies]
+        if anim_ir.float_curve_names:
+            d["float_curve_names"] = anim_ir.float_curve_names
         return d
 
 
