@@ -218,10 +218,10 @@ class TestRendererListFormats:
 
 
 class TestJSONOnlyBlueprintExports:
-    """验证 JSON 输出只包含蓝图相关 export。"""
+    """验证 JSON 输出包含所有 export（包括蓝图和非蓝图）。"""
 
     def test_json_only_blueprint_exports(self):
-        """JSON 输出应只包含蓝图相关 export（类名以 _C 结尾或有 graphs）"""
+        """JSON 输出应包含所有 export（蓝图和非蓝图）"""
         import json
         from uasset_read.renderers.json_renderer import JSONRenderer
         from uasset_read.renderers.base import RenderOptions
@@ -289,9 +289,10 @@ class TestJSONOnlyBlueprintExports:
         result = renderer.render(ir, options)
         data = json.loads(result)
 
-        # 验证只包含蓝图 export
-        assert len(data["exports"]) == 1, f"应只有 1 个蓝图 export，实际有 {len(data['exports'])}"
-        assert data["exports"][0]["object_name"] == "BP_Test_C", "应保留蓝图 export"
+        # 验证包含所有 export
+        assert len(data["exports"]) == 2, f"应有 2 个 export，实际有 {len(data['exports'])}"
+        assert data["exports"][0]["object_name"] == "BP_Test_C", "应包含蓝图 export"
+        assert data["exports"][1]["object_name"] == "BodySetup", "应包含非蓝图 export"
 
     def test_export_name_ends_with_c_is_blueprint(self):
         """类名以 _C 结尾的 export 应被视为蓝图 export"""
@@ -372,7 +373,7 @@ class TestJSONOnlyBlueprintExports:
         assert data["exports"][0]["object_name"] == "SomeFunc"
 
     def test_no_blueprint_exports_empty_list(self):
-        """如果没有蓝图 export，exports 应为空列表"""
+        """非蓝图资产应包含其 export"""
         import json
         from uasset_read.renderers.json_renderer import JSONRenderer
         from uasset_read.renderers.base import RenderOptions
@@ -406,7 +407,8 @@ class TestJSONOnlyBlueprintExports:
         result = renderer.render(ir, RenderOptions())
         data = json.loads(result)
 
-        assert len(data["exports"]) == 0, "无蓝图 export 时应为空列表"
+        assert len(data["exports"]) == 1, "应包含非蓝图 export"
+        assert data["exports"][0]["object_name"] == "TextureAsset"
 
 
 class TestMarkdownOnlyBlueprintExports:

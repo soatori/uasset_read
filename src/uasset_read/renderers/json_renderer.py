@@ -37,7 +37,6 @@ class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        # 输出所有 exports，不过滤（蓝图过滤由调用方按需处理）
         all_exports = ir.exports
 
         data = {
@@ -78,6 +77,8 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        if ir.diagnostics:
+            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
         if ir.asset_registry_data:
             data["asset_registry_data"] = ir.asset_registry_data
         if options.include_function_graphs:

@@ -82,7 +82,7 @@ class TestPreloadErrorRecovery:
         """preload 循环应捕获单个 export 的异常。"""
         # 直接读取源文件验证 preload 循环有 try/except
         from pathlib import Path
-        source_path = Path(__file__).parent.parent / "src" / "uasset_read" / "parse_uasset.py"
+        source_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "parse_uasset.py"
         source = source_path.read_text(encoding="utf-8")
         # 确认 preload 循环中有 try/except
         assert "try:" in source and "linker.preload" in source, \
