@@ -10,7 +10,6 @@ Issue #28: 验证 PackageLinker 的两阶段加载流程正确性。
 
 合并自 test_lifecycle_preload.py：使用真实资产验证加载生命周期。
 """
-import gc
 import os
 import pytest
 from pathlib import Path
@@ -18,6 +17,7 @@ from unittest.mock import MagicMock, patch, call
 
 from uasset_read.link.linker import PackageLinker
 from uasset_read.link.object_instance import UObjectInstance
+from uasset_read.memory_safety import cleanup_after_parse
 from uasset_read.serializers.object_resources import PackageIndex
 
 
@@ -425,6 +425,10 @@ BLUEPRINT = DEFAULT_SAMPLE_ROOT / (
 class TestLinkerLifecycleIntegration:
     """使用真实资产验证 FLinkerLoad 生命周期。"""
 
+    def teardown_method(self):
+        """每个测试方法结束后清理内存。"""
+        cleanup_after_parse()
+
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_full_lifecycle_with_blueprint(self):
         """完整生命周期：link → preload_all → post_load。"""
@@ -450,7 +454,7 @@ class TestLinkerLifecycleIntegration:
             assert hasattr(inst, "property_references")
             assert hasattr(inst, "weak_references")
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not STATIC_MESH.exists(), reason="StaticMesh sample not found")
     def test_preload_populates_real_properties(self):
@@ -468,7 +472,7 @@ class TestLinkerLifecycleIntegration:
         )
         assert has_properties, "StaticMesh 资产应包含属性数据"
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_property_references_real_resolution(self):
@@ -493,7 +497,7 @@ class TestLinkerLifecycleIntegration:
 
         # 注意：某些资产可能没有 ObjectProperty，不强制断言
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_post_load_order_preload_dependency(self):
@@ -529,7 +533,7 @@ class TestLinkerLifecycleIntegration:
             if i != preloaded_idx and not inst._preloaded:
                 assert inst.property_references == {}
         del result
-        gc.collect()
+        cleanup_after_parse()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

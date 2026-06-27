@@ -9,10 +9,10 @@ Blueprint 字段验证测试 — 合并自以下文件：
 
 from __future__ import annotations
 
-import gc
 import os
 
 import pytest
+from uasset_read.memory_safety import cleanup_after_parse
 
 # 测试资产路径
 _BP_FIRST_PERSON = "E:/Develop/lib/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
@@ -147,4 +147,4 @@ class TestVariableClassification:
             f"PackageIR.variables 包含元数据变量: {metadata_found}"
         )
         del result, ir
-        gc.collect()
+        cleanup_after_parse()

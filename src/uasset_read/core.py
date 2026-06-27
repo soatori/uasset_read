@@ -147,6 +147,8 @@ def parse_batch(
     mappings_path: str | None = None,
     game: str | None = None,
     force_full_parse: bool = False,
+    max_memory_usage: float = 0.85,  # 内存使用上限（85%）
+    skip_large_files: bool = True,
 ) -> BatchResult:
     """批量解析目录下所有 .uasset/.umap。
 
@@ -163,6 +165,8 @@ def parse_batch(
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        max_memory_usage: 内存使用上限（0.0-1.0），超过时停止处理
+        skip_large_files: 是否跳过大文件（防止 OOM）
 
     Returns:
         BatchResult 包含成功、跳过、失败的文件列表
@@ -170,6 +174,18 @@ def parse_batch(
     Raises:
         ValueError: 目录不存在或没有资产文件
     """
+    from uasset_read.memory_safety import (
+        MemoryGuard,
+        check_memory_pressure,
+        check_process_rss_limit,
+        cleanup_after_parse,
+        emergency_cleanup,
+        get_memory_stats,
+        should_skip_file,
+        MEMORY_CHECK_INTERVAL,
+        PROCESS_RSS_CRITICAL_MB,
+    )
+
     input_path = Path(input_dir)
     if not input_path.is_dir():
         raise ValueError(f"Not a directory: {input_dir}")
@@ -178,6 +194,29 @@ def parse_batch(
     if not package_files:
         raise ValueError(f"No .uasset/.umap files found in {input_dir}")
 
+    # 过滤大文件
+    if skip_large_files:
+        original_count = len(package_files)
+        filtered_files = []
+        skipped_count = 0
+
+        for pf in package_files:
+            should_skip, reason = should_skip_file(pf)
+            if should_skip:
+                skipped_count += 1
+                continue
+            filtered_files.append(pf)
+
+        if skipped_count > 0:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Batch: skipped %d large files to prevent OOM",
+                skipped_count
+            )
+
+        package_files = filtered_files
+
     if output_dir is None:
         output_dir = str(input_path / "output")
     output_path = Path(output_dir)
@@ -185,34 +224,82 @@ def parse_batch(
 
     result = BatchResult(total=len(package_files))
 
-    for pf in package_files:
-        try:
-            output_str = parse_single(
-                str(pf),
-                format=format,
-                tolerant=tolerant,
-                verbose=verbose,
-                include_schema=include_schema,
-                include_function_graphs=include_function_graphs,
-                include_parent_assets=include_parent_assets,
-                asset_roots=asset_roots,
-                mappings_path=mappings_path,
-                game=game,
-                force_full_parse=force_full_parse,
-            )
-            # 确定输出文件扩展名
-            if format.startswith("json"):
-                ext = ".json"
-            elif format == "markdown":
-                ext = ".md"
-            else:
-                ext = f".{format}"
+    # 使用内存保护上下文管理器
+    with MemoryGuard("batch_parse"):
+        for idx, pf in enumerate(package_files):
+            # 每个文件开始前检查进程 RSS（不只在间隔时检查）
+            rss_warning = check_process_rss_limit()
+            if rss_warning:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning("Batch: %s, stopping", rss_warning)
+                emergency_cleanup()
+                # GC 后再检查一次
+                rss_warning = check_process_rss_limit()
+                if rss_warning:
+                    result.skipped.append((str(pf), rss_warning))
+                    for remaining in package_files[idx + 1:]:
+                        result.skipped.append((str(remaining), rss_warning))
+                    break
 
-            out_file = output_path / f"{pf.stem}{ext}"
-            out_file.write_text(output_str, encoding="utf-8")
-            result.success.append(str(out_file))
-        except Exception as e:
-            result.failed.append((str(pf), str(e)))
+            # 定期检查系统内存使用
+            if idx % MEMORY_CHECK_INTERVAL == 0:
+                stats = get_memory_stats()
+                if stats.usage_percent > max_memory_usage:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        "Batch: memory usage %.1f%% exceeds limit %.1f%%, stopping",
+                        stats.usage_percent * 100,
+                        max_memory_usage * 100
+                    )
+                    result.skipped.append((str(pf), "Memory limit exceeded"))
+                    for remaining in package_files[idx + 1:]:
+                        result.skipped.append((str(remaining), "Memory limit exceeded"))
+                    break
+
+            try:
+                output_str = parse_single(
+                    str(pf),
+                    format=format,
+                    tolerant=tolerant,
+                    verbose=verbose,
+                    include_schema=include_schema,
+                    include_function_graphs=include_function_graphs,
+                    include_parent_assets=include_parent_assets,
+                    asset_roots=asset_roots,
+                    mappings_path=mappings_path,
+                    game=game,
+                    force_full_parse=force_full_parse,
+                )
+                # 确定输出文件扩展名
+                if format.startswith("json"):
+                    ext = ".json"
+                elif format == "markdown":
+                    ext = ".md"
+                else:
+                    ext = f".{format}"
+
+                out_file = output_path / f"{pf.stem}{ext}"
+                out_file.write_text(output_str, encoding="utf-8")
+                result.success.append(str(out_file))
+
+                # 每次解析后强制 GC
+                cleanup_after_parse()
+
+            except MemoryError as e:
+                # 内存不足：记录错误并停止
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error("Batch: MemoryError parsing %s: %s", pf.name, e)
+                result.failed.append((str(pf), f"MemoryError: {e}"))
+                # 停止后续处理
+                for remaining in package_files[idx + 1:]:
+                    result.skipped.append((str(remaining), "Stopped due to MemoryError"))
+                break
+
+            except Exception as e:
+                result.failed.append((str(pf), str(e)))
 
     return result
 

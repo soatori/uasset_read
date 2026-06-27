@@ -9,10 +9,12 @@ UE 保真度改进集成测试
 5. 依赖图：FPackageIndex 语义
 6. 状态模型：success|partial|failed
 """
+import gc
 import pytest
 from pathlib import Path
 from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.serializers.object_resources import resolve_class_name
+from uasset_read.memory_safety import cleanup_after_parse, force_gc
 
 # 测试资产路径
 BLUEPRINT_ASSET = "E:/Develop/lib/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
@@ -27,6 +29,10 @@ def asset_exists(path: str) -> bool:
 
 class TestUEFidelityIntegration:
     """UE 保真度改进集成测试"""
+
+    def teardown_method(self):
+        """每个测试方法结束后清理内存。"""
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
     def test_blueprint_full_pipeline(self):
@@ -126,11 +132,10 @@ class TestUEFidelityIntegration:
     def test_batch_parsing_consistency(self):
         """场景 5: 多资产批量解析的一致性"""
         assets = [BLUEPRINT_ASSET, STATICMESH_ASSET]
-        results = []
+        parsed_count = 0
 
         for asset_path in assets:
             result = parse_uasset(asset_path)
-            results.append(result)
 
             assert hasattr(result, 'status')
             assert result.status in ['success', 'partial', 'failed']
@@ -140,10 +145,10 @@ class TestUEFidelityIntegration:
 
             # 每次迭代后清理，防止内存累积
             del result
-            from tests.conftest import cleanup_after_parse
             cleanup_after_parse()
+            parsed_count += 1
 
-        assert len(results) == len(assets)
+        assert parsed_count == len(assets)
 
     @pytest.mark.skipif(not asset_exists(TEXTURE_ASSET), reason="Texture asset not found")
     def test_texture_opaque_handling(self):

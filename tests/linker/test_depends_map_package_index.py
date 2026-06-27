@@ -5,11 +5,11 @@ DependsMap values should be interpreted as FPackageIndex:
 - Negative = import index (-1 based)
 - Zero = null
 """
-import gc
 import pytest
 from pathlib import Path
 from uasset_read.parse_uasset import parse_uasset_with_linker
 from uasset_read.link.object_instance import UObjectInstance
+from uasset_read.memory_safety import cleanup_after_parse
 
 
 # Sample assets
@@ -49,7 +49,7 @@ class TestDependsMapFPackageIndexSemantics:
                         f"DependsMap import index {raw_dep} out of bounds"
                 # raw_dep == 0 is null, valid
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_linker_resolves_depends_to_instances(self):
@@ -66,7 +66,7 @@ class TestDependsMapFPackageIndexSemantics:
                     assert hasattr(dep, 'object_name'), \
                         "Dependency should have object_name"
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
     def test_depends_map_can_reference_imports(self):
@@ -87,7 +87,7 @@ class TestDependsMapFPackageIndexSemantics:
         # The important thing is that the code doesn't crash and handles both cases
         assert isinstance(has_import_dep, bool)
         del result
-        gc.collect()
+        cleanup_after_parse()
 
     @pytest.mark.skipif(not STATIC_MESH.exists(), reason="StaticMesh sample not found")
     def test_depends_map_with_static_mesh(self):
@@ -103,7 +103,7 @@ class TestDependsMapFPackageIndexSemantics:
         # This is informational — the important thing is no crashes
         assert isinstance(has_deps, bool)
         del result
-        gc.collect()
+        cleanup_after_parse()
 
 
 class TestDependsMapUnitTests:
