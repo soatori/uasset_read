@@ -5,7 +5,7 @@ uasset_read - Unreal Engine .uasset 文件解析器
 
 公共API通过__all__控制。
 """
-__version__ = "0.5.1.20"
+__version__ = "0.5.1.19"
 
 # 导出常量模块
 from .constants import (
