@@ -219,9 +219,11 @@ class TestStatusModel:
 # 合并自 test_status_model_unified.py 的集成测试
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Sample assets（保持硬编码路径，后续 Task 6 会修复）
-STATIC_MESH_UNIFIED = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
-BLUEPRINT_UNIFIED = Path("E:/Develop/lib/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
+from tests.conftest import asset_path, ASSET_MESH_CHAIR
+
+# Sample assets 相对路径
+STATIC_MESH_UNIFIED_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+BLUEPRINT_UNIFIED_REL = "CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset"
 
 
 @lru_cache(maxsize=4)
@@ -233,18 +235,18 @@ def _cached_parse(path: str):
 class TestUnifiedStatusModel:
     """Test unified status model: success|partial|failed."""
 
-    @pytest.mark.skipif(not BLUEPRINT_UNIFIED.exists(), reason="Blueprint sample not found")
-    def test_status_is_success_partial_or_failed(self):
+    def test_status_is_success_partial_or_failed(self, sample_root: Path):
         """Status should be one of: success, partial, failed."""
-        result = _cached_parse(str(BLUEPRINT_UNIFIED))
+        bp_path = asset_path(sample_root, BLUEPRINT_UNIFIED_REL)
+        result = _cached_parse(str(bp_path))
 
         assert result.status in ('success', 'partial', 'failed'), \
             f"Status should be success|partial|failed, not {result.status}"
 
-    @pytest.mark.skipif(not STATIC_MESH_UNIFIED.exists(), reason="StaticMesh sample not found")
-    def test_opaque_export_makes_status_partial(self):
+    def test_opaque_export_makes_status_partial(self, sample_root: Path):
         """If any export is opaque, overall status should be partial."""
-        result = _cached_parse(str(STATIC_MESH_UNIFIED))
+        mesh_path = asset_path(sample_root, STATIC_MESH_UNIFIED_REL)
+        result = _cached_parse(str(mesh_path))
 
         # Check if any export is opaque/partial/skipped
         has_non_success = any(
@@ -256,10 +258,10 @@ class TestUnifiedStatusModel:
             assert result.status == 'partial', \
                 f"Status should be partial when exports are opaque, not {result.status}"
 
-    @pytest.mark.skipif(not BLUEPRINT_UNIFIED.exists(), reason="Blueprint sample not found")
-    def test_errors_make_status_partial_or_failed(self):
+    def test_errors_make_status_partial_or_failed(self, sample_root: Path):
         """If there are errors, status should be partial (with data) or failed (no data)."""
-        result = _cached_parse(str(BLUEPRINT_UNIFIED))
+        bp_path = asset_path(sample_root, BLUEPRINT_UNIFIED_REL)
+        result = _cached_parse(str(bp_path))
 
         if result.errors:
             # Should be partial (if we have some data) or failed (if no data)
@@ -271,10 +273,10 @@ class TestUnifiedStatusModel:
                 assert result.status == 'partial', \
                     "Should be partial (not failed) when we have core data"
 
-    @pytest.mark.skipif(not BLUEPRINT_UNIFIED.exists(), reason="Blueprint sample not found")
-    def test_no_errors_and_all_success_exports(self):
+    def test_no_errors_and_all_success_exports(self, sample_root: Path):
         """No errors + all exports success + not lightweight -> status is success."""
-        result = _cached_parse(str(BLUEPRINT_UNIFIED))
+        bp_path = asset_path(sample_root, BLUEPRINT_UNIFIED_REL)
+        result = _cached_parse(str(bp_path))
 
         # Check if all exports are success
         all_success = all(

@@ -9,20 +9,21 @@ import pytest
 from pathlib import Path
 from uasset_read.parse_uasset import parse_uasset_with_linker
 from uasset_read.link.object_instance import UObjectInstance
+from tests.conftest import asset_path, ASSET_MESH_CHAIR
 
 
-# Sample assets
-STATIC_MESH = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
-BLUEPRINT = Path("E:/Develop/lib/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
+# Sample assets 相对路径
+STATIC_MESH_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+BLUEPRINT_REL = "CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset"
 
 
 class TestDependsMapFPackageIndexSemantics:
     """Test that DependsMap values are interpreted as FPackageIndex."""
 
-    @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
-    def test_depends_map_uses_package_index(self):
+    def test_depends_map_uses_package_index(self, sample_root: Path):
         """DependsMap values should be FPackageIndex, not raw export indices."""
-        result = parse_uasset_with_linker(str(BLUEPRINT), preload_all=True)
+        bp_path = asset_path(sample_root, BLUEPRINT_REL)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
 
         # Check if DependsMap exists
         if not hasattr(result.summary, 'depends_map') or not result.summary.depends_map:
@@ -49,10 +50,10 @@ class TestDependsMapFPackageIndexSemantics:
                 # raw_dep == 0 is null, valid
         del result
 
-    @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
-    def test_linker_resolves_depends_to_instances(self):
+    def test_linker_resolves_depends_to_instances(self, sample_root: Path):
         """Linker should resolve DependsMap to UObjectInstance references."""
-        result = parse_uasset_with_linker(str(BLUEPRINT), preload_all=True)
+        bp_path = asset_path(sample_root, BLUEPRINT_REL)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
         linker = result.linker
 
         # Check that dependencies are resolved to UObjectInstance
@@ -65,10 +66,10 @@ class TestDependsMapFPackageIndexSemantics:
                         "Dependency should have object_name"
         del result
 
-    @pytest.mark.skipif(not BLUEPRINT.exists(), reason="Blueprint sample not found")
-    def test_depends_map_can_reference_imports(self):
+    def test_depends_map_can_reference_imports(self, sample_root: Path):
         """DependsMap should be able to reference imports (negative indices)."""
-        result = parse_uasset_with_linker(str(BLUEPRINT), preload_all=True)
+        bp_path = asset_path(sample_root, BLUEPRINT_REL)
+        result = parse_uasset_with_linker(str(bp_path), preload_all=True)
         linker = result.linker
 
         # Check if any dependency references an import
@@ -85,10 +86,10 @@ class TestDependsMapFPackageIndexSemantics:
         assert isinstance(has_import_dep, bool)
         del result
 
-    @pytest.mark.skipif(not STATIC_MESH.exists(), reason="StaticMesh sample not found")
-    def test_depends_map_with_static_mesh(self):
+    def test_depends_map_with_static_mesh(self, sample_root: Path):
         """Test DependsMap resolution with StaticMesh asset."""
-        result = parse_uasset_with_linker(str(STATIC_MESH), preload_all=True)
+        mesh_path = asset_path(sample_root, STATIC_MESH_REL)
+        result = parse_uasset_with_linker(str(mesh_path), preload_all=True)
         linker = result.linker
 
         # StaticMesh should have some dependencies resolved

@@ -13,53 +13,24 @@ UE5 中 FBoxSphereBounds UPROPERTY 结构体没有 STRUCT_SerializeNative 标志
 FBoxSphereBounds（UPROPERTY 版本）始终使用 tagged 格式，因为
 TBoxSphereBoundsStructOpsTypeTraits 没有设置 WithSerialize 标志。
 """
-import os
+from pathlib import Path
+
 import pytest
 
-SAMPLES_DIR = "E:/Develop/lib/Samples"
-CHAIR_PATH = os.path.join(
-    SAMPLES_DIR, "StarterContent", "Content", "StarterContent", "Props", "SM_Chair.uasset"
-)
-
-
-def _find_sample_with_bounds():
-    """搜索包含 BoxSphereBounds 属性的样本文件。"""
-    from uasset_read.parse_uasset import parse_package
-
-    for root, _dirs, files in os.walk(SAMPLES_DIR):
-        for fname in files:
-            if not fname.endswith(".uasset"):
-                continue
-            fpath = os.path.join(root, fname).replace("\\", "/")
-            try:
-                result = parse_package(fpath, tolerant=True)
-                linker = result.linker
-                for inst in linker._export_objects:
-                    if not inst._preloaded:
-                        continue
-                    if not hasattr(inst, "serialized_properties") or not inst.serialized_properties:
-                        continue
-                    for prop in inst.serialized_properties:
-                        if "Bounds" in prop.name and hasattr(prop.value, "struct_type"):
-                            if prop.value.struct_type == "BoxSphereBounds":
-                                return fpath, prop
-            except Exception:
-                continue
-    return None, None
+from tests.conftest import asset_path, ASSET_MESH_CHAIR
 
 
 @pytest.mark.integration
 class TestBoxSphereBoundsParsing:
     """BoxSphereBounds 解析验证。"""
 
-    def test_box_sphere_bounds_parsed(self):
+    def test_box_sphere_bounds_parsed(self, sample_root: Path):
         """验证 SM_Chair 中的 BoxSphereBounds 能正确解析。"""
-        if not os.path.exists(CHAIR_PATH):
-            pytest.skip(f"样本文件不存在: {CHAIR_PATH}")
+        chair_path = asset_path(sample_root, ASSET_MESH_CHAIR)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(CHAIR_PATH, tolerant=True)
+        result = parse_package(str(chair_path), tolerant=True)
         linker = result.linker
 
         found = False
