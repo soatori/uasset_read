@@ -45,6 +45,7 @@ def parse_single(
 
     纯函数，无 argparse、无 sys.exit、无 print。
     需要 linker 的格式内部自动选择 parse_uasset_with_linker。
+    内置 MemoryGuard 内存保护。
 
     Args:
         file_path: .uasset/.umap 文件路径
@@ -67,55 +68,62 @@ def parse_single(
         ParseError: 解析失败
         ValueError: 渲染格式不存在
     """
+    from uasset_read.memory_safety import MemoryGuard, cleanup_after_parse
+
     # 需要 linker 的格式
     linker_formats = {"json"}
 
-    if format in linker_formats:
-        result = parse_uasset_with_linker(
-            file_path,
-            tolerant=tolerant,
-            include_parent_assets=include_parent_assets,
-            asset_roots=asset_roots,
-            mappings_path=mappings_path,
-            game=game,
-            force_full_parse=force_full_parse,
-            hex_view=hex_view,
-        )
-    else:
-        result = parse_package(
-            file_path,
-            tolerant=tolerant,
-            include_parent_assets=include_parent_assets,
-            asset_roots=asset_roots,
-            mappings_path=mappings_path,
-            game=game,
-            force_full_parse=force_full_parse,
-            hex_view=hex_view,
-        )
+    with MemoryGuard("parse_single"):
+        if format in linker_formats:
+            result = parse_uasset_with_linker(
+                file_path,
+                tolerant=tolerant,
+                include_parent_assets=include_parent_assets,
+                asset_roots=asset_roots,
+                mappings_path=mappings_path,
+                game=game,
+                force_full_parse=force_full_parse,
+                hex_view=hex_view,
+            )
+        else:
+            result = parse_package(
+                file_path,
+                tolerant=tolerant,
+                include_parent_assets=include_parent_assets,
+                asset_roots=asset_roots,
+                mappings_path=mappings_path,
+                game=game,
+                force_full_parse=force_full_parse,
+                hex_view=hex_view,
+            )
 
-    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
-        raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
+        if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
+            raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
-    # HexView 模式：直接输出 hex view，不走常规渲染器
-    if hex_view and result.hex_view_entries:
-        from uasset_read.debug.hex_view import format_hex_view
-        return format_hex_view(
-            result.hex_view_entries,
-            file_size=result.summary.uncompressed_size if result.summary else 0,
-        )
+        # HexView 模式：直接输出 hex view，不走常规渲染器
+        if hex_view and result.hex_view_entries:
+            from uasset_read.debug.hex_view import format_hex_view
+            output = format_hex_view(
+                result.hex_view_entries,
+                file_size=result.summary.uncompressed_size if result.summary else 0,
+            )
+        else:
+            # 构建 IR
+            ir = build_package_ir(result)
 
-    # 构建 IR
-    ir = build_package_ir(result)
+            # 渲染
+            renderer = get_renderer(format)
+            options = RenderOptions(
+                verbose=verbose,
+                include_schema=include_schema,
+                include_function_graphs=include_function_graphs,
+                linker_result=None,
+            )
+            output = renderer.render(ir, options)
 
-    # 渲染
-    renderer = get_renderer(format)
-    options = RenderOptions(
-        verbose=verbose,
-        include_schema=include_schema,
-        include_function_graphs=include_function_graphs,
-        linker_result=None,
-    )
-    return renderer.render(ir, options)
+    # 清理
+    cleanup_after_parse()
+    return output
 
 
 def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:

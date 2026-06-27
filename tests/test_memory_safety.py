@@ -25,3 +25,11 @@ def test_memory_high_watermark_is_60_percent():
 def test_memory_critical_watermark_is_75_percent():
     """系统内存临界值应为 75%。"""
     assert MEMORY_CRITICAL_WATERMARK == 0.75
+
+
+def test_parse_single_uses_memory_guard():
+    """parse_single 应使用 MemoryGuard 上下文管理器。"""
+    import inspect
+    from uasset_read.core import parse_single
+    source = inspect.getsource(parse_single)
+    assert "MemoryGuard" in source, "parse_single 应引用 MemoryGuard"
