@@ -14,7 +14,6 @@ import pytest
 
 from uasset_read.core import parse_single
 from uasset_read.parse_uasset import parse_uasset_with_linker
-from uasset_read.memory_safety import cleanup_after_parse
 
 # 真实蓝图资产路径
 _REAL_BLUEPRINT = os.path.join(
@@ -46,9 +45,6 @@ def truncated_file(tmp_path):
 class TestRealAssetHighLevelFormats:
     """验证真实蓝图的 json / markdown 输出不崩溃。"""
 
-    def teardown_method(self):
-        cleanup_after_parse()
-
     def test_json_format_does_not_crash(self):
         output = parse_single(_REAL_BLUEPRINT, format="json", tolerant=True)
         assert output
@@ -70,9 +66,6 @@ class TestRealAssetHighLevelFormats:
 @pytest.mark.regression
 class TestTruncatedFileLinkerDiagnostics:
     """验证截断文件通过 linker 入口返回诊断，不抛 AttributeError。"""
-
-    def teardown_method(self):
-        cleanup_after_parse()
 
     def test_truncated_linker_returns_diagnostics(self, truncated_file):
         result = parse_uasset_with_linker(truncated_file, tolerant=True)
@@ -117,9 +110,6 @@ class TestTruncatedFileLinkerDiagnostics:
 @pytest.mark.skipif(not _has_real_asset, reason="真实资产不可用")
 class TestLinkerDiagnosticsRemovedFromJson:
     """验证 linker 诊断已从 JSON 输出中移除（输出精简）。"""
-
-    def teardown_method(self):
-        cleanup_after_parse()
 
     def test_real_asset_json_no_diagnostics_field(self):
         """精简后 JSON 输出不应包含 diagnostics 字段。"""

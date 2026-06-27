@@ -11,17 +11,20 @@ section: parse-pipeline
 
 <!-- data-api="parse_single" -->
 ```python
-parse_single(file_path, format="json", tolerant=True, verbose=False, include_schema=False, ...) -> str
+parse_single(file_path, format="json", tolerant=True, memory_policy=None, ...) -> str
 ```
 
 纯函数入口，无 argparse/sys.exit/print。内部自动完成：解析 → IR 构建 → 渲染。
 
 <!-- data-api="parse_batch" -->
 ```python
-parse_batch(input_dir, format="json", output_dir=None, ...) -> BatchResult
+parse_batch(input_dir, format="json", output_dir=None, isolate_assets=True,
+            memory_policy=None, ...) -> BatchResult
 ```
 
-批量解析目录下所有 `.uasset`/`.umap` 文件。
+批量解析目录下所有 `.uasset`/`.umap` 文件。默认每个顶层资产使用独立
+spawn worker；父资产关联读取仍在该 worker 内完成。父进程按文件大小选择
+RSS/超时档位，超限时终止当前 worker、记录失败并继续后续资产。
 
 <!-- data-api="list_formats" -->
 ```python

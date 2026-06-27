@@ -1,8 +1,16 @@
 """core.py API 测试。"""
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
-from uasset_read.core import parse_single, parse_batch, list_formats, ParseError, BatchResult
+from uasset_read.core import (
+    BatchResult,
+    ParseError,
+    _can_render_tolerant_json,
+    list_formats,
+    parse_batch,
+    parse_single,
+)
 
 
 class TestListFormats:
@@ -16,13 +24,22 @@ class TestListFormats:
 
 
 class TestParseSingle:
+    def test_bare_magic_mock_is_not_a_renderable_partial_result(self):
+        mock_result = MagicMock()
+        mock_result.is_success = False
+        mock_result.errors = ["test error"]
+
+        assert _can_render_tolerant_json(mock_result, "json", True) is False
+
     def test_parse_single_raises_on_parse_failure(self):
         """parse_single 在解析失败时抛出 ParseError。"""
+        from uasset_read.link.result import LinkerParseResult
+
         with patch("uasset_read.core.parse_uasset_with_linker") as mock_parse:
-            mock_result = MagicMock()
-            mock_result.is_success = False
-            mock_result.errors = ["test error"]
-            mock_parse.return_value = mock_result
+            mock_parse.return_value = LinkerParseResult(
+                is_success=False,
+                errors=["test error"],
+            )
 
             with pytest.raises(ParseError, match="Parse failed"):
                 parse_single("nonexistent.uasset", format="json")
@@ -56,8 +73,104 @@ class TestParseSingle:
                     parse_single("test.uasset", format="json")
                     mock_linker_parse.assert_called_once()
 
+    def test_parse_single_forwards_memory_policy(self):
+        from uasset_read.memory_safety import MemoryPolicy
+
+        policy = MemoryPolicy()
+        result = MagicMock()
+        result.is_success = True
+
+        with patch(
+            "uasset_read.core.parse_uasset_with_linker",
+            return_value=result,
+        ) as mock_parse, patch(
+            "uasset_read.core.build_package_ir",
+            return_value=MagicMock(),
+        ), patch("uasset_read.core.get_renderer") as mock_get_renderer:
+            mock_get_renderer.return_value.render.return_value = "{}"
+
+            parse_single("test.uasset", format="json", memory_policy=policy)
+
+        assert mock_parse.call_args.kwargs["memory_policy"] is policy
+
 
 class TestParseBatch:
+    def test_parse_batch_isolates_each_asset_and_continues_after_failure(
+        self,
+        tmp_path,
+    ):
+        first = tmp_path / "a.uasset"
+        second = tmp_path / "b.uasset"
+        first.write_bytes(b"a")
+        second.write_bytes(b"b")
+        first_output = tmp_path / "out" / "a.json"
+
+        outcomes = [
+            SimpleNamespace(
+                succeeded=True,
+                output_path=str(first_output),
+                error="",
+            ),
+            SimpleNamespace(
+                succeeded=False,
+                output_path="",
+                error="memory_limit: 1025.0MB > 1024.0MB",
+            ),
+        ]
+        with patch(
+            "uasset_read.core.run_isolated_asset",
+            create=True,
+            side_effect=outcomes,
+        ) as run_isolated:
+            result = parse_batch(
+                str(tmp_path),
+                output_dir=str(tmp_path / "out"),
+            )
+
+        assert run_isolated.call_count == 2
+        first_request = run_isolated.call_args_list[0].args[0]
+        assert first_request.parse_options["include_parent_assets"] is False
+        assert "memory_policy" in first_request.parse_options
+        assert result.success == [str(first_output)]
+        assert result.failed == [
+            (str(second), "memory_limit: 1025.0MB > 1024.0MB")
+        ]
+        assert result.skipped == []
+
+    def test_parse_batch_warns_for_deprecated_skip_large_files(self, tmp_path):
+        test_file = tmp_path / "test.uasset"
+        test_file.write_bytes(b"\x00" * 100)
+
+        with patch(
+            "uasset_read.core.run_isolated_asset",
+            create=True,
+            return_value=SimpleNamespace(
+                succeeded=True,
+                output_path=str(tmp_path / "output" / "test.json"),
+                error="",
+            ),
+        ), pytest.warns(DeprecationWarning, match="skip_large_files"):
+            parse_batch(str(tmp_path), skip_large_files=True)
+
+    def test_parse_batch_stops_launching_workers_at_system_memory_limit(
+        self,
+        tmp_path,
+    ):
+        for name in ("a.uasset", "b.uasset"):
+            (tmp_path / name).write_bytes(b"x")
+
+        with patch(
+            "uasset_read.memory_safety.get_memory_stats",
+        ) as get_stats, patch(
+            "uasset_read.core.run_isolated_asset",
+        ) as run_isolated:
+            get_stats.return_value = SimpleNamespace(usage_percent=0.9)
+            result = parse_batch(str(tmp_path), max_memory_usage=0.85)
+
+        run_isolated.assert_not_called()
+        assert len(result.skipped) == 2
+        assert all("90.0% exceeds 85.0%" in reason for _, reason in result.skipped)
+
     def test_parse_batch_raises_on_non_directory(self):
         """parse_batch 在非目录输入时抛出 ValueError。"""
         with pytest.raises(ValueError, match="Not a directory"):
@@ -77,7 +190,11 @@ class TestParseBatch:
         with patch("uasset_read.core.parse_single") as mock_parse_single:
             mock_parse_single.return_value = '{"status": "success"}'
 
-            result = parse_batch(str(tmp_path), format="json")
+            result = parse_batch(
+                str(tmp_path),
+                format="json",
+                isolate_assets=False,
+            )
 
             assert isinstance(result, BatchResult)
             assert result.total == 1
@@ -90,7 +207,11 @@ class TestParseBatch:
         with patch("uasset_read.core.parse_single") as mock_parse_single:
             mock_parse_single.side_effect = ParseError("test error")
 
-            result = parse_batch(str(tmp_path), format="json")
+            result = parse_batch(
+                str(tmp_path),
+                format="json",
+                isolate_assets=False,
+            )
 
             assert result.total == 1
             assert len(result.failed) == 1
@@ -121,6 +242,7 @@ class TestCLIBatchOptions:
                 asset_roots=["/game/root"],
                 mappings_path="test.usmap",
                 game="Fortnite",
+                isolate_assets=False,
             )
 
             assert isinstance(result, BatchResult)

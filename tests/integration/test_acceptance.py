@@ -17,7 +17,6 @@ import pytest
 from uasset_read.core import parse_single
 from uasset_read.parse_uasset import parse_uasset_with_linker
 from uasset_read.renderers import list_formats
-from uasset_read.memory_safety import cleanup_after_parse
 
 pytestmark = pytest.mark.acceptance
 
@@ -47,9 +46,6 @@ def first_person_blueprint(ue_sample_root) -> Path:
 @pytest.mark.integration
 class TestOutputCorrectness:
     """验证 JSON 输出字段与解析结果一致（非仅"不为空"）。"""
-
-    def teardown_method(self):
-        cleanup_after_parse()
 
     def test_json_package_name_matches_filename(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
@@ -101,9 +97,6 @@ class TestOutputCorrectness:
 class TestCrossFormatConsistency:
     """验证同一资产在不同格式下报告相同核心数据。"""
 
-    def teardown_method(self):
-        cleanup_after_parse()
-
     def test_json_and_markdown_report_same_package_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         md_out = parse_single(str(first_person_blueprint), format="markdown", tolerant=True)
@@ -138,9 +131,6 @@ ALL_FORMATS = ["json", "markdown"]
 class TestAssetTypeFormatMatrix:
     """每种支持的资产类型 × 每种输出格式 = 不崩溃且非空。"""
 
-    def teardown_method(self):
-        cleanup_after_parse()
-
     def test_asset_type_in_format(self, ue_sample_root, asset_type, rel_path, format_name):
         path = ue_sample_root / rel_path
         if not path.exists():
@@ -159,9 +149,6 @@ class TestAssetTypeFormatMatrix:
 @pytest.mark.integration
 class TestKnownGapsDocumented:
     """验证已知缺口都有显式的 xfail/skip reason。"""
-
-    def teardown_method(self):
-        cleanup_after_parse()
 
     def test_p_fire_particle_xfail_reason(self, ue_sample_root):
         """P_Fire.uasset (UE4 legacy) 应被 xfail 且 reason 包含版本信息。"""

@@ -50,6 +50,12 @@ tests/*
 !tests/__init__.py
 !tests/graph/
 !tests/graph/*.py
+!tests/core/
+tests/core/*
+!tests/core/test_batch_worker.py
+!tests/kismet/
+tests/kismet/*
+!tests/kismet/test_archive_safety.py
 !tests/renderers/
 !tests/renderers/*.py
 !tests/blueprint/
@@ -69,4 +75,3 @@ docs/reference/refactor-reference.md
 
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
-

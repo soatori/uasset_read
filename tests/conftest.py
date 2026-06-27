@@ -10,38 +10,17 @@ from typing import Iterable
 
 import pytest
 
-# 导入内存安全模块
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from uasset_read.memory_safety import (
-    MemoryGuard,
-    check_memory_pressure,
-    cleanup_after_parse as _cleanup_after_parse,
-    emergency_cleanup,
-    force_gc,
-    get_memory_stats,
-    get_file_processing_strategy,
-    should_wait_for_memory,
-    wait_and_cleanup,
     LARGE_FILE_THRESHOLD,
     MAX_ASSET_COUNT,
-    PARSE_TIMEOUT,
-    MEMORY_CRITICAL_WATERMARK,
-    PROCESS_RSS_CRITICAL_MB,
-    PROCESS_RSS_HIGH_WATERMARK_MB,
+    get_memory_stats,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
 DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
-
-# ---------------------------------------------------------------------------
-# 内存安全常量（从 memory_safety 模块导入）
-# ---------------------------------------------------------------------------
-# 保留向后兼容的本地别名
-LARGE_FILE_THRESHOLD_LOCAL = LARGE_FILE_THRESHOLD
-MAX_ASSET_COUNT_LOCAL = MAX_ASSET_COUNT
-
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
@@ -73,7 +52,7 @@ def sample_root(pytestconfig: pytest.Config) -> Path:
 
 @pytest.fixture(scope="session")
 def all_assets(sample_root: Path) -> list[Path]:
-    """收集所有资产文件，大文件标记为分块处理而非跳过。"""
+    """Collect a bounded set of sample assets."""
     all_files = sorted(
         p for p in sample_root.rglob("*")
         if p.is_file() and p.suffix.lower() in {".uasset", ".umap"}
@@ -96,7 +75,7 @@ def all_assets(sample_root: Path) -> list[Path]:
     # 统计大文件数量
     large_count = sum(1 for p in all_files if p.stat().st_size > LARGE_FILE_THRESHOLD)
     if large_count > 0:
-        print(f"[MemorySafety] {large_count} large files will use chunked processing")
+        print(f"[MemorySafety] {large_count} large files use size-tier resource limits")
 
     return all_files
 
@@ -162,62 +141,24 @@ def parse_json_output(output: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def skip_if_too_large(path: Path) -> None:
-    """检查文件处理策略，超大文件（>100MB）跳过测试。"""
-    strategy, reason = get_file_processing_strategy(path)
-    if strategy == "skip":
-        pytest.skip(f"asset too large: {reason}")
-    # 对于 chunked/critical 策略，不跳过，让解析器处理
-
-
-def check_memory_before_test() -> None:
-    """测试开始前检查内存状态，内存紧张时尝试清理而非跳过。"""
-    # 如果内存紧张，先尝试清理
-    if should_wait_for_memory():
-        print("[MemorySafety] Memory pressure detected, cleaning up...")
-        wait_and_cleanup(max_wait_seconds=5)
-
-    # 清理后检查进程 RSS
-    stats = get_memory_stats()
-    if stats.process_rss_mb > PROCESS_RSS_CRITICAL_MB and stats.usage_percent > MEMORY_CRITICAL_WATERMARK:
-        # 只有在进程RSS和系统内存都超限时才跳过
-        pytest.skip(
-            f"[MemorySafety] Memory critical: process RSS {stats.process_rss_mb:.0f}MB, "
-            f"system {stats.usage_percent*100:.1f}% used"
-        )
+    """Compatibility helper; file size no longer causes tests to skip."""
+    if not path.is_file():
+        pytest.skip(f"asset not found: {path}")
 
 
 # ---------------------------------------------------------------------------
-# pytest hooks — 内存监控
+# pytest hooks
 # ---------------------------------------------------------------------------
-
-def pytest_runtest_setup(item):
-    """每个测试开始前检查内存状态。"""
-    check_memory_before_test()
-
 
 def pytest_runtest_teardown(item):
-    """每个测试结束后强制释放内存。"""
-    import gc
-
-    # 强制释放测试函数的局部变量
-    if hasattr(item, "_request") and hasattr(item._request, "_funcobj"):
-        try:
-            item._request._funcobj = None
-        except Exception:
-            pass
-
-    # 多轮 GC + 内存检查
-    _cleanup_after_parse()
-    force_gc()
+    """Run one cyclic-GC pass after each test."""
+    gc.collect()
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """测试会话结束时输出内存统计并强制清理。"""
-    import gc
-
+    """Print final process/system memory statistics."""
     stats = get_memory_stats()
     print(
         f"\n[MemorySafety] Final memory: process RSS={stats.process_rss_mb:.0f}MB, "
         f"system {stats.usage_percent*100:.1f}% used, {stats.available_mb:.0f}MB available"
     )
-    emergency_cleanup()

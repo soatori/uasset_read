@@ -14,7 +14,7 @@ import pytest
 from pathlib import Path
 from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.serializers.object_resources import resolve_class_name
-from uasset_read.memory_safety import cleanup_after_parse, force_gc
+from uasset_read.memory_safety import cleanup_after_parse
 
 # 测试资产路径
 BLUEPRINT_ASSET = "E:/Develop/lib/Samples/FirstPerson/Content/Variant_Shooter/Blueprints/Pickups/Projectiles/BP_ShooterProjectileBase.uasset"
@@ -29,10 +29,6 @@ def asset_exists(path: str) -> bool:
 
 class TestUEFidelityIntegration:
     """UE 保真度改进集成测试"""
-
-    def teardown_method(self):
-        """每个测试方法结束后清理内存。"""
-        cleanup_after_parse()
 
     @pytest.mark.skipif(not asset_exists(BLUEPRINT_ASSET), reason="Blueprint asset not found")
     def test_blueprint_full_pipeline(self):

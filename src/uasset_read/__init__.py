@@ -294,6 +294,7 @@ from .graph import (
 
 # Core API (parse_single, parse_batch, list_formats)
 from .core import parse_single, parse_batch, list_formats, BatchResult
+from .memory_safety import MemoryLimitExceeded, MemoryPolicy, ResourceLimits
 
 # ============================================================================
 from .parse_uasset import parse_package, parse_uasset, parse_uasset_with_linker
@@ -438,6 +439,9 @@ __all__ = [
     "parse_batch",
     "list_formats",
     "BatchResult",
+    "MemoryPolicy",
+    "ResourceLimits",
+    "MemoryLimitExceeded",
     # 常量（基础）
     "PACKAGE_FILE_TAG",
     "PACKAGE_FILE_TAG_SWAPPED",

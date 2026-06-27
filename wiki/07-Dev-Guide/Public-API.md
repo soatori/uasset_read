@@ -11,7 +11,7 @@ section: public-api
 
 ```python
 # 推荐：按需导入
-from uasset_read import parse_single, parse_batch, list_formats
+from uasset_read import parse_single, parse_batch, list_formats, MemoryPolicy
 from uasset_read import parse_uasset, ParseResult
 from uasset_read import FArchive, BlueprintMetadata, UEdGraph
 from uasset_read import PakFileReader
@@ -35,6 +35,17 @@ from uasset_read.renderers import get_renderer, list_formats
 | `parse_batch` | 批量解析目录中所有 .uasset/.umap |
 | `list_formats` | 返回所有已注册的格式名 |
 | `BatchResult` | 批量导出结果数据类 |
+| `MemoryPolicy` | 按文件大小选择 RSS/超时限制的内存策略 |
+| `ResourceLimits` | 单资产 RSS 与超时限制 |
+| `MemoryLimitExceeded` | 进程内解析检查点超过 RSS 限制 |
+
+`parse_batch()` 默认逐资产使用独立子进程。根资产及其父资产关联读取在同一
+worker 内完成；worker 超过 RSS 或超时限制时，当前资产记录到 `failed`，
+批处理继续处理后续文件。传入 `isolate_assets=False` 可恢复进程内批处理。
+
+默认档位为：≤20 MB 使用 1 GB/120 秒，20–100 MB 使用 2 GB/180 秒，
+>100 MB 使用 4 GB/300 秒。可通过 `memory_policy=MemoryPolicy(...)` 覆盖。
+`skip_large_files` 参数仅为兼容保留，已弃用。
 
 ## 版本号
 

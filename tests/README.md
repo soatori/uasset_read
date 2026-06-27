@@ -222,5 +222,5 @@ python -m pytest tests/kismet/ -v
 | 问题 | 解决方案 |
 |------|----------|
 | 样本资产缺失 | 使用 `--allow-missing-assets` 跳过 |
-| 内存不足 | 检查 `MAX_PARSE_FILE_SIZE` 配置 |
-| 测试超时 | 检查 `PARSE_TIMEOUT` 配置 |
+| 内存不足 | 检查 `MemoryPolicy` 文件大小档位及 worker RSS 失败信息 |
+| 测试超时 | 检查 `MemoryPolicy` 对应档位的 `timeout_seconds` |

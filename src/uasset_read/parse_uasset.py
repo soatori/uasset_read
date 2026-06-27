@@ -11,6 +11,7 @@ from pathlib import Path
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.kismet.result import KismetDecompiledResult
+    from uasset_read.memory_safety import MemoryPolicy
 
 from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
@@ -93,6 +94,7 @@ def _post_process(
     include_parent_assets: bool = False,
     asset_roots: Optional[Sequence[str]] = None,
     archive_factory=None,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """共享后处理：blueprint 元数据、图提取、依赖分析。
 
@@ -202,7 +204,13 @@ def _post_process(
             result.warnings.append(f"Kismet decompilation error: {e}")
 
     if include_parent_assets:
-        _resolve_parent_assets(path, result, tolerant, asset_roots)
+        _resolve_parent_assets(
+            path,
+            result,
+            tolerant,
+            asset_roots,
+            memory_policy=memory_policy,
+        )
 
     # Component property extraction
     try:
@@ -249,6 +257,7 @@ def _resolve_parent_assets(
     result: "Union[ParseResult, LinkerParseResult]",
     tolerant: bool,
     asset_roots: Optional[Sequence[str]],
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """Best-effort parent Blueprint lookup used by cross-asset parsing."""
     if not getattr(result, "blueprint", None):
@@ -282,6 +291,7 @@ def _resolve_parent_assets(
             str(parent_file),
             tolerant=tolerant,
             include_parent_assets=False,
+            memory_policy=memory_policy,
         )
     except Exception as exc:
         result.logic_sources.append({
@@ -481,6 +491,7 @@ def _parse_package_core(
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -500,52 +511,24 @@ def _parse_package_core(
     """
     from uasset_read.link.linker import PackageLinker
     from uasset_read.memory_safety import (
-        MemoryGuard,
-        check_file_size,
-        get_memory_stats,
-        cleanup_after_parse,
-        CRITICAL_FILE_SIZE,
-        LARGE_FILE_THRESHOLD,
+        MemoryLimitExceeded,
+        MemoryMonitor,
+        MemoryPolicy,
     )
 
     archive = None
     bundle = None
     mappings_provider = None
 
-    # 内存安全保护：检查文件大小和内存状态
-    from pathlib import Path as _Path
-    file_path = _Path(path)
-    if file_path.exists():
-        file_size = file_path.stat().st_size
+    file_path = Path(path)
+    file_size = file_path.stat().st_size if file_path.is_file() else 0
+    policy = memory_policy or MemoryPolicy()
+    memory_monitor = MemoryMonitor(
+        asset_path=path,
+        limits=policy.limits_for_size(file_size),
+    )
 
-        # 临界大小：强制拒绝
-        if file_size > CRITICAL_FILE_SIZE:
-            size_mb = file_size / 1024 / 1024
-            raise MemoryError(
-                f"File too large to parse safely: {size_mb:.1f}MB > {CRITICAL_FILE_SIZE/1024/1024}MB limit"
-            )
-
-        # 大文件：记录警告
-        if file_size > LARGE_FILE_THRESHOLD:
-            size_mb = file_size / 1024 / 1024
-            result.warnings.append(
-                f"Large file: {size_mb:.1f}MB may cause memory issues"
-            )
-
-        # 检查内存状态
-        stats = get_memory_stats()
-        if stats.usage_percent > 0.9:
-            # 内存紧张：尝试 GC
-            cleanup_after_parse()
-            stats = get_memory_stats()
-            if stats.usage_percent > 0.9:
-                raise MemoryError(
-                    f"Insufficient memory: {stats.usage_percent*100:.1f}% used, "
-                    f"{stats.available_mb:.1f}MB available"
-                )
-
-    # 使用内存保护上下文管理器
-    with MemoryGuard("parse_package"):
+    with memory_monitor:
         try:
             if check_aes_key is not None:
                 raise ParseError(
@@ -578,6 +561,7 @@ def _parse_package_core(
             )
             if result.summary is None:
                 return
+            memory_monitor.checkpoint("package_summary")
             result.version_container = build_version_container(result.summary)
 
             # 将 UE5 版本号附加到 archive 供下游属性标签解析器使用
@@ -605,6 +589,7 @@ def _parse_package_core(
             if result.name_map is None:
                 result.name_map = []
                 return
+            memory_monitor.checkpoint("name_map")
 
             # package_name 为空时从文件路径推导（UE FName::None 或缺失时）
             if not result.summary.package_name:
@@ -635,6 +620,7 @@ def _parse_package_core(
             if result.import_map is None:
                 result.import_map = []
                 return
+            memory_monitor.checkpoint("import_map")
 
             # 读取导出表
             result.export_map = _run_required_stage(
@@ -645,6 +631,7 @@ def _parse_package_core(
             if result.export_map is None:
                 result.export_map = []
                 return
+            memory_monitor.checkpoint("export_map")
 
             # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
             if hasattr(result.summary, 'depends_offset'):
@@ -723,29 +710,10 @@ def _parse_package_core(
 
             # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
             _mappings = mappings_provider.mappings if mappings_provider else None
-            from uasset_read.memory_safety import (
-                get_export_processing_strategy as _get_export_strategy,
-                should_wait_for_memory as _should_wait,
-                wait_and_cleanup as _wait_cleanup,
-                cleanup_after_parse as _mem_cleanup,
-                force_gc as _force_gc,
-            )
             for _exp_idx, export in enumerate(result.export_map or []):
-                # 每 3 个 export 检查一次内存，必要时清理等待
-                if _exp_idx % 3 == 0 and _should_wait():
-                    _force_gc()
-                    if _should_wait():
-                        _wait_cleanup(max_wait_seconds=5)
-                    if _should_wait():
-                        logger.warning(
-                            "Memory still high after cleanup at export %d/%d, continuing",
-                            _exp_idx, len(result.export_map or [])
-                        )
+                memory_monitor.checkpoint(f"export[{_exp_idx}]")
 
                 if export.serial_size > 0:
-                    # 获取 export 处理策略：normal/chunked
-                    _strategy, _reason = _get_export_strategy(export.serial_size)
-
                     try:
                         if linker is not None:
                             linker.preload(
@@ -765,20 +733,19 @@ def _parse_package_core(
                                 mappings=_mappings,
                                 game=game,
                                 tolerant=tolerant,
-                                chunked=_strategy == "chunked",  # 传递分段标志
                             )
                         if not getattr(export, "parse_status", None):
                             setattr(export, "parse_status", "success")
                         elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
                             # 保持 asset type handler 设置的状态，不覆盖为 success
                             pass
+                    except MemoryLimitExceeded:
+                        raise
                     except MemoryError as e:
                         logger.error(
                             "MemoryError parsing export %s: %s",
                             getattr(export, "object_name", "?"), e
                         )
-                        # 内存错误时尝试清理后标记为 partial，而非跳过
-                        _force_gc()
                         export.properties = []
                         setattr(export, "parse_status", "partial")
                         setattr(export, "fallback_reason", "memory_error_partial")
@@ -798,6 +765,8 @@ def _parse_package_core(
                     if export.properties:
                         export.transforms = extract_component_transforms(export.properties)
 
+            memory_monitor.checkpoint("post_load")
+
             # post_load — 在所有 export 预加载完成后执行（link → preload → post_load）
             if linker is not None:
                 try:
@@ -807,6 +776,8 @@ def _parse_package_core(
                         raise ParseError(f"Linker post_load failed: {e}") from e
                     result.errors.append(f"Linker post_load failed: {e}")
 
+            memory_monitor.checkpoint("post_process")
+
             # 共享后处理
             _post_process(
                 path, archive, result.summary, result.name_map,
@@ -815,6 +786,7 @@ def _parse_package_core(
                 include_parent_assets=include_parent_assets,
                 asset_roots=asset_roots,
                 archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
+                memory_policy=policy,
             )
             result.is_success = len(result.errors) == 0
 
@@ -836,11 +808,11 @@ def _parse_package_core(
             if not tolerant:
                 raise
 
+        except MemoryLimitExceeded:
+            raise
         except MemoryError as e:
-            # 内存不足：记录错误并尝试清理
             result.errors.append(f"MemoryError: {e}")
             result.is_success = False
-            cleanup_after_parse()
             if not tolerant:
                 raise
 
@@ -864,8 +836,6 @@ def _parse_package_core(
                 if archive.is_hex_view_enabled():
                     result.hex_view_entries = archive.get_hex_view_entries()
                 archive.close()
-            # 解析完成后强制 GC
-            cleanup_after_parse()
 
 
 def parse_package(
@@ -881,6 +851,7 @@ def parse_package(
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -919,6 +890,7 @@ def parse_package(
         lightweight_threshold=lightweight_threshold,
         force_full_parse=force_full_parse,
         hex_view=hex_view,
+        memory_policy=memory_policy,
     )
     return result
 
@@ -932,6 +904,7 @@ def parse_uasset(
     game: Optional[str] = None,
     include_linker: bool = True,  # Deprecated: linker is now always created
     force_full_parse: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -948,6 +921,7 @@ def parse_uasset(
         game=game,
         include_linker=include_linker,
         force_full_parse=force_full_parse,
+        memory_policy=memory_policy,
     )
 
 
@@ -963,6 +937,7 @@ def parse_uasset_with_linker(
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
+    memory_policy: Optional["MemoryPolicy"] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -993,6 +968,7 @@ def parse_uasset_with_linker(
         lightweight_threshold=lightweight_threshold,
         force_full_parse=force_full_parse,
         hex_view=hex_view,
+        memory_policy=memory_policy,
     )
 
     if preload_all and result.linker:

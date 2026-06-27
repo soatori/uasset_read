@@ -1,4 +1,6 @@
 """渲染器测试。"""
+from unittest.mock import MagicMock
+
 import pytest
 from uasset_read.renderers.base import RenderOptions, IRenderer
 from uasset_read.renderers import get_renderer, RENDERER_REGISTRY
@@ -50,6 +52,15 @@ class TestRendererRegistry:
 
 
 class TestJSONRenderer:
+    def test_encoder_rejects_dynamically_generated_to_dict(self):
+        from uasset_read.renderers.json_renderer import _JSONEncoder
+
+        mock = MagicMock()
+
+        with pytest.raises(TypeError):
+            _JSONEncoder().default(mock)
+        mock.to_dict.assert_not_called()
+
     def test_json_excludes_redundant_fields(self):
         """JSON 输出不应包含 name_map, imports, linker 等冗余字段"""
         import json

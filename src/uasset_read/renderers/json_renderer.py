@@ -23,9 +23,9 @@ class _JSONEncoder(json.JSONEncoder):
     """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
 
     def default(self, o):
-        to_dict = getattr(o, "to_dict", None)
+        to_dict = getattr(type(o), "to_dict", None)
         if callable(to_dict):
-            return to_dict()
+            return to_dict(o)
         if dataclasses.is_dataclass(o):
             return dataclasses.asdict(o)
         if isinstance(o, bytes):

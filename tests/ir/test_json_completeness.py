@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -439,81 +440,51 @@ class TestIRBuilderIntegration:
 
     def test_full_build_with_blueprint(self):
         """完整构建：变量 + 函数 + 事件 + 实现关联。"""
-        from uasset_read.models.blueprint import BlueprintMetadata, BlueprintVariable, BlueprintFunction, BlueprintEvent, FunctionParameter
+        from uasset_read.models.blueprint import (
+            BlueprintFunction,
+            BlueprintMetadata,
+            BlueprintVariable,
+        )
+        from uasset_read.models.core import FEdGraphPinType
 
-        # 构造 BlueprintMetadata
-        var = MagicMock()
-        var.var_name = "Speed"
-        var.category = "float"
-        var.var_guid = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
-        var.default_value = "600.0"
-        var.property_flags = 0
-        var.replication_condition = 0
-        var.rep_notify_func = ""
-        var.friendly_name = "Speed"
-        var.metadata = {}
-        var.flags_labels = []
-        var.edit_condition = ""
-        var.is_component = False
-        var.is_edit_anywhere = True
-        var.is_visible_anywhere = False
-        var.is_blueprint_read_only = False
-        var.is_transient = False
-        var.is_replicated = False
-        var.is_rep_notify = False
-        var.is_expose_on_spawn = False
-        var.is_save_game = False
-        pin_type = MagicMock()
-        pin_type.pin_category = "float"
-        pin_type.pin_subcategory = ""
-        pin_type.pin_subcategory_object_name = None
-        pin_type.container_type = 0
-        var.var_type = pin_type
+        var = BlueprintVariable(
+            var_name="Speed",
+            var_type=FEdGraphPinType(pin_category="float"),
+            category="float",
+            var_guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+            default_value="600.0",
+            friendly_name="Speed",
+            is_edit_anywhere=True,
+        )
+        func = BlueprintFunction(
+            name="Fire",
+            return_type="void",
+            is_blueprint_callable=True,
+        )
 
-        func = MagicMock()
-        func.name = "Fire"
-        func.return_type = "void"
-        func.parameters = []
-        func.function_flags = 0
-        func.is_pure = False
-        func.is_blueprint_callable = True
-        func.is_const = False
-        func.is_static = False
-        func.is_net = False
-        func.is_net_reliable = False
-        func.is_blueprint_private = False
-        func.access_specifier = "Public"
-        func.meta_data = {}
+        from uasset_read.models.result import ParseResult
 
-        result = MagicMock()
-        result.summary.package_name = "/Game/Test/BP_Test"
-        result.summary.package_class = "BP_Test_C"
-        result.summary.package_flags = 0
-        result.summary.total_export_count = 1
-        result.summary.total_import_count = 1
-        result.name_map = ["BP_Test"]
-        result.import_map = []
-        result.export_map = []
-        result.linker = None
-        result.version_container = None
-        result.errors = []
-        result.warnings = []
-        result.is_success = True
-        result.diagnostics = []
-        result.graphs = []
-        result.components = []
-        result.decompiled_functions = []
-        result.resolved_parent_assets = []
-        result.inherited_blueprint_graphs = []
-        result.logic_sources = []
-        result.metadata = {}
+        result = ParseResult(
+            summary=SimpleNamespace(
+                package_name="/Game/Test/BP_Test",
+                package_class="BP_Test_C",
+                package_flags=0,
+                export_count=1,
+                import_count=1,
+                saved_hash=b"",
+                depends_map=[],
+                asset_registry_data_offset=0,
+            ),
+            name_map=["BP_Test"],
+            is_success=True,
+        )
 
-        bp = MagicMock()
-        bp.parent_class = "/Script/Engine.Character"
-        bp.functions = [func]
-        bp.events = []
-        bp.variables = [var]
-        result.blueprint = bp
+        result.blueprint = BlueprintMetadata(
+            is_blueprint=True,
+            parent_class="/Script/Engine.Character",
+            functions=[func],
+            variables=[var],
+        )
 
         ir = build_package_ir(result)
 

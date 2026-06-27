@@ -8,11 +8,9 @@
 
 from __future__ import annotations
 
-import gc
 import os
 
 import pytest
-from uasset_read.memory_safety import cleanup_after_parse, force_gc
 
 # 测试资产路径
 _BP_FIRST_PERSON = "E:/Develop/lib/Samples/FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
@@ -37,10 +35,7 @@ _METADATA_KEYS = {
 
 
 def _cleanup_result(result):
-    """显式释放解析结果并清理内存。"""
-    del result
-    gc.collect()
-    cleanup_after_parse()
+    """Compatibility helper; global pytest teardown owns cyclic GC."""
 
 
 # === test_interfaces.py ===
@@ -165,4 +160,3 @@ class TestVariableClassification:
             )
         finally:
             del result, ir
-            cleanup_after_parse()

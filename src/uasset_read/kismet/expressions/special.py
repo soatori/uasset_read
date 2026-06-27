@@ -273,8 +273,7 @@ class EX_Unknown6E(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6E:
-        # 0x6E 格式未知，读取单个字节并回退（交由 tolerant 模式继续解析）
-        archive.seek(archive.tell() - 1)  # 回退到 opcode 位置
+        # 格式未知；opcode 已由 FKismetArchive 消费，保留占位表达式继续解析。
         return cls(Value=b"")
 
 
@@ -290,8 +289,7 @@ class EX_Unknown6F(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6F:
-        # 0x6F 格式未知，读取单个字节并回退（交由 tolerant 模式继续解析）
-        archive.seek(archive.tell() - 1)  # 回退到 opcode 位置
+        # 格式未知；opcode 已由 FKismetArchive 消费，保留占位表达式继续解析。
         return cls(Value=b"")
 
 
@@ -310,7 +308,6 @@ class EX_UnknownF9(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownF9:
-        archive.seek(archive.tell() - 1)
         return cls(Value=b"")
 
 
@@ -326,7 +323,6 @@ class EX_UnknownFD(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownFD:
-        archive.seek(archive.tell() - 1)
         return cls(Value=b"")
 
 
@@ -342,7 +338,6 @@ class EX_UnknownFE(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnknownFE:
-        archive.seek(archive.tell() - 1)
         return cls(Value=b"")
 
 
