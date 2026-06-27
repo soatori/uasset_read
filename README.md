@@ -2,11 +2,11 @@
 
 > **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
 
-A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON, text, and code.
+A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.4.5-dev** — UE fidelity improvements: unified status model (success|partial|failed), UE-style loading lifecycle, class serialization strategy table, SoftObjectPath index-based resolution, DependsMap FPackageIndex semantics. With 8 dedicated asset-type parsers (StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave); broader asset categories are partially supported via generic UObject/property fallback paths. Some UE4 legacy assets may have limited support.
+> 📦 **v0.5.1.19** — 18 issues resolved since v0.5.0: PackageFlags complete definitions, HexView debug system, AssetRegistryData parsing, FString UTF-16 fix, BoxSphereBounds multi-format support, BlueprintVariable var_type extraction, AnimGraph nested subgraph parsing, BlueprintDescription + Interfaces classification, and more.
 
 ## Why uasset_read?
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.4.5-dev |
+| Version | 0.5.1.19 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1389 passed, 2 skipped, 2 xfailed |
-| Modules | 145 source files across 14 subpackages |
+| Tests | 1424 collected (integration tests skip when sample assets unavailable) |
+| Modules | 134 source files across 14 subpackages |
 
 ## Features
 
@@ -58,22 +58,20 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### File Format Support
 - **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
 - **IoStore container** — Chunk ID, offset/size structures
-- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
 
-### Multiple Output Formats
-- **JSON** — full structured output or summary (renderer-based, no blueprint wrapper)
-- **Text** — human-readable format
+### Output Formats
+- **JSON** — structured output optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
-- **Blueprint UE Text** — UE-editor-style format
-- **C++ Skeleton** — ready-to-use class boilerplate with constructor init lists
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON/Text/Markdown/BlueprintText/BlueprintUE/CppSkeleton)
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown)
 - **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
+
 ## Installation
 
 ```bash
@@ -92,12 +90,9 @@ python run.py path/to/file.uasset              # JSON output to stdout
 python run.py path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
-python run.py path/to/file.uasset --summary      # Summary only
-python run.py path/to/file.uasset --text         # Readable text
+python run.py path/to/file.uasset --json         # JSON output (default)
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
-python run.py path/to/file.uasset --blueprint-text  # Blueprint node text
-python run.py path/to/file.uasset --blueprint-ue-text  # UE-format text
-python run.py path/to/file.uasset --cpp-skeleton  # C++ class skeleton
+python run.py path/to/file.uasset --list-formats # List available formats
 
 # Batch export
 python run.py --batch-dir path/to/dir/            # Batch export directory
@@ -108,12 +103,14 @@ python run.py path/to/file.uasset --tolerant     # Continue on recoverable error
 
 # Debug
 python run.py path/to/file.uasset --verbose      # Enable verbose logging
+python run.py path/to/file.uasset --hex-view     # Enable HexView binary inspection
+python run.py path/to/file.uasset --full-parse   # Force full parse for large blueprints
 ```
 
 Or via module:
 
 ```bash
-python -m uasset_read path/to/file.uasset --text
+python -m uasset_read path/to/file.uasset --json
 ```
 
 ## Core API
@@ -125,7 +122,6 @@ from uasset_read import parse_single, parse_batch, list_formats
 
 # Parse a single file (returns formatted string)
 json_str = parse_single("path/to/file.uasset", format="json")
-summary = parse_single("path/to/file.uasset", format="json_summary")
 text = parse_single("path/to/file.uasset", format="markdown")
 
 # Batch parse a directory
@@ -133,18 +129,6 @@ results = parse_batch("path/to/directory", format="json")
 
 # List available output formats
 formats = list_formats()
-```
-
-### Legacy formatters (deprecated)
-
-The following formatter functions are still exported for backward compatibility
-but are considered legacy. **Use `parse_single()` / `parse_batch()` instead** —
-they go through the unified IR → Renderer pipeline and produce the most complete
-output.
-
-```python
-from uasset_read import format_json_full, format_json_summary, format_text_full, format_markdown
-# ⚠️ Legacy — prefer parse_single(format="json") over format_json_full()
 ```
 
 ### Module-level API
@@ -171,10 +155,6 @@ from uasset_read import (
     # Flow tracing
     build_execution_flow_entries, build_data_flows, build_connections_map,
     build_execution_chains,
-
-    # Formatters (legacy — prefer parse_single(format=...))
-    format_json_full, format_json_summary,
-    format_text_full, format_markdown,
 
     # Linker
     parse_uasset_with_linker, PackageLinker, UObjectInstance,
@@ -204,7 +184,7 @@ Full API list: see `src/uasset_read/__init__.py`.
 FArchive pipeline pattern mirroring UE's internal structure:
 
 ```
-.uasset → FArchive → Deserializer → Models → Formatters → Output
+.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers → Output
                 ↓
           GraphParser
           BlueprintParser
@@ -212,7 +192,6 @@ FArchive pipeline pattern mirroring UE's internal structure:
           PackageLinker
           KismetDecompiler
           PakFileReader
-          IR Builder → Renderers
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -227,26 +206,26 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Core API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
 | Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
-| CLI | `cli.py` | argparse 入口点，委托 `core.py` API |
+| CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
+| Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
-| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, SoundWave |
+| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
+| ├ Asset Types | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
-| **Graph** | `graph/` | Execution/data flow tracing, chain builder, pin tracing |
+| **Graph** | `graph/` | Execution/data flow tracing, chain builder |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
-| ├ 表达式 | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
+| ├ Expressions | `kismet/expressions/` | 15 expression types (assignment, control flow, function calls, literals) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting |
+| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting, body extraction |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material) |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (6 renderers) |
-| **Formatters** | `formatters/` | JSON/Text/Markdown(with Mermaid)/Blueprint text/UE format output generation |
+| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance) |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (2 renderers: JSON, Markdown) |
 
 ## Testing
 
@@ -254,6 +233,31 @@ FArchive pipeline pattern mirroring UE's internal structure:
 python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
 ```
+
+### UE Editor Ground Truth
+
+For parser changes that claim UE fidelity, do not rely only on pytest or static
+C++ references. When Unreal Editor 5.8 is available, use the official
+Experimental Unreal MCP server as a live read-only ground-truth channel:
+
+1. Enable `ModelContextProtocol` and, when broader toolsets are needed, enable
+   `AllToolsets` in the UE 5.8 editor project.
+2. Start the server with `ModelContextProtocol.StartServer` or launch the
+   editor with `-ModelContextProtocolStartServer`; the default endpoint is
+   `http://127.0.0.1:8000/mcp`.
+3. Record `tools/list`, `list_toolsets`, and the `describe_toolset` schema for
+   the toolset used to inspect the asset.
+4. Compare parser JSON/Markdown against editor live data for asset class,
+   export object names, Blueprint variables, graph names, nodes, pins,
+   component hierarchy, transforms, input bindings, soft references, and asset
+   load/compile status.
+5. Keep MCP-derived evidence as test artifacts or issue evidence. Do not make
+   the normal test suite fail when the editor or MCP endpoint is unavailable.
+
+MCP evidence is authoritative for editor-visible state, while `.uasset` parsing
+remains the source under test. If the two disagree, document whether the gap is
+caused by cooked/editor-only stripping, unresolved binary serialization, or an
+actual parser defect.
 
 ## Tech Stack
 

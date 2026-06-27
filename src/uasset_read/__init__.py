@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.4.4
+版本 0.5.1
 
 公共API通过__all__控制。
 """
-__version__ = "0.4.4"
+__version__ = "0.5.1.19"
 
 # 导出常量模块
 from .constants import (
@@ -36,10 +36,38 @@ from .constants import (
     CONTROL_FLOW_NODES,
     START_EVENT_TYPES,
     BRANCH_TYPE_MAP,
-    # Package Flags
+    # Package Flags (EPackageFlags)
+    PKG_None,
+    PKG_NewlyCreated,
+    PKG_ClientOptional,
+    PKG_ServerSideOnly,
+    PKG_CompiledIn,
+    PKG_ForDiffing,
+    PKG_EditorOnly,
+    PKG_Developer,
+    PKG_UncookedOnly,
     PKG_Cooked,
+    PKG_ContainsNoAsset,
+    PKG_NotExternallyReferenceable,
+    PKG_AccessSpecifierEpicInternal,
     PKG_UnversionedProperties,
+    PKG_ContainsMapData,
+    PKG_IsSaving,
+    PKG_Compiling,
+    PKG_ContainsMap,
+    PKG_RequiresLocalizationGather,
+    PKG_LoadUncooked,
+    PKG_PlayInEditor,
+    PKG_ContainsScript,
+    PKG_DisallowExport,
+    PKG_CookGenerated,
+    PKG_DynamicImports,
+    PKG_RuntimeGenerated,
+    PKG_ReloadingForCooker,
     PKG_FilterEditorOnly,
+    PKG_TransientFlags,
+    PKG_InMemoryOnly,
+    decode_package_flags,
     # UE5 版本常量
     UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_PROPERTY_TAG_EXTENSION,
@@ -255,45 +283,18 @@ from .blueprint import (
 from .graph import (
     extract_blueprint_graphs,
     build_execution_flow_entries,
-    build_execution_flows,  # deprecated compatibility wrapper; use build_execution_flow_entries
     build_data_flows,
     build_connections_map,
-    build_graphs_summary,
     format_graphs_json,
-    build_blueprint_node_index,
     build_execution_chains,
     format_pin_ref,
     _derive_node_name,
-    write_pin_trace_report,
-    is_function_graph,
     build_function_graphs,
-    write_phase75_diagnostic,
 )
 
-# 格式化模块（legacy — 推荐使用 parse_single()/parse_batch() 统一入口）
-# 主解析管线
-from .formatters import (
-    # JSON 格式化（legacy，保留兼容）
-    format_json_full,
-    format_json_summary,
-    format_exports_list,
-    format_properties_list,
-    format_blueprint_dict,
-    # Text 格式化（legacy，保留兼容）
-    format_text_full,
-    format_text_summary,
-    # Markdown 格式化（legacy，保留兼容）
-    format_markdown,
-    # Blueprint 翻译参考文本
-    format_blueprint_translation_text,
-    format_blueprint_ue_text,
-    # 辅助函数
-    build_status_info,
-    build_schema_info,
-    resolve_fpackage_index,
-)
 # Core API (parse_single, parse_batch, list_formats)
 from .core import parse_single, parse_batch, list_formats, BatchResult
+from .memory_safety import MemoryLimitExceeded, MemoryPolicy, ResourceLimits
 
 # ============================================================================
 from .parse_uasset import parse_package, parse_uasset, parse_uasset_with_linker
@@ -438,6 +439,9 @@ __all__ = [
     "parse_batch",
     "list_formats",
     "BatchResult",
+    "MemoryPolicy",
+    "ResourceLimits",
+    "MemoryLimitExceeded",
     # 常量（基础）
     "PACKAGE_FILE_TAG",
     "PACKAGE_FILE_TAG_SWAPPED",
@@ -467,9 +471,37 @@ __all__ = [
     "START_EVENT_TYPES",
     "BRANCH_TYPE_MAP",
     # 常量（Package Flags）
+    "PKG_None",
+    "PKG_NewlyCreated",
+    "PKG_ClientOptional",
+    "PKG_ServerSideOnly",
+    "PKG_CompiledIn",
+    "PKG_ForDiffing",
+    "PKG_EditorOnly",
+    "PKG_Developer",
+    "PKG_UncookedOnly",
     "PKG_Cooked",
+    "PKG_ContainsNoAsset",
+    "PKG_NotExternallyReferenceable",
+    "PKG_AccessSpecifierEpicInternal",
     "PKG_UnversionedProperties",
+    "PKG_ContainsMapData",
+    "PKG_IsSaving",
+    "PKG_Compiling",
+    "PKG_ContainsMap",
+    "PKG_RequiresLocalizationGather",
+    "PKG_LoadUncooked",
+    "PKG_PlayInEditor",
+    "PKG_ContainsScript",
+    "PKG_DisallowExport",
+    "PKG_CookGenerated",
+    "PKG_DynamicImports",
+    "PKG_RuntimeGenerated",
+    "PKG_ReloadingForCooker",
     "PKG_FilterEditorOnly",
+    "PKG_TransientFlags",
+    "PKG_InMemoryOnly",
+    "decode_package_flags",
     # 常量（UE5 版本）
     "UE5_SCRIPT_SERIALIZATION_OFFSET",
     "UE5_PROPERTY_TAG_EXTENSION",
@@ -657,32 +689,13 @@ __all__ = [
     # 图解析辅助函数
     "extract_blueprint_graphs",
     "build_execution_flow_entries",
-    "build_execution_flows",
     "build_data_flows",
     "build_connections_map",
-    "build_graphs_summary",
-    "build_blueprint_node_index",
-    "build_execution_chains",
-    "write_pin_trace_report",
-    "is_function_graph",
-    "build_function_graphs",
-    "write_phase75_diagnostic",
-    # 格式化函数
-    "format_json_full",
-    "format_json_summary",
-    "format_exports_list",
-    "format_properties_list",
-    "format_blueprint_dict",
-    "format_text_summary",
-    "format_text_full",
-    "format_markdown",
-    "format_blueprint_translation_text",
-    "format_blueprint_ue_text",
     "format_graphs_json",
-    "build_schema_info",
-    "resolve_fpackage_index",
+    "build_execution_chains",
     "format_pin_ref",
-    "build_status_info",
+    "build_function_graphs",
+    "format_pin_ref",
     # 辅助函数
     "find_main_blueprint_generated_class",
     "resolve_parent_class",

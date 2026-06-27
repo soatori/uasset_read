@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     PROPERTY_TAG_COMPLETE_TYPE_NAME,
+    UE5_PROPERTY_TAG_EXTENSION,
     PROP_TAG_HAS_ARRAY_INDEX,
     PROP_TAG_HAS_PROPERTY_GUID,
     PROP_TAG_HAS_EXTENSIONS,
@@ -30,12 +31,24 @@ def _read_property_type_name(
     archive: FArchive,
     name_map: List[str],
     max_nodes: int = MAX_PROPERTY_TYPE_NODES,
+    file_version_ue5: int = PROPERTY_TAG_COMPLETE_TYPE_NAME,
 ) -> PropertyTypeName:
     """读取 FPropertyTypeName 前序节点并恢复递归树。
 
     部分资产的非标准 payload 会让 inner_count 看起来异常大。这里使用 50 节点
     读取上限，平衡复杂类型支持和安全性。
+
+    UE5 版本差异：
+    - ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME (1012): 属性类型名为简单 FName
+      （8 字节：4 字节索引 + 4 字节 number），无 children 树。
+    - ue5 >= 1012: 属性类型名为 FPropertyTypeName（含 children 的前序遍历树）。
     """
+    # UE 5.0.x ~ 5.2: 属性类型名为简单 FName（仅 name index）
+    if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
+        simple_name = archive.read_name(name_map)
+        return PropertyTypeName(simple_name)
+
+    # UE 5.3+: 完整 FPropertyTypeName 前序遍历树
     parts: List[Tuple[str, int]] = []
     pending = 1
     while pending > 0 and len(parts) < max_nodes:
@@ -162,7 +175,14 @@ def read_property_tag(
     if tag.name == "None":
         return tag
 
-    tag.type_name = _read_property_type_name(archive, name_map)
+    # 从 archive 获取 UE5 版本号（由 parse_uasset 在 summary 解析后设置）
+    file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
+
+    if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
+        return _read_property_tag_legacy(archive, name_map, tag, tolerant, file_version_ue5)
+
+    # === UE5 >= 1012: 完整 FPropertyTypeName 格式 ===
+    tag.type_name = _read_property_type_name(archive, name_map, file_version_ue5=file_version_ue5)
     tag.type_parts = tag.type_name.to_parts()
     _apply_property_type_to_tag(tag, tag.type_name)
 
@@ -200,6 +220,115 @@ def read_property_tag(
 
     if tag.flags & PROP_TAG_BOOL_TRUE:
         tag.bool_val = 1
+
+    # Record value start position and expected end position
+    tag.value_start_offset = archive.tell()
+    if tag.size > 0:
+        tag.value_end_offset = tag.value_start_offset + tag.size
+    else:
+        tag.value_end_offset = tag.value_start_offset
+
+    return tag
+
+
+def _read_property_tag_legacy(
+    archive: "FArchive",
+    name_map: List[str],
+    tag: "PropertyTag",
+    tolerant: bool = False,
+    file_version_ue5: int = 0,
+) -> "PropertyTag":
+    """读取 UE5 < 1012 (PROPERTY_TAG_COMPLETE_TYPE_NAME) 的旧格式属性标签。
+
+    对应 UE 源码 LoadPropertyTagNoFullType() (PropertyTag.cpp:195)。
+
+    旧格式布局（binary）：
+    - Name: FName（8 字节：index + number）— 已在 read_property_tag 读取
+    - Type: FName（8 字节：属性类型名 + number）
+    - Size: int32
+    - ArrayIndex: int32
+    - Type.number == 0 (NAME_NO_NUMBER_INTERNAL) 时的类型特定字段：
+      - StructProperty: StructName(FName) + StructGuid(FGuid, 16 bytes)
+      - BoolProperty: BoolVal(uint8, 1 byte) — 二进制格式始终序列化
+      - ByteProperty: EnumName(FName)
+      - EnumProperty: EnumName(FName)
+      - ArrayProperty: InnerType(FName)
+      - SetProperty: InnerType(FName)
+      - OptionalProperty: InnerType(FName)
+      - MapProperty: InnerType(FName) + ValueType(FName)
+    - HasPropertyGuid: uint8 (1 byte) — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG
+    - PropertyGuid: FGuid (16 bytes) — 仅当 HasPropertyGuid=true
+    - PropertyExtensions (ue5 >= 1011): uint8 + 可能的扩展数据
+    """
+    # Type: 完整 FName (8 bytes: index + number)
+    type_index = archive.read_u32()
+    type_number = archive.read_u32()
+    if 0 <= type_index < len(name_map):
+        base_type = name_map[type_index]
+        tag.type = f"{base_type}_{type_number}" if type_number > 0 else base_type
+    else:
+        tag.type = "None"
+
+    # Size
+    tag.size = archive.read_i32()
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+
+    # ArrayIndex — 旧格式始终存在
+    tag.array_index = archive.read_i32()
+
+    # Type.number == 0 (NAME_NO_NUMBER_INTERNAL) 时的类型特定字段
+    if type_number == 0:
+        if tag.type == "StructProperty":
+            # StructName (FName) + StructGuid (FGuid = 16 bytes)
+            tag.struct_type = archive.read_name(name_map)
+            # StructGuid — UE5 资产的 file_version_ue4 始终 >=
+            # VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG，始终读取
+            tag.property_guid = archive.read_bytes(16)
+        elif tag.type == "BoolProperty":
+            # BoolVal: uint8 — 二进制格式序列化为 1 字节
+            # 参考: PropertyTag.cpp:271-281 (Slot << SA_ATTRIBUTE(TEXT("BoolVal"), Tag.BoolVal))
+            tag.bool_val = archive.read_u8()
+        elif tag.type == "ByteProperty":
+            # EnumName (FName)
+            enum_name = archive.read_name(name_map)
+            if enum_name and enum_name != "None":
+                tag.enum_type = enum_name
+        elif tag.type == "EnumProperty":
+            # EnumName (FName)
+            enum_name = archive.read_name(name_map)
+            if enum_name and enum_name != "None":
+                tag.enum_type = enum_name
+        elif tag.type == "ArrayProperty":
+            # InnerType (FName) — 参考 PropertyTag.cpp:318-330
+            tag.inner_type = archive.read_name(name_map)
+        elif tag.type == "SetProperty":
+            # InnerType (FName) — 参考 PropertyTag.cpp:346-355
+            tag.inner_type = archive.read_name(name_map)
+        elif tag.type == "OptionalProperty":
+            # InnerType (FName) — 参考 PropertyTag.cpp:333-342
+            tag.inner_type = archive.read_name(name_map)
+        elif tag.type == "MapProperty":
+            # InnerType (FName) + ValueType (FName) — 参考 PropertyTag.cpp:357-371
+            tag.inner_type = archive.read_name(name_map)
+            tag.value_type = archive.read_name(name_map)
+
+    # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (UE5 始终满足)
+    # 参考: PropertyTag.cpp:378-393
+    has_property_guid = archive.read_u8()
+    if has_property_guid:
+        tag.property_guid = archive.read_bytes(16)
+
+    # PropertyExtensions (ue5 >= 1011)
+    # 参考: PropertyTag.cpp:395-399, SerializePropertyExtensions
+    if file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:  # 1011
+        property_extensions = archive.read_u8()
+        tag.flags = property_extensions  # 复用 flags 字段存储扩展标志
+        if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
+            tag.override_operation = archive.read_u8()
+            tag.experimental_overridable_logic = archive.read_u8()
+
+    # 旧格式无 Flags 字节（除 extensions 外）→ serialize_type 始终为 "Property"
+    tag.serialize_type = "Property"
 
     # Record value start position and expected end position
     tag.value_start_offset = archive.tell()

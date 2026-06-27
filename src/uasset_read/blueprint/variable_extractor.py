@@ -26,6 +26,35 @@ from uasset_read.constants import (
     CPF_Replicated, CPF_NonPIEDuplicateTransient,
 )
 
+# UE 属性类型名 → 标准化 pin_category 映射
+# 用于将序列化数据中的 "BoolProperty" 等名称转换为 "bool" 等标准 pin_category
+_PROPERTY_TYPE_TO_PIN_CATEGORY: Dict[str, str] = {
+    "BoolProperty": "bool",
+    "IntProperty": "int",
+    "Int64Property": "int64",
+    "UInt32Property": "uint32",
+    "FloatProperty": "float",
+    "DoubleProperty": "double",
+    "StrProperty": "string",
+    "NameProperty": "name",
+    "TextProperty": "text",
+    "ObjectProperty": "object",
+    "ClassProperty": "class",
+    "ArrayProperty": "array",
+    "StructProperty": "struct",
+    "MapProperty": "map",
+    "SetProperty": "set",
+    "EnumProperty": "byte",
+    "ByteProperty": "byte",
+    "DelegateProperty": "delegate",
+    "MulticastDelegateProperty": "multicast_delegate",
+    "InterfaceProperty": "interface",
+    "WeakObjectProperty": "weak_object",
+    "LazyObjectProperty": "lazy_object",
+    "SoftObjectProperty": "soft_object",
+    "SoftClassProperty": "soft_class",
+}
+
 
 # ============================================================================
 # Pin Category 到 C++ 类型映射
@@ -95,12 +124,12 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
 
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
-    "BlueprintDescription",
     "ParentClass",
     "ParentClassProperty",
     "SuperClass",
     "BlueprintGuid",
     "BlueprintCategory",
+    "BlueprintDescription",
     "BlueprintType",
     "IsBlueprintBase",
     "KismetSchemaDeprecationWarning",
@@ -177,6 +206,21 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
                 elif "pin_subcategory_object" in value:
                     pin_subcategory_object = value["pin_subcategory_object"]
 
+        # dict 是属性值（含 object_class / struct_type）而非 pin 类型 dict 时，
+        # 从 prop.type 和 dict 内容推断类型信息
+        prop_type = getattr(prop, 'type', None)
+        if not pin_category and prop_type:
+            pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, "")
+        if not pin_subcategory and prop_type:
+            if prop_type in ("ObjectProperty", "ClassProperty"):
+                pin_subcategory = value.get("object_class", value.get("object_name", ""))
+            elif prop_type == "StructProperty":
+                pin_subcategory = value.get("struct_type", "")
+
+        # 标准化 pin_category：将 "BoolProperty" 等 UE 内部类型名转换为 "bool" 等标准名
+        if pin_category in _PROPERTY_TYPE_TO_PIN_CATEGORY:
+            pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY[pin_category]
+
         return FEdGraphPinType(
             pin_category=pin_category,
             pin_subcategory=pin_subcategory,
@@ -211,10 +255,16 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         "SoftClassProperty": FEdGraphPinType(pin_category="soft_class"),
     }
 
-    if isinstance(value, str) and getattr(prop, 'type', None) in type_mapping:
-        return type_mapping[prop.type]
+    # 非 dict 值：根据 prop.type 查找标准化 pin_category
+    prop_type = getattr(prop, 'type', None)
+    if prop_type and prop_type in type_mapping:
+        return type_mapping[prop_type]
 
-    return FEdGraphPinType(pin_category=prop.type if hasattr(prop, "type") else "unknown")
+    # 回退：将属性类型名标准化为 pin_category
+    pin_category = "unknown"
+    if prop_type:
+        pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type)
+    return FEdGraphPinType(pin_category=pin_category)
 
 
 def extract_blueprint_variables(properties: List[PropertyValue]) -> List[BlueprintVariable]:
@@ -354,13 +404,17 @@ def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
     if isinstance(value, StructValue):
         fields = value.fields
     elif isinstance(value, dict) and value.get("kind") == "binary_or_native_property":
-        return FEdGraphPinType(pin_category=str(value.get("type") or "StructProperty"))
+        raw_category = str(value.get("type") or "unknown")
+        return FEdGraphPinType(
+            pin_category=_PROPERTY_TYPE_TO_PIN_CATEGORY.get(raw_category, raw_category),
+        )
     elif isinstance(value, dict):
         fields = value
     else:
         return FEdGraphPinType(pin_category="unknown")
+    raw_category = str(fields.get("PinCategory") or fields.get("pin_category") or "unknown")
     return FEdGraphPinType(
-        pin_category=str(fields.get("PinCategory") or fields.get("pin_category") or "unknown"),
+        pin_category=_PROPERTY_TYPE_TO_PIN_CATEGORY.get(raw_category, raw_category),
         pin_subcategory=str(fields.get("PinSubCategory") or fields.get("PinSubcategory") or fields.get("pin_subcategory") or ""),
         container_type=int(fields.get("ContainerType") or fields.get("container_type") or 0),
     )
@@ -538,7 +592,7 @@ def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[Bluep
         if prop_name == "UbergraphFunction":
             func_name = _resolve_property_to_function_name(prop.value)
             if func_name:
-                functions.append(BlueprintFunction(name=func_name))
+                functions.append(BlueprintFunction(name=func_name, is_implemented=False))
         elif prop_name == "FunctionList" and isinstance(prop.value, (list, tuple)):
             for item in prop.value:
                 func_name = _resolve_property_to_function_name(item)
@@ -673,6 +727,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 name=func_name,
                 return_type=return_type,
                 parameters=parameters,
+                is_implemented=not is_event_node,
             )
             # 标记事件节点
             if is_event_node:
@@ -804,9 +859,73 @@ def extract_blueprint_metadata(
                 parameters=f.parameters,
             ))
 
+    # 提取 BlueprintDescription
+    description = ""
+    for prop in properties:
+        if prop.name == "BlueprintDescription":
+            description = str(prop.value) if prop.value else ""
+            break
+
+    # 提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）
+    from uasset_read.models.blueprint import BlueprintInterface
+    interfaces: List[BlueprintInterface] = []
+
+    def _extract_interfaces_from_props(props_list):
+        """从属性列表中提取 ImplementedInterfaces。"""
+        result = []
+        for prop in props_list:
+            if prop.name == "ImplementedInterfaces" and isinstance(prop.value, list):
+                for item in prop.value:
+                    # FBPInterfaceDescription: {Interface: object_ref, Graphs: [...]}
+                    # item 可能是 dict 或 StructValue
+                    fields = {}
+                    if isinstance(item, dict):
+                        fields = item
+                    elif hasattr(item, "fields"):
+                        fields = getattr(item, "fields", {})
+
+                    # Interface 是对象引用索引，需要解析为接口名
+                    iface_ref = fields.get("Interface", None)
+                    iface_name = ""
+                    if isinstance(iface_ref, int) and import_map and iface_ref < 0:
+                        # 负索引表示导入表引用
+                        idx = -iface_ref - 1
+                        if idx < len(import_map):
+                            imp = import_map[idx]
+                            iface_name = str(getattr(imp, "object_name", ""))
+                    elif isinstance(iface_ref, str):
+                        iface_name = iface_ref
+                    if iface_name:
+                        result.append(BlueprintInterface(name=iface_name))
+                break
+        return result
+
+    interfaces = _extract_interfaces_from_props(properties)
+
+    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
+    if not interfaces and export_map:
+        from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
+        for other_export in export_map:
+            if other_export is export:
+                continue
+            is_bp = _dbl(other_export, linker) if linker else False
+            if not is_bp:
+                continue
+            try:
+                other_props = parse_properties_from_export(
+                    other_export, archive, summary, name_map, export_map, import_map,
+                )
+                interfaces = _extract_interfaces_from_props(other_props)
+            except Exception:
+                pass
+            if interfaces:
+                break
+
     meta = BlueprintMetadata(
         is_blueprint=True,
         parent_class=parent_class,
+        description=description,
+        interfaces=interfaces,
         variables=variables,
         functions=functions,
         events=events,

@@ -173,6 +173,7 @@ class UEdGraph:
     nodes: List["UEdGraphNode"] = field(default_factory=list)
     graph_guid: Optional[str] = None
     b_editable: bool = True
+    subgraphs: List["UEdGraph"] = field(default_factory=list)
 
     @classmethod
     def from_archive(

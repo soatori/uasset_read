@@ -12,6 +12,8 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 
 logger = logging.getLogger(__name__)
 
+MAX_EXPRESSION_RECURSION_DEPTH = 256
+
 
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
@@ -29,6 +31,7 @@ class FKismetArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._name_map = name_map
+        self._expression_depth = 0
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
@@ -37,6 +40,12 @@ class FKismetArchive(FArchive):
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
+        if self._expression_depth >= MAX_EXPRESSION_RECURSION_DEPTH:
+            raise ParseError(
+                f"Kismet expression recursion depth exceeded "
+                f"{MAX_EXPRESSION_RECURSION_DEPTH} at offset {self.tell()}"
+            )
+
         consecutive_unknown = 0
         while True:
             stmt_index = self.tell()
@@ -67,10 +76,21 @@ class FKismetArchive(FArchive):
             # Reset consecutive unknown counter on successful token match
             consecutive_unknown = 0
 
-            if hasattr(expr_class, 'from_archive'):
-                expr = expr_class.from_archive(self, self._name_map)
-            else:
-                expr = expr_class()
+            self._expression_depth += 1
+            try:
+                if hasattr(expr_class, 'from_archive'):
+                    expr = expr_class.from_archive(self, self._name_map)
+                else:
+                    expr = expr_class()
+            finally:
+                self._expression_depth -= 1
+
+            end_offset = self.tell()
+            if end_offset <= stmt_index:
+                raise ParseError(
+                    f"Kismet expression {token.name} made no progress "
+                    f"at offset {stmt_index} (ended at {end_offset})"
+                )
 
             expr.StatementIndex = stmt_index
             return expr
@@ -78,7 +98,13 @@ class FKismetArchive(FArchive):
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
         """Read expressions until end_token is encountered. The end_token expression is NOT included."""
         result = []
+        max_items = self.remaining()
         while True:
+            if len(result) >= max_items:
+                raise ParseError(
+                    f"Kismet expression array exceeded {max_items} items "
+                    f"without finding {end_token.name} at offset {self.tell()}"
+                )
             expr = self.read_expression()
             if expr.Token == end_token:
                 break

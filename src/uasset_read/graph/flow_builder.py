@@ -494,6 +494,51 @@ def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphN
     return [(x_name, "Yaw"), (y_name, "Pitch")]
 
 
+def _extract_call_function_parameters(
+    node: Any,
+    pin_lookup: Optional[Dict] = None,
+    node_lookup: Optional[Dict] = None,
+    node_name_lookup: Optional[Dict] = None
+) -> Dict[str, List[Dict]]:
+    """从 K2Node_CallFunction 节点的 pins 中提取函数参数。
+
+    过滤 exec pins，将输入/输出参数分离为结构化数组。
+    """
+    input_params: List[Dict] = []
+    output_params: List[Dict] = []
+
+    for pin in node.pins:
+        if pin.pin_type and pin.pin_type.pin_category == "exec":
+            continue
+
+        param: Dict[str, Any] = {
+            "name": pin.pin_name,
+            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+        }
+        if pin.pin_type:
+            if pin.pin_type.pin_subcategory:
+                param["pin_subcategory"] = pin.pin_type.pin_subcategory
+            if pin.pin_type.is_reference:
+                param["is_reference"] = True
+        if pin.default_value is not None and pin.default_value != "":
+            param["default_value"] = pin.default_value
+
+        if pin.direction == 0:  # Input
+            if pin_lookup and node_lookup and node_name_lookup:
+                try:
+                    data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
+                    if data_source:
+                        param["data_source"] = data_source
+                except Exception:
+                    pass
+
+            input_params.append(param)
+        else:  # Output
+            output_params.append(param)
+
+    return {"input_params": input_params, "output_params": output_params}
+
+
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """格式化单个节点为紧凑的 Blueprint DTO JSON 结构。
 
@@ -539,7 +584,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     # CallFunction 节点提取结构化 parameters
     if node.class_name == "K2Node_CallFunction":
-        from uasset_read.formatters.json_formatter import _extract_call_function_parameters
         result["parameters"] = _extract_call_function_parameters(node)
 
     return result
@@ -649,22 +693,6 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
         return node.class_name
 
     return node.class_name
-
-
-def is_function_graph(graph: UEdGraph) -> bool:
-    """判断图是否为函数图（非事件图）。
-
-    组合判断（D-01）：
-    1. 含 K2Node_FunctionEntry → Function Graph
-    2. 含 K2Node_Event → EventGraph
-    3. Fallback: graph_name 模式
-    """
-    node_types = {n.class_name for n in graph.nodes}
-    if "K2Node_FunctionEntry" in node_types:
-        return True
-    if "K2Node_Event" in node_types:
-        return False
-    return graph.graph_name.lower() != "eventgraph"
 
 
 def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
@@ -1016,7 +1044,6 @@ def _trace_execution_from_event(
 
         # --- CallFunction 的 parameters 提取（数据流追踪）---
         if current_node.class_name == "K2Node_CallFunction":
-            from uasset_read.formatters.json_formatter import _extract_call_function_parameters
             node_info["parameters"] = _extract_call_function_parameters(
                 current_node, pin_lookup, node_lookup, node_name_lookup
             )
@@ -1331,22 +1358,6 @@ def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     return {"graphs": [graph_dict]}
 
 
-def build_execution_flows(graph: UEdGraph) -> List[Dict]:
-    """已弃用：请使用 build_execution_flow_entries()。
-
-    此函数保留用于向后兼容，会发出 DeprecationWarning。
-    """
-    import warnings
-    warnings.warn(
-        "build_execution_flows() is deprecated. "
-        "Use build_execution_flow_entries() for internal calls, "
-        "or build_execution_chains() for chain format output.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    return build_execution_flow_entries(graph)
-
-
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     """构建数据流图（D-19-06~09, LINK-03）。
 
@@ -1427,52 +1438,6 @@ def _build_synthetic_function_data_flows(
     return flows
 
 
-def build_graphs_summary(graphs: List[UEdGraph]) -> List[Dict]:
-    """构建所有图的摘要（OUT-03, D-19-09）。
-
-    Args:
-        graphs: List[UEdGraph] 图列表
-
-    Returns:
-        List[Dict]: graphs_summary 数组
-    """
-    from .chain_builder import build_execution_chains
-
-    summaries: List[Dict] = []
-
-    for graph in graphs:
-        # 图类型映射
-        graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
-
-        # 执行流构建（用于 chain_builder）
-        execution_flows = build_execution_flow_entries(graph)
-
-        # 执行流链式表达
-        execution_chains = build_execution_chains(graph, execution_flows)
-
-        # 连接映射构建
-        connections, warnings = build_connections_map(graph)
-
-        # 数据流构建（D-19-09）
-        data_flows = build_data_flows(graph)
-
-        # 过滤空 chain（无实际连接的 flow）
-        non_empty_chains = [c for c in execution_chains if c.get("chains")]
-
-        summaries.append({
-            "graph_name": graph.graph_name,
-            "graph_type": graph_type,
-            "node_count": len(graph.nodes),
-            "schema": graph.schema,
-            "execution_chains": non_empty_chains,  # 链式表达替代 execution_flows
-            "connections": connections,
-            "data_flows": data_flows,  # D-19-09: 数据流与执行流独立分离
-            "warnings": warnings if warnings else None,
-        })
-
-    return summaries
-
-
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
 
@@ -1547,48 +1512,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
-
-
-def build_blueprint_node_index(graphs: List[UEdGraph]) -> Dict[str, Any]:
-    """Build the standard Blueprint node index used by JSON output."""
-    node_items: List[Dict[str, Any]] = []
-    graph_names: List[Dict[str, Any]] = []
-
-    for graph in graphs:
-        pin_lookup, _, _ = _build_graph_indexes(graph)
-        node_name_lookup = {
-            node.node_guid: _derive_node_name(node, idx)
-            for idx, node in enumerate(graph.nodes)
-        }
-        graph_node_guids: List[str] = []
-        for idx, node in enumerate(graph.nodes):
-            graph_node_guids.append(node.node_guid or "")
-            node_items.append({
-                "GraphName": graph.graph_name,
-                "Type": node.class_name,
-                "Name": _derive_node_name(node, idx),
-                "NodePosX": node.node_pos_x,
-                "NodePosY": node.node_pos_y,
-                "NodeGuid": node.node_guid or None,
-                "FunctionName": _node_member_name(node) or None,
-                "Pins": [
-                    _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
-                    for pin in node.pins
-                ],
-                "Note": node.node_comment or None,
-            })
-        graph_names.append({
-            "Name": graph.graph_name,
-            "Type": GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class),
-            "NodeCount": len(graph.nodes),
-            "NodeGuids": graph_node_guids,
-        })
-
-    return {
-        "Graphs": graph_names,
-        "NodeCount": len(node_items),
-        "Nodes": node_items,
-    }
 
 
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:

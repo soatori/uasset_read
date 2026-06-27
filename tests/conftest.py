@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import os
 import subprocess
@@ -9,11 +10,17 @@ from typing import Iterable
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from uasset_read.memory_safety import (
+    LARGE_FILE_THRESHOLD,
+    MAX_ASSET_COUNT,
+    get_memory_stats,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\UnrealEngine\Samples")
-
+DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
@@ -45,13 +52,32 @@ def sample_root(pytestconfig: pytest.Config) -> Path:
 
 @pytest.fixture(scope="session")
 def all_assets(sample_root: Path) -> list[Path]:
-    assets = sorted(
+    """Collect a bounded set of sample assets."""
+    all_files = sorted(
         p for p in sample_root.rglob("*")
         if p.is_file() and p.suffix.lower() in {".uasset", ".umap"}
     )
-    if not assets:
+
+    # 限制总数
+    if len(all_files) > MAX_ASSET_COUNT:
+        all_files = all_files[:MAX_ASSET_COUNT]
+
+    if not all_files:
         pytest.fail(f"No .uasset/.umap files found under {sample_root}")
-    return assets
+
+    # 检查内存状态
+    stats = get_memory_stats()
+    print(
+        f"\n[MemorySafety] Memory: process RSS={stats.process_rss_mb:.0f}MB, "
+        f"system {stats.used_mb:.0f}MB used, {stats.available_mb:.0f}MB available ({stats.usage_percent*100:.1f}%)"
+    )
+
+    # 统计大文件数量
+    large_count = sum(1 for p in all_files if p.stat().st_size > LARGE_FILE_THRESHOLD)
+    if large_count > 0:
+        print(f"[MemorySafety] {large_count} large files use size-tier resource limits")
+
+    return all_files
 
 
 @pytest.fixture(scope="session")
@@ -108,3 +134,31 @@ def run_python(args: Iterable[str], timeout: int = 60) -> subprocess.CompletedPr
 
 def parse_json_output(output: str) -> dict:
     return json.loads(output)
+
+
+# ---------------------------------------------------------------------------
+# 内存安全辅助
+# ---------------------------------------------------------------------------
+
+def skip_if_too_large(path: Path) -> None:
+    """Compatibility helper; file size no longer causes tests to skip."""
+    if not path.is_file():
+        pytest.skip(f"asset not found: {path}")
+
+
+# ---------------------------------------------------------------------------
+# pytest hooks
+# ---------------------------------------------------------------------------
+
+def pytest_runtest_teardown(item):
+    """Run one cyclic-GC pass after each test."""
+    gc.collect()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Print final process/system memory statistics."""
+    stats = get_memory_stats()
+    print(
+        f"\n[MemorySafety] Final memory: process RSS={stats.process_rss_mb:.0f}MB, "
+        f"system {stats.usage_percent*100:.1f}% used, {stats.available_mb:.0f}MB available"
+    )

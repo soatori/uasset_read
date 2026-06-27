@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.versioning import VersionContainer
     from uasset_read.link.linker import PackageLinker
+    from uasset_read.parsers.asset_registry_parser import AssetRegistryData
 
 
 @dataclass
@@ -48,6 +49,8 @@ class ParseResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
     linker: Optional["PackageLinker"] = None
     diagnostics: List = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    hex_view_entries: List = field(default_factory=list)  # List[HexViewEntry]
+    asset_registry_data: Optional["AssetRegistryData"] = None
 
     @property
     def status(self) -> str:

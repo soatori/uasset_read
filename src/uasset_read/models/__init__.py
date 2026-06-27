@@ -28,6 +28,7 @@ from .blueprint import (
     BlueprintVariable,
     BlueprintFunction,
     BlueprintEvent,
+    BlueprintInterface,
     FunctionParameter,
     MulticastDelegate,
 )
@@ -94,6 +95,7 @@ __all__ = [
     "BlueprintVariable",
     "BlueprintFunction",
     "BlueprintEvent",
+    "BlueprintInterface",
     "FunctionParameter",
     "MulticastDelegate",
     # 属性数据模型

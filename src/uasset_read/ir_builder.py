@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
-from uasset_read.serializers.object_resources import PackageIndex
+from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 
 
 def _classify_variable(var) -> str:
@@ -111,6 +111,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
         resolved_depends_map=_build_resolved_depends_map(result),
         asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
+        asset_registry_data=_build_asset_registry_data(result),
         errors=errors,
         status=status,
         status_message=status_message,
@@ -228,6 +229,7 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_export_count=_safe_int(getattr(summary, "export_count", 0)),
         total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
+        saved_hash=getattr(summary, "saved_hash", b'') or b'',
     )
 
 
@@ -296,10 +298,17 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     # 构建 UE 原始导出表字段
     raw = _build_export_raw_ir(export)
 
+    # ObjectExport 没有 object_class 字段，需从 class_index 解析
+    resolved_class = getattr(export, "object_class", None)
+    if not resolved_class and hasattr(export, "class_index"):
+        resolved_class = resolve_class_name(
+            export.class_index, result.import_map or [], result.export_map or []
+        )
+
     return ExportIR(
         index=idx,
         object_name=_safe_str(getattr(export, "object_name", None)),
-        object_class=_safe_str(getattr(export, "object_class", None)),
+        object_class=_safe_str(resolved_class),
         serial_size=getattr(export, "serial_size", 0) or 0,
         outer_index_resolved=outer_resolved,
         super_index_resolved=super_resolved,
@@ -375,12 +384,32 @@ def _build_graph_ir(graph) -> GraphIR:
     for node in getattr(graph, "nodes", None) or []:
         nodes.append(_build_node_ir(node))
 
+    # 递归构建嵌套子图
+    subgraphs = []
+    for subgraph in getattr(graph, "subgraphs", None) or []:
+        subgraphs.append(_build_graph_ir(subgraph))
+
+    # 推断图类型
+    graph_type = None
+    graph_class = _safe_str(getattr(graph, "graph_class", None))
+    if graph_class:
+        if "StateMachine" in graph_class:
+            graph_type = "state_machine"
+        elif "State" in graph_class:
+            graph_type = "state"
+        elif "Transition" in graph_class:
+            graph_type = "transition"
+        elif "AnimGraph" in graph_class or "Animation" in graph_class:
+            graph_type = "animation"
+
     return GraphIR(
         graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
         graph_name=_safe_str(getattr(graph, "graph_name", None)),
-        graph_class=_safe_str(getattr(graph, "graph_class", None)),
+        graph_class=graph_class,
         nodes=nodes,
         execution_chains=getattr(graph, "execution_chains", None) or [],
+        subgraphs=subgraphs,
+        graph_type=graph_type,
     )
 
 
@@ -502,6 +531,7 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
                 "is_output": p.is_output,
             } for p in func.parameters],
             function_flags=getattr(func, "function_flags", 0) or 0,
+            is_implemented=getattr(func, "is_implemented", True),
             is_pure=getattr(func, "is_pure", False),
             is_blueprint_callable=getattr(func, "is_blueprint_callable", False),
             is_const=getattr(func, "is_const", False),
@@ -541,8 +571,17 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
 
     components = list(result.components) if result.components else []
 
+    # 提取 description 和 interfaces
+    description = getattr(bp, "description", "") or ""
+    interfaces = [
+        {"name": iface.name, "guid": iface.guid}
+        for iface in getattr(bp, "interfaces", []) or []
+    ]
+
     return BlueprintIR(
         parent_class=bp.parent_class,
+        description=description,
+        interfaces=interfaces,
         functions=functions,
         events=events,
         components=components,
@@ -938,3 +977,14 @@ def _extract_pin_guid(ref) -> str | None:
         return _normalize_guid(ref)
     raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
     return _normalize_guid(raw) if raw else None
+
+
+def _build_asset_registry_data(result) -> dict | None:
+    """从 ParseResult 构建 asset_registry_data 字典。"""
+    asset_registry_data = getattr(result, "asset_registry_data", None)
+    if asset_registry_data is None:
+        return None
+    try:
+        return asset_registry_data.to_dict()
+    except Exception:
+        return None

@@ -28,7 +28,6 @@ from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
 from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
 from uasset_read.parsers.asset_types.texture2d import parse_texture2d
-
 __all__ = [
     "parse_static_mesh",
     "parse_skeletal_mesh",
@@ -129,6 +128,8 @@ def register_asset_type_handlers() -> None:
         ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
         ("anim_sequence", "parse_anim_sequence", ["AnimSequence"], "AnimSequenceHandler"),
         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
+        ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
+        ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

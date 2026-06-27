@@ -69,7 +69,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--json', action='store_true', help='Output full JSON structure')
+    group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
 
     # Optional flags
@@ -86,6 +86,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--game', metavar='NAME', help='Enable game-specific property readers')
     parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode (default)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
+    parser.add_argument('--full-parse', action='store_true', default=False,
+                        help='Force full parse for large blueprints (skip lightweight mode)')
+    parser.add_argument('--hex-view', action='store_true', default=False,
+                        help='Enable HexView byte offset tracking (debug)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
@@ -100,6 +104,8 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
+    if args.json:
+        return "json"
     return "json"
 
 
@@ -140,6 +146,7 @@ def _handle_batch(args) -> None:
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            force_full_parse=args.full_parse,
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)
@@ -234,6 +241,8 @@ def main():
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
+            force_full_parse=args.full_parse,
+            hex_view=args.hex_view,
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)
