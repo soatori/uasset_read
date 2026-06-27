@@ -240,6 +240,14 @@ def run_isolated_asset(
     )
     process = None
     try:
+        # 确保子进程能导入 uasset_read
+        env = os.environ.copy()
+        src_dir = str(Path(__file__).resolve().parent.parent)
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = src_dir + os.pathsep + env["PYTHONPATH"]
+        else:
+            env["PYTHONPATH"] = src_dir
+
         popen = subprocess.Popen(
             [
                 sys.executable,
@@ -252,6 +260,7 @@ def run_isolated_asset(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=env,
         )
         process = _SubprocessAdapter(popen)
         return _monitor_worker(
