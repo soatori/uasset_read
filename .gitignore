@@ -3,6 +3,7 @@ UnrealEngine/
 LyraStarterGame/
 UnrealProjects/
 external/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -11,18 +12,29 @@ __pycache__/
 .Python
 lib/
 lib64/
+*.egg-info/
+*.egg
+dist/
+build/
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.coverage.*
+
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
 # Temp and output
 temp/
 test/
@@ -30,6 +42,7 @@ output/
 /debug/
 reports/
 /json
+
 # Session-local tool config (but track skills)
 .claude/*
 !.claude/skills/
@@ -39,32 +52,30 @@ reports/
 .agents/
 .playwright-mcp/
 memory/
+
 # CodeGraph local data
 .codegraph/
-# Test files
+
+# Test files - track test Python files and directories
 tests/*
-!tests/test_*.py
+!tests/__init__.py
 !tests/conftest.py
 !tests/README.md
-
-!tests/__init__.py
+!tests/test_*.py
 !tests/graph/
-!tests/graph/*.py
 !tests/core/
-tests/core/*
-!tests/core/test_batch_worker.py
 !tests/kismet/
-tests/kismet/*
-!tests/kismet/test_archive_safety.py
 !tests/renderers/
-!tests/renderers/*.py
 !tests/blueprint/
-!tests/blueprint/*.py
 !tests/integration/
-!tests/integration/*.py
 !tests/linker/
-!tests/linker/*.py
-QWEN.md
+!tests/archive/
+!tests/ir/
+!tests/structs/
+!tests/misc/
+!tests/serialization/
+!tests/asset/
+!tests/cpp/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
@@ -75,3 +86,7 @@ docs/reference/refactor-reference.md
 
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
+
+# Documentation build artifacts
+docs/superpowers/
+.mimocode/

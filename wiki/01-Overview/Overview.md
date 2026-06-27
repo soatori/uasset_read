@@ -13,7 +13,7 @@ section: overview
 
 | 项目 | 详情 |
 |------|------|
-| 版本信息 | `0.5.1.18` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
+| 版本信息 | `0.5.1.19` · Python 3.10+（match/case、类型注解） · 运行时零依赖 |
 | 构建系统 | 直接脚本（src 布局） · `python run.py file.uasset` 调用 · PAK 可选依赖 |
 | 支持资产 | 10 种专用资产类型（StaticMesh、SkeletalMesh、Material、MaterialInstance、Texture2D、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation）+ Blueprint/Map 通用解析 · 容器：文件系统 / PAK / IoStore |
 
@@ -36,7 +36,7 @@ section: overview
 | 0.4.1 | ParseResult → IR Builder → PackageIR → Renderers → Output | IR 层引入，解析与输出解耦 |
 | **0.4.2** | IR + 2 渲染器，Kismet 反编译改进，C++ 骨架质量提升，PropertyFallback 系统 | 首个稳定发布 |
 | 0.5.0 | Core/Extras 分层架构，精简公共 API，解析器模块拆分为独立子包 | |
-| **0.5.1.18** | 18 issues 修复：PackageFlags、HexView、AssetRegistryData、FString UTF-16、BoxSphereBounds、AnimGraph 等 | 当前版本 |
+| **0.5.1.19** | 18 issues 修复：PackageFlags、HexView、AssetRegistryData、FString UTF-16、BoxSphereBounds、AnimGraph 等 | 当前版本 |
 
 ## 关键约束
 

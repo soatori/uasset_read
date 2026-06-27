@@ -10,7 +10,7 @@ section: agent-index
 >
 > **0.4.1 变更**：`exporter/`、`n2c/`、`agent/` 模块已移除。新增 `core.py`（parse_single/parse_batch）、`renderers/`、`models/ir.py`。
 > **0.5.0 变更**：`formatters/` 目录已清空，所有格式化功能迁移到 `renderers/` 系统。
-> **0.5.1.18 变更**：新增 `--full-parse`、`--hex-view` CLI 标志，新增 AnimDataModel/SoundAttenuation 资产类型解析器。
+> **0.5.1.19 变更**：新增 `--full-parse`、`--hex-view` CLI 标志，新增 AnimDataModel/SoundAttenuation 资产类型解析器。
 
 ## 按任务类型快速定位
 
