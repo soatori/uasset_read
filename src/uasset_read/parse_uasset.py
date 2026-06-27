@@ -505,7 +505,7 @@ def _parse_package_core(
         get_memory_stats,
         cleanup_after_parse,
         CRITICAL_FILE_SIZE,
-        MAX_PARSE_FILE_SIZE,
+        LARGE_FILE_THRESHOLD,
     )
 
     archive = None
@@ -526,7 +526,7 @@ def _parse_package_core(
             )
 
         # 大文件：记录警告
-        if file_size > MAX_PARSE_FILE_SIZE:
+        if file_size > LARGE_FILE_THRESHOLD:
             size_mb = file_size / 1024 / 1024
             result.warnings.append(
                 f"Large file: {size_mb:.1f}MB may cause memory issues"
