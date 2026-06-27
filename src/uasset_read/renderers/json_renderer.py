@@ -81,6 +81,12 @@ class JSONRenderer(IRenderer):
             data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
         if ir.asset_registry_data:
             data["asset_registry_data"] = ir.asset_registry_data
+        if ir.anim_blueprint:
+            data["anim_blueprint"] = self._anim_blueprint_to_dict(ir.anim_blueprint)
+        if ir.anim_sequence:
+            data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
+        if ir.anim_montage:
+            data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
@@ -254,6 +260,90 @@ class JSONRenderer(IRenderer):
     @property
     def format_name(self) -> str:
         return "json"
+
+    def _anim_blueprint_to_dict(self, anim_ir) -> dict[str, Any]:
+        """序列化 AnimBlueprintIR 为字典。"""
+        d: dict[str, Any] = {}
+        if anim_ir.target_skeleton:
+            d["target_skeleton"] = anim_ir.target_skeleton
+        if anim_ir.baked_state_machines:
+            d["baked_state_machines"] = [
+                self._baked_state_machine_to_dict(sm) for sm in anim_ir.baked_state_machines
+            ]
+        if anim_ir.anim_notifies:
+            d["anim_notifies"] = [
+                self._anim_notify_to_dict(n) for n in anim_ir.anim_notifies
+            ]
+        if anim_ir.sync_group_names:
+            d["sync_group_names"] = anim_ir.sync_group_names
+        return d
+
+    def _baked_state_machine_to_dict(self, sm) -> dict[str, Any]:
+        """序列化 BakedStateMachineIR 为字典。"""
+        return {
+            "machine_name": sm.machine_name,
+            "initial_state": sm.initial_state,
+            "states": [
+                {
+                    "state_name": s.state_name,
+                    "state_root_node_index": s.state_root_node_index,
+                    "b_is_a_conduit": s.b_is_a_conduit,
+                }
+                for s in sm.states
+            ],
+            "transitions": [
+                {
+                    "previous_state": t.previous_state,
+                    "next_state": t.next_state,
+                    "crossfade_duration": t.crossfade_duration,
+                    "blend_mode": t.blend_mode,
+                }
+                for t in sm.transitions
+            ],
+        }
+
+    def _anim_notify_to_dict(self, notify) -> dict[str, Any]:
+        """序列化 AnimNotifyIR 为字典。"""
+        return {
+            "notify_name": notify.notify_name,
+            "trigger_time_offset": notify.trigger_time_offset,
+            "duration": notify.duration,
+            "notify_class": notify.notify_class,
+            "track_index": notify.track_index,
+        }
+
+    def _anim_sequence_to_dict(self, anim_ir) -> dict[str, Any]:
+        """序列化 AnimSequenceIR 为字典。"""
+        d: dict[str, Any] = {}
+        if anim_ir.target_skeleton:
+            d["target_skeleton"] = anim_ir.target_skeleton
+        if anim_ir.additive_anim_type:
+            d["additive_anim_type"] = anim_ir.additive_anim_type
+        if anim_ir.sequence_length:
+            d["sequence_length"] = anim_ir.sequence_length
+        if anim_ir.rate_scale:
+            d["rate_scale"] = anim_ir.rate_scale
+        if anim_ir.notifies:
+            d["notifies"] = [self._anim_notify_to_dict(n) for n in anim_ir.notifies]
+        if anim_ir.float_curve_names:
+            d["float_curve_names"] = anim_ir.float_curve_names
+        d["has_compressed_data"] = anim_ir.has_compressed_data
+        return d
+
+    def _anim_montage_to_dict(self, anim_ir) -> dict[str, Any]:
+        """序列化 AnimMontageIR 为字典。"""
+        d: dict[str, Any] = {}
+        if anim_ir.blend_mode_in:
+            d["blend_mode_in"] = anim_ir.blend_mode_in
+        if anim_ir.blend_mode_out:
+            d["blend_mode_out"] = anim_ir.blend_mode_out
+        if anim_ir.sync_group:
+            d["sync_group"] = anim_ir.sync_group
+        if anim_ir.rate_scale:
+            d["rate_scale"] = anim_ir.rate_scale
+        if anim_ir.notifies:
+            d["notifies"] = [self._anim_notify_to_dict(n) for n in anim_ir.notifies]
+        return d
 
 
 register_renderer("json", JSONRenderer)

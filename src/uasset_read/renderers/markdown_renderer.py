@@ -232,6 +232,9 @@ class MarkdownRenderer(IRenderer):
         # === Asset Registry Data ===
         self._render_asset_registry(lines, ir)
 
+        # === 动画数据 ===
+        self._render_anim_data(lines, ir)
+
         # === 诊断信息 ===
         self._render_diagnostics(lines, ir)
 
@@ -424,6 +427,84 @@ class MarkdownRenderer(IRenderer):
                 for key, value in tags.items():
                     lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
+
+    def _render_anim_data(self, lines: list[str], ir: PackageIR) -> None:
+        """渲染动画数据章节 — AnimBlueprint, AnimSequence, AnimMontage。"""
+        # AnimBlueprint
+        if ir.anim_blueprint:
+            lines.append("## Animation Blueprint")
+            lines.append("")
+            if ir.anim_blueprint.target_skeleton:
+                lines.append(f"**Target Skeleton**: `{ir.anim_blueprint.target_skeleton}`")
+                lines.append("")
+            if ir.anim_blueprint.sync_group_names:
+                lines.append(f"**Sync Groups**: {', '.join(ir.anim_blueprint.sync_group_names)}")
+                lines.append("")
+            for sm in ir.anim_blueprint.baked_state_machines:
+                lines.append(f"### State Machine: {sm.machine_name}")
+                lines.append("")
+                lines.append("| State | Root Node | Conduit |")
+                lines.append("|-------|-----------|---------|")
+                for state in sm.states:
+                    conduit = "Yes" if state.b_is_a_conduit else "No"
+                    lines.append(f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |")
+                lines.append("")
+            if ir.anim_blueprint.anim_notifies:
+                lines.append("### Anim Notifies")
+                lines.append("")
+                lines.append("| Name | Class | Trigger Offset | Duration |")
+                lines.append("|------|-------|---------------|----------|")
+                for notify in ir.anim_blueprint.anim_notifies:
+                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+                lines.append("")
+
+        # AnimSequence
+        if ir.anim_sequence:
+            lines.append("## Animation Sequence")
+            lines.append("")
+            if ir.anim_sequence.target_skeleton:
+                lines.append(f"**Target Skeleton**: `{ir.anim_sequence.target_skeleton}`")
+            if ir.anim_sequence.sequence_length:
+                lines.append(f"**Sequence Length**: {ir.anim_sequence.sequence_length:.2f}s")
+            if ir.anim_sequence.rate_scale != 1.0:
+                lines.append(f"**Rate Scale**: {ir.anim_sequence.rate_scale}")
+            if ir.anim_sequence.additive_anim_type:
+                lines.append(f"**Additive Type**: {ir.anim_sequence.additive_anim_type}")
+            if ir.anim_sequence.notifies:
+                lines.append("")
+                lines.append("### Anim Notifies")
+                lines.append("")
+                lines.append("| Name | Class | Trigger Offset | Duration |")
+                lines.append("|------|-------|---------------|----------|")
+                for notify in ir.anim_sequence.notifies:
+                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+            if ir.anim_sequence.float_curve_names:
+                lines.append("")
+                lines.append(f"**Float Curves**: {', '.join(ir.anim_sequence.float_curve_names)}")
+            lines.append(f"**Has Compressed Data**: {ir.anim_sequence.has_compressed_data}")
+            lines.append("")
+
+        # AnimMontage
+        if ir.anim_montage:
+            lines.append("## Animation Montage")
+            lines.append("")
+            if ir.anim_montage.blend_mode_in:
+                lines.append(f"**Blend In Mode**: {ir.anim_montage.blend_mode_in}")
+            if ir.anim_montage.blend_mode_out:
+                lines.append(f"**Blend Out Mode**: {ir.anim_montage.blend_mode_out}")
+            if ir.anim_montage.sync_group:
+                lines.append(f"**Sync Group**: {ir.anim_montage.sync_group}")
+            if ir.anim_montage.rate_scale != 1.0:
+                lines.append(f"**Rate Scale**: {ir.anim_montage.rate_scale}")
+            if ir.anim_montage.notifies:
+                lines.append("")
+                lines.append("### Anim Notifies")
+                lines.append("")
+                lines.append("| Name | Class | Trigger Offset | Duration |")
+                lines.append("|------|-------|---------------|----------|")
+                for notify in ir.anim_montage.notifies:
+                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+            lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
         """渲染诊断信息章节 — 偏移范围诊断表格。"""
