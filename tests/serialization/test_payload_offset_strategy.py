@@ -8,32 +8,26 @@
 import pytest
 from pathlib import Path
 
-
-# 测试样本路径
-BLUEPRINT_SAMPLE = Path("E:/Develop/lib/Samples/CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset")
-STATICMESH_SAMPLE = Path("E:/Develop/lib/Samples/StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset")
+from tests.conftest import asset_path
 
 
-def skip_if_sample_missing(sample_path: Path):
-    """如果样本文件不存在则跳过测试。"""
-    if not sample_path.exists():
-        pytest.skip(f"样本文件不存在: {sample_path}")
+# 测试样本相对路径
+BLUEPRINT_SAMPLE_REL = "CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset"
+STATICMESH_SAMPLE_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
 
 
 class TestPayloadOffsetStrategy:
     """测试属性解析使用 SerialOffset 作为默认策略。"""
 
-    def test_properties_parsed_from_serial_offset(self):
+    def test_properties_parsed_from_serial_offset(self, sample_root: Path):
         """验证属性从 SerialOffset 区域开始解析。"""
         # 使用 StaticMesh 而非 Blueprint，因为 Blueprint 样本超过 300 exports
         # 会触发 lightweight tolerant parse，跳过完整属性解析
-        skip_if_sample_missing(STATICMESH_SAMPLE)
-        from tests.conftest import skip_if_too_large
-        skip_if_too_large(STATICMESH_SAMPLE)
+        staticmesh_path = asset_path(sample_root, STATICMESH_SAMPLE_REL)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(str(STATICMESH_SAMPLE))
+        result = parse_package(str(staticmesh_path))
 
         # 验证解析成功
         assert result.is_success or result.is_partial, f"解析失败: {result.errors}"
@@ -48,15 +42,13 @@ class TestPayloadOffsetStrategy:
         ]
         assert len(exports_with_properties) > 0, "应有至少一个 export 包含属性"
 
-    def test_script_serialization_offsets_preserved_as_diagnostics(self):
+    def test_script_serialization_offsets_preserved_as_diagnostics(self, sample_root: Path):
         """验证 ScriptSerialization 偏移被保存为诊断字段。"""
-        skip_if_sample_missing(STATICMESH_SAMPLE)
-        from tests.conftest import skip_if_too_large
-        skip_if_too_large(STATICMESH_SAMPLE)
+        staticmesh_path = asset_path(sample_root, STATICMESH_SAMPLE_REL)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(str(STATICMESH_SAMPLE))
+        result = parse_package(str(staticmesh_path))
 
         # 查找 UE5.10+ 的 exports（有 script_serialization 字段）
         ue510_exports = [
@@ -85,13 +77,13 @@ class TestPayloadOffsetStrategy:
             assert exp._script_serialization_end_absolute == expected_end, \
                 f"Export {exp.object_name} 结束偏移计算错误"
 
-    def test_exports_have_properties_parsed(self):
+    def test_exports_have_properties_parsed(self, sample_root: Path):
         """验证 exports 的属性被解析（未被跳过）。"""
-        skip_if_sample_missing(STATICMESH_SAMPLE)
+        staticmesh_path = asset_path(sample_root, STATICMESH_SAMPLE_REL)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(str(STATICMESH_SAMPLE))
+        result = parse_package(str(staticmesh_path))
 
         # 验证解析成功
         assert result.is_success or result.is_partial, f"解析失败: {result.errors}"
@@ -111,13 +103,13 @@ class TestPayloadOffsetStrategy:
         assert len(exports_with_properties) > 0, \
             "应有至少一个非跳过的 export 包含属性"
 
-    def test_property_start_uses_serial_offset(self):
+    def test_property_start_uses_serial_offset(self, sample_root: Path):
         """验证属性解析起始位置使用 SerialOffset。"""
-        skip_if_sample_missing(STATICMESH_SAMPLE)
+        staticmesh_path = asset_path(sample_root, STATICMESH_SAMPLE_REL)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(str(STATICMESH_SAMPLE))
+        result = parse_package(str(staticmesh_path))
 
         # 验证所有 exports 的属性解析从正确位置开始
         for exp in result.export_map:
@@ -131,13 +123,13 @@ class TestPayloadOffsetStrategy:
                 assert exp.serial_offset >= 0, \
                     f"Export {exp.object_name} serial_offset 应为非负数"
 
-    def test_property_end_uses_serial_size(self):
+    def test_property_end_uses_serial_size(self, sample_root: Path):
         """验证属性解析结束位置使用 SerialOffset + SerialSize。"""
-        skip_if_sample_missing(STATICMESH_SAMPLE)
+        staticmesh_path = asset_path(sample_root, STATICMESH_SAMPLE_REL)
 
         from uasset_read.parse_uasset import parse_package
 
-        result = parse_package(str(STATICMESH_SAMPLE))
+        result = parse_package(str(staticmesh_path))
 
         # 验证所有有属性的 exports
         for exp in result.export_map:
