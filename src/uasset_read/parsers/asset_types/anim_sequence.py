@@ -19,6 +19,10 @@ from uasset_read.models.ir import AnimNotifyIR, AnimSequenceIR
 class AnimSequenceHandler:
     """AnimSequence 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimSequence"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimSequence export
 

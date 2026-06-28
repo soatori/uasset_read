@@ -24,6 +24,10 @@ from uasset_read.models.ir import (
 class AnimBlueprintHandler:
     """AnimBlueprint 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimBlueprintGeneratedClass"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimBlueprintGeneratedClass export
 

@@ -3,10 +3,17 @@
 所有 handler 返回 opaque partial metadata（原始字节样本），
 不尝试解析 UE 标准 Serialize 布局。
 在模块加载时自动注册为 ClassHandler，集成到主解析管线。
+
+支持两种注册方式：
+1. 手动注册：通过 register_asset_type_handlers() 显式注册
+2. 反射注册：通过 discover_handlers() 自动扫描 asset_types/ 目录下的处理器类
 """
 from __future__ import annotations
 
+import importlib
+import inspect
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -101,12 +108,84 @@ class HandlerClassAdapter(ClassHandler):
             )
 
 
+def discover_handlers() -> Dict[str, Any]:
+    """自动发现 asset_types/ 目录下的处理器。
+
+    扫描所有非私有 Python 模块，查找具有 export_type 和 priority 属性的类。
+    这些类会被自动注册到处理器映射中。
+
+    Returns:
+        Dict[str, Any]: export_type -> handler_class 的映射
+    """
+    handlers: Dict[str, Any] = {}
+    asset_types_dir = Path(__file__).parent
+
+    for py_file in asset_types_dir.glob("*.py"):
+        if py_file.name.startswith("_") or py_file.name == "opaque_stub.py":
+            continue
+
+        module_name = py_file.stem
+        try:
+            module = importlib.import_module(f".{module_name}", package=__name__)
+
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                if hasattr(obj, "export_type") and hasattr(obj, "priority"):
+                    export_type = obj.export_type
+                    if export_type not in handlers:
+                        handlers[export_type] = obj
+                        logger.debug(
+                            "Auto-discovered handler: %s -> %s (priority=%d)",
+                            export_type, obj.__name__, obj.priority,
+                        )
+
+        except Exception as e:
+            logger.warning("Failed to load handler from %s: %s", py_file.name, e)
+
+    return handlers
+
+
+# 手动注册的处理器映射（优先级高于自动发现）
+手动注册的处理器: Dict[str, Any] = {}
+
+
+def register_handler(export_type: str, handler: Any) -> None:
+    """手动注册处理器（优先级高于自动发现）。"""
+    手动注册的处理器[export_type] = handler
+
+
+def get_handler(export_type: str) -> Optional[Any]:
+    """获取处理器，手动注册优先于自动发现。
+
+    Args:
+        export_type: UE export 类型名称
+
+    Returns:
+        处理器类或 None
+    """
+    # 手动注册优先
+    if export_type in 手动注册的处理器:
+        return 手动注册的处理器[export_type]
+
+    # 自动发现 fallback
+    _auto_discovered = discover_handlers()
+    if export_type in _auto_discovered:
+        return _auto_discovered[export_type]
+
+    return None
+
+
 # 导入专用解析函数
 from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
 from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
 from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
 from uasset_read.parsers.asset_types.texture2d import parse_texture2d
+
+# 导入处理器类（用于反射注册）
+from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
+from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
+from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
+
 __all__ = [
     "parse_static_mesh",
     "parse_skeletal_mesh",
@@ -118,8 +197,13 @@ __all__ = [
     "parse_sound_wave",
     "parse_sound_cue",
     "register_asset_type_handlers",
+    "AnimBlueprintHandler",
     "AnimSequenceHandler",
+    "AnimMontageHandler",
     "HandlerClassAdapter",
+    "discover_handlers",
+    "get_handler",
+    "register_handler",
 ]
 
 

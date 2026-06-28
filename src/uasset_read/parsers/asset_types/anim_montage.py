@@ -17,6 +17,10 @@ from uasset_read.models.ir import AnimMontageIR, AnimNotifyIR
 class AnimMontageHandler:
     """AnimMontage 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimMontage"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimMontage export
 
