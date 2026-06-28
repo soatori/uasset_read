@@ -49,6 +49,7 @@ class UMaterialInstance(UObject):
     scalar_parameters: Dict[str, float] = field(default_factory=dict)
     vector_parameters: Dict[str, Any] = field(default_factory=dict)
     texture_parameters: Dict[str, Any] = field(default_factory=dict)
+    static_switch_parameters: Dict[str, bool] = field(default_factory=dict)
     parse_status: str = "opaque"
     raw_offset: int = 0
     raw_size: int = 0
@@ -68,11 +69,16 @@ class UMaterialInstance(UObject):
             prop_value(self, "TextureParameterValues", "texture_parameters"),
             value_names=("ParameterValue", "Texture", "Value", "value"),
         )
+        # 静态开关参数
+        self.static_switch_parameters = _collect_static_switch_parameters(
+            prop_value(self, "StaticSwitchParameters", "static_switch_parameters"),
+        )
         self.raw_offset = offset
         self.raw_size = size
         self.parse_status = (
             "metadata"
-            if self.parent or self.scalar_parameters or self.vector_parameters or self.texture_parameters
+            if self.parent or self.scalar_parameters or self.vector_parameters
+            or self.texture_parameters or self.static_switch_parameters
             else "opaque"
         )
 
@@ -100,4 +106,26 @@ def _collect_parameters(source: Any, value_names: tuple[str, ...]) -> Dict[str, 
             "association": association,
             "index": index,
         }
+    return result
+
+
+def _collect_static_switch_parameters(source: Any) -> Dict[str, bool]:
+    """提取 StaticSwitchParameters（Name -> bool Value）。"""
+    if isinstance(source, dict):
+        return dict(source)
+    result: Dict[str, bool] = {}
+    for item in as_list(source):
+        data = as_mapping(item)
+        if not data:
+            continue
+        info = as_mapping(prop_value(data, "ParameterInfo", "Info"))
+        name = (
+            prop_value(info, "Name", "ParameterName", "name")
+            or prop_value(data, "ParameterName", "Name", "name")
+        )
+        if not name:
+            continue
+        value = prop_value(data, "Value", "value")
+        if isinstance(value, bool):
+            result[str(name)] = value
     return result

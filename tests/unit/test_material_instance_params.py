@@ -38,3 +38,23 @@ class TestCollectParametersEnhanced:
         }]
         result = _collect_parameters(source, value_names=("ParameterValue",))
         assert result["Roughness"]["value"] == 0.3
+
+
+class TestStaticSwitchParameters:
+    def test_static_switch_parameters_extracted(self):
+        """UMaterialInstance 应提取 StaticSwitchParameters"""
+        from uasset_read.objects.exports.material import UMaterialInstance
+
+        mock_archive = MagicMock()
+        instance = UMaterialInstance()
+        # 模拟属性标签数据
+        instance.properties = {
+            "StaticSwitchParameters": [{
+                "ParameterInfo": {"Name": "UseNormalMap"},
+                "Value": True,
+                "bOverride": True,
+            }]
+        }
+        instance.deserialize(mock_archive, 0, 100)
+        assert "UseNormalMap" in instance.static_switch_parameters
+        assert instance.static_switch_parameters["UseNormalMap"] is True
