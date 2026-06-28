@@ -170,9 +170,9 @@ class TestBuildPackageIR:
 
         ir = build_package_ir(result)
         assert len(ir.imports) == 1
-        assert ir.imports[0]["class_package"] == "/Script/Engine"
-        assert ir.imports[0]["class_name"] == "Actor"
-        assert ir.imports[0]["object_name"] == "MyActor"
+        assert ir.imports[0].class_package == "/Script/Engine"
+        assert ir.imports[0].class_name == "Actor"
+        assert ir.imports[0].object_name == "MyActor"
 
     def test_build_with_linker(self):
         result = _make_mock_parse_result()
