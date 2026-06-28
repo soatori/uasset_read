@@ -224,6 +224,8 @@ def register_asset_type_handlers() -> None:
         ("anim_bone_compression", "parse_anim_bone_compression_settings", ["AnimBoneCompressionSettings"], "AnimBoneCompressionHandler"),
         ("anim_curve_compression", "parse_anim_curve_compression_codec", ["AnimCurveCompressionCodec"], "AnimCurveCompressionHandler"),
         ("subsurface_profile", "parse_subsurface_profile", ["SubsurfaceProfile"], "SubsurfaceProfileHandler"),
+        ("foliage_type", "parse_foliage_type", ["FoliageType"], "FoliageTypeHandler"),
+        ("skeletal_mesh_lod_settings", "parse_skeletal_mesh_lod_settings", ["SkeletalMeshLODSettings"], "SkeletalMeshLODSettingsHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
