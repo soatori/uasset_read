@@ -136,11 +136,11 @@ class EX_SwitchValue(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SwitchValue:
+        num_cases = archive.read_u16()
         end_offset = archive.read_u32()
         index = archive.read_expression()
-        case_count = archive.read_u32()
         cases = []
-        for _ in range(case_count):
+        for _ in range(num_cases):
             case = FKismetSwitchCase.from_archive(archive, name_map)
             cases.append(case)
         default = archive.read_expression()
