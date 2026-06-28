@@ -162,15 +162,8 @@ class EX_InstrumentationEvent(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
         name = None
-        if evt_type not in (
-            EScriptInstrumentationType.Entry,
-            EScriptInstrumentationType.Exit,
-            EScriptInstrumentationType.PureEntry,
-            EScriptInstrumentationType.PureExit,
-        ):
-            pass  # some types have no name
-        else:
-            name = archive.xfer_string()
+        if evt_type == EScriptInstrumentationType.InlineEvent:
+            name = archive.read_fname_kismet()
             archive.skip(1)
         return cls(EventType=evt_type, EventName=name)
 
