@@ -1,4 +1,7 @@
-"""GameDirectoryProvider 单元测试 — 验证游戏目录自动扫描功能。"""
+"""GameDirectoryProvider 单元测试 — 验证游戏目录自动扫描功能。
+
+需要本地样本目录 E:/Develop/lib/Samples，CI 环境中标记为 integration 跳过。
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +10,8 @@ import pytest
 
 from uasset_read.providers import GameDirectoryProvider
 
+# 本模块所有测试需要本地样本目录，CI 环境不可用
+pytestmark = pytest.mark.integration
 
 # 测试样本根目录（使用较小的子目录避免扫描全量 20K+ 文件）
 SAMPLES_ROOT = Path("E:/Develop/lib/Samples")
