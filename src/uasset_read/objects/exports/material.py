@@ -93,5 +93,11 @@ def _collect_parameters(source: Any, value_names: tuple[str, ...]) -> Dict[str, 
         if not name:
             continue
         value = prop_value(data, *value_names)
-        result[str(name)] = value
+        association = prop_value(info, "Association", default=0)
+        index = prop_value(info, "Index", default=-1)
+        result[str(name)] = {
+            "value": value,
+            "association": association,
+            "index": index,
+        }
     return result

@@ -76,6 +76,7 @@ tests/*
 !tests/serialization/
 !tests/asset/
 !tests/cpp/
+!tests/unit/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
