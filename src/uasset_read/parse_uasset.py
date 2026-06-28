@@ -979,3 +979,209 @@ def parse_uasset_with_linker(
                 logger.warning("预加载 export %d 失败，跳过: %s", i, e)
 
     return result
+
+
+def parse_package_lazy(
+    path: str,
+    export_indices: Optional[List[int]] = None,
+    store_raw_bytes: bool = True,
+    tolerant: bool = True,
+    provider: Optional[PackageProvider] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
+    memory_policy: Optional["MemoryPolicy"] = None,
+) -> ParseResult:
+    """懒加载模式解析包 — 按需解析 export body。
+
+    始终解析：Header、NameMap、ImportMap、ExportMap（元数据）。
+    仅解析指定 export_indices 的 body；未指定时所有 export 标记为未加载。
+
+    Args:
+        path: .uasset/.umap 文件路径
+        export_indices: 需要解析 body 的 export 索引列表，None 表示全部跳过
+        store_raw_bytes: 是否将 export body 原始字节存入 lazy_load_archive
+        tolerant: 容错模式
+        provider: 可选 package provider
+        mappings_path: 类型映射文件路径
+        game: 游戏标识
+        memory_policy: 内存策略
+
+    Returns:
+        ParseResult 实例（export body 按需解析）
+    """
+    from uasset_read.link.linker import PackageLinker
+    from uasset_read.models.ir import ExportIR, ExportRawIR
+
+    result = ParseResult()
+    archive = None
+    bundle = None
+    mappings_provider = None
+
+    file_path = Path(path)
+    try:
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
+
+        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+        archive = bundle.open_archive(tolerant=tolerant)
+        result.metadata.update(_package_metadata(bundle))
+
+        # 始终解析 Header
+        result.summary = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="package_summary", field="summary",
+            reader=lambda: read_package_summary(archive),
+        )
+        if result.summary is None:
+            return result
+        result.version_container = build_version_container(result.summary)
+        archive._file_version_ue5 = result.summary.file_version_ue5
+
+        # 始终解析 NameMap
+        result.name_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="name_table", field="name_map",
+            reader=lambda: read_name_table(archive, result.summary),
+        )
+        if result.name_map is None:
+            result.name_map = []
+
+        # package_name 为空时从文件路径推导
+        if not result.summary.package_name:
+            _p = Path(path)
+            _path_str = _p.as_posix()
+            _content_idx = _path_str.lower().find("/content/")
+            if _content_idx >= 0:
+                _relative = _path_str[_content_idx + len("/content/"):]
+                if _relative.startswith("/"):
+                    _relative = _relative[1:]
+                if _relative.lower().endswith(".uasset"):
+                    _relative = _relative[:-len(".uasset")]
+                result.summary.package_name = f"/Game/{_relative}"
+            else:
+                result.summary.package_name = f"/Game/{_p.stem}"
+
+        # 始终解析 ImportMap
+        result.import_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="import_map", field="import_map",
+            reader=lambda: read_import_map(archive, result.summary, result.name_map),
+        )
+        if result.import_map is None:
+            result.import_map = []
+
+        # 始终解析 ExportMap（仅元数据，不含 body）
+        result.export_map = _run_required_stage(
+            result=result, archive=archive, path=path, tolerant=tolerant,
+            stage="export_map", field="export_map",
+            reader=lambda: read_export_map(archive, result.summary, result.name_map),
+        )
+        if result.export_map is None:
+            result.export_map = []
+
+        # 创建 linker
+        linker: Optional["PackageLinker"] = None
+        try:
+            linker = PackageLinker(
+                archive, result.summary, result.name_map,
+                result.import_map, result.export_map or [],
+                version_container=result.version_container,
+            )
+            linker.link()
+            result.linker = linker
+        except Exception as e:
+            if not tolerant:
+                raise ParseError(f"Linker creation failed: {e}") from e
+            result.errors.append(f"Linker creation failed: {e}")
+
+        # 按需解析指定 export body
+        parse_indices = set(export_indices) if export_indices else set()
+        _mappings = mappings_provider.mappings if mappings_provider else None
+
+        for idx, export in enumerate(result.export_map or []):
+            if idx in parse_indices and export.serial_size > 0:
+                try:
+                    if linker is not None:
+                        linker.preload(
+                            idx, mappings=_mappings, game=game, tolerant=tolerant,
+                        )
+                        inst = linker._export_objects[idx]
+                        export.properties = inst.serialized_properties
+                    else:
+                        export.properties = parse_properties_from_export(
+                            export, archive, result.summary, result.name_map,
+                            result.export_map or [], result.import_map,
+                            linker=linker, mappings=_mappings, game=game,
+                            tolerant=tolerant,
+                        )
+                    if not getattr(export, "parse_status", None):
+                        setattr(export, "parse_status", "success")
+                    elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
+                        pass
+                except Exception as e:
+                    if not tolerant:
+                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
+                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                    export.properties = []
+                    setattr(export, "parse_status", "failed")
+                    setattr(export, "fallback_reason", "parse_error")
+                    setattr(export, "error_message", str(e))
+
+                # 提取组件变换属性
+                if export.properties:
+                    export.transforms = extract_component_transforms(export.properties)
+
+            # 存储原始字节（可选）
+            if store_raw_bytes and export.serial_size > 0:
+                try:
+                    archive.seek(export.serial_offset)
+                    setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
+                except Exception as e:
+                    if not tolerant:
+                        logger.warning("读取 export %s 原始字节失败: %s", export.object_name, e)
+                    setattr(export, "lazy_load_archive", None)
+
+            # 设置懒加载标记（通过 setattr 兼容 ObjectExport 和 ExportIR）
+            setattr(export, "is_loaded", idx in parse_indices)
+
+        # post_load
+        if linker is not None:
+            try:
+                linker.post_load()
+            except Exception as e:
+                if not tolerant:
+                    raise ParseError(f"Linker post_load failed: {e}") from e
+                result.errors.append(f"Linker post_load failed: {e}")
+
+        result.is_success = len(result.errors) == 0
+        result.metadata["lazy_loading"] = True
+        result.metadata["loaded_exports"] = sorted(parse_indices)
+        result.metadata["total_exports"] = len(result.export_map or [])
+
+    except VersionError as e:
+        _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
+        result.errors.append(str(e))
+        result.is_success = False
+        if not tolerant:
+            raise
+    except ParseError as e:
+        _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
+        result.errors.append(str(e))
+        result.is_success = False
+        if not tolerant:
+            raise
+    except Exception as e:
+        _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
+        result.errors.append(f"Unexpected error: {str(e)}")
+        result.is_success = False
+        if not tolerant:
+            raise
+    finally:
+        if archive:
+            archive.close()
+
+    return result

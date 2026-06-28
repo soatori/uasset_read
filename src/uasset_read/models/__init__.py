@@ -59,6 +59,7 @@ from .ir import (
     PropertyIR,
     ExportIR,
     ExportRawIR,
+    ImportIR,
     LinkerSummaryIR,
     PackageIR,
 )
