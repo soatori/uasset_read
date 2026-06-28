@@ -8,6 +8,7 @@ C++ 代码生成模块。
     cpp_uproperty_mapper: CPF 标志 → UPROPERTY 标记映射
     extract_cpp_skeleton: C++ 类骨架提取
     formatters: C++ JSON IR 格式化和 .h 头文件生成
+    math_simplifier: KismetMathLibrary 函数 → 运算符简化
 
 导出符号：
     类型映射：
@@ -33,6 +34,9 @@ C++ 代码生成模块。
 
     .h 头文件生成：
         format_cpp_header: CppClassIR → .h 文本转换函数
+
+    数学函数简化：
+        MathSimplifier: KismetMathLibrary 函数 → 运算符简化器
 """
 from uasset_read.cpp_gen.cpp_type_mapper import (
     UE_TO_CPP_TYPE_MAP,
@@ -88,6 +92,9 @@ from uasset_read.cpp_gen.extract_cpp_skeleton import (
 from uasset_read.cpp_gen.sanitizer import (
     sanitize_identifier,
 )
+from uasset_read.cpp_gen.math_simplifier import (
+    MathSimplifier,
+)
 
 __all__ = [
     # 类型映射
@@ -137,4 +144,6 @@ __all__ = [
     "extract_cpp_constructor",
     # C++ 标识符清理
     "sanitize_identifier",
+    # 数学函数简化
+    "MathSimplifier",
 ]
