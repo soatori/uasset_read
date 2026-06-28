@@ -49,7 +49,7 @@ from uasset_read.constants import (
 # ============================================================================
 
 class EUEVersion(IntEnum):
-    """关键 UE 版本阈值，用于 is_at_least() 比较。
+    """关键 UE 版本阈值，用于版本比较。
 
     值对应 EUnrealEngineObjectUE5Version 枚举中的 CustomVersion 阈值
     （ObjectVersion.cs），而非 file_version_ue5 的全部可能值。
@@ -204,7 +204,6 @@ class VersionContainer:
 
     从 PackageFileSummary 构建后，提供：
     - get_version(guid) → 查找 CustomVersion 版本号
-    - is_at_least(threshold, stream) → 指定流是否达到阈值
     """
     custom_versions: List[_CustomVersionLike] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
@@ -237,19 +236,6 @@ class VersionContainer:
 
         self._guid_cache[normalized] = default
         return default
-
-    def is_at_least(self, threshold: int, stream: str = "framework") -> bool:
-        """检查指定版本流是否达到阈值。
-
-        Args:
-            threshold: 目标版本号（或 EUEVersion 枚举值）
-            stream: 版本流名称（framework/ue5_mainstream/release/ue5_release）
-        """
-        stream_def = STREAM_MAP.get(stream)
-        if stream_def is None:
-            return False
-        version = self.get_version(stream_def.guid)
-        return version >= threshold
 
     @property
     def is_ue5(self) -> bool:
