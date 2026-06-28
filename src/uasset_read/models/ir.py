@@ -193,6 +193,9 @@ class ImportIR:
     outer_index: int = 0
     is_asset: bool = False
     package_flags: int = 0
+    outer_index_resolved: str | None = None
+    package_name: str = ""
+    b_import_optional: bool = False
 
 
 @dataclass
@@ -220,6 +223,17 @@ class ExportIR:
     # 懒加载标记
     is_loaded: bool = False
     lazy_load_archive: bytes | None = None
+    # 直接访问字段（从 ExportRawIR 提升，方便渲染层直接读取）
+    template_index: int = 0
+    object_flags: int = 0
+    package_flags: int = 0
+    b_forced_export: bool = False
+    b_not_for_client: bool = False
+    b_not_for_server: bool = False
+    b_is_asset: bool = False
+    b_generate_public_hash: bool = False
+    b_not_always_loaded_for_editor_game: bool = True
+    guid: str = ""
 
 
 @dataclass
