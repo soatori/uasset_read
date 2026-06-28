@@ -8,10 +8,12 @@ from typing import Dict, Optional, Tuple
 from uasset_read.pak.constants import PakFileVersion
 
 
-# 游戏标识枚举（简化版，仅包含常用游戏）
+# 游戏标识枚举
 class EGame:
     """游戏标识枚举。"""
     UNKNOWN = 0
+
+    # 自定义魔数游戏（13 个，与 CUE4Parse FPakInfo.cs 完全对齐）
     OUTLAST_TRIALS = 1
     TORCHLIGHT_INFINITE = 2
     WILD_ASSAULT = 3
@@ -25,12 +27,40 @@ class EGame:
     PROMISE_MASCOT_AGENCY = 11
     ARENA_BREAKOUT_INFINITE = 12
     ASSAULT_FIRE_FUTURE = 13
-    # 可以继续添加更多游戏
+
+    # UE5 热门游戏（标准魔数 0x5A6F12E1）
+    BLACK_MYTH_WUKONG = 100
+    STALKER_2 = 101
+    MARVEL_RIVALS = 102
+    THE_FIRST_DESCENDANT = 103
+    INFINITY_NIKKI = 104
+    WUTHERING_WAVES = 105
+    DELTA_FORCE = 106
+    SILENT_HILL_2_REMAKE = 107
+    DUNE_AWAKENING = 108
+    BORDERLANDS_4 = 109
+    GRAY_ZONE_WARFARE = 110
+
+    # UE4 热门游戏（标准魔数 0x5A6F12E1）
+    PUBG = 200
+    FORTNITE = 201
+    APEX_LEGENDS = 202
+    KINGDOM_HEARTS_3 = 203
+    FF7_REMAKE = 204
+    GTA_TRILOGY = 205
+    HOGWARTS_LEGACY = 206
+    VALORANT = 207
+    STATE_OF_DECAY_2 = 208
+    DAYS_GONE = 209
+    TEKKEN_7 = 210
+    BORDERLANDS_3 = 211
 
 
 # 游戏到 PAK 版本的映射
+# UE 源码参考: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs GetVersion()
 GAME_PAK_VERSION_MAP: Dict[int, int] = {
-    EGame.UNKNOWN: PakFileVersion.Utf8PakDirectory,  # 默认最新版本
+    # 自定义魔数游戏
+    EGame.UNKNOWN: PakFileVersion.Utf8PakDirectory,
     EGame.OUTLAST_TRIALS: PakFileVersion.PathHashIndex,
     EGame.TORCHLIGHT_INFINITE: PakFileVersion.PathHashIndex,
     EGame.WILD_ASSAULT: PakFileVersion.PathHashIndex,
@@ -44,6 +74,31 @@ GAME_PAK_VERSION_MAP: Dict[int, int] = {
     EGame.PROMISE_MASCOT_AGENCY: PakFileVersion.PathHashIndex,
     EGame.ARENA_BREAKOUT_INFINITE: PakFileVersion.PathHashIndex,
     EGame.ASSAULT_FIRE_FUTURE: PakFileVersion.PathHashIndex,
+    # UE5 游戏（file_version_ue5 映射）
+    EGame.BLACK_MYTH_WUKONG: PakFileVersion.Utf8PakDirectory,     # UE5.0+
+    EGame.STALKER_2: PakFileVersion.Utf8PakDirectory,             # UE5.1
+    EGame.MARVEL_RIVALS: PakFileVersion.Utf8PakDirectory,         # UE5.3
+    EGame.THE_FIRST_DESCENDANT: PakFileVersion.Utf8PakDirectory,  # UE5.2
+    EGame.INFINITY_NIKKI: PakFileVersion.Utf8PakDirectory,        # UE5.4
+    EGame.WUTHERING_WAVES: PakFileVersion.Utf8PakDirectory,       # UE4.26
+    EGame.DELTA_FORCE: PakFileVersion.Utf8PakDirectory,           # UE4.27
+    EGame.SILENT_HILL_2_REMAKE: PakFileVersion.Utf8PakDirectory,  # UE5.1
+    EGame.DUNE_AWAKENING: PakFileVersion.Utf8PakDirectory,        # UE5.2
+    EGame.BORDERLANDS_4: PakFileVersion.Utf8PakDirectory,         # UE5.5
+    EGame.GRAY_ZONE_WARFARE: PakFileVersion.Utf8PakDirectory,     # UE5.5
+    # UE4 游戏
+    EGame.PUBG: PakFileVersion.FNameBasedCompressionMethod,       # UE4.16
+    EGame.FORTNITE: PakFileVersion.Utf8PakDirectory,              # UE4.20+
+    EGame.APEX_LEGENDS: PakFileVersion.FNameBasedCompressionMethod, # UE4.23
+    EGame.KINGDOM_HEARTS_3: PakFileVersion.FNameBasedCompressionMethod, # UE4.18
+    EGame.FF7_REMAKE: PakFileVersion.FNameBasedCompressionMethod, # UE4.18
+    EGame.GTA_TRILOGY: PakFileVersion.PathHashIndex,              # UE4.26
+    EGame.HOGWARTS_LEGACY: PakFileVersion.PathHashIndex,          # UE4.27
+    EGame.VALORANT: PakFileVersion.PathHashIndex,                 # UE4.27
+    EGame.STATE_OF_DECAY_2: PakFileVersion.Initial,               # UE4.13
+    EGame.DAYS_GONE: PakFileVersion.Initial,                      # UE4.11
+    EGame.TEKKEN_7: PakFileVersion.Initial,                       # UE4.14
+    EGame.BORDERLANDS_3: PakFileVersion.FNameBasedCompressionMethod, # UE4.20
 }
 
 
@@ -90,14 +145,7 @@ def get_pak_version_for_game(game: int) -> int:
 
 
 def get_game_info(game: int) -> Tuple[str, int]:
-    """获取游戏信息。
-
-    Args:
-        game: 游戏标识（EGame 枚举值）
-
-    Returns:
-        (游戏名称, PAK 版本)
-    """
+    """获取游戏信息。"""
     game_names = {
         EGame.UNKNOWN: "Unknown",
         EGame.OUTLAST_TRIALS: "Outlast Trials",
@@ -113,6 +161,29 @@ def get_game_info(game: int) -> Tuple[str, int]:
         EGame.PROMISE_MASCOT_AGENCY: "Promise Mascot Agency",
         EGame.ARENA_BREAKOUT_INFINITE: "Arena Breakout Infinite",
         EGame.ASSAULT_FIRE_FUTURE: "Assault Fire Future",
+        EGame.BLACK_MYTH_WUKONG: "Black Myth: Wukong",
+        EGame.STALKER_2: "S.T.A.L.K.E.R. 2",
+        EGame.MARVEL_RIVALS: "Marvel Rivals",
+        EGame.THE_FIRST_DESCENDANT: "The First Descendant",
+        EGame.INFINITY_NIKKI: "Infinity Nikki",
+        EGame.WUTHERING_WAVES: "Wuthering Waves",
+        EGame.DELTA_FORCE: "Delta Force",
+        EGame.SILENT_HILL_2_REMAKE: "Silent Hill 2 Remake",
+        EGame.DUNE_AWAKENING: "Dune: Awakening",
+        EGame.BORDERLANDS_4: "Borderlands 4",
+        EGame.GRAY_ZONE_WARFARE: "Gray Zone Warfare",
+        EGame.PUBG: "PUBG: Battlegrounds",
+        EGame.FORTNITE: "Fortnite",
+        EGame.APEX_LEGENDS: "Apex Legends",
+        EGame.KINGDOM_HEARTS_3: "Kingdom Hearts III",
+        EGame.FF7_REMAKE: "Final Fantasy VII Remake",
+        EGame.GTA_TRILOGY: "GTA: The Trilogy",
+        EGame.HOGWARTS_LEGACY: "Hogwarts Legacy",
+        EGame.VALORANT: "VALORANT",
+        EGame.STATE_OF_DECAY_2: "State of Decay 2",
+        EGame.DAYS_GONE: "Days Gone",
+        EGame.TEKKEN_7: "TEKKEN 7",
+        EGame.BORDERLANDS_3: "Borderlands 3",
     }
     name = game_names.get(game, "Unknown")
     version = get_pak_version_for_game(game)

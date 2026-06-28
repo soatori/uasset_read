@@ -247,7 +247,7 @@ def test_asset_metadata_deserializers_populate_structured_fields():
     }
     mat.deserialize(None, 0, 0)
     assert mat.parent == "/Game/M"
-    assert mat.scalar_parameters == {"Roughness": 0.5}
+    assert mat.scalar_parameters == {"Roughness": {"value": 0.5, "association": 0, "index": -1}}
 
     mesh = UStaticMesh()
     mesh.properties = {
