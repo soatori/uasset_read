@@ -179,24 +179,8 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         except (OSError, ValueError, IndexError):
             pass
 
-    # macOS: 使用 ps 命令获取 RSS
-    if sys.platform == "darwin":
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["ps", "-o", "rss=", "-p", str(target_pid)],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                rss_kb = int(result.stdout.strip())
-                return rss_kb / 1024
-        except (subprocess.TimeoutExpired, ValueError, FileNotFoundError):
-            pass
-
     if pid is not None and not (
-        sys.platform == "win32" or sys.platform.startswith("linux") or sys.platform == "darwin"
+        sys.platform == "win32" or sys.platform.startswith("linux")
     ):
         raise RuntimeError(
             "Per-process RSS monitoring requires psutil on this platform"
