@@ -5,6 +5,8 @@ uasset_read常量定义
 从uasset_read.py提取（per D-11）。
 """
 
+from enum import IntEnum
+
 # ============================================================================
 # Package文件标签（来自UE源码）
 # ============================================================================
@@ -467,5 +469,42 @@ EXIT_SUCCESS = 0
 EXIT_PARSE_ERROR = 1
 EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
+
+# ============================================================================
+# 游戏变体枚举（GameVariant）
+# ============================================================================
+
+class GameVariant(IntEnum):
+    """游戏变体枚举。"""
+    NONE = 0
+    FORTNITE = 1001
+    PUBG = 1002
+    APEX_LEGENDS = 1003
+    VALORANT = 1004
+
+# 版本映射表
+GAME_VARIANT_VERSIONS = {
+    GameVariant.NONE: {
+        "override_file_version": None,
+        "feature_flags": {},
+    },
+    GameVariant.FORTNITE: {
+        "override_file_version": None,
+        "feature_flags": {
+            "use_new_cooked_format": True,
+            "enable_niagara_support": True,
+        },
+    },
+    GameVariant.PUBG: {
+        "override_file_version": None,
+        "feature_flags": {
+            "enable_lod_streaming": True,
+        },
+    },
+}
+
+def get_game_variant_config(variant: GameVariant) -> dict:
+    """获取游戏变体配置。"""
+    return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
 
 
