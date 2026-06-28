@@ -214,6 +214,7 @@ def register_asset_type_handlers() -> None:
         ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
         ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
         ("data_table", "parse_data_table", ["DataTable"], "DataTableHandler"),
+        ("curve_table", "parse_curve_table", ["CurveTable"], "CurveTableHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
