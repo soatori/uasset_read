@@ -218,6 +218,7 @@ def register_asset_type_handlers() -> None:
         ("data_table", "parse_data_table", ["DataTable"], "DataTableHandler"),
         ("curve_table", "parse_curve_table", ["CurveTable"], "CurveTableHandler"),
         ("skeleton", "parse_skeleton", ["Skeleton"], "SkeletonHandler"),
+        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
