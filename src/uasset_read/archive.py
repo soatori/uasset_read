@@ -721,6 +721,45 @@ class FArchive:
                                   start, self.tell())
         return result
 
+    def read_bulk_array(self, element_size: int, element_count: int) -> bytes:
+        """读取 BulkArray 并验证大小。
+
+        用于 BulkData 系统的原始数据读取，镜像 UE 的 TBulkData 序列化。
+        读取后校验实际读取字节数与期望大小一致，防止静默数据错误。
+
+        Args:
+            element_size: 单个元素大小（字节）
+            element_count: 元素数量
+
+        Returns:
+            原始字节数据
+
+        Raises:
+            ParseError: 元素大小或数量为负数
+            ParseError: 实际读取大小与期望不匹配
+        """
+        if element_size < 0:
+            raise ParseError(
+                f"read_bulk_array: element_size {element_size} 为负数"
+            )
+        if element_count < 0:
+            raise ParseError(
+                f"read_bulk_array: element_count {element_count} 为负数"
+            )
+
+        expected_size = element_size * element_count
+        pos_before = self.tell()
+        data = self.read(expected_size)
+        pos_after = self.tell()
+
+        actual_size = pos_after - pos_before
+        if actual_size != expected_size:
+            raise ParseError(
+                f"BulkArray size mismatch: expected {expected_size}, "
+                f"serialized {actual_size}"
+            )
+        return data
+
 
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
