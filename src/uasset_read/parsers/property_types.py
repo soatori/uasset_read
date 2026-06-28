@@ -368,7 +368,9 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         return archive.read_i64()
     elif type_name == "Int16Property":
         return archive.read_i16()
-    elif type_name in ("Int8Property", "ByteProperty"):
+    elif type_name == "Int8Property":
+        return archive.read_i8()
+    elif type_name == "ByteProperty":
         return archive.read_u8()
     else:  # IntProperty (default)
         return archive.read_i32()

@@ -344,6 +344,16 @@ class FArchive:
             self._record_hex_view(key, "u8", value, start, start + 1)
         return value
 
+    def read_i8(self, key: str = "") -> int:
+        """读取 signed 8-bit integer（字节序无关）"""
+        import struct
+        start = self.tell()
+        data = self.read(1)
+        value = struct.unpack('<b', data)[0]  # 'b' = signed byte
+        if key:
+            self._record_hex_view(key, "i8", value, start, start + 1)
+        return value
+
     def read_bytes(self, n: int, key: str = "") -> bytes:
         """读取原始字节（无字节序交换）"""
         start = self.tell()
