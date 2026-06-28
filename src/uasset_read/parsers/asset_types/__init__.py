@@ -219,6 +219,11 @@ def register_asset_type_handlers() -> None:
         ("curve_table", "parse_curve_table", ["CurveTable"], "CurveTableHandler"),
         ("skeleton", "parse_skeleton", ["Skeleton"], "SkeletonHandler"),
         ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
+        ("string_table", "parse_string_table", ["StringTable"], "StringTableHandler"),
+        ("pose_asset", "parse_pose_asset", ["PoseAsset"], "PoseAssetHandler"),
+        ("anim_bone_compression", "parse_anim_bone_compression_settings", ["AnimBoneCompressionSettings"], "AnimBoneCompressionHandler"),
+        ("anim_curve_compression", "parse_anim_curve_compression_codec", ["AnimCurveCompressionCodec"], "AnimCurveCompressionHandler"),
+        ("subsurface_profile", "parse_subsurface_profile", ["SubsurfaceProfile"], "SubsurfaceProfileHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
