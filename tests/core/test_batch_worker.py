@@ -76,6 +76,10 @@ def test_monitor_terminates_worker_after_timeout() -> None:
     assert outcome.error == "timeout: 11.0s > 10.0s"
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="Per-process RSS monitoring requires psutil on macOS"
+)
 def test_spawn_worker_writes_output_atomically(tmp_path) -> None:
     asset = tmp_path / "invalid.uasset"
     output = tmp_path / "out" / "invalid.json"
