@@ -11,7 +11,11 @@ from typing import Any
 
 @dataclass
 class PackageHeaderIR:
-    """包头部精简摘要。"""
+    """包头信息，与 UE 文件格式完全对齐。
+
+    字段来源于 PackageFileSummary（UE 的 FPackageFileSummary）。
+    """
+    # 核心字段（必填）
     package_name: str
     package_class: str
     package_flags: int
@@ -19,6 +23,95 @@ class PackageHeaderIR:
     total_import_count: int
     ue_version: str
     saved_hash: bytes = field(default_factory=lambda: b'')
+
+    # 文件版本
+    file_version_ue4: int = 0
+    file_version_ue5: int = 0
+    file_version_licensee: int = 0
+
+    # 头部结构偏移
+    total_header_size: int = 0
+    custom_versions: list[dict] = field(default_factory=list)
+    folder_name: str = ""
+
+    # 名称表
+    name_count: int = 0
+    name_offset: int = 0
+
+    # 软引用路径表
+    soft_object_paths_count: int = 0
+    soft_object_paths_offset: int = 0
+
+    # 本地化
+    localization_id: str = ""
+
+    # 可收集文本数据
+    gatherable_text_data_count: int = 0
+    gatherable_text_data_offset: int = 0
+
+    # 导出/导入表
+    export_count: int = 0
+    export_offset: int = 0
+    import_count: int = 0
+    import_offset: int = 0
+
+    # 元数据
+    metadata_offset: int = 0
+
+    # 依赖表
+    depends_offset: int = 0
+
+    # 软包引用
+    soft_package_references_count: int = 0
+    soft_package_references_offset: int = 0
+
+    # 可搜索名称
+    searchable_names_offset: int = 0
+
+    # 缩略图表
+    thumbnail_table_offset: int = 0
+
+    # 导入类型层级
+    import_type_hierarchies_count: int = 0
+    import_type_hierarchies_offset: int = 0
+
+    # 持久化 GUID
+    persistent_guid: str = "00000000000000000000000000000000"
+
+    # 版本世代
+    generations: list[dict] = field(default_factory=list)
+
+    # 引擎版本
+    saved_by_engine_version: str = ""
+    compatible_with_engine_version: str = ""
+
+    # 压缩
+    compression_flags: int = 0
+
+    # 包来源
+    package_source: int = 0
+
+    # 批量数据
+    bulk_data_start_offset: int = 0
+
+    # 世界分块信息
+    world_tile_info_data_offset: int = 0
+
+    # 分块 ID
+    chunk_ids: list[int] = field(default_factory=list)
+
+    # 预加载依赖
+    preload_dependency_count: int = 0
+    preload_dependency_offset: int = 0
+
+    # 名称引用计数
+    names_referenced_from_export_data_count: int = 0
+
+    # Payload TOC
+    payload_toc_offset: int = 0
+
+    # 数据资源
+    data_resource_offset: int = 0
 
 
 @dataclass
@@ -91,6 +184,18 @@ class ExportRawIR:
 
 
 @dataclass
+class ImportIR:
+    """单个导入对象的 IR 表示，与 UE 的 FObjectImport 对齐。"""
+    index: int
+    class_package: str
+    class_name: str
+    object_name: str
+    outer_index: int = 0
+    is_asset: bool = False
+    package_flags: int = 0
+
+
+@dataclass
 class ExportIR:
     """单个导出对象的 IR 表示。"""
     index: int
@@ -112,6 +217,23 @@ class ExportIR:
     anim_montage: AnimMontageIR | None = None
     ue_export_raw: ExportRawIR | None = None
     diagnostics: dict | None = None
+    # 懒加载标记
+    is_loaded: bool = False
+    lazy_load_archive: bytes | None = None
+
+
+@dataclass
+class ExportDependencyIR:
+    """Export 依赖关系。
+
+    对应 UE 的 FExportMapEntry 中的依赖关系字段。
+    用于描述 export 之间的序列化和创建顺序依赖。
+    """
+    export_index: int
+    serialization_before_serialization: list[int]
+    create_before_serialization: list[int]
+    serialization_before_create: list[int]
+    create_before_create: list[int]
 
 
 @dataclass
@@ -220,6 +342,31 @@ class VariableIR:
     is_rep_notify: bool = False
     is_expose_on_spawn: bool = False
     is_save_game: bool = False
+
+
+@dataclass
+class SourceSiteContextIR:
+    """本地化上下文信息 — FTextSourceSiteContext。
+
+    参照 GatherableTextData.h:12
+    描述文本在源代码中的使用位置及其本地化属性。
+    """
+    key_name: str
+    site_description: str
+    is_editor_only: bool
+    is_optional: bool
+
+
+@dataclass
+class GatherableTextDataIR:
+    """可收集文本数据 — FGatherableTextData。
+
+    参照 GatherableTextData.h:49
+    包含命名空间名称、源字符串和来源上下文列表。
+    """
+    namespace_name: str
+    source_string: str
+    source_site_contexts: list[SourceSiteContextIR]
 
 
 @dataclass
