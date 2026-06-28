@@ -45,6 +45,9 @@ class ByteArchive(FArchive):
         self._mmap_warning = None
         self._logger = logging.getLogger(__name__)
         self._diagnostics: list[OffsetRangeDiagnostic] = []
+        self._hex_view_enabled: bool = False
+        self._hex_view_entries: list = []
+        self._hex_view_context: str = ""
 
     def close(self) -> None:
         if self._file:

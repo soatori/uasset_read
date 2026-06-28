@@ -30,15 +30,15 @@ class _TrackingArchive:
         """手动推进位置 n 字节。"""
         self._pos += n
 
-    def read_i32(self):
+    def read_i32(self, key=""):
         self._pos += 4
         return 0
 
-    def read_u8(self):
+    def read_u8(self, key=""):
         self._pos += 1
         return 1  # EGPD_Output
 
-    def read_bytes(self, n):
+    def read_bytes(self, n, key=""):
         self._pos += n
         return b'\x00' * n
 
@@ -48,7 +48,7 @@ class _TrackingArchive:
         self._pos += n
         return b'\x00' * n
 
-    def read_name(self, name_map):
+    def read_name(self, name_map, key=""):
         self._pos += 8  # u32 index + u32 number
         return name_map[0] if name_map else "TestPin"
 

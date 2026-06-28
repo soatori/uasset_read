@@ -187,11 +187,11 @@ def read_ed_graph_pin_type(
     release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
 
     # PinCategory / PinSubCategory (UE5 始终使用 FName 格式)
-    pin_type.pin_category = archive.read_name(name_map)
-    pin_type.pin_subcategory = archive.read_name(name_map)
+    pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")
+    pin_type.pin_subcategory = archive.read_name(name_map, "PinType.PinSubCategory")
 
     # PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_subcategory_object = archive.read_i32()
+    pin_type.pin_subcategory_object = archive.read_i32("PinType.PinSubCategoryObject")
     if pin_type.pin_subcategory_object:
         pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
         try:
@@ -210,29 +210,29 @@ def read_ed_graph_pin_type(
             pin_type.pin_subcategory_object_name = None
 
     # ContainerType (UE5 始终使用现代 uint8 格式)
-    pin_type.container_type = archive.read_u8()
+    pin_type.container_type = archive.read_u8("PinType.ContainerType")
     if pin_type.container_type == 3:  # Map
-        archive.read_name(name_map)  # TerminalCategory
-        archive.read_name(name_map)  # TerminalSubCategory
-        archive.read_i32()           # TerminalSubCategoryObject
+        archive.read_name(name_map, "PinType.TerminalCategory")
+        archive.read_name(name_map, "PinType.TerminalSubCategory")
+        archive.read_i32("PinType.TerminalSubCategoryObject")
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_reference = archive.read_bool()
-    pin_type.is_weak_pointer = archive.read_bool()
+    pin_type.is_reference = archive.read_bool("PinType.bIsReference")
+    pin_type.is_weak_pointer = archive.read_bool("PinType.bIsWeakPointer")
 
     # FSimpleMemberReference (UE5 始终存在)
-    archive.read_i32()       # MemberParent
-    archive.read_name(name_map)  # MemberName
-    archive.read_bytes(16)   # MemberGuid
+    archive.read_i32("PinType.MemberParent")
+    archive.read_name(name_map, "PinType.MemberName")
+    archive.read_bytes(16, "PinType.MemberGuid")
 
     # bIsConst (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_const = archive.read_bool()
+    pin_type.is_const = archive.read_bool("PinType.bIsConst")
 
     # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_uobject_wrapper = archive.read_bool()
+    pin_type.is_uobject_wrapper = archive.read_bool("PinType.bIsUObjectWrapper")
 
     # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool("PinType.bSerializeAsSinglePrecisionFloat")
 
     return pin_type
 
@@ -548,11 +548,11 @@ def read_pin_reference(
     linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
     """读取单个 Pin 引用（FBlueprintEditorUtils::FPinReference）。"""
-    b_null_ptr = archive.read_i32()
+    b_null_ptr = archive.read_i32("PinRef.BNullPtr")
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
-    owning_node_index = archive.read_i32()
+    owning_node_index = archive.read_i32("PinRef.OwningNode")
     pin_guid_raw = _read_guid(archive)
 
     # 归一化为 32 字符大写 hex（移除 dash），与 pin_id 格式一致
@@ -600,7 +600,7 @@ def read_pin_array(
 
     恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
     """
-    array_count = archive.read_i32()
+    array_count = archive.read_i32("PinArray.Count")
 
     if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
         # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
@@ -929,20 +929,20 @@ def read_ue_graph_pin(
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
     _field_start = archive.tell()
     if header_owning_node is not None:
-        archive.read_i32()  # Discard internal duplicate
+        archive.read_i32("Pin.OwningNode.Duplicate")  # Discard internal duplicate
         owning_node_index = header_owning_node
     else:
-        owning_node_index = archive.read_i32()
+        owning_node_index = archive.read_i32("Pin.OwningNode")
     if trace_mode:
         _trace_field("OwningNode", _field_start, archive.tell(), str(owning_node_index))
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
     _field_start = archive.tell()
     if header_pin_id is not None:
-        archive.read_bytes(16)  # Discard internal duplicate
+        archive.read_bytes(16, "Pin.PinId.Duplicate")  # Discard internal duplicate
         pin_id = header_pin_id
     else:
-        pin_id_bytes = archive.read_bytes(16)
+        pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
         pin_id = pin_id_bytes.hex().upper()
     if trace_mode:
         _trace_field("PinId", _field_start, archive.tell(), pin_id[:16]+"...")
@@ -988,7 +988,7 @@ def read_ue_graph_pin(
 
     # 5. SourceIndex (UE5 始终存在)
     _field_start = archive.tell()
-    source_index = archive.read_i32()
+    source_index = archive.read_i32("Pin.SourceIndex")
     if trace_mode:
         _trace_field("SourceIndex", _field_start, archive.tell(), str(source_index))
 
@@ -1023,7 +1023,7 @@ def read_ue_graph_pin(
 
     # 7. Direction — u8 for both UE4 and UE5
     _field_start = archive.tell()
-    direction = archive.read_u8()
+    direction = archive.read_u8("Pin.Direction")
     if trace_mode:
         _trace_field("Direction", _field_start, archive.tell(), str(direction))
 
@@ -1072,7 +1072,7 @@ def read_ue_graph_pin(
 
     # 11. DefaultObject (FPackageIndex)
     _field_start = archive.tell()
-    default_object = archive.read_i32()
+    default_object = archive.read_i32("Pin.DefaultObject")
     if trace_mode:
         _trace_field("DefaultObject", _field_start, archive.tell(), str(default_object))
 
@@ -1303,18 +1303,18 @@ def read_fmember_reference(
     linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
     """读取 FMemberReference（MemberReference.h L74-95）。"""
-    member_parent_index = archive.read_i32()
+    member_parent_index = archive.read_i32("MemberRef.MemberParent")
     member_parent: Optional[str] = None
     if member_parent_index != 0:
         member_parent = _rcn(
             PackageIndex(member_parent_index), import_map, export_map, linker
         )
 
-    member_scope = archive.read_fstring()
-    member_name = archive.read_name(name_map)
+    member_scope = archive.read_fstring("MemberRef.MemberScope")
+    member_name = archive.read_name(name_map, "MemberRef.MemberName")
     member_guid = _read_guid(archive, uppercase=False)
-    b_self_context = archive.read_bool()
-    _b_was_deprecated = archive.read_bool()
+    b_self_context = archive.read_bool("MemberRef.bSelfContext")
+    _b_was_deprecated = archive.read_bool("MemberRef.bWasDeprecated")
 
     return FMemberReference(
         member_parent=member_parent,
@@ -1347,7 +1347,7 @@ def read_k2node_call_function(
     if function_reference is None:
         function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
-    b_defaults_to_pure = archive.read_bool()
+    b_defaults_to_pure = archive.read_bool("K2Node_CallFunction.bDefaultsToPure")
     return {
         "function_reference": function_reference,
         "b_defaults_to_pure": b_defaults_to_pure,
