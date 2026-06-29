@@ -456,6 +456,10 @@ CPF_NativeAccessSpecifierPrivate = 0x0040000000000000
 CPF_SkipSerialization = 0x0080000000000000
 CPF_TObjectPtr = 0x0100000000000000
 CPF_AllowSelfReference = 0x1000000000000000
+CPF_ExperimentalOverridableLogic = 0x0200000000000000
+CPF_ExperimentalAlwaysOverriden = 0x0400000000000000
+CPF_ExperimentalNeverOverriden = 0x0800000000000000
+CPF_ForcePostConstructLink = 0x2000000000000000
 
 # ============================================================================
 # CLI退出代码

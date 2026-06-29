@@ -17,6 +17,8 @@ from uasset_read.constants import (
     CPF_UObjectWrapper, CPF_HasGetValueTypeHash, CPF_NativeAccessSpecifierPublic,
     CPF_NativeAccessSpecifierProtected, CPF_NativeAccessSpecifierPrivate,
     CPF_SkipSerialization, CPF_TObjectPtr, CPF_AllowSelfReference,
+    CPF_ExperimentalOverridableLogic, CPF_ExperimentalAlwaysOverriden,
+    CPF_ExperimentalNeverOverriden, CPF_ForcePostConstructLink,
 )
 
 
@@ -184,6 +186,18 @@ class TestCPFConstantsAlignment:
 
     def test_cpf_allow_self_reference(self):
         assert CPF_AllowSelfReference == 0x1000000000000000
+
+    def test_cpf_experimental_overridable_logic(self):
+        assert CPF_ExperimentalOverridableLogic == 0x0200000000000000
+
+    def test_cpf_experimental_always_overriden(self):
+        assert CPF_ExperimentalAlwaysOverriden == 0x0400000000000000
+
+    def test_cpf_experimental_never_overriden(self):
+        assert CPF_ExperimentalNeverOverriden == 0x0800000000000000
+
+    def test_cpf_force_post_construct_link(self):
+        assert CPF_ForcePostConstructLink == 0x2000000000000000
 
     def test_no_nonexistent_flags(self):
         """验证不存在的标志位已被移除。"""
