@@ -36,13 +36,20 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
-    # UI 相关属性（编辑器布局，不影响运行时）
-    _UI_PROPERTY_NAMES = frozenset({
+    # 编辑器布局属性（不影响运行时和 C++ 翻译）
+    _EDITOR_PROPERTY_NAMES = frozenset({
+        # 节点布局
         "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
-        "NodeGuid", "CommentColor", "FontSize",
+        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
+        # 注释相关
+        "CommentColor", "FontSize",
         "bCommentBubbleVisible_InDetailsPanel",
         "bCommentBubblePinned", "bCommentBubbleVisible",
-        "NodeComment", "bIsCommentBubbleVisible",
+        # 图相关
+        "Schema", "GraphGuid", "ErrorType",
+        "AdvancedPinDisplay", "MoveMode",
+        # 事件/函数引用（已提取到其他字段）
+        "EventReference", "bOverrideFunction",
     })
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
@@ -121,13 +128,13 @@ class JSONRenderer(IRenderer):
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
-        # standard 模式下过滤 UI 属性
+        # standard 模式下过滤编辑器布局属性
         if is_debug:
             properties = [self._property_to_dict(p) for p in export.properties]
         else:
             properties = [
                 self._property_to_dict(p) for p in export.properties
-                if p.name not in self._UI_PROPERTY_NAMES
+                if p.name not in self._EDITOR_PROPERTY_NAMES
             ]
 
         # graphs: standard 模式下只保留有内容的
