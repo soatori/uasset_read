@@ -510,7 +510,7 @@ class TestJSONRendererDiagnostics:
 
     def _render(self, ir: PackageIR) -> dict:
         renderer = JSONRenderer()
-        options = RenderOptions()
+        options = RenderOptions(output_level="debug")
         raw = renderer.render(ir, options)
         return json.loads(raw)
 

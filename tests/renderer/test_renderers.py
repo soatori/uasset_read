@@ -642,7 +642,7 @@ class TestJSONExportExcludesRawFields:
         ir.status = "success"
 
         renderer = JSONRenderer()
-        options = RenderOptions()
+        options = RenderOptions(output_level="debug")
         result = renderer.render(ir, options)
         data = json.loads(result)
 
