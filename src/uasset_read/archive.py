@@ -220,6 +220,10 @@ class FArchive:
             return None
         return self.read(size)
 
+    def __repr__(self) -> str:
+        """返回可读的 repr，包含路径和文件大小。"""
+        return f"<FArchive path='{self._path}' size={self._file_size}>"
+
     def close(self) -> None:
         """关闭文件和 mmap"""
         if self._mmap:
@@ -846,6 +850,10 @@ class ByteArchive(FArchive):
         """定位到指定位置（带边界验证）。"""
         self.validate_offset(pos, "seek")
         self._pos = pos
+
+    def __repr__(self) -> str:
+        """返回可读的 repr，包含缓冲区大小。"""
+        return f"<ByteArchive size={self._file_size}>"
 
     def close(self) -> None:
         """释放缓冲区引用。"""
