@@ -250,7 +250,7 @@ class FIoStoreTocHeader:
     partition_count: int  # uint32
     container_id: int  # uint64 (FIoContainerId)
     encryption_key_guid: bytes  # 16 bytes (FGuid)
-    container_flags: int  # uint32 (EIoContainerFlags)
+    container_flags: int  # uint8 (EIoContainerFlags)
     toc_chunk_perfect_hash_seeds_count: int  # uint32
     partition_size: int  # uint64
     toc_chunks_without_perfect_hash_count: int  # uint32
@@ -270,21 +270,32 @@ class FIoStoreTocHeader:
         if toc_magic != TOC_MAGIC:
             raise ValueError(f"无效的 IoStore TOC 魔数: {toc_magic!r}")
 
-        # 解析头部字段（小端序）
+        # 解析头部字段（小端序）offset 16-59
         (version, reserved0, reserved1,
          toc_header_size, toc_entry_count,
          toc_compressed_block_entry_count, toc_compressed_block_entry_size,
          compression_method_name_count, compression_method_name_length,
          compression_block_size, directory_index_size,
-         partition_count) = struct.unpack_from('<BBHIIIIIIIIII', header_data, 16)
+         partition_count, reserved2) = struct.unpack_from('<BBHIIIIIIIIII', header_data, 16)
 
-        # container_id (8 bytes) + encryption_key_guid (16 bytes) + container_flags (4 bytes)
-        container_id = struct.unpack_from('<Q', header_data, 64)[0]
-        encryption_key_guid = header_data[72:88]
-        container_flags = struct.unpack_from('<I', header_data, 88)[0]
+        # container_id (uint64) at offset 56
+        container_id = struct.unpack_from('<Q', header_data, 56)[0]
 
-        # toc_chunk_perfect_hash_seeds_count (4 bytes) + partition_size (8 bytes)
-        toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 92)[0]
+        # encryption_key_guid (16 bytes) at offset 64
+        encryption_key_guid = header_data[64:80]
+
+        # container_flags (uint8) at offset 80
+        container_flags = header_data[80]
+
+        # reserved3(1 byte at 81) + reserved4(2 bytes at 82) + reserved5(4 bytes at 84)
+        # 这些是保留字段，跳过
+
+        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 88
+        toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 88)[0]
+
+        # reserved6 (uint32) at offset 92 — 跳过
+
+        # partition_size (uint64) at offset 96
         partition_size = struct.unpack_from('<Q', header_data, 96)[0]
 
         # toc_chunks_without_perfect_hash_count (4 bytes) + reserved7 (4 bytes)
