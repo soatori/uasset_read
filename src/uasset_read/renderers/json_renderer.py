@@ -52,6 +52,17 @@ class JSONRenderer(IRenderer):
         "EventReference", "bOverrideFunction",
     })
 
+    # 编辑器内部变量（不影响运行时和 C++ 翻译）
+    _EDITOR_VARIABLE_NAMES = frozenset({
+        "UbergraphPages",  # 图页面索引列表
+        "FunctionGraphs",  # 函数图索引列表
+        "CategorySorting",  # 编辑器分类排序
+        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
+        "LastEditedDocuments",  # 最后编辑文档
+        "ThumbnailInfo",  # 缩略图信息
+        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+    })
+
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         all_exports = ir.exports
         is_debug = options.output_level == "debug"
@@ -90,7 +101,16 @@ class JSONRenderer(IRenderer):
                 if chains_with_content:
                     data["execution_chains"] = chains_with_content
         if ir.variables:
-            data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
+            # standard 模式下过滤编辑器内部变量
+            if is_debug:
+                data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
+            else:
+                variables = [
+                    self._variable_to_dict(v) for v in ir.variables
+                    if v.name not in self._EDITOR_VARIABLE_NAMES
+                ]
+                if variables:
+                    data["variables"] = variables
         if ir.resolved_parent_assets:
             data["resolved_parent_assets"] = ir.resolved_parent_assets
         if ir.inherited_blueprint_graphs:
@@ -147,9 +167,12 @@ class JSONRenderer(IRenderer):
             "object_class": export.object_class,
             "serial_size": export.serial_size,
             "parent_class": export.parent_class,
-            "properties": properties,
-            "graphs": graphs,
         }
+        # standard 模式下只添加非空字段
+        if properties or is_debug:
+            d["properties"] = properties
+        if graphs or is_debug:
+            d["graphs"] = graphs
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
