@@ -150,7 +150,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
         "is_edit_anywhere": bool(flags & CPF_Edit),
-        "is_edit_instance_only": bool(flags & CPF_Edit),
+        "is_edit_instance_only": bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst),
         "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
@@ -166,9 +166,10 @@ def _flags_to_labels(flags: int) -> List[str]:
     """将 CPF_* 位标志转换为可读标签列表。"""
     labels = []
     if flags & CPF_Edit:
-        labels.append("EditAnywhere")
-    if flags & CPF_EditConst:
-        labels.append("EditConst")
+        if flags & CPF_EditConst:
+            labels.append("EditConst")
+        else:
+            labels.append("EditAnywhere")
     if flags & CPF_BlueprintVisible:
         labels.append("BlueprintReadWrite")
     if flags & CPF_BlueprintReadOnly:
@@ -398,6 +399,18 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         var.friendly_name = str(fields.get("FriendlyName") or fields.get("friendly_name") or "")
         var.rep_notify_func = str(fields.get("RepNotifyFunc") or fields.get("rep_notify_func") or "")
         var.replication_condition = _replication_condition_value(rep_condition)
+
+        # 组件变量检测（与 read_blueprint_variable 逻辑对齐）
+        type_str = ""
+        if var.var_type:
+            if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
+                type_str = var.var_type.pin_subcategory
+            elif var.var_type.pin_category:
+                type_str = var.var_type.pin_category
+        is_component_by_name = isinstance(type_str, str) and "Component" in type_str
+        is_component_by_flag = (property_flags & CPF_InstancedReference) != 0
+        var.is_component = is_component_by_name or is_component_by_flag
+
         variables.append(var)
     return variables
 
