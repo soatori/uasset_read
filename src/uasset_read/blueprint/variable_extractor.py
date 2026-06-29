@@ -20,9 +20,8 @@ from uasset_read.constants import (
     CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
     CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
-    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn, CPF_Edit,
-    CPF_BlueprintVisible, CPF_DuplicateTransient,
-    CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
+    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn,
+    CPF_DuplicateTransient, CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
     CPF_NonPIEDuplicateTransient,
 )
 
