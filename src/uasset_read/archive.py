@@ -851,6 +851,51 @@ class ByteArchive(FArchive):
         self.validate_offset(pos, "seek")
         self._pos = pos
 
+    def seek_safe(self, pos: int, context: str = "") -> bool:
+        """安全定位 — 越界时记录诊断并返回 False。"""
+        current = self._pos
+        if pos < 0 or pos > self._file_size:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="seek",
+                current_pos=current,
+                target_offset=pos,
+                file_size=self._file_size,
+                source=context or "seek_safe",
+                error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
+            ))
+            return False
+        self._pos = pos
+        return True
+
+    def read_safe(self, size: int, context: str = "") -> Optional[bytes]:
+        """安全读取 — 越界时记录诊断并返回 None。"""
+        current = self._pos
+        remaining = self._file_size - current
+        if size < 0:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 大小 {size} 为负数",
+            ))
+            return None
+        if size > remaining:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
+            ))
+            return None
+        return self.read(size)
+
     def __repr__(self) -> str:
         """返回可读的 repr，包含缓冲区大小。"""
         return f"<ByteArchive size={self._file_size}>"
