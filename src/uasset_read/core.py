@@ -18,7 +18,6 @@ from uasset_read.exceptions import ParseError as ParseError  # Re-export for bac
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
-    from uasset_read.models.ir import PackageIR
 
 
 @dataclass
