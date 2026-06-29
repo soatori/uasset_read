@@ -76,6 +76,10 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
                 f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}"
             )
         data = stream.read(utf16_len)
+        if len(data) < utf16_len:
+            raise ParseError(
+                f"UTF-16 string truncated: 读取 {len(data)} < 预期 {utf16_len} bytes"
+            )
         stream.read(2)  # null terminator (2 bytes for UTF-16)
         return data.decode('utf-16-le', errors='replace').rstrip('\x00')
     else:
@@ -85,6 +89,10 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
                 f"ANSI string length {length} exceeds maximum {MAX_FSTRING_LENGTH}"
             )
         data = stream.read(length)
+        if len(data) < length:
+            raise ParseError(
+                f"ANSI string truncated: 读取 {len(data)} < 预期 {length} bytes"
+            )
         stream.read(1)  # null terminator
         return data.decode('ascii', errors='replace').rstrip('\x00')
 
@@ -297,7 +305,11 @@ class FPakEntry:
 
         # 压缩块大小索引 (6 bits)
         # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
-        if self.compression_block_size > 0 and self.compression_block_size % 2048 == 0:
+        # 注意: compression_block_size=0 时写入索引 0（不写流数据），
+        #       避免编码器写 0x3F 但省略 block_size 数据导致解码器越界读取。
+        if self.compression_block_size == 0:
+            bitfield |= 0  # 索引 0 = block_size=0，无需流数据
+        elif self.compression_block_size % 2048 == 0:
             block_size_index = self.compression_block_size >> 11
             if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"
                 bitfield |= block_size_index
@@ -309,6 +321,7 @@ class FPakEntry:
         result.extend(struct.pack('<I', bitfield))
 
         # UE 顺序: CompressionBlockSize 在 Offset 之前
+        # 仅当 bitfield 索引为 0x3F 且 block_size > 0 时写入流数据
         if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
             result.extend(struct.pack('<I', self.compression_block_size))
 

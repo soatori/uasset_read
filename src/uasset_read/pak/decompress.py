@@ -132,6 +132,12 @@ def decompress_entry(
         return raw[:entry.uncompressed_size]
 
     # Compressed: process block by block
+    if not entry.compression_blocks:
+        raise ParseError(
+            f"压缩条目缺少 compression_blocks 数据 "
+            f"(compression_block_count={entry.compression_block_count})"
+        )
+
     alignment = 16 if entry.is_encrypted else 1
     result = bytearray()
 
