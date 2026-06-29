@@ -20,10 +20,10 @@ from uasset_read.constants import (
     CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
     CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
-    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn, CPF_EditAnywhere,
-    CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_DuplicateTransient,
-    CPF_NoClear, CPF_ReferenceOnly, CPF_BlueprintCallable, CPF_Interp,
-    CPF_Replicated, CPF_NonPIEDuplicateTransient,
+    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn, CPF_Edit,
+    CPF_BlueprintVisible, CPF_DuplicateTransient,
+    CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
+    CPF_NonPIEDuplicateTransient,
 )
 
 # UE 属性类型名 → 标准化 pin_category 映射
@@ -147,12 +147,12 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
 def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
-        "is_edit_anywhere": bool(flags & CPF_EditAnywhere),
-        "is_edit_instance_only": bool(flags & CPF_EditInstanceOnly),
-        "is_blueprint_readable": bool(flags & CPF_BlueprintReadWrite),
+        "is_edit_anywhere": bool(flags & CPF_Edit),
+        "is_edit_instance_only": bool(flags & CPF_Edit),
+        "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
-        "is_replicated": bool(flags & CPF_Replicated),
+        "is_replicated": bool(flags & CPF_Net),
         "is_transient": bool(flags & CPF_Transient),
         "is_blueprint_assignable": bool(flags & CPF_BlueprintAssignable),
         "is_rep_notify": bool(flags & CPF_RepNotify),
@@ -163,11 +163,11 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
 def _flags_to_labels(flags: int) -> List[str]:
     """将 CPF_* 位标志转换为可读标签列表。"""
     labels = []
-    if flags & CPF_EditAnywhere:
+    if flags & CPF_Edit:
         labels.append("EditAnywhere")
     if flags & CPF_EditConst:
         labels.append("EditConst")
-    if flags & CPF_BlueprintReadWrite:
+    if flags & CPF_BlueprintVisible:
         labels.append("BlueprintReadWrite")
     if flags & CPF_BlueprintReadOnly:
         labels.append("BlueprintReadOnly")
@@ -983,7 +983,6 @@ def parse_property_flags_to_labels(flags: int) -> List[str]:
         labels.append("Interp")
     if flags & CPF_Net:
         labels.append("Net")
-    if flags & CPF_Replicated:
         labels.append("Replicated")
 
     return labels
@@ -1045,23 +1044,23 @@ def read_blueprint_variable(
 
     # 解析属性标志为布尔字段
     flags = var.property_flags
-    var.is_edit_anywhere = bool(flags & CPF_EditAnywhere)
-    var.is_edit_instance_only = bool(flags & CPF_EditInstanceOnly)
+    var.is_edit_anywhere = bool(flags & CPF_Edit)
+    var.is_edit_instance_only = bool(flags & CPF_Edit)
     var.is_blueprint_read_only = bool(flags & CPF_BlueprintReadOnly)
-    var.is_blueprint_readable = bool(flags & CPF_BlueprintReadWrite)
-    var.is_blueprint_writable = bool(flags & CPF_BlueprintReadWrite) and not bool(flags & CPF_BlueprintReadOnly)
+    var.is_blueprint_readable = bool(flags & CPF_BlueprintVisible)
+    var.is_blueprint_writable = bool(flags & CPF_BlueprintVisible) and not bool(flags & CPF_BlueprintReadOnly)
     var.is_transient = bool(flags & CPF_Transient)
     var.is_duplicate_transient = bool(flags & CPF_DuplicateTransient)
     var.is_save_game = bool(flags & CPF_SaveGame)
     var.is_no_clear = bool(flags & CPF_NoClear)
-    var.is_reference_only = bool(flags & CPF_ReferenceOnly)
+    var.is_reference_only = False
     var.is_blueprint_assignable = bool(flags & CPF_BlueprintAssignable)
     var.is_blueprint_callable = bool(flags & CPF_BlueprintCallable)
     var.is_rep_notify = bool(flags & CPF_RepNotify)
     var.is_interp = bool(flags & CPF_Interp)
     var.is_expose_on_spawn = bool(flags & CPF_ExposeOnSpawn)
     var.is_net = bool(flags & CPF_Net)
-    var.is_replicated = bool(flags & CPF_Replicated)
+    var.is_replicated = bool(flags & CPF_Net)
     var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
 
     # 提取元数据字段
