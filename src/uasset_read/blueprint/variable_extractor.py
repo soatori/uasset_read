@@ -88,7 +88,7 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "class": "UClass*",
     "widget": "UWidget*",
     # 特殊类型
-    " wildcard": "Wildcard",
+    "wildcard": "Wildcard",
     "exec": "void",
     "delegate": "void",
     "multicastdelegate": "void",
@@ -104,22 +104,24 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     Returns:
         C++ 类型字符串
     """
+    normalized = pin_category.strip()
+
     # 精确匹配
-    if pin_category in _PIN_CATEGORY_TO_CPP_TYPE:
-        return _PIN_CATEGORY_TO_CPP_TYPE[pin_category]
+    if normalized in _PIN_CATEGORY_TO_CPP_TYPE:
+        return _PIN_CATEGORY_TO_CPP_TYPE[normalized]
 
     # 大小写不敏感匹配
-    lower_category = pin_category.lower()
+    lower_category = normalized.lower()
     for key, value in _PIN_CATEGORY_TO_CPP_TYPE.items():
         if key.lower() == lower_category:
             return value
 
     # 如果是对象类型路径（以 /Script/ 开头），直接返回
-    if pin_category.startswith("/Script/"):
-        return pin_category
+    if normalized.startswith("/Script/"):
+        return normalized
 
     # 默认返回原始类型名
-    return pin_category
+    return normalized
 
 
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
