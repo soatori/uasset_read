@@ -497,6 +497,17 @@ class PackageLinker:
                     # Null dependency, skip
                     continue
 
+                # 类型校验：仅接受 int 类型的 FPackageIndex 值
+                if not isinstance(raw_dep, int):
+                    self._diagnostics.append(OffsetRangeDiagnostic(
+                        module="linker",
+                        field="DependsMap",
+                        export_index=exp_idx,
+                        source="_build_dependency_graph",
+                        error=f"Export #{exp_idx} dependency 值类型异常: {type(raw_dep).__name__}({raw_dep})",
+                    ))
+                    continue
+
                 # Convert FPackageIndex to UObjectInstance
                 pkg_idx = PackageIndex(raw_dep)
                 resolved = self.resolve_package_index(pkg_idx)
