@@ -63,6 +63,11 @@ class JSONRenderer(IRenderer):
         "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
     })
 
+    # 编辑器内部节点类（不影响运行时，UE 编译时移除）
+    _EDITOR_NODE_CLASSES = frozenset({
+        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+    })
+
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         all_exports = ir.exports
         is_debug = options.output_level == "debug"
@@ -84,7 +89,11 @@ class JSONRenderer(IRenderer):
                 "ue_version": ir.header.ue_version,
                 "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
             },
-            "exports": [self._export_to_dict(e, options, is_debug) for e in all_exports],
+            "exports": [
+                self._export_to_dict(e, options, is_debug)
+                for e in all_exports
+                if is_debug or e.object_class not in self._EDITOR_NODE_CLASSES
+            ],
         }
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)

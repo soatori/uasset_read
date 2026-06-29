@@ -72,3 +72,25 @@ class TestOutputLevelRendering:
         debug = parse_single(str(SAMPLE_BP), format="json", output_level="debug")
 
         assert len(standard) < len(debug)
+
+    def test_standard_filters_knot_nodes(self):
+        """standard 模式应该过滤 K2Node_Knot 导出。"""
+        from uasset_read.core import parse_single
+        result = parse_single(str(SAMPLE_BP), format="json", output_level="standard")
+        data = json.loads(result)
+
+        for export in data.get("exports", []):
+            assert export.get("object_class") != "K2Node_Knot", \
+                f"K2Node_Knot should be filtered in standard: {export.get('object_name')}"
+
+    def test_debug_preserves_knot_nodes(self):
+        """debug 模式应该保留 K2Node_Knot 导出。"""
+        from uasset_read.core import parse_single
+        result = parse_single(str(SAMPLE_BP), format="json", output_level="debug")
+        data = json.loads(result)
+
+        has_knot = any(
+            export.get("object_class") == "K2Node_Knot"
+            for export in data.get("exports", [])
+        )
+        assert has_knot
