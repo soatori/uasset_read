@@ -44,6 +44,7 @@ def parse_single(
     force_full_parse: bool = False,
     hex_view: bool = False,
     memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
 ) -> str:
     """解析单个 .uasset/.umap，返回格式化字符串。
 
@@ -65,6 +66,7 @@ def parse_single(
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
         hex_view: 启用 HexView 字节偏移追踪
         memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
 
     Returns:
         格式化后的字符串
@@ -118,6 +120,7 @@ def parse_single(
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
         linker_result=None,
+        output_level=output_level,
     )
     return renderer.render(ir, options)
 

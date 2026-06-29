@@ -36,6 +36,7 @@ class RenderOptions:
     include_schema: bool = False
     include_function_graphs: bool = False
     linker_result: Any = None  # LinkerParseResult，供需要 linker 数据的格式使用
+    output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
 
 
 class IRenderer(ABC):

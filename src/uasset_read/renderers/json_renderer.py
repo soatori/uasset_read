@@ -36,8 +36,18 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
+    # UI 相关属性（编辑器布局，不影响运行时）
+    _UI_PROPERTY_NAMES = frozenset({
+        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
+        "NodeGuid", "CommentColor", "FontSize",
+        "bCommentBubbleVisible_InDetailsPanel",
+        "bCommentBubblePinned", "bCommentBubbleVisible",
+        "NodeComment", "bIsCommentBubbleVisible",
+    })
+
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         all_exports = ir.exports
+        is_debug = options.output_level == "debug"
 
         data = {
             "status": {
@@ -56,17 +66,22 @@ class JSONRenderer(IRenderer):
                 "ue_version": ir.header.ue_version,
                 "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
             },
-            # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
-            # imports 已移除 — C++ 翻译不需要原始导入索引
-            "exports": [self._export_to_dict(e, options) for e in all_exports],
+            "exports": [self._export_to_dict(e, options, is_debug) for e in all_exports],
         }
-        # linker 已移除 — linker 元数据对 C++ 翻译无用
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:
             data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
+        # execution_chains: 过滤空的 chains
         if ir.execution_chains:
-            data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
+            chains = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
+            if is_debug:
+                data["execution_chains"] = chains
+            else:
+                # standard 模式下只保留有内容的 chains
+                chains_with_content = [c for c in chains if c.get("chain")]
+                if chains_with_content:
+                    data["execution_chains"] = chains_with_content
         if ir.variables:
             data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
         if ir.resolved_parent_assets:
@@ -77,8 +92,22 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        # diagnostics: 去重
         if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
+            if is_debug:
+                data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
+            else:
+                # standard 模式下去重
+                seen = set()
+                unique_diags = []
+                for d in ir.diagnostics:
+                    d_dict = d.to_dict()
+                    key = (d_dict.get("field"), d_dict.get("error"))
+                    if key not in seen:
+                        seen.add(key)
+                        unique_diags.append(d_dict)
+                if unique_diags:
+                    data["diagnostics"] = unique_diags
         if ir.asset_registry_data:
             data["asset_registry_data"] = ir.asset_registry_data
         if ir.anim_blueprint:
@@ -91,14 +120,28 @@ class JSONRenderer(IRenderer):
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
-    def _export_to_dict(self, export, options: RenderOptions) -> dict[str, Any]:
+    def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
+        # standard 模式下过滤 UI 属性
+        if is_debug:
+            properties = [self._property_to_dict(p) for p in export.properties]
+        else:
+            properties = [
+                self._property_to_dict(p) for p in export.properties
+                if p.name not in self._UI_PROPERTY_NAMES
+            ]
+
+        # graphs: standard 模式下只保留有内容的
+        graphs = [self._graph_to_dict(g, options) for g in export.graphs]
+        if not is_debug:
+            graphs = [g for g in graphs if g.get("nodes")]
+
         d = {
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
             "parent_class": export.parent_class,
-            "properties": [self._property_to_dict(p) for p in export.properties],
-            "graphs": [self._graph_to_dict(g, options) for g in export.graphs],
+            "properties": properties,
+            "graphs": graphs,
         }
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
