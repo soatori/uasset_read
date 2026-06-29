@@ -1,6 +1,7 @@
 """kismet 模块缺陷测试。"""
 import struct
 import pytest
+from unittest.mock import patch
 
 
 class TestKismetQuality:
@@ -399,3 +400,252 @@ class TestKismetQuality:
         # 验证 USTRUCT_TYPES 包含预期值
         assert "Function" in USTRUCT_TYPES
         assert "UFunction" in USTRUCT_TYPES
+
+
+# ============================================================================
+# bpgc_bytecode 关键路径测试
+# ============================================================================
+
+class TestBpgcBytecode:
+    """bpgc_bytecode 模块关键路径测试。"""
+
+    def test_parse_cooked_bytecode_buffer_empty(self):
+        """空数据应返回空列表。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+        result = _parse_cooked_bytecode_buffer(b"")
+        assert result == []
+
+    def test_parse_cooked_bytecode_buffer_single_function(self):
+        """单个函数缓冲区应正确解析。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        # 构造: [u32 size][bytecode ending with 0x53]
+        bytecode = bytes([0x04, 0x53])  # EX_Return + EX_EndOfScript
+        size = len(bytecode)
+        data = size.to_bytes(4, byteorder='little', signed=False) + bytecode
+
+        result = _parse_cooked_bytecode_buffer(data)
+        assert len(result) == 1
+        assert result[0] == bytecode
+
+    def test_parse_cooked_bytecode_buffer_multiple_functions(self):
+        """多个函数缓冲区应正确解析。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        buf1 = bytes([0x04, 0x53])
+        buf2 = bytes([0x1D, 0x01, 0x00, 0x00, 0x00, 0x53])
+        data = (
+            len(buf1).to_bytes(4, byteorder='little', signed=False) + buf1 +
+            len(buf2).to_bytes(4, byteorder='little', signed=False) + buf2
+        )
+
+        result = _parse_cooked_bytecode_buffer(data)
+        assert len(result) == 2
+        assert result[0] == buf1
+        assert result[1] == buf2
+
+    def test_parse_cooked_bytecode_buffer_size_zero(self):
+        """size=0 应终止解析。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        data = (0).to_bytes(4, byteorder='little', signed=False)
+        result = _parse_cooked_bytecode_buffer(data)
+        assert result == []
+
+    def test_parse_cooked_bytecode_buffer_size_exceeds_remaining(self):
+        """size 超过剩余数据时应容错处理。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        # size 声明 100 字节但实际只有 2 字节
+        data = (100).to_bytes(4, byteorder='little', signed=False) + bytes([0x53, 0x53])
+        result = _parse_cooked_bytecode_buffer(data)
+        # 容错模式下应跳过或终止
+        assert isinstance(result, list)
+
+    def test_parse_cooked_bytecode_buffer_truncated_header(self):
+        """截断的 size header（<4字节）应终止解析。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        data = bytes([0x01, 0x02])  # 只有 2 字节，不够 u32
+        result = _parse_cooked_bytecode_buffer(data)
+        assert result == []
+
+    def test_parse_cooked_bytecode_buffer_non_standard_sentinel(self):
+        """非标准结束标记应接受并记录警告。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        bytecode = bytes([0x04, 0xAA])  # 以 0xAA 结尾（非标准）
+        size = len(bytecode)
+        data = size.to_bytes(4, byteorder='little', signed=False) + bytecode
+
+        result = _parse_cooked_bytecode_buffer(data)
+        assert len(result) == 1  # 容错模式仍接受
+
+    def test_find_next_sentinel(self):
+        """_find_next_sentinel 应查找下一个 0x53 或 0xDD。"""
+        from uasset_read.kismet.bpgc_bytecode import _find_next_sentinel
+
+        data = bytes([0x01, 0x02, 0x53, 0x04])
+        assert _find_next_sentinel(data, 0) == 2
+        assert _find_next_sentinel(data, 3) == 4  # len(data) if not found past end
+
+    def test_find_next_sentinel_not_found(self):
+        """找不到 sentinel 时应返回数据长度。"""
+        from uasset_read.kismet.bpgc_bytecode import _find_next_sentinel
+
+        data = bytes([0x01, 0x02, 0x03, 0x04])
+        assert _find_next_sentinel(data, 0) == len(data)
+
+    def test_find_next_sentinel_cooked_variant(self):
+        """应识别 0xDD cooked 变体。"""
+        from uasset_read.kismet.bpgc_bytecode import _find_next_sentinel
+
+        data = bytes([0x01, 0xDD, 0x03])
+        assert _find_next_sentinel(data, 0) == 1
+
+    def test_map_bytecode_to_functions_empty(self):
+        """空缓冲区映射应返回空字典。"""
+        from uasset_read.kismet.bpgc_bytecode import map_bytecode_to_functions
+        result = map_bytecode_to_functions({}, [], [], [], [])
+        assert result == {}
+
+    def test_map_bytecode_to_functions_no_function_exports(self):
+        """无 Function 类型导出时应返回空字典。"""
+        from uasset_read.kismet.bpgc_bytecode import map_bytecode_to_functions
+        from unittest.mock import MagicMock
+
+        export = MagicMock()
+        export.class_index = MagicMock()
+
+        buffers = {"0": b"\x53"}
+        with patch('uasset_read.serializers.object_resources.resolve_class_name', return_value="BlueprintGeneratedClass"):
+            result = map_bytecode_to_functions(buffers, [export], [], [], [])
+            assert result == {}
+
+    def test_map_bytecode_to_functions_matching(self):
+        """缓冲区应按序号匹配到 Function 导出。"""
+        from uasset_read.kismet.bpgc_bytecode import map_bytecode_to_functions
+        from unittest.mock import MagicMock
+
+        func_export = MagicMock()
+        func_export.object_name = "MyFunction"
+        func_export.class_index = MagicMock()
+
+        buffers = {"0": b"\x53", "1": b"\x04\x53"}
+
+        with patch('uasset_read.serializers.object_resources.resolve_class_name', return_value="Function"):
+            result = map_bytecode_to_functions(buffers, [func_export], [], [], [])
+            assert "MyFunction" in result
+            assert result["MyFunction"] == b"\x53"
+
+    def test_map_bytecode_to_functions_count_mismatch(self):
+        """缓冲区数量与 Function 数量不匹配时按 min 配对。"""
+        from uasset_read.kismet.bpgc_bytecode import map_bytecode_to_functions
+        from unittest.mock import MagicMock
+
+        func1 = MagicMock()
+        func1.object_name = "Func1"
+        func1.class_index = MagicMock()
+        func2 = MagicMock()
+        func2.object_name = "Func2"
+        func2.class_index = MagicMock()
+
+        buffers = {"0": b"\x53"}  # 只有 1 个缓冲区，2 个函数
+
+        with patch('uasset_read.serializers.object_resources.resolve_class_name', return_value="Function"):
+            result = map_bytecode_to_functions(buffers, [func1, func2], [], [], [])
+            assert len(result) == 1
+            assert "Func1" in result
+
+
+# ============================================================================
+# bytecode_extractor 关键路径测试
+# ============================================================================
+
+class TestBytecodeExtractor:
+    """bytecode_extractor 关键路径测试。"""
+
+    def test_parse_bytecode_stream_single_expression(self):
+        """单个表达式应正确解析。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+        from uasset_read.kismet.tokens import EExprToken
+
+        # EX_IntConst (0x1D) + i32 value (42) + EX_EndOfScript (0x53)
+        data = struct.pack('B', EExprToken.EX_IntConst) + struct.pack('<i', 42)
+        data += struct.pack('B', EExprToken.EX_EndOfScript)
+
+        result = parse_bytecode_stream(data, [], tolerant=True)
+        assert len(result) >= 2
+        assert result[-1].Token == EExprToken.EX_EndOfScript
+
+    def test_parse_bytecode_stream_tolerant_mode(self):
+        """容错模式应跳过未知 token。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+        from uasset_read.kismet.tokens import EExprToken
+
+        # 未知 token (0xFE) + EX_EndOfScript
+        data = bytes([0xFE, EExprToken.EX_EndOfScript])
+
+        # tolerant=True 应不抛异常
+        result = parse_bytecode_stream(data, [], tolerant=True)
+        assert isinstance(result, list)
+
+    def test_parse_bytecode_stream_non_tolerant_raises(self):
+        """非容错模式遇到未知 token 应抛异常。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+
+        # 构造一个截断的 EX_FinalFunction (0x1C) — 需要更多字节但数据不足
+        data = bytes([0x1C])  # EX_FinalFunction but truncated
+        with pytest.raises(Exception):
+            parse_bytecode_stream(data, [], tolerant=False)
+
+    def test_expressions_to_flat_list(self):
+        """expressions_to_flat_list 应返回扁平字典列表。"""
+        from uasset_read.kismet.bytecode_extractor import expressions_to_flat_list
+        from uasset_read.kismet.expressions.literals import EX_IntConst
+
+        expr = EX_IntConst(Value=42)
+        expr.StatementIndex = 0
+        result = expressions_to_flat_list([expr])
+        assert len(result) == 1
+        assert result[0]["Value"] == 42
+        assert result[0]["type"] == "EX_IntConst"
+
+    def test_expressions_to_tree(self):
+        """expressions_to_tree 应返回树形结构。"""
+        from uasset_read.kismet.bytecode_extractor import expressions_to_tree
+        from uasset_read.kismet.expressions.literals import EX_IntConst
+
+        expr = EX_IntConst(Value=42)
+        expr.StatementIndex = 0
+        result = expressions_to_tree([expr])
+        assert len(result) == 1
+        assert result[0]["type"] == "EX_IntConst"
+
+    def test_is_kismet_expression(self):
+        """_is_kismet_expression 应正确识别 KismetExpression。"""
+        from uasset_read.kismet.bytecode_extractor import _is_kismet_expression
+        from uasset_read.kismet.expressions.literals import EX_IntConst
+
+        assert _is_kismet_expression(EX_IntConst(Value=1)) is True
+        assert _is_kismet_expression(42) is False
+        assert _is_kismet_expression("string") is False
+
+    def test_extract_and_parse_empty_bytecode(self):
+        """extract_and_parse 空字节码应返回空列表。"""
+        from uasset_read.kismet.bytecode_extractor import extract_and_parse
+        from unittest.mock import MagicMock
+
+        archive = MagicMock()
+        export = MagicMock()
+        export.has_script_serialization = False
+        summary = MagicMock()
+
+        # 非 UStruct 类型
+        with patch('uasset_read.serializers.object_resources.resolve_class_name', return_value="TestComponent"):
+            expressions, error, reason = extract_and_parse(
+                archive, export, summary, [], [], []
+            )
+            assert expressions == []
+            assert error is None
+            assert reason == "none"

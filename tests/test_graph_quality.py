@@ -9,17 +9,27 @@ import pytest
 from uasset_read.graph.flow_builder import (
     _iter_normalized_edges,
     _build_graph_indexes,
+    _build_normalized_edge_indexes,
     _resolve_knot_chain,
     _trace_data_source,
     _derive_node_name,
     _pin_ref_guid,
     _is_valid_pin_guid,
     _sanitize_string,
+    _sanitize_recursive,
     _sanitize_pin_dict,
     _comment_enclosed_nodes,
     _get_start_event_name,
     _node_member_name,
+    _enhanced_input_action_name,
     _choose_synthetic_source_pin,
+    _synthetic_parameter_edges,
+    _extract_call_function_parameters,
+    _pin_direction_text,
+    _pin_category,
+    _pin_subcategory,
+    _pin_container_type,
+    _is_exec_pin,
     format_pin_ref,
     format_node_dict,
     _find_next_exec_node,
@@ -1145,3 +1155,363 @@ class TestBuildGraphIndexes:
         pin_lookup, node_lookup, pin_obj_lookup = _build_graph_indexes(graph)
         assert pin_lookup == {}
         assert node_lookup == {}
+
+
+# ============================================================================
+# flow_builder 关键路径补充测试
+# ============================================================================
+
+class TestSanitizeRecursive:
+    """_sanitize_recursive 递归清理测试。"""
+
+    def test_nested_dict_cleanup(self):
+        """嵌套字典中的字符串应被清理。"""
+        obj = {"key": "hello\x00world", "nested": {"inner": "test\x01val"}}
+        result = _sanitize_recursive(obj)
+        assert result["key"] == "helloworld"
+        assert result["nested"]["inner"] == "testval"
+
+    def test_nested_list_cleanup(self):
+        """嵌套列表中的字符串应被清理。"""
+        obj = ["hello\x00world", ["nested\x01val"]]
+        result = _sanitize_recursive(obj)
+        assert result[0] == "helloworld"
+        assert result[1][0] == "nestedval"
+
+    def test_mixed_nested_structures(self):
+        """混合嵌套结构应正确清理。"""
+        obj = {"list": ["a\x00b", {"key": "c\x01d"}]}
+        result = _sanitize_recursive(obj)
+        assert result["list"][0] == "ab"
+        assert result["list"][1]["key"] == "cd"
+
+    def test_non_string_passthrough(self):
+        """非字符串类型应原样返回。"""
+        assert _sanitize_recursive(42) == 42
+        assert _sanitize_recursive(3.14) == 3.14
+        assert _sanitize_recursive(True) is True
+        assert _sanitize_recursive(None) is None
+
+    def test_object_with_get_full_name(self):
+        """有 get_full_name 方法的对象应返回全名。"""
+        class MockObj:
+            def get_full_name(self):
+                return "Full.Name"
+        result = _sanitize_recursive(MockObj())
+        assert result == "Full.Name"
+
+    def test_object_with_get_full_name_exception(self):
+        """get_full_name 抛异常应回退到 str()。"""
+        class MockObj:
+            def get_full_name(self):
+                raise RuntimeError("fail")
+        result = _sanitize_recursive(MockObj())
+        assert "MockObj" in result
+
+    def test_object_with_object_name(self):
+        """有 object_name 属性的对象应返回 object_name。"""
+        class MockObj:
+            object_name = "MyObject"
+        result = _sanitize_recursive(MockObj())
+        assert result == "MyObject"
+
+    def test_cycle_detection_list(self):
+        """循环引用列表应返回空列表。"""
+        a = [1, 2]
+        a.append(a)  # self-reference
+        result = _sanitize_recursive(a)
+        assert result[:2] == [1, 2]
+        assert result[2] == []  # cycle broken
+
+    def test_cycle_detection_dict(self):
+        """循环引用字典应返回空字典。"""
+        a = {"key": "value"}
+        a["self"] = a  # self-reference
+        result = _sanitize_recursive(a)
+        assert result["key"] == "value"
+        assert result["self"] == {}  # cycle broken
+
+
+class TestPinDirectionText:
+    """_pin_direction_text 方向文本测试。"""
+
+    def test_output_direction(self):
+        """direction=1 应返回 output。"""
+        assert _pin_direction_text(1) == "output"
+
+    def test_input_direction(self):
+        """direction=0 应返回 input。"""
+        assert _pin_direction_text(0) == "input"
+
+    def test_other_direction(self):
+        """其他值应返回 input。"""
+        assert _pin_direction_text(99) == "input"
+
+
+class TestPinHelpers:
+    """_pin_category, _pin_subcategory, _pin_container_type 辅助函数测试。"""
+
+    def test_pin_category_with_type(self):
+        """有 pin_type 时应返回 pin_category。"""
+        pin = FakePin(pin_type=FakePinType(pin_category="float"))
+        assert _pin_category(pin) == "float"
+
+    def test_pin_category_without_type(self):
+        """无 pin_type 时应返回空字符串。"""
+        pin = FakePin(pin_type=None)
+        assert _pin_category(pin) == ""
+
+    def test_pin_subcategory_with_type(self):
+        """有 pin_type 时应返回 pin_subcategory。"""
+        pin = FakePin(pin_type=FakePinType(pin_subcategory="float"))
+        assert _pin_subcategory(pin) == "float"
+
+    def test_pin_subcategory_without_type(self):
+        """无 pin_type 时应返回空字符串。"""
+        pin = FakePin(pin_type=None)
+        assert _pin_subcategory(pin) == ""
+
+    def test_pin_container_type_with_type(self):
+        """有 pin_type 时应返回 container_type 字符串。"""
+        pin = FakePin(pin_type=FakePinType(container_type=2))
+        assert _pin_container_type(pin) == "2"
+
+    def test_pin_container_type_without_type(self):
+        """无 pin_type 时应返回空字符串。"""
+        pin = FakePin(pin_type=None)
+        assert _pin_container_type(pin) == ""
+
+
+class TestIsExecPin:
+    """_is_exec_pin 测试。"""
+
+    def test_exec_pin_returns_true(self):
+        """exec 类型 pin 应返回 True。"""
+        pin = FakePin(pin_type=FakePinType(pin_category="exec"))
+        assert _is_exec_pin(pin) is True
+
+    def test_non_exec_pin_returns_false(self):
+        """非 exec 类型 pin 应返回 False。"""
+        pin = FakePin(pin_type=FakePinType(pin_category="float"))
+        assert _is_exec_pin(pin) is False
+
+    def test_no_pin_type_returns_false(self):
+        """无 pin_type 时应返回 False。"""
+        pin = FakePin(pin_type=None)
+        assert _is_exec_pin(pin) is False
+
+
+class TestBuildNormalizedEdgeIndexes:
+    """_build_normalized_edge_indexes 边索引构建测试。"""
+
+    def test_builds_from_and_to_indexes(self):
+        """应构建 from_pin_id 和 to_pin_id 两种索引。"""
+        node_a = FakeNode(
+            node_guid="guid-a",
+            pins=[FakePin(
+                pin_id="PIN-A-OUT", pin_name="ReturnValue", direction=1,
+                pin_type=FakePinType(pin_category="float"),
+            )],
+        )
+        node_b = FakeNode(
+            node_guid="guid-b",
+            pins=[FakePin(
+                pin_id="PIN-B-IN", pin_name="Value", direction=0,
+                pin_type=FakePinType(pin_category="float"),
+            )],
+        )
+        node_a.pins[0].linked_to_raw = [{"pin_id": "PIN-B-IN"}]
+
+        graph = FakeGraph(nodes=[node_a, node_b])
+        by_from, by_to = _build_normalized_edge_indexes(graph)
+
+        # from_pin_id 应包含归一化后的 PIN-A-OUT（去 dash，大写）
+        assert "PINAOUT" in by_from
+        assert len(by_from["PINAOUT"]) == 1
+
+        # to_pin_id 应包含归一化后的 PIN-B-IN
+        assert "PINBIN" in by_to
+        assert len(by_to["PINBIN"]) == 1
+
+    def test_empty_graph(self):
+        """空图应返回空索引。"""
+        graph = FakeGraph(nodes=[])
+        by_from, by_to = _build_normalized_edge_indexes(graph)
+        assert by_from == {}
+        assert by_to == {}
+
+
+class TestEnhancedInputActionName:
+    """_enhanced_input_action_name 测试。"""
+
+    def test_extracts_action_name_from_path(self):
+        """应从 input_action_path 提取动作名称。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"input_action_path": "/Game/Inputs/IA_Jump"},
+        )
+        assert _enhanced_input_action_name(node) == "IA_Jump"
+
+    def test_no_path_returns_empty(self):
+        """无 input_action_path 时应返回空字符串。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"input_action_path": ""},
+        )
+        assert _enhanced_input_action_name(node) == ""
+
+    def test_no_node_data_returns_empty(self):
+        """无 node_data 时应返回空字符串。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            node_data=None,
+        )
+        assert _enhanced_input_action_name(node) == ""
+
+    def test_path_with_dot_suffix(self):
+        """路径含 . 后缀时应只取动作名部分。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"input_action_path": "IA_Dash"},
+        )
+        assert _enhanced_input_action_name(node) == "IA_Dash"
+
+
+class TestSyntheticParameterEdges:
+    """_synthetic_parameter_edges 语义参数边测试。"""
+
+    def test_move_function_gets_edges(self):
+        """目标函数为 Move 时应返回 X/Y 参数边。"""
+        source = FakeNode(
+            node_guid="src",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"function_reference": {"member_name": "IA_Move"}},
+        )
+        target = FakeNode(
+            node_guid="tgt",
+            class_name="K2Node_CallFunction",
+            node_data={"function_reference": {"member_name": "Move"}},
+        )
+        edges = _synthetic_parameter_edges(source, target)
+        assert len(edges) == 2
+        names = {e[0] for e in edges}
+        assert "ActionValue_X" in names
+        assert "ActionValue_Y" in names
+
+    def test_aim_function_gets_edges(self):
+        """目标函数为 Aim 时应返回 Yaw/Pitch 参数边。"""
+        source = FakeNode(
+            node_guid="src",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"function_reference": {"member_name": "IA_Look"}},
+        )
+        target = FakeNode(
+            node_guid="tgt",
+            class_name="K2Node_CallFunction",
+            node_data={"function_reference": {"member_name": "Aim"}},
+        )
+        edges = _synthetic_parameter_edges(source, target)
+        assert len(edges) == 2
+        pin_names = {e[1] for e in edges}
+        assert "Yaw" in pin_names
+        assert "Pitch" in pin_names
+
+    def test_unknown_target_returns_empty(self):
+        """目标函数非 Move/Aim 时应返回空列表。"""
+        source = FakeNode(
+            node_guid="src",
+            class_name="K2Node_EnhancedInputAction",
+            node_data={"function_reference": {"member_name": "IA_Move"}},
+        )
+        target = FakeNode(
+            node_guid="tgt",
+            class_name="K2Node_CallFunction",
+            node_data={"function_reference": {"member_name": "Jump"}},
+        )
+        edges = _synthetic_parameter_edges(source, target)
+        assert edges == []
+
+    def test_non_source_type_returns_empty(self):
+        """非 EnhancedInputAction/Event 源节点应返回空列表。"""
+        source = FakeNode(
+            node_guid="src",
+            class_name="K2Node_CallFunction",
+            node_data={"function_reference": {"member_name": "Something"}},
+        )
+        target = FakeNode(
+            node_guid="tgt",
+            class_name="K2Node_CallFunction",
+            node_data={"function_reference": {"member_name": "Move"}},
+        )
+        edges = _synthetic_parameter_edges(source, target)
+        assert edges == []
+
+
+class TestExtractCallFunctionParameters:
+    """_extract_call_function_parameters 参数提取测试。"""
+
+    def test_filters_exec_pins(self):
+        """exec pin 应被过滤。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_CallFunction",
+            pins=[
+                make_exec_pin("exec-in", "exec", direction=0),
+                make_data_pin("param-in", "Value", direction=0),
+            ],
+        )
+        result = _extract_call_function_parameters(node)
+        assert len(result["input_params"]) == 1
+        assert result["input_params"][0]["name"] == "Value"
+
+    def test_separates_input_output(self):
+        """输入/输出参数应分离到不同数组。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_CallFunction",
+            pins=[
+                make_exec_pin("exec-in", "exec", direction=0),
+                make_data_pin("param-in", "Value", direction=0),
+                make_data_pin("param-out", "ReturnValue", direction=1),
+            ],
+        )
+        result = _extract_call_function_parameters(node)
+        assert len(result["input_params"]) == 1
+        assert result["input_params"][0]["name"] == "Value"
+        assert len(result["output_params"]) == 1
+        assert result["output_params"][0]["name"] == "ReturnValue"
+
+    def test_includes_default_value(self):
+        """有默认值的参数应包含 default_value。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_CallFunction",
+            pins=[
+                FakePin(
+                    pin_id="pin-1", pin_name="Value", direction=0,
+                    pin_type=FakePinType(pin_category="float"),
+                    default_value="3.14",
+                ),
+            ],
+        )
+        result = _extract_call_function_parameters(node)
+        assert result["input_params"][0]["default_value"] == "3.14"
+
+    def test_includes_reference_flag(self):
+        """is_reference 标志应被提取。"""
+        node = FakeNode(
+            node_guid="guid-1",
+            class_name="K2Node_CallFunction",
+            pins=[
+                FakePin(
+                    pin_id="pin-1", pin_name="Value", direction=0,
+                    pin_type=FakePinType(pin_category="object", is_reference=True),
+                ),
+            ],
+        )
+        result = _extract_call_function_parameters(node)
+        assert result["input_params"][0]["is_reference"] is True

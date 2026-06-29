@@ -149,100 +149,102 @@ class TestBuildLightweightGraphs:
         graphs = _build_lightweight_graphs(result)
         assert graphs == []
 
+    def test_empty_import_map(self):
+        """空 import_map — 返回空列表。"""
+        result = ParseResult()
+        result.export_map = [MockExport(object_name="Test")]
+        result.import_map = []
+
+        graphs = _build_lightweight_graphs(result)
+        assert graphs == []
+
     def test_no_edgraph_exports(self):
         """无 EdGraph 类型导出 — 返回空列表。"""
         result = ParseResult()
         export = MockExport(object_name="TestComponent")
-
         result.export_map = [export]
         result.import_map = [MockImport()]
 
-        # 直接测试函数逻辑 - 验证空 export_map 和 import_map 情况
-        assert not result.export_map or not result.import_map == False
-        # 如果有 export_map 和 import_map，检查是否返回空列表
-        graphs = []
-        assert graphs == []
+        with patch('uasset_read.serializers.object_resources.get_asset_class', return_value="BlueprintGeneratedClass"):
+            graphs = _build_lightweight_graphs(result)
+            assert graphs == []
 
     def test_edgraph_export(self):
         """EdGraph 类型导出 — 创建最小化图。"""
         result = ParseResult()
         export = MockExport(object_name="EventGraph")
-        export.class_index = MagicMock()
-
         result.export_map = [export]
         result.import_map = [MockImport()]
 
-        # 测试轻量图创建逻辑
-        from uasset_read.models.core import UEdGraph
-        name = str(getattr(export, "object_name", "") or "")
-        if name:
-            graph = UEdGraph(
-                graph_name=name,
-                graph_class="EdGraph",
-                nodes=[],
-            )
-            assert graph.graph_name == "EventGraph"
-            assert graph.graph_class == "EdGraph"
+        with patch('uasset_read.serializers.object_resources.get_asset_class', return_value="EdGraph"):
+            graphs = _build_lightweight_graphs(result)
+            assert len(graphs) == 1
+            assert graphs[0].graph_name == "EventGraph"
+            assert graphs[0].graph_class == "EdGraph"
+            assert graphs[0].nodes == []
 
     def test_uberedgraph_export(self):
         """UberEdGraph 类型导出 — 创建最小化图。"""
         result = ParseResult()
         export = MockExport(object_name="UberGraphPages")
-        export.class_index = MagicMock()
-
         result.export_map = [export]
         result.import_map = [MockImport()]
 
-        from uasset_read.models.core import UEdGraph
-        name = str(getattr(export, "object_name", "") or "")
-        if name:
-            graph = UEdGraph(
-                graph_name=name,
-                graph_class="UberEdGraph",
-                nodes=[],
-            )
-            assert graph.graph_name == "UberGraphPages"
-            assert graph.graph_class == "UberEdGraph"
+        with patch('uasset_read.serializers.object_resources.get_asset_class', return_value="UberEdGraph"):
+            graphs = _build_lightweight_graphs(result)
+            assert len(graphs) == 1
+            assert graphs[0].graph_name == "UberGraphPages"
+            assert graphs[0].graph_class == "UberEdGraph"
+            assert graphs[0].nodes == []
 
     def test_multiple_edgraph_exports(self):
         """多个 EdGraph 导出 — 创建多个图。"""
         result = ParseResult()
         export1 = MockExport(object_name="EventGraph")
-        export1.class_index = MagicMock()
         export2 = MockExport(object_name="AnimGraph")
-        export2.class_index = MagicMock()
-
         result.export_map = [export1, export2]
         result.import_map = [MockImport()]
 
-        from uasset_read.models.core import UEdGraph
-        graphs = []
-        for export in result.export_map:
-            name = str(getattr(export, "object_name", "") or "")
-            if name:
-                graph = UEdGraph(
-                    graph_name=name,
-                    graph_class="EdGraph",
-                    nodes=[],
-                )
-                graphs.append(graph)
-
-        assert len(graphs) == 2
-        names = {g.graph_name for g in graphs}
-        assert "EventGraph" in names
-        assert "AnimGraph" in names
+        with patch('uasset_read.serializers.object_resources.get_asset_class', return_value="EdGraph"):
+            graphs = _build_lightweight_graphs(result)
+            assert len(graphs) == 2
+            names = {g.graph_name for g in graphs}
+            assert "EventGraph" in names
+            assert "AnimGraph" in names
 
     def test_export_without_name(self):
         """导出无名称 — 跳过。"""
         result = ParseResult()
         export = MockExport(object_name="")
-        export.class_index = MagicMock()
-
         result.export_map = [export]
         result.import_map = [MockImport()]
 
-        name = str(getattr(export, "object_name", "") or "")
-        assert not name  # 空名称
+        with patch('uasset_read.serializers.object_resources.get_asset_class', return_value="EdGraph"):
+            graphs = _build_lightweight_graphs(result)
+            assert graphs == []
+
+    def test_mixed_export_types(self):
+        """混合类型导出 — 仅提取 EdGraph/UberEdGraph。"""
+        result = ParseResult()
+        export1 = MockExport(object_name="EventGraph")
+        export2 = MockExport(object_name="TestComponent")
+        export3 = MockExport(object_name="UberGraphPages")
+        result.export_map = [export1, export2, export3]
+        result.import_map = [MockImport()]
+
+        def mock_get_class(exp, imp, exps):
+            if exp.object_name in ("EventGraph",):
+                return "EdGraph"
+            if exp.object_name == "UberGraphPages":
+                return "UberEdGraph"
+            return "BlueprintGeneratedClass"
+
+        with patch('uasset_read.serializers.object_resources.get_asset_class', side_effect=mock_get_class):
+            graphs = _build_lightweight_graphs(result)
+            assert len(graphs) == 2
+            names = {g.graph_name for g in graphs}
+            assert "EventGraph" in names
+            assert "UberGraphPages" in names
 
 
 # ===========================================================================
