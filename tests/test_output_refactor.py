@@ -257,7 +257,7 @@ class TestExportIRDirectFields:
         assert export.b_not_for_server is False
         assert export.b_is_asset is False
         assert export.b_generate_public_hash is False
-        assert export.b_not_always_loaded_for_editor_game is True
+        assert export.b_not_always_loaded_for_editor_game is False
         assert export.guid == ""
 
     def test_direct_fields_coexist_with_ue_export_raw(self):

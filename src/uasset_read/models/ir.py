@@ -175,7 +175,7 @@ class ExportRawIR:
     b_not_for_client: bool = False
     b_not_for_server: bool = False
     b_is_inherited_instance: bool = False
-    b_not_always_loaded_for_editor_game: bool = True
+    b_not_always_loaded_for_editor_game: bool = False
     b_is_asset: bool = False
     b_generate_public_hash: bool = False
     script_serialization_start_offset: int = 0
@@ -232,7 +232,7 @@ class ExportIR:
     b_not_for_server: bool = False
     b_is_asset: bool = False
     b_generate_public_hash: bool = False
-    b_not_always_loaded_for_editor_game: bool = True
+    b_not_always_loaded_for_editor_game: bool = False
     guid: str = ""
 
 

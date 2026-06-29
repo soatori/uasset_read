@@ -41,9 +41,12 @@ def format_transform_value(value: float, precision_type: str) -> float | int:
     Location: 整数优先（is_integer 时返回 int），否则 3 位小数。
     Rotation: 3 位小数。
     Scale: 4 位小数。
+
+    NaN/inf 值直接透传，不进行整数转换（避免 OverflowError/ValueError）。
     """
+    import math
     if precision_type == 'location':
-        if value == int(value):
+        if math.isfinite(value) and value == int(value):
             return int(value)
         return round(value, 3)
     elif precision_type == 'rotation':
