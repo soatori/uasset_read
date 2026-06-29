@@ -125,9 +125,10 @@ class TestFPakEntry:
         bitfield = (1 << 31) | (1 << 30) | (1 << 29) | 0x3F
         data = bytearray()
         data.extend(struct.pack('<I', bitfield))
+        # UE 顺序: CompressionBlockSize → Offset → UncompressedSize
+        data.extend(struct.pack('<I', actual_block_size))
         data.extend(struct.pack('<I', 100))
         data.extend(struct.pack('<I', 200))
-        data.extend(struct.pack('<I', actual_block_size))
 
         entry, consumed = FPakEntry.decode_bitfield(bytes(data), 0, pak_info)
 
@@ -202,8 +203,8 @@ class TestFPakEntry:
         bitfield = struct.unpack_from('<I', encoded, 0)[0]
         assert (bitfield & 0x3F) == 0x3F
 
-        # 最后 4 字节应为 block_size
-        block_size = struct.unpack_from('<I', encoded, len(encoded) - 4)[0]
+        # UE 顺序: CompressionBlockSize 在 Offset 之前（bitfield 之后立即写入）
+        block_size = struct.unpack_from('<I', encoded, 4)[0]
         assert block_size == 1000
 
     def test_encode_bitfield_large_offset_64bit(self):

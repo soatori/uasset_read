@@ -135,23 +135,24 @@ class FPakEntry:
 
         序列化顺序（UE FPakEntry::Serialize）：
         - Offset (int64)
+        - Size (int64) — 压缩后大小
         - UncompressedSize (int64)
-        - Size (int64)
         - CompressionMethodIndex (uint32)
-        - [Timestamp (int64) — version < 2 only, removed in v2]
+        - [Timestamp (int64) — version < 2 only]
         - CompressionBlockCount (uint16 if v<8 else uint32)
         - CompressionBlockSize (uint32)
         - CompressionBlocks [array]
         - Hash [20 bytes]
+        - Flags (uint32) — v>=8
         """
         entry = cls()
 
         entry.offset = struct.unpack('<q', stream.read(8))[0]
+        entry.size = struct.unpack('<q', stream.read(8))[0]           # Size 先于 UncompressedSize
         entry.uncompressed_size = struct.unpack('<q', stream.read(8))[0]
-        entry.size = struct.unpack('<q', stream.read(8))[0]
         entry.compression_method_index = struct.unpack('<I', stream.read(4))[0]
 
-        # Timestamp removed in version 2 (PakFile_Version_NoTimestamps)
+        # Timestamp removed in version 2
         if version < PakFileVersion.NoTimestamps:
             stream.read(8)
 
@@ -173,12 +174,19 @@ class FPakEntry:
         # SHA1 hash
         entry.hash = stream.read(20)
 
+        # Flags (v>=8)
+        if version >= 8:
+            entry.flags = struct.unpack('<I', stream.read(4))[0]
+
         entry.is_compressed = entry.compression_method_index > 0
         return entry
 
     @classmethod
     def decode_bitfield(cls, data: bytes, offset: int, pak_info: "FPakInfo") -> tuple["FPakEntry", int]:
         """解码 v10+ bitfield 编码的 FPakEntry。
+
+        UE 读取顺序：
+        bitfield → CompressionBlockSize(if 0x3F) → Offset → UncompressedSize → Size
 
         Bitfield 布局（UE PakFile.cpp DecodePakEntry）：
         - Bit 31: Offset fits in 32-bit
@@ -213,7 +221,14 @@ class FPakEntry:
         entry.compression_block_count = (bitfield >> 6) & 0xFFFF
         block_size_index = bitfield & 0x3F
 
-        # Read actual values for fields that don't fit in 32-bit
+        # UE 顺序: CompressionBlockSize 在 Offset 之前
+        if block_size_index == 0x3F:
+            entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
+            offset += 4
+        else:
+            entry.compression_block_size = block_size_index << 11
+
+        # Offset
         if offset_fits_32:
             entry.offset = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -221,7 +236,7 @@ class FPakEntry:
             entry.offset = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        # Read UncompressedSize
+        # UncompressedSize
         if uncompressed_size_fits_32:
             entry.uncompressed_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -229,10 +244,8 @@ class FPakEntry:
             entry.uncompressed_size = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        # Size defaults to UncompressedSize
+        # Size (compressed)
         entry.size = entry.uncompressed_size
-
-        # Read CompressedSize only if entry is compressed
         if entry.compression_method_index > 0:
             if size_fits_32:
                 entry.size = struct.unpack_from('<I', data, offset)[0]
@@ -240,15 +253,6 @@ class FPakEntry:
             else:
                 entry.size = struct.unpack_from('<q', data, offset)[0]
                 offset += 8
-
-        # Block size: 0x3F means read from stream
-        if block_size_index == 0x3F:
-            entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
-            offset += 4
-        else:
-            # Block size index maps to actual size
-            # UE 源码: (bitfield & 0x3f) << 11 = index * 2048
-            entry.compression_block_size = block_size_index << 11
 
         entry.is_compressed = entry.compression_method_index > 0
         entry.flags = Flag_Encrypted if entry.is_encrypted else 0
@@ -304,6 +308,10 @@ class FPakEntry:
 
         result.extend(struct.pack('<I', bitfield))
 
+        # UE 顺序: CompressionBlockSize 在 Offset 之前
+        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
+            result.extend(struct.pack('<I', self.compression_block_size))
+
         # 写入 Offset
         if offset_fits_32:
             result.extend(struct.pack('<I', self.offset))
@@ -322,10 +330,6 @@ class FPakEntry:
                 result.extend(struct.pack('<I', self.size))
             else:
                 result.extend(struct.pack('<q', self.size))
-
-        # 写入 BlockSize（如果使用 0x3F 标记）
-        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
-            result.extend(struct.pack('<I', self.compression_block_size))
 
         self.serialized_size = len(result)
         return bytes(result)
@@ -490,34 +494,42 @@ class FPakDirectoryEntry:
 
 def decode_encoded_pak_entry(data: bytes, is_enabled: bool) -> Optional[Dict[str, Any]]:
     """解码 v10+ 编码 Pak 条目
-    
-    等价实现 FPakEntry 的编码条目解码逻辑
-    
+
+    UE 位域布局（PakFile.cpp DecodePakEntry）：
+    Bit 31: offset_fits_32
+    Bit 30: uncompressed_size_fits_32
+    Bit 29: size_fits_32
+    Bits 23-28: compression_method_index (6 bits)
+    Bit 22: is_encrypted
+    Bits 6-21: compression_block_count (16 bits)
+    Bits 0-5: compression_block_size_index (6 bits)
+
     Args:
         data: 编码的条目数据
         is_enabled: 是否启用编码
-        
+
     Returns:
         解码后的条目信息字典，或 None
     """
     if not is_enabled or len(data) < 4:
         return None
-    
+
     value = struct.unpack('<I', data[:4])[0]
-    
-    # 解析位域
-    compression_method_index = value & 0x3F  # 6 位
-    is_encrypted = bool((value >> 6) & 1)  # 1 位
-    is_compressed = bool((value >> 7) & 1)  # 1 位
-    compression_block_count = (value >> 8) & 0x3FF  # 10 位
-    
-    # 检查 64 位大小标志
-    has_64bit_size = bool((value >> 22) & 1)
-    
+
+    offset_fits_32 = bool(value & (1 << 31))
+    uncompressed_size_fits_32 = bool(value & (1 << 30))
+    size_fits_32 = bool(value & (1 << 29))
+    compression_method_index = (value >> 23) & 0x3F
+    is_encrypted = bool(value & (1 << 22))
+    compression_block_count = (value >> 6) & 0xFFFF
+    block_size_index = value & 0x3F
+
     return {
+        'offset_fits_32': offset_fits_32,
+        'uncompressed_size_fits_32': uncompressed_size_fits_32,
+        'size_fits_32': size_fits_32,
         'compression_method_index': compression_method_index,
         'is_encrypted': is_encrypted,
-        'is_compressed': is_compressed,
         'compression_block_count': compression_block_count,
-        'has_64bit_size': has_64bit_size,
+        'block_size_index': block_size_index,
     }
