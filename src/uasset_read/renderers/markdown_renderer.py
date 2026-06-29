@@ -202,7 +202,7 @@ class MarkdownRenderer(IRenderer):
                     lines.append(f"- **Type**: {graph.graph_type}")
                 lines.append("")
 
-                if graph.nodes:
+                if graph.nodes or graph.subgraphs:
                     lines.append("```mermaid")
                     lines.append("graph TD")
                     self._render_mermaid_nodes(lines, graph)
