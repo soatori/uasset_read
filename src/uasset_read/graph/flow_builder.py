@@ -242,7 +242,7 @@ def _build_graph_indexes(
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
-            normalized_key = pin.pin_id.replace("-", "").upper() if pin.pin_id else pin.pin_id
+            normalized_key = _normalize_pin_id(pin.pin_id)
             pin_lookup[normalized_key] = (node.node_guid, pin.pin_name)
             pin_object_lookup[normalized_key] = pin
     return pin_lookup, node_lookup, pin_object_lookup
@@ -415,7 +415,7 @@ def _iter_normalized_edges(
                 )
                 edge = _emit(
                     source_node, source_pin_name, source_pin_id, source_pin_obj,
-                    node, pin.pin_name, pin.pin_id, pin,
+                    node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                 )
                 if edge:
                     yield edge
