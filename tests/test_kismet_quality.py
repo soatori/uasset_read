@@ -53,7 +53,7 @@ class TestKismetQuality:
 
         # 正确行为：使用 read_i32，-1 应该被解析为 -1
         # resolve_fname 会将 -1 视为越界，返回 "Unknown_-1"
-        assert "Unknown_-1" in expr.Value or name_index < 0
+        assert "Unknown_-1" in expr.Value
 
     def test_name_const_positive_index(self):
         """EX_NameConst 正数索引应正常工作。"""
