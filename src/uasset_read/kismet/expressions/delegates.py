@@ -100,7 +100,7 @@ class EX_RemoveMulticastDelegate(KismetExpression):
     """Remove a delegate from a multicast delegate's targets (EX_RemoveMulticastDelegate, 0x62)."""
 
     Delegate: Optional[KismetExpression] = None
-    DelegateToAdd: Optional[KismetExpression] = None
+    DelegateToRemove: Optional[KismetExpression] = None
 
     @property
     def Token(self) -> EExprToken:
@@ -111,13 +111,13 @@ class EX_RemoveMulticastDelegate(KismetExpression):
         cls, archive: FKismetArchive, name_map: list[str]
     ) -> EX_RemoveMulticastDelegate:
         d = archive.read_expression()
-        d_add = archive.read_expression()
-        return cls(Delegate=d, DelegateToAdd=d_add)
+        d_remove = archive.read_expression()
+        return cls(Delegate=d, DelegateToRemove=d_remove)
 
     def to_dict(self) -> dict:
         result = super().to_dict()
         result["Delegate"] = self.Delegate.to_dict() if self.Delegate else None
-        result["DelegateToAdd"] = self.DelegateToAdd.to_dict() if self.DelegateToAdd else None
+        result["DelegateToRemove"] = self.DelegateToRemove.to_dict() if self.DelegateToRemove else None
         return result
 
 

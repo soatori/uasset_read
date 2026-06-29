@@ -25,7 +25,7 @@ class EX_SetArray(KismetExpression):
         # In UE5, SetArray reads a property then elements
         prop = FKismetPropertyPointer.from_archive(archive, name_map)
         elements = archive.read_expression_array(EExprToken.EX_EndArray)
-        return cls(ArrayInnerProp=prop, Elements=elements)
+        return cls(AssigningProperty=prop, Elements=elements)
 
 
 @dataclass

@@ -247,9 +247,9 @@ class EX_NameConst(KismetExpressionT[str]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
-        # Read FName: index + number
-        idx = archive.read_u32()
-        num = archive.read_u32()
+        # Read FName: index + number（对齐 UE FName 序列化为两个 int32）
+        idx = archive.read_i32()
+        num = archive.read_i32()
         name = archive.resolve_fname(idx, num)
         return cls(Value=name)
 

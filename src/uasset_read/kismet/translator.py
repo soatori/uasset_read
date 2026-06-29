@@ -1110,8 +1110,8 @@ class KismetTranslator:
         if isinstance(expr, EX_RemoveMulticastDelegate):
             delegate = (self.line_cpp(expr.Delegate)
                         if hasattr(expr, 'Delegate') and expr.Delegate else "?")
-            to_remove = (self.line_cpp(expr.DelegateToAdd)
-                         if hasattr(expr, 'DelegateToAdd') and expr.DelegateToAdd else "?")
+            to_remove = (self.line_cpp(expr.DelegateToRemove)
+                         if hasattr(expr, 'DelegateToRemove') and expr.DelegateToRemove else "?")
             sep = ("->" if isinstance(expr.Delegate, (EX_Context, EX_Context_FailSilent))
                    else "." if hasattr(expr, 'Delegate') and expr.Delegate else ".")
             return f"{delegate}{sep}RemoveDelegate({to_remove})"
