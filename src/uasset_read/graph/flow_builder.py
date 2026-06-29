@@ -145,6 +145,16 @@ def format_pin_ref(
         }
 
 
+def _normalize_pin_id(pin_id: str) -> str:
+    """归一化 pin_id 为大写 hex（移除 dash，转大写）。
+
+    所有 pin ID 键统一使用此格式，确保查找一致。
+    """
+    if not pin_id:
+        return pin_id
+    return pin_id.replace("-", "").upper()
+
+
 def _pin_ref_guid(ref: object) -> str | None:
     """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
 
@@ -221,15 +231,20 @@ def _format_blueprint_pin_dto(
 def _build_graph_indexes(
     graph: UEdGraph,
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
-    """构建节点和 Pin 查找表。"""
+    """构建节点和 Pin 查找表。
+
+    Pin key 统一归一化为大写 hex（与 _pin_ref_guid 输出格式对齐），
+    避免大小写不一致导致的连接查找失败。
+    """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
     pin_object_lookup: Dict[str, UEdGraphPin] = {}
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
-            pin_object_lookup[pin.pin_id] = pin
+            normalized_key = pin.pin_id.replace("-", "").upper() if pin.pin_id else pin.pin_id
+            pin_lookup[normalized_key] = (node.node_guid, pin.pin_name)
+            pin_object_lookup[normalized_key] = pin
     return pin_lookup, node_lookup, pin_object_lookup
 
 
@@ -362,13 +377,13 @@ def _iter_normalized_edges(
 
                     if pin.direction == 1 and other_pin.direction == 0:
                         edge = _emit(
-                            node, pin.pin_name, pin.pin_id, pin,
+                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                             other_node, other_pin_name, other_pin_id, other_pin,
                         )
                     elif pin.direction == 0 and other_pin.direction == 1:
                         edge = _emit(
                             other_node, other_pin_name, other_pin_id, other_pin,
-                            node, pin.pin_name, pin.pin_id, pin,
+                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                         )
                     else:
                         edge = None
@@ -394,7 +409,7 @@ def _iter_normalized_edges(
                     None,
                 )
                 source_pin_id = (
-                    source_pin_obj.pin_id
+                    _normalize_pin_id(source_pin_obj.pin_id)
                     if source_pin_obj is not None
                     else f"{source_node.node_guid}:{source_pin_name}"
                 )
@@ -647,8 +662,16 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
             return node.class_name
 
         # member_name can be a path like "/Game/.../BP_X_37120"
+        # or "/Game/Blueprints/BP_Test.ReceiveBeginPlay"
         if '/' in mn:
-            return f"Event.{mn.split('/')[-1]}"
+            last_segment = mn.split('/')[-1]
+            # 对象名.成员名 格式：取成员名部分
+            if '.' in last_segment:
+                last_segment = last_segment.split('.')[-1]
+            return f"Event.{last_segment}"
+        # 纯成员名中也可能含点号
+        if '.' in mn:
+            return f"Event.{mn.split('.')[-1]}"
         return f"Event.{mn}"
 
     elif node.class_name == "K2Node_EnhancedInputAction":
@@ -761,8 +784,8 @@ def _resolve_knot_chain(
         # Knot: Find InputPin and follow its linked_to_raw backwards
         for pin in target_node.pins:
             if pin.pin_name == "InputPin" and pin.direction == 0:  # Input
-                if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
-                    current_pin_guid = source_edges_by_to_pin[pin.pin_id][0]["from_pin_id"]
+                if source_edges_by_to_pin and _normalize_pin_id(pin.pin_id) in source_edges_by_to_pin:
+                    current_pin_guid = source_edges_by_to_pin[_normalize_pin_id(pin.pin_id)][0]["from_pin_id"]
                     break
                 # InputPin 的 linked_to_raw 是上一个 pin（数据来源）
                 for linked_ref in (pin.linked_to_raw or []):
@@ -808,10 +831,11 @@ def _trace_data_source(
     """
     # 检查是否有连接
     linked_refs = list(pin.linked_to_raw or [])
-    if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
+    normalized_pin_id = _normalize_pin_id(pin.pin_id)
+    if source_edges_by_to_pin and normalized_pin_id in source_edges_by_to_pin:
         linked_refs = [
             {"pin_guid": edge["from_pin_id"]}
-            for edge in source_edges_by_to_pin[pin.pin_id]
+            for edge in source_edges_by_to_pin[normalized_pin_id]
         ]
 
     if not linked_refs:
@@ -908,8 +932,8 @@ def _find_next_exec_node(
     for pin in node.pins:
         if pin.direction == 1:  # Output
             if pin.pin_type and pin.pin_type.pin_category == "exec":
-                if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
-                    edge = edges_by_from_pin[pin.pin_id][0]
+                if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
+                    edge = edges_by_from_pin[_normalize_pin_id(pin.pin_id)][0]
                     return (node_lookup.get(edge["to_node_guid"]), pin.pin_name)
                 for linked_pin_id in (pin.linked_to_raw or []):
                     target_pin_guid = _pin_ref_guid(linked_pin_id)
@@ -1058,8 +1082,8 @@ def _trace_execution_from_event(
             for pin in current_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
                     # 找到 output pin 的连接目标
-                    if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
-                        for edge in edges_by_from_pin[pin.pin_id]:
+                    if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
+                        for edge in edges_by_from_pin[_normalize_pin_id(pin.pin_id)]:
                             data_providers.append({
                                 "output_pin": pin.pin_name,
                                 "target_node": node_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
@@ -1132,8 +1156,8 @@ def _trace_execution_from_pin(
     用于EnhancedInputAction多触发时机追踪。
     增加 node_name_lookup 参数传递。
     """
-    if edges_by_from_pin and start_pin.pin_id in edges_by_from_pin:
-        edge = edges_by_from_pin[start_pin.pin_id][0]
+    if edges_by_from_pin and _normalize_pin_id(start_pin.pin_id) in edges_by_from_pin:
+        edge = edges_by_from_pin[_normalize_pin_id(start_pin.pin_id)][0]
         next_node = node_lookup.get(edge["to_node_guid"])
         if next_node:
             return _trace_execution_from_event(
@@ -1177,7 +1201,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     for node in graph.nodes:
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     mode = FORMAT_CONFIG["pin_reference_mode"]
     connections: List[Dict] = []
@@ -1261,7 +1285,7 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     # 构建 node_name_lookup
     for idx, node in enumerate(graph.nodes):
@@ -1373,7 +1397,7 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     for node in graph.nodes:
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     node_name_lookup: Dict[str, str] = {}
     for idx, node in enumerate(graph.nodes):
@@ -1612,7 +1636,7 @@ def build_function_graphs(
             node_lookup[node.node_guid] = node
             node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
             for pin in node.pins:
-                pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+                pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
         edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
 
@@ -1712,7 +1736,7 @@ def build_function_graphs(
                     # Output pin → data_providers（正向追踪）
                     elif pin.direction == 1:
                         # 找到 output pin 的连接目标
-                        edges = edges_by_from_pin.get(pin.pin_id, [])
+                        edges = edges_by_from_pin.get(_normalize_pin_id(pin.pin_id), [])
                         if edges:
                             for edge in edges:
                                 providers.append({
