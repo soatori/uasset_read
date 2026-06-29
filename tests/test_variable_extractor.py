@@ -93,6 +93,17 @@ class TestMapPropertyFlagsSemantics:
             "EditConst 模式下 is_edit_instance_only 应为 False（不可在实例编辑）"
         )
 
+    def test_editconst_alone(self):
+        """仅 CPF_EditConst（无 CPF_Edit）→ is_edit_anywhere=False, is_edit_instance_only=False。
+        CPF_EditConst 语义为"仅默认值可编辑"，无 CPF_Edit 时两者都应为 False。"""
+        result = _map_property_flags(CPF_EditConst)
+        assert result["is_edit_anywhere"] is False, (
+            "CPF_EditConst 单独设置时，无 CPF_Edit 位，is_edit_anywhere 应为 False"
+        )
+        assert result["is_edit_instance_only"] is False, (
+            "CPF_EditConst 单独设置时，is_edit_instance_only 应为 False"
+        )
+
     def test_no_edit_flags(self):
         """无 CPF_Edit → 两者都为 False。"""
         result = _map_property_flags(0)
