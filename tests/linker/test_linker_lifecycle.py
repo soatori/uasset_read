@@ -411,8 +411,8 @@ class TestPreloadPopulatesProperties:
 DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
 
 STATIC_MESH = DEFAULT_SAMPLE_ROOT / (
-    "StarterContent/Content/StarterContent/Architecture/"
-    "SM_AssetPlatform.uasset"
+    "StarterContent/Content/StarterContent/Props/"
+    "SM_Chair.uasset"
 )
 BLUEPRINT = DEFAULT_SAMPLE_ROOT / (
     "FirstPerson/Content/FirstPerson/Blueprints/"
