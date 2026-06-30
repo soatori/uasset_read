@@ -16,6 +16,9 @@ lib64/
 *.egg
 dist/
 build/
+venv/
+.venv/
+env/
 
 # IDE
 .vscode/
@@ -55,6 +58,9 @@ memory/
 
 # CodeGraph local data
 .codegraph/
+
+# Codex local data
+.codex/
 
 # Test files - track test Python files and directories
 tests/*

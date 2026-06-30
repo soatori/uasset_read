@@ -1,7 +1,7 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.5.1
+版本 0.5.1.19
 
 公共API通过__all__控制。
 """
@@ -695,7 +695,6 @@ __all__ = [
     "build_execution_chains",
     "format_pin_ref",
     "build_function_graphs",
-    "format_pin_ref",
     # 辅助函数
     "find_main_blueprint_generated_class",
     "resolve_parent_class",
