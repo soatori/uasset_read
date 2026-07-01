@@ -30,6 +30,7 @@ from uasset_read.constants import (
     UE4_ADDED_PACKAGE_OWNER,
     UE4_NON_OUTER_PACKAGE_IMPORT,
     UE4_NAME_HASHES_SERIALIZED,
+    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
 )
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
@@ -336,19 +337,24 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
         archive.read(16)  # LegacyGuid — 读取但不存储（旧格式兼容）
 
-    # 第 16a 步：PersistentGuid（非 FilterEditorOnly 文件，UE4 519+）
-    # For legacy -6, the Guid field is at a different position. Skip for -6 only.
+    # 第 16a 步：PersistentGuid（非 FilterEditorOnly 文件）
+    # UE 源码: #if WITH_EDITORONLY_DATA 块中读取
+    # legacy -6: 即使 FileVersionUE4 < 519，PersistentGuid 仍存在于二进制中
     persistent_guid = ""
-    if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
-        if legacy_file_version != -6:
+    if not has_filter_editor_only:
+        if legacy_file_version == -6:
+            # legacy -6: PersistentGuid 始终存在于 LegacyGuid 之后
             guid_bytes = archive.read(16)
             persistent_guid = guid_bytes.hex()
-        # else: legacy -6: Guid is at a different position, skip here
+        elif file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
+            guid_bytes = archive.read(16)
+            persistent_guid = guid_bytes.hex()
 
     # 第 16b 步：OwnerPersistentGuid
     # UE 源码: VER_UE4_ADDED_PACKAGE_OWNER (519) 时添加, VER_UE4_NON_OUTER_PACKAGE_IMPORT (520) 时移除
     # 仅当 FileVersionUE4 >= 519 && FileVersionUE4 < 520 时存在（即恰好等于 519）
     # UE5 资产的 FileVersionUE4 通常为 522+, 不应读取此字段
+    # legacy -6: OwnerPersistentGuid 不存在（FileVersionUE4=490 < 519）
     if (
         not has_filter_editor_only
         and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER
@@ -398,6 +404,11 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
+    # 第 23a 步：NumTextureAllocations（仅 legacy -6，UE 源码 PackageFileSummary.cpp:468-474）
+    # legacyFileVersion > -7（即 -6）时存在此字段，-7/-8/-9 已移除
+    if legacy_file_version > -7:
+        archive.read_i32("NumTextureAllocations")
+
     # 第 24 步：AssetRegistryDataOffset
     asset_registry_data_offset = archive.read_i32("AssetRegistryDataOffset")
     if asset_registry_data_offset > 0:
@@ -420,17 +431,27 @@ def read_package_summary(archive: FArchive) -> PackageFileSummary:
     for _ in range(chunk_ids_count):
         chunk_ids.append(archive.read_i32())
 
-    # 第 28 步：PreloadDependencies
-    preload_dependency_count = archive.read_i32("PreloadDependencyCount")
-    preload_dependency_offset = archive.read_i32("PreloadDependencyOffset")
-    if preload_dependency_offset > 0:
-        archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
+    # 第 28 步：PreloadDependencies（FileVersionUE4 >= 506）
+    # UE 源码: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 506
+    preload_dependency_count = -1
+    preload_dependency_offset = 0
+    if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
+        preload_dependency_count = archive.read_i32("PreloadDependencyCount")
+        preload_dependency_offset = archive.read_i32("PreloadDependencyOffset")
+        if preload_dependency_offset > 0:
+            archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
 
-    # 第 29 步：NamesReferencedFromExportData（UE5.7 始终存在）
-    names_referenced_from_export_data_count = archive.read_i32("NamesReferencedFromExportDataCount")
+    # 第 29 步：NamesReferencedFromExportData（FileVersionUE5 >= 1001）
+    # UE 源码: EUnrealEngineObjectUE5Version::NAMES_REFERENCED_FROM_EXPORT_DATA = 1001
+    names_referenced_from_export_data_count = 0
+    if file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
+        names_referenced_from_export_data_count = archive.read_i32("NamesReferencedFromExportDataCount")
 
-    # 第 30 步：PayloadTocOffset（UE5.7 始终存在，但值可能无效）
-    payload_toc_offset = archive.read_i64("PayloadTocOffset")
+    # 第 30 步：PayloadTocOffset（FileVersionUE5 >= 1002）
+    # UE 源码: EUnrealEngineObjectUE5Version::PAYLOAD_TOC = 1002
+    payload_toc_offset = 0
+    if file_version_ue5 >= UE5_PAYLOAD_TOC:
+        payload_toc_offset = archive.read_i64("PayloadTocOffset")
 
     # Tolerant: 检查 payload_toc_offset 是否合理
     if payload_toc_offset < 0:
