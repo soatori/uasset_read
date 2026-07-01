@@ -158,10 +158,12 @@ def parse_batch(
     mappings_path: str | None = None,
     game: str | None = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
     skip_large_files: bool | None = None,
     isolate_assets: bool = True,
     memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
 ) -> BatchResult:
     """批量解析目录下所有 .uasset/.umap。
 
@@ -178,10 +180,12 @@ def parse_batch(
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
         max_memory_usage: 系统内存使用上限（0.0-1.0），超过时停止启动 worker
         skip_large_files: 已弃用；文件大小仅用于选择资源档位
         isolate_assets: 是否为每个资产启动独立子进程
         memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
 
     Returns:
         BatchResult 包含成功、跳过、失败的文件列表
@@ -236,7 +240,9 @@ def parse_batch(
         "mappings_path": mappings_path,
         "game": game,
         "force_full_parse": force_full_parse,
+        "hex_view": hex_view,
         "memory_policy": policy,
+        "output_level": output_level,
     }
 
     for idx, pf in enumerate(package_files):

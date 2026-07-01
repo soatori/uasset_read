@@ -81,26 +81,22 @@ def _extract_kismet_decompiled(
     return results
 
 
-def _post_process(
-    path: str,
+def _extract_blueprint_graphs_and_metadata(
     archive: FArchive,
     summary: "PackageFileSummary",
     name_map: List[str],
     import_map: List["ObjectImport"],
     export_map: List["ObjectExport"],
     result: "Union[ParseResult, LinkerParseResult]",
-    tolerant: bool = True,
     linker: Optional["PackageLinker"] = None,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
     archive_factory=None,
-    memory_policy: Optional["MemoryPolicy"] = None,
-) -> None:
-    """共享后处理：blueprint 元数据、图提取、依赖分析。
+) -> Optional["BlueprintMetadata"]:
+    """提取蓝图图和元数据（BPGC 优先 + UBlueprint 回退）。
 
-    通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
+    Returns:
+        提取到的 BlueprintMetadata，未找到时返回 None。
     """
-    # Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数）
+    # --- Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数） ---
     graphs_list = None
     try:
         from uasset_read.graph import extract_blueprint_graphs
@@ -116,7 +112,7 @@ def _post_process(
         if hasattr(result, 'errors'):
             result.errors.append(f"graph extraction error: {e}")
 
-    # Blueprint 元数据提取（使用 graphs 填充 functions）
+    # --- Blueprint 元数据提取（BPGC 优先） ---
     blueprint_metadata = None
     asset_name = name_map[0] if name_map else None
 
@@ -146,7 +142,7 @@ def _post_process(
                 if owned_archive:
                     temp_archive.close()
 
-    # UBlueprint 回退
+    # --- UBlueprint 回退 ---
     if not blueprint_metadata:
         for export in export_map:
             if linker is not None:
@@ -180,6 +176,22 @@ def _post_process(
     if hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
+    return blueprint_metadata
+
+
+def _run_kismet_and_dependency_analysis(
+    path: str,
+    archive: FArchive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    result: "Union[ParseResult, LinkerParseResult]",
+    tolerant: bool = True,
+    linker: Optional["PackageLinker"] = None,
+    blueprint_metadata=None,
+) -> None:
+    """Kismet 反编译 + 组件提取 + 依赖分析。"""
     # Kismet decompilation (per D-02, D-10)
     try:
         from uasset_read.kismet.pipeline import decompile_single_function
@@ -192,9 +204,6 @@ def _post_process(
             if decompiled and getattr(result, "graphs", None):
                 from uasset_read.kismet.semantic import enrich_decompiled_functions
                 enrich_decompiled_functions(decompiled, result.graphs)
-            # If extraction produced errors that were caught internally,
-            # and result has no decompiled functions but blueprint was found,
-            # add a warning so the user knows decompilation was attempted
             if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
                 result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
     except ImportError:
@@ -202,15 +211,6 @@ def _post_process(
     except Exception as e:
         if hasattr(result, 'warnings'):
             result.warnings.append(f"Kismet decompilation error: {e}")
-
-    if include_parent_assets:
-        _resolve_parent_assets(
-            path,
-            result,
-            tolerant,
-            asset_roots,
-            memory_policy=memory_policy,
-        )
 
     # Component property extraction
     try:
@@ -237,9 +237,44 @@ def _post_process(
         if hasattr(result, 'errors'):
             result.errors.append(f"dependency analysis error: {e}")
 
-    # name_map 一致性检查：如果 summary.name_count > 0 但 name_map 为空，
-    # 说明名称表读取失败或为空，这不应该在成功的解析中出现。
-    # 添加错误以确保集成测试的 name_map 验证通过。
+
+def _post_process(
+    path: str,
+    archive: FArchive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    result: "Union[ParseResult, LinkerParseResult]",
+    tolerant: bool = True,
+    linker: Optional["PackageLinker"] = None,
+    include_parent_assets: bool = False,
+    asset_roots: Optional[Sequence[str]] = None,
+    archive_factory=None,
+    memory_policy: Optional["MemoryPolicy"] = None,
+) -> None:
+    """共享后处理：blueprint 元数据、图提取、依赖分析。
+
+    通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
+    """
+    blueprint_metadata = _extract_blueprint_graphs_and_metadata(
+        archive, summary, name_map, import_map, export_map,
+        result, linker=linker, archive_factory=archive_factory,
+    )
+
+    _run_kismet_and_dependency_analysis(
+        path, archive, summary, name_map, import_map, export_map,
+        result, tolerant=tolerant, linker=linker,
+        blueprint_metadata=blueprint_metadata,
+    )
+
+    if include_parent_assets:
+        _resolve_parent_assets(
+            path, result, tolerant, asset_roots,
+            memory_policy=memory_policy,
+        )
+
+    # name_map 一致性检查
     if hasattr(result, 'name_map') and not result.name_map:
         if summary is not None and getattr(summary, 'name_count', 0) > 0:
             if hasattr(result, 'errors'):
@@ -248,7 +283,6 @@ def _post_process(
                     f"名称表读取失败"
                 )
 
-    # 设置成功标志
     result.is_success = len(result.errors) == 0
 
 
@@ -477,6 +511,156 @@ def _build_lightweight_function_graphs(export_map) -> list[dict]:
     return entries
 
 
+def _derive_package_name(path: str, summary: "PackageFileSummary") -> None:
+    """package_name 为空时从文件路径推导。"""
+    if summary.package_name:
+        return
+    _p = Path(path)
+    _path_str = _p.as_posix()
+    _content_idx = _path_str.lower().find("/content/")
+    if _content_idx >= 0:
+        _relative = _path_str[_content_idx + len("/content/"):]
+        if _relative.startswith("/"):
+            _relative = _relative[1:]
+        if _relative.lower().endswith(".uasset"):
+            _relative = _relative[:-len(".uasset")]
+        summary.package_name = f"/Game/{_relative}"
+    else:
+        summary.package_name = f"/Game/{_p.stem}"
+
+
+def _create_linker(
+    archive,
+    summary: "PackageFileSummary",
+    name_map: List[str],
+    import_map: List["ObjectImport"],
+    export_map: List["ObjectExport"],
+    result,
+    tolerant: bool = True,
+    version_container=None,
+    extra_linker_setup: Optional[Callable] = None,
+) -> Optional["PackageLinker"]:
+    """创建并链接 PackageLinker。返回 linker 或 None。"""
+    from uasset_read.link.linker import PackageLinker
+    try:
+        linker = PackageLinker(
+            archive, summary, name_map,
+            import_map, export_map or [],
+            version_container=version_container,
+        )
+        linker.link()
+        result.linker = linker
+        if extra_linker_setup is not None:
+            extra_linker_setup(linker, result)
+        return linker
+    except Exception as e:
+        if not tolerant:
+            raise ParseError(f"Linker creation failed: {e}") from e
+        result.errors.append(f"Linker creation failed: {e}")
+        return None
+
+
+def _read_package_headers(
+    path: str,
+    result,
+    tolerant: bool = True,
+    provider: Optional["PackageProvider"] = None,
+    mappings_path: Optional[str] = None,
+    game: Optional[str] = None,
+    hex_view: bool = False,
+    validate_range: bool = True,
+) -> tuple:
+    """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
+
+    Returns:
+        (bundle, archive, linker, mappings_provider) — 调用方负责关闭 archive。
+        如果 result.summary is None，表示早期失败，调用方应直接返回。
+    """
+    bundle = None
+    archive = None
+    mappings_provider = None
+
+    if mappings_path:
+        from uasset_read.mappings import TypeMappingsProvider
+        mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+        result.metadata["mappings_path"] = mappings_path
+    if game:
+        result.metadata["game"] = game
+
+    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+    archive = bundle.open_archive(tolerant=tolerant)
+    if hex_view:
+        archive.enable_hex_view(True)
+    result.metadata.update(_package_metadata(bundle))
+
+    # Extract mmap info
+    mmap_info = archive.get_mmap_info()
+    result.mmap_used = mmap_info["used"]
+    result.mmap_warning = mmap_info["warning"]
+
+    # 读取文件头
+    result.summary = _run_required_stage(
+        result=result, archive=archive, path=path, tolerant=tolerant,
+        stage="package_summary", field="summary",
+        reader=lambda: read_package_summary(archive),
+    )
+    if result.summary is None:
+        return bundle, archive, None, mappings_provider
+    result.version_container = build_version_container(result.summary)
+    archive._file_version_ue5 = result.summary.file_version_ue5
+
+    # 截断文件检测
+    if validate_range:
+        try:
+            validate_export_data_range(archive, result.summary)
+        except Exception as e:
+            if not tolerant:
+                raise
+            _record_parse_stage_error(
+                result, archive, path, "package_summary", "export_data_range", e
+            )
+            return bundle, archive, None, mappings_provider
+
+    # 读取名称表
+    result.name_map = _run_required_stage(
+        result=result, archive=archive, path=path, tolerant=tolerant,
+        stage="name_table", field="name_map",
+        reader=lambda: read_name_table(archive, result.summary),
+    )
+    if result.name_map is None:
+        result.name_map = []
+
+    _derive_package_name(path, result.summary)
+
+    # 读取导入表
+    result.import_map = _run_required_stage(
+        result=result, archive=archive, path=path, tolerant=tolerant,
+        stage="import_map", field="import_map",
+        reader=lambda: read_import_map(archive, result.summary, result.name_map),
+    )
+    if result.import_map is None:
+        result.import_map = []
+
+    # 读取导出表
+    result.export_map = _run_required_stage(
+        result=result, archive=archive, path=path, tolerant=tolerant,
+        stage="export_map", field="export_map",
+        reader=lambda: read_export_map(archive, result.summary, result.name_map),
+    )
+    if result.export_map is None:
+        result.export_map = []
+
+    # 创建 linker
+    linker = _create_linker(
+        archive, result.summary, result.name_map,
+        result.import_map, result.export_map or [],
+        result, tolerant=tolerant,
+        version_container=result.version_container,
+    )
+
+    return bundle, archive, linker, mappings_provider
+
+
 def _parse_package_core(
     path: str,
     result,
@@ -591,25 +775,7 @@ def _parse_package_core(
                 return
             memory_monitor.checkpoint("name_map")
 
-            # package_name 为空时从文件路径推导（UE FName::None 或缺失时）
-            if not result.summary.package_name:
-                from pathlib import Path as _Path
-                _p = _Path(path)
-                # 尝试从路径中提取 /Game/... 形式的包名
-                _path_str = _p.as_posix()
-                _content_idx = _path_str.lower().find("/content/")
-                if _content_idx >= 0:
-                    # /Game/Content/... → /Game/... （去掉 Content/ 层级）
-                    _relative = _path_str[_content_idx + len("/content/"):]
-                    if _relative.startswith("/"):
-                        _relative = _relative[1:]
-                    # 去掉 .uasset 扩展名
-                    if _relative.lower().endswith(".uasset"):
-                        _relative = _relative[:-len(".uasset")]
-                    result.summary.package_name = f"/Game/{_relative}"
-                else:
-                    # 回退：使用文件名（不含扩展名）
-                    result.summary.package_name = f"/Game/{_p.stem}"
+            _derive_package_name(path, result.summary)
 
             # 读取导入表
             result.import_map = _run_required_stage(
@@ -669,25 +835,15 @@ def _parse_package_core(
                 result.warnings.append(f"AssetRegistryData 解析失败: {e}")
                 result.asset_registry_data = None
 
-            # 创建 linker 用于完整对象图解析（在属性解析之前创建，确保 parse_properties_from_export 可使用 linker）
-            linker: Optional["PackageLinker"] = None
-            try:
-                linker = PackageLinker(
-                    archive, result.summary, result.name_map,
-                    result.import_map, result.export_map or [],
-                    version_container=result.version_container,
-                )
-                linker.link()
-                result.linker = linker
-
-                if extra_linker_setup is not None:
-                    extra_linker_setup(linker, result)
-
-                # NOTE: post_load() is deferred until after export preloading (link → preload → post_load)
-            except Exception as e:
-                if not tolerant:
-                    raise ParseError(f"Linker creation failed: {e}") from e
-                result.errors.append(f"Linker creation failed: {e}")
+            # 创建 linker 用于完整对象图解析
+            linker = _create_linker(
+                archive, result.summary, result.name_map,
+                result.import_map, result.export_map or [],
+                result, tolerant=tolerant,
+                version_container=result.version_container,
+                extra_linker_setup=extra_linker_setup,
+            )
+            # NOTE: post_load() is deferred until after export preloading (link → preload → post_load)
 
             if _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold, force_full_parse):
                 result.warnings.append(
@@ -1009,93 +1165,17 @@ def parse_package_lazy(
     Returns:
         ParseResult 实例（export body 按需解析）
     """
-    from uasset_read.link.linker import PackageLinker
-
     result = ParseResult()
     archive = None
-    bundle = None
-    mappings_provider = None
 
-    file_path = Path(path)
     try:
-        if mappings_path:
-            from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
-            result.metadata["mappings_path"] = mappings_path
-        if game:
-            result.metadata["game"] = game
-
-        bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
-        archive = bundle.open_archive(tolerant=tolerant)
-        result.metadata.update(_package_metadata(bundle))
-
-        # 始终解析 Header
-        result.summary = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="package_summary", field="summary",
-            reader=lambda: read_package_summary(archive),
+        bundle, archive, linker, mappings_provider = _read_package_headers(
+            path, result,
+            tolerant=tolerant, provider=provider,
+            mappings_path=mappings_path, game=game,
         )
         if result.summary is None:
             return result
-        result.version_container = build_version_container(result.summary)
-        archive._file_version_ue5 = result.summary.file_version_ue5
-
-        # 始终解析 NameMap
-        result.name_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="name_table", field="name_map",
-            reader=lambda: read_name_table(archive, result.summary),
-        )
-        if result.name_map is None:
-            result.name_map = []
-
-        # package_name 为空时从文件路径推导
-        if not result.summary.package_name:
-            _p = Path(path)
-            _path_str = _p.as_posix()
-            _content_idx = _path_str.lower().find("/content/")
-            if _content_idx >= 0:
-                _relative = _path_str[_content_idx + len("/content/"):]
-                if _relative.startswith("/"):
-                    _relative = _relative[1:]
-                if _relative.lower().endswith(".uasset"):
-                    _relative = _relative[:-len(".uasset")]
-                result.summary.package_name = f"/Game/{_relative}"
-            else:
-                result.summary.package_name = f"/Game/{_p.stem}"
-
-        # 始终解析 ImportMap
-        result.import_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="import_map", field="import_map",
-            reader=lambda: read_import_map(archive, result.summary, result.name_map),
-        )
-        if result.import_map is None:
-            result.import_map = []
-
-        # 始终解析 ExportMap（仅元数据，不含 body）
-        result.export_map = _run_required_stage(
-            result=result, archive=archive, path=path, tolerant=tolerant,
-            stage="export_map", field="export_map",
-            reader=lambda: read_export_map(archive, result.summary, result.name_map),
-        )
-        if result.export_map is None:
-            result.export_map = []
-
-        # 创建 linker
-        linker: Optional["PackageLinker"] = None
-        try:
-            linker = PackageLinker(
-                archive, result.summary, result.name_map,
-                result.import_map, result.export_map or [],
-                version_container=result.version_container,
-            )
-            linker.link()
-            result.linker = linker
-        except Exception as e:
-            if not tolerant:
-                raise ParseError(f"Linker creation failed: {e}") from e
-            result.errors.append(f"Linker creation failed: {e}")
 
         # 按需解析指定 export body
         parse_indices = set(export_indices) if export_indices else set()

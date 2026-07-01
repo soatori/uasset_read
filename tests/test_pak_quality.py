@@ -249,12 +249,12 @@ class TestFPakInfoSerializedSizeConsistency:
         assert FPakInfo._serialized_size(10) == FPakInfo._serialized_size(8)
 
     def test_pak_info_sizes_constant_sum_v1_6(self):
-        """v1-6 常量验证。"""
-        assert PAK_INFO_SIZES["v1-6"] == 4 + 4 + 8 + 8 + 20  # 44
+        """v1-6 常量验证（含 bEncryptedIndex）。"""
+        assert PAK_INFO_SIZES["v1-6"] == 1 + 4 + 4 + 8 + 8 + 20  # 45
 
     def test_pak_info_sizes_constant_sum_v7(self):
-        """v7 常量验证。"""
-        assert PAK_INFO_SIZES["v7"] == PAK_INFO_SIZES["v1-6"] + 16 + 1  # 61
+        """v7 常量验证（EncryptionKeyGuid 已包含在 v1-6 base 中）。"""
+        assert PAK_INFO_SIZES["v7"] == PAK_INFO_SIZES["v1-6"] + 16  # 61
 
     def test_pak_info_sizes_constant_sum_v8(self):
         """v8 常量验证。"""
@@ -269,8 +269,9 @@ class TestFPakInfoDeserialize:
     """FPakInfo.deserialize 反序列化测试。"""
 
     def _build_pak_info_trailer_v1_6(self, version=6, magic=PAK_FILE_MAGIC):
-        """构建 v1-6 FPakInfo 尾部。"""
+        """构建 v1-6 FPakInfo 尾部（含 bEncryptedIndex）。"""
         buf = io.BytesIO()
+        buf.write(struct.pack('<B', 0))       # bEncryptedIndex (1 byte, always present)
         buf.write(struct.pack('<I', magic))
         buf.write(struct.pack('<i', version))
         buf.write(struct.pack('<q', 0x1000))  # index_offset

@@ -288,7 +288,6 @@ from .graph import (
     format_graphs_json,
     build_execution_chains,
     format_pin_ref,
-    _derive_node_name,
     build_function_graphs,
 )
 
@@ -641,10 +640,6 @@ __all__ = [
     "handle_custom_property",
     # 辅助函数（测试依赖）
     "get_struct_size",
-    "_extract_struct_type_from_tag",
-    "_extract_map_types_from_tag",
-    "_extract_set_type_from_tag",
-    "_extract_enum_type_from_tag",
     # parsers/utils.py 辅助函数
     "resolve_name_from_index",
     "read_validated_count",

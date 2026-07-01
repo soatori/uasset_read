@@ -122,9 +122,10 @@ MaxNumCompressionMethods = 5  # UE engine constant
 
 # FPakInfo serialized sizes per version range
 # Computed from field sizes in IPlatformFilePak.h
+# bEncryptedIndex (1 byte) is unconditionally serialized for ALL versions
 PAK_INFO_SIZES = {
-    "v1-6": 44,    # Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20)
-    "v7": 61,      # + EncryptionKeyGuid(16) + bEncryptedIndex(1)
+    "v1-6": 45,    # Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) + bEncryptedIndex(1)
+    "v7": 61,      # + EncryptionKeyGuid(16)
     "v8": 221,     # + CompressionMethods(32*5=160)
     "v9": 222,     # + FrozenIndex(1)
     "v10+": 221,   # - FrozenIndex (removed in v10)

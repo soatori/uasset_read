@@ -377,9 +377,9 @@ class TestFPakInfo:
 
     def test_sizes_match_expected_constants(self):
         """验证 PAK_INFO_SIZES 常量值与已知 UE 格式一致。"""
-        # v1-6: Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) = 44
-        assert PAK_INFO_SIZES["v1-6"] == 44
-        # v7: + EncryptionKeyGuid(16) + bEncryptedIndex(1) = 61
+        # v1-6: bEncryptedIndex(1) + Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) = 45
+        assert PAK_INFO_SIZES["v1-6"] == 45
+        # v7: + EncryptionKeyGuid(16) = 61
         assert PAK_INFO_SIZES["v7"] == 61
         # v8: + CompressionMethods(32*5) = 221
         assert PAK_INFO_SIZES["v8"] == 221

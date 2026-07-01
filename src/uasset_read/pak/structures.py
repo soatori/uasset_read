@@ -411,7 +411,7 @@ class FPakInfo:
             (9,),           # 222 bytes
             (8,),           # 221 bytes (same size as v10+, but different structure)
             (7,),           # 61 bytes
-            (6, 5, 4, 3, 2, 1),  # 44 bytes
+            (6, 5, 4, 3, 2, 1),  # 45 bytes
         ]
 
         for group in version_groups:
@@ -420,9 +420,12 @@ class FPakInfo:
             if pos < 0:
                 continue
 
-            # For v7+, the magic is at offset 17 (after EncryptionKeyGuid[16] + bEncryptedIndex[1])
-            # For v1-6, magic is at offset 0
-            magic_offset_in_trailer = 17 if group[0] >= PakFileVersion.EncryptionKeyGuid else 0
+            # bEncryptedIndex is always serialized (1 byte), unconditionally per UE source.
+            # For v7+, EncryptionKeyGuid(16) is prepended before bEncryptedIndex.
+            # Magic position: v7+ at offset 17, v1-6 at offset 1
+            magic_offset_in_trailer = (
+                17 if group[0] >= PakFileVersion.EncryptionKeyGuid else 1
+            )
 
             stream.seek(pos + magic_offset_in_trailer)
             raw = stream.read(4)
@@ -462,10 +465,12 @@ class FPakInfo:
             info.version = version
             info.detected_game = detected_game
 
-            # New fields (version >= 7): prepended before Magic
+            # EncryptionKeyGuid (version >= 7 only, prepended before bEncryptedIndex)
             if version >= PakFileVersion.EncryptionKeyGuid:
                 info.encryption_key_guid = stream.read(16)
-                info.encrypted_index = struct.unpack('<B', stream.read(1))[0] != 0
+
+            # bEncryptedIndex: always serialized, unconditionally (UE IPlatformFilePak.h)
+            info.encrypted_index = struct.unpack('<B', stream.read(1))[0] != 0
 
             # Core fields (always present)
             info.magic = struct.unpack('<I', stream.read(4))[0]
