@@ -544,6 +544,163 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     return elements
 
 
+def _try_fast_path_struct(
+    struct_type: str,
+    tag,
+    archive: FArchive,
+    name_map: List[str],
+) -> Optional[StructValue]:
+    """尝试快速路径解析简单结构体（无 PropertyTag 循环）。返回 None 表示无匹配。"""
+    if struct_type == "Vector":
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        return StructValue(struct_type="Vector", fields={"X": reader(), "Y": reader(), "Z": reader()})
+
+    if struct_type == "Rotator":
+        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+        return StructValue(struct_type="Rotator", fields={"Pitch": reader(), "Yaw": reader(), "Roll": reader()})
+
+    if struct_type == "Vector2D":
+        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
+        return StructValue(struct_type="Vector2D", fields={"X": reader(), "Y": reader()})
+
+    if struct_type == "Vector4":
+        if tag.size == 32:
+            x, y, z, w = archive.read_f64(), archive.read_f64(), archive.read_f64(), archive.read_f64()
+        else:
+            x, y, z, w = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
+        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
+
+    if struct_type == "LinearColor":
+        return StructValue(struct_type="LinearColor", fields={
+            "R": archive.read_f32(), "G": archive.read_f32(),
+            "B": archive.read_f32(), "A": archive.read_f32(),
+        })
+
+    if struct_type == "Color":
+        return StructValue(struct_type="Color", fields={
+            "B": archive.read_u8(), "G": archive.read_u8(),
+            "R": archive.read_u8(), "A": archive.read_u8(),
+        })
+
+    if struct_type == "Quat":
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        return StructValue(struct_type="Quat", fields={
+            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
+        })
+
+    if struct_type == "Plane":
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        return StructValue(struct_type="Plane", fields={
+            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
+        })
+
+    if struct_type == "Guid":
+        return StructValue(struct_type="Guid", fields={
+            "A": archive.read_u32(), "B": archive.read_u32(),
+            "C": archive.read_u32(), "D": archive.read_u32(),
+        })
+
+    if struct_type == "IntPoint":
+        return StructValue(struct_type="IntPoint", fields={"X": archive.read_i32(), "Y": archive.read_i32()})
+
+    if struct_type == "IntVector":
+        return StructValue(struct_type="IntVector", fields={
+            "X": archive.read_i32(), "Y": archive.read_i32(), "Z": archive.read_i32(),
+        })
+
+    if struct_type == "Box2D":
+        min_x, min_y = archive.read_f32(), archive.read_f32()
+        max_x, max_y = archive.read_f32(), archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box2D", fields={
+            "Min": {"X": min_x, "Y": min_y}, "Max": {"X": max_x, "Y": max_y}, "bIsValid": b_valid,
+        })
+
+    if struct_type == "Box":
+        min_x, min_y, min_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        max_x, max_y, max_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        b_valid = archive.read_i32() != 0
+        return StructValue(struct_type="Box", fields={
+            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
+            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
+            "bIsValid": b_valid,
+        })
+
+    if struct_type == "Sphere":
+        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+        cx, cy, cz, w = reader(), reader(), reader(), reader()
+        return StructValue(struct_type="Sphere", fields={"Center": {"X": cx, "Y": cy, "Z": cz}, "W": w})
+
+    if struct_type == "TopLevelAssetPath":
+        return StructValue(struct_type="TopLevelAssetPath", fields={
+            "PackageName": archive.read_name(name_map), "AssetName": archive.read_name(name_map),
+        })
+
+    if struct_type == "PointerToUberGraphFrame":
+        return StructValue(struct_type="PointerToUberGraphFrame", fields={"FrameIndex": archive.read_i64()})
+
+    if struct_type == "Matrix":
+        matrix = [[archive.read_f32() for _ in range(4)] for _ in range(4)]
+        return StructValue(struct_type="Matrix", fields={"M": matrix})
+
+    if struct_type == "TwoVectors":
+        e1 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        e2 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        return StructValue(struct_type="TwoVectors", fields={"E1": e1, "E2": e2})
+
+    if struct_type == "OrientedBox":
+        ax = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        ay = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        az = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        ext = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        ctr = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        return StructValue(struct_type="OrientedBox", fields={
+            "AxisX": ax, "AxisY": ay, "AxisZ": az, "Extent": ext, "Center": ctr,
+        })
+
+    if struct_type == "Transform":
+        tx, ty, tz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+        rx, ry, rz, rw = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
+        sx, sy, sz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        return StructValue(struct_type="Transform", fields={
+            "Translation": {"X": tx, "Y": ty, "Z": tz},
+            "Rotation": {"X": rx, "Y": ry, "Z": rz, "W": rw},
+            "Scale3D": {"X": sx, "Y": sy, "Z": sz},
+        })
+
+    if struct_type == "BoxSphereBounds":
+        if tag.size == 28:
+            ox, oy, oz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            sr = archive.read_f32()
+        elif tag.size == 56:
+            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            bx, by, bz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            sr = archive.read_f64()
+        elif tag.size == 52:
+            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            bx, by, bz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            sr = archive.read_f32()
+        elif tag.size == 40:
+            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            sr = archive.read_f32()
+        else:
+            ox, oy, oz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            sr = archive.read_f32()
+            remaining = tag.size - 28
+            if remaining > 0:
+                archive.read_bytes(remaining)
+        return StructValue(struct_type="BoxSphereBounds", fields={
+            "Origin": {"X": ox, "Y": oy, "Z": oz},
+            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
+            "SphereRadius": sr,
+        })
+
+    return None
+
+
 def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
     """解析 StructProperty（ADVP-01）。"""
     MAX_DEPTH = 5
@@ -608,263 +765,9 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     # Fast-path for simple structs (FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
-    if struct_type == "Vector":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        x = reader()
-        y = reader()
-        z = reader()
-        return StructValue(struct_type="Vector", fields={"X": x, "Y": y, "Z": z})
-
-    if struct_type == "Rotator":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        pitch = reader()
-        yaw = reader()
-        roll = reader()
-        return StructValue(struct_type="Rotator", fields={"Pitch": pitch, "Yaw": yaw, "Roll": roll})
-
-    if struct_type == "Vector2D":
-        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
-        x = reader()
-        y = reader()
-        return StructValue(struct_type="Vector2D", fields={"X": x, "Y": y})
-
-    # Additional fast-path structs (raw reads, no PropertyTags loop)
-    if struct_type == "Vector4":
-        if tag.size == 32:
-            # UE5.5 LWC: double 精度
-            x = archive.read_f64()
-            y = archive.read_f64()
-            z = archive.read_f64()
-            w = archive.read_f64()
-        else:
-            # 标准 float 精度
-            x = archive.read_f32()
-            y = archive.read_f32()
-            z = archive.read_f32()
-            w = archive.read_f32()
-        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
-
-    if struct_type == "LinearColor":
-        r = archive.read_f32()
-        g = archive.read_f32()
-        b = archive.read_f32()
-        a = archive.read_f32()
-        return StructValue(struct_type="LinearColor", fields={"R": r, "G": g, "B": b, "A": a})
-
-    if struct_type == "Color":
-        b = archive.read_u8()
-        g = archive.read_u8()
-        r = archive.read_u8()
-        a = archive.read_u8()
-        return StructValue(struct_type="Color", fields={"B": b, "G": g, "R": r, "A": a})
-
-    if struct_type == "Quat":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        x = reader()
-        y = reader()
-        z = reader()
-        w = reader()
-        return StructValue(struct_type="Quat", fields={"X": x, "Y": y, "Z": z, "W": w})
-
-    if struct_type == "Plane":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        x = reader()
-        y = reader()
-        z = reader()
-        w = reader()
-        return StructValue(struct_type="Plane", fields={"X": x, "Y": y, "Z": z, "W": w})
-
-    if struct_type == "Guid":
-        a = archive.read_u32()
-        b = archive.read_u32()
-        c = archive.read_u32()
-        d = archive.read_u32()
-        return StructValue(struct_type="Guid", fields={"A": a, "B": b, "C": c, "D": d})
-
-    if struct_type == "IntPoint":
-        x = archive.read_i32()
-        y = archive.read_i32()
-        return StructValue(struct_type="IntPoint", fields={"X": x, "Y": y})
-
-    if struct_type == "IntVector":
-        x = archive.read_i32()
-        y = archive.read_i32()
-        z = archive.read_i32()
-        return StructValue(struct_type="IntVector", fields={"X": x, "Y": y, "Z": z})
-
-    if struct_type == "Box2D":
-        min_x = archive.read_f32()
-        min_y = archive.read_f32()
-        max_x = archive.read_f32()
-        max_y = archive.read_f32()
-        b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box2D", fields={
-            "Min": {"X": min_x, "Y": min_y},
-            "Max": {"X": max_x, "Y": max_y},
-            "bIsValid": b_valid,
-        })
-
-    if struct_type == "Box":
-        min_x = archive.read_f32()
-        min_y = archive.read_f32()
-        min_z = archive.read_f32()
-        max_x = archive.read_f32()
-        max_y = archive.read_f32()
-        max_z = archive.read_f32()
-        b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box", fields={
-            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
-            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
-            "bIsValid": b_valid,
-        })
-
-    if struct_type == "Sphere":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        cx = reader()
-        cy = reader()
-        cz = reader()
-        w = reader()
-        return StructValue(struct_type="Sphere", fields={
-            "Center": {"X": cx, "Y": cy, "Z": cz},
-            "W": w,
-        })
-
-    if struct_type == "TopLevelAssetPath":
-        pkg_name = archive.read_name(name_map)
-        asset_name = archive.read_name(name_map)
-        return StructValue(struct_type="TopLevelAssetPath", fields={
-            "PackageName": pkg_name,
-            "AssetName": asset_name,
-        })
-
-    if struct_type == "PointerToUberGraphFrame":
-        frame_index = archive.read_i64()  # 8 字节 FPackageIndex
-        return StructValue(struct_type="PointerToUberGraphFrame", fields={
-            "FrameIndex": frame_index,
-        })
-
-    if struct_type == "BoxSphereBounds":
-        # 紧凑格式布局（UE 源码: BoxSphereBounds.h operator<<）：
-        # - 28 bytes: FBoxSphereBounds3f — Origin(3f) + BoxExtent(3f) + SphereRadius(f)
-        # - 56 bytes: FBoxSphereBounds3d (LWC) — Origin(3d) + BoxExtent(3d) + SphereRadius(d)
-        # - 52 bytes: FBoxSphereBounds3d (pre-LWC) — Origin(3d) + BoxExtent(3d) + SphereRadius(f)
-        # - 40 bytes: FCompactBoxSphereBounds3d — Origin(3d) + BoxExtent(3f) + SphereRadius(f)
-        if tag.size == 28:
-            # FBoxSphereBounds3f: all float
-            ox = archive.read_f32()
-            oy = archive.read_f32()
-            oz = archive.read_f32()
-            bx = archive.read_f32()
-            by = archive.read_f32()
-            bz = archive.read_f32()
-            sr = archive.read_f32()
-        elif tag.size == 56:
-            # FBoxSphereBounds3d (LWC): all double
-            ox = archive.read_f64()
-            oy = archive.read_f64()
-            oz = archive.read_f64()
-            bx = archive.read_f64()
-            by = archive.read_f64()
-            bz = archive.read_f64()
-            sr = archive.read_f64()
-        elif tag.size == 52:
-            # FBoxSphereBounds3d (pre-LWC): double Origin/BoxExtent, float SphereRadius
-            ox = archive.read_f64()
-            oy = archive.read_f64()
-            oz = archive.read_f64()
-            bx = archive.read_f64()
-            by = archive.read_f64()
-            bz = archive.read_f64()
-            sr = archive.read_f32()
-        elif tag.size == 40:
-            # FCompactBoxSphereBounds3d: double Origin, float BoxExtent/SphereRadius
-            ox = archive.read_f64()
-            oy = archive.read_f64()
-            oz = archive.read_f64()
-            bx = archive.read_f32()
-            by = archive.read_f32()
-            bz = archive.read_f32()
-            sr = archive.read_f32()
-        else:
-            # 未知大小，使用 float 读取并跳过剩余字节
-            ox = archive.read_f32()
-            oy = archive.read_f32()
-            oz = archive.read_f32()
-            bx = archive.read_f32()
-            by = archive.read_f32()
-            bz = archive.read_f32()
-            sr = archive.read_f32()
-            remaining = tag.size - 28
-            if remaining > 0:
-                archive.read_bytes(remaining)
-        return StructValue(struct_type="BoxSphereBounds", fields={
-            "Origin": {"X": ox, "Y": oy, "Z": oz},
-            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
-            "SphereRadius": sr,
-        })
-
-    if struct_type == "Matrix":
-        matrix = []
-        for i in range(4):
-            row = [archive.read_f32() for _ in range(4)]
-            matrix.append(row)
-        return StructValue(struct_type="Matrix", fields={
-            "M": matrix,
-        })
-
-    if struct_type == "TwoVectors":
-        e1_x = archive.read_f32()
-        e1_y = archive.read_f32()
-        e1_z = archive.read_f32()
-        e2_x = archive.read_f32()
-        e2_y = archive.read_f32()
-        e2_z = archive.read_f32()
-        return StructValue(struct_type="TwoVectors", fields={
-            "E1": {"X": e1_x, "Y": e1_y, "Z": e1_z},
-            "E2": {"X": e2_x, "Y": e2_y, "Z": e2_z},
-        })
-
-    if struct_type == "OrientedBox":
-        ax_x = archive.read_f32()
-        ax_y = archive.read_f32()
-        ax_z = archive.read_f32()
-        ay_x = archive.read_f32()
-        ay_y = archive.read_f32()
-        ay_z = archive.read_f32()
-        az_x = archive.read_f32()
-        az_y = archive.read_f32()
-        az_z = archive.read_f32()
-        ex = archive.read_f32()
-        ey = archive.read_f32()
-        ez = archive.read_f32()
-        cx = archive.read_f32()
-        cy = archive.read_f32()
-        cz = archive.read_f32()
-        return StructValue(struct_type="OrientedBox", fields={
-            "AxisX": {"X": ax_x, "Y": ax_y, "Z": ax_z},
-            "AxisY": {"X": ay_x, "Y": ay_y, "Z": ay_z},
-            "AxisZ": {"X": az_x, "Y": az_y, "Z": az_z},
-            "Extent": {"X": ex, "Y": ey, "Z": ez},
-            "Center": {"X": cx, "Y": cy, "Z": cz},
-        })
-
-    # Transform: UE5 LWC uses double for FVector components
-    if struct_type == "Transform":
-        translation_x = archive.read_f64()
-        translation_y = archive.read_f64()
-        translation_z = archive.read_f64()
-        rot_x = archive.read_f32()
-        rot_y = archive.read_f32()
-        rot_z = archive.read_f32()
-        rot_w = archive.read_f32()
-        scale_x = archive.read_f32()
-        scale_y = archive.read_f32()
-        scale_z = archive.read_f32()
-        return StructValue(struct_type="Transform", fields={
-            "Translation": {"X": translation_x, "Y": translation_y, "Z": translation_z},
-            "Rotation": {"X": rot_x, "Y": rot_y, "Z": rot_z, "W": rot_w},
-            "Scale3D": {"X": scale_x, "Y": scale_y, "Z": scale_z},
-        })
+    fast_result = _try_fast_path_struct(struct_type, tag, archive, name_map)
+    if fast_result is not None:
+        return fast_result
 
     if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
         return StructValue(

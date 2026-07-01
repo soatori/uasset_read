@@ -192,75 +192,66 @@ class MathFunctionCleaner:
 
     # --- Math library ---
 
+    # Lookup 表：prefix → lambda(p) -> str，用于分类分派降低圈复杂度
+    _MATH_COMPARISON_TABLE: dict[str, any] = {
+        "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
+        "EqualEqual_ByteByte": lambda p: f"((!{p[0]}) == (!{p[1]}))",
+        "NotEqualExactly_": lambda p: f"({p[0]} != {p[1]})",
+        "NotEqual_": lambda p: f"({p[0]} != {p[1]})",
+        "NotEqual_ByteByte": lambda p: f"((!{p[0]}) != (!{p[1]}))",
+        "LessEqual_": lambda p: f"({p[0]} <= {p[1]})",
+        "Less_": lambda p: f"({p[0]} < {p[1]})",
+        "GreaterEqual_": lambda p: f"({p[0]} >= {p[1]})",
+        "Greater_": lambda p: f"({p[0]} > {p[1]})",
+    }
+
+    _MATH_ARITHMETIC_TABLE: dict[str, any] = {
+        "Add_": lambda p: f"{p[0]} + {p[1]}",
+        "Subtract_": lambda p: f"{p[0]} - {p[1]}",
+        "Multiply_": lambda p: f"({p[0]} * {p[1]})",
+        "Divide_": lambda p: f"({p[0]} / {p[1]})",
+        "Percent_": lambda p: f"({p[0]} % {p[1]})",
+    }
+
+    _MATH_BITWISE_TABLE: dict[str, any] = {
+        "Xor_": lambda p: f"({p[0]} ^ {p[1]})",
+        "Or_": lambda p: f"({p[0]} | {p[1]})",
+        "And_": lambda p: f"({p[0]} & {p[1]})",
+        "Not_PreBool": lambda p: f"!{p[0]}",
+        "Not_": lambda p: f"(~{p[0]})",
+    }
+
+    _MATH_BOOLEAN_TABLE: dict[str, any] = {
+        "BooleanAND": lambda p: f"{p[0]} && {p[1]}",
+        "BooleanNAND": lambda p: f"!({p[0]} && {p[1]})",
+        "BooleanOR": lambda p: f"({p[0]} || {p[1]})",
+        "BooleanXOR": lambda p: f"{p[0]} ^ {p[1]}",
+        "BooleanNOR": lambda p: f"!({p[0]} || {p[1]})",
+    }
+
+    _MATH_COMPOUND_ASSIGN_TABLE: dict[str, any] = {
+        "AddEquals": lambda p: f"({p[0]} += {p[1]})",
+        "SubtractEquals": lambda p: f"({p[0]} -= {p[1]})",
+        "MultiplyEquals": lambda p: f"({p[0]} *= {p[1]})",
+        "DivideEquals": lambda p: f"({p[0]} /= {p[1]})",
+    }
+
     @staticmethod
-    def _clean_math(func_name: str, p: list[str]) -> str:
-        # Comparison
-        if func_name.startswith("EqualEqual_"):
-            if func_name.startswith("EqualEqual_ByteByte"):
-                return f"((!{p[0]}) == (!{p[1]}))"
-            return f"{p[0]} == {p[1]}"
-        if func_name.startswith("NotEqualExactly_"):
-            return f"({p[0]} != {p[1]})"
-        if func_name.startswith("NotEqual_"):
-            if func_name.startswith("NotEqual_ByteByte"):
-                return f"((!{p[0]}) != (!{p[1]}))"
-            return f"({p[0]} != {p[1]})"
-        if func_name.startswith("LessEqual_"):
-            return f"({p[0]} <= {p[1]})"
-        if func_name.startswith("Less_"):
-            return f"({p[0]} < {p[1]})"
-        if func_name.startswith("GreaterEqual_"):
-            return f"({p[0]} >= {p[1]})"
-        if func_name.startswith("Greater_"):
-            return f"({p[0]} > {p[1]})"
+    def _dispatch_table_lookup(func_name: str, p: list[str],
+                               table: dict[str, any]) -> str | None:
+        """按最长前缀匹配查找 table，返回格式化结果或 None。"""
+        # 先检查精确匹配
+        if func_name in table:
+            return table[func_name](p)
+        # 按前缀长度降序查找（最长优先）
+        for prefix in sorted(table, key=len, reverse=True):
+            if prefix != func_name and func_name.startswith(prefix):
+                return table[prefix](p)
+        return None
 
-        # Arithmetic
-        if func_name.startswith("Add_"):
-            return f"{p[0]} + {p[1]}"
-        if func_name.startswith("Subtract_"):
-            return f"{p[0]} - {p[1]}"
-        if func_name.startswith("Multiply_"):
-            return f"({p[0]} * {p[1]})"
-        if func_name.startswith("Divide_"):
-            return f"({p[0]} / {p[1]})"
-        if func_name.startswith("Percent_"):
-            return f"({p[0]} % {p[1]})"
-
-        # Bitwise
-        if func_name.startswith("Xor_"):
-            return f"({p[0]} ^ {p[1]})"
-        if func_name.startswith("Or_"):
-            return f"({p[0]} | {p[1]})"
-        if func_name.startswith("And_"):
-            return f"({p[0]} & {p[1]})"
-        if func_name.startswith("Not_PreBool"):
-            return f"!{p[0]}"
-        if func_name.startswith("Not_"):
-            return f"(~{p[0]})"
-
-        # Boolean
-        if func_name.startswith("BooleanAND"):
-            return f"{p[0]} && {p[1]}"
-        if func_name.startswith("BooleanNAND"):
-            return f"!({p[0]} && {p[1]})"
-        if func_name.startswith("BooleanOR"):
-            return f"({p[0]} || {p[1]})"
-        if func_name.startswith("BooleanXOR"):
-            return f"{p[0]} ^ {p[1]}"
-        if func_name.startswith("BooleanNOR"):
-            return f"!({p[0]} || {p[1]})"
-
-        # Compound assignment
-        if func_name.startswith("AddEquals"):
-            return f"({p[0]} += {p[1]})"
-        if func_name.startswith("SubtractEquals"):
-            return f"({p[0]} -= {p[1]})"
-        if func_name.startswith("MultiplyEquals"):
-            return f"({p[0]} *= {p[1]})"
-        if func_name.startswith("DivideEquals"):
-            return f"({p[0]} /= {p[1]})"
-
-        # Math functions
+    @staticmethod
+    def _clean_math_functions(func_name: str, p: list[str]) -> str | None:
+        """处理数学函数类（Abs/Floor/Ceil/Round/...）。"""
         if func_name.startswith("Abs"):
             return f"({p[0]} < 0.0 ? -{p[0]} : {p[0]})"
         if func_name.startswith("Floor"):
@@ -297,8 +288,12 @@ class MathFunctionCleaner:
             return f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})"
         if func_name.startswith("NormalizeToRange"):
             return f"NormalizeToRange({p[0]}, {p[1]}, {p[2]})"
+        return None
 
-        # Type conversion
+    @staticmethod
+    def _clean_type_conversions(func_name: str, p: list[str]) -> str | None:
+        """处理类型转换和后缀转换。"""
+        # 前缀转换
         if func_name.startswith("Conv_IntToBool"):
             return f"({p[0]} != 0)"
         if func_name.startswith("Conv_BoolToInt"):
@@ -323,8 +318,7 @@ class MathFunctionCleaner:
             return f"((int32){p[0]})"
         if func_name.startswith("UncheckedConvertI32I64"):
             return f"{p[0]}"
-
-        # Suffix conversions
+        # 后缀转换
         if func_name.endswith("ToDouble"):
             return f"((double){p[0]})"
         if func_name.endswith("ToFloat"):
@@ -335,13 +329,16 @@ class MathFunctionCleaner:
             return f"((int32){p[0]})"
         if func_name.endswith("ToByte"):
             return f"((uint8){p[0]})"
+        return None
 
-        # Select (ternary)
+    @staticmethod
+    def _clean_constructors_and_vectors(func_name: str, p: list[str]) -> str | None:
+        """处理构造器和向量操作。"""
+        # Select / IsValid
         if func_name.startswith("Select"):
             return f"({p[2]} ? {p[0]} : {p[1]})"
         if func_name.startswith("IsValid"):
             return f"{p[0]} != nullptr"
-
         # Make constructors
         if func_name.startswith("MakeTransform"):
             return f"FTransform({p[0]}, {p[1]}, {p[2]})"
@@ -367,7 +364,6 @@ class MathFunctionCleaner:
             return f"FString({p[0]})"
         if func_name.startswith("Conv_TextToString"):
             return f"FString({p[0]})"
-
         # Vector operations
         if func_name.startswith("Dot_") or func_name == "Dot_VectorVector":
             return f"Dot({p[0]}, {p[1]})"
@@ -383,8 +379,11 @@ class MathFunctionCleaner:
             return f"{p[0]} + {p[1]}"
         if func_name.startswith("Subtract_Vector"):
             return f"{p[0]} - {p[1]}"
+        return None
 
-        # Break functions
+    @staticmethod
+    def _clean_break_functions(func_name: str, p: list[str]) -> str | None:
+        """处理 Break 函数。"""
         if func_name == "BreakVector":
             return f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y;\n{p[3]} = {p[0]}.Z"
         if func_name == "BreakVector2D":
@@ -395,6 +394,32 @@ class MathFunctionCleaner:
             return f"{p[1]} = {p[0]}.Location;\n{p[2]} = {p[0]}.Rotation;\n{p[3]} = {p[0]}.Scale"
         if func_name == "BreakColor":
             return f"{p[1]} = {p[0]}.R;\n{p[2]} = {p[0]}.G;\n{p[3]} = {p[0]}.B;\n{p[4]} = {p[0]}.A"
+        return None
+
+    @staticmethod
+    def _clean_math(func_name: str, p: list[str]) -> str:
+        # 1. 表驱动分派：comparison / arithmetic / bitwise / boolean / compound assignment
+        for table in (
+            MathFunctionCleaner._MATH_COMPARISON_TABLE,
+            MathFunctionCleaner._MATH_ARITHMETIC_TABLE,
+            MathFunctionCleaner._MATH_BITWISE_TABLE,
+            MathFunctionCleaner._MATH_BOOLEAN_TABLE,
+            MathFunctionCleaner._MATH_COMPOUND_ASSIGN_TABLE,
+        ):
+            result = MathFunctionCleaner._dispatch_table_lookup(func_name, p, table)
+            if result is not None:
+                return result
+
+        # 2. 子函数分派：math functions / type conversions / constructors+vectors / break
+        for handler in (
+            MathFunctionCleaner._clean_math_functions,
+            MathFunctionCleaner._clean_type_conversions,
+            MathFunctionCleaner._clean_constructors_and_vectors,
+            MathFunctionCleaner._clean_break_functions,
+        ):
+            result = handler(func_name, p)
+            if result is not None:
+                return result
 
         return f"KismetMathLibrary::{func_name}({', '.join(p)})"
 
