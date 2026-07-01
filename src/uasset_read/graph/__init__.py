@@ -32,4 +32,9 @@ __all__ = [
     "_derive_node_name",
     "build_function_graphs",
     "build_execution_chains",
+    # Public API for cross-module consumers
+    "build_graph_indexes",
+    "build_normalized_edge_indexes",
+    "trace_execution_from_event",
+    "node_member_name",
 ]

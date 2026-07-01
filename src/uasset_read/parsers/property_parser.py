@@ -22,7 +22,6 @@ from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
-    UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_PROPERTY_TAG_EXTENSION,
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded

@@ -5,11 +5,9 @@
 """
 from __future__ import annotations
 
-import warnings
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional
 
-from uasset_read.constants import CONTROL_FLOW_NODES
-from uasset_read.models.core import UEdGraph, UEdGraphNode
+from uasset_read.models.core import UEdGraph
 
 MAX_CHAIN_DEPTH = 1000
 

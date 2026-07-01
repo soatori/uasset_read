@@ -20,14 +20,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
-    START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
-    FFRAMEWORK_OBJECT_VERSION_GUID, FUE5_MAINSTREAM_VERSION_GUID, FRELEASE_OBJECT_VERSION_GUID,
-    FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE, FFRAMEWORK_VERSION_PINS_STORE_FNAME,
-    FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX,
-    FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
-    FUE5RELEASESTREAM_OBJECT_VERSION_GUID,
-    FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION,
-    UE5_PROPERTY_TAG_EXTENSION,
+    FRELEASE_OBJECT_VERSION_GUID,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,13 +62,6 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import (
-    K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment,
-    K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage,
-    K2NodeCallDelegate, K2NodeCallArrayFunction, K2NodeCallParentFunction,
-    K2NodeFunctionResult, K2NodeCreateWidget, K2NodeAddDelegate, K2NodeMacroInstance,
-    K2NodeAssignDelegate, K2NodeGetDataTableRow, K2NodeLoadAsset, K2NodeSpawnActorFromClass,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -1813,7 +1799,6 @@ def _read_anim_graph_node(
             # 解析 PackageIndex 为对象引用
             try:
                 from uasset_read.serializers.object_resources import PackageIndex
-                from uasset_read.link.object_instance import UObjectInstance
                 if linker is not None:
                     obj_ref = linker.resolve_package_index(PackageIndex(pkg_idx))
                     if obj_ref is not None:

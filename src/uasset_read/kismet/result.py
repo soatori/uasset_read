@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.kismet.expressions.base import KismetExpression
+    pass
 
 
 @dataclass

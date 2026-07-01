@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.constants import (
-    PKG_Cooked, PKG_UnversionedProperties, PKG_FilterEditorOnly,
+    PKG_UnversionedProperties, PKG_FilterEditorOnly,
     MAX_IMPORT_COUNT, MAX_EXPORT_COUNT,
     UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID, UE5_TRACK_OBJECT_EXPORT_IS_INHERITED,
     UE5_OPTIONAL_RESOURCES, UE5_SCRIPT_SERIALIZATION_OFFSET,
-    UE5_ADD_SOFTOBJECTPATH_LIST, UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
     UE4_NON_OUTER_PACKAGE_IMPORT, UE4_LOAD_FOR_EDITOR_GAME,
     UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT, UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
     UE4_TemplateIndex_IN_COOKED_EXPORTS, UE4_64BIT_EXPORTMAP_SERIALSIZES,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
 import re
 
 logger = logging.getLogger(__name__)
@@ -16,8 +16,7 @@ if TYPE_CHECKING:
     from uasset_read.versioning import VersionContainer
 
 from uasset_read.models.properties import (
-    PropertyTag, PropertyValue,
-    StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue,
+    PropertyTag, StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue,
     SoftObjectPathValue,
 )
 from uasset_read.models.core import FEdGraphPinType

@@ -10,9 +10,7 @@ from typing import TYPE_CHECKING, List, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
-    from uasset_read.serializers.object_resources import ObjectExport
-    from uasset_read.serializers.package_summary import PackageFileSummary
+    pass
 
 from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, BlueprintEvent, FunctionParameter
 from uasset_read.models.properties import PropertyValue, StructValue
@@ -23,7 +21,7 @@ from uasset_read.constants import (
     CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
     CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
-    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn,
+    CPF_Protected, CPF_ExposeOnSpawn,
     CPF_DuplicateTransient, CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
     CPF_NonPIEDuplicateTransient,
 )
@@ -201,7 +199,6 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         container_type = value.get("container_type", 0)
 
         # 处理 StructValue 对象（高级属性容器）
-        from uasset_read.models.properties import StructValue
         if hasattr(prop, "type") and prop.type == "StructProperty":
             if isinstance(value, dict):
                 pin_category = value.get("PinCategory", value.get("pin_category", ""))

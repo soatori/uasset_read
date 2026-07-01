@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from uasset_read.exceptions import ParseError
 

@@ -11,7 +11,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 

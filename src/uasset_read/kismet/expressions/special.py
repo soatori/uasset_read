@@ -15,7 +15,6 @@ from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
-    from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
 
 @dataclass

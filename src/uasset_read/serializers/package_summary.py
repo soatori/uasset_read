@@ -30,7 +30,6 @@ from uasset_read.constants import (
     UE4_SERIALIZE_TEXT_IN_PACKAGES,
     UE4_ADDED_PACKAGE_OWNER,
     UE4_NON_OUTER_PACKAGE_IMPORT,
-    UE4_NAME_HASHES_SERIALIZED,
     UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
 )
 from uasset_read.exceptions import VersionError, ParseError
@@ -680,7 +679,6 @@ def validate_export_data_range(
 
     注：此函数仅记录诊断，不抛出异常（容错模式友好）。
     """
-    from uasset_read.serializers.object_resources import ObjectExport
 
     file_size = archive.total_size()
     if file_size <= 0 or summary.export_count <= 0:

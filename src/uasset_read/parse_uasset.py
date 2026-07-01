@@ -195,7 +195,7 @@ def _run_kismet_and_dependency_analysis(
     """Kismet 反编译 + 组件提取 + 依赖分析。"""
     # Kismet decompilation (per D-02, D-10)
     try:
-        from uasset_read.kismet.pipeline import decompile_single_function
+        from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — 模块存在性检查
         if hasattr(result, 'decompiled_functions'):
             decompiled = _extract_kismet_decompiled(
                 path, archive, summary, name_map,

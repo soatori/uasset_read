@@ -90,7 +90,7 @@ class StructuredControlFlow:
         """
         from uasset_read.kismet.expressions import (
             EX_PushExecutionFlow, EX_PopExecutionFlow,
-            EX_PopExecutionFlowIfNot, EX_JumpIfNot, EX_Jump, EX_EndOfScript,
+            EX_JumpIfNot, EX_Jump, EX_EndOfScript,
         )
 
         regions: list[dict] = []

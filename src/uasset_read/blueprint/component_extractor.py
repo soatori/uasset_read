@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.blueprint.transform_parser import extract_component_transforms

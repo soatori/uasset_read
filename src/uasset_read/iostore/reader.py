@@ -15,16 +15,10 @@ from uasset_read.iostore.structures import (
     FIoOffsetAndLength,
     FIoStoreTocHeader,
     FIoStoreTocCompressedBlockEntry,
-    FIoStoreTocEntryMeta,
     FIoDirectoryIndexEntry,
     FIoFileIndexEntry,
     EIoStoreTocVersion,
-    EIoContainerFlags,
     EIoStoreTocReadOptions,
-    EIoChunkType,
-    EIoStoreTocEntryMetaFlags,
-    TOC_MAGIC,
-    TOC_HEADER_SIZE,
 )
 from uasset_read.pak.decompress import decompress_block
 from uasset_read.pak.crypto import decrypt_aes_ecb
