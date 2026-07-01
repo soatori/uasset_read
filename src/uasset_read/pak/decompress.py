@@ -49,16 +49,20 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
     Args:
         data: 压缩数据
         uncompressed_size: 期望的解压后大小
-        method: 压缩方法名称（"None", "Zlib", "LZ4", "Zstd", "Oodle"）
+        method: 压缩方法名称（"Zlib", "Gzip", "LZ4", "Zstd", "Oodle"）
 
     Returns:
         解压后的数据
 
     Raises:
+        ValueError: method 为 None 或未知的压缩方法
         NotImplementedError: Oodle 不支持
-        ValueError: 未知的压缩方法
         ImportError: 缺少必需的包（lz4/zstandard）
     """
+    if method is None:
+        raise ValueError(
+            "compression_method is required, cannot default to Zlib"
+        )
     method = normalize_compression_method(method)
     if method == "None":
         return data[:uncompressed_size]

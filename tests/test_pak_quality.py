@@ -71,11 +71,11 @@ class TestEncodeBitfieldRoundtrip:
         assert decoded.uncompressed_size == original.uncompressed_size
         assert decoded.compression_method_index == 0
 
-    def test_roundtrip_compressed_block_size_zero(self):
-        """压缩 + block_size=0 的 roundtrip。
+    def test_roundtrip_compressed_block_size_zero_raises(self):
+        """压缩 + block_size=0 应抛出 ValueError。
 
         当 compression_block_size=0 且 compression_method_index > 0 时，
-        编码器应正确处理 bitfield，避免解码器越界读取。
+        编码器应拒绝编解码不对称的状态。
         """
         original = FPakEntry(
             offset=0x1000,
@@ -86,15 +86,8 @@ class TestEncodeBitfieldRoundtrip:
             compression_block_count=0,
             compression_block_size=0,
         )
-        encoded = original.encode_bitfield()
-
-        decoded, consumed = FPakEntry.decode_bitfield(encoded, 0, FPakInfo())
-
-        assert decoded.offset == original.offset
-        assert decoded.uncompressed_size == original.uncompressed_size
-        assert decoded.size == original.size
-        assert decoded.compression_method_index == 2
-        assert consumed == len(encoded)
+        with pytest.raises(ValueError, match="compression_block_size must be > 0"):
+            original.encode_bitfield()
 
     def test_encode_bitfield_block_size_zero_no_stream_read(self):
         """block_size=0 时，编码后数据不应包含 block_size 流字段。

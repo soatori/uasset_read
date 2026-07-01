@@ -305,10 +305,11 @@ class FPakEntry:
 
         # 压缩块大小索引 (6 bits)
         # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
-        # 注意: compression_block_size=0 时写入索引 0（不写流数据），
-        #       避免编码器写 0x3F 但省略 block_size 数据导致解码器越界读取。
-        if self.compression_block_size == 0:
-            bitfield |= 0  # 索引 0 = block_size=0，无需流数据
+        # 压缩条目要求 block_size > 0，否则编解码不对称
+        if self.compression_method_index > 0 and self.compression_block_size == 0:
+            raise ValueError(
+                "compression_block_size must be > 0 for compressed entries"
+            )
         elif self.compression_block_size % 2048 == 0:
             block_size_index = self.compression_block_size >> 11
             if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"

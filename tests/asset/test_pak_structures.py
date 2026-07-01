@@ -178,15 +178,12 @@ class TestFPakEntry:
             uncompressed_size=0x2000,
             size=0x1000,
             compression_method_index=2,
-            compression_block_size=0,
+            compression_block_size=4096,  # 4096 >> 11 = 2 <= 0x3E，使用索引
         )
         encoded = entry.encode_bitfield()
 
-        # 4 + 4 + 4 + 4 (size) + 4 (block_size from stream) = 20
-        # block_size=0 → index=0, 非 0x3F → 不写额外数据?
-        # 看代码: block_size=0, 0 % 2048 == 0, 但 0 >> 11 == 0 <= 0x3E → index=0
-        # (bitfield & 0x3F) == 0 ≠ 0x3F → 不写 block_size
-        # 所以实际是 4+4+4+4 = 16
+        # 4 (bitfield) + 4 (offset) + 4 (uncompressed_size) + 4 (size) = 16
+        # block_size=4096, index=2, (bitfield & 0x3F) == 2 ≠ 0x3F → 不写 block_size 流数据
         assert len(encoded) == 16
 
     def test_encode_bitfield_block_size_from_stream(self):
