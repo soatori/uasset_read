@@ -2,8 +2,10 @@
 蓝图元数据数据类 — BlueprintMetadata, BlueprintVariable, BlueprintFunction,
 BlueprintEvent, FunctionParameter, MulticastDelegate。
 
-等价覆盖 uasset_read.py 中第 1655-1870 行的数据类定义。
-Per D-06: 数据和序列化解耦，from_archive 为 stub。
+蓝图元数据通过 blueprint/variable_extractor.py 的
+extract_blueprint_metadata() 填充，不经过 from_archive 序列化路径。
+
+Per D-10: Python 3.10+ 严格类型提示。
 """
 from __future__ import annotations
 
@@ -11,16 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
     from uasset_read.models.core import FEdGraphPinType
-
-
-def _raise_metadata_from_archive_not_supported() -> None:
-    raise NotImplementedError(
-        "Blueprint metadata models are populated by "
-        "extract_blueprint_metadata(); direct from_archive() parsing is not "
-        "implemented for these DTO classes"
-    )
 
 
 @dataclass
@@ -35,10 +28,6 @@ class FunctionParameter:
     property_flags: int = 0
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "FunctionParameter":
-        _raise_metadata_from_archive_not_supported()
-
 
 @dataclass
 class MulticastDelegate:
@@ -46,10 +35,6 @@ class MulticastDelegate:
     delegate_name: str = ""
     signature_function: str = ""
     is_callable_in_blueprint: bool = False
-
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "MulticastDelegate":
-        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -77,10 +62,6 @@ class BlueprintEvent:
     interface_class: str = ""
     parameters: List[FunctionParameter] = field(default_factory=list)
     meta_data: Dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "BlueprintEvent":
-        _raise_metadata_from_archive_not_supported()
 
 
 @dataclass
@@ -126,10 +107,6 @@ class BlueprintFunction:
     access_specifier: str = "Public"
     meta_data: Dict[str, Any] = field(default_factory=dict)
 
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "BlueprintFunction":
-        _raise_metadata_from_archive_not_supported()
-
 
 @dataclass
 class BlueprintVariable:
@@ -173,10 +150,6 @@ class BlueprintVariable:
     edit_category: str = ""
     edit_widget: str = ""
 
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "BlueprintVariable":
-        _raise_metadata_from_archive_not_supported()
-
 
 @dataclass
 class BlueprintMetadata:
@@ -189,7 +162,3 @@ class BlueprintMetadata:
     detection_warning: Optional[str] = None
     functions: List[BlueprintFunction] = field(default_factory=list)
     events: List[BlueprintEvent] = field(default_factory=list)
-
-    @classmethod
-    def from_archive(cls, archive: FArchive) -> "BlueprintMetadata":
-        _raise_metadata_from_archive_not_supported()

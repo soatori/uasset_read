@@ -2,6 +2,11 @@
 
 IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 ParseResult。
 所有 GUID（Node/Pin）统一为 32 位小写 hex。
+
+分层说明：
+- 本模块（ir.py）定义呈现模型，面向渲染器的简化表示（str 类型、str 方向等）
+- models/core.py 定义序列化模型，保留 UE 原始类型（int 方向、嵌套对象等）
+- IR Builder 负责从序列化模型（UEdGraph*）转换为呈现模型（GraphIR*）
 """
 from __future__ import annotations
 
@@ -116,7 +121,13 @@ class PackageHeaderIR:
 
 @dataclass
 class PinIR:
-    """单个 Pin 的 IR 表示。"""
+    """单个 Pin 的呈现模型（IR 层）。
+
+    与序列化模型 UEdGraphPin 的区别：
+    - direction 为 str（"input"/"output"），而非 int
+    - pin_type 为 str，而非 FEdGraphPinType 嵌套对象
+    - linked_to 为 str GUID 列表，而非 UObjectInstance 列表
+    """
     pin_name: str
     pin_type: str
     pin_type_value: str | None
@@ -127,7 +138,14 @@ class PinIR:
 
 @dataclass
 class NodeIR:
-    """单个节点的 IR 表示。"""
+    """单个节点的呈现模型（IR 层）。
+
+    与序列化模型 UEdGraphNode 的区别：
+    - node_class 为 str，对应 UEdGraphNode.class_name
+    - pins 为 list[PinIR]，而非 list[UEdGraphPin]
+    - 包含 execution_flow 和 macro_expansion 等 IR 特有字段
+    - 不包含 node_pos_x/y（渲染器不需要）
+    """
     node_guid: str
     node_class: str
     node_comment: str | None
@@ -138,7 +156,13 @@ class NodeIR:
 
 @dataclass
 class GraphIR:
-    """单个图的 IR 表示。"""
+    """单个图的呈现模型（IR 层）。
+
+    与序列化模型 UEdGraph 的区别：
+    - nodes 为 list[NodeIR]，而非 list[UEdGraphNode]
+    - 包含 execution_chains 等 IR 特有字段
+    - 不包含 schema/b_editable（渲染器不需要）
+    """
     graph_guid: str
     graph_name: str
     graph_class: str

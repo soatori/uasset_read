@@ -10,8 +10,8 @@
   LinkerSummaryIR、VariableIR、SourceSiteContextIR、GatherableTextDataIR、
   PackageIR
 - models/core: FEdGraphPinType、UEdGraphPin、UEdGraphNode、UEdGraph、
-  FMemberReference
-- models/node_types: 各 K2Node 子类存在性
+  FMemberReference（序列化模型，无 from_archive）
+- models/node_types: 各 K2Node 子类存在性（序列化模型，无 from_archive）
 """
 from __future__ import annotations
 
@@ -759,3 +759,129 @@ class TestEdGraphNodeComment:
         )
         assert node.node_comment == "This is a comment"
         assert node.font_size == 18
+
+
+# ============================================================================
+# models/core — from_archive 已移除验证
+# ============================================================================
+
+
+class TestFromArchiveRemoved:
+    """from_archive 方法已从序列化模型移至 serializers 层（#255 M-5）。"""
+
+    def test_fed_graph_pin_type_no_from_archive(self):
+        """FEdGraphPinType 不应有 from_archive 方法。"""
+        assert not hasattr(FEdGraphPinType, "from_archive")
+
+    def test_ue_graph_pin_no_from_archive(self):
+        """UEdGraphPin 不应有 from_archive 或 from_archive_with_linker 方法。"""
+        assert not hasattr(UEdGraphPin, "from_archive")
+        assert not hasattr(UEdGraphPin, "from_archive_with_linker")
+
+    def test_ue_graph_node_no_from_archive(self):
+        """UEdGraphNode 不应有 from_archive 或 from_archive_with_linker 方法。"""
+        assert not hasattr(UEdGraphNode, "from_archive")
+        assert not hasattr(UEdGraphNode, "from_archive_with_linker")
+
+    def test_ue_graph_no_from_archive(self):
+        """UEdGraph 不应有 from_archive 或 from_archive_with_linker 方法。"""
+        assert not hasattr(UEdGraph, "from_archive")
+        assert not hasattr(UEdGraph, "from_archive_with_linker")
+
+    def test_f_member_reference_no_from_archive(self):
+        """FMemberReference 不应有 from_archive 方法。"""
+        assert not hasattr(FMemberReference, "from_archive")
+
+
+class TestNodeTypesNoFromArchive:
+    """K2Node 子类不应有 from_archive 方法（#255 M-5）。"""
+
+    @pytest.mark.parametrize(
+        "cls",
+        [
+            K2NodeCallFunction,
+            K2NodeEvent,
+            K2NodeKnot,
+            EdGraphNodeComment,
+            K2NodeEnhancedInputAction,
+            K2NodeFunctionEntry,
+            K2NodeMessage,
+            K2NodeCallDelegate,
+            K2NodeCallArrayFunction,
+            K2NodeCallParentFunction,
+            K2NodeFunctionResult,
+            K2NodeCreateWidget,
+            K2NodeAddDelegate,
+            K2NodeMacroInstance,
+            K2NodeAssignDelegate,
+            K2NodeGetDataTableRow,
+            K2NodeLoadAsset,
+            K2NodeSpawnActorFromClass,
+        ],
+    )
+    def test_no_from_archive(self, cls):
+        """每个 K2Node 子类不应有 from_archive 方法。"""
+        assert not hasattr(cls, "from_archive")
+
+
+class TestBlueprintNoFromArchive:
+    """蓝图元数据 DTO 不应有 from_archive 方法（#255 M-5）。"""
+
+    def test_function_parameter_no_from_archive(self):
+        from uasset_read.models.blueprint import FunctionParameter
+        assert not hasattr(FunctionParameter, "from_archive")
+
+    def test_multicast_delegate_no_from_archive(self):
+        from uasset_read.models.blueprint import MulticastDelegate
+        assert not hasattr(MulticastDelegate, "from_archive")
+
+    def test_blueprint_event_no_from_archive(self):
+        from uasset_read.models.blueprint import BlueprintEvent
+        assert not hasattr(BlueprintEvent, "from_archive")
+
+    def test_blueprint_function_no_from_archive(self):
+        from uasset_read.models.blueprint import BlueprintFunction
+        assert not hasattr(BlueprintFunction, "from_archive")
+
+    def test_blueprint_variable_no_from_archive(self):
+        from uasset_read.models.blueprint import BlueprintVariable
+        assert not hasattr(BlueprintVariable, "from_archive")
+
+    def test_blueprint_metadata_no_from_archive(self):
+        from uasset_read.models.blueprint import BlueprintMetadata
+        assert not hasattr(BlueprintMetadata, "from_archive")
+
+
+# ============================================================================
+# models 分层文档验证（#255 M-4）
+# ============================================================================
+
+
+class TestLayerSeparation:
+    """序列化模型与呈现模型应有清晰的分层文档（#255 M-4）。"""
+
+    def test_core_module_docstring_mentions_serialization_layer(self):
+        """core.py 模块文档应说明其为序列化层。"""
+        import uasset_read.models.core as core_mod
+        doc = core_mod.__doc__
+        assert "序列化" in doc
+        assert "core.py" in doc or "本模块" in doc
+
+    def test_ir_module_docstring_mentions_presentation_layer(self):
+        """ir.py 模块文档应说明其为呈现层。"""
+        import uasset_read.models.ir as ir_mod
+        doc = ir_mod.__doc__
+        assert "呈现" in doc
+        assert "ir.py" in doc or "本模块" in doc
+
+    def test_pin_ir_docstring_mentions_ue_d_graph_pin(self):
+        """PinIR 文档应说明与 UEdGraphPin 的关系。"""
+        assert "UEdGraphPin" in PinIR.__doc__
+
+    def test_node_ir_docstring_mentions_ue_d_graph_node(self):
+        """NodeIR 文档应说明与 UEdGraphNode 的关系。"""
+        assert "UEdGraphNode" in NodeIR.__doc__
+
+    def test_graph_ir_docstring_mentions_ue_d_graph(self):
+        """GraphIR 文档应说明与 UEdGraph 的关系。"""
+        assert "UEdGraph" in GraphIR.__doc__
