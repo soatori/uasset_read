@@ -303,6 +303,8 @@ def diff_single(
 ) -> str:
     """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
 
+    解析失败不会抛出异常，而是在 diff 输出中标注解析错误信息。
+
     Args:
         file_path1: 第一个 .uasset 文件路径
         file_path2: 第二个 .uasset 文件路径
@@ -313,10 +315,7 @@ def diff_single(
         force_full_parse: 是否强制完整蓝图解析
 
     Returns:
-        unified diff 文本
-
-    Raises:
-        ParseError: 两个文件都解析失败
+        unified diff 文本，解析失败时包含错误标注
     """
     import difflib
 

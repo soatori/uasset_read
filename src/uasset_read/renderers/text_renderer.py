@@ -6,8 +6,6 @@
 """
 from __future__ import annotations
 
-import json
-import textwrap
 from typing import TYPE_CHECKING
 
 from uasset_read.renderers.base import IRenderer, RenderOptions
@@ -154,10 +152,10 @@ class TextRenderer(IRenderer):
         if ir.anim_blueprint:
             abp = ir.anim_blueprint
             lines.append("[AnimBlueprint]")
-            if abp.state_machines:
-                lines.append(f"  State Machines: {len(abp.state_machines)}")
-                for sm in abp.state_machines:
-                    lines.append(f"    - {sm.name}")
+            if abp.baked_state_machines:
+                lines.append(f"  State Machines: {len(abp.baked_state_machines)}")
+                for sm in abp.baked_state_machines:
+                    lines.append(f"    - {sm.machine_name}")
             lines.append("")
 
         if ir.anim_sequence:
@@ -170,8 +168,8 @@ class TextRenderer(IRenderer):
         if ir.anim_montage:
             amt = ir.anim_montage
             lines.append("[AnimMontage]")
-            if amt.blends:
-                lines.append(f"  Blends: {len(amt.blends)}")
+            if amt.composite_sections:
+                lines.append(f"  Composite Sections: {len(amt.composite_sections)}")
             lines.append("")
 
         # === Diagnostics ===

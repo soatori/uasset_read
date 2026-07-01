@@ -242,11 +242,11 @@ def main():
     if args.diff is not None:
         from uasset_read.core import diff_single
         if args.diff is True:
-            print("Error: --diff requires a second file path", file=sys.stderr)
+            print("错误: --diff 需要第二个文件路径", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
         file2 = Path(args.diff)
         if not file2.is_file():
-            print(f"Error: Diff file not found: {args.diff}", file=sys.stderr)
+            print(f"错误: Diff 文件不存在: {args.diff}", file=sys.stderr)
             sys.exit(EXIT_FILE_NOT_FOUND)
         try:
             diff_output = diff_single(
@@ -256,8 +256,9 @@ def main():
                 context_lines=args.diff_context,
             )
         except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(EXIT_GENERIC_ERROR)
+            _logger.debug("Diff failed (full): %s", e, exc_info=True)
+            print(f"Error: Diff failed: {_sanitize_error_message(e)}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
         _write_output(diff_output, args.output)
         return
 
