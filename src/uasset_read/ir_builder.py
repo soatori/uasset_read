@@ -390,9 +390,14 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
     super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
 
+    # parent_class 仅在蓝图 export 上设置（#252 修复）
+    # 蓝图 export 定义：object_name 以 _C 结尾，或有 graphs 数据
     parent_class = None
     if result.blueprint and getattr(result.blueprint, "parent_class", None):
-        parent_class = result.blueprint.parent_class
+        object_name = _safe_str(getattr(export, "object_name", None))
+        has_graphs = bool(getattr(export, "graphs", None))
+        if object_name.endswith("_C") or has_graphs:
+            parent_class = result.blueprint.parent_class
 
     properties = []
     for prop in getattr(export, "properties", None) or []:
