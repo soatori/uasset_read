@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
+from uasset_read.models.ir import HexViewEntryIR
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
@@ -149,6 +150,11 @@ class JSONRenderer(IRenderer):
             data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
         if ir.anim_montage:
             data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
+        # HexView 解析轨迹：当 --hex-view 或 output_level=debug 时输出
+        if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
+            data["debug"] = {
+                "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
+            }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
@@ -440,6 +446,28 @@ class JSONRenderer(IRenderer):
             d["notifies"] = [self._anim_notify_to_dict(n) for n in anim_ir.notifies]
         if anim_ir.float_curve_names:
             d["float_curve_names"] = anim_ir.float_curve_names
+        return d
+
+    def _hex_view_entry_to_dict(self, entry: "HexViewEntryIR") -> dict[str, Any]:
+        """序列化 HexViewEntryIR 为字典。"""
+        d: dict[str, Any] = {
+            "key": entry.key,
+            "type": entry.type,
+            "start": entry.start,
+            "stop": entry.stop,
+            "size": entry.size,
+        }
+        if entry.field_path is not None:
+            d["field_path"] = entry.field_path
+        if entry.semantic_type is not None:
+            d["semantic_type"] = entry.semantic_type
+        if isinstance(entry.value, bytes):
+            d["value_hex"] = entry.value.hex()
+            d["value_size"] = len(entry.value)
+        elif isinstance(entry.value, str):
+            d["value"] = entry.value
+        else:
+            d["value"] = entry.value
         return d
 
 

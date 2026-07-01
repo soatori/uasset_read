@@ -408,6 +408,27 @@ class GatherableTextDataIR:
 
 
 @dataclass
+class HexViewEntryIR:
+    """单次读取操作的 IR 表示（从 HexViewEntry 转换而来）。"""
+    key: str
+    type: str
+    value: Any
+    start: int
+    stop: int
+    size: int
+    field_path: str | None = None
+    semantic_type: str | None = None
+    value_hex: str | None = None
+    value_size: int | None = None
+
+
+@dataclass
+class DebugIR:
+    """调试数据 IR（解析轨迹信息）。"""
+    hex_view: list[HexViewEntryIR] = field(default_factory=list)
+
+
+@dataclass
 class PackageIR:
     """顶层 IR 结构。"""
     header: PackageHeaderIR
@@ -437,6 +458,7 @@ class PackageIR:
     anim_blueprint: AnimBlueprintIR | None = None
     anim_sequence: AnimSequenceIR | None = None
     anim_montage: AnimMontageIR | None = None
+    debug: DebugIR | None = None
 
 
 # =============================================================================

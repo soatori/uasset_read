@@ -28,6 +28,8 @@ from uasset_read.models.ir import (
     DecompiledFunctionIR,
     ExecutionChainIR,
     VariableIR,
+    HexViewEntryIR,
+    DebugIR,
 )
 
 if TYPE_CHECKING:
@@ -120,6 +122,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status=status,
         status_message=status_message,
         status_code=status_code,
+        debug=_build_debug_ir(getattr(result, 'hex_view_entries', [])),
     )
 
     # 绑定函数/事件实现关联
@@ -1119,3 +1122,26 @@ def _build_asset_registry_data(result) -> dict | None:
         return asset_registry_data.to_dict()
     except (AttributeError, TypeError, ValueError):
         return None
+
+
+def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
+    """将 ParseResult.hex_view_entries 转为 DebugIR。
+
+    如果没有 hex_view 条目则返回 None。
+    """
+    if not hex_view_entries:
+        return None
+    entries = []
+    for e in hex_view_entries:
+        entry = HexViewEntryIR(
+            key=e.key,
+            type=e.type,
+            value=e.value,
+            start=e.start,
+            stop=e.stop,
+            size=e.size,
+            field_path=getattr(e, "field_path", None),
+            semantic_type=getattr(e, "semantic_type", None),
+        )
+        entries.append(entry)
+    return DebugIR(hex_view=entries)

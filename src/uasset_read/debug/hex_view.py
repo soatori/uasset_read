@@ -23,6 +23,10 @@ class HexViewEntry:
     """文件起始偏移（字节）"""
     stop: int
     """文件结束偏移（字节）"""
+    field_path: str | None = None
+    """完整字段路径（如 "PackageSummary.Magic"），比 key 更精确"""
+    semantic_type: str | None = None
+    """语义类型标识（如 "header", "name_table", "export"），用于分类和过滤"""
 
     @property
     def size(self) -> int:
@@ -51,6 +55,10 @@ class HexViewEntry:
             "stop": self.stop,
             "size": self.size,
         }
+        if self.field_path is not None:
+            d["field_path"] = self.field_path
+        if self.semantic_type is not None:
+            d["semantic_type"] = self.semantic_type
         if isinstance(self.value, bytes):
             d["value_hex"] = self.value.hex()
             d["value_size"] = len(self.value)

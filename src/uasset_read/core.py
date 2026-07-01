@@ -105,7 +105,8 @@ def parse_single(
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
-    if hex_view and result.hex_view_entries:
+    # HexView 文本旁路：仅非 json 格式时直接返回文本（json 格式走 IR 管线）
+    if hex_view and result.hex_view_entries and format != "json":
         from uasset_read.debug.hex_view import format_hex_view
         return format_hex_view(
             result.hex_view_entries,
@@ -120,6 +121,7 @@ def parse_single(
         include_function_graphs=include_function_graphs,
         linker_result=None,
         output_level=output_level,
+        hex_view=hex_view,
     )
     return renderer.render(ir, options)
 
