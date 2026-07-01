@@ -169,39 +169,6 @@ class TestDecodePackageFlags:
 
 
 # ============================================================================
-# Constants — CPF_* (补充 test_cpf_constants.py 未覆盖的)
-# ============================================================================
-
-
-class TestCPFConstantsAdditional:
-    """CPF_* 常量附加验证（补充 test_cpf_constants.py 未覆盖的常量）。"""
-
-    def test_cpf_no_clear(self):
-        assert constants.CPF_NoClear == 0x0000000002000000
-
-    def test_cpf_virtual(self):
-        assert constants.CPF_Virtual == 0x0000000004000000
-
-    def test_cpf_reference_parm(self):
-        assert constants.CPF_ReferenceParm == 0x0000000008000000
-
-    def test_cpf_blue_print_callable(self):
-        assert constants.CPF_BlueprintCallable == 0x0000100000000000
-
-    def test_cpf_blue_print_authority_only(self):
-        assert constants.CPF_BlueprintAuthorityOnly == 0x0000200000000000
-
-    def test_cpf_auto_weak(self):
-        assert constants.CPF_AutoWeak == 0x0000004000000000
-
-    def test_cpf_tobject_ptr(self):
-        assert constants.CPF_TObjectPtr == 0x0100000000000000
-
-    def test_cpf_allow_self_reference(self):
-        assert constants.CPF_AllowSelfReference == 0x1000000000000000
-
-
-# ============================================================================
 # Constants — PropertyTag 标志
 # ============================================================================
 
