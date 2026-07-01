@@ -41,7 +41,7 @@ desktop.ini
 # Temp and output
 temp/
 test/
-output/
+/output/
 /debug/
 reports/
 /json

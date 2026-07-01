@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/user/uasset_read/schemas/package.schema.json",
+  "$id": "https://github.com/soatori/uasset_read/schemas/package.schema.json",
   "title": "uasset_read PackageIR 输出",
   "description": "uasset_read 解析器 PackageIR 的 JSON 输出 Schema。描述 .uasset 文件解析后的完整结构。",
   "type": "object",
@@ -256,10 +256,6 @@
         "graph_guid": {
           "type": "string",
           "description": "图 GUID（32 位小写 hex）"
-        },
-        "graph_class": {
-          "type": "string",
-          "description": "图类名"
         },
         "graph_type": {
           "type": ["string", "null"],
