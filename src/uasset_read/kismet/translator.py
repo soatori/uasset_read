@@ -10,7 +10,10 @@ Provides:
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
@@ -1198,7 +1201,7 @@ def line_cpp(expr: "KismetExpression") -> str:
         from uasset_read.kismet.expressions import EX_IntConst
 
         expr = EX_IntConst(StatementIndex=0, Value=42)
-        print(line_cpp(expr))  # "42"
+        logger.debug("Translated expression: %s", line_cpp(expr))
     """
     translator = KismetTranslator()
     return translator.line_cpp(expr)
