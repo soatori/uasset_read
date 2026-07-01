@@ -132,7 +132,8 @@ class RegionDecoder:
         # 跳转标签
         if line.startswith("Label_"):
             return GotoLabel(label=line)
-        # 赋值检测: 包含 = 但不以 if/for/while/switch 开头
+        # 赋值检测: 包含 = 但不以 if/for/while/switch 开头，
+        # 且 LHS 不含括号（排除命名参数等函数调用，如 FRotator(Pitch=90)）
         if (
             "=" in line
             and not line.startswith("if ")
@@ -144,7 +145,7 @@ class RegionDecoder:
             parts = line.split("=", 1)
             lhs = parts[0].strip()
             rhs = parts[1].strip().rstrip(";")
-            if lhs and rhs:
+            if lhs and rhs and "(" not in lhs:
                 return Assignment(lhs=lhs, rhs=rhs)
         # return
         if line.startswith("return"):
@@ -190,10 +191,37 @@ class RegionDecoder:
                 else:
                     then_blocks.append(succ)
         else:
-            # 回退：前半 then，后半 else
-            mid = len(region.body_blocks) // 2
-            then_blocks = region.body_blocks[:mid]
-            else_blocks = region.body_blocks[mid:]
+            # 回退：基于支配关系和区域尾块确定分支成员。
+            # 使用 CFG 支配树信息将区域体块分配到对应分支。
+            body = [b for b in region.body_blocks if b != head]
+            if len(body) == 1:
+                # 单块：全部归 then
+                then_blocks = body
+            elif len(body) >= 2:
+                # 从尾块反向追溯，将可达块归 else 分支
+                tail = region.tail
+                visited: set[int] = set()
+                worklist = [tail]
+                while worklist:
+                    bid = worklist.pop()
+                    if bid in visited or bid == head:
+                        continue
+                    visited.add(bid)
+                    blk = self.cfg.blocks.get(bid)
+                    if blk:
+                        for pred in blk.predecessors:
+                            if pred not in visited and pred != head:
+                                worklist.append(pred)
+                # else 分支 = 从尾块可达的区域体块（排除 head）
+                else_blocks = [b for b in body if b in visited]
+                # then 分支 = 剩余体块
+                then_blocks = [b for b in body if b not in visited]
+                # 如果 else 为空（尾块不可达），将后半归 else
+                if not else_blocks and body:
+                    mid = len(body) // 2
+                    then_blocks = body[:mid] if mid > 0 else body
+                    else_blocks = body[mid:]
+            # 如果 body 为空，保持空列表
 
         then_body = self._emit_body_for_blocks(region, then_blocks)
         else_body = self._emit_body_for_blocks(region, else_blocks)

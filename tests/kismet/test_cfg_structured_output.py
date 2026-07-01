@@ -548,6 +548,40 @@ class TestRegionDecoderSimple:
         # 应该返回有效内容
         assert len(result) > 0
 
+    def test_named_param_not_misclassified_as_assignment(self):
+        """命名参数行不应被误判为赋值（如 FRotator(Pitch=90)）。"""
+        from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree, decompose_regions
+        from uasset_read.kismet.cfg.emitter import RegionDecoder
+        from uasset_read.kismet.cfg.stmt import Assignment, Call
+
+        let0 = _make_let(0)
+        end = _make_end(8)
+        cfg = build_cfg([let0, end])
+        dom = compute_dominator_tree(cfg)
+        regions = decompose_regions(cfg, dom)
+
+        from uasset_read.kismet.translator import KismetTranslator
+
+        translator = KismetTranslator(expressions=[let0, end])
+        decoder = RegionDecoder(
+            cfg=cfg,
+            region_tree=regions,
+            expressions=[let0, end],
+            translator=translator,
+            offset_to_index={},
+            jump_targets=set(),
+        )
+        # 直接测试 _line_to_stmt 对命名参数行的处理
+        stmt_named = decoder._line_to_stmt("SetActorRotation(FRotator(Pitch=90))")
+        assert isinstance(stmt_named, Call), (
+            f"命名参数行应识别为 Call，实际为 {type(stmt_named).__name__}"
+        )
+        # 普通赋值仍应正确识别
+        stmt_real = decoder._line_to_stmt("x = 42")
+        assert isinstance(stmt_real, Assignment), (
+            f"普通赋值应识别为 Assignment，实际为 {type(stmt_real).__name__}"
+        )
+
 
 class TestRegionDecoderIfElse:
     """RegionDecoder if-else 场景测试。"""
@@ -733,9 +767,8 @@ class TestEndToEndBodyBuilder:
 
     def test_structured_rate_target(self):
         """验证 StructuredRateReport 目标指标。"""
-        from uasset_read.kismet.cfg.stmt import Loop as LoopStmt
-        from uasset_read.kismet.cfg.stmt import Branch as BranchStmt
         from uasset_read.kismet.body_builder import FunctionBodyBuilder
+        from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
         # 构建一个包含 if-else 和 while 循环的复杂函数
         let0 = _make_let(0)
@@ -747,11 +780,33 @@ class TestEndToEndBodyBuilder:
         let3 = _make_let(56)  # while 体
         end = _make_end(64)
 
+        expressions = [let0, jmp1, let1, jmp2, let2, jmp3, let3, end]
+
+        # 调用 JumpAnalyzer.analyze_structured_rate() 获取报告
+        analyzer = JumpAnalyzer(expressions)
+        report = analyzer.analyze_structured_rate()
+
+        # 验证 StructuredRateReport 字段
+        assert report.total_jump_exprs >= 1
+        assert report.structured_count >= 0
+        assert report.goto_count >= 0
+        assert report.rate >= 0.95, (
+            f"结构化率 {report.rate:.1%} 未达标（要求 >= 95%）"
+        )
+        goto_rate = (
+            report.goto_count / report.total_jump_exprs
+            if report.total_jump_exprs > 0
+            else 0.0
+        )
+        assert goto_rate <= 0.05, (
+            f"goto 比率 {goto_rate:.1%} 超标（要求 <= 5%）"
+        )
+
+        # 同时验证 FunctionBodyBuilder 正常生成
         builder = FunctionBodyBuilder()
         result = builder.to_function_body_structured(
-            [let0, jmp1, let1, jmp2, let2, jmp3, let3, end],
+            expressions,
             func_name="ComplexFunc",
         )
-        # 应该成功生成，不应抛出异常
         assert result is not None
         assert len(result) > 0
