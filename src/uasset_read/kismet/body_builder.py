@@ -408,6 +408,101 @@ class FunctionBodyBuilder:
         body = "\n".join(f"    {line}" for line in processed)
         return f"{signature} {{\n{body}\n}}"
 
+    def to_function_body_cfg(
+        self,
+        expressions: list["KismetExpression"],
+        func_name: str | None = None,
+    ) -> tuple[str, "CFG"]:
+        """
+        基于 CFG 的函数体构建。
+
+        构建控制流图，计算支配树和区域分解，然后按基本块顺序
+        翻译为 C++ 函数体。
+
+        Args:
+            expressions: 从字节码解析得到的表达式列表。
+            func_name: 可选的函数名包装。
+
+        Returns:
+            (formatted C++ function body, CFG) 元组。
+        """
+        from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree, decompose_regions
+        from uasset_read.kismet.translator import KismetTranslator
+
+        cfg = build_cfg(expressions)
+        dom_tree = compute_dominator_tree(cfg)
+
+        translator = KismetTranslator(
+            self.type_registry, linker=self._linker, expressions=expressions
+        )
+
+        # Build byte_offset → expression index map for label generation
+        offset_to_index: dict[int, int] = {}
+        for idx, expr in enumerate(expressions):
+            byte_offset = getattr(expr, "byte_offset", None)
+            if byte_offset is not None:
+                offset_to_index[byte_offset] = idx
+            if hasattr(expr, "CodeOffset"):
+                offset_to_index[expr.CodeOffset] = idx
+
+        # Collect pending labels (offsets that are jump targets)
+        jump_targets: set[int] = set()
+        for expr in expressions:
+            if hasattr(expr, "CodeOffset"):
+                jump_targets.add(expr.CodeOffset)
+
+        # 按 CFG 拓扑顺序翻译
+        lines: list[str] = []
+        label_set: set[int] = set()
+        visited: set[int] = set()
+
+        def _visit(bid: int) -> None:
+            if bid in visited or bid == cfg.exit_id:
+                return
+            visited.add(bid)
+            block = cfg.blocks.get(bid)
+            if block is None:
+                return
+
+            for expr_idx in range(block.start_idx, block.end_idx + 1):
+                if expr_idx >= len(expressions):
+                    continue
+                expr = expressions[expr_idx]
+
+                # 检查是否是跳转目标（标签）
+                byte_off = getattr(expr, "byte_offset", None)
+                if byte_off is not None and byte_off in jump_targets:
+                    target_idx = offset_to_index.get(byte_off)
+                    if target_idx is not None and target_idx not in label_set:
+                        lines.append(f"Label_{byte_off}:")
+                        label_set.add(target_idx)
+
+                cpp_line = translator.line_cpp(expr, index=expr_idx)
+                if not cpp_line or cpp_line.strip() == "":
+                    continue
+
+                for sub_line in cpp_line.split("\n"):
+                    sub_line = sub_line.strip()
+                    if not sub_line:
+                        continue
+                    if _needs_semicolon(sub_line):
+                        sub_line += ";"
+                    lines.append(sub_line)
+
+            # 递归访问后继
+            for succ in block.successors:
+                if succ not in visited and succ != cfg.exit_id:
+                    _visit(succ)
+
+        _visit(cfg.entry_id)
+
+        signature = func_name if func_name else "void UnknownFunction"
+        if "(" not in signature:
+            signature += "()"
+
+        body = "\n".join(f"    {line}" for line in lines)
+        return f"{signature} {{\n{body}\n}}", cfg
+
 
 # ===========================================================================
 # Module-level convenience functions (D-01 dual API)
