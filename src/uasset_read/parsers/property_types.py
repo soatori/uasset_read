@@ -4,8 +4,11 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Union
 import re
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -329,8 +332,8 @@ def _build_version_container_from_summary(summary: Any) -> Optional["VersionCont
         # 缓存到 summary 上，避免重复构建
         try:
             summary._version_container = vc
-        except AttributeError:
-            pass
+        except AttributeError as e:
+            logger.debug("缓存 version_container 失败: %s", e)
         return vc
     except Exception:
         return None

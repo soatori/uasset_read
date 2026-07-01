@@ -544,8 +544,8 @@ def _extract_call_function_parameters(
                     data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
                     if data_source:
                         param["data_source"] = data_source
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("追踪数据源失败: %s", e, exc_info=True)
 
             input_params.append(param)
         else:  # Output

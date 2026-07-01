@@ -4,7 +4,10 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, List, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -930,8 +933,8 @@ def extract_blueprint_metadata(
                     other_export, archive, summary, name_map, export_map, import_map,
                 )
                 interfaces = _extract_interfaces_from_props(other_props)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("提取接口属性失败: %s", e, exc_info=True)
             if interfaces:
                 break
 

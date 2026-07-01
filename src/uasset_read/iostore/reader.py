@@ -237,15 +237,15 @@ class IoStoreReader:
         if self._utoc_file:
             try:
                 self._utoc_file.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("关闭 utoc 文件失败: %s", e)
             self._utoc_file = None
 
         for f in self._ucas_files:
             try:
                 f.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("关闭 ucas 文件失败: %s", e)
         self._ucas_files.clear()
 
     def __enter__(self) -> IoStoreReader:

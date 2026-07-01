@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -13,6 +14,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.memory_safety import (
     MemoryPolicy,
@@ -109,8 +112,8 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
     finally:
         try:
             temporary_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("清理临时文件失败: %s", e)
 
 
 class _SubprocessAdapter:
@@ -135,7 +138,7 @@ class _SubprocessAdapter:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            pass
+            logger.debug("子进程 join 超时，继续执行")
 
 
 class _ResultFile:
@@ -268,8 +271,8 @@ def run_isolated_asset(
                 _temporary_output_path(request.output_path, process.pid).unlink(
                     missing_ok=True
                 )
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("清理临时输出文件失败: %s", e)
         request_path.unlink(missing_ok=True)
         result_path.unlink(missing_ok=True)
 

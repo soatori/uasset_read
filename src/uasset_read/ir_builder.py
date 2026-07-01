@@ -5,8 +5,11 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.models.ir import (
     PackageIR,
@@ -343,8 +346,8 @@ def _get_version_string(result: ParseResult) -> str:
     if callable(method):
         try:
             return method()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("获取 UE 版本字符串失败: %s", e, exc_info=True)
 
     # 回退：基于 is_ue5 判断
     if getattr(vc, "is_ue5", False):
@@ -377,9 +380,9 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
         try:
             export_ir = _build_export_ir(idx, export, result)
             exports.append(export_ir)
-        except Exception:
+        except Exception as e:
             # tolerant 模式：跳过失败的 export
-            pass
+            logger.debug("构建 export %d IR 失败: %s", idx, e, exc_info=True)
     return exports
 
 

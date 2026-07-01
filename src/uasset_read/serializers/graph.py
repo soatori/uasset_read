@@ -1210,8 +1210,8 @@ def read_ue_graph_pin(
         orphaned_pin = bool(bitfield & (1 << 5))
         if trace_mode:
             _trace_field("BitField", bitfield_start, archive.tell(), str(bitfield))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("读取 Pin BitField 失败: %s", e, exc_info=True)
 
     default_object_ref = None
     if linker is not None and default_object not in (None, 0):
@@ -2245,8 +2245,8 @@ def read_ue_graph_node(
                     history_type_raw = archive.read_u8()
                     history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
                     read_ftext_with_history(archive, history_type, tolerant=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("读取 NodeDetails FText 失败: %s", e, exc_info=True)
                 if archive.tell() < tag.value_end_offset:
                     archive.seek(tag.value_end_offset)
                 raw_properties[tag.name] = {"size": tag.size, "type": "FText"}

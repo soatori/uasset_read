@@ -119,8 +119,8 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         import psutil
         process = psutil.Process(target_pid)
         return process.memory_info().rss / 1024 / 1024
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("psutil RSS 获取失败: %s", e, exc_info=True)
 
     # Windows 降级方案：使用 ctypes 调用 GetProcessMemoryInfo
     if sys.platform == "win32":
@@ -167,8 +167,8 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
             finally:
                 if close_handle:
                     kernel32.CloseHandle(handle)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Windows GetProcessMemoryInfo 获取 RSS 失败: %s", e, exc_info=True)
 
     if sys.platform.startswith("linux"):
         try:
@@ -176,8 +176,8 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
                 Path(f"/proc/{target_pid}/statm").read_text(encoding="ascii").split()[1]
             )
             return resident_pages * os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
-        except (OSError, ValueError, IndexError):
-            pass
+        except (OSError, ValueError, IndexError) as e:
+            logger.debug("Linux /proc RSS 获取失败: %s", e)
 
     if pid is not None and not (
         sys.platform == "win32" or sys.platform.startswith("linux")
@@ -244,8 +244,8 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
             if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
                 total_mb = stat.ullTotalPhys / 1024 / 1024
                 available_mb = stat.ullAvailPhys / 1024 / 1024
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Windows GlobalMemoryStatusEx 获取内存信息失败: %s", e, exc_info=True)
 
     if total_mb <= 0:
         total_mb = 16 * 1024  # 最终降级

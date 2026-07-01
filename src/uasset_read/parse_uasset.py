@@ -111,7 +111,7 @@ def _post_process(
             )
             graphs_list = result.graphs
     except ImportError:
-        pass  # graph 模块不存在时静默跳过
+        logger.debug("graph 模块不存在，跳过蓝图图提取")
     except ParseError as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"graph extraction error: {e}")
@@ -198,7 +198,7 @@ def _post_process(
             if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
                 result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
     except ImportError:
-        pass  # kismet/pipeline.py does not exist yet — silent skip
+        logger.debug("kismet 模块不存在，跳过字节码反编译")
     except Exception as e:
         if hasattr(result, 'warnings'):
             result.warnings.append(f"Kismet decompilation error: {e}")
@@ -218,7 +218,7 @@ def _post_process(
         if hasattr(result, 'components'):
             result.components = extract_components(export_map, import_map)
     except ImportError:
-        pass  # component_extractor module does not exist yet
+        logger.debug("component_extractor 模块不存在，跳过组件属性提取")
     except Exception as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"component extraction error: {e}")

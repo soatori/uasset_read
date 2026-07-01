@@ -334,8 +334,8 @@ def register_asset_type_handlers() -> None:
                         handler_name=handler_name,
                     ),
                 )
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.debug("跳过资产类型处理器 %s: %s", handler_name, e)
 
     for handler in handlers:
         registry.register(handler)

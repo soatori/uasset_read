@@ -11,8 +11,11 @@
 """
 from __future__ import annotations
 
+import logging
 import struct
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 # ECurveTableMode 枚举值（CurveTable.h:29-33）
@@ -178,9 +181,9 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
                                 keys.append({"time": time_val, "value": value_val})
                                 offset += 8
 
-    except Exception:
+    except Exception as e:
         # 解析失败时返回已解析的部分数据
-        pass
+        logger.debug("RichCurve 解析失败: %s", e, exc_info=True)
 
     return {"type": "RichCurve", "keys": keys}
 
