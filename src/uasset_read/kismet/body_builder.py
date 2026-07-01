@@ -370,43 +370,82 @@ class FunctionBodyBuilder:
         func_name: str | None = None,
     ) -> str:
         """
-        Translate expressions using structured control flow reconstruction.
+        基于 CFG 的结构化函数体构建。
 
-        Tries StructuredControlFlow first; falls back to goto-based output
-        if no structured patterns are detected.
+        优先使用 CFG 区域分解 → 结构化语句树 → 伪代码发射；
+        无结构化区域时回退到 goto 输出。
 
         Args:
-            expressions: List of KismetExpression from bytecode parsing.
-            func_name: Optional function name for the wrapper.
+            expressions: 从字节码解析得到的表达式列表。
+            func_name: 可选的函数名包装。
 
         Returns:
-            Formatted C++ function body string.
+            格式化的 C++ 函数体字符串。
         """
-        from uasset_read.kismet.structured_flow import StructuredControlFlow
+        from uasset_read.kismet.cfg import (
+            RegionDecoder,
+            StmtEmitter,
+            build_cfg,
+            compute_dominator_tree,
+            decompose_regions,
+        )
+        from uasset_read.kismet.translator import KismetTranslator
 
-        flow = StructuredControlFlow(linker=self._linker)
-        structured_lines = flow.reconstruct(expressions)
+        # 构建 CFG
+        cfg = build_cfg(expressions)
+        dom_tree = compute_dominator_tree(cfg)
+        region_tree = decompose_regions(cfg, dom_tree)
 
-        if not structured_lines:
-            # No patterns detected, use goto fallback
+        # 构建辅助映射
+        offset_to_index: dict[int, int] = {}
+        for idx, expr in enumerate(expressions):
+            byte_offset = getattr(expr, "byte_offset", None)
+            if byte_offset is not None:
+                offset_to_index[byte_offset] = idx
+            if hasattr(expr, "CodeOffset"):
+                offset_to_index[expr.CodeOffset] = idx
+
+        jump_targets: set[int] = set()
+        for expr in expressions:
+            if hasattr(expr, "CodeOffset"):
+                jump_targets.add(expr.CodeOffset)
+
+        translator = KismetTranslator(
+            self.type_registry, linker=self._linker, expressions=expressions
+        )
+
+        # CFG → 结构化语句树
+        decoder = RegionDecoder(
+            cfg=cfg,
+            region_tree=region_tree,
+            expressions=expressions,
+            translator=translator,
+            offset_to_index=offset_to_index,
+            jump_targets=jump_targets,
+        )
+        stmt = decoder.decode()
+
+        # 检查是否有实际结构（非空 Sequence）
+        from uasset_read.kismet.cfg.stmt import Sequence
+        if isinstance(stmt, Sequence) and not stmt.stmts:
             return self.to_function_body(expressions, func_name)
 
-        # Add semicolons and indentation to structured lines
-        processed: list[str] = []
-        for line in structured_lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if _needs_semicolon(stripped):
-                stripped += ";"
-            processed.append(stripped)
+        # 渲染伪代码
+        emitter = StmtEmitter()
+        body = emitter.emit_body(stmt)
+
+        if not body or not body.strip():
+            return self.to_function_body(expressions, func_name)
 
         signature = func_name if func_name else "void UnknownFunction"
         if "(" not in signature:
             signature += "()"
 
-        body = "\n".join(f"    {line}" for line in processed)
-        return f"{signature} {{\n{body}\n}}"
+        # 缩进对齐
+        indented_lines = "\n".join(
+            f"    {line}" for line in body.split("\n") if line
+        )
+        return f"{signature} {{\n{indented_lines}\n}}"
 
     def to_function_body_cfg(
         self,
