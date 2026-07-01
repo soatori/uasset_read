@@ -510,18 +510,17 @@ class TestIRBuilderIntegration:
 
 
 # ===========================================================================
-# output_version / errors 字段测试
+# errors 字段测试
 # ===========================================================================
 
 class TestOutputVersionAndErrors:
-    """验证 JSON 输出包含 output_version 和 errors 字段。"""
+    """验证 JSON 输出不包含 output_version，errors 字段正确。"""
 
-    def test_json_has_output_version(self):
-        """JSON 完整输出应包含 output_version。"""
+    def test_json_no_output_version(self):
+        """JSON 完整输出不应包含 output_version。"""
         ir = _make_minimal_ir()
         data = _render_json(ir)
-        assert "output_version" in data
-        assert data["output_version"] == "5.0"
+        assert "output_version" not in data
 
     def test_json_has_errors_when_present(self):
         """有错误时 JSON 应包含 errors 数组。"""

@@ -15,9 +15,6 @@ from uasset_read.constants import decode_package_flags
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
 
-# 输出格式版本号
-_OUTPUT_VERSION_FULL = "5.0"
-
 
 class _JSONEncoder(json.JSONEncoder):
     """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
@@ -72,29 +69,29 @@ class JSONRenderer(IRenderer):
         all_exports = ir.exports
         is_debug = options.output_level == "debug"
 
-        data = {
-            "status": {
-                "status": ir.status,
-                "message": ir.status_message,
-                "code": ir.status_code,
-            },
-            "output_version": _OUTPUT_VERSION_FULL,
-            "summary": {
-                "package_name": ir.header.package_name,
-                "package_class": ir.header.package_class,
-                "package_flags": ir.header.package_flags,
-                "package_flags_decoded": decode_package_flags(ir.header.package_flags),
-                "total_export_count": ir.header.total_export_count,
-                "total_import_count": ir.header.total_import_count,
-                "ue_version": ir.header.ue_version,
-                "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
-            },
-            "exports": [
-                self._export_to_dict(e, options, is_debug)
-                for e in all_exports
-                if is_debug or e.object_class not in self._EDITOR_NODE_CLASSES
-            ],
+        data: dict[str, Any] = {}
+        if options.include_schema:
+            data["$schema"] = "package.schema.json"
+        data["status"] = {
+            "status": ir.status,
+            "message": ir.status_message,
+            "code": ir.status_code,
         }
+        data["summary"] = {
+            "package_name": ir.header.package_name,
+            "package_class": ir.header.package_class,
+            "package_flags": ir.header.package_flags,
+            "package_flags_decoded": decode_package_flags(ir.header.package_flags),
+            "total_export_count": ir.header.total_export_count,
+            "total_import_count": ir.header.total_import_count,
+            "ue_version": ir.header.ue_version,
+            "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
+        }
+        data["exports"] = [
+            self._export_to_dict(e, options, is_debug)
+            for e in all_exports
+            if is_debug or e.object_class not in self._EDITOR_NODE_CLASSES
+        ]
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:

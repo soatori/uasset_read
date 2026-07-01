@@ -1,0 +1,754 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/user/uasset_read/schemas/package.schema.json",
+  "title": "uasset_read PackageIR 输出",
+  "description": "uasset_read 解析器 PackageIR 的 JSON 输出 Schema。描述 .uasset 文件解析后的完整结构。",
+  "type": "object",
+  "required": ["status", "summary", "exports"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema 引用（仅 include_schema=True 时存在）"
+    },
+    "status": {
+      "$ref": "#/$defs/StatusInfo",
+      "description": "解析状态信息"
+    },
+    "summary": {
+      "$ref": "#/$defs/PackageSummary",
+      "description": "包头摘要信息（与 UE FPackageFileSummary 对齐）"
+    },
+    "exports": {
+      "type": "array",
+      "description": "导出对象列表",
+      "items": {
+        "$ref": "#/$defs/ExportEntry"
+      }
+    },
+    "blueprint": {
+      "$ref": "#/$defs/BlueprintData",
+      "description": "蓝图元数据（仅蓝图类资产存在）"
+    },
+    "variables": {
+      "type": "array",
+      "description": "蓝图变量列表",
+      "items": {
+        "$ref": "#/$defs/VariableEntry"
+      }
+    },
+    "decompiled_functions": {
+      "type": "array",
+      "description": "反编译函数列表",
+      "items": {
+        "$ref": "#/$defs/DecompiledFunction"
+      }
+    },
+    "execution_chains": {
+      "type": "array",
+      "description": "执行链列表",
+      "items": {
+        "$ref": "#/$defs/ExecutionChain"
+      }
+    },
+    "resolved_parent_assets": {
+      "type": "array",
+      "description": "已解析的父资产列表",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_blueprint_graphs": {
+      "type": "array",
+      "description": "继承的蓝图图列表",
+      "items": {
+        "type": "object"
+      }
+    },
+    "logic_sources": {
+      "type": "array",
+      "description": "逻辑源列表",
+      "items": {
+        "type": "object"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "解析错误列表",
+      "items": {
+        "type": "string"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "description": "诊断信息列表",
+      "items": {
+        "type": "object"
+      }
+    },
+    "asset_registry_data": {
+      "type": ["object", "null"],
+      "description": "资产注册表数据"
+    },
+    "anim_blueprint": {
+      "$ref": "#/$defs/AnimBlueprintData",
+      "description": "动画蓝图数据（仅 AnimBlueprint 资产存在）"
+    },
+    "anim_sequence": {
+      "$ref": "#/$defs/AnimSequenceData",
+      "description": "动画序列数据（仅 AnimSequence 资产存在）"
+    },
+    "anim_montage": {
+      "$ref": "#/$defs/AnimMontageData",
+      "description": "动画蒙太奇数据（仅 AnimMontage 资产存在）"
+    },
+    "function_graphs": {
+      "type": "array",
+      "description": "函数图数据（仅 include_function_graphs=True 时存在）",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "StatusInfo": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["success", "partial", "failed"],
+          "description": "解析状态"
+        },
+        "message": {
+          "type": ["string", "null"],
+          "description": "状态消息"
+        },
+        "code": {
+          "type": ["string", "null"],
+          "description": "状态码"
+        }
+      }
+    },
+    "PackageSummary": {
+      "type": "object",
+      "required": ["package_name", "package_class", "package_flags", "total_export_count", "total_import_count", "ue_version"],
+      "properties": {
+        "package_name": {
+          "type": "string",
+          "description": "包名称（如 /Game/Path/AssetName）"
+        },
+        "package_class": {
+          "type": "string",
+          "description": "包类名"
+        },
+        "package_flags": {
+          "type": "integer",
+          "description": "包标志位（原始值）"
+        },
+        "package_flags_decoded": {
+          "type": "array",
+          "description": "包标志位解码列表",
+          "items": {
+            "type": "string"
+          }
+        },
+        "total_export_count": {
+          "type": "integer",
+          "description": "导出总数"
+        },
+        "total_import_count": {
+          "type": "integer",
+          "description": "导入总数"
+        },
+        "ue_version": {
+          "type": "string",
+          "description": "UE 版本号"
+        },
+        "saved_hash": {
+          "type": ["string", "null"],
+          "description": "保存哈希（hex 字符串）"
+        }
+      }
+    },
+    "ExportEntry": {
+      "type": "object",
+      "required": ["object_name", "object_class", "serial_size"],
+      "properties": {
+        "object_name": {
+          "type": "string",
+          "description": "导出对象名称"
+        },
+        "object_class": {
+          "type": "string",
+          "description": "导出对象类名"
+        },
+        "serial_size": {
+          "type": "integer",
+          "description": "序列化大小（字节）"
+        },
+        "parent_class": {
+          "type": ["string", "null"],
+          "description": "父类名"
+        },
+        "properties": {
+          "type": "array",
+          "description": "属性列表",
+          "items": {
+            "$ref": "#/$defs/PropertyEntry"
+          }
+        },
+        "graphs": {
+          "type": "array",
+          "description": "图列表",
+          "items": {
+            "$ref": "#/$defs/GraphEntry"
+          }
+        },
+        "parse_status": {
+          "type": "string",
+          "enum": ["success", "partial", "failed"],
+          "description": "解析状态（仅非 success 时存在）"
+        },
+        "fallback_reason": {
+          "type": ["string", "null"],
+          "description": "降级原因"
+        },
+        "error_message": {
+          "type": ["string", "null"],
+          "description": "错误消息"
+        }
+      }
+    },
+    "PropertyEntry": {
+      "type": "object",
+      "required": ["name", "type", "value", "array_index"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "属性名"
+        },
+        "type": {
+          "type": "string",
+          "description": "属性类型"
+        },
+        "value": {
+          "description": "属性值（类型取决于属性类型）"
+        },
+        "array_index": {
+          "type": "integer",
+          "description": "数组索引"
+        },
+        "guid": {
+          "type": ["string", "null"],
+          "description": "GUID"
+        }
+      }
+    },
+    "GraphEntry": {
+      "type": "object",
+      "required": ["graph_name", "graph_guid", "nodes", "execution_chains"],
+      "properties": {
+        "graph_name": {
+          "type": "string",
+          "description": "图名称"
+        },
+        "graph_guid": {
+          "type": "string",
+          "description": "图 GUID（32 位小写 hex）"
+        },
+        "graph_class": {
+          "type": "string",
+          "description": "图类名"
+        },
+        "graph_type": {
+          "type": ["string", "null"],
+          "description": "图类型"
+        },
+        "nodes": {
+          "type": "array",
+          "description": "节点列表",
+          "items": {
+            "$ref": "#/$defs/NodeEntry"
+          }
+        },
+        "execution_chains": {
+          "type": "array",
+          "description": "执行链",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "subgraphs": {
+          "type": "array",
+          "description": "子图列表",
+          "items": {
+            "$ref": "#/$defs/GraphEntry"
+          }
+        }
+      }
+    },
+    "NodeEntry": {
+      "type": "object",
+      "required": ["node_guid", "node_class", "pins", "execution_flow"],
+      "properties": {
+        "node_guid": {
+          "type": "string",
+          "description": "节点 GUID（32 位小写 hex）"
+        },
+        "node_class": {
+          "type": "string",
+          "description": "节点类名"
+        },
+        "node_comment": {
+          "type": ["string", "null"],
+          "description": "节点注释"
+        },
+        "pins": {
+          "type": "array",
+          "description": "Pin 列表",
+          "items": {
+            "$ref": "#/$defs/PinEntry"
+          }
+        },
+        "execution_flow": {
+          "type": "array",
+          "description": "执行流信息",
+          "items": {
+            "type": "object"
+          }
+        },
+        "macro_expansion": {
+          "type": ["object", "null"],
+          "description": "宏展开信息"
+        }
+      }
+    },
+    "PinEntry": {
+      "type": "object",
+      "required": ["pin_name", "pin_type", "linked_to", "direction"],
+      "properties": {
+        "pin_name": {
+          "type": "string",
+          "description": "Pin 名称"
+        },
+        "pin_type": {
+          "type": "string",
+          "description": "Pin 类型"
+        },
+        "pin_type_value": {
+          "type": ["string", "null"],
+          "description": "Pin 类型值"
+        },
+        "linked_to": {
+          "type": "array",
+          "description": "连接到的 Pin GUID 列表",
+          "items": {
+            "type": "string"
+          }
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["input", "output"],
+          "description": "方向"
+        },
+        "default_value": {
+          "type": ["string", "null"],
+          "description": "默认值"
+        }
+      }
+    },
+    "BlueprintData": {
+      "type": "object",
+      "properties": {
+        "parent_class": {
+          "type": ["string", "null"],
+          "description": "父类名"
+        },
+        "description": {
+          "type": "string",
+          "description": "蓝图描述"
+        },
+        "interfaces": {
+          "type": "array",
+          "description": "已实现接口列表",
+          "items": {
+            "type": "object"
+          }
+        },
+        "functions": {
+          "type": "array",
+          "description": "蓝图函数列表",
+          "items": {
+            "$ref": "#/$defs/BlueprintFunction"
+          }
+        },
+        "events": {
+          "type": "array",
+          "description": "蓝图事件列表",
+          "items": {
+            "$ref": "#/$defs/BlueprintEvent"
+          }
+        },
+        "components": {
+          "type": "array",
+          "description": "组件列表",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "BlueprintFunction": {
+      "type": "object",
+      "required": ["name", "return_type", "parameters", "implementation_status"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "函数名"
+        },
+        "return_type": {
+          "type": "string",
+          "description": "返回类型"
+        },
+        "parameters": {
+          "type": "array",
+          "description": "参数列表",
+          "items": {
+            "type": "object"
+          }
+        },
+        "function_flags": {
+          "type": "integer",
+          "description": "函数标志位"
+        },
+        "is_pure": {
+          "type": "boolean",
+          "description": "是否为纯函数"
+        },
+        "is_blueprint_callable": {
+          "type": "boolean",
+          "description": "是否蓝图可调用"
+        },
+        "is_const": {
+          "type": "boolean",
+          "description": "是否为 const 函数"
+        },
+        "is_static": {
+          "type": "boolean",
+          "description": "是否为静态函数"
+        },
+        "implementation": {
+          "type": ["object", "null"],
+          "description": "实现关联信息"
+        },
+        "function_graph": {
+          "type": ["object", "null"],
+          "description": "函数图数据"
+        },
+        "implementation_status": {
+          "type": "string",
+          "enum": ["decompiled", "graph_only", "metadata_only", "missing"],
+          "description": "实现状态"
+        }
+      }
+    },
+    "BlueprintEvent": {
+      "type": "object",
+      "required": ["name", "event_type", "parameters", "implementation_status"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "事件名"
+        },
+        "event_type": {
+          "type": "string",
+          "description": "事件类型"
+        },
+        "parameters": {
+          "type": "array",
+          "description": "参数列表",
+          "items": {
+            "type": "object"
+          }
+        },
+        "is_override": {
+          "type": "boolean",
+          "description": "是否为覆写事件"
+        },
+        "override_parent_class": {
+          "type": "string",
+          "description": "覆写的父类"
+        },
+        "implementation": {
+          "type": ["object", "null"],
+          "description": "实现关联信息"
+        },
+        "function_graph": {
+          "type": ["object", "null"],
+          "description": "函数图数据"
+        },
+        "implementation_status": {
+          "type": "string",
+          "enum": ["decompiled", "graph_only", "metadata_only", "missing"],
+          "description": "实现状态"
+        }
+      }
+    },
+    "VariableEntry": {
+      "type": "object",
+      "required": ["name", "type", "kind"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "变量名"
+        },
+        "type": {
+          "type": "string",
+          "description": "变量类型"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["user", "component", "input_action", "metadata"],
+          "description": "变量种类"
+        },
+        "default_value": {
+          "type": ["string", "null"],
+          "description": "默认值"
+        },
+        "guid": {
+          "type": ["string", "null"],
+          "description": "GUID"
+        },
+        "category": {
+          "type": "string",
+          "description": "分类"
+        },
+        "property_flags": {
+          "type": "integer",
+          "description": "属性标志位"
+        },
+        "is_edit_anywhere": {
+          "type": "boolean",
+          "description": "是否 EditAnywhere"
+        },
+        "is_replicated": {
+          "type": "boolean",
+          "description": "是否复制"
+        }
+      }
+    },
+    "DecompiledFunction": {
+      "type": "object",
+      "required": ["name", "signature", "cpp_code", "parameters", "return_type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "函数名"
+        },
+        "signature": {
+          "type": "string",
+          "description": "函数签名"
+        },
+        "cpp_code": {
+          "type": "string",
+          "description": "反编译的 C++ 代码"
+        },
+        "parameters": {
+          "type": "array",
+          "description": "参数列表",
+          "items": {
+            "type": "object"
+          }
+        },
+        "return_type": {
+          "type": "string",
+          "description": "返回类型"
+        },
+        "fallback_reasons": {
+          "type": "array",
+          "description": "降级原因列表",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ExecutionChain": {
+      "type": "object",
+      "required": ["event", "chain"],
+      "properties": {
+        "event": {
+          "type": "string",
+          "description": "事件名"
+        },
+        "chain": {
+          "type": "array",
+          "description": "执行链节点列表",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AnimBlueprintData": {
+      "type": "object",
+      "properties": {
+        "target_skeleton": {
+          "type": ["string", "null"],
+          "description": "目标骨骼路径"
+        },
+        "baked_state_machines": {
+          "type": "array",
+          "description": "烘焙状态机列表",
+          "items": {
+            "$ref": "#/$defs/BakedStateMachine"
+          }
+        },
+        "anim_notifies": {
+          "type": "array",
+          "description": "动画通知列表",
+          "items": {
+            "$ref": "#/$defs/AnimNotify"
+          }
+        },
+        "sync_group_names": {
+          "type": "array",
+          "description": "同步组名称列表",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "BakedStateMachine": {
+      "type": "object",
+      "required": ["machine_name", "initial_state", "states", "transitions"],
+      "properties": {
+        "machine_name": {
+          "type": "string",
+          "description": "状态机名称"
+        },
+        "initial_state": {
+          "type": "integer",
+          "description": "初始状态索引"
+        },
+        "states": {
+          "type": "array",
+          "description": "状态列表",
+          "items": {
+            "type": "object"
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "description": "转换列表",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "AnimNotify": {
+      "type": "object",
+      "required": ["notify_name"],
+      "properties": {
+        "notify_name": {
+          "type": "string",
+          "description": "通知名称"
+        },
+        "trigger_time_offset": {
+          "type": "number",
+          "description": "触发时间偏移"
+        },
+        "duration": {
+          "type": "number",
+          "description": "持续时间"
+        },
+        "notify_class": {
+          "type": ["string", "null"],
+          "description": "通知类名"
+        },
+        "track_index": {
+          "type": "integer",
+          "description": "轨道索引"
+        }
+      }
+    },
+    "AnimSequenceData": {
+      "type": "object",
+      "properties": {
+        "target_skeleton": {
+          "type": ["string", "null"],
+          "description": "目标骨骼路径"
+        },
+        "additive_anim_type": {
+          "type": ["string", "null"],
+          "description": "叠加动画类型"
+        },
+        "sequence_length": {
+          "type": "number",
+          "description": "序列时长"
+        },
+        "rate_scale": {
+          "type": "number",
+          "description": "速率缩放"
+        },
+        "has_compressed_data": {
+          "type": "boolean",
+          "description": "是否有压缩数据"
+        },
+        "notifies": {
+          "type": "array",
+          "description": "通知列表",
+          "items": {
+            "$ref": "#/$defs/AnimNotify"
+          }
+        },
+        "float_curve_names": {
+          "type": "array",
+          "description": "浮点曲线名称列表",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AnimMontageData": {
+      "type": "object",
+      "properties": {
+        "blend_mode_in": {
+          "type": ["string", "null"],
+          "description": "混合入模式"
+        },
+        "blend_mode_out": {
+          "type": ["string", "null"],
+          "description": "混合出模式"
+        },
+        "sync_group": {
+          "type": ["string", "null"],
+          "description": "同步组"
+        },
+        "rate_scale": {
+          "type": "number",
+          "description": "速率缩放"
+        },
+        "notifies": {
+          "type": "array",
+          "description": "通知列表",
+          "items": {
+            "$ref": "#/$defs/AnimNotify"
+          }
+        },
+        "float_curve_names": {
+          "type": "array",
+          "description": "浮点曲线名称列表",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

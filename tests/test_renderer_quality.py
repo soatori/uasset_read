@@ -157,13 +157,13 @@ class TestJSONRendererBasic:
         assert isinstance(data, dict)
 
     def test_render_contains_required_keys(self):
-        """输出应包含 status、output_version、summary、exports 键。"""
+        """输出应包含 status、summary、exports 键，不包含 output_version。"""
         ir = _make_ir()
         renderer = get_renderer("json")
         result = renderer.render(ir, RenderOptions())
         data = json.loads(result)
         assert "status" in data
-        assert "output_version" in data
+        assert "output_version" not in data
         assert "summary" in data
         assert "exports" in data
 

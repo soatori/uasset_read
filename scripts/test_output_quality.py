@@ -312,15 +312,15 @@ def check_top_level_empty_fields(data: dict) -> CheckResult:
     )
 
 
-def check_output_version_semantic(data: dict) -> CheckResult:
-    """检查 output_version 字段语义。"""
-    ov = data.get("output_version", "")
+def check_output_version_absent(data: dict) -> CheckResult:
+    """检查 output_version 字段已被移除。"""
+    has_ov = "output_version" in data
     return CheckResult(
-        check_id="output_version",
-        severity="P2",
-        name="output_version 语义",
-        passed=bool(ov),
-        detail=f'值: "{ov}"（需确认是解析器版本还是输出格式版本）',
+        check_id="output_version_absent",
+        severity="P1",
+        name="output_version 已移除",
+        passed=not has_ov,
+        detail="output_version 字段不存在" if not has_ov else "output_version 字段仍存在（应已移除）",
     )
 
 
@@ -436,7 +436,7 @@ ALL_JSON_CHECKS = [
     check_name_map_size,
     check_blueprint_components_properties,
     check_top_level_empty_fields,
-    check_output_version_semantic,
+    check_output_version_absent,
 ]
 
 ALL_MD_CHECKS = [
