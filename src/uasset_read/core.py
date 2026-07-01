@@ -289,3 +289,87 @@ def parse_batch(
 def list_formats() -> list[str]:
     """返回所有支持的格式名列表。"""
     return _list_renderer_formats()
+
+
+def diff_single(
+    file_path1: str,
+    file_path2: str,
+    *,
+    tolerant: bool = True,
+    context_lines: int = 3,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+) -> str:
+    """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
+
+    Args:
+        file_path1: 第一个 .uasset 文件路径
+        file_path2: 第二个 .uasset 文件路径
+        tolerant: 容错模式
+        context_lines: diff 上下文行数
+        mappings_path: 可选 .usmap/.jmap 类型映射
+        game: 可选游戏名（启用游戏特定属性解析）
+        force_full_parse: 是否强制完整蓝图解析
+
+    Returns:
+        unified diff 文本
+
+    Raises:
+        ParseError: 两个文件都解析失败
+    """
+    import difflib
+
+    from uasset_read.exceptions import ParseError
+
+    errors = []
+
+    # 解析文件 1
+    try:
+        text1 = parse_single(
+            file_path1,
+            format="text",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text1 = f"[解析错误] {Path(file_path1).name}: {e}"
+        errors.append(f"File 1: {e}")
+
+    # 解析文件 2
+    try:
+        text2 = parse_single(
+            file_path2,
+            format="text",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text2 = f"[解析错误] {Path(file_path2).name}: {e}"
+        errors.append(f"File 2: {e}")
+
+    name1 = Path(file_path1).name
+    name2 = Path(file_path2).name
+
+    lines1 = text1.splitlines(keepends=True)
+    lines2 = text2.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        lines1,
+        lines2,
+        fromfile=f"a/{name1}",
+        tofile=f"b/{name2}",
+        n=context_lines,
+    )
+
+    result = "".join(diff)
+    if not result:
+        return f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n"
+
+    return result

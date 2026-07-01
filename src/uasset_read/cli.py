@@ -71,6 +71,7 @@ def create_parser() -> argparse.ArgumentParser:
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument('--text', action='store_true', help='Output human-readable text summary')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -98,6 +99,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--batch', action='store_true', help='Enable batch mode')
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
+    parser.add_argument('--diff', metavar='FILE2', nargs='?', const=True, default=None,
+                        help='Diff FILE against FILE2 (text summary comparison)')
+    parser.add_argument('--diff-context', metavar='N', type=int, default=3,
+                        help='Number of context lines around changes in diff (default: 3)')
 
     return parser
 
@@ -106,6 +111,8 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
+    if args.text:
+        return "text"
     if args.json:
         return "json"
     return "json"
@@ -229,6 +236,29 @@ def main():
     # --list-package-files
     if args.list_package_files:
         _handle_list_package_files(args.file, tolerant)
+        return
+
+    # --diff 模式
+    if args.diff is not None:
+        from uasset_read.core import diff_single
+        if args.diff is True:
+            print("Error: --diff requires a second file path", file=sys.stderr)
+            sys.exit(EXIT_ARGUMENT_ERROR)
+        file2 = Path(args.diff)
+        if not file2.is_file():
+            print(f"Error: Diff file not found: {args.diff}", file=sys.stderr)
+            sys.exit(EXIT_FILE_NOT_FOUND)
+        try:
+            diff_output = diff_single(
+                str(file_path),
+                str(file2),
+                tolerant=tolerant,
+                context_lines=args.diff_context,
+            )
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(EXIT_GENERIC_ERROR)
+        _write_output(diff_output, args.output)
         return
 
     try:
