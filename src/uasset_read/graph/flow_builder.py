@@ -801,7 +801,7 @@ def _trace_data_source(
     pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Optional[Dict]:
     """追踪单个参数的数据来源。
@@ -829,6 +829,10 @@ def _trace_data_source(
             ]
         }
     """
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
     # 检查是否有连接
     linked_refs = list(pin.linked_to_raw or [])
     normalized_pin_id = _normalize_pin_id(pin.pin_id)
@@ -995,7 +999,7 @@ def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
@@ -1011,6 +1015,10 @@ def _trace_execution_from_event(
     Returns:
         List[Dict]: 节点信息序列
     """
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
     visited: Set[str] = set()
     flow: List[Dict] = []
     current_node = start_node
@@ -1146,7 +1154,7 @@ def _trace_execution_from_pin(
     start_pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
@@ -1156,6 +1164,10 @@ def _trace_execution_from_pin(
     用于EnhancedInputAction多触发时机追踪。
     增加 node_name_lookup 参数传递。
     """
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
     if edges_by_from_pin and _normalize_pin_id(start_pin.pin_id) in edges_by_from_pin:
         edge = edges_by_from_pin[_normalize_pin_id(start_pin.pin_id)][0]
         next_node = node_lookup.get(edge["to_node_guid"])
