@@ -283,7 +283,7 @@ def _post_process(
                     f"名称表读取失败"
                 )
 
-    result.is_success = len(result.errors) == 0
+    result.is_success = not result.errors
 
 
 def _resolve_parent_assets(
@@ -861,7 +861,7 @@ def _parse_package_core(
                         if name.endswith("_C") and not name.startswith("Default__"):
                             export.graphs = result.graphs
                             break
-                result.is_success = len(result.errors) == 0
+                result.is_success = not result.errors
                 return
 
             # 解析 ExportMap 属性 — 通过 linker.preload() 统一调度（link → preload → post_load）
@@ -944,7 +944,7 @@ def _parse_package_core(
                 archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
                 memory_policy=policy,
             )
-            result.is_success = len(result.errors) == 0
+            result.is_success = not result.errors
 
         except VersionError as e:
             _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
@@ -1236,7 +1236,7 @@ def parse_package_lazy(
                     raise ParseError(f"Linker post_load failed: {e}") from e
                 result.errors.append(f"Linker post_load failed: {e}")
 
-        result.is_success = len(result.errors) == 0
+        result.is_success = not result.errors
         result.metadata["lazy_loading"] = True
         result.metadata["loaded_exports"] = sorted(parse_indices)
         result.metadata["total_exports"] = len(result.export_map or [])
