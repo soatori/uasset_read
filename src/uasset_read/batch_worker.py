@@ -120,6 +120,7 @@ class _SubprocessAdapter:
     def __init__(self, process: subprocess.Popen) -> None:
         self._process = process
         self.pid = process.pid
+        self._stderr_text: str = ""
 
     @property
     def exitcode(self) -> int | None:
@@ -134,11 +135,25 @@ class _SubprocessAdapter:
     def kill(self) -> None:
         self._process.kill()
 
+    @property
+    def stderr_text(self) -> str:
+        return self._stderr_text
+
+    def _drain_stderr(self) -> None:
+        """读取并缓存 stderr，防止管道资源泄漏。"""
+        if self._process.stderr is not None and self._stderr_text == "":
+            try:
+                raw = self._process.stderr.read()
+                self._stderr_text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+            except (OSError, ValueError) as exc:
+                logger.debug("读取子进程 stderr 失败: %s", exc)
+
     def join(self, timeout=None) -> None:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             logger.debug("子进程 join 超时，继续执行")
+        self._drain_stderr()
 
 
 class _ResultFile:
@@ -196,6 +211,10 @@ def _monitor_worker(
         sleep(poll_interval_seconds)
 
     process.join(timeout=1)
+    if process.exitcode and process.exitcode != 0:
+        stderr_out = getattr(process, "stderr_text", "")
+        if stderr_out:
+            logger.warning("子进程 stderr (exit %d):\n%s", process.exitcode, stderr_out)
     if result_queue is None:
         return BatchWorkerOutcome(
             False,
@@ -254,7 +273,7 @@ def run_isolated_asset(
                 str(result_path),
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         process = _SubprocessAdapter(popen)
         return _monitor_worker(
