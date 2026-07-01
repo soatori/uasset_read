@@ -793,7 +793,7 @@ def extract_blueprint_metadata(
         properties = parse_properties_from_export(
             export, archive, summary, name_map, export_map, import_map,
         )
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         return None, None
 
     if not properties:
@@ -933,7 +933,7 @@ def extract_blueprint_metadata(
                     other_export, archive, summary, name_map, export_map, import_map,
                 )
                 interfaces = _extract_interfaces_from_props(other_props)
-            except Exception as e:
+            except (KeyError, TypeError, ValueError) as e:
                 logger.debug("提取接口属性失败: %s", e, exc_info=True)
             if interfaces:
                 break

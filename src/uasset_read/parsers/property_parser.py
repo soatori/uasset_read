@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import struct as _struct
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ def _try_asset_type_handler(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
                 handler.handler_name, export.object_name, handler_status,
             )
-    except Exception as e:
+    except (KeyError, TypeError, ValueError) as e:
         logger.debug(
             "AssetTypeHandler failed for '%s' (%s): %s",
             export.object_name, class_name, e,
@@ -209,7 +210,7 @@ def parse_property_value(
                 if result is not None:
                     return result
                 # Handler 返回 None（未知类型/解析失败），继续回退到 raw_data
-            except Exception as e:
+            except (_struct.error, OSError, ValueError) as e:
                 logger.warning("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
@@ -233,13 +234,13 @@ def parse_property_value(
             if custom_id is not None:
                 try:
                     return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-                except Exception as e:
+                except (_struct.error, OSError, ValueError) as e:
                     logger.warning("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-            except Exception as e:
+            except (_struct.error, OSError, ValueError) as e:
                 logger.warning("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
         # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
@@ -288,7 +289,7 @@ def parse_property_value(
             return handler(tag, archive, name_map, summary)
         elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
             return handler(tag, archive)
-    except Exception as e:
+    except (_struct.error, OSError, ValueError, AttributeError, KeyError) as e:
         if not tolerant:
             raise
         logger.warning("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
@@ -370,7 +371,7 @@ def parse_properties_from_export(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except Exception as e:
+        except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve class name for export: %s", e)
     if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
@@ -379,7 +380,7 @@ def parse_properties_from_export(
         )
         try:
             skip_export_payload(archive, export, summary)
-        except Exception as e:
+        except (_struct.error, OSError, ValueError) as e:
             logger.warning("Failed to skip export '%s' payload: %s", export.object_name, e)
         setattr(export, "parse_status", "skipped")
         setattr(export, "fallback_reason", "unsupported_type")
@@ -485,7 +486,7 @@ def parse_properties_from_export(
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
-                except Exception as e:
+                except (KeyError, AttributeError, IndexError) as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
@@ -595,7 +596,7 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             return resolve_class_name(export.class_index, import_map, export_map)
-        except Exception as e:
+        except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
 
@@ -729,7 +730,7 @@ def _try_read_unversioned_header(
         if archive.tell() >= property_end and not all(is_zero for _index, is_zero in selected):
             raise ParseError("unversioned header consumes entire property payload")
         return selected
-    except Exception as e:
+    except (_struct.error, ParseError, ValueError) as e:
         logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
         archive.seek(start)
         return None
@@ -826,7 +827,7 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
             if inner_size <= 0:
                 return 0
             return min(remaining, 4 + inner_size)
-    except Exception as e:
+    except (_struct.error, ValueError, AttributeError) as e:
         logger.debug("Unversioned variable size estimation failed: %s", e)
         return 0
     finally:

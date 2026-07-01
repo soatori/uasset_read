@@ -384,7 +384,7 @@ class TestExtractKismetDecompiled:
 
         with patch('uasset_read.serializers.object_resources.resolve_class_name', return_value="UserDefinedEnum"):
             with patch('uasset_read.kismet.bytecode_extractor.USTRUCT_TYPES', {"UserDefinedEnum"}):
-                with patch('uasset_read.kismet.pipeline.decompile_single_function', side_effect=Exception("Test error")):
+                with patch('uasset_read.kismet.pipeline.decompile_single_function', side_effect=OSError("Test error")):
                     with patch('uasset_read.kismet.bytecode_extractor.reset_bpgc_cache'):
                         # tolerant=True (default)
                         result = _extract_kismet_decompiled(

@@ -8,6 +8,7 @@ UE BinaryOrNative 序列化用于某些特殊结构（如 FInstancedStruct），
 from __future__ import annotations
 
 import logging
+import struct
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ def _parse_instanced_struct(
             "script_struct_index": script_struct_index,
             "struct_data": struct_data,
         }
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         # 解析失败，回退到原始字节
         archive.seek(start_pos)
         logger.debug("FInstancedStruct 解析失败: %s", e)
@@ -108,7 +109,7 @@ def _parse_material_input(
             "mask_b": mask_b,
             "mask_a": mask_a,
         }
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
         logger.debug("MaterialInput 解析失败: %s", e)
         return None
@@ -154,7 +155,7 @@ def _parse_expression_output(
             "mask_b": mask_b,
             "mask_a": mask_a,
         }
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
         logger.debug("ExpressionOutput 解析失败: %s", e)
         return None
@@ -182,7 +183,7 @@ def _parse_struct_binary(
     start_pos = archive.tell()
     try:
         raw = archive.read(size)
-    except Exception:
+    except (struct.error, OSError):
         archive.seek(start_pos)
         return None
 

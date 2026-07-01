@@ -5,6 +5,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 """
 
 import logging
+import struct
 from typing import Optional, List, Dict, Any, Tuple, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -361,7 +362,7 @@ def read_export_map(
                 script_serialization_start_offset=script_serialization_start_offset,
                 guid=package_guid,
             ))
-        except Exception as e:
+        except (struct.error, OSError, ValueError, AttributeError) as e:
             context = ErrorContext(
                 offset=archive.tell(), phase="export_map", operation="read_export",
                 context_name=object_name, export_index=export_idx

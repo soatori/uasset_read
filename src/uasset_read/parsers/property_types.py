@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import struct
 from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple, Union
 import re
 
@@ -335,7 +336,7 @@ def _build_version_container_from_summary(summary: Any) -> Optional["VersionCont
         except AttributeError as e:
             logger.debug("缓存 version_container 失败: %s", e)
         return vc
-    except Exception:
+    except (AttributeError, TypeError, ValueError, KeyError):
         return None
 
 
@@ -917,7 +918,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
                 ),
             )
             fields[inner_tag.name] = field_value
-    except Exception:
+    except (struct.error, ParseError, OSError, ValueError):
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
@@ -1235,7 +1236,7 @@ def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
     try:
         if tag.size > 1:
             value_data = archive.read_fstring()
-    except Exception:
+    except (struct.error, OSError, ValueError):
         archive.seek(start + 1)
     consumed = archive.tell() - start
     raw = archive.read_bytes(tag.size - consumed) if tag.size > consumed else b""

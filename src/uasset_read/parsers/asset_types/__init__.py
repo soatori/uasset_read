@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+import struct
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -96,7 +97,7 @@ class HandlerClassAdapter(ClassHandler):
                 data=data,
                 fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, struct.error) as e:
             logger.debug(
                 "HandlerClassAdapter '%s' failed for '%s': %s",
                 self._handler_name, export.object_name, e,
@@ -138,7 +139,7 @@ def discover_handlers() -> Dict[str, Any]:
                             export_type, obj.__name__, obj.priority,
                         )
 
-        except Exception as e:
+        except (ImportError, OSError, AttributeError, ValueError) as e:
             logger.warning("Failed to load handler from %s: %s", py_file.name, e)
 
     return handlers
@@ -245,7 +246,7 @@ class AssetTypeHandler(ClassHandler):
                 data=data,
                 fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, struct.error) as e:
             logger.debug(
                 "AssetTypeHandler '%s' failed for '%s': %s",
                 self._handler_name, export.object_name, e,

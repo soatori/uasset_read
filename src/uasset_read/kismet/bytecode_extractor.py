@@ -12,6 +12,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import struct
 from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.archive import FKismetArchive
@@ -204,7 +205,8 @@ def _scan_export_serial_for_bytecode(
                 return best[1] if best else None
             try:
                 expressions = parse_bytecode_stream(candidate, name_map, tolerant=tolerant)
-            except Exception:
+            except (struct.error, ValueError, IndexError, ParseError,
+                    KeyError, TypeError, AttributeError, OverflowError):
                 continue
             if not expressions:
                 continue
@@ -304,7 +306,7 @@ def _bpgc_fallback(
                 len(_bpgc_bytecode_cache), bpgc_export.object_name,
             )
 
-        except Exception as e:
+        except (OSError, struct.error, ValueError, KeyError) as e:
             # T-72C-03: Return None on failure rather than raising
             logger.error("BPGC bytecode extraction failed: %s", e)
             _bpgc_bytecode_cache = {}
@@ -471,7 +473,7 @@ def _expr_to_tree_node(expr: KismetExpression) -> dict:
             continue
         try:
             val = getattr(expr, key)
-        except Exception:
+        except AttributeError:
             continue
         if _is_kismet_expression(val):
             # Avoid duplicates if already in node_dict

@@ -74,7 +74,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     elif hasattr(result, 'graphs') and result.graphs:
         try:
             function_graphs = _build_function_graphs_safe(result)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
             if hasattr(result, "warnings"):
                 result.warnings.append(f"function_graphs generation skipped: {e}")
 
@@ -346,7 +346,7 @@ def _get_version_string(result: ParseResult) -> str:
     if callable(method):
         try:
             return method()
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             logger.debug("获取 UE 版本字符串失败: %s", e, exc_info=True)
 
     # 回退：基于 is_ue5 判断
@@ -380,7 +380,7 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
         try:
             export_ir = _build_export_ir(idx, export, result)
             exports.append(export_ir)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
             # tolerant 模式：跳过失败的 export
             logger.debug("构建 export %d IR 失败: %s", idx, e, exc_info=True)
     return exports
@@ -592,7 +592,7 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         if hasattr(obj_ref, "get_full_name"):
             return obj_ref.get_full_name()
         return str(obj_ref)
-    except Exception:
+    except (KeyError, IndexError, AttributeError, ValueError):
         return None
 
 
@@ -1117,5 +1117,5 @@ def _build_asset_registry_data(result) -> dict | None:
         return None
     try:
         return asset_registry_data.to_dict()
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return None

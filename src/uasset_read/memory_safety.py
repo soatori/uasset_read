@@ -119,7 +119,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         import psutil
         process = psutil.Process(target_pid)
         return process.memory_info().rss / 1024 / 1024
-    except Exception as e:
+    except (ImportError, OSError) as e:
         logger.debug("psutil RSS 获取失败: %s", e, exc_info=True)
 
     # Windows 降级方案：使用 ctypes 调用 GetProcessMemoryInfo
@@ -167,7 +167,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
             finally:
                 if close_handle:
                     kernel32.CloseHandle(handle)
-        except Exception as e:
+        except (OSError, ValueError, OverflowError) as e:
             logger.debug("Windows GetProcessMemoryInfo 获取 RSS 失败: %s", e, exc_info=True)
 
     if sys.platform.startswith("linux"):
@@ -244,7 +244,7 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
             if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
                 total_mb = stat.ullTotalPhys / 1024 / 1024
                 available_mb = stat.ullAvailPhys / 1024 / 1024
-        except Exception as e:
+        except (OSError, ValueError, OverflowError) as e:
             logger.debug("Windows GlobalMemoryStatusEx 获取内存信息失败: %s", e, exc_info=True)
 
     if total_mb <= 0:

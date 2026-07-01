@@ -652,7 +652,7 @@ class KismetTranslator:
                 return "?"
             try:
                 return str(var_ptr)
-            except Exception:
+            except (TypeError, ValueError):
                 return "?"
         return None
 

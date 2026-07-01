@@ -388,7 +388,7 @@ class FArchive:
             if key:
                 self._record_hex_view(key, "i32(peek)", result, current_pos, current_pos + 4)
             return result
-        except Exception:
+        except (struct.error, OSError, ValueError):
             self.seek(current_pos)
             raise
 

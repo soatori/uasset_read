@@ -6,6 +6,7 @@ UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
 
 import logging
+import struct
 from typing import List
 from dataclasses import dataclass, field
 
@@ -602,7 +603,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
 
     try:
         archive.seek(summary.name_offset)
-    except Exception as e:
+    except (OSError, OverflowError) as e:
         raise ParseError(
             f"seek({summary.name_offset}) 失败，无法读取名称表: {e}"
         ) from e
@@ -618,7 +619,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
             from uasset_read.constants import UE4_NAME_HASHES_SERIALIZED
             if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
                 archive.read(4)
-        except Exception as e:
+        except (struct.error, OSError, ValueError) as e:
             logger.warning(
                 "read_name_table: 读取名称条目 %d/%d 失败: %s（已读取 %d 个名称）",
                 i, summary.name_count, e, len(name_map),

@@ -32,6 +32,7 @@ class FKismetArchive(FArchive):
         self._mmap_warning = None
         self._name_map = name_map
         self._expression_depth = 0
+        self._diagnostics: list = []
 
     @classmethod
     def reset_warned_offsets(cls) -> None:

@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+import struct
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -94,7 +95,7 @@ def read_asset_registry_data(
 
     try:
         archive.seek(asset_registry_data_offset)
-    except Exception as e:
+    except (OSError, OverflowError) as e:
         logger.warning("无法定位到 AssetRegistryDataOffset=%d: %s", asset_registry_data_offset, e)
         return None
 
@@ -128,7 +129,7 @@ def read_asset_registry_data(
             if obj_data is not None:
                 result.objects.append(obj_data)
 
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         logger.warning("AssetRegistryData 解析异常: %s", e)
         # 返回已解析的部分数据
         return result
@@ -160,6 +161,6 @@ def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
             tags=tags,
         )
 
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         logger.warning("AssetRegistryData: 读取对象数据异常: %s", e)
         return None

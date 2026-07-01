@@ -132,7 +132,7 @@ class AnimSequenceHandler:
 
             return ParseStatus.SUCCESS
 
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             # 记录错误但不中断解析
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimSequence 解析错误: {e}")

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import struct
 from typing import TYPE_CHECKING, Optional, List, Union, Sequence, Callable
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def _extract_kismet_decompiled(
             )
             if result is not None:
                 results.append(result)
-        except Exception as e:
+        except (ParseError, OSError, struct.error, ValueError, KeyError, AttributeError) as e:
             # Per D-10: failure does NOT block pipeline
             # Log warning so caller can diagnose if needed
             logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
@@ -208,7 +209,7 @@ def _run_kismet_and_dependency_analysis(
                 result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
     except ImportError:
         logger.debug("kismet 模块不存在，跳过字节码反编译")
-    except Exception as e:
+    except (OSError, struct.error, ValueError, KeyError) as e:
         if hasattr(result, 'warnings'):
             result.warnings.append(f"Kismet decompilation error: {e}")
 
@@ -219,7 +220,7 @@ def _run_kismet_and_dependency_analysis(
             result.components = extract_components(export_map, import_map)
     except ImportError:
         logger.debug("component_extractor 模块不存在，跳过组件属性提取")
-    except Exception as e:
+    except (KeyError, TypeError, ValueError) as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"component extraction error: {e}")
 
@@ -327,7 +328,7 @@ def _resolve_parent_assets(
             include_parent_assets=False,
             memory_policy=memory_policy,
         )
-    except Exception as exc:
+    except (OSError, ParseError, struct.error, ValueError) as exc:
         result.logic_sources.append({
             "source": "parent_asset",
             "class": parent_class,
@@ -404,11 +405,11 @@ def _record_parse_stage_error(
     if archive is not None:
         try:
             file_size = archive.total_size()
-        except Exception:
+        except (OSError, OverflowError):
             file_size = getattr(archive, "_file_size", 0) or 0
         try:
             current_pos = archive.tell()
-        except Exception:
+        except (OSError, OverflowError):
             current_pos = 0
     result.diagnostics.append(OffsetRangeDiagnostic(
         kind="parse_stage_error",
@@ -553,7 +554,7 @@ def _create_linker(
         if extra_linker_setup is not None:
             extra_linker_setup(linker, result)
         return linker
-    except Exception as e:
+    except (OSError, struct.error, ValueError, AttributeError, KeyError) as e:
         if not tolerant:
             raise ParseError(f"Linker creation failed: {e}") from e
         result.errors.append(f"Linker creation failed: {e}")
@@ -613,7 +614,7 @@ def _read_package_headers(
     if validate_range:
         try:
             validate_export_data_range(archive, result.summary)
-        except Exception as e:
+        except (OSError, struct.error, ValueError) as e:
             if not tolerant:
                 raise
             _record_parse_stage_error(
@@ -756,7 +757,7 @@ def _parse_package_core(
             # 截断文件检测：验证导出数据范围
             try:
                 validate_export_data_range(archive, result.summary)
-            except Exception as e:
+            except (OSError, struct.error, ValueError) as e:
                 if not tolerant:
                     raise
                 _record_parse_stage_error(
@@ -829,7 +830,7 @@ def _parse_package_core(
                     file_version_ue4=result.summary.file_version_ue4,
                     is_cooked=is_cooked,
                 )
-            except Exception as e:
+            except (struct.error, OSError, ValueError) as e:
                 if not tolerant:
                     raise ParseError(f"AssetRegistryData 解析失败: {e}") from e
                 result.warnings.append(f"AssetRegistryData 解析失败: {e}")
@@ -908,7 +909,7 @@ def _parse_package_core(
                         setattr(export, "error_message", str(e))
                         if not tolerant:
                             raise
-                    except Exception as e:
+                    except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
                         if not tolerant:
                             raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                         result.errors.append(f"Property parse error in {export.object_name}: {e}")
@@ -927,7 +928,7 @@ def _parse_package_core(
             if linker is not None:
                 try:
                     linker.post_load()
-                except Exception as e:
+                except (OSError, struct.error, ValueError, AttributeError) as e:
                     if not tolerant:
                         raise ParseError(f"Linker post_load failed: {e}") from e
                     result.errors.append(f"Linker post_load failed: {e}")
@@ -1201,7 +1202,7 @@ def parse_package_lazy(
                         setattr(export, "parse_status", "success")
                     elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
                         pass
-                except Exception as e:
+                except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
                     if not tolerant:
                         raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
@@ -1219,7 +1220,7 @@ def parse_package_lazy(
                 try:
                     archive.seek(export.serial_offset)
                     setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
-                except Exception as e:
+                except (OSError, struct.error) as e:
                     if not tolerant:
                         logger.warning("读取 export %s 原始字节失败: %s", export.object_name, e)
                     setattr(export, "lazy_load_archive", None)
@@ -1231,7 +1232,7 @@ def parse_package_lazy(
         if linker is not None:
             try:
                 linker.post_load()
-            except Exception as e:
+            except (OSError, struct.error, ValueError, AttributeError) as e:
                 if not tolerant:
                     raise ParseError(f"Linker post_load failed: {e}") from e
                 result.errors.append(f"Linker post_load failed: {e}")
