@@ -51,10 +51,6 @@ from uasset_read.parsers.property_types import (
     parse_double_property,
     parse_guid_property,
     get_struct_size,
-    _extract_struct_type_from_tag,
-    _extract_map_types_from_tag,
-    _extract_set_type_from_tag,
-    _extract_enum_type_from_tag,
 )
 
 from uasset_read.parsers.custom_properties import (
@@ -122,10 +118,6 @@ __all__ = [
     "handle_custom_property",
     # 辅助函数（测试依赖）
     "get_struct_size",
-    "_extract_struct_type_from_tag",
-    "_extract_map_types_from_tag",
-    "_extract_set_type_from_tag",
-    "_extract_enum_type_from_tag",
     # 共享辅助函数（parsers/utils.py）
     "resolve_name_from_index",
     "read_validated_count",
