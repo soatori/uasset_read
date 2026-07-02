@@ -258,7 +258,7 @@ def parse_batch(
                 result.skipped.append((str(remaining), reason))
             break
 
-        out_file = output_path / f"{pf.stem}{extension}"
+        out_file = output_path / f"{pf.name}{extension}"
         try:
             if isolate_assets:
                 request = BatchWorkerRequest(
