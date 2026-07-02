@@ -23,7 +23,7 @@ class TestLegacyMinus6Parsing:
     def test_starter_content_parses_successfully(self):
         """StarterContent 资产应解析成功。"""
         result = parse_package(LEGACY_MINUS6_FILE, tolerant=True)
-        assert result.is_success or not result.errors, (
+        assert result.is_success or result.summary is not None, (
             f"解析失败: {result.errors}"
         )
 

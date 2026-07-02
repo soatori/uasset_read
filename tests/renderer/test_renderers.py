@@ -132,7 +132,7 @@ class TestJSONRenderer:
             package_flags=0, total_export_count=1, total_import_count=2,
             ue_version="5.3")
         prop = PropertyIR(name="Health", type="FloatProperty", value=100.0, array_index=0, guid=None)
-        pin = PinIR(pin_name="Exec", pin_type="exec", pin_type_value=None, linked_to=["abcd12345678"], direction=1, default_value=None)
+        pin = PinIR(pin_name="Exec", pin_type="exec", linked_to=["abcd12345678"], direction=1, default_value=None)
         node = NodeIR(node_guid="abcd1234567890abcdef1234567890ab", node_class="K2Node_CallFunction", node_comment="Set Health", pins=[pin], execution_flow=[])
         graph = GraphIR(graph_guid="guid0001", graph_name="EventGraph", graph_class="EdGraph", nodes=[node], execution_chains=[["N1", "N2"]])
         export = ExportIR(
@@ -179,7 +179,7 @@ class TestMarkdownRenderer:
         )
         from uasset_read.renderers.base import RenderOptions
 
-        pin = PinIR(pin_name="Exec", pin_type="exec", pin_type_value=None, linked_to=["target1234"], direction=1, default_value=None)
+        pin = PinIR(pin_name="Exec", pin_type="exec", linked_to=["target1234"], direction=1, default_value=None)
         node = NodeIR(node_guid="abcd1234567890abcdef1234567890ab", node_class="K2Node_Event", node_comment="BeginPlay", pins=[pin], execution_flow=[])
         graph = GraphIR(graph_guid="guid0001", graph_name="EventGraph", graph_class="EdGraph", nodes=[node], execution_chains=[])
         export = ExportIR(

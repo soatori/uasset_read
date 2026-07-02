@@ -98,8 +98,8 @@ def decompile_single_function(
         rate_analyzer = JumpAnalyzer(expressions)
         rate_report = rate_analyzer.analyze_structured_rate()
         structured_rate = rate_report.rate
-    except Exception:
-        pass  # 结构化率采集失败不影响主流程
+    except (ImportError, AttributeError, TypeError, ValueError):
+        structured_rate = None
 
     # 提取函数引用解析统计
     func_ref_stats: dict = {}

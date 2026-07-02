@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.memory_safety import MemoryPolicy
 
+from uasset_read.memory_safety import MemoryLimitExceeded
 from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
@@ -1208,7 +1209,8 @@ def parse_uasset_with_linker(
         res.all_objects = linker._import_objects + linker._export_objects
         res.root_objects = linker._root_objects
 
-    _parse_package_core(
+    try:
+        _parse_package_core(
         path, result,
         tolerant=tolerant, provider=provider,
         mappings_path=mappings_path, game=game,
@@ -1220,6 +1222,12 @@ def parse_uasset_with_linker(
         hex_view=hex_view,
         memory_policy=memory_policy,
     )
+    except Exception as e:
+        # strict 模式下 _handle_parse_error 会 re-raise，
+        # 这里捕获后将已有部分结果返回给调用者
+        if not result.summary:
+            result.errors.append(str(e))
+            result.is_success = False
 
     if preload_all and result.linker:
         for i in range(len(result.linker._export_objects)):

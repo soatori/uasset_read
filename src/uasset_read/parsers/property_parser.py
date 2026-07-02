@@ -577,23 +577,18 @@ def parse_properties_from_export(
                 if target_pos > start_pos:
                     archive.seek(target_pos)
                 else:
-                    # 直接设置内部位置，跳过 validate_offset 防止越界异常
-                    next_pos = min(start_pos + 1, archive._file_size)
-                    if archive._use_mmap and archive._mmap:
-                        archive._mmap.seek(next_pos)
-                    else:
-                        archive._file.seek(next_pos)
+                    archive.seek(min(start_pos + 1, getattr(archive, '_file_size', start_pos + 1)))
             else:
                 # start_pos 未知（tag 读取早期失败），前进 1 字节防止无限循环
-                next_pos = min(archive.tell() + 1, archive._file_size)
+                next_pos = archive.tell() + 1
+                file_size = getattr(archive, '_file_size', None)
+                if isinstance(file_size, int):
+                    next_pos = min(next_pos, file_size)
                 logger.warning(
                     "PropertyTag 早期损坏，无法确定偏移，跳过 1 字节 (offset=%d)",
                     archive.tell(),
                 )
-                if archive._use_mmap and archive._mmap:
-                    archive._mmap.seek(next_pos)
-                else:
-                    archive._file.seek(next_pos)
+                archive.seek(next_pos)
 
             # 使用 PropertyFallback 替代纯字符串错误信息
             fb = PropertyFallback(

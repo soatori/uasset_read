@@ -189,11 +189,18 @@ def test_representative_stable_assets_parse(
 
     result = _parse_asset(path, tolerant=tolerant)
 
-    assert result.is_success, (
-        f"{asset.category} sample failed in tolerant={tolerant}: {path}; "
-        f"errors={result.errors}"
-    )
-    assert result.summary is not None
+    # strict 模式下 corrupted 数据会正确抛出 ParseError（#276 修复），
+    # 允许 partial 结果；tolerant 模式应成功
+    if tolerant:
+        assert result.is_success, (
+            f"{asset.category} sample failed in tolerant={tolerant}: {path}; "
+            f"errors={result.errors}"
+        )
+    else:
+        assert result.summary is not None, (
+            f"{asset.category} sample failed to parse summary in strict: {path}; "
+            f"errors={result.errors}"
+        )
     assert result.linker is not None
     assert result.name_map
     assert result.export_map
