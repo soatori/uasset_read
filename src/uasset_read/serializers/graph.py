@@ -2352,11 +2352,16 @@ def read_ue_graph(
     graph_class: str,
     graph_export_idx: int = 0,
     linker: Optional["PackageLinker"] = None,
+    _parsed_indices: Optional[set] = None,
 ) -> UEdGraph:
     """读取 UEdGraph 容器（EdGraph.cpp）。
     
     参考 UE C++ UEdGraph::Serialize() 实现
     """
+    if _parsed_indices is None:
+        _parsed_indices = set()
+    _parsed_indices.add(graph_export_idx)
+
     archive.seek(graph_export.serial_offset)
 
     # 1. Schema
@@ -2444,13 +2449,12 @@ def read_ue_graph(
 
     # 6. 解析子图（合并 SubGraphs 数组 + AnimGraphNode 嵌套子图）
     subgraphs: List[UEdGraph] = []
-    parsed_export_indices: set[int] = set()
 
     # 6a. 从 SubGraphs 数组解析（直接序列化的子图引用）
     for pkg_idx in subgraph_indices:
         if pkg_idx <= 0 or pkg_idx > len(export_map):
             continue
-        if pkg_idx in parsed_export_indices:
+        if pkg_idx in _parsed_indices:
             continue
 
         subgraph_export = export_map[pkg_idx - 1]
@@ -2463,9 +2467,9 @@ def read_ue_graph(
             subgraph = read_ue_graph(
                 archive, name_map, summary, export_map, import_map,
                 subgraph_export, subgraph_class, pkg_idx, linker,
+                _parsed_indices=_parsed_indices,
             )
             subgraphs.append(subgraph)
-            parsed_export_indices.add(pkg_idx)
         except (struct.error, OSError, ValueError, KeyError) as e:
             logger.warning("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
 
@@ -2483,7 +2487,7 @@ def read_ue_graph(
             pkg_idx = ref_info.get("package_index", 0)
             if pkg_idx <= 0 or pkg_idx > len(export_map):
                 continue
-            if pkg_idx in parsed_export_indices:
+            if pkg_idx in _parsed_indices:
                 continue
 
             subgraph_export = export_map[pkg_idx - 1]
@@ -2496,10 +2500,10 @@ def read_ue_graph(
                 subgraph = read_ue_graph(
                     archive, name_map, summary, export_map, import_map,
                     subgraph_export, subgraph_class, pkg_idx, linker,
+                    _parsed_indices=_parsed_indices,
                 )
                 subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
                 subgraphs.append(subgraph)
-                parsed_export_indices.add(pkg_idx)
             except (struct.error, OSError, ValueError, KeyError) as e:
                 logger.warning("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 
