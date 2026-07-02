@@ -1,12 +1,14 @@
 """
 Kismet Expression → Structured Control Flow Reconstruction.
 
-Identifies if/else, while/for patterns from
-PushExecutionFlow / PopExecutionFlow / JumpIfNot sequences and
-produces structured C++ output. Falls back to goto for unrecognized patterns.
+Provides goto-based fallback output when JumpAnalyzer cannot match structured patterns.
 
 Decision D-03: Algorithm does not need to be perfect — handles common patterns,
 falls back to goto for edge cases.
+
+Note: Pattern detection is handled by JumpAnalyzer (the unified detector).
+StructuredControlFlow.reconstruct() delegates detection to JumpAnalyzer
+and falls back to goto emission when no patterns match.
 """
 from __future__ import annotations
 
@@ -30,10 +32,11 @@ class StructuredControlFlow:
     """
     Reconstructs structured control flow from Kismet expressions.
 
-    Algorithm: work-list + Push/Pop pattern matching.
-    - PushExecutionFlow + JumpIfNot + PopExecutionFlow → if/else
-    - Back-jump to earlier offset → while/for loop
-    - Unrecognized → goto fallback
+    Uses JumpAnalyzer as the unified pattern detector.
+    Falls back to goto-based output for unrecognized patterns.
+
+    For primary usage, prefer FunctionBodyBuilder.to_function_body_structured()
+    which uses JumpAnalyzer directly.
     """
 
     def __init__(self, linker: "PackageLinker | None" = None) -> None:
@@ -44,6 +47,8 @@ class StructuredControlFlow:
         """
         Reconstruct structured control flow from a list of expressions.
 
+        Uses JumpAnalyzer for pattern detection, falls back to goto emission.
+
         Args:
             expressions: List of KismetExpression from bytecode parsing.
 
@@ -53,6 +58,10 @@ class StructuredControlFlow:
         """
         if not expressions:
             return []
+
+        from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+
+        jump_analyzer = JumpAnalyzer(expressions)
 
         # Build offset → index map
         offset_map: dict[int, int] = {}
@@ -69,140 +78,81 @@ class StructuredControlFlow:
             if hasattr(expr, "CodeOffset"):
                 jump_targets.add(expr.CodeOffset)
 
-        # Detect structured patterns
-        structured_regions = self._detect_patterns(expressions, offset_map, jump_targets)
+        # Use JumpAnalyzer for pattern detection (unified entry point)
+        structured_regions = self._detect_patterns_via_jump_analyzer(
+            expressions, jump_analyzer,
+        )
 
         if structured_regions:
             return self._emit_structured(expressions, structured_regions, jump_targets)
         else:
             return self._emit_goto_fallback(expressions, jump_targets, offset_map)
 
-    def _detect_patterns(
+    def _detect_patterns_via_jump_analyzer(
         self,
         expressions: list["KismetExpression"],
-        offset_map: dict[int, int],
-        jump_targets: set[int],
+        jump_analyzer: "JumpAnalyzer",
     ) -> list[dict]:
-        """
-        Detect if/else and while patterns in the expression list.
+        """使用 JumpAnalyzer 检测结构化模式（统一入口）。
 
-        Returns a list of region dicts: {type, start, end, else_start, condition, ...}
+        将 JumpAnalyzer 的检测结果转换为 _emit_structured 所需的格式。
         """
-        from uasset_read.kismet.expressions import (
-            EX_PushExecutionFlow, EX_PopExecutionFlow,
-            EX_JumpIfNot, EX_Jump, EX_EndOfScript,
-        )
+        from uasset_read.kismet.jump_analyzer import JumpAnalyzer as _JA
 
         regions: list[dict] = []
+        used_indices: set[int] = set()
         i = 0
         while i < len(expressions):
-            expr = expressions[i]
+            if i in used_indices:
+                i += 1
+                continue
 
-            # --- if/else pattern: Push + (optional exprs) + JumpIfNot → then body → Pop → else body ---
-            # Allow up to 3 instructions between Push and JumpIfNot (condition loading).
-            if isinstance(expr, EX_PushExecutionFlow):
-                jump_if_not_idx = None
-                for k in range(i + 1, min(i + 4, len(expressions))):
-                    if isinstance(expressions[k], EX_JumpIfNot):
-                        jump_if_not_idx = k
-                        break
-                    # Stop if we hit another Push, Jump, or EndOfScript
-                    if isinstance(expressions[k], (EX_PushExecutionFlow, EX_Jump, EX_EndOfScript)):
-                        break
-                if jump_if_not_idx is not None:
-                    cond = expressions[jump_if_not_idx].BooleanExpression
-
-                    # Find the Pop that ends the then-block
-                    # Search from jump_if_not_idx+1 until we find a Pop
-                    pop_idx = None
-                    for j in range(jump_if_not_idx + 1, len(expressions)):
-                        if isinstance(expressions[j], EX_PopExecutionFlow):
-                            pop_idx = j
-                            break
-                        # Stop if we hit another Push or EndOfScript
-                        if isinstance(expressions[j], (EX_PushExecutionFlow, EX_EndOfScript)):
-                            break
-
-                    if pop_idx is not None:
-                        # Else block: from pop_idx+1 until next label/jump target or end
-                        else_start = pop_idx + 1
-                        else_end = self._find_block_end(expressions, else_start, offset_map, jump_targets)
-
-                        regions.append({
-                            "type": "if_else",
-                            "start": i,
-                            "cond": cond,
-                            "then_start": i + 2,
-                            "then_end": pop_idx,
-                            "else_start": else_start,
-                            "else_end": else_end,
-                        })
-                        i = else_end + 1
-                        continue
-
-            # --- while pattern: JumpIfNot(exit) → body → Jump(back) ---
-            if isinstance(expr, EX_JumpIfNot):
-                exit_offset = expr.CodeOffset if hasattr(expr, 'CodeOffset') else None
-                if exit_offset is not None:
-                    # Look for a back-jump (Jump to an offset <= current)
-                    back_jump_idx = self._find_back_jump(expressions, i + 1, exit_offset)
-                    if back_jump_idx is not None:
-                        regions.append({
-                            "type": "while",
-                            "start": i,
-                            "cond": expr.BooleanExpression,
-                            "body_start": i + 1,
-                            "body_end": back_jump_idx,
-                            "exit": exit_offset,
-                        })
-                        i = back_jump_idx + 1
-                        continue
-
+            result = jump_analyzer.detect_pattern(i)
+            if result is not None:
+                ptype = result["type"]
+                if ptype in ("push_pop", "if_else"):
+                    # 统一为 if_else 格式供 _emit_structured 使用
+                    region = {
+                        "type": "if_else",
+                        "start": result["start"],
+                        "cond": result["condition"],
+                        "then_start": result["then_start"],
+                        "then_end": result["then_end"],
+                        "else_start": result["else_start"],
+                        "else_end": result["else_end"],
+                    }
+                    regions.append(region)
+                    for j in range(result["start"], result["else_end"] + 1):
+                        used_indices.add(j)
+                elif ptype == "while":
+                    region = {
+                        "type": "while",
+                        "start": result["start"],
+                        "cond": result["condition"],
+                        "body_start": result["body_start"],
+                        "body_end": result["body_end"],
+                        "exit": result["exit_label"],
+                    }
+                    regions.append(region)
+                    for j in range(result["start"], result["body_end"] + 1):
+                        used_indices.add(j)
+                elif ptype == "for":
+                    # for 循环也转为 while 格式输出（简化处理）
+                    region = {
+                        "type": "while",
+                        "start": result["start"],
+                        "cond": result["condition"],
+                        "body_start": result["body_start"],
+                        "body_end": result["body_end"],
+                        "exit": result["exit_label"],
+                    }
+                    regions.append(region)
+                    for j in range(result["start"], result["body_end"] + 1):
+                        used_indices.add(j)
+                # switch 作为独立表达式处理，不创建 region
             i += 1
 
         return regions
-
-    def _find_matching_pop(
-        self,
-        expressions: list["KismetExpression"],
-        search_from: int,
-        before_idx: int,
-    ) -> int | None:
-        """Find EX_PopExecutionFlow between search_from and before_idx."""
-        from uasset_read.kismet.expressions import EX_PopExecutionFlow
-        for i in range(search_from, min(before_idx, len(expressions))):
-            if isinstance(expressions[i], EX_PopExecutionFlow):
-                return i
-        return None
-
-    def _find_back_jump(
-        self,
-        expressions: list["KismetExpression"],
-        search_from: int,
-        exit_offset: int,
-    ) -> int | None:
-        """Find an EX_Jump that jumps back to before exit_offset."""
-        from uasset_read.kismet.expressions import EX_Jump
-        for i in range(search_from, len(expressions)):
-            if isinstance(expressions[i], EX_Jump):
-                target = expressions[i].CodeOffset if hasattr(expressions[i], 'CodeOffset') else None
-                if target is not None and target <= exit_offset:
-                    return i
-        return None
-
-    def _find_block_end(
-        self,
-        expressions: list["KismetExpression"],
-        start: int,
-        offset_map: dict[int, int],
-        jump_targets: set[int],
-    ) -> int:
-        """Find the end of a block (next label or end of list)."""
-        for i in range(start + 1, len(expressions)):
-            byte_off = getattr(expressions[i], "byte_offset", None)
-            if byte_off is not None and byte_off in jump_targets:
-                return i - 1
-        return len(expressions) - 1
 
     def _emit_structured(
         self,

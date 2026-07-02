@@ -50,7 +50,7 @@ def _get_structured_block_end(jump_analyzer, idx: int) -> int:
     ptype = result["type"]
     if ptype in ("while", "for"):
         return result["body_end"]
-    if ptype == "if_else":
+    if ptype in ("if_else", "push_pop"):
         return result["else_end"]
     if ptype == "if":
         return result["then_end"]
@@ -87,7 +87,14 @@ def _emit_structured_block(
             jump_targets, offset_to_index, label_set,
         )
 
-    # --- if/else 模式 ---
+    # --- Push/Pop if/else 模式 ---
+    push_pop_result = jump_analyzer.detect_push_pop_pattern(start_idx)
+    if push_pop_result is not None:
+        return _emit_push_pop_block(
+            push_pop_result, translator, expressions,
+        )
+
+    # --- if/else 模式（JumpIfNot 起始） ---
     if_else_result = jump_analyzer.detect_if_else_pattern(start_idx)
     if if_else_result is not None:
         return _emit_if_else_block(
@@ -261,6 +268,41 @@ def _emit_if_else_block(
     return result
 
 
+def _emit_push_pop_block(
+    push_pop_result: dict,
+    translator,
+    expressions: list,
+) -> list[str]:
+    """输出 Push/Pop 标记的 if/else 块。
+
+    Push/Pop 模式：PushExecutionFlow + JumpIfNot + then + PopExecutionFlow + else
+    """
+    condition = push_pop_result["condition"]
+    cond_str = translator.line_cpp(condition)
+    result: list[str] = [f"if ({cond_str}) {{"]
+
+    # then 分支
+    then_start = push_pop_result["then_start"]
+    then_end = push_pop_result["then_end"]
+    for j in range(then_start, then_end):
+        line = translator.line_cpp(expressions[j], index=j)
+        if line and line.strip():
+            result.append(f"    {line}")
+
+    result.append("} else {")
+
+    # else 分支
+    else_start = push_pop_result["else_start"]
+    else_end = push_pop_result["else_end"]
+    for j in range(else_start, else_end + 1):
+        line = translator.line_cpp(expressions[j], index=j)
+        if line and line.strip():
+            result.append(f"    {line}")
+
+    result.append("}")
+    return result
+
+
 class FunctionBodyBuilder:
     """
     Assembles KismetExpression list into a readable C++ function body.
@@ -370,10 +412,10 @@ class FunctionBodyBuilder:
         func_name: str | None = None,
     ) -> str:
         """
-        基于 CFG 的结构化函数体构建。
+        统一结构化函数体构建（JumpAnalyzer 作为唯一检测器）。
 
-        优先使用 CFG 区域分解 → 结构化语句树 → 伪代码发射；
-        无结构化区域时回退到 goto 输出。
+        使用 JumpAnalyzer 检测所有控制流模式（for/while/push_pop/if_else/switch），
+        无法匹配时回退到 goto 输出。
 
         Args:
             expressions: 从字节码解析得到的表达式列表。
@@ -382,19 +424,17 @@ class FunctionBodyBuilder:
         Returns:
             格式化的 C++ 函数体字符串。
         """
-        from uasset_read.kismet.cfg import (
-            RegionDecoder,
-            StmtEmitter,
-            build_cfg,
-            compute_dominator_tree,
-            decompose_regions,
-        )
+        from uasset_read.kismet.jump_analyzer import JumpAnalyzer
         from uasset_read.kismet.translator import KismetTranslator
 
-        # 构建 CFG
-        cfg = build_cfg(expressions)
-        dom_tree = compute_dominator_tree(cfg)
-        region_tree = decompose_regions(cfg, dom_tree)
+        if not expressions:
+            return self.to_function_body([], func_name)
+
+        # 构建 JumpAnalyzer（统一检测器）
+        jump_analyzer = JumpAnalyzer(expressions)
+        translator = KismetTranslator(
+            self.type_registry, linker=self._linker, expressions=expressions
+        )
 
         # 构建辅助映射
         offset_to_index: dict[int, int] = {}
@@ -410,42 +450,58 @@ class FunctionBodyBuilder:
             if hasattr(expr, "CodeOffset"):
                 jump_targets.add(expr.CodeOffset)
 
-        translator = KismetTranslator(
-            self.type_registry, linker=self._linker, expressions=expressions
-        )
+        # 检查是否有任何结构化模式
+        has_structured = False
+        for idx in range(len(expressions)):
+            if jump_analyzer.detect_pattern(idx) is not None:
+                has_structured = True
+                break
 
-        # CFG → 结构化语句树
-        decoder = RegionDecoder(
-            cfg=cfg,
-            region_tree=region_tree,
-            expressions=expressions,
-            translator=translator,
-            offset_to_index=offset_to_index,
-            jump_targets=jump_targets,
-        )
-        stmt = decoder.decode()
-
-        # 检查是否有实际结构（非空 Sequence）
-        from uasset_read.kismet.cfg.stmt import Sequence
-        if isinstance(stmt, Sequence) and not stmt.stmts:
+        if not has_structured:
+            # 无结构化模式 → goto 回退
             return self.to_function_body(expressions, func_name)
 
-        # 渲染伪代码
-        emitter = StmtEmitter()
-        body = emitter.emit_body(stmt)
+        # 使用 JumpAnalyzer + goto 回退输出结构化代码
+        lines: list[str] = []
+        label_set: set[int] = set()
+        skip_until: int = -1
 
-        if not body or not body.strip():
-            return self.to_function_body(expressions, func_name)
+        for idx, expr in enumerate(expressions):
+            if idx <= skip_until:
+                continue
+
+            if _is_structured_block_start(jump_analyzer, idx):
+                block_lines = _emit_structured_block(
+                    jump_analyzer, translator, expressions, idx,
+                    jump_targets, offset_to_index, label_set,
+                )
+                lines.extend(block_lines)
+                skip_until = _get_structured_block_end(jump_analyzer, idx)
+                continue
+
+            cpp_line = translator.line_cpp(expr, index=idx)
+            if not cpp_line or cpp_line.strip() == "":
+                continue
+
+            for target in sorted(jump_targets):
+                if offset_to_index.get(target) == idx and target not in label_set:
+                    lines.append(f"Label_{target}:")
+                    label_set.add(target)
+
+            for sub_line in cpp_line.split("\n"):
+                sub_line = sub_line.strip()
+                if not sub_line:
+                    continue
+                if _needs_semicolon(sub_line):
+                    sub_line += ";"
+                lines.append(sub_line)
 
         signature = func_name if func_name else "void UnknownFunction"
         if "(" not in signature:
             signature += "()"
 
-        # 缩进对齐
-        indented_lines = "\n".join(
-            f"    {line}" for line in body.split("\n") if line
-        )
-        return f"{signature} {{\n{indented_lines}\n}}"
+        body = "\n".join(f"    {line}" for line in lines)
+        return f"{signature} {{\n{body}\n}}"
 
     def to_function_body_cfg(
         self,

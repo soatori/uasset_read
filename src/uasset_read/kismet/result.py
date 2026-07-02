@@ -40,6 +40,7 @@ class KismetDecompiledResult:
     semantic_calls: list[dict[str, Any]] = field(default_factory=list)
     logic_source: str = "current_asset"
     function_ref_stats: dict[str, Any] = field(default_factory=dict)
+    structured_rate: float | None = None
 
     def to_dict(self) -> dict:
         """
@@ -60,6 +61,7 @@ class KismetDecompiledResult:
             "semantic_calls": self.semantic_calls,
             "logic_source": self.logic_source,
             "function_ref_stats": self.function_ref_stats,
+            "structured_rate": self.structured_rate,
             "expressions": [
                 e.to_dict() if hasattr(e, "to_dict") else str(e)
                 for e in self.expressions
