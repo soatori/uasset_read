@@ -17,7 +17,6 @@ from uasset_read.pak.structures import (
     FPakCompressedBlock,
     FPakDirectoryEntry,
     read_fstring,
-    decode_encoded_pak_entry,
 )
 from uasset_read.exceptions import ParseError
 
@@ -405,20 +404,11 @@ class TestGameVersions:
 
 
 class TestDecodeEncodedPakEntryFunction:
-    """decode_encoded_pak_entry 函数测试。"""
-
-    def test_disabled_returns_none(self):
-        """禁用时返回 None。"""
-        result = decode_encoded_pak_entry(b'\x00' * 4, is_enabled=False)
-        assert result is None
-
-    def test_short_data_returns_none(self):
-        """数据不足 4 字节时返回 None。"""
-        result = decode_encoded_pak_entry(b'\x00' * 3, is_enabled=True)
-        assert result is None
+    """decode_encoded_pak_entry 已删除（C-5 死代码），验证位域通过 decode_bitfield 正确工作。"""
 
     def test_all_fields_decoded(self):
-        """验证所有位域字段正确解码。"""
+        """验证所有位域字段通过 decode_bitfield 正确解码。"""
+        from unittest.mock import MagicMock
         bf = 0
         bf |= 1 << 31  # offset_fits_32
         bf |= 1 << 30  # uncompressed_size_fits_32
@@ -428,13 +418,11 @@ class TestDecodeEncodedPakEntryFunction:
         bf |= (3 & 0xFFFF) << 6  # block_count = 3
         bf |= 5 & 0x3F  # block_size_index = 5
 
-        data = struct.pack('<I', bf) + b'\x00' * 16
-        result = decode_encoded_pak_entry(data, is_enabled=True)
-        assert result is not None
-        assert result['offset_fits_32'] is True
-        assert result['uncompressed_size_fits_32'] is True
-        assert result['size_fits_32'] is True
-        assert result['compression_method_index'] == 2
-        assert result['is_encrypted'] is True
-        assert result['compression_block_count'] == 3
-        assert result['block_size_index'] == 5
+        data = struct.pack('<I', bf) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        pak_info = MagicMock()
+        pak_info.version = 10
+        entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
+        assert entry.compression_method_index == 2
+        assert entry.is_encrypted is True
+        assert entry.compression_block_count == 3
+        assert entry.compression_block_size == 5 << 11  # 10240

@@ -5,7 +5,7 @@ Pak 文件数据结构
 """
 import struct
 from dataclasses import dataclass, field
-from typing import Any, BinaryIO, Dict, Optional
+from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_FSTRING_LENGTH
@@ -139,50 +139,53 @@ class FPakEntry:
     def deserialize_legacy(cls, stream: BinaryIO, version: int) -> "FPakEntry":
         """从流中反序列化完整 FPakEntry（version < 10 的旧格式）。
 
-        序列化顺序（UE FPakEntry::Serialize）：
+        序列化顺序（UE FPakEntry::Serialize, IPlatformFilePak.h:521-570）：
         - Offset (int64)
         - Size (int64) — 压缩后大小
         - UncompressedSize (int64)
         - CompressionMethodIndex (uint32)
-        - [Timestamp (int64) — version < 2 only]
-        - CompressionBlockCount (uint16 if v<8 else uint32)
-        - CompressionBlockSize (uint32)
-        - CompressionBlocks [array]
-        - Hash [20 bytes]
-        - Flags (uint32) — v>=8
+        - [Timestamp (int64) — version <= 1 only]
+        - Hash [20 bytes] — 始终存在
+        - [version >= 3 (CompressionEncryption)]:
+          - CompressionBlocks [TArray: int32 count + N * (int64, int64)] — 仅 compression_method_index != 0
+          - Flags (uint8)
+          - CompressionBlockSize (uint32)
         """
         entry = cls()
 
         entry.offset = struct.unpack('<q', stream.read(8))[0]
-        entry.size = struct.unpack('<q', stream.read(8))[0]           # Size 先于 UncompressedSize
+        entry.size = struct.unpack('<q', stream.read(8))[0]
         entry.uncompressed_size = struct.unpack('<q', stream.read(8))[0]
         entry.compression_method_index = struct.unpack('<I', stream.read(4))[0]
 
-        # Timestamp removed in version 2
+        # Timestamp removed in version 2 (UE: Version <= PakFile_Version_Initial)
         if version < PakFileVersion.NoTimestamps:
             stream.read(8)
 
-        if version < PakFileVersion.FNameBasedCompressionMethod:
-            entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
-        else:
-            entry.compression_block_count = struct.unpack('<I', stream.read(4))[0]
-
-        entry.compression_block_size = struct.unpack('<I', stream.read(4))[0]
-
-        # Compression blocks
-        for _ in range(entry.compression_block_count):
-            block_start = struct.unpack('<q', stream.read(8))[0]
-            block_end = struct.unpack('<q', stream.read(8))[0]
-            entry.compression_blocks.append(
-                FPakCompressedBlock(compressed_start=block_start, compressed_end=block_end)
-            )
-
-        # SHA1 hash
+        # Hash — UE 在 CompressionBlocks 之前写入 Hash
         entry.hash = stream.read(20)
 
-        # Flags (v>=8)
-        if version >= 8:
-            entry.flags = struct.unpack('<I', stream.read(4))[0]
+        # [version >= CompressionEncryption (3)]: CompressionBlocks, Flags, CompressionBlockSize
+        if version >= PakFileVersion.CompressionEncryption:
+            if entry.compression_method_index != 0:
+                # CompressionBlocks: int32 count + N * (int64 compressed_start, int64 compressed_end)
+                if version < PakFileVersion.FNameBasedCompressionMethod:
+                    entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
+                else:
+                    entry.compression_block_count = struct.unpack('<I', stream.read(4))[0]
+
+                for _ in range(entry.compression_block_count):
+                    block_start = struct.unpack('<q', stream.read(8))[0]
+                    block_end = struct.unpack('<q', stream.read(8))[0]
+                    entry.compression_blocks.append(
+                        FPakCompressedBlock(compressed_start=block_start, compressed_end=block_end)
+                    )
+
+            # Flags — uint8 (1 byte)
+            entry.flags = struct.unpack('<B', stream.read(1))[0]
+
+            # CompressionBlockSize — uint32
+            entry.compression_block_size = struct.unpack('<I', stream.read(4))[0]
 
         entry.is_compressed = entry.compression_method_index > 0
         return entry
@@ -508,45 +511,3 @@ class FPakDirectoryEntry:
     path: str                    # 目录路径
     filename: str                # 文件名
     entry: FPakEntry             # 实际的条目数据
-
-def decode_encoded_pak_entry(data: bytes, is_enabled: bool) -> Optional[Dict[str, Any]]:
-    """解码 v10+ 编码 Pak 条目
-
-    UE 位域布局（PakFile.cpp DecodePakEntry）：
-    Bit 31: offset_fits_32
-    Bit 30: uncompressed_size_fits_32
-    Bit 29: size_fits_32
-    Bits 23-28: compression_method_index (6 bits)
-    Bit 22: is_encrypted
-    Bits 6-21: compression_block_count (16 bits)
-    Bits 0-5: compression_block_size_index (6 bits)
-
-    Args:
-        data: 编码的条目数据
-        is_enabled: 是否启用编码
-
-    Returns:
-        解码后的条目信息字典，或 None
-    """
-    if not is_enabled or len(data) < 4:
-        return None
-
-    value = struct.unpack('<I', data[:4])[0]
-
-    offset_fits_32 = bool(value & (1 << 31))
-    uncompressed_size_fits_32 = bool(value & (1 << 30))
-    size_fits_32 = bool(value & (1 << 29))
-    compression_method_index = (value >> 23) & 0x3F
-    is_encrypted = bool(value & (1 << 22))
-    compression_block_count = (value >> 6) & 0xFFFF
-    block_size_index = value & 0x3F
-
-    return {
-        'offset_fits_32': offset_fits_32,
-        'uncompressed_size_fits_32': uncompressed_size_fits_32,
-        'size_fits_32': size_fits_32,
-        'compression_method_index': compression_method_index,
-        'is_encrypted': is_encrypted,
-        'compression_block_count': compression_block_count,
-        'block_size_index': block_size_index,
-    }

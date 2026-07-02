@@ -2,7 +2,7 @@
 import io
 import struct
 import pytest
-from uasset_read.pak.structures import FPakEntry, decode_encoded_pak_entry
+from uasset_read.pak.structures import FPakEntry
 
 
 class TestFPakEntryLegacyDeserialization:
@@ -144,26 +144,27 @@ class TestFPakEntryBitfield:
 
 
 class TestDecodeEncodedPakEntry:
-    """decode_encoded_pak_entry 位域布局对齐。"""
+    """decode_encoded_pak_entry 已删除（C-5 死代码），验证位域通过 decode_bitfield 正确工作。"""
 
     def test_compression_method_from_bits_23_28(self):
-        """compression_method 从 bits 23-28 读取（非 bits 0-5）。"""
+        """compression_method 从 bits 23-28 读取（通过 decode_bitfield）。"""
+        from unittest.mock import MagicMock
         # 构建 bitfield: compression_method=3 at bits 23-28
         value = (3 & 0x3F) << 23
-        data = struct.pack('<I', value) + b'\x00' * 16
-        result = decode_encoded_pak_entry(data, is_enabled=True)
-        assert result is not None
-        assert result['compression_method_index'] == 3
+        value |= (1 << 31) | (1 << 30) | (1 << 29)  # fits_32 flags
+        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        pak_info = MagicMock()
+        pak_info.version = 10
+        entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
+        assert entry.compression_method_index == 3
 
     def test_encrypted_from_bit_22(self):
-        """is_encrypted 从 bit 22 读取。"""
+        """is_encrypted 从 bit 22 读取（通过 decode_bitfield）。"""
+        from unittest.mock import MagicMock
         value = (1 << 22) | ((2 & 0x3F) << 23)
-        data = struct.pack('<I', value) + b'\x00' * 16
-        result = decode_encoded_pak_entry(data, is_enabled=True)
-        assert result is not None
-        assert result['is_encrypted'] is True
-
-    def test_disabled_returns_none(self):
-        """is_enabled=False 时返回 None。"""
-        result = decode_encoded_pak_entry(b'\x00' * 4, is_enabled=False)
-        assert result is None
+        value |= (1 << 31) | (1 << 30) | (1 << 29)
+        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        pak_info = MagicMock()
+        pak_info.version = 10
+        entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
+        assert entry.is_encrypted is True

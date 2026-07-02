@@ -87,7 +87,7 @@ def _write_fstring(stream: BytesIO, text: str, version: int = 0) -> None:
 
 
 def _write_legacy_entry(stream: BytesIO, entry: FPakEntry, version: int) -> None:
-    """写入 legacy 格式 FPakEntry。"""
+    """写入 legacy 格式 FPakEntry（对齐 UE FPakEntry::Serialize 顺序）。"""
     stream.write(struct.pack('<q', entry.offset))
     stream.write(struct.pack('<q', entry.size))
     stream.write(struct.pack('<q', entry.uncompressed_size))
@@ -97,26 +97,27 @@ def _write_legacy_entry(stream: BytesIO, entry: FPakEntry, version: int) -> None
     if version < PakFileVersion.NoTimestamps:
         stream.write(struct.pack('<q', 0))
 
-    # CompressionBlockCount
-    if version < PakFileVersion.FNameBasedCompressionMethod:
-        stream.write(struct.pack('<H', entry.compression_block_count))
-    else:
-        stream.write(struct.pack('<I', entry.compression_block_count))
-
-    stream.write(struct.pack('<I', entry.compression_block_size))
-
-    # CompressionBlocks (only if block_count > 0)
-    for _ in range(entry.compression_block_count):
-        # 使用默认值写入压缩块信息
-        stream.write(struct.pack('<q', 0))  # compressed_start
-        stream.write(struct.pack('<q', 0))  # compressed_end
-
-    # SHA1 hash
+    # Hash — UE 在 CompressionBlocks 之前写入 Hash
     stream.write(entry.hash.ljust(20, b'\x00')[:20])
 
-    # Flags (version >= 8)
-    if version >= 8:
-        stream.write(struct.pack('<I', entry.flags))
+    # [version >= CompressionEncryption (3)]: CompressionBlocks, Flags, CompressionBlockSize
+    if version >= PakFileVersion.CompressionEncryption:
+        if entry.compression_method_index != 0:
+            # CompressionBlocks: count + N * (int64, int64)
+            if version < PakFileVersion.FNameBasedCompressionMethod:
+                stream.write(struct.pack('<H', entry.compression_block_count))
+            else:
+                stream.write(struct.pack('<I', entry.compression_block_count))
+
+            for _ in range(entry.compression_block_count):
+                stream.write(struct.pack('<q', 0))  # compressed_start
+                stream.write(struct.pack('<q', 0))  # compressed_end
+
+        # Flags — uint8 (1 byte)
+        stream.write(struct.pack('<B', entry.flags))
+
+        # CompressionBlockSize — uint32
+        stream.write(struct.pack('<I', entry.compression_block_size))
 
 
 def _create_mock_file_stream(data: bytes) -> BytesIO:
