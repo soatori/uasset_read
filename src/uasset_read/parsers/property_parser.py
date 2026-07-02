@@ -699,7 +699,12 @@ def _parse_unversioned_properties_from_mapping(
     if archive.tell() < property_end:
         remaining = property_end - archive.tell()
         # #276: 安全读取 tail，防止 property_end 超出 archive 实际大小
-        tail_size = min(remaining, archive._file_size - archive.tell()) if archive.tell() < archive._file_size else 0
+        current_pos = archive.tell()
+        file_size = getattr(archive, '_file_size', None)
+        if isinstance(file_size, int):
+            tail_size = max(0, min(remaining, file_size - current_pos))
+        else:
+            tail_size = remaining
         tail = archive.read(tail_size) if tail_size > 0 else b""
         if tail:
             out.append(PropertyValue(
