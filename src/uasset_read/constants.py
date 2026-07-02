@@ -423,6 +423,7 @@ CPF_DisableEditOnInstance = 0x0000000000010000  # L450
 CPF_EditConst = 0x0000000000020000    # L451
 CPF_GlobalConfig = 0x0000000000040000  # L452
 CPF_InstancedReference = 0x0000000000080000  # L453
+# L454: CPF_ExperimentalExternalObjects omitted — UE5 experimental, no UPROPERTY semantic mapping
 CPF_DuplicateTransient = 0x0000000000200000  # L455
 CPF_SaveGame = 0x0000000001000000     # L458
 CPF_NoClear = 0x0000000002000000      # L459
