@@ -92,8 +92,11 @@ class TestVerifyImportsReturnDiscarded:
         assert len(errors) > 0
         assert "class_index 无法解析" in errors[0]
 
-    def test_post_load_discards_verify_imports_result(self):
-        """post_load 不存储 _verify_imports 的返回值 — 错误丢失。"""
+    def test_post_load_preserves_verify_imports_result(self):
+        """post_load 保留 _verify_imports 的返回值 — 修复 #250 (M-21)。
+
+        _verify_imports() 的错误列表现在存储在 linker._import_verification_errors 中。
+        """
         linker = _make_linker(export_count=1, import_count=2)
         linker.link()
 
@@ -107,27 +110,10 @@ class TestVerifyImportsReturnDiscarded:
         # 调用 post_load
         linker.post_load()
 
-        # 验证：post_load 之后，import 验证错误没有被存储到任何地方
-        # （这是缺陷：errors 应该被收集并记录）
-        # 当前实现中，_verify_imports 的返回值被丢弃
-        # 以下断言验证 post_load 不会崩溃（至少容错）
-        # 但 import 验证错误丢失了 — 这就是需要修复的缺陷
-
-        # 我们期望修复后，_verify_imports 的错误应被记录到 linker.diagnostics 或 result.errors
-        # 目前先验证缺陷存在
-        errors = linker._verify_imports()
-        assert len(errors) > 0, "_verify_imports 应该检测到错误"
-
-        # 检查 diagnostics 中是否有 import 验证相关记录
-        import_diag_errors = [
-            d for d in linker.diagnostics
-            if d.source == "_verify_imports"
-        ]
-        # 缺陷确认：diagnostics 中没有 _verify_imports 的记录
-        # 修复后此断言应改为 assert len(import_diag_errors) > 0
-        # 目前验证缺陷存在
-        assert len(import_diag_errors) == 0, (
-            "缺陷确认: _verify_imports 错误未被记录到 diagnostics"
+        # 验证：post_load 后 _verify_imports 的错误被保存
+        assert hasattr(linker, '_import_verification_errors')
+        assert len(linker._import_verification_errors) > 0, (
+            "post_load 应保留 _verify_imports 的错误"
         )
 
 
@@ -136,9 +122,9 @@ class TestVerifyImportsReturnDiscarded:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestGetFullNameCircularReference:
-    """缺陷: get_full_name() 递归遍历 outer 链，无循环检测。
+    """修复 #250 (M-20): get_full_name() 现在检测循环 outer 引用。
 
-    如果 outer A → outer B → outer A，会触发 RecursionError。
+    循环引用时返回 '<circular:N>' 而非触发 RecursionError。
     """
 
     def test_normal_outer_chain(self):
@@ -162,8 +148,8 @@ class TestGetFullNameCircularReference:
         )
         assert child.get_full_name() == "Root.Child"
 
-    def test_circular_outer_raises_recursion_error(self):
-        """循环 outer 引用触发 RecursionError（缺陷）。"""
+    def test_circular_outer_returns_circular_marker(self):
+        """循环 outer 引用返回 <circular:N> 而非 RecursionError（修复 #250）。"""
         obj_a = UObjectInstance(
             package_index=1,
             object_name="ObjectA",
@@ -184,12 +170,12 @@ class TestGetFullNameCircularReference:
         obj_a.outer = obj_b
         obj_b.outer = obj_a
 
-        # 应该触发 RecursionError（缺陷），而非无限循环
-        with pytest.raises(RecursionError):
-            obj_a.get_full_name()
+        # 不再触发 RecursionError，而是返回 <circular:N>
+        result = obj_a.get_full_name()
+        assert "<circular:" in result
 
-    def test_self_referencing_outer(self):
-        """对象的 outer 指向自身（极端循环）。"""
+    def test_self_referencing_outer_returns_circular_marker(self):
+        """对象的 outer 指向自身时返回 <circular:N>（修复 #250）。"""
         obj = UObjectInstance(
             package_index=1,
             object_name="SelfRef",
@@ -200,8 +186,8 @@ class TestGetFullNameCircularReference:
         )
         obj.outer = obj
 
-        with pytest.raises(RecursionError):
-            obj.get_full_name()
+        result = obj.get_full_name()
+        assert result == "<circular:1>.SelfRef"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

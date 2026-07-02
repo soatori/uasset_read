@@ -924,6 +924,9 @@ def _run_linker_post_load(linker, result, tolerant: bool) -> None:
         if not tolerant:
             raise ParseError(f"Linker post_load failed: {e}") from e
         result.errors.append(f"Linker post_load failed: {e}")
+    # Propagate import verification errors from linker to result
+    if hasattr(linker, '_import_verification_errors') and linker._import_verification_errors:
+        result.errors.extend(linker._import_verification_errors)
 
 
 def _handle_parse_error(
@@ -1326,6 +1329,9 @@ def parse_package_lazy(
                 if not tolerant:
                     raise ParseError(f"Linker post_load failed: {e}") from e
                 result.errors.append(f"Linker post_load failed: {e}")
+            # Propagate import verification errors from linker to result
+            if hasattr(linker, '_import_verification_errors') and linker._import_verification_errors:
+                result.errors.extend(linker._import_verification_errors)
 
         result.is_success = not result.errors
         result.metadata["lazy_loading"] = True

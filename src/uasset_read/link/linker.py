@@ -57,6 +57,7 @@ class PackageLinker:
         self._preload_cache: dict[int, bool] = {}
         self._diagnostics: List[OffsetRangeDiagnostic] = []
         self._file_size: int = getattr(archive, '_file_size', 0)
+        self._import_verification_errors: List[str] = []
 
     @property
     def diagnostics(self) -> List[OffsetRangeDiagnostic]:
@@ -379,7 +380,7 @@ class PackageLinker:
         """
         self._resolve_property_references()
         self._resolve_weak_references()
-        self._verify_imports()
+        self._import_verification_errors = self._verify_imports()
         self._resolve_template_objects()
         self._build_dependency_graph()
 

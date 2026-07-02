@@ -100,13 +100,35 @@ class UObjectInstance:
     def is_null(self) -> bool:
         return self.package_index == 0
 
-    def get_full_name(self) -> str:
-        """Get full UE object path: 'Outermost.Outer.Inner.ObjectName'."""
+    def get_full_name(self, _visited: Optional[frozenset] = None) -> str:
+        """Get full UE object path: 'Outermost.Outer.Inner.ObjectName'.
+
+        Detects circular outer references on corrupted assets and returns
+        '<circular:N>' instead of recursing infinitely.
+
+        Args:
+            _visited: Internal — set of visited object ids for cycle detection.
+        """
+        result, hit_cycle = self._get_full_name_inner(
+            frozenset() if _visited is None else _visited
+        )
+        return result
+
+    def _get_full_name_inner(
+        self, visited: frozenset
+    ) -> tuple[str, bool]:
+        """Recursive helper that also reports whether a cycle was found."""
+        obj_id = id(self)
+        if obj_id in visited:
+            return f"<circular:{len(visited)}>", True
+        visited = visited | {obj_id}
         if self.outer is not None:
-            parent_name = self.outer.get_full_name()
-            return f"{parent_name}.{self.object_name}"
+            parent_name, cycle = self.outer._get_full_name_inner(visited)
+            if cycle:
+                return f"{parent_name}.{self.object_name}", True
+            return f"{parent_name}.{self.object_name}", False
         elif self.is_import and self.class_package:
-            return f"{self.class_package}.{self.object_name}"
+            return f"{self.class_package}.{self.object_name}", False
         elif self.linker and self.linker.summary:
             pkg_name = getattr(self.linker.summary, "package_name", "Unknown")
             if isinstance(pkg_name, int) and self.linker.name_map:
@@ -115,8 +137,8 @@ class UObjectInstance:
                     pkg_name = self.linker.name_map[idx]
                 else:
                     pkg_name = "Unknown"
-            return f"{pkg_name}.{self.object_name}"
-        return self.object_name
+            return f"{pkg_name}.{self.object_name}", False
+        return self.object_name, False
 
     def get_class_object(self) -> Optional["UObjectInstance"]:
         """Resolve the class of this object to a UObjectInstance."""
