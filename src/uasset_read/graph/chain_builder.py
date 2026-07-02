@@ -22,7 +22,12 @@ def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
         True 如果检测到环
     """
     WHITE, GRAY, BLACK = 0, 1, 2
-    color: dict[str, int] = {node: WHITE for node in adjacency}
+    # 收集邻接表中所有出现的节点（包括仅作为 target 出现的节点），
+    # 确保 DFS 不会遗漏只作为邻居出现的节点。
+    all_nodes: set[str] = set(adjacency.keys())
+    for neighbors in adjacency.values():
+        all_nodes.update(neighbors)
+    color: dict[str, int] = {node: WHITE for node in all_nodes}
 
     def dfs(node: str) -> bool:
         color[node] = GRAY

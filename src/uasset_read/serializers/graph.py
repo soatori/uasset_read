@@ -2421,14 +2421,55 @@ def read_ue_graph(
                         ))
                         nodes[-1]._export_object_name = node_export.object_name
 
-    # 3. GraphGuid
+    # 3. bEditable (UE header 顺序: Schema, Nodes, bEditable, SubGraphs, GraphGuid)
+    b_editable_raw = archive.read_u8("Graph.bEditable")
+    b_editable = b_editable_raw != 0
+
+    # 4. SubGraphs 数组（UE UEdGraph::SubGraphs — WITH_EDITORONLY_DATA）
+    #    序列化为 i32 count + i32[] package indices
+    subgraph_indices: List[int] = []
+    subgraphs_count = archive.read_i32("Graph.SubGraphs.Count")
+    if subgraphs_count < 0 or subgraphs_count > MAX_NODES_PER_GRAPH:
+        logger.warning(
+            "Invalid SubGraphs count %d at graph %s, skipping",
+            subgraphs_count, graph_export.object_name,
+        )
+    else:
+        for _ in range(subgraphs_count):
+            pkg_idx = archive.read_i32("Graph.SubGraphs.Element")
+            subgraph_indices.append(pkg_idx)
+
+    # 5. GraphGuid
     graph_guid = _read_guid(archive, uppercase=False)
 
-    # 4. bEditable
-    b_editable = archive.read_u8() != 0
-
-    # 5. 递归解析子图（AnimGraphNode 嵌套子图）
+    # 6. 解析子图（合并 SubGraphs 数组 + AnimGraphNode 嵌套子图）
     subgraphs: List[UEdGraph] = []
+    parsed_export_indices: set[int] = set()
+
+    # 6a. 从 SubGraphs 数组解析（直接序列化的子图引用）
+    for pkg_idx in subgraph_indices:
+        if pkg_idx <= 0 or pkg_idx > len(export_map):
+            continue
+        if pkg_idx in parsed_export_indices:
+            continue
+
+        subgraph_export = export_map[pkg_idx - 1]
+        subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
+
+        if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
+            continue
+
+        try:
+            subgraph = read_ue_graph(
+                archive, name_map, summary, export_map, import_map,
+                subgraph_export, subgraph_class, pkg_idx, linker,
+            )
+            subgraphs.append(subgraph)
+            parsed_export_indices.add(pkg_idx)
+        except (struct.error, OSError, ValueError, KeyError) as e:
+            logger.warning("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
+
+    # 6b. 从 AnimGraphNode node_data.subgraph_references 解析
     for node in nodes:
         node_data = getattr(node, "node_data", None)
         if not isinstance(node_data, dict):
@@ -2442,11 +2483,12 @@ def read_ue_graph(
             pkg_idx = ref_info.get("package_index", 0)
             if pkg_idx <= 0 or pkg_idx > len(export_map):
                 continue
+            if pkg_idx in parsed_export_indices:
+                continue
 
             subgraph_export = export_map[pkg_idx - 1]
             subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
 
-            # 检查是否为图类型
             if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
                 continue
 
@@ -2457,6 +2499,7 @@ def read_ue_graph(
                 )
                 subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
                 subgraphs.append(subgraph)
+                parsed_export_indices.add(pkg_idx)
             except (struct.error, OSError, ValueError, KeyError) as e:
                 logger.warning("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 

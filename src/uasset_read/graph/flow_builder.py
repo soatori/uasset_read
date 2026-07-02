@@ -1430,42 +1430,59 @@ def _build_synthetic_function_data_flows(
     node_name_lookup: Dict[str, str],
     mode: str,
 ) -> List[Dict]:
-    """为 FirstPerson 模板中错位缺失的函数图参数边补充语义数据流。"""
-    if graph.graph_name not in ("Move", "Aim"):
-        return []
+    """为函数图中错位缺失的参数边补充语义数据流。
 
+    动态检测模式：查找 FunctionEntry 的输出参数与 CallFunction 的
+    匹配输入参数之间的连接关系，不再依赖特定模板名称。
+    """
     def ref(node: UEdGraphNode, pin_name: str) -> Dict:
         return format_pin_ref(node.node_guid, pin_name, node_name_lookup, mode)
 
-    nodes_by_func: Dict[str, List[UEdGraphNode]] = {}
+    # 查找 FunctionEntry 节点
     function_entry = None
     for node in graph.nodes:
-        name = _node_member_name(node)
         if node.class_name == "K2Node_FunctionEntry":
             function_entry = node
+            break
+
+    if function_entry is None:
+        return []
+
+    # 收集 FunctionEntry 的输出参数 pin 名称
+    fe_output_pins = [
+        pin.pin_name for pin in function_entry.pins
+        if pin.direction == 1  # Output
+        and pin.pin_type and pin.pin_type.pin_category != "exec"
+    ]
+
+    if not fe_output_pins:
+        return []
+
+    # 收集图中所有 CallFunction 节点的输入参数 pin 名称
+    nodes_by_func: Dict[str, List[UEdGraphNode]] = {}
+    for node in graph.nodes:
+        name = _node_member_name(node)
         if name:
             nodes_by_func.setdefault(name, []).append(node)
 
     flows: List[Dict] = []
-    if graph.graph_name == "Move" and function_entry:
-        add_nodes = sorted(nodes_by_func.get("AddMovementInput", []), key=lambda n: n.node_pos_x)
-        right_nodes = nodes_by_func.get("GetActorRightVector", [])
-        forward_nodes = nodes_by_func.get("GetActorForwardVector", [])
-        if len(add_nodes) >= 2:
-            if right_nodes:
-                flows.append({"source": ref(right_nodes[0], "ReturnValue"), "target": ref(add_nodes[0], "WorldDirection")})
-            flows.append({"source": ref(function_entry, "Left / Right"), "target": ref(add_nodes[0], "ScaleValue")})
-            if forward_nodes:
-                flows.append({"source": ref(forward_nodes[0], "ReturnValue"), "target": ref(add_nodes[1], "WorldDirection")})
-            flows.append({"source": ref(function_entry, "Forward / Backward"), "target": ref(add_nodes[1], "ScaleValue")})
-
-    if graph.graph_name == "Aim" and function_entry:
-        yaw_nodes = nodes_by_func.get("AddControllerYawInput", [])
-        pitch_nodes = nodes_by_func.get("AddControllerPitchInput", [])
-        if yaw_nodes:
-            flows.append({"source": ref(function_entry, "Yaw"), "target": ref(yaw_nodes[0], "Val")})
-        if pitch_nodes:
-            flows.append({"source": ref(function_entry, "Pitch"), "target": ref(pitch_nodes[0], "Val")})
+    for func_nodes in nodes_by_func.values():
+        for node in func_nodes:
+            if node.class_name != "K2Node_CallFunction":
+                continue
+            for pin in node.pins:
+                if (
+                    pin.direction == 0  # Input
+                    and pin.pin_type
+                    and pin.pin_type.pin_category != "exec"
+                    and pin.pin_name in fe_output_pins
+                    and not (pin.linked_to_raw or [])
+                ):
+                    # 该输入 pin 未连接但与 FunctionEntry 输出参数同名
+                    flows.append({
+                        "source": ref(function_entry, pin.pin_name),
+                        "target": ref(node, pin.pin_name),
+                    })
 
     return flows
 
