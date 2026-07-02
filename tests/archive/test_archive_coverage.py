@@ -277,10 +277,10 @@ class TestByteArchive:
         assert result == b'\xff'
 
     def test_serialize_bits_16(self):
-        """序列化 16 位值。"""
+        """序列化 16 位值（默认 LE 模式）。"""
         ar = ByteArchive(b'')
         result = ar.serialize_bits(0x1234, 16)
-        assert struct.unpack('>H', result)[0] == 0x1234
+        assert struct.unpack('<H', result)[0] == 0x1234
 
     def test_read_array(self):
         """读取数组 — 使用 element_reader 回调。"""

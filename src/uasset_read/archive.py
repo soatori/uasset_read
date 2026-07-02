@@ -5,7 +5,10 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 来自 uasset_read.py 第 204-895 行。
 """
 import logging
+import math
 import mmap
+import os
+import struct
 from typing import Optional, Dict, BinaryIO, Callable, Any
 
 from uasset_read.exceptions import ParseError
@@ -39,7 +42,7 @@ class FArchive:
 
         try:
             self._file = open(path, 'rb')
-            self._file_size = __import__('os').path.getsize(path)
+            self._file_size = os.path.getsize(path)
 
             if self._file_size >= MMAP_THRESHOLD:
                 try:
@@ -339,7 +342,7 @@ class FArchive:
 
     def read_u8(self, key: str = "") -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
-        import struct
+
         start = self.tell()
         data = self.read(1)
         value = struct.unpack('<B', data)[0]
@@ -349,7 +352,7 @@ class FArchive:
 
     def read_i8(self, key: str = "") -> int:
         """读取 signed 8-bit integer（字节序无关）"""
-        import struct
+
         start = self.tell()
         data = self.read(1)
         value = struct.unpack('<b', data)[0]  # 'b' = signed byte
@@ -367,7 +370,7 @@ class FArchive:
 
     def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'i', self.read(4))[0]
@@ -377,7 +380,7 @@ class FArchive:
 
     def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
-        import struct
+
         current_pos = self.tell()
         try:
             fmt = '>' if self._byte_swapping else '<'
@@ -393,7 +396,7 @@ class FArchive:
 
     def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'H', self.read(2))[0]
@@ -403,7 +406,7 @@ class FArchive:
 
     def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'h', self.read(2))[0]
@@ -413,7 +416,7 @@ class FArchive:
 
     def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'I', self.read(4))[0]
@@ -450,7 +453,7 @@ class FArchive:
 
     def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'q', self.read(8))[0]
@@ -460,7 +463,7 @@ class FArchive:
 
     def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'Q', self.read(8))[0]
@@ -470,7 +473,7 @@ class FArchive:
 
     def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'f', self.read(4))[0]
@@ -480,7 +483,7 @@ class FArchive:
 
     def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'd', self.read(8))[0]
@@ -494,7 +497,7 @@ class FArchive:
         UE FArchive::SerializeInt 通常用于将整数写入存档。
         此方法提供对称的序列化能力。
         """
-        import struct
+
         fmt = '>' if self._byte_swapping else '<'
         return struct.pack(fmt + 'i', value)
 
@@ -502,7 +505,12 @@ class FArchive:
         """序列化指定位数的值（用于 SerializeBits 兼容）。
 
         UE FArchive::SerializeBits 用于位级别的序列化。
-        此方法将值打包为指定字节数。
+        此方法将值打包为指定字节数，并在非字节对齐时应用 UE 位掩码。
+
+        对齐 UE 源码 Archive.h:1716-1724:
+            Serialize(V, (LengthBits + 7) / 8);
+            if (IsLoading() && (LengthBits % 8) != 0)
+                ((uint8*)V)[LengthBits / 8] &= ((1 << (LengthBits & 7)) - 1);
 
         Args:
             value: 要序列化的值
@@ -511,9 +519,13 @@ class FArchive:
         Returns:
             序列化后的字节
         """
-        import math
-        num_bytes = math.ceil(num_bits / 8)
-        return value.to_bytes(num_bytes, byteorder='big', signed=False)
+        num_bytes = (num_bits + 7) // 8
+        byteorder = 'big' if self._byte_swapping else 'little'
+        # 对齐 UE bitmask: 非字节对齐时截断高位
+        if num_bits % 8 != 0:
+            mask = (1 << (num_bits & 7)) - 1
+            value = value & mask
+        return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
     def read_fstring(self, key: str = "") -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
