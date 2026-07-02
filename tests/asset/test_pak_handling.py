@@ -172,20 +172,25 @@ def test_decompress_entry_reads_compressed_block_and_bad_method():
 
 
 def _legacy_entry_bytes(version: int, timestamp: bool) -> bytes:
+    """构建 legacy FPakEntry 字节流（对齐 UE FPakEntry::Serialize 格式）。"""
     parts = [
-        struct.pack("<q", 10),
-        struct.pack("<q", 5),
-        struct.pack("<q", 5),
-        struct.pack("<I", 0),
+        struct.pack("<q", 10),     # Offset
+        struct.pack("<q", 5),      # Size
+        struct.pack("<q", 5),      # UncompressedSize
+        struct.pack("<I", 0),      # CompressionMethodIndex
     ]
     if timestamp:
-        parts.append(struct.pack("<q", 123456))
-    count_fmt = "<H" if version < PakFileVersion.FNameBasedCompressionMethod else "<I"
-    parts.extend([
-        struct.pack(count_fmt, 0),
-        struct.pack("<I", 65536),
-        b"h" * 20,
-    ])
+        parts.append(struct.pack("<q", 123456))  # Timestamp (v<2 only)
+    # Hash — UE 在 CompressionBlocks 之前写入 Hash
+    parts.append(b"h" * 20)
+    # [v>=3]: CompressionBlockCount, Flags, CompressionBlockSize
+    if version >= PakFileVersion.CompressionEncryption:
+        count_fmt = "<H" if version < PakFileVersion.FNameBasedCompressionMethod else "<I"
+        parts.extend([
+            struct.pack(count_fmt, 0),  # CompressionBlockCount (0 blocks)
+            struct.pack("<B", 0),       # Flags (uint8)
+            struct.pack("<I", 65536),   # CompressionBlockSize
+        ])
     return b"".join(parts)
 
 
@@ -195,7 +200,8 @@ def test_legacy_v1_entry_consumes_timestamp():
     entry = FPakEntry.deserialize_legacy(stream, PakFileVersion.Initial)
 
     assert entry.compression_block_count == 0
-    assert entry.compression_block_size == 65536
+    # version 1 (< 3): CompressionBlockSize 不存在于流中，保持默认值 0
+    assert entry.compression_block_size == 0
     assert stream.tell() == len(stream.getvalue())
 
 
@@ -205,5 +211,6 @@ def test_legacy_v2_entry_does_not_consume_timestamp():
     entry = FPakEntry.deserialize_legacy(stream, PakFileVersion.NoTimestamps)
 
     assert entry.compression_block_count == 0
-    assert entry.compression_block_size == 65536
+    # version 2 (< 3): CompressionBlockSize 不存在于流中，保持默认值 0
+    assert entry.compression_block_size == 0
     assert stream.tell() == len(stream.getvalue())

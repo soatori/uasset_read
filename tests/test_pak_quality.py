@@ -418,7 +418,8 @@ class TestDecodeEncodedPakEntryFunction:
         bf |= (3 & 0xFFFF) << 6  # block_count = 3
         bf |= 5 & 0x3F  # block_size_index = 5
 
-        data = struct.pack('<I', bf) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        # 压缩条目: offset(4) + uncompressed_size(4) + size(4) (因为 compression_method > 0)
+        data = struct.pack('<I', bf) + struct.pack('<I', 100) + struct.pack('<I', 200) + struct.pack('<I', 150)
         pak_info = MagicMock()
         pak_info.version = 10
         entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
@@ -426,3 +427,4 @@ class TestDecodeEncodedPakEntryFunction:
         assert entry.is_encrypted is True
         assert entry.compression_block_count == 3
         assert entry.compression_block_size == 5 << 11  # 10240
+        assert entry.size == 150

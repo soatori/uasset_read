@@ -13,8 +13,8 @@ class TestFPakEntryLegacyDeserialization:
 
         UE 序列化顺序（version >= 2, < 10）：
         Offset(i64) → Size(i64) → UncompressedSize(i64) → CompressionMethodIndex(u32)
-        → CompressionBlockCount(u32) → CompressionBlockSize(u32)
-        → CompressionBlocks[] → Hash(20bytes)
+        → [Timestamp(i64) — version < 2] → Hash(20bytes)
+        → [version >= 3: CompressionBlocks, Flags, CompressionBlockSize]
         """
         buf = io.BytesIO()
         # Offset
@@ -25,14 +25,15 @@ class TestFPakEntryLegacyDeserialization:
         buf.write(struct.pack('<q', 0x1000))
         # CompressionMethodIndex
         buf.write(struct.pack('<I', 1))
+        # Hash (20 bytes) — UE 在 CompressionBlocks 之前写入 Hash
+        buf.write(b'\x00' * 20)
+        # [version >= 3]: CompressionBlocks, Flags, CompressionBlockSize
         # CompressionBlockCount (v>=8 → uint32)
         buf.write(struct.pack('<I', 0))
+        # Flags (uint8)
+        buf.write(struct.pack('<B', 0))
         # CompressionBlockSize
         buf.write(struct.pack('<I', 65536))
-        # Hash (20 bytes)
-        buf.write(b'\x00' * 20)
-        # Flags (v>=8)
-        buf.write(struct.pack('<I', 0))
         return buf.getvalue()
 
     def test_legacy_field_order(self):
@@ -152,7 +153,8 @@ class TestDecodeEncodedPakEntry:
         # 构建 bitfield: compression_method=3 at bits 23-28
         value = (3 & 0x3F) << 23
         value |= (1 << 31) | (1 << 30) | (1 << 29)  # fits_32 flags
-        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        # 压缩条目需要: bitfield(4) + offset(4) + uncompressed(4) + size(4) = 16 bytes
+        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200) + struct.pack('<I', 150)
         pak_info = MagicMock()
         pak_info.version = 10
         entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
@@ -163,7 +165,8 @@ class TestDecodeEncodedPakEntry:
         from unittest.mock import MagicMock
         value = (1 << 22) | ((2 & 0x3F) << 23)
         value |= (1 << 31) | (1 << 30) | (1 << 29)
-        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200)
+        # 压缩条目需要: bitfield(4) + offset(4) + uncompressed(4) + size(4) = 16 bytes
+        data = struct.pack('<I', value) + struct.pack('<I', 100) + struct.pack('<I', 200) + struct.pack('<I', 150)
         pak_info = MagicMock()
         pak_info.version = 10
         entry, consumed = FPakEntry.decode_bitfield(data, 0, pak_info)
