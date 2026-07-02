@@ -63,6 +63,7 @@ class FakePin:
     default_value: Optional[str] = None
     persistent_guid: Optional[str] = None
     hidden: bool = False
+    parent_pin: Optional[str] = None
 
 
 @dataclass
