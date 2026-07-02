@@ -1356,38 +1356,81 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
     return execution_flows
 
 
+def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
+    """将单个 UEdGraph 转换为 MacroExpander 期望的字典格式。
+
+    包含完整的 pin 数据（pin_id、linked_to_raw、parent_pin）和
+    tunnel 节点属性（b_can_have_outputs、b_can_have_inputs、exact_class），
+    确保宏展开时 tunnel/pin 数据不丢失。
+    """
+    direction_map = {0: "EGPD_Input", 1: "EGPD_Output"}
+
+    nodes = []
+    for node in graph.nodes:
+        nd = node.node_data if isinstance(node.node_data, dict) else {}
+
+        node_dict: Dict[str, Any] = {
+            "node_type": node.class_name,
+            "node_guid": node.node_guid,
+            "pins": [
+                {
+                    "pin_id": pin.pin_id,
+                    "pin_name": pin.pin_name,
+                    "direction": direction_map.get(pin.direction, pin.direction),
+                    "pin_type": {
+                        "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+                        "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
+                    } if pin.pin_type else {},
+                    "linked_to_raw": pin.linked_to_raw or [],
+                    "parent_pin": pin.parent_pin,
+                    "default_value": pin.default_value or "",
+                }
+                for pin in node.pins
+            ],
+            "macro_graph_reference": nd.get("macro_graph_reference", {}),
+        }
+
+        # 提取 Tunnel 节点特有属性（从 _raw_properties 或 node_data）
+        if node.class_name == "K2Node_Tunnel":
+            raw_props = nd.get("_raw_properties", {})
+            node_dict["exact_class"] = "UK2Node_Tunnel"
+            node_dict["b_can_have_inputs"] = raw_props.get("bCanHaveInputs", False)
+            node_dict["b_can_have_outputs"] = raw_props.get("bCanHaveOutputs", False)
+
+        nodes.append(node_dict)
+
+    return {
+        "guid": graph.graph_guid or "",
+        "name": graph.graph_name,
+        "nodes": nodes,
+    }
+
+
 def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     """从 UEdGraph 构建宏展开所需的 asset_context。
 
-    将 UEdGraph 转换为 MacroExpander 期望的字典格式。
+    将 UEdGraph 及其所有 subgraph 转换为 MacroExpander 期望的字典格式。
+    BFS 遍历 subgraph（带 visited 集合防止循环引用），确保宏图定义
+    （包含 Tunnel 节点）被正确收集。
     """
-    graph_dict = {
-        "guid": graph.graph_guid or "",
-        "name": graph.graph_name,
-        "nodes": [
-            {
-                "node_type": node.class_name,
-                "node_guid": node.node_guid,
-                "pins": [
-                    {
-                        "pin_name": pin.pin_name,
-                        "direction": pin.direction,
-                        "pin_type": {
-                            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
-                            "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
-                        } if pin.pin_type else {},
-                    }
-                    for pin in node.pins
-                ],
-                "macro_graph_reference": (
-                    node.node_data.get("macro_graph_reference", {})
-                    if isinstance(node.node_data, dict) else {}
-                ),
-            }
-            for node in graph.nodes
-        ],
-    }
-    return {"graphs": [graph_dict]}
+    all_graphs: List[Dict[str, Any]] = []
+    visited: set = set()
+
+    # BFS 遍历：顶层图 + 所有子图
+    queue = [graph]
+    while queue:
+        g = queue.pop(0)
+        g_id = id(g)
+        if g_id in visited:
+            continue
+        visited.add(g_id)
+
+        all_graphs.append(_build_graph_dict(g))
+        for subgraph in getattr(g, "subgraphs", None) or []:
+            if id(subgraph) not in visited:
+                queue.append(subgraph)
+
+    return {"graphs": all_graphs}
 
 
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
