@@ -483,9 +483,9 @@ class TestJSONRendererNodes:
         """Pin 应包含所有字段。"""
         pin = PinIR(
             pin_name="ReturnValue", pin_type="float",
-            pin_type_value="float",
             linked_to=["aabbccdd11223344aabbccdd11223344"],
             direction="output", default_value="0.0",
+            pin_category="float",
         )
         node = NodeIR(
             node_guid="aabbccdd11223344aabbccdd11223344",
@@ -1139,7 +1139,7 @@ class TestMarkdownRendererMermaid:
     def test_mermaid_with_edges(self):
         """有 linked_to 的节点应生成边。"""
         pin = PinIR(
-            pin_name="Then", pin_type="exec", pin_type_value=None,
+            pin_name="Then", pin_type="exec",
             linked_to=["bbccdd1122334455bbccdd1122334455"],
             direction="output", default_value=None,
         )

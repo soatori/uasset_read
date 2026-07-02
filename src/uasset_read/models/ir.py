@@ -124,16 +124,38 @@ class PinIR:
     """单个 Pin 的呈现模型（IR 层）。
 
     与序列化模型 UEdGraphPin 的区别：
-    - direction 为 str（"input"/"output"），而非 int
-    - pin_type 为 str，而非 FEdGraphPinType 嵌套对象
+    - direction 为 str（"EGPD_Input"/"EGPD_Output"），而非 int
+    - pin_category/pin_subcategory 等结构化字段替代 _safe_str() 的 FEdGraphPinType 字符串化
     - linked_to 为 str GUID 列表，而非 UObjectInstance 列表
+
+    新增字段（v0.5.2）对应 FEdGraphPinType 的 10 个结构化属性：
+    - pin_category: Pin 类型大类（"bool"/"int"/"float"/"object"/"struct"/"exec" 等）
+    - pin_subcategory: Pin 类型子类（如 "bool"→"int" 的子类型路径）
+    - pin_subcategory_object: PinSubCategoryObject 解析后的对象名（如 "/Script/Engine.Actor"）
+    - container_type: 容器类型（"None"/"Array"/"Set"/"Map"），对应 EPinContainerType
+    - is_reference: 是否按引用传递
+    - is_const: 是否不可变常量
+    - is_weak_pointer: 是否弱引用
+    - is_uobject_wrapper: 是否 UObject 包装类型（如 TSubclassOf）
+    - is_map_key: Map 容器的 key 类型标记（来自 PinValueType）
+    - is_map_value: Map 容器的 value 类型标记（来自 PinValueType）
     """
     pin_name: str
-    pin_type: str
-    pin_type_value: str | None
+    pin_type: str  # 保留向后兼容：FEdGraphPinType 的 _safe_str() 输出
     linked_to: list[str]
     direction: str
     default_value: str | None
+    # --- 结构化类型字段（FEdGraphPinType 拆解） ---
+    pin_category: str = ""
+    pin_subcategory: str = ""
+    pin_subcategory_object: str | None = None
+    container_type: str = "None"
+    is_reference: bool = False
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False
+    is_map_key: bool = False
+    is_map_value: bool = False
 
 
 @dataclass

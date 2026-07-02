@@ -216,7 +216,28 @@ class JSONRenderer(IRenderer):
         return d
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
-        return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}
+        d: dict[str, Any] = {
+            "pin_name": pin.pin_name,
+            "pin_type": pin.pin_type,
+            "linked_to": pin.linked_to,
+            "direction": pin.direction,
+            "default_value": pin.default_value,
+            # 结构化类型字段
+            "pin_category": pin.pin_category,
+            "pin_subcategory": pin.pin_subcategory,
+            "container_type": pin.container_type,
+            "is_reference": pin.is_reference,
+            "is_const": pin.is_const,
+            "is_weak_pointer": pin.is_weak_pointer,
+            "is_uobject_wrapper": pin.is_uobject_wrapper,
+        }
+        if pin.pin_subcategory_object is not None:
+            d["pin_subcategory_object"] = pin.pin_subcategory_object
+        if pin.is_map_key:
+            d["is_map_key"] = True
+        if pin.is_map_value:
+            d["is_map_value"] = True
+        return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""

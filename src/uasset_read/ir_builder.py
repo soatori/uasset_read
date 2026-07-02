@@ -573,13 +573,52 @@ def _build_pin_ir(pin) -> PinIR:
     if getattr(pin, "direction", 0) == 1:
         direction = "EGPD_Output"
 
+    # 从 FEdGraphPinType 提取结构化字段
+    pin_type_obj = getattr(pin, "pin_type", None)
+    pin_category = ""
+    pin_subcategory = ""
+    pin_subcategory_object = None
+    container_type = "None"
+    is_reference = False
+    is_const = False
+    is_weak_pointer = False
+    is_uobject_wrapper = False
+    is_map_key = False
+    is_map_value = False
+
+    if pin_type_obj is not None:
+        pin_category = _safe_str(getattr(pin_type_obj, "pin_category", None))
+        pin_subcategory = _safe_str(getattr(pin_type_obj, "pin_subcategory", None))
+        pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
+
+        # EPinContainerType: None=0, Array=1, Set=2, Map=3
+        _CONTAINER_MAP = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
+        _container_int = getattr(pin_type_obj, "container_type", 0)
+        container_type = _CONTAINER_MAP.get(_container_int, "None")
+
+        is_reference = bool(getattr(pin_type_obj, "is_reference", False))
+        is_const = bool(getattr(pin_type_obj, "is_const", False))
+        is_weak_pointer = bool(getattr(pin_type_obj, "is_weak_pointer", False))
+        is_uobject_wrapper = bool(getattr(pin_type_obj, "is_uobject_wrapper", False))
+        is_map_key = bool(getattr(pin_type_obj, "is_map_key", False))
+        is_map_value = bool(getattr(pin_type_obj, "is_map_value", False))
+
     return PinIR(
         pin_name=_safe_str(getattr(pin, "pin_name", None)),
-        pin_type=_safe_str(getattr(pin, "pin_type", None)),
-        pin_type_value=getattr(pin, "pin_type_value", None),
+        pin_type=_safe_str(pin_type_obj),
         linked_to=linked_to,
         direction=direction,
         default_value=getattr(pin, "default_value", None),
+        pin_category=pin_category,
+        pin_subcategory=pin_subcategory,
+        pin_subcategory_object=pin_subcategory_object,
+        container_type=container_type,
+        is_reference=is_reference,
+        is_const=is_const,
+        is_weak_pointer=is_weak_pointer,
+        is_uobject_wrapper=is_uobject_wrapper,
+        is_map_key=is_map_key,
+        is_map_value=is_map_value,
     )
 
 
@@ -975,8 +1014,8 @@ def _format_var_type(var) -> str:
     object_name = getattr(pin_type, "pin_subcategory_object_name", None) or ""
     container = getattr(pin_type, "container_type", 0)
 
-    # 容器类型前缀
-    container_map = {1: "TArray", 2: "TMap", 3: "TSet"}
+    # 容器类型前缀（EPinContainerType: None=0, Array=1, Set=2, Map=3）
+    container_map = {1: "TArray", 2: "TSet", 3: "TMap"}
     prefix = container_map.get(container, "")
 
     # 基础类型

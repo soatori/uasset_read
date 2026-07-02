@@ -276,7 +276,6 @@ class TestBuildNodeIR:
         mock_pin = MagicMock()
         mock_pin.pin_name = "Exec"
         mock_pin.pin_type = "exec"
-        mock_pin.pin_type_value = None
         mock_pin.linked_to_raw = []
         mock_pin.direction = 1  # Output
         mock_pin.default_value = None
@@ -292,8 +291,17 @@ class TestBuildPinIR:
     def test_pin_input_direction(self):
         mock_pin = MagicMock()
         mock_pin.pin_name = "Target"
-        mock_pin.pin_type = "Object"
-        mock_pin.pin_type_value = "Actor"
+        mock_pin.pin_type = MagicMock()
+        mock_pin.pin_type.pin_category = "object"
+        mock_pin.pin_type.pin_subcategory = ""
+        mock_pin.pin_type.pin_subcategory_object_name = "Actor"
+        mock_pin.pin_type.container_type = 0
+        mock_pin.pin_type.is_reference = False
+        mock_pin.pin_type.is_const = False
+        mock_pin.pin_type.is_weak_pointer = False
+        mock_pin.pin_type.is_uobject_wrapper = False
+        mock_pin.pin_type.is_map_key = False
+        mock_pin.pin_type.is_map_value = False
         mock_pin.linked_to_raw = []
         mock_pin.direction = 0  # Input
         mock_pin.default_value = None
@@ -301,12 +309,24 @@ class TestBuildPinIR:
         pin_ir = _build_pin_ir(mock_pin)
         assert pin_ir.direction == "EGPD_Input"
         assert pin_ir.pin_name == "Target"
+        assert pin_ir.pin_category == "object"
+        assert pin_ir.pin_subcategory_object == "Actor"
+        assert pin_ir.container_type == "None"
 
     def test_pin_linked_to_raw_dicts(self):
         mock_pin = MagicMock()
         mock_pin.pin_name = "Exec"
-        mock_pin.pin_type = "exec"
-        mock_pin.pin_type_value = None
+        mock_pin.pin_type = MagicMock()
+        mock_pin.pin_type.pin_category = "exec"
+        mock_pin.pin_type.pin_subcategory = ""
+        mock_pin.pin_type.pin_subcategory_object_name = None
+        mock_pin.pin_type.container_type = 0
+        mock_pin.pin_type.is_reference = False
+        mock_pin.pin_type.is_const = False
+        mock_pin.pin_type.is_weak_pointer = False
+        mock_pin.pin_type.is_uobject_wrapper = False
+        mock_pin.pin_type.is_map_key = False
+        mock_pin.pin_type.is_map_value = False
         mock_pin.linked_to_raw = [
             {"pin_guid": "a1b2c3d4e5f67890abcdef1234567890"},
             {"pin_guid": "b1b2c3d4e5f67890abcdef1234567890"},
@@ -321,14 +341,100 @@ class TestBuildPinIR:
     def test_pin_linked_to_raw_strings(self):
         mock_pin = MagicMock()
         mock_pin.pin_name = "Exec"
-        mock_pin.pin_type = "exec"
-        mock_pin.pin_type_value = None
+        mock_pin.pin_type = MagicMock()
+        mock_pin.pin_type.pin_category = "exec"
+        mock_pin.pin_type.pin_subcategory = ""
+        mock_pin.pin_type.pin_subcategory_object_name = None
+        mock_pin.pin_type.container_type = 0
+        mock_pin.pin_type.is_reference = False
+        mock_pin.pin_type.is_const = False
+        mock_pin.pin_type.is_weak_pointer = False
+        mock_pin.pin_type.is_uobject_wrapper = False
+        mock_pin.pin_type.is_map_key = False
+        mock_pin.pin_type.is_map_value = False
         mock_pin.linked_to_raw = ["a1b2c3d4e5f67890abcdef1234567890"]
         mock_pin.direction = 0
         mock_pin.default_value = None
 
         pin_ir = _build_pin_ir(mock_pin)
         assert len(pin_ir.linked_to) == 1
+
+    def test_pin_structured_type_fields(self):
+        """测试 FEdGraphPinType 结构化字段正确提取。"""
+        mock_pin = MagicMock()
+        mock_pin.pin_name = "Value"
+        mock_pin.pin_type = MagicMock()
+        mock_pin.pin_type.pin_category = "struct"
+        mock_pin.pin_type.pin_subcategory = ""
+        mock_pin.pin_type.pin_subcategory_object_name = "/Script/Engine.Vector"
+        mock_pin.pin_type.container_type = 1  # Array
+        mock_pin.pin_type.is_reference = True
+        mock_pin.pin_type.is_const = False
+        mock_pin.pin_type.is_weak_pointer = False
+        mock_pin.pin_type.is_uobject_wrapper = False
+        mock_pin.pin_type.is_map_key = False
+        mock_pin.pin_type.is_map_value = False
+        mock_pin.linked_to_raw = []
+        mock_pin.direction = 1  # Output
+        mock_pin.default_value = None
+
+        pin_ir = _build_pin_ir(mock_pin)
+        assert pin_ir.pin_category == "struct"
+        assert pin_ir.pin_subcategory_object == "/Script/Engine.Vector"
+        assert pin_ir.container_type == "Array"
+        assert pin_ir.is_reference is True
+        assert pin_ir.is_const is False
+
+    def test_pin_map_container(self):
+        """测试 Map 容器类型的 pin 提取。"""
+        mock_pin = MagicMock()
+        mock_pin.pin_name = "MapPin"
+        mock_pin.pin_type = MagicMock()
+        mock_pin.pin_type.pin_category = "struct"
+        mock_pin.pin_type.pin_subcategory = ""
+        mock_pin.pin_type.pin_subcategory_object_name = None
+        mock_pin.pin_type.container_type = 3  # Map
+        mock_pin.pin_type.is_reference = False
+        mock_pin.pin_type.is_const = False
+        mock_pin.pin_type.is_weak_pointer = False
+        mock_pin.pin_type.is_uobject_wrapper = False
+        mock_pin.pin_type.is_map_key = True
+        mock_pin.pin_type.is_map_value = False
+        mock_pin.linked_to_raw = []
+        mock_pin.direction = 0
+        mock_pin.default_value = None
+
+        pin_ir = _build_pin_ir(mock_pin)
+        assert pin_ir.container_type == "Map"
+        assert pin_ir.is_map_key is True
+        assert pin_ir.is_map_value is False
+
+    def test_pin_none_pin_type(self):
+        """测试 pin_type 为 None 时的降级处理。"""
+        mock_pin = MagicMock()
+        mock_pin.pin_name = "Broken"
+        mock_pin.pin_type = None
+        mock_pin.linked_to_raw = []
+        mock_pin.direction = 0
+        mock_pin.default_value = None
+
+        pin_ir = _build_pin_ir(mock_pin)
+        assert pin_ir.pin_category == ""
+        assert pin_ir.container_type == "None"
+        assert pin_ir.is_reference is False
+
+    def test_pin_backward_compat_string_pin_type(self):
+        """测试 pin_type 为字符串时的向后兼容（旧数据）。"""
+        mock_pin = MagicMock()
+        mock_pin.pin_name = "Legacy"
+        mock_pin.pin_type = "Object"
+        mock_pin.linked_to_raw = []
+        mock_pin.direction = 0
+        mock_pin.default_value = None
+
+        pin_ir = _build_pin_ir(mock_pin)
+        assert pin_ir.pin_type == "Object"
+        assert pin_ir.pin_category == ""
 
 
 class TestBuildPropertyIR:
@@ -437,17 +543,52 @@ from uasset_read.models.ir import (
 
 class TestPinIR:
     def test_pin_ir_minimal(self):
-        pin = PinIRStruct(pin_name="Exec", pin_type="exec", pin_type_value=None,
+        pin = PinIRStruct(pin_name="Exec", pin_type="exec",
                     linked_to=[], direction="EGPD_Output", default_value=None)
         assert pin.pin_name == "Exec"
         assert pin.linked_to == []
+        # 新字段默认值
+        assert pin.pin_category == ""
+        assert pin.container_type == "None"
+        assert pin.is_reference is False
 
     def test_pin_ir_full(self):
-        pin = PinIRStruct(pin_name="Target", pin_type="Object", pin_type_value="Actor",
-                    linked_to=["abc123def456789012345678abcdef01"], direction="EGPD_Input",
-                    default_value="SomeValue")
+        pin = PinIRStruct(
+            pin_name="Target", pin_type="Object",
+            linked_to=["abc123def456789012345678abcdef01"],
+            direction="EGPD_Input", default_value="SomeValue",
+            pin_category="object", pin_subcategory="",
+            pin_subcategory_object="/Script/Engine.Actor",
+            container_type="None", is_reference=False,
+            is_const=False, is_weak_pointer=False,
+            is_uobject_wrapper=False, is_map_key=False, is_map_value=False,
+        )
         assert len(pin.linked_to) == 1
         assert pin.default_value == "SomeValue"
+        assert pin.pin_category == "object"
+        assert pin.pin_subcategory_object == "/Script/Engine.Actor"
+        assert pin.container_type == "None"
+
+    def test_pin_ir_container_array(self):
+        """测试 TArray 容器类型的 PinIR。"""
+        pin = PinIRStruct(
+            pin_name="ArrayPin", pin_type="Array<int>",
+            linked_to=[], direction="EGPD_Input", default_value=None,
+            pin_category="int", container_type="Array",
+        )
+        assert pin.container_type == "Array"
+        assert pin.pin_category == "int"
+
+    def test_pin_ir_map_container(self):
+        """测试 TMap 容器类型的 PinIR。"""
+        pin = PinIRStruct(
+            pin_name="MapPin", pin_type="Map",
+            linked_to=[], direction="EGPD_Input", default_value=None,
+            pin_category="struct", container_type="Map",
+            is_map_key=True, is_map_value=False,
+        )
+        assert pin.container_type == "Map"
+        assert pin.is_map_key is True
 
 
 class TestNodeIR:

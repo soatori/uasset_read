@@ -92,7 +92,6 @@ class TestIRDataclass:
         pin = PinIR(
             pin_name="OutputPin",
             pin_type="bool",
-            pin_type_value=None,
             linked_to=["abcdef1234567890abcdef1234567890"],
             direction="output",
             default_value="true",

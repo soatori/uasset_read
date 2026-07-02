@@ -263,7 +263,6 @@ class TestPinIR:
         pin = PinIR(
             pin_name="exec",
             pin_type="exec",
-            pin_type_value=None,
             linked_to=[],
             direction="output",
             default_value=None,
