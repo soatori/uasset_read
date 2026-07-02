@@ -433,6 +433,7 @@ def parse_properties_from_export(
                 mapped,
                 struct_name,
                 property_end,
+                tolerant=tolerant,
             )
 
     # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
@@ -478,6 +479,10 @@ def parse_properties_from_export(
             # 边界检查：当前位置不应超过属性数据范围
             current_pos = archive.tell()
             if current_pos >= property_end:
+                break
+            # #276: EOF 检查 — 防止 archive 数据不足时在 EOF 处无限重试
+            file_size = getattr(archive, '_file_size', None)
+            if isinstance(file_size, int) and current_pos >= file_size:
                 break
 
             struct_name = None
@@ -561,9 +566,34 @@ def parse_properties_from_export(
                     properties[-1].value = resolved
 
         except ParseError as e:
+            # #276: strict 模式下直接传播，不重试
+            if not tolerant:
+                raise
+
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
             if tag is not None and start_pos is not None:
-                archive.seek(start_pos + tag.size)
+                target_pos = start_pos + tag.size
+                # 安全网：如果 target_pos 回退或原地不动，强制前进至少 1 字节
+                if target_pos > start_pos:
+                    archive.seek(target_pos)
+                else:
+                    # 直接设置内部位置，跳过 validate_offset 防止越界异常
+                    next_pos = min(start_pos + 1, archive._file_size)
+                    if archive._use_mmap and archive._mmap:
+                        archive._mmap.seek(next_pos)
+                    else:
+                        archive._file.seek(next_pos)
+            else:
+                # start_pos 未知（tag 读取早期失败），前进 1 字节防止无限循环
+                next_pos = min(archive.tell() + 1, archive._file_size)
+                logger.warning(
+                    "PropertyTag 早期损坏，无法确定偏移，跳过 1 字节 (offset=%d)",
+                    archive.tell(),
+                )
+                if archive._use_mmap and archive._mmap:
+                    archive._mmap.seek(next_pos)
+                else:
+                    archive._file.seek(next_pos)
 
             # 使用 PropertyFallback 替代纯字符串错误信息
             fb = PropertyFallback(
@@ -609,6 +639,7 @@ def _parse_unversioned_properties_from_mapping(
     mappings: Any,
     struct_name: str,
     property_end: int,
+    tolerant: bool = True,
 ) -> List[PropertyValue]:
     """Parse a simple mapping-driven unversioned property stream.
 
@@ -643,10 +674,14 @@ def _parse_unversioned_properties_from_mapping(
             continue
         start = archive.tell()
         try:
-            value = parse_property_value(tag, archive, name_map, export_map, summary)
+            value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
+            # #276: strict 模式下直接传播
+            if not tolerant:
+                raise
             if tag.size > 0:
-                archive.seek(min(start + tag.size, property_end))
+                seek_target = min(start + tag.size, property_end, archive._file_size)
+                archive.seek(seek_target)
             fb = PropertyFallback(
                 name=info.name,
                 type=tag.type,
@@ -662,7 +697,10 @@ def _parse_unversioned_properties_from_mapping(
             tag.size = archive.tell() - start
         out.append(PropertyValue(info.name, tag.type, value))
     if archive.tell() < property_end:
-        tail = archive.read(property_end - archive.tell())
+        remaining = property_end - archive.tell()
+        # #276: 安全读取 tail，防止 property_end 超出 archive 实际大小
+        tail_size = min(remaining, archive._file_size - archive.tell()) if archive.tell() < archive._file_size else 0
+        tail = archive.read(tail_size) if tail_size > 0 else b""
         if tail:
             out.append(PropertyValue(
                 name="_unversioned_tail",

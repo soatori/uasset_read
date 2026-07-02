@@ -1,8 +1,3 @@
----
-name: uasset-mcp-comparison
-description: Use when comparing uasset_read parser output against Unreal Editor MCP ground truth — validating graph names, variables, and structure accuracy. Use for batch testing multiple projects, validating parser improvements, or generating comparison reports for the issue tracker.
----
-
 # uasset MCP 对比测试
 
 ## Overview
@@ -121,8 +116,8 @@ gh issue create --title "feat: <描述>" --body-file temp/comparison-report.md
 | `scripts/batch_mcp_compare.py` | 多项目批量对比 |
 | `scripts/quick_mcp_compare.py` | 快速对比（仅关键蓝图） |
 
-## 相关 Skills
+## 相关子文档
 
-- `uasset-output-quality-test` - 解析器输出质量检测
-- `bp-cpp-comparison` - 蓝图 vs C++ 对照验证
-- `unreal-mcp` - Unreal MCP 配置和使用
+- [bp-cpp-comparison.md](bp-cpp-comparison.md) — 蓝图 vs C++ 对照验证（同 skill 内）
+- [ue-source-audit.md](ue-source-audit.md) — 源码审计（同 skill 内）
+- [output-quality-test.md](../../test/references/output-quality-test.md) — 解析器输出质量检测（test skill）

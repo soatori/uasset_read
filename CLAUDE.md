@@ -119,14 +119,4 @@ serializers/graph.py → graph/flow_builder.py
 - `wiki/` — 开发指南 | `docs/formats/uasset/` — UE 格式参考（60+ 文件）
 - `docs/designs/` — 设计规格 | `docs/reference/` — 技术参考 | `docs/release-notes/` — 发布说明
 
-**Agent skills**（`.claude/skills/`，通过 `/skill-name` 调用）：
-
-| Skill | 场景 |
-|---|---|
-| `test-runner` | 运行测试、更新文档统计 |
-| `code-quality-fix` | P0-P3 分级代码质量修复 |
-| `doc-consistency` | 文档一致性审计 |
-| `version-sync` | 跨文件版本号同步 |
-| `release-prep` | 发布前完整流程 |
-
 **Issue tracker**：GitHub Issues（gh CLI）。详见 `docs/agents/issue-tracker.md`。

@@ -1,8 +1,3 @@
----
-name: bp-cpp-comparison
-description: "Use when comparing a parsed .uasset Blueprint result against its C++ equivalent source code, or when using Unreal MCP as the primary oracle to validate parser accuracy. MCP is the ground truth; C++ is a secondary reference."
----
-
 # Blueprint vs C++ 对照验证
 
 ## Overview
@@ -62,7 +57,7 @@ C++ 是蓝图的子集，C++ 与 MCP 不一致 ≠ 解析错误（蓝图编辑�
 | 父组件/挂载 | `AttachParent`/`AttachToName` | `get_components` | `SetupAttachment()` | |
 | 属性值 | `FloatProperty`/`BoolProperty` 等 | 节点属性 | 构造函数中的赋值 | |
 
-**判定规则**：解析器 vs MCP 不一致 = ❌ 解析错误；解析器 vs C++ 不一致但 MCP 一致 = ⚠️ 蓝图编辑器修改。
+**判定规则**：解析器 vs MCP 不一致 = 解析错误；解析器 vs C++ 不一致但 MCP 一致 = 蓝图编辑器修改。
 
 #### 4.2 输入绑定
 
@@ -91,7 +86,7 @@ C++ 是蓝图的子集，C++ 与 MCP 不一致 ≠ 解析错误（蓝图编辑�
 
 ### Step 5: 生成差异报告
 
-输出到 `temp/<asset-name>-comparison-report.md`，包含：基本信息、Step 4 的对照表（组件/输入/函数/蓝图独有内容）、差异分类（✅ 一致 / ❌ 解析错误 / ⚠️ 蓝图编辑器修改 / ℹ️ 蓝图独有）、结论。
+输出到 `temp/<asset-name>-comparison-report.md`，包含：基本信息、Step 4 的对照表（组件/输入/函数/蓝图独有内容）、差异分类（一致 / 解析错误 / 蓝图编辑器修改 / 蓝图独有）、结论。
 
 ## 已验证资产
 
