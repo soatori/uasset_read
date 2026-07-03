@@ -5,12 +5,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    pass
 
 from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, BlueprintEvent, FunctionParameter
 from uasset_read.models.properties import PropertyValue, StructValue
