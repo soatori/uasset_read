@@ -516,8 +516,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     parse_property_value = _get_parse_property_value()
 
     if tag.size < 4:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "ArrayProperty '%s': tag.size=%d < 4, 无法计算剩余数据大小",
             tag.name, tag.size,
         )
@@ -728,15 +727,13 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             if lwc_entry is not None:
                 float_size, double_size = lwc_entry
                 if tag.size not in (float_size, double_size):
-                    import logging
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
                         struct_type, tag.size, float_size, double_size,
                     )
                     struct_type = None  # Skip all fast-path branches
             else:
-                import logging
-                logging.getLogger(__name__).warning(
+                logger.warning(
                     "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
                     struct_type, tag.size, expected_size,
                 )
@@ -744,8 +741,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "StructProperty '%s': negative size %d, treating as unsigned",
             declared_struct_type, tag.size,
         )
