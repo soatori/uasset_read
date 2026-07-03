@@ -287,24 +287,24 @@ class FIoStoreTocHeader:
         # container_flags (uint8) at offset 80
         container_flags = header_data[80]
 
-        # reserved3(1 byte at 81) + reserved4(2 bytes at 82) + reserved5(4 bytes at 84)
+        # reserved3(1 byte at 81) + reserved4(2 bytes at 82)
         # 这些是保留字段，跳过
 
-        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 88
-        toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 88)[0]
+        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 84
+        toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 84)[0]
 
-        # reserved6 (uint32) at offset 92 — 跳过
+        # partition_size (uint64) at offset 88
+        partition_size = struct.unpack_from('<Q', header_data, 88)[0]
 
-        # partition_size (uint64) at offset 96
-        partition_size = struct.unpack_from('<Q', header_data, 96)[0]
+        # toc_chunks_without_perfect_hash_count (uint32) at offset 96
+        toc_chunks_without_perfect_hash_count = struct.unpack_from('<I', header_data, 96)[0]
 
-        # toc_chunks_without_perfect_hash_count (4 bytes) + reserved7 (4 bytes)
-        toc_chunks_without_perfect_hash_count = struct.unpack_from('<I', header_data, 104)[0]
-        reserved7 = struct.unpack_from('<I', header_data, 108)[0]
+        # reserved7 (uint32) at offset 100
+        reserved7 = struct.unpack_from('<I', header_data, 100)[0]
 
-        # reserved8 (5 bytes in header, padded to 32 bytes)
-        reserved8_raw = header_data[112:144]
-        reserved8 = list(reserved8_raw[:5])
+        # reserved8 (5 x uint64 = 40 bytes) at offset 104
+        reserved8_raw = header_data[104:144]
+        reserved8 = list(struct.unpack_from('<5Q', reserved8_raw, 0))
 
         return FIoStoreTocHeader(
             toc_magic=toc_magic,

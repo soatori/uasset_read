@@ -23,19 +23,17 @@ class TestFIoStoreTocHeaderOffsets:
                     compression_method_name_length(u32)
         Offset 44:  compression_block_size(u32),
                     directory_index_size(u32)
-        Offset 52:  partition_count(u32), reserved2(u32)
+        Offset 52:  partition_count(u32)
         Offset 56:  container_id (uint64)
         Offset 64:  encryption_key_guid (16 bytes)
         Offset 80:  container_flags (uint8)
         Offset 81:  reserved3 (1 byte)
         Offset 82:  reserved4 (2 bytes) — uint16
-        Offset 84:  reserved5 (4 bytes) — uint32
-        Offset 88:  toc_chunk_perfect_hash_seeds_count (uint32)
-        Offset 92:  reserved6 (4 bytes) — uint32
-        Offset 96:  partition_size (uint64)
-        Offset 104: toc_chunks_without_perfect_hash_count (uint32)
-        Offset 108: reserved7 (uint32)
-        Offset 112: reserved8 (32 bytes)
+        Offset 84:  toc_chunk_perfect_hash_seeds_count (uint32)
+        Offset 88:  partition_size (uint64)
+        Offset 96:  toc_chunks_without_perfect_hash_count (uint32)
+        Offset 100: reserved7 (uint32)
+        Offset 104: reserved8 (5 x uint64 = 40 bytes)
         """
         if encryption_key_guid is None:
             encryption_key_guid = b'\x00' * 16
@@ -72,25 +70,22 @@ class TestFIoStoreTocHeaderOffsets:
         # container_flags (uint8) at offset 80
         buf[80] = container_flags
 
-        # reserved3(1) + reserved4(2) + reserved5(4) at offset 81-87
+        # reserved3(1) + reserved4(2) at offset 81-83
         # (already zero)
 
-        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 88
-        struct.pack_into('<I', buf, 88, toc_chunk_perfect_hash_seeds_count)
+        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 84
+        struct.pack_into('<I', buf, 84, toc_chunk_perfect_hash_seeds_count)
 
-        # reserved6(4) at offset 92
+        # partition_size (uint64) at offset 88
+        struct.pack_into('<Q', buf, 88, partition_size)
+
+        # toc_chunks_without_perfect_hash_count (uint32) at offset 96
+        struct.pack_into('<I', buf, 96, 0)
+
+        # reserved7 (uint32) at offset 100
         # (already zero)
 
-        # partition_size (uint64) at offset 96
-        struct.pack_into('<Q', buf, 96, partition_size)
-
-        # toc_chunks_without_perfect_hash_count (uint32) at offset 104
-        struct.pack_into('<I', buf, 104, 0)
-
-        # reserved7 (uint32) at offset 108
-        # (already zero)
-
-        # reserved8 (32 bytes) at offset 112-143
+        # reserved8 (5 x uint64 = 40 bytes) at offset 104-143
         # (already zero)
 
         return bytes(buf)
@@ -126,13 +121,13 @@ class TestFIoStoreTocHeaderOffsets:
         assert header.container_flags == 0xFF
 
     def test_toc_chunk_perfect_hash_seeds_count_offset(self):
-        """toc_chunk_perfect_hash_seeds_count 在 offset 88（非 92）。"""
+        """toc_chunk_perfect_hash_seeds_count 在 offset 84（UE IoStore.h:65）。"""
         header_data = self._build_header(toc_chunk_perfect_hash_seeds_count=42)
         header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
         assert header.toc_chunk_perfect_hash_seeds_count == 42
 
     def test_partition_size_offset(self):
-        """partition_size 在 offset 96。"""
+        """partition_size 在 offset 88（UE IoStore.h:66）。"""
         header_data = self._build_header(partition_size=0xDEADBEEF)
         header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
         assert header.partition_size == 0xDEADBEEF
