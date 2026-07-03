@@ -329,6 +329,28 @@ class TestDiffSingle:
         # 实际测试使用真实文件
         assert callable(diff_single)
 
+    def test_returns_str(self):
+        """验证返回类型为 str。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("nonexistent1.uasset", "nonexistent2.uasset")
+        assert isinstance(result, str)
+
+    def test_nonexistent_files_contain_error(self):
+        """验证不存在的文件在 diff 输出中包含错误标注。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("nonexistent1.uasset", "nonexistent2.uasset")
+        assert "[解析错误]" in result
+
+    def test_diff_header_present(self):
+        """验证 diff 输出包含文件名头信息。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("foo.uasset", "bar.uasset")
+        assert "a/foo.uasset" in result
+        assert "b/bar.uasset" in result
+
 
 # ---------------------------------------------------------------------------
 # get_renderer 可用性

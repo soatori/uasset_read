@@ -319,10 +319,6 @@ def diff_single(
     """
     import difflib
 
-    from uasset_read.exceptions import ParseError
-
-    errors = []
-
     # 解析文件 1
     try:
         text1 = parse_single(
@@ -336,7 +332,6 @@ def diff_single(
         )
     except Exception as e:
         text1 = f"[解析错误] {Path(file_path1).name}: {e}"
-        errors.append(f"File 1: {e}")
 
     # 解析文件 2
     try:
@@ -351,7 +346,6 @@ def diff_single(
         )
     except Exception as e:
         text2 = f"[解析错误] {Path(file_path2).name}: {e}"
-        errors.append(f"File 2: {e}")
 
     name1 = Path(file_path1).name
     name2 = Path(file_path2).name
