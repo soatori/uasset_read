@@ -371,3 +371,174 @@ class TestTextRendererRegistration:
     def test_markdown_renderer_still_works(self):
         renderer = get_renderer("markdown")
         assert renderer is not None
+
+
+# ---------------------------------------------------------------------------
+# TextRenderer output_level 过滤测试
+# ---------------------------------------------------------------------------
+
+class TestTextRendererOutputLevelFilter:
+    """TextRenderer output_level 过滤功能测试。"""
+
+    def test_standard_mode_filters_editor_variables(self):
+        """standard 模式下应过滤编辑器内部变量"""
+        renderer = get_renderer("text")
+        # 创建包含编辑器变量的 IR
+        editor_var = VariableIR(
+            name="UbergraphPages",
+            type="ArrayProperty",
+            default_value="[]",
+            kind="editor",
+        )
+        user_var = VariableIR(
+            name="Health",
+            type="FloatProperty",
+            default_value="100.0",
+            kind="user",
+        )
+        ir = _make_ir(variables=[editor_var, user_var])
+        # standard 模式（默认）
+        result = renderer.render(ir, RenderOptions())
+        assert "[Variables]" in result
+        assert "Health: FloatProperty = 100.0" in result
+        assert "UbergraphPages" not in result
+
+    def test_debug_mode_preserves_editor_variables(self):
+        """debug 模式下应保留编辑器内部变量"""
+        renderer = get_renderer("text")
+        editor_var = VariableIR(
+            name="UbergraphPages",
+            type="ArrayProperty",
+            default_value="[]",
+            kind="editor",
+        )
+        user_var = VariableIR(
+            name="Health",
+            type="FloatProperty",
+            default_value="100.0",
+            kind="user",
+        )
+        ir = _make_ir(variables=[editor_var, user_var])
+        # debug 模式
+        result = renderer.render(ir, RenderOptions(output_level="debug"))
+        assert "[Variables]" in result
+        assert "Health: FloatProperty = 100.0" in result
+        assert "UbergraphPages" in result
+
+    def test_standard_mode_filters_editor_nodes_in_graphs(self):
+        """standard 模式下应过滤编辑器节点（如 K2Node_Knot）"""
+        from uasset_read.models.ir import GraphIR, NodeIR, PinIR
+
+        renderer = get_renderer("text")
+        # 创建包含编辑器节点的图
+        editor_node = NodeIR(
+            node_guid="knot_guid_1234567890abcdef12345678",
+            node_class="K2Node_Knot",
+            node_comment="Redirect node",
+            pins=[],
+            execution_flow=[],
+        )
+        normal_node = NodeIR(
+            node_guid="normal_guid_1234567890abcdef12345678",
+            node_class="K2Node_CallFunction",
+            node_comment="Set Health",
+            pins=[],
+            execution_flow=[],
+        )
+        graph = GraphIR(
+            graph_guid="guid0001",
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[editor_node, normal_node],
+            execution_chains=[],
+        )
+        export = _make_export(graphs=[graph])
+        ir = _make_ir(exports=[export])
+        # standard 模式
+        result = renderer.render(ir, RenderOptions())
+        assert "[Graph: EventGraph]" in result
+        assert "Nodes: 1" in result  # 只有 normal_node
+        assert "K2Node_Knot" not in result
+
+    def test_debug_mode_preserves_editor_nodes_in_graphs(self):
+        """debug 模式下应保留编辑器节点"""
+        from uasset_read.models.ir import GraphIR, NodeIR
+
+        renderer = get_renderer("text")
+        editor_node = NodeIR(
+            node_guid="knot_guid_1234567890abcdef12345678",
+            node_class="K2Node_Knot",
+            node_comment="Redirect node",
+            pins=[],
+            execution_flow=[],
+        )
+        normal_node = NodeIR(
+            node_guid="normal_guid_1234567890abcdef12345678",
+            node_class="K2Node_CallFunction",
+            node_comment="Set Health",
+            pins=[],
+            execution_flow=[],
+        )
+        graph = GraphIR(
+            graph_guid="guid0001",
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[editor_node, normal_node],
+            execution_chains=[],
+        )
+        export = _make_export(graphs=[graph])
+        ir = _make_ir(exports=[export])
+        # debug 模式
+        result = renderer.render(ir, RenderOptions(output_level="debug"))
+        assert "[Graph: EventGraph]" in result
+        assert "Nodes: 2" in result  # 两个节点都保留（TextRenderer 不显示节点类名，只显示数量）
+
+    def test_empty_graph_after_filtering_not_shown(self):
+        """过滤后无节点的图不应显示"""
+        from uasset_read.models.ir import GraphIR, NodeIR
+
+        renderer = get_renderer("text")
+        editor_node = NodeIR(
+            node_guid="knot_guid_1234567890abcdef12345678",
+            node_class="K2Node_Knot",
+            node_comment="Redirect node",
+            pins=[],
+            execution_flow=[],
+        )
+        graph = GraphIR(
+            graph_guid="guid0001",
+            graph_name="EventGraph",
+            graph_class="EdGraph",
+            nodes=[editor_node],
+            execution_chains=[],
+        )
+        export = _make_export(graphs=[graph])
+        ir = _make_ir(exports=[export])
+        # standard 模式
+        result = renderer.render(ir, RenderOptions())
+        assert "[Graph: EventGraph]" not in result
+
+    def test_multiple_editor_variables_filtered(self):
+        """应过滤所有编辑器变量"""
+        renderer = get_renderer("text")
+        variables = [
+            VariableIR(name="UbergraphPages", type="ArrayProperty", default_value="[]", kind="editor"),
+            VariableIR(name="FunctionGraphs", type="ArrayProperty", default_value="[]", kind="editor"),
+            VariableIR(name="CategorySorting", type="ArrayProperty", default_value="[]", kind="editor"),
+            VariableIR(name="ImplementedInterfaces", type="ArrayProperty", default_value="[]", kind="editor"),
+            VariableIR(name="LastEditedDocuments", type="ArrayProperty", default_value="[]", kind="editor"),
+            VariableIR(name="ThumbnailInfo", type="ObjectProperty", default_value=None, kind="editor"),
+            VariableIR(name="bLegacyNeedToPurgeSkelRefs", type="BoolProperty", default_value="false", kind="editor"),
+            VariableIR(name="Health", type="FloatProperty", default_value="100.0", kind="user"),
+        ]
+        ir = _make_ir(variables=variables)
+        result = renderer.render(ir, RenderOptions())
+        # 只有 Health 应显示
+        assert "Health" in result
+        assert "UbergraphPages" not in result
+        assert "FunctionGraphs" not in result
+        assert "CategorySorting" not in result
+        assert "ImplementedInterfaces" not in result
+        assert "LastEditedDocuments" not in result
+        assert "ThumbnailInfo" not in result
+        assert "bLegacyNeedToPurgeSkelRefs" not in result
