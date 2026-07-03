@@ -574,83 +574,24 @@ def _read_package_headers(
 ) -> tuple:
     """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
 
+    复用 _init_parse_env + _read_core_tables，额外创建 linker。
+
     Returns:
         (bundle, archive, linker, mappings_provider) — 调用方负责关闭 archive。
         如果 result.summary is None，表示早期失败，调用方应直接返回。
     """
-    bundle = None
-    archive = None
-    mappings_provider = None
-
-    if mappings_path:
-        from uasset_read.mappings import TypeMappingsProvider
-        mappings_provider = TypeMappingsProvider.from_file(mappings_path)
-        result.metadata["mappings_path"] = mappings_path
-    if game:
-        result.metadata["game"] = game
-
-    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
-    archive = bundle.open_archive(tolerant=tolerant)
-    if hex_view:
-        archive.enable_hex_view(True)
-    result.metadata.update(_package_metadata(bundle))
-
-    # Extract mmap info
-    mmap_info = archive.get_mmap_info()
-    result.mmap_used = mmap_info["used"]
-    result.mmap_warning = mmap_info["warning"]
-
-    # 读取文件头
-    result.summary = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="package_summary", field="summary",
-        reader=lambda: read_package_summary(archive),
+    # 初始化解析环境（archive、bundle、mappings_provider）
+    archive, bundle, mappings_provider = _init_parse_env(
+        path, result, tolerant, provider, mappings_path, game,
+        check_aes_key=None, hex_view=hex_view,
     )
-    if result.summary is None:
+
+    # 读取核心表（summary/name/import/export）
+    if not _read_core_tables(
+        archive, result, path, tolerant,
+        validate_range=validate_range,
+    ):
         return bundle, archive, None, mappings_provider
-    result.version_container = build_version_container(result.summary)
-    archive._file_version_ue5 = result.summary.file_version_ue5
-
-    # 截断文件检测
-    if validate_range:
-        try:
-            validate_export_data_range(archive, result.summary)
-        except (OSError, struct.error, ValueError) as e:
-            if not tolerant:
-                raise
-            _record_parse_stage_error(
-                result, archive, path, "package_summary", "export_data_range", e
-            )
-            return bundle, archive, None, mappings_provider
-
-    # 读取名称表
-    result.name_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="name_table", field="name_map",
-        reader=lambda: read_name_table(archive, result.summary),
-    )
-    if result.name_map is None:
-        result.name_map = []
-
-    _derive_package_name(path, result.summary)
-
-    # 读取导入表
-    result.import_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="import_map", field="import_map",
-        reader=lambda: read_import_map(archive, result.summary, result.name_map),
-    )
-    if result.import_map is None:
-        result.import_map = []
-
-    # 读取导出表
-    result.export_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="export_map", field="export_map",
-        reader=lambda: read_export_map(archive, result.summary, result.name_map),
-    )
-    if result.export_map is None:
-        result.export_map = []
 
     # 创建 linker
     linker = _create_linker(
@@ -822,8 +763,9 @@ def _read_core_tables(
     result,
     path: str,
     tolerant: bool,
-    memory_monitor,
+    memory_monitor=None,
     mappings_provider=None,
+    validate_range: bool = True,
 ) -> bool:
     """读取 summary + name + import + export 核心表。
 
@@ -837,20 +779,22 @@ def _read_core_tables(
     )
     if result.summary is None:
         return False
-    memory_monitor.checkpoint("package_summary")
+    if memory_monitor is not None:
+        memory_monitor.checkpoint("package_summary")
     result.version_container = build_version_container(result.summary)
     archive._file_version_ue5 = result.summary.file_version_ue5
 
     # 截断文件检测：验证导出数据范围
-    try:
-        validate_export_data_range(archive, result.summary)
-    except (OSError, struct.error, ValueError) as e:
-        if not tolerant:
-            raise
-        _record_parse_stage_error(
-            result, archive, path, "package_summary", "export_data_range", e
-        )
-        return False
+    if validate_range:
+        try:
+            validate_export_data_range(archive, result.summary)
+        except (OSError, struct.error, ValueError) as e:
+            if not tolerant:
+                raise
+            _record_parse_stage_error(
+                result, archive, path, "package_summary", "export_data_range", e
+            )
+            return False
 
     # 读取名称表
     result.name_map = _run_required_stage(
@@ -861,7 +805,8 @@ def _read_core_tables(
     if result.name_map is None:
         result.name_map = []
         return False
-    memory_monitor.checkpoint("name_map")
+    if memory_monitor is not None:
+        memory_monitor.checkpoint("name_map")
     _derive_package_name(path, result.summary)
 
     # 读取导入表
@@ -873,7 +818,8 @@ def _read_core_tables(
     if result.import_map is None:
         result.import_map = []
         return False
-    memory_monitor.checkpoint("import_map")
+    if memory_monitor is not None:
+        memory_monitor.checkpoint("import_map")
 
     # 读取导出表
     result.export_map = _run_required_stage(
@@ -884,7 +830,8 @@ def _read_core_tables(
     if result.export_map is None:
         result.export_map = []
         return False
-    memory_monitor.checkpoint("export_map")
+    if memory_monitor is not None:
+        memory_monitor.checkpoint("export_map")
 
     return True
 
