@@ -24,8 +24,10 @@ jobs:
           echo "Checking master branch directory compliance..."
 
           # 对于 PR，只检查相对于 master 分支的新增文件
+          # 对于直接 push 到 master，检查所有文件
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            FILES=$(git diff --name-only origin/master...HEAD 2>/dev/null || git ls-files)
+            # 只检查新增文件（相对于 master 的差异）
+            FILES=$(git diff --diff-filter=A --name-only origin/master...HEAD 2>/dev/null || git ls-files)
           else
             FILES=$(git ls-files)
           fi
