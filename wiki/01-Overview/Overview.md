@@ -13,7 +13,7 @@ section: overview
 
 | Item | Details |
 |------|---------|
-| Version | `0.5.1.19` · Python 3.10+ (match/case, type annotations) · Zero runtime dependencies |
+| Version | `0.5.1.31` · Python 3.10+ (match/case, type annotations) · Zero runtime dependencies |
 | Build System | Direct script (src layout) · `python run.py file.uasset` invocation · PAK optional dependency |
 | Supported Assets | 10 specialized asset types (StaticMesh, SkeletalMesh, Material, MaterialInstance, Texture2D, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation) + Blueprint/Map general parsing · Containers: Filesystem / PAK / IoStore |
 
@@ -36,7 +36,7 @@ section: overview
 | 0.4.1 | ParseResult -> IR Builder -> PackageIR -> Renderers -> Output | IR layer introduced, parsing decoupled from output |
 | **0.4.2** | IR + 2 renderers, Kismet decompilation improvements, C++ skeleton quality, PropertyFallback system | First stable release |
 | 0.5.0 | Core/Extras layered architecture, streamlined public API, parser modules split into independent subpackages | |
-| **0.5.1.19** | 18 issues fixed: PackageFlags, HexView, AssetRegistryData, FString UTF-16, BoxSphereBounds, AnimGraph, etc. | Current version |
+| **0.5.1.31** | 31 issues fixed since v0.5.1.19: graph output chain, UEdGraph offset, Map Pin terminal types, CPF_* flags, pak/ioStore format, etc. | Current version |
 
 ## Key Constraints
 

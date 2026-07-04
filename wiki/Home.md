@@ -16,6 +16,6 @@
 
 ## Project Information
 
-- **Version**: 0.5.1.19 (Current branch: develop)
+- **Version**: 0.5.1.31 (Current branch: develop)
 - **Python**: 3.10+
 - **Repository**: [GitHub](https://github.com/SOATOORL/uasset_read)

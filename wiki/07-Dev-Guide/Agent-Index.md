@@ -10,7 +10,7 @@ section: agent-index
 >
 > **0.4.1 Changes**: `exporter/`, `n2c/`, `agent/` modules have been removed. New additions: `core.py` (parse_single/parse_batch), `renderers/`, `models/ir.py`.
 > **0.5.0 Changes**: `formatters/` directory has been emptied; all formatting functionality has migrated to the `renderers/` system.
-> **0.5.1.19 Changes**: New `--full-parse`, `--hex-view` CLI flags; new AnimDataModel/SoundAttenuation asset type parsers.
+> **0.5.1.31 Changes**: 31 issues fixed since v0.5.1.19: graph output chain fix, UEdGraph offset validation, Map Pin terminal types, CPF_* flags alignment, pak/ioStore binary format, and more.
 
 ## Quick Navigation by Task Type
 
