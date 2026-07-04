@@ -1027,6 +1027,15 @@ def _parse_package_core(
                 archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
                 memory_policy=policy,
             )
+
+            # 将 result.graphs 分配给蓝图 export（IR 构建器从 export.graphs 读取）
+            if result.graphs and result.export_map:
+                for export in result.export_map:
+                    name = str(getattr(export, "object_name", "") or "")
+                    if name.endswith("_C") and not name.startswith("Default__"):
+                        export.graphs = result.graphs
+                        break  # 只分配给主蓝图 export
+
             result.is_success = not result.errors
 
         except Exception as e:

@@ -58,7 +58,7 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
         for graph in export.graphs:
             for node in graph.nodes:
                 if node.node_class == "K2Node_EnhancedInputAction":
-                    data = node.node_data
+                    data = getattr(node, "node_data", None)
                     if isinstance(data, dict):
                         path = data.get("input_action_path", "?")
                         triggers = data.get("trigger_events", {})
