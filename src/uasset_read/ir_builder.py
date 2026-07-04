@@ -603,6 +603,17 @@ def _build_pin_ir(pin) -> PinIR:
         is_map_key = bool(getattr(pin_type_obj, "is_map_key", False))
         is_map_value = bool(getattr(pin_type_obj, "is_map_value", False))
 
+    # Map terminal 类型（key 的类型信息）
+    map_key_pin_category = ""
+    map_key_pin_subcategory = ""
+    map_key_pin_subcategory_object = None
+    if pin_type_obj is not None and getattr(pin_type_obj, "container_type", 0) == 3:
+        map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
+        map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
+        map_key_pin_subcategory_object = getattr(
+            pin_type_obj, "map_key_terminal_sub_category_object_name", None
+        )
+
     return PinIR(
         pin_name=_safe_str(getattr(pin, "pin_name", None)),
         pin_type=_safe_str(pin_type_obj),
@@ -619,6 +630,9 @@ def _build_pin_ir(pin) -> PinIR:
         is_uobject_wrapper=is_uobject_wrapper,
         is_map_key=is_map_key,
         is_map_value=is_map_value,
+        map_key_pin_category=map_key_pin_category,
+        map_key_pin_subcategory=map_key_pin_subcategory,
+        map_key_pin_subcategory_object=map_key_pin_subcategory_object,
     )
 
 

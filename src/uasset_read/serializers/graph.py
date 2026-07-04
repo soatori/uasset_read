@@ -198,9 +198,27 @@ def read_ed_graph_pin_type(
     # ContainerType (UE5 始终使用现代 uint8 格式)
     pin_type.container_type = archive.read_u8("PinType.ContainerType")
     if pin_type.container_type == 3:  # Map
-        archive.read_name(name_map, "PinType.TerminalCategory")
-        archive.read_name(name_map, "PinType.TerminalSubCategory")
-        archive.read_i32("PinType.TerminalSubCategoryObject")
+        # Map key 的 terminal 类型（FEdGraphTerminalType 序列化）
+        # 参照 UE EdGraphPin.cpp:218 — Ar << PinValueType
+        pin_type.map_key_terminal_category = archive.read_name(name_map, "PinType.TerminalCategory")
+        pin_type.map_key_terminal_sub_category = archive.read_name(name_map, "PinType.TerminalSubCategory")
+        terminal_sub_category_object = archive.read_i32("PinType.TerminalSubCategoryObject")
+        pin_type.map_key_terminal_sub_category_object = terminal_sub_category_object
+        if terminal_sub_category_object:
+            pkg_idx = PackageIndex(terminal_sub_category_object)
+            try:
+                if linker is not None:
+                    ref = linker.resolve_package_index(pkg_idx)
+                    if ref is not None:
+                        pin_type.map_key_terminal_sub_category_object_name = getattr(
+                            ref, "object_name", None
+                        )
+                elif import_map is not None and export_map is not None:
+                    pin_type.map_key_terminal_sub_category_object_name = _rcn(
+                        pkg_idx, import_map, export_map, linker
+                    )
+            except (KeyError, IndexError, AttributeError):
+                pin_type.map_key_terminal_sub_category_object_name = None
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
     pin_type.is_reference = archive.read_bool("PinType.bIsReference")

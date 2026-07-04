@@ -237,6 +237,14 @@ class JSONRenderer(IRenderer):
             d["is_map_key"] = True
         if pin.is_map_value:
             d["is_map_value"] = True
+        # Map terminal 类型
+        if pin.container_type == "Map":
+            if pin.map_key_pin_category:
+                d["map_key_pin_category"] = pin.map_key_pin_category
+            if pin.map_key_pin_subcategory:
+                d["map_key_pin_subcategory"] = pin.map_key_pin_subcategory
+            if pin.map_key_pin_subcategory_object is not None:
+                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object
         return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:

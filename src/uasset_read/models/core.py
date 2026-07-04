@@ -38,6 +38,11 @@ class FEdGraphPinType:
     is_const: bool = False
     is_uobject_wrapper: bool = False
     b_serialize_as_single_precision_float: bool = False
+    # Map terminal 类型（container_type == 3 时，key 的 terminal 信息）
+    map_key_terminal_category: str = ""
+    map_key_terminal_sub_category: str = ""
+    map_key_terminal_sub_category_object: Optional[int] = None  # FPackageIndex (int32)
+    map_key_terminal_sub_category_object_name: Optional[str] = None
 
 
 @dataclass

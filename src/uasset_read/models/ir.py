@@ -156,6 +156,10 @@ class PinIR:
     is_uobject_wrapper: bool = False
     is_map_key: bool = False
     is_map_value: bool = False
+    # Map terminal 类型字段（Map 容器专用）
+    map_key_pin_category: str = ""
+    map_key_pin_subcategory: str = ""
+    map_key_pin_subcategory_object: str | None = None
 
 
 @dataclass
