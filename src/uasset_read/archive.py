@@ -344,6 +344,16 @@ class FArchive:
             self._record_hex_view(key, "u8", value, start, start + 1)
         return value
 
+    def read_i8(self, key: str = "") -> int:
+        """读取 signed 8-bit integer（字节序无关）"""
+        import struct
+        start = self.tell()
+        data = self.read(1)
+        value = struct.unpack('<b', data)[0]  # 'b' = signed byte
+        if key:
+            self._record_hex_view(key, "i8", value, start, start + 1)
+        return value
+
     def read_bytes(self, n: int, key: str = "") -> bytes:
         """读取原始字节（无字节序交换）"""
         start = self.tell()
@@ -732,3 +742,74 @@ def _contains_binary_data(
         return False
     check_len = min(len(value), max_check_length)
     return value.count('\x00', 0, check_len) / check_len > threshold
+
+
+class ByteArchive(FArchive):
+    """
+    内存数据读取器，镜像 UE 的 FByteArchive。
+
+    继承 FArchive 所有 read_* 方法，将底层 I/O 从文件切换到内存缓冲区。
+    用于测试、流式解析、网络数据等场景。
+    """
+
+    def __init__(self, data: bytes | memoryview, tolerant: bool = False):
+        """
+        从内存数据创建 ByteArchive。
+
+        Args:
+            data: 二进制数据（bytes 或 memoryview）
+            tolerant: 容错模式开关
+        """
+        # 不调用 FArchive.__init__，避免打开文件
+        # 直接设置所有 FArchive 实例属性
+        self._path = ""
+        self._file: Optional[BinaryIO] = None
+        self._byte_swapping: bool = False
+        self._tolerant: bool = tolerant
+        self._mmap: Optional[mmap.mmap] = None
+        self._use_mmap: bool = False
+        self._mmap_warning: Optional[str] = None
+        self._logger = logging.getLogger(__name__)
+        self._name_map: Optional[list] = None
+        self._diagnostics: list[OffsetRangeDiagnostic] = []
+        self._hex_view_enabled: bool = False
+        self._hex_view_entries: list = []
+        self._hex_view_context: str = ""
+        # ByteArchive 专有属性
+        self._buffer: memoryview | bytes = data
+        self._file_size: int = len(data)
+        self._pos: int = 0
+
+    def read(self, size: int) -> bytes:
+        """从内存缓冲区读取指定字节数。"""
+        current_pos = self._pos
+        remaining = self._file_size - current_pos
+        if size > remaining:
+            self._record_diagnostic(
+                module="byte_archive", field="read",
+                source="read", read_size=size,
+                current_pos=current_pos, file_size=self._file_size,
+                error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
+            )
+            raise ParseError(
+                f"Cannot read {size} bytes at position {current_pos}, "
+                f"only {remaining} bytes remaining"
+            )
+        data = bytes(self._buffer[current_pos:current_pos + size])
+        self._pos = current_pos + size
+        return data
+
+    def tell(self) -> int:
+        """返回当前读取位置。"""
+        return self._pos
+
+    def seek(self, pos: int) -> None:
+        """定位到指定位置（带边界验证）。"""
+        self.validate_offset(pos, "seek")
+        self._pos = pos
+
+    def close(self) -> None:
+        """释放缓冲区引用。"""
+        self._buffer = b""
+        self._pos = 0
+        self._file_size = 0

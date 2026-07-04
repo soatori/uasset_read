@@ -1,11 +1,32 @@
 # 变更日志
 
-## [0.5.1.20] — 2026-06-28
+## [0.5.2-dev] — 2026-06-28
 
-### 修复
-- 测试文件使用 sample_root fixture 替代硬编码路径，修复 CI 测试失败
-- macOS RSS 监控支持：添加 ps 命令获取进程内存
-- batch_worker 子进程继承 PYTHONPATH，确保子进程能导入 uasset_read
+### 新增
+
+- **动画蓝图全面支持**
+  - 移除 `AnimBlueprintGeneratedClass` 跳过标记
+  - 新增 `AnimBlueprintIR` 数据模型
+  - 提取 BakedStateMachines（烘焙后的状态机）
+  - 提取 AnimNotifies（动画通知）
+  - 提取 SyncGroupNames（同步组）
+  - JSON/Markdown 渲染器支持动画字段输出
+
+- **AnimSequence 深度元数据提取**
+  - 提取 AdditiveAnimType、Interpolation、RateScale 等
+  - 提取 FloatCurveNames（浮点曲线名称）
+  - 检测 CompressedData 存在性
+
+- **AnimMontage 全新 Handler**
+  - 提取 BlendModeIn/Out、BlendIn/Out 参数
+  - 提取 SyncGroup、SyncSlotIndex
+  - 提取 AnimNotifies
+
+- **动画子图类型识别**
+  - UAnimationStateMachineGraph → state_machine
+  - UAnimationStateGraph → state
+  - UAnimationTransitionGraph → transition
+  - UAnimationConduitGraph → conduit
 
 ## [0.5.1.19] — 2026-06-28
 

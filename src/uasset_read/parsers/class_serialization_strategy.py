@@ -40,6 +40,7 @@ _TAGGED_PROPERTIES_CLASSES = frozenset({
     "EdGraph",
     "EdGraphNode",
     "K2Node",
+    "AnimBlueprintGeneratedClass",
 })
 
 # Opaque class payload — 有专用 Serialize() 但我们不实现

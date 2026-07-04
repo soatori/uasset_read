@@ -22,6 +22,15 @@ from uasset_read.constants import (
     FANIM_OBJECT_VERSION_GUID,
     FPHYSICS_OBJECT_VERSION_GUID,
     FRENDERING_OBJECT_VERSION_GUID,
+    FSEQUENCER_OBJECT_VERSION_GUID,
+    FANIMPHYS_OBJECT_VERSION_GUID,
+    FDESTRUCTION_OBJECT_VERSION_GUID,
+    FEXTERNAL_PHYSICS_OBJECT_VERSION_GUID,
+    FENTERPRISE_OBJECT_VERSION_GUID,
+    FVR_OBJECT_VERSION_GUID,
+    FMOBILE_OBJECT_VERSION_GUID,
+    FCINECAMERA_OBJECT_VERSION_GUID,
+    FNIAGARA_OBJECT_VERSION_GUID,
     UE5_VERSION_MIN,
 )
 
@@ -33,7 +42,10 @@ from uasset_read.constants import (
 class EUEVersion(IntEnum):
     """关键 UE 版本阈值，用于 is_at_least() 比较。
 
-    值对应 file_version_ue5（PackageFileSummary.file_version_ue5）。
+    值对应 EUnrealEngineObjectUE5Version 枚举中的 CustomVersion 阈值
+    （ObjectVersion.cs），而非 file_version_ue5 的全部可能值。
+    file_version_ue5 在包头中存储的是该包引入的最高 CustomVersion 枚举值，
+    与本枚举的语义不同。
     UE4 版本使用 file_version_ue4（通常 516-520）。
     """
     # UE4 版本（file_version_ue4 范围）
@@ -43,15 +55,16 @@ class EUEVersion(IntEnum):
     UE4_26 = 519
     UE4_27 = 520
 
-    # UE5 版本（file_version_ue5 范围）
-    UE5_0 = 1000     # UE5 initial
-    UE5_1 = 1001     # UE5_ADD_SOFTOBJECTPATH_LIST
-    UE5_2 = 1005     # UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID
-    UE5_3 = 1008     # UE5_ADD_SOFTOBJECTPATH_LIST fully
-    UE5_4 = 1010     # UE5_SCRIPT_SERIALIZATION_OFFSET
-    UE5_5 = 1012     # UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME
-    UE5_6 = 1015     # UE5_VERSE_CELLS
-    UE5_7 = 1016     # UE5_PACKAGE_SAVED_HASH
+    # UE5 版本（CustomVersion 阈值，对应 EUnrealEngineObjectUE5Version）
+    UE5_0 = 1000     # INITIAL_VERSION
+    UE5_1 = 1001     # NAMES_REFERENCED_FROM_EXPORT_DATA
+    UE5_2 = 1005     # REMOVE_OBJECT_EXPORT_PACKAGE_GUID
+    UE5_3 = 1008     # ADD_SOFTOBJECTPATH_LIST
+    UE5_4 = 1010     # SCRIPT_SERIALIZATION_OFFSET
+    UE5_5 = 1012     # PROPERTY_TAG_COMPLETE_TYPE_NAME
+    UE5_6 = 1015     # VERSE_CELLS
+    UE5_7 = 1016     # PACKAGE_SAVED_HASH
+    UE5_8 = 1018     # IMPORT_TYPE_HIERARCHIES (= AUTOMATIC_VERSION)
 
 
 # ============================================================================
@@ -75,6 +88,15 @@ STREAM_EDITOR = VersionStream(FEDITOR_OBJECT_VERSION_GUID, "editor")
 STREAM_ANIM = VersionStream(FANIM_OBJECT_VERSION_GUID, "anim")
 STREAM_PHYSICS = VersionStream(FPHYSICS_OBJECT_VERSION_GUID, "physics")
 STREAM_RENDERING = VersionStream(FRENDERING_OBJECT_VERSION_GUID, "rendering")
+STREAM_SEQUENCER = VersionStream(FSEQUENCER_OBJECT_VERSION_GUID, "sequencer")
+STREAM_ANIMPHYS = VersionStream(FANIMPHYS_OBJECT_VERSION_GUID, "animphys")
+STREAM_DESTRUCTION = VersionStream(FDESTRUCTION_OBJECT_VERSION_GUID, "destruction")
+STREAM_EXTERNAL_PHYSICS = VersionStream(FEXTERNAL_PHYSICS_OBJECT_VERSION_GUID, "external_physics")
+STREAM_ENTERPRISE = VersionStream(FENTERPRISE_OBJECT_VERSION_GUID, "enterprise")
+STREAM_VR = VersionStream(FVR_OBJECT_VERSION_GUID, "vr")
+STREAM_MOBILE = VersionStream(FMOBILE_OBJECT_VERSION_GUID, "mobile")
+STREAM_CINECAMERA = VersionStream(FCINECAMERA_OBJECT_VERSION_GUID, "cinecamera")
+STREAM_NIAGARA = VersionStream(FNIAGARA_OBJECT_VERSION_GUID, "niagara")
 
 STREAM_MAP: Dict[str, VersionStream] = {
     "framework": STREAM_FRAMEWORK,
@@ -87,6 +109,15 @@ STREAM_MAP: Dict[str, VersionStream] = {
     "anim": STREAM_ANIM,
     "physics": STREAM_PHYSICS,
     "rendering": STREAM_RENDERING,
+    "sequencer": STREAM_SEQUENCER,
+    "animphys": STREAM_ANIMPHYS,
+    "destruction": STREAM_DESTRUCTION,
+    "external_physics": STREAM_EXTERNAL_PHYSICS,
+    "enterprise": STREAM_ENTERPRISE,
+    "vr": STREAM_VR,
+    "mobile": STREAM_MOBILE,
+    "cinecamera": STREAM_CINECAMERA,
+    "niagara": STREAM_NIAGARA,
 }
 
 

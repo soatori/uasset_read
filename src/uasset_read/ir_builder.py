@@ -328,6 +328,9 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         ),
         ue_export_raw=raw,
         diagnostics=_build_export_diagnostics(export),
+        anim_blueprint=getattr(export, "custom_data", {}).get("anim_blueprint"),
+        anim_sequence=getattr(export, "custom_data", {}).get("anim_sequence"),
+        anim_montage=getattr(export, "custom_data", {}).get("anim_montage"),
     )
 
 
@@ -395,6 +398,8 @@ def _build_graph_ir(graph) -> GraphIR:
     if graph_class:
         if "StateMachine" in graph_class:
             graph_type = "state_machine"
+        elif "Conduit" in graph_class:
+            graph_type = "conduit"
         elif "State" in graph_class:
             graph_type = "state"
         elif "Transition" in graph_class:
