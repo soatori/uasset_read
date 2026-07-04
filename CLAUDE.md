@@ -25,7 +25,7 @@ python run.py --batch-dir path/to/dir/           # 批量导出
 # 测试
 python -m pytest tests/ -v                        # 运行所有测试
 python -m pytest tests/ -v -m "not slow"          # 运行非慢速测试
-python -m pytest tests/test_archive_quality.py -v # 运行单个测试文件
+python -m pytest tests/ -v # 运行所有测试
 python -m pytest tests/ -v --cov=uasset_read     # 覆盖率
 
 # 质量
