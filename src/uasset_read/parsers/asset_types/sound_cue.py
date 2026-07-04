@@ -13,7 +13,10 @@
 from __future__ import annotations
 
 import logging
+import struct
 from typing import Any, Dict, List
+
+from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +63,7 @@ def parse_sound_cue(archive: Any, name_map: List[str]) -> Dict[str, Any]:
             nodes.append(node_ref)
         result["sound_cue_nodes"] = nodes
 
-    except Exception as e:
+    except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("SoundCue handler 解析失败: %s", e)
         result["parse_status"] = "failed"
         result["error"] = str(e)

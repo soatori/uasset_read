@@ -5,8 +5,7 @@ Pak 文件数据结构
 """
 import struct
 from dataclasses import dataclass, field
-from io import BytesIO
-from typing import Any, BinaryIO, Dict, Optional
+from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MAX_FSTRING_LENGTH
@@ -16,9 +15,8 @@ from uasset_read.pak.constants import (
     PakFileVersion,
     PAK_INFO_SIZES,
     Flag_Encrypted,
-    Flag_Deleted,
 )
-from uasset_read.pak.game_versions import detect_game_from_magic, get_game_info, EGame
+from uasset_read.pak.game_versions import detect_game_from_magic, EGame
 
 
 # ============================================================================
@@ -76,6 +74,10 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
                 f"UTF-16 string length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}"
             )
         data = stream.read(utf16_len)
+        if len(data) < utf16_len:
+            raise ParseError(
+                f"UTF-16 string truncated: 读取 {len(data)} < 预期 {utf16_len} bytes"
+            )
         stream.read(2)  # null terminator (2 bytes for UTF-16)
         return data.decode('utf-16-le', errors='replace').rstrip('\x00')
     else:
@@ -85,6 +87,10 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
                 f"ANSI string length {length} exceeds maximum {MAX_FSTRING_LENGTH}"
             )
         data = stream.read(length)
+        if len(data) < length:
+            raise ParseError(
+                f"ANSI string truncated: 读取 {len(data)} < 预期 {length} bytes"
+            )
         stream.read(1)  # null terminator
         return data.decode('ascii', errors='replace').rstrip('\x00')
 
@@ -133,45 +139,53 @@ class FPakEntry:
     def deserialize_legacy(cls, stream: BinaryIO, version: int) -> "FPakEntry":
         """从流中反序列化完整 FPakEntry（version < 10 的旧格式）。
 
-        序列化顺序（UE FPakEntry::Serialize）：
+        序列化顺序（UE FPakEntry::Serialize, IPlatformFilePak.h:521-570）：
         - Offset (int64)
+        - Size (int64) — 压缩后大小
         - UncompressedSize (int64)
-        - Size (int64)
         - CompressionMethodIndex (uint32)
-        - [Timestamp (int64) — version < 2 only, removed in v2]
-        - CompressionBlockCount (uint16 if v<8 else uint32)
-        - CompressionBlockSize (uint32)
-        - CompressionBlocks [array]
-        - Hash [20 bytes]
+        - [Timestamp (int64) — version <= 1 only]
+        - Hash [20 bytes] — 始终存在
+        - [version >= 3 (CompressionEncryption)]:
+          - CompressionBlocks [TArray: int32 count + N * (int64, int64)] — 仅 compression_method_index != 0
+          - Flags (uint8)
+          - CompressionBlockSize (uint32)
         """
         entry = cls()
 
         entry.offset = struct.unpack('<q', stream.read(8))[0]
-        entry.uncompressed_size = struct.unpack('<q', stream.read(8))[0]
         entry.size = struct.unpack('<q', stream.read(8))[0]
+        entry.uncompressed_size = struct.unpack('<q', stream.read(8))[0]
         entry.compression_method_index = struct.unpack('<I', stream.read(4))[0]
 
-        # Timestamp removed in version 2 (PakFile_Version_NoTimestamps)
+        # Timestamp removed in version 2 (UE: Version <= PakFile_Version_Initial)
         if version < PakFileVersion.NoTimestamps:
             stream.read(8)
 
-        if version < PakFileVersion.FNameBasedCompressionMethod:
-            entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
-        else:
-            entry.compression_block_count = struct.unpack('<I', stream.read(4))[0]
-
-        entry.compression_block_size = struct.unpack('<I', stream.read(4))[0]
-
-        # Compression blocks
-        for _ in range(entry.compression_block_count):
-            block_start = struct.unpack('<q', stream.read(8))[0]
-            block_end = struct.unpack('<q', stream.read(8))[0]
-            entry.compression_blocks.append(
-                FPakCompressedBlock(compressed_start=block_start, compressed_end=block_end)
-            )
-
-        # SHA1 hash
+        # Hash — UE 在 CompressionBlocks 之前写入 Hash
         entry.hash = stream.read(20)
+
+        # [version >= CompressionEncryption (3)]: CompressionBlocks, Flags, CompressionBlockSize
+        if version >= PakFileVersion.CompressionEncryption:
+            if entry.compression_method_index != 0:
+                # CompressionBlocks: int32 count + N * (int64 compressed_start, int64 compressed_end)
+                if version < PakFileVersion.FNameBasedCompressionMethod:
+                    entry.compression_block_count = struct.unpack('<H', stream.read(2))[0]
+                else:
+                    entry.compression_block_count = struct.unpack('<I', stream.read(4))[0]
+
+                for _ in range(entry.compression_block_count):
+                    block_start = struct.unpack('<q', stream.read(8))[0]
+                    block_end = struct.unpack('<q', stream.read(8))[0]
+                    entry.compression_blocks.append(
+                        FPakCompressedBlock(compressed_start=block_start, compressed_end=block_end)
+                    )
+
+            # Flags — uint8 (1 byte)
+            entry.flags = struct.unpack('<B', stream.read(1))[0]
+
+            # CompressionBlockSize — uint32
+            entry.compression_block_size = struct.unpack('<I', stream.read(4))[0]
 
         entry.is_compressed = entry.compression_method_index > 0
         return entry
@@ -179,6 +193,9 @@ class FPakEntry:
     @classmethod
     def decode_bitfield(cls, data: bytes, offset: int, pak_info: "FPakInfo") -> tuple["FPakEntry", int]:
         """解码 v10+ bitfield 编码的 FPakEntry。
+
+        UE 读取顺序：
+        bitfield → CompressionBlockSize(if 0x3F) → Offset → UncompressedSize → Size
 
         Bitfield 布局（UE PakFile.cpp DecodePakEntry）：
         - Bit 31: Offset fits in 32-bit
@@ -213,7 +230,14 @@ class FPakEntry:
         entry.compression_block_count = (bitfield >> 6) & 0xFFFF
         block_size_index = bitfield & 0x3F
 
-        # Read actual values for fields that don't fit in 32-bit
+        # UE 顺序: CompressionBlockSize 在 Offset 之前
+        if block_size_index == 0x3F:
+            entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
+            offset += 4
+        else:
+            entry.compression_block_size = block_size_index << 11
+
+        # Offset
         if offset_fits_32:
             entry.offset = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -221,7 +245,7 @@ class FPakEntry:
             entry.offset = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        # Read UncompressedSize
+        # UncompressedSize
         if uncompressed_size_fits_32:
             entry.uncompressed_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -229,10 +253,8 @@ class FPakEntry:
             entry.uncompressed_size = struct.unpack_from('<q', data, offset)[0]
             offset += 8
 
-        # Size defaults to UncompressedSize
+        # Size (compressed)
         entry.size = entry.uncompressed_size
-
-        # Read CompressedSize only if entry is compressed
         if entry.compression_method_index > 0:
             if size_fits_32:
                 entry.size = struct.unpack_from('<I', data, offset)[0]
@@ -240,15 +262,6 @@ class FPakEntry:
             else:
                 entry.size = struct.unpack_from('<q', data, offset)[0]
                 offset += 8
-
-        # Block size: 0x3F means read from stream
-        if block_size_index == 0x3F:
-            entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
-            offset += 4
-        else:
-            # Block size index maps to actual size
-            # UE 源码: (bitfield & 0x3f) << 11 = index * 2048
-            entry.compression_block_size = block_size_index << 11
 
         entry.is_compressed = entry.compression_method_index > 0
         entry.flags = Flag_Encrypted if entry.is_encrypted else 0
@@ -293,7 +306,12 @@ class FPakEntry:
 
         # 压缩块大小索引 (6 bits)
         # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
-        if self.compression_block_size > 0 and self.compression_block_size % 2048 == 0:
+        # 压缩条目要求 block_size > 0，否则编解码不对称
+        if self.compression_method_index > 0 and self.compression_block_size == 0:
+            raise ValueError(
+                "compression_block_size must be > 0 for compressed entries"
+            )
+        elif self.compression_block_size % 2048 == 0:
             block_size_index = self.compression_block_size >> 11
             if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"
                 bitfield |= block_size_index
@@ -303,6 +321,11 @@ class FPakEntry:
             bitfield |= 0x3F
 
         result.extend(struct.pack('<I', bitfield))
+
+        # UE 顺序: CompressionBlockSize 在 Offset 之前
+        # 仅当 bitfield 索引为 0x3F 且 block_size > 0 时写入流数据
+        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
+            result.extend(struct.pack('<I', self.compression_block_size))
 
         # 写入 Offset
         if offset_fits_32:
@@ -322,10 +345,6 @@ class FPakEntry:
                 result.extend(struct.pack('<I', self.size))
             else:
                 result.extend(struct.pack('<q', self.size))
-
-        # 写入 BlockSize（如果使用 0x3F 标记）
-        if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
-            result.extend(struct.pack('<I', self.compression_block_size))
 
         self.serialized_size = len(result)
         return bytes(result)
@@ -393,7 +412,7 @@ class FPakInfo:
             (9,),           # 222 bytes
             (8,),           # 221 bytes (same size as v10+, but different structure)
             (7,),           # 61 bytes
-            (6, 5, 4, 3, 2, 1),  # 44 bytes
+            (6, 5, 4, 3, 2, 1),  # 45 bytes
         ]
 
         for group in version_groups:
@@ -402,9 +421,12 @@ class FPakInfo:
             if pos < 0:
                 continue
 
-            # For v7+, the magic is at offset 17 (after EncryptionKeyGuid[16] + bEncryptedIndex[1])
-            # For v1-6, magic is at offset 0
-            magic_offset_in_trailer = 17 if group[0] >= PakFileVersion.EncryptionKeyGuid else 0
+            # bEncryptedIndex is always serialized (1 byte), unconditionally per UE source.
+            # For v7+, EncryptionKeyGuid(16) is prepended before bEncryptedIndex.
+            # Magic position: v7+ at offset 17, v1-6 at offset 1
+            magic_offset_in_trailer = (
+                17 if group[0] >= PakFileVersion.EncryptionKeyGuid else 1
+            )
 
             stream.seek(pos + magic_offset_in_trailer)
             raw = stream.read(4)
@@ -444,10 +466,12 @@ class FPakInfo:
             info.version = version
             info.detected_game = detected_game
 
-            # New fields (version >= 7): prepended before Magic
+            # EncryptionKeyGuid (version >= 7 only, prepended before bEncryptedIndex)
             if version >= PakFileVersion.EncryptionKeyGuid:
                 info.encryption_key_guid = stream.read(16)
-                info.encrypted_index = struct.unpack('<B', stream.read(1))[0] != 0
+
+            # bEncryptedIndex: always serialized, unconditionally (UE IPlatformFilePak.h)
+            info.encrypted_index = struct.unpack('<B', stream.read(1))[0] != 0
 
             # Core fields (always present)
             info.magic = struct.unpack('<I', stream.read(4))[0]
@@ -487,37 +511,3 @@ class FPakDirectoryEntry:
     path: str                    # 目录路径
     filename: str                # 文件名
     entry: FPakEntry             # 实际的条目数据
-
-def decode_encoded_pak_entry(data: bytes, is_enabled: bool) -> Optional[Dict[str, Any]]:
-    """解码 v10+ 编码 Pak 条目
-    
-    等价实现 FPakEntry 的编码条目解码逻辑
-    
-    Args:
-        data: 编码的条目数据
-        is_enabled: 是否启用编码
-        
-    Returns:
-        解码后的条目信息字典，或 None
-    """
-    if not is_enabled or len(data) < 4:
-        return None
-    
-    value = struct.unpack('<I', data[:4])[0]
-    
-    # 解析位域
-    compression_method_index = value & 0x3F  # 6 位
-    is_encrypted = bool((value >> 6) & 1)  # 1 位
-    is_compressed = bool((value >> 7) & 1)  # 1 位
-    compression_block_count = (value >> 8) & 0x3FF  # 10 位
-    
-    # 检查 64 位大小标志
-    has_64bit_size = bool((value >> 22) & 1)
-    
-    return {
-        'compression_method_index': compression_method_index,
-        'is_encrypted': is_encrypted,
-        'is_compressed': is_compressed,
-        'compression_block_count': compression_block_count,
-        'has_64bit_size': has_64bit_size,
-    }

@@ -71,6 +71,7 @@ def create_parser() -> argparse.ArgumentParser:
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument('--text', action='store_true', help='Output human-readable text summary')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -90,12 +91,18 @@ def create_parser() -> argparse.ArgumentParser:
                         help='Force full parse for large blueprints (skip lightweight mode)')
     parser.add_argument('--hex-view', action='store_true', default=False,
                         help='Enable HexView byte offset tracking (debug)')
+    parser.add_argument('--output-level', choices=['standard', 'debug'], default='standard',
+                        help='Output level: standard (default, filters UI properties) or debug (full output)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
     parser.add_argument('--batch', action='store_true', help='Enable batch mode')
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
+    parser.add_argument('--diff', metavar='FILE2', nargs='?', const=True, default=None,
+                        help='Diff FILE against FILE2 (text summary comparison)')
+    parser.add_argument('--diff-context', metavar='N', type=int, default=3,
+                        help='Number of context lines around changes in diff (default: 3)')
 
     return parser
 
@@ -104,6 +111,8 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
+    if args.text:
+        return "text"
     if args.json:
         return "json"
     return "json"
@@ -229,6 +238,30 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
+    # --diff 模式
+    if args.diff is not None:
+        from uasset_read.core import diff_single
+        if args.diff is True:
+            print("错误: --diff 需要第二个文件路径", file=sys.stderr)
+            sys.exit(EXIT_ARGUMENT_ERROR)
+        file2 = Path(args.diff)
+        if not file2.is_file():
+            print(f"错误: Diff 文件不存在: {args.diff}", file=sys.stderr)
+            sys.exit(EXIT_FILE_NOT_FOUND)
+        try:
+            diff_output = diff_single(
+                str(file_path),
+                str(file2),
+                tolerant=tolerant,
+                context_lines=args.diff_context,
+            )
+        except Exception as e:
+            _logger.debug("Diff failed (full): %s", e, exc_info=True)
+            print(f"Error: Diff failed: {_sanitize_error_message(e)}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+        _write_output(diff_output, args.output)
+        return
+
     try:
         output_str = parse_single(
             str(file_path),
@@ -243,6 +276,7 @@ def main():
             game=args.game,
             force_full_parse=args.full_parse,
             hex_view=args.hex_view,
+            output_level=args.output_level,
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)

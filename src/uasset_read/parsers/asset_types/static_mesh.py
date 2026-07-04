@@ -6,16 +6,6 @@
 """
 from __future__ import annotations
 
-from typing import Any
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
-
-def parse_static_mesh(archive: Any, name_map: list[str]) -> dict[str, Any]:
-    """提取 StaticMesh 原始字节样本（opaque partial metadata）。"""
-    start = archive.tell()
-    remaining = max(0, archive.total_size() - start)
-    sample = archive.read(min(remaining, 256))
-    return {
-        "raw_offset": start,
-        "sample_size": len(sample),
-        "parse_status": "partial_metadata",
-    }
+parse_static_mesh = make_opaque_stub("StaticMesh")

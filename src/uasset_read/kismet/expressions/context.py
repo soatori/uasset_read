@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.tokens import EExprToken
 

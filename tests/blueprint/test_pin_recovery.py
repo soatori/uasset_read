@@ -30,15 +30,15 @@ class _TrackingArchive:
         """手动推进位置 n 字节。"""
         self._pos += n
 
-    def read_i32(self):
+    def read_i32(self, key=""):
         self._pos += 4
         return 0
 
-    def read_u8(self):
+    def read_u8(self, key=""):
         self._pos += 1
         return 1  # EGPD_Output
 
-    def read_bytes(self, n):
+    def read_bytes(self, n, key=""):
         self._pos += n
         return b'\x00' * n
 
@@ -48,7 +48,7 @@ class _TrackingArchive:
         self._pos += n
         return b'\x00' * n
 
-    def read_name(self, name_map):
+    def read_name(self, name_map, key=""):
         self._pos += 8  # u32 index + u32 number
         return name_map[0] if name_map else "TestPin"
 
@@ -233,7 +233,7 @@ class TestFTextSafetyNet:
         def exception_then_normal(archive, tolerant=True):
             if not hasattr(exception_then_normal, '_called'):
                 exception_then_normal._called = True
-                raise Exception("FText parse error")
+                raise struct.error("FText parse error")
             archive.advance(10)
             return ("DefaultText", 0, -1, 10)
 
@@ -408,7 +408,7 @@ class TestLinkedToRecovery:
         mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 _try_recover_to_subpins 返回值被正确使用。"""
-        mock_pin_array.side_effect = Exception("LinkedTo parse error")
+        mock_pin_array.side_effect = struct.error("LinkedTo parse error")
         mock_recover.return_value = {
             "recovered_pos": 100,
             "count": 2,
@@ -456,7 +456,7 @@ class TestLinkedToRecovery:
         mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证失败日志去重包含 pin_name。"""
-        mock_pin_array.side_effect = Exception("test error")
+        mock_pin_array.side_effect = struct.error("test error")
         mock_recover.return_value = None
 
         archive = _TrackingArchive()
@@ -502,7 +502,7 @@ class TestLinkedToRecovery:
         mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 _try_recover_to_subpins 返回 None 时不输出 info 日志。"""
-        mock_pin_array.side_effect = Exception("LinkedTo parse error")
+        mock_pin_array.side_effect = struct.error("LinkedTo parse error")
         mock_recover.return_value = None  # 恢复失败
 
         # 提供干净的线程局部状态，确保 logger.error 不被去重跳过

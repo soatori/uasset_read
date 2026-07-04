@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 @dataclass
@@ -278,24 +278,42 @@ class MacroExpander:
         """在资产中查找宏图。
 
         按优先级查找：
-        1. 当前资产的 graphs 列表（按 GUID 匹配）
-        2. 当前资产的 graphs 列表（按名称匹配）
-        3. resolved_parent_assets 中的 graphs（跨蓝图引用）
+        1. 当前资产的 graphs 列表（按 GUID 精确匹配，跳过空 GUID）
+        2. 当前资产的 graphs 列表（按名称精确匹配，跳过空名称）
+        3. 当前资产的 graphs 列表（按名称大小写不敏感匹配 — GUID fallback）
+        4. resolved_parent_assets 中的 graphs（跨蓝图引用）
         """
-        graph_guid = macro_ref.get("graph_guid")
-        graph_name = macro_ref.get("graph_name")
+        graph_guid = macro_ref.get("graph_guid") or ""
+        graph_name = macro_ref.get("graph_name") or ""
 
-        # 1. 在当前资产的所有 Graph 中查找
-        for graph in self.asset_context.get("graphs", []):
-            if graph.get("guid") == graph_guid:
-                return graph
-            if graph.get("name") == graph_name:
-                return graph
+        all_graphs = self.asset_context.get("graphs", [])
 
-        # 2. 在 resolved_parent_assets 中查找（跨蓝图引用）
+        # 1. GUID 精确匹配（跳过空/None GUID，避免误匹配）
+        if graph_guid:
+            for graph in all_graphs:
+                if graph.get("guid") == graph_guid:
+                    return graph
+
+        # 2. 名称精确匹配（跳过空名称）
+        if graph_name:
+            for graph in all_graphs:
+                if graph.get("name") == graph_name:
+                    return graph
+
+        # 3. 名称大小写不敏感匹配（GUID 失败时的 fallback）
+        if graph_name:
+            name_lower = graph_name.lower()
+            for graph in all_graphs:
+                gname = graph.get("name") or ""
+                if gname.lower() == name_lower:
+                    return graph
+
+        # 4. resolved_parent_assets 中查找（跨蓝图引用）
         for parent_asset in self.asset_context.get("resolved_parent_assets", []):
             for graph in parent_asset.get("graphs", []):
-                if graph.get("guid") == graph_guid:
+                if graph_guid and graph.get("guid") == graph_guid:
+                    return graph
+                if graph_name and graph.get("name") == graph_name:
                     return graph
 
         return None
@@ -365,8 +383,11 @@ class MacroExpander:
             for pin in tunnel.get("pins", []):
                 if pin.get("parent_pin") is None:
                     direction = pin.get("direction", "")
-                    # 方向取反
-                    instance_dir = "EGPD_Input" if direction == "EGPD_Output" else "EGPD_Output"
+                    # 方向取反（兼容 int 和 str）
+                    if self._is_output_direction(direction):
+                        instance_dir = "EGPD_Input"
+                    else:
+                        instance_dir = "EGPD_Output"
                     mapping[pin["pin_name"]] = {
                         "instance_direction": instance_dir,
                         "pin_type": pin.get("pin_type", {}),
@@ -374,6 +395,16 @@ class MacroExpander:
                         "tunnel_type": "entry" if tunnel in entry_tunnels else "exit",
                     }
         return mapping
+
+    @staticmethod
+    def _is_output_direction(direction) -> bool:
+        """判断 direction 是否为 output（兼容 int 1 和 str "EGPD_Output"）。"""
+        return direction == 1 or direction == "EGPD_Output"
+
+    @staticmethod
+    def _is_input_direction(direction) -> bool:
+        """判断 direction 是否为 input（兼容 int 0 和 str "EGPD_Input"）。"""
+        return direction == 0 or direction == "EGPD_Input"
 
     def _build_internal_flows(
         self,
@@ -415,7 +446,7 @@ class MacroExpander:
             if tunnel_guid:
                 exit_node_guids.add(tunnel_guid)
             for pin in tunnel.get("pins", []):
-                if pin.get("direction") == 0:  # input pin
+                if self._is_input_direction(pin.get("direction")):  # input pin
                     pid = pin.get("pin_id", "")
                     if pid:
                         exit_pin_ids.add(pid)
@@ -425,7 +456,7 @@ class MacroExpander:
         for entry in entry_tunnels:
             # 找 entry tunnel 的 exec output pin (direction=1)
             for pin in entry.get("pins", []):
-                if pin.get("direction") != 1:
+                if not self._is_output_direction(pin.get("direction")):
                     continue
                 pt = pin.get("pin_type", {})
                 if pt.get("pin_category") != "exec":
@@ -465,7 +496,7 @@ class MacroExpander:
                     flow_nodes.append(first_node)
                     # 收集该节点的 exec output pin 的 linked_to_raw
                     for out_pin in first_node.get("pins", []):
-                        if out_pin.get("direction") != 1:
+                        if not self._is_output_direction(out_pin.get("direction")):
                             continue
                         out_pt = out_pin.get("pin_type", {})
                         if out_pt.get("pin_category") != "exec":
@@ -500,7 +531,7 @@ class MacroExpander:
 
                         # 收集该节点的 exec output pin 的 linked_to_raw
                         for out_pin in node.get("pins", []):
-                            if out_pin.get("direction") != 1:
+                            if not self._is_output_direction(out_pin.get("direction")):
                                 continue
                             out_pt = out_pin.get("pin_type", {})
                             if out_pt.get("pin_category") != "exec":

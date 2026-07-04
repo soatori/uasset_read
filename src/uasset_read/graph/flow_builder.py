@@ -15,10 +15,6 @@ from uasset_read.graph.macro_expander import (
     MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
 )
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
-from uasset_read.models.node_types import (
-    K2NodeCallFunction, K2NodeEvent, K2NodeKnot,
-    EdGraphNodeComment, K2NodeEnhancedInputAction
-)
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +141,16 @@ def format_pin_ref(
         }
 
 
+def _normalize_pin_id(pin_id: str) -> str:
+    """归一化 pin_id 为大写 hex（移除 dash，转大写）。
+
+    所有 pin ID 键统一使用此格式，确保查找一致。
+    """
+    if not pin_id:
+        return pin_id
+    return pin_id.replace("-", "").upper()
+
+
 def _pin_ref_guid(ref: object) -> str | None:
     """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
 
@@ -221,15 +227,20 @@ def _format_blueprint_pin_dto(
 def _build_graph_indexes(
     graph: UEdGraph,
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
-    """构建节点和 Pin 查找表。"""
+    """构建节点和 Pin 查找表。
+
+    Pin key 统一归一化为大写 hex（与 _pin_ref_guid 输出格式对齐），
+    避免大小写不一致导致的连接查找失败。
+    """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
     pin_object_lookup: Dict[str, UEdGraphPin] = {}
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
-            pin_object_lookup[pin.pin_id] = pin
+            normalized_key = _normalize_pin_id(pin.pin_id)
+            pin_lookup[normalized_key] = (node.node_guid, pin.pin_name)
+            pin_object_lookup[normalized_key] = pin
     return pin_lookup, node_lookup, pin_object_lookup
 
 
@@ -362,13 +373,13 @@ def _iter_normalized_edges(
 
                     if pin.direction == 1 and other_pin.direction == 0:
                         edge = _emit(
-                            node, pin.pin_name, pin.pin_id, pin,
+                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                             other_node, other_pin_name, other_pin_id, other_pin,
                         )
                     elif pin.direction == 0 and other_pin.direction == 1:
                         edge = _emit(
                             other_node, other_pin_name, other_pin_id, other_pin,
-                            node, pin.pin_name, pin.pin_id, pin,
+                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                         )
                     else:
                         edge = None
@@ -394,13 +405,13 @@ def _iter_normalized_edges(
                     None,
                 )
                 source_pin_id = (
-                    source_pin_obj.pin_id
+                    _normalize_pin_id(source_pin_obj.pin_id)
                     if source_pin_obj is not None
                     else f"{source_node.node_guid}:{source_pin_name}"
                 )
                 edge = _emit(
                     source_node, source_pin_name, source_pin_id, source_pin_obj,
-                    node, pin.pin_name, pin.pin_id, pin,
+                    node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
                 )
                 if edge:
                     yield edge
@@ -529,8 +540,8 @@ def _extract_call_function_parameters(
                     data_source = _trace_data_source(pin, pin_lookup, node_lookup, node_name_lookup)
                     if data_source:
                         param["data_source"] = data_source
-                except Exception:
-                    pass
+                except (KeyError, AttributeError, ValueError) as e:
+                    logger.debug("追踪数据源失败: %s", e, exc_info=True)
 
             input_params.append(param)
         else:  # Output
@@ -647,8 +658,16 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
             return node.class_name
 
         # member_name can be a path like "/Game/.../BP_X_37120"
+        # or "/Game/Blueprints/BP_Test.ReceiveBeginPlay"
         if '/' in mn:
-            return f"Event.{mn.split('/')[-1]}"
+            last_segment = mn.split('/')[-1]
+            # 对象名.成员名 格式：取成员名部分
+            if '.' in last_segment:
+                last_segment = last_segment.split('.')[-1]
+            return f"Event.{last_segment}"
+        # 纯成员名中也可能含点号
+        if '.' in mn:
+            return f"Event.{mn.split('.')[-1]}"
         return f"Event.{mn}"
 
     elif node.class_name == "K2Node_EnhancedInputAction":
@@ -761,8 +780,8 @@ def _resolve_knot_chain(
         # Knot: Find InputPin and follow its linked_to_raw backwards
         for pin in target_node.pins:
             if pin.pin_name == "InputPin" and pin.direction == 0:  # Input
-                if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
-                    current_pin_guid = source_edges_by_to_pin[pin.pin_id][0]["from_pin_id"]
+                if source_edges_by_to_pin and _normalize_pin_id(pin.pin_id) in source_edges_by_to_pin:
+                    current_pin_guid = source_edges_by_to_pin[_normalize_pin_id(pin.pin_id)][0]["from_pin_id"]
                     break
                 # InputPin 的 linked_to_raw 是上一个 pin（数据来源）
                 for linked_ref in (pin.linked_to_raw or []):
@@ -778,7 +797,7 @@ def _trace_data_source(
     pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Optional[Dict]:
     """追踪单个参数的数据来源。
@@ -806,12 +825,17 @@ def _trace_data_source(
             ]
         }
     """
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
     # 检查是否有连接
     linked_refs = list(pin.linked_to_raw or [])
-    if source_edges_by_to_pin and pin.pin_id in source_edges_by_to_pin:
+    normalized_pin_id = _normalize_pin_id(pin.pin_id)
+    if source_edges_by_to_pin and normalized_pin_id in source_edges_by_to_pin:
         linked_refs = [
             {"pin_guid": edge["from_pin_id"]}
-            for edge in source_edges_by_to_pin[pin.pin_id]
+            for edge in source_edges_by_to_pin[normalized_pin_id]
         ]
 
     if not linked_refs:
@@ -908,8 +932,8 @@ def _find_next_exec_node(
     for pin in node.pins:
         if pin.direction == 1:  # Output
             if pin.pin_type and pin.pin_type.pin_category == "exec":
-                if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
-                    edge = edges_by_from_pin[pin.pin_id][0]
+                if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
+                    edge = edges_by_from_pin[_normalize_pin_id(pin.pin_id)][0]
                     return (node_lookup.get(edge["to_node_guid"]), pin.pin_name)
                 for linked_pin_id in (pin.linked_to_raw or []):
                     target_pin_guid = _pin_ref_guid(linked_pin_id)
@@ -959,7 +983,7 @@ def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict
             "is_standard": is_standard or expansion.context.macro_name in STANDARD_MACROS,
             "internal_flows": expansion.internal_flows,
         }
-    except Exception as e:
+    except (KeyError, AttributeError, ValueError, TypeError) as e:
         return {
             "unresolved": True,
             "reason": str(e),
@@ -971,7 +995,7 @@ def _trace_execution_from_event(
     start_node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
@@ -987,6 +1011,10 @@ def _trace_execution_from_event(
     Returns:
         List[Dict]: 节点信息序列
     """
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
     visited: Set[str] = set()
     flow: List[Dict] = []
     current_node = start_node
@@ -1058,8 +1086,8 @@ def _trace_execution_from_event(
             for pin in current_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category != "exec":
                     # 找到 output pin 的连接目标
-                    if edges_by_from_pin and pin.pin_id in edges_by_from_pin:
-                        for edge in edges_by_from_pin[pin.pin_id]:
+                    if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
+                        for edge in edges_by_from_pin[_normalize_pin_id(pin.pin_id)]:
                             data_providers.append({
                                 "output_pin": pin.pin_name,
                                 "target_node": node_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
@@ -1122,7 +1150,7 @@ def _trace_execution_from_pin(
     start_pin: UEdGraphPin,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
-    node_name_lookup: Dict[str, str] = {},
+    node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
@@ -1132,8 +1160,12 @@ def _trace_execution_from_pin(
     用于EnhancedInputAction多触发时机追踪。
     增加 node_name_lookup 参数传递。
     """
-    if edges_by_from_pin and start_pin.pin_id in edges_by_from_pin:
-        edge = edges_by_from_pin[start_pin.pin_id][0]
+    # 初始化可变默认参数
+    if node_name_lookup is None:
+        node_name_lookup = {}
+
+    if edges_by_from_pin and _normalize_pin_id(start_pin.pin_id) in edges_by_from_pin:
+        edge = edges_by_from_pin[_normalize_pin_id(start_pin.pin_id)][0]
         next_node = node_lookup.get(edge["to_node_guid"])
         if next_node:
             return _trace_execution_from_event(
@@ -1177,7 +1209,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     for node in graph.nodes:
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     mode = FORMAT_CONFIG["pin_reference_mode"]
     connections: List[Dict] = []
@@ -1261,7 +1293,7 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
     for node in graph.nodes:
         node_lookup[node.node_guid] = node
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     # 构建 node_name_lookup
     for idx, node in enumerate(graph.nodes):
@@ -1324,38 +1356,81 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
     return execution_flows
 
 
+def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
+    """将单个 UEdGraph 转换为 MacroExpander 期望的字典格式。
+
+    包含完整的 pin 数据（pin_id、linked_to_raw、parent_pin）和
+    tunnel 节点属性（b_can_have_outputs、b_can_have_inputs、exact_class），
+    确保宏展开时 tunnel/pin 数据不丢失。
+    """
+    direction_map = {0: "EGPD_Input", 1: "EGPD_Output"}
+
+    nodes = []
+    for node in graph.nodes:
+        nd = node.node_data if isinstance(node.node_data, dict) else {}
+
+        node_dict: Dict[str, Any] = {
+            "node_type": node.class_name,
+            "node_guid": node.node_guid,
+            "pins": [
+                {
+                    "pin_id": pin.pin_id,
+                    "pin_name": pin.pin_name,
+                    "direction": direction_map.get(pin.direction, pin.direction),
+                    "pin_type": {
+                        "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
+                        "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
+                    } if pin.pin_type else {},
+                    "linked_to_raw": pin.linked_to_raw or [],
+                    "parent_pin": pin.parent_pin,
+                    "default_value": pin.default_value or "",
+                }
+                for pin in node.pins
+            ],
+            "macro_graph_reference": nd.get("macro_graph_reference", {}),
+        }
+
+        # 提取 Tunnel 节点特有属性（从 _raw_properties 或 node_data）
+        if node.class_name == "K2Node_Tunnel":
+            raw_props = nd.get("_raw_properties", {})
+            node_dict["exact_class"] = "UK2Node_Tunnel"
+            node_dict["b_can_have_inputs"] = raw_props.get("bCanHaveInputs", False)
+            node_dict["b_can_have_outputs"] = raw_props.get("bCanHaveOutputs", False)
+
+        nodes.append(node_dict)
+
+    return {
+        "guid": graph.graph_guid or "",
+        "name": graph.graph_name,
+        "nodes": nodes,
+    }
+
+
 def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     """从 UEdGraph 构建宏展开所需的 asset_context。
 
-    将 UEdGraph 转换为 MacroExpander 期望的字典格式。
+    将 UEdGraph 及其所有 subgraph 转换为 MacroExpander 期望的字典格式。
+    BFS 遍历 subgraph（带 visited 集合防止循环引用），确保宏图定义
+    （包含 Tunnel 节点）被正确收集。
     """
-    graph_dict = {
-        "guid": graph.graph_guid or "",
-        "name": graph.graph_name,
-        "nodes": [
-            {
-                "node_type": node.class_name,
-                "node_guid": node.node_guid,
-                "pins": [
-                    {
-                        "pin_name": pin.pin_name,
-                        "direction": pin.direction,
-                        "pin_type": {
-                            "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
-                            "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
-                        } if pin.pin_type else {},
-                    }
-                    for pin in node.pins
-                ],
-                "macro_graph_reference": (
-                    node.node_data.get("macro_graph_reference", {})
-                    if isinstance(node.node_data, dict) else {}
-                ),
-            }
-            for node in graph.nodes
-        ],
-    }
-    return {"graphs": [graph_dict]}
+    all_graphs: List[Dict[str, Any]] = []
+    visited: set = set()
+
+    # BFS 遍历：顶层图 + 所有子图
+    queue = [graph]
+    while queue:
+        g = queue.pop(0)
+        g_id = id(g)
+        if g_id in visited:
+            continue
+        visited.add(g_id)
+
+        all_graphs.append(_build_graph_dict(g))
+        for subgraph in getattr(g, "subgraphs", None) or []:
+            if id(subgraph) not in visited:
+                queue.append(subgraph)
+
+    return {"graphs": all_graphs}
 
 
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
@@ -1373,7 +1448,7 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     for node in graph.nodes:
         for pin in node.pins:
-            pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
     node_name_lookup: Dict[str, str] = {}
     for idx, node in enumerate(graph.nodes):
@@ -1398,42 +1473,59 @@ def _build_synthetic_function_data_flows(
     node_name_lookup: Dict[str, str],
     mode: str,
 ) -> List[Dict]:
-    """为 FirstPerson 模板中错位缺失的函数图参数边补充语义数据流。"""
-    if graph.graph_name not in ("Move", "Aim"):
-        return []
+    """为函数图中错位缺失的参数边补充语义数据流。
 
+    动态检测模式：查找 FunctionEntry 的输出参数与 CallFunction 的
+    匹配输入参数之间的连接关系，不再依赖特定模板名称。
+    """
     def ref(node: UEdGraphNode, pin_name: str) -> Dict:
         return format_pin_ref(node.node_guid, pin_name, node_name_lookup, mode)
 
-    nodes_by_func: Dict[str, List[UEdGraphNode]] = {}
+    # 查找 FunctionEntry 节点
     function_entry = None
     for node in graph.nodes:
-        name = _node_member_name(node)
         if node.class_name == "K2Node_FunctionEntry":
             function_entry = node
+            break
+
+    if function_entry is None:
+        return []
+
+    # 收集 FunctionEntry 的输出参数 pin 名称
+    fe_output_pins = [
+        pin.pin_name for pin in function_entry.pins
+        if pin.direction == 1  # Output
+        and pin.pin_type and pin.pin_type.pin_category != "exec"
+    ]
+
+    if not fe_output_pins:
+        return []
+
+    # 收集图中所有 CallFunction 节点的输入参数 pin 名称
+    nodes_by_func: Dict[str, List[UEdGraphNode]] = {}
+    for node in graph.nodes:
+        name = _node_member_name(node)
         if name:
             nodes_by_func.setdefault(name, []).append(node)
 
     flows: List[Dict] = []
-    if graph.graph_name == "Move" and function_entry:
-        add_nodes = sorted(nodes_by_func.get("AddMovementInput", []), key=lambda n: n.node_pos_x)
-        right_nodes = nodes_by_func.get("GetActorRightVector", [])
-        forward_nodes = nodes_by_func.get("GetActorForwardVector", [])
-        if len(add_nodes) >= 2:
-            if right_nodes:
-                flows.append({"source": ref(right_nodes[0], "ReturnValue"), "target": ref(add_nodes[0], "WorldDirection")})
-            flows.append({"source": ref(function_entry, "Left / Right"), "target": ref(add_nodes[0], "ScaleValue")})
-            if forward_nodes:
-                flows.append({"source": ref(forward_nodes[0], "ReturnValue"), "target": ref(add_nodes[1], "WorldDirection")})
-            flows.append({"source": ref(function_entry, "Forward / Backward"), "target": ref(add_nodes[1], "ScaleValue")})
-
-    if graph.graph_name == "Aim" and function_entry:
-        yaw_nodes = nodes_by_func.get("AddControllerYawInput", [])
-        pitch_nodes = nodes_by_func.get("AddControllerPitchInput", [])
-        if yaw_nodes:
-            flows.append({"source": ref(function_entry, "Yaw"), "target": ref(yaw_nodes[0], "Val")})
-        if pitch_nodes:
-            flows.append({"source": ref(function_entry, "Pitch"), "target": ref(pitch_nodes[0], "Val")})
+    for func_nodes in nodes_by_func.values():
+        for node in func_nodes:
+            if node.class_name != "K2Node_CallFunction":
+                continue
+            for pin in node.pins:
+                if (
+                    pin.direction == 0  # Input
+                    and pin.pin_type
+                    and pin.pin_type.pin_category != "exec"
+                    and pin.pin_name in fe_output_pins
+                    and not (pin.linked_to_raw or [])
+                ):
+                    # 该输入 pin 未连接但与 FunctionEntry 输出参数同名
+                    flows.append({
+                        "source": ref(function_entry, pin.pin_name),
+                        "target": ref(node, pin.pin_name),
+                    })
 
     return flows
 
@@ -1612,7 +1704,7 @@ def build_function_graphs(
             node_lookup[node.node_guid] = node
             node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
             for pin in node.pins:
-                pin_lookup[pin.pin_id] = (node.node_guid, pin.pin_name)
+                pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
         edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
 
@@ -1712,7 +1804,7 @@ def build_function_graphs(
                     # Output pin → data_providers（正向追踪）
                     elif pin.direction == 1:
                         # 找到 output pin 的连接目标
-                        edges = edges_by_from_pin.get(pin.pin_id, [])
+                        edges = edges_by_from_pin.get(_normalize_pin_id(pin.pin_id), [])
                         if edges:
                             for edge in edges:
                                 providers.append({

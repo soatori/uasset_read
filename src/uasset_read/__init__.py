@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.5.1
+版本 0.5.1.31
 
 公共API通过__all__控制。
 """
-__version__ = "0.5.1.19"
+__version__ = "0.5.1.31"
 
 # 导出常量模块
 from .constants import (
@@ -260,10 +260,6 @@ from .parsers import (
     handle_custom_property,
     # 辅助函数（测试依赖）
     get_struct_size,
-    _extract_struct_type_from_tag,
-    _extract_map_types_from_tag,
-    _extract_set_type_from_tag,
-    _extract_enum_type_from_tag,
     # 共享辅助函数（parsers/utils.py）
     resolve_name_from_index,
     read_validated_count,
@@ -288,7 +284,6 @@ from .graph import (
     format_graphs_json,
     build_execution_chains,
     format_pin_ref,
-    _derive_node_name,
     build_function_graphs,
 )
 
@@ -341,8 +336,8 @@ from .serializers.property_tags import read_property_tag, parse_ctrl_flags, pars
 from .parsers.property_types import parse_default_value, format_variable_type
 from .blueprint.variable_extractor import read_blueprint_variable, parse_property_flags_to_labels
 from .constants import (
-    CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference, CPF_EditAnywhere,
-    CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly,
+    CPF_Edit, CPF_BlueprintVisible, CPF_InstancedReference,
+    CPF_BlueprintReadOnly,
     CPF_Transient, CPF_SaveGame, CPF_ExposeOnSpawn,
 )
 
@@ -641,10 +636,6 @@ __all__ = [
     "handle_custom_property",
     # 辅助函数（测试依赖）
     "get_struct_size",
-    "_extract_struct_type_from_tag",
-    "_extract_map_types_from_tag",
-    "_extract_set_type_from_tag",
-    "_extract_enum_type_from_tag",
     # parsers/utils.py 辅助函数
     "resolve_name_from_index",
     "read_validated_count",
@@ -695,7 +686,6 @@ __all__ = [
     "build_execution_chains",
     "format_pin_ref",
     "build_function_graphs",
-    "format_pin_ref",
     # 辅助函数
     "find_main_blueprint_generated_class",
     "resolve_parent_class",
@@ -720,9 +710,6 @@ __all__ = [
     "CPF_Edit",
     "CPF_BlueprintVisible",
     "CPF_InstancedReference",
-    "CPF_EditAnywhere",
-    "CPF_EditInstanceOnly",
-    "CPF_BlueprintReadWrite",
     "CPF_BlueprintReadOnly",
     "CPF_Transient",
     "CPF_SaveGame",

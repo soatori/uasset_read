@@ -10,7 +10,7 @@ from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.pak.constants import PakFileVersion
-from uasset_read.pak.structures import FPakInfo, FPakEntry, FPakDirectoryEntry, read_fstring
+from uasset_read.pak.structures import FPakInfo, FPakEntry, read_fstring
 
 logger = logging.getLogger(__name__)
 

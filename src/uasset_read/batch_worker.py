@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import queue
 import subprocess
@@ -13,6 +14,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.memory_safety import (
     MemoryPolicy,
@@ -109,14 +112,15 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
     finally:
         try:
             temporary_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("清理临时文件失败: %s", e)
 
 
 class _SubprocessAdapter:
     def __init__(self, process: subprocess.Popen) -> None:
         self._process = process
         self.pid = process.pid
+        self._stderr_text: str = ""
 
     @property
     def exitcode(self) -> int | None:
@@ -131,11 +135,25 @@ class _SubprocessAdapter:
     def kill(self) -> None:
         self._process.kill()
 
+    @property
+    def stderr_text(self) -> str:
+        return self._stderr_text
+
+    def _drain_stderr(self) -> None:
+        """读取并缓存 stderr，防止管道资源泄漏。"""
+        if self._process.stderr is not None and self._stderr_text == "":
+            try:
+                raw = self._process.stderr.read()
+                self._stderr_text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+            except (OSError, ValueError) as exc:
+                logger.debug("读取子进程 stderr 失败: %s", exc)
+
     def join(self, timeout=None) -> None:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            pass
+            logger.debug("子进程 join 超时，继续执行")
+        self._drain_stderr()
 
 
 class _ResultFile:
@@ -193,6 +211,10 @@ def _monitor_worker(
         sleep(poll_interval_seconds)
 
     process.join(timeout=1)
+    if process.exitcode and process.exitcode != 0:
+        stderr_out = getattr(process, "stderr_text", "")
+        if stderr_out:
+            logger.warning("子进程 stderr (exit %d):\n%s", process.exitcode, stderr_out)
     if result_queue is None:
         return BatchWorkerOutcome(
             False,
@@ -251,7 +273,7 @@ def run_isolated_asset(
                 str(result_path),
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         process = _SubprocessAdapter(popen)
         return _monitor_worker(
@@ -268,8 +290,8 @@ def run_isolated_asset(
                 _temporary_output_path(request.output_path, process.pid).unlink(
                     missing_ok=True
                 )
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("清理临时输出文件失败: %s", e)
         request_path.unlink(missing_ok=True)
         result_path.unlink(missing_ok=True)
 

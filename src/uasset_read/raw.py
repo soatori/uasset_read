@@ -51,7 +51,7 @@ def parse_json_descriptor(path: str) -> RawFileResult:
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         result.metadata = data if isinstance(data, dict) else {"value": data}
-    except Exception as exc:
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
         result.errors.append(str(exc))
     return result
 
@@ -63,7 +63,7 @@ def parse_ini_file(path: str) -> RawFileResult:
     try:
         parser.read(path, encoding="utf-8-sig")
         result.metadata = {section: dict(parser.items(section)) for section in parser.sections()}
-    except Exception as exc:
+    except (OSError, KeyError, ValueError) as exc:
         result.errors.append(str(exc))
     return result
 
@@ -80,7 +80,7 @@ def parse_audio_metadata(path: str) -> RawFileResult:
         }
         if p.suffix.lower() == ".bnk" and len(data) >= 12:
             result.metadata["soundbank_id"] = struct.unpack_from("<I", data, 8)[0]
-    except Exception as exc:
+    except (OSError, struct.error) as exc:
         result.errors.append(str(exc))
     return result
 
@@ -94,7 +94,7 @@ def parse_locmeta(path: str) -> RawFileResult:
             "magic": data[:4].hex(),
             "raw_preview": data[:64].hex(),
         }
-    except Exception as exc:
+    except OSError as exc:
         result.errors.append(str(exc))
     return result
 
@@ -107,7 +107,7 @@ def parse_locres(path: str) -> RawFileResult:
         data = Path(path).read_bytes()
         result.metadata = {"size": len(data), "magic": data[:4].hex()}
         result.entries = _scrape_locres_strings(data)
-    except Exception as exc:
+    except OSError as exc:
         result.errors.append(str(exc))
     return result
 

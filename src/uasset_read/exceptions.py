@@ -44,9 +44,34 @@ class ErrorContext:
 
 
 class ParseError(UAssetError):
-    """解析错误（可携带部分结果和上下文）"""
+    """解析错误（可携带部分结果、上下文和丰富的诊断信息）。
+
+    Attributes:
+        partial_result: 部分解析结果（容错场景）
+        context: 旧版 ErrorContext（向后兼容）
+        reader_name: 读取器名称（如 FArchive、ByteArchive）
+        position: 当前读取位置
+        length: 文件总长度
+        export_name: 当前导出名称（如有）
+    """
 
     def __init__(self, message: str, partial_result: Optional[Dict] = None, context: Optional[ErrorContext] = None):
         super().__init__(message)
         self.partial_result = partial_result
         self.context = context
+        # 新增上下文信息
+        self.reader_name: str = ""
+        self.position: int = 0
+        self.length: int = 0
+        self.export_name: str = ""
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.reader_name:
+            parts.append(f"Reader: {self.reader_name}")
+        if self.length > 0:
+            pct = (self.position / self.length * 100) if self.length > 0 else 0
+            parts.append(f"Position: {self.position} / {self.length} ({pct:.1f}% done)")
+        if self.export_name:
+            parts.append(f"Export: {self.export_name}")
+        return "\n".join(parts)

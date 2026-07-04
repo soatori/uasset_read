@@ -178,9 +178,9 @@ def test_soft_object_outputs_are_normalized(tmp_path):
 
 
 def test_cpf_values_are_ue5_standard():
-    assert CPF_Net == 0x0000000000000800
-    assert CPF_NoClear == 0x0000000000200000
-    assert CPF_BlueprintCallable == 0x0000000004000000
+    assert CPF_Net == 0x0000000000000020
+    assert CPF_NoClear == 0x0000000002000000
+    assert CPF_BlueprintCallable == 0x0000100000000000
 
 
 def test_common_decompression_supports_aliases_and_wrapped_zlib():

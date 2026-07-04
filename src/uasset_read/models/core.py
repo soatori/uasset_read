@@ -1,21 +1,24 @@
 """
-核心 UE 蓝图数据模型 — 引脚、节点、图容器、成员引用。
+序列化模型 — UE 蓝图引脚、节点、图容器、成员引用。
 
-等价覆盖 uasset_read.py 中第 1878-1971 行的数据类定义。
+本模块定义的类是 UE 二进制格式的直接映射（序列化模型），用于
+serializers 层从 archive 读取数据时构建实例。它们与 ir.py 中的
+呈现模型（GraphIR / NodeIR / PinIR）形成清晰的分层：
+
+- core.py 类：序列化层，保留 UE 原始类型（int 方向、FEdGraphPinType 嵌套对象等）
+- ir.py 类：呈现层，面向渲染器的简化表示（str 方向、str 类型等）
+
+IR Builder 负责从序列化模型转换为呈现模型。
+
 Per D-01: 保持 UE 源码命名。
-Per D-06: 数据和序列化解耦，from_archive 为 stub。
 Per D-10: Python 3.10+ 严格类型提示。
-Per D-12: 静态 from_archive 方法。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any, Dict, TYPE_CHECKING
+from typing import Optional, List, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
-    from uasset_read.serializers.package_summary import PackageFileSummary
-    from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
     from uasset_read.link.object_instance import UObjectInstance
 
 
@@ -35,17 +38,11 @@ class FEdGraphPinType:
     is_const: bool = False
     is_uobject_wrapper: bool = False
     b_serialize_as_single_precision_float: bool = False
-
-    @classmethod
-    def from_archive(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary
-    ) -> "FEdGraphPinType":
-        """延迟导入避免循环依赖。"""
-        from uasset_read.serializers.graph import read_ed_graph_pin_type
-        return read_ed_graph_pin_type(archive, name_map, summary)
+    # Map terminal 类型（container_type == 3 时，key 的 terminal 信息）
+    map_key_terminal_category: str = ""
+    map_key_terminal_sub_category: str = ""
+    map_key_terminal_sub_category_object: Optional[int] = None  # FPackageIndex (int32)
+    map_key_terminal_sub_category_object_name: Optional[str] = None
 
 
 @dataclass
@@ -87,41 +84,6 @@ class UEdGraphPin:
     # Legacy
     flags: int = 0
 
-    @classmethod
-    def from_archive(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport]
-    ) -> "UEdGraphPin":
-        """延迟导入避免循环依赖。"""
-        from uasset_read.serializers.graph import read_ue_graph_pin
-        return read_ue_graph_pin(archive, name_map, summary, export_map, import_map)
-
-    @classmethod
-    def from_archive_with_linker(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport],
-        linker: Optional["PackageLinker"] = None,
-    ) -> "UEdGraphPin":
-        """带 linker 的读取入口，支持 PackageIndex → UObjectInstance 解析（D-09）。"""
-        from uasset_read.serializers.graph import read_ue_graph_pin
-        from uasset_read.serializers.object_resources import PackageIndex
-        pin = read_ue_graph_pin(archive, name_map, summary, export_map, import_map, linker)
-        # D-04: 解析 default_object 为 UObjectInstance
-        if linker is not None and pin.default_object is not None and pin.default_object != 0:
-            try:
-                pin.default_object_ref = linker.resolve_package_index(PackageIndex(pin.default_object))
-            except Exception:
-                pin.default_object_ref = None  # D-06: 解析失败存 None
-        return pin
-
 
 @dataclass
 class UEdGraphNode:
@@ -133,35 +95,6 @@ class UEdGraphNode:
     pins: List["UEdGraphPin"] = field(default_factory=list)
     class_name: str = ""
     node_data: Optional[Any] = None
-
-    @classmethod
-    def from_archive(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport],
-        node_export: ObjectExport
-    ) -> "UEdGraphNode":
-        """延迟导入避免循环依赖。"""
-        from uasset_read.serializers.graph import read_ue_graph_node
-        return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
-
-    @classmethod
-    def from_archive_with_linker(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport],
-        node_export: ObjectExport,
-        linker: Optional["PackageLinker"] = None,
-    ) -> "UEdGraphNode":
-        """带 linker 的读取入口（D-09）。"""
-        from uasset_read.serializers.graph import read_ue_graph_node
-        return read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
 
 
 @dataclass
@@ -175,39 +108,6 @@ class UEdGraph:
     b_editable: bool = True
     subgraphs: List["UEdGraph"] = field(default_factory=list)
 
-    @classmethod
-    def from_archive(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport],
-        graph_export: ObjectExport,
-        graph_class: str,
-        graph_export_idx: int = 0
-    ) -> "UEdGraph":
-        """延迟导入避免循环依赖。"""
-        from uasset_read.serializers.graph import read_ue_graph
-        return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx)
-
-    @classmethod
-    def from_archive_with_linker(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        summary: PackageFileSummary,
-        export_map: List[ObjectExport],
-        import_map: List[ObjectImport],
-        graph_export: ObjectExport,
-        graph_class: str,
-        graph_export_idx: int = 0,
-        linker: Optional["PackageLinker"] = None,
-    ) -> "UEdGraph":
-        """带 linker 的读取入口（D-09）。"""
-        from uasset_read.serializers.graph import read_ue_graph
-        return read_ue_graph(archive, name_map, summary, export_map, import_map, graph_export, graph_class, graph_export_idx, linker)
-
 
 @dataclass
 class FMemberReference:
@@ -216,15 +116,3 @@ class FMemberReference:
     member_name: str = ""
     member_guid: Optional[str] = None
     b_self_context: bool = False
-
-    @classmethod
-    def from_archive(
-        cls,
-        archive: FArchive,
-        name_map: List[str],
-        import_map: List[ObjectImport],
-        export_map: List[ObjectExport]
-    ) -> "FMemberReference":
-        """延迟导入避免循环依赖。"""
-        from uasset_read.serializers.graph import read_fmember_reference
-        return read_fmember_reference(archive, name_map, import_map, export_map)

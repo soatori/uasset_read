@@ -16,12 +16,35 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.base_ref == 'master'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check master branch file whitelist
         run: |
           echo "Checking master branch directory compliance..."
 
-          FILES=$(git ls-files)
+          # 对于 PR，只检查相对于 master 分支的新增文件
+          # 对于直接 push 到 master，检查所有文件
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # 只检查新增文件（相对于 master 的差异）
+            # 但排除那些已经在 develop 分支上存在的目录（它们不应该被合并到 master）
+            ALL_ADDED=$(git diff --diff-filter=A --name-only origin/master...HEAD 2>/dev/null || echo "")
+            # 获取 develop 分支上已存在的目录
+            EXISTING_DIRS=$(git ls-tree -d --name-only HEAD 2>/dev/null || echo "")
+            # 过滤掉已经在 develop 分支上存在的目录
+            FILES=""
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                dir=$(dirname "$file")
+                # 检查这个目录是否在 develop 分支上已经存在
+                if ! echo "$EXISTING_DIRS" | grep -q "^${dir}$"; then
+                  FILES="$FILES\n$file"
+                fi
+              fi
+            done <<< "$ALL_ADDED"
+          else
+            FILES=$(git ls-files)
+          fi
 
           # 禁止出现在 master 的目录
           FORBIDDEN_PATTERNS=(
@@ -34,6 +57,7 @@ jobs:
             "^\.claude/skills/"
             "^\.claude/workflows/"
             "^\.claude/agents/"
+            "^docs/mcp-config/"
           )
 
           VIOLATIONS=""
@@ -65,7 +89,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4

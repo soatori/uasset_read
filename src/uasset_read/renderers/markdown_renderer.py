@@ -58,7 +58,7 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
         for graph in export.graphs:
             for node in graph.nodes:
                 if node.node_class == "K2Node_EnhancedInputAction":
-                    data = node.node_data
+                    data = getattr(node, "node_data", None)
                     if isinstance(data, dict):
                         path = data.get("input_action_path", "?")
                         triggers = data.get("trigger_events", {})
@@ -81,6 +81,38 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
 
 class MarkdownRenderer(IRenderer):
     """Markdown + Mermaid 流程图渲染器。"""
+
+    # 编辑器内部变量（不影响运行时和 C++ 翻译），与 JSONRenderer 保持一致
+    _EDITOR_VARIABLE_NAMES = frozenset({
+        "UbergraphPages",  # 图页面索引列表
+        "FunctionGraphs",  # 函数图索引列表
+        "CategorySorting",  # 编辑器分类排序
+        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
+        "LastEditedDocuments",  # 最后编辑文档
+        "ThumbnailInfo",  # 缩略图信息
+        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+    })
+
+    # 编辑器布局属性（不影响运行时和 C++ 翻译），与 JSONRenderer 保持一致
+    _EDITOR_PROPERTY_NAMES = frozenset({
+        # 节点布局
+        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
+        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
+        # 注释相关
+        "CommentColor", "FontSize",
+        "bCommentBubbleVisible_InDetailsPanel",
+        "bCommentBubblePinned", "bCommentBubbleVisible",
+        # 图相关
+        "Schema", "GraphGuid", "ErrorType",
+        "AdvancedPinDisplay", "MoveMode",
+        # 事件/函数引用（已提取到其他字段）
+        "EventReference", "bOverrideFunction",
+    })
+
+    # 编辑器内部节点类（不影响运行时，UE 编译时移除），与 JSONRenderer 保持一致
+    _EDITOR_NODE_CLASSES = frozenset({
+        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+    })
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         lines: list[str] = []
@@ -173,8 +205,11 @@ class MarkdownRenderer(IRenderer):
                         lines.append(f"| {action_name} | — | — |")
                 lines.append("")
 
-        # 导出 — 只显示蓝图 export
-        blueprint_exports = [e for e in ir.exports if is_blueprint_export(e)]
+        # 导出 — 只显示蓝图 export，过滤编辑器节点类 export（与 JSON 渲染器一致）
+        blueprint_exports = [
+            e for e in ir.exports
+            if is_blueprint_export(e) and e.object_class not in self._EDITOR_NODE_CLASSES
+        ]
         if blueprint_exports:
             lines.append("## Exports")
             lines.append("| Name | Class | Size | Properties |")
@@ -202,20 +237,24 @@ class MarkdownRenderer(IRenderer):
                     lines.append(f"- **Type**: {graph.graph_type}")
                 lines.append("")
 
-                if graph.nodes:
+                if graph.nodes or graph.subgraphs:
                     lines.append("```mermaid")
                     lines.append("graph TD")
                     self._render_mermaid_nodes(lines, graph)
                     lines.append("```")
                     lines.append("")
 
-                # 属性详情
-                if export.properties:
+                # 属性详情（过滤编辑器布局属性，与 JSON 渲染器一致）
+                filtered_props = [
+                    p for p in (export.properties or [])
+                    if p.name not in self._EDITOR_PROPERTY_NAMES
+                ]
+                if filtered_props:
                     lines.append("### Properties")
                     lines.append("")
                     lines.append("| Name | Type | Value |")
                     lines.append("|------|------|-------|")
-                    for prop in export.properties:
+                    for prop in filtered_props:
                         val = _escape_md_cell(str(prop.value)[:50]) if prop.value is not None else "null"
                         lines.append(f"| {prop.name} | {prop.type} | {val} |")
                     lines.append("")
@@ -389,11 +428,19 @@ class MarkdownRenderer(IRenderer):
         if not ir.variables:
             return
 
+        # 过滤编辑器内部变量（与 JSON 渲染器一致）
+        filtered_variables = [
+            v for v in ir.variables
+            if v.name not in self._EDITOR_VARIABLE_NAMES
+        ]
+        if not filtered_variables:
+            return
+
         lines.append("## Variables")
         lines.append("")
         lines.append("| Name | Type | Default Value |")
         lines.append("|------|------|---------------|")
-        for var in ir.variables:
+        for var in filtered_variables:
             default_str = _escape_md_cell(str(var.default_value)) if var.default_value is not None else "-"
             lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
         lines.append("")

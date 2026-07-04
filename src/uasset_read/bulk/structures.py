@@ -5,7 +5,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntFlag
-from typing import Optional
 
 
 class BulkDataFlags(IntFlag):

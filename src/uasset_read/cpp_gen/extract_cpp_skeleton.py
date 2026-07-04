@@ -43,7 +43,6 @@ from uasset_read.cpp_gen.cpp_constructor_formatter import (
     format_cpp_constructor,
 )
 from uasset_read.cpp_gen.sanitizer import sanitize_identifier
-from uasset_read.constants import CPF_InstancedReference
 
 if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult

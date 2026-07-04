@@ -18,7 +18,6 @@ from uasset_read.exceptions import ParseError as ParseError  # Re-export for bac
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
-    from uasset_read.models.ir import PackageIR
 
 
 @dataclass
@@ -44,6 +43,7 @@ def parse_single(
     force_full_parse: bool = False,
     hex_view: bool = False,
     memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
 ) -> str:
     """解析单个 .uasset/.umap，返回格式化字符串。
 
@@ -65,6 +65,7 @@ def parse_single(
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
         hex_view: 启用 HexView 字节偏移追踪
         memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
 
     Returns:
         格式化后的字符串
@@ -104,7 +105,8 @@ def parse_single(
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
-    if hex_view and result.hex_view_entries:
+    # HexView 文本旁路：仅非 json 格式时直接返回文本（json 格式走 IR 管线）
+    if hex_view and result.hex_view_entries and format != "json":
         from uasset_read.debug.hex_view import format_hex_view
         return format_hex_view(
             result.hex_view_entries,
@@ -118,6 +120,8 @@ def parse_single(
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
         linker_result=None,
+        output_level=output_level,
+        hex_view=hex_view,
     )
     return renderer.render(ir, options)
 
@@ -156,10 +160,12 @@ def parse_batch(
     mappings_path: str | None = None,
     game: str | None = None,
     force_full_parse: bool = False,
+    hex_view: bool = False,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
     skip_large_files: bool | None = None,
     isolate_assets: bool = True,
     memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
 ) -> BatchResult:
     """批量解析目录下所有 .uasset/.umap。
 
@@ -176,10 +182,12 @@ def parse_batch(
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
         max_memory_usage: 系统内存使用上限（0.0-1.0），超过时停止启动 worker
         skip_large_files: 已弃用；文件大小仅用于选择资源档位
         isolate_assets: 是否为每个资产启动独立子进程
         memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
 
     Returns:
         BatchResult 包含成功、跳过、失败的文件列表
@@ -234,7 +242,9 @@ def parse_batch(
         "mappings_path": mappings_path,
         "game": game,
         "force_full_parse": force_full_parse,
+        "hex_view": hex_view,
         "memory_policy": policy,
+        "output_level": output_level,
     }
 
     for idx, pf in enumerate(package_files):
@@ -248,7 +258,7 @@ def parse_batch(
                 result.skipped.append((str(remaining), reason))
             break
 
-        out_file = output_path / f"{pf.stem}{extension}"
+        out_file = output_path / f"{pf.name}{extension}"
         try:
             if isolate_assets:
                 request = BatchWorkerRequest(
@@ -279,3 +289,80 @@ def parse_batch(
 def list_formats() -> list[str]:
     """返回所有支持的格式名列表。"""
     return _list_renderer_formats()
+
+
+def diff_single(
+    file_path1: str,
+    file_path2: str,
+    *,
+    tolerant: bool = True,
+    context_lines: int = 3,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+) -> str:
+    """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
+
+    解析失败不会抛出异常，而是在 diff 输出中标注解析错误信息。
+
+    Args:
+        file_path1: 第一个 .uasset 文件路径
+        file_path2: 第二个 .uasset 文件路径
+        tolerant: 容错模式
+        context_lines: diff 上下文行数
+        mappings_path: 可选 .usmap/.jmap 类型映射
+        game: 可选游戏名（启用游戏特定属性解析）
+        force_full_parse: 是否强制完整蓝图解析
+
+    Returns:
+        unified diff 文本，解析失败时包含错误标注
+    """
+    import difflib
+
+    # 解析文件 1
+    try:
+        text1 = parse_single(
+            file_path1,
+            format="text",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text1 = f"[解析错误] {Path(file_path1).name}: {e}"
+
+    # 解析文件 2
+    try:
+        text2 = parse_single(
+            file_path2,
+            format="text",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text2 = f"[解析错误] {Path(file_path2).name}: {e}"
+
+    name1 = Path(file_path1).name
+    name2 = Path(file_path2).name
+
+    lines1 = text1.splitlines(keepends=True)
+    lines2 = text2.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        lines1,
+        lines2,
+        fromfile=f"a/{name1}",
+        tofile=f"b/{name2}",
+        n=context_lines,
+    )
+
+    result = "".join(diff)
+    if not result:
+        return f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n"
+
+    return result

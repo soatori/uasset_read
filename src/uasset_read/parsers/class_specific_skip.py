@@ -42,7 +42,10 @@ SKIP_CLASS_PREFIXES = (
     # "MetasoundEditorGraphInputObjectArray",
     # "MetasoundEditorGraphMemberDefaultObjectArray",
     # P2: K2Node
-    "K2Node_FunctionEntry",
+    # K2Node_FunctionEntry 已从 skip 列表移除（#286）：
+    # 通用 tagged property parser 可处理，K2Node_FunctionEntry 的特有字段
+    # 通过 PropertyTag 序列化，不需要跳过。跳过会导致合法资产被标记 partial。
+    # "K2Node_FunctionEntry",
     "K2Node_FormatText",
     # P2: Material
     # MaterialExpressionDynamicParameter 已从 skip 列表移除（#136 延伸）：

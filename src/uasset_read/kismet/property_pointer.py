@@ -98,5 +98,8 @@ class FKismetPropertyPointer:
         if self.New and self.New.Path:
             return self.New.Path[0]
         if self.Old is not None:
-            return str(self.Old.index)
+            idx = self.Old.index
+            if idx == 0:
+                return "None"
+            return f"Property_{idx}"
         return "None"

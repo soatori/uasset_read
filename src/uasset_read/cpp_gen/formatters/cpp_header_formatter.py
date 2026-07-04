@@ -18,7 +18,7 @@ from typing import List, TYPE_CHECKING
 if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters import CppCallStatement
 
-from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppHeaderMeta, CppMethodIR, CppCallStatement
+from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppMethodIR, CppCallStatement
 
 logger = logging.getLogger(__name__)
 

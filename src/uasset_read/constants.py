@@ -5,6 +5,8 @@ uasset_read常量定义
 从uasset_read.py提取（per D-11）。
 """
 
+from enum import IntEnum
+
 # ============================================================================
 # Package文件标签（来自UE源码）
 # ============================================================================
@@ -247,6 +249,21 @@ FMOBILE_OBJECT_VERSION_GUID = "B02B49B5-BB2044E9-A30432B7-52E40360"
 FCINECAMERA_OBJECT_VERSION_GUID = "B2E18506-4273CFC2-A54EF4BB-758BBA07"
 FNIAGARA_OBJECT_VERSION_GUID = "F2AED0AC-9AFE416F-8664AA7F-FA26D6FC"
 
+# Phase 2: P1 核心版本流（LevelSequence/MorphTarget/RigVM/ControlRig）
+FUE5_SPECIAL_PROJECT_STREAM_OBJECT_VERSION_GUID = "59DA5D52-12324948-B8785978-70B8E98B"
+FRIGVM_OBJECT_VERSION_GUID = "DC49959B-53C04DE7-9156EA88-5E7C5D39"
+FCONTROL_RIG_OBJECT_VERSION_GUID = "A7820CFB-20A74359-8C542C14-9623CF50"
+
+# Phase 2: P2 特定资产类型版本流
+FNANITE_RESEARCH_STREAM_OBJECT_VERSION_GUID = "30D58BE3-95EA4282-A6E3B159-D8EBB06A"
+
+# Phase 2: P3 插件级版本
+FSKELETAL_MESH_CUSTOM_VERSION_GUID = "D78A4A00-E8584697-BAA819B5-487D46B4"
+FNIAGARA_CUSTOM_VERSION_GUID = "FCF57AFA-50764283-B9A9E658-FFA02D32"
+FINTERCHANGE_CUSTOM_VERSION_GUID = "92738C43-29884D9C-9A3D9BBE-6EFF9FC0"
+FASSET_REGISTRY_VERSION_GUID = "717F9EE7-E9B0493A-88B39132-1B388107"
+FCURVE_EXPRESSION_CUSTOM_VERSION_GUID = "A26D36AE-26935388-A8C5CB96-2B95B4AF"
+
 # ============================================================================
 # FrameworkObjectVersion阈值
 # ============================================================================
@@ -381,68 +398,70 @@ GRAPH_TYPE_MAP = {
 }
 
 # ============================================================================
-# CPF_* 属性标志位常量（Class Property Flags）
-# 等价迁移 uasset_read.py §4711-4738
+# EPropertyFlags — CPF_* 属性标志位常量
+# 对齐 UE5 ObjectMacros.h EPropertyFlags 枚举（64-bit）
+# 源码: Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h
 # ============================================================================
 
-CPF_Edit = 0x0000000000000001
-CPF_ConstParm = 0x0000000000000002
-CPF_BlueprintVisible = 0x0000000000000004
-CPF_ExportObject = 0x0000000000000008
-CPF_BlueprintReadOnly = 0x0000000000000010
-CPF_BlueprintAuthorityOnly = 0x0000000000000020
-CPF_EditFixedSize = 0x0000000000000040
-CPF_Parm = 0x0000000000000080
-CPF_OutParm = 0x0000000000000100
-CPF_ZeroConstructor = 0x0000000000000200
-CPF_ReturnParm = 0x0000000000000400
-CPF_Net = 0x0000000000000800
-CPF_EditAnywhere = 0x0000000000001000
-CPF_BlueprintReadWrite = 0x0000000000010000
-CPF_Transient = 0x0000000000002000
-CPF_Config = 0x0000000000004000
-CPF_DisableEditOnTemplate = 0x0000000000008000
-CPF_DuplicateTransient = 0x0000000000020000
-CPF_NonPIEDuplicateTransient = 0x0000000000040000
-CPF_EditConst = 0x0000000000080000
-CPF_NoClear = 0x0000000000200000
-CPF_ReferencePersisted = 0x0000000000400000
-CPF_SaveGame = 0x0000000001000000
-CPF_BlueprintAssignable = 0x0000000002000000
-CPF_BlueprintCallable = 0x0000000004000000
-CPF_BlueprintPure = 0x0000000008000000
-CPF_BlueprintCompilerGenerated = 0x0000000010000000
-CPF_NetSerialize = 0x0000000020000000
-CPF_RepNotify = 0x0000000040000000
-CPF_RepRetry = 0x0000000080000000
-CPF_Interp = 0x0000000100000000
-CPF_Constructed = 0x0000000200000000
-CPF_Protected = 0x0000000400000000
-CPF_AdvancedDisplay = 0x0000000800000000
-CPF_AssetRegistrySearchable = 0x0000001000000000
-CPF_ContainsInstancedReference = 0x0000002000000000
-CPF_Deprecated = 0x0000004000000000
-CPF_IsPlainOldData = 0x0000008000000000
-CPF_NoDestructor = 0x0000010000000000
-CPF_HasGetValueTypeHash = 0x0000020000000000
-CPF_NativeAccessSpecifierPublic = 0x0000040000000000
-CPF_NativeAccessSpecifierProtected = 0x0000080000000000
-CPF_NativeAccessSpecifierPrivate = 0x0000100000000000
-CPF_SkipSerialization = 0x0000200000000000
-CPF_TextExportTransient = 0x0000400000000000
-CPF_NonTransactional = 0x0000800000000000
-CPF_Required = 0x0001000000000000
-CPF_ExposeOnSpawn = 0x0002000000000000
-CPF_PersistentInstance = 0x0004000000000000
-CPF_TObjectPtr = 0x0008000000000000
-CPF_UObjectWrapper = 0x0010000000000000
-CPF_NaturalizePropertyIndex = 0x0020000000000000
-CPF_InstancedReference = 0x0040000000000000
-
-# 旧 API 名称保留为 UE5 标准语义别名，不再覆盖标准 CPF_* 值。
-CPF_EditInstanceOnly = CPF_EditAnywhere
-CPF_ReferenceOnly = CPF_ReferencePersisted
-CPF_Replicated = CPF_Net
+CPF_Edit = 0x0000000000000001          # L434
+CPF_ConstParm = 0x0000000000000002     # L435
+CPF_BlueprintVisible = 0x0000000000000004  # L436
+CPF_ExportObject = 0x0000000000000008  # L437
+CPF_BlueprintReadOnly = 0x0000000000000010  # L438
+CPF_Net = 0x0000000000000020          # L439
+CPF_EditFixedSize = 0x0000000000000040  # L440
+CPF_Parm = 0x0000000000000080         # L441
+CPF_OutParm = 0x0000000000000100      # L442
+CPF_ZeroConstructor = 0x0000000000000200  # L443
+CPF_ReturnParm = 0x0000000000000400   # L444
+CPF_DisableEditOnTemplate = 0x0000000000000800  # L445
+CPF_NonNullable = 0x0000000000001000  # L446
+CPF_Transient = 0x0000000000002000    # L447
+CPF_Config = 0x0000000000004000       # L448
+CPF_RequiredParm = 0x0000000000008000  # L449
+CPF_DisableEditOnInstance = 0x0000000000010000  # L450
+CPF_EditConst = 0x0000000000020000    # L451
+CPF_GlobalConfig = 0x0000000000040000  # L452
+CPF_InstancedReference = 0x0000000000080000  # L453
+# L454: CPF_ExperimentalExternalObjects omitted — UE5 experimental, no UPROPERTY semantic mapping
+CPF_DuplicateTransient = 0x0000000000200000  # L455
+CPF_SaveGame = 0x0000000001000000     # L458
+CPF_NoClear = 0x0000000002000000      # L459
+CPF_Virtual = 0x0000000004000000      # L460
+CPF_ReferenceParm = 0x0000000008000000  # L461
+CPF_BlueprintAssignable = 0x0000000010000000  # L462
+CPF_Deprecated = 0x0000000020000000   # L463
+CPF_IsPlainOldData = 0x0000000040000000  # L464
+CPF_RepSkip = 0x0000000080000000      # L465
+CPF_RepNotify = 0x0000000100000000    # L466
+CPF_Interp = 0x0000000200000000       # L467
+CPF_NonTransactional = 0x0000000400000000  # L468
+CPF_EditorOnly = 0x0000000800000000   # L469
+CPF_NoDestructor = 0x0000001000000000  # L470
+CPF_AutoWeak = 0x0000004000000000     # L472
+CPF_ContainsInstancedReference = 0x0000008000000000  # L473
+CPF_AssetRegistrySearchable = 0x0000010000000000  # L474
+CPF_SimpleDisplay = 0x0000020000000000  # L475
+CPF_AdvancedDisplay = 0x0000040000000000  # L476
+CPF_Protected = 0x0000080000000000    # L477
+CPF_BlueprintCallable = 0x0000100000000000  # L478
+CPF_BlueprintAuthorityOnly = 0x0000200000000000  # L479
+CPF_TextExportTransient = 0x0000400000000000  # L480
+CPF_NonPIEDuplicateTransient = 0x0000800000000000  # L481
+CPF_ExposeOnSpawn = 0x0001000000000000  # L482
+CPF_PersistentInstance = 0x0002000000000000  # L483
+CPF_UObjectWrapper = 0x0004000000000000  # L484
+CPF_HasGetValueTypeHash = 0x0008000000000000  # L485
+CPF_NativeAccessSpecifierPublic = 0x0010000000000000  # L486
+CPF_NativeAccessSpecifierProtected = 0x0020000000000000  # L487
+CPF_NativeAccessSpecifierPrivate = 0x0040000000000000  # L488
+CPF_SkipSerialization = 0x0080000000000000  # L489
+CPF_TObjectPtr = 0x0100000000000000   # L490
+CPF_ExperimentalOverridableLogic = 0x0200000000000000  # L491
+CPF_ExperimentalAlwaysOverriden = 0x0400000000000000  # L492
+CPF_ExperimentalNeverOverriden = 0x0800000000000000  # L493
+CPF_AllowSelfReference = 0x1000000000000000  # L494
+CPF_ForcePostConstructLink = 0x2000000000000000  # L495
 
 # ============================================================================
 # CLI退出代码
@@ -452,5 +471,42 @@ EXIT_SUCCESS = 0
 EXIT_PARSE_ERROR = 1
 EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
+
+# ============================================================================
+# 游戏变体枚举（GameVariant）
+# ============================================================================
+
+class GameVariant(IntEnum):
+    """游戏变体枚举。"""
+    NONE = 0
+    FORTNITE = 1001
+    PUBG = 1002
+    APEX_LEGENDS = 1003
+    VALORANT = 1004
+
+# 版本映射表
+GAME_VARIANT_VERSIONS = {
+    GameVariant.NONE: {
+        "override_file_version": None,
+        "feature_flags": {},
+    },
+    GameVariant.FORTNITE: {
+        "override_file_version": None,
+        "feature_flags": {
+            "use_new_cooked_format": True,
+            "enable_niagara_support": True,
+        },
+    },
+    GameVariant.PUBG: {
+        "override_file_version": None,
+        "feature_flags": {
+            "enable_lod_streaming": True,
+        },
+    },
+}
+
+def get_game_variant_config(variant: GameVariant) -> dict:
+    """获取游戏变体配置。"""
+    return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
 
 

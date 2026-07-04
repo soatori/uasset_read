@@ -16,6 +16,9 @@ lib64/
 *.egg
 dist/
 build/
+venv/
+.venv/
+env/
 
 # IDE
 .vscode/
@@ -38,7 +41,7 @@ desktop.ini
 # Temp and output
 temp/
 test/
-output/
+/output/
 /debug/
 reports/
 /json
@@ -56,6 +59,9 @@ memory/
 # CodeGraph local data
 .codegraph/
 
+# Codex local data
+.codex/
+
 # Test files - track test Python files and directories
 tests/*
 !tests/__init__.py
@@ -69,6 +75,7 @@ tests/*
 !tests/blueprint/
 !tests/integration/
 !tests/linker/
+!tests/link/
 !tests/archive/
 !tests/ir/
 !tests/structs/
@@ -77,6 +84,7 @@ tests/*
 !tests/asset/
 !tests/cpp/
 !tests/unit/
+!tests/pak/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
