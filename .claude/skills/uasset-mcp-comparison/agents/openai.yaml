@@ -1,4 +1,0 @@
-interface:
-  display_name: "uasset MCP 对比测试"
-  short_description: "对比 uasset_read 解析器输出与 Unreal Editor MCP 实时数据"
-  default_prompt: "对比解析器输出与 MCP 数据，验证蓝图图名和变量解析准确性"
