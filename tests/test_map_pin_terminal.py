@@ -31,10 +31,9 @@ class TestMapPinTerminal:
                     for pin in node.pins:
                         if pin.container_type == "Map":
                             map_pins_found = True
-                            # Map pin 应有 terminal 类型信息
-                            # 即使是 None，也不应该是缺失状态
-                            assert pin.pin_category != "", \
-                                f"Map pin {pin.pin_name} 缺少 pin_category"
+                            # Map pin 应有 terminal 类型字段（新增字段）
+                            assert pin.map_key_pin_category != "", \
+                                f"Map pin {pin.pin_name} 缺少 map_key_pin_category"
 
         if not map_pins_found:
             pytest.skip("未找到 Map 类型引脚")
@@ -87,9 +86,8 @@ class TestMapPinTerminal:
                     for pin in node.get("pins", []):
                         if pin.get("container_type") == "Map":
                             # Map pin 应有 terminal 类型字段
-                            # map_key_pin_category 可能为空但字段应存在
-                            assert "map_key_pin_category" in pin or pin.get("map_key_pin_category", "") == "", \
-                                f"Map pin {pin.get('pin_name')} 缺少 map_key_pin_category"
+                            assert "map_key_pin_category" in pin, \
+                                f"Map pin {pin.get('pin_name')} 的 JSON 缺少 map_key_pin_category 字段"
 
     @pytest.mark.integration
     def test_map_pin_terminal_type_stored(self):
@@ -104,19 +102,21 @@ class TestMapPinTerminal:
         result = parse_package(str(path))
         ir = build_package_ir(result)
 
-        # 查找 Map 类型引脚并验证 terminal 类型字段存在
+        # 查找 Map 类型引脚并验证 terminal 类型字段是 str 类型（dataclass 检查用类型断言代替 hasattr）
         for export in ir.exports:
             for graph in export.graphs:
                 for node in graph.nodes:
                     for pin in node.pins:
                         if pin.container_type == "Map":
-                            # Map pin 应有 terminal 类型字段（即使值为空）
-                            assert hasattr(pin, "map_key_pin_category"), \
-                                f"Map pin {pin.pin_name} 缺少 map_key_pin_category 属性"
-                            assert hasattr(pin, "map_key_pin_subcategory"), \
-                                f"Map pin {pin.pin_name} 缺少 map_key_pin_subcategory 属性"
-                            assert hasattr(pin, "map_key_pin_subcategory_object"), \
-                                f"Map pin {pin.pin_name} 缺少 map_key_pin_subcategory_object 属性"
+                            # PinIR 是 dataclass，hasattr 恒为 True，改用类型检查
+                            assert isinstance(pin.map_key_pin_category, str), \
+                                f"Map pin {pin.pin_name} 的 map_key_pin_category 不是 str"
+                            assert isinstance(pin.map_key_pin_subcategory, str), \
+                                f"Map pin {pin.pin_name} 的 map_key_pin_subcategory 不是 str"
+                            # map_key_pin_subcategory_object 可以是 None 或 str
+                            assert pin.map_key_pin_subcategory_object is None or isinstance(
+                                pin.map_key_pin_subcategory_object, str
+                            ), f"Map pin {pin.pin_name} 的 map_key_pin_subcategory_object 类型错误"
 
     def test_fed_graph_pin_type_map_fields(self):
         """验证 FEdGraphPinType 的 Map terminal 类型字段。"""
@@ -140,3 +140,95 @@ class TestMapPinTerminal:
         assert pin_type.map_key_terminal_sub_category == "Vector"
         assert pin_type.map_key_terminal_sub_category_object == 123
         assert pin_type.map_key_terminal_sub_category_object_name == "/Script/Engine.Vector"
+
+
+class TestMapPinTerminalEndToEnd:
+    """Map Pin terminal 类型端到端测试（单元级，不依赖样本文件）。"""
+
+    def test_map_pin_terminal_values_propagated_to_ir(self):
+        """验证 FEdGraphPinType → IR Builder → PinIR 的 terminal 类型值正确传播。"""
+        from uasset_read.models.core import FEdGraphPinType, UEdGraphPin
+        from uasset_read.ir_builder import _build_pin_ir
+
+        # 构造带 Map terminal 类型信息的 FEdGraphPinType
+        pin_type = FEdGraphPinType()
+        pin_type.pin_category = "struct"
+        pin_type.pin_subcategory = ""
+        pin_type.container_type = 3  # Map
+        pin_type.map_key_terminal_category = "struct"
+        pin_type.map_key_terminal_sub_category = "Vector"
+        pin_type.map_key_terminal_sub_category_object = 42
+        pin_type.map_key_terminal_sub_category_object_name = "/Script/Engine.Vector"
+
+        # 构造 UEdGraphPin
+        pin = UEdGraphPin(
+            pin_id="TEST_GUID_0000000000000000",
+            pin_name="TestMapPin",
+            pin_type=pin_type,
+            direction=1,
+            default_value=None,
+        )
+
+        # 通过 IR Builder 转换
+        pin_ir = _build_pin_ir(pin)
+
+        # 验证 terminal 类型值正确传播
+        assert pin_ir.container_type == "Map"
+        assert pin_ir.map_key_pin_category == "struct"
+        assert pin_ir.map_key_pin_subcategory == "Vector"
+        assert pin_ir.map_key_pin_subcategory_object == "/Script/Engine.Vector"
+
+    def test_non_map_pin_terminal_fields_are_default(self):
+        """验证非 Map Pin 的 terminal 类型字段保持默认值。"""
+        from uasset_read.models.core import FEdGraphPinType, UEdGraphPin
+        from uasset_read.ir_builder import _build_pin_ir
+
+        # 构造非 Map 类型的 Pin（container_type=0 即 None）
+        pin_type = FEdGraphPinType()
+        pin_type.pin_category = "object"
+        pin_type.pin_subcategory = ""
+        pin_type.container_type = 0  # None（非 Map）
+        # 即使手动设置了 terminal 字段，非 Map Pin 不应传播到 IR
+        pin_type.map_key_terminal_category = "struct"
+        pin_type.map_key_terminal_sub_category = "Vector"
+        pin_type.map_key_terminal_sub_category_object_name = "/Script/Engine.Vector"
+
+        pin = UEdGraphPin(
+            pin_id="TEST_GUID_0000000000000000",
+            pin_name="TestObjectPin",
+            pin_type=pin_type,
+            direction=0,
+            default_value=None,
+        )
+
+        pin_ir = _build_pin_ir(pin)
+
+        # 非 Map Pin 的 terminal 字段应保持默认
+        assert pin_ir.map_key_pin_category == ""
+        assert pin_ir.map_key_pin_subcategory == ""
+        assert pin_ir.map_key_pin_subcategory_object is None
+
+    def test_array_pin_terminal_fields_are_default(self):
+        """验证 Array Pin 的 terminal 类型字段保持默认值。"""
+        from uasset_read.models.core import FEdGraphPinType, UEdGraphPin
+        from uasset_read.ir_builder import _build_pin_ir
+
+        pin_type = FEdGraphPinType()
+        pin_type.pin_category = "int"
+        pin_type.container_type = 1  # Array（非 Map）
+        pin_type.map_key_terminal_category = "int"  # 手动设置不应传播
+
+        pin = UEdGraphPin(
+            pin_id="TEST_GUID_0000000000000000",
+            pin_name="TestArrayPin",
+            pin_type=pin_type,
+            direction=1,
+            default_value=None,
+        )
+
+        pin_ir = _build_pin_ir(pin)
+
+        assert pin_ir.container_type == "Array"
+        assert pin_ir.map_key_pin_category == ""
+        assert pin_ir.map_key_pin_subcategory == ""
+        assert pin_ir.map_key_pin_subcategory_object is None
