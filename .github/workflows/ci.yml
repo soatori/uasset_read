@@ -27,7 +27,21 @@ jobs:
           # 对于直接 push 到 master，检查所有文件
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # 只检查新增文件（相对于 master 的差异）
-            FILES=$(git diff --diff-filter=A --name-only origin/master...HEAD 2>/dev/null || git ls-files)
+            # 但排除那些已经在 develop 分支上存在的目录（它们不应该被合并到 master）
+            ALL_ADDED=$(git diff --diff-filter=A --name-only origin/master...HEAD 2>/dev/null || echo "")
+            # 获取 develop 分支上已存在的目录
+            EXISTING_DIRS=$(git ls-tree -d --name-only HEAD 2>/dev/null || echo "")
+            # 过滤掉已经在 develop 分支上存在的目录
+            FILES=""
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                dir=$(dirname "$file")
+                # 检查这个目录是否在 develop 分支上已经存在
+                if ! echo "$EXISTING_DIRS" | grep -q "^${dir}$"; then
+                  FILES="$FILES\n$file"
+                fi
+              fi
+            done <<< "$ALL_ADDED"
           else
             FILES=$(git ls-files)
           fi
