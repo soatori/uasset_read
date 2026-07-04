@@ -96,8 +96,9 @@ class TestHashBeforeCompressionBlocks:
         decoded = FPakEntry.deserialize_legacy(BytesIO(raw), version=8)
 
         # Hash 必须被正确读取（不是被 CompressionBlocks 的数据覆盖）
-        assert decoded.hash == b'\xAA' * 20, (
-            f"Hash 位置错误: 期望 {b'\\xAA' * 20!r}, 实际 {decoded.hash!r}"
+        expected_hash = b'\xAA' * 20
+        assert decoded.hash == expected_hash, (
+            f"Hash 位置错误: 期望 {expected_hash!r}, 实际 {decoded.hash!r}"
         )
         assert decoded.compression_block_count == 1
         assert decoded.compression_blocks[0].compressed_start == 0
