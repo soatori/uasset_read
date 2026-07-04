@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.5.1.31** — 31 issues resolved since v0.5.1.19: graph output chain fix, UEdGraph offset validation, Map Pin terminal types, CPF_* flags alignment, pak/ioStore binary format, blueprint wildcard fix, and more.
+> 📦 **v0.5.2.31** — 31 issues resolved since v0.5.1.19: graph output chain fix, UEdGraph offset validation, Map Pin terminal types, CPF_* flags alignment, pak/ioStore binary format, blueprint wildcard fix, and more.
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.5.1.31 |
+| Version | 0.5.2.31 |
 | Source | Python parser for Unreal Engine .uasset files |
 | Tests | 1424 collected (integration tests skip when sample assets unavailable) |
 | Modules | 134 source files across 14 subpackages |
