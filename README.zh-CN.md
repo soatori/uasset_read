@@ -6,7 +6,7 @@
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.5.1.19** — 自 v0.5.0 以来修复 18 个 issue：PackageFlags 完整定义、HexView 调试系统、AssetRegistryData 解析、FString UTF-16 修复、BoxSphereBounds 多格式支持、BlueprintVariable var_type 提取、AnimGraph 嵌套子图解析、BlueprintDescription + Interfaces 分类等。
+> 📦 **v0.5.2.31** — 自 v0.5.1.19 以来修复 31 个 issue：图输出链修复、UEdGraph 偏移验证、Map Pin 终端类型、CPF_* 标志对齐、pak/ioStore 二进制格式、蓝图通配符修复等。
 
 ## 为什么选择 uasset_read？
 
@@ -24,7 +24,7 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.5.1.19 |
+| 版本 | 0.5.2.31 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
 | 测试 | 1424 个测试用例（集成测试在样本资产不可用时自动跳过） |
 | 模块 | 14 个子包，134 个源文件 |
