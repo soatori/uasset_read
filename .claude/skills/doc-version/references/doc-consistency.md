@@ -58,7 +58,7 @@ find src/uasset_read -name "*.py" -path "*/formatters/*"  # 应为空
 ### ❌ 不一致
 - CLI 标志: README 提到 --text 但已移除
 - 模块列表: CLAUDE.md 提到 formatters/ 但已删除
-- 测试命令: README 引用 scripts/test_matrix.py 但不存在
+- 测试命令: 文档引用了不存在的测试入口（已修正）
 
 ### ⚠️ 过时
 - wiki/ 渲染器数量: 6 (应为 2)

@@ -23,14 +23,13 @@ python run.py file.uasset --tolerant             # 容错模式（默认）
 python run.py --batch-dir path/to/dir/           # 批量导出
 
 # 测试
-python scripts/test_matrix.py smoke              # L0 烟雾测试（最快）
-python scripts/test_matrix.py unit               # L0+L1 单元测试
-python scripts/test_matrix.py all                # 全量测试
-python -m pytest tests/test_pak_handling.py -v   # 单个文件
+python -m pytest tests/ -v                        # 运行所有测试
+python -m pytest tests/ -v -m "not slow"          # 运行非慢速测试
+python -m pytest tests/test_archive_quality.py -v # 运行单个测试文件
 python -m pytest tests/ -v --cov=uasset_read     # 覆盖率
 
 # 质量
-python scripts/test_matrix.py quality            # 质量门禁
+python -m pytest tests/ -v -m "quality"           # 质量门禁
 ```
 
 **Windows 路径**：使用正斜杠 `E:/Develop/...` 或双反斜杠。**测试样本**：`E:\Develop\lib\Samples`。**pytest 标记**：`integration`、`quality`、`regression`、`slow`。
