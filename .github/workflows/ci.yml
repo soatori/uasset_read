@@ -16,12 +16,19 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.base_ref == 'master'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check master branch file whitelist
         run: |
           echo "Checking master branch directory compliance..."
 
-          FILES=$(git ls-files)
+          # 对于 PR，只检查相对于 master 分支的新增文件
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FILES=$(git diff --name-only origin/master...HEAD 2>/dev/null || git ls-files)
+          else
+            FILES=$(git ls-files)
+          fi
 
           # 禁止出现在 master 的目录
           FORBIDDEN_PATTERNS=(
