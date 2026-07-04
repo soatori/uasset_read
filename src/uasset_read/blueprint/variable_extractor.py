@@ -4,12 +4,10 @@
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Dict, Any, Optional
+import logging
+from typing import List, Dict, Any, Optional
 
-if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
-    from uasset_read.serializers.object_resources import ObjectExport
-    from uasset_read.serializers.package_summary import PackageFileSummary
+logger = logging.getLogger(__name__)
 
 from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, BlueprintEvent, FunctionParameter
 from uasset_read.models.properties import PropertyValue, StructValue
@@ -20,10 +18,9 @@ from uasset_read.constants import (
     CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
     CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
     CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
-    CPF_Protected, CPF_AdvancedDisplay, CPF_ExposeOnSpawn, CPF_EditAnywhere,
-    CPF_EditInstanceOnly, CPF_BlueprintReadWrite, CPF_DuplicateTransient,
-    CPF_NoClear, CPF_ReferenceOnly, CPF_BlueprintCallable, CPF_Interp,
-    CPF_Replicated, CPF_NonPIEDuplicateTransient,
+    CPF_Protected, CPF_ExposeOnSpawn,
+    CPF_DuplicateTransient, CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
+    CPF_NonPIEDuplicateTransient,
 )
 
 # UE 属性类型名 → 标准化 pin_category 映射
@@ -88,7 +85,7 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "class": "UClass*",
     "widget": "UWidget*",
     # 特殊类型
-    " wildcard": "Wildcard",
+    "wildcard": "Wildcard",
     "exec": "void",
     "delegate": "void",
     "multicastdelegate": "void",
@@ -104,22 +101,24 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     Returns:
         C++ 类型字符串
     """
+    normalized = pin_category.strip()
+
     # 精确匹配
-    if pin_category in _PIN_CATEGORY_TO_CPP_TYPE:
-        return _PIN_CATEGORY_TO_CPP_TYPE[pin_category]
+    if normalized in _PIN_CATEGORY_TO_CPP_TYPE:
+        return _PIN_CATEGORY_TO_CPP_TYPE[normalized]
 
     # 大小写不敏感匹配
-    lower_category = pin_category.lower()
+    lower_category = normalized.lower()
     for key, value in _PIN_CATEGORY_TO_CPP_TYPE.items():
         if key.lower() == lower_category:
             return value
 
     # 如果是对象类型路径（以 /Script/ 开头），直接返回
-    if pin_category.startswith("/Script/"):
-        return pin_category
+    if normalized.startswith("/Script/"):
+        return normalized
 
     # 默认返回原始类型名
-    return pin_category
+    return normalized
 
 
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
@@ -147,12 +146,12 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
 def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
     return {
-        "is_edit_anywhere": bool(flags & CPF_EditAnywhere),
-        "is_edit_instance_only": bool(flags & CPF_EditInstanceOnly),
-        "is_blueprint_readable": bool(flags & CPF_BlueprintReadWrite),
+        "is_edit_anywhere": bool(flags & CPF_Edit),
+        "is_edit_instance_only": bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst),
+        "is_blueprint_readable": bool(flags & CPF_BlueprintVisible),
         "is_blueprint_read_only": bool(flags & CPF_BlueprintReadOnly),
         "is_net": bool(flags & CPF_Net),
-        "is_replicated": bool(flags & CPF_Replicated),
+        "is_replicated": bool(flags & CPF_Net),
         "is_transient": bool(flags & CPF_Transient),
         "is_blueprint_assignable": bool(flags & CPF_BlueprintAssignable),
         "is_rep_notify": bool(flags & CPF_RepNotify),
@@ -163,11 +162,12 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
 def _flags_to_labels(flags: int) -> List[str]:
     """将 CPF_* 位标志转换为可读标签列表。"""
     labels = []
-    if flags & CPF_EditAnywhere:
-        labels.append("EditAnywhere")
-    if flags & CPF_EditConst:
-        labels.append("EditConst")
-    if flags & CPF_BlueprintReadWrite:
+    if flags & CPF_Edit:
+        if flags & CPF_EditConst:
+            labels.append("EditConst")
+        else:
+            labels.append("EditAnywhere")
+    if flags & CPF_BlueprintVisible:
         labels.append("BlueprintReadWrite")
     if flags & CPF_BlueprintReadOnly:
         labels.append("BlueprintReadOnly")
@@ -196,7 +196,6 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         container_type = value.get("container_type", 0)
 
         # 处理 StructValue 对象（高级属性容器）
-        from uasset_read.models.properties import StructValue
         if hasattr(prop, "type") and prop.type == "StructProperty":
             if isinstance(value, dict):
                 pin_category = value.get("PinCategory", value.get("pin_category", ""))
@@ -396,6 +395,18 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         var.friendly_name = str(fields.get("FriendlyName") or fields.get("friendly_name") or "")
         var.rep_notify_func = str(fields.get("RepNotifyFunc") or fields.get("rep_notify_func") or "")
         var.replication_condition = _replication_condition_value(rep_condition)
+
+        # 组件变量检测（与 read_blueprint_variable 逻辑对齐）
+        type_str = ""
+        if var.var_type:
+            if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
+                type_str = var.var_type.pin_subcategory
+            elif var.var_type.pin_category:
+                type_str = var.var_type.pin_category
+        is_component_by_name = isinstance(type_str, str) and "Component" in type_str
+        is_component_by_flag = (property_flags & CPF_InstancedReference) != 0
+        var.is_component = is_component_by_name or is_component_by_flag
+
         variables.append(var)
     return variables
 
@@ -776,7 +787,7 @@ def extract_blueprint_metadata(
         properties = parse_properties_from_export(
             export, archive, summary, name_map, export_map, import_map,
         )
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         return None, None
 
     if not properties:
@@ -916,8 +927,8 @@ def extract_blueprint_metadata(
                     other_export, archive, summary, name_map, export_map, import_map,
                 )
                 interfaces = _extract_interfaces_from_props(other_props)
-            except Exception:
-                pass
+            except (KeyError, TypeError, ValueError) as e:
+                logger.debug("提取接口属性失败: %s", e, exc_info=True)
             if interfaces:
                 break
 
@@ -983,7 +994,6 @@ def parse_property_flags_to_labels(flags: int) -> List[str]:
         labels.append("Interp")
     if flags & CPF_Net:
         labels.append("Net")
-    if flags & CPF_Replicated:
         labels.append("Replicated")
 
     return labels
@@ -1045,23 +1055,23 @@ def read_blueprint_variable(
 
     # 解析属性标志为布尔字段
     flags = var.property_flags
-    var.is_edit_anywhere = bool(flags & CPF_EditAnywhere)
-    var.is_edit_instance_only = bool(flags & CPF_EditInstanceOnly)
+    var.is_edit_anywhere = bool(flags & CPF_Edit)
+    var.is_edit_instance_only = bool(flags & CPF_Edit)
     var.is_blueprint_read_only = bool(flags & CPF_BlueprintReadOnly)
-    var.is_blueprint_readable = bool(flags & CPF_BlueprintReadWrite)
-    var.is_blueprint_writable = bool(flags & CPF_BlueprintReadWrite) and not bool(flags & CPF_BlueprintReadOnly)
+    var.is_blueprint_readable = bool(flags & CPF_BlueprintVisible)
+    var.is_blueprint_writable = bool(flags & CPF_BlueprintVisible) and not bool(flags & CPF_BlueprintReadOnly)
     var.is_transient = bool(flags & CPF_Transient)
     var.is_duplicate_transient = bool(flags & CPF_DuplicateTransient)
     var.is_save_game = bool(flags & CPF_SaveGame)
     var.is_no_clear = bool(flags & CPF_NoClear)
-    var.is_reference_only = bool(flags & CPF_ReferenceOnly)
+    var.is_reference_only = False
     var.is_blueprint_assignable = bool(flags & CPF_BlueprintAssignable)
     var.is_blueprint_callable = bool(flags & CPF_BlueprintCallable)
     var.is_rep_notify = bool(flags & CPF_RepNotify)
     var.is_interp = bool(flags & CPF_Interp)
     var.is_expose_on_spawn = bool(flags & CPF_ExposeOnSpawn)
     var.is_net = bool(flags & CPF_Net)
-    var.is_replicated = bool(flags & CPF_Replicated)
+    var.is_replicated = bool(flags & CPF_Net)
     var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
 
     # 提取元数据字段

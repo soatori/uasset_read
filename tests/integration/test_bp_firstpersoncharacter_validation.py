@@ -230,8 +230,8 @@ class TestDiagnostics:
             d for d in bp_result.diagnostics
             if d.field == "PackageIndex"
         ]
-        assert len(package_index_diags) == 4, (
-            f"PackageIndex 越界诊断应为 4，实际: {len(package_index_diags)}"
+        assert len(package_index_diags) == 5, (
+            f"PackageIndex 越界诊断应为 5，实际: {len(package_index_diags)}"
         )
         # 验证诊断内容
         for diag in package_index_diags:

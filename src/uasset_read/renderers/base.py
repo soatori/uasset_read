@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -36,6 +36,8 @@ class RenderOptions:
     include_schema: bool = False
     include_function_graphs: bool = False
     linker_result: Any = None  # LinkerParseResult，供需要 linker 数据的格式使用
+    output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
+    hex_view: bool = False  # 输出 HexView 解析轨迹数据
 
 
 class IRenderer(ABC):

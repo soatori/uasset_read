@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 
 class SerializationStrategy(str, Enum):
@@ -69,6 +68,9 @@ _OPAQUE_CLASSES = frozenset({
     "MetasoundEditorGraphMemberDefaultString",
     "MetasoundEditorGraphMemberDefaultLiteral",
     "MetasoundEditorGraphMemberDefaultObjectArray",
+    # 纯 UPROPERTY 但当前 parser 无法完整解析的类
+    "FoliageType",
+    "SkeletalMeshLODSettings",
 })
 
 # Skip entirely — 格式未知或风险过高

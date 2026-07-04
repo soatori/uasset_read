@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import struct as _struct
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,6 @@ from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
-    UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE5_PROPERTY_TAG_EXTENSION,
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
@@ -155,7 +155,7 @@ def _try_asset_type_handler(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
                 handler.handler_name, export.object_name, handler_status,
             )
-    except Exception as e:
+    except (KeyError, TypeError, ValueError) as e:
         logger.debug(
             "AssetTypeHandler failed for '%s' (%s): %s",
             export.object_name, class_name, e,
@@ -209,7 +209,7 @@ def parse_property_value(
                 if result is not None:
                     return result
                 # Handler 返回 None（未知类型/解析失败），继续回退到 raw_data
-            except Exception as e:
+            except (_struct.error, OSError, ValueError) as e:
                 logger.warning("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
@@ -233,13 +233,13 @@ def parse_property_value(
             if custom_id is not None:
                 try:
                     return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-                except Exception as e:
+                except (_struct.error, OSError, ValueError) as e:
                     logger.warning("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
-            except Exception as e:
+            except (_struct.error, OSError, ValueError) as e:
                 logger.warning("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
         # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
@@ -288,7 +288,7 @@ def parse_property_value(
             return handler(tag, archive, name_map, summary)
         elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
             return handler(tag, archive)
-    except Exception as e:
+    except (_struct.error, OSError, ValueError, AttributeError, KeyError) as e:
         if not tolerant:
             raise
         logger.warning("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
@@ -370,7 +370,7 @@ def parse_properties_from_export(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except Exception as e:
+        except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve class name for export: %s", e)
     if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
         logger.debug(
@@ -379,7 +379,7 @@ def parse_properties_from_export(
         )
         try:
             skip_export_payload(archive, export, summary)
-        except Exception as e:
+        except (_struct.error, OSError, ValueError) as e:
             logger.warning("Failed to skip export '%s' payload: %s", export.object_name, e)
         setattr(export, "parse_status", "skipped")
         setattr(export, "fallback_reason", "unsupported_type")
@@ -433,6 +433,7 @@ def parse_properties_from_export(
                 mapped,
                 struct_name,
                 property_end,
+                tolerant=tolerant,
             )
 
     # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
@@ -479,13 +480,17 @@ def parse_properties_from_export(
             current_pos = archive.tell()
             if current_pos >= property_end:
                 break
+            # #276: EOF 检查 — 防止 archive 数据不足时在 EOF 处无限重试
+            file_size = getattr(archive, '_file_size', None)
+            if isinstance(file_size, int) and current_pos >= file_size:
+                break
 
             struct_name = None
             if mappings is not None and import_map is not None:
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
-                except Exception as e:
+                except (KeyError, AttributeError, IndexError) as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
@@ -561,9 +566,29 @@ def parse_properties_from_export(
                     properties[-1].value = resolved
 
         except ParseError as e:
+            # #276: strict 模式下直接传播，不重试
+            if not tolerant:
+                raise
+
             # D-19: Smart continue - skip damaged property using PropertyTag.Size
             if tag is not None and start_pos is not None:
-                archive.seek(start_pos + tag.size)
+                target_pos = start_pos + tag.size
+                # 安全网：如果 target_pos 回退或原地不动，强制前进至少 1 字节
+                if target_pos > start_pos:
+                    archive.seek(target_pos)
+                else:
+                    archive.seek(min(start_pos + 1, getattr(archive, '_file_size', start_pos + 1)))
+            else:
+                # start_pos 未知（tag 读取早期失败），前进 1 字节防止无限循环
+                next_pos = archive.tell() + 1
+                file_size = getattr(archive, '_file_size', None)
+                if isinstance(file_size, int):
+                    next_pos = min(next_pos, file_size)
+                logger.warning(
+                    "PropertyTag 早期损坏，无法确定偏移，跳过 1 字节 (offset=%d)",
+                    archive.tell(),
+                )
+                archive.seek(next_pos)
 
             # 使用 PropertyFallback 替代纯字符串错误信息
             fb = PropertyFallback(
@@ -595,7 +620,7 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
             return resolve_class_name(export.class_index, import_map, export_map)
-        except Exception as e:
+        except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
 
@@ -609,6 +634,7 @@ def _parse_unversioned_properties_from_mapping(
     mappings: Any,
     struct_name: str,
     property_end: int,
+    tolerant: bool = True,
 ) -> List[PropertyValue]:
     """Parse a simple mapping-driven unversioned property stream.
 
@@ -643,10 +669,14 @@ def _parse_unversioned_properties_from_mapping(
             continue
         start = archive.tell()
         try:
-            value = parse_property_value(tag, archive, name_map, export_map, summary)
+            value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
+            # #276: strict 模式下直接传播
+            if not tolerant:
+                raise
             if tag.size > 0:
-                archive.seek(min(start + tag.size, property_end))
+                seek_target = min(start + tag.size, property_end, archive._file_size)
+                archive.seek(seek_target)
             fb = PropertyFallback(
                 name=info.name,
                 type=tag.type,
@@ -662,7 +692,15 @@ def _parse_unversioned_properties_from_mapping(
             tag.size = archive.tell() - start
         out.append(PropertyValue(info.name, tag.type, value))
     if archive.tell() < property_end:
-        tail = archive.read(property_end - archive.tell())
+        remaining = property_end - archive.tell()
+        # #276: 安全读取 tail，防止 property_end 超出 archive 实际大小
+        current_pos = archive.tell()
+        file_size = getattr(archive, '_file_size', None)
+        if isinstance(file_size, int):
+            tail_size = max(0, min(remaining, file_size - current_pos))
+        else:
+            tail_size = remaining
+        tail = archive.read(tail_size) if tail_size > 0 else b""
         if tail:
             out.append(PropertyValue(
                 name="_unversioned_tail",
@@ -729,7 +767,7 @@ def _try_read_unversioned_header(
         if archive.tell() >= property_end and not all(is_zero for _index, is_zero in selected):
             raise ParseError("unversioned header consumes entire property payload")
         return selected
-    except Exception as e:
+    except (_struct.error, ParseError, ValueError) as e:
         logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
         archive.seek(start)
         return None
@@ -826,7 +864,7 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
             if inner_size <= 0:
                 return 0
             return min(remaining, 4 + inner_size)
-    except Exception as e:
+    except (_struct.error, ValueError, AttributeError) as e:
         logger.debug("Unversioned variable size estimation failed: %s", e)
         return 0
     finally:

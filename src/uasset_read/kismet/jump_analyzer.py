@@ -145,8 +145,9 @@ class JumpAnalyzer:
         优先级顺序：
         1. for（while + 递增表达式）
         2. while（条件 + 回跳）
-        3. if_else / if（条件分支）
-        4. switch/case（EX_SwitchValue）
+        3. push_pop（Push/Pop + JumpIfNot，if/else 的精确标记）
+        4. if_else / if（条件分支）
+        5. switch/case（EX_SwitchValue）
 
         Args:
             start_idx: 起始表达式索引。
@@ -158,6 +159,9 @@ class JumpAnalyzer:
         if result is not None:
             return result
         result = self.detect_while_pattern(start_idx)
+        if result is not None:
+            return result
+        result = self.detect_push_pop_pattern(start_idx)
         if result is not None:
             return result
         result = self.detect_if_else_pattern(start_idx)
@@ -236,6 +240,99 @@ class JumpAnalyzer:
             "condition": condition,
             "then_start": start_idx + 1,
             "then_end": false_label_idx - 1,
+        }
+
+    # ================================================================
+    # Push/Pop if/else 检测
+    # ================================================================
+
+    def detect_push_pop_pattern(self, start_idx: int) -> dict | None:
+        """检测 Push/Pop 标记的 if/else 控制流模式。
+
+        UE 蓝图中 if/else 编译为：
+        - EX_PushExecutionFlow（保存返回地址）
+        - EX_JumpIfNot（条件为假时跳过 then 分支）
+        - then 分支代码
+        - EX_PopExecutionFlow（then 分支结束）
+        - else 分支代码
+        - PushingAddress 目标（汇合点）
+
+        与 JumpIfNot 检测的区别：Push/Pop 使用显式栈操作标记分支边界，
+        是 if/else 的精确编译产物，检测更可靠。
+
+        Returns:
+            {
+                "type": "push_pop",
+                "start": start_idx,
+                "condition": BooleanExpression,
+                "then_start": int,
+                "then_end": int,
+                "else_start": int,
+                "else_end": int,
+                "pushing_address": int,
+            }
+            无法匹配时返回 None。
+        """
+        from uasset_read.kismet.expressions.control_flow import (
+            EX_PushExecutionFlow, EX_JumpIfNot, EX_PopExecutionFlow,
+            EX_EndOfScript,
+        )
+
+        if start_idx < 0 or start_idx >= len(self._expressions):
+            return None
+
+        expr = self._expressions[start_idx]
+        if not isinstance(expr, EX_PushExecutionFlow):
+            return None
+
+        pushing_address = expr.PushingAddress
+
+        # 扫描后续指令（最多 3 条）寻找 JumpIfNot
+        jump_if_not_idx = None
+        for k in range(start_idx + 1, min(start_idx + 4, len(self._expressions))):
+            if isinstance(self._expressions[k], EX_JumpIfNot):
+                jump_if_not_idx = k
+                break
+            if isinstance(self._expressions[k], (
+                EX_PushExecutionFlow, EX_EndOfScript,
+            )):
+                break
+
+        if jump_if_not_idx is None:
+            return None
+
+        jump_if_not = self._expressions[jump_if_not_idx]
+        condition = jump_if_not.BooleanExpression
+
+        # 从 JumpIfNot 之后搜索 PopExecutionFlow
+        pop_idx = None
+        for j in range(jump_if_not_idx + 1, len(self._expressions)):
+            if isinstance(self._expressions[j], EX_PopExecutionFlow):
+                pop_idx = j
+                break
+            if isinstance(self._expressions[j], (
+                EX_PushExecutionFlow, EX_EndOfScript,
+            )):
+                break
+
+        if pop_idx is None:
+            return None
+
+        # 查找 pushing_address 对应的表达式索引（else 块结束）
+        else_end_idx = self.find_label_index(pushing_address)
+        if else_end_idx is None:
+            # pushing_address 无法映射时，用 else 块末尾作为结束
+            else_end_idx = pop_idx
+
+        return {
+            "type": "push_pop",
+            "start": start_idx,
+            "condition": condition,
+            "then_start": jump_if_not_idx + 1,
+            "then_end": pop_idx,
+            "else_start": pop_idx + 1,
+            "else_end": else_end_idx,
+            "pushing_address": pushing_address,
         }
 
     # ================================================================
@@ -460,7 +557,9 @@ class JumpAnalyzer:
 
     def _build_structured_indices(self) -> None:
         """构建结构化索引集合（延迟初始化）。"""
-        from uasset_read.kismet.expressions.control_flow import EX_JumpIfNot
+        from uasset_read.kismet.expressions.control_flow import (
+            EX_JumpIfNot, EX_PushExecutionFlow,
+        )
         from uasset_read.kismet.expressions.special import EX_SwitchValue
 
         for idx in range(len(self._expressions)):
@@ -470,6 +569,18 @@ class JumpAnalyzer:
             if isinstance(expr, EX_SwitchValue):
                 self._structured_indices.add(idx)
                 continue
+
+            # Push/Pop 模式：PushExecutionFlow 起始
+            if isinstance(expr, EX_PushExecutionFlow):
+                push_pop_result = self.detect_push_pop_pattern(idx)
+                if push_pop_result is not None:
+                    end = push_pop_result.get(
+                        "else_end",
+                        push_pop_result.get("then_end", push_pop_result["start"]),
+                    )
+                    for j in range(push_pop_result["start"], end + 1):
+                        self._structured_indices.add(j)
+                    continue
 
             # JumpIfNot 起始的模式
             if isinstance(expr, EX_JumpIfNot):

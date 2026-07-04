@@ -17,6 +17,10 @@ from uasset_read.models.ir import AnimMontageIR, AnimNotifyIR
 class AnimMontageHandler:
     """AnimMontage 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimMontage"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimMontage export
 
@@ -112,7 +116,7 @@ class AnimMontageHandler:
 
             return ParseStatus.SUCCESS
 
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             # 记录错误但不中断解析
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimMontage 解析错误: {e}")

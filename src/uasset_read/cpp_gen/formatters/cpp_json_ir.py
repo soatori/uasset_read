@@ -14,7 +14,7 @@ Per D-06: JSON IR 结构包含 header_meta, properties, methods, constructor 四
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import logging

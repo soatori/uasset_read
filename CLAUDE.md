@@ -23,14 +23,12 @@ python run.py file.uasset --tolerant             # 容错模式（默认）
 python run.py --batch-dir path/to/dir/           # 批量导出
 
 # 测试
-python scripts/test_matrix.py smoke              # L0 烟雾测试（最快）
-python scripts/test_matrix.py unit               # L0+L1 单元测试
-python scripts/test_matrix.py all                # 全量测试
-python -m pytest tests/test_pak_handling.py -v   # 单个文件
+python -m pytest tests/ -v                        # 运行所有测试
+python -m pytest tests/ -v -m "not slow"          # 运行非慢速测试
 python -m pytest tests/ -v --cov=uasset_read     # 覆盖率
 
 # 质量
-python scripts/test_matrix.py quality            # 质量门禁
+python -m pytest tests/ -v -m "quality"           # 质量门禁
 ```
 
 **Windows 路径**：使用正斜杠 `E:/Develop/...` 或双反斜杠。**测试样本**：`E:\Develop\lib\Samples`。**pytest 标记**：`integration`、`quality`、`regression`、`slow`。
@@ -118,15 +116,5 @@ serializers/graph.py → graph/flow_builder.py
 
 - `wiki/` — 开发指南 | `docs/formats/uasset/` — UE 格式参考（60+ 文件）
 - `docs/designs/` — 设计规格 | `docs/reference/` — 技术参考 | `docs/release-notes/` — 发布说明
-
-**Agent skills**（`.claude/skills/`，通过 `/skill-name` 调用）：
-
-| Skill | 场景 |
-|---|---|
-| `test-runner` | 运行测试、更新文档统计 |
-| `code-quality-fix` | P0-P3 分级代码质量修复 |
-| `doc-consistency` | 文档一致性审计 |
-| `version-sync` | 跨文件版本号同步 |
-| `release-prep` | 发布前完整流程 |
 
 **Issue tracker**：GitHub Issues（gh CLI）。详见 `docs/agents/issue-tracker.md`。

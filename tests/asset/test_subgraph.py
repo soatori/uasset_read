@@ -241,7 +241,7 @@ class TestJsonRendererSubgraphs:
         # 渲染
         renderer = JSONRenderer()
         from uasset_read.renderers.base import RenderOptions
-        options = RenderOptions()
+        options = RenderOptions(output_level="debug")
         output = renderer.render(package_ir, options)
 
         # 验证 JSON 输出包含子图

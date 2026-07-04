@@ -17,13 +17,9 @@ from uasset_read.constants import (
     CPF_Edit,
     CPF_BlueprintVisible,
     CPF_BlueprintReadOnly,
-    CPF_BlueprintReadWrite,
-    CPF_EditAnywhere,
-    CPF_EditInstanceOnly,
     CPF_InstancedReference,
     CPF_BlueprintAssignable,
     CPF_BlueprintCallable,
-    CPF_Replicated,
     CPF_Net,
     CPF_Transient,
     CPF_DuplicateTransient,
@@ -33,7 +29,6 @@ from uasset_read.constants import (
     CPF_ExposeOnSpawn,
     CPF_Interp,
     CPF_RepNotify,
-    CPF_ReferenceOnly,
     CPF_Deprecated,
     CPF_AdvancedDisplay,
     CPF_Protected,
@@ -52,18 +47,14 @@ logger = logging.getLogger(__name__)
 # 顺序很重要：更具体的组合检查在前
 
 _CPF_UPROPERTY_RULES: List[Tuple[int, List[str], bool]] = [
-    # 组合检查：EditAnywhere + BlueprintReadWrite（常见组合）
-    (CPF_Edit | CPF_BlueprintVisible, ["EditAnywhere", "BlueprintReadWrite"], True),
-
     # 单标志检查（按 UE UPROPERTY 文档顺序）
-    (CPF_EditAnywhere, ["EditAnywhere"], False),
-    (CPF_EditInstanceOnly, ["EditInstanceOnly"], False),
+    (CPF_Edit, ["EditAnywhere"], False),
     (CPF_BlueprintReadOnly, ["BlueprintReadOnly"], False),
-    (CPF_BlueprintReadWrite, ["BlueprintReadWrite"], False),
+    (CPF_BlueprintVisible, ["BlueprintReadWrite"], False),
     (CPF_InstancedReference, ["Instanced"], False),
     (CPF_BlueprintAssignable, ["BlueprintAssignable"], False),
     (CPF_BlueprintCallable, ["BlueprintCallable"], False),
-    (CPF_Replicated, ["Replicated"], False),
+    (CPF_Net, ["Replicated"], False),
     (CPF_Transient, ["Transient"], False),
     (CPF_DuplicateTransient, ["DuplicateTransient"], False),
     (CPF_Config, ["Config"], False),
@@ -72,14 +63,12 @@ _CPF_UPROPERTY_RULES: List[Tuple[int, List[str], bool]] = [
     (CPF_ExposeOnSpawn, ["ExposeOnSpawn"], False),
     (CPF_Interp, ["Interp"], False),
     (CPF_RepNotify, ["RepNotify"], False),
-    (CPF_ReferenceOnly, ["ReferenceOnly"], False),
     (CPF_Deprecated, ["Deprecated"], False),
     (CPF_AdvancedDisplay, ["AdvancedDisplay"], False),
     (CPF_Protected, ["Protected"], False),
 ]
 
-# CPF_Net 单独处理：只有当 CPF_Replicated 未设置时才添加
-# CPF_Replicated 隐含 CPF_Net，所以 CPF_Net 通常不需要单独显示
+# CPF_Net 映射为 UPROPERTY Replicated 标记
 
 
 def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> List[str]:
@@ -132,11 +121,6 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
                     if mark not in marks:
                         marks.append(mark)
 
-    # CPF_Net 特殊处理：只有当 CPF_Replicated 未设置时才添加
-    if (cpf_flags & CPF_Net) and not (cpf_flags & CPF_Replicated):
-        if "Net" not in marks:
-            marks.append("Net")
-
     # 组件默认标记：UE SCS 组件默认行为
     # 如果是组件且没有明确的可见性/编辑标志，添加 VisibleAnywhere + BlueprintReadOnly
     if is_component:
@@ -169,15 +153,15 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
 # ============================================================================
 
 _UPROPERTY_TO_CPF: dict[str, int] = {
-    "EditAnywhere": CPF_EditAnywhere,
-    "EditInstanceOnly": CPF_EditInstanceOnly,
+    "EditAnywhere": CPF_Edit,
+    "EditInstanceOnly": CPF_Edit,
     "EditDefaultsOnly": CPF_Edit,
     "BlueprintReadOnly": CPF_BlueprintReadOnly,
-    "BlueprintReadWrite": CPF_BlueprintReadWrite,
+    "BlueprintReadWrite": CPF_BlueprintVisible,
     "Instanced": CPF_InstancedReference,
     "BlueprintAssignable": CPF_BlueprintAssignable,
     "BlueprintCallable": CPF_BlueprintCallable,
-    "Replicated": CPF_Replicated,
+    "Replicated": CPF_Net,
     "Net": CPF_Net,
     "Transient": CPF_Transient,
     "DuplicateTransient": CPF_DuplicateTransient,
@@ -187,7 +171,7 @@ _UPROPERTY_TO_CPF: dict[str, int] = {
     "ExposeOnSpawn": CPF_ExposeOnSpawn,
     "Interp": CPF_Interp,
     "RepNotify": CPF_RepNotify,
-    "ReferenceOnly": CPF_ReferenceOnly,
+    "ReferenceOnly": 0,
     "Deprecated": CPF_Deprecated,
     "AdvancedDisplay": CPF_AdvancedDisplay,
     "Protected": CPF_Protected,

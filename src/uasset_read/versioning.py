@@ -31,6 +31,15 @@ from uasset_read.constants import (
     FMOBILE_OBJECT_VERSION_GUID,
     FCINECAMERA_OBJECT_VERSION_GUID,
     FNIAGARA_OBJECT_VERSION_GUID,
+    FUE5_SPECIAL_PROJECT_STREAM_OBJECT_VERSION_GUID,
+    FRIGVM_OBJECT_VERSION_GUID,
+    FCONTROL_RIG_OBJECT_VERSION_GUID,
+    FNANITE_RESEARCH_STREAM_OBJECT_VERSION_GUID,
+    FSKELETAL_MESH_CUSTOM_VERSION_GUID,
+    FNIAGARA_CUSTOM_VERSION_GUID,
+    FINTERCHANGE_CUSTOM_VERSION_GUID,
+    FASSET_REGISTRY_VERSION_GUID,
+    FCURVE_EXPRESSION_CUSTOM_VERSION_GUID,
     UE5_VERSION_MIN,
 )
 
@@ -40,7 +49,7 @@ from uasset_read.constants import (
 # ============================================================================
 
 class EUEVersion(IntEnum):
-    """关键 UE 版本阈值，用于 is_at_least() 比较。
+    """关键 UE 版本阈值，用于版本比较。
 
     值对应 EUnrealEngineObjectUE5Version 枚举中的 CustomVersion 阈值
     （ObjectVersion.cs），而非 file_version_ue5 的全部可能值。
@@ -98,6 +107,21 @@ STREAM_MOBILE = VersionStream(FMOBILE_OBJECT_VERSION_GUID, "mobile")
 STREAM_CINECAMERA = VersionStream(FCINECAMERA_OBJECT_VERSION_GUID, "cinecamera")
 STREAM_NIAGARA = VersionStream(FNIAGARA_OBJECT_VERSION_GUID, "niagara")
 
+# Phase 2: P1 核心版本流
+STREAM_UE5_SPECIAL_PROJECT = VersionStream(FUE5_SPECIAL_PROJECT_STREAM_OBJECT_VERSION_GUID, "ue5_special_project")
+STREAM_RIGVM = VersionStream(FRIGVM_OBJECT_VERSION_GUID, "rigvm")
+STREAM_CONTROL_RIG = VersionStream(FCONTROL_RIG_OBJECT_VERSION_GUID, "control_rig")
+
+# Phase 2: P2 特定资产类型版本流
+STREAM_NANITE_RESEARCH = VersionStream(FNANITE_RESEARCH_STREAM_OBJECT_VERSION_GUID, "nanite_research")
+
+# Phase 2: P3 插件级版本
+STREAM_SKELETAL_MESH_CUSTOM = VersionStream(FSKELETAL_MESH_CUSTOM_VERSION_GUID, "skeletal_mesh_custom")
+STREAM_NIAGARA_CUSTOM = VersionStream(FNIAGARA_CUSTOM_VERSION_GUID, "niagara_custom")
+STREAM_INTERCHANGE = VersionStream(FINTERCHANGE_CUSTOM_VERSION_GUID, "interchange")
+STREAM_ASSET_REGISTRY = VersionStream(FASSET_REGISTRY_VERSION_GUID, "asset_registry")
+STREAM_CURVE_EXPRESSION = VersionStream(FCURVE_EXPRESSION_CUSTOM_VERSION_GUID, "curve_expression")
+
 STREAM_MAP: Dict[str, VersionStream] = {
     "framework": STREAM_FRAMEWORK,
     "ue5_mainstream": STREAM_UE5_MAINSTREAM,
@@ -118,6 +142,15 @@ STREAM_MAP: Dict[str, VersionStream] = {
     "mobile": STREAM_MOBILE,
     "cinecamera": STREAM_CINECAMERA,
     "niagara": STREAM_NIAGARA,
+    "ue5_special_project": STREAM_UE5_SPECIAL_PROJECT,
+    "rigvm": STREAM_RIGVM,
+    "control_rig": STREAM_CONTROL_RIG,
+    "nanite_research": STREAM_NANITE_RESEARCH,
+    "skeletal_mesh_custom": STREAM_SKELETAL_MESH_CUSTOM,
+    "niagara_custom": STREAM_NIAGARA_CUSTOM,
+    "interchange": STREAM_INTERCHANGE,
+    "asset_registry": STREAM_ASSET_REGISTRY,
+    "curve_expression": STREAM_CURVE_EXPRESSION,
 }
 
 
@@ -171,7 +204,6 @@ class VersionContainer:
 
     从 PackageFileSummary 构建后，提供：
     - get_version(guid) → 查找 CustomVersion 版本号
-    - is_at_least(threshold, stream) → 指定流是否达到阈值
     """
     custom_versions: List[_CustomVersionLike] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
@@ -204,19 +236,6 @@ class VersionContainer:
 
         self._guid_cache[normalized] = default
         return default
-
-    def is_at_least(self, threshold: int, stream: str = "framework") -> bool:
-        """检查指定版本流是否达到阈值。
-
-        Args:
-            threshold: 目标版本号（或 EUEVersion 枚举值）
-            stream: 版本流名称（framework/ue5_mainstream/release/ue5_release）
-        """
-        stream_def = STREAM_MAP.get(stream)
-        if stream_def is None:
-            return False
-        version = self.get_version(stream_def.guid)
-        return version >= threshold
 
     @property
     def is_ue5(self) -> bool:

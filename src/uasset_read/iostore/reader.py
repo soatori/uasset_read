@@ -15,16 +15,10 @@ from uasset_read.iostore.structures import (
     FIoOffsetAndLength,
     FIoStoreTocHeader,
     FIoStoreTocCompressedBlockEntry,
-    FIoStoreTocEntryMeta,
     FIoDirectoryIndexEntry,
     FIoFileIndexEntry,
     EIoStoreTocVersion,
-    EIoContainerFlags,
     EIoStoreTocReadOptions,
-    EIoChunkType,
-    EIoStoreTocEntryMetaFlags,
-    TOC_MAGIC,
-    TOC_HEADER_SIZE,
 )
 from uasset_read.pak.decompress import decompress_block
 from uasset_read.pak.crypto import decrypt_aes_ecb
@@ -228,7 +222,7 @@ class IoStoreReader:
                 self._compression_methods,
             )
 
-        except Exception:
+        except (OSError, struct.error, ValueError):
             self.close()
             raise
 
@@ -237,15 +231,15 @@ class IoStoreReader:
         if self._utoc_file:
             try:
                 self._utoc_file.close()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.debug("关闭 utoc 文件失败: %s", e)
             self._utoc_file = None
 
         for f in self._ucas_files:
             try:
                 f.close()
-            except Exception:
-                pass
+            except OSError as e:
+                logger.debug("关闭 ucas 文件失败: %s", e)
         self._ucas_files.clear()
 
     def __enter__(self) -> IoStoreReader:

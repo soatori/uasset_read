@@ -20,14 +20,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
-    START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
-    FFRAMEWORK_OBJECT_VERSION_GUID, FUE5_MAINSTREAM_VERSION_GUID, FRELEASE_OBJECT_VERSION_GUID,
-    FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE, FFRAMEWORK_VERSION_PINS_STORE_FNAME,
-    FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX,
-    FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER,
-    FUE5RELEASESTREAM_OBJECT_VERSION_GUID,
-    FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION,
-    UE5_PROPERTY_TAG_EXTENSION,
+    FRELEASE_OBJECT_VERSION_GUID,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,13 +62,6 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
-from uasset_read.models.node_types import (
-    K2NodeCallFunction, K2NodeEvent, K2NodeKnot, EdGraphNodeComment,
-    K2NodeEnhancedInputAction, K2NodeFunctionEntry, K2NodeMessage,
-    K2NodeCallDelegate, K2NodeCallArrayFunction, K2NodeCallParentFunction,
-    K2NodeFunctionResult, K2NodeCreateWidget, K2NodeAddDelegate, K2NodeMacroInstance,
-    K2NodeAssignDelegate, K2NodeGetDataTableRow, K2NodeLoadAsset, K2NodeSpawnActorFromClass,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +173,11 @@ def read_ed_graph_pin_type(
     release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
 
     # PinCategory / PinSubCategory (UE5 始终使用 FName 格式)
-    pin_type.pin_category = archive.read_name(name_map)
-    pin_type.pin_subcategory = archive.read_name(name_map)
+    pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")
+    pin_type.pin_subcategory = archive.read_name(name_map, "PinType.PinSubCategory")
 
     # PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_subcategory_object = archive.read_i32()
+    pin_type.pin_subcategory_object = archive.read_i32("PinType.PinSubCategoryObject")
     if pin_type.pin_subcategory_object:
         pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
         try:
@@ -205,34 +191,52 @@ def read_ed_graph_pin_type(
                 pin_type.pin_subcategory_object_name = _rcn(
                     pkg_idx, import_map, export_map, linker
                 )
-        except Exception:
+        except (KeyError, IndexError, AttributeError):
             pin_type.pin_subcategory_object_ref = None
             pin_type.pin_subcategory_object_name = None
 
     # ContainerType (UE5 始终使用现代 uint8 格式)
-    pin_type.container_type = archive.read_u8()
+    pin_type.container_type = archive.read_u8("PinType.ContainerType")
     if pin_type.container_type == 3:  # Map
-        archive.read_name(name_map)  # TerminalCategory
-        archive.read_name(name_map)  # TerminalSubCategory
-        archive.read_i32()           # TerminalSubCategoryObject
+        # Map key 的 terminal 类型（FEdGraphTerminalType 序列化）
+        # 参照 UE EdGraphPin.cpp:218 — Ar << PinValueType
+        pin_type.map_key_terminal_category = archive.read_name(name_map, "PinType.TerminalCategory")
+        pin_type.map_key_terminal_sub_category = archive.read_name(name_map, "PinType.TerminalSubCategory")
+        terminal_sub_category_object = archive.read_i32("PinType.TerminalSubCategoryObject")
+        pin_type.map_key_terminal_sub_category_object = terminal_sub_category_object
+        if terminal_sub_category_object:
+            pkg_idx = PackageIndex(terminal_sub_category_object)
+            try:
+                if linker is not None:
+                    ref = linker.resolve_package_index(pkg_idx)
+                    if ref is not None:
+                        pin_type.map_key_terminal_sub_category_object_name = getattr(
+                            ref, "object_name", None
+                        )
+                elif import_map is not None and export_map is not None:
+                    pin_type.map_key_terminal_sub_category_object_name = _rcn(
+                        pkg_idx, import_map, export_map, linker
+                    )
+            except (KeyError, IndexError, AttributeError):
+                pin_type.map_key_terminal_sub_category_object_name = None
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_reference = archive.read_bool()
-    pin_type.is_weak_pointer = archive.read_bool()
+    pin_type.is_reference = archive.read_bool("PinType.bIsReference")
+    pin_type.is_weak_pointer = archive.read_bool("PinType.bIsWeakPointer")
 
     # FSimpleMemberReference (UE5 始终存在)
-    archive.read_i32()       # MemberParent
-    archive.read_name(name_map)  # MemberName
-    archive.read_bytes(16)   # MemberGuid
+    archive.read_i32("PinType.MemberParent")
+    archive.read_name(name_map, "PinType.MemberName")
+    archive.read_bytes(16, "PinType.MemberGuid")
 
     # bIsConst (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_const = archive.read_bool()
+    pin_type.is_const = archive.read_bool("PinType.bIsConst")
 
     # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_uobject_wrapper = archive.read_bool()
+    pin_type.is_uobject_wrapper = archive.read_bool("PinType.bIsUObjectWrapper")
 
     # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool("PinType.bSerializeAsSinglePrecisionFloat")
 
     return pin_type
 
@@ -548,11 +552,11 @@ def read_pin_reference(
     linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
     """读取单个 Pin 引用（FBlueprintEditorUtils::FPinReference）。"""
-    b_null_ptr = archive.read_i32()
+    b_null_ptr = archive.read_i32("PinRef.BNullPtr")
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
-    owning_node_index = archive.read_i32()
+    owning_node_index = archive.read_i32("PinRef.OwningNode")
     pin_guid_raw = _read_guid(archive)
 
     # 归一化为 32 字符大写 hex（移除 dash），与 pin_id 格式一致
@@ -600,7 +604,7 @@ def read_pin_array(
 
     恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
     """
-    array_count = archive.read_i32()
+    array_count = archive.read_i32("PinArray.Count")
 
     if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
         # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
@@ -886,6 +890,191 @@ def _try_recover_to_subpins(
     return None
 # ============================================================================
 
+def _read_pin_fstring_field(
+    archive: FArchive,
+    field_name: str,
+    trace_mode: bool,
+    trace_fields: Dict[str, Any],
+    pin_name: str = "",
+    max_length: int = 4096,
+) -> str:
+    """读取 Pin 的 FString 字段（DefaultValue / AutogeneratedDefaultValue / PinToolTip）。"""
+    from uasset_read.archive import _contains_binary_data
+    _field_start = archive.tell()
+    try:
+        value = _read_fstring_safe(archive, max_length=max_length)
+        if _contains_binary_data(value):
+            logger.debug(
+                "Binary %s at pos %d for pin '%s' — returning empty",
+                field_name, archive.tell() - len(value), pin_name
+            )
+            if trace_mode:
+                _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(), "[BINARY]")
+            return ""
+        if trace_mode:
+            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
+                                 value[:30] if value else "[empty]")
+        return value
+    except (struct.error, OSError, ValueError):
+        if trace_mode:
+            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
+                                 "", is_exception=True)
+        return ""
+
+
+def _read_pin_ftext_field(
+    archive: FArchive,
+    field_name: str,
+    trace_mode: bool,
+    trace_fields: Dict[str, Any],
+) -> tuple:
+    """读取 Pin 的 FText 字段（PinFriendlyName / DefaultTextValue）。"""
+    _start = archive.tell()
+    try:
+        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True)
+        consumed = archive.tell() - _start
+        if consumed > MAX_FTEXT_CONSUMPTION:
+            logger.warning(
+                "[FTEXT-SAFETY] %s consumed %d bytes (> %d), "
+                "possible corruption, seeking back to %d",
+                field_name, consumed, MAX_FTEXT_CONSUMPTION, _start + 5
+            )
+            archive.seek(_start + 5)
+            value = None
+        if trace_mode:
+            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
+                                 f"flags={flags},htype={history_type}")
+        return value, True
+    except (struct.error, OSError, ValueError):
+        archive.seek(_start + 5)
+        if trace_mode:
+            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
+                                 "", is_exception=True, is_fallback=True)
+        return None, False
+
+
+def _trace_fields_append(
+    trace_fields: Dict[str, Any],
+    name: str, start: int, end: int, value_preview: str = "",
+    is_exception: bool = False, is_fallback: bool = False,
+) -> None:
+    """记录单个字段的追踪信息。"""
+    trace_fields.setdefault("fields", []).append({
+        "name": name,
+        "start": start,
+        "end": end,
+        "consumed": end - start,
+        "value": value_preview[:50],
+        "exception": is_exception,
+        "fallback": is_fallback,
+    })
+
+
+def _read_pin_linkedto(
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"],
+    trace_mode: bool,
+    trace_fields: Dict[str, Any],
+    pin_name: str,
+) -> list:
+    """读取 Pin 的 LinkedTo 数组。"""
+    linkedto_start = archive.tell()
+    linkedto_raw_count: Optional[int] = None
+    try:
+        _count_pos = archive.tell()
+        linkedto_raw_count = archive.read_i32()
+        archive.seek(_count_pos)
+    except (struct.error, OSError):
+        linkedto_raw_count = None
+    try:
+        linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
+        logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
+        if trace_mode:
+            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
+            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
+                                 f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
+    except (struct.error, OSError, ValueError) as e:
+        failure_key = (linkedto_start, type(e).__name__, pin_name)
+        tl = _get_thread_local()
+        if failure_key not in tl.linkedto_failure_seen:
+            tl.linkedto_failure_seen.add(failure_key)
+            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
+        else:
+            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
+                         linkedto_start, pin_name, e)
+        if trace_mode:
+            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
+                                 "", is_exception=True)
+        linked_to = []
+        recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
+        if recovery_result is not None:
+            logger.info(
+                "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
+                recovery_result.get("recovered_pos"),
+                recovery_result.get("recovery_type"),
+            )
+    return linked_to
+
+
+def _read_pin_subpins(
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"],
+    trace_mode: bool,
+    trace_fields: Dict[str, Any],
+) -> list:
+    """读取 Pin 的 SubPins 数组。"""
+    subpins_start = archive.tell()
+    subpins_raw_count: Optional[int] = None
+    try:
+        _count_pos = archive.tell()
+        subpins_raw_count = archive.read_i32()
+        archive.seek(_count_pos)
+    except (struct.error, OSError):
+        subpins_raw_count = None
+    try:
+        sub_pins = read_pin_array(archive, name_map, export_map, import_map, linker)
+        if trace_mode:
+            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
+                                 f"raw_count={subpins_raw_count},count={len(sub_pins)}")
+    except (struct.error, OSError, ValueError):
+        sub_pins = []
+        if trace_mode:
+            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
+                                 f"raw_count={subpins_raw_count}", is_exception=True)
+    return sub_pins
+
+
+def _read_pin_bitfield(
+    archive: FArchive,
+    trace_mode: bool,
+    trace_fields: Dict[str, Any],
+) -> tuple:
+    """读取 Pin 的 BitField（EditorOnly）。返回 (hidden, not_connectable, advanced_view, orphaned_pin)。"""
+    hidden = False
+    not_connectable = False
+    advanced_view = False
+    orphaned_pin = False
+    try:
+        bitfield_start = archive.tell()
+        bitfield = archive.read_u32()
+        hidden = bool(bitfield & (1 << 0))
+        not_connectable = bool(bitfield & (1 << 1))
+        advanced_view = bool(bitfield & (1 << 4))
+        orphaned_pin = bool(bitfield & (1 << 5))
+        if trace_mode:
+            _trace_fields_append(trace_fields, "BitField", bitfield_start, archive.tell(), str(bitfield))
+    except (struct.error, OSError, ValueError, AttributeError) as e:
+        logger.debug("读取 Pin BitField 失败: %s", e, exc_info=True)
+    return hidden, not_connectable, advanced_view, orphaned_pin
+
+
 def read_ue_graph_pin(
     archive: FArchive,
     name_map: List[str],
@@ -911,43 +1100,29 @@ def read_ue_graph_pin(
 
     # 诊断记录
     _trace_fields: Dict[str, Any] = {}
-    if trace_mode:
-        _trace_fields["fields"] = []
-        def _trace_field(name: str, start: int, end: int, value_preview: str = "",
-                         is_exception: bool = False, is_fallback: bool = False):
-            """记录单个字段的追踪信息。"""
-            _trace_fields["fields"].append({
-                "name": name,
-                "start": start,
-                "end": end,
-                "consumed": end - start,
-                "value": value_preview[:50],
-                "exception": is_exception,
-                "fallback": is_fallback,
-            })
 
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
     _field_start = archive.tell()
     if header_owning_node is not None:
-        archive.read_i32()  # Discard internal duplicate
+        archive.read_i32("Pin.OwningNode.Duplicate")  # Discard internal duplicate
         owning_node_index = header_owning_node
     else:
-        owning_node_index = archive.read_i32()
+        owning_node_index = archive.read_i32("Pin.OwningNode")
     if trace_mode:
-        _trace_field("OwningNode", _field_start, archive.tell(), str(owning_node_index))
+        _trace_fields_append(_trace_fields, "OwningNode", _field_start, archive.tell(), str(owning_node_index))
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
     _field_start = archive.tell()
     if header_pin_id is not None:
-        archive.read_bytes(16)  # Discard internal duplicate
+        archive.read_bytes(16, "Pin.PinId.Duplicate")  # Discard internal duplicate
         pin_id = header_pin_id
     else:
-        pin_id_bytes = archive.read_bytes(16)
+        pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
         pin_id = pin_id_bytes.hex().upper()
     if trace_mode:
-        _trace_field("PinId", _field_start, archive.tell(), pin_id[:16]+"...")
+        _trace_fields_append(_trace_fields, "PinId", _field_start, archive.tell(), pin_id[:16]+"...")
 
-    # 3. PinName — pin_start_pos corresponds to PinName start (after discarding internal duplicates)
+    # 3. PinName
     pin_start_pos = archive.tell()
     if trace_mode:
         _trace_fields["pin_start_pos"] = pin_start_pos
@@ -955,77 +1130,25 @@ def read_ue_graph_pin(
     _field_start = archive.tell()
     pin_name = archive.read_name(name_map)
     if trace_mode:
-        _trace_field("PinName", _field_start, archive.tell(), pin_name)
+        _trace_fields_append(_trace_fields, "PinName", _field_start, archive.tell(), pin_name)
 
     # 4. PinFriendlyName (FText)
-    # FText 安全网：记录解析前位置，限制最大消耗
-    ftext_start_pos = archive.tell()
-    pin_friendly_name: Optional[str] = None
-    try:
-        pin_friendly_name, flags, history_type, _ = _read_ftext_value(
-            archive, tolerant=True
-        )
-        # FText 安全网：验证消耗字节数
-        ftext_consumed = archive.tell() - ftext_start_pos
-        if ftext_consumed > MAX_FTEXT_CONSUMPTION:
-            logger.warning(
-                "[FTEXT-SAFETY] PinFriendlyName consumed %d bytes (> %d), "
-                "possible corruption, seeking back to %d",
-                ftext_consumed, MAX_FTEXT_CONSUMPTION, ftext_start_pos + 5
-            )
-            archive.seek(ftext_start_pos + 5)
-            # 标记解析失败，使用默认值
-            pin_friendly_name = None
-        if trace_mode:
-            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
-                         f"flags={flags},htype={history_type}")
-    except Exception as e:
-        pin_friendly_name = None
-        archive.seek(ftext_start_pos + 5)
-        if trace_mode:
-            _trace_field("PinFriendlyName", ftext_start_pos, archive.tell(),
-                         "", is_exception=True, is_fallback=True)
+    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", trace_mode, _trace_fields)
 
     # 5. SourceIndex (UE5 始终存在)
     _field_start = archive.tell()
-    source_index = archive.read_i32()
+    source_index = archive.read_i32("Pin.SourceIndex")
     if trace_mode:
-        _trace_field("SourceIndex", _field_start, archive.tell(), str(source_index))
+        _trace_fields_append(_trace_fields, "SourceIndex", _field_start, archive.tell(), str(source_index))
 
     # 6. PinToolTip — FString (NOT FText!)
-    # C++ UEdGraphPin::Serialize L1870: Ar << PinToolTip;
-    # EdGraphPin.h L380: FString PinToolTip;
-    # FString format: i32 length + data (ANSICHAR or UTF16CHAR)
-    _field_start = archive.tell()
-    try:
-        # PinToolTip 常为短字符串，使用安全读取避免异常长度吞偏游标
-        pin_tooltip = _read_fstring_safe(archive, max_length=4096)
-        # 额外检查：pin_tooltip 专用二进制数据过滤
-        # 注意：archive._contains_binary_data 不存在，需要从 archive 模块导入
-        from uasset_read.archive import _contains_binary_data
-        if _contains_binary_data(pin_tooltip):
-            archive.logger.debug(
-                "Binary pinTooltip at pos %d for pin '%s' — returning empty",
-                archive.tell() - len(pin_tooltip), pin_name
-            )
-            if trace_mode:
-                _trace_field("PinToolTip", _field_start, archive.tell(), "[BINARY]")
-            pin_tooltip = ""
-        else:
-            if trace_mode:
-                _trace_field("PinToolTip", _field_start, archive.tell(),
-                             pin_tooltip[:30] if pin_tooltip else "[empty]")
-    except Exception as e:
-        if trace_mode:
-            _trace_field("PinToolTip", _field_start, archive.tell(), "",
-                         is_exception=True)
-        pin_tooltip = ""
+    pin_tooltip = _read_pin_fstring_field(archive, "PinToolTip", trace_mode, _trace_fields, pin_name)
 
     # 7. Direction — u8 for both UE4 and UE5
     _field_start = archive.tell()
-    direction = archive.read_u8()
+    direction = archive.read_u8("Pin.Direction")
     if trace_mode:
-        _trace_field("Direction", _field_start, archive.tell(), str(direction))
+        _trace_fields_append(_trace_fields, "Direction", _field_start, archive.tell(), str(direction))
 
     # 8. PinType
     _field_start = archive.tell()
@@ -1033,191 +1156,65 @@ def read_ue_graph_pin(
         archive, name_map, summary, import_map, export_map, linker
     )
     if trace_mode:
-        _trace_field("PinType", _field_start, archive.tell(), "[PinType struct]")
+        _trace_fields_append(_trace_fields, "PinType", _field_start, archive.tell(), "[PinType struct]")
 
     # 9-10. DefaultValue strings (容错)
-    _field_start = archive.tell()
-    try:
-        # DefaultValue 常为短字面量，使用安全读取避免大块错误消费
-        default_value = _read_fstring_safe(archive, max_length=4096)
-        if trace_mode:
-            from uasset_read.archive import _contains_binary_data
-            if _contains_binary_data(default_value):
-                _trace_field("DefaultValue", _field_start, archive.tell(), "[BINARY]")
-            else:
-                _trace_field("DefaultValue", _field_start, archive.tell(),
-                             default_value[:30] if default_value else "[empty]")
-    except Exception as e:
-        if trace_mode:
-            _trace_field("DefaultValue", _field_start, archive.tell(), "",
-                         is_exception=True)
-        default_value = ""
-
-    _field_start = archive.tell()
-    try:
-        # AutogeneratedDefaultValue 同上，限制异常长度影响
-        autogenerated_default_value = _read_fstring_safe(archive, max_length=4096)
-        if trace_mode:
-            from uasset_read.archive import _contains_binary_data
-            if _contains_binary_data(autogenerated_default_value):
-                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "[BINARY]")
-            else:
-                _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(),
-                             autogenerated_default_value[:30] if autogenerated_default_value else "[empty]")
-    except Exception as e:
-        if trace_mode:
-            _trace_field("AutogeneratedDefaultValue", _field_start, archive.tell(), "",
-                         is_exception=True)
-        autogenerated_default_value = ""
+    default_value = _read_pin_fstring_field(archive, "DefaultValue", trace_mode, _trace_fields)
+    autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue", trace_mode, _trace_fields)
 
     # 11. DefaultObject (FPackageIndex)
     _field_start = archive.tell()
-    default_object = archive.read_i32()
+    default_object = archive.read_i32("Pin.DefaultObject")
     if trace_mode:
-        _trace_field("DefaultObject", _field_start, archive.tell(), str(default_object))
+        _trace_fields_append(_trace_fields, "DefaultObject", _field_start, archive.tell(), str(default_object))
 
-    # 12. DefaultTextValue (FText) — NICHT FString!
-    # UE5 C++: Ar << DefaultTextValue; (EdGraphPin.cpp L1876)
-    # FText Serialisierung: flags(i32,4B) + history_type(u8,1B) + body(variable)
-    # Siehe read_ftext_with_history() fuer history_type Verarbeitung
-    _dtv_start = archive.tell()
-    default_text_value: Optional[str] = None
-    try:
-        default_text_value, _dtv_flags, _dtv_history, _ = _read_ftext_value(
-            archive, tolerant=True
-        )
-        # DefaultTextValue FText 安全网：验证消耗字节数
-        dtv_consumed = archive.tell() - _dtv_start
-        if dtv_consumed > MAX_FTEXT_CONSUMPTION:
-            logger.warning(
-                "[FTEXT-SAFETY] DefaultTextValue consumed %d bytes (> %d), "
-                "possible corruption, seeking back to %d",
-                dtv_consumed, MAX_FTEXT_CONSUMPTION, _dtv_start + 5
-            )
-            archive.seek(_dtv_start + 5)
-            # 标记解析失败，使用默认值
-            default_text_value = None
-        if trace_mode:
-            _trace_field("DefaultTextValue", _dtv_start, archive.tell(),
-                         f"flags={_dtv_flags},htype={_dtv_history}")
-    except Exception as e:
-        archive.seek(_dtv_start + 5)
-        if trace_mode:
-            _trace_field("DefaultTextValue", _dtv_start, archive.tell(), "",
-                         is_exception=True, is_fallback=True)
-        logger.debug("DefaultTextValue read failed at pos %d, skipping header: %s",
-                     _dtv_start, e)
+    # 12. DefaultTextValue (FText)
+    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", trace_mode, _trace_fields)
 
-    # 13. LinkedTo array — 关键诊断点
-    linkedto_start = archive.tell()
-    linkedto_raw_count: Optional[int] = None
-    try:
-        _count_pos = archive.tell()
-        linkedto_raw_count = archive.read_i32()
-        archive.seek(_count_pos)
-    except Exception:
-        linkedto_raw_count = None
-    try:
-        linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
-        logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
-        if trace_mode:
-            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
-            _trace_field("LinkedTo", linkedto_start, archive.tell(),
-                         f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
-    except Exception as e:
-        # Phase 75: 改进日志去重，包含 pin_name
-        failure_key = (linkedto_start, type(e).__name__, pin_name)
-        tl = _get_thread_local()
-        if failure_key not in tl.linkedto_failure_seen:
-            tl.linkedto_failure_seen.add(failure_key)
-            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
-        else:
-            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
-        if trace_mode:
-            _trace_field("LinkedTo", linkedto_start, archive.tell(), "",
-                         is_exception=True)
-        linked_to = []
-        # Phase 75: 使用恢复结果
-        recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
-        if recovery_result is not None:
-            logger.info(
-                "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
-                recovery_result.get("recovered_pos"),
-                recovery_result.get("recovery_type"),
-            )
+    # 13. LinkedTo array
+    linked_to = _read_pin_linkedto(archive, name_map, export_map, import_map, linker,
+                                    trace_mode, _trace_fields, pin_name)
 
     # 14. SubPins array
-    subpins_start = archive.tell()
-    subpins_raw_count: Optional[int] = None
-    try:
-        _count_pos = archive.tell()
-        subpins_raw_count = archive.read_i32()
-        archive.seek(_count_pos)
-    except Exception:
-        subpins_raw_count = None
-    try:
-        sub_pins = read_pin_array(archive, name_map, export_map, import_map, linker)
-        if trace_mode:
-            _trace_field("SubPins", subpins_start, archive.tell(),
-                         f"raw_count={subpins_raw_count},count={len(sub_pins)}")
-    except Exception:
-        # 同上，不尝试恢复
-        sub_pins = []
-        if trace_mode:
-            _trace_field("SubPins", subpins_start, archive.tell(),
-                         f"raw_count={subpins_raw_count}", is_exception=True)
+    sub_pins = _read_pin_subpins(archive, name_map, export_map, import_map, linker,
+                                  trace_mode, _trace_fields)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
     parent_start = archive.tell()
     _pp_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
     parent_pin = _pp_ref
     if trace_mode:
-        _trace_field("ParentPin", parent_start, archive.tell(),
+        _trace_fields_append(_trace_fields, "ParentPin", parent_start, archive.tell(),
                      f"null={1 if _pp_ref is None else 0},owning={_pp_ref.get('owning_node') if _pp_ref else 'N/A'}")
 
-    # 16. ReferencePassThroughConnection — reuse read_pin_reference() (same pattern as ParentPin)
-    ref_pass_through: Optional[dict] = None
+    # 16. ReferencePassThroughConnection — reuse read_pin_reference()
     ref_start = archive.tell()
     _ref_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
     ref_pass_through = _ref_ref
     if trace_mode:
-        _trace_field("ReferencePassThroughConnection", ref_start, archive.tell(),
+        _trace_fields_append(_trace_fields, "ReferencePassThroughConnection", ref_start, archive.tell(),
                      f"null={1 if _ref_ref is None else 0},owning={_ref_ref.get('owning_node') if _ref_ref else 'N/A'}")
 
     # 17. PersistentGuid (EditorOnly)
     persistent_start = archive.tell()
     try:
         persistent_guid = _read_guid(archive)
-    except Exception:
+    except (struct.error, OSError):
         persistent_guid = None
     if trace_mode:
-        _trace_field("PersistentGuid", persistent_start, archive.tell(),
+        _trace_fields_append(_trace_fields, "PersistentGuid", persistent_start, archive.tell(),
                      persistent_guid or "")
 
     # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
-    hidden = False
-    not_connectable = False
-    advanced_view = False
-    orphaned_pin = False
-    try:
-        bitfield_start = archive.tell()
-        bitfield = archive.read_u32()
-        hidden = bool(bitfield & (1 << 0))
-        not_connectable = bool(bitfield & (1 << 1))
-        advanced_view = bool(bitfield & (1 << 4))
-        orphaned_pin = bool(bitfield & (1 << 5))
-        if trace_mode:
-            _trace_field("BitField", bitfield_start, archive.tell(), str(bitfield))
-    except Exception:
-        pass
+    hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(
+        archive, trace_mode, _trace_fields
+    )
 
     default_object_ref = None
     if linker is not None and default_object not in (None, 0):
         try:
             default_object_ref = linker.resolve_package_index(PackageIndex(default_object))
-        except Exception:
+        except (KeyError, IndexError, AttributeError):
             default_object_ref = None
 
     # 从 raw dict 中提取对象引用
@@ -1230,36 +1227,32 @@ def read_ue_graph_pin(
     if trace_mode:
         # 找出第一个可能错位的字段
         first_misaligned = ""
-        for f in _trace_fields["fields"]:
+        for f in _trace_fields.get("fields", []):
             if f.get("exception") and not f.get("fallback"):
                 first_misaligned = f["name"]
                 break
-            # 检查 [BINARY] 标记
             if "[BINARY]" in str(f.get("value", "")):
                 first_misaligned = f["name"]
                 break
 
         logger.info(
             "[P73-PINTRACE] Pin '%s' at pos %d: fields=%d, linkedto=%d, first_misaligned='%s'",
-            pin_name, pin_start_pos, len(_trace_fields["fields"]),
+            pin_name, pin_start_pos, len(_trace_fields.get("fields", [])),
             len(linked_to), first_misaligned
         )
         _get_thread_local().pin_trace_events.append({
             "pin_name": pin_name,
             "pin_id": pin_id,
             "pin_start_pos": pin_start_pos,
-            "linkedto_start": linkedto_start,
-            "linkedto_raw_count": linkedto_raw_count,
+            "linkedto_raw_count": None,
             "linkedto_count": len(linked_to),
-            "subpins_start": subpins_start,
-            "subpins_raw_count": subpins_raw_count,
+            "subpins_raw_count": None,
             "subpins_count": len(sub_pins),
             "first_misaligned": first_misaligned,
-            "fields": [dict(item) for item in _trace_fields["fields"]],
+            "fields": [dict(item) for item in _trace_fields.get("fields", [])],
         })
-        # 详细字段日志（可选，调试时启用）
         if first_misaligned:
-            logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields["fields"]))
+            logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields.get("fields", [])))
 
     return UEdGraphPin(
         pin_id=pin_id,
@@ -1303,18 +1296,18 @@ def read_fmember_reference(
     linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
     """读取 FMemberReference（MemberReference.h L74-95）。"""
-    member_parent_index = archive.read_i32()
+    member_parent_index = archive.read_i32("MemberRef.MemberParent")
     member_parent: Optional[str] = None
     if member_parent_index != 0:
         member_parent = _rcn(
             PackageIndex(member_parent_index), import_map, export_map, linker
         )
 
-    member_scope = archive.read_fstring()
-    member_name = archive.read_name(name_map)
+    member_scope = archive.read_fstring("MemberRef.MemberScope")
+    member_name = archive.read_name(name_map, "MemberRef.MemberName")
     member_guid = _read_guid(archive, uppercase=False)
-    b_self_context = archive.read_bool()
-    _b_was_deprecated = archive.read_bool()
+    b_self_context = archive.read_bool("MemberRef.bSelfContext")
+    _b_was_deprecated = archive.read_bool("MemberRef.bWasDeprecated")
 
     return FMemberReference(
         member_parent=member_parent,
@@ -1347,7 +1340,7 @@ def read_k2node_call_function(
     if function_reference is None:
         function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
-    b_defaults_to_pure = archive.read_bool()
+    b_defaults_to_pure = archive.read_bool("K2Node_CallFunction.bDefaultsToPure")
     return {
         "function_reference": function_reference,
         "b_defaults_to_pure": b_defaults_to_pure,
@@ -1395,7 +1388,7 @@ def read_k2node_event(
                 "K2Node_Event b_override_function read from legacy fallback (bool at pos %d)",
                 archive.tell() - 4
             )
-        except Exception as e:
+        except (struct.error, OSError, ValueError) as e:
             logger.warning(
                 "K2Node_Event b_override_function fallback failed: %s, defaulting to False",
                 e
@@ -1490,7 +1483,7 @@ def read_k2node_enhanced_input(
             # 从路径提取短名
             if input_action_path:
                 input_action_short_name = input_action_path.split(".")[-1].split("'")[0]
-        except Exception:
+        except (struct.error, OSError, ValueError):
             input_action_path = ""
 
     # AdvancedPinDisplay 从 PropertyTag 获取
@@ -1554,7 +1547,7 @@ def read_k2node_message(
             result["message_name"] = name_map[message_name_idx]
         else:
             result["message_name"] = f"Message_{message_name_idx}"
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         logger.warning("K2Node_Message read failed: %s", e)
         result["message_name"] = "Unknown"
 
@@ -1568,7 +1561,7 @@ def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[st
         delegate_idx = archive.read_i32()
         if 0 <= delegate_idx < len(name_map):
             result["delegate_name"] = name_map[delegate_idx]
-    except Exception as e:
+    except (struct.error, OSError, ValueError) as e:
         logger.warning("K2Node_CallDelegate read failed: %s", e)
     return result
 
@@ -1824,7 +1817,6 @@ def _read_anim_graph_node(
             # 解析 PackageIndex 为对象引用
             try:
                 from uasset_read.serializers.object_resources import PackageIndex
-                from uasset_read.link.object_instance import UObjectInstance
                 if linker is not None:
                     obj_ref = linker.resolve_package_index(PackageIndex(pkg_idx))
                     if obj_ref is not None:
@@ -1842,7 +1834,7 @@ def _read_anim_graph_node(
                             "object_name": obj_export.object_name,
                             "class_name": _gac(obj_export, import_map, export_map, linker) or "",
                         }
-            except Exception:
+            except (KeyError, IndexError, AttributeError):
                 subgraph_refs[key] = {"package_index": pkg_idx, "error": "resolve_failed"}
 
     if subgraph_refs:
@@ -1987,6 +1979,324 @@ def create_node_from_archive(
 # UEdGraphNode 读取
 # ============================================================================
 
+def _read_member_reference_from_tags(
+    archive: FArchive,
+    tag,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"] = None,
+) -> FMemberReference:
+    """从 PropertyTag 读取 FMemberReference 结构（FunctionReference/EventReference 共用）。"""
+    value_end = tag.value_end_offset or (archive.tell() + tag.size)
+    mp_idx = 0
+    m_name = ""
+    m_guid = ""
+    m_self = False
+
+    while archive.tell() < value_end:
+        inner = read_property_tag(archive, name_map)
+        if inner.name == "None":
+            break
+        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
+            raise ParseError(
+                f"MemberReference field '{inner.name}' exceeds struct boundary"
+            )
+
+        def _read_inner(inner=inner):
+            if inner.name == "MemberParent" and inner.size > 0:
+                return archive.read_i32()
+            if inner.name == "MemberScope" and inner.size > 0:
+                archive.read_fstring()
+                return None
+            if inner.name == "MemberName":
+                return archive.read_name(name_map)
+            if inner.name == "MemberGuid" and inner.size > 0:
+                return archive.read_bytes(16).hex()
+            if inner.name == "bSelfContext":
+                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
+            if inner.name == "bWasDeprecated" and inner.size > 0:
+                archive.read_i32()
+            return None
+
+        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
+        if inner.name == "MemberParent":
+            mp_idx = inner_value or 0
+        elif inner.name == "MemberName":
+            m_name = inner_value or ""
+        elif inner.name == "MemberGuid":
+            m_guid = inner_value or ""
+        elif inner.name == "bSelfContext":
+            m_self = bool(inner_value)
+
+    return FMemberReference(
+        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+        member_name=m_name,
+        member_guid=m_guid,
+        b_self_context=m_self,
+    )
+
+
+def _read_node_property_tag(
+    archive: FArchive,
+    tag,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"],
+    raw_properties: Dict[str, Any],
+) -> dict:
+    """读取单个 node PropertyTag 并更新局部变量。返回需要更新的 named 属性。"""
+    updates: Dict[str, Any] = {}
+
+    if tag.name == "NodePosX":
+        updates["node_pos_x"] = _read_tag_i32(archive, tag)
+    elif tag.name == "NodePosY":
+        updates["node_pos_y"] = _read_tag_i32(archive, tag)
+    elif tag.name == "NodeGuid" and tag.size > 0:
+        updates["node_guid"] = archive.read_bytes(16).hex()
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name == "NodeComment" and tag.size > 0:
+        updates["node_comment"] = archive.read_fstring()
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name == "InputAction" and tag.size > 0:
+        pkg_idx = archive.read_i32()
+        input_action_path = (
+            _rcn(PackageIndex(pkg_idx), import_map, export_map, linker)
+            if pkg_idx != 0 else ""
+        )
+        raw_properties[tag.name] = input_action_path
+        raw_properties["InputActionShortName"] = (
+            input_action_path.split(".")[-1].split("'")[0]
+            if input_action_path else ""
+        )
+        raw_properties["InputActionPackageIndex"] = pkg_idx
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name == "CommentColor" and tag.size >= 16:
+        raw_properties[tag.name] = (
+            archive.read_f32(),
+            archive.read_f32(),
+            archive.read_f32(),
+            archive.read_f32(),
+        )
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name in ("NodeWidth", "NodeHeight", "FontSize") and tag.size > 0:
+        raw_properties[tag.name] = _read_tag_i32(archive, tag)
+    elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
+        raw_properties[tag.name] = _read_tag_bool(archive, tag)
+    elif tag.name == "CommentDepth" and tag.size > 0:
+        raw_properties[tag.name] = _read_tag_i32(archive, tag)
+    elif tag.name == "ExtraFlags" and tag.size > 0:
+        raw_properties[tag.name] = _read_tag_i32(archive, tag)
+    elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
+        raw_val = _read_tag_i32(archive, tag)
+        raw_properties[tag.name] = raw_val
+        enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
+        raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
+    elif tag.name == "bOverrideFunction":
+        updates["b_override_function"] = _read_tag_bool(archive, tag)
+        raw_properties[tag.name] = updates["b_override_function"]
+    elif tag.name == "bInternalEvent":
+        updates["b_internal_event"] = _read_tag_bool(archive, tag)
+        raw_properties[tag.name] = updates["b_internal_event"]
+    elif tag.name == "bIsEditable":
+        raw_properties[tag.name] = _read_tag_bool(archive, tag)
+    elif tag.name == "CustomFunctionName":
+        updates["custom_function_name"] = _read_tag_fname(archive, tag, name_map)
+        raw_properties[tag.name] = updates["custom_function_name"]
+    elif tag.name == "FunctionFlags" and tag.size > 0:
+        updates["function_flags"] = _read_tag_i32(archive, tag)
+        raw_properties[tag.name] = updates["function_flags"]
+    elif tag.name == "CustomGeneratedFunctionName":
+        raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
+    elif tag.name in ("EditorStateMachineGraph", "BoundGraph") and tag.size > 0:
+        pkg_idx = archive.read_i32()
+        raw_properties[tag.name] = pkg_idx
+        raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name == "MoveMode" and tag.size > 0:
+        raw_val = archive.read_u8() if tag.size >= 1 else 0
+        raw_properties[tag.name] = raw_val
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+    elif tag.name == "NodeDetails" and tag.size > 0:
+        try:
+            flags = archive.read_i32()
+            history_type_raw = archive.read_u8()
+            history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
+            read_ftext_with_history(archive, history_type, tolerant=True)
+        except (struct.error, OSError, ValueError) as e:
+            logger.debug("读取 NodeDetails FText 失败: %s", e, exc_info=True)
+        if archive.tell() < tag.value_end_offset:
+            archive.seek(tag.value_end_offset)
+        raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
+    elif tag.size > 0:
+        value_start = archive.tell()
+        raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
+        archive.seek(tag.value_end_offset)
+
+    return updates
+
+
+def _read_node_pins(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary,
+    export_map: List[ObjectExport],
+    import_map: List[ObjectImport],
+    linker: Optional["PackageLinker"],
+    node_export: ObjectExport,
+    node_name: str,
+    node_guid: str,
+) -> List[UEdGraphPin]:
+    """读取节点的 Pins 数组。"""
+    pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
+    archive.seek(node_export.serial_offset + pins_offset)
+
+    pins_count = archive.read_i32()
+
+    if pins_count < 0:
+        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
+    if pins_count > MAX_PINS_PER_NODE:
+        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
+
+    pins: List[UEdGraphPin] = []
+    for _ in range(pins_count):
+        b_null_ptr = archive.read_i32()
+
+        if b_null_ptr != 0:
+            archive.read_i32()  # owning_node (unused)
+            archive.read_bytes(16)  # pin_guid (unused)
+            continue
+
+        header_owning = archive.read_i32()
+        header_guid_bytes = archive.read_bytes(16)
+        header_pin_id = header_guid_bytes.hex().upper()
+
+        try:
+            pin = read_ue_graph_pin(
+                archive, name_map, summary, export_map, import_map, linker,
+                header_owning_node=header_owning,
+                header_pin_id=header_pin_id,
+            )
+            _local_trace = _get_thread_local().pin_trace_events
+            if _local_trace and _local_trace[-1].get("pin_id") == pin.pin_id:
+                _local_trace[-1]["node_name"] = node_export.object_name
+                _local_trace[-1]["node_guid"] = node_guid
+                _local_trace[-1]["node_class"] = _rcn(
+                    node_export.class_index, import_map, export_map, linker
+                ) or ""
+            pins.append(pin)
+        except (struct.error, OSError, ValueError, KeyError):
+            continue
+
+    return pins
+
+
+def _read_node_script_serial(
+    archive: FArchive,
+    name_map: List[str],
+    summary: PackageFileSummary,
+    node_export: ObjectExport,
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"],
+    node_name: str,
+) -> tuple:
+    """读取 node 的 script_serial PropertyTags，返回 (function_reference, event_reference, 局部变量字典, raw_properties)。"""
+    function_reference: Optional[FMemberReference] = None
+    event_reference: Optional[FMemberReference] = None
+    b_override_function: Optional[bool] = None
+    b_internal_event: Optional[bool] = None
+    custom_function_name: Optional[str] = None
+    function_flags: Optional[int] = None
+    node_pos_x: int = 0
+    node_pos_y: int = 0
+    node_guid: str = ""
+    node_comment: str = ""
+    raw_properties: Dict[str, Any] = {}
+
+    if not node_export.has_script_serialization:
+        return (function_reference, event_reference, b_override_function,
+                b_internal_event, custom_function_name, function_flags,
+                node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
+
+    script_start = node_export.serial_offset + node_export.script_serialization_start_offset
+    script_end = node_export.serial_offset + node_export.script_serialization_end_offset
+    archive.seek(script_start)
+
+    # UE5 >= 1011: SerializationControlExtensions
+    if summary.file_version_ue5 >= 1011:
+        ctrl = archive.read_u8()
+        if ctrl & 0x02:
+            archive.read_u8()
+
+    max_property_iterations = max(1000, node_export.script_serialization_size)
+    _property_iterations = 0
+
+    while archive.tell() < script_end:
+        _property_iterations += 1
+        if _property_iterations > max_property_iterations:
+            logger.warning(
+                "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
+                max_property_iterations, node_name
+            )
+            break
+
+        tag_pos = archive.tell()
+        try:
+            tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
+        except ParseError as e:
+            logger.warning(
+                "read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s",
+                tag_pos, node_name, e
+            )
+            break
+
+        if tag.name == "None":
+            break
+
+        if tag.name == "FunctionReference" and tag.size > 0:
+            function_reference = read_tag_value_bounded(
+                archive, tag,
+                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker)
+            )
+        elif tag.name == "EventReference" and tag.size > 0:
+            event_reference = read_tag_value_bounded(
+                archive, tag,
+                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker)
+            )
+        else:
+            updates = _read_node_property_tag(
+                archive, tag, name_map, import_map, export_map, linker, raw_properties
+            )
+            if "node_pos_x" in updates:
+                node_pos_x = updates["node_pos_x"]
+            if "node_pos_y" in updates:
+                node_pos_y = updates["node_pos_y"]
+            if "node_guid" in updates:
+                node_guid = updates["node_guid"]
+            if "node_comment" in updates:
+                node_comment = updates["node_comment"]
+            if "b_override_function" in updates:
+                b_override_function = updates["b_override_function"]
+            if "b_internal_event" in updates:
+                b_internal_event = updates["b_internal_event"]
+            if "custom_function_name" in updates:
+                custom_function_name = updates["custom_function_name"]
+            if "function_flags" in updates:
+                function_flags = updates["function_flags"]
+
+    return (function_reference, event_reference, b_override_function,
+            b_internal_event, custom_function_name, function_flags,
+            node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
+
+
 def read_ue_graph_node(
     archive: FArchive,
     name_map: List[str],
@@ -2002,310 +2312,19 @@ def read_ue_graph_node(
     node_name = node_export.object_name
     node_class = _gac(node_export, import_map, export_map, linker)
 
-    function_reference: Optional[FMemberReference] = None
-    event_reference: Optional[FMemberReference] = None
-    # K2Node_Event PropertyTag 字段
-    b_override_function: Optional[bool] = None
-    b_internal_event: Optional[bool] = None
-    custom_function_name: Optional[str] = None
-    function_flags: Optional[int] = None
-    node_pos_x: int = 0
-    node_pos_y: int = 0
-    node_guid: str = ""
-    node_comment: str = ""
-    raw_properties: Dict[str, Any] = {}  # 收集未知 PropertyTags（用于未知节点类型）
-
     # 解析 script_serial 中的 tagged properties
-    if node_export.has_script_serialization:
-        script_start = node_export.serial_offset + node_export.script_serialization_start_offset
-        script_end = node_export.serial_offset + node_export.script_serialization_end_offset
-        archive.seek(script_start)
-
-        # UE5 >= 1011: SerializationControlExtensions
-        if summary.file_version_ue5 >= 1011:
-            ctrl = archive.read_u8()
-            if ctrl & 0x02:
-                archive.read_u8()
-
-        # 边界保护：防止 script_serialization 不正确导致无限循环
-        max_property_iterations = max(1000, node_export.script_serialization_size)
-        _property_iterations = 0
-
-        while archive.tell() < script_end:
-            _property_iterations += 1
-            if _property_iterations > max_property_iterations:
-                logger.warning(
-                    "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
-                    max_property_iterations, node_name
-                )
-                break
-
-            tag_pos = archive.tell()
-            try:
-                tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
-            except ParseError as e:
-                logger.warning(
-                    "read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s",
-                    tag_pos, node_name, e
-                )
-                break
-
-            if tag.name == "None":
-                break
-
-            if tag.name == "FunctionReference" and tag.size > 0:
-                def _read_function_reference() -> FMemberReference:
-                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
-                    mp_idx = 0
-                    m_name = ""
-                    m_guid = ""
-                    m_self = False
-
-                    while archive.tell() < value_end:
-                        inner = read_property_tag(archive, name_map)
-                        if inner.name == "None":
-                            break
-                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
-                            raise ParseError(
-                                f"FunctionReference field '{inner.name}' exceeds struct boundary"
-                            )
-
-                        def _read_inner(inner=inner):
-                            if inner.name == "MemberParent" and inner.size > 0:
-                                return archive.read_i32()
-                            if inner.name == "MemberScope" and inner.size > 0:
-                                archive.read_fstring()
-                                return None
-                            if inner.name == "MemberName":
-                                return archive.read_name(name_map)
-                            if inner.name == "MemberGuid" and inner.size > 0:
-                                return archive.read_bytes(16).hex()
-                            if inner.name == "bSelfContext":
-                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
-                            if inner.name == "bWasDeprecated" and inner.size > 0:
-                                archive.read_i32()
-                            return None
-
-                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
-                        if inner.name == "MemberParent":
-                            mp_idx = inner_value or 0
-                        elif inner.name == "MemberName":
-                            m_name = inner_value or ""
-                        elif inner.name == "MemberGuid":
-                            m_guid = inner_value or ""
-                        elif inner.name == "bSelfContext":
-                            m_self = bool(inner_value)
-
-                    return FMemberReference(
-                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                        member_name=m_name,
-                        member_guid=m_guid,
-                        b_self_context=m_self,
-                    )
-
-                function_reference = read_tag_value_bounded(archive, tag, _read_function_reference)
-            elif tag.name == "EventReference" and tag.size > 0:
-                def _read_event_reference() -> FMemberReference:
-                    value_end = tag.value_end_offset or (archive.tell() + tag.size)
-                    mp_idx = 0
-                    m_name = ""
-                    m_guid = ""
-                    m_self = False
-
-                    while archive.tell() < value_end:
-                        inner = read_property_tag(archive, name_map)
-                        if inner.name == "None":
-                            break
-                        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
-                            raise ParseError(
-                                f"EventReference field '{inner.name}' exceeds struct boundary"
-                            )
-
-                        def _read_inner(inner=inner):
-                            if inner.name == "MemberParent" and inner.size > 0:
-                                return archive.read_i32()
-                            if inner.name == "MemberScope" and inner.size > 0:
-                                archive.read_fstring()
-                                return None
-                            if inner.name == "MemberName":
-                                return archive.read_name(name_map)
-                            if inner.name == "MemberGuid" and inner.size > 0:
-                                return archive.read_bytes(16).hex()
-                            if inner.name == "bSelfContext":
-                                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
-                            if inner.name == "bWasDeprecated" and inner.size > 0:
-                                archive.read_i32()
-                            return None
-
-                        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
-                        if inner.name == "MemberParent":
-                            mp_idx = inner_value or 0
-                        elif inner.name == "MemberName":
-                            m_name = inner_value or ""
-                        elif inner.name == "MemberGuid":
-                            m_guid = inner_value or ""
-                        elif inner.name == "bSelfContext":
-                            m_self = bool(inner_value)
-
-                    return FMemberReference(
-                        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-                        member_name=m_name,
-                        member_guid=m_guid,
-                        b_self_context=m_self,
-                    )
-
-                event_reference = read_tag_value_bounded(archive, tag, _read_event_reference)
-            # K2Node_Event PropertyTag 字段使用 helper functions
-            # 注意：这些字段会在后面的 elif 分支（使用 helper functions）处理
-            # 这里只是占位注释，实际处理在 lines 1859-1872
-            elif tag.name == "NodePosX":
-                node_pos_x = _read_tag_i32(archive, tag)
-            elif tag.name == "NodePosY":
-                node_pos_y = _read_tag_i32(archive, tag)
-            elif tag.name == "NodeGuid" and tag.size > 0:
-                node_guid = archive.read_bytes(16).hex()
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name == "NodeComment" and tag.size > 0:
-                node_comment = archive.read_fstring()
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name == "InputAction" and tag.size > 0:
-                pkg_idx = archive.read_i32()
-                input_action_path = (
-                    _rcn(PackageIndex(pkg_idx), import_map, export_map, linker)
-                    if pkg_idx != 0 else ""
-                )
-                raw_properties[tag.name] = input_action_path
-                # 保留短名提取
-                raw_properties["InputActionShortName"] = (
-                    input_action_path.split(".")[-1].split("'")[0]
-                    if input_action_path else ""
-                )
-                raw_properties["InputActionPackageIndex"] = pkg_idx
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name == "CommentColor" and tag.size >= 16:
-                raw_properties[tag.name] = (
-                    archive.read_f32(),
-                    archive.read_f32(),
-                    archive.read_f32(),
-                    archive.read_f32(),
-                )
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name in ("NodeWidth", "NodeHeight", "FontSize") and tag.size > 0:
-                raw_properties[tag.name] = _read_tag_i32(archive, tag)
-            elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
-                raw_properties[tag.name] = _read_tag_bool(archive, tag)
-            elif tag.name == "CommentDepth" and tag.size > 0:
-                raw_properties[tag.name] = _read_tag_i32(archive, tag)
-            elif tag.name == "ExtraFlags" and tag.size > 0:
-                raw_properties[tag.name] = _read_tag_i32(archive, tag)
-            # 新增节点字段收集
-            elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
-                raw_val = _read_tag_i32(archive, tag)
-                raw_properties[tag.name] = raw_val
-                # 格式化枚举名映射（EAdvancedPinDisplay）
-                enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
-                raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
-            elif tag.name == "bOverrideFunction":
-                b_override_function = _read_tag_bool(archive, tag)
-                raw_properties[tag.name] = b_override_function
-            elif tag.name == "bInternalEvent":
-                b_internal_event = _read_tag_bool(archive, tag)
-                raw_properties[tag.name] = b_internal_event
-            elif tag.name == "bIsEditable":
-                raw_properties[tag.name] = _read_tag_bool(archive, tag)
-            elif tag.name == "CustomFunctionName":
-                custom_function_name = _read_tag_fname(archive, tag, name_map)
-                raw_properties[tag.name] = custom_function_name
-            elif tag.name == "FunctionFlags" and tag.size > 0:
-                function_flags = _read_tag_i32(archive, tag)
-                raw_properties[tag.name] = function_flags
-            elif tag.name == "CustomGeneratedFunctionName":
-                raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
-            # AnimGraphNode 子图引用属性
-            elif tag.name in ("EditorStateMachineGraph", "BoundGraph") and tag.size > 0:
-                pkg_idx = archive.read_i32()
-                raw_properties[tag.name] = pkg_idx
-                raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name == "MoveMode" and tag.size > 0:
-                # MoveMode 通常为 byte/int
-                raw_val = archive.read_u8() if tag.size >= 1 else 0
-                raw_properties[tag.name] = raw_val
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-            elif tag.name == "NodeDetails" and tag.size > 0:
-                # NodeDetails 为 FText，尝试读取预览
-                try:
-                    flags = archive.read_i32()
-                    history_type_raw = archive.read_u8()
-                    history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-                    read_ftext_with_history(archive, history_type, tolerant=True)
-                except Exception:
-                    pass
-                if archive.tell() < tag.value_end_offset:
-                    archive.seek(tag.value_end_offset)
-                raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
-            elif tag.size > 0:
-                # 收集未知 PropertyTag（用于未知节点类型调试和未来扩展）
-                value_start = archive.tell()
-                raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
-                archive.seek(tag.value_end_offset)
+    (function_reference, event_reference, b_override_function,
+     b_internal_event, custom_function_name, function_flags,
+     node_pos_x, node_pos_y, node_guid, node_comment, raw_properties
+     ) = _read_node_script_serial(
+        archive, name_map, summary, node_export, import_map, export_map, linker, node_name
+    )
 
     # 读取 Pins 数组
-    # D-12: UE5 UEdGraphNode Pins format:
-    #   - End marker (4 bytes, value=0) after script_serial
-    #   - pins_count (i32)
-    #   - TArray<UEdGraphPin> elements with header (b_null_ptr + owning_node + pin_guid)
-    pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
-    archive.seek(node_export.serial_offset + pins_offset)
-
-    pins_count = archive.read_i32()
-
-    if pins_count < 0:
-        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
-    if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
-
-    pins: List[UEdGraphPin] = []
-    for _ in range(pins_count):
-        # D-12: UE5 Pin array uses PinReference format:
-        #   Header: b_null_ptr + owning_node + pin_guid
-        #   Body: Complete UEdGraphPin (duplicates owning_node + pin_guid, then PinName + ...)
-        b_null_ptr = archive.read_i32()
-
-        if b_null_ptr != 0:
-            # NULL pin reference: skip remaining header (owning_node + pin_guid)
-            archive.read_i32()  # owning_node (unused)
-            archive.read_bytes(16)  # pin_guid (unused)
-            continue
-
-        # Read external header: owning_node and pin_guid
-        header_owning = archive.read_i32()
-        header_guid_bytes = archive.read_bytes(16)
-        header_pin_id = header_guid_bytes.hex().upper()
-
-        try:
-            # D-12: Pass header values to skip internal duplicates
-            pin = read_ue_graph_pin(
-                archive, name_map, summary, export_map, import_map, linker,
-                header_owning_node=header_owning,
-                header_pin_id=header_pin_id,
-            )
-            _local_trace = _get_thread_local().pin_trace_events
-            if _local_trace and _local_trace[-1].get("pin_id") == pin.pin_id:
-                _local_trace[-1]["node_name"] = node_export.object_name
-                _local_trace[-1]["node_guid"] = node_guid
-                _local_trace[-1]["node_class"] = _rcn(
-                    node_export.class_index, import_map, export_map, linker
-                ) or ""
-            pins.append(pin)
-        except Exception:
-            continue
+    pins = _read_node_pins(
+        archive, name_map, summary, export_map, import_map, linker,
+        node_export, node_name, node_guid,
+    )
 
     class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
 
@@ -2351,11 +2370,16 @@ def read_ue_graph(
     graph_class: str,
     graph_export_idx: int = 0,
     linker: Optional["PackageLinker"] = None,
+    _parsed_indices: Optional[set] = None,
 ) -> UEdGraph:
     """读取 UEdGraph 容器（EdGraph.cpp）。
     
     参考 UE C++ UEdGraph::Serialize() 实现
     """
+    if _parsed_indices is None:
+        _parsed_indices = set()
+    _parsed_indices.add(graph_export_idx)
+
     archive.seek(graph_export.serial_offset)
 
     # 1. Schema
@@ -2420,14 +2444,54 @@ def read_ue_graph(
                         ))
                         nodes[-1]._export_object_name = node_export.object_name
 
-    # 3. GraphGuid
+    # 3. bEditable (UE header 顺序: Schema, Nodes, bEditable, SubGraphs, GraphGuid)
+    b_editable_raw = archive.read_u8("Graph.bEditable")
+    b_editable = b_editable_raw != 0
+
+    # 4. SubGraphs 数组（UE UEdGraph::SubGraphs — WITH_EDITORONLY_DATA）
+    #    序列化为 i32 count + i32[] package indices
+    subgraph_indices: List[int] = []
+    subgraphs_count = archive.read_i32("Graph.SubGraphs.Count")
+    if subgraphs_count < 0 or subgraphs_count > MAX_NODES_PER_GRAPH:
+        logger.warning(
+            "Invalid SubGraphs count %d at graph %s, skipping",
+            subgraphs_count, graph_export.object_name,
+        )
+    else:
+        for _ in range(subgraphs_count):
+            pkg_idx = archive.read_i32("Graph.SubGraphs.Element")
+            subgraph_indices.append(pkg_idx)
+
+    # 5. GraphGuid
     graph_guid = _read_guid(archive, uppercase=False)
 
-    # 4. bEditable
-    b_editable = archive.read_u8() != 0
-
-    # 5. 递归解析子图（AnimGraphNode 嵌套子图）
+    # 6. 解析子图（合并 SubGraphs 数组 + AnimGraphNode 嵌套子图）
     subgraphs: List[UEdGraph] = []
+
+    # 6a. 从 SubGraphs 数组解析（直接序列化的子图引用）
+    for pkg_idx in subgraph_indices:
+        if pkg_idx <= 0 or pkg_idx > len(export_map):
+            continue
+        if pkg_idx in _parsed_indices:
+            continue
+
+        subgraph_export = export_map[pkg_idx - 1]
+        subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
+
+        if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
+            continue
+
+        try:
+            subgraph = read_ue_graph(
+                archive, name_map, summary, export_map, import_map,
+                subgraph_export, subgraph_class, pkg_idx, linker,
+                _parsed_indices=_parsed_indices,
+            )
+            subgraphs.append(subgraph)
+        except (struct.error, OSError, ValueError, KeyError) as e:
+            logger.warning("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
+
+    # 6b. 从 AnimGraphNode node_data.subgraph_references 解析
     for node in nodes:
         node_data = getattr(node, "node_data", None)
         if not isinstance(node_data, dict):
@@ -2441,11 +2505,12 @@ def read_ue_graph(
             pkg_idx = ref_info.get("package_index", 0)
             if pkg_idx <= 0 or pkg_idx > len(export_map):
                 continue
+            if pkg_idx in _parsed_indices:
+                continue
 
             subgraph_export = export_map[pkg_idx - 1]
             subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
 
-            # 检查是否为图类型
             if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
                 continue
 
@@ -2453,10 +2518,11 @@ def read_ue_graph(
                 subgraph = read_ue_graph(
                     archive, name_map, summary, export_map, import_map,
                     subgraph_export, subgraph_class, pkg_idx, linker,
+                    _parsed_indices=_parsed_indices,
                 )
                 subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
                 subgraphs.append(subgraph)
-            except Exception as e:
+            except (struct.error, OSError, ValueError, KeyError) as e:
                 logger.warning("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 
     return UEdGraph(

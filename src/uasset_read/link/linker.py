@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
     from uasset_read.versioning import VersionContainer
 
-from uasset_read.serializers.object_resources import resolve_class_name, PackageIndex as PI
+from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
@@ -57,6 +57,7 @@ class PackageLinker:
         self._preload_cache: dict[int, bool] = {}
         self._diagnostics: List[OffsetRangeDiagnostic] = []
         self._file_size: int = getattr(archive, '_file_size', 0)
+        self._import_verification_errors: List[str] = []
 
     @property
     def diagnostics(self) -> List[OffsetRangeDiagnostic]:
@@ -379,7 +380,7 @@ class PackageLinker:
         """
         self._resolve_property_references()
         self._resolve_weak_references()
-        self._verify_imports()
+        self._import_verification_errors = self._verify_imports()
         self._resolve_template_objects()
         self._build_dependency_graph()
 
@@ -495,6 +496,17 @@ class PackageLinker:
             for raw_dep in dep_indices:
                 if raw_dep == 0:
                     # Null dependency, skip
+                    continue
+
+                # 类型校验：仅接受 int 类型的 FPackageIndex 值
+                if not isinstance(raw_dep, int):
+                    self._diagnostics.append(OffsetRangeDiagnostic(
+                        module="linker",
+                        field="DependsMap",
+                        export_index=exp_idx,
+                        source="_build_dependency_graph",
+                        error=f"Export #{exp_idx} dependency 值类型异常: {type(raw_dep).__name__}({raw_dep})",
+                    ))
                     continue
 
                 # Convert FPackageIndex to UObjectInstance

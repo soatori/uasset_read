@@ -91,6 +91,16 @@ def decompile_single_function(
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
     warnings = _collect_translation_warnings(cpp_code)
 
+    # 收集结构化率指标
+    structured_rate: float | None = None
+    try:
+        from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+        rate_analyzer = JumpAnalyzer(expressions)
+        rate_report = rate_analyzer.analyze_structured_rate()
+        structured_rate = rate_report.rate
+    except (ImportError, AttributeError, TypeError, ValueError):
+        structured_rate = None
+
     # 提取函数引用解析统计
     func_ref_stats: dict = {}
     if builder._translator._func_resolver is not None:
@@ -120,6 +130,7 @@ def decompile_single_function(
         warnings=warnings,
         fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
+        structured_rate=structured_rate,
     )
 
 

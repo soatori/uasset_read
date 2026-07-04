@@ -5,7 +5,10 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 来自 uasset_read.py 第 204-895 行。
 """
 import logging
+import math
 import mmap
+import os
+import struct
 from typing import Optional, Dict, BinaryIO, Callable, Any
 
 from uasset_read.exceptions import ParseError
@@ -39,7 +42,7 @@ class FArchive:
 
         try:
             self._file = open(path, 'rb')
-            self._file_size = __import__('os').path.getsize(path)
+            self._file_size = os.path.getsize(path)
 
             if self._file_size >= MMAP_THRESHOLD:
                 try:
@@ -58,7 +61,6 @@ class FArchive:
 
     def read(self, size: int) -> bytes:
         """基础读取方法 - 不对原始字节进行交换。"""
-        import struct as _struct
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
@@ -220,6 +222,10 @@ class FArchive:
             return None
         return self.read(size)
 
+    def __repr__(self) -> str:
+        """返回可读的 repr，包含路径和文件大小。"""
+        return f"<FArchive path='{self._path}' size={self._file_size}>"
+
     def close(self) -> None:
         """关闭文件和 mmap"""
         if self._mmap:
@@ -336,7 +342,7 @@ class FArchive:
 
     def read_u8(self, key: str = "") -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
-        import struct
+
         start = self.tell()
         data = self.read(1)
         value = struct.unpack('<B', data)[0]
@@ -346,7 +352,7 @@ class FArchive:
 
     def read_i8(self, key: str = "") -> int:
         """读取 signed 8-bit integer（字节序无关）"""
-        import struct
+
         start = self.tell()
         data = self.read(1)
         value = struct.unpack('<b', data)[0]  # 'b' = signed byte
@@ -364,7 +370,7 @@ class FArchive:
 
     def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'i', self.read(4))[0]
@@ -374,7 +380,7 @@ class FArchive:
 
     def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
-        import struct
+
         current_pos = self.tell()
         try:
             fmt = '>' if self._byte_swapping else '<'
@@ -384,13 +390,13 @@ class FArchive:
             if key:
                 self._record_hex_view(key, "i32(peek)", result, current_pos, current_pos + 4)
             return result
-        except Exception:
+        except (struct.error, OSError, ValueError):
             self.seek(current_pos)
             raise
 
     def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'H', self.read(2))[0]
@@ -400,7 +406,7 @@ class FArchive:
 
     def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'h', self.read(2))[0]
@@ -410,7 +416,7 @@ class FArchive:
 
     def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'I', self.read(4))[0]
@@ -447,7 +453,7 @@ class FArchive:
 
     def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'q', self.read(8))[0]
@@ -457,7 +463,7 @@ class FArchive:
 
     def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'Q', self.read(8))[0]
@@ -467,7 +473,7 @@ class FArchive:
 
     def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'f', self.read(4))[0]
@@ -477,7 +483,7 @@ class FArchive:
 
     def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
-        import struct
+
         start = self.tell()
         fmt = '>' if self._byte_swapping else '<'
         value = struct.unpack(fmt + 'd', self.read(8))[0]
@@ -491,7 +497,7 @@ class FArchive:
         UE FArchive::SerializeInt 通常用于将整数写入存档。
         此方法提供对称的序列化能力。
         """
-        import struct
+
         fmt = '>' if self._byte_swapping else '<'
         return struct.pack(fmt + 'i', value)
 
@@ -499,7 +505,12 @@ class FArchive:
         """序列化指定位数的值（用于 SerializeBits 兼容）。
 
         UE FArchive::SerializeBits 用于位级别的序列化。
-        此方法将值打包为指定字节数。
+        此方法将值打包为指定字节数，并在非字节对齐时应用 UE 位掩码。
+
+        对齐 UE 源码 Archive.h:1716-1724:
+            Serialize(V, (LengthBits + 7) / 8);
+            if (IsLoading() && (LengthBits % 8) != 0)
+                ((uint8*)V)[LengthBits / 8] &= ((1 << (LengthBits & 7)) - 1);
 
         Args:
             value: 要序列化的值
@@ -508,9 +519,13 @@ class FArchive:
         Returns:
             序列化后的字节
         """
-        import math
-        num_bytes = math.ceil(num_bits / 8)
-        return value.to_bytes(num_bytes, byteorder='big', signed=False)
+        num_bytes = (num_bits + 7) // 8
+        byteorder = 'big' if self._byte_swapping else 'little'
+        # 对齐 UE bitmask: 非字节对齐时截断高位
+        if num_bits % 8 != 0:
+            mask = (1 << (num_bits & 7)) - 1
+            value = value & mask
+        return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
     def read_fstring(self, key: str = "") -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
@@ -721,6 +736,45 @@ class FArchive:
                                   start, self.tell())
         return result
 
+    def read_bulk_array(self, element_size: int, element_count: int) -> bytes:
+        """读取 BulkArray 并验证大小。
+
+        用于 BulkData 系统的原始数据读取，镜像 UE 的 TBulkData 序列化。
+        读取后校验实际读取字节数与期望大小一致，防止静默数据错误。
+
+        Args:
+            element_size: 单个元素大小（字节）
+            element_count: 元素数量
+
+        Returns:
+            原始字节数据
+
+        Raises:
+            ParseError: 元素大小或数量为负数
+            ParseError: 实际读取大小与期望不匹配
+        """
+        if element_size < 0:
+            raise ParseError(
+                f"read_bulk_array: element_size {element_size} 为负数"
+            )
+        if element_count < 0:
+            raise ParseError(
+                f"read_bulk_array: element_count {element_count} 为负数"
+            )
+
+        expected_size = element_size * element_count
+        pos_before = self.tell()
+        data = self.read(expected_size)
+        pos_after = self.tell()
+
+        actual_size = pos_after - pos_before
+        if actual_size != expected_size:
+            raise ParseError(
+                f"BulkArray size mismatch: expected {expected_size}, "
+                f"serialized {actual_size}"
+            )
+        return data
+
 
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
@@ -807,6 +861,55 @@ class ByteArchive(FArchive):
         """定位到指定位置（带边界验证）。"""
         self.validate_offset(pos, "seek")
         self._pos = pos
+
+    def seek_safe(self, pos: int, context: str = "") -> bool:
+        """安全定位 — 越界时记录诊断并返回 False。"""
+        current = self._pos
+        if pos < 0 or pos > self._file_size:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="seek",
+                current_pos=current,
+                target_offset=pos,
+                file_size=self._file_size,
+                source=context or "seek_safe",
+                error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
+            ))
+            return False
+        self._pos = pos
+        return True
+
+    def read_safe(self, size: int, context: str = "") -> Optional[bytes]:
+        """安全读取 — 越界时记录诊断并返回 None。"""
+        current = self._pos
+        remaining = self._file_size - current
+        if size < 0:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 大小 {size} 为负数",
+            ))
+            return None
+        if size > remaining:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="byte_archive",
+                field="read",
+                current_pos=current,
+                read_size=size,
+                file_size=self._file_size,
+                source=context or "read_safe",
+                error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
+            ))
+            return None
+        return self.read(size)
+
+    def __repr__(self) -> str:
+        """返回可读的 repr，包含缓冲区大小。"""
+        return f"<ByteArchive size={self._file_size}>"
 
     def close(self) -> None:
         """释放缓冲区引用。"""

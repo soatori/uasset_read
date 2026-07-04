@@ -5,8 +5,11 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from uasset_read.models.ir import (
     PackageIR,
@@ -14,6 +17,7 @@ from uasset_read.models.ir import (
     PropertyIR,
     ExportIR,
     ExportRawIR,
+    ImportIR,
     GraphIR,
     NodeIR,
     PinIR,
@@ -24,6 +28,8 @@ from uasset_read.models.ir import (
     DecompiledFunctionIR,
     ExecutionChainIR,
     VariableIR,
+    HexViewEntryIR,
+    DebugIR,
 )
 
 if TYPE_CHECKING:
@@ -70,7 +76,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     elif hasattr(result, 'graphs') and result.graphs:
         try:
             function_graphs = _build_function_graphs_safe(result)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
             if hasattr(result, "warnings"):
                 result.warnings.append(f"function_graphs generation skipped: {e}")
 
@@ -116,6 +122,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status=status,
         status_message=status_message,
         status_code=status_code,
+        debug=_build_debug_ir(getattr(result, 'hex_view_entries', [])),
     )
 
     # 绑定函数/事件实现关联
@@ -222,6 +229,40 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
     summary = result.summary
     version = _get_version_string(result)
 
+    # 辅助：安全提取 EngineVersion 为字符串
+    def _engine_version_str(ev) -> str:
+        if ev is None:
+            return ""
+        major = getattr(ev, "major", 0)
+        minor = getattr(ev, "minor", 0)
+        patch = getattr(ev, "patch", 0)
+        changelist = getattr(ev, "changelist", 0)
+        branch = getattr(ev, "branch", "") or ""
+        if major or minor or patch:
+            base = f"{major}.{minor}.{patch}-{changelist}"
+            return f"{base}+{branch}" if branch else base
+        return ""
+
+    # 辅助：安全提取 custom_versions 为 dict 列表
+    def _custom_versions_list(cvs) -> list[dict]:
+        result_list = []
+        for cv in cvs or []:
+            result_list.append({
+                "guid": getattr(cv, "guid", "") or "",
+                "version": getattr(cv, "version", 0),
+            })
+        return result_list
+
+    # 辅助：安全提取 generations 为 dict 列表
+    def _generations_list(gens) -> list[dict]:
+        result_list = []
+        for gen in gens or []:
+            result_list.append({
+                "export_count": getattr(gen, "export_count", 0),
+                "name_count": getattr(gen, "name_count", 0),
+            })
+        return result_list
+
     return PackageHeaderIR(
         package_name=_safe_str(getattr(summary, "package_name", None)),
         package_class=_safe_str(getattr(summary, "package_class", None)),
@@ -230,6 +271,70 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
         saved_hash=getattr(summary, "saved_hash", b'') or b'',
+        # 文件版本
+        file_version_ue4=_safe_int(getattr(summary, "file_version_ue4", 0)),
+        file_version_ue5=_safe_int(getattr(summary, "file_version_ue5", 0)),
+        file_version_licensee=_safe_int(getattr(summary, "file_version_licensee", 0)),
+        # 头部结构偏移
+        total_header_size=_safe_int(getattr(summary, "total_header_size", 0)),
+        custom_versions=_custom_versions_list(getattr(summary, "custom_versions", None)),
+        folder_name=_safe_str(getattr(summary, "folder_name", None)),
+        # 名称表
+        name_count=_safe_int(getattr(summary, "name_count", 0)),
+        name_offset=_safe_int(getattr(summary, "name_offset", 0)),
+        # 软引用路径表
+        soft_object_paths_count=_safe_int(getattr(summary, "soft_object_paths_count", 0)),
+        soft_object_paths_offset=_safe_int(getattr(summary, "soft_object_paths_offset", 0)),
+        # 本地化
+        localization_id=_safe_str(getattr(summary, "localization_id", None)),
+        # 可收集文本数据
+        gatherable_text_data_count=_safe_int(getattr(summary, "gatherable_text_data_count", 0)),
+        gatherable_text_data_offset=_safe_int(getattr(summary, "gatherable_text_data_offset", 0)),
+        # 导出/导入表
+        export_count=_safe_int(getattr(summary, "export_count", 0)),
+        export_offset=_safe_int(getattr(summary, "export_offset", 0)),
+        import_count=_safe_int(getattr(summary, "import_count", 0)),
+        import_offset=_safe_int(getattr(summary, "import_offset", 0)),
+        # 元数据
+        metadata_offset=_safe_int(getattr(summary, "metadata_offset", 0)),
+        # 依赖表
+        depends_offset=_safe_int(getattr(summary, "depends_offset", 0)),
+        # 软包引用
+        soft_package_references_count=_safe_int(getattr(summary, "soft_package_references_count", 0)),
+        soft_package_references_offset=_safe_int(getattr(summary, "soft_package_references_offset", 0)),
+        # 可搜索名称
+        searchable_names_offset=_safe_int(getattr(summary, "searchable_names_offset", 0)),
+        # 缩略图表
+        thumbnail_table_offset=_safe_int(getattr(summary, "thumbnail_table_offset", 0)),
+        # 导入类型层级
+        import_type_hierarchies_count=_safe_int(getattr(summary, "import_type_hierarchies_count", 0)),
+        import_type_hierarchies_offset=_safe_int(getattr(summary, "import_type_hierarchies_offset", 0)),
+        # 持久化 GUID
+        persistent_guid=_safe_str(getattr(summary, "persistent_guid", None)),
+        # 版本世代
+        generations=_generations_list(getattr(summary, "generations", None)),
+        # 引擎版本
+        saved_by_engine_version=_engine_version_str(getattr(summary, "saved_by_engine_version", None)),
+        compatible_with_engine_version=_engine_version_str(getattr(summary, "compatible_with_engine_version", None)),
+        # 压缩
+        compression_flags=_safe_int(getattr(summary, "compression_flags", 0)),
+        # 包来源
+        package_source=_safe_int(getattr(summary, "package_source", 0)),
+        # 批量数据
+        bulk_data_start_offset=_safe_int(getattr(summary, "bulk_data_start_offset", 0)),
+        # 世界分块信息
+        world_tile_info_data_offset=_safe_int(getattr(summary, "world_tile_info_data_offset", 0)),
+        # 分块 ID
+        chunk_ids=list(getattr(summary, "chunk_ids", None) or []),
+        # 预加载依赖
+        preload_dependency_count=_safe_int(getattr(summary, "preload_dependency_count", 0)),
+        preload_dependency_offset=_safe_int(getattr(summary, "preload_dependency_offset", 0)),
+        # 名称引用计数
+        names_referenced_from_export_data_count=_safe_int(getattr(summary, "names_referenced_from_export_data_count", 0)),
+        # Payload TOC
+        payload_toc_offset=_safe_int(getattr(summary, "payload_toc_offset", 0)),
+        # 数据资源
+        data_resource_offset=_safe_int(getattr(summary, "data_resource_offset", 0)),
     )
 
 
@@ -244,8 +349,8 @@ def _get_version_string(result: ParseResult) -> str:
     if callable(method):
         try:
             return method()
-        except Exception:
-            pass
+        except (AttributeError, TypeError, ValueError) as e:
+            logger.debug("获取 UE 版本字符串失败: %s", e, exc_info=True)
 
     # 回退：基于 is_ue5 判断
     if getattr(vc, "is_ue5", False):
@@ -253,14 +358,22 @@ def _get_version_string(result: ParseResult) -> str:
     return "4.x"
 
 
-def _build_imports(result: ParseResult) -> list[dict]:
+def _build_imports(result: ParseResult) -> list[ImportIR]:
     imports = []
-    for imp in result.import_map or []:
-        imports.append({
-            "class_package": _safe_str(getattr(imp, "class_package", None)),
-            "class_name": _safe_str(getattr(imp, "class_name", None)),
-            "object_name": _safe_str(getattr(imp, "object_name", None)),
-        })
+    for idx, imp in enumerate(result.import_map or []):
+        outer_resolved = _resolve_package_index(result, getattr(imp, "outer_index", None))
+        imports.append(ImportIR(
+            index=idx,
+            class_package=_safe_str(getattr(imp, "class_package", None)),
+            class_name=_safe_str(getattr(imp, "class_name", None)),
+            object_name=_safe_str(getattr(imp, "object_name", None)),
+            outer_index=getattr(imp, "outer_index", 0) or 0,
+            is_asset=bool(getattr(imp, "is_asset", False)),
+            package_flags=_safe_int(getattr(imp, "package_flags", 0)),
+            outer_index_resolved=outer_resolved,
+            package_name=_safe_str(getattr(imp, "package_name", None)),
+            b_import_optional=bool(getattr(imp, "b_import_optional", False)),
+        ))
     return imports
 
 
@@ -270,9 +383,9 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
         try:
             export_ir = _build_export_ir(idx, export, result)
             exports.append(export_ir)
-        except Exception:
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
             # tolerant 模式：跳过失败的 export
-            pass
+            logger.debug("构建 export %d IR 失败: %s", idx, e, exc_info=True)
     return exports
 
 
@@ -280,9 +393,14 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
     super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
 
+    # parent_class 仅在蓝图 export 上设置（#252 修复）
+    # 蓝图 export 定义：object_name 以 _C 结尾，或有 graphs 数据
     parent_class = None
     if result.blueprint and getattr(result.blueprint, "parent_class", None):
-        parent_class = result.blueprint.parent_class
+        object_name = _safe_str(getattr(export, "object_name", None))
+        has_graphs = bool(getattr(export, "graphs", None))
+        if object_name.endswith("_C") or has_graphs:
+            parent_class = result.blueprint.parent_class
 
     properties = []
     for prop in getattr(export, "properties", None) or []:
@@ -331,6 +449,17 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         anim_blueprint=getattr(export, "custom_data", {}).get("anim_blueprint"),
         anim_sequence=getattr(export, "custom_data", {}).get("anim_sequence"),
         anim_montage=getattr(export, "custom_data", {}).get("anim_montage"),
+        # 直接访问字段（从 ExportRawIR 提升）
+        template_index=raw.template_index,
+        object_flags=raw.object_flags,
+        package_flags=raw.package_flags,
+        b_forced_export=raw.b_forced_export,
+        b_not_for_client=raw.b_not_for_client,
+        b_not_for_server=raw.b_not_for_server,
+        b_is_asset=raw.b_is_asset,
+        b_generate_public_hash=raw.b_generate_public_hash,
+        b_not_always_loaded_for_editor_game=raw.b_not_always_loaded_for_editor_game,
+        guid=raw.guid,
     )
 
 
@@ -444,13 +573,66 @@ def _build_pin_ir(pin) -> PinIR:
     if getattr(pin, "direction", 0) == 1:
         direction = "EGPD_Output"
 
+    # 从 FEdGraphPinType 提取结构化字段
+    pin_type_obj = getattr(pin, "pin_type", None)
+    pin_category = ""
+    pin_subcategory = ""
+    pin_subcategory_object = None
+    container_type = "None"
+    is_reference = False
+    is_const = False
+    is_weak_pointer = False
+    is_uobject_wrapper = False
+    is_map_key = False
+    is_map_value = False
+
+    if pin_type_obj is not None:
+        pin_category = _safe_str(getattr(pin_type_obj, "pin_category", None))
+        pin_subcategory = _safe_str(getattr(pin_type_obj, "pin_subcategory", None))
+        pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
+
+        # EPinContainerType: None=0, Array=1, Set=2, Map=3
+        _CONTAINER_MAP = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
+        _container_int = getattr(pin_type_obj, "container_type", 0)
+        container_type = _CONTAINER_MAP.get(_container_int, "None")
+
+        is_reference = bool(getattr(pin_type_obj, "is_reference", False))
+        is_const = bool(getattr(pin_type_obj, "is_const", False))
+        is_weak_pointer = bool(getattr(pin_type_obj, "is_weak_pointer", False))
+        is_uobject_wrapper = bool(getattr(pin_type_obj, "is_uobject_wrapper", False))
+        is_map_key = bool(getattr(pin_type_obj, "is_map_key", False))
+        is_map_value = bool(getattr(pin_type_obj, "is_map_value", False))
+
+    # Map terminal 类型（key 的类型信息）
+    map_key_pin_category = ""
+    map_key_pin_subcategory = ""
+    map_key_pin_subcategory_object = None
+    if pin_type_obj is not None and getattr(pin_type_obj, "container_type", 0) == 3:
+        map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
+        map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
+        map_key_pin_subcategory_object = getattr(
+            pin_type_obj, "map_key_terminal_sub_category_object_name", None
+        )
+
     return PinIR(
         pin_name=_safe_str(getattr(pin, "pin_name", None)),
-        pin_type=_safe_str(getattr(pin, "pin_type", None)),
-        pin_type_value=getattr(pin, "pin_type_value", None),
+        pin_type=_safe_str(pin_type_obj),
         linked_to=linked_to,
         direction=direction,
         default_value=getattr(pin, "default_value", None),
+        pin_category=pin_category,
+        pin_subcategory=pin_subcategory,
+        pin_subcategory_object=pin_subcategory_object,
+        container_type=container_type,
+        is_reference=is_reference,
+        is_const=is_const,
+        is_weak_pointer=is_weak_pointer,
+        is_uobject_wrapper=is_uobject_wrapper,
+        is_map_key=is_map_key,
+        is_map_value=is_map_value,
+        map_key_pin_category=map_key_pin_category,
+        map_key_pin_subcategory=map_key_pin_subcategory,
+        map_key_pin_subcategory_object=map_key_pin_subcategory_object,
     )
 
 
@@ -466,7 +648,7 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         if hasattr(obj_ref, "get_full_name"):
             return obj_ref.get_full_name()
         return str(obj_ref)
-    except Exception:
+    except (KeyError, IndexError, AttributeError, ValueError):
         return None
 
 
@@ -846,8 +1028,8 @@ def _format_var_type(var) -> str:
     object_name = getattr(pin_type, "pin_subcategory_object_name", None) or ""
     container = getattr(pin_type, "container_type", 0)
 
-    # 容器类型前缀
-    container_map = {1: "TArray", 2: "TMap", 3: "TSet"}
+    # 容器类型前缀（EPinContainerType: None=0, Array=1, Set=2, Map=3）
+    container_map = {1: "TArray", 2: "TSet", 3: "TMap"}
     prefix = container_map.get(container, "")
 
     # 基础类型
@@ -991,5 +1173,28 @@ def _build_asset_registry_data(result) -> dict | None:
         return None
     try:
         return asset_registry_data.to_dict()
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return None
+
+
+def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
+    """将 ParseResult.hex_view_entries 转为 DebugIR。
+
+    如果没有 hex_view 条目则返回 None。
+    """
+    if not hex_view_entries:
+        return None
+    entries = []
+    for e in hex_view_entries:
+        entry = HexViewEntryIR(
+            key=e.key,
+            type=e.type,
+            value=e.value,
+            start=e.start,
+            stop=e.stop,
+            size=e.size,
+            field_path=getattr(e, "field_path", None),
+            semantic_type=getattr(e, "semantic_type", None),
+        )
+        entries.append(entry)
+    return DebugIR(hex_view=entries)

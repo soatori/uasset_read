@@ -125,9 +125,10 @@ class TestFPakEntry:
         bitfield = (1 << 31) | (1 << 30) | (1 << 29) | 0x3F
         data = bytearray()
         data.extend(struct.pack('<I', bitfield))
+        # UE 顺序: CompressionBlockSize → Offset → UncompressedSize
+        data.extend(struct.pack('<I', actual_block_size))
         data.extend(struct.pack('<I', 100))
         data.extend(struct.pack('<I', 200))
-        data.extend(struct.pack('<I', actual_block_size))
 
         entry, consumed = FPakEntry.decode_bitfield(bytes(data), 0, pak_info)
 
@@ -177,15 +178,12 @@ class TestFPakEntry:
             uncompressed_size=0x2000,
             size=0x1000,
             compression_method_index=2,
-            compression_block_size=0,
+            compression_block_size=4096,  # 4096 >> 11 = 2 <= 0x3E，使用索引
         )
         encoded = entry.encode_bitfield()
 
-        # 4 + 4 + 4 + 4 (size) + 4 (block_size from stream) = 20
-        # block_size=0 → index=0, 非 0x3F → 不写额外数据?
-        # 看代码: block_size=0, 0 % 2048 == 0, 但 0 >> 11 == 0 <= 0x3E → index=0
-        # (bitfield & 0x3F) == 0 ≠ 0x3F → 不写 block_size
-        # 所以实际是 4+4+4+4 = 16
+        # 4 (bitfield) + 4 (offset) + 4 (uncompressed_size) + 4 (size) = 16
+        # block_size=4096, index=2, (bitfield & 0x3F) == 2 ≠ 0x3F → 不写 block_size 流数据
         assert len(encoded) == 16
 
     def test_encode_bitfield_block_size_from_stream(self):
@@ -202,8 +200,8 @@ class TestFPakEntry:
         bitfield = struct.unpack_from('<I', encoded, 0)[0]
         assert (bitfield & 0x3F) == 0x3F
 
-        # 最后 4 字节应为 block_size
-        block_size = struct.unpack_from('<I', encoded, len(encoded) - 4)[0]
+        # UE 顺序: CompressionBlockSize 在 Offset 之前（bitfield 之后立即写入）
+        block_size = struct.unpack_from('<I', encoded, 4)[0]
         assert block_size == 1000
 
     def test_encode_bitfield_large_offset_64bit(self):
@@ -379,9 +377,9 @@ class TestFPakInfo:
 
     def test_sizes_match_expected_constants(self):
         """验证 PAK_INFO_SIZES 常量值与已知 UE 格式一致。"""
-        # v1-6: Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) = 44
-        assert PAK_INFO_SIZES["v1-6"] == 44
-        # v7: + EncryptionKeyGuid(16) + bEncryptedIndex(1) = 61
+        # v1-6: bEncryptedIndex(1) + Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) = 45
+        assert PAK_INFO_SIZES["v1-6"] == 45
+        # v7: + EncryptionKeyGuid(16) = 61
         assert PAK_INFO_SIZES["v7"] == 61
         # v8: + CompressionMethods(32*5) = 221
         assert PAK_INFO_SIZES["v8"] == 221

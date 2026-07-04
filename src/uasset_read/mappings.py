@@ -157,7 +157,11 @@ class UsmapParser:
     FILE_MAGIC = 0x30C4
 
     def __init__(self, path_or_bytes: str | bytes):
-        data = path_or_bytes if isinstance(path_or_bytes, bytes) else open(path_or_bytes, "rb").read()
+        if isinstance(path_or_bytes, bytes):
+            data = path_or_bytes
+        else:
+            with open(path_or_bytes, "rb") as fh:
+                data = fh.read()
         self.mappings = self._parse(data)
 
     def _parse(self, data: bytes) -> TypeMappings:
@@ -273,7 +277,8 @@ class JmapParser:
         if isinstance(path_or_bytes, bytes):
             data = path_or_bytes
         else:
-            data = open(path_or_bytes, "rb").read()
+            with open(path_or_bytes, "rb") as fh:
+                data = fh.read()
             if path_or_bytes.lower().endswith(".gz"):
                 data = gzip.decompress(data)
         self.mappings = self._parse(json.loads(data.decode("utf-8")))

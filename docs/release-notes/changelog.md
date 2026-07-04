@@ -1,5 +1,49 @@
 # 变更日志
 
+## [0.5.1.31] — 2026-07-04
+
+自 v0.5.1.19 以来完成 31 个 issue 修复（#202 ~ #288）。
+
+### 修复
+- 修复 ParseResult.graphs 在 IR/JSON/Markdown 输出链中丢失（Issue #285）
+- 修复 UEdGraph 从错误 export 偏移读取导致合法资产被标记 partial（Issue #286）
+- 修复 Map Pin terminal 类型在反序列化和 IR 输出中丢失（Issue #287）
+- 修正文档中不存在的 scripts/test_matrix.py 测试入口（Issue #288）
+- 修复 core.py diff_single() 中 errors 列表未使用（Issue #281）
+- 修复 batch 同 stem 的 uasset/umap 静默覆盖输出（Issue #278）
+- 修复生产宏上下文丢失 tunnel/pin 数据导致非标准宏展开失效（Issue #277）
+- 修复损坏 PropertyTag 在同一偏移重试至上限且 strict 模式失效（Issue #276）
+- 修复 pytest console entry 无法收集 tests.conftest 导入模块（Issue #275）
+- 修复 kismet/translator.py print() 改为 logging（Issue #271）
+- 修复 16 处静默异常吞没（except + pass）丢失错误上下文（Issue #270）
+- 修复 flow_builder.py 3 处可变默认参数（Issue #269）
+- 修复 link 模块 get_full_name 无限递归和 verify_imports 静默丢弃（Issue #250）
+- 修复 kismet translator 臃肿和 TextConst 枚举冲突（Issue #249）
+- 修复 graph 模块 SubGraphs 缺失和硬编码 hack（Issue #248）
+- 修复 blueprint 模块多处功能缺陷和零测试覆盖（Issue #247）
+- 修复 archive.py 内联 import 反模式和 serialize_bits 语义偏差（Issue #246）
+- 修复 blueprint wildcard 键含前导空格导致类型匹配完全失败（Issue #245）
+- 修复 pak/ioStore 二进制格式与 UE 源码存在多处严重偏差（Issue #244）
+- 修复 CPF_* 属性标志约 25 个值与 UE ObjectMacros.h 严重不匹配（Issue #243）
+- 修复 legacy -6 文件解析失败（StarterContent 等）（Issue #257）
+- 修复 models 层两层重复和 from_archive 混入（Issue #255）
+- 修复 mappings.py 文件句柄泄漏和 batch_worker stderr 吞没（Issue #254）
+- 修复 pak 模块编解码不对称和默认 Zlib 问题（Issue #253）
+- 修复 renderers Markdown 过滤不一致和 IR Builder parent_class 风险（Issue #252）
+- 修复入口点参数断裂、代码重复和私有函数泄漏（Issue #251）
+- 修复 __all__ 重复条目 + 私有函数导出修复（Issue #259）
+- 修复 6 个 CustomVersion GUID 错误（Issue #202）
+- 补充 EUEVersion.UE5_8 并修复文档字符串（Issue #206）
+
+### 新增
+- CFG 结构化输出 — 基于 CFG 的控制流重建（Issue #265）
+- Git textconv 集成 — .uasset 二进制 diff 可读化（Issue #266）
+
+### 改进
+- 新增 `_validate_graph_export_offset()` 偏移验证函数
+- 新增 Map Pin terminal 类型测试覆盖
+- CLAUDE.md 测试命令修正为标准 pytest 命令
+
 ## [0.5.2-dev] — 2026-06-28
 
 ### 新增

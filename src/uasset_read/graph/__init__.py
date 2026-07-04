@@ -10,7 +10,6 @@ from .flow_builder import (
     build_connections_map,
     format_graphs_json,
     format_pin_ref,
-    _derive_node_name,
     build_function_graphs,
     # Public API for cross-module consumers (kismet/semantic.py)
     build_graph_indexes,
@@ -29,7 +28,11 @@ __all__ = [
     "build_connections_map",
     "format_graphs_json",
     "format_pin_ref",
-    "_derive_node_name",
     "build_function_graphs",
     "build_execution_chains",
+    # Public API for cross-module consumers
+    "build_graph_indexes",
+    "build_normalized_edge_indexes",
+    "trace_execution_from_event",
+    "node_member_name",
 ]

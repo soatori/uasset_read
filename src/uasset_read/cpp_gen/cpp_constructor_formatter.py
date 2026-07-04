@@ -21,7 +21,6 @@ from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
     CppDefaultValue,
 )
 from uasset_read.cpp_gen.cpp_default_value_formatter import (
-    _escape_cpp_string,
     format_cpp_default_value,
     format_cpp_input_action_load,
     format_cpp_transform,

@@ -20,7 +20,10 @@ UPROPERTY 部分（BoneTree、VirtualBones、SlotGroups、Sockets 等）
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+import struct
+from typing import Any, Dict, List
+
+from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +74,7 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
             guid_bytes = archive.read_bytes(FGUID_SIZE, "Skeleton.Guid")
             result["guid"] = _format_guid(guid_bytes)
 
-    except Exception as e:
+    except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("skeleton handler 解析失败: %s", e)
         result["parse_status"] = "failed"
         result["error"] = str(e)

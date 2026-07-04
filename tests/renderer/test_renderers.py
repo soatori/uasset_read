@@ -132,7 +132,7 @@ class TestJSONRenderer:
             package_flags=0, total_export_count=1, total_import_count=2,
             ue_version="5.3")
         prop = PropertyIR(name="Health", type="FloatProperty", value=100.0, array_index=0, guid=None)
-        pin = PinIR(pin_name="Exec", pin_type="exec", pin_type_value=None, linked_to=["abcd12345678"], direction=1, default_value=None)
+        pin = PinIR(pin_name="Exec", pin_type="exec", linked_to=["abcd12345678"], direction=1, default_value=None)
         node = NodeIR(node_guid="abcd1234567890abcdef1234567890ab", node_class="K2Node_CallFunction", node_comment="Set Health", pins=[pin], execution_flow=[])
         graph = GraphIR(graph_guid="guid0001", graph_name="EventGraph", graph_class="EdGraph", nodes=[node], execution_chains=[["N1", "N2"]])
         export = ExportIR(
@@ -179,7 +179,7 @@ class TestMarkdownRenderer:
         )
         from uasset_read.renderers.base import RenderOptions
 
-        pin = PinIR(pin_name="Exec", pin_type="exec", pin_type_value=None, linked_to=["target1234"], direction=1, default_value=None)
+        pin = PinIR(pin_name="Exec", pin_type="exec", linked_to=["target1234"], direction=1, default_value=None)
         node = NodeIR(node_guid="abcd1234567890abcdef1234567890ab", node_class="K2Node_Event", node_comment="BeginPlay", pins=[pin], execution_flow=[])
         graph = GraphIR(graph_guid="guid0001", graph_name="EventGraph", graph_class="EdGraph", nodes=[node], execution_chains=[])
         export = ExportIR(
@@ -207,11 +207,12 @@ class TestRendererListFormats:
         fmts = list_formats()
         assert "json" in fmts
         assert "markdown" in fmts
-        assert len(fmts) == 2
+        assert "text" in fmts
+        assert len(fmts) == 3
 
     def test_get_renderer_all_registered(self):
         from uasset_read.renderers import get_renderer
-        formats = ["json", "markdown"]
+        formats = ["json", "markdown", "text"]
         for fmt in formats:
             r = get_renderer(fmt)
             assert r.format_name == fmt
@@ -642,7 +643,7 @@ class TestJSONExportExcludesRawFields:
         ir.status = "success"
 
         renderer = JSONRenderer()
-        options = RenderOptions()
+        options = RenderOptions(output_level="debug")
         result = renderer.render(ir, options)
         data = json.loads(result)
 
@@ -708,13 +709,13 @@ class TestOnlyJsonAndMarkdownFormats:
     """验证只支持 json 和 markdown 两种格式。"""
 
     def test_only_json_and_markdown_formats(self):
-        """应只支持 json 和 markdown 两种格式"""
+        """应支持 json、markdown 和 text 三种格式"""
         from uasset_read.renderers import list_formats
 
         formats = list_formats()
         assert "json" in formats, "json 格式应存在"
         assert "markdown" in formats, "markdown 格式应存在"
-        assert "text" not in formats, "text 格式应被移除"
+        assert "text" in formats, "text 格式应存在"
         assert "text_summary" not in formats, "text_summary 格式应被移除"
         assert "blueprint_text" not in formats, "blueprint_text 格式应被移除"
         assert "blueprint_ue_text" not in formats, "blueprint_ue_text 格式应被移除"

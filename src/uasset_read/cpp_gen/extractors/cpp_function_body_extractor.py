@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppAssignmentStmt,

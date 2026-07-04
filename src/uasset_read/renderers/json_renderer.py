@@ -11,12 +11,10 @@ from typing import TYPE_CHECKING, Any
 from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
+from uasset_read.models.ir import HexViewEntryIR
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
-
-# 输出格式版本号
-_OUTPUT_VERSION_FULL = "5.0"
 
 
 class _JSONEncoder(json.JSONEncoder):
@@ -36,39 +34,90 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
+    # 编辑器布局属性（不影响运行时和 C++ 翻译）
+    _EDITOR_PROPERTY_NAMES = frozenset({
+        # 节点布局
+        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
+        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
+        # 注释相关
+        "CommentColor", "FontSize",
+        "bCommentBubbleVisible_InDetailsPanel",
+        "bCommentBubblePinned", "bCommentBubbleVisible",
+        # 图相关
+        "Schema", "GraphGuid", "ErrorType",
+        "AdvancedPinDisplay", "MoveMode",
+        # 事件/函数引用（已提取到其他字段）
+        "EventReference", "bOverrideFunction",
+    })
+
+    # 编辑器内部变量（不影响运行时和 C++ 翻译）
+    _EDITOR_VARIABLE_NAMES = frozenset({
+        "UbergraphPages",  # 图页面索引列表
+        "FunctionGraphs",  # 函数图索引列表
+        "CategorySorting",  # 编辑器分类排序
+        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
+        "LastEditedDocuments",  # 最后编辑文档
+        "ThumbnailInfo",  # 缩略图信息
+        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+    })
+
+    # 编辑器内部节点类（不影响运行时，UE 编译时移除）
+    _EDITOR_NODE_CLASSES = frozenset({
+        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+    })
+
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         all_exports = ir.exports
+        is_debug = options.output_level == "debug"
 
-        data = {
-            "status": {
-                "status": ir.status,
-                "message": ir.status_message,
-                "code": ir.status_code,
-            },
-            "output_version": _OUTPUT_VERSION_FULL,
-            "summary": {
-                "package_name": ir.header.package_name,
-                "package_class": ir.header.package_class,
-                "package_flags": ir.header.package_flags,
-                "package_flags_decoded": decode_package_flags(ir.header.package_flags),
-                "total_export_count": ir.header.total_export_count,
-                "total_import_count": ir.header.total_import_count,
-                "ue_version": ir.header.ue_version,
-                "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
-            },
-            # name_map 已移除 — 渲染器只需 IR 中的 exports 等高层数据
-            # imports 已移除 — C++ 翻译不需要原始导入索引
-            "exports": [self._export_to_dict(e, options) for e in all_exports],
+        data: dict[str, Any] = {}
+        if options.include_schema:
+            data["$schema"] = "package.schema.json"
+        data["status"] = {
+            "status": ir.status,
+            "message": ir.status_message,
+            "code": ir.status_code,
         }
-        # linker 已移除 — linker 元数据对 C++ 翻译无用
+        data["summary"] = {
+            "package_name": ir.header.package_name,
+            "package_class": ir.header.package_class,
+            "package_flags": ir.header.package_flags,
+            "package_flags_decoded": decode_package_flags(ir.header.package_flags),
+            "total_export_count": ir.header.total_export_count,
+            "total_import_count": ir.header.total_import_count,
+            "ue_version": ir.header.ue_version,
+            "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
+        }
+        data["exports"] = [
+            self._export_to_dict(e, options, is_debug)
+            for e in all_exports
+            if is_debug or e.object_class not in self._EDITOR_NODE_CLASSES
+        ]
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:
             data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
+        # execution_chains: 过滤空的 chains
         if ir.execution_chains:
-            data["execution_chains"] = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
+            chains = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
+            if is_debug:
+                data["execution_chains"] = chains
+            else:
+                # standard 模式下只保留有内容的 chains
+                chains_with_content = [c for c in chains if c.get("chain")]
+                if chains_with_content:
+                    data["execution_chains"] = chains_with_content
         if ir.variables:
-            data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
+            # standard 模式下过滤编辑器内部变量
+            if is_debug:
+                data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
+            else:
+                variables = [
+                    self._variable_to_dict(v) for v in ir.variables
+                    if v.name not in self._EDITOR_VARIABLE_NAMES
+                ]
+                if variables:
+                    data["variables"] = variables
         if ir.resolved_parent_assets:
             data["resolved_parent_assets"] = ir.resolved_parent_assets
         if ir.inherited_blueprint_graphs:
@@ -77,8 +126,22 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        # diagnostics: 去重
         if ir.diagnostics:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
+            if is_debug:
+                data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
+            else:
+                # standard 模式下去重
+                seen = set()
+                unique_diags = []
+                for d in ir.diagnostics:
+                    d_dict = d.to_dict()
+                    key = (d_dict.get("field"), d_dict.get("error"))
+                    if key not in seen:
+                        seen.add(key)
+                        unique_diags.append(d_dict)
+                if unique_diags:
+                    data["diagnostics"] = unique_diags
         if ir.asset_registry_data:
             data["asset_registry_data"] = ir.asset_registry_data
         if ir.anim_blueprint:
@@ -87,19 +150,41 @@ class JSONRenderer(IRenderer):
             data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
         if ir.anim_montage:
             data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
+        # HexView 解析轨迹：当 --hex-view 或 output_level=debug 时输出
+        if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
+            data["debug"] = {
+                "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
+            }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
-    def _export_to_dict(self, export, options: RenderOptions) -> dict[str, Any]:
+    def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
+        # standard 模式下过滤编辑器布局属性
+        if is_debug:
+            properties = [self._property_to_dict(p) for p in export.properties]
+        else:
+            properties = [
+                self._property_to_dict(p) for p in export.properties
+                if p.name not in self._EDITOR_PROPERTY_NAMES
+            ]
+
+        # graphs: standard 模式下只保留有内容的
+        graphs = [self._graph_to_dict(g, options) for g in export.graphs]
+        if not is_debug:
+            graphs = [g for g in graphs if g.get("nodes")]
+
         d = {
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
             "parent_class": export.parent_class,
-            "properties": [self._property_to_dict(p) for p in export.properties],
-            "graphs": [self._graph_to_dict(g, options) for g in export.graphs],
         }
+        # standard 模式下只添加非空字段
+        if properties or is_debug:
+            d["properties"] = properties
+        if graphs or is_debug:
+            d["graphs"] = graphs
         if export.parse_status != "success":
             d["parse_status"] = export.parse_status
         if export.fallback_reason:
@@ -131,7 +216,36 @@ class JSONRenderer(IRenderer):
         return d
 
     def _pin_to_dict(self, pin) -> dict[str, Any]:
-        return {"pin_name": pin.pin_name, "pin_type": pin.pin_type, "pin_type_value": pin.pin_type_value, "linked_to": pin.linked_to, "direction": pin.direction, "default_value": pin.default_value}
+        d: dict[str, Any] = {
+            "pin_name": pin.pin_name,
+            "pin_type": pin.pin_type,
+            "linked_to": pin.linked_to,
+            "direction": pin.direction,
+            "default_value": pin.default_value,
+            # 结构化类型字段
+            "pin_category": pin.pin_category,
+            "pin_subcategory": pin.pin_subcategory,
+            "container_type": pin.container_type,
+            "is_reference": pin.is_reference,
+            "is_const": pin.is_const,
+            "is_weak_pointer": pin.is_weak_pointer,
+            "is_uobject_wrapper": pin.is_uobject_wrapper,
+        }
+        if pin.pin_subcategory_object is not None:
+            d["pin_subcategory_object"] = pin.pin_subcategory_object
+        if pin.is_map_key:
+            d["is_map_key"] = True
+        if pin.is_map_value:
+            d["is_map_value"] = True
+        # Map terminal 类型
+        if pin.container_type == "Map":
+            if pin.map_key_pin_category:
+                d["map_key_pin_category"] = pin.map_key_pin_category
+            if pin.map_key_pin_subcategory:
+                d["map_key_pin_subcategory"] = pin.map_key_pin_subcategory
+            if pin.map_key_pin_subcategory_object is not None:
+                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object
+        return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
@@ -361,6 +475,28 @@ class JSONRenderer(IRenderer):
             d["notifies"] = [self._anim_notify_to_dict(n) for n in anim_ir.notifies]
         if anim_ir.float_curve_names:
             d["float_curve_names"] = anim_ir.float_curve_names
+        return d
+
+    def _hex_view_entry_to_dict(self, entry: "HexViewEntryIR") -> dict[str, Any]:
+        """序列化 HexViewEntryIR 为字典。"""
+        d: dict[str, Any] = {
+            "key": entry.key,
+            "type": entry.type,
+            "start": entry.start,
+            "stop": entry.stop,
+            "size": entry.size,
+        }
+        if entry.field_path is not None:
+            d["field_path"] = entry.field_path
+        if entry.semantic_type is not None:
+            d["semantic_type"] = entry.semantic_type
+        if isinstance(entry.value, bytes):
+            d["value_hex"] = entry.value.hex()
+            d["value_size"] = len(entry.value)
+        elif isinstance(entry.value, str):
+            d["value"] = entry.value
+        else:
+            d["value"] = entry.value
         return d
 
 

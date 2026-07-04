@@ -13,6 +13,8 @@ from __future__ import annotations
 import struct
 from typing import Any, Dict, List
 
+from uasset_read.exceptions import ParseError
+
 
 def parse_data_table(
     archive: Any,
@@ -81,7 +83,7 @@ def parse_data_table(
 
         result["rows"] = rows
 
-    except Exception as e:
+    except (struct.error, OSError, ValueError, ParseError) as e:
         result["parse_status"] = "failed"
         result["error"] = str(e)
 

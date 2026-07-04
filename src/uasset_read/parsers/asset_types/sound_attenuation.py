@@ -5,19 +5,6 @@ USoundAttenuation 使用标准 UPROPERTY 序列化（无自定义 Serialize()）
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
-if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
-
-
-def parse_sound_attenuation(archive: FArchive, name_map: list[str]) -> dict[str, Any]:
-    """提取 SoundAttenuation 原始字节样本（opaque partial metadata）。"""
-    start = archive.tell()
-    remaining = max(0, archive.total_size() - start)
-    sample = archive.read(min(remaining, 256))
-    return {
-        "raw_offset": start,
-        "sample_size": len(sample),
-        "parse_status": "partial_metadata",
-    }
+parse_sound_attenuation = make_opaque_stub("SoundAttenuation")

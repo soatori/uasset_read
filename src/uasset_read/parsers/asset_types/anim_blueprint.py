@@ -24,6 +24,10 @@ from uasset_read.models.ir import (
 class AnimBlueprintHandler:
     """AnimBlueprint 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimBlueprintGeneratedClass"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimBlueprintGeneratedClass export
 
@@ -93,7 +97,7 @@ class AnimBlueprintHandler:
 
             return ParseStatus.SUCCESS
 
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             # 记录错误但不中断解析
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimBlueprint 解析错误: {e}")

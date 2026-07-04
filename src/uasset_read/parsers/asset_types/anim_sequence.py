@@ -19,6 +19,10 @@ from uasset_read.models.ir import AnimNotifyIR, AnimSequenceIR
 class AnimSequenceHandler:
     """AnimSequence 资产类型处理器"""
 
+    # 反射注册元数据
+    export_type: str = "AnimSequence"
+    priority: int = 100
+
     def handle(self, export: Any, context: Any) -> ParseStatus:
         """处理 AnimSequence export
 
@@ -128,7 +132,7 @@ class AnimSequenceHandler:
 
             return ParseStatus.SUCCESS
 
-        except Exception as e:
+        except (KeyError, TypeError, ValueError) as e:
             # 记录错误但不中断解析
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimSequence 解析错误: {e}")
