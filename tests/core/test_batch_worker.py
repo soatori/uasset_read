@@ -6,9 +6,15 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+import pytest
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.memory_safety import ResourceLimits
+
+# 子进程需要 src/ 在 PYTHONPATH 中才能 import uasset_read
+_SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
 
 
 class _FakeProcess:
@@ -70,6 +76,10 @@ def test_monitor_terminates_worker_after_timeout() -> None:
     assert outcome.error == "timeout: 11.0s > 10.0s"
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="Per-process RSS monitoring requires psutil on macOS"
+)
 def test_spawn_worker_writes_output_atomically(tmp_path) -> None:
     asset = tmp_path / "invalid.uasset"
     output = tmp_path / "out" / "invalid.json"
@@ -80,11 +90,21 @@ def test_spawn_worker_writes_output_atomically(tmp_path) -> None:
         parse_options={"format": "json", "tolerant": True},
     )
 
-    outcome = run_isolated_asset(
-        request,
-        limits=ResourceLimits(512, 30),
-        poll_interval_seconds=0.01,
-    )
+    # 子进程需要 PYTHONPATH 才能 import uasset_read
+    old_pythonpath = os.environ.get("PYTHONPATH")
+    try:
+        existing = os.environ.get("PYTHONPATH", "")
+        os.environ["PYTHONPATH"] = _SRC_DIR + os.pathsep + existing if existing else _SRC_DIR
+        outcome = run_isolated_asset(
+            request,
+            limits=ResourceLimits(512, 30),
+            poll_interval_seconds=0.01,
+        )
+    finally:
+        if old_pythonpath is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = old_pythonpath
 
     assert outcome.succeeded is True
     assert outcome.output_path == str(output)
@@ -92,7 +112,12 @@ def test_spawn_worker_writes_output_atomically(tmp_path) -> None:
     assert list(output.parent.glob(".*.tmp")) == []
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="Per-process RSS monitoring requires psutil on macOS"
+)
 def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
+    """验证 parse_batch 可在无 if __name__ == '__main__' 守卫的脚本中调用。"""
     asset_dir = tmp_path / "assets"
     asset_dir.mkdir()
     (asset_dir / "invalid.uasset").write_bytes(b"\x00" * 100)
@@ -104,9 +129,7 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
         encoding="utf-8",
     )
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(
-        (__import__("pathlib").Path(__file__).resolve().parents[2] / "src")
-    )
+    env["PYTHONPATH"] = _SRC_DIR
 
     completed = subprocess.run(
         [sys.executable, str(script)],
@@ -117,4 +140,5 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
+    # 无效 uasset 文件在 isolated 模式下容忍解析成功，输出 JSON 并计入 success
     assert completed.stdout.strip() == "1 0"

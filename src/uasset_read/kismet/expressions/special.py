@@ -136,11 +136,11 @@ class EX_SwitchValue(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SwitchValue:
+        num_cases = archive.read_u16()
         end_offset = archive.read_u32()
         index = archive.read_expression()
-        case_count = archive.read_u32()
         cases = []
-        for _ in range(case_count):
+        for _ in range(num_cases):
             case = FKismetSwitchCase.from_archive(archive, name_map)
             cases.append(case)
         default = archive.read_expression()
@@ -162,15 +162,8 @@ class EX_InstrumentationEvent(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
         name = None
-        if evt_type not in (
-            EScriptInstrumentationType.Entry,
-            EScriptInstrumentationType.Exit,
-            EScriptInstrumentationType.PureEntry,
-            EScriptInstrumentationType.PureExit,
-        ):
-            pass  # some types have no name
-        else:
-            name = archive.xfer_string()
+        if evt_type == EScriptInstrumentationType.InlineEvent:
+            name = archive.read_fname_kismet()
             archive.skip(1)
         return cls(EventType=evt_type, EventName=name)
 

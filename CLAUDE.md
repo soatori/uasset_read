@@ -68,6 +68,13 @@ serializers/graph.py → graph/flow_builder.py
 
 渲染器通过 `RENDERER_REGISTRY` 自动注册。新增格式：在 `renderers/` 实现 `IRenderer` 子类 → 调用 `register_renderer()` → 在 `renderers/__init__.py` 添加 import。
 
+### 动画蓝图支持
+
+- **AnimBlueprintGeneratedClass** — 完整解析 BakedStateMachines / AnimNotifies / AnimNodeData
+- **AnimSequence** — 深度元数据提取（不含压缩轨迹数据）
+- **AnimMontage** — 混合参数 / 通知 / 同步组解析
+- **动画子图** — StateMachine / State / Transition / Conduit 类型识别
+
 ### 容错模式
 
 - **strict**：遇警告停止
