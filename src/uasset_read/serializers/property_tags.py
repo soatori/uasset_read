@@ -3,6 +3,7 @@
 等价迁移 uasset_read.py 第 5186-5282 行。
 UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, List, Tuple, Optional, Any, TypeVar
 
