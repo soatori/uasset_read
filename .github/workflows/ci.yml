@@ -105,7 +105,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml --allow-missing-assets -m "not integration and not slow and not regression"
+          python -m pytest tests/ -v --cov=uasset_read --cov-report=xml -m "not integration and not slow and not regression"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -113,3 +113,43 @@ jobs:
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  resource-safety:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install pytest
+
+      - name: Run resource safety tests
+        run: |
+          python -m pytest tests/core/test_batch_hybrid.py tests/core/test_error_handling_v2.py -v
+
+  ruff-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ruff
+        run: |
+          python -m pip install ruff
+
+      - name: Run Ruff checks
+        run: |
+          ruff check src/uasset_read --select F821,F841,F811,F541,B023

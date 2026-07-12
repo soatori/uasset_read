@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Kismet 控制流表达式。
 
 包含跳转、条件分支、执行流栈操作等控制流相关的表达式子类。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

@@ -1,5 +1,4 @@
 """Helpers for lightweight asset export metadata extraction."""
-from __future__ import annotations
 
 from dataclasses import is_dataclass, asdict
 from typing import Any

@@ -3,7 +3,6 @@
 纯 UPROPERTY 序列化，无自定义 Serialize()。
 AnimSequence 使用此类型决定骨骼压缩策略。
 """
-from __future__ import annotations
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 

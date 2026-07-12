@@ -2,448 +2,42 @@
 
 等价迁移 uasset_read.py §6223-6412。
 """
-from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Optional, List, Union, Sequence, Callable
+import warnings
+from typing import TYPE_CHECKING, Optional, List, Sequence, Callable
 from pathlib import Path
 
 if TYPE_CHECKING:
-    from uasset_read.link.linker import PackageLinker
-    from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.memory_safety import MemoryPolicy
+    from uasset_read.link.result import LinkerParseResult
+    from uasset_read.config import ParseConfig
 
 from uasset_read.memory_safety import MemoryLimitExceeded
-from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
+from uasset_read.constants import (
+    LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD,
+    CONTROL_RIG_LARGE_FILE_THRESHOLD,
+    CONTROL_RIG_LARGE_FILE_CLASSES,
+)
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
-from uasset_read.package import PackageBundle, PackageProvider, open_package_bundle
-from uasset_read.serializers.package_summary import (
-    read_package_summary, read_name_table, read_depends_map,
-    read_preload_dependencies, validate_export_data_range,
-    read_soft_package_references,
-)
-from uasset_read.versioning import build_version_container
-from uasset_read.serializers.object_resources import (
-    read_import_map, read_export_map,
-    find_main_blueprint_generated_class, detect_blueprint,
-    build_imports_list, read_soft_object_paths, detect_circular_deps,
-)
+from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
-from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
-from uasset_read.blueprint import (
-    extract_blueprint_metadata,
-    extract_component_transforms,
-)
 from uasset_read.models.result import ParseResult
-from uasset_read.link.result import LinkerParseResult
-from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.project_logging import configure_project_logging
+from uasset_read.parse_stages import (
+    _record_parse_stage_error,
+    _init_parse_env,
+    _read_core_tables,
+    _read_secondary_tables,
+    _parse_export_properties,
+    _create_linker,
+    _read_package_headers,
+)
+from uasset_read.parse_post_process import _post_process
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_kismet_decompiled(
-    path: str,
-    archive: FArchive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    import_map: List["ObjectImport"],
-    export_map: List["ObjectExport"],
-    tolerant: bool = True,
-    linker: Optional["PackageLinker"] = None,
-) -> List["KismetDecompiledResult"]:
-    """Extract and decompile Kismet bytecode from Blueprint UStruct exports.
-
-    Tolerant mode: failures return empty list for that function, never crash.
-    Per D-10: Kismet decompilation failure does NOT block the main pipeline.
-    """
-    from uasset_read.kismet.bytecode_extractor import USTRUCT_TYPES, reset_bpgc_cache
-    from uasset_read.serializers.object_resources import resolve_class_name
-    from uasset_read.kismet.pipeline import decompile_single_function
-
-    reset_bpgc_cache()
-
-    results: List["KismetDecompiledResult"] = []
-    for export in export_map:
-        class_name = resolve_class_name(export.class_index, import_map, export_map)
-        if class_name not in USTRUCT_TYPES:
-            continue
-        try:
-            result = decompile_single_function(
-                archive, export, summary, name_map, import_map, export_map,
-                tolerant=tolerant, linker=linker,
-            )
-            if result is not None:
-                results.append(result)
-        except (ParseError, OSError, struct.error, ValueError, KeyError, AttributeError) as e:
-            # Per D-10: failure does NOT block pipeline
-            # Log warning so caller can diagnose if needed
-            logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
-    return results
-
-
-def _extract_blueprint_graphs_and_metadata(
-    archive: FArchive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    import_map: List["ObjectImport"],
-    export_map: List["ObjectExport"],
-    result: "Union[ParseResult, LinkerParseResult]",
-    linker: Optional["PackageLinker"] = None,
-    archive_factory=None,
-) -> Optional["BlueprintMetadata"]:
-    """提取蓝图图和元数据（BPGC 优先 + UBlueprint 回退）。
-
-    Returns:
-        提取到的 BlueprintMetadata，未找到时返回 None。
-    """
-    # --- Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数） ---
-    graphs_list = None
-    try:
-        from uasset_read.graph import extract_blueprint_graphs
-        if hasattr(result, 'graphs'):
-            result.graphs = extract_blueprint_graphs(
-                archive, summary, name_map, import_map, export_map,
-                linker=linker,
-            )
-            graphs_list = result.graphs
-    except ImportError:
-        logger.debug("graph 模块不存在，跳过蓝图图提取")
-    except ParseError as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"graph extraction error: {e}")
-
-    # --- Blueprint 元数据提取（BPGC 优先） ---
-    blueprint_metadata = None
-    asset_name = name_map[0] if name_map else None
-
-    if asset_name:
-        main_bpgc = find_main_blueprint_generated_class(
-            export_map, import_map, asset_name
-        )
-        if main_bpgc:
-            owned_archive = archive_factory is not None
-            temp_archive = archive_factory() if archive_factory else archive
-            temp_archive.set_byte_swapping(archive._byte_swapping)
-            try:
-                meta, warn = extract_blueprint_metadata(
-                    main_bpgc, temp_archive, import_map,
-                    export_map, name_map, summary,
-                    linker=linker,
-                    graphs=graphs_list,
-                )
-                if meta:
-                    blueprint_metadata = meta
-                    if hasattr(result, 'errors') and warn:
-                        result.errors.append(f"blueprint parent warning: {warn}")
-            except ParseError as e:
-                if hasattr(result, 'errors'):
-                    result.errors.append(f"blueprint extraction error (BPGC): {e}")
-            finally:
-                if owned_archive:
-                    temp_archive.close()
-
-    # --- UBlueprint 回退 ---
-    if not blueprint_metadata:
-        for export in export_map:
-            if linker is not None:
-                from uasset_read.serializers.object_resources import detect_blueprint_with_linker
-                is_bp = detect_blueprint_with_linker(export, linker)
-            else:
-                is_bp = detect_blueprint(export, import_map, export_map)
-            if is_bp:
-                owned_archive = archive_factory is not None
-                temp_archive = archive_factory() if archive_factory else archive
-                temp_archive.set_byte_swapping(archive._byte_swapping)
-                try:
-                    meta, warn = extract_blueprint_metadata(
-                        export, temp_archive, import_map,
-                        export_map, name_map, summary,
-                        linker=linker,
-                        graphs=graphs_list,
-                    )
-                    if meta:
-                        blueprint_metadata = meta
-                        if hasattr(result, 'errors') and warn:
-                            result.errors.append(f"blueprint parent warning: {warn}")
-                except ParseError as e:
-                    if hasattr(result, 'errors'):
-                        result.errors.append(f"blueprint extraction error: {e}")
-                finally:
-                    if owned_archive:
-                        temp_archive.close()
-                break
-
-    if hasattr(result, 'blueprint'):
-        result.blueprint = blueprint_metadata
-
-    return blueprint_metadata
-
-
-def _run_kismet_and_dependency_analysis(
-    path: str,
-    archive: FArchive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    import_map: List["ObjectImport"],
-    export_map: List["ObjectExport"],
-    result: "Union[ParseResult, LinkerParseResult]",
-    tolerant: bool = True,
-    linker: Optional["PackageLinker"] = None,
-    blueprint_metadata=None,
-) -> None:
-    """Kismet 反编译 + 组件提取 + 依赖分析。"""
-    # Kismet decompilation (per D-02, D-10)
-    try:
-        from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — 模块存在性检查
-        if hasattr(result, 'decompiled_functions'):
-            decompiled = _extract_kismet_decompiled(
-                path, archive, summary, name_map,
-                import_map, export_map, tolerant, linker=linker,
-            )
-            result.decompiled_functions = decompiled
-            if decompiled and getattr(result, "graphs", None):
-                from uasset_read.kismet.semantic import enrich_decompiled_functions
-                enrich_decompiled_functions(decompiled, result.graphs)
-            if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
-                result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
-    except ImportError:
-        logger.debug("kismet 模块不存在，跳过字节码反编译")
-    except (OSError, struct.error, ValueError, KeyError) as e:
-        if hasattr(result, 'warnings'):
-            result.warnings.append(f"Kismet decompilation error: {e}")
-
-    # Component property extraction
-    try:
-        from uasset_read.blueprint.component_extractor import extract_components
-        if hasattr(result, 'components'):
-            result.components = extract_components(export_map, import_map)
-    except ImportError:
-        logger.debug("component_extractor 模块不存在，跳过组件属性提取")
-    except (KeyError, TypeError, ValueError) as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"component extraction error: {e}")
-
-    # 依赖分析
-    try:
-        if hasattr(result, 'imports'):
-            result.imports = build_imports_list(import_map)
-        if hasattr(result, 'soft_references'):
-            result.soft_references = read_soft_object_paths(
-                archive, summary, name_map,
-            )
-        if hasattr(result, 'circular_deps'):
-            result.circular_deps = detect_circular_deps(import_map)
-    except ParseError as e:
-        if hasattr(result, 'errors'):
-            result.errors.append(f"dependency analysis error: {e}")
-
-
-def _post_process(
-    path: str,
-    archive: FArchive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    import_map: List["ObjectImport"],
-    export_map: List["ObjectExport"],
-    result: "Union[ParseResult, LinkerParseResult]",
-    tolerant: bool = True,
-    linker: Optional["PackageLinker"] = None,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    archive_factory=None,
-    memory_policy: Optional["MemoryPolicy"] = None,
-) -> None:
-    """共享后处理：blueprint 元数据、图提取、依赖分析。
-
-    通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
-    """
-    blueprint_metadata = _extract_blueprint_graphs_and_metadata(
-        archive, summary, name_map, import_map, export_map,
-        result, linker=linker, archive_factory=archive_factory,
-    )
-
-    _run_kismet_and_dependency_analysis(
-        path, archive, summary, name_map, import_map, export_map,
-        result, tolerant=tolerant, linker=linker,
-        blueprint_metadata=blueprint_metadata,
-    )
-
-    if include_parent_assets:
-        _resolve_parent_assets(
-            path, result, tolerant, asset_roots,
-            memory_policy=memory_policy,
-        )
-
-    # name_map 一致性检查
-    if hasattr(result, 'name_map') and not result.name_map:
-        if summary is not None and getattr(summary, 'name_count', 0) > 0:
-            if hasattr(result, 'errors'):
-                result.errors.append(
-                    f"name_map 为空（summary.name_count={summary.name_count}），"
-                    f"名称表读取失败"
-                )
-
-    result.is_success = not result.errors
-
-
-def _resolve_parent_assets(
-    path: str,
-    result: "Union[ParseResult, LinkerParseResult]",
-    tolerant: bool,
-    asset_roots: Optional[Sequence[str]],
-    memory_policy: Optional["MemoryPolicy"] = None,
-) -> None:
-    """Best-effort parent Blueprint lookup used by cross-asset parsing."""
-    if not getattr(result, "blueprint", None):
-        return
-    parent_class = getattr(result.blueprint, "parent_class", None)
-    if not parent_class:
-        return
-
-    result.logic_sources.append({
-        "source": "current_asset",
-        "asset": path,
-        "blueprint": result.summary.package_name if result.summary else None,
-    })
-
-    roots = [Path(root) for root in (asset_roots or [])]
-    roots.append(Path(path).resolve().parent)
-    parent_file = _find_parent_asset_file(parent_class, roots)
-    if parent_file is None:
-        result.logic_sources.append({
-            "source": "native_parent",
-            "class": parent_class,
-            "status": "asset_not_found",
-        })
-        result.warnings.append(
-            f"Parent asset '{parent_class}.uasset' not found in asset roots"
-        )
-        return
-
-    try:
-        parent_result = parse_uasset_with_linker(
-            str(parent_file),
-            tolerant=tolerant,
-            include_parent_assets=False,
-            memory_policy=memory_policy,
-        )
-    except (OSError, ParseError, struct.error, ValueError) as exc:
-        result.logic_sources.append({
-            "source": "parent_asset",
-            "class": parent_class,
-            "asset": str(parent_file),
-            "status": "parse_error",
-            "error": str(exc),
-        })
-        result.warnings.append(f"Parent asset '{parent_file}' parse failed: {exc}")
-        return
-
-    result.resolved_parent_assets.append({
-        "class": parent_class,
-        "path": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
-        "warnings": parent_result.warnings,
-        "errors": parent_result.errors,
-    })
-    result.logic_sources.append({
-        "source": "parent_asset",
-        "class": parent_class,
-        "asset": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
-    })
-    if parent_result.graphs:
-        from uasset_read.graph import format_graphs_json
-        result.inherited_blueprint_graphs.extend(format_graphs_json(parent_result.graphs))
-
-
-def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optional[Path]:
-    target_name = f"{parent_class}.uasset"
-    seen: set[Path] = set()
-    for root in roots:
-        try:
-            root = root.resolve()
-        except OSError:
-            continue
-        if root in seen or not root.exists():
-            continue
-        seen.add(root)
-        direct = root / target_name
-        if direct.is_file():
-            return direct
-        if root.is_dir():
-            try:
-                match = next(root.rglob(target_name), None)
-            except OSError:
-                match = None
-            if match is not None and match.is_file():
-                return match
-    return None
-
-
-def _package_metadata(bundle: PackageBundle) -> dict:
-    return {
-        "package_kind": bundle.package_kind,
-        "package_files": bundle.package_files,
-        "container": bundle.container,
-        "asset_type_details": {},
-    }
-
-
-def _record_parse_stage_error(
-    result,
-    archive,
-    path: str,
-    stage: str,
-    field: str,
-    error: Exception,
-) -> None:
-    if str(error) not in result.errors:
-        result.errors.append(str(error))
-    file_size = 0
-    current_pos = 0
-    if archive is not None:
-        try:
-            file_size = archive.total_size()
-        except (OSError, OverflowError):
-            file_size = getattr(archive, "_file_size", 0) or 0
-        try:
-            current_pos = archive.tell()
-        except (OSError, OverflowError):
-            current_pos = 0
-    result.diagnostics.append(OffsetRangeDiagnostic(
-        kind="parse_stage_error",
-        asset_path=path,
-        module=stage,
-        field=field,
-        current_pos=current_pos,
-        file_size=file_size,
-        source="_parse_package_core",
-        error=str(error),
-        fallback_used=True,
-        fallback_result="partial" if getattr(result, "summary", None) is not None else "failed",
-    ))
-    result.is_success = False
-
-
-def _run_required_stage(
-    *,
-    result,
-    archive,
-    path: str,
-    tolerant: bool,
-    stage: str,
-    field: str,
-    reader,
-):
-    try:
-        return reader()
-    except (VersionError, ParseError, Exception) as e:
-        if not tolerant:
-            raise
-        _record_parse_stage_error(result, archive, path, stage, field, e)
-        return None
 
 
 def _should_use_lightweight_tolerant_parse(
@@ -461,23 +55,52 @@ def _should_use_lightweight_tolerant_parse(
         if lightweight_threshold is not None
         else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
     )
+    # ControlRig 等大型文件：检测 export 类名，使用更高的阈值
+    if (
+        threshold == LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
+        and lightweight_threshold is None
+        and _is_large_file_asset(result)
+    ):
+        threshold = CONTROL_RIG_LARGE_FILE_THRESHOLD
     return getattr(result.summary, "export_count", 0) > threshold
+
+
+def _is_large_file_asset(result) -> bool:
+    """检测是否为 ControlRig/RigVM 等天然大型文件资产。
+
+    通过 export 类名子串匹配判断，避免将这类资产误判为超大蓝图。
+    参考: UE ControlRig.cpp 序列化结构。
+    """
+    from uasset_read.serializers.object_resources import resolve_class_name
+    export_map = getattr(result, "export_map", None) or []
+    import_map = getattr(result, "import_map", None) or []
+    # 仅检查前 20 个 export 的类名即可判断（避免全量扫描性能开销）
+    for export in export_map[:20]:
+        try:
+            class_name = resolve_class_name(
+                export.class_index, import_map, export_map
+            )
+        except (AttributeError, TypeError, IndexError):
+            continue
+        if class_name and any(sub in class_name for sub in CONTROL_RIG_LARGE_FILE_CLASSES):
+            return True
+    return False
 
 
 def _build_lightweight_graphs(result) -> list:
     """在轻量模式下提取基本图信息（仅名称）。"""
     from uasset_read.serializers.object_resources import get_asset_class
     from uasset_read.models.core import UEdGraph
-    
+
     graphs = []
     if not result.export_map or not result.import_map:
         return graphs
-    
+
     for export in result.export_map:
         name = str(getattr(export, "object_name", "") or "")
         if not name:
             continue
-        
+
         # 检测 EdGraph 类型导出
         class_name = get_asset_class(export, result.import_map, result.export_map)
         if class_name in ("EdGraph", "UberEdGraph"):
@@ -488,7 +111,7 @@ def _build_lightweight_graphs(result) -> list:
                 nodes=[],
             )
             graphs.append(graph)
-    
+
     return graphs
 
 
@@ -511,329 +134,6 @@ def _build_lightweight_function_graphs(export_map) -> list[dict]:
         if len(entries) >= 64:
             break
     return entries
-
-
-def _derive_package_name(path: str, summary: "PackageFileSummary") -> None:
-    """package_name 为空时从文件路径推导。"""
-    if summary.package_name:
-        return
-    _p = Path(path)
-    _path_str = _p.as_posix()
-    _content_idx = _path_str.lower().find("/content/")
-    if _content_idx >= 0:
-        _relative = _path_str[_content_idx + len("/content/"):]
-        if _relative.startswith("/"):
-            _relative = _relative[1:]
-        if _relative.lower().endswith(".uasset"):
-            _relative = _relative[:-len(".uasset")]
-        summary.package_name = f"/Game/{_relative}"
-    else:
-        summary.package_name = f"/Game/{_p.stem}"
-
-
-def _create_linker(
-    archive,
-    summary: "PackageFileSummary",
-    name_map: List[str],
-    import_map: List["ObjectImport"],
-    export_map: List["ObjectExport"],
-    result,
-    tolerant: bool = True,
-    version_container=None,
-    extra_linker_setup: Optional[Callable] = None,
-) -> Optional["PackageLinker"]:
-    """创建并链接 PackageLinker。返回 linker 或 None。"""
-    from uasset_read.link.linker import PackageLinker
-    try:
-        linker = PackageLinker(
-            archive, summary, name_map,
-            import_map, export_map or [],
-            version_container=version_container,
-        )
-        linker.link()
-        result.linker = linker
-        if extra_linker_setup is not None:
-            extra_linker_setup(linker, result)
-        return linker
-    except (OSError, struct.error, ValueError, AttributeError, KeyError) as e:
-        if not tolerant:
-            raise ParseError(f"Linker creation failed: {e}") from e
-        result.errors.append(f"Linker creation failed: {e}")
-        return None
-
-
-def _read_package_headers(
-    path: str,
-    result,
-    tolerant: bool = True,
-    provider: Optional["PackageProvider"] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    hex_view: bool = False,
-    validate_range: bool = True,
-) -> tuple:
-    """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
-
-    复用 _init_parse_env + _read_core_tables，额外创建 linker。
-
-    Returns:
-        (bundle, archive, linker, mappings_provider) — 调用方负责关闭 archive。
-        如果 result.summary is None，表示早期失败，调用方应直接返回。
-    """
-    # 初始化解析环境（archive、bundle、mappings_provider）
-    archive, bundle, mappings_provider = _init_parse_env(
-        path, result, tolerant, provider, mappings_path, game,
-        check_aes_key=None, hex_view=hex_view,
-    )
-
-    # 读取核心表（summary/name/import/export）
-    if not _read_core_tables(
-        archive, result, path, tolerant,
-        validate_range=validate_range,
-    ):
-        return bundle, archive, None, mappings_provider
-
-    # 创建 linker
-    linker = _create_linker(
-        archive, result.summary, result.name_map,
-        result.import_map, result.export_map or [],
-        result, tolerant=tolerant,
-        version_container=result.version_container,
-    )
-
-    return bundle, archive, linker, mappings_provider
-
-
-def _read_secondary_tables(
-    archive,
-    result,
-    tolerant: bool,
-    linker,
-    mappings_provider,
-    path: str,
-    memory_monitor,
-    extra_linker_setup=None,
-) -> None:
-    """读取 DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData。"""
-    # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
-    if hasattr(result.summary, 'depends_offset'):
-        result.summary.depends_map = read_depends_map(archive, result.summary)
-    if hasattr(result.summary, 'preload_dependency_count'):
-        result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
-
-    # 读取 SoftPackageReferences（软包引用表）
-    if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
-        result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
-
-    # 读取 SoftObjectPathList（UE5.7+ 用于索引化 SoftObjectProperty 解析）
-    if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
-        result.soft_object_path_list = read_soft_object_paths(
-            archive, result.summary, result.name_map
-        )
-    else:
-        result.soft_object_path_list = []
-
-    # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
-    setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
-
-    # 读取 AssetRegistryData（资产元数据标签）
-    try:
-        is_cooked = bool(result.summary.package_flags & 0x00000100)  # PKG_FilterEditorOnly
-        result.asset_registry_data = read_asset_registry_data(
-            archive,
-            result.summary.asset_registry_data_offset,
-            file_version_ue4=result.summary.file_version_ue4,
-            is_cooked=is_cooked,
-        )
-    except (struct.error, OSError, ValueError) as e:
-        if not tolerant:
-            raise ParseError(f"AssetRegistryData 解析失败: {e}") from e
-        result.warnings.append(f"AssetRegistryData 解析失败: {e}")
-        result.asset_registry_data = None
-
-
-def _parse_export_properties(
-    archive,
-    result,
-    linker,
-    tolerant: bool,
-    mappings_provider,
-    game: str,
-    memory_monitor,
-) -> None:
-    """解析 ExportMap 属性 — 通过 linker.preload() 统一调度。"""
-    _mappings = mappings_provider.mappings if mappings_provider else None
-    for _exp_idx, export in enumerate(result.export_map or []):
-        memory_monitor.checkpoint(f"export[{_exp_idx}]")
-
-        if export.serial_size > 0:
-            try:
-                if linker is not None:
-                    linker.preload(
-                        _exp_idx,
-                        mappings=_mappings,
-                        game=game,
-                        tolerant=tolerant,
-                    )
-                    inst = linker._export_objects[_exp_idx]
-                    export.properties = inst.serialized_properties
-                else:
-                    export.properties = parse_properties_from_export(
-                        export, archive, result.summary, result.name_map,
-                        result.export_map or [], result.import_map,
-                        linker=linker,
-                        mappings=_mappings,
-                        game=game,
-                        tolerant=tolerant,
-                    )
-                if not getattr(export, "parse_status", None):
-                    setattr(export, "parse_status", "success")
-                elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
-                    pass
-            except MemoryLimitExceeded:
-                raise
-            except MemoryError as e:
-                logger.error(
-                    "MemoryError parsing export %s: %s",
-                    getattr(export, "object_name", "?"), e
-                )
-                export.properties = []
-                setattr(export, "parse_status", "partial")
-                setattr(export, "fallback_reason", "memory_error_partial")
-                setattr(export, "error_message", str(e))
-                if not tolerant:
-                    raise
-            except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
-                if not tolerant:
-                    raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
-                result.errors.append(f"Property parse error in {export.object_name}: {e}")
-                export.properties = []
-                setattr(export, "parse_status", "failed")
-                setattr(export, "fallback_reason", "parse_error")
-                setattr(export, "error_message", str(e))
-
-            # 提取组件变换属性
-            if export.properties:
-                export.transforms = extract_component_transforms(export.properties)
-
-
-def _init_parse_env(
-    path: str,
-    result,
-    tolerant: bool,
-    provider: Optional["PackageProvider"],
-    mappings_path: Optional[str],
-    game: Optional[str],
-    check_aes_key: Optional[bytes],
-    hex_view: bool,
-):
-    """初始化解析环境：验证参数、打开 archive、读取 mmap 信息。
-
-    返回 (archive, bundle, mappings_provider) 或遇到 early-return 条件时返回 None。
-    """
-    if check_aes_key is not None:
-        raise ParseError(
-            "Unsupported argument: aes_key. Pass the key "
-            "when constructing the Pak/IoStore reader and provider"
-        )
-
-    mappings_provider = None
-    if mappings_path:
-        from uasset_read.mappings import TypeMappingsProvider
-        mappings_provider = TypeMappingsProvider.from_file(mappings_path)
-        result.metadata["mappings_path"] = mappings_path
-    if game:
-        result.metadata["game"] = game
-
-    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
-    archive = bundle.open_archive(tolerant=tolerant)
-    if hex_view:
-        archive.enable_hex_view(True)
-    result.metadata.update(_package_metadata(bundle))
-
-    mmap_info = archive.get_mmap_info()
-    result.mmap_used = mmap_info["used"]
-    result.mmap_warning = mmap_info["warning"]
-
-    return archive, bundle, mappings_provider
-
-
-def _read_core_tables(
-    archive,
-    result,
-    path: str,
-    tolerant: bool,
-    memory_monitor=None,
-    mappings_provider=None,
-    validate_range: bool = True,
-) -> bool:
-    """读取 summary + name + import + export 核心表。
-
-    成功返回 True；early return（某阶段失败）返回 False。
-    """
-    # 读取文件头
-    result.summary = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="package_summary", field="summary",
-        reader=lambda: read_package_summary(archive),
-    )
-    if result.summary is None:
-        return False
-    if memory_monitor is not None:
-        memory_monitor.checkpoint("package_summary")
-    result.version_container = build_version_container(result.summary)
-    archive._file_version_ue5 = result.summary.file_version_ue5
-
-    # 截断文件检测：验证导出数据范围
-    if validate_range:
-        try:
-            validate_export_data_range(archive, result.summary)
-        except (OSError, struct.error, ValueError) as e:
-            if not tolerant:
-                raise
-            _record_parse_stage_error(
-                result, archive, path, "package_summary", "export_data_range", e
-            )
-            return False
-
-    # 读取名称表
-    result.name_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="name_table", field="name_map",
-        reader=lambda: read_name_table(archive, result.summary),
-    )
-    if result.name_map is None:
-        result.name_map = []
-        return False
-    if memory_monitor is not None:
-        memory_monitor.checkpoint("name_map")
-    _derive_package_name(path, result.summary)
-
-    # 读取导入表
-    result.import_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="import_map", field="import_map",
-        reader=lambda: read_import_map(archive, result.summary, result.name_map),
-    )
-    if result.import_map is None:
-        result.import_map = []
-        return False
-    if memory_monitor is not None:
-        memory_monitor.checkpoint("import_map")
-
-    # 读取导出表
-    result.export_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="export_map", field="export_map",
-        reader=lambda: read_export_map(archive, result.summary, result.name_map),
-    )
-    if result.export_map is None:
-        result.export_map = []
-        return False
-    if memory_monitor is not None:
-        memory_monitor.checkpoint("export_map")
-
-    return True
 
 
 def _apply_lightweight_parse(
@@ -884,30 +184,32 @@ def _handle_parse_error(
     path: str,
     tolerant: bool,
 ) -> None:
-    """统一处理解析异常（VersionError / ParseError / MemoryError / 其他）。"""
-    from uasset_read.memory_safety import MemoryLimitExceeded
+    """统一处理解析异常（VersionError / ParseError / MemoryError / 其他）。
+
+    注意：错误记录统一通过 _record_parse_stage_error 完成（含去重），
+    不再额外调用 result.errors.append，避免重复记录。
+    """
 
     if isinstance(exc, MemoryLimitExceeded):
         raise
 
     if isinstance(exc, VersionError):
         _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", exc)
-        result.errors.append(str(exc))
         result.is_success = False
     elif isinstance(exc, ParseError):
         _record_parse_stage_error(result, archive, path, "parse", "parse_error", exc)
-        result.errors.append(str(exc))
         if exc.partial_result:
             for key, value in exc.partial_result.items():
                 if hasattr(result, key):
                     setattr(result, key, value)
         result.is_success = False
     elif isinstance(exc, MemoryError):
-        result.errors.append(f"MemoryError: {exc}")
+        error_msg = f"MemoryError: {exc}"
+        if error_msg not in result.errors:
+            result.errors.append(error_msg)
         result.is_success = False
     else:
         _record_parse_stage_error(result, archive, path, "parse", "unexpected", exc)
-        result.errors.append(f"Unexpected error: {str(exc)}")
         result.is_success = False
 
     if not tolerant:
@@ -1045,6 +347,55 @@ def _parse_package_core(
             _cleanup_archive_diagnostics(result, archive)
 
 
+def _resolve_parse_params(
+    config: Optional["ParseConfig"],
+    kwargs: dict,
+) -> dict:
+    """将 ParseConfig 和旧风格关键字参数合并为最终参数字典。
+
+    - 若提供 config，config 的值作为默认，显式传入的旧参数可覆盖。
+    - 若未提供 config，旧参数保持原样。
+    - 对同时从 config 和旧参数传入的值，发出 DeprecationWarning。
+    """
+    if config is None:
+        return kwargs
+
+    # 检测是否有旧参数也显式传入了（非默认值）
+    _PARAM_DEFAULTS = {
+        "tolerant": True,
+        "include_parent_assets": False,
+        "asset_roots": None,
+        "mappings_path": None,
+        "game": None,
+        "force_full_parse": False,
+        "hex_view": False,
+        "lightweight_threshold": None,
+        "memory_policy": None,
+    }
+    conflicting = []
+    for field_name, default in _PARAM_DEFAULTS.items():
+        if field_name in kwargs and kwargs[field_name] != default:
+            conflicting.append(field_name)
+
+    if conflicting:
+        warnings.warn(
+            f"同时传入 config 和旧参数 {conflicting}，旧参数将覆盖 config 中的对应值。"
+            "请统一使用 ParseConfig。",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+    # 用 config 填充缺失的参数
+    merged = {}
+    for fld in config.__dataclass_fields__:
+        merged[fld] = kwargs.get(fld, getattr(config, fld))
+    # 保留 kwargs 中不在 config 中的键（如 path, provider 等）
+    for key in kwargs:
+        if key not in merged:
+            merged[key] = kwargs[key]
+    return merged
+
+
 def parse_package(
     path: str,
     tolerant: bool = True,
@@ -1054,11 +405,12 @@ def parse_package(
     provider: Optional[PackageProvider] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
-    include_linker: bool = True,  # Deprecated: linker is now always created
+    include_linker: bool = True,  # 已废弃，linker 始终创建
     lightweight_threshold: Optional[int] = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
     memory_policy: Optional["MemoryPolicy"] = None,
+    config: Optional["ParseConfig"] = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -1073,11 +425,24 @@ def parse_package(
             object graph resolution. Parameter retained for backward compatibility.
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
         hex_view: 启用 HexView 字节偏移追踪
+        config: 可选 ParseConfig 实例，集中管理解析参数。
+            传入 config 时，旧风格的个别参数仍可覆盖 config 中的值
+            （但不推荐混用）。
 
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
+    configure_project_logging()
     result = ParseResult()
+
+    # 处理已废弃的 include_linker 参数
+    if include_linker is not True:
+        warnings.warn(
+            "include_linker 参数已废弃，linker 始终包含在结果中。"
+            "请移除该参数调用。",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Handle deprecated aes_key inline (don't pass to core)
     if aes_key is not None:
@@ -1088,16 +453,23 @@ def parse_package(
         result.is_success = False
         return result
 
+    # 合并 config 和旧参数
+    core_kwargs = _resolve_parse_params(config, {
+        "tolerant": tolerant,
+        "include_parent_assets": include_parent_assets,
+        "asset_roots": asset_roots,
+        "mappings_path": mappings_path,
+        "game": game,
+        "force_full_parse": force_full_parse,
+        "hex_view": hex_view,
+        "lightweight_threshold": lightweight_threshold,
+        "memory_policy": memory_policy,
+    })
+
     _parse_package_core(
         path, result,
-        tolerant=tolerant, provider=provider,
-        mappings_path=mappings_path, game=game,
-        include_parent_assets=include_parent_assets,
-        asset_roots=asset_roots,
-        lightweight_threshold=lightweight_threshold,
-        force_full_parse=force_full_parse,
-        hex_view=hex_view,
-        memory_policy=memory_policy,
+        provider=provider,
+        **core_kwargs,
     )
     return result
 
@@ -1109,9 +481,10 @@ def parse_uasset(
     asset_roots: Optional[Sequence[str]] = None,
     mappings_path: Optional[str] = None,
     game: Optional[str] = None,
-    include_linker: bool = True,  # Deprecated: linker is now always created
+    include_linker: bool = True,  # 已废弃，linker 始终创建
     force_full_parse: bool = False,
     memory_policy: Optional["MemoryPolicy"] = None,
+    config: Optional["ParseConfig"] = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -1119,6 +492,15 @@ def parse_uasset(
     Internally delegates to parse_package(), so sidecar payload discovery is
     shared with .umap/package parsing.
     """
+    # 处理已废弃的 include_linker 参数
+    if include_linker is not True:
+        warnings.warn(
+            "include_linker 参数已废弃，linker 始终包含在结果中。"
+            "请移除该参数调用。",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     return parse_package(
         path,
         tolerant=tolerant,
@@ -1126,9 +508,9 @@ def parse_uasset(
         asset_roots=asset_roots,
         mappings_path=mappings_path,
         game=game,
-        include_linker=include_linker,
         force_full_parse=force_full_parse,
         memory_policy=memory_policy,
+        config=config,
     )
 
 
@@ -1145,6 +527,7 @@ def parse_uasset_with_linker(
     force_full_parse: bool = False,
     hex_view: bool = False,
     memory_policy: Optional["MemoryPolicy"] = None,
+    config: Optional["ParseConfig"] = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -1155,42 +538,49 @@ def parse_uasset_with_linker(
         provider: 可选 package provider（filesystem/pak/iostore）
         force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
         hex_view: 启用 HexView 字节偏移追踪
+        config: 可选 ParseConfig 实例，集中管理解析参数。
 
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
     """
+    configure_project_logging()
+    # 延迟导入 extras 模块（per #117 core/extras 分层）
+    from uasset_read.link.result import LinkerParseResult
+
     result = LinkerParseResult()
 
     def extra_linker_setup(linker, res):
         res.all_objects = linker._import_objects + linker._export_objects
         res.root_objects = linker._root_objects
 
-    try:
-        _parse_package_core(
+    # 合并 config 和旧参数
+    core_kwargs = _resolve_parse_params(config, {
+        "tolerant": tolerant,
+        "include_parent_assets": include_parent_assets,
+        "asset_roots": asset_roots,
+        "mappings_path": mappings_path,
+        "game": game,
+        "force_full_parse": force_full_parse,
+        "hex_view": hex_view,
+        "lightweight_threshold": lightweight_threshold,
+        "memory_policy": memory_policy,
+    })
+
+    _parse_package_core(
         path, result,
-        tolerant=tolerant, provider=provider,
-        mappings_path=mappings_path, game=game,
-        include_parent_assets=include_parent_assets,
-        asset_roots=asset_roots,
+        provider=provider,
         extra_linker_setup=extra_linker_setup,
-        lightweight_threshold=lightweight_threshold,
-        force_full_parse=force_full_parse,
-        hex_view=hex_view,
-        memory_policy=memory_policy,
+        **core_kwargs,
     )
-    except Exception as e:
-        # strict 模式下 _handle_parse_error 会 re-raise，
-        # 这里捕获后将已有部分结果返回给调用者
-        if not result.summary:
-            result.errors.append(str(e))
-            result.is_success = False
 
     if preload_all and result.linker:
         for i in range(len(result.linker._export_objects)):
             try:
                 result.linker.preload(i)
-            except (ParseError, Exception) as e:
+            except ParseError as e:
                 logger.warning("预加载 export %d 失败，跳过: %s", i, e)
+            except Exception as e:
+                logger.exception("预加载 export %d 意外错误: %s", i, e)
 
     return result
 
@@ -1198,7 +588,7 @@ def parse_uasset_with_linker(
 def parse_package_lazy(
     path: str,
     export_indices: Optional[List[int]] = None,
-    store_raw_bytes: bool = True,
+    store_raw_bytes: bool = False,
     tolerant: bool = True,
     provider: Optional[PackageProvider] = None,
     mappings_path: Optional[str] = None,
@@ -1210,10 +600,14 @@ def parse_package_lazy(
     始终解析：Header、NameMap、ImportMap、ExportMap（元数据）。
     仅解析指定 export_indices 的 body；未指定时所有 export 标记为未加载。
 
+    当 provider 提供 open_file() 时，优先使用它获取 archive（支持 mmap
+    范围读取），避免将整个文件读入内存；否则回退到 read_file() 路径。
+
     Args:
         path: .uasset/.umap 文件路径
         export_indices: 需要解析 body 的 export 索引列表，None 表示全部跳过
         store_raw_bytes: 是否将 export body 原始字节存入 lazy_load_archive
+            （默认 False — 懒加载场景不缓存原始字节以节省内存）
         tolerant: 容错模式
         provider: 可选 package provider
         mappings_path: 类型映射文件路径
@@ -1223,17 +617,59 @@ def parse_package_lazy(
     Returns:
         ParseResult 实例（export body 按需解析）
     """
+    from uasset_read.blueprint import extract_component_transforms
+
     result = ParseResult()
     archive = None
+    linker = None
+
+    # 当 provider 提供 open_file() 时，直接用它获取 archive，
+    # 避免通过 open_package_bundle() 将整个文件读入内存。
+    # open_file() 支持 mmap 范围读取，适合懒加载场景。
+    use_direct_archive = (
+        provider is not None
+        and hasattr(provider, 'open_file')
+        and callable(getattr(provider, 'open_file', None))
+    )
 
     try:
-        bundle, archive, linker, mappings_provider = _read_package_headers(
-            path, result,
-            tolerant=tolerant, provider=provider,
-            mappings_path=mappings_path, game=game,
-        )
-        if result.summary is None:
-            return result
+        mappings_provider = None
+        if mappings_path:
+            from uasset_read.mappings import TypeMappingsProvider
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            result.metadata["mappings_path"] = mappings_path
+        if game:
+            result.metadata["game"] = game
+
+        if use_direct_archive:
+            # 快速路径：通过 open_file() 获取 archive，不读取整个文件
+            archive = provider.open_file(path)
+            if archive is None:
+                raise FileNotFoundError(f"Package not found: {path}")
+
+            # 读取核心表
+            if not _read_core_tables(
+                archive, result, path, tolerant,
+                validate_range=True,
+            ):
+                if result.summary is None:
+                    return result
+
+            # 读取 secondary 表
+            _read_secondary_tables(
+                archive, result, tolerant, linker=None,
+                mappings_provider=mappings_provider,
+                path=path, memory_monitor=None,
+            )
+        else:
+            # 回退路径：通过 bundle 读取（read_file）
+            bundle_obj, archive, linker, mappings_provider = _read_package_headers(
+                path, result,
+                tolerant=tolerant, provider=provider,
+                mappings_path=mappings_path, game=game,
+            )
+            if result.summary is None:
+                return result
 
         # 按需解析指定 export body
         parse_indices = set(export_indices) if export_indices else set()
@@ -1304,19 +740,16 @@ def parse_package_lazy(
 
     except VersionError as e:
         _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
-        result.errors.append(str(e))
         result.is_success = False
         if not tolerant:
             raise
     except ParseError as e:
         _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
-        result.errors.append(str(e))
         result.is_success = False
         if not tolerant:
             raise
     except Exception as e:
         _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
-        result.errors.append(f"Unexpected error: {str(e)}")
         result.is_success = False
         if not tolerant:
             raise

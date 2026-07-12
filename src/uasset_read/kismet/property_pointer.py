@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet 属性指针 — FFieldPath + FKismetPropertyPointer。
 
@@ -9,7 +11,6 @@ False 时使用 legacy FPackageIndex 单步引用。
 简化实现：始终读取 FFieldPath 路径（UE5 默认行为）。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING

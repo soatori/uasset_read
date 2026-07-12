@@ -11,7 +11,6 @@
 - Engine/Source/Runtime/LevelSequence/Classes/LevelSequence.h
 - Engine/Source/Runtime/LevelSequence/Private/LevelSequence.cpp
 """
-from __future__ import annotations
 
 import logging
 import struct

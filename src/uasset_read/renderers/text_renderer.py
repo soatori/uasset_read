@@ -4,11 +4,10 @@
 
 只注册 text 格式。
 """
-from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING
 
-from uasset_read.renderers.base import IRenderer, RenderOptions
+from uasset_read.renderers.base import IRenderer, RenderOptions, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
 from uasset_read.renderers import register_renderer
 
 if TYPE_CHECKING:
@@ -18,43 +17,11 @@ if TYPE_CHECKING:
 class TextRenderer(IRenderer):
     """文本摘要渲染器。生成人类可读、行稳定的文本摘要。"""
 
-    # 编辑器布局属性（不影响运行时和 C++ 翻译）
-    _EDITOR_PROPERTY_NAMES = frozenset({
-        # 节点布局
-        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
-        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
-        # 注释相关
-        "CommentColor", "FontSize",
-        "bCommentBubbleVisible_InDetailsPanel",
-        "bCommentBubblePinned", "bCommentBubbleVisible",
-        # 图相关
-        "Schema", "GraphGuid", "ErrorType",
-        "AdvancedPinDisplay", "MoveMode",
-        # 事件/函数引用（已提取到其他字段）
-        "EventReference", "bOverrideFunction",
-    })
-
-    # 编辑器内部变量（不影响运行时和 C++ 翻译）
-    _EDITOR_VARIABLE_NAMES = frozenset({
-        "UbergraphPages",  # 图页面索引列表
-        "FunctionGraphs",  # 函数图索引列表
-        "CategorySorting",  # 编辑器分类排序
-        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
-        "LastEditedDocuments",  # 最后编辑文档
-        "ThumbnailInfo",  # 缩略图信息
-        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
-    })
-
-    # 编辑器内部节点类（不影响运行时，UE 编译时移除）
-    _EDITOR_NODE_CLASSES = frozenset({
-        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
-    })
-
     @property
     def format_name(self) -> str:
         return "text"
 
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
+    def _build_lines(self, ir: PackageIR, options: RenderOptions) -> list[str]:
         lines: list[str] = []
         h = ir.header
         is_debug = options.output_level == "debug"
@@ -143,7 +110,7 @@ class TextRenderer(IRenderer):
             else:
                 filtered_variables = [
                     v for v in ir.variables
-                    if v.name not in self._EDITOR_VARIABLE_NAMES
+                    if v.name not in EDITOR_VARIABLE_NAMES
                 ]
             if filtered_variables:
                 lines.append("[Variables]")
@@ -185,7 +152,7 @@ class TextRenderer(IRenderer):
                     else:
                         filtered_nodes = [
                             n for n in g.nodes
-                            if n.node_class not in self._EDITOR_NODE_CLASSES
+                            if n.node_class not in EDITOR_NODE_CLASSES
                         ]
                     # 过滤后无节点的图不显示
                     if not filtered_nodes and not is_debug:
@@ -244,7 +211,15 @@ class TextRenderer(IRenderer):
                 lines.append(f"  Message: {ir.status_message}")
             lines.append("")
 
-        return "\n".join(lines)
+        return lines
+
+    def render(self, ir: PackageIR, options: RenderOptions) -> str:
+        return "\n".join(self._build_lines(ir, options))
+
+    def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
+        if options is None:
+            options = RenderOptions()
+        writer.write("\n".join(self._build_lines(ir, options)))
 
 
 # 注册

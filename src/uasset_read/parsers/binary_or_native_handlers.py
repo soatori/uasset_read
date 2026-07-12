@@ -5,7 +5,6 @@
 UE BinaryOrNative 序列化用于某些特殊结构（如 FInstancedStruct），
 这些结构使用原生序列化而非属性标签序列化。
 """
-from __future__ import annotations
 
 import logging
 import struct

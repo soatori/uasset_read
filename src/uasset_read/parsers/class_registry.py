@@ -11,7 +11,6 @@ handler 接口：
 - parse(export, archive, context) -> HandlerResult
 - fallback_policy -> FallbackPolicy
 """
-from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod

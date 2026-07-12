@@ -1,0 +1,592 @@
+"""核心解析 API — 纯函数，无 argparse、无 sys.exit、无 print。
+
+CLI、独立脚本、未来 Skill 共享此 API。
+"""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import IO, TYPE_CHECKING
+import warnings
+
+from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
+from uasset_read.config import LogConfig
+from uasset_read.ir_builder import build_package_ir
+from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
+from uasset_read.project_logging import configure_project_logging, new_log_run_id
+from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
+from uasset_read.renderers.base import RenderOptions
+from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
+
+if TYPE_CHECKING:
+    from uasset_read.memory_safety import MemoryPolicy
+    from uasset_read.config import ParseConfig
+
+
+@dataclass
+class BatchResult:
+    """批量导出结果。"""
+    total: int = 0
+    success: list[str] = field(default_factory=list)
+    skipped: list[tuple[str, str]] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _configure_logging(
+    *,
+    log_config: LogConfig | None = None,
+    log_level: str | None = None,
+    log_dir: str | None = None,
+    log_enabled: bool = True,
+    log_run_id: str | None = None,
+    log_keep_latest: int | None = None,
+    log_max_total_bytes: int | None = None,
+    log_cleanup: bool = False,
+    log_max_bytes: int = 10_000_000,
+    log_backup_count: int = 5,
+):
+    """配置项目日志。
+
+    优先使用 log_config（LogConfig 实例），旧风格参数保留兼容。
+    """
+    if log_config is not None:
+        # 检测是否有旧参数也显式传入
+        has_legacy = any(v is not None and v != {
+            "log_level": None, "log_dir": None, "log_run_id": None,
+            "log_keep_latest": None, "log_max_total_bytes": None,
+        }.get(k) for k, v in {
+            "log_level": log_level, "log_dir": log_dir,
+            "log_run_id": log_run_id, "log_keep_latest": log_keep_latest,
+            "log_max_total_bytes": log_max_total_bytes,
+        }.items())
+        if has_legacy:
+            warnings.warn(
+                "同时传入 log_config 和旧风格日志参数，旧参数将被忽略。"
+                "请统一使用 LogConfig。",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return configure_project_logging(**log_config.to_configure_kwargs())
+
+    # 旧风格路径
+    effective_enabled = log_enabled and log_level != "off"
+    if (
+        log_level is None
+        and log_dir is None
+        and log_enabled is True
+        and log_run_id is None
+        and log_keep_latest is None
+        and log_max_total_bytes is None
+        and log_cleanup is False
+        and log_max_bytes == 10_000_000
+        and log_backup_count == 5
+    ):
+        return configure_project_logging()
+    kwargs = {
+        "level": log_level or "DEBUG",
+        "log_dir": log_dir,
+        "enabled": effective_enabled,
+        "max_bytes": log_max_bytes,
+        "backup_count": log_backup_count,
+    }
+    if log_run_id is not None:
+        kwargs["run_id"] = log_run_id
+    if log_keep_latest is not None:
+        kwargs["keep_latest"] = log_keep_latest
+    if log_max_total_bytes is not None:
+        kwargs["max_total_bytes"] = log_max_total_bytes
+    if log_cleanup:
+        kwargs["cleanup"] = True
+    return configure_project_logging(**kwargs)
+
+
+def parse_single(
+    file_path: str,
+    format: str = "json",
+    tolerant: bool = True,
+    verbose: bool = False,
+    include_schema: bool = False,
+    include_function_graphs: bool = False,
+    include_parent_assets: bool = False,
+    asset_roots: list[str] | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+    hex_view: bool = False,
+    memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
+    log_level: str | None = None,
+    log_dir: str | None = None,
+    log_enabled: bool = True,
+    log_run_id: str | None = None,
+    log_keep_latest: int | None = None,
+    log_max_total_bytes: int | None = None,
+    log_cleanup: bool = False,
+    log_max_bytes: int = 10_000_000,
+    log_backup_count: int = 5,
+    log_config: LogConfig | None = None,
+    parse_config: "ParseConfig | None" = None,
+) -> str:
+    """解析单个 .uasset/.umap，返回格式化字符串。
+
+    纯函数，无 argparse、无 sys.exit、无 print。
+    需要 linker 的格式内部自动选择 parse_uasset_with_linker。
+    解析阶段使用集中式 MemoryPolicy 检查点。
+
+    Args:
+        file_path: .uasset/.umap 文件路径
+        format: 输出格式（json, markdown）
+        tolerant: 容错模式，遇到错误继续解析
+        verbose: 详细输出
+        include_schema: 包含 JSON Schema
+        include_function_graphs: 包含函数图
+        include_parent_assets: 解析父资产
+        asset_roots: 资产根目录列表
+        mappings_path: .usmap 映射文件路径
+        game: 游戏名称
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
+        memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
+        log_config: 可选 LogConfig 实例，集中管理日志参数。
+        parse_config: 可选 ParseConfig 实例，集中管理解析参数。
+
+    Returns:
+        格式化后的字符串
+
+    Raises:
+        ParseError: 解析失败
+        ValueError: 渲染格式不存在
+    """
+    _configure_logging(
+        log_config=log_config,
+        log_level=log_level,
+        log_dir=log_dir,
+        log_enabled=log_enabled,
+        log_run_id=log_run_id,
+        log_keep_latest=log_keep_latest,
+        log_max_total_bytes=log_max_total_bytes,
+        log_cleanup=log_cleanup,
+        log_max_bytes=log_max_bytes,
+        log_backup_count=log_backup_count,
+    )
+
+    # 需要 linker 的格式
+    linker_formats = {"json"}
+
+    if format in linker_formats:
+        result = parse_uasset_with_linker(
+            file_path,
+            tolerant=tolerant,
+            include_parent_assets=include_parent_assets,
+            asset_roots=asset_roots,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+            hex_view=hex_view,
+            memory_policy=memory_policy,
+            config=parse_config,
+        )
+    else:
+        result = parse_package(
+            file_path,
+            tolerant=tolerant,
+            include_parent_assets=include_parent_assets,
+            asset_roots=asset_roots,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+            hex_view=hex_view,
+            memory_policy=memory_policy,
+            config=parse_config,
+        )
+
+    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
+        raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
+
+    # HexView 文本旁路：仅非 json 格式时直接返回文本（json 格式走 IR 管线）
+    if hex_view and result.hex_view_entries and format != "json":
+        from uasset_read.debug.hex_view import format_hex_view
+        return format_hex_view(
+            result.hex_view_entries,
+            file_size=result.summary.uncompressed_size if result.summary else 0,
+        )
+
+    ir = build_package_ir(result)
+    renderer = get_renderer(format)
+    options = RenderOptions(
+        verbose=verbose,
+        include_schema=include_schema,
+        include_function_graphs=include_function_graphs,
+        linker_result=None,
+        output_level=output_level,
+        hex_view=hex_view,
+    )
+    return renderer.render(ir, options)
+
+
+def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
+    if not tolerant or format not in {"json"}:
+        return False
+    from uasset_read.link.result import LinkerParseResult
+    from uasset_read.models.result import ParseResult
+
+    if not isinstance(result, (ParseResult, LinkerParseResult)):
+        return False
+    if getattr(result, "diagnostics", None):
+        return True
+    if getattr(result, "metadata", None):
+        return True
+    if getattr(result, "summary", None) is not None:
+        return True
+    if getattr(result, "name_map", None):
+        return True
+    if getattr(result, "import_map", None) or getattr(result, "export_map", None):
+        return True
+    return False
+
+
+def parse_batch(
+    input_dir: str,
+    format: str = "json",
+    output_dir: str | None = None,
+    tolerant: bool = True,
+    verbose: bool = False,
+    include_schema: bool = False,
+    include_function_graphs: bool = False,
+    include_parent_assets: bool = False,
+    asset_roots: list[str] | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+    hex_view: bool = False,
+    max_memory_usage: float = 0.85,  # 内存使用上限（85%）
+    skip_large_files: bool | None = None,
+    isolate_assets: bool | str = True,  # True/False/"auto"
+    memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
+    log_level: str | None = None,
+    log_dir: str | None = None,
+    log_enabled: bool = True,
+    log_run_id: str | None = None,
+    log_keep_latest: int | None = None,
+    log_max_total_bytes: int | None = None,
+    log_cleanup: bool = False,
+    log_max_bytes: int = 10_000_000,
+    log_backup_count: int = 5,
+    log_config: LogConfig | None = None,
+    parse_config: "ParseConfig | None" = None,
+) -> BatchResult:
+    """批量解析目录下所有 .uasset/.umap。
+
+    Args:
+        input_dir: 输入目录
+        format: 输出格式
+        output_dir: 输出目录（默认为 input_dir/output）
+        tolerant: 容错模式
+        verbose: 详细输出
+        include_schema: 包含 JSON Schema
+        include_function_graphs: 包含函数图
+        include_parent_assets: 解析父资产
+        asset_roots: 资产根目录列表
+        mappings_path: .usmap 映射文件路径
+        game: 游戏名称
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
+        hex_view: 启用 HexView 字节偏移追踪
+        max_memory_usage: 系统内存使用上限（0.0-1.0），超过时停止启动 worker
+        skip_large_files: 已弃用；文件大小仅用于选择资源档位
+        isolate_assets: 是否为每个资产启动独立子进程。True/False/\"auto\"（auto 根据文件大小自动选择）
+        memory_policy: 可选内存策略
+        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
+
+    Returns:
+        BatchResult 包含成功、跳过、失败的文件列表
+
+    Raises:
+        ValueError: 目录不存在或没有资产文件
+    """
+    # 验证 isolate_assets 参数
+    if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
+        raise ValueError(
+            f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
+        )
+
+    active_run_id = log_run_id or new_log_run_id()
+    _configure_logging(
+        log_config=log_config,
+        log_level=log_level,
+        log_dir=log_dir,
+        log_enabled=log_enabled,
+        log_run_id=active_run_id,
+        log_keep_latest=log_keep_latest,
+        log_max_total_bytes=log_max_total_bytes,
+        log_cleanup=log_cleanup,
+        log_max_bytes=log_max_bytes,
+        log_backup_count=log_backup_count,
+    )
+
+    from uasset_read.memory_safety import MemoryPolicy, get_memory_stats
+
+    if skip_large_files is not None:
+        warnings.warn(
+            "skip_large_files is deprecated; file size now selects an isolated "
+            "worker resource tier",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    if not 0.0 < max_memory_usage <= 1.0:
+        raise ValueError("max_memory_usage must be in (0.0, 1.0]")
+
+    input_path = Path(input_dir)
+    if not input_path.is_dir():
+        raise ValueError(f"Not a directory: {input_dir}")
+
+    package_files = sorted([*input_path.rglob("*.uasset"), *input_path.rglob("*.umap")])
+    if not package_files:
+        raise ValueError(f"No .uasset/.umap files found in {input_dir}")
+
+    if output_dir is None:
+        output_dir = str(input_path / "output")
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    result = BatchResult(total=len(package_files))
+    policy = memory_policy or MemoryPolicy()
+    system_usage_limit = min(max_memory_usage, policy.system_usage_limit)
+
+    if format.startswith("json"):
+        extension = ".json"
+    elif format == "markdown":
+        extension = ".md"
+    else:
+        extension = f".{format}"
+
+    parse_options = {
+        "format": format,
+        "tolerant": tolerant,
+        "verbose": verbose,
+        "include_schema": include_schema,
+        "include_function_graphs": include_function_graphs,
+        "include_parent_assets": include_parent_assets,
+        "asset_roots": asset_roots,
+        "mappings_path": mappings_path,
+        "game": game,
+        "force_full_parse": force_full_parse,
+        "hex_view": hex_view,
+        "memory_policy": policy,
+        "output_level": output_level,
+    }
+    if parse_config is not None:
+        parse_options["parse_config"] = parse_config
+
+    # #346: 智能混合模式 — 将导入移到循环外部
+    if isolate_assets == "auto":
+        from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
+
+    for idx, pf in enumerate(package_files):
+        stats = get_memory_stats()
+        if stats.usage_percent > system_usage_limit:
+            reason = (
+                f"System memory usage {stats.usage_percent * 100:.1f}% exceeds "
+                f"{system_usage_limit * 100:.1f}%"
+            )
+            for remaining in package_files[idx:]:
+                result.skipped.append((str(remaining), reason))
+            break
+
+        out_file = output_path / f"{pf.name}{extension}"
+        try:
+            # #346: 智能混合模式
+            if isolate_assets == "auto":
+                file_size = check_file_size(pf)
+                tier = FileSizeTier.from_size(file_size)
+                actual_isolate = should_isolate(file_size, tier)
+            else:
+                actual_isolate = bool(isolate_assets)
+
+            if actual_isolate:
+                request = BatchWorkerRequest(
+                    file_path=str(pf),
+                    output_path=str(out_file),
+                    parse_options=parse_options,
+                    logging_options={
+                        "enabled": log_enabled if log_config is None else log_config.enabled,
+                        "level": (log_level or "DEBUG") if log_config is None else (log_config.level or "DEBUG"),
+                        "log_dir": log_dir if log_config is None else log_config.dir,
+                        "run_id": active_run_id,
+                    },
+                )
+                outcome = run_isolated_asset(
+                    request,
+                    policy.limits_for_path(pf),
+                    policy.poll_interval_seconds,
+                )
+                if outcome.succeeded:
+                    result.success.append(outcome.output_path)
+                else:
+                    result.failed.append((str(pf), outcome.error))
+                continue
+
+            output_str = parse_single(
+                str(pf),
+                **parse_options,
+                log_config=log_config,
+                log_level=log_level,
+                log_dir=log_dir,
+                log_enabled=log_enabled,
+                log_run_id=active_run_id,
+            )
+            out_file.write_text(output_str, encoding="utf-8")
+            result.success.append(str(out_file))
+        except Exception as exc:
+            result.failed.append((str(pf), f"{type(exc).__name__}: {exc}"))
+
+    return result
+
+
+def list_formats() -> list[str]:
+    """返回所有支持的格式名列表。"""
+    return _list_renderer_formats()
+
+
+def diff_single(
+    file_path1: str,
+    file_path2: str,
+    *,
+    tolerant: bool = True,
+    context_lines: int = 3,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+    writer: IO[str] | None = None,
+    log_level: str | None = None,
+    log_dir: str | None = None,
+    log_enabled: bool = True,
+    log_run_id: str | None = None,
+    log_keep_latest: int | None = None,
+    log_max_total_bytes: int | None = None,
+    log_cleanup: bool = False,
+    log_max_bytes: int = 10_000_000,
+    log_backup_count: int = 5,
+    log_config: LogConfig | None = None,
+) -> str:
+    """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
+
+    解析失败不会抛出异常，而是在 diff 输出中标注解析错误信息。
+    当提供 writer 时，diff 写入流而不是返回字符串（流式输出）。
+
+    Args:
+        file_path1: 第一个 .uasset 文件路径
+        file_path2: 第二个 .uasset 文件路径
+        tolerant: 容错模式
+        context_lines: diff 上下文行数
+        mappings_path: 可选 .usmap/.jmap 类型映射
+        game: 可选游戏名（启用游戏特定属性解析）
+        force_full_parse: 是否强制完整蓝图解析
+        writer: 可选输出流，提供时 diff 写入该流
+        log_config: 可选 LogConfig 实例，集中管理日志参数。
+
+    Returns:
+        writer 为 None 时返回 unified diff 文本；否则返回空字符串
+    """
+    _configure_logging(
+        log_config=log_config,
+        log_level=log_level,
+        log_dir=log_dir,
+        log_enabled=log_enabled,
+        log_run_id=log_run_id,
+        log_keep_latest=log_keep_latest,
+        log_max_total_bytes=log_max_total_bytes,
+        log_cleanup=log_cleanup,
+        log_max_bytes=log_max_bytes,
+        log_backup_count=log_backup_count,
+    )
+
+    if writer is None:
+        from io import StringIO
+        buf = StringIO()
+        _diff_to(
+            file_path1, file_path2, buf,
+            tolerant=tolerant,
+            context_lines=context_lines,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+        return buf.getvalue()
+    _diff_to(
+        file_path1, file_path2, writer,
+        tolerant=tolerant,
+        context_lines=context_lines,
+        mappings_path=mappings_path,
+        game=game,
+        force_full_parse=force_full_parse,
+    )
+    return ""
+
+
+def _diff_to(
+    file_path1: str,
+    file_path2: str,
+    writer: IO[str],
+    *,
+    tolerant: bool = True,
+    context_lines: int = 3,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool = False,
+) -> None:
+    """将 unified diff 流式写入 writer。
+
+    逐行写入，不累积完整 diff 字符串。
+    """
+    import difflib
+
+    # 解析文件 1
+    try:
+        text1 = parse_single(
+            file_path1,
+            format="json",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text1 = f"[解析错误] {Path(file_path1).name}: {e}"
+
+    # 解析文件 2
+    try:
+        text2 = parse_single(
+            file_path2,
+            format="json",
+            tolerant=tolerant,
+            verbose=False,
+            mappings_path=mappings_path,
+            game=game,
+            force_full_parse=force_full_parse,
+        )
+    except Exception as e:
+        text2 = f"[解析错误] {Path(file_path2).name}: {e}"
+
+    name1 = Path(file_path1).name
+    name2 = Path(file_path2).name
+
+    lines1 = text1.splitlines(keepends=True)
+    lines2 = text2.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        lines1,
+        lines2,
+        fromfile=f"a/{name1}",
+        tofile=f"b/{name2}",
+        n=context_lines,
+    )
+
+    wrote_any = False
+    for line in diff:
+        writer.write(line)
+        wrote_any = True
+
+    if not wrote_any:
+        writer.write(f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n")

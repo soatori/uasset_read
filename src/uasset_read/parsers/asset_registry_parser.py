@@ -6,7 +6,7 @@
 - Tags：键值对标签列表
 
 数据格式（UE 源码参考：PackageReader.cpp ReadPackageDataMain）：
-- DependencyDataOffset (int32, 仅非 Cooked 且版本 >= VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS)
+- DependencyDataOffset (int64, 仅非 Cooked 且版本 >= VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS)
 - ObjectCount (int32)
 - 对每个 object:
   - ObjectPath (FString)
@@ -16,7 +16,6 @@
     - Key (FString)
     - Value (FString)
 """
-from __future__ import annotations
 
 import logging
 import struct
@@ -96,7 +95,7 @@ def read_asset_registry_data(
     try:
         archive.seek(asset_registry_data_offset)
     except (OSError, OverflowError) as e:
-        logger.warning("无法定位到 AssetRegistryDataOffset=%d: %s", asset_registry_data_offset, e)
+        logger.debug("无法定位到 AssetRegistryDataOffset=%d: %s", asset_registry_data_offset, e)
         return None
 
     result = AssetRegistryData()
@@ -104,21 +103,39 @@ def read_asset_registry_data(
     try:
         # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS = 510
         # 非 Cooked 且版本 >= 510 时读取 DependencyDataOffset
+        # UE 写入时使用 int64（见 SavePackageUtilities.cpp:1684、IAssetRegistry.h:1366）
+        # 部分资产（如 pre-dependency 格式保存的编辑器资产）不包含此字段，
+        # 通过验证偏移值合理性来检测格式差异
         if not is_cooked and file_version_ue4 >= 510:
-            result.dependency_data_offset = archive.read_i32()
+            pos_before = archive.tell()
+            dep_offset_64 = archive.read_i64()
+            # 合理性校验：偏移应为 -1（INDEX_NONE）、0、或不超过文件大小
+            file_size = archive.total_size()
+            if dep_offset_64 < -1 or (dep_offset_64 > 0 and file_size > 0 and dep_offset_64 > file_size):
+                # 值不合理 — 可能是 pre-dependency 格式（无此字段），
+                # 回退 8 字节，将 object_count 重新读为 int32
+                archive.seek(pos_before)
+                result.dependency_data_offset = -1
+                logger.debug(
+                    "AssetRegistryData: DependencyDataOffset=%d 超出文件范围 "
+                    "(file_size=%d)，疑似 pre-dependency 格式，跳过此字段",
+                    dep_offset_64, file_size,
+                )
+            else:
+                result.dependency_data_offset = dep_offset_64
         else:
             result.dependency_data_offset = -1
 
         # 读取 ObjectCount
         object_count = archive.read_i32()
         if object_count < 0:
-            logger.warning("AssetRegistryData: ObjectCount 为负数 (%d)，跳过", object_count)
+            logger.debug("AssetRegistryData: ObjectCount 为负数 (%d)，跳过", object_count)
             return result
 
         # 安全检查：object_count 不能过大
         file_size = archive.total_size()
         if file_size > 0 and object_count > file_size:
-            logger.warning(
+            logger.debug(
                 "AssetRegistryData: ObjectCount=%d 明显过大（文件大小=%d），跳过",
                 object_count, file_size,
             )
@@ -130,7 +147,7 @@ def read_asset_registry_data(
                 result.objects.append(obj_data)
 
     except (struct.error, OSError, ValueError) as e:
-        logger.warning("AssetRegistryData 解析异常: %s", e)
+        logger.debug("AssetRegistryData 解析异常: %s", e)
         # 返回已解析的部分数据
         return result
 
@@ -145,7 +162,7 @@ def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
         tag_count = archive.read_i32()
 
         if tag_count < 0:
-            logger.warning("AssetRegistryData: TagCount 为负数 (%d)，跳过对象", tag_count)
+            logger.debug("AssetRegistryData: TagCount 为负数 (%d)，跳过对象", tag_count)
             return None
 
         tags: List[AssetRegistryTag] = []
@@ -162,5 +179,5 @@ def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
         )
 
     except (struct.error, OSError, ValueError) as e:
-        logger.warning("AssetRegistryData: 读取对象数据异常: %s", e)
+        logger.debug("AssetRegistryData: 读取对象数据异常: %s", e)
         return None

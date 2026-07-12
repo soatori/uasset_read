@@ -11,7 +11,6 @@ Per D-06: JSON IR 结构包含 header_meta, properties, methods, constructor 四
     format_cpp_class_json: JSON IR 格式化函数
     kismet_to_cpp_body: Kismet 表达式 → 结构化 C++ 语句列表
 """
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field

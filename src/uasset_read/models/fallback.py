@@ -3,7 +3,6 @@
 参考 CUE4Parse: FStructFallback, generic UObject, FPropertyTag fallback.
 目标：让未知的 property/struct/export 仍能保留可诊断的结构化信息。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum

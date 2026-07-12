@@ -1,5 +1,4 @@
 """蓝图宏展开引擎 — 递归展开 MacroInstance，循环检测，引脚映射，标准宏定义。"""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -463,7 +462,7 @@ class MacroExpander:
                     continue
 
                 pin_name = pin.get("pin_name", "")
-                start_pid = pin.get("pin_id", "")
+                _start_pid = pin.get("pin_id", "")  # noqa: F841 - extracted for clarity
 
                 # 通过 linked_to_raw 找到连接的第一个内部节点
                 first_node = None

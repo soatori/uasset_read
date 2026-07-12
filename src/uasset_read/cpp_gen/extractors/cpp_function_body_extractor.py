@@ -2,7 +2,6 @@
 
 将蓝图函数体逻辑翻译为中间 IR 结构。
 """
-from __future__ import annotations
 
 import logging
 from typing import Callable, Dict, List, Optional, Tuple
@@ -46,12 +45,12 @@ def _build_call_expression(func_name: str, args: List[str]) -> str:
 
 
 def _sanitize_identifier(name: str) -> str:
-    """将 UE pin 名清理为 C++ 标识符。"""
-    # 移除空格和斜杠： "Left / Right" → "LeftRight"
-    cleaned = name.replace(" ", "").replace("/", "").replace("-", "_")
-    if not cleaned:
-        return "unnamed"
-    return cleaned
+    """将 UE pin 名清理为 C++ 标识符。
+
+    委托给 cpp_gen.sanitizer.sanitize_identifier 统一实现。
+    """
+    from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+    return sanitize_identifier(name)
 
 
 def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
@@ -201,7 +200,7 @@ def _extract_call_args(
         data_sources = node_info.get("data_sources", [])
         for ds in data_sources:
             if isinstance(ds, dict):
-                pin = ds.get("input_pin", "")
+                _pin = ds.get("input_pin", "")  # noqa: F841 - extracted for clarity
                 source = ds.get("data_source", {})
                 if isinstance(source, dict):
                     sources_list = source.get("data_sources", [])
@@ -264,7 +263,7 @@ def _translate_control_flow(
 ) -> Optional[CppStatement]:
     """翻译控制流节点（IfThenElse / Switch*）为 CppIfStmt。"""
     node_type = node_info.get("node_type", "")
-    branch_type = node_info.get("branch_type", "unknown")
+    _branch_type = node_info.get("branch_type", "unknown")  # noqa: F841 - extracted for clarity
 
     # 推导条件表达式
     condition = _derive_condition(node_info, data_flows)
@@ -288,7 +287,7 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
     if data_sources:
         for ds in data_sources:
             if isinstance(ds, dict):
-                input_pin = ds.get("input_pin", "")
+                _input_pin = ds.get("input_pin", "")  # noqa: F841 - extracted for clarity
                 source = ds.get("data_source", {})
                 if isinstance(source, dict):
                     for src in source.get("data_sources", []):

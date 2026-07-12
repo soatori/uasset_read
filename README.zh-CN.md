@@ -2,11 +2,11 @@
 
 > **虚幻引擎 .uasset 文件 Python 解析器** — 解析蓝图、提取变量、反编译 Kismet 字节码、生成 C++ 类骨架 — 无需启动 UE 编辑器。
 
-一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON、文本和代码。
+一个零依赖的 Python 解析器，将虚幻引擎 `.uasset` 二进制蓝图数据转换为结构化 JSON 和代码。
 
 [English](README.md) | [中文版](README.zh-CN.md)
 
-> 📦 **v0.5.2.31** — 自 v0.5.1.19 以来修复 31 个 issue：图输出链修复、UEdGraph 偏移验证、Map Pin 终端类型、CPF_* 标志对齐、pak/ioStore 二进制格式、蓝图通配符修复等。
+> 📦 **v0.5.3.23** — 自 v0.5.2.31 以来修复 23 个 issue：图安全防护、EventGraph 偏移保护、FText 边界检查、内存安全、AnimSequence/MovieScene 解析、安全加固等。
 
 ## 为什么选择 uasset_read？
 
@@ -24,10 +24,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 版本 | 0.5.2.31 |
+| 版本 | 0.5.3.23 |
 | 源码 | Python 解析器，用于解析 Unreal Engine .uasset 文件 |
-| 测试 | 1424 个测试用例（集成测试在样本资产不可用时自动跳过） |
-| 模块 | 14 个子包，134 个源文件 |
+| 测试 | 492 个测试用例（集成测试在样本资产不可用时自动跳过） |
+| 模块 | 21 个子包，175 个源文件 |
 
 ## 功能特性
 
@@ -58,7 +58,7 @@
 ### 文件格式支持
 - **Pak 文件解析** — FPakInfo、标准库 Zlib 解压；安装 `lz4`、`zstandard` 或 `cryptography` 后支持 LZ4/Zstd/AES-ECB；Oodle 会明确报告暂不支持
 - **IoStore 容器** — Chunk ID、偏移/大小结构
-- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
+- **专用资产类型解析器** — StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimBlueprint、AnimMontage、AnimBoneCompression、AnimCurveCompression、AnimationDataModel、SoundWave、SoundCue、SoundAttenuation、DataTable、CurveTable、StringTable、Skeleton、PoseAsset、LevelSequence、MovieScene、MovieSceneControlRig、FoliageType、SkeletalMeshLODSettings、SubsurfaceProfile、OpaqueStub、PropertyExtractor；更广泛的资产类别通过通用 UObject/属性 fallback 路径处理。Pak/IoStore 解析缺少真实 `.pak/.utoc/.ucas` 样本覆盖。
 - **Bulk Data** — BulkData 头部解析
 - **游戏版本支持** — 游戏特定的序列化常量
 - **Binary/Native 处理器** — 支持二进制或原生属性序列化
@@ -66,10 +66,11 @@
 ### 输出格式
 - **JSON** — 完整结构化输出（C++ 翻译参考）
 - **Markdown** — 带表格的格式化文档，内嵌 Mermaid 流程图
+- **Text** — 纯文本摘要
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON、Markdown）
-- **核心 API** — `parse_single()`、`parse_batch()`、`list_formats()` 简化编程访问
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON、Markdown、Text）
+- **核心 API** — `parse_single()`、`parse_batch()`、`diff_single()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
 ## 安装
@@ -92,10 +93,11 @@ python run.py path/to/file.uasset --output output.json   # 保存到文件
 # 输出模式
 python run.py path/to/file.uasset --json             # JSON 输出（默认）
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
+python run.py path/to/file.uasset --text             # 纯文本摘要
 python run.py path/to/file.uasset --list-formats     # 列出可用格式
 
-# 批量导出
-python run.py --batch-dir path/to/dir/               # 批量导出目录
+# 批量导出（输入目录 + 输出目录）
+python run.py path/to/input/dir/ --batch --batch-dir path/to/output/dir/
 
 # 严格度
 python run.py path/to/file.uasset --strict           # 遇到警告即停止
@@ -105,6 +107,16 @@ python run.py path/to/file.uasset --tolerant         # 容错模式（默认）
 python run.py path/to/file.uasset --verbose          # 启用详细日志
 python run.py path/to/file.uasset --hex-view         # 启用 HexView 二进制检查
 python run.py path/to/file.uasset --full-parse       # 强制完整解析大型蓝图
+
+# Diff 比较
+python run.py path/to/file1.uasset --diff path/to/file2.uasset  # 比较两个文件
+
+# 高级选项
+python run.py path/to/file.uasset --export 0         # 仅输出指定索引的 export
+python run.py path/to/file.uasset --schema           # 包含字段语义注解
+python run.py path/to/file.uasset --function-graphs  # 包含 function_graphs 数组
+python run.py path/to/file.uasset --mappings path/to/usmap  # 加载类型映射
+python run.py path/to/file.uasset --output-level debug   # 输出详细级别
 ```
 
 或通过模块调用：
@@ -118,7 +130,7 @@ python -m uasset_read path/to/file.uasset --json
 简化的高级编程接口 — **推荐入口**：
 
 ```python
-from uasset_read import parse_single, parse_batch, list_formats
+from uasset_read import parse_single, parse_batch, diff_single, list_formats
 
 # 解析单个文件（返回格式化字符串）
 json_str = parse_single("path/to/file.uasset", format="json")
@@ -126,6 +138,9 @@ text = parse_single("path/to/file.uasset", format="markdown")
 
 # 批量解析目录
 results = parse_batch("path/to/directory", format="json")
+
+# 比较两个 .uasset 文件
+diff_output = diff_single("file1.uasset", "file2.uasset", format="json")
 
 # 列出可用的输出格式
 formats = list_formats()
@@ -203,29 +218,37 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | 常量 | `constants.py` | 版本号、属性类型阈值、CPF/PropertyTag 标志 |
 | 异常 | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | 主解析器 | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
-| 核心 API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
+| 核心 API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
 | 包管理 | `package.py` | `PackageBundle`, `PackageProvider`（文件系统/Pak/IoStore） |
 | 原始文件 | `raw.py` | JSON/INI/LocRes/LocMeta/Audio 非 uasset 解析 |
 | CLI | `cli.py` | argparse 入口，委托到核心 API |
 | 版本管理 | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | 映射 | `mappings.py` | UE 类型映射（`.usmap`/`.jmap` 解析） |
+| 内存安全 | `memory_safety.py` | 内存策略、RSS 测量、解析器检查点 |
+| 有界事件 | `bounded_events.py` | 有界诊断收集器 |
+| 解析阶段 | `parse_stages.py` | 核心表读取、二级表读取、export 属性解析 |
+| 后处理 | `parse_post_process.py` | 后处理：Kismet 反编译、图提取、依赖分析 |
+| 批处理 | `batch_worker.py` | 子进程隔离的批量 worker |
+| 提供者 | `providers.py` | GameDirectoryProvider 游戏资产扫描 |
+| 项目日志 | `project_logging.py` | 结构化日志与轮转 |
 | 调试 | `debug/hex_view.py` | HexView 调试系统，用于二进制字段检查 |
 | **IR** | `ir_builder.py` | 包级中间表示构建器 |
 | **序列化** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
-| **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
+| **数据模型** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
 | **解析器** | `parsers/` | 40+ 种属性类型解析器 + 分派器 + 自定义属性注册表 + AssetRegistry 解析器 + 类序列化策略 |
-| ├ 资产类型 | `parsers/asset_types/` | StaticMesh、SkeletalMesh、Texture2D、Material、MaterialInstanceConstant、TextureCube、AnimSequence、AnimDataModel、SoundWave、SoundAttenuation |
+| ├ 资产类型 | `parsers/asset_types/` | 28 种资产类型解析器，包括 StaticMesh、SkeletalMesh、AnimBlueprint、AnimMontage、DataTable、LevelSequence、MovieScene |
 | **蓝图** | `blueprint/` | 变量/变换/组件/元数据提取 |
-| **图** | `graph/` | 执行流/数据流追踪、链构建器 |
+| **图** | `graph/` | 执行流/数据流追踪、链构建器、graph_utils |
 | **Kismet** | `kismet/` | 字节码提取器, EExprToken → AST, C++ 翻译器, BPGC 回退 |
-| ├ 表达式 | `kismet/expressions/` | 15 种表达式类型（赋值、控制流、函数调用、字面量等） |
+| ├ 表达式 | `kismet/expressions/` | 16 种表达式类型（赋值、控制流、函数调用、字面量等） |
+| ├ CFG | `kismet/cfg/` | 控制流图：build、dom、emitter、region、stmt |
 | **链接器** | `link/` | PackageLinker, UObjectInstance |
 | **CPP Gen** | `cpp_gen/` | C++ 骨架/函数提取, IR 格式化器, 类型映射, UPROPERTY 映射, 构造函数格式化, 函数体提取 |
 | **Pak** | `pak/` | FPakInfo/PakEntry/目录条目, PakFileReader, 索引解析, 压缩, AES 解密 |
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance） |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（2 个渲染器：JSON、Markdown） |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（JSON、Markdown、Text） |
 
 ## 测试
 

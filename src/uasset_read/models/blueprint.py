@@ -7,7 +7,6 @@ extract_blueprint_metadata() 填充，不经过 from_archive 序列化路径。
 
 Per D-10: Python 3.10+ 严格类型提示。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, TYPE_CHECKING

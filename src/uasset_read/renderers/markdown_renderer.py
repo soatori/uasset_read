@@ -1,9 +1,8 @@
 """Markdown + Mermaid 流程图渲染器。"""
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export
+from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export, EDITOR_PROPERTY_NAMES, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 
@@ -46,25 +45,27 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
     """从 PackageIR 收集 Enhanced Input Action 绑定。
 
     支持两种来源：
-    1. graphs 中的 K2Node_EnhancedInputAction 节点（当前未使用，graphs 通常为空）
-    2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名
+    1. graphs 中的 K2Node_EnhancedInputAction 节点（优先使用新字段）
+    2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名（降级）
     """
     import re
     input_actions: list[tuple[str, dict]] = []
     seen_actions: set[str] = set()
 
-    # 来源1: graphs 中的节点（保留兼容）
+    # 来源1: graphs 中的节点（优先使用新字段）
     for export in ir.exports:
         for graph in export.graphs:
             for node in graph.nodes:
                 if node.node_class == "K2Node_EnhancedInputAction":
-                    data = getattr(node, "node_data", None)
-                    if isinstance(data, dict):
-                        path = data.get("input_action_path", "?")
-                        triggers = data.get("trigger_events", {})
+                    # 使用新字段
+                    path = node.input_action_path or "?"
+                    triggers = node.trigger_events or {}
+
+                    if path not in seen_actions:
+                        seen_actions.add(path)
                         input_actions.append((path, triggers))
 
-    # 来源2: decompiled_functions 中的函数名
+    # 来源2: decompiled_functions 中的函数名（降级路径）
     # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
     pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
     for func in (ir.decompiled_functions or []):
@@ -73,7 +74,7 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
             action_name = match.group(1)
             if action_name not in seen_actions:
                 seen_actions.add(action_name)
-                # 从函数名解析 action path（简化处理）
+                # 降级：从函数名解析，无法获取详细信息
                 input_actions.append((action_name, {}))
 
     return input_actions
@@ -81,38 +82,6 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
 
 class MarkdownRenderer(IRenderer):
     """Markdown + Mermaid 流程图渲染器。"""
-
-    # 编辑器内部变量（不影响运行时和 C++ 翻译），与 JSONRenderer 保持一致
-    _EDITOR_VARIABLE_NAMES = frozenset({
-        "UbergraphPages",  # 图页面索引列表
-        "FunctionGraphs",  # 函数图索引列表
-        "CategorySorting",  # 编辑器分类排序
-        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
-        "LastEditedDocuments",  # 最后编辑文档
-        "ThumbnailInfo",  # 缩略图信息
-        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
-    })
-
-    # 编辑器布局属性（不影响运行时和 C++ 翻译），与 JSONRenderer 保持一致
-    _EDITOR_PROPERTY_NAMES = frozenset({
-        # 节点布局
-        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
-        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
-        # 注释相关
-        "CommentColor", "FontSize",
-        "bCommentBubbleVisible_InDetailsPanel",
-        "bCommentBubblePinned", "bCommentBubbleVisible",
-        # 图相关
-        "Schema", "GraphGuid", "ErrorType",
-        "AdvancedPinDisplay", "MoveMode",
-        # 事件/函数引用（已提取到其他字段）
-        "EventReference", "bOverrideFunction",
-    })
-
-    # 编辑器内部节点类（不影响运行时，UE 编译时移除），与 JSONRenderer 保持一致
-    _EDITOR_NODE_CLASSES = frozenset({
-        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
-    })
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         lines: list[str] = []
@@ -208,7 +177,7 @@ class MarkdownRenderer(IRenderer):
         # 导出 — 只显示蓝图 export，过滤编辑器节点类 export（与 JSON 渲染器一致）
         blueprint_exports = [
             e for e in ir.exports
-            if is_blueprint_export(e) and e.object_class not in self._EDITOR_NODE_CLASSES
+            if is_blueprint_export(e) and e.object_class not in EDITOR_NODE_CLASSES
         ]
         if blueprint_exports:
             lines.append("## Exports")
@@ -244,20 +213,8 @@ class MarkdownRenderer(IRenderer):
                     lines.append("```")
                     lines.append("")
 
-                # 属性详情（过滤编辑器布局属性，与 JSON 渲染器一致）
-                filtered_props = [
-                    p for p in (export.properties or [])
-                    if p.name not in self._EDITOR_PROPERTY_NAMES
-                ]
-                if filtered_props:
-                    lines.append("### Properties")
-                    lines.append("")
-                    lines.append("| Name | Type | Value |")
-                    lines.append("|------|------|-------|")
-                    for prop in filtered_props:
-                        val = _escape_md_cell(str(prop.value)[:50]) if prop.value is not None else "null"
-                        lines.append(f"| {prop.name} | {prop.type} | {val} |")
-                    lines.append("")
+            # 属性详情（过滤编辑器布局属性，与 JSON 渲染器一致）
+            self._render_export_properties(lines, export)
 
         # === Event Graph ===
         self._render_event_graph(lines, ir)
@@ -306,7 +263,11 @@ class MarkdownRenderer(IRenderer):
             # 查找匹配的反编译函数
             decompiled = self._find_decompiled(ir, event.name)
             if decompiled:
-                lines.append(f"```cpp")
+                if decompiled.bytecode_confidence == "heuristic":
+                    lines.append("> [!WARNING]")
+                    lines.append("> bytecode 为启发式恢复（serial scan），置信度较低")
+                    lines.append("")
+                lines.append("```cpp")
                 lines.append(decompiled.signature)
                 lines.append("{")
                 if decompiled.cpp_code.strip():
@@ -359,6 +320,7 @@ class MarkdownRenderer(IRenderer):
                 "cpp_code": func.cpp_code,
                 "parameters": func.parameters,
                 "return_type": func.return_type,
+                "bytecode_confidence": func.bytecode_confidence,
             }
 
         if ir.blueprint and ir.blueprint.functions:
@@ -418,6 +380,10 @@ class MarkdownRenderer(IRenderer):
 
             # C++ 实现代码块
             if func_info["cpp_code"] and func_info["cpp_code"].strip():
+                if func_info.get("bytecode_confidence") == "heuristic":
+                    lines.append("> [!WARNING]")
+                    lines.append("> bytecode 为启发式恢复（serial scan），置信度较低")
+                    lines.append("")
                 lines.append("```cpp")
                 lines.append(func_info["cpp_code"].strip())
                 lines.append("```")
@@ -431,7 +397,7 @@ class MarkdownRenderer(IRenderer):
         # 过滤编辑器内部变量（与 JSON 渲染器一致）
         filtered_variables = [
             v for v in ir.variables
-            if v.name not in self._EDITOR_VARIABLE_NAMES
+            if v.name not in EDITOR_VARIABLE_NAMES
         ]
         if not filtered_variables:
             return
@@ -625,6 +591,34 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
         lines.append("")
 
+    def _render_export_properties(self, lines: list[str], export) -> None:
+        """渲染 export 的属性表格。"""
+        # 过滤编辑器属性（standard 输出级别）
+        filtered_props = [
+            p for p in (export.properties or [])
+            if p.name not in EDITOR_PROPERTY_NAMES
+        ]
+        if not filtered_props:
+            return
+
+        lines.append("### Properties")
+        lines.append("")
+        lines.append("| Name | Type | Value |")
+        lines.append("|------|------|-------|")
+        for prop in filtered_props:
+            name = _escape_md_cell(prop.name)
+            prop_type = _escape_md_cell(prop.type)
+            value = prop.value if prop.value is not None else "null"
+
+            # 截断长值
+            value_str = str(value)
+            if len(value_str) > 50:
+                value_str = value_str[:50]
+            value_str = _escape_md_cell(value_str)
+
+            lines.append(f"| {name} | {prop_type} | {value_str} |")
+        lines.append("")
+
     def _find_decompiled(self, ir: PackageIR, name: str):
         """根据函数名查找反编译函数。"""
         for func in ir.decompiled_functions:
@@ -641,6 +635,51 @@ class MarkdownRenderer(IRenderer):
         param_str = ", ".join(params)
         return f"void {event.name}({param_str}) override"
 
+    def _build_pin_to_node_index(self, graph) -> dict[str, str]:
+        """构建 Pin GUID → Node GUID 的映射索引。"""
+        pin_to_node: dict[str, str] = {}
+        for node in graph.nodes:
+            node_guid = node.node_guid
+            if not node_guid:
+                continue
+            for pin in node.pins:
+                if pin.pin_guid:
+                    pin_to_node[pin.pin_guid] = node_guid
+        return pin_to_node
+
+    def _render_mermaid_edges(self, graph, pin_to_node: dict[str, str], indent: int = 0) -> list[str]:
+        """渲染 Mermaid 边，使用 Node GUID 替代 Pin GUID。"""
+        prefix = "    " * indent
+        edge_lines: list[str] = []
+        seen_edges: set[tuple[str, str]] = set()
+
+        for node in graph.nodes:
+            source_guid = (node.node_guid or "")[:8]
+            for pin in node.pins:
+                for linked_pin_guid in (pin.linked_to or []):
+                    # 将 Pin GUID 转换为 Node GUID
+                    target_node_guid = pin_to_node.get(linked_pin_guid)
+
+                    # 跳过无法解析的 Pin 引用
+                    if target_node_guid is None:
+                        continue
+
+                    target_guid = target_node_guid[:8]
+
+                    # 跳过自连接
+                    if source_guid == target_guid:
+                        continue
+
+                    # 去重
+                    edge_key = (source_guid, target_guid)
+                    if edge_key in seen_edges:
+                        continue
+                    seen_edges.add(edge_key)
+
+                    edge_lines.append(f"{prefix}    {source_guid} --> {target_guid}")
+
+        return edge_lines
+
     def _render_mermaid_nodes(self, lines: list[str], graph, indent: int = 0) -> None:
         """渲染 Mermaid 节点和连接（递归支持嵌套子图）。"""
         prefix = "    " * indent
@@ -651,13 +690,10 @@ class MarkdownRenderer(IRenderer):
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
             lines.append(f'{prefix}    {safe_guid}["{label}"]')
 
-        # 定义连接
-        for node in graph.nodes:
-            for pin in node.pins:
-                for target in (pin.linked_to or []):
-                    source_guid = (node.node_guid or "")[:8]
-                    target_guid = target[:8] if len(target) >= 8 else target
-                    lines.append(f"{prefix}    {source_guid} --> {target_guid}")
+        # 定义连接（使用索引转换 Pin GUID -> Node GUID）
+        pin_to_node = self._build_pin_to_node_index(graph)
+        edge_lines = self._render_mermaid_edges(graph, pin_to_node, indent)
+        lines.extend(edge_lines)
 
         # 递归渲染嵌套子图
         for subgraph in graph.subgraphs or []:

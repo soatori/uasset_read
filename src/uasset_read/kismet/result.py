@@ -3,7 +3,6 @@ Kismet Decompilation Result — Single function decompilation result.
 
 Data model for Kismet bytecode decompilation output.
 """
-from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field

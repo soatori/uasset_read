@@ -3,10 +3,18 @@
 用于记录解析过程中遇到的偏移/范围异常情况，
 包括序列偏移越界、脚本偏移溢出、CodeOffset 异常等。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, Optional
+
+
+class DiagnosticSeverity(Enum):
+    """诊断严重度级别。"""
+    INFO = "info"           # 信息性，不影响状态
+    WARNING = "warning"     # 警告，可能影响完整性
+    ERROR = "error"         # 错误，肯定影响完整性
+    CRITICAL = "critical"   # 严重错误，解析失败
 
 
 @dataclass
@@ -14,6 +22,7 @@ class OffsetRangeDiagnostic:
     """偏移范围诊断记录 — 捕获解析过程中的偏移异常。"""
 
     kind: str = "offset_range_diagnostic"
+    severity: str = "warning"  # 严重度：info|warning|error|critical
     asset_path: str = ""
     asset_type: str = ""
     module: str = ""  # linker|property|graph|pin|kismet|pak|iostore
@@ -36,6 +45,7 @@ class OffsetRangeDiagnostic:
         """转为 JSON 兼容字典。None 值字段自动省略。"""
         d: Dict[str, Any] = {
             "kind": self.kind,
+            "severity": self.severity,
         }
         # 字符串字段：非空时输出
         for str_field in (
@@ -57,3 +67,7 @@ class OffsetRangeDiagnostic:
         if self.fallback_used:
             d["fallback_used"] = True
         return d
+
+    def is_structural(self) -> bool:
+        """判断是否为结构性诊断（会影响状态）。"""
+        return self.severity in ("error", "critical")

@@ -3,7 +3,6 @@
 等价迁移 uasset_read.py 第 5186-5282 行。
 UE5.7 专用版本 — 已移除 UE4 兼容代码。
 """
-from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, List, Tuple, Optional, Any, TypeVar
 
@@ -21,6 +20,7 @@ from uasset_read.constants import (
     PROP_TAG_SKIPPED_SERIALIZE,
     PROP_EXT_SERIALIZE_CONTROL,
     MAX_PROPERTY_TYPE_NODES,
+    UE_NONE_SENTINEL,
 )
 from uasset_read.models.properties import PropertyTag, PropertyTypeName
 
@@ -123,7 +123,7 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
         enum_child = child_type(0)
         if enum_child is not None:
             enum_name = getattr(enum_child, "name", None) or getattr(enum_child, "type", None)
-            if enum_name and enum_name != "None":
+            if enum_name and enum_name != UE_NONE_SENTINEL:
                 tag.enum_type = enum_name
 
 
@@ -172,7 +172,7 @@ def read_property_tag(
 
     tag = PropertyTag(name=archive.read_name(name_map), type="", size=0, tag_start_offset=tag_start_pos)
 
-    if tag.name == "None":
+    if tag.name == UE_NONE_SENTINEL:
         return tag
 
     # 从 archive 获取 UE5 版本号（由 parse_uasset 在 summary 解析后设置）
@@ -291,12 +291,12 @@ def _read_property_tag_legacy(
         elif tag.type == "ByteProperty":
             # EnumName (FName)
             enum_name = archive.read_name(name_map)
-            if enum_name and enum_name != "None":
+            if enum_name and enum_name != UE_NONE_SENTINEL:
                 tag.enum_type = enum_name
         elif tag.type == "EnumProperty":
             # EnumName (FName)
             enum_name = archive.read_name(name_map)
-            if enum_name and enum_name != "None":
+            if enum_name and enum_name != UE_NONE_SENTINEL:
                 tag.enum_type = enum_name
         elif tag.type == "ArrayProperty":
             # InnerType (FName) — 参考 PropertyTag.cpp:318-330
@@ -363,17 +363,4 @@ def read_tag_value_bounded(
             archive.seek(final_pos)
 
 
-def parse_ue511_ctrl_flags(ctrl: int) -> dict:
-    """解析 UE5.11+ 序列化控制扩展头的 ctrl 字节。
 
-    复用标准常量，保持与 parse_ctrl_flags 一致的键名。
-    0x02 位在 flags 语境下叫 HasPropertyGuid，在 ctrl 语境下叫 SerializeControl。
-    """
-    return {
-        "has_array_index": bool(ctrl & PROP_TAG_HAS_ARRAY_INDEX),
-        "serialize_control": bool(ctrl & PROP_TAG_HAS_PROPERTY_GUID),
-        "has_extensions": bool(ctrl & PROP_TAG_HAS_EXTENSIONS),
-        "has_binary_or_native": bool(ctrl & PROP_TAG_HAS_BINARY_OR_NATIVE),
-        "bool_true": bool(ctrl & PROP_TAG_BOOL_TRUE),
-        "skipped_serialize": bool(ctrl & PROP_TAG_SKIPPED_SERIALIZE),
-    }

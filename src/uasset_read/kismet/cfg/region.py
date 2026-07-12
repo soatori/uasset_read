@@ -10,7 +10,6 @@
 5. 组装区域树
 """
 
-from __future__ import annotations
 
 from uasset_read.kismet.cfg.data import (
     CFG,

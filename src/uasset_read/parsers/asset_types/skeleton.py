@@ -17,7 +17,6 @@ UPROPERTY 部分（BoneTree、VirtualBones、SlotGroups、Sockets 等）
 - Engine/Source/Runtime/Engine/Private/Animation/Skeleton.cpp
 - Engine/Source/Runtime/Engine/Public/ReferenceSkeleton.h
 """
-from __future__ import annotations
 
 import logging
 import struct
@@ -76,7 +75,10 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
 
     except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("skeleton handler 解析失败: %s", e)
-        result["parse_status"] = "failed"
+        # 当 class_index 错误指向 Skeleton 但实际数据为其他类型（如 SkeletalMesh）时，
+        # handler 无法解析是预期行为，标记为 opaque 而非 failed，
+        # 避免整个 package 被判定为 failed（Issue #321）
+        result["parse_status"] = "opaque"
         result["error"] = str(e)
 
     return result
@@ -108,7 +110,7 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
 
         # 读取 PropertyTag.Name
         name_index = archive.read_i32()
-        name_number = archive.read_i32()
+        _name_number = archive.read_i32()  # noqa: F841 - protocol read
 
         if name_index == 0:
             # Name == "None"，属性列表结束
@@ -116,7 +118,7 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
 
         # 读取 TypeName
         type_index = archive.read_i32()
-        type_number = archive.read_i32()
+        _type_number = archive.read_i32()  # noqa: F841 - protocol read
 
         # 解析类型名（用于判断是否需要跳过额外字段）
         type_name = ""

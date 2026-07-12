@@ -7,7 +7,6 @@ structured results.
 
 BPGC bytecode fallback with cache reset.
 """
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

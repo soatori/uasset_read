@@ -2,7 +2,6 @@
 
 等价迁移 uasset_read.py §1435-1480。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 

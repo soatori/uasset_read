@@ -52,33 +52,37 @@ class PakFileReader:
         """打开 .pak 文件并解析 FPakInfo + Primary Index。"""
         logger.debug("Opening pak file: %s", self._path)
 
-        self._file = open(self._path, 'rb')
-        self._file.seek(0, 2)
-        self._file_size = self._file.tell()
-        self._file.seek(0)
+        try:
+            self._file = open(self._path, 'rb')
+            self._file.seek(0, 2)
+            self._file_size = self._file.tell()
+            self._file.seek(0)
 
-        # Read FPakInfo
-        self._info = FPakInfo.deserialize(self._file, self._file_size)
-        logger.debug("Detected FPakInfo version=%d, index_offset=%d, index_size=%d",
-                     self._info.version, self._info.index_offset, self._info.index_size)
+            # Read FPakInfo
+            self._info = FPakInfo.deserialize(self._file, self._file_size)
+            logger.debug("Detected FPakInfo version=%d, index_offset=%d, index_size=%d",
+                         self._info.version, self._info.index_offset, self._info.index_size)
 
-        # Parse primary index
-        mount_point, entries, extra = parse_primary_index(
-            self._file, self._info, self._aes_key
-        )
+            # Parse primary index
+            mount_point, entries, extra = parse_primary_index(
+                self._file, self._info, self._aes_key
+            )
 
-        self._mount_point = mount_point
-        self._entries = entries
+            self._mount_point = mount_point
+            self._entries = entries
 
-        # Extract v10+ extra info
-        if extra:
-            self._directory_index = extra.get("directory_index", {})
-            self._encoded_entries = extra.get("encoded_entries", [])
-            self._path_hash_seed = extra.get("path_hash_seed", 0)
-            self._path_hash_index = extra.get("path_hash_index", {})
+            # Extract v10+ extra info
+            if extra:
+                self._directory_index = extra.get("directory_index", {})
+                self._encoded_entries = extra.get("encoded_entries", [])
+                self._path_hash_seed = extra.get("path_hash_seed", 0)
+                self._path_hash_index = extra.get("path_hash_index", {})
 
-        logger.debug("PakFileReader: %d entries, mount_point='%s'",
-                     len(self._entries), self._mount_point)
+            logger.debug("PakFileReader: %d entries, mount_point='%s'",
+                         len(self._entries), self._mount_point)
+        except Exception:
+            self.close()
+            raise
 
     def close(self) -> None:
         """关闭文件句柄。"""

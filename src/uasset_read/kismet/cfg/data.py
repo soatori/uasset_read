@@ -3,7 +3,6 @@
 定义基本块、控制流图、支配树、区域等核心数据结构。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto

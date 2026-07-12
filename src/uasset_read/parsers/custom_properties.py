@@ -5,7 +5,6 @@ UE PropertyTag.h 定义了自定义属性槽位（CustomProperty 0xFD/0xFE），
 
 本模块提供注册表机制，允许动态注册自定义属性处理器。
 """
-from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
@@ -78,7 +77,7 @@ def handle_custom_property(
         or CUSTOM_PROPERTY_HANDLERS.get((None, tag.type))
     )
     if handler is None:
-        logger.warning(
+        logger.debug(
             "CustomProperty 0x%02X: no handler registered, skipping %d bytes",
             type_id, tag.size,
         )

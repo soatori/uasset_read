@@ -34,6 +34,7 @@ from uasset_read.pak.structures import (
 # Compression
 from uasset_read.pak.decompress import (
     decompress_block,
+    decompress_block_chunked,
     decompress_entry,
 )
 
@@ -72,6 +73,7 @@ __all__ = [
     "read_fstring",
     # Compression
     "decompress_block",
+    "decompress_block_chunked",
     "decompress_entry",
     # Crypto
     "decrypt_aes_ecb",

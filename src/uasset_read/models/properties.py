@@ -2,7 +2,6 @@
 
 等价迁移 uasset_read.py 第 1294-1427 行。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple

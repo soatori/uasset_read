@@ -3,6 +3,7 @@ UnrealEngine/
 LyraStarterGame/
 UnrealProjects/
 external/
+.reasonix/
 
 # Python
 __pycache__/
@@ -43,6 +44,7 @@ temp/
 test/
 /output/
 /debug/
+/log/
 reports/
 /json
 
@@ -85,6 +87,11 @@ tests/*
 !tests/cpp/
 !tests/unit/
 !tests/pak/
+!tests/security/
+!tests/debug/
+!tests/parsers/
+!tests/iostore/
+!tests/samples/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
@@ -96,6 +103,13 @@ docs/reference/refactor-reference.md
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
 
+# Git worktrees
+.worktrees/
+
 # Documentation build artifacts
 docs/superpowers/
+docs/compose/
 .mimocode/
+
+# Wiki submodule (external)
+wiki/

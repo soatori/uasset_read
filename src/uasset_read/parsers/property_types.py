@@ -2,7 +2,6 @@
 
 等价迁移 uasset_read.py 第 5289-6004 行。
 """
-from __future__ import annotations
 
 import logging
 import struct
@@ -21,11 +20,11 @@ from uasset_read.models.properties import (
 )
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT, UE5_LARGE_WORLD_COORDINATES
-from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count
-
-# FPropertyTypeName 最大节点数（UE 源码限制）
-MAX_TYPENODE_NODES = 20
+from uasset_read.constants import (
+    MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT, UE5_LARGE_WORLD_COORDINATES,
+    MAX_SAFE_COUNT, UE_NONE_SENTINEL,
+)
+from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count_tolerant
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
 _EXPECTED_STRUCT_SIZES: dict[str, int] = {
@@ -34,7 +33,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Guid": 16, "IntPoint": 8, "IntVector": 12,
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
-    "Transform": 48,
+    "Transform": 40,           # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
     "TopLevelAssetPath": 16,
     # 时间/帧类型
     "Timespan": 8,           # int64
@@ -78,7 +77,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box2f": 16,             # 2 * Vector2f(8)
     "Box3f": 24,             # 2 * Vector3f(12)
     "Matrix44f": 64,         # 4 * Plane4f(16)
-    "Transform3f": 48,       # Quat4f(16) + Vector3f(12) + Vector3f(4) + padding
+    "Transform3f": 40,       # FTransform3f: Quat4f(16) + Vector3f(12) + Vector3f(12)
     # 动画/混合空间高频结构体（报告补充）
     "FrameRate": 8,          # 紧凑格式：int32 Numerator + int32 Denominator
                              # tagged 格式 size 不固定（实测 37），通过 tagged fallback 静默解析
@@ -104,7 +103,7 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
     "Matrix":        (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (48, 48),   # FQuat + FVector + FVector（Transform 始终混用）
+    "Transform":     (40, 80),   # FTransform3f(40) → FTransform3d(80)，根据 tag.size 选择读取精度
 }
 
 # LWC 双精度类型名 → 对应的基础类型名
@@ -511,13 +510,15 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
         )
 
-    count = read_validated_count(archive, MAX_ARRAY_COUNT, "数组数量")
+    count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "数组数量")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
 
     if tag.size < 4:
-        logger.warning(
-            "ArrayProperty '%s': tag.size=%d < 4, 无法计算剩余数据大小",
+        # #345: tag.size < 4 通常是空数组或 RigVM DebugWatch 属性
+        # 使用 debug 级别，避免日志噪音
+        logger.debug(
+            "ArrayProperty '%s': tag.size=%d < 4, 返回空数组",
             tag.name, tag.size,
         )
         return elements
@@ -657,9 +658,23 @@ def _try_fast_path_struct(
         })
 
     if struct_type == "Transform":
-        tx, ty, tz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-        rx, ry, rz, rw = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
-        sx, sy, sz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        # 序列化顺序: Rotation → Translation → Scale3D (UE 源码 TransformNonVectorized.h:616-622)
+        if tag.size == 40:  # FTransform3f (all float): 16 + 12 + 12
+            rx, ry, rz, rw = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
+            tx, ty, tz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+            sx, sy, sz = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        elif tag.size == 80:  # FTransform3d (all double): 32 + 24 + 24
+            rx, ry, rz, rw = archive.read_f64(), archive.read_f64(), archive.read_f64(), archive.read_f64()
+            tx, ty, tz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+            sx, sy, sz = archive.read_f64(), archive.read_f64(), archive.read_f64()
+        else:
+            # 未知大小：可能是损坏数据，拒绝解析
+            if not archive._tolerant:
+                raise ParseError(f"Transform: unexpected size {tag.size} (expected 40 or 80)")
+            logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
+            return StructValue(struct_type="Transform", fields={
+                "_warning": f"unexpected size {tag.size}",
+            })
         return StructValue(struct_type="Transform", fields={
             "Translation": {"X": tx, "Y": ty, "Z": tz},
             "Rotation": {"X": rx, "Y": ry, "Z": rz, "W": rw},
@@ -727,13 +742,13 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             if lwc_entry is not None:
                 float_size, double_size = lwc_entry
                 if tag.size not in (float_size, double_size):
-                    logger.warning(
+                    logger.debug(
                         "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
                         struct_type, tag.size, float_size, double_size,
                     )
                     struct_type = None  # Skip all fast-path branches
             else:
-                logger.warning(
+                logger.debug(
                     "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
                     struct_type, tag.size, expected_size,
                 )
@@ -799,7 +814,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
             inner_tag = read_property_tag(archive, name_map)
 
-            if inner_tag.name == "None":
+            if inner_tag.name == UE_NONE_SENTINEL:
                 break
 
             if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
@@ -855,13 +870,13 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         key_type, value_type = _extract_map_types_from_tag(tag)
 
     # 读取待删除的键数量（UE 源码中用于增量更新）
-    num_keys_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
+    num_keys_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
     # 跳过待删除的键（按 key_type 序列化）
     for _ in range(num_keys_to_remove):
         _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
 
     # 读取实际条目数量
-    num_entries = read_validated_count(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
+    num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
@@ -887,7 +902,7 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
     # 读取待删除的元素数量（UE 源码中用于增量更新）
-    num_elements_to_remove = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
+    num_elements_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
     # 跳过待删除的元素（按 element_type 序列化）
     parse_property_value = _get_parse_property_value()
     for _ in range(num_elements_to_remove):
@@ -895,7 +910,7 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     # 读取实际元素数量
-    num_elements = read_validated_count(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
+    num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
     elements: List[Any] = []
 
     for _ in range(num_elements):
@@ -926,8 +941,8 @@ def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
 
 def _read_ftext_args(archive: FArchive) -> None:
     """读取 FText 参数字典并丢弃（仅消耗字节）。"""
-    from uasset_read.parsers.utils import read_validated_count
-    count = read_validated_count(archive, 10_000, "FText args")
+    from uasset_read.parsers.utils import read_validated_count_tolerant
+    count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
     for _ in range(count):
         archive.read_fstring()  # key
         archive.read_fstring()  # value
@@ -1017,8 +1032,8 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
     """解析 MulticastDelegateProperty"""
-    from uasset_read.parsers.utils import read_validated_count
-    count = read_validated_count(archive, 10_000, "MulticastDelegate")
+    from uasset_read.parsers.utils import read_validated_count_tolerant
+    count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
@@ -1048,8 +1063,8 @@ def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
     """解析 FieldPathProperty"""
-    from uasset_read.parsers.utils import read_validated_count
-    count = read_validated_count(archive, 10_000, "FieldPath")
+    from uasset_read.parsers.utils import read_validated_count_tolerant
+    count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FieldPath")
     path = []
     for _ in range(count):
         path.append(archive.read_fstring())

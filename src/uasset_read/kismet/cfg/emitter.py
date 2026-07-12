@@ -6,7 +6,6 @@
 2. emit_body() 递归渲染 Stmt 树，缩进管理
 """
 
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING

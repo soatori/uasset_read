@@ -6,7 +6,6 @@
 该算法在大多数情况下 2-3 轮迭代即可收敛，时间复杂度接近 O(N)。
 """
 
-from __future__ import annotations
 
 from uasset_read.kismet.cfg.data import CFG, DominatorTree
 

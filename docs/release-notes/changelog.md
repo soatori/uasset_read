@@ -1,5 +1,120 @@
 # 变更日志
 
+## [0.5.3.23] — 2026-07-12
+
+自 v0.5.2.31 以来完成 23 个 issue 修复。
+
+### 修复
+- #341: PropertyTag 类型树按 UE5 版本正确解析，消除 inner_count 误判
+- #341: PropertyTag 恢复扫描使用真实 FName 二进制格式
+- #341: 窗口末端候选无法验证时拒绝而非降级接受
+- 限制 Zlib/Gzip 解压输出大小，防止解压炸弹
+- 添加解压压缩比上限检查（10:1），防止解压炸弹
+- IoStore 头部解析添加资源上限（条目数/块数/方法数/分区数/索引大小）
+- IoStore 目录索引添加环检测和深度限制
+- usmap/mappings 属性类型解析添加递归深度限制
+- usmap/jmap 解压路径添加 ResourceBudget 保护
+- 修复 Transform/DependsMap/graph 节点审查后多项问题（Issue #329 #331 #338）
+- 修复 EventGraph export 偏移越界防护（Issue #338）
+- 修复 FTEXT-SAFETY 恢复位置修正为字段起始位置（Issue #337）
+- 修复 SubGraphs 数组长度限制（Issue #333）
+- 修复 FText args 数量限制统一为 MAX_SAFE_COUNT（Issue #332）
+- 修复 Graph 节点读取异常捕获扩大（Issue #331）
+- 修复 StructProperty Transform size 修正为 40/80（Issue #329）
+- 修复 preload export NoneType 防护（Issue #328）
+- 修复 read_name 索引越界增强诊断和 strict 模式（Issue #334）
+- 修复 FArchive 基类添加 skip() 方法，修正测试构造参数（Issue #327）
+- 修复 UE4 版本常量与 UE 源码 ObjectVersion.h 对齐（Issue #324）
+- 修复 SkeletalMesh SK_* 文件解析失败（Issue #321）
+- 修复 bytecode fallback scan 分类并标记置信度（Issue #77）
+- 修复 batch 模式递归扫描子目录中的 .uasset/.umap（Issue #322）
+- 修复 Enhanced Input Action 的 Trigger 映射修正，Markdown 正确显示（Issue #296）
+- 修复 _verify_imports 中 class_index 死代码替换为 class_name 验证（Issue #307）
+- 修复字节码恢复日志降级为 debug，避免污染 CLI stderr（Issue #303）
+- 修复 validate_size 小文件启发式不再使用 remaining 作为 fallback（Issue #312）
+- 修复 RSS 获取失败时添加 warning 日志，避免静默禁用内存保护（Issue #310）
+
+### 新增
+- AnimSequence 基础轨迹数据解析（Issue #318）
+- MovieScene 及 ControlRig ParameterTrack 解析支持（Issue #317）
+- ControlRig 大型文件优化，提高轻量解析阈值（Issue #320）
+- 统一日志管理，运行日志写入 log/ 目录（Issue #323）
+- 235 个新集成测试（覆盖率 28% → 50%）
+- 14 个新资产样本
+- 添加 Pak/IoStore 安全集成测试
+- 添加 CLI --version 参数支持
+
+### 改进
+- 内存安全：RSS 测量、解析器检查点、资源预算模型
+- 安全防护：边界检查、异常捕获扩大、资源限制
+- 代码重构：parse_uasset.py 拆分为三个文件
+- 测试套件精简 1688→78 测试
+
+### 修复
+- #341: PropertyTag 类型树按 UE5 版本正确解析，消除 inner_count 误判
+- #341: PropertyTag 恢复扫描使用真实 FName 二进制格式
+- #341: 窗口末端候选无法验证时拒绝而非降级接受
+
+### 新增
+- 235 个新集成测试（覆盖率 28% → 50%）
+- 14 个新资产样本（FirstPerson、IntroToUnreal、Lyra、StackOBot、StarterContent）
+- pyproject.toml 包元数据
+- MIT LICENSE
+
+### 改进
+- 版本号统一至 0.5.3.20
+
+## [0.5.3.19] — 2026-07-11
+
+自 v0.5.2.31 以来完成 19 个 issue 修复（#77, #296~#338）。
+
+### 修复
+- 修复 Transform/DependsMap/graph 节点审查后多项问题（Issue #329 #331 #338）
+- 修复 EventGraph export 偏移越界防护（Issue #338）
+- 修复 FTEXT-SAFETY 恢复位置修正为字段起始位置（Issue #337）
+- 修复 SubGraphs 数组长度限制（Issue #333）
+- 修复 FText args 数量限制统一为 MAX_SAFE_COUNT（Issue #332）
+- 修复 Graph 节点读取异常捕获扩大（Issue #331）
+- 修复 StructProperty Transform size 修正为 40/80（Issue #329）
+- 修复 preload export NoneType 防护（Issue #328）
+- 修复 read_name 索引越界增强诊断和 strict 模式（Issue #334）
+- 修复 FArchive 基类添加 skip() 方法，修正测试构造参数（Issue #327）
+- 修复 UE4 版本常量与 UE 源码 ObjectVersion.h 对齐（Issue #324）
+- 修复 SkeletalMesh SK_* 文件解析失败（Issue #321）
+- 修复 bytecode fallback scan 分类并标记置信度（Issue #77）
+- 修复 batch 模式递归扫描子目录中的 .uasset/.umap（Issue #322）
+- 修复 Enhanced Input Action 的 Trigger 映射修正，Markdown 正确显示（Issue #296）
+- 修复 _verify_imports 中 class_index 死代码替换为 class_name 验证（Issue #307）
+- 修复字节码恢复日志降级为 debug，避免污染 CLI stderr（Issue #303）
+- 修复 validate_size 小文件启发式不再使用 remaining 作为 fallback（Issue #312）
+- 修复 RSS 获取失败时添加 warning 日志，避免静默禁用内存保护（Issue #310）
+
+### 新增
+- AnimSequence 基础轨迹数据解析（Issue #318）
+- MovieScene 及 ControlRig ParameterTrack 解析支持（Issue #317）
+- ControlRig 大型文件优化，提高轻量解析阈值（Issue #320）
+- 统一日志管理，运行日志写入 log/ 目录（Issue #323）
+- 添加属性提取辅助函数模块，消除 asset_types 处理器中的重复模式
+- 添加集中式状态计算模块 status.py
+- 添加工作量预算，高连接度畸形输入快速中止
+- diff 与文本输出采用流式输出，不同时持有两个完整文本
+- 实现 BoundedEventBuffer 有界诊断收集器
+- lazy raw bytes 默认不缓存，IR 使用不可变 tuple view
+- mappings/raw 输入有界读取，拒绝压缩炸弹
+- 添加大文件隔离判断逻辑
+- 增加 JsonRenderer.render_to() 流式输出和 _build_data() 提取
+- export 懒加载使用 open_file() 而不是 read_file()
+- 实现受限分块解压并添加预算检查
+- 添加 PackageProvider.open_file() 范围读取接口
+- 建立可验证的资源预算模型
+- 添加 CLI --version 参数支持
+
+### 改进
+- 内存安全：RSS 测量、解析器检查点、资源预算模型
+- 安全防护：边界检查、异常捕获扩大、资源限制
+- 代码重构：parse_uasset.py 拆分为三个文件、graph/flow_builder.py 提取 graph_utils.py
+- 测试套件精简 1688→78 测试
+
 ## [0.5.2.31] — 2026-07-04
 
 自 v0.5.1.19 以来完成 31 个 issue 修复（#202 ~ #288）。

@@ -4,7 +4,6 @@
 语句树反映控制流结构：Branch、Loop、Switch、Sequence、Assignment、Call、Return。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 

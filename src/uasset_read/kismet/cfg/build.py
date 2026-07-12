@@ -9,7 +9,6 @@
 4. 合成 sink: 所有 fall-through 指向的终止块
 """
 
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

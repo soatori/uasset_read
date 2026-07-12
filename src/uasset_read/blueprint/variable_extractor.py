@@ -2,7 +2,6 @@
 
 独立模块（per D-02），可被属性解析和蓝图图解析共同使用。
 """
-from __future__ import annotations
 
 import logging
 from typing import List, Dict, Any, Optional
@@ -20,7 +19,7 @@ from uasset_read.constants import (
     CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
     CPF_Protected, CPF_ExposeOnSpawn,
     CPF_DuplicateTransient, CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
-    CPF_NonPIEDuplicateTransient,
+    CPF_NonPIEDuplicateTransient, format_guid_bytes, UE_NONE_SENTINEL,
 )
 
 # UE 属性类型名 → 标准化 pin_category 映射
@@ -157,31 +156,6 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
         "is_rep_notify": bool(flags & CPF_RepNotify),
         "is_save_game": bool(flags & CPF_SaveGame),
     }
-
-
-def _flags_to_labels(flags: int) -> List[str]:
-    """将 CPF_* 位标志转换为可读标签列表。"""
-    labels = []
-    if flags & CPF_Edit:
-        if flags & CPF_EditConst:
-            labels.append("EditConst")
-        else:
-            labels.append("EditAnywhere")
-    if flags & CPF_BlueprintVisible:
-        labels.append("BlueprintReadWrite")
-    if flags & CPF_BlueprintReadOnly:
-        labels.append("BlueprintReadOnly")
-    if flags & CPF_Net:
-        labels.append("Net")
-    if flags & CPF_Transient:
-        labels.append("Transient")
-    if flags & CPF_BlueprintAssignable:
-        labels.append("BlueprintAssignable")
-    if flags & CPF_RepNotify:
-        labels.append("RepNotify")
-    if flags & CPF_SaveGame:
-        labels.append("SaveGame")
-    return labels
 
 
 def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
@@ -321,7 +295,7 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
 
         # 构建 BlueprintVariable
         flag_mapping = _map_property_flags(property_flags)
-        flags_labels = _flags_to_labels(property_flags)
+        flags_labels = parse_property_flags_to_labels(property_flags)
 
         # 提取默认值
         default_value = None
@@ -375,7 +349,7 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
             continue
         property_flags = int(fields.get("PropertyFlags") or fields.get("property_flags") or 0)
         flag_mapping = _map_property_flags(property_flags)
-        flags_labels = _flags_to_labels(property_flags)
+        flags_labels = parse_property_flags_to_labels(property_flags)
         category = _text_or_string(fields.get("Category") or fields.get("category"))
         default_value = fields.get("DefaultValue", fields.get("default_value"))
         rep_condition = fields.get("ReplicationCondition", fields.get("replication_condition", 0))
@@ -443,12 +417,12 @@ def _guid_from_description(value: Any) -> str:
         def _u32_to_bytes(v: int) -> bytes:
             return v.to_bytes(4, byteorder='little')
         raw = _u32_to_bytes(a) + _u32_to_bytes(b) + _u32_to_bytes(c) + _u32_to_bytes(d)
-        return _format_guid_bytes(raw)
+        return format_guid_bytes(raw)
 
     if isinstance(value, dict) and value.get("kind") == "binary_or_native_property":
         raw = value.get("raw_data")
         if isinstance(raw, bytes) and len(raw) == 16:
-            return _format_guid_bytes(raw)
+            return format_guid_bytes(raw)
     # #143: struct_binary_decoded 格式的 Guid
     if isinstance(value, dict) and value.get("kind") == "struct_binary_decoded":
         if value.get("struct_type") == "Guid":
@@ -463,22 +437,12 @@ def _guid_from_description(value: Any) -> str:
                 + c.to_bytes(4, byteorder="little")
                 + d.to_bytes(4, byteorder="little")
             )
-            return _format_guid_bytes(raw)
+            return format_guid_bytes(raw)
     if isinstance(value, bytes) and len(value) == 16:
-        return _format_guid_bytes(value)
+        return format_guid_bytes(value)
     if isinstance(value, str):
         return value
     return ""
-
-
-def _format_guid_bytes(data: bytes) -> str:
-    return (
-        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
-        f"{data[4]:02x}{data[5]:02x}-"
-        f"{data[6]:02x}{data[7]:02x}-"
-        f"{data[8]:02x}{data[9]:02x}-"
-        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
-    )
 
 
 def _text_or_string(value: Any) -> str:
@@ -616,19 +580,19 @@ def _resolve_property_to_function_name(value: Any) -> Optional[str]:
     """Resolve a property value to a function name string."""
     if value is None:
         return None
-    if isinstance(value, str) and value and value != "None":
+    if isinstance(value, str) and value and value != UE_NONE_SENTINEL:
         # UE path format: /Game/Path/To/PackageName.ClassName
         # First extract after last '/', then after last '.'
         raw = value.split('/')[-1] if '/' in value else value
         return raw.split('.')[-1] if '.' in raw else raw
     if isinstance(value, dict):
         obj_name = value.get('object_name') or value.get('resolved') or value.get('raw_index')
-        if obj_name and obj_name != "None":
+        if obj_name and obj_name != UE_NONE_SENTINEL:
             raw = str(obj_name)
             return raw.split('.')[-1] if '.' in raw else raw
     if hasattr(value, 'object_name'):
         name = getattr(value, 'object_name', None)
-        if name and name != "None":
+        if name and name != UE_NONE_SENTINEL:
             raw = str(name)
             return raw.split('.')[-1] if '.' in raw else raw
     return None
@@ -662,14 +626,14 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 if er and hasattr(er, 'member_name'):
                     mn = er.member_name
                     func_name = mn.split('/')[-1] if '/' in mn else mn
-                    if func_name == "None":
+                    if func_name == UE_NONE_SENTINEL:
                         func_name = nd.get("custom_function_name", "Unknown")
                 elif nd.get("custom_function_name"):
                     func_name = nd["custom_function_name"]
             else:
                 fr = nd.get("function_reference")
                 if fr and hasattr(fr, 'member_name'):
-                    func_name = fr.member_name if fr.member_name != "None" else "Unknown"
+                    func_name = fr.member_name if fr.member_name != UE_NONE_SENTINEL else "Unknown"
                 else:
                     func_name = nd.get("function_name", nd.get("custom_function_name", "Unknown"))
 
@@ -749,6 +713,169 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
     return functions
 
 
+def _resolve_parent_class(
+    properties: List[Any],
+    export: Any,
+    linker: Any = None,
+    import_map: Any = None,
+    export_map: Any = None,
+) -> Optional[str]:
+    """从属性和 export 元数据中解析父类。
+
+    优先从属性中查找 ParentClass / ParentClassProperty / SuperClass，
+    其次从 export 的 super_index 推断。
+    """
+    parent_class = None
+    for prop in properties:
+        if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
+            if prop.value and isinstance(prop.value, dict):
+                if prop.value.get('raw_index'):
+                    parent_class = prop.value.get('raw_index')
+                elif prop.value.get('resolved'):
+                    parent_class = prop.value.get('resolved')
+                elif prop.value.get('object_name'):
+                    object_name = prop.value.get('object_name')
+                    class_package = prop.value.get('class_package', '')
+                    if class_package:
+                        parent_class = f"{class_package}.{object_name}"
+                    else:
+                        common_engine_classes = [
+                            "Character", "Pawn", "Actor", "ActorComponent",
+                            "SceneComponent", "Object", "Interface", "UserWidget",
+                            "HUD", "PlayerController", "GameModeBase", "GameMode",
+                            "Controller", "PlayerCameraManager", "PawnMovementComponent",
+                            "CharacterMovementComponent", "SpringArmComponent",
+                            "CameraComponent", "SkeletalMeshComponent", "StaticMeshComponent",
+                            "BoxComponent", "SphereComponent", "CapsuleComponent",
+                            "AudioComponent", "ParticleSystemComponent",
+                            "WidgetComponent", "ChildActorComponent",
+                            "Blueprint", "BlueprintGeneratedClass",
+                        ]
+                        if object_name in common_engine_classes:
+                            parent_class = f"/Script/Engine.{object_name}"
+                        else:
+                            parent_class = object_name
+
+    # 从 export 的 super_index 推断父类
+    if not parent_class and hasattr(export, 'super_index'):
+        if linker is not None:
+            from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
+            parent_name, warn = _rpc(export.super_index, linker)
+        else:
+            from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
+            parent_name, warn = _rpc(export.super_index, import_map, export_map)
+        if parent_name:
+            parent_class = parent_name
+
+    return parent_class
+
+
+def _extract_and_merge_functions(
+    properties: List[Any],
+    graphs: Any = None,
+) -> List[BlueprintFunction]:
+    """合并 BPGC 属性路径和图路径的函数列表，按名称去重。"""
+    functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
+    functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
+    seen_names: set = set()
+    functions: List[BlueprintFunction] = []
+    for func in functions_bpgc + functions_graph:
+        if func.name not in seen_names:
+            seen_names.add(func.name)
+            functions.append(func)
+    return functions
+
+
+def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[BlueprintEvent]:
+    """从函数列表中提取事件（可实现事件和蓝图事件）。"""
+    events: List[BlueprintEvent] = []
+    for f in functions:
+        if f.is_blueprint_implementable_event or f.is_blueprint_event:
+            events.append(BlueprintEvent(
+                name=f.name,
+                event_type="Override" if f.is_blueprint_event else "Event",
+                function_flags=f.function_flags,
+                is_blueprint_event=f.is_blueprint_event,
+                is_blueprint_implementable_event=f.is_blueprint_implementable_event,
+                parameters=f.parameters,
+            ))
+    return events
+
+
+def _extract_interfaces_from_props(
+    props_list: List[Any],
+    import_map: Any = None,
+) -> List[Any]:
+    """从属性列表中提取 ImplementedInterfaces。
+
+    解析 FBPInterfaceDescription 结构，将 Interface 对象引用索引解析为接口名。
+    """
+    from uasset_read.models.blueprint import BlueprintInterface
+    result: List[Any] = []
+    for prop in props_list:
+        if prop.name == "ImplementedInterfaces" and isinstance(prop.value, list):
+            for item in prop.value:
+                fields = {}
+                if isinstance(item, dict):
+                    fields = item
+                elif hasattr(item, "fields"):
+                    fields = getattr(item, "fields", {})
+
+                iface_ref = fields.get("Interface", None)
+                iface_name = ""
+                if isinstance(iface_ref, int) and import_map and iface_ref < 0:
+                    idx = -iface_ref - 1
+                    if idx < len(import_map):
+                        imp = import_map[idx]
+                        iface_name = str(getattr(imp, "object_name", ""))
+                elif isinstance(iface_ref, str):
+                    iface_name = iface_ref
+                if iface_name:
+                    result.append(BlueprintInterface(name=iface_name))
+            break
+    return result
+
+
+def _extract_interfaces(
+    properties: List[Any],
+    export: Any,
+    export_map: Any = None,
+    archive: Any = None,
+    summary: Any = None,
+    name_map: Any = None,
+    import_map: Any = None,
+    linker: Any = None,
+) -> List[Any]:
+    """提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）。
+
+    先从当前 export 属性中查找，未找到时遍历其他蓝图 export 搜索。
+    """
+    from uasset_read.parsers.property_parser import parse_properties_from_export
+
+    interfaces = _extract_interfaces_from_props(properties, import_map)
+
+    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
+    if not interfaces and export_map:
+        from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
+        for other_export in export_map:
+            if other_export is export:
+                continue
+            is_bp = _dbl(other_export, linker) if linker else False
+            if not is_bp:
+                continue
+            try:
+                other_props = parse_properties_from_export(
+                    other_export, archive, summary, name_map, export_map, import_map,
+                )
+                interfaces = _extract_interfaces_from_props(other_props, import_map)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.debug("提取接口属性失败: %s", e, exc_info=True)
+            if interfaces:
+                break
+
+    return interfaces
+
+
 def extract_blueprint_metadata(
     export,
     archive,
@@ -796,141 +923,26 @@ def extract_blueprint_metadata(
     # 提取变量
     variables = extract_blueprint_variables(properties)
 
-    # 提取父类信息
-    parent_class = None
-    for prop in properties:
-        if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
-            # 修复: 不使用 str(prop.value)，而是提取实际值
-            # prop.value 可能是 ObjectProperty 实例 (dict 格式)
-            if prop.value and isinstance(prop.value, dict):
-                # 如果 dict 中有 raw_index/resolved，使用它
-                if prop.value.get('raw_index'):
-                    parent_class = prop.value.get('raw_index')
-                elif prop.value.get('resolved'):
-                    parent_class = prop.value.get('resolved')
-                elif prop.value.get('object_name'):
-                    # 从 object_name 构建 UE 路径
-                    object_name = prop.value.get('object_name')
-                    # 如果有 class_package，构建完整路径
-                    class_package = prop.value.get('class_package', '')
-                    if class_package:
-                        # 典型格式: /Script/Engine.ClassName
-                        parent_class = f"{class_package}.{object_name}"
-                    else:
-                        # 尝试从 object_name 推断（常见引擎类）
-                        # 对于 Character/Pawn/Actor 等，使用 /Script/Engine 前缀
-                        common_engine_classes = [
-                            "Character", "Pawn", "Actor", "ActorComponent",
-                            "SceneComponent", "Object", "Interface", "UserWidget",
-                            "HUD", "PlayerController", "GameModeBase", "GameMode",
-                            "Controller", "PlayerCameraManager", "PawnMovementComponent",
-                            "CharacterMovementComponent", "SpringArmComponent",
-                            "CameraComponent", "SkeletalMeshComponent", "StaticMeshComponent",
-                            "BoxComponent", "SphereComponent", "CapsuleComponent",
-                            "AudioComponent", "ParticleSystemComponent",
-                            "WidgetComponent", "ChildActorComponent",
-                            "Blueprint", "BlueprintGeneratedClass",
-                        ]
-                        if object_name in common_engine_classes:
-                            parent_class = f"/Script/Engine.{object_name}"
-                        else:
-                            # 未知类，使用 object_name 作为父类名
-                            parent_class = object_name
+    # 提取父类
+    parent_class = _resolve_parent_class(properties, export, linker, import_map, export_map)
 
-    # 推断父类（从 export 的 super_index）
-    if not parent_class and hasattr(export, 'super_index'):
-        if linker is not None:
-            from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
-            parent_name, warn = _rpc(export.super_index, linker)
-        else:
-            from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
-            parent_name, warn = _rpc(export.super_index, import_map, export_map)
-        if parent_name:
-            parent_class = parent_name
+    # 提取函数（BPGC + 图路径合并去重）
+    functions = _extract_and_merge_functions(properties, graphs)
 
-    # Merge primary BPGC path + fallback graph path
-    functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
-    functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
-    # Deduplicate by name
-    seen_names = set()
-    functions: List[BlueprintFunction] = []
-    for func in functions_bpgc + functions_graph:
-        if func.name not in seen_names:
-            seen_names.add(func.name)
-            functions.append(func)
-    events: List[BlueprintEvent] = []
-    for f in functions:
-        if f.is_blueprint_implementable_event or f.is_blueprint_event:
-            events.append(BlueprintEvent(
-                name=f.name,
-                event_type="Override" if f.is_blueprint_event else "Event",
-                function_flags=f.function_flags,
-                is_blueprint_event=f.is_blueprint_event,
-                is_blueprint_implementable_event=f.is_blueprint_implementable_event,
-                parameters=f.parameters,
-            ))
+    # 提取事件
+    events = _extract_events_from_functions(functions)
 
-    # 提取 BlueprintDescription
+    # 提取描述
     description = ""
     for prop in properties:
         if prop.name == "BlueprintDescription":
             description = str(prop.value) if prop.value else ""
             break
 
-    # 提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）
-    from uasset_read.models.blueprint import BlueprintInterface
-    interfaces: List[BlueprintInterface] = []
-
-    def _extract_interfaces_from_props(props_list):
-        """从属性列表中提取 ImplementedInterfaces。"""
-        result = []
-        for prop in props_list:
-            if prop.name == "ImplementedInterfaces" and isinstance(prop.value, list):
-                for item in prop.value:
-                    # FBPInterfaceDescription: {Interface: object_ref, Graphs: [...]}
-                    # item 可能是 dict 或 StructValue
-                    fields = {}
-                    if isinstance(item, dict):
-                        fields = item
-                    elif hasattr(item, "fields"):
-                        fields = getattr(item, "fields", {})
-
-                    # Interface 是对象引用索引，需要解析为接口名
-                    iface_ref = fields.get("Interface", None)
-                    iface_name = ""
-                    if isinstance(iface_ref, int) and import_map and iface_ref < 0:
-                        # 负索引表示导入表引用
-                        idx = -iface_ref - 1
-                        if idx < len(import_map):
-                            imp = import_map[idx]
-                            iface_name = str(getattr(imp, "object_name", ""))
-                    elif isinstance(iface_ref, str):
-                        iface_name = iface_ref
-                    if iface_name:
-                        result.append(BlueprintInterface(name=iface_name))
-                break
-        return result
-
-    interfaces = _extract_interfaces_from_props(properties)
-
-    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
-    if not interfaces and export_map:
-        from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
-        for other_export in export_map:
-            if other_export is export:
-                continue
-            is_bp = _dbl(other_export, linker) if linker else False
-            if not is_bp:
-                continue
-            try:
-                other_props = parse_properties_from_export(
-                    other_export, archive, summary, name_map, export_map, import_map,
-                )
-                interfaces = _extract_interfaces_from_props(other_props)
-            except (KeyError, TypeError, ValueError) as e:
-                logger.debug("提取接口属性失败: %s", e, exc_info=True)
-            if interfaces:
-                break
+    # 提取接口
+    interfaces = _extract_interfaces(
+        properties, export, export_map, archive, summary, name_map, import_map, linker,
+    )
 
     meta = BlueprintMetadata(
         is_blueprint=True,
@@ -1056,7 +1068,7 @@ def read_blueprint_variable(
     # 解析属性标志为布尔字段
     flags = var.property_flags
     var.is_edit_anywhere = bool(flags & CPF_Edit)
-    var.is_edit_instance_only = bool(flags & CPF_Edit)
+    var.is_edit_instance_only = bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst)
     var.is_blueprint_read_only = bool(flags & CPF_BlueprintReadOnly)
     var.is_blueprint_readable = bool(flags & CPF_BlueprintVisible)
     var.is_blueprint_writable = bool(flags & CPF_BlueprintVisible) and not bool(flags & CPF_BlueprintReadOnly)

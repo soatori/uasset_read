@@ -2,7 +2,6 @@
 
 将函数体 IR 渲染为可读的 UE .cpp 实现文件。
 """
-from __future__ import annotations
 
 import re
 from typing import List
@@ -272,7 +271,7 @@ def _render_if_stmt(stmt: CppIfStmt, indent: int) -> List[str]:
     """递归渲染 CppIfStmt 为 .cpp 行列表。"""
     lines: List[str] = []
     prefix = _INDENT * indent
-    inner_prefix = _INDENT * (indent + 1)
+    _inner_prefix = _INDENT * (indent + 1)  # noqa: F841 - computed for context
 
     # if (condition) {
     lines.append(f"{prefix}if ({stmt.condition}) {{")

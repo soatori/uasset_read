@@ -4,7 +4,6 @@ UFoliageType 的 Serialize() 仅调用 Super::Serialize()，数据通过 UPROPER
 但当前通用 tagged property parser 无法完整解析其 payload，
 因此作为 opaque stub 提供类型识别。
 """
-from __future__ import annotations
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 

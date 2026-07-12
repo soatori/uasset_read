@@ -23,6 +23,16 @@ class VersionError(UAssetError):
     pass
 
 
+class DecompressionError(UAssetError):
+    """解压缩失败（zlib/Oodle/LZ4 等）"""
+    pass
+
+
+class LinkerError(UAssetError):
+    """Linker 阶段错误（import/export 解析失败）"""
+    pass
+
+
 @dataclass
 class ErrorContext:
     """

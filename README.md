@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.5.2.31** — 31 issues resolved since v0.5.1.19: graph output chain fix, UEdGraph offset validation, Map Pin terminal types, CPF_* flags alignment, pak/ioStore binary format, blueprint wildcard fix, and more.
+> 📦 **v0.5.3.23** — 23 issues fixed since v0.5.2.31: graph safety, EventGraph offset protection, FText bounds, memory safety, AnimSequence/MovieScene parsing, security hardening, and more.
 
 ## Why uasset_read?
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.5.2.31 |
+| Version | 0.5.3.23 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 1424 collected (integration tests skip when sample assets unavailable) |
-| Modules | 134 source files across 14 subpackages |
+| Tests | 492 collected (integration tests skip when sample assets unavailable) |
+| Modules | 175 source files across 21 subpackages |
 
 ## Features
 
@@ -58,7 +58,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### File Format Support
 - **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
 - **IoStore container** — Chunk ID, offset/size structures
-- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimBlueprint, AnimMontage, AnimBoneCompression, AnimCurveCompression, AnimationDataModel, SoundWave, SoundCue, SoundAttenuation, DataTable, CurveTable, StringTable, Skeleton, PoseAsset, LevelSequence, MovieScene, MovieSceneControlRig, FoliageType, SkeletalMeshLODSettings, SubsurfaceProfile, OpaqueStub, PropertyExtractor; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -66,10 +66,11 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ### Output Formats
 - **JSON** — structured output optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
+- **Text** — human-readable text summary
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown)
-- **Core API** — `parse_single()`, `parse_batch()`, `list_formats()` for simplified programmatic access
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown, Text)
+- **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 
 ## Installation
@@ -92,10 +93,11 @@ python run.py path/to/file.uasset --output output.json   # Save to file
 # Output modes
 python run.py path/to/file.uasset --json         # JSON output (default)
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
+python run.py path/to/file.uasset --text         # Human-readable text summary
 python run.py path/to/file.uasset --list-formats # List available formats
 
-# Batch export
-python run.py --batch-dir path/to/dir/            # Batch export directory
+# Batch export (input directory + output directory)
+python run.py path/to/input/dir/ --batch --batch-dir path/to/output/dir/
 
 # Strictness
 python run.py path/to/file.uasset --strict       # Stop on warnings
@@ -105,7 +107,30 @@ python run.py path/to/file.uasset --tolerant     # Continue on recoverable error
 python run.py path/to/file.uasset --verbose      # Enable verbose logging
 python run.py path/to/file.uasset --hex-view     # Enable HexView binary inspection
 python run.py path/to/file.uasset --full-parse   # Force full parse for large blueprints
+
+# Diff comparison
+python run.py path/to/file1.uasset --diff path/to/file2.uasset  # Compare two files
+
+# Advanced options
+python run.py path/to/file.uasset --export 0     # Output only specific export by index
+python run.py path/to/file.uasset --schema        # Include field semantic annotations
+python run.py path/to/file.uasset --function-graphs  # Include function_graphs array
+python run.py path/to/file.uasset --mappings path/to/usmap  # Load type mappings
+python run.py path/to/file.uasset --output-level debug   # Output verbosity level
 ```
+
+### Logging Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--log-level` | debug | File log level: debug, info, warning, error, off |
+| `--log-dir` | ./log | Log output directory |
+| `--log-max-bytes` | 10000000 | Max size per log file (bytes) |
+| `--log-backup-count` | 5 | Number of backup log files to keep |
+| `--log-cleanup` | false | Clean old logs on startup |
+| `--log-keep-latest` | 5 | Number of latest log files to keep |
+| `--log-max-total-mb` | none | Total log size limit (MB) |
+| `--clean-logs` | false | Plan cleanup only, do not delete |
 
 Or via module:
 
@@ -118,7 +143,7 @@ python -m uasset_read path/to/file.uasset --json
 Simplified high-level API for programmatic use — **recommended entry point**:
 
 ```python
-from uasset_read import parse_single, parse_batch, list_formats
+from uasset_read import parse_single, parse_batch, diff_single, list_formats
 
 # Parse a single file (returns formatted string)
 json_str = parse_single("path/to/file.uasset", format="json")
@@ -126,6 +151,9 @@ text = parse_single("path/to/file.uasset", format="markdown")
 
 # Batch parse a directory
 results = parse_batch("path/to/directory", format="json")
+
+# Compare two .uasset files
+diff_output = diff_single("file1.uasset", "file2.uasset", format="json")
 
 # List available output formats
 formats = list_formats()
@@ -203,29 +231,37 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
-| Core API | `core.py` | `parse_single()`, `parse_batch()`, `list_formats()` |
+| Core API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
 | Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
 | CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
+| Memory Safety | `memory_safety.py` | Central memory policy, RSS measurement, parser checkpoints |
+| Bounded Events | `bounded_events.py` | Bounded event buffer for diagnostics |
+| Parse Stages | `parse_stages.py` | Core table reading, secondary table reading, export property parsing |
+| Post Process | `parse_post_process.py` | Post-processing: Kismet decompilation, graph extraction, dependency analysis |
+| Batch Worker | `batch_worker.py` | Subprocess-isolated per-asset batch worker |
+| Providers | `providers.py` | GameDirectoryProvider for game asset scanning |
+| Project Logging | `project_logging.py` | Structured logging with rotation |
 | Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
-| **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult |
+| **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
-| ├ Asset Types | `parsers/asset_types/` | StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimDataModel, SoundWave, SoundAttenuation |
+| ├ Asset Types | `parsers/asset_types/` | 28 asset type parsers including StaticMesh, SkeletalMesh, AnimBlueprint, AnimMontage, DataTable, LevelSequence, MovieScene |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
-| **Graph** | `graph/` | Execution/data flow tracing, chain builder |
+| **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
-| ├ Expressions | `kismet/expressions/` | 15 expression types (assignment, control flow, function calls, literals) |
+| ├ Expressions | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
+| ├ CFG | `kismet/cfg/` | Control flow graph: build, dom, emitter, region, stmt |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
 | **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting, body extraction |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
 | **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance) |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (2 renderers: JSON, Markdown) |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (JSON, Markdown, Text) |
 
 ## Testing
 

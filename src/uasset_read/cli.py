@@ -2,7 +2,6 @@
 
 核心逻辑与入口分离：core.py 提供纯解析函数，CLI 仅负责参数解析和输出写入。
 """
-from __future__ import annotations
 
 import json
 import logging
@@ -11,12 +10,8 @@ import sys
 from pathlib import Path
 
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
-
-# Exit code constants
-EXIT_SUCCESS = 0
-EXIT_PARSE_ERROR = 1
-EXIT_FILE_NOT_FOUND = 2
-EXIT_ARGUMENT_ERROR = 3
+from uasset_read.project_logging import cleanup_project_logs
+from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
 
 _logger = logging.getLogger(__name__)
 
@@ -55,15 +50,17 @@ def _sanitize_error_message(message: str) -> str:
     return sanitized
 
 
-def create_parser() -> argparse.ArgumentParser:
+def create_parser():
     """Create argparse parser for CLI."""
     import argparse
+    from uasset_read import __version__
 
     parser = argparse.ArgumentParser(
         prog='uasset_read',
         description='Parse Unreal Engine .uasset/.umap files and output structured data'
     )
 
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('file', nargs='?', default=None,
                         help='Path to .uasset/.umap file to parse (or directory in --batch mode)')
 
@@ -93,14 +90,29 @@ def create_parser() -> argparse.ArgumentParser:
                         help='Enable HexView byte offset tracking (debug)')
     parser.add_argument('--output-level', choices=['standard', 'debug'], default='standard',
                         help='Output level: standard (default, filters UI properties) or debug (full output)')
+    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error', 'off'], default=None,
+                        help='File log level: debug, info, warning, error, or off')
+    parser.add_argument('--log-dir', metavar='DIR', help='Write project logs to DIR instead of ./log')
+    parser.add_argument('--log-cleanup', action='store_true',
+                        help='Delete old uasset_read logs before creating a new log file')
+    parser.add_argument('--log-keep-latest', metavar='N', type=int,
+                        help='When --log-cleanup is set, keep only the newest N log files')
+    parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
+                        help='When --log-cleanup is set, cap total log storage to MB megabytes')
+    parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
+                        help='单个日志文件最大大小（字节），默认 10MB')
+    parser.add_argument('--log-backup-count', metavar='N', type=int, default=5,
+                        help='保留的备份日志文件数量，默认 5')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
+    parser.add_argument('--clean-logs', action='store_true',
+                        help='Plan log cleanup and exit; pass --log-cleanup to delete')
     parser.add_argument('--batch', action='store_true', help='Enable batch mode')
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
     parser.add_argument('--diff', metavar='FILE2', nargs='?', const=True, default=None,
-                        help='Diff FILE against FILE2 (text summary comparison)')
+                        help='Diff FILE against FILE2 (JSON comparison)')
     parser.add_argument('--diff-context', metavar='N', type=int, default=3,
                         help='Number of context lines around changes in diff (default: 3)')
 
@@ -133,6 +145,16 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
+def _log_enabled_from_args(args) -> bool:
+    return args.log_level != "off"
+
+
+def _log_max_total_bytes_from_args(args) -> int | None:
+    if args.log_max_total_mb is None:
+        return None
+    return args.log_max_total_mb * 1_000_000
+
+
 def _handle_batch(args) -> None:
     """处理批量导出模式。"""
     input_dir = Path(args.file)
@@ -156,6 +178,14 @@ def _handle_batch(args) -> None:
             mappings_path=args.mappings,
             game=args.game,
             force_full_parse=args.full_parse,
+            log_level=args.log_level,
+            log_dir=args.log_dir,
+            log_enabled=_log_enabled_from_args(args),
+            log_keep_latest=args.log_keep_latest,
+            log_max_total_bytes=_log_max_total_bytes_from_args(args),
+            log_cleanup=args.log_cleanup,
+            log_max_bytes=args.log_max_bytes,
+            log_backup_count=args.log_backup_count,
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)
@@ -173,6 +203,20 @@ def _handle_batch(args) -> None:
             print(f"    - {Path(path).name}: {_sanitize_error_message(error)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
+    sys.exit(EXIT_SUCCESS)
+
+
+def _handle_clean_logs(args) -> None:
+    planned = cleanup_project_logs(
+        log_dir=args.log_dir,
+        keep_latest=args.log_keep_latest,
+        max_total_bytes=_log_max_total_bytes_from_args(args),
+        dry_run=not args.log_cleanup,
+    )
+    action = "Would delete" if not args.log_cleanup else "Deleted"
+    print(f"{action} {len(planned)} log file(s)")
+    for path in planned:
+        print(str(path))
     sys.exit(EXIT_SUCCESS)
 
 
@@ -211,6 +255,9 @@ def main():
         for fmt in formats:
             print(f"  --{fmt.replace('_', '-')}")
         sys.exit(EXIT_SUCCESS)
+
+    if args.clean_logs:
+        _handle_clean_logs(args)
 
     # Batch mode
     if args.batch:
@@ -254,6 +301,14 @@ def main():
                 str(file2),
                 tolerant=tolerant,
                 context_lines=args.diff_context,
+                log_level=args.log_level,
+                log_dir=args.log_dir,
+                log_enabled=_log_enabled_from_args(args),
+                log_keep_latest=args.log_keep_latest,
+                log_max_total_bytes=_log_max_total_bytes_from_args(args),
+                log_cleanup=args.log_cleanup,
+                log_max_bytes=args.log_max_bytes,
+                log_backup_count=args.log_backup_count,
             )
         except Exception as e:
             _logger.debug("Diff failed (full): %s", e, exc_info=True)
@@ -277,6 +332,14 @@ def main():
             force_full_parse=args.full_parse,
             hex_view=args.hex_view,
             output_level=args.output_level,
+            log_level=args.log_level,
+            log_dir=args.log_dir,
+            log_enabled=_log_enabled_from_args(args),
+            log_keep_latest=args.log_keep_latest,
+            log_max_total_bytes=_log_max_total_bytes_from_args(args),
+            log_cleanup=args.log_cleanup,
+            log_max_bytes=args.log_max_bytes,
+            log_backup_count=args.log_backup_count,
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)
