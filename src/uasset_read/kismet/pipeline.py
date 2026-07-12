@@ -1,6 +1,7 @@
 """
 Kismet Decompilation Pipeline — Standalone decompile_uasset() entry point.
 
+from __future__ import annotations
 Provides decompile_uasset(path) function that iterates Blueprint
 UStruct exports, extracts bytecode, translates to C++ pseudocode, and returns
 structured results.

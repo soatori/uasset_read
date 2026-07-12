@@ -1,5 +1,6 @@
 """PackageLinker — two-phase loading coordinator.
 
+from __future__ import annotations
 Mirrors UE's FLinkerLoad pattern: link() creates UObjectInstance shells,
 preload(index) lazily deserializes properties on demand.
 """
