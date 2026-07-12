@@ -8,6 +8,7 @@
 1. 手动注册：通过 register_asset_type_handlers() 显式注册
 2. 反射注册：通过 discover_handlers() 自动扫描 asset_types/ 目录下的处理器类
 """
+from __future__ import annotations
 
 import importlib
 import inspect

@@ -3,6 +3,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
+from __future__ import annotations
 
 import logging
 import struct

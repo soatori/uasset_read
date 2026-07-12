@@ -2,6 +2,7 @@
 
 等价迁移 uasset_read.py §6223-6412。
 """
+from __future__ import annotations
 
 import logging
 import struct

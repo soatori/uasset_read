@@ -3,6 +3,7 @@
 将重复的 try/except ParseError + result.errors.append 模式
 收敛为声明式上下文管理器，减少样板代码并统一错误消息格式。
 """
+from __future__ import annotations
 
 import logging
 from contextlib import contextmanager

@@ -11,6 +11,7 @@
     T-059-06: 组件创建按拓扑排序排列（基于 attach 关系）
     T-059-07: InputAction asset_path 验证 /Game/... 模式
 """
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List
 

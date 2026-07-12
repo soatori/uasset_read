@@ -8,6 +8,7 @@ Per T-056-06: 验证类名匹配 UE 命名约定。
 导出：
     format_cpp_header: CppClassIR → .h 文本转换函数
 """
+from __future__ import annotations
 
 import html
 import logging

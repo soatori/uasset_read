@@ -2,6 +2,7 @@
 
 CLI、独立脚本、未来 Skill 共享此 API。
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path

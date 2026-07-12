@@ -4,6 +4,7 @@
 BaseResult 是 ParseResult 和 LinkerParseResult 的共享基类，
 包含所有公共字段和统一的 status 属性。
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, TYPE_CHECKING

@@ -13,6 +13,7 @@ IR Builder 负责从序列化模型转换为呈现模型。
 Per D-01: 保持 UE 源码命名。
 Per D-10: Python 3.10+ 严格类型提示。
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Any, TYPE_CHECKING

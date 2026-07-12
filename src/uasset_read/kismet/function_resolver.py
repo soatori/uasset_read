@@ -8,6 +8,7 @@ StackNode（FPackageIndex int）解析为可读的 "ClassName::FuncName" 格式�
 - EX_LocalFinalFunction：检测是否为蓝图本地函数（export）
 - unresolved 函数引用统计报告
 """
+from __future__ import annotations
 
 
 from typing import TYPE_CHECKING

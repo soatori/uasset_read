@@ -1,4 +1,5 @@
 """Linker 解析结果数据类 — LinkerParseResult。"""
+from __future__ import annotations
 
 
 from dataclasses import dataclass, field

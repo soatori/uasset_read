@@ -16,6 +16,7 @@ default_values 三个列表。
     build_default_values: 从 ir.properties 和 blueprint_vars 提取默认值
     build_transform_assignments: 从 component transforms 提取变换数据
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
