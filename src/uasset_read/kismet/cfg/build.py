@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """CFG 构建器。
 
 从 KismetExpression 序列构建基本块和控制流图。

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
 
 仅注册 json 格式：完整分析格式，字段最全。

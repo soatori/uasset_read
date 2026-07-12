@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """文本摘要渲染器 — 人类可读的结构化摘要，适合 Git textconv。
 
 字段排序稳定（sorted），确保同一资产不同版本的输出行号对齐，提升 diff 可读性。

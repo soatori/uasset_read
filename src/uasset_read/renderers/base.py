@@ -4,6 +4,7 @@
 渲染器不做数据转换（GUID 格式化等在 IR 构建时完成）。
 渲染器不拼接业务逻辑，只负责格式排版。
 """
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

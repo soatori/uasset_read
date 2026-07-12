@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Markdown + Mermaid 流程图渲染器。"""
 
 from typing import TYPE_CHECKING

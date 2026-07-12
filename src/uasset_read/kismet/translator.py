@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet Expression → C++ Pseudocode Translator.
 
