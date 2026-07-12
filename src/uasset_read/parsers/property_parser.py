@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """属性解析分派器和导出条目属性循环。
 
-from __future__ import annotations
 等价迁移 uasset_read.py 第 6007-6220 行。
 """
 

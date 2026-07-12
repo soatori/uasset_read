@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """class-specific payload 类型识别 + tolerant skip 辅助函数。
 
-from __future__ import annotations
 当通用 property parser 进入不支持的专用序列化区域时，
 此模块提供类型识别和安全跳过逻辑。
 """

@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
 
-from __future__ import annotations
 等价迁移 uasset_read.py 第 5289-6004 行。
 """
 

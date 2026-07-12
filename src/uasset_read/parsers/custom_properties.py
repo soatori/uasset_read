@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """CustomProperty 注册表 — 处理 0xFD/0xFE 等自定义属性槽位。
 
-from __future__ import annotations
 UE PropertyTag.h 定义了自定义属性槽位（CustomProperty 0xFD/0xFE），
 用于插件/Mod 扩展的自定义属性类型。
 

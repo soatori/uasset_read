@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 """
 BPGC Bytecode Extraction — BlueprintGeneratedClass cooked bytecode parsing.
 
-from __future__ import annotations
 Extract bytecode from BPGC script_serial_region (fallback
 for UE5 cooked Blueprints where Function exports contain no bytecode).
 

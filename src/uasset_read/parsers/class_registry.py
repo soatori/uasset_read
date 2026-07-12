@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """src/uasset_read/parsers/class_registry.py — Class Handler Registry。
 
-from __future__ import annotations
 参考 CUE4Parse ObjectTypeRegistry 模式：
 1. 精确 class handler 查找
 2. 父类 handler 查找（后续扩展）
