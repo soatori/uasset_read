@@ -3,6 +3,7 @@
 构建阶段处理所有 FPackageIndex 跨引用解析和 GUID 标准化。
 渲染器只接收 PackageIR，不访问 ParseResult。
 """
+from __future__ import annotations
 
 import logging
 import re
