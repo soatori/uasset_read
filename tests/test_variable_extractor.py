@@ -1,13 +1,13 @@
 """VariableExtractor 缺陷修复测试。
 
 覆盖场景：
-1. _flags_to_labels: EditConst 标签生成缺陷
+1. parse_property_flags_to_labels: EditConst 标签生成缺陷
 2. _map_property_flags: is_edit_anywhere / is_edit_instance_only 语义混淆
 3. _extract_pin_type_from_property: UInt32Property 非 dict 值类型映射
 4. _extract_blueprint_variable_descriptions: 组件变量缺失 is_component 标记
 5. extract_blueprint_variables: CPF_InstancedReference 未参与组件检测
 6. _map_pin_category_to_cpp_type: 未知类型回退
-7. _flags_to_labels: 完整标志位覆盖
+7. parse_property_flags_to_labels: 完整标志位覆盖
 """
 import pytest
 from unittest.mock import MagicMock
@@ -21,7 +21,6 @@ from uasset_read.constants import (
     CPF_Config, CPF_Deprecated, CPF_BlueprintCallable, CPF_Interp,
 )
 from uasset_read.blueprint.variable_extractor import (
-    _flags_to_labels,
     _map_property_flags,
     _extract_pin_type_from_property,
     _extract_blueprint_variable_descriptions,
@@ -32,21 +31,21 @@ from uasset_read.blueprint.variable_extractor import (
 
 
 # ===========================================================================
-# Defect 1: _flags_to_labels 缺少 EditConst 标签
+# Defect 1: parse_property_flags_to_labels 缺少 EditConst 标签
 # ===========================================================================
 
 class TestFlagsToLabelsEditConst:
-    """_flags_to_labels 在 CPF_EditConst 时应输出 'EditConst' 而非 'EditAnywhere'。"""
+    """parse_property_flags_to_labels 在 CPF_EditConst 时应输出 'EditConst' 而非 'EditAnywhere'。"""
 
     def test_edit_only_generates_editanywhere(self):
         """仅 CPF_Edit → EditAnywhere。"""
-        labels = _flags_to_labels(CPF_Edit)
+        labels = parse_property_flags_to_labels(CPF_Edit)
         assert "EditAnywhere" in labels
         assert "EditConst" not in labels
 
     def test_edit_and_editconst_generates_editconst(self):
         """CPF_Edit | CPF_EditConst → EditConst（不是 EditAnywhere）。"""
-        labels = _flags_to_labels(CPF_Edit | CPF_EditConst)
+        labels = parse_property_flags_to_labels(CPF_Edit | CPF_EditConst)
         assert "EditConst" in labels, (
             "CPF_Edit | CPF_EditConst 应生成 'EditConst' 标签，"
             f"实际得到: {labels}"
@@ -58,14 +57,14 @@ class TestFlagsToLabelsEditConst:
 
     def test_parse_property_flags_labels_consistent(self):
         """parse_property_flags_to_labels 已正确处理 EditConst，
-        _flags_to_labels 应与其行为一致。"""
+        应在 EditConst 模式下输出正确标签。"""
         flags = CPF_Edit | CPF_EditConst
         parse_labels = parse_property_flags_to_labels(flags)
-        flag_labels = _flags_to_labels(flags)
+        flag_labels = parse_property_flags_to_labels(flags)
         # 两者都应包含 EditConst
         assert "EditConst" in parse_labels, "parse 侧已验证 EditConst"
         assert "EditConst" in flag_labels, (
-            "_flags_to_labels 应与 parse_property_flags_to_labels 行为一致"
+            "parse_property_flags_to_labels 应包含 EditConst 标签"
         )
 
 

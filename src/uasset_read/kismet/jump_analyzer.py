@@ -8,6 +8,7 @@
     pattern = analyzer.detect_pattern(start_idx=0)
     stats = analyzer.analyze_structured_rate()
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING

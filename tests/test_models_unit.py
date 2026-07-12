@@ -63,23 +63,11 @@ from uasset_read.models.core import (
 )
 from uasset_read.models.node_types import (
     EdGraphNodeComment,
-    K2NodeAddDelegate,
-    K2NodeAssignDelegate,
-    K2NodeCallArrayFunction,
-    K2NodeCallDelegate,
     K2NodeCallFunction,
-    K2NodeCallParentFunction,
-    K2NodeCreateWidget,
     K2NodeEnhancedInputAction,
     K2NodeEvent,
     K2NodeFunctionEntry,
-    K2NodeFunctionResult,
-    K2NodeGetDataTableRow,
     K2NodeKnot,
-    K2NodeLoadAsset,
-    K2NodeMacroInstance,
-    K2NodeMessage,
-    K2NodeSpawnActorFromClass,
 )
 
 
@@ -687,18 +675,6 @@ class TestNodeTypesExistence:
             EdGraphNodeComment,
             K2NodeEnhancedInputAction,
             K2NodeFunctionEntry,
-            K2NodeMessage,
-            K2NodeCallDelegate,
-            K2NodeCallArrayFunction,
-            K2NodeCallParentFunction,
-            K2NodeFunctionResult,
-            K2NodeCreateWidget,
-            K2NodeAddDelegate,
-            K2NodeMacroInstance,
-            K2NodeAssignDelegate,
-            K2NodeGetDataTableRow,
-            K2NodeLoadAsset,
-            K2NodeSpawnActorFromClass,
         ],
     )
     def test_inherits_ue_d_graph_node(self, cls):
@@ -804,18 +780,6 @@ class TestNodeTypesNoFromArchive:
             EdGraphNodeComment,
             K2NodeEnhancedInputAction,
             K2NodeFunctionEntry,
-            K2NodeMessage,
-            K2NodeCallDelegate,
-            K2NodeCallArrayFunction,
-            K2NodeCallParentFunction,
-            K2NodeFunctionResult,
-            K2NodeCreateWidget,
-            K2NodeAddDelegate,
-            K2NodeMacroInstance,
-            K2NodeAssignDelegate,
-            K2NodeGetDataTableRow,
-            K2NodeLoadAsset,
-            K2NodeSpawnActorFromClass,
         ],
     )
     def test_no_from_archive(self, cls):

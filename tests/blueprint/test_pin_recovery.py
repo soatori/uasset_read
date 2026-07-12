@@ -6,6 +6,8 @@ from uasset_read.constants import MAX_FTEXT_CONSUMPTION
 from uasset_read.serializers.graph import (
     read_ue_graph_pin,
     read_pin_reference,
+)
+from uasset_read.serializers.graph_pin import (
     _recover_pin_array_count,
     _try_recover_to_subpins,
 )
@@ -401,7 +403,7 @@ class TestLinkedToRecovery:
     @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
     @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
     @patch("uasset_read.serializers.graph._read_ftext_value")
-    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
     @patch("uasset_read.serializers.graph.logger")
     def test_recover_to_subpins_result_is_used(
         self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
@@ -449,7 +451,7 @@ class TestLinkedToRecovery:
     @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
     @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
     @patch("uasset_read.serializers.graph._read_ftext_value")
-    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
     @patch("uasset_read.serializers.graph.logger")
     def test_linkedto_failure_log_dedup_with_pin_name(
         self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
@@ -494,7 +496,7 @@ class TestLinkedToRecovery:
     @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
     @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
     @patch("uasset_read.serializers.graph._read_ftext_value")
-    @patch("uasset_read.serializers.graph._try_recover_to_subpins")
+    @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
     @patch("uasset_read.serializers.graph._get_thread_local")
     @patch("uasset_read.serializers.graph.logger")
     def test_recovery_result_none_skips_info_log(

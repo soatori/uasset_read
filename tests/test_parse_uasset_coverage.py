@@ -19,8 +19,10 @@ from uasset_read.parse_uasset import (
     _should_use_lightweight_tolerant_parse,
     _build_lightweight_graphs,
     _build_lightweight_function_graphs,
-    _extract_kismet_decompiled,
     _post_process,
+)
+from uasset_read.parse_post_process import (
+    _extract_kismet_decompiled,
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD

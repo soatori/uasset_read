@@ -6,31 +6,33 @@ from typing import List, Optional
 
 import pytest
 
-from uasset_read.graph.flow_builder import (
+from uasset_read.graph.graph_utils import (
     _iter_normalized_edges,
     _build_graph_indexes,
     _build_normalized_edge_indexes,
-    _resolve_knot_chain,
-    _trace_data_source,
     _derive_node_name,
     _pin_ref_guid,
     _is_valid_pin_guid,
     _sanitize_string,
     _sanitize_recursive,
     _sanitize_pin_dict,
-    _comment_enclosed_nodes,
-    _get_start_event_name,
     _node_member_name,
     _enhanced_input_action_name,
     _choose_synthetic_source_pin,
     _synthetic_parameter_edges,
-    _extract_call_function_parameters,
     _pin_direction_text,
     _pin_category,
     _pin_subcategory,
     _pin_container_type,
     _is_exec_pin,
     format_pin_ref,
+)
+from uasset_read.graph.flow_builder import (
+    _resolve_knot_chain,
+    _trace_data_source,
+    _comment_enclosed_nodes,
+    _get_start_event_name,
+    _extract_call_function_parameters,
     format_node_dict,
     _find_next_exec_node,
     _trace_execution_from_event,
