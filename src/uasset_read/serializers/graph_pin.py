@@ -2,6 +2,7 @@
 
 从 serializers/graph.py 拆分而来，包含所有 Pin 相关的读取逻辑。
 """
+from __future__ import annotations
 
 import json
 import logging

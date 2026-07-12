@@ -3,6 +3,7 @@
 Pin 和 Node 相关函数已拆分到 graph_pin.py 和 graph_node.py。
 本模块保留共享辅助函数、诊断追踪和 UEdGraph 容器读取。
 """
+from __future__ import annotations
 
 import logging
 import os
