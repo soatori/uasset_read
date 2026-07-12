@@ -318,8 +318,8 @@ def _try_asset_type_handler(
 
     saved_pos = archive.tell()
     try:
-        # 定位到自定义 payload 起始位置（Super::Serialize 完成后）
-        archive.seek(property_end)
+        # 不 seek 到 property_end — 属性解析结束后当前位置已在 Super::Serialize 之后，
+        # DataTable 等资产的自定义 payload 紧跟属性之后，而非在 export 数据末尾。
         result = handler.parse(export, archive, context=name_map)
         if result.success and result.data:
             # 附加到 export 对象，供下游使用
