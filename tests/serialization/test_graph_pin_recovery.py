@@ -31,7 +31,23 @@ class TestPinArrayRecovery:
         archive.read = _read
         return archive
 
-    def test_recovery_logs_confidence_level(self, caplog):
+    def _capture_logs(self, func):
+        """使用独立 Handler 捕获日志，避免 caplog 在全量测试中受根日志器级别影响。"""
+        test_logger = logging.getLogger("uasset_read.serializers.graph_pin")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
+            result = func()
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
+        return result, captured
+
+    def test_recovery_logs_confidence_level(self):
         """验证恢复过程记录置信度级别和诊断信息。"""
         # 布局: [bad_count=255 at pos 0] [valid_count=2 at pos 16] [pin_ref1 at pos 20] [pin_ref2 at pos 44]
         bad_count = 255
@@ -49,26 +65,28 @@ class TestPinArrayRecovery:
         mock_validation = {"valid": True, "b_null": 0, "owning_node": 1, "owning_node_valid": True, "reason": "ok"}
 
         with patch('uasset_read.serializers.graph_pin.validate_pin_reference_at', return_value=mock_validation):
-            with caplog.at_level(logging.DEBUG):
-                from uasset_read.serializers.graph_pin import _recover_pin_array_count
-                result = _recover_pin_array_count(
+            from uasset_read.serializers.graph_pin import _recover_pin_array_count
+
+            def do_test():
+                return _recover_pin_array_count(
                     archive, error_pos=0, bad_count=bad_count,
                     export_map=[], import_map=[], scan_window=16
                 )
+            result, captured = self._capture_logs(do_test)
 
         assert result is not None
         assert result["count"] == valid_count
         assert result["confidence"] == "high"
 
         # 验证日志包含置信度和诊断信息
-        recovery_logs = [r for r in caplog.records if 'P73-RECOVERY' in r.message]
+        recovery_logs = [r for r in captured if 'P73-RECOVERY' in r.message]
         assert len(recovery_logs) > 0
         log_msg = recovery_logs[0].message
         assert 'confidence=' in log_msg
         assert 'scan=' in log_msg
         assert 'bad_count=' in log_msg
 
-    def test_recovery_logs_medium_confidence(self, caplog):
+    def test_recovery_logs_medium_confidence(self):
         """验证中等置信度恢复也记录诊断信息。"""
         bad_count = 255
         valid_count = 1
@@ -84,18 +102,20 @@ class TestPinArrayRecovery:
         mock_validation = {"valid": True, "b_null": 0, "owning_node": 1, "owning_node_valid": True, "reason": "ok"}
 
         with patch('uasset_read.serializers.graph_pin.validate_pin_reference_at', return_value=mock_validation):
-            with caplog.at_level(logging.DEBUG):
-                from uasset_read.serializers.graph_pin import _recover_pin_array_count
-                result = _recover_pin_array_count(
+            from uasset_read.serializers.graph_pin import _recover_pin_array_count
+
+            def do_test():
+                return _recover_pin_array_count(
                     archive, error_pos=0, bad_count=bad_count,
                     export_map=[], import_map=[], scan_window=16
                 )
+            result, captured = self._capture_logs(do_test)
 
         assert result is not None
         assert result["count"] == valid_count
         assert result["confidence"] == "high"
 
-    def test_recovery_logs_low_confidence_count_zero(self, caplog):
+    def test_recovery_logs_low_confidence_count_zero(self):
         """验证低置信度 count=0 恢复记录诊断信息。"""
         bad_count = 255
 
@@ -107,25 +127,27 @@ class TestPinArrayRecovery:
 
         archive = self._make_archive(bytes(data))
 
-        with caplog.at_level(logging.DEBUG):
-            from uasset_read.serializers.graph_pin import _recover_pin_array_count
-            result = _recover_pin_array_count(
+        from uasset_read.serializers.graph_pin import _recover_pin_array_count
+
+        def do_test():
+            return _recover_pin_array_count(
                 archive, error_pos=0, bad_count=bad_count,
                 export_map=[], import_map=[], scan_window=16
             )
+        result, captured = self._capture_logs(do_test)
 
         assert result is not None
         assert result["count"] == 0
         assert result["confidence"] == "low"
 
         # 验证日志包含 bad_count 和 scan 信息
-        recovery_logs = [r for r in caplog.records if 'P73-RECOVERY' in r.message]
+        recovery_logs = [r for r in captured if 'P73-RECOVERY' in r.message]
         assert len(recovery_logs) > 0
         log_msg = recovery_logs[0].message
         assert 'confidence=low' in log_msg
         assert 'bad_count=255' in log_msg
 
-    def test_recovery_includes_scan_window_in_log(self, caplog):
+    def test_recovery_includes_scan_window_in_log(self):
         """验证日志中包含实际使用的 scan_window 大小。"""
         bad_count = 150  # 触发动态窗口调整 (bad_count > 100 -> scan_window >= 64)
 
@@ -144,15 +166,17 @@ class TestPinArrayRecovery:
         mock_validation = {"valid": True, "b_null": 0, "owning_node": 1, "owning_node_valid": True, "reason": "ok"}
 
         with patch('uasset_read.serializers.graph_pin.validate_pin_reference_at', return_value=mock_validation):
-            with caplog.at_level(logging.DEBUG):
-                from uasset_read.serializers.graph_pin import _recover_pin_array_count
-                result = _recover_pin_array_count(
+            from uasset_read.serializers.graph_pin import _recover_pin_array_count
+
+            def do_test():
+                return _recover_pin_array_count(
                     archive, error_pos=0, bad_count=bad_count,
                     export_map=[], import_map=[], scan_window=16
                 )
+            result, captured = self._capture_logs(do_test)
 
         assert result is not None
-        recovery_logs = [r for r in caplog.records if 'P73-RECOVERY' in r.message]
+        recovery_logs = [r for r in captured if 'P73-RECOVERY' in r.message]
         assert len(recovery_logs) > 0
         log_msg = recovery_logs[0].message
         # scan_window 应该被扩展到 64

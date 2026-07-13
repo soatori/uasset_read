@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 class TestTransformWarningDowngrade:
     """#340: Transform size 警告应降级为 debug。"""
 
-    def test_unknown_transform_variant_logs_debug_not_warning(self, caplog):
-        """未知 Transform 变体应使用 debug 级别。"""
+    def test_unknown_transform_variant_logs_debug_not_warning(self):
+        """未知 Transform 变体应使用 debug 级别（不触发 warning）。"""
         from uasset_read.parsers.property_types import parse_struct_property
 
         # 创建 mock tag 和 archive
@@ -25,23 +25,36 @@ class TestTransformWarningDowngrade:
         archive.read_bytes = MagicMock(return_value=b'\x00' * 48)
         archive.tell = MagicMock(return_value=0)
         archive.total_size = MagicMock(return_value=1000)
+        archive._tolerant = True
 
         name_map = []
         export_map = []
 
-        with caplog.at_level(logging.DEBUG):
+        # 直接设置 logger 级别确保 debug 消息被捕获
+        test_logger = logging.getLogger("uasset_read.parsers.property_types")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
             try:
                 parse_struct_property(tag, archive, name_map, export_map)
             except Exception:
                 pass  # mock 不完整，关注日志级别
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
 
-        # 应该有 debug 日志，没有 warning
-        debug_msgs = [r for r in caplog.records if r.levelno == logging.DEBUG]
-        warning_msgs = [r for r in caplog.records if r.levelno == logging.WARNING
-                        and 'tag.size' in r.message and 'Transform' in r.message]
-        assert len(debug_msgs) > 0 and len(warning_msgs) == 0
+        # 应该有 debug 日志（标记 size 不匹配），无 warning
+        debug_msgs = [r for r in captured if r.levelno == logging.DEBUG]
+        warning_msgs = [r for r in captured if r.levelno == logging.WARNING
+                        and 'Transform' in r.message]
+        assert len(debug_msgs) > 0, f"Expected debug logs but got none"
+        assert len(warning_msgs) == 0, f"Expected no warnings but got: {warning_msgs}"
 
-    def test_unknown_non_lwc_struct_variant_logs_debug_not_warning(self, caplog):
+    def test_unknown_non_lwc_struct_variant_logs_debug_not_warning(self):
         """非 LWC 结构体的未知变体也应使用 debug 级别。"""
         from uasset_read.parsers.property_types import parse_struct_property
 
@@ -62,16 +75,27 @@ class TestTransformWarningDowngrade:
         name_map = []
         export_map = []
 
-        with caplog.at_level(logging.DEBUG):
+        # 直接设置 logger 级别确保 debug 消息被捕获
+        test_logger = logging.getLogger("uasset_read.parsers.property_types")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
             try:
                 parse_struct_property(tag, archive, name_map, export_map)
             except Exception:
                 pass  # mock 不完整，关注日志级别
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
 
         # 应该有 debug 日志，没有 warning
-        debug_msgs = [r for r in caplog.records if r.levelno == logging.DEBUG]
-        warning_msgs = [r for r in caplog.records if r.levelno == logging.WARNING
-                        and 'tag.size' in r.message and 'Vector' in r.message]
+        debug_msgs = [r for r in captured if r.levelno == logging.DEBUG]
+        warning_msgs = [r for r in captured if r.levelno == logging.WARNING
+                        and 'Vector' in r.message]
         assert len(debug_msgs) > 0 and len(warning_msgs) == 0
 
     def test_standard_transform_size_no_warning(self, caplog):

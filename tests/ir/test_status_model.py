@@ -334,6 +334,7 @@ class TestStatusModelUnitTests:
         from uasset_read.models.result import ParseResult
         result = ParseResult()
         result.summary = object()
+        result.is_success = True
 
         # Mock export with success status
         class MockExport:

@@ -20,20 +20,30 @@ class TestBpgcBytecodeDiagnostics:
         warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
         assert len(warnings) == 0
 
-    def test_corrupted_bytecode_logs_debug(self, caplog):
+    def test_corrupted_bytecode_logs_debug(self):
         """损坏字节码应使用 debug 级别记录容错诊断。"""
         from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
 
-        # 构造损坏数据：无效 size
+        # 构造损坏数据：无效 size（unsigned 解释后远超剩余数据）
         import struct
         corrupted = struct.pack('<i', -1) + b'\x00' * 10
 
-        with caplog.at_level(logging.DEBUG):
+        # 用 Handler 捕获日志，避免 caplog 在全量测试中受根日志器级别影响
+        test_logger = logging.getLogger("uasset_read.kismet.bpgc_bytecode")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
             _result = _parse_cooked_bytecode_buffer(corrupted)
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
 
-        # 应有 debug 诊断信息
-        debugs = [r for r in caplog.records if r.levelno == logging.DEBUG]
-        assert len(debugs) > 0
+        debugs = [r for r in captured if r.levelno == logging.DEBUG]
+        assert len(debugs) > 0, f"Expected debug logs but got none"
 
 
 def test_remaining_bytes_zero_early_return():
