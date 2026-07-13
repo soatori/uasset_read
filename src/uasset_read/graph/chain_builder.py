@@ -161,7 +161,9 @@ def build_execution_chains(
             for i in range(len(ids)):
                 parts.append(ids[i])
                 if i < len(ids) - 1:
-                    pin_name = names[i + 1] if i + 1 < len(names) else ""
+                    # pin 名称来自源节点（names[i]），而非目标节点（names[i+1]）
+                    # used_exec_pin_name 设置在源节点上，其 exec output pin 连接到前方
+                    pin_name = names[i] if i < len(names) else ""
                     if pin_name:
                         parts.append(f"--{pin_name}-->")
                     else:
