@@ -209,62 +209,69 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
 def _is_internal_engine_property(prop_name: str) -> bool:
     """判断属性是否为内部引擎属性（非用户定义变量）。
 
-    通过前缀和模式匹配识别常见内部属性。
+    仅匹配明确的引擎内部属性名（如编译状态标志、蓝图生成类引用等）。
+    不使用前缀匹配，避免误过滤合法蓝图变量（如 bIsPlayer、CachedHealth 等）。
     """
-    # 常见内部引擎属性前缀
-    internal_prefixes = (
-        "b",  # 布尔标志（如 bIsRegenerating）
-        "Cached",
-        "Selected",
-        "Original",
-        "Regeneration",
-        "Compilation",
-        "Import",
-        "Export",
-        "Version",
-        "LOD",
-        "Platform",
-    )
+    # 明确的内部引擎属性名（精确匹配）
+    internal_exact_names = frozenset({
+        # 编译/生成状态标志
+        "bBeingCompiled",
+        "bCompiled",
+        "bRegenerating",
+        "bDuplicating",
+        "bImportedFromAnotherAsset",
+        "bCanUseSimplifiedConstructor",
+        "bIsNewObject",
+        "bHasDocumentedClass",
+        "bDisplayCompileSucceededLog",
+        "bForceFullDeployment",
+        "bQueuedForDeletion",
+        "bRecompileOnLoad",
+        "bDisableCompileOnLoad",
+        "bDeferCompilation",
+        "bForceCompilation",
+        "bCreateNewModule",
+        "bLoadPublicModules",
+        "bRecompileAfterLoad",
+        "bEnableParallelCompilation",
+        "bEnableCompilation",
+        "bForceReregistration",
+        "bForceRegeneration",
+        "bIsIncrementalCompile",
+        "bIsRegeneratingOnLoad",
+        "bIsRegenerating",
+        "bIsRegeneratingClass",
+        "bIsRegeneratingInterface",
+        "bIsRegeneratingStruct",
+        "bIsRegeneratingEnum",
+        "bIsRegeneratingFunction",
+        "bIsRegeneratingVariable",
+        "bIsRegeneratingEvent",
+        "bIsRegeneratingDelegate",
+        "bIsRegeneratingInterfaceFunction",
+        "bIsRegeneratingInterfaceVariable",
+        "bIsRegeneratingInterfaceEvent",
+        "bIsRegeneratingInterfaceDelegate",
+        "bIsRegeneratingStructVariable",
+        "bIsRegeneratingStructFunction",
+        "bIsRegeneratingStructEvent",
+        "bIsRegeneratingStructDelegate",
+        "bIsRegeneratingEnumValue",
+        "bIsRegeneratingEnumFunction",
+        "bIsRegeneratingEnumEvent",
+        "bIsRegeneratingEnumDelegate",
+        # 蓝图生成类引用
+        "BlueprintGeneratedClass",
+        # 编辑器相关
+        "SelectedNodes",
+        "GraphZoom",
+        "PanningAmount",
+        "bAllowRenaming",
+        "bAllowMultipleOutputs",
+        "bAllowMultipleInputs",
+    })
 
-    # 检查前缀
-    for prefix in internal_prefixes:
-        if prop_name.startswith(prefix):
-            # 排除以 'b' 开头但确实是蓝图属性的特殊情况
-            if prefix == "b":
-                # 蓝图属性通常有 CPF_Edit 或 CPF_BlueprintVisible 标志
-                # 但此处无法访问 prop.value，所以仅排除明显的内部标志
-                # 保留 bIsRegenerating 等内部标志
-                internal_b_prefixes = ("bIs", "bHas", "bWas", "bCan", "bShould", "bEnable", "bForce", "bDefer", "bDisable", "bAllow", "bDisplay", "bCreate", "bLoad", "bBeing", "bDuplicating", "bImported", "bRegenerating")
-                for ibp in internal_b_prefixes:
-                    if prop_name.startswith(ibp):
-                        return True
-            else:
-                return True
-
-    # 检查常见内部属性模式
-    internal_patterns = (
-        "Graph",
-        "Node",
-        "Pin",
-        "Edge",
-        "Connection",
-        "Link",
-        "Reference",
-        "Index",
-        "Offset",
-        "Size",
-        "Count",
-        "Type",
-        "Class",
-        "Package",
-        "Module",
-        "Plugin",
-    )
-    for pattern in internal_patterns:
-        if pattern in prop_name and prop_name.startswith(pattern):
-            return True
-
-    return False
+    return prop_name in internal_exact_names
 
 
 def _map_property_flags(flags: int) -> Dict[str, bool]:
