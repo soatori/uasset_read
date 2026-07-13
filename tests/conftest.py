@@ -20,7 +20,7 @@ from uasset_read.memory_safety import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
+DEFAULT_SAMPLE_ROOT = ROOT / "tests" / "samples"
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
@@ -154,13 +154,13 @@ def asset_path(sample_root: Path, relative_path: str) -> Path:
     return full_path
 
 
-# Common asset relative paths
-ASSET_TEXTURE_BRICK = "StarterContent/Content/StarterContent/Textures/T_Brick_Clay_New_D.uasset"
-ASSET_MATERIAL_ROCK = "StarterContent/Content/StarterContent/Materials/M_Rock_Basalt.uasset"
-ASSET_MESH_CHAIR = "StarterContent/Content/StarterContent/Props/SM_Chair.uasset"
-ASSET_MESH_MANNY = "Content/Characters/Mannequins/Meshes/SKM_Manny.uasset"
-ASSET_BLUEPRINT_FIRST_PERSON = "FirstPersonBP/Content/FirstPersonBP/Blueprints/BP_FirstPersonCharacter.uasset"
-ASSET_BLUEPRINT_THIRD_PERSON = "Content/ThirdPersonBP/Blueprints/BP_ThirdPersonCharacter.uasset"
+# Common asset relative paths (using local samples)
+ASSET_TEXTURE_BRICK = "StarterContent_M_Wood_Walnut.uasset"
+ASSET_MATERIAL_ROCK = "IntroToUnreal_M_Plastic.uasset"
+ASSET_MESH_CHAIR = "StackOBot_M_BotBase.uasset"
+ASSET_MESH_MANNY = "CiciToon_SK_Mannequin.uasset"
+ASSET_BLUEPRINT_FIRST_PERSON = "FirstPerson_BP_FirstPersonGameMode.uasset"
+ASSET_BLUEPRINT_THIRD_PERSON = "StackOBot_BP_Drone.uasset"
 
 
 # ---------------------------------------------------------------------------

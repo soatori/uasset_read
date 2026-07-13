@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 
-SAMPLES_DIR = Path(r"E:\Develop\lib\Samples")
+SAMPLES_DIR = Path(__file__).parent / "samples"
 
 
 class TestMapPinTerminal:
@@ -14,9 +14,8 @@ class TestMapPinTerminal:
         from uasset_read.parse_uasset import parse_package
         from uasset_read.ir_builder import build_package_ir
 
-        # 需要找到包含 Map 属性的蓝图资产
-        # 优先使用 FirstPerson 示例
-        path = SAMPLES_DIR / "FirstPerson" / "Content" / "FirstPerson" / "Blueprints" / "BP_FirstPersonCharacter.uasset"
+        # 使用本地蓝图样本
+        path = SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
         if not path.exists():
             pytest.skip("测试样本不存在")
 

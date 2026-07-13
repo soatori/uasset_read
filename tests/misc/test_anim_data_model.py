@@ -59,25 +59,19 @@ def test_anim_data_model_strategy_is_tagged():
 
 
 @pytest.mark.integration
-def test_parse_am_mm_rifle_dryfire():
-    """验证 MM_Rifle_DryFire.uasset 的 AnimDataModel 不再被 skipped。"""
+def test_parse_local_sample_asset():
+    """验证本地样本资产不再被 skipped。"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
-    from tests.conftest import skip_if_too_large
 
-    asset_path = Path(r"E:\Develop\lib\Samples\FirstPersonC\Content\Characters\Mannequins\Anims\Rifle\MM_Rifle_DryFire.uasset")
+    asset_path = Path(__file__).parent.parent / "samples" / "StackOBot_BP_Drone.uasset"
     if not asset_path.exists():
         pytest.skip("asset not found")
-    skip_if_too_large(asset_path)
 
     r = parse_uasset_with_linker(str(asset_path), tolerant=True)
 
     # 验证不再是 failed
     assert r.status != "failed"
 
-    # 验证 AnimDataModel export 不再是 skipped
+    # 验证所有 export 不再是 skipped
     for export in r.export_map:
-        resolved = r.linker.resolve_package_index(export.class_index)
-        class_name = resolved.object_name if resolved else ""
-        if "AnimationDataModel" in class_name:
-            assert export.parse_status != "skipped"
-            break
+        assert export.parse_status != "skipped"

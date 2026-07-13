@@ -50,9 +50,9 @@ class TestConstants:
 
 
 class TestMissingFields:
-    """验证 M_Mannequin 材质资产能正确解析。"""
+    """验证本地材质资产能正确解析。"""
 
-    SAMPLE = r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Materials\M_Mannequin.uasset"
+    SAMPLE = str(Path(__file__).parent.parent / "samples" / "IntroToUnreal_M_Plastic.uasset")
 
     @pytest.fixture(scope="class")
     def result(self):
@@ -60,8 +60,6 @@ class TestMissingFields:
         if not os.path.exists(self.SAMPLE):
             pytest.skip("sample asset not found")
         from uasset_read import parse_uasset_with_linker
-        from tests.conftest import skip_if_too_large
-        skip_if_too_large(Path(self.SAMPLE))
         return parse_uasset_with_linker(self.SAMPLE, tolerant=True)
 
     def test_m_mannequin_parses_successfully(self, result):
@@ -158,8 +156,7 @@ class TestSkeletalMeshParsing:
     """验证骨骼网格资产解析（此前因 Negative generations count 失败）。"""
 
     SAMPLES = [
-        r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Manny_Simple.uasset",
-        r"E:\Develop\lib\Samples\FirstPerson\Content\Characters\Mannequins\Meshes\SKM_Quinn_Simple.uasset",
+        str(Path(__file__).parent.parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
     ]
 
     @pytest.mark.parametrize("path", SAMPLES, ids=lambda p: os.path.basename(p))

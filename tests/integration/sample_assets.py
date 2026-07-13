@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
+DEFAULT_SAMPLE_ROOT = Path(__file__).parent.parent / "samples"
 
 
 @dataclass(frozen=True)
