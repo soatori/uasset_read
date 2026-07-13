@@ -7,13 +7,11 @@ name = "uasset-read"
 version = "0.5.3.23"
 description = "虚幻引擎 .uasset 文件的 Python 解析器，零运行时依赖"
 readme = "README.md"
-license = {text = "MIT"}
 requires-python = ">=3.10"
 keywords = ["unreal-engine", "uasset", "parser", "blueprint"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

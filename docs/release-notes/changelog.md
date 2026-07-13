@@ -59,7 +59,6 @@
 - 235 new integration tests (coverage 28% → 50%)
 - 14 new asset samples (FirstPerson, IntroToUnreal, Lyra, StackOBot, StarterContent)
 - pyproject.toml package metadata
-- MIT LICENSE
 
 ### Improvements
 - Version number unified to 0.5.3.20
