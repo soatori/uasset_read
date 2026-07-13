@@ -658,7 +658,7 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
     import_paths = []
     for imp in result.import_map or []:
         path = f"{_safe_str(getattr(imp, 'class_package', None))}.{_safe_str(getattr(imp, 'class_name', None))}"
-        if path.strip("."):
+        if path.strip():
             import_paths.append(path)
 
     export_paths = []
