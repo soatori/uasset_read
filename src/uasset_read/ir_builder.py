@@ -594,7 +594,7 @@ def _build_pin_ir(pin) -> PinIR:
         default_value=getattr(pin, "default_value", None),
         pin_category=pin_category,
         pin_subcategory=pin_subcategory,
-        pin_subcategory_object=pin_subcategory_object,
+        pin_subcategory_object_name=pin_subcategory_object,
         container_type=container_type,
         is_reference=is_reference,
         is_const=is_const,
@@ -604,7 +604,7 @@ def _build_pin_ir(pin) -> PinIR:
         is_map_value=is_map_value,
         map_key_pin_category=map_key_pin_category,
         map_key_pin_subcategory=map_key_pin_subcategory,
-        map_key_pin_subcategory_object=map_key_pin_subcategory_object,
+        map_key_pin_subcategory_object_name=map_key_pin_subcategory_object,
     )
 
 def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:

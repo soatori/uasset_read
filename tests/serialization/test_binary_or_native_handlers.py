@@ -58,8 +58,9 @@ class FakeArchive:
         return struct.unpack("<i", self.read(4))[0]
 
     def read_name(self, name_map: Optional[List[str]] = None) -> str:
-        # 简化 FName：仅读取 int32 索引作为名称
+        # FName = int32 index + int32 number (8 bytes total)
         idx = self.read_i32()
+        _number = self.read_i32()  # skip number field
         if name_map and 0 <= idx < len(name_map):
             return name_map[idx]
         return f"Name_{idx}"
@@ -83,7 +84,9 @@ def _build_material_input_data(
     """构造 FMaterialInput 二进制数据。"""
     buf = io.BytesIO()
     buf.write(struct.pack("<i", output_index))
+    # FName = int32 index + int32 number (8 bytes total)
     buf.write(struct.pack("<i", input_name_idx))
+    buf.write(struct.pack("<i", 0))  # number
     buf.write(struct.pack("<i", mask))
     buf.write(struct.pack("<i", mask_r))
     buf.write(struct.pack("<i", mask_g))
@@ -102,7 +105,9 @@ def _build_expression_output_data(
 ) -> bytes:
     """构造 FExpressionOutput 二进制数据。"""
     buf = io.BytesIO()
+    # FName = int32 index + int32 number (8 bytes total)
     buf.write(struct.pack("<i", output_name_idx))
+    buf.write(struct.pack("<i", 0))  # number
     buf.write(struct.pack("<i", mask))
     buf.write(struct.pack("<i", mask_r))
     buf.write(struct.pack("<i", mask_g))
@@ -191,11 +196,11 @@ class TestMaterialInput:
         assert result is None
 
     def test_parse_material_input_exact_min_size(self):
-        """恰好 28 字节可以正常解析。"""
+        """恰好 32 字节可以正常解析。"""
         data = _build_material_input_data()
-        assert len(data) == 28
+        assert len(data) == 32
 
-        tag = FakePropertyTag(type="FScalarMaterialInput", size=28)
+        tag = FakePropertyTag(type="FScalarMaterialInput", size=32)
         archive = FakeArchive(data)
 
         result = _parse_material_input(tag, archive, [], [], None)
@@ -270,11 +275,11 @@ class TestExpressionOutput:
         assert result is None
 
     def test_parse_expression_output_exact_min_size(self):
-        """恰好 24 字节可以正常解析。"""
+        """恰好 28 字节可以正常解析。"""
         data = _build_expression_output_data()
-        assert len(data) == 24
+        assert len(data) == 28
 
-        tag = FakePropertyTag(type="FExpressionOutput", size=24)
+        tag = FakePropertyTag(type="FExpressionOutput", size=28)
         archive = FakeArchive(data)
 
         result = _parse_expression_output(tag, archive, [], [], None)

@@ -153,7 +153,7 @@ class PinIR:
     # --- 结构化类型字段（FEdGraphPinType 拆解） ---
     pin_category: str = ""
     pin_subcategory: str = ""
-    pin_subcategory_object: str | None = None
+    pin_subcategory_object_name: str | None = None
     container_type: str = "None"
     is_reference: bool = False
     is_const: bool = False
@@ -164,7 +164,7 @@ class PinIR:
     # Map terminal 类型字段（Map 容器专用）
     map_key_pin_category: str = ""
     map_key_pin_subcategory: str = ""
-    map_key_pin_subcategory_object: str | None = None
+    map_key_pin_subcategory_object_name: str | None = None
 
 
 @dataclass
