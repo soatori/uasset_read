@@ -76,7 +76,7 @@ def _backfill_missing_methods(
     """
     existing_names = {m.cpp_name for m in methods}
     for decompiled in decompiled_functions:
-        sanitized = _sanitize_identifier(decompiled.function_name)
+        sanitized = sanitize_identifier(decompiled.function_name)
         if sanitized not in existing_names:
             methods.append(CppMethodIR(
                 cpp_name=sanitized,
@@ -349,7 +349,7 @@ def _inject_function_bodies(
 
         # 清理后匹配
         if method is None:
-            sanitized = _sanitize_identifier(func_name)
+            sanitized = sanitize_identifier(func_name)
             method = method_index.get(sanitized)
 
         # 大小写不敏感匹配
@@ -718,17 +718,6 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
 
 # --- 辅助函数（Plan 02） ---
 
-def _sanitize_identifier(name: str) -> str:
-    """将 UE 引脚名转换为有效 C++ 标识符。
-
-    委托给 sanitizer.sanitize_identifier。
-
-    "Left / Right" → "Left__Right"
-    "Primary Thumbstick" → "Primary_Thumbstick"
-    "2DValue" → "_2DValue"
-    "Target Touch UI" → "Target_Touch_UI"
-    """
-    return sanitize_identifier(name)
 
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
@@ -795,7 +784,7 @@ def _extract_parameters_from_pins(
             continue
 
         params.append(CppCallParameter(
-            name=_sanitize_identifier(pin.pin_name),
+            name=sanitize_identifier(pin.pin_name),
             cpp_type=cpp_type,
             direction="input" if pin.direction == 0 else "output",
         ))
@@ -935,7 +924,7 @@ def _build_cpp_method_from_entry(
         return_type = bp_func.return_type or "void"
         parameters = [
             CppCallParameter(
-                name=_sanitize_identifier(p.name),
+                name=sanitize_identifier(p.name),
                 cpp_type=ue_path_to_cpp_type(p.param_type),
                 direction="input" if p.is_input else "output",
             )
@@ -960,7 +949,7 @@ def _build_cpp_method_from_entry(
         access_modifier = "private"
 
     return CppMethodIR(
-        cpp_name=_sanitize_identifier(func_name),
+        cpp_name=sanitize_identifier(func_name),
         return_type=return_type,
         parameters=parameters,
         ufunction_specifiers=specifiers,
@@ -1003,7 +992,7 @@ def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     parameters = _extract_parameters_from_pins(event_node.pins, is_event=True)
 
     return CppMethodIR(
-        cpp_name=_sanitize_identifier(event_name),
+        cpp_name=sanitize_identifier(event_name),
         return_type="void",
         parameters=parameters,
         ufunction_specifiers=[],
@@ -1106,7 +1095,7 @@ def extract_cpp_call_statements(
                     continue
                 if pin.pin_name in ("self", "then"):
                     continue
-                args.append(_sanitize_identifier(pin.pin_name))
+                args.append(sanitize_identifier(pin.pin_name))
 
             statements.append(CppCallStatement(
                 method_name=member_name,

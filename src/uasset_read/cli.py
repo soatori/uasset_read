@@ -1,6 +1,6 @@
-"""CLI 入口模块 — argparse 参数解析 + 委托 core.py。
+"""CLI 入口模块 — argparse 参数解析 + 委托 core 模块。
 
-核心逻辑与入口分离：core.py 提供纯解析函数，CLI 仅负责参数解析和输出写入。
+核心逻辑与入口分离：core 模块提供纯解析函数，CLI 仅负责参数解析和输出写入。
 """
 
 import json

@@ -92,7 +92,7 @@ from .diagnostics import (
 )
 
 __all__ = [
-    # 核心模型（core.py）
+    # 核心模型（models/core.py）
     "FEdGraphPinType",
     "UEdGraphPin",
     "UEdGraphNode",
