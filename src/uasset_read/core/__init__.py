@@ -213,6 +213,17 @@ def parse_single(
         )
 
     ir = build_package_ir(result)
+
+    # 释放临时大对象，防止批量解析时内存累积
+    try:
+        for export in getattr(result, "export_map", []) or []:
+            if hasattr(export, "_asset_type_data"):
+                delattr(export, "_asset_type_data")
+            if hasattr(export, "_uclass_native_fields"):
+                delattr(export, "_uclass_native_fields")
+    except Exception:
+        pass
+
     renderer = get_renderer(format)
     options = RenderOptions(
         verbose=verbose,
