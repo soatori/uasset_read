@@ -906,14 +906,14 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     num_keys_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
     # 跳过待删除的键（按 key_type 序列化）
     for _ in range(num_keys_to_remove):
-        _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+        _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
 
     # 读取实际条目数量
     num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
-        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary)
+        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
         value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
         entries.append({"key": key, "value": value})
 
@@ -1057,24 +1057,28 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # Multicast delegate type parsers
 # ============================================================================
 
-def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
-    """解析 MulticastDelegateProperty"""
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
+    """解析 MulticastDelegateProperty。
+
+    UE FMulticastScriptDelegate::SerializeItem 使用 FName 序列化函数名
+    （4 字节索引 + 4 字节实例号），与 parse_delegate_property 一致。
+    """
     from uasset_read.parsers.utils import read_validated_count_tolerant
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "MulticastDelegate")
     delegates = []
     for _ in range(count):
         obj_index = archive.read_i32()
-        func_name = archive.read_fstring()
+        func_name = archive.read_name(name_map)
         delegates.append({"object": obj_index, "function": func_name})
     return delegates
 
-def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
     """解析 MulticastInlineDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
 
-def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive) -> list:
+def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
     """解析 MulticastSparseDelegateProperty"""
-    return parse_multicast_delegate_property(tag, archive)
+    return parse_multicast_delegate_property(tag, archive, name_map)
 
 # ============================================================================
 # Special type parsers
@@ -1084,13 +1088,17 @@ def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
     """解析 InterfaceProperty"""
     return _simple_read(archive, "read_i32")
 
-def parse_field_path_property(tag: PropertyTag, archive: FArchive) -> dict:
-    """解析 FieldPathProperty"""
+def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
+    """解析 FieldPathProperty。
+
+    UE FFieldPath::Serialize 将路径序列化为 TArray<FName>
+    （int32 计数 + N * FName），而非 FString 数组。
+    """
     from uasset_read.parsers.utils import read_validated_count_tolerant
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FieldPath")
     path = []
     for _ in range(count):
-        path.append(archive.read_fstring())
+        path.append(archive.read_name(name_map))
     return {"path": path}
 
 def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
@@ -1230,7 +1238,7 @@ def _get_inner_type(array_type: str) -> str:
         "ArrayProperty_SoftObjectProperty": "SoftObjectProperty",
         "ArrayProperty_EnumProperty": "EnumProperty",
     }
-    return type_mapping.get(array_type, "IntProperty")
+    return type_mapping.get(array_type, "Unknown")
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     """从 PropertyTag 提取结构体类型名（D-08）。"""
@@ -1277,7 +1285,7 @@ def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
 # Internal dispatch helpers for MapProperty (lines 5773-5841 equivalent)
 # ============================================================================
 
-def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> Any:
+def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
     """键类型分派解析（D-02b）。"""
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
@@ -1294,6 +1302,15 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
 
     if key_type == "EnumProperty":
         return archive.read_name(name_map)
+
+    if key_type == "StructProperty":
+        # StructProperty key 需要知道具体结构体类型才能正确解析
+        # 从 tag 获取 key_type_struct，若 tag 为 None 则尝试从 archive 获取
+        struct_type = None
+        if tag is not None:
+            struct_type = getattr(tag, 'key_type_struct', None)
+        dummy_tag = PropertyTag(name="Key", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
+        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
 
     return None
 

@@ -451,14 +451,15 @@ def parse_property_value(
                          "StrProperty", "ObjectProperty", "TextProperty",
                          "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
                          "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
-                         "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
-                         "MulticastSparseDelegateProperty",
-                         "InterfaceProperty", "FieldPathProperty",
+                         "InterfaceProperty",
                          "VerseStringProperty", "VerseClassProperty",
                          "VerseFunctionProperty", "VerseDynamicProperty",
                          "AnsiStrProperty", "GuidProperty"):
             return handler(tag, archive)
-        elif tag.type in ("NameProperty", "DelegateProperty"):
+        elif tag.type in ("NameProperty", "DelegateProperty",
+                         "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+                         "MulticastSparseDelegateProperty",
+                         "FieldPathProperty"):
             return handler(tag, archive, name_map)
         elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
             # These need soft_object_path_list for UE5.7+ index-based resolution
@@ -474,7 +475,7 @@ def parse_property_value(
             return handler(tag, archive, name_map, summary)
         elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
             return handler(tag, archive)
-    except (_struct.error, OSError, ValueError, AttributeError, KeyError) as e:
+    except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
         if not tolerant:
             raise
         logger.debug("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
