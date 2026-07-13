@@ -5,7 +5,7 @@
 - 多个跳转目标各自输出标签
 - 已输出标签不重复
 - 无跳转目标时不输出标签
-- offset_to_index 映射正确关联 byte_offset 和 CodeOffset
+- offset_to_index 映射正确关联 StatementIndex 和 CodeOffset
 """
 from uasset_read.kismet.structured_flow import StructuredControlFlow
 from uasset_read.kismet.expressions.control_flow import EX_Jump, EX_JumpIfNot
@@ -22,10 +22,10 @@ def _make_expr(statement_index: int):
     return _Stub()
 
 
-def _make_expr_with_byte_offset(statement_index: int, byte_offset_val: int):
-    """创建带 byte_offset 的 mock 表达式。"""
+def _make_expr_with_byte_offset(statement_index: int, offset_val: int):
+    """创建带 StatementIndex 的 mock 表达式（用于标签映射测试）。"""
     obj = _make_expr(statement_index)
-    obj.byte_offset = byte_offset_val
+    obj.StatementIndex = offset_val
     return obj
 
 
@@ -133,10 +133,10 @@ class TestGotoLabelEmission:
 
         assert "Label_42:" in result
 
-    def test_offset_to_index_mapping_with_byte_offset(self):
-        """验证 byte_offset → index 映射正确关联跳转目标。"""
+    def test_offset_to_index_mapping_with_statement_index(self):
+        """验证 StatementIndex → index 映射正确关联跳转目标。"""
         # Jump(CodeOffset=50) 跳到 offset 50
-        # 表达式列表中 idx 2 的 byte_offset=50
+        # 表达式列表中 idx 2 的 StatementIndex=50
         jump = _make_jump(statement_index=0, code_offset=50)
         expr1 = _make_expr(10)
         target = _make_expr_with_byte_offset(20, 50)
@@ -145,13 +145,13 @@ class TestGotoLabelEmission:
         # 构建 offset_to_index 映射
         offset_to_index: dict[int, int] = {}
         for idx, expr in enumerate(expressions):
-            byte_offset = getattr(expr, "byte_offset", None)
-            if byte_offset is not None:
-                offset_to_index[byte_offset] = idx
+            stmt_idx = getattr(expr, "StatementIndex", None)
+            if stmt_idx is not None:
+                offset_to_index[stmt_idx] = idx
             if hasattr(expr, "CodeOffset"):
                 offset_to_index[expr.CodeOffset] = idx
 
-        # CodeOffset=50 应映射到 idx 0（来自 jump 的 CodeOffset）和 idx 2（来自 byte_offset）
+        # CodeOffset=50 应映射到 idx 0（来自 jump 的 CodeOffset）和 idx 2（来自 StatementIndex）
         # 最终映射为 idx 2（后写覆盖）
         assert offset_to_index.get(50) == 2
 

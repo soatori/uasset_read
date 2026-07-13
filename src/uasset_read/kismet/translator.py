@@ -327,7 +327,7 @@ class MathFunctionCleaner:
         "MakeVector2D": lambda p: f"FVector2D({p[0]}, {p[1]})",
         "MakeVector": lambda p: f"FVector({p[0]}, {p[1]}, {p[2]})",
         "MakeRotator": lambda p: f"FRotator({p[0]}, {p[1]}, {p[2]})",
-        "MakeTimespan": lambda p: f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)",
+        # MakeTimespan moved to special handling in _clean_constructors_and_vectors
         "MakeColor": lambda p: f"FLinearColor({p[0]}, {p[1]}, {p[2]}, {p[3]})",
         "ComposeRotators": lambda p: f"FRotator(FQuat({p[0]}) * FQuat({p[1]}))",
         "Conv_NameToString": lambda p: f"FString({p[0]})",
@@ -354,6 +354,14 @@ class MathFunctionCleaner:
     @staticmethod
     def _clean_constructors_and_vectors(func_name: str, p: list[str]) -> str | None:
         """处理构造器和向量操作。"""
+        # MakeTimespan 特殊处理：需要 bounds check
+        if func_name.startswith("MakeTimespan"):
+            if len(p) >= 5:
+                return f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)"
+            elif len(p) >= 3:
+                return f"FTimespan({p[0]}, {p[1]}, {p[2]})"
+            else:
+                return f"FTimespan({', '.join(p)})"
         # 先精确匹配
         result = MathFunctionCleaner._VECTOR_OP_TABLE.get(func_name)
         if result is not None:
