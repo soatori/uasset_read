@@ -759,5 +759,27 @@ def parse_package_lazy(
     finally:
         if archive:
             archive.close()
+        # 清理循环引用，防止批量解析时内存泄漏
+        if result is not None and result.linker is not None:
+            try:
+                # 打破 UObjectInstance ↔ linker 循环引用
+                for obj in result.linker._export_objects:
+                    obj.linker = None
+                for obj in result.linker._import_objects:
+                    obj.linker = None
+                result.linker._export_objects.clear()
+                result.linker._import_objects.clear()
+                result.linker._root_objects.clear()
+                result.linker._preload_cache.clear()
+                # 释放 archive 引用
+                result.linker._archive = None
+            except Exception:
+                pass
+        # 清理全局缓存，防止无界增长
+        try:
+            from uasset_read.parsers.class_registry import get_class_registry
+            get_class_registry().reset_cache()
+        except Exception:
+            pass
 
     return result

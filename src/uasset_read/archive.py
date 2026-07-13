@@ -280,6 +280,13 @@ class FArchive:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
+    def __del__(self) -> None:
+        """安全网：确保文件句柄被释放。"""
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志"""
         self._byte_swapping = enabled
