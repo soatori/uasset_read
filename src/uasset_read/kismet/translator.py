@@ -351,7 +351,13 @@ class MathFunctionCleaner:
         if func_name.startswith("MakeRotator"):
             return f"FRotator({p[0]}, {p[1]}, {p[2]})"
         if func_name.startswith("MakeTimespan"):
-            return f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)"
+            # FTimespan(Hours, Minutes, Seconds, Ticks) — 检查参数数量
+            if len(p) >= 5:
+                return f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)"
+            elif len(p) >= 3:
+                return f"FTimespan({p[0]}, {p[1]}, {p[2]})"
+            else:
+                return f"FTimespan({', '.join(p)})"
         if func_name.startswith("MakeColor"):
             return f"FLinearColor({p[0]}, {p[1]}, {p[2]}, {p[3]})"
         if func_name.startswith("ComposeRotators"):
@@ -579,7 +585,8 @@ class MathFunctionCleaner:
         if func_name.startswith("Set_Clear"):
             return f"{p[0]}.Clear()"
         if func_name.startswith("Set_Difference"):
-            return f"{p[2]} = {p[0]} == {p[1]}"
+            # Difference(A, B, Result) → Result = A.Difference(B)
+            return f"{p[2]} = {p[0]}.Difference({p[1]})"
         if func_name.startswith("Set_IsEmpty"):
             return f"{p[0]}.Length == 0"
         if func_name.startswith("Set_Length"):
@@ -756,23 +763,21 @@ class KismetTranslator:
             inner = self.line_cpp(expr.Value) if hasattr(expr, 'Value') and expr.Value else '""'
             return f"FSoftObjectPath({inner})"
         # --- Vector / Rotation / Transform ---
+        # 这些表达式继承自 KismetExpression（非 KismetExpressionT），
+        # 字段直接是 X/Y/Z 等，不通过 Value 属性。
         if isinstance(expr, EX_Vector3fConst):
-            v = expr.Value
-            return f"FVector3f({v.X}, {v.Y}, {v.Z})"
+            return f"FVector3f({expr.X}, {expr.Y}, {expr.Z})"
         if isinstance(expr, EX_VectorConst):
-            v = expr.Value
-            return f"FVector({v.X}, {v.Y}, {v.Z})"
+            return f"FVector({expr.X}, {expr.Y}, {expr.Z})"
         if isinstance(expr, EX_RotationConst):
-            v = expr.Value
-            return f"FRotator({v.Pitch}, {v.Roll}, {v.Yaw})"
+            return f"FRotator({expr.Pitch}, {expr.Yaw}, {expr.Roll})"
         if isinstance(expr, EX_TransformConst):
-            v = expr.Value
             return (
-                f"FTransform(FQuat({v.Rotation.X}, {v.Rotation.Y}, "
-                f"{v.Rotation.Z}, {v.Rotation.W}), "
-                f"FVector({v.Translation.X}, {v.Translation.Y}, "
-                f"{v.Translation.Z}), "
-                f"FVector({v.Scale3D.X}, {v.Scale3D.Y}, {v.Scale3D.Z}))"
+                f"FTransform(FQuat({expr.X}, {expr.Y}, "
+                f"{expr.Z}, {expr.W}), "
+                f"FVector({expr.Pitch}, {expr.Yaw}, "
+                f"{expr.Roll}), "
+                f"FVector({expr.SX}, {expr.SY}, {expr.SZ}))"
             )
         return None
 
