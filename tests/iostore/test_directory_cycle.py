@@ -147,6 +147,9 @@ def test_sibling_cycle_no_hang_subprocess():
 
     使用 subprocess.run 超时检测，确保 _parse_directory_index 不死循环。
     """
+    import pathlib
+    project_root = str(pathlib.Path(__file__).resolve().parent.parent.parent)
+
     code = """
 import sys
 sys.path.insert(0, "src")
@@ -190,7 +193,7 @@ except Exception:
         [sys.executable, "-c", code],
         capture_output=True,
         timeout=3.0,
-        cwd="E:/Develop/uasset_read",
+        cwd=project_root,
     )
     assert result.returncode == 0, (
         f"子进程应正常退出（ParseError），实际退出码: {result.returncode}\n"

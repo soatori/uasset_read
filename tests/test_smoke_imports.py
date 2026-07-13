@@ -155,9 +155,11 @@ def test_memory_policy():
 
 
 def test_cli_help():
-    import subprocess, sys
+    import subprocess, sys, os
+    src_dir = os.path.join(os.path.dirname(__file__), "..", "src")
+    env = {**os.environ, "PYTHONPATH": src_dir}
     result = subprocess.run(
-        [sys.executable, "-m", "uasset_read.cli", "--help"],
-        capture_output=True, text=True, timeout=10
+        [sys.executable, "-m", "uasset_read", "--help"],
+        capture_output=True, text=True, timeout=10, env=env
     )
     assert result.returncode == 0
