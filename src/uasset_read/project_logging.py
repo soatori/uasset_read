@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
@@ -24,30 +23,9 @@ def new_log_run_id() -> str:
     return uuid4().hex[:12]
 
 
-def _build_log_path(log_dir: Path, run_id: str, *, reuse_existing: bool = True) -> Path:
+def _build_log_path(log_dir: Path) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
-
-    # 当提供 run_id 时，优先复用已存在的日志文件
-    if reuse_existing:
-        existing = _find_existing_log(log_dir, run_id)
-        if existing is not None:
-            return existing
-
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{run_id}.log"
-
-
-def _find_existing_log(log_dir: Path, run_id: str) -> Path | None:
-    """查找已存在的同 run_id 日志文件，供子进程复用。"""
-    import glob as glob_mod
-
-    pattern = str(log_dir / f"uasset_read-*-{run_id}.log")
-    matches = glob_mod.glob(pattern)
-    if not matches:
-        return None
-    # 返回最新的那个
-    matches.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-    return Path(matches[0])
+    return log_dir / "uasset_read.log"
 
 
 def _coerce_level(level: str | int | None) -> int:
@@ -132,8 +110,7 @@ def configure_project_logging(
                 dry_run=False,
             )
         active_run_id = run_id or new_log_run_id()
-        # 当显式提供 run_id 时（来自父进程），复用已存在的日志文件
-        log_path = _build_log_path(resolved_log_dir, active_run_id, reuse_existing=bool(run_id))
+        log_path = _build_log_path(resolved_log_dir)
 
         log_level = _coerce_level(level)
         package_logger.setLevel(min(logging.DEBUG, log_level))
@@ -182,7 +159,7 @@ def cleanup_project_logs(
         return []
 
     files = sorted(
-        resolved_log_dir.glob("uasset_read-*.log*"),
+        resolved_log_dir.glob("uasset_read*.log*"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
@@ -232,3 +209,14 @@ def _reset_logging_state_for_tests() -> None:
         _configured_log_path = None
         _configured_run_id = None
         _disabled_by_request = False
+
+
+def setup_logging(
+    *,
+    log_dir: str | Path | None = None,
+    level: str | int | None = "DEBUG",
+    **kwargs,
+) -> Path | None:
+    """便捷日志配置入口，重置状态后调用 configure_project_logging。"""
+    _reset_logging_state_for_tests()
+    return configure_project_logging(log_dir=log_dir, level=level, **kwargs)
