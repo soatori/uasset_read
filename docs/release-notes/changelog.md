@@ -1,68 +1,68 @@
-# 变更日志
+# Changelog
 
 ## [0.5.3.23] — 2026-07-12
 
-自 v0.5.2.31 以来完成 23 个 issue 修复。
+23 issue fixes since v0.5.2.31.
 
-### 修复
-- #341: PropertyTag 类型树按 UE5 版本正确解析，消除 inner_count 误判
-- #341: PropertyTag 恢复扫描使用真实 FName 二进制格式
-- #341: 窗口末端候选无法验证时拒绝而非降级接受
-- 限制 Zlib/Gzip 解压输出大小，防止解压炸弹
-- 添加解压压缩比上限检查（10:1），防止解压炸弹
-- IoStore 头部解析添加资源上限（条目数/块数/方法数/分区数/索引大小）
-- IoStore 目录索引添加环检测和深度限制
-- usmap/mappings 属性类型解析添加递归深度限制
-- usmap/jmap 解压路径添加 ResourceBudget 保护
-- 修复 Transform/DependsMap/graph 节点审查后多项问题（Issue #329 #331 #338）
-- 修复 EventGraph export 偏移越界防护（Issue #338）
-- 修复 FTEXT-SAFETY 恢复位置修正为字段起始位置（Issue #337）
-- 修复 SubGraphs 数组长度限制（Issue #333）
-- 修复 FText args 数量限制统一为 MAX_SAFE_COUNT（Issue #332）
-- 修复 Graph 节点读取异常捕获扩大（Issue #331）
-- 修复 StructProperty Transform size 修正为 40/80（Issue #329）
-- 修复 preload export NoneType 防护（Issue #328）
-- 修复 read_name 索引越界增强诊断和 strict 模式（Issue #334）
-- 修复 FArchive 基类添加 skip() 方法，修正测试构造参数（Issue #327）
-- 修复 UE4 版本常量与 UE 源码 ObjectVersion.h 对齐（Issue #324）
-- 修复 SkeletalMesh SK_* 文件解析失败（Issue #321）
-- 修复 bytecode fallback scan 分类并标记置信度（Issue #77）
-- 修复 batch 模式递归扫描子目录中的 .uasset/.umap（Issue #322）
-- 修复 Enhanced Input Action 的 Trigger 映射修正，Markdown 正确显示（Issue #296）
-- 修复 _verify_imports 中 class_index 死代码替换为 class_name 验证（Issue #307）
-- 修复字节码恢复日志降级为 debug，避免污染 CLI stderr（Issue #303）
-- 修复 validate_size 小文件启发式不再使用 remaining 作为 fallback（Issue #312）
-- 修复 RSS 获取失败时添加 warning 日志，避免静默禁用内存保护（Issue #310）
+### Fixes
+- #341: PropertyTag type tree parses correctly according to UE5 version, eliminating inner_count misjudgment
+- #341: PropertyTag recovery scan uses real FName binary format
+- #341: Window-end candidates rejected when validation fails instead of degraded acceptance
+- Limit Zlib/Gzip decompression output size to prevent decompression bombs
+- Add decompression ratio cap (10:1) to prevent decompression bombs
+- Add resource limits to IoStore header parsing (entry count/block count/method count/partition count/index size)
+- Add cycle detection and depth limits to IoStore directory index
+- Add recursion depth limit to usmap/mappings property type parsing
+- Add ResourceBudget protection to usmap/jmap decompression path
+- Fix multiple issues after Transform/DependsMap/graph node review (Issue #329 #331 #338)
+- Fix EventGraph export offset out-of-bounds protection (Issue #338)
+- Fix FTEXT-SAFETY recovery position corrected to field start position (Issue #337)
+- Fix SubGraphs array length limit (Issue #333)
+- Fix FText args count limit unified to MAX_SAFE_COUNT (Issue #332)
+- Fix Graph node read exception capture expanded (Issue #331)
+- Fix StructProperty Transform size corrected to 40/80 (Issue #329)
+- Fix preload export NoneType protection (Issue #328)
+- Fix read_name index out-of-bounds enhanced diagnostics and strict mode (Issue #334)
+- Fix FArchive base class add skip() method, correct test constructor parameters (Issue #327)
+- Fix UE4 version constants aligned with UE source ObjectVersion.h (Issue #324)
+- Fix SkeletalMesh SK_* file parsing failure (Issue #321)
+- Fix bytecode fallback scan classification and confidence marking (Issue #77)
+- Fix batch mode recursive scan of subdirectories for .uasset/.umap (Issue #322)
+- Fix Enhanced Input Action Trigger mapping correction, Markdown displays correctly (Issue #296)
+- Fix _verify_imports class_index dead code replaced with class_name validation (Issue #307)
+- Fix bytecode recovery log downgraded to debug to avoid polluting CLI stderr (Issue #303)
+- Fix validate_size small file heuristic no longer uses remaining as fallback (Issue #312)
+- Fix RSS acquisition failure adds warning log to avoid silently disabling memory protection (Issue #310)
 
-### 新增
-- AnimSequence 基础轨迹数据解析（Issue #318）
-- MovieScene 及 ControlRig ParameterTrack 解析支持（Issue #317）
-- ControlRig 大型文件优化，提高轻量解析阈值（Issue #320）
-- 统一日志管理，运行日志写入 log/ 目录（Issue #323）
-- 235 个新集成测试（覆盖率 28% → 50%）
-- 14 个新资产样本
-- 添加 Pak/IoStore 安全集成测试
-- 添加 CLI --version 参数支持
+### New Features
+- AnimSequence basic trajectory data parsing (Issue #318)
+- MovieScene and ControlRig ParameterTrack parsing support (Issue #317)
+- ControlRig large file optimization, increase lightweight parsing threshold (Issue #320)
+- Unified log management, runtime logs written to log/ directory (Issue #323)
+- 235 new integration tests (coverage 28% → 50%)
+- 14 new asset samples
+- Add Pak/IoStore security integration tests
+- Add CLI --version parameter support
 
-### 改进
-- 内存安全：RSS 测量、解析器检查点、资源预算模型
-- 安全防护：边界检查、异常捕获扩大、资源限制
-- 代码重构：parse_uasset.py 拆分为三个文件
-- 测试套件精简 1688→78 测试
+### Improvements
+- Memory safety: RSS measurement, parser checkpoints, resource budget model
+- Security: boundary checks, expanded exception capture, resource limits
+- Code refactor: parse_uasset.py split into three files
+- Test suite streamlined 1688→78 tests
 
-### 修复
-- #341: PropertyTag 类型树按 UE5 版本正确解析，消除 inner_count 误判
-- #341: PropertyTag 恢复扫描使用真实 FName 二进制格式
-- #341: 窗口末端候选无法验证时拒绝而非降级接受
+### Fixes
+- #341: PropertyTag type tree parses correctly according to UE5 version, eliminating inner_count misjudgment
+- #341: PropertyTag recovery scan uses real FName binary format
+- #341: Window-end candidates rejected when validation fails instead of degraded acceptance
 
-### 新增
-- 235 个新集成测试（覆盖率 28% → 50%）
-- 14 个新资产样本（FirstPerson、IntroToUnreal、Lyra、StackOBot、StarterContent）
-- pyproject.toml 包元数据
+### New Features
+- 235 new integration tests (coverage 28% → 50%)
+- 14 new asset samples (FirstPerson, IntroToUnreal, Lyra, StackOBot, StarterContent)
+- pyproject.toml package metadata
 - MIT LICENSE
 
-### 改进
-- 版本号统一至 0.5.3.20
+### Improvements
+- Version number unified to 0.5.3.20
 
 ## [0.5.3.19] — 2026-07-11
 
