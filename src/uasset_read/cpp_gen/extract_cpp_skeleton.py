@@ -628,71 +628,42 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
     )
 
 def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
-    """从 FEdGraphPinType 构建 UE 类型路径。
-
-    Args:
-        pin_type: FEdGraphPinType
-
-    Returns:
-        UE 类型路径字符串
-    """
+    """从 FEdGraphPinType 构建 UE 类型路径。"""
     category = pin_type.pin_category
-    subcategory = pin_type.pin_subcategory
+    subcategory = pin_type.pin_subcategory or ""
 
     # 属性类型（Property）→ 映射到对应的 UE 基本类型
-    if category in ("IntProperty",):
-        return "int32"
-    if category in ("FloatProperty", "DoubleProperty"):
-        return "float" if category == "FloatProperty" else "double"
-    if category in ("BoolProperty",):
-        return "bool"
+    _PROP_TYPE_MAP = {
+        "IntProperty": "int32", "FloatProperty": "float", "DoubleProperty": "double",
+        "BoolProperty": "bool",
+        "StrProperty": "FString", "NameProperty": "FName", "TextProperty": "FText",
+    }
+    if category in _PROP_TYPE_MAP:
+        return _PROP_TYPE_MAP[category]
     if category in ("ObjectProperty", "SoftObjectProperty"):
-        # ObjectProperty 总是指针类型
-        cpp_type = subcategory if subcategory else "UObject"
-        if not cpp_type.endswith("*"):
-            cpp_type = f"{cpp_type}*"
-        return cpp_type
+        cpp_type = subcategory or "UObject"
+        return cpp_type if cpp_type.endswith("*") else f"{cpp_type}*"
     if category in ("ArrayProperty", "SetProperty", "MapProperty"):
-        # 对于集合类型，返回元素类型（从 pin_type 中提取）
-        # 如果没有 subcategory，返回基本类型
-        return subcategory if subcategory else "FString"
-    if category in ("StrProperty", "NameProperty", "TextProperty"):
-        cpp_type_map = {
-            "StrProperty": "FString",
-            "NameProperty": "FName",
-            "TextProperty": "FText",
-        }
-        return cpp_type_map.get(category, category)
+        return subcategory or "FString"
 
     # 基本类型直接返回
-    if category in ("float", "double", "bool", "int", "int32", "int64",
-                     "byte", "string", "name", "text"):
+    _BASIC_TYPES = frozenset({"float", "double", "bool", "int", "int32", "int64",
+                               "byte", "string", "name", "text"})
+    if category in _BASIC_TYPES:
         return category
 
-    # object 类型：subcategory 是类名
+    # object 类型
     if category == "object":
         if subcategory:
-            if subcategory.startswith("/Script/"):
-                return subcategory
-            # 补全路径
-            return f"/Script/Engine.{subcategory}"
-        return "UObject"  # 未知 object 类型
+            return subcategory if subcategory.startswith("/Script/") else f"/Script/Engine.{subcategory}"
+        return "UObject"
 
-    # struct 类型：subcategory 是结构名
+    # struct 类型
     if category in ("struct", "StructProperty"):
         if subcategory:
-            if subcategory.startswith("/Script/"):
-                return subcategory
-            # 常见结构体补全路径
-            common_structs = ("Vector", "Rotator", "Transform", "Vector2D",
-                              "LinearColor", "Color", "Guid", "Quat", "Box")
-            if subcategory in common_structs:
-                return f"/Script/CoreUObject.{subcategory}"
-            return f"/Script/CoreUObject.{subcategory}"
-        # StructProperty 无 subcategory — 使用通用 FStruct 占位
+            return subcategory if subcategory.startswith("/Script/") else f"/Script/CoreUObject.{subcategory}"
         return "FStruct"
 
-    # 其他类型返回 category
     return category
 
 # ============================================================================

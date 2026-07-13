@@ -283,13 +283,12 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("bIsDefault", "BoolProperty"),
     ],
     # 材质参数结构体 tagged fallback schemas
-    # FMaterialParameterInfo: FName ParameterName + int32 Index + bool bOverride
     "FMaterialParameterInfo": [
         ("ParameterName", "NameProperty"),
         ("Index", "IntProperty"),
         ("bOverride", "BoolProperty"),
     ],
-    # FScalarParameterValue: FMaterialParameterInfo ParameterInfo + float ParameterValue + bool bOverride
+    # FScalarParameterValue
     "ScalarParameterValue": [
         ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
         ("ParameterValue", "FloatProperty"),
@@ -301,8 +300,6 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("bOverride", "BoolProperty"),
     ],
     # 动画混合空间结构体 tagged fallback schemas
-    # FBlendSample: FVector SampleValue + float Time + int32 RateScale + bool bIsValid
-    # 参考：Engine/Classes/Animation/BlendSpace.h — FBlendSample
     "BlendSample": [
         ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
         ("Time", "FloatProperty"),            # float — 动画时间值
@@ -565,176 +562,166 @@ def _try_fast_path_struct(
     name_map: List[str],
 ) -> Optional[StructValue]:
     """尝试快速路径解析简单结构体（无 PropertyTag 循环）。返回 None 表示无匹配。"""
-    if struct_type == "Vector":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        return StructValue(struct_type="Vector", fields={"X": reader(), "Y": reader(), "Z": reader()})
-
-    if struct_type == "Rotator":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        return StructValue(struct_type="Rotator", fields={"Pitch": reader(), "Yaw": reader(), "Roll": reader()})
-
-    if struct_type == "Vector2D":
-        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
-        return StructValue(struct_type="Vector2D", fields={"X": reader(), "Y": reader()})
-
-    if struct_type == "Vector4":
-        if tag.size == 32:
-            x, y, z, w = archive.read_f64(), archive.read_f64(), archive.read_f64(), archive.read_f64()
-        else:
-            x, y, z, w = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
-        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
-
-    if struct_type == "LinearColor":
-        return StructValue(struct_type="LinearColor", fields={
-            "R": archive.read_f32(), "G": archive.read_f32(),
-            "B": archive.read_f32(), "A": archive.read_f32(),
-        })
-
-    if struct_type == "Color":
-        return StructValue(struct_type="Color", fields={
-            "B": archive.read_u8(), "G": archive.read_u8(),
-            "R": archive.read_u8(), "A": archive.read_u8(),
-        })
-
-    if struct_type == "Quat":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(struct_type="Quat", fields={
-            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
-        })
-
-    if struct_type == "Plane":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(struct_type="Plane", fields={
-            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
-        })
-
-    if struct_type == "Guid":
-        return StructValue(struct_type="Guid", fields={
-            "A": archive.read_u32(), "B": archive.read_u32(),
-            "C": archive.read_u32(), "D": archive.read_u32(),
-        })
-
-    if struct_type == "IntPoint":
-        return StructValue(struct_type="IntPoint", fields={"X": archive.read_i32(), "Y": archive.read_i32()})
-
-    if struct_type == "IntVector":
-        return StructValue(struct_type="IntVector", fields={
-            "X": archive.read_i32(), "Y": archive.read_i32(), "Z": archive.read_i32(),
-        })
-
-    if struct_type == "Box2D":
-        min_x, min_y = archive.read_f32(), archive.read_f32()
-        max_x, max_y = archive.read_f32(), archive.read_f32()
-        b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box2D", fields={
-            "Min": {"X": min_x, "Y": min_y}, "Max": {"X": max_x, "Y": max_y}, "bIsValid": b_valid,
-        })
-
-    if struct_type == "Box":
-        min_x, min_y, min_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
-        max_x, max_y, max_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
-        b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box", fields={
-            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
-            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
-            "bIsValid": b_valid,
-        })
-
-    if struct_type == "Sphere":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        cx, cy, cz, w = reader(), reader(), reader(), reader()
-        return StructValue(struct_type="Sphere", fields={"Center": {"X": cx, "Y": cy, "Z": cz}, "W": w})
-
-    if struct_type == "TopLevelAssetPath":
-        return StructValue(struct_type="TopLevelAssetPath", fields={
-            "PackageName": archive.read_name(name_map), "AssetName": archive.read_name(name_map),
-        })
-
-    if struct_type == "PointerToUberGraphFrame":
-        return StructValue(struct_type="PointerToUberGraphFrame", fields={"FrameIndex": archive.read_i64()})
-
-    if struct_type == "Matrix":
-        matrix = [[archive.read_f32() for _ in range(4)] for _ in range(4)]
-        return StructValue(struct_type="Matrix", fields={"M": matrix})
-
-    if struct_type == "TwoVectors":
-        e1 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        e2 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        return StructValue(struct_type="TwoVectors", fields={"E1": e1, "E2": e2})
-
-    if struct_type == "OrientedBox":
-        ax = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        ay = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        az = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        ext = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        ctr = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        return StructValue(struct_type="OrientedBox", fields={
-            "AxisX": ax, "AxisY": ay, "AxisZ": az, "Extent": ext, "Center": ctr,
-        })
-
-    if struct_type == "Transform":
-        # 序列化顺序: Rotation → Translation → Scale3D (UE 源码 TransformNonVectorized.h:616-622)
-        if tag.size == 40:  # FTransform3f (all float): 16 + 12 + 12
-            rx, ry, rz, rw = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
-            tx, ty, tz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            sx, sy, sz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-        elif tag.size == 80:  # FTransform3d (all double): 32 + 24 + 24
-            rx, ry, rz, rw = archive.read_f64(), archive.read_f64(), archive.read_f64(), archive.read_f64()
-            tx, ty, tz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            sx, sy, sz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-        else:
-            # 未知大小：可能是损坏数据，拒绝解析
-            if not archive._tolerant:
-                raise ParseError(
-                    f"Transform: unexpected size {tag.size} (expected 40 or 80)",
-                    context=ErrorContext(
-                        offset=archive.tell(),
-                        phase="properties",
-                        operation="_try_fast_path_struct",
-                        context_name=tag.name,
-                    ),
-                )
-            logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
-            return StructValue(struct_type="Transform", fields={
-                "_warning": f"unexpected size {tag.size}",
-            })
-        return StructValue(struct_type="Transform", fields={
-            "Translation": {"X": tx, "Y": ty, "Z": tz},
-            "Rotation": {"X": rx, "Y": ry, "Z": rz, "W": rw},
-            "Scale3D": {"X": sx, "Y": sy, "Z": sz},
-        })
-
-    if struct_type == "BoxSphereBounds":
-        if tag.size == 28:
-            ox, oy, oz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            sr = archive.read_f32()
-        elif tag.size == 56:
-            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            bx, by, bz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            sr = archive.read_f64()
-        elif tag.size == 52:
-            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            bx, by, bz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            sr = archive.read_f32()
-        elif tag.size == 40:
-            ox, oy, oz = archive.read_f64(), archive.read_f64(), archive.read_f64()
-            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            sr = archive.read_f32()
-        else:
-            ox, oy, oz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            bx, by, bz = archive.read_f32(), archive.read_f32(), archive.read_f32()
-            sr = archive.read_f32()
-            remaining = tag.size - 28
-            if remaining > 0:
-                archive.read_bytes(remaining)
-        return StructValue(struct_type="BoxSphereBounds", fields={
-            "Origin": {"X": ox, "Y": oy, "Z": oz},
-            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
-            "SphereRadius": sr,
-        })
-
+    handler = _FAST_PATH_STRUCT_HANDLERS.get(struct_type)
+    if handler is not None:
+        fields = handler(tag, archive, name_map)
+        return StructValue(struct_type=struct_type, fields=fields)
     return None
+
+
+# --- Fast-path struct handlers (table-driven) ---
+
+def _fp_vec3(fields, tag, archive):
+    """读取 3-float 向量（Vector/Rotator 等），支持 LWC 双精度。"""
+    reader = archive.read_f64 if tag.size == 24 else archive.read_f32
+    return {f: reader() for f in fields}
+
+def _fp_vec4(tag, archive):
+    """读取 4-float 向量（Vector4/Quat/Plane），支持 LWC 双精度。"""
+    reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+    return {f: reader() for f in ("X", "Y", "Z", "W")}
+
+def _fp_vec2(tag, archive):
+    """读取 2-float 向量（Vector2D），支持 LWC 双精度。"""
+    reader = archive.read_f64 if tag.size == 16 else archive.read_f32
+    return {"X": reader(), "Y": reader()}
+
+def _fp_color(tag, archive):
+    return {"R": archive.read_f32(), "G": archive.read_f32(),
+            "B": archive.read_f32(), "A": archive.read_f32()}
+
+def _fp_u8color(tag, archive):
+    return {"B": archive.read_u8(), "G": archive.read_u8(),
+            "R": archive.read_u8(), "A": archive.read_u8()}
+
+def _fp_u32_quad(tag, archive):
+    return {"A": archive.read_u32(), "B": archive.read_u32(),
+            "C": archive.read_u32(), "D": archive.read_u32()}
+
+def _fp_i32_pair(tag, archive):
+    return {"X": archive.read_i32(), "Y": archive.read_i32()}
+
+def _fp_i32_triple(tag, archive):
+    return {"X": archive.read_i32(), "Y": archive.read_i32(), "Z": archive.read_i32()}
+
+def _fp_box2d(tag, archive):
+    mn = {"X": archive.read_f32(), "Y": archive.read_f32()}
+    mx = {"X": archive.read_f32(), "Y": archive.read_f32()}
+    return {"Min": mn, "Max": mx, "bIsValid": archive.read_i32() != 0}
+
+def _fp_box(tag, archive):
+    mn = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+    mx = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+    return {"Min": mn, "Max": mx, "bIsValid": archive.read_i32() != 0}
+
+def _fp_sphere(tag, archive):
+    reader = archive.read_f64 if tag.size == 32 else archive.read_f32
+    c = {f: reader() for f in ("X", "Y", "Z")}
+    return {"Center": c, "W": reader()}
+
+def _fp_top_level_path(tag, archive, name_map):
+    return {"PackageName": archive.read_name(name_map), "AssetName": archive.read_name(name_map)}
+
+def _fp_ptr_uber(tag, archive):
+    return {"FrameIndex": archive.read_i64()}
+
+def _fp_matrix(tag, archive):
+    return {"M": [[archive.read_f32() for _ in range(4)] for _ in range(4)]}
+
+def _fp_two_vectors(tag, archive):
+    r3 = lambda: {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+    return {"E1": r3(), "E2": r3()}
+
+def _fp_oriented_box(tag, archive):
+    r3 = lambda: {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+    return {"AxisX": r3(), "AxisY": r3(), "AxisZ": r3(), "Extent": r3(), "Center": r3()}
+
+def _fp_transform(tag, archive, _name_map):
+    """FTransform: Rotation → Translation → Scale3D (TransformNonVectorized.h:616-622)"""
+    if tag.size == 40:
+        rf = lambda: archive.read_f32()
+    elif tag.size == 80:
+        rf = archive.read_f64
+    else:
+        if not archive._tolerant:
+            raise ParseError(
+                f"Transform: unexpected size {tag.size} (expected 40 or 80)",
+                context=ErrorContext(
+                    offset=archive.tell(), phase="properties",
+                    operation="_try_fast_path_struct", context_name=tag.name,
+                ),
+            )
+        logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
+        return {"_warning": f"unexpected size {tag.size}"}
+    return {
+        "Rotation": {f: rf() for f in ("X", "Y", "Z", "W")},
+        "Translation": {f: rf() for f in ("X", "Y", "Z")},
+        "Scale3D": {f: rf() for f in ("X", "Y", "Z")},
+    }
+
+def _fp_box_sphere_bounds(tag, archive):
+    _FP3 = lambda: archive.read_f32()
+    _FP6 = lambda: archive.read_f64()
+    if tag.size == 28:
+        ox, oy, oz = _FP3(), _FP3(), _FP3()
+        bx, by, bz = _FP3(), _FP3(), _FP3()
+        sr = _FP3()
+    elif tag.size == 56:
+        ox, oy, oz = _FP6(), _FP6(), _FP6()
+        bx, by, bz = _FP6(), _FP6(), _FP6()
+        sr = _FP6()
+    elif tag.size == 52:
+        ox, oy, oz = _FP6(), _FP6(), _FP6()
+        bx, by, bz = _FP6(), _FP6(), _FP6()
+        sr = _FP3()
+    elif tag.size == 40:
+        ox, oy, oz = _FP6(), _FP6(), _FP6()
+        bx, by, bz = _FP3(), _FP3(), _FP3()
+        sr = _FP3()
+    else:
+        ox, oy, oz = _FP3(), _FP3(), _FP3()
+        bx, by, bz = _FP3(), _FP3(), _FP3()
+        sr = _FP3()
+        remaining = tag.size - 28
+        if remaining > 0:
+            archive.read_bytes(remaining)
+    return {
+        "Origin": {"X": ox, "Y": oy, "Z": oz},
+        "BoxExtent": {"X": bx, "Y": by, "Z": bz},
+        "SphereRadius": sr,
+    }
+
+
+def _make_fp_vec3(fields):
+    """生成读取 N-float 向量的 handler。"""
+    def handler(tag, archive, _name_map):
+        return _fp_vec3(fields, tag, archive)
+    return handler
+
+# 表驱动分派：结构体类型 → handler(tag, archive, name_map) -> Optional[dict]
+_FAST_PATH_STRUCT_HANDLERS = {
+    "Vector": _make_fp_vec3(("X", "Y", "Z")),
+    "Rotator": _make_fp_vec3(("Pitch", "Yaw", "Roll")),
+    "Vector2D": lambda t, a, _nm: _fp_vec2(t, a),
+    "Vector4": lambda t, a, _nm: _fp_vec4(t, a),
+    "LinearColor": lambda t, a, _nm: _fp_color(t, a),
+    "Color": lambda t, a, _nm: _fp_u8color(t, a),
+    "Quat": lambda t, a, _nm: _fp_vec4(t, a),
+    "Plane": lambda t, a, _nm: _fp_vec4(t, a),
+    "Guid": lambda t, a, _nm: _fp_u32_quad(t, a),
+    "IntPoint": lambda t, a, _nm: _fp_i32_pair(t, a),
+    "IntVector": lambda t, a, _nm: _fp_i32_triple(t, a),
+    "Box2D": lambda t, a, _nm: _fp_box2d(t, a),
+    "Box": lambda t, a, _nm: _fp_box(t, a),
+    "Sphere": lambda t, a, _nm: _fp_sphere(t, a),
+    "TopLevelAssetPath": lambda t, a, nm: _fp_top_level_path(t, a, nm),
+    "PointerToUberGraphFrame": lambda t, a, _nm: _fp_ptr_uber(t, a),
+    "Matrix": lambda t, a, _nm: _fp_matrix(t, a),
+    "TwoVectors": lambda t, a, _nm: _fp_two_vectors(t, a),
+    "OrientedBox": lambda t, a, _nm: _fp_oriented_box(t, a),
+    "Transform": lambda t, a, nm: _fp_transform(t, a, nm),
+    "BoxSphereBounds": lambda t, a, _nm: _fp_box_sphere_bounds(t, a),
+}
 
 def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
     """解析 StructProperty（ADVP-01）。"""
