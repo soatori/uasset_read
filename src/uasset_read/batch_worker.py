@@ -64,7 +64,8 @@ class _StderrDrain:
     def _drain_loop(self, proc: subprocess.Popen[bytes]) -> None:
         """持续读取 stderr 行直到 EOF。"""
         try:
-            assert proc.stderr is not None
+            if proc.stderr is None:
+                return
             for raw_line in proc.stderr:
                 line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
                 self._append(line)

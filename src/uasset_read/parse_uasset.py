@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import struct
 import warnings
-from typing import TYPE_CHECKING, Optional, List, Sequence, Callable
+from typing import TYPE_CHECKING, Sequence, Callable
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 def _should_use_lightweight_tolerant_parse(
     result,
     tolerant: bool,
-    lightweight_threshold: Optional[int] = None,
+    lightweight_threshold: int | None = None,
     force_full_parse: bool = False,
 ) -> bool:
     if force_full_parse:
@@ -140,7 +140,7 @@ def _build_lightweight_function_graphs(export_map) -> list[dict]:
 def _apply_lightweight_parse(
     result,
     tolerant: bool,
-    lightweight_threshold: Optional[int],
+    lightweight_threshold: int | None,
     force_full_parse: bool,
 ) -> bool:
     """轻量解析路径：若触发则填充 result 并返回 True。"""
@@ -234,17 +234,17 @@ def _parse_package_core(
     path: str,
     result,
     tolerant: bool = True,
-    provider: Optional["PackageProvider"] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
     include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    extra_linker_setup: Optional[Callable] = None,
-    check_aes_key: Optional[bytes] = None,
-    lightweight_threshold: Optional[int] = None,
+    asset_roots: Sequence[str] | None = None,
+    extra_linker_setup: Callable | None = None,
+    check_aes_key: bytes | None = None,
+    lightweight_threshold: int | None = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
+    memory_policy: MemoryPolicy | None = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
@@ -349,7 +349,7 @@ def _parse_package_core(
 
 
 def _resolve_parse_params(
-    config: Optional["ParseConfig"],
+    config: ParseConfig | None,
     kwargs: dict,
 ) -> dict:
     """将 ParseConfig 和旧风格关键字参数合并为最终参数字典。
@@ -401,17 +401,17 @@ def parse_package(
     path: str,
     tolerant: bool = True,
     include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    aes_key: Optional[bytes] = None,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
+    asset_roots: Sequence[str] | None = None,
+    aes_key: bytes | None = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
-    lightweight_threshold: Optional[int] = None,
+    lightweight_threshold: int | None = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -479,13 +479,13 @@ def parse_uasset(
     path: str,
     tolerant: bool = True,
     include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
+    asset_roots: Sequence[str] | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
     force_full_parse: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -520,15 +520,15 @@ def parse_uasset_with_linker(
     tolerant: bool = True,
     preload_all: bool = False,
     include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    lightweight_threshold: Optional[int] = None,
+    asset_roots: Sequence[str] | None = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    lightweight_threshold: int | None = None,
     force_full_parse: bool = False,
     hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -588,13 +588,13 @@ def parse_uasset_with_linker(
 
 def parse_package_lazy(
     path: str,
-    export_indices: Optional[List[int]] = None,
+    export_indices: list[int] | None = None,
     store_raw_bytes: bool = False,
     tolerant: bool = True,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    memory_policy: Optional["MemoryPolicy"] = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    memory_policy: MemoryPolicy | None = None,
 ) -> ParseResult:
     """懒加载模式解析包 — 按需解析 export body。
 
