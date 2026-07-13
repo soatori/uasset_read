@@ -2,7 +2,6 @@
 
 等价迁移 uasset_read.py §1514-1630。
 """
-from __future__ import annotations
 
 import struct
 from typing import Any, Dict, List, Optional

@@ -5,11 +5,12 @@
 对应 COR-02: FCustomVersion 体系。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Dict, List
+
+from uasset_read.core.utils import normalize_hex_guid
 
 from uasset_read.constants import (
     FFRAMEWORK_OBJECT_VERSION_GUID,
@@ -223,18 +224,18 @@ class VersionContainer:
 
         GUID 比较时自动去除横杠并转小写。
         """
-        normalized = guid.replace("-", "").lower()
+        normalized = normalize_hex_guid(guid)
         cached = self._guid_cache.get(normalized)
         if cached is not None:
             return cached
 
         for cv in self.custom_versions:
-            cv_guid = cv.guid.replace("-", "").lower()
+            cv_guid = normalize_hex_guid(cv.guid)
             if cv_guid == normalized:
                 self._guid_cache[normalized] = cv.version
                 return cv.version
 
-        self._guid_cache[normalized] = default
+        # 未命中时不缓存 default，避免不同调用者的 default 互相污染
         return default
 
     @property

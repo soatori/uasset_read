@@ -5,20 +5,19 @@
 - class_specific_skip.py 在 property_parser 内部作为二次安全网
 
 策略定义：
-- FULL_SERIALIZER: 完整支持该类专用 Serialize()（暂未实现）
 - TAGGED_PROPERTIES_ONLY: 仅解析 tagged properties（通用 parser 可处理）
 - OPAQUE_CLASS_PAYLOAD: 类专属二进制 payload，不尝试解析
 - SKIP_UNSUPPORTED: 完全不支持，直接跳过
+
+注：FULL_SERIALIZER 已移除 — 当前无任何实际 handler 实现。
 """
-from __future__ import annotations
 
 from enum import Enum
 
 
 class SerializationStrategy(str, Enum):
     """序列化策略枚举。"""
-    # 完整专用序列化器（当前未实现任何此类 handler）
-    FULL_SERIALIZER = "full_serializer"
+    # FULL_SERIALIZER 已移除 — 当前无实际 handler 实现
     # 仅 tagged properties（通用 property parser 可处理）
     TAGGED_PROPERTIES_ONLY = "tagged_properties_only"
     # 类专属 opaque payload（有自定义 Serialize() 但我们不实现）
@@ -40,6 +39,13 @@ _TAGGED_PROPERTIES_CLASSES = frozenset({
     "EdGraphNode",
     "K2Node",
     "AnimBlueprintGeneratedClass",
+    # #320: ControlRig / RigVM 蓝图生成类（含 tagged properties）
+    "ControlRigBlueprintGeneratedClass",
+    "RigVMBlueprintGeneratedClass",
+    # MovieScene 系列类（#317）
+    "MovieScene",
+    "MovieSceneControlRigParameterTrack",
+    "MovieSceneControlRigParameterSection",
 })
 
 # Opaque class payload — 有专用 Serialize() 但我们不实现
@@ -54,13 +60,30 @@ _OPAQUE_CLASSES = frozenset({
     "AnimMontage",
     "SoundWave",
     "SoundCue",
+    "LevelSequence",
     "ParticleSystem",
     "NiagaraSystem",
-    # #164: MovieScene/Sequencer 类
-    "MovieScene",
+    # #164: MovieScene/Sequencer 类（MovieScene/ControlRig 已迁移到 TAGGED_PROPERTIES_ONLY）
     "MovieSceneBuiltInEasingFunction",
-    "MovieSceneControlRigParameterSection",
-    "MovieSceneControlRigParameterTrack",
+    # #320: ControlRig / RigVM 序列化类（自定义 Serialize()）
+    "ControlRig",
+    "RigHierarchy",
+    "RigVM",
+    "RigVMHost",
+    "RigVMScript",
+    "RigVMFunction",
+    "RigVMClosure",
+    "RigVMBlueprint",
+    "RigVMController",
+    "RigVMGraph",
+    "RigVMNode",
+    "RigVMLink",
+    "RigVMVariable",
+    "RigVMParameter",
+    "RigVMOperand",
+    "RigVMStruct",
+    "RigVMUserWorkflowOptions",
+    "RigVMEditorSettings",
     # #165: MetaSound 编辑器元数据类
     "MetasoundEditorGraphMemberDefaultBool",
     "MetasoundEditorGraphMemberDefaultInt",
@@ -78,6 +101,48 @@ _SKIP_CLASSES = frozenset({
     "NiagaraGraph",
     "NiagaraScript",
     "NiagaraDataInterface",
+    # 从 class_specific_skip.py SKIP_CLASS_NAMES 迁移（消除策略冲突）
+    "NiagaraScriptSource",
+    "NiagaraDataInterfaceExport",
+    "NiagaraDataInterfaceGrid2D",
+    "NiagaraDataInterfaceGrid3D",
+    "NiagaraDataInterfaceSkeletalMesh",
+    "NiagaraDataInterfaceTexture",
+    "NiagaraDataInterfaceComponentRenderer",
+    "NiagaraDataInterfaceAudioSubmix",
+    "NiagaraDataInterfaceCurlNoise",
+    "NiagaraDataInterfaceRenderTarget2D",
+    "NiagaraDataInterfaceSkeletalMeshSlice",
+    "NiagaraDataInterfaceStaticMesh",
+    "NiagaraDataInterfaceRwGrid2D",
+    "NiagaraDataInterfaceRwGrid3D",
+    "NiagaraDataInterfaceNeighborGrid3D",
+    "NiagaraDataInterfaceLandscape",
+    "NiagaraDataInterfaceOcclusion",
+    "NiagaraDataInterfaceParticleRead",
+    "NiagaraDataInterfaceDebugColor",
+    "NiagaraDataInterfaceGpuReadback",
+    "NiagaraDataInterfaceAudio",
+    "NiagaraDataInterfaceMediaTexture",
+    "NiagaraDataInterfaceVideo",
+    "NiagaraDataInterfaceVirtualTexture",
+    "NiagaraDataInterfaceSparseVolumeTexture",
+    "AnimBlueprintExtension",
+    "AnimComposite",
+    "AnimPoseSnapshot",
+    "ImpulseResponse",
+    "SoundConcurrency",
+    "SoundMix",
+    "SoundClass",
+    "ReverbEffect",
+    "AmbientSound",
+    # 从 class_specific_skip.py SKIP_CLASS_NAMES 迁移（消除策略冲突 #6）
+    "NiagaraEmitter",
+    "NiagaraSpriteRendererProperties",
+    "NiagaraMeshRendererProperties",
+    "NiagaraRibbonRendererProperties",
+    "NiagaraRendererProperties",
+    "NiagaraEmitterProperties",
 })
 
 CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = {

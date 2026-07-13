@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Kismet 表达式 — Struct 相关表达式。
 
 包含 EX_StructConst、EX_EndStructConst、EX_PropertyConst、EX_BitFieldConst。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional

@@ -1,10 +1,10 @@
 """FKismetArchive — Kismet bytecode reader, inherits FArchive for in-memory byte stream parsing."""
-from __future__ import annotations
 
 import io
 import logging
 
 from uasset_read.archive import FArchive
+from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
@@ -32,7 +32,7 @@ class FKismetArchive(FArchive):
         self._mmap_warning = None
         self._name_map = name_map
         self._expression_depth = 0
-        self._diagnostics: list = []
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
@@ -62,7 +62,7 @@ class FKismetArchive(FArchive):
                             "Too many consecutive unknown tokens in tolerant mode"
                         )
                     if stmt_index not in self._warned_offsets:
-                        logger.warning(
+                        logger.debug(
                             f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
                         )
                         self._warned_offsets.add(stmt_index)

@@ -4,7 +4,6 @@
 （该布局依赖版本、CustomVersion 和 FMaterialParameterInfo 结构）。
 仅提取原始字节样本供诊断使用。
 """
-from __future__ import annotations
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 

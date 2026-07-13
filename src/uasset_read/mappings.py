@@ -1,5 +1,4 @@
 """Usmap/Jmap 映射读取与统一类型模型。"""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 import gzip
@@ -9,7 +8,10 @@ import struct
 from typing import Dict, Optional, Any
 
 from uasset_read.exceptions import ParseError
+from uasset_read.memory_safety import ResourceBudget
 
+
+MAX_RECURSION_DEPTH: int = 64
 
 _PROPERTY_TYPE_NAMES = {
     0: "ByteProperty",
@@ -156,15 +158,18 @@ class UsmapParser:
     """读取 CUE4Parse 兼容的 .usmap 映射文件。"""
     FILE_MAGIC = 0x30C4
 
-    def __init__(self, path_or_bytes: str | bytes):
+    def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
         if isinstance(path_or_bytes, bytes):
             data = path_or_bytes
         else:
+            if budget is not None:
+                file_size = os.path.getsize(path_or_bytes)
+                budget.reserve(file_size, "usmap_file_read")
             with open(path_or_bytes, "rb") as fh:
                 data = fh.read()
-        self.mappings = self._parse(data)
+        self.mappings = self._parse(data, budget)
 
-    def _parse(self, data: bytes) -> TypeMappings:
+    def _parse(self, data: bytes, budget: ResourceBudget | None = None) -> TypeMappings:
         reader = _BytesReader(data)
         magic = reader.u16()
         if magic != self.FILE_MAGIC:
@@ -185,6 +190,8 @@ class UsmapParser:
         comp_size = reader.u32()
         decomp_size = reader.u32()
         payload = reader.read(comp_size)
+        if budget is not None:
+            budget.reserve(decomp_size, "usmap_decompress")
         data = self._decompress(payload, compression, comp_size, decomp_size)
         ar = _BytesReader(data)
 
@@ -255,31 +262,38 @@ class UsmapParser:
         name = ar.name(lut) or ""
         return PropertyInfo(index=index, name=name, mapping_type=self._parse_property_type(ar, lut), array_size=array_dim)
 
-    def _parse_property_type(self, ar: _BytesReader, lut: list[str]) -> PropertyType:
+    def _parse_property_type(self, ar: _BytesReader, lut: list[str], depth: int = 0) -> PropertyType:
+        if depth > MAX_RECURSION_DEPTH:
+            raise ParseError(f"Usmap 属性类型递归深度超过上限 {MAX_RECURSION_DEPTH}")
         type_id = ar.u8()
         type_name = _PROPERTY_TYPE_NAMES.get(type_id, "Unknown")
         if type_name == "EnumProperty":
-            inner = self._parse_property_type(ar, lut)
+            inner = self._parse_property_type(ar, lut, depth + 1)
             return PropertyType(type_name, inner_type=inner, enum_name=ar.name(lut))
         if type_name == "StructProperty":
             return PropertyType(type_name, struct_type=ar.name(lut))
         if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"}:
-            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut))
+            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1))
         if type_name == "MapProperty":
-            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut), value_type=self._parse_property_type(ar, lut))
+            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1), value_type=self._parse_property_type(ar, lut, depth + 1))
         return PropertyType(type_name)
 
 
 class JmapParser:
     """读取 CUE4Parse 兼容的 .jmap/.jmap.gz 映射文件。"""
 
-    def __init__(self, path_or_bytes: str | bytes):
+    def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
         if isinstance(path_or_bytes, bytes):
             data = path_or_bytes
         else:
+            if budget is not None:
+                file_size = os.path.getsize(path_or_bytes)
+                budget.reserve(file_size, "jmap_file_read")
             with open(path_or_bytes, "rb") as fh:
                 data = fh.read()
             if path_or_bytes.lower().endswith(".gz"):
+                if budget is not None:
+                    budget.reserve(len(data), "jmap_gzip_decompress")
                 data = gzip.decompress(data)
         self.mappings = self._parse(json.loads(data.decode("utf-8")))
 
@@ -322,12 +336,14 @@ class JmapParser:
             array_size=int(prop.get("array_dim") or 1),
         )
 
-    def _parse_property_type(self, prop: Dict[str, Any]) -> PropertyType:
+    def _parse_property_type(self, prop: Dict[str, Any], depth: int = 0) -> PropertyType:
+        if depth > MAX_RECURSION_DEPTH:
+            raise ParseError(f"Jmap 属性类型递归深度超过上限 {MAX_RECURSION_DEPTH}")
         type_name = str(prop.get("type") or "Unknown")
         inner_src = prop.get("container") or prop.get("inner") or prop.get("key_prop")
         value_src = prop.get("value_prop")
-        inner = self._parse_property_type(inner_src) if isinstance(inner_src, dict) else None
-        value = self._parse_property_type(value_src) if isinstance(value_src, dict) else None
+        inner = self._parse_property_type(inner_src, depth + 1) if isinstance(inner_src, dict) else None
+        value = self._parse_property_type(value_src, depth + 1) if isinstance(value_src, dict) else None
         if type_name == "EnumProperty" and inner is None:
             inner = PropertyType("ByteProperty")
         if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"} and inner is None:
@@ -344,6 +360,22 @@ class JmapParser:
         )
 
 
+def parse_jmap(path: str, budget: ResourceBudget | None = None) -> TypeMappings:
+    """解析 .jmap/.jmap.gz 文件，返回 TypeMappings。
+
+    Args:
+        path: 映射文件路径
+        budget: 可选资源预算，用于限制解压大小
+
+    Returns:
+        TypeMappings 映射容器
+
+    Raises:
+        MemoryLimitExceeded: 解压大小超出预算
+    """
+    return JmapParser(path, budget=budget).mappings
+
+
 class TypeMappingsProvider:
     """按扩展名加载 Usmap/Jmap 映射。"""
 
@@ -351,10 +383,10 @@ class TypeMappingsProvider:
         self.mappings = mappings
 
     @classmethod
-    def from_file(cls, path: str) -> "TypeMappingsProvider":
+    def from_file(cls, path: str, budget: ResourceBudget | None = None) -> "TypeMappingsProvider":
         lower = path.lower()
         if lower.endswith(".usmap"):
-            return cls(UsmapParser(path).mappings)
+            return cls(UsmapParser(path, budget=budget).mappings)
         if lower.endswith(".jmap") or lower.endswith(".jmap.gz"):
-            return cls(JmapParser(path).mappings)
+            return cls(JmapParser(path, budget=budget).mappings)
         raise ParseError(f"不支持的映射文件类型: {os.path.basename(path)}")

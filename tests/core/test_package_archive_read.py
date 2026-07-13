@@ -10,7 +10,7 @@ from uasset_read.exceptions import ParseError
 
 def _make_archive(data: bytes) -> PackageArchive:
     """用 ByteArchive 构造一个最小 PackageArchive。"""
-    main = ByteArchive("test.uasset", data, tolerant=False)
+    main = ByteArchive(data, tolerant=False, name="test.uasset")
     return PackageArchive(main, tolerant=False)
 
 

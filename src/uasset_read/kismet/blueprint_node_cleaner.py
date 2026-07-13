@@ -15,7 +15,6 @@
     result = BlueprintNodeCleaner.clean("Character", "AddMovementInput", ["WorldDirection", "ScaleValue"])
     # → "AddMovementInput(WorldDirection, ScaleValue)"
 """
-from __future__ import annotations
 
 from typing import Callable
 

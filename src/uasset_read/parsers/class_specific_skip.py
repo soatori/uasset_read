@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """class-specific payload 类型识别 + tolerant skip 辅助函数。
 
 当通用 property parser 进入不支持的专用序列化区域时，
 此模块提供类型识别和安全跳过逻辑。
 """
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Optional
@@ -62,61 +63,21 @@ SKIP_CLASS_PREFIXES = (
 
 # 需要跳过的精确 class 名称（不使用前缀匹配）
 # 这些 class 使用完全自定义的序列化格式，无法用通用 parser 处理
+#
+# 注意：已迁移到 class_serialization_strategy.py _SKIP_CLASSES 的类不再列出，
+# 包括：NiagaraGraph, NiagaraScript, NiagaraDataInterface 及其子类、
+# NiagaraSystem（保留在 _OPAQUE_CLASSES）、AnimBlueprintExtension、
+# AnimComposite、AnimPoseSnapshot、ImpulseResponse、SoundConcurrency、
+# SoundMix、SoundClass、ReverbEffect、AmbientSound。
+# 完整 skip 策略以 CLASS_STRATEGY_TABLE 为唯一权威来源。
 SKIP_CLASS_NAMES = {
-    # Niagara — 使用 FNiagaraVariable 等自定义序列化器
-    "NiagaraSystem",
-    "NiagaraGraph",
+    # Niagara — Renderer / Emitter（前缀匹配由 SKIP_CLASS_PREFIXES 处理）
     "NiagaraEmitter",
-    "NiagaraScript",
-    "NiagaraScriptSource",
-    "NiagaraDataInterface",
-    "NiagaraDataInterfaceExport",
-    "NiagaraDataInterfaceGrid2D",
-    "NiagaraDataInterfaceGrid3D",
-    "NiagaraDataInterfaceSkeletalMesh",
-    "NiagaraDataInterfaceTexture",
-    "NiagaraDataInterfaceComponentRenderer",
-    "NiagaraDataInterfaceAudioSubmix",
-    "NiagaraDataInterfaceCurlNoise",
-    "NiagaraDataInterfaceRenderTarget2D",
-    "NiagaraDataInterfaceSkeletalMeshSlice",
-    "NiagaraDataInterfaceStaticMesh",
-    "NiagaraDataInterfaceRwGrid2D",
-    "NiagaraDataInterfaceRwGrid3D",
-    "NiagaraDataInterfaceNeighborGrid3D",
-    "NiagaraDataInterfaceLandscape",
-    "NiagaraDataInterfaceOcclusion",
-    "NiagaraDataInterfaceParticleRead",
-    "NiagaraDataInterfaceDebugColor",
-    "NiagaraDataInterfaceGpuReadback",
-    "NiagaraDataInterfaceAudio",
-    "NiagaraDataInterfaceMediaTexture",
-    "NiagaraDataInterfaceVideo",
-    "NiagaraDataInterfaceVirtualTexture",
-    "NiagaraDataInterfaceSparseVolumeTexture",
-    # Niagara — Renderer / Emitter
     "NiagaraSpriteRendererProperties",
     "NiagaraMeshRendererProperties",
     "NiagaraRibbonRendererProperties",
     "NiagaraRendererProperties",
     "NiagaraEmitterProperties",
-    # Anim — 使用自定义序列化
-    "AnimBlueprintExtension",
-    # AnimSequence 和 AnimMontage 已降级为有限解析（见 asset_types/anim_sequence.py）
-    # AnimComposite, AnimPoseSnapshot 仍跳过
-    "AnimComposite",
-    "AnimPoseSnapshot",
-    # Audio — ImpulseResponse 等使用特殊格式
-    "ImpulseResponse",
-    # SoundWave 和 SoundCue 已降级为有限解析（见 asset_types/sound_wave.py）
-    # SoundAttenuation 已移至 opaque 白名单（#166）
-    # SoundConcurrency 等仍跳过
-    # "SoundAttenuation",
-    "SoundConcurrency",
-    "SoundMix",
-    "SoundClass",
-    "ReverbEffect",
-    "AmbientSound",
 }
 
 

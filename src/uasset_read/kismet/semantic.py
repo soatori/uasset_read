@@ -1,5 +1,4 @@
 """Graph-backed semantic enrichment for Kismet decompilation results."""
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -14,9 +13,12 @@ _EMPTY_BODY_THRESHOLD = 3
 
 
 def _sanitize_cpp_name(name: str) -> str:
-    """将 UE pin 名清理为 C++ 兼容标识符。"""
-    cleaned = name.replace(" ", "").replace("/", "").replace("-", "_")
-    return cleaned if cleaned else "unnamed"
+    """将 UE pin 名清理为 C++ 兼容标识符。
+
+    委托给 cpp_gen.sanitizer.sanitize_identifier 统一实现。
+    """
+    from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+    return sanitize_identifier(name)
 
 
 def enrich_decompiled_functions(

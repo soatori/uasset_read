@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Kismet 表达式 — 类型转换。
 
 包含类型转换相关表达式（EX_Cast / EX_MetaCast / EX_DynamicCast 等）。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional

@@ -12,21 +12,21 @@ class TestPinGuidFormat:
     """验证 PinReference GUID 与 pin_id 格式兼容。"""
 
     def test_pin_ref_guid_from_dict_with_dashes(self):
-        """PinReference dict 返回归一化后的 GUID（无 dash，大写）。"""
+        """PinReference dict 返回归一化后的 GUID（无 dash，小写）。"""
         ref = {"pin_guid": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890", "owning_node": "TestNode"}
         result = _pin_ref_guid(ref)
-        assert result == "A1B2C3D4E5F67890ABCDEF1234567890"
+        assert result == "a1b2c3d4e5f67890abcdef1234567890"
 
     def test_pin_ref_guid_from_dict_without_dashes(self):
-        """纯 hex GUID 应转大写。"""
+        """纯 hex GUID 应归一化为小写。"""
         ref = {"pin_guid": "a1b2c3d4e5f67890abcdef1234567890"}
         result = _pin_ref_guid(ref)
-        assert result == "A1B2C3D4E5F67890ABCDEF1234567890"
+        assert result == "a1b2c3d4e5f67890abcdef1234567890"
 
     def test_pin_ref_guid_from_string(self):
-        """字符串输入应归一化。"""
+        """字符串输入应归一化为小写。"""
         result = _pin_ref_guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        assert result == "A1B2C3D4E5F67890ABCDEF1234567890"
+        assert result == "a1b2c3d4e5f67890abcdef1234567890"
 
     def test_pin_ref_guid_returns_none_for_empty(self):
         """空值返回 None。"""
@@ -64,7 +64,7 @@ class TestPinGuidFormat:
     def test_pin_ref_guid_normalized_matches_pin_lookup(self):
         """端到端测试：PinReference GUID 归一化后应匹配 pin_id。"""
         ref_guid = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
-        pin_id = "A1B2C3D4E5F67890ABCDEF1234567890"
+        pin_id = "a1b2c3d4e5f67890abcdef1234567890"
         normalized = _pin_ref_guid(ref_guid)
         assert normalized == pin_id
         assert _is_valid_pin_guid(normalized) is True

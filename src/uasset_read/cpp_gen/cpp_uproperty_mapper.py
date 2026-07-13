@@ -8,7 +8,6 @@ Per D-04: CPF 标志直接映射到 UPROPERTY 标记。
     CPF_TO_UPROPERTY_MAP: CPF 标志到 UPROPERTY 标记的映射
     cpf_flags_to_uproperty_marks: CPF 标志 → UPROPERTY 标记列表转换函数
 """
-from __future__ import annotations
 
 import logging
 from typing import List, Tuple

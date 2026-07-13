@@ -12,8 +12,8 @@ from tests.conftest import asset_path
 
 
 # 测试样本相对路径
-BLUEPRINT_SAMPLE_REL = "CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset"
-STATICMESH_SAMPLE_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+BLUEPRINT_SAMPLE_REL = "StackOBot_BP_Drone.uasset"
+STATICMESH_SAMPLE_REL = "StackOBot_M_BotBase.uasset"
 
 
 class TestPayloadOffsetStrategy:

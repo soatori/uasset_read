@@ -1,11 +1,10 @@
-"""蓝图图二进制序列化器 — FEdGraphPinType, UEdGraphPin, UEdGraphNode, UEdGraph 读取函数。
+"""蓝图图共享辅助函数与 UEdGraph 读取。
 
-等价迁移 uasset_read.py L3191-4679。
-Pin 字段级诊断钩子 (trace_mode)。
+Pin 和 Node 相关函数已拆分到 graph_pin.py 和 graph_node.py。
+本模块保留共享辅助函数、诊断追踪和 UEdGraph 容器读取。
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import struct
@@ -19,31 +18,30 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
-    MAX_PINS_PER_NODE, MAX_NODES_PER_GRAPH, MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
-    FRELEASE_OBJECT_VERSION_GUID,
+    MAX_NODES_PER_GRAPH, MAX_SUBGRAPHS, MAX_SAFE_COUNT, format_guid_bytes,
 )
+from uasset_read.exceptions import ParseError
+from uasset_read.serializers.object_resources import (
+    resolve_class_name, resolve_class_name_with_linker,
+    get_asset_class, get_asset_class_with_linker,
+)
+from uasset_read.serializers.property_tags import read_tag_value_bounded
+from uasset_read.models.core import UEdGraph, UEdGraphNode
 
 logger = logging.getLogger(__name__)
 
 _thread_local = threading.local()
 
 
-def _format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
-    """Format 16 raw FGuid bytes as a stable 8-4-4-4-12 string."""
-    if len(data) != 16:
-        raise ParseError(f"FGuid requires 16 bytes, got {len(data)}")
-    text = (
-        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
-        f"{data[4]:02x}{data[5]:02x}-"
-        f"{data[6]:02x}{data[7]:02x}-"
-        f"{data[8]:02x}{data[9]:02x}-"
-        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
-    )
-    return text.upper() if uppercase else text
-
+# ============================================================================
+# 共享辅助函数
+# ============================================================================
 
 def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
-    return _format_guid_bytes(archive.read_bytes(16), uppercase=uppercase)
+    data = archive.read_bytes(16)
+    if len(data) != 16:
+        raise ParseError(f"FGuid requires 16 bytes, got {len(data)}")
+    return format_guid_bytes(data, uppercase=uppercase)
 
 
 def _get_thread_local():
@@ -54,29 +52,20 @@ def _get_thread_local():
         _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
     return _thread_local
 
-from uasset_read.exceptions import ParseError
-from uasset_read.serializers.object_resources import (
-    resolve_class_name, resolve_class_name_with_linker,
-    get_asset_class, get_asset_class_with_linker,
-    PackageIndex,
-)
-from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
-from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin, FEdGraphPinType, FMemberReference
+
+def _rcn(idx, im, em, lk):
+    """Resolve class name - linker version if available."""
+    return (resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em))
 
 
-# ---------------------------------------------------------------------------
-# 异常 Pin 计数值检测与恢复
-# ---------------------------------------------------------------------------
+def _gac(exp, im, em, lk):
+    """Get asset class - linker version if available."""
+    return (get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em))
 
 
-def get_pin_trace_events() -> Dict[str, List[Dict[str, Any]]]:
-    """返回 Pin 字段级诊断快照。"""
-    _local = _get_thread_local()
-    return {
-        "pins": [dict(item) for item in _local.pin_trace_events],
-        "recoveries": [dict(item) for item in _local.pin_recovery_events],
-    }
-
+# ============================================================================
+# 诊断追踪
+# ============================================================================
 
 def _pin_trace_enabled(explicit: bool = False) -> bool:
     return explicit or os.environ.get("UASSET_READ_PIN_TRACE", "").lower() in {
@@ -88,14 +77,21 @@ def _record_pin_recovery(event: Dict[str, Any]) -> None:
     _get_thread_local().pin_recovery_events.append(dict(event))
 
 
-def _rcn(idx, im, em, lk):
-    """Resolve class name - linker version if available."""
-    return (resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em))
-
-
-def _gac(exp, im, em, lk):
-    """Get asset class - linker version if available."""
-    return (get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em))
+def _trace_fields_append(
+    trace_fields: Dict[str, Any],
+    name: str, start: int, end: int, value_preview: str = "",
+    is_exception: bool = False, is_fallback: bool = False,
+) -> None:
+    """记录单个字段的追踪信息。"""
+    trace_fields.setdefault("fields", []).append({
+        "name": name,
+        "start": start,
+        "end": end,
+        "consumed": end - start,
+        "value": value_preview[:50],
+        "exception": is_exception,
+        "fallback": is_fallback,
+    })
 
 
 # ============================================================================
@@ -156,96 +152,10 @@ def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
 
 
 # ============================================================================
-# FEdGraphPinType 读取
-# ============================================================================
-
-def read_ed_graph_pin_type(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    import_map: Optional[List[ObjectImport]] = None,
-    export_map: Optional[List[ObjectExport]] = None,
-    linker: Optional["PackageLinker"] = None,
-) -> FEdGraphPinType:
-    """解析 FEdGraphPinType（UE5.7 专用 — 自定义序列化路径）。"""
-    pin_type = FEdGraphPinType()
-
-    release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)
-
-    # PinCategory / PinSubCategory (UE5 始终使用 FName 格式)
-    pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")
-    pin_type.pin_subcategory = archive.read_name(name_map, "PinType.PinSubCategory")
-
-    # PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_subcategory_object = archive.read_i32("PinType.PinSubCategoryObject")
-    if pin_type.pin_subcategory_object:
-        pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
-        try:
-            if linker is not None:
-                pin_type.pin_subcategory_object_ref = linker.resolve_package_index(pkg_idx)
-                if pin_type.pin_subcategory_object_ref is not None:
-                    pin_type.pin_subcategory_object_name = getattr(
-                        pin_type.pin_subcategory_object_ref, "object_name", None
-                    )
-            elif import_map is not None and export_map is not None:
-                pin_type.pin_subcategory_object_name = _rcn(
-                    pkg_idx, import_map, export_map, linker
-                )
-        except (KeyError, IndexError, AttributeError):
-            pin_type.pin_subcategory_object_ref = None
-            pin_type.pin_subcategory_object_name = None
-
-    # ContainerType (UE5 始终使用现代 uint8 格式)
-    pin_type.container_type = archive.read_u8("PinType.ContainerType")
-    if pin_type.container_type == 3:  # Map
-        # Map key 的 terminal 类型（FEdGraphTerminalType 序列化）
-        # 参照 UE EdGraphPin.cpp:218 — Ar << PinValueType
-        pin_type.map_key_terminal_category = archive.read_name(name_map, "PinType.TerminalCategory")
-        pin_type.map_key_terminal_sub_category = archive.read_name(name_map, "PinType.TerminalSubCategory")
-        terminal_sub_category_object = archive.read_i32("PinType.TerminalSubCategoryObject")
-        pin_type.map_key_terminal_sub_category_object = terminal_sub_category_object
-        if terminal_sub_category_object:
-            pkg_idx = PackageIndex(terminal_sub_category_object)
-            try:
-                if linker is not None:
-                    ref = linker.resolve_package_index(pkg_idx)
-                    if ref is not None:
-                        pin_type.map_key_terminal_sub_category_object_name = getattr(
-                            ref, "object_name", None
-                        )
-                elif import_map is not None and export_map is not None:
-                    pin_type.map_key_terminal_sub_category_object_name = _rcn(
-                        pkg_idx, import_map, export_map, linker
-                    )
-            except (KeyError, IndexError, AttributeError):
-                pin_type.map_key_terminal_sub_category_object_name = None
-
-    # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_reference = archive.read_bool("PinType.bIsReference")
-    pin_type.is_weak_pointer = archive.read_bool("PinType.bIsWeakPointer")
-
-    # FSimpleMemberReference (UE5 始终存在)
-    archive.read_i32("PinType.MemberParent")
-    archive.read_name(name_map, "PinType.MemberName")
-    archive.read_bytes(16, "PinType.MemberGuid")
-
-    # bIsConst (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_const = archive.read_bool("PinType.bIsConst")
-
-    # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_uobject_wrapper = archive.read_bool("PinType.bIsUObjectWrapper")
-
-    # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool("PinType.bSerializeAsSinglePrecisionFloat")
-
-    return pin_type
-
-
-# ============================================================================
 # FText 读取（UE5 多 history_type 支持）
 # ============================================================================
 
-def _read_fstring_safe(archive: FArchive, max_length: int = 10_000) -> str:
+def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> str:
     """读取 FString，对异常长度进行容错处理。
 
     参考 UE C++ FArchive& operator<<(FString&) 实现
@@ -283,13 +193,13 @@ def _read_ftext_fstring(archive: FArchive) -> str:
     """读取 FText 内部 FString。
 
     与 _read_fstring_safe 不同，此函数在长度异常时直接抛错，由上层决定
-    是否整体回退整个 FText。这样可以避免“少读一部分 body 但继续向后走”
+    是否整体回退整个 FText。这样可以避免"少读一部分 body 但继续向后走"
     的隐性错位。
     """
     length = archive.read_i32()
     if length == 0 or length == -1:
         return ""
-    if abs(length) > 10_000:
+    if abs(length) > MAX_SAFE_COUNT:
         raise ParseError(f"Invalid FText FString length: {length}")
     if length < -1:
         data = archive.read(-length * 2)
@@ -347,8 +257,14 @@ def read_ftext_with_history(
     elif history_type == 1:
         format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
         arg_count = archive.read_i32()
-        if arg_count < 0 or arg_count > 100:
-            raise ParseError(f"Invalid FText NamedFormat arg_count={arg_count}")
+        if arg_count < 0 or arg_count > MAX_SAFE_COUNT:
+            # 设计决策：从 raise ParseError 改为 warning+skip，
+            # 与项目整体 tolerant 模式对齐，避免损坏数据导致解析完全中断
+            logger.debug(
+                "FText NamedFormat arg_count=%d exceeds limit %d, skipping args",
+                arg_count, MAX_SAFE_COUNT
+            )
+            arg_count = 0  # 跳过后续参数读取
         format_args: Dict[str, str] = {}
         for _ in range(arg_count):
             arg_name = _read_ftext_fstring(archive)
@@ -381,7 +297,7 @@ def read_ftext_with_history(
 
 
 # ============================================================================
-# Pin 引用辅助函数
+# Pin 引用校验辅助
 # ============================================================================
 
 def validate_pin_reference_at(
@@ -488,1877 +404,58 @@ def validate_pin_reference_at(
     }
 
 
-def peek_valid_pin_array_count(
-    archive: FArchive,
-    export_map: List[ObjectExport],
-    max_count: int = 20,
-) -> Optional[int]:
-    """不移动指针，检查当前位置是否是有效的 LinkedTo 数组。
-
-    只读取 i32 count，验证范围 0..max_count，检查后续数据是否符合 PinReference 结构。
-    如果有效返回 count；否则返回 None。
-
-    用途：在 FText 失败后判断当前位置是否已经是 LinkedTo 数组。
-    """
-    import struct
-
-    current_pos = archive.tell()
-    file_size = getattr(archive, "_file_size", getattr(archive, "file_size", 0))
-
-    # 读取 4 字节 count（不移动指针）
-    if current_pos + 4 > file_size:
-        return None
-
-    archive.seek(current_pos)
-    count_bytes = archive.read(4)
-    count = struct.unpack('<i', count_bytes)[0]
-
-    # 验证 count 范围
-    if count < 0 or count > max_count:
-        archive.seek(current_pos)  # 恢复位置
-        return None
-
-    # 如果 count == 0，检查后续是否有 SubPins 数组结构
-    # (count=0 后面应该是 SubPins count 或其他 Pin 字段)
-    # 简化：count=0 总是有效的
-    if count == 0:
-        archive.seek(current_pos)
-        return 0
-
-    # count > 0：检查第一个 PinReference header
-    # PinReference header: b_null (i32) + owning_node (i32) + pin_guid (16 bytes)
-    if current_pos + 4 + 4 > file_size:
-        archive.seek(current_pos)
-        return None
-
-    b_null_bytes = archive.read(4)
-    b_null = struct.unpack('<i', b_null_bytes)[0]
-
-    archive.seek(current_pos)  # 恢复位置
-
-    # b_null == 0: 正常 PinReference
-    # b_null != 0: 空引用（但 count > 0 意味着有内容，所以 b_null 应该是 0）
-    if b_null == 0:
-        return count
-    else:
-        return None
-
-
-def read_pin_reference(
-    archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
-) -> Optional[dict]:
-    """读取单个 Pin 引用（FBlueprintEditorUtils::FPinReference）。"""
-    b_null_ptr = archive.read_i32("PinRef.BNullPtr")
-    if b_null_ptr != 0:
-        return None  # null marker consumed 4 bytes only, no more reading
-
-    owning_node_index = archive.read_i32("PinRef.OwningNode")
-    pin_guid_raw = _read_guid(archive)
-
-    # 归一化为 32 字符大写 hex（移除 dash），与 pin_id 格式一致
-    pin_guid = pin_guid_raw.replace("-", "").upper()
-
-    # 解析 owning node 名称
-    owning_node_name: Optional[str] = None
-    if owning_node_index > 0:
-        node_idx = owning_node_index - 1
-        if node_idx < len(export_map):
-            owning_node_name = export_map[node_idx].object_name
-    elif owning_node_index < 0:
-        import_idx = -owning_node_index - 1
-        if import_idx < len(import_map):
-            owning_node_name = import_map[import_idx].object_name
-
-    # pin_guid 已在上方归一化为 32 字符大写 hex（无 dash）
-    result = {
-        "owning_node": owning_node_name,
-        "pin_guid": pin_guid,
-    }
-
-    # 如果有 linker，解析 owning_node_index 为对象引用
-    if linker is not None and owning_node_index != 0:
-        pkg_idx = PackageIndex(owning_node_index)
-        if not pkg_idx.is_null:
-            obj_ref = linker.resolve_package_index(pkg_idx)
-            result["owning_node_object"] = obj_ref
-
-    return result
-
-
-def read_pin_array(
-    archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
-    recovery_context: str = "linkedto",  # 区分 linkedto vs subpins
-) -> List[dict]:
-    """读取 Pin 引用数组（SerializePinArray 格式）。
-
-    滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
-    验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
-
-    恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
-    """
-    array_count = archive.read_i32("PinArray.Count")
-
-    if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
-        # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
-        recovery_pos = archive.tell()
-        recovered = _recover_pin_array_count(
-            archive, recovery_pos, array_count, export_map, import_map
-        )
-        if recovered is not None:
-            original_bad_count = array_count
-            array_count = recovered["count"]
-            _record_pin_recovery({
-                "kind": "pin_array_count",
-                "context": recovery_context,
-                "bad_count": original_bad_count,
-                "candidate_pos": recovered["candidate_pos"],
-                "confidence": recovered["confidence"],
-                "reason": recovered["reason"],
-            })
-            if recovered["confidence"] == "low" and recovery_context == "linkedto":
-                # 低置信度恢复不参与 LinkedTo 连接构建，避免污染后续语义
-                logger.info(
-                    "[P73-RECOVERY] %s low-confidence recovered (count=%d, reason=%s) -> ignored",
-                    recovery_context, array_count, recovered["reason"]
-                )
-                return []
-            logger.info(
-                "[P73-RECOVERY] %s recovered: count=%d, confidence=%s, reason=%s",
-                recovery_context, array_count, recovered["confidence"], recovered["reason"]
-            )
-        else:
-            if array_count < 0:
-                raise ParseError(f"Invalid pin array count: {array_count} (negative)")
-            raise ParseError(
-                f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}"
-            )
-
-    pins: List[dict] = []
-    for _ in range(array_count):
-        ref_pos = archive.tell()
-        ref_validation = validate_pin_reference_at(
-            archive, ref_pos, export_map, import_map
-        )
-        if ref_validation is None or not ref_validation["valid"]:
-            reason = ref_validation["reason"] if ref_validation else "not enough bytes"
-            raise ParseError(
-                f"Invalid pin reference at pos {ref_pos} in {recovery_context}: {reason}"
-            )
-        pin_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
-        if pin_ref is not None:
-            pins.append(pin_ref)
-    return pins
-
-
-def _recover_pin_array_count(
-    archive: FArchive,
-    error_pos: int,
-    bad_count: int,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport] = None,
-    scan_window: int = 16,
-) -> Optional[Dict[str, Any]]:
-    """滑动恢复增强校验（Phase 75: 动态窗口）。
-
-    扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
-
-    scan_window 根据 bad_count 大小动态调整：
-    - bad_count <= 20: 基础窗口 16 字节
-    - bad_count <= 100: 窗口 32 字节
-    - bad_count > 100: 窗口 64 字节
-
-    改进：
-    - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
-    - count>0 必须验证全部或至少前两个 PinReference
-    - 恢复成功返回结构化结果：{count, candidate_pos, confidence, reason}
-
-    Returns:
-        None: 恢复失败
-        Dict: {
-            "count": int,
-            "candidate_pos": int,
-            "confidence": "high"/"medium"/"low",
-            "reason": str,
-        }
-    """
-    import struct
-
-    # Phase 75: 动态调整 scan_window
-    if bad_count > 100:
-        scan_window = max(scan_window, 64)
-    elif bad_count > 20:
-        scan_window = max(scan_window, 32)
-
-    current_pos = archive.tell()
-    search_start = max(0, error_pos - scan_window)
-    search_end = min(archive._file_size, error_pos + scan_window)
-
-    archive.seek(search_start)
-    window = archive.read(search_end - search_start)
-
-    best_candidate = None
-    best_confidence = "low"
-    best_reason = ""
-
-    for offset in range(0, len(window) - 4, 1):
-        candidate_bytes = window[offset:offset + 4]
-        candidate = struct.unpack('<i', candidate_bytes)[0]
-        if candidate < 0 or candidate > 20:
-            continue  # 不合理范围
-
-        candidate_pos = search_start + offset
-        after_count = offset + 4
-
-        # count=0 需要额外验证后续结构
-        if candidate == 0:
-            # count=0 后面应该是 SubPins 数组或其他合理结构
-            # 检查是否有另一个小整数 count (0..20) 紧随其后
-            if after_count + 4 <= len(window):
-                next_val = struct.unpack('<i', window[after_count:after_count + 4])[0]
-                if 0 <= next_val <= 20:
-                    # 后面有另一个数组 count，符合 SubPins 结构
-                    best_candidate = (candidate_pos, candidate)
-                    best_confidence = "medium"
-                    best_reason = "count=0 followed by valid SubPins count"
-                    # 不 break，继续寻找更高置信度的候选
-                    continue
-            # count=0 但后续结构不明，置信度低（仅作为最后兜底）
-            if best_candidate is None:
-                best_candidate = (candidate_pos, candidate)
-                best_confidence = "low"
-                best_reason = "count=0 without verified subsequent structure"
-            continue
-
-        # count > 0: 验证 PinReference 结构
-        if after_count + 24 > len(window):
-            continue  # 空间不足
-
-        # 验证第一个 PinReference
-        pin_ref_1 = validate_pin_reference_at(
-            archive, candidate_pos + 4, export_map, import_map
-        )
-        if pin_ref_1 is None or not pin_ref_1["valid"]:
-            continue
-
-        # 验证第二个 PinReference（如果 count >= 2）
-        if candidate >= 2 and after_count + 48 <= len(window):
-            pin_ref_2 = validate_pin_reference_at(
-                archive, candidate_pos + 4 + 24, export_map, import_map
-            )
-            if pin_ref_2 is None or not pin_ref_2["valid"]:
-                # 第二个 ref 无效，置信度中等
-                best_candidate = (candidate_pos, candidate)
-                best_confidence = "medium"
-                best_reason = f"count={candidate}, ref1 valid but ref2 invalid"
-                continue
-
-        # 所有验证通过，高置信度
-        best_candidate = (candidate_pos, candidate)
-        best_confidence = "high"
-        best_reason = f"count={candidate}, all refs validated"
-        break  # 找到高置信度候选，停止搜索
-
-    if best_candidate is not None:
-        candidate_pos, recovered_count = best_candidate
-        logger.warning(
-            "[P73-RECOVERY] LinkedTo: bad count %d at pos %d, "
-            "found count %d at pos %d (confidence=%s, reason=%s)",
-            bad_count, error_pos - 4, recovered_count, candidate_pos,
-            best_confidence, best_reason,
-        )
-        # Seek to just after the valid count (start of first pin ref)
-        archive.seek(candidate_pos + 4)
-        return {
-            "count": recovered_count,
-            "candidate_pos": candidate_pos,
-            "confidence": best_confidence,
-            "reason": best_reason,
-        }
-
-    # 恢复失败：seek 回原始错误位置
-    archive.seek(current_pos)
-    return None
-
-
-def _try_recover_to_subpins(
-    archive: FArchive,
-    error_pos: int,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport] = None,
-    max_scan: int = 256,
-) -> Optional[Dict[str, Any]]:
-    """LinkedTo 失败后恢复到 SubPins。
-
-    扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
-    (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
-
-    改进：
-    - 使用 validate_pin_reference_at() 进行结构校验
-    - 区分 linkedto_recovered（找到合法 Pin 数组）和 subpins_resync（跳到下一个结构）
-    - 返回结构化恢复结果
-
-    Returns:
-        None: 恢复失败
-        Dict: {
-            "recovered_pos": int,
-            "count": int,
-            "recovery_type": "linkedto_recovered" / "subpins_resync",
-            "reason": str,
-        }
-    """
-    import struct
-
-    scan_start = archive.tell()
-    scan_end = min(archive._file_size, scan_start + max_scan)
-    archive.seek(scan_start)
-    window = archive.read(scan_end - scan_start)
-
-    for offset in range(0, len(window) - 4, 1):
-        candidate = struct.unpack('<i', window[offset:offset + 4])[0]
-        if candidate < 0 or candidate > 20:
-            continue
-
-        candidate_pos = scan_start + offset
-        after = offset + 4
-
-        # 使用 validate_pin_reference_at 校验
-        if candidate > 0 and after + 24 <= len(window):
-            pin_ref_result = validate_pin_reference_at(
-                archive, candidate_pos + 4, export_map, import_map
-            )
-            if pin_ref_result is not None and pin_ref_result["valid"]:
-                recovered_pos = candidate_pos
-                archive.seek(recovered_pos)
-                # 收敛：此路径仅用于 SubPins 重同步，不再标记为 linkedto_recovered
-                recovery_type = "subpins_resync"
-                logger.warning(
-                    "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
-                    recovered_pos, candidate, recovery_type, pin_ref_result["reason"],
-                )
-                _record_pin_recovery({
-                    "kind": "subpins_resync",
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": recovery_type,
-                    "reason": pin_ref_result["reason"],
-                })
-                return {
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": recovery_type,
-                    "reason": pin_ref_result["reason"],
-                }
-
-        # count=0 或 b_null!=0 情况：检查是否是空数组或 null ref
-        if after + 4 <= len(window):
-            b_null = struct.unpack('<i', window[after:after + 4])[0]
-            if b_null != 0:
-                # b_null!=0: 空引用，有效
-                recovered_pos = candidate_pos
-                archive.seek(recovered_pos)
-                logger.warning(
-                    "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
-                    recovered_pos, candidate,
-                )
-                _record_pin_recovery({
-                    "kind": "subpins_resync",
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": "subpins_resync",
-                    "reason": "b_null!=0 null reference",
-                })
-                return {
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": "subpins_resync",  # 跳到下一个结构
-                    "reason": "b_null!=0 null reference",
-                }
-
-    # 恢复失败，保持在当前位置
-    logger.warning(
-        "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
-        max_scan, error_pos,
-    )
-    return None
-# ============================================================================
-
-def _read_pin_fstring_field(
-    archive: FArchive,
-    field_name: str,
-    trace_mode: bool,
-    trace_fields: Dict[str, Any],
-    pin_name: str = "",
-    max_length: int = 4096,
-) -> str:
-    """读取 Pin 的 FString 字段（DefaultValue / AutogeneratedDefaultValue / PinToolTip）。"""
-    from uasset_read.archive import _contains_binary_data
-    _field_start = archive.tell()
-    try:
-        value = _read_fstring_safe(archive, max_length=max_length)
-        if _contains_binary_data(value):
-            logger.debug(
-                "Binary %s at pos %d for pin '%s' — returning empty",
-                field_name, archive.tell() - len(value), pin_name
-            )
-            if trace_mode:
-                _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(), "[BINARY]")
-            return ""
-        if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
-                                 value[:30] if value else "[empty]")
-        return value
-    except (struct.error, OSError, ValueError):
-        if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
-                                 "", is_exception=True)
-        return ""
-
-
-def _read_pin_ftext_field(
-    archive: FArchive,
-    field_name: str,
-    trace_mode: bool,
-    trace_fields: Dict[str, Any],
-) -> tuple:
-    """读取 Pin 的 FText 字段（PinFriendlyName / DefaultTextValue）。"""
-    _start = archive.tell()
-    try:
-        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True)
-        consumed = archive.tell() - _start
-        if consumed > MAX_FTEXT_CONSUMPTION:
-            logger.warning(
-                "[FTEXT-SAFETY] %s consumed %d bytes (> %d), "
-                "possible corruption, seeking back to %d",
-                field_name, consumed, MAX_FTEXT_CONSUMPTION, _start + 5
-            )
-            archive.seek(_start + 5)
-            value = None
-        if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
-                                 f"flags={flags},htype={history_type}")
-        return value, True
-    except (struct.error, OSError, ValueError):
-        archive.seek(_start + 5)
-        if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
-                                 "", is_exception=True, is_fallback=True)
-        return None, False
-
-
-def _trace_fields_append(
-    trace_fields: Dict[str, Any],
-    name: str, start: int, end: int, value_preview: str = "",
-    is_exception: bool = False, is_fallback: bool = False,
-) -> None:
-    """记录单个字段的追踪信息。"""
-    trace_fields.setdefault("fields", []).append({
-        "name": name,
-        "start": start,
-        "end": end,
-        "consumed": end - start,
-        "value": value_preview[:50],
-        "exception": is_exception,
-        "fallback": is_fallback,
-    })
-
-
-def _read_pin_linkedto(
-    archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
-    trace_mode: bool,
-    trace_fields: Dict[str, Any],
-    pin_name: str,
-) -> list:
-    """读取 Pin 的 LinkedTo 数组。"""
-    linkedto_start = archive.tell()
-    linkedto_raw_count: Optional[int] = None
-    try:
-        _count_pos = archive.tell()
-        linkedto_raw_count = archive.read_i32()
-        archive.seek(_count_pos)
-    except (struct.error, OSError):
-        linkedto_raw_count = None
-    try:
-        linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
-        logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
-        if trace_mode:
-            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
-            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
-                                 f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
-    except (struct.error, OSError, ValueError) as e:
-        failure_key = (linkedto_start, type(e).__name__, pin_name)
-        tl = _get_thread_local()
-        if failure_key not in tl.linkedto_failure_seen:
-            tl.linkedto_failure_seen.add(failure_key)
-            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
-        else:
-            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
-        if trace_mode:
-            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
-                                 "", is_exception=True)
-        linked_to = []
-        recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
-        if recovery_result is not None:
-            logger.info(
-                "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
-                recovery_result.get("recovered_pos"),
-                recovery_result.get("recovery_type"),
-            )
-    return linked_to
-
-
-def _read_pin_subpins(
-    archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
-    trace_mode: bool,
-    trace_fields: Dict[str, Any],
-) -> list:
-    """读取 Pin 的 SubPins 数组。"""
-    subpins_start = archive.tell()
-    subpins_raw_count: Optional[int] = None
-    try:
-        _count_pos = archive.tell()
-        subpins_raw_count = archive.read_i32()
-        archive.seek(_count_pos)
-    except (struct.error, OSError):
-        subpins_raw_count = None
-    try:
-        sub_pins = read_pin_array(archive, name_map, export_map, import_map, linker)
-        if trace_mode:
-            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
-                                 f"raw_count={subpins_raw_count},count={len(sub_pins)}")
-    except (struct.error, OSError, ValueError):
-        sub_pins = []
-        if trace_mode:
-            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
-                                 f"raw_count={subpins_raw_count}", is_exception=True)
-    return sub_pins
-
-
-def _read_pin_bitfield(
-    archive: FArchive,
-    trace_mode: bool,
-    trace_fields: Dict[str, Any],
-) -> tuple:
-    """读取 Pin 的 BitField（EditorOnly）。返回 (hidden, not_connectable, advanced_view, orphaned_pin)。"""
-    hidden = False
-    not_connectable = False
-    advanced_view = False
-    orphaned_pin = False
-    try:
-        bitfield_start = archive.tell()
-        bitfield = archive.read_u32()
-        hidden = bool(bitfield & (1 << 0))
-        not_connectable = bool(bitfield & (1 << 1))
-        advanced_view = bool(bitfield & (1 << 4))
-        orphaned_pin = bool(bitfield & (1 << 5))
-        if trace_mode:
-            _trace_fields_append(trace_fields, "BitField", bitfield_start, archive.tell(), str(bitfield))
-    except (struct.error, OSError, ValueError, AttributeError) as e:
-        logger.debug("读取 Pin BitField 失败: %s", e, exc_info=True)
-    return hidden, not_connectable, advanced_view, orphaned_pin
-
-
-def read_ue_graph_pin(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
-    header_owning_node: Optional[int] = None,
-    header_pin_id: Optional[str] = None,
-    trace_mode: bool = False,  # 字段级诊断开关
-) -> UEdGraphPin:
-    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
-
-    D-12: UE5 Pin array uses PinReference format with external header:
-      - Header: b_null_ptr + owning_node + pin_guid (read by caller)
-      - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
-
-    If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
-
-    trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
-    """
-    trace_mode = _pin_trace_enabled(trace_mode)
-
-    # 诊断记录
-    _trace_fields: Dict[str, Any] = {}
-
-    # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
-    _field_start = archive.tell()
-    if header_owning_node is not None:
-        archive.read_i32("Pin.OwningNode.Duplicate")  # Discard internal duplicate
-        owning_node_index = header_owning_node
-    else:
-        owning_node_index = archive.read_i32("Pin.OwningNode")
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "OwningNode", _field_start, archive.tell(), str(owning_node_index))
-
-    # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
-    _field_start = archive.tell()
-    if header_pin_id is not None:
-        archive.read_bytes(16, "Pin.PinId.Duplicate")  # Discard internal duplicate
-        pin_id = header_pin_id
-    else:
-        pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
-        pin_id = pin_id_bytes.hex().upper()
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "PinId", _field_start, archive.tell(), pin_id[:16]+"...")
-
-    # 3. PinName
-    pin_start_pos = archive.tell()
-    if trace_mode:
-        _trace_fields["pin_start_pos"] = pin_start_pos
-
-    _field_start = archive.tell()
-    pin_name = archive.read_name(name_map)
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "PinName", _field_start, archive.tell(), pin_name)
-
-    # 4. PinFriendlyName (FText)
-    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", trace_mode, _trace_fields)
-
-    # 5. SourceIndex (UE5 始终存在)
-    _field_start = archive.tell()
-    source_index = archive.read_i32("Pin.SourceIndex")
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "SourceIndex", _field_start, archive.tell(), str(source_index))
-
-    # 6. PinToolTip — FString (NOT FText!)
-    pin_tooltip = _read_pin_fstring_field(archive, "PinToolTip", trace_mode, _trace_fields, pin_name)
-
-    # 7. Direction — u8 for both UE4 and UE5
-    _field_start = archive.tell()
-    direction = archive.read_u8("Pin.Direction")
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "Direction", _field_start, archive.tell(), str(direction))
-
-    # 8. PinType
-    _field_start = archive.tell()
-    pin_type = read_ed_graph_pin_type(
-        archive, name_map, summary, import_map, export_map, linker
-    )
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "PinType", _field_start, archive.tell(), "[PinType struct]")
-
-    # 9-10. DefaultValue strings (容错)
-    default_value = _read_pin_fstring_field(archive, "DefaultValue", trace_mode, _trace_fields)
-    autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue", trace_mode, _trace_fields)
-
-    # 11. DefaultObject (FPackageIndex)
-    _field_start = archive.tell()
-    default_object = archive.read_i32("Pin.DefaultObject")
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "DefaultObject", _field_start, archive.tell(), str(default_object))
-
-    # 12. DefaultTextValue (FText)
-    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", trace_mode, _trace_fields)
-
-    # 13. LinkedTo array
-    linked_to = _read_pin_linkedto(archive, name_map, export_map, import_map, linker,
-                                    trace_mode, _trace_fields, pin_name)
-
-    # 14. SubPins array
-    sub_pins = _read_pin_subpins(archive, name_map, export_map, import_map, linker,
-                                  trace_mode, _trace_fields)
-
-    # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
-    parent_start = archive.tell()
-    _pp_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
-    parent_pin = _pp_ref
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "ParentPin", parent_start, archive.tell(),
-                     f"null={1 if _pp_ref is None else 0},owning={_pp_ref.get('owning_node') if _pp_ref else 'N/A'}")
-
-    # 16. ReferencePassThroughConnection — reuse read_pin_reference()
-    ref_start = archive.tell()
-    _ref_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
-    ref_pass_through = _ref_ref
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "ReferencePassThroughConnection", ref_start, archive.tell(),
-                     f"null={1 if _ref_ref is None else 0},owning={_ref_ref.get('owning_node') if _ref_ref else 'N/A'}")
-
-    # 17. PersistentGuid (EditorOnly)
-    persistent_start = archive.tell()
-    try:
-        persistent_guid = _read_guid(archive)
-    except (struct.error, OSError):
-        persistent_guid = None
-    if trace_mode:
-        _trace_fields_append(_trace_fields, "PersistentGuid", persistent_start, archive.tell(),
-                     persistent_guid or "")
-
-    # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
-    hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(
-        archive, trace_mode, _trace_fields
-    )
-
-    default_object_ref = None
-    if linker is not None and default_object not in (None, 0):
-        try:
-            default_object_ref = linker.resolve_package_index(PackageIndex(default_object))
-        except (KeyError, IndexError, AttributeError):
-            default_object_ref = None
-
-    # 从 raw dict 中提取对象引用
-    linked_to_objects = [pin.get("owning_node_object") for pin in linked_to]
-    sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
-    parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
-    ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
-
-    # 诊断日志输出
-    if trace_mode:
-        # 找出第一个可能错位的字段
-        first_misaligned = ""
-        for f in _trace_fields.get("fields", []):
-            if f.get("exception") and not f.get("fallback"):
-                first_misaligned = f["name"]
-                break
-            if "[BINARY]" in str(f.get("value", "")):
-                first_misaligned = f["name"]
-                break
-
-        logger.info(
-            "[P73-PINTRACE] Pin '%s' at pos %d: fields=%d, linkedto=%d, first_misaligned='%s'",
-            pin_name, pin_start_pos, len(_trace_fields.get("fields", [])),
-            len(linked_to), first_misaligned
-        )
-        _get_thread_local().pin_trace_events.append({
-            "pin_name": pin_name,
-            "pin_id": pin_id,
-            "pin_start_pos": pin_start_pos,
-            "linkedto_raw_count": None,
-            "linkedto_count": len(linked_to),
-            "subpins_raw_count": None,
-            "subpins_count": len(sub_pins),
-            "first_misaligned": first_misaligned,
-            "fields": [dict(item) for item in _trace_fields.get("fields", [])],
-        })
-        if first_misaligned:
-            logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields.get("fields", [])))
-
-    return UEdGraphPin(
-        pin_id=pin_id,
-        pin_name=pin_name,
-        pin_friendly_name=pin_friendly_name,
-        pin_tooltip=pin_tooltip,
-        direction=direction,
-        pin_type=pin_type,
-        default_value=default_value,
-        auto_default_value=autogenerated_default_value,
-        default_object=default_object,
-        default_object_ref=default_object_ref,
-        default_text_value=default_text_value,
-        linked_to_raw=linked_to,
-        sub_pins=sub_pins,
-        parent_pin=parent_pin,
-        ref_pass_through=ref_pass_through,
-        linked_to_objects=linked_to_objects,
-        sub_pins_objects=sub_pins_objects,
-        parent_pin_object=parent_pin_object,
-        ref_pass_through_object=ref_pass_through_object,
-        owning_node_index=owning_node_index,
-        source_index=source_index,
-        persistent_guid=persistent_guid,
-        hidden=hidden,
-        not_connectable=not_connectable,
-        advanced_view=advanced_view,
-        orphaned_pin=orphaned_pin,
-    )
-
-
-# ============================================================================
-# FMemberReference 读取
-# ============================================================================
-
-def read_fmember_reference(
-    archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-) -> FMemberReference:
-    """读取 FMemberReference（MemberReference.h L74-95）。"""
-    member_parent_index = archive.read_i32("MemberRef.MemberParent")
-    member_parent: Optional[str] = None
-    if member_parent_index != 0:
-        member_parent = _rcn(
-            PackageIndex(member_parent_index), import_map, export_map, linker
-        )
-
-    member_scope = archive.read_fstring("MemberRef.MemberScope")
-    member_name = archive.read_name(name_map, "MemberRef.MemberName")
-    member_guid = _read_guid(archive, uppercase=False)
-    b_self_context = archive.read_bool("MemberRef.bSelfContext")
-    _b_was_deprecated = archive.read_bool("MemberRef.bWasDeprecated")
-
-    return FMemberReference(
-        member_parent=member_parent,
-        member_name=member_name,
-        member_guid=member_guid,
-        b_self_context=b_self_context,
-    )
-
-
-# ============================================================================
-# 5 种节点类型读取器
-# ============================================================================
-
-def read_k2node_call_function(
-    archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-    function_reference: Optional[FMemberReference] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_CallFunction 特有字段，返回字典（作为 node_data）。
-
-    如果 function_reference 已在 PropertyTag 层解析（script_serial），直接使用；
-    否则从 archive 当前位置读取 FMemberReference。
-
-    参考 UE C++ FK2Node_CallFunction::Serialize() 实现。
-    """
-    # D-11: PropertyTag 层已正确解析 FunctionReference，优先使用
-    if function_reference is None:
-        function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
-
-    b_defaults_to_pure = archive.read_bool("K2Node_CallFunction.bDefaultsToPure")
-    return {
-        "function_reference": function_reference,
-        "b_defaults_to_pure": b_defaults_to_pure,
-    }
-
-
-def read_k2node_event(
-    archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-    event_reference: Optional[FMemberReference] = None,
-    b_override_function: Optional[bool] = None,
-    b_internal_event: Optional[bool] = None,
-    custom_function_name: Optional[str] = None,
-    function_flags: Optional[int] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_Event 特有字段，返回字典（作为 node_data）。
-
-    如果 event_reference、b_override_function 等字段已在 PropertyTag 层解析（script_serial），
-    直接使用；fallback 读取必须受 script_serial_size / 字段 trace 验证保护。
-
-    返回字段：
-    - event_reference: FMemberReference
-    - b_override_function: bool
-    - b_internal_event: bool (新增)
-    - custom_function_name: str (新增)
-    - function_flags: int (新增)
-
-    参考 UE C++ FK2Node_Event::Serialize() 实现。
-    """
-    # D-11: PropertyTag 层已正确解析 EventReference，优先使用
-    if event_reference is None:
-        event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
-
-    # b_override_function 优先使用 PropertyTag 值，不再盲读
-    # 只有 PropertyTag 未提供时才考虑 fallback，且 fallback 必须受验证保护
-    if b_override_function is None:
-        # Legacy fallback: 仅在确认有剩余字节时读取
-        # 标记 source 为 "legacy_fallback"，便于诊断追踪
-        try:
-            b_override_function = archive.read_bool()
-            logger.debug(
-                "K2Node_Event b_override_function read from legacy fallback (bool at pos %d)",
-                archive.tell() - 4
-            )
-        except (struct.error, OSError, ValueError) as e:
-            logger.warning(
-                "K2Node_Event b_override_function fallback failed: %s, defaulting to False",
-                e
-            )
-            b_override_function = False
-
-    return {
-        "event_reference": event_reference,
-        "b_override_function": b_override_function,
-        "b_internal_event": b_internal_event if b_internal_event is not None else False,
-        "custom_function_name": custom_function_name or "",
-        "function_flags": function_flags if function_flags is not None else 0,
-        "is_event": True,
-    }
-
-
-def read_k2node_knot(archive: FArchive) -> Dict[str, Any]:
-    """K2Node_Knot 无额外字段。"""
-    return {}
-
-
-def read_edgraph_node_comment(raw_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """读取 EdGraphNode_Comment 特有字段，返回字典（作为 node_data）。
-
-    UE5 样本中注释节点的颜色和尺寸位于 tagged properties。旧实现继续从
-    尾部二进制读 float/int，容易把后续字段错读成荒谬尺寸。
-    """
-    raw_properties = raw_properties or {}
-    return {
-        "comment_color": raw_properties.get("CommentColor"),
-        "node_width": raw_properties.get("NodeWidth"),
-        "node_height": raw_properties.get("NodeHeight"),
-        "font_size": raw_properties.get("FontSize"),
-        "comment_depth": raw_properties.get("CommentDepth"),
-    }
-
-
-def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]:
-    """从 EnhancedInputAction 节点的 pins 提取 trigger_events 映射。
-
-    遍历 exec 方向的输出 pin，将 pin 名称通过 ETRIGGER_EVENT_PIN_MAP
-    映射为 ETriggerEvent 枚举字符串值。
-    """
-    from uasset_read.constants import ETRIGGER_EVENT_PIN_MAP
-
-    trigger_events = {}
-    for pin in pins:
-        pin_category = getattr(pin.pin_type, 'pin_category', '') if pin.pin_type else ''
-        direction = getattr(pin, 'direction', None)
-        pin_name = getattr(pin, 'pin_name', '')
-        
-        # Check if this is an output exec pin or if pin_category matches trigger events
-        is_exec_output = (pin_category == "exec" and direction == 1)
-        is_trigger_pin = (pin_name in ETRIGGER_EVENT_PIN_MAP)
-        is_trigger_category = (pin_category in ETRIGGER_EVENT_PIN_MAP)
-        
-        if is_exec_output or is_trigger_pin or is_trigger_category:
-            # Use pin_name if available and valid, otherwise use pin_category
-            trigger_name = pin_name if pin_name and pin_name in ETRIGGER_EVENT_PIN_MAP else pin_category
-            if trigger_name in ETRIGGER_EVENT_PIN_MAP:
-                trigger_events[trigger_name] = ETRIGGER_EVENT_PIN_MAP[trigger_name]
-    return trigger_events
-
-
-def read_k2node_enhanced_input(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_EnhancedInputAction 特有字段，返回字典（作为 node_data）。
-
-    从 PropertyTag 层获取 AdvancedPinDisplay、InputAction 短名等字段。
-
-    返回字段：
-    - input_action_path: 完整对象路径
-    - input_action_short_name: 短名（如 "IA_Move"）
-    - input_action_package_index: 原始 FPackageIndex
-    - advanced_pin_display: 格式化枚举名（如 "Hidden"）
-    - advanced_pin_display_raw: 原始 int 值
-    """
-    raw_properties = raw_properties or {}
-
-    # InputAction 从 PropertyTag 获取（已在 read_ue_graph_node 中解析）
-    input_action_path = raw_properties.get("InputAction") or ""
-    input_action_short_name = raw_properties.get("InputActionShortName") or ""
-    input_action_package_index = raw_properties.get("InputActionPackageIndex", 0)
-
-    # 如果 PropertyTag 未提供，尝试从 archive 读取
-    if not input_action_path:
-        try:
-            input_action_path = archive.read_fstring()
-            # 从路径提取短名
-            if input_action_path:
-                input_action_short_name = input_action_path.split(".")[-1].split("'")[0]
-        except (struct.error, OSError, ValueError):
-            input_action_path = ""
-
-    # AdvancedPinDisplay 从 PropertyTag 获取
-    advanced_pin_display_raw = raw_properties.get("AdvancedPinDisplay", 0)
-    advanced_pin_display = raw_properties.get("AdvancedPinDisplayFormatted", "Default")
-
-    return {
-        "input_action_path": input_action_path,
-        "input_action_short_name": input_action_short_name,
-        "input_action_package_index": input_action_package_index,
-        "advanced_pin_display": advanced_pin_display,
-        "advanced_pin_display_raw": advanced_pin_display_raw,
-    }
-
-
-def read_k2node_functionentry(
-    archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-    function_reference: Optional[FMemberReference] = None,
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_FunctionEntry 特有字段，返回字典（作为 node_data）。
-
-    从 PropertyTag 层获取 ExtraFlags、bIsEditable。
-
-    FunctionReference 已在 read_ue_graph_node() 中从 PropertyTag 解析。
-
-    返回字段：
-    - function_reference: FMemberReference
-    - extra_flags: int
-    - b_is_editable: bool
-    """
-    raw_properties = raw_properties or {}
-
-    extra_flags = raw_properties.get("ExtraFlags", 0)
-    b_is_editable = raw_properties.get("bIsEditable", False)
-
-    return {
-        "function_reference": function_reference,
-        "extra_flags": extra_flags,
-        "b_is_editable": b_is_editable,
-    }
-
-
-def read_k2node_message(
-    archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_Message 特有字段。"""
-    result = {}
-
-    try:
-        message_name_idx = archive.read_i32()
-        if 0 <= message_name_idx < len(name_map):
-            result["message_name"] = name_map[message_name_idx]
-        else:
-            result["message_name"] = f"Message_{message_name_idx}"
-    except (struct.error, OSError, ValueError) as e:
-        logger.warning("K2Node_Message read failed: %s", e)
-        result["message_name"] = "Unknown"
-
-    return result
-
-
-def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """读取 K2Node_CallDelegate 字段。"""
-    result = {}
-    try:
-        delegate_idx = archive.read_i32()
-        if 0 <= delegate_idx < len(name_map):
-            result["delegate_name"] = name_map[delegate_idx]
-    except (struct.error, OSError, ValueError) as e:
-        logger.warning("K2Node_CallDelegate read failed: %s", e)
-    return result
-
-
-def read_k2node_call_array_function(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_CallArrayFunction 特有字段。
-
-    继承自 K2Node_CallFunction，特有字段通过 PropertyTag 序列化。
-    从 raw_properties 提取 FunctionReference（已在 PropertyTag 层解析）。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # FunctionReference 从 PropertyTag 获取
-    func_ref = raw_properties.get("FunctionReference")
-    if isinstance(func_ref, dict):
-        result["function_reference"] = func_ref
-    elif func_ref is not None:
-        result["function_reference"] = func_ref
-
-    return result
-
-
-def read_k2node_call_parent_function(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_CallParentFunction 特有字段。
-
-    继承自 K2Node_CallFunction，调用父类同名函数。
-    特有字段通过 PropertyTag 序列化。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # FunctionReference 从 PropertyTag 获取
-    func_ref = raw_properties.get("FunctionReference")
-    if isinstance(func_ref, dict):
-        result["function_reference"] = func_ref
-    elif func_ref is not None:
-        result["function_reference"] = func_ref
-
-    return result
-
-
-def read_k2node_function_result(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_FunctionResult 特有字段。
-
-    继承自 K2Node_FunctionTerminator，表示函数返回节点。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    func_ref = raw_properties.get("FunctionReference")
-    if isinstance(func_ref, dict):
-        result["function_reference"] = func_ref
-    elif func_ref is not None:
-        result["function_reference"] = func_ref
-
-    return result
-
-
-def read_k2node_create_widget(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_CreateWidget 特有字段。
-
-    继承自 K2Node_ConstructObjectFromClass，创建 UMG 控件。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # WidgetClass 从 PropertyTag 获取（FPackageIndex → 类名）
-    widget_class = raw_properties.get("WidgetClass")
-    if widget_class is not None:
-        result["widget_class"] = widget_class
-
-    return result
-
-
-def read_k2node_add_delegate(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_AddDelegate 特有字段。
-
-    继承自 K2Node_BaseMCDelegate，添加多播委托绑定。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    delegate_name = raw_properties.get("DelegateName")
-    if delegate_name is not None:
-        result["delegate_name"] = delegate_name
-
-    return result
-
-
-def read_k2node_macro_instance(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_MacroInstance 特有字段。
-
-    继承自 K2Node_Tunnel，表示宏图表实例。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # MacroGraph 从 PropertyTag 获取（FPackageIndex → 宏图表引用）
-    macro_graph = raw_properties.get("MacroGraph")
-    if macro_graph is not None:
-        result["macro_graph"] = macro_graph
-
-    # Macro 从 PropertyTag 获取（FName → 宏名称）
-    macro = raw_properties.get("Macro")
-    if macro is not None:
-        result["macro_name"] = macro
-
-    # MacroGraphReference 结构化解析（新格式：FGraphReference）
-    macro_graph_ref = raw_properties.get("MacroGraphReference")
-    if macro_graph_ref is not None:
-        result["macro_graph_reference"] = macro_graph_ref
-
-    # ResolvedWildcardType — 通配符引脚解析后的类型
-    resolved_wildcard = raw_properties.get("ResolvedWildcardType")
-    if resolved_wildcard is not None:
-        result["resolved_wildcard_type"] = resolved_wildcard
-
-    return result
-
-
-def read_k2node_assign_delegate(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_AssignDelegate 特有字段。
-
-    继承自 K2Node_AddDelegate，赋值委托绑定。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    delegate_name = raw_properties.get("DelegateName")
-    if delegate_name is not None:
-        result["delegate_name"] = delegate_name
-
-    return result
-
-
-def read_k2node_get_data_table_row(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_GetDataTableRow 特有字段。
-
-    从数据表获取行数据。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # DataTable 从 PropertyTag 获取
-    data_table = raw_properties.get("DataTable")
-    if data_table is not None:
-        result["data_table"] = data_table
-
-    # RowStructName 从 PropertyTag 获取
-    row_struct = raw_properties.get("RowStructName")
-    if row_struct is not None:
-        result["row_struct_name"] = row_struct
-
-    return result
-
-
-def read_k2node_load_asset(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_LoadAsset 特有字段。
-
-    异步加载资产节点。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # AssetType 从 PropertyTag 获取
-    asset_type = raw_properties.get("AssetType")
-    if asset_type is not None:
-        result["asset_type"] = asset_type
-
-    return result
-
-
-def read_k2node_spawn_actor_from_class(
-    archive: FArchive, name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 K2Node_SpawnActorFromClass 特有字段。
-
-    继承自 K2Node_ConstructObjectFromClass，生成 Actor。
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # Class 从 PropertyTag 获取
-    spawn_class = raw_properties.get("Class")
-    if spawn_class is not None:
-        result["spawn_class"] = spawn_class
-
-    return result
-
-
-# ============================================================================
-# AnimGraphNode 读取
-# ============================================================================
-
-def _read_anim_graph_node(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
-    class_name: str,
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """读取 AnimGraphNode 类型节点的数据。
-
-    关键属性：
-    - EditorStateMachineGraph: 状态机的子图 (UAnimationStateMachineGraph)
-    - BoundGraph: 状态的子图 (UEdGraph)
-    - Node: 动画节点运行时数据 (FAnimNode_StateMachine 等)
-    """
-    result: Dict[str, Any] = {
-        "node_type": class_name,
-    }
-
-    if not raw_properties:
-        return result
-
-    # 提取子图引用
-    subgraph_refs = {}
-    for key in ("EditorStateMachineGraph", "BoundGraph"):
-        pkg_idx = raw_properties.get(key)
-        if pkg_idx and isinstance(pkg_idx, int) and pkg_idx != 0:
-            # 解析 PackageIndex 为对象引用
-            try:
-                from uasset_read.serializers.object_resources import PackageIndex
-                if linker is not None:
-                    obj_ref = linker.resolve_package_index(PackageIndex(pkg_idx))
-                    if obj_ref is not None:
-                        subgraph_refs[key] = {
-                            "package_index": pkg_idx,
-                            "object_name": getattr(obj_ref, "object_name", ""),
-                            "class_name": getattr(obj_ref, "class_name", ""),
-                        }
-                else:
-                    # 无 linker 时，尝试从 export_map 解析
-                    if pkg_idx > 0 and pkg_idx <= len(export_map):
-                        obj_export = export_map[pkg_idx - 1]
-                        subgraph_refs[key] = {
-                            "package_index": pkg_idx,
-                            "object_name": obj_export.object_name,
-                            "class_name": _gac(obj_export, import_map, export_map, linker) or "",
-                        }
-            except (KeyError, IndexError, AttributeError):
-                subgraph_refs[key] = {"package_index": pkg_idx, "error": "resolve_failed"}
-
-    if subgraph_refs:
-        result["subgraph_references"] = subgraph_refs
-
-    # 提取其他 AnimGraphNode 特有属性
-    node_data = raw_properties.get("Node")
-    if node_data and isinstance(node_data, dict):
-        result["anim_node_data"] = node_data
-
-    # 状态机特有属性
-    if "StateMachineIndexInClass" in raw_properties:
-        result["state_machine_index"] = raw_properties["StateMachineIndexInClass"]
-
-    return result
-
-
-# ============================================================================
-# 节点工厂
-# ============================================================================
-
-def create_node_from_archive(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    node_export: ObjectExport,
-    base_node: UEdGraphNode,
-    raw_properties: Optional[Dict[str, Any]] = None,
-    linker: Optional["PackageLinker"] = None,
-    node_refs: Optional[Dict[str, Any]] = None,
-) -> UEdGraphNode:
-    """根据 class_name 分派到对应的节点读取函数（D-07/D-08 工厂模式）。"""
-    class_name = base_node.class_name
-
-    # 如果 base_node 已经携带 _parse_error 标记，跳过分发保护已有信息
-    if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
-        return base_node
-
-    # D-11: 使用 PropertyTag 层已解析的 function_reference/event_reference
-    if class_name == "K2Node_CallFunction":
-        base_node.node_data = read_k2node_call_function(
-            archive, name_map, import_map, export_map, linker,
-            function_reference=node_refs.get('function_reference') if node_refs else None,
-        )
-    elif class_name == "K2Node_Event":
-        base_node.node_data = read_k2node_event(
-            archive, name_map, import_map, export_map, linker,
-            event_reference=node_refs.get('event_reference') if node_refs else None,
-            b_override_function=node_refs.get('b_override_function') if node_refs else None,
-            b_internal_event=node_refs.get('b_internal_event') if node_refs else None,
-            custom_function_name=node_refs.get('custom_function_name') if node_refs else None,
-            function_flags=node_refs.get('function_flags') if node_refs else None,
-        )
-    elif class_name == "K2Node_Knot":
-        base_node.node_data = read_k2node_knot(archive)
-    elif class_name == "EdGraphNode_Comment":
-        base_node.node_data = read_edgraph_node_comment(raw_properties)
-        if isinstance(base_node.node_data, dict):
-            for attr, key in (
-                ("comment_color", "comment_color"),
-                ("node_width", "node_width"),
-                ("node_height", "node_height"),
-                ("font_size", "font_size"),
-            ):
-                value = base_node.node_data.get(key)
-                if value is not None:
-                    setattr(base_node, attr, value)
-    elif class_name == "K2Node_EnhancedInputAction":
-        base_node.node_data = read_k2node_enhanced_input(archive, name_map, raw_properties)
-        # Populate trigger_events from already-parsed pins
-        if isinstance(base_node.node_data, dict):
-            base_node.node_data["trigger_events"] = _build_trigger_events_from_pins(base_node.pins)
-    elif class_name == "K2Node_FunctionEntry":
-        fr = node_refs.get('function_reference') if node_refs else None
-        base_node.node_data = read_k2node_functionentry(
-            archive, name_map, import_map, export_map, linker,
-            function_reference=fr,
-            raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_Message":
-        base_node.node_data = read_k2node_message(
-            archive, name_map, import_map, export_map, linker,
-        )
-    elif class_name == "K2Node_CallDelegate":
-        base_node.node_data = read_k2node_call_delegate(archive, name_map)
-    elif class_name == "K2Node_CallArrayFunction":
-        base_node.node_data = read_k2node_call_array_function(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_CallParentFunction":
-        base_node.node_data = read_k2node_call_parent_function(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_FunctionResult":
-        base_node.node_data = read_k2node_function_result(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_CreateWidget":
-        base_node.node_data = read_k2node_create_widget(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_AddDelegate":
-        base_node.node_data = read_k2node_add_delegate(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_MacroInstance":
-        base_node.node_data = read_k2node_macro_instance(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_AssignDelegate":
-        base_node.node_data = read_k2node_assign_delegate(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_GetDataTableRow":
-        base_node.node_data = read_k2node_get_data_table_row(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_LoadAsset":
-        base_node.node_data = read_k2node_load_asset(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    elif class_name == "K2Node_SpawnActorFromClass":
-        base_node.node_data = read_k2node_spawn_actor_from_class(
-            archive, name_map, raw_properties=raw_properties,
-        )
-    # AnimGraphNode 类型处理
-    elif class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
-        base_node.node_data = _read_anim_graph_node(
-            archive, name_map, summary, export_map, import_map, linker,
-            class_name, raw_properties,
-        )
-    elif raw_properties:
-        # 未知类型：保留原始 PropertyTag 元数据用于调试和未来扩展
-        base_node.node_data = {"_raw_properties": raw_properties}
-
-    return base_node
-
-
-# ============================================================================
-# UEdGraphNode 读取
-# ============================================================================
-
-def _read_member_reference_from_tags(
-    archive: FArchive,
-    tag,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
-) -> FMemberReference:
-    """从 PropertyTag 读取 FMemberReference 结构（FunctionReference/EventReference 共用）。"""
-    value_end = tag.value_end_offset or (archive.tell() + tag.size)
-    mp_idx = 0
-    m_name = ""
-    m_guid = ""
-    m_self = False
-
-    while archive.tell() < value_end:
-        inner = read_property_tag(archive, name_map)
-        if inner.name == "None":
-            break
-        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
-            raise ParseError(
-                f"MemberReference field '{inner.name}' exceeds struct boundary"
-            )
-
-        def _read_inner(inner=inner):
-            if inner.name == "MemberParent" and inner.size > 0:
-                return archive.read_i32()
-            if inner.name == "MemberScope" and inner.size > 0:
-                archive.read_fstring()
-                return None
-            if inner.name == "MemberName":
-                return archive.read_name(name_map)
-            if inner.name == "MemberGuid" and inner.size > 0:
-                return archive.read_bytes(16).hex()
-            if inner.name == "bSelfContext":
-                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
-            if inner.name == "bWasDeprecated" and inner.size > 0:
-                archive.read_i32()
-            return None
-
-        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
-        if inner.name == "MemberParent":
-            mp_idx = inner_value or 0
-        elif inner.name == "MemberName":
-            m_name = inner_value or ""
-        elif inner.name == "MemberGuid":
-            m_guid = inner_value or ""
-        elif inner.name == "bSelfContext":
-            m_self = bool(inner_value)
-
-    return FMemberReference(
-        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
-        member_name=m_name,
-        member_guid=m_guid,
-        b_self_context=m_self,
-    )
-
-
-def _read_node_property_tag(
-    archive: FArchive,
-    tag,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"],
-    raw_properties: Dict[str, Any],
-) -> dict:
-    """读取单个 node PropertyTag 并更新局部变量。返回需要更新的 named 属性。"""
-    updates: Dict[str, Any] = {}
-
-    if tag.name == "NodePosX":
-        updates["node_pos_x"] = _read_tag_i32(archive, tag)
-    elif tag.name == "NodePosY":
-        updates["node_pos_y"] = _read_tag_i32(archive, tag)
-    elif tag.name == "NodeGuid" and tag.size > 0:
-        updates["node_guid"] = archive.read_bytes(16).hex()
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name == "NodeComment" and tag.size > 0:
-        updates["node_comment"] = archive.read_fstring()
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name == "InputAction" and tag.size > 0:
-        pkg_idx = archive.read_i32()
-        input_action_path = (
-            _rcn(PackageIndex(pkg_idx), import_map, export_map, linker)
-            if pkg_idx != 0 else ""
-        )
-        raw_properties[tag.name] = input_action_path
-        raw_properties["InputActionShortName"] = (
-            input_action_path.split(".")[-1].split("'")[0]
-            if input_action_path else ""
-        )
-        raw_properties["InputActionPackageIndex"] = pkg_idx
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name == "CommentColor" and tag.size >= 16:
-        raw_properties[tag.name] = (
-            archive.read_f32(),
-            archive.read_f32(),
-            archive.read_f32(),
-            archive.read_f32(),
-        )
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name in ("NodeWidth", "NodeHeight", "FontSize") and tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
-        raw_properties[tag.name] = _read_tag_bool(archive, tag)
-    elif tag.name == "CommentDepth" and tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "ExtraFlags" and tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
-        raw_val = _read_tag_i32(archive, tag)
-        raw_properties[tag.name] = raw_val
-        enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
-        raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
-    elif tag.name == "bOverrideFunction":
-        updates["b_override_function"] = _read_tag_bool(archive, tag)
-        raw_properties[tag.name] = updates["b_override_function"]
-    elif tag.name == "bInternalEvent":
-        updates["b_internal_event"] = _read_tag_bool(archive, tag)
-        raw_properties[tag.name] = updates["b_internal_event"]
-    elif tag.name == "bIsEditable":
-        raw_properties[tag.name] = _read_tag_bool(archive, tag)
-    elif tag.name == "CustomFunctionName":
-        updates["custom_function_name"] = _read_tag_fname(archive, tag, name_map)
-        raw_properties[tag.name] = updates["custom_function_name"]
-    elif tag.name == "FunctionFlags" and tag.size > 0:
-        updates["function_flags"] = _read_tag_i32(archive, tag)
-        raw_properties[tag.name] = updates["function_flags"]
-    elif tag.name == "CustomGeneratedFunctionName":
-        raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
-    elif tag.name in ("EditorStateMachineGraph", "BoundGraph") and tag.size > 0:
-        pkg_idx = archive.read_i32()
-        raw_properties[tag.name] = pkg_idx
-        raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name == "MoveMode" and tag.size > 0:
-        raw_val = archive.read_u8() if tag.size >= 1 else 0
-        raw_properties[tag.name] = raw_val
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-    elif tag.name == "NodeDetails" and tag.size > 0:
-        try:
-            flags = archive.read_i32()
-            history_type_raw = archive.read_u8()
-            history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-            read_ftext_with_history(archive, history_type, tolerant=True)
-        except (struct.error, OSError, ValueError) as e:
-            logger.debug("读取 NodeDetails FText 失败: %s", e, exc_info=True)
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
-        raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
-    elif tag.size > 0:
-        value_start = archive.tell()
-        raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
-        archive.seek(tag.value_end_offset)
-
-    return updates
-
-
-def _read_node_pins(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
-    node_export: ObjectExport,
-    node_name: str,
-    node_guid: str,
-) -> List[UEdGraphPin]:
-    """读取节点的 Pins 数组。"""
-    pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
-    archive.seek(node_export.serial_offset + pins_offset)
-
-    pins_count = archive.read_i32()
-
-    if pins_count < 0:
-        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
-    if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
-
-    pins: List[UEdGraphPin] = []
-    for _ in range(pins_count):
-        b_null_ptr = archive.read_i32()
-
-        if b_null_ptr != 0:
-            archive.read_i32()  # owning_node (unused)
-            archive.read_bytes(16)  # pin_guid (unused)
-            continue
-
-        header_owning = archive.read_i32()
-        header_guid_bytes = archive.read_bytes(16)
-        header_pin_id = header_guid_bytes.hex().upper()
-
-        try:
-            pin = read_ue_graph_pin(
-                archive, name_map, summary, export_map, import_map, linker,
-                header_owning_node=header_owning,
-                header_pin_id=header_pin_id,
-            )
-            _local_trace = _get_thread_local().pin_trace_events
-            if _local_trace and _local_trace[-1].get("pin_id") == pin.pin_id:
-                _local_trace[-1]["node_name"] = node_export.object_name
-                _local_trace[-1]["node_guid"] = node_guid
-                _local_trace[-1]["node_class"] = _rcn(
-                    node_export.class_index, import_map, export_map, linker
-                ) or ""
-            pins.append(pin)
-        except (struct.error, OSError, ValueError, KeyError):
-            continue
-
-    return pins
-
-
-def _read_node_script_serial(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    node_export: ObjectExport,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"],
-    node_name: str,
-) -> tuple:
-    """读取 node 的 script_serial PropertyTags，返回 (function_reference, event_reference, 局部变量字典, raw_properties)。"""
-    function_reference: Optional[FMemberReference] = None
-    event_reference: Optional[FMemberReference] = None
-    b_override_function: Optional[bool] = None
-    b_internal_event: Optional[bool] = None
-    custom_function_name: Optional[str] = None
-    function_flags: Optional[int] = None
-    node_pos_x: int = 0
-    node_pos_y: int = 0
-    node_guid: str = ""
-    node_comment: str = ""
-    raw_properties: Dict[str, Any] = {}
-
-    if not node_export.has_script_serialization:
-        return (function_reference, event_reference, b_override_function,
-                b_internal_event, custom_function_name, function_flags,
-                node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
-
-    script_start = node_export.serial_offset + node_export.script_serialization_start_offset
-    script_end = node_export.serial_offset + node_export.script_serialization_end_offset
-    archive.seek(script_start)
-
-    # UE5 >= 1011: SerializationControlExtensions
-    if summary.file_version_ue5 >= 1011:
-        ctrl = archive.read_u8()
-        if ctrl & 0x02:
-            archive.read_u8()
-
-    max_property_iterations = max(1000, node_export.script_serialization_size)
-    _property_iterations = 0
-
-    while archive.tell() < script_end:
-        _property_iterations += 1
-        if _property_iterations > max_property_iterations:
-            logger.warning(
-                "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
-                max_property_iterations, node_name
-            )
-            break
-
-        tag_pos = archive.tell()
-        try:
-            tag = read_property_tag(archive, name_map, tolerant=getattr(archive, '_tolerant', False))
-        except ParseError as e:
-            logger.warning(
-                "read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s",
-                tag_pos, node_name, e
-            )
-            break
-
-        if tag.name == "None":
-            break
-
-        if tag.name == "FunctionReference" and tag.size > 0:
-            function_reference = read_tag_value_bounded(
-                archive, tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker)
-            )
-        elif tag.name == "EventReference" and tag.size > 0:
-            event_reference = read_tag_value_bounded(
-                archive, tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker)
-            )
-        else:
-            updates = _read_node_property_tag(
-                archive, tag, name_map, import_map, export_map, linker, raw_properties
-            )
-            if "node_pos_x" in updates:
-                node_pos_x = updates["node_pos_x"]
-            if "node_pos_y" in updates:
-                node_pos_y = updates["node_pos_y"]
-            if "node_guid" in updates:
-                node_guid = updates["node_guid"]
-            if "node_comment" in updates:
-                node_comment = updates["node_comment"]
-            if "b_override_function" in updates:
-                b_override_function = updates["b_override_function"]
-            if "b_internal_event" in updates:
-                b_internal_event = updates["b_internal_event"]
-            if "custom_function_name" in updates:
-                custom_function_name = updates["custom_function_name"]
-            if "function_flags" in updates:
-                function_flags = updates["function_flags"]
-
-    return (function_reference, event_reference, b_override_function,
-            b_internal_event, custom_function_name, function_flags,
-            node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
-
-
-def read_ue_graph_node(
-    archive: FArchive,
-    name_map: List[str],
-    summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    node_export: ObjectExport,
-    linker: Optional["PackageLinker"] = None,
-) -> UEdGraphNode:
-    """读取 UEdGraphNode 基类字段（含 script_serial PropertyTag 解析）。"""
-    archive.seek(node_export.serial_offset)
-
-    node_name = node_export.object_name
-    node_class = _gac(node_export, import_map, export_map, linker)
-
-    # 解析 script_serial 中的 tagged properties
-    (function_reference, event_reference, b_override_function,
-     b_internal_event, custom_function_name, function_flags,
-     node_pos_x, node_pos_y, node_guid, node_comment, raw_properties
-     ) = _read_node_script_serial(
-        archive, name_map, summary, node_export, import_map, export_map, linker, node_name
-    )
-
-    # 读取 Pins 数组
-    pins = _read_node_pins(
-        archive, name_map, summary, export_map, import_map, linker,
-        node_export, node_name, node_guid,
-    )
-
-    class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
-
-    base_node = UEdGraphNode(
-        node_guid=node_guid,
-        node_pos_x=node_pos_x,
-        node_pos_y=node_pos_y,
-        node_comment=node_comment,
-        pins=pins,
-        class_name=class_name,
-    )
-    base_node._export_object_name = node_export.object_name
-
-    node_refs = {
-        'function_reference': function_reference,
-        'event_reference': event_reference,
-        # K2Node_Event PropertyTag 字段
-        'b_override_function': b_override_function,
-        'b_internal_event': b_internal_event,
-        'custom_function_name': custom_function_name,
-        'function_flags': function_flags,
-    }
-
-    return create_node_from_archive(
-        archive, name_map, summary, export_map, import_map, node_export, base_node,
-        raw_properties=raw_properties if raw_properties else None,
-        linker=linker,
-        node_refs=node_refs,
-    )
-
-
 # ============================================================================
 # UEdGraph 读取
 # ============================================================================
+
+def _extract_graph_properties(
+    graph_export: ObjectExport,
+) -> tuple:
+    """从已解析的 PropertyTag 数据中提取 UEdGraph 字段。
+
+    UEdGraph 的 Schema、Nodes、GraphGuid 在 UE 中声明为 UPROPERTY，
+    因此以 PropertyTag 形式序列化在 export body 中。直接从
+    graph_export.properties 读取，避免二次从 archive 二进制解析。
+
+    Returns:
+        (schema_name, node_indices, graph_guid_str)
+        schema_name: Schema import 的全名，如 "EdGraphSchema_K2"，未找到时为 None
+        node_indices: 节点的1-based export index 列表
+        graph_guid_str: GraphGuid 的 hex 字符串（小写无 dash），未找到时为 ""
+    """
+    schema_name: Optional[str] = None
+    node_indices: List[int] = []
+    graph_guid: str = ""
+
+    props = getattr(graph_export, "properties", None) or []
+    for prop in props:
+        name = getattr(prop, "name", None) or (prop.get("name") if isinstance(prop, dict) else None)
+        value = getattr(prop, "value", None) or (prop.get("value") if isinstance(prop, dict) else None)
+        if name == "Schema" and value is not None:
+            # ObjectProperty → import reference
+            if isinstance(value, dict):
+                schema_name = value.get("object_name") or value.get("full_name")
+            elif isinstance(value, int):
+                # 未解析的 PackageIndex (legacy)
+                pass
+        elif name == "Nodes" and isinstance(value, list):
+            node_indices = [v for v in value if isinstance(v, int) and v > 0]
+        elif name == "GraphGuid" and isinstance(value, dict):
+            fields = value.get("fields", {})
+            if fields:
+                a = fields.get("A", 0) & 0xFFFFFFFF
+                b = fields.get("B", 0) & 0xFFFFFFFF
+                c = fields.get("C", 0) & 0xFFFFFFFF
+                d = fields.get("D", 0) & 0xFFFFFFFF
+                graph_guid = (
+                    f"{a & 0xFF:02x}{(a >> 8) & 0xFF:02x}{(a >> 16) & 0xFF:02x}{(a >> 24) & 0xFF:02x}"
+                    f"{b & 0xFF:02x}{(b >> 8) & 0xFF:02x}-{(c >> 8) & 0xFF:02x}{c & 0xFF:02x}"
+                    f"-{(c >> 24) & 0xFF:02x}{(c >> 16) & 0xFF:02x}-{(d >> 8) & 0xFF:02x}{d & 0xFF:02x}"
+                    f"-{(d >> 24) & 0xFF:02x}{(d >> 16) & 0xFF:02x}{(d >> 8) & 0xFF:02x}{d & 0xFF:02x}"
+                )
+
+    return schema_name, node_indices, graph_guid
+
 
 def read_ue_graph(
     archive: FArchive,
@@ -2373,54 +470,56 @@ def read_ue_graph(
     _parsed_indices: Optional[set] = None,
 ) -> UEdGraph:
     """读取 UEdGraph 容器（EdGraph.cpp）。
-    
+
+    Schema / Nodes / GraphGuid 均为 UPROPERTY，由 PropertyTag 解析器
+    在 preload 阶段提取到 graph_export.properties 中。此函数从已解析
+    的属性中获取这些字段，不再从 archive 二进制读取。
+
+    节点数据仍通过 archive.seek(node_export.serial_offset) 读取
+    （节点 export 的 script_serial + pins 是独立的二进制段）。
+
     参考 UE C++ UEdGraph::Serialize() 实现
     """
+    # 延迟导入避免循环依赖
+    from uasset_read.serializers.graph_node import read_ue_graph_node  # noqa: F811
+
     if _parsed_indices is None:
         _parsed_indices = set()
     _parsed_indices.add(graph_export_idx)
 
-    archive.seek(graph_export.serial_offset)
+    # ── 1. 从 PropertyTag 提取 Schema / Nodes / GraphGuid ──
+    schema_name, node_indices, graph_guid = _extract_graph_properties(graph_export)
 
-    # 1. Schema
-    schema_index = archive.read_i32()
-    schema: Optional[str] = None
-    if schema_index != 0:
-        schema = _rcn(PackageIndex(schema_index), import_map, export_map, linker)
+    # 解析 Schema 引用
+    schema: Optional[str] = schema_name
 
-    # 2. Nodes array
-    nodes_count = archive.read_i32()
-    if nodes_count < 0:
-        raise ParseError(f"Invalid nodes_count {nodes_count} (negative) at graph {graph_export.object_name}")
-    if nodes_count > MAX_NODES_PER_GRAPH:
-        raise ParseError(f"nodes_count {nodes_count} exceeds MAX_NODES_PER_GRAPH {MAX_NODES_PER_GRAPH} at graph {graph_export.object_name}")
+    # ── 2. 按 node_indices 读取每个节点的二进制数据 ──
+    if len(node_indices) > MAX_NODES_PER_GRAPH:
+        logger.debug("node_indices count %d exceeds MAX_NODES_PER_GRAPH %d, truncating",
+                       len(node_indices), MAX_NODES_PER_GRAPH)
+        node_indices = node_indices[:MAX_NODES_PER_GRAPH]
 
     nodes: List[UEdGraphNode] = []
-    failed_nodes: List[str] = []
 
-    for _ in range(nodes_count):
-        node_index = archive.read_i32()
-        if node_index > 0 and node_index <= len(export_map):
-            node_export = export_map[node_index - 1]
-            try:
-                node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
-                node._export_index = node_index  # tag for dedup
-                nodes.append(node)
-            except ParseError:
-                failed_nodes.append(node_export.object_name)
+    for node_index in node_indices:
+        if node_index <= 0 or node_index > len(export_map):
+            continue
+        node_export = export_map[node_index - 1]
+        try:
+            node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+            node._export_index = node_index  # tag for dedup
+            nodes.append(node)
+        except (ParseError, struct.error, OSError, ValueError, KeyError):
+            logger.debug("Failed to read node %s (export #%d) in graph %s",
+                           node_export.object_name, node_index, graph_export.object_name)
 
-    # UE 5.x fallback: always scan export_map for nodes whose outer is this graph.
-    # Main path nodes_count can be incomplete due to UE5 serialization differences;
-    # fallback discovery via outer_index scan catches the rest. Dedup by _export_index.
+    # UE 5.x fallback: scan export_map for nodes whose outer is this graph.
+    # Catches nodes not listed in the Nodes PropertyTag (e.g. dynamically added nodes).
     if graph_export_idx > 0:
-        if len(nodes) > 0:
-            logger.debug("Main path collected %d nodes but fallback still triggered — merging with outer_index scan", len(nodes))
-        collected_object_names = {n.class_name for n in nodes}  # quick dedup hint
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
                 node_class = _gac(node_export, import_map, export_map, linker)
                 if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
-                    # Skip if already collected by main path (same export index)
                     node_idx = export_map.index(node_export) + 1
                     already_collected = any(
                         getattr(n, '_export_index', None) == node_idx
@@ -2432,7 +531,7 @@ def read_ue_graph(
                         node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
                         node._export_index = node_idx  # tag for dedup
                         nodes.append(node)
-                    except ParseError:
+                    except (ParseError, struct.error, OSError, ValueError, KeyError):
                         nodes.append(UEdGraphNode(
                             node_guid="",
                             node_pos_x=0,
@@ -2444,26 +543,26 @@ def read_ue_graph(
                         ))
                         nodes[-1]._export_object_name = node_export.object_name
 
-    # 3. bEditable (UE header 顺序: Schema, Nodes, bEditable, SubGraphs, GraphGuid)
-    b_editable_raw = archive.read_u8("Graph.bEditable")
-    b_editable = b_editable_raw != 0
-
-    # 4. SubGraphs 数组（UE UEdGraph::SubGraphs — WITH_EDITORONLY_DATA）
-    #    序列化为 i32 count + i32[] package indices
+    # ── 3. bEditable / SubGraphs — 从 PropertyTag 或 fallback 读取 ──
+    # 这些字段可能是 WITH_EDITORONLY_DATA，未必存在于 PropertyTag 中。
+    # 当 Properties 中有时直接取值；否则默认 bEditable=True、SubGraphs=[]。
+    b_editable = True  # 默认值
     subgraph_indices: List[int] = []
-    subgraphs_count = archive.read_i32("Graph.SubGraphs.Count")
-    if subgraphs_count < 0 or subgraphs_count > MAX_NODES_PER_GRAPH:
-        logger.warning(
-            "Invalid SubGraphs count %d at graph %s, skipping",
-            subgraphs_count, graph_export.object_name,
-        )
-    else:
-        for _ in range(subgraphs_count):
-            pkg_idx = archive.read_i32("Graph.SubGraphs.Element")
-            subgraph_indices.append(pkg_idx)
 
-    # 5. GraphGuid
-    graph_guid = _read_guid(archive, uppercase=False)
+    props = getattr(graph_export, "properties", None) or []
+    for prop in props:
+        pname = getattr(prop, "name", None) or (prop.get("name") if isinstance(prop, dict) else None)
+        pvalue = getattr(prop, "value", None) or (prop.get("value") if isinstance(prop, dict) else None)
+        if pname == "bEditable":
+            b_editable = bool(pvalue) if pvalue is not None else True
+        elif pname == "SubGraphs" and isinstance(pvalue, list):
+            if len(pvalue) > MAX_SUBGRAPHS:
+                logger.debug(
+                    "SubGraphs count %d exceeds limit %d, truncating",
+                    len(pvalue), MAX_SUBGRAPHS,
+                )
+                pvalue = pvalue[:MAX_SUBGRAPHS]
+            subgraph_indices = [v for v in pvalue if isinstance(v, int) and v > 0]
 
     # 6. 解析子图（合并 SubGraphs 数组 + AnimGraphNode 嵌套子图）
     subgraphs: List[UEdGraph] = []
@@ -2489,7 +588,7 @@ def read_ue_graph(
             )
             subgraphs.append(subgraph)
         except (struct.error, OSError, ValueError, KeyError) as e:
-            logger.warning("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
+            logger.debug("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
 
     # 6b. 从 AnimGraphNode node_data.subgraph_references 解析
     for node in nodes:
@@ -2523,7 +622,7 @@ def read_ue_graph(
                 subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
                 subgraphs.append(subgraph)
             except (struct.error, OSError, ValueError, KeyError) as e:
-                logger.warning("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
+                logger.debug("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 
     return UEdGraph(
         graph_name=graph_export.object_name,
@@ -2534,3 +633,44 @@ def read_ue_graph(
         b_editable=b_editable,
         subgraphs=subgraphs,
     )
+
+
+# ============================================================================
+# 向后兼容 re-exports — 从 graph_pin.py 和 graph_node.py 重新导出
+#
+# ⚠️ 循环依赖脆弱性：
+# graph_node.py 和 graph_pin.py 内部通过延迟导入引用本模块 (graph.py) 的辅助函数，
+# 本模块又通过 re-exports 反向引用它们。这个循环依赖由 Python 的模块缓存机制
+# 隐式容忍，但任何导入顺序变化（如调整 import 位置或拆分 helper 到新模块）都可能
+# 导致 ImportError。修改此区域前务必验证 `python -c "from uasset_read.serializers.graph import *"`。
+# ============================================================================
+
+from uasset_read.serializers.graph_pin import (  # noqa: E402, F401
+    read_ed_graph_pin_type,
+    read_pin_reference,
+    read_pin_array,
+    read_ue_graph_pin,
+)
+from uasset_read.serializers.graph_node import (  # noqa: E402, F401
+    read_ue_graph_node,
+    create_node_from_archive,
+    read_fmember_reference,
+    read_k2node_call_function,
+    read_k2node_event,
+    read_k2node_knot,
+    read_edgraph_node_comment,
+    read_k2node_enhanced_input,
+    read_k2node_functionentry,
+    read_k2node_message,
+    read_k2node_call_delegate,
+    read_k2node_call_array_function,
+    read_k2node_call_parent_function,
+    read_k2node_function_result,
+    read_k2node_create_widget,
+    read_k2node_add_delegate,
+    read_k2node_macro_instance,
+    read_k2node_assign_delegate,
+    read_k2node_get_data_table_row,
+    read_k2node_load_asset,
+    read_k2node_spawn_actor_from_class,
+)

@@ -1,5 +1,4 @@
 """Kismet expression classes and token-to-class mapping."""
-from __future__ import annotations
 
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression

@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from io import BytesIO
 
-from uasset_read.parsers.utils import read_validated_count
+from uasset_read.parsers.utils import read_validated_count_tolerant
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.exceptions import ParseError
 from uasset_read.archive import FArchive
@@ -35,31 +35,31 @@ class TestReadValidatedCount:
     def test_negative_count_returns_zero_with_warning(self):
         """负数数量应返回 0 并记录警告（而非抛出 ParseError）。"""
         archive = self._make_archive_with_i32(-1)
-        result = read_validated_count(archive, 1000000, "test")
+        result = read_validated_count_tolerant(archive, 1000000, "test")
         assert result == 0
 
     def test_exceeds_max_returns_zero_with_warning(self):
         """超大数量应返回 0 并记录警告（而非抛出 ParseError）。"""
         archive = self._make_archive_with_i32(9999999)
-        result = read_validated_count(archive, 1000000, "test")
+        result = read_validated_count_tolerant(archive, 1000000, "test")
         assert result == 0
 
     def test_valid_count_returns_value(self):
         """正常数量应正常返回。"""
         archive = self._make_archive_with_i32(42)
-        result = read_validated_count(archive, 1000000, "test")
+        result = read_validated_count_tolerant(archive, 1000000, "test")
         assert result == 42
 
     def test_zero_count_returns_value(self):
         """零值应正常返回。"""
         archive = self._make_archive_with_i32(0)
-        result = read_validated_count(archive, 1000000, "test")
+        result = read_validated_count_tolerant(archive, 1000000, "test")
         assert result == 0
 
     def test_invalid_count_returns_zero_not_exception(self):
         """无效数量应返回 0 而非抛出任何异常。"""
         archive = self._make_archive_with_i32(-100)
-        result = read_validated_count(archive, 1000000, "test_label")
+        result = read_validated_count_tolerant(archive, 1000000, "test_label")
         assert result == 0
 
 

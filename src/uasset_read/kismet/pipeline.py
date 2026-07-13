@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet Decompilation Pipeline — Standalone decompile_uasset() entry point.
 
@@ -7,7 +9,6 @@ structured results.
 
 BPGC bytecode fallback with cache reset.
 """
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

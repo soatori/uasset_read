@@ -1,12 +1,16 @@
-"""纹理资产类型"""
 from __future__ import annotations
+
+"""纹理资产类型"""
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import logging
 
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
 
 # Texture2D 合理尺寸上限（256MB 像素等价）
 _MAX_TEXTURE_DIMENSION = 32768
@@ -48,13 +52,13 @@ class UTexture2D(UObject):
 
         # 尺寸有效性验证（#137: 防止负值/溢出导致后续解析异常）
         if self.size_x < 0 or self.size_x > _MAX_TEXTURE_DIMENSION:
-            _logger.warning(
+            _logger.debug(
                 "Texture2D '%s': ImportedSizeX=%d 超出合理范围 [0, %d]，置为 0",
                 getattr(self, 'object_name', '?'), self.size_x, _MAX_TEXTURE_DIMENSION,
             )
             self.size_x = 0
         if self.size_y < 0 or self.size_y > _MAX_TEXTURE_DIMENSION:
-            _logger.warning(
+            _logger.debug(
                 "Texture2D '%s': ImportedSizeY=%d 超出合理范围 [0, %d]，置为 0",
                 getattr(self, 'object_name', '?'), self.size_y, _MAX_TEXTURE_DIMENSION,
             )
@@ -105,7 +109,7 @@ def _normalize_mip(mip: Any, archive: 'FArchive' = None) -> Dict[str, Any]:
 
     # BulkData 大小边界检查（#137: 防止 Size 溢出到后续属性区域）
     if data_size < 0 or data_size > _MAX_BULK_DATA_SIZE:
-        _logger.warning(
+        _logger.debug(
             "Texture2D mip: DataSize=%d 超出合理范围 [0, %d]，置为 0",
             data_size, _MAX_BULK_DATA_SIZE,
         )
@@ -113,7 +117,7 @@ def _normalize_mip(mip: Any, archive: 'FArchive' = None) -> Dict[str, Any]:
     elif archive is not None and data_size > 0:
         remaining = archive.total_size() - archive.tell()
         if data_size > remaining:
-            _logger.warning(
+            _logger.debug(
                 "Texture2D mip: DataSize=%d 超出剩余字节 %d，截断为 0",
                 data_size, remaining,
             )

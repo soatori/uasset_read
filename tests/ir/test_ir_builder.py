@@ -104,7 +104,7 @@ class TestBuildPackageIR:
         assert isinstance(ir, PackageIR)
         assert ir.header.package_name == "/Game/Test/BP_Test"
         assert ir.header.package_class == "BP_Test_C"
-        assert ir.name_map == ["BP_Test", "SomeName"]
+        assert ir.name_map == ("BP_Test", "SomeName")
         assert ir.exports == []
         assert ir.imports == []
         assert ir.linker is None

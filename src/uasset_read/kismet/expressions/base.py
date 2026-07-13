@@ -4,7 +4,6 @@ Kismet 表达式系统 — 基类定义。
 包含 KismetExpression 抽象基类和 KismetExpressionT 泛型子类。
 """
 
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field

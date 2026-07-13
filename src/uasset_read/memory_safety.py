@@ -1,18 +1,137 @@
-"""Central memory policy, process RSS measurement, and parser checkpoints."""
 from __future__ import annotations
+
+"""Central memory policy, process RSS measurement, and parser checkpoints."""
 
 import gc
 import logging
 import os
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+
+class FileSizeTier(Enum):
+    """文件大小分级，用于决定是否需要子进程隔离。"""
+
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
+
+    @classmethod
+    def from_size(cls, file_size: int) -> "FileSizeTier":
+        """根据文件大小返回对应分级。
+
+        - SMALL: < 20MB
+        - MEDIUM: 20MB - 100MB
+        - LARGE: > 100MB
+        """
+        if file_size < 20 * 1024 * 1024:
+            return cls.SMALL
+        if file_size <= 100 * 1024 * 1024:
+            return cls.MEDIUM
+        return cls.LARGE
+
+
+MEDIUM_FILE_ISOLATION_THRESHOLD = 50 * 1024 * 1024  # 50 MB
+
+
+def should_isolate(file_size: int, tier: FileSizeTier) -> bool:
+    """判断文件是否需要在隔离的子进程中处理。
+
+    Args:
+        file_size: 文件大小（字节）
+        tier: 文件大小分级
+
+    Returns:
+        True 表示应在隔离子进程中处理
+    """
+    if tier == FileSizeTier.SMALL:
+        return False
+    elif tier == FileSizeTier.MEDIUM:
+        return file_size > MEDIUM_FILE_ISOLATION_THRESHOLD
+    elif tier == FileSizeTier.LARGE:
+        return True
+    return False
+
+
 LARGE_FILE_THRESHOLD = 20 * 1024 * 1024
 MAX_ASSET_COUNT = 200
+
+
+@dataclass
+class AllocationLimits:
+    """分配限制配置 — 用于资源预算跟踪。"""
+    max_single_read_bytes: int = 16 * 1024 * 1024  # 16 MB
+    max_decompressed_block_bytes: int = 64 * 1024 * 1024  # 64 MB
+    max_total_decompressed_bytes: int = 256 * 1024 * 1024  # 256 MB
+    max_compression_ratio: float = 10.0
+    stream_chunk_bytes: int = 1024 * 1024  # 1 MB
+    max_output_buffer_bytes: int = 32 * 1024 * 1024  # 32 MB
+
+
+class ResourceBudget:
+    """资源预算跟踪器 — 在实际读取或扩容前检查配额。"""
+
+    def __init__(self, limits: AllocationLimits | None = None):
+        self.limits = limits or AllocationLimits()
+        self._total_decompressed = 0
+        self._checkpoints: list[int] = []
+        self._work_units: int = 0
+        self._max_work_units: int = 10_000_000  # 10M work units
+
+    def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
+        """预留资源，超限抛 MemoryLimitExceeded。"""
+        if bytes_needed > self.limits.max_single_read_bytes:
+            raise MemoryLimitExceeded(
+                asset_path=asset,
+                stage=stage,
+                current_rss_mb=0,
+                limit_mb=self.limits.max_single_read_bytes / 1024 / 1024,
+            )
+        if bytes_needed > self.limits.max_decompressed_block_bytes:
+            raise MemoryLimitExceeded(
+                asset_path=asset,
+                stage=stage,
+                current_rss_mb=bytes_needed / 1024 / 1024,
+                limit_mb=self.limits.max_decompressed_block_bytes / 1024 / 1024,
+            )
+        self._total_decompressed += bytes_needed
+        if self._total_decompressed > self.limits.max_total_decompressed_bytes:
+            raise MemoryLimitExceeded(
+                asset_path=asset,
+                stage=stage,
+                current_rss_mb=self._total_decompressed / 1024 / 1024,
+                limit_mb=self.limits.max_total_decompressed_bytes / 1024 / 1024,
+            )
+
+    def checkpoint(self) -> None:
+        """保存当前状态。"""
+        self._checkpoints.append(self._total_decompressed)
+
+    def rollback(self) -> None:
+        """回滚到上一个检查点。"""
+        if self._checkpoints:
+            self._total_decompressed = self._checkpoints.pop()
+
+    def consume_work(self, units: int, stage: str) -> None:
+        """消耗工作量单位，超限抛 MemoryLimitExceeded。"""
+        self._work_units += units
+        if self._work_units > self._max_work_units:
+            raise MemoryLimitExceeded(
+                asset_path="",
+                stage=stage,
+                current_rss_mb=self._work_units / 1_000_000,
+                limit_mb=self._max_work_units / 1_000_000,
+            )
+
+    @property
+    def total_decompressed(self) -> int:
+        """当前累计解压字节数。"""
+        return self._total_decompressed
 
 
 @dataclass
@@ -186,6 +305,11 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
             "Per-process RSS monitoring requires psutil on this platform"
         )
 
+    import warnings
+    warnings.warn(
+        "无法获取进程 RSS，内存保护已禁用。建议安装 psutil: pip install psutil",
+        stacklevel=2,
+    )
     return 0.0
 
 
@@ -283,3 +407,98 @@ def check_file_size(path: Path) -> int:
 def cleanup_after_parse() -> None:
     """Compatibility cleanup hook: perform exactly one cyclic-GC pass."""
     gc.collect()
+
+
+# ---------------------------------------------------------------------------
+# 跨平台硬限制
+# ---------------------------------------------------------------------------
+
+def set_hard_rss_limit(limit_mb: int) -> Callable[[], None]:
+    """设置当前进程的硬性 RSS 内存上限。
+
+    在 Windows 上使用 WorkingSet 限制，在 Linux/macOS 上使用 ``resource.setrlimit``。
+    返回一个清理函数，用于恢复原始限制。
+
+    Args:
+        limit_mb: RSS 上限（MB）
+
+    Returns:
+        清理函数，调用后恢复原始限制
+    """
+    limit_bytes = limit_mb * 1024 * 1024
+    original_limit: Any = None
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # GetCurrentProcess 返回 -1 (伪句柄)
+            handle = kernel32.GetCurrentProcess()
+            # c_size_t 在 64 位 Windows 上是 8 字节，但 32 位应用上是 4 字节
+            # SetProcessWorkingSetSize 期望 SIZE_T 参数，用 c_size_t 即可
+            try:
+                result = kernel32.SetProcessWorkingSetSize(
+                    handle, ctypes.c_size_t(limit_bytes), ctypes.c_size_t(limit_bytes)
+                )
+                if not result:
+                    logger.debug("SetProcessWorkingSetSize 返回失败")
+            except OverflowError as e:
+                logger.debug("SetProcessWorkingSetSize 参数溢出: %s", e)
+        except (OSError, OverflowError) as e:
+            logger.debug("Windows 设置 RSS 硬限制失败: %s", e)
+    else:
+        try:
+            import resource
+            # 保存原始限制
+            original_limit = resource.getrlimit(resource.RLIMIT_AS)
+            # 设置虚拟内存上限（RSS 的上限）
+            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+        except (ImportError, ValueError, OSError) as e:
+            logger.debug("Unix 设置 RSS 硬限制失败: %s", e)
+
+    def _cleanup() -> None:
+        if sys.platform != "win32" and original_limit is not None:
+            try:
+                import resource
+                resource.setrlimit(resource.RLIMIT_AS, original_limit)
+            except (ImportError, ValueError, OSError) as exc:
+                logger.debug("恢复 RSS 硬限制失败: %s", exc)
+
+    return _cleanup
+
+
+def get_platform_limits() -> dict[str, Any]:
+    """返回当前平台的资源限制信息。
+
+    Returns:
+        包含 platform、pid、rss_limit_source 等字段的字典
+    """
+    info: dict[str, Any] = {
+        "platform": sys.platform,
+        "pid": os.getpid(),
+        "rss_limit_source": "none",
+    }
+
+    if sys.platform == "win32":
+        info["rss_limit_source"] = "SetProcessWorkingSetSize"
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            _handle = kernel32.GetCurrentProcess()  # noqa: F841 - API call for context
+            # Windows 没有直接 API 查询 WorkingSet 限制
+            # 只能报告当前 RSS
+            info["current_rss_mb"] = _get_process_rss_mb()
+        except Exception as exc:
+            logger.debug("获取 Windows 平台限制失败: %s", exc)
+    else:
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+            info["rss_limit_source"] = "RLIMIT_AS"
+            info["virtual_memory_soft_limit_bytes"] = soft
+            info["virtual_memory_hard_limit_bytes"] = hard
+            info["current_rss_mb"] = _get_process_rss_mb()
+        except (ImportError, ValueError, OSError) as exc:
+            logger.debug("获取 Unix 平台限制失败: %s", exc)
+
+    return info

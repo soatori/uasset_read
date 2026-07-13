@@ -1,0 +1,78 @@
+"""有界事件缓冲区 — 保留首段、尾段、去重计数。"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass
+class BoundedEventBuffer:
+    """有界事件缓冲区 — 保留首段、尾段、去重计数。
+
+    用于收集 diagnostics、warnings、errors 和 HexView 条目。
+    当达到条目数或字节上限时，新条目会被丢弃并计数。
+
+    Attributes:
+        max_entries: 最大条目数
+        max_bytes: 最大字节数（基于 str(entry) 长度）
+    """
+
+    max_entries: int = 1000
+    max_bytes: int = 1024 * 1024  # 1 MB
+
+    def __post_init__(self) -> None:
+        """初始化内部状态。"""
+        self._entries: list[Any] = []
+        self._total_bytes: int = 0
+        self._dropped_count: int = 0
+
+    def append(self, entry: Any) -> bool:
+        """添加条目，超限时返回 False。
+
+        Args:
+            entry: 任意条目（通过 str(entry) 计算大小）
+
+        Returns:
+            True 表示添加成功，False 表示已超限被丢弃
+        """
+        entry_size = len(str(entry))
+        if len(self._entries) >= self.max_entries or self._total_bytes + entry_size > self.max_bytes:
+            self._dropped_count += 1
+            return False
+        self._entries.append(entry)
+        self._total_bytes += entry_size
+        return True
+
+    @property
+    def entries(self) -> list[Any]:
+        """返回当前条目列表（副本）。"""
+        return list(self._entries)
+
+    @property
+    def dropped_count(self) -> int:
+        """返回被丢弃的条目总数。"""
+        return self._dropped_count
+
+    @property
+    def total_bytes(self) -> int:
+        """返回当前已用字节数。"""
+        return self._total_bytes
+
+    @property
+    def count(self) -> int:
+        """返回当前条目数。"""
+        return len(self._entries)
+
+    def clear(self) -> None:
+        """清空缓冲区。"""
+        self._entries.clear()
+        self._total_bytes = 0
+        self._dropped_count = 0
+
+    def __len__(self) -> int:
+        """返回当前条目数。"""
+        return len(self._entries)
+
+    def __bool__(self) -> bool:
+        """缓冲区非空时返回 True。"""
+        return len(self._entries) > 0

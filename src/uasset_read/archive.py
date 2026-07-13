@@ -5,16 +5,29 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 来自 uasset_read.py 第 204-895 行。
 """
 import logging
-import math
 import mmap
 import os
 import struct
-from typing import Optional, Dict, BinaryIO, Callable, Any
+from typing import Optional, Dict, BinaryIO, Callable, Any, Protocol
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.bounded_events import BoundedEventBuffer
 
+# read_name 索引恢复阈值
+_FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # 超过此值尝试恢复
+
+
+class ArchiveLike(Protocol):
+    """统一的 Archive 契约 — 所有 Archive 实现必须满足。"""
+
+    def read(self, size: int) -> bytes: ...
+    def seek(self, pos: int) -> None: ...
+    def tell(self) -> int: ...
+    def close(self) -> None: ...
+    def total_size(self) -> int: ...
+    def set_byte_swapping(self, enabled: bool) -> None: ...
 
 
 class FArchive:
@@ -35,9 +48,9 @@ class FArchive:
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
-        self._diagnostics: list[OffsetRangeDiagnostic] = []  # 偏移诊断记录
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # 偏移诊断记录（有界）
         self._hex_view_enabled: bool = hex_view
-        self._hex_view_entries: list = []  # list[HexViewEntry]，延迟导入避免循环
+        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry]，有界
         self._hex_view_context: str = ""  # 当前上下文前缀（如 "Summary."）
 
         try:
@@ -61,6 +74,10 @@ class FArchive:
 
     def read(self, size: int) -> bytes:
         """基础读取方法 - 不对原始字节进行交换。"""
+        if size < 0:
+            raise ParseError(
+                f"read() received negative size ({size}) at position {self.tell()}"
+            )
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
@@ -99,6 +116,11 @@ class FArchive:
             self._mmap.seek(pos)
         else:
             self._file.seek(pos)
+
+    def skip(self, n: int) -> None:
+        """跳过 n 字节。"""
+        current = self.tell()
+        self.seek(current + n)
 
     def validate_offset(self, offset: int, context: str = "") -> None:
         """全偏移验证 - 在定位前检查偏移有效性。"""
@@ -141,7 +163,18 @@ class FArchive:
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
         min_reasonable = 1024
         max_reasonable_cap = 100 * 1024 * 1024
-        max_reasonable = max(min_reasonable, min(self._file_size // 10, max_reasonable_cap))
+        # 自适应 max_reasonable：
+        # - 小文件（<100KB）：使用 file_size // 2，不再使用 remaining 作为 fallback
+        # - 大文件（>=100KB）：沿用 file_size // 10
+        # - 始终不超过 max_reasonable_cap（100MB）
+        if self._file_size < 100 * 1024:
+            # 小文件：允许最大 50% 文件大小（不再使用 remaining 作为 fallback）
+            max_reasonable = min(self._file_size // 2, max_reasonable_cap)
+        else:
+            max_reasonable = max(
+                min_reasonable,
+                min(self._file_size // 10, max_reasonable_cap),
+            )
         if size > max_reasonable:
             if tolerant:
                 return
@@ -284,7 +317,7 @@ class FArchive:
 
     def get_diagnostics(self) -> list[OffsetRangeDiagnostic]:
         """返回收集到的偏移诊断记录。"""
-        return list(self._diagnostics)
+        return self._diagnostics.entries
 
     # HexView 支持
 
@@ -332,11 +365,11 @@ class FArchive:
 
     def get_hex_view_entries(self) -> list:
         """返回收集到的 hex_view 条目列表。"""
-        return list(self._hex_view_entries)
+        return list(self._hex_view_entries.entries)
 
     def get_hex_view_entries_raw(self) -> list:
         """返回原始 hex_view 条目列表（不复制）。"""
-        return self._hex_view_entries
+        return self._hex_view_entries.entries
 
     # 类型读取方法
 
@@ -562,6 +595,19 @@ class FArchive:
             result = data.decode('utf-16-le', errors='replace').rstrip('\x00')
             # UTF-16 null terminator (\x00\x00) is legal — rstrip handles it.
             # Internal single nulls between valid chars are unusual but not fatal.
+            # All-null detection: if result is empty after rstrip, the data was all nulls.
+            if not result and length != 0:
+                if not self._tolerant:
+                    self.seek(pos_before)
+                    raise ParseError(
+                        f"FString at pos {pos_before}: length={-length}, "
+                        f"encoding=UTF-16, all nulls (completely corrupted), strict mode"
+                    )
+                self._logger.warning(
+                    "FString at pos %d: length=%d, encoding=UTF-16, "
+                    "all nulls (completely corrupted), consumed=%d bytes",
+                    pos_before, -length, len(data),
+                )
         else:
             if length > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
@@ -577,6 +623,17 @@ class FArchive:
                 )
             data = self.read(length)
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
+
+            # All-null detection: if result is empty after rstrip but length was non-zero,
+            # the data was entirely null bytes — completely corrupted (#302).
+            if not result and length != 0:
+                if not self._tolerant:
+                    self.seek(pos_before)
+                    raise ParseError(
+                        f"FString at pos {pos_before}: length={length}, "
+                        f"encoding=UTF-8, all nulls (completely corrupted), strict mode"
+                    )
+                # Tolerant mode: return empty string.
 
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
             # Improved handling — truncate at first null rather than
@@ -606,6 +663,14 @@ class FArchive:
                     return truncated
                 else:
                     # All nulls from start — likely file tail padding (zero-filled region).
+                    # In strict mode, fail immediately to prevent offset cascade (#302).
+                    if not self._tolerant:
+                        self.seek(pos_before)
+                        raise ParseError(
+                            f"FString at pos {pos_before}: length={length}, "
+                            f"encoding=UTF-8, all nulls (completely corrupted), strict mode"
+                        )
+                    # Tolerant mode: log and continue with padding zone detection.
                     # Check if remaining file data is also mostly zeros (padding zone).
                     # If so, advance to file end to prevent offset cascade (#138).
                     self._logger.warning(
@@ -663,6 +728,10 @@ class FArchive:
     def read_name(self, name_map: Optional[list] = None, key: str = "") -> str:
         """读取 FName（名称表索引 + 实例编号）。
 
+        当索引超过 _FNAME_INDEX_RECOVERY_THRESHOLD (1000) 时，在容错模式下
+        尝试通过调整偏移量恢复。这可以处理 SerializationControlExtensions
+        未知高位标志导致的偏移错位问题 (#339)。
+
         Args:
             name_map: 名称表列表。如果为 None，使用内部缓存的名称表。
             key: hex_view 字段名（可选）
@@ -683,6 +752,13 @@ class FArchive:
 
         index = self.read_u32()
         number = self.read_u32()
+
+        # 索引合理性检测：异常大索引可能是偏移错位导致
+        if index > _FNAME_INDEX_RECOVERY_THRESHOLD and self._tolerant:
+            recovered = self._try_recover_fname(start, name_map)
+            if recovered is not None:
+                return recovered
+
         if 0 <= index < len(name_map):
             base_name = name_map[index]
             if number > 0:
@@ -691,15 +767,98 @@ class FArchive:
                 result = base_name
         else:
             # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
-            # 添加日志帮助诊断索引越界问题
-            self._logger.debug(
+            # 升级日志级别为 warning
+            self._logger.warning(
                 "read_name: index %d out of range (name_map len=%d) at pos %d",
                 index, len(name_map), self.tell() - 8
             )
+            # 添加诊断记录
+            self._record_diagnostic(
+                module="archive", field="read_name",
+                source="read_name", target_offset=self.tell() - 8,
+                file_size=self._file_size,
+                error=f"FName index {index} out of range (name_map len={len(name_map)})",
+            )
+            # strict 模式抛异常
+            if not self._tolerant:
+                raise ParseError(
+                    f"FName index {index} out of range (name_map len={len(name_map)}) at pos {self.tell() - 8}"
+                )
             result = "None"
         if key:
             self._record_hex_view(key, "fname", result, start, self.tell())
         return result
+
+    def get_read_name_recovery_stats(self) -> dict:
+        """获取 read_name 恢复统计信息。
+
+        Returns:
+            dict: 包含恢复尝试次数、成功次数等统计
+        """
+        return {
+            "recovery_attempts": getattr(self, '_recovery_attempts', 0),
+            "recovery_successes": getattr(self, '_recovery_successes', 0),
+            "recovery_failures": getattr(self, '_recovery_failures', 0),
+        }
+
+    def _try_recover_fname(self, original_pos: int, name_map: list) -> Optional[str]:
+        """尝试从偏移错位中恢复 FName 读取。
+
+        当检测到异常大的索引值时，尝试在附近寻找有效的 FName。
+        恢复统计可通过 get_read_name_recovery_stats() 获取。
+
+        Args:
+            original_pos: read_name 调用前的位置
+            name_map: 名称表
+
+        Returns:
+            恢复的名称字符串，或 None（恢复失败）
+        """
+        # 更新统计
+        if not hasattr(self, '_recovery_attempts'):
+            self._recovery_attempts = 0
+            self._recovery_successes = 0
+            self._recovery_failures = 0
+        self._recovery_attempts += 1
+
+        # 保存当前位置（read_name 已读取8字节）
+        current_pos = self.tell()
+
+        # 策略：尝试回退或前进若干字节（可能是 SerializationControlExtensions 导致偏移错位）
+        for offset_adjust in [-2, -1, 1, 2]:
+            try_pos = original_pos + offset_adjust
+            if try_pos < 0 or try_pos + 8 > self._file_size:
+                continue
+
+            self.seek(try_pos)
+            try:
+                test_index = self.read_u32()
+                test_number = self.read_u32()
+                if 0 <= test_index < len(name_map):
+                    # 找到有效索引，记录恢复信息
+                    self._recovery_successes += 1
+                    self._logger.debug(
+                        "read_name: recovered at offset %d (adjust %+d), index=%d",
+                        try_pos, offset_adjust, test_index
+                    )
+                    self._record_diagnostic(
+                        module="archive", field="read_name",
+                        source="read_name_recovery",
+                        target_offset=original_pos,
+                        file_size=self._file_size,
+                        error=f"FName recovery: adjusted {offset_adjust} bytes to pos {try_pos}",
+                    )
+                    base_name = name_map[test_index]
+                    if test_number > 0:
+                        return f"{base_name}_{test_number}"
+                    return base_name
+            except Exception:
+                continue
+
+        # 恢复失败，回退到原始位置
+        self._recovery_failures += 1
+        self.seek(current_pos)
+        return None
 
     def read_array(self, count: int, element_reader: Callable[["FArchive"], Any],
                    key: str = "") -> list:
@@ -806,17 +965,18 @@ class ByteArchive(FArchive):
     用于测试、流式解析、网络数据等场景。
     """
 
-    def __init__(self, data: bytes | memoryview, tolerant: bool = False):
+    def __init__(self, data: bytes | memoryview, tolerant: bool = False, name: str = ""):
         """
         从内存数据创建 ByteArchive。
 
         Args:
             data: 二进制数据（bytes 或 memoryview）
             tolerant: 容错模式开关
+            name: 可选名称/路径（用于诊断信息）
         """
         # 不调用 FArchive.__init__，避免打开文件
         # 直接设置所有 FArchive 实例属性
-        self._path = ""
+        self._path = name
         self._file: Optional[BinaryIO] = None
         self._byte_swapping: bool = False
         self._tolerant: bool = tolerant
@@ -825,9 +985,9 @@ class ByteArchive(FArchive):
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None
-        self._diagnostics: list[OffsetRangeDiagnostic] = []
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
         self._hex_view_enabled: bool = False
-        self._hex_view_entries: list = []
+        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""
         # ByteArchive 专有属性
         self._buffer: memoryview | bytes = data
@@ -836,6 +996,10 @@ class ByteArchive(FArchive):
 
     def read(self, size: int) -> bytes:
         """从内存缓冲区读取指定字节数。"""
+        if size < 0:
+            raise ParseError(
+                f"read() received negative size ({size}) at position {self._pos}"
+            )
         current_pos = self._pos
         remaining = self._file_size - current_pos
         if size > remaining:

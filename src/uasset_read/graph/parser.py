@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 """蓝图图解析入口 — 从 ExportMap 提取所有 EdGraph/UberEdGraph。
 
 等价迁移 uasset_read.py L3095-3143。
 """
-from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional
 
@@ -40,6 +41,14 @@ def _validate_graph_export_offset(export, archive_size: int) -> bool:
 
     if serial_size == 0:
         return True  # 空 export 跳过检查
+
+    # 检查负数
+    if serial_offset < 0 or serial_size < 0:
+        logger.warning(
+            "图 export '%s' 偏移异常: offset=%d, size=%d",
+            export.object_name, serial_offset, serial_size,
+        )
+        return False
 
     # 偏移不应为 0（除非是特殊 Default__ export）
     if serial_offset == 0 and not str(getattr(export, "object_name", "")).startswith("Default__"):

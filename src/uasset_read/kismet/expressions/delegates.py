@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """Kismet 表达式 — Delegate 相关表达式。
 
 包含 EX_AddMulticastDelegate、EX_ClearMulticastDelegate、EX_BindDelegate、
 EX_RemoveMulticastDelegate、EX_InstanceDelegate。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional

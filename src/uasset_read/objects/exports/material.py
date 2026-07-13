@@ -1,11 +1,15 @@
-"""材质资产类型"""
 from __future__ import annotations
+
+"""材质资产类型"""
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
 
 
 @global_registry.register("Material")

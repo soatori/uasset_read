@@ -19,8 +19,10 @@ from uasset_read.parse_uasset import (
     _should_use_lightweight_tolerant_parse,
     _build_lightweight_graphs,
     _build_lightweight_function_graphs,
-    _extract_kismet_decompiled,
     _post_process,
+)
+from uasset_read.parse_post_process import (
+    _extract_kismet_decompiled,
 )
 from uasset_read.models.result import ParseResult
 from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
@@ -493,10 +495,16 @@ class TestParseResultEdgeCases:
         result = ParseResult()
         assert result.status == "failed"
 
-        # 有数据时状态为 success
+        # 有数据但 is_success=False 时状态为 partial（非 success）
         result.name_map = ["Test"]
-        assert result.status == "success"
+        assert result.status == "partial"
 
         # 有错误时状态为 partial
         result.errors = ["Test error"]
         assert result.status == "partial"
+
+        # is_success=True 且无错误时状态为 success
+        result2 = ParseResult()
+        result2.is_success = True
+        result2.name_map = ["Test"]
+        assert result2.status == "success"

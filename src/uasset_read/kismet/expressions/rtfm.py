@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet 表达式系统 — AutoRTFM 表达式。
 
@@ -5,7 +7,6 @@ Kismet 表达式系统 — AutoRTFM 表达式。
 对应 EX_AutoRtfmTransact, EX_AutoRtfmStopTransact, EX_AutoRtfmAbortIfNot。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

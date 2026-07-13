@@ -3,13 +3,11 @@
 将 build_execution_flows() 的逐对执行流转换为链式字符串格式（N1->N2->N3），
 替代原有 pair 格式，提供更简洁的 LLM 优化输出。
 """
-from __future__ import annotations
 
 from typing import Dict, List, Optional
 
 from uasset_read.models.core import UEdGraph
 
-MAX_CHAIN_DEPTH = 1000
 
 
 def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:

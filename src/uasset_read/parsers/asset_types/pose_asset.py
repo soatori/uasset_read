@@ -4,7 +4,6 @@ UPoseAsset::Serialize 仅调用 Super::Serialize，数据通过 UPROPERTY 序列
 （PoseNames TArray<FName>、PoseValues TArray<FTransform>）。
 Handler 提供类型识别。
 """
-from __future__ import annotations
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 

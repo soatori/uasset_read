@@ -34,8 +34,8 @@ class FakeNode:
     node_data: Optional[FakeNodeData] = None
 
 
-# _pin_ref_guid 会把 ref 转成大写 hex，所以 pin_lookup 的 key 和 linked_to_raw 的值
-# 都需要用大写格式才能匹配。这里用简短的 hex id 模拟。
+# _pin_ref_guid 会把 ref 归一化为小写无 dash 格式，所以 pin_lookup 的 key 和
+# linked_to_raw 的值都需要用小写格式才能匹配。这里用简短的 hex id 模拟。
 
 def test_no_guid_self_loop_terminates():
     """单个无 GUID 节点（无出边）应立即终止。"""
@@ -50,7 +50,7 @@ def test_no_guid_self_loop_terminates():
 
 def test_no_guid_repeated_node_stops():
     """同一个无 GUID 节点自环应 cycle_detected 终止。"""
-    # _pin_ref_guid("AA") → "AA"，pin_lookup["AA"] → (None, "exec")
+    # _pin_ref_guid("AA") → "aa"，pin_lookup["aa"] → (None, "exec")
     # node_lookup[None] → node，_find_next_exec_node 返回 node 自身
     pin_in = FakePin(
         pin_id="AA", pin_name="exec",
@@ -63,7 +63,7 @@ def test_no_guid_repeated_node_stops():
     )
     node = FakeNode(node_guid=None, class_name="K2Node_CallFunction", pins=[pin_out, pin_in])
 
-    pin_lookup = {"AA": (None, "exec")}
+    pin_lookup = {"aa": (None, "exec")}
     node_lookup = {None: node}
 
     flow = _trace_execution_from_event(
@@ -89,7 +89,7 @@ def test_guid_node_cycle_detected():
         class_name="K2Node_CallFunction",
         pins=[pin_out, pin_in],
     )
-    pin_lookup = {"AA": ("guid-self", "exec")}
+    pin_lookup = {"aa": ("guid-self", "exec")}
     node_lookup = {"guid-self": node}
 
     flow = _trace_execution_from_event(
@@ -125,7 +125,7 @@ def test_max_steps_exceeded():
     node_lookup = {}
     node_name_lookup = {}
     for i in range(501):
-        pin_lookup[f"IN{i+1:04d}"] = (f"guid-{i+1:04d}", "exec")
+        pin_lookup[f"in{i+1:04d}"] = (f"guid-{i+1:04d}", "exec")
         node_lookup[f"guid-{i:04d}"] = nodes[i]
         node_name_lookup[f"guid-{i:04d}"] = f"Node{i}"
     node_lookup["guid-501"] = nodes[501]

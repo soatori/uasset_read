@@ -15,7 +15,7 @@ import pytest
 from tests.conftest import asset_path, ASSET_BLUEPRINT_FIRST_PERSON
 
 # 测试资产相对路径
-_BP_FIRST_PERSON_PLAYER_CONTROLLER_REL = "FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonPlayerController.uasset"
+_BP_FIRST_PERSON_PLAYER_CONTROLLER_REL = "StackOBot_BP_Drone.uasset"
 
 # 已知元数据键（不应出现在构造函数中）
 _METADATA_KEYS = {

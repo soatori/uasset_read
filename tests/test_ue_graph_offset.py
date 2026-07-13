@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 
-SAMPLES_DIR = Path(r"E:\Develop\lib\Samples")
+SAMPLES_DIR = Path(__file__).parent / "samples"
 
 
 class TestValidateGraphExportOffset:
@@ -58,11 +58,11 @@ class TestUEGraphOffset:
     """UEdGraph 偏移读取集成测试。"""
 
     @pytest.mark.integration
-    def test_bp_first_person_character_graphs_not_partial(self):
-        """验证 BP_FirstPersonCharacter 解析后不被标记为 partial。"""
+    def test_local_blueprint_graphs_not_partial(self):
+        """验证本地蓝图样本解析后不被标记为 partial。"""
         from uasset_read.parse_uasset import parse_package
 
-        path = SAMPLES_DIR / "FirstPerson" / "Content" / "FirstPerson" / "Blueprints" / "BP_FirstPersonCharacter.uasset"
+        path = SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
         if not path.exists():
             pytest.skip("测试样本不存在")
 
@@ -76,7 +76,7 @@ class TestUEGraphOffset:
         """验证图数据偏移在 export 边界内。"""
         from uasset_read.parse_uasset import parse_package
 
-        path = SAMPLES_DIR / "FirstPerson" / "Content" / "FirstPerson" / "Blueprints" / "BP_FirstPersonCharacter.uasset"
+        path = SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
         if not path.exists():
             pytest.skip("测试样本不存在")
 

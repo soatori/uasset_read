@@ -9,6 +9,7 @@ Provides:
 - parse_bytecode_stream: Parse bytecode bytes into KismetExpression list
 - extract_and_parse: Combined extraction + parsing entry point
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.exceptions import ParseError
+from uasset_read.constants import UE_NONE_SENTINEL
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -127,12 +129,12 @@ def extract_bytecode_bytes(
     # Skip PropertyTags until "None" (positions us at bytecode header)
     while True:
         tag = read_property_tag(archive, name_map, summary=summary)
-        if tag.name == "None":
+        if tag.name == UE_NONE_SENTINEL:
             break
         archive.skip(tag.size)
 
     # Read bytecode header: bytecodeBufferSize + serializedScriptSize
-    bytecode_buffer_size = archive.read_i32()
+    _bytecode_buffer_size = archive.read_i32()  # noqa: F841 - protocol read
     serialized_script_size = archive.read_i32()
 
     # T-62-02: Validate serializedScriptSize bounds
@@ -220,7 +222,7 @@ def _scan_export_serial_for_bytecode(
 
     if best is None:
         return None
-    logger.warning(
+    logger.debug(
         "Recovered bytecode for '%s' by scanning Function serial (%d expressions)",
         export.object_name, best[0],
     )

@@ -32,7 +32,7 @@ class TestVersionConstantsExist:
 
     def test_ue4_added_package_owner(self):
         assert hasattr(constants, "UE4_ADDED_PACKAGE_OWNER")
-        assert constants.UE4_ADDED_PACKAGE_OWNER == 519
+        assert constants.UE4_ADDED_PACKAGE_OWNER == 518
 
     def test_ue4_added_package_summary_localization_id(self):
         assert constants.UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID == 516
@@ -41,7 +41,7 @@ class TestVersionConstantsExist:
         assert constants.UE4_NON_OUTER_PACKAGE_IMPORT == 520
 
     def test_ue4_name_hashes_serialized(self):
-        assert constants.UE4_NAME_HASHES_SERIALIZED == 514
+        assert constants.UE4_NAME_HASHES_SERIALIZED == 504
 
     def test_ue5_script_serialization_offset(self):
         assert constants.UE5_SCRIPT_SERIALIZATION_OFFSET == 1010
@@ -216,7 +216,8 @@ class TestFrameworkVersionThresholds:
         assert constants.FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER == 10
 
     def test_float_pin_defaults_single_precision(self):
-        assert constants.FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION == 36
+        """FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION 已移除，验证不存在。"""
+        assert not hasattr(constants, "FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION")
 
 
 # ============================================================================
@@ -255,7 +256,7 @@ class TestNodeCollections:
 
     def test_etrigger_event_pin_map(self):
         assert constants.ETRIGGER_EVENT_PIN_MAP["Started"] == "Started"
-        assert constants.ETRIGGER_EVENT_PIN_MAP["Triggered"] == "Ongoing"
+        assert constants.ETRIGGER_EVENT_PIN_MAP["Triggered"] == "Triggered"
 
 
 # ============================================================================

@@ -9,18 +9,16 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 from uasset_read.core import parse_single
 from uasset_read.parse_uasset import parse_uasset_with_linker
 
-# 真实蓝图资产路径
-_REAL_BLUEPRINT = os.path.join(
-    os.environ.get("UE_ASSET_ROOT", r"E:\Develop\lib\Samples"),
-    "FirstPerson", "Content", "FirstPerson", "Blueprints",
-    "BP_FirstPersonCharacter.uasset",
-)
+# 本地样本资产路径
+_LOCAL_SAMPLE_ROOT = Path(__file__).parent.parent / "samples"
+_REAL_BLUEPRINT = str(_LOCAL_SAMPLE_ROOT / "FirstPerson_BP_FirstPersonGameMode.uasset")
 
 _has_real_asset = os.path.isfile(_REAL_BLUEPRINT)
 
@@ -55,7 +53,7 @@ class TestRealAssetHighLevelFormats:
     def test_markdown_format_does_not_crash(self):
         output = parse_single(_REAL_BLUEPRINT, format="markdown", tolerant=True)
         assert output
-        assert "BP_FirstPersonCharacter" in output
+        assert "FirstPerson" in output
 
 
 # ---------------------------------------------------------------------------

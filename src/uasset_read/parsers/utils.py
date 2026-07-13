@@ -28,12 +28,12 @@ def resolve_name_from_index(
     return f"{fallback_prefix}_{index}"
 
 
-def read_validated_count(
+def read_validated_count_tolerant(
     archive: Any,
     max_count: int,
     label: str,
 ) -> int:
-    """读取并验证数量值。
+    """读取并验证数量值（容错版：超限返回 0）。
 
     当 count 为负数或超过 max_count 时，记录诊断日志并返回 0（跳过后续循环），
     而非抛出 ParseError。这样调用方的 ``for _ in range(count)`` 循环不会执行，
@@ -53,13 +53,13 @@ def read_validated_count(
     # 检查 struct.unpack 读取的值是否在 i32 范围内（Python 自动处理大整数，
     # 但 read_i32 使用 '<i' 有符号格式，所以负数已正确表示）
     if count < 0:
-        logger.warning(
+        logger.debug(
             "%s: 数量为负数 (%d)，跳过 | 位置=0x%X, 上限=%d",
             label, count, offset, max_count,
         )
         return 0
     if count > max_count:
-        logger.warning(
+        logger.debug(
             "%s: 数量超过最大值 (%d > %d)，跳过 | 位置=0x%X",
             label, count, max_count, offset,
         )

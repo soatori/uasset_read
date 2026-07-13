@@ -62,7 +62,7 @@ from uasset_read.parsers.custom_properties import (
 
 from uasset_read.parsers.utils import (
     resolve_name_from_index,
-    read_validated_count,
+    read_validated_count_tolerant,
     make_enum_value,
     extract_inner_from_tag,
 )
@@ -120,7 +120,7 @@ __all__ = [
     "get_struct_size",
     # 共享辅助函数（parsers/utils.py）
     "resolve_name_from_index",
-    "read_validated_count",
+    "read_validated_count_tolerant",
     "make_enum_value",
     "extract_inner_from_tag",
 ]

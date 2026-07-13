@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet Expression → Structured Control Flow Reconstruction.
 
@@ -10,7 +12,6 @@ Note: Pattern detection is handled by JumpAnalyzer (the unified detector).
 StructuredControlFlow.reconstruct() delegates detection to JumpAnalyzer
 and falls back to goto emission when no patterns match.
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.link.linker import PackageLinker
+    from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
 
 @dataclass
@@ -97,8 +99,6 @@ class StructuredControlFlow:
 
         将 JumpAnalyzer 的检测结果转换为 _emit_structured 所需的格式。
         """
-        from uasset_read.kismet.jump_analyzer import JumpAnalyzer as _JA
-
         regions: list[dict] = []
         used_indices: set[int] = set()
         i = 0

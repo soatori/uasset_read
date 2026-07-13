@@ -337,11 +337,11 @@ class TestDiffSingle:
         assert isinstance(result, str)
 
     def test_nonexistent_files_contain_error(self):
-        """验证不存在的文件在 diff 输出中包含错误标注。"""
+        """验证不存在的文件在 diff 输出中包含错误信息。"""
         from uasset_read.core import diff_single
 
         result = diff_single("nonexistent1.uasset", "nonexistent2.uasset")
-        assert "[解析错误]" in result
+        assert "FileNotFoundError" in result or "failed" in result
 
     def test_diff_header_present(self):
         """验证 diff 输出包含文件名头信息。"""

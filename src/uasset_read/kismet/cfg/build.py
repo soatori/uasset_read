@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """CFG 构建器。
 
 从 KismetExpression 序列构建基本块和控制流图。
@@ -9,7 +11,6 @@
 4. 合成 sink: 所有 fall-through 指向的终止块
 """
 
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

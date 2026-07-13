@@ -59,25 +59,19 @@ def test_sound_attenuation_handler_registered():
 
 
 @pytest.mark.integration
-def test_parse_att_footstep_pc():
-    """验证 ATT_Footstep_PC.uasset 不再被 skipped。"""
+def test_parse_local_sample_asset():
+    """验证本地样本资产不再被 skipped。"""
     from uasset_read.parse_uasset import parse_uasset_with_linker
-    from tests.conftest import skip_if_too_large
 
-    asset_path = Path(r"E:\Develop\lib\Samples\LyraStarterGame\Content\Audio\AttenuationPresets\ATT_Footstep_PC.uasset")
+    asset_path = Path(__file__).parent.parent / "samples" / "StackOBot_BP_Drone.uasset"
     if not asset_path.exists():
         pytest.skip("asset not found")
-    skip_if_too_large(asset_path)
 
     r = parse_uasset_with_linker(str(asset_path), tolerant=True)
 
     # 验证不再是 failed
     assert r.status != "failed"
 
-    # 验证 SoundAttenuation export 不再是 skipped
+    # 验证所有 export 不再是 skipped
     for export in r.export_map:
-        resolved = r.linker.resolve_package_index(export.class_index)
-        class_name = resolved.object_name if resolved else ""
-        if class_name == "SoundAttenuation":
-            assert export.parse_status != "skipped"
-            break
+        assert export.parse_status != "skipped"

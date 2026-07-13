@@ -27,17 +27,18 @@ class FakeNode:
 def test_async_action_marked_as_latent():
     """K2Node_AsyncAction 应在执行流中标记 latent=True。"""
     # 使用 32 字符 hex GUID 以通过 _is_valid_pin_guid 验证
-    pid_event_exec = "A" * 32
-    pid_async_input = "B" * 32
-    pid_async_output = "C" * 32
-    pid_end_input = "D" * 32
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_async_input = "b" * 32
+    pid_async_output = "c" * 32
+    pid_end_input = "d" * 32
 
     event = FakeNode("guid_event", "K2Node_Event", [
-        FakePin("exec", 1, "exec", [pid_async_input]),
+        FakePin("exec", 1, "exec", ["B" * 32]),
     ])
     async_node = FakeNode("guid_async", "K2Node_AsyncAction", [
         FakePin("Then", 0, "exec"),
-        FakePin("Completed", 1, "exec", [pid_end_input]),
+        FakePin("Completed", 1, "exec", ["D" * 32]),
     ])
     end_node = FakeNode("guid_end", "K2Node_MakeVariable", [
         FakePin("Completed", 0, "exec"),
@@ -61,11 +62,12 @@ def test_async_action_marked_as_latent():
 
 def test_timeline_marked_as_latent():
     """K2Node_Timeline 应在执行流中标记 latent=True。"""
-    pid_event_exec = "A" * 32
-    pid_timeline_input = "B" * 32
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_timeline_input = "b" * 32
 
     event = FakeNode("guid_event", "K2Node_Event", [
-        FakePin("exec", 1, "exec", [pid_timeline_input]),
+        FakePin("exec", 1, "exec", ["B" * 32]),
     ])
     timeline = FakeNode("guid_timeline", "K2Node_Timeline", [
         FakePin("Update", 0, "exec"),
@@ -87,11 +89,12 @@ def test_timeline_marked_as_latent():
 
 def test_normal_node_not_latent():
     """普通节点不应有 latent 标记。"""
-    pid_event_exec = "A" * 32
-    pid_call_input = "B" * 32
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_call_input = "b" * 32
 
     event = FakeNode("guid_event", "K2Node_Event", [
-        FakePin("exec", 1, "exec", [pid_call_input]),
+        FakePin("exec", 1, "exec", ["B" * 32]),
     ])
     call_func = FakeNode("guid_call", "K2Node_CallFunction", [
         FakePin("Then", 0, "exec"),

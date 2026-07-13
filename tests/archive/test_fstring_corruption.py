@@ -5,12 +5,12 @@ import os
 from uasset_read.archive import FArchive
 
 
-def _make_archive(data: bytes, tmp_path) -> FArchive:
+def _make_archive(data: bytes, tmp_path, tolerant: bool = True) -> FArchive:
     """创建临时 FArchive 用于测试。"""
     path = tmp_path / "_test_fstring.uasset"
     with open(path, "wb") as f:
         f.write(data)
-    return FArchive(str(path))
+    return FArchive(str(path), tolerant=tolerant)
 
 
 class TestFStringCorruption:

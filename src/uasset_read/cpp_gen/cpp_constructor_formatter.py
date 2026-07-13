@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from uasset_read.cpp_gen.cpp_constructor_ir_builder import (
     CppComponentAssignment,
@@ -287,7 +287,7 @@ def format_cpp_constructor(ir: "CppClassIR") -> str:
     lines.append(f"{ir.name}::{ir.name}()")
 
     # 初始化列表 — UE5 使用 Super() 作为父类构造调用
-    lines.append(f"    : Super()")
+    lines.append("    : Super()")
 
     # 函数体开始
     lines.append("{")

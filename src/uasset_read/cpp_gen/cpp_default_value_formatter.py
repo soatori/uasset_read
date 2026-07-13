@@ -7,7 +7,6 @@
 - 拒绝包含 C++ 语法令牌（;, {, }, //）的值
 - InputAction asset_path 验证 /Game/... 模式
 """
-from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional

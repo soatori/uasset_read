@@ -40,6 +40,10 @@ class FakeArchive:
         data = self.read(4)
         return struct.unpack("<i", data)[0]
 
+    def read_i64(self) -> int:
+        data = self.read(8)
+        return struct.unpack("<q", data)[0]
+
     def read_fstring(self) -> str:
         """模拟 FArchive::read_fstring（UE FString 序列化格式）。"""
         length = self.read_i32()
@@ -67,6 +71,7 @@ def _build_archive_with_registry(
     dep_offset: int,
     objects: list[tuple[str, str, list[tuple[str, str]]]],
     include_dep_offset: bool = True,
+    file_version_ue4: int = 522,
 ) -> FakeArchive:
     """构建包含 AssetRegistryData 的 FakeArchive。"""
     buf = BytesIO()
@@ -74,7 +79,11 @@ def _build_archive_with_registry(
     buf.write(b"\x00" * _DATA_OFFSET)
     # 写入 AssetRegistryData
     if include_dep_offset:
-        buf.write(struct.pack("<i", dep_offset))
+        # UE5 版本 >= 510 时使用 int64 写入 DependencyDataOffset
+        if file_version_ue4 >= 510:
+            buf.write(struct.pack("<q", dep_offset))
+        else:
+            buf.write(struct.pack("<i", dep_offset))
     buf.write(struct.pack("<i", len(objects)))
     for obj_path, class_name, tags in objects:
         buf.write(_build_fstring(obj_path))
@@ -145,15 +154,15 @@ class TestReadAssetRegistryData:
         assert result is None
 
     def test_empty_object_list(self):
-        archive = _build_archive_with_registry(dep_offset=50, objects=[])
+        archive = _build_archive_with_registry(dep_offset=0, objects=[])
         result = read_asset_registry_data(archive, _DATA_OFFSET, file_version_ue4=522)
         assert result is not None
-        assert result.dependency_data_offset == 50
+        assert result.dependency_data_offset == 0
         assert result.object_count == 0
 
     def test_single_object_no_tags(self):
         archive = _build_archive_with_registry(
-            dep_offset=100,
+            dep_offset=0,
             objects=[("MyAsset", "Texture2D", [])],
         )
         result = read_asset_registry_data(archive, _DATA_OFFSET, file_version_ue4=522)
@@ -165,7 +174,7 @@ class TestReadAssetRegistryData:
 
     def test_single_object_with_tags(self):
         archive = _build_archive_with_registry(
-            dep_offset=100,
+            dep_offset=0,
             objects=[
                 ("MyAsset", "Material", [
                     ("NativeIdentifier", "Material'/Game/MyMaterial'"),
@@ -186,7 +195,7 @@ class TestReadAssetRegistryData:
 
     def test_multiple_objects(self):
         archive = _build_archive_with_registry(
-            dep_offset=200,
+            dep_offset=0,
             objects=[
                 ("Obj1", "Class1", [("K1", "V1")]),
                 ("Obj2", "Class2", [("K2", "V2"), ("K3", "V3")]),
@@ -216,7 +225,7 @@ class TestReadAssetRegistryData:
         """ObjectCount 为负数时返回空结果。"""
         buf = BytesIO()
         buf.write(b"\x00" * _DATA_OFFSET)
-        buf.write(struct.pack("<i", 100))  # DependencyDataOffset
+        buf.write(struct.pack("<q", 100))  # DependencyDataOffset (int64 for UE5)
         buf.write(struct.pack("<i", -1))  # ObjectCount = -1
         archive = FakeArchive(buf.getvalue())
         result = read_asset_registry_data(archive, _DATA_OFFSET, file_version_ue4=522)
@@ -227,7 +236,7 @@ class TestReadAssetRegistryData:
         """TagCount 为负数时跳过该对象。"""
         buf = BytesIO()
         buf.write(b"\x00" * _DATA_OFFSET)
-        buf.write(struct.pack("<i", 100))  # DependencyDataOffset
+        buf.write(struct.pack("<q", 100))  # DependencyDataOffset (int64 for UE5)
         buf.write(struct.pack("<i", 1))  # ObjectCount
         buf.write(_build_fstring("Obj"))
         buf.write(_build_fstring("Class"))
@@ -252,7 +261,7 @@ class TestReadAssetRegistryData:
     def test_to_dict_roundtrip(self):
         """to_dict 输出可正确反映原始数据。"""
         archive = _build_archive_with_registry(
-            dep_offset=500,
+            dep_offset=0,
             objects=[
                 ("/Game/Test", "Blueprint", [
                     ("GeneratedClass", "/Script/Engine.BlueprintGeneratedClass"),
@@ -262,7 +271,7 @@ class TestReadAssetRegistryData:
         result = read_asset_registry_data(archive, _DATA_OFFSET, file_version_ue4=522)
         assert result is not None
         d = result.to_dict()
-        assert d["dependency_data_offset"] == 500
+        assert d["dependency_data_offset"] == 0
         assert d["object_count"] == 1
         assert d["objects"][0]["object_path"] == "/Game/Test"
         assert d["objects"][0]["tags"]["GeneratedClass"] == "/Script/Engine.BlueprintGeneratedClass"

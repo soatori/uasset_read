@@ -6,7 +6,6 @@ C++ 标识符清理模块。
 导出：
     sanitize_identifier: 清理 C++ 标识符函数
 """
-from __future__ import annotations
 
 import re
 import logging
