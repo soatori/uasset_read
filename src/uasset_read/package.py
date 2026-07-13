@@ -95,6 +95,9 @@ class PackageArchive(FArchive):
         if self._uexp_archive is not None:
             self._uexp_archive.close()
         self._use_mmap = False
+        # 释放诊断缓冲区以回收内存
+        self._diagnostics.clear()
+        self._hex_view_entries.clear()
 
     def set_byte_swapping(self, enabled: bool) -> None:
         self._byte_swapping = enabled

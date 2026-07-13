@@ -716,7 +716,9 @@ def parse_package_lazy(
                     setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
                 except (OSError, struct.error) as e:
                     if not tolerant:
-                        logger.warning("读取 export %s 原始字节失败: %s", export.object_name, e)
+                        raise ParseError(
+                            f"读取 export {export.object_name} 原始字节失败: {e}"
+                        ) from e
                     setattr(export, "lazy_load_archive", None)
 
             # 设置懒加载标记（通过 setattr 兼容 ObjectExport 和 ExportIR）

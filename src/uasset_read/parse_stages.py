@@ -397,6 +397,7 @@ def _read_package_headers(
     game: Optional[str] = None,
     hex_view: bool = False,
     validate_range: bool = True,
+    check_aes_key: Optional[bytes] = None,
 ) -> tuple:
     """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
 
@@ -409,7 +410,7 @@ def _read_package_headers(
     # 初始化解析环境（archive、bundle、mappings_provider）
     archive, bundle, mappings_provider = _init_parse_env(
         path, result, tolerant, provider, mappings_path, game,
-        check_aes_key=None, hex_view=hex_view,
+        check_aes_key=check_aes_key, hex_view=hex_view,
     )
 
     # 读取核心表（summary/name/import/export）
