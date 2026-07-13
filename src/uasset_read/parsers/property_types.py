@@ -886,7 +886,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         struct_type=declared_struct_type,
         fields=fields,
         raw_size=tag.size,
-        parse_status="parsed",
+        parse_status="success",
     )
 
 def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:

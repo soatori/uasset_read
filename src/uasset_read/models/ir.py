@@ -12,7 +12,10 @@ IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .diagnostics import OffsetRangeDiagnostic
 
 
 @dataclass
@@ -219,6 +222,11 @@ class ExportRawIR:
     """UE 原始导出表字段（FObjectExport 对应）。
 
     保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
+
+    注意: package_flags 对应 FObjectExport.PackageFlags，仅当 export 是通过
+    OBJECTMARK_ForceTagExp 强制加入导出表的顶层包时才有意义（存储原始包的 flags）。
+    与 PackageHeaderIR.package_flags（FPackageFileSummary.PackageFlags）不同。
+    参见 ObjectResource.h:359-363。
     """
     class_index: int = 0
     super_index: int = 0
@@ -226,7 +234,7 @@ class ExportRawIR:
     template_index: int = 0
     object_flags: int = 0
     serial_offset: int = 0
-    package_flags: int = 0
+    package_flags: int = 0  # FObjectExport.PackageFlags（仅顶层包 export 有意义）
     b_forced_export: bool = False
     b_not_for_client: bool = False
     b_not_for_server: bool = False
@@ -473,7 +481,7 @@ class PackageIR:
     decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
-    diagnostics: list = field(default_factory=list)  # List[OffsetRangeDiagnostic]
+    diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
     function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
     resolved_parent_assets: list[dict] = field(default_factory=list)
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)

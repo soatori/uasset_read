@@ -95,7 +95,7 @@ class StructValue(AdvancedPropertyValue):
     struct_type: str
     fields: Dict[str, Any] = field(default_factory=dict)
     raw_size: Optional[int] = None
-    parse_status: str = "parsed"
+    parse_status: str = "success"
     property_type: str = "StructProperty"
 
 

@@ -343,7 +343,7 @@ def _resolve_parent_assets(
     result.resolved_parent_assets.append({
         "class": parent_class,
         "path": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
+        "status": "success" if parent_result.is_success else "failed",
         "warnings": parent_result.warnings,
         "errors": parent_result.errors,
     })
@@ -351,7 +351,7 @@ def _resolve_parent_assets(
         "source": "parent_asset",
         "class": parent_class,
         "asset": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
+        "status": "success" if parent_result.is_success else "failed",
     })
     if parent_result.graphs:
         from uasset_read.graph import format_graphs_json

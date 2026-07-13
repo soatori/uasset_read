@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from uasset_read.versioning import VersionContainer
     from uasset_read.link.linker import PackageLinker
     from uasset_read.parsers.asset_registry_parser import AssetRegistryData
+    from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 
 @dataclass
@@ -39,7 +40,7 @@ class BaseResult:
     mmap_warning: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    diagnostics: List = field(default_factory=list)
+    diagnostics: List[OffsetRangeDiagnostic] = field(default_factory=list)
     _error_keys: set = field(default_factory=set)  # 错误去重用：(异常类型, 阶段, 消息)
 
     @property
