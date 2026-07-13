@@ -153,7 +153,6 @@ def read_property_tag(
     archive: FArchive,
     name_map: List[str],
     tolerant: bool = False,
-    summary: Optional[Any] = None,  # 向后兼容，接受但不使用
     mappings: Optional[Any] = None,
     struct_name: Optional[str] = None,
 ) -> PropertyTag:
@@ -163,7 +162,6 @@ def read_property_tag(
         archive: FArchive 实例
         name_map: 名称映射列表
         tolerant: 是否启用容错模式
-        summary: PackageFileSummary 实例（向后兼容参数，当前未使用）
 
     Returns:
         PropertyTag 实例

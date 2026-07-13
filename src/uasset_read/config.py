@@ -58,11 +58,14 @@ class ParseConfig:
     def apply_to_package(self, kwargs: dict) -> dict:
         """将配置项注入 parse_package() 的调用参数字典。
 
-        用于内部桥接，不覆盖 kwargs 中已有的值（如 path、provider 等）。
+        用于内部桥接，不覆盖 kwargs 中已有的值（如 path、provider 等），
+        也不注入值为 None 的字段，避免覆盖调用方的显式 None。
         """
         for fld in self.__dataclass_fields__:
             if fld not in kwargs:
-                kwargs[fld] = getattr(self, fld)
+                val = getattr(self, fld)
+                if val is not None:
+                    kwargs[fld] = val
         return kwargs
 
 
