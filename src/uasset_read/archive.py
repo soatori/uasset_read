@@ -30,6 +30,11 @@ class ArchiveLike(Protocol):
     def total_size(self) -> int: ...
     def set_byte_swapping(self, enabled: bool) -> None: ...
 
+
+# 对齐大小集合，用于 padding 检测 (#369)
+_ALIGNMENT_SIZES = frozenset({4, 8, 16, 32, 64})
+
+
 class FArchive:
     """
     二进制读取类，镜像 UE 的 FArchive 模式。
@@ -560,6 +565,24 @@ class FArchive:
             value = value & mask
         return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
+    def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
+        """判断全零数据是否为对齐 padding 而非真实损坏（#369）。
+
+        启发式条件：
+        1. 字节数为常见对齐大小（4/8/16/32/64）
+        2. 数据起始位置为 4 字节对齐（UE 默认对齐）
+
+        Args:
+            data_start_pos: 数据起始位置（length 字段之后）
+            byte_count: 全零字节数
+
+        Returns:
+            True 如果可能是对齐 padding
+        """
+        if byte_count not in _ALIGNMENT_SIZES:
+            return False
+        return data_start_pos % 4 == 0
+
     def read_fstring(self, key: str = "") -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
 
@@ -603,11 +626,19 @@ class FArchive:
                         f"FString at pos {pos_before}: length={-length}, "
                         f"encoding=UTF-16, all nulls (completely corrupted), strict mode"
                     )
-                self._logger.warning(
-                    "FString at pos %d: length=%d, encoding=UTF-16, "
-                    "all nulls (completely corrupted), consumed=%d bytes",
-                    pos_before, -length, len(data),
-                )
+                # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
+                if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                    self._logger.debug(
+                        "FString at pos %d: length=%d, encoding=UTF-16, "
+                        "all nulls (likely alignment padding), consumed=%d bytes",
+                        pos_before, -length, len(data),
+                    )
+                else:
+                    self._logger.warning(
+                        "FString at pos %d: length=%d, encoding=UTF-16, "
+                        "all nulls (completely corrupted), consumed=%d bytes",
+                        pos_before, -length, len(data),
+                    )
         else:
             if length > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
@@ -673,12 +704,21 @@ class FArchive:
                     # Tolerant mode: log and continue with padding zone detection.
                     # Check if remaining file data is also mostly zeros (padding zone).
                     # If so, advance to file end to prevent offset cascade (#138).
-                    self._logger.warning(
-                        "FString at pos %d: length=%d, encoding=UTF-8, "
-                        "all nulls (completely corrupted), "
-                        "consumed=%d bytes, end_pos=%d",
-                        pos_before, length, len(data), self.tell()
-                    )
+                    # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
+                    if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                        self._logger.debug(
+                            "FString at pos %d: length=%d, encoding=UTF-8, "
+                            "all nulls (likely alignment padding), "
+                            "consumed=%d bytes, end_pos=%d",
+                            pos_before, length, len(data), self.tell()
+                        )
+                    else:
+                        self._logger.warning(
+                            "FString at pos %d: length=%d, encoding=UTF-8, "
+                            "all nulls (completely corrupted), "
+                            "consumed=%d bytes, end_pos=%d",
+                            pos_before, length, len(data), self.tell()
+                        )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s",
                         pos_before, data[:32].hex()
