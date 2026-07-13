@@ -31,6 +31,9 @@ from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, r
 # ============================================================================
 # Table-driven simple property dispatch
 # ============================================================================
+# Maps property type names to archive read methods. Serves as documentation
+# of the simple-property dispatch pattern; individual parse_*_property functions
+# use _simple_read() with the corresponding method name.
 _SIMPLE_PROPERTY_DISPATCH: dict[str, str] = {
     "UInt16Property": "read_u16",
     "UInt32Property": "read_u32",
