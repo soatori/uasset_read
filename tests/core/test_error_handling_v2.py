@@ -119,14 +119,20 @@ def test_tolerant_parse_dedup():
 # ===========================================================================
 
 class TestHandleParseError:
-    """覆盖 _handle_parse_error 的六个分支。"""
+    """覆盖 _handle_parse_error 的六个分支。
+
+    不使用 mock.patch — 直接验证实际行为，避免 Python 3.10 模块名冲突。
+    """
 
     def _call(self, exc, result, tolerant=True):
         """在 except 上下文中调用 _handle_parse_error，模拟实际调用链。
 
         _handle_parse_error 内部使用 bare raise，需要活跃的异常上下文。
         """
-        from uasset_read.parse_uasset import _handle_parse_error
+        # 通过 importlib 导入模块，绕过 __init__.py 中同名函数遮蔽
+        import importlib
+        mod = importlib.import_module("uasset_read.parse_uasset")
+        _handle_parse_error = mod._handle_parse_error
         archive = _FakeArchive()
         try:
             raise exc
@@ -135,60 +141,51 @@ class TestHandleParseError:
 
     # -- VersionError -------------------------------------------------------
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_version_error_records_and_sets_failure(self, mock_record):
+    def test_version_error_records_and_sets_failure(self):
         result = _FakeResult()
         self._call(VersionError("unsupported version"), result)
 
-        mock_record.assert_called_once()
         assert result.is_success is False
-        # _record_parse_stage_error 内部也会 append error_msg，
-        # 这里只需确认它被调用了即可
+        assert len(result.errors) > 0
+        assert any("VersionError" in e for e in result.errors)
 
     # -- ParseError (有 partial_result) -------------------------------------
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_parse_error_extracts_partial_result(self, mock_record):
+    def test_parse_error_extracts_partial_result(self):
         result = _FakeResult()
         partial = {"graphs": [{"name": "partial_graph"}]}
         exc = ParseError("parse failed", partial_result=partial)
         self._call(exc, result)
 
-        mock_record.assert_called_once()
         assert result.is_success is False
-        # partial_result 的字段应被写入 result
         assert result.graphs == [{"name": "partial_graph"}]
+        assert len(result.errors) > 0
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_parse_error_no_partial_result(self, mock_record):
+    def test_parse_error_no_partial_result(self):
         result = _FakeResult()
         exc = ParseError("parse failed without partial")
         self._call(exc, result)
 
-        mock_record.assert_called_once()
         assert result.is_success is False
+        assert len(result.errors) > 0
 
     # -- MemoryError --------------------------------------------------------
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_memory_error_records_and_sets_failure(self, mock_record):
+    def test_memory_error_records_and_sets_failure(self):
         result = _FakeResult()
         self._call(MemoryError("out of memory"), result)
 
-        # MemoryError 走独立分支，不调用 _record_parse_stage_error
-        mock_record.assert_not_called()
         assert result.is_success is False
         assert any("MemoryError" in e for e in result.errors)
 
     # -- 其他异常 -----------------------------------------------------------
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_unexpected_error_records_and_sets_failure(self, mock_record):
+    def test_unexpected_error_records_and_sets_failure(self):
         result = _FakeResult()
         self._call(RuntimeError("something broke"), result)
 
-        mock_record.assert_called_once()
         assert result.is_success is False
+        assert len(result.errors) > 0
 
     # -- MemoryLimitExceeded 直接 re-raise ----------------------------------
 
@@ -208,15 +205,14 @@ class TestHandleParseError:
 
     # -- tolerant=False 时 re-raise -----------------------------------------
 
-    @mock.patch("uasset_read.parse_uasset._record_parse_stage_error")
-    def test_not_tolerant_reraises(self, mock_record):
+    def test_not_tolerant_reraises(self):
         result = _FakeResult()
         exc = ParseError("fatal parse error")
         with pytest.raises(ParseError):
             self._call(exc, result, tolerant=False)
-        # 即使 re-raise，仍然记录了错误
-        mock_record.assert_called_once()
+        # re-raise 前仍记录了错误
         assert result.is_success is False
+        assert len(result.errors) > 0
 
 
 # ===========================================================================
