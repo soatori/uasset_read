@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uasset-read"
-version = "0.5.3.23"
+version = "0.5.4"
 description = "虚幻引擎 .uasset 文件的 Python 解析器，零运行时依赖"
 readme = "README.md"
 requires-python = ">=3.10"

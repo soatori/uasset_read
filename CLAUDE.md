@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。专注未烘焙/编辑器保存的资产（含完整蓝图数据）。版本 0.5.3.23 | Python 3.10+ | 禁止 `pip install`。
+**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。专注未烘焙/编辑器保存的资产（含完整蓝图数据）。版本 0.5.4 | Python 3.10+ | 禁止 `pip install`。
 
 ## 常用命令
 

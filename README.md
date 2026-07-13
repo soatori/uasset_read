@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.5.3.23** — 23 issues fixed since v0.5.2.31: graph safety, EventGraph offset protection, FText bounds, memory safety, AnimSequence/MovieScene parsing, security hardening, and more.
+> 📦 **v0.5.4** — Code quality and maintenance release: dead code removal, deprecated exports cleanup, duplicate code consolidation.
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.5.3.23 |
+| Version | 0.5.4 |
 | Source | Python parser for Unreal Engine .uasset files |
 | Tests | 492 collected (integration tests skip when sample assets unavailable) |
 | Modules | 175 source files across 21 subpackages |

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.4] — 2026-07-13
+
+Code quality and maintenance release.
+
+### Improvements
+- #374: Delete `core.py` dead code (368 lines) — shadowed by `core/` package directory
+- #375: Trim `_compat.py` deprecated exports (415→20 lines, removed 356 unused mappings)
+- #376: Merge duplicate `sanitize_identifier` wrapper functions (3 files consolidated)
+- #377: Update wiki Public-API.md import paths (deprecated → focused imports)
+- Merge `curve_table._resolve_name` into shared `resolve_name_from_index`
+- Total: **-790 lines** (48085 → 47295, 1.6% reduction)
+
+### Internal
+- Removed dead `core.py` file (Python only loads `core/__init__.py`)
+- Only 7 deprecated export mappings retained (verified by tests/wiki)
+- All `sanitize_identifier` calls use canonical `cpp_gen.sanitizer` module
+
 ## [0.5.3.23] — 2026-07-12
 
 23 issue fixes since v0.5.2.31.

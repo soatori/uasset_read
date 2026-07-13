@@ -1,11 +1,11 @@
 """
 uasset_read - Unreal Engine .uasset 文件解析器
 
-版本 0.5.3.23
+版本 0.5.4
 
 公共API通过__all__控制。内部导出通过 __getattr__ 延迟加载并发出 deprecation 警告。
 """
-__version__ = "0.5.3.23"
+__version__ = "0.5.4"
 
 import warnings as _warnings
 
