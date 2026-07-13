@@ -10,7 +10,6 @@ Per T-056-06: 验证类名匹配 UE 命名约定。
 """
 from __future__ import annotations
 
-import html
 import logging
 import re
 from typing import List, TYPE_CHECKING
@@ -193,7 +192,7 @@ def _sanitize_generated_include(class_name: str) -> str:
 def _sanitize_comment(comment: str) -> str:
     """清理注释字符串以防止注入（T-056-05）。
 
-    转义 HTML 特殊字符，防止潜在的代码注入。
+    移除会导致块注释提前关闭的序列（*/），防止 C++ 注入。
 
     Args:
         comment: 原始注释文本
@@ -204,8 +203,8 @@ def _sanitize_comment(comment: str) -> str:
     if not comment:
         return ""
 
-    # 转义 HTML 特殊字符
-    sanitized = html.escape(comment, quote=False)
+    # 移除可能导致块注释提前关闭的序列
+    sanitized = comment.replace("*/", "* /")
 
     # 移除可能导致问题的其他字符
     sanitized = sanitized.replace('\n', ' ')
@@ -315,17 +314,20 @@ def _format_default_value(cpp_type: str, value: any) -> str:
     if cpp_type == "bool":
         return "true" if value else "false"
 
-    # 处理浮点类型（添加 f 后缀）
-    if cpp_type in ("float", "double"):
+    # 处理浮点类型
+    if cpp_type == "float":
         return f"{float(value)}f"
+    if cpp_type == "double":
+        return str(float(value))
 
     # 处理整数类型（无后缀）
     if cpp_type in ("int", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "byte"):
         return str(int(value))
 
-    # 处理字符串类型（TEXT 包装）
+    # 处理字符串类型（TEXT 包装，转义引号和反斜杠）
     if cpp_type in ("FString", "FName"):
-        return f'TEXT("{value}")'
+        escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
+        return f'TEXT("{escaped}")'
 
     # FText 太复杂，跳过（当前不支持）
     if cpp_type == "FText":

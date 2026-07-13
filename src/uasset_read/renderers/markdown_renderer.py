@@ -17,6 +17,14 @@ def _escape_md_cell(text: str) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
+def _escape_mermaid_label(text: str) -> str:
+    """转义 Mermaid 标签中的特殊字符，防止图解析失败。"""
+    s = str(text)
+    for ch in ('"', '[', ']', '{', '}'):
+        s = s.replace(ch, f'#{ord(ch)};')
+    return s
+
+
 def _format_transforms(transforms) -> str:
     """格式化 Transform 字典为紧凑字符串。"""
     if not transforms:
@@ -120,7 +128,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
             comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
-            lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
+            lines.append(f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |")
             lines.append("")
 
             # === Component Hierarchy Mermaid 图 ===
@@ -135,7 +143,8 @@ class MarkdownRenderer(IRenderer):
                     comp_name = comp.get("name", "Unknown") if isinstance(comp, dict) else getattr(comp, "name", "Unknown")
                     comp_class = comp.get("class", "Unknown") if isinstance(comp, dict) else getattr(comp, "class_name", "Unknown")
                     safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in comp_name)
-                    lines.append(f"  {root_name} --> {safe_name}[\"{comp_name}<br/><i>{comp_class}</i>\"]")
+                    safe_label = _escape_mermaid_label(f"{comp_name}<br/><i>{comp_class}</i>")
+                    lines.append(f"  {root_name} --> {safe_name}[\"{safe_label}\"]")
                 lines.append("```")
                 lines.append("")
 
@@ -688,7 +697,7 @@ class MarkdownRenderer(IRenderer):
 
         # 定义节点
         for node in graph.nodes:
-            label = node.node_comment or node.node_class
+            label = _escape_mermaid_label(node.node_comment or node.node_class)
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
             lines.append(f'{prefix}    {safe_guid}["{label}"]')
 

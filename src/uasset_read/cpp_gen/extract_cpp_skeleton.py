@@ -816,9 +816,9 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
         函数标志字典
     """
     return {
-        # 访问修饰符（需要从其他信息推断）
-        "is_public": False,  # 默认
-        "is_protected": True,  # 默认
+        # 访问修饰符（C++ 默认 public）
+        "is_public": True,  # 默认
+        "is_protected": False,  # 默认
         "is_private": False,
         # 函数类型
         "is_blueprint_pure": bool(flags & FUNC_BlueprintPure),
