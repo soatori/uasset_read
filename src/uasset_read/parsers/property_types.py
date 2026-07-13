@@ -21,7 +21,7 @@ from uasset_read.models.properties import (
     SoftObjectPathValue,
 )
 from uasset_read.models.core import FEdGraphPinType
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT, UE5_LARGE_WORLD_COORDINATES,
     MAX_SAFE_COUNT, UE_NONE_SENTINEL,
@@ -376,7 +376,15 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
     # ByteProperty with enum backing: read FName (8 bytes) per
     if type_name == "ByteProperty" and tag.enum_type is not None:
         if name_map is None:
-            raise ParseError("ByteProperty with enum backing requires name_map")
+            raise ParseError(
+                "ByteProperty with enum backing requires name_map",
+                context=ErrorContext(
+                    offset=archive.tell(),
+                    phase="properties",
+                    operation="parse_int_property",
+                    context_name=tag.name,
+                ),
+            )
         enum_value_name = archive.read_name(name_map)
         return make_enum_value(tag.enum_type, enum_value_name)
 
@@ -506,7 +514,13 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
 
     if depth > MAX_DEPTH:
         raise ParseError(
-            f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
+            f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="properties",
+                operation="parse_array_property",
+                context_name=tag.name,
+            ),
         )
 
     count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "数组数量")
@@ -668,7 +682,15 @@ def _try_fast_path_struct(
         else:
             # 未知大小：可能是损坏数据，拒绝解析
             if not archive._tolerant:
-                raise ParseError(f"Transform: unexpected size {tag.size} (expected 40 or 80)")
+                raise ParseError(
+                    f"Transform: unexpected size {tag.size} (expected 40 or 80)",
+                    context=ErrorContext(
+                        offset=archive.tell(),
+                        phase="properties",
+                        operation="_try_fast_path_struct",
+                        context_name=tag.name,
+                    ),
+                )
             logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
             return StructValue(struct_type="Transform", fields={
                 "_warning": f"unexpected size {tag.size}",
@@ -717,7 +739,13 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     if depth > MAX_DEPTH:
         raise ParseError(
-            f"StructProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}"
+            f"StructProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="properties",
+                operation="parse_struct_property",
+                context_name=tag.name,
+            ),
         )
 
     struct_type = _extract_struct_type_from_tag(tag)
@@ -817,7 +845,13 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
                 raise ParseError(
                     f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
-                    f"size {inner_tag.size} exceeds struct boundary"
+                    f"size {inner_tag.size} exceeds struct boundary",
+                    context=ErrorContext(
+                        offset=archive.tell(),
+                        phase="properties",
+                        operation="parse_struct_property",
+                        context_name=tag.name,
+                    ),
                 )
 
             field_value = read_tag_value_bounded(
