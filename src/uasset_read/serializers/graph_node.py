@@ -945,7 +945,7 @@ def _read_node_pins(
 
         header_owning = archive.read_i32()
         header_guid_bytes = archive.read_bytes(16)
-        header_pin_id = header_guid_bytes.hex().upper()
+        header_pin_id = header_guid_bytes.hex()
 
         try:
             pin = read_ue_graph_pin(

@@ -330,10 +330,10 @@ def read_export_map(
                 offset=archive.tell(), phase="export_map", operation="read_export",
                 context_name=object_name, export_index=export_idx
             )
-            raise ParseError(
-                f"导出表解析失败（导出 #{export_idx}）：{str(e)}",
-                partial_result={"export_map": export_map},
-                context=context
+            # 容错模式：记录错误并跳过失败的导出，保留已成功解析的导出
+            logger.warning(
+                "导出 #%d 解析失败（%s），跳过继续解析后续导出",
+                export_idx, str(e),
             )
     return export_map
 

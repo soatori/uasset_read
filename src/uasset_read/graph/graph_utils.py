@@ -85,10 +85,10 @@ def _sanitize_recursive(obj, visited=None):
 # ============================================================================
 
 def _pin_ref_guid(ref: object) -> str | None:
-    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
+    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符小写 hex）。
 
     PinReference GUID 原始格式为 8-4-4-4-12 带 dash（_read_guid 输出），
-    而归一化后与 pin_id（.hex().upper() 输出）格式一致，确保连接查找匹配。
+    而归一化后与 pin_id（.hex() 输出）格式一致，确保连接查找匹配。
     """
     raw_guid: str | None = None
     if isinstance(ref, dict):
@@ -248,7 +248,7 @@ def _build_graph_indexes(
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
     """构建节点和 Pin 查找表。
 
-    Pin key 统一归一化为大写 hex（与 _pin_ref_guid 输出格式对齐），
+    Pin key 统一归一化为小写 hex（与 _pin_ref_guid 输出格式对齐），
     避免大小写不一致导致的连接查找失败。
     """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
