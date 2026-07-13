@@ -191,6 +191,5 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
 
 def _resolve_name(name_index: int, name_map: List[str]) -> str:
     """从名称表解析名称。"""
-    if 0 <= name_index < len(name_map):
-        return name_map[name_index]
-    return f"<name_{name_index}>"
+    from uasset_read.parsers.utils import resolve_name_from_index
+    return resolve_name_from_index(None, name_map, name_index, fallback_prefix="name")
