@@ -247,152 +247,144 @@ class MathFunctionCleaner:
                 return table[prefix](p)
         return None
 
+    # 数学函数表（精确匹配优先，前缀匹配按长度降序）
+    _MATH_FN_TABLE: dict[str, any] = {
+        "Max": lambda p: f"(({p[0]} > {p[1]}) ? {p[0]} : {p[1]})",
+        "Min": lambda p: f"(({p[0]} < {p[1]}) ? {p[0]} : {p[1]})",
+        "RandomFloatInRange": lambda p: f"RandomFloatInRange({p[0]}, {p[1]})",
+        "RandomFloat": lambda p: "RandomFloat()",
+        "CheckConstrainedFloat": lambda p: f"{p[2]} < {p[0]} or {p[2]} > {p[1]}",
+        "MapRangeClamped": lambda p: f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})",
+        "NormalizeToRange": lambda p: f"NormalizeToRange({p[0]}, {p[1]}, {p[2]})",
+        "Abs": lambda p: f"({p[0]} < 0.0 ? -{p[0]} : {p[0]})",
+        "Floor": lambda p: f"Floor({p[0]})",
+        "Ceil": lambda p: f"Ceil({p[0]})",
+        "RoundToInt": lambda p: f"Round({p[0]})",
+        "Round": lambda p: f"Round({p[0]})",
+        "Sqrt": lambda p: f"Sqrt({p[0]})",
+        "Negate": lambda p: f"-{p[0]}",
+        "Clamp": lambda p: f"(({p[0]} < {p[1]}) ? {p[1]} : (({p[0]} > {p[2]}) ? {p[2]} : {p[0]}))",
+        "Lerp": lambda p: f"{p[0]} + {p[2]} * ({p[1]} - {p[0]})",
+        "FInterpEaseIn": lambda p: f"FInterpEaseIn({p[0]}, {p[1]}, {p[2]}, {p[3]})",
+        "FInterpEaseOut": lambda p: f"FInterpEaseOut({p[0]}, {p[1]}, {p[2]}, {p[3]})",
+        "FInterpTo": lambda p: f"FInterpTo({p[0]}, {p[1]}, {p[2]}, {p[3]})",
+    }
+
     @staticmethod
     def _clean_math_functions(func_name: str, p: list[str]) -> str | None:
         """处理数学函数类（Abs/Floor/Ceil/Round/...）。"""
-        if func_name.startswith("Abs"):
-            return f"({p[0]} < 0.0 ? -{p[0]} : {p[0]})"
-        if func_name.startswith("Floor"):
-            return f"Floor({p[0]})"
-        if func_name.startswith("Ceil"):
-            return f"Ceil({p[0]})"
-        if func_name.startswith("Round") or func_name.startswith("RoundToInt"):
-            return f"Round({p[0]})"
-        if func_name.startswith("Sqrt"):
-            return f"Sqrt({p[0]})"
-        if func_name.startswith("Negate"):
-            return f"-{p[0]}"
-        if func_name == "Max":
-            return f"(({p[0]} > {p[1]}) ? {p[0]} : {p[1]})"
-        if func_name == "Min":
-            return f"(({p[0]} < {p[1]}) ? {p[0]} : {p[1]})"
-        if func_name.startswith("Clamp"):
-            return f"(({p[0]} < {p[1]}) ? {p[1]} : (({p[0]} > {p[2]}) ? {p[2]} : {p[0]}))"
-        if func_name.startswith("Lerp"):
-            return f"{p[0]} + {p[2]} * ({p[1]} - {p[0]})"
-        if func_name.startswith("FInterpTo"):
-            return f"FInterpTo({p[0]}, {p[1]}, {p[2]}, {p[3]})"
-        if func_name.startswith("FInterpEaseIn"):
-            return f"FInterpEaseIn({p[0]}, {p[1]}, {p[2]}, {p[3]})"
-        if func_name.startswith("FInterpEaseOut"):
-            return f"FInterpEaseOut({p[0]}, {p[1]}, {p[2]}, {p[3]})"
-        if func_name.startswith("CheckConstrainedFloat"):
-            return f"{p[2]} < {p[0]} or {p[2]} > {p[1]}"
-        if func_name.startswith("RandomFloatInRange"):
-            return f"RandomFloatInRange({p[0]}, {p[1]})"
-        if func_name.startswith("RandomFloat"):
-            return "RandomFloat()"
-        if func_name.startswith("MapRangeClamped"):
-            return f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})"
-        if func_name.startswith("NormalizeToRange"):
-            return f"NormalizeToRange({p[0]}, {p[1]}, {p[2]})"
-        return None
+        # 精确匹配
+        result = MathFunctionCleaner._MATH_FN_TABLE.get(func_name)
+        if result is not None:
+            return result(p)
+        # 前缀匹配
+        return MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._MATH_FN_TABLE
+        )
+
+    # 类型转换前缀 → C++ 强制转换
+    _CONV_PREFIX_TABLE: dict[str, str] = {
+        "Conv_IntToBool": "({p} != 0)",
+        "Conv_BoolToInt": "({p} ? 1 : 0)",
+        "Conv_BoolToFloat": "({p} ? 1.0f : 0.0f)",
+        "Conv_BoolToDouble": "({p} ? 1.0 : 0.0)",
+        "Conv_BoolToByte": "({p} ? 1 : 0)",
+        "Conv_FloatToDouble": "((double){p})",
+        "Conv_DoubleToFloat": "((float){p})",
+        "Conv_FloatToInt": "((int32){p})",
+        "Conv_IntToFloat": "((float){p})",
+        "Conv_IntToInt64": "((int64){p})",
+        "Conv_Int64ToInt": "((int32){p})",
+    }
+    # 类型转换后缀 → C++ 强制转换
+    _CONV_SUFFIX_TABLE: dict[str, str] = {
+        "ToDouble": "((double){p})",
+        "ToFloat": "((float){p})",
+        "ToInt64": "((int64){p})",
+        "ToInt": "((int32){p})",
+        "ToByte": "((uint8){p})",
+    }
 
     @staticmethod
     def _clean_type_conversions(func_name: str, p: list[str]) -> str | None:
         """处理类型转换和后缀转换。"""
-        # 前缀转换
-        if func_name.startswith("Conv_IntToBool"):
-            return f"({p[0]} != 0)"
-        if func_name.startswith("Conv_BoolToInt"):
-            return f"({p[0]} ? 1 : 0)"
-        if func_name.startswith("Conv_BoolToFloat"):
-            return f"({p[0]} ? 1.0f : 0.0f)"
-        if func_name.startswith("Conv_BoolToDouble"):
-            return f"({p[0]} ? 1.0 : 0.0)"
-        if func_name.startswith("Conv_BoolToByte"):
-            return f"({p[0]} ? 1 : 0)"
-        if func_name.startswith("Conv_FloatToDouble"):
-            return f"((double){p[0]})"
-        if func_name.startswith("Conv_DoubleToFloat"):
-            return f"((float){p[0]})"
-        if func_name.startswith("Conv_FloatToInt"):
-            return f"((int32){p[0]})"
-        if func_name.startswith("Conv_IntToFloat"):
-            return f"((float){p[0]})"
-        if func_name.startswith("Conv_IntToInt64"):
-            return f"((int64){p[0]})"
-        if func_name.startswith("Conv_Int64ToInt"):
-            return f"((int32){p[0]})"
-        if func_name.startswith("UncheckedConvertI32I64"):
+        if func_name == "UncheckedConvertI32I64":
             return f"{p[0]}"
-        # 后缀转换
-        if func_name.endswith("ToDouble"):
-            return f"((double){p[0]})"
-        if func_name.endswith("ToFloat"):
-            return f"((float){p[0]})"
-        if func_name.endswith("ToInt64"):
-            return f"((int64){p[0]})"
-        if func_name.endswith("ToInt"):
-            return f"((int32){p[0]})"
-        if func_name.endswith("ToByte"):
-            return f"((uint8){p[0]})"
+        for prefix, fmt in MathFunctionCleaner._CONV_PREFIX_TABLE.items():
+            if func_name.startswith(prefix):
+                return fmt.format(p=p[0])
+        for suffix, fmt in MathFunctionCleaner._CONV_SUFFIX_TABLE.items():
+            if func_name.endswith(suffix):
+                return fmt.format(p=p[0])
         return None
+
+    # 构造器前缀 → lambda(p) -> str
+    _CONSTRUCTOR_TABLE: dict[str, any] = {
+        "Select": lambda p: f"({p[2]} ? {p[0]} : {p[1]})",
+        "IsValid": lambda p: f"{p[0]} != nullptr",
+        "MakeTransform": lambda p: f"FTransform({p[0]}, {p[1]}, {p[2]})",
+        "Conv_VectorToTransform": lambda p: f"FTransform({p[0]})",
+        "MakeVector2D": lambda p: f"FVector2D({p[0]}, {p[1]})",
+        "MakeVector": lambda p: f"FVector({p[0]}, {p[1]}, {p[2]})",
+        "MakeRotator": lambda p: f"FRotator({p[0]}, {p[1]}, {p[2]})",
+        "MakeTimespan": lambda p: f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)",
+        "MakeColor": lambda p: f"FLinearColor({p[0]}, {p[1]}, {p[2]}, {p[3]})",
+        "ComposeRotators": lambda p: f"FRotator(FQuat({p[0]}) * FQuat({p[1]}))",
+        "Conv_NameToString": lambda p: f"FString({p[0]})",
+        "Conv_TextToString": lambda p: f"FString({p[0]})",
+        "ToLinearColor": lambda p: f"FLinearColor({p[0]})",
+        "ToVector": lambda p: f"FVector((float){p[0]})",
+    }
+    # 向量操作：精确匹配或前缀匹配 → lambda(p) -> str
+    _VECTOR_OP_TABLE: dict[str, any] = {
+        "Dot_": lambda p: f"Dot({p[0]}, {p[1]})",
+        "Dot_VectorVector": lambda p: f"Dot({p[0]}, {p[1]})",
+        "Cross_": lambda p: f"Cross({p[0]}, {p[1]})",
+        "Cross_ProductVectorVector": lambda p: f"Cross({p[0]}, {p[1]})",
+        "Normalize_": lambda p: f"Normalize({p[0]})",
+        "Normal_Vector": lambda p: f"Normalize({p[0]})",
+        "VectorLength": lambda p: f"Length({p[0]})",
+        "Length_": lambda p: f"Length({p[0]})",
+        "Distance_": lambda p: f"Distance({p[0]}, {p[1]})",
+        "Add_Vector": lambda p: f"{p[0]} + {p[1]}",
+        "Add_VectorVector": lambda p: f"{p[0]} + {p[1]}",
+        "Subtract_Vector": lambda p: f"{p[0]} - {p[1]}",
+    }
 
     @staticmethod
     def _clean_constructors_and_vectors(func_name: str, p: list[str]) -> str | None:
         """处理构造器和向量操作。"""
-        # Select / IsValid
-        if func_name.startswith("Select"):
-            return f"({p[2]} ? {p[0]} : {p[1]})"
-        if func_name.startswith("IsValid"):
-            return f"{p[0]} != nullptr"
-        # Make constructors
-        if func_name.startswith("MakeTransform"):
-            return f"FTransform({p[0]}, {p[1]}, {p[2]})"
-        if func_name.startswith("Conv_VectorToTransform"):
-            return f"FTransform({p[0]})"
-        if func_name.startswith("MakeVector2D"):
-            return f"FVector2D({p[0]}, {p[1]})"
-        if func_name.startswith("MakeVector"):
-            return f"FVector({p[0]}, {p[1]}, {p[2]})"
-        if func_name.endswith("ToVector"):
-            return f"FVector((float){p[0]})"
-        if func_name.startswith("MakeRotator"):
-            return f"FRotator({p[0]}, {p[1]}, {p[2]})"
-        if func_name.startswith("MakeTimespan"):
-            return f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)"
-        if func_name.startswith("MakeColor"):
-            return f"FLinearColor({p[0]}, {p[1]}, {p[2]}, {p[3]})"
-        if func_name.startswith("ComposeRotators"):
-            return f"FRotator(FQuat({p[0]}) * FQuat({p[1]}))"
-        if func_name.endswith("ToLinearColor"):
-            return f"FLinearColor({p[0]})"
-        if func_name.startswith("Conv_NameToString"):
-            return f"FString({p[0]})"
-        if func_name.startswith("Conv_TextToString"):
-            return f"FString({p[0]})"
-        # Vector operations
-        if func_name.startswith("Dot_") or func_name == "Dot_VectorVector":
-            return f"Dot({p[0]}, {p[1]})"
-        if func_name.startswith("Cross_") or func_name == "Cross_ProductVectorVector":
-            return f"Cross({p[0]}, {p[1]})"
-        if func_name.startswith("Normalize_") or func_name == "Normal_Vector":
-            return f"Normalize({p[0]})"
-        if func_name.startswith("VectorLength") or func_name.startswith("Length_"):
-            return f"Length({p[0]})"
-        if func_name.startswith("Distance_"):
-            return f"Distance({p[0]}, {p[1]})"
-        if func_name.startswith("Add_Vector") or func_name.startswith("Add_VectorVector"):
-            return f"{p[0]} + {p[1]}"
-        if func_name.startswith("Subtract_Vector"):
-            return f"{p[0]} - {p[1]}"
+        # 先精确匹配
+        result = MathFunctionCleaner._VECTOR_OP_TABLE.get(func_name)
+        if result is not None:
+            return result(p)
+        # 表驱动分派：构造器（前缀匹配）
+        result = MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._CONSTRUCTOR_TABLE
+        )
+        if result is not None:
+            return result
+        # 向量操作（前缀匹配）
+        result = MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._VECTOR_OP_TABLE
+        )
+        if result is not None:
+            return result
         return None
+
+    _BREAK_TABLE: dict[str, any] = {
+        "BreakVector": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y;\n{p[3]} = {p[0]}.Z",
+        "BreakVector2D": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y",
+        "BreakRotator": lambda p: f"{p[1]} = {p[0]}.Roll;\n{p[2]} = {p[0]}.Pitch;\n{p[3]} = {p[0]}.Yaw",
+        "BreakTransform": lambda p: f"{p[1]} = {p[0]}.Location;\n{p[2]} = {p[0]}.Rotation;\n{p[3]} = {p[0]}.Scale",
+        "BreakColor": lambda p: f"{p[1]} = {p[0]}.R;\n{p[2]} = {p[0]}.G;\n{p[3]} = {p[0]}.B;\n{p[4]} = {p[0]}.A",
+    }
 
     @staticmethod
     def _clean_break_functions(func_name: str, p: list[str]) -> str | None:
         """处理 Break 函数。"""
-        if func_name == "BreakVector":
-            return f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y;\n{p[3]} = {p[0]}.Z"
-        if func_name == "BreakVector2D":
-            return f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y"
-        if func_name == "BreakRotator":
-            return f"{p[1]} = {p[0]}.Roll;\n{p[2]} = {p[0]}.Pitch;\n{p[3]} = {p[0]}.Yaw"
-        if func_name == "BreakTransform":
-            return f"{p[1]} = {p[0]}.Location;\n{p[2]} = {p[0]}.Rotation;\n{p[3]} = {p[0]}.Scale"
-        if func_name == "BreakColor":
-            return f"{p[1]} = {p[0]}.R;\n{p[2]} = {p[0]}.G;\n{p[3]} = {p[0]}.B;\n{p[4]} = {p[0]}.A"
-        return None
+        result = MathFunctionCleaner._BREAK_TABLE.get(func_name)
+        return result(p) if result is not None else None
 
     @staticmethod
     def _clean_math(func_name: str, p: list[str]) -> str:
@@ -423,84 +415,76 @@ class MathFunctionCleaner:
 
     # --- String library ---
 
+    # 字符串库精确匹配表
+    _STRING_EXACT_TABLE: dict[str, any] = {
+        "Concat_StrStr": lambda p: " += ".join(p),
+        "ParseIntoArray": lambda p: f"{p[0]}.Split({p[1]}, /* removeEmpty = */ {p[2]})",
+        "JoinStringArray": lambda p: f"{p[0]}.Join({p[1]})",
+        "IsNumeric": lambda p: f"{p[0]}.IsNumeric()",
+        "Len": lambda p: f"{p[0]}.Length",
+        "Append": lambda p: f"{p[0]} + {p[1]}",
+        "Trim": lambda p: f"{p[0]}.Trim()",
+        "ToUpper": lambda p: f"{p[0]}.ToUpper()",
+        "ToLower": lambda p: f"{p[0]}.ToLower()",
+    }
+    # 字符串库前缀匹配表（按长度降序）
+    _STRING_PREFIX_TABLE: dict[str, any] = {
+        "Conv_BoolToString": lambda p: f"{p[0]} ? \"true\" : \"false\"",
+        "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
+        "NotEqual_": lambda p: f"({p[0]} != {p[1]})",
+        "ToString": lambda p: f"FString({p[0]})",
+        "ToName": lambda p: f"FName({p[0]})",
+        "ToDouble": lambda p: f"(double){p[0]}",
+        "ToInt64": lambda p: f"(int64){p[0]}",
+        "ToInt": lambda p: f"(int32){p[0]}",
+        "ToByte": lambda p: f"(uint8){p[0]}",
+        "Contains": lambda p: f"{p[0]}.Contains({p[1]}, /* bUseCase = */ {p[2]}, /* bSearchFromEnd = */ {p[3] if len(p) > 3 else 'false'})",
+        "Replace": lambda p: f"{p[0]}.Replace({p[1]}, {p[2]}, /* SearchCase = */ {p[3] if len(p) > 3 else 'false'})",
+        "StartsWith": lambda p: f"{p[0]}.startswith({p[1]}, /* SearchCase = */ {p[2] if len(p) > 2 else 'false'})",
+        "Left": lambda p: f"{p[0]}.Left({p[1]})",
+        "Right": lambda p: f"{p[0]}.Right({p[1]})",
+        "Mid": lambda p: f"{p[0]}.Mid({p[1]}, {p[2] if len(p) > 2 else '-1'})",
+    }
+
     @staticmethod
     def _clean_string(func_name: str, p: list[str]) -> str:
-        if func_name.startswith("EqualEqual_"):
-            return f"{p[0]} == {p[1]}"
-        if func_name.startswith("NotEqual_"):
-            return f"({p[0]} != {p[1]})"
-
-        if func_name.startswith("Conv_BoolToString"):
-            return f"{p[0]} ? \"true\" : \"false\""
-        if func_name.endswith("ToString"):
-            return f"FString({p[0]})"
-        if func_name.endswith("ToName"):
-            return f"FName({p[0]})"
-        if func_name.endswith("ToDouble"):
-            return f"(double){p[0]}"
-        if func_name.endswith("ToInt64"):
-            return f"(int64){p[0]}"
-        if func_name.endswith("ToInt"):
-            return f"(int32){p[0]}"
-        if func_name.endswith("ToByte"):
-            return f"(uint8){p[0]}"
-        if func_name.startswith("Concat_StrStr"):
-            return " += ".join(p)
-        if func_name.startswith("ParseIntoArray"):
-            return f"{p[0]}.Split({p[1]}, /* removeEmpty = */ {p[2]})"
-        if func_name.startswith("Contains"):
-            return f"{p[0]}.Contains({p[1]}, /* bUseCase = */ {p[2]}, /* bSearchFromEnd = */ {p[3] if len(p) > 3 else 'false'})"
-        if func_name.startswith("JoinStringArray"):
-            return f"{p[0]}.Join({p[1]})"
-        if func_name.startswith("Replace"):
-            return f"{p[0]}.Replace({p[1]}, {p[2]}, /* SearchCase = */ {p[3] if len(p) > 3 else 'false'})"
-        if func_name.startswith("StartsWith"):
-            return f"{p[0]}.startswith({p[1]}, /* SearchCase = */ {p[2] if len(p) > 2 else 'false'})"
-        if func_name.startswith("IsNumeric"):
-            return f"{p[0]}.IsNumeric()"
-        if func_name.startswith("Len"):
-            return f"{p[0]}.Length"
-        if func_name.startswith("Append"):
-            return f"{p[0]} + {p[1]}"
-        if func_name.startswith("Left"):
-            return f"{p[0]}.Left({p[1]})"
-        if func_name.startswith("Right"):
-            return f"{p[0]}.Right({p[1]})"
-        if func_name.startswith("Mid"):
-            return f"{p[0]}.Mid({p[1]}, {p[2] if len(p) > 2 else '-1'})"
-        if func_name.startswith("Trim"):
-            return f"{p[0]}.Trim()"
-        if func_name.startswith("ToUpper"):
-            return f"{p[0]}.ToUpper()"
-        if func_name.startswith("ToLower"):
-            return f"{p[0]}.ToLower()"
-
+        # 精确匹配
+        result = MathFunctionCleaner._STRING_EXACT_TABLE.get(func_name)
+        if result is not None:
+            return result(p)
+        # 前缀匹配
+        result = MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._STRING_PREFIX_TABLE
+        )
+        if result is not None:
+            return result
         return f"KismetStringLibrary::{func_name}({', '.join(p)})"
 
     # --- System library ---
 
+    # System library 前缀匹配表（按长度降序）
+    _SYSTEM_PREFIX_TABLE: dict[str, any] = {
+        "Conv_SoftClassPathToSoftClassRef": lambda p: f"TSoftClassPtr<UObject>({p[0]})",
+        "Conv_SoftClassReferenceToClass": lambda p: f"{p[0]}",
+        "Conv_SoftObjectReferenceToObject": lambda p: f"{p[0]}",
+        "Conv_ObjectToSoftObjectReference": lambda p: f"TSoftObjectPtr<UObject>({p[0]})",
+        "Conv_SoftObjPathToSoftObjRef": lambda p: f"TSoftObjectPtr<UObject>({p[0]})",
+        "Conv_ClassToSoftClassReference": lambda p: f"TSoftClassPtr<UObject>(*{p[0]})",
+    }
+
     @staticmethod
     def _clean_system(func_name: str, p: list[str]) -> str:
-        if func_name.startswith("IsValid"):
-            return f"{p[0]}"
-        if func_name.startswith("Conv_SoftClassReferenceToClass"):
-            return f"{p[0]}"
-        if func_name.startswith("Conv_SoftObjectReferenceToObject"):
-            return f"{p[0]}"
-        if func_name.startswith("Conv_ObjectToSoftObjectReference"):
-            return f"TSoftObjectPtr<UObject>({p[0]})"
-        if func_name.startswith("Conv_SoftObjPathToSoftObjRef"):
-            return f"TSoftObjectPtr<UObject>({p[0]})"
-        if func_name.startswith("Conv_ClassToSoftClassReference"):
-            return f"TSoftClassPtr<UObject>(*{p[0]})"
-        if func_name.startswith("Conv_SoftClassPathToSoftClassRef"):
-            return f"TSoftClassPtr<UObject>({p[0]})"
         if func_name.startswith("Delay") and len(p) >= 3:
             return f"Delay({p[1]}f);\n{p[2]}"
-        if func_name.startswith("Make"):
-            if len(p) == 1:
-                return f"{p[0]}"
-
+        if func_name.startswith("Make") and len(p) == 1:
+            return f"{p[0]}"
+        if func_name.startswith("IsValid"):
+            return f"{p[0]}"
+        result = MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._SYSTEM_PREFIX_TABLE
+        )
+        if result is not None:
+            return result
         return f"KismetSystemLibrary::{func_name}({', '.join(p)})"
 
     # --- Input/Tag/Text misc ---
@@ -520,72 +504,60 @@ class MathFunctionCleaner:
 
     # --- Array library ---
 
+    _ARRAY_CLEAN_TABLE: dict[str, any] = {
+        "Array_Length": lambda p: f"{p[0]}.Length",
+        "Array_IsNotEmpty": lambda p: f"{p[0]}.Length > 0",
+        "Array_IsEmpty": lambda p: f"{p[0]}.Length == 0",
+        "Array_LastIndex": lambda p: f"{p[0]}.Length - 1",
+        "Array_Clear": lambda p: f"{p[0]}.Clear()",
+        "Array_Identical": lambda p: f"{p[0]} == {p[1]}",
+        "Array_Remove": lambda p: f"{p[0]}.Remove({p[1]})",
+        "Array_Add": lambda p: f"{p[0]}.Add({p[1]})",
+        "Array_Get": lambda p: f"{p[2]} = {p[0]}[{p[1]}]",
+        "Array_Contains": lambda p: f"{p[0]}.Contains({p[1]})",
+        "Array_IsValidIndex": lambda p: f"{p[0]}.IsValidIndex({p[1]})",
+        "Array_Insert": lambda p: f"{p[0]}.Insert({p[1]}, {p[2]})",
+        "Array_Find": lambda p: f"{p[0]}.Find({p[1]})",
+    }
+
     @staticmethod
     def _clean_array(func_name: str, p: list[str]) -> str:
-        if func_name.startswith("Array_Length"):
-            return f"{p[0]}.Length"
-        if func_name.startswith("Array_IsNotEmpty"):
-            return f"{p[0]}.Length > 0"
-        if func_name.startswith("Array_IsEmpty"):
-            return f"{p[0]}.Length == 0"
-        if func_name.startswith("Array_LastIndex"):
-            return f"{p[0]}.Length - 1"
-        if func_name.startswith("Array_Clear"):
-            return f"{p[0]}.Clear()"
-        if func_name.startswith("Array_Identical"):
-            return f"{p[0]} == {p[1]}"
-        if func_name.startswith("Array_Remove"):
-            return f"{p[0]}.Remove({p[1]})"
-        if func_name.startswith("Array_Add"):
-            return f"{p[0]}.Add({p[1]})"
-        if func_name.startswith("Array_Get"):
-            return f"{p[2]} = {p[0]}[{p[1]}]"
-        if func_name.startswith("Array_Contains"):
-            return f"{p[0]}.Contains({p[1]})"
-        if func_name.startswith("Array_IsValidIndex"):
-            return f"{p[0]}.IsValidIndex({p[1]})"
-        if func_name.startswith("Array_Insert"):
-            return f"{p[0]}.Insert({p[1]}, {p[2]})"
-        if func_name.startswith("Array_Find"):
-            return f"{p[0]}.Find({p[1]})"
-
-        return f"KismetArrayLibrary::{func_name}({', '.join(p)})"
+        return MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._ARRAY_CLEAN_TABLE
+        ) or f"KismetArrayLibrary::{func_name}({', '.join(p)})"
 
     # --- Map library ---
 
+    _MAP_CLEAN_TABLE: dict[str, any] = {
+        "Map_Length": lambda p: f"{p[0]}.Length",
+        "Map_Remove": lambda p: f"{p[0]}.Remove({p[1]})",
+        "Map_Contains": lambda p: f"{p[0]}.Contains({p[1]})",
+        "Map_Get": lambda p: f"{p[2]} = {p[0]}[{p[1]}]",
+        "Map_Add": lambda p: f"{p[0]}.Add({p[1]}, {p[2]})",
+        "Map_IsValidIndex": lambda p: f"{p[0]}.Contains({p[1]})",
+    }
+
     @staticmethod
     def _clean_map(func_name: str, p: list[str]) -> str:
-        if func_name.startswith("Map_Length"):
-            return f"{p[0]}.Length"
-        if func_name.startswith("Map_Remove"):
-            return f"{p[0]}.Remove({p[1]})"
-        if func_name.startswith("Map_Contains"):
-            return f"{p[0]}.Contains({p[1]})"
-        if func_name.startswith("Map_Get"):
-            return f"{p[2]} = {p[0]}[{p[1]}]"
-        if func_name.startswith("Map_Add"):
-            return f"{p[0]}.Add({p[1]}, {p[2]})"
-        if func_name.startswith("Map_IsValidIndex"):
-            return f"{p[0]}.Contains({p[1]})"
-
-        return f"BlueprintMapLibrary::{func_name}({', '.join(p)})"
+        return MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._MAP_CLEAN_TABLE
+        ) or f"BlueprintMapLibrary::{func_name}({', '.join(p)})"
 
     # --- Set library ---
 
+    _SET_CLEAN_TABLE: dict[str, any] = {
+        "Set_AddItems": lambda p: f"{p[0]}.Add({p[1]})",
+        "Set_Clear": lambda p: f"{p[0]}.Clear()",
+        "Set_Difference": lambda p: f"{p[2]} = {p[0]} == {p[1]}",
+        "Set_IsEmpty": lambda p: f"{p[0]}.Length == 0",
+        "Set_Length": lambda p: f"{p[0]}.Length",
+    }
+
     @staticmethod
     def _clean_set(func_name: str, p: list[str]) -> str:
-        if func_name.startswith("Set_AddItems"):
-            return f"{p[0]}.Add({p[1]})"
-        if func_name.startswith("Set_Clear"):
-            return f"{p[0]}.Clear()"
-        if func_name.startswith("Set_Difference"):
-            return f"{p[2]} = {p[0]} == {p[1]}"
-        if func_name.startswith("Set_IsEmpty"):
-            return f"{p[0]}.Length == 0"
-        if func_name.startswith("Set_Length"):
-            return f"{p[0]}.Length"
-
-        return f"BlueprintSetLibrary::{func_name}({', '.join(p)})"
+        return MathFunctionCleaner._dispatch_table_lookup(
+            func_name, p, MathFunctionCleaner._SET_CLEAN_TABLE
+        ) or f"BlueprintSetLibrary::{func_name}({', '.join(p)})"
 
 # ===========================================================================
 # KismetTranslator — central line_cpp() dispatcher

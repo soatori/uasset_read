@@ -473,20 +473,18 @@ def _build_graph_ir(graph) -> GraphIR:
     for subgraph in getattr(graph, "subgraphs", None) or []:
         subgraphs.append(_build_graph_ir(subgraph))
 
-    # 推断图类型
+    # 推断图类型（按优先级排序：更具体的模式优先于更宽泛的模式）
     graph_type = None
     graph_class = _safe_str(getattr(graph, "graph_class", None))
     if graph_class:
-        if "StateMachine" in graph_class:
-            graph_type = "state_machine"
-        elif "Conduit" in graph_class:
-            graph_type = "conduit"
-        elif "State" in graph_class:
-            graph_type = "state"
-        elif "Transition" in graph_class:
-            graph_type = "transition"
-        elif "AnimGraph" in graph_class or "Animation" in graph_class:
-            graph_type = "animation"
+        for kw, gtype in (
+            ("StateMachine", "state_machine"), ("Transition", "transition"),
+            ("Conduit", "conduit"), ("State", "state"),
+            ("AnimGraph", "animation"), ("Animation", "animation"),
+        ):
+            if kw in graph_class:
+                graph_type = gtype
+                break
 
     return GraphIR(
         graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
@@ -563,16 +561,15 @@ def _build_pin_ir(pin) -> PinIR:
     is_uobject_wrapper = False
     is_map_key = False
     is_map_value = False
+    map_key_pin_category = ""
+    map_key_pin_subcategory = ""
+    map_key_pin_subcategory_object = None
 
     if pin_type_obj is not None:
         pin_category = _safe_str(getattr(pin_type_obj, "pin_category", None))
         pin_subcategory = _safe_str(getattr(pin_type_obj, "pin_subcategory", None))
         pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
-
-        # EPinContainerType: None=0, Array=1, Set=2, Map=3
-        _container_int = getattr(pin_type_obj, "container_type", 0)
-        container_type = CONTAINER_TYPE_MAP.get(_container_int, "None")
-
+        container_type = CONTAINER_TYPE_MAP.get(getattr(pin_type_obj, "container_type", 0), "None")
         is_reference = bool(getattr(pin_type_obj, "is_reference", False))
         is_const = bool(getattr(pin_type_obj, "is_const", False))
         is_weak_pointer = bool(getattr(pin_type_obj, "is_weak_pointer", False))
@@ -580,16 +577,13 @@ def _build_pin_ir(pin) -> PinIR:
         is_map_key = bool(getattr(pin_type_obj, "is_map_key", False))
         is_map_value = bool(getattr(pin_type_obj, "is_map_value", False))
 
-    # Map terminal 类型（key 的类型信息）
-    map_key_pin_category = ""
-    map_key_pin_subcategory = ""
-    map_key_pin_subcategory_object = None
-    if pin_type_obj is not None and getattr(pin_type_obj, "container_type", 0) == 3:
-        map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
-        map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
-        map_key_pin_subcategory_object = getattr(
-            pin_type_obj, "map_key_terminal_sub_category_object_name", None
-        )
+        # Map terminal 类型（key 的类型信息）
+        if getattr(pin_type_obj, "container_type", 0) == 3:
+            map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
+            map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
+            map_key_pin_subcategory_object = getattr(
+                pin_type_obj, "map_key_terminal_sub_category_object_name", None
+            )
 
     return PinIR(
         pin_guid=pin_guid,

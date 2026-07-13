@@ -378,6 +378,30 @@ class FArchive:
 
     # 类型读取方法
 
+    def _read_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
+        """通用字节序感知读取（内部辅助方法）。"""
+        start = self.tell()
+        fmt = '>' if self._byte_swapping else '<'
+        value = struct.unpack(fmt + fmt_char, self.read(size))[0]
+        if key:
+            self._record_hex_view(key, type_name, value, start, start + size)
+        return value
+
+    def _peek_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
+        """通用字节序感知预读（不移动位置）。"""
+        current_pos = self.tell()
+        try:
+            fmt = '>' if self._byte_swapping else '<'
+            data = self.read(size)
+            result = struct.unpack(fmt + fmt_char, data)[0]
+            self.seek(current_pos)
+            if key:
+                self._record_hex_view(key, type_name, result, current_pos, current_pos + size)
+            return result
+        except (struct.error, OSError, ValueError):
+            self.seek(current_pos)
+            raise
+
     def read_u8(self, key: str = "") -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
 
@@ -408,59 +432,23 @@ class FArchive:
 
     def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'i', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "i32", value, start, start + 4)
-        return value
+        return self._read_swapped('i', 4, "i32", key)
 
     def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
-
-        current_pos = self.tell()
-        try:
-            fmt = '>' if self._byte_swapping else '<'
-            data = self.read(4)
-            result = struct.unpack(fmt + 'i', data)[0]
-            self.seek(current_pos)
-            if key:
-                self._record_hex_view(key, "i32(peek)", result, current_pos, current_pos + 4)
-            return result
-        except (struct.error, OSError, ValueError):
-            self.seek(current_pos)
-            raise
+        return self._peek_swapped('i', 4, "i32(peek)", key)
 
     def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'H', self.read(2))[0]
-        if key:
-            self._record_hex_view(key, "u16", value, start, start + 2)
-        return value
+        return self._read_swapped('H', 2, "u16", key)
 
     def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'h', self.read(2))[0]
-        if key:
-            self._record_hex_view(key, "i16", value, start, start + 2)
-        return value
+        return self._read_swapped('h', 2, "i16", key)
 
     def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'I', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "u32", value, start, start + 4)
-        return value
+        return self._read_swapped('I', 4, "u32", key)
 
     def read_bool(self, key: str = "") -> bool:
         """读取 UE bool 值（序列化为 uint32，4 bytes）。
@@ -491,43 +479,19 @@ class FArchive:
 
     def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'q', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "i64", value, start, start + 8)
-        return value
+        return self._read_swapped('q', 8, "i64", key)
 
     def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'Q', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "u64", value, start, start + 8)
-        return value
+        return self._read_swapped('Q', 8, "u64", key)
 
     def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'f', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "f32", value, start, start + 4)
-        return value
+        return self._read_swapped('f', 4, "f32", key)
 
     def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'd', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "f64", value, start, start + 8)
-        return value
+        return self._read_swapped('d', 8, "f64", key)
 
     def serialize_int(self, value: int) -> bytes:
         """序列化 32 位整数（用于 SerializeInt 兼容）。
