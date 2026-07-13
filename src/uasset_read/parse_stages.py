@@ -23,6 +23,7 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
+from uasset_read.constants import PKG_Cooked
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
@@ -273,7 +274,7 @@ def _read_secondary_tables(
 
     # 读取 AssetRegistryData（资产元数据标签）
     try:
-        is_cooked = bool(result.summary.package_flags & 0x00000100)  # PKG_FilterEditorOnly
+        is_cooked = bool(result.summary.package_flags & PKG_Cooked)
         result.asset_registry_data = read_asset_registry_data(
             archive,
             result.summary.asset_registry_data_offset,
