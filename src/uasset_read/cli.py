@@ -100,9 +100,9 @@ def create_parser():
     parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
                         help='When --log-cleanup is set, cap total log storage to MB megabytes')
     parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
-                        help='单个日志文件最大大小（字节），默认 10MB')
+                        help='Max size per log file in bytes (default: 10MB)')
     parser.add_argument('--log-backup-count', metavar='N', type=int, default=5,
-                        help='保留的备份日志文件数量，默认 5')
+                        help='Number of backup log files to keep (default: 5)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
@@ -289,11 +289,11 @@ def main():
     if args.diff is not None:
         from uasset_read.core import diff_single
         if args.diff is True:
-            print("错误: --diff 需要第二个文件路径", file=sys.stderr)
+            print("Error: --diff requires a second file path", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
         file2 = Path(args.diff)
         if not file2.is_file():
-            print(f"错误: Diff 文件不存在: {args.diff}", file=sys.stderr)
+            print(f"Error: Diff file not found: {args.diff}", file=sys.stderr)
             sys.exit(EXIT_FILE_NOT_FOUND)
         try:
             diff_output = diff_single(
