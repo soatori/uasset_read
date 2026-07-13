@@ -42,6 +42,9 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
     0x80: "Unknown_Bit7",
 }
 
+# #341: PropertyTag 损坏恢复最大扫描字节数
+_MAX_RECOVERY_SCAN = 256
+
 # Lazy import + 缓存：避免循环依赖 + 避免每次属性解析重建 dict
 _TYPE_HANDLER_MAP: dict | None = None
 
@@ -776,16 +779,18 @@ def parse_properties_from_export(
                     archive.seek(min(start_pos + 1, getattr(archive, '_file_size', start_pos + 1)))
             else:
                 # start_pos 未知（tag 读取早期失败），尝试智能恢复
+                recover_start = archive.tell()
                 recovered = _try_recover_property_tag(
                     archive,
                     name_map,
-                    max_scan=64,
+                    max_scan=_MAX_RECOVERY_SCAN,
                     property_end=property_end,
                 )
                 if recovered:
+                    scan_distance = archive.tell() - recover_start
                     logger.debug(
-                        "PropertyTag 早期损坏，已恢复到疑似有效位置 (offset=%d)",
-                        archive.tell(),
+                        "PropertyTag 早期损坏，已恢复到疑似有效位置 (offset=%d, 扫描距离=%d)",
+                        archive.tell(), scan_distance,
                     )
                 else:
                     # 恢复失败，前进 1 字节防止无限循环
@@ -794,8 +799,8 @@ def parse_properties_from_export(
                     if isinstance(file_size, int):
                         next_pos = min(next_pos, file_size)
                     logger.debug(
-                        "PropertyTag 早期损坏，无法恢复，跳过 1 字节 (offset=%d)",
-                        archive.tell(),
+                        "PropertyTag 早期损坏，无法恢复 (已扫描 %d 字节)，跳过 1 字节 (offset=%d)",
+                        _MAX_RECOVERY_SCAN, archive.tell(),
                     )
                     archive.seek(next_pos)
 

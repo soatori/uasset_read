@@ -255,3 +255,83 @@ class TestPropertyTagRecovery:
         # 此测试验证 legacy 路径确实把 +16 当作 size（而非拒绝）
         result = _try_recover_property_tag(archive, name_map, max_scan=64, property_end=200)
         assert result is True  # legacy 模式下，+16 读到 size=0 是合法的
+
+    def test_recovery_finds_valid_position(self):
+        """恢复到有效 FName 位置应成功。"""
+        import struct
+        name_map = ["None", "IntProperty", "TestProp"]
+        # 有效 FName 距离当前位置 10 字节
+        valid_fname = struct.pack('<I', 2) + struct.pack('<I', 0)    # "TestProp"
+        type_fname = struct.pack('<I', 1) + struct.pack('<I', 0)   # "IntProperty"
+        size = struct.pack('<i', 8)
+        data = b'\xff' * 10 + valid_fname + type_fname + size + b'\xff' * 30
+        archive = self._make_archive(data, pos=0, file_version_ue5=_LEGACY_UE5)
+
+        result = _try_recover_property_tag(archive, name_map, max_scan=64)
+        assert result is True
+        assert archive.tell() == 10
+
+    def test_recovery_stops_at_max_scan(self):
+        """扫描不应超过最大字节限制。"""
+        import struct
+        name_map = ["None", "IntProperty", "TestProp"]
+        # 有效 FName 在 offset 100，但 max_scan=50，应找不到
+        valid_fname = struct.pack('<I', 2) + struct.pack('<I', 0)
+        type_fname = struct.pack('<I', 1) + struct.pack('<I', 0)
+        size = struct.pack('<i', 8)
+        data = b'\xff' * 100 + valid_fname + type_fname + size + b'\xff' * 30
+        archive = self._make_archive(data, pos=0, file_version_ue5=_LEGACY_UE5)
+
+        result = _try_recover_property_tag(archive, name_map, max_scan=50)
+        assert result is False
+        # 位置应恢复到原始位置
+        assert archive.tell() == 0
+
+    def test_recovery_records_distance(self):
+        """恢复操作应记录扫描距离（通过返回后的 tell 位置计算）。"""
+        import struct
+        name_map = ["None", "IntProperty", "TestProp"]
+        # 有效 FName 在 offset 20
+        valid_fname = struct.pack('<I', 2) + struct.pack('<I', 0)
+        type_fname = struct.pack('<I', 1) + struct.pack('<I', 0)
+        size = struct.pack('<i', 8)
+        data = b'\xff' * 20 + valid_fname + type_fname + size + b'\xff' * 30
+        archive = self._make_archive(data, pos=0, file_version_ue5=_LEGACY_UE5)
+
+        start = archive.tell()
+        result = _try_recover_property_tag(archive, name_map, max_scan=64)
+        assert result is True
+        distance = archive.tell() - start
+        assert distance == 20
+
+    def test_fallback_when_no_valid_position(self):
+        """无有效位置时应回退到最小跳过（返回 False，位置不变）。"""
+        data = b'\xff' * 100
+        archive = self._make_archive(data, pos=0)
+
+        result = _try_recover_property_tag(archive, ["None"], max_scan=50)
+        assert result is False
+        # 位置应恢复到原始位置（调用者负责 1 字节跳过）
+        assert archive.tell() == 0
+
+    def test_max_recovery_scan_constant_value(self):
+        """_MAX_RECOVERY_SCAN 常量应为 256。"""
+        from uasset_read.parsers.property_parser import _MAX_RECOVERY_SCAN
+        assert _MAX_RECOVERY_SCAN == 256
+
+    def test_recovery_uses_max_recovery_scan_default(self):
+        """调用方应使用 _MAX_RECOVERY_SCAN 作为默认扫描范围。"""
+        from uasset_read.parsers.property_parser import _MAX_RECOVERY_SCAN
+        import struct
+        name_map = ["None", "IntProperty", "TestProp"]
+        # 有效 FName 在 offset 200（超过旧默认 64，但在新默认 256 内）
+        valid_fname = struct.pack('<I', 2) + struct.pack('<I', 0)
+        type_fname = struct.pack('<I', 1) + struct.pack('<I', 0)
+        size = struct.pack('<i', 8)
+        data = b'\xff' * 200 + valid_fname + type_fname + size + b'\xff' * 30
+        archive = self._make_archive(data, pos=0, file_version_ue5=_LEGACY_UE5)
+
+        # 使用 _MAX_RECOVERY_SCAN 应能找到偏移 200 处的签名
+        result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
+        assert result is True
+        assert archive.tell() == 200
