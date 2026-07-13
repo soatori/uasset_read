@@ -274,6 +274,12 @@ class FArchive:
             self._file = None
         self._use_mmap = False
 
+    def __enter__(self) -> "FArchive":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志"""
         self._byte_swapping = enabled
@@ -896,7 +902,7 @@ class FArchive:
                     if test_number > 0:
                         return f"{base_name}_{test_number}"
                     return base_name
-            except Exception:
+            except (ParseError, OSError, struct.error, ValueError):
                 continue
 
         # 恢复失败，回退到原始位置
