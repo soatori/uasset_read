@@ -15,6 +15,8 @@ from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.bounded_events import BoundedEventBuffer
 
+logger = logging.getLogger(__name__)
+
 # read_name 索引恢复阈值
 _FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # 超过此值尝试恢复
 
@@ -755,6 +757,10 @@ class FArchive:
         if index > _FNAME_INDEX_RECOVERY_THRESHOLD and self._tolerant:
             recovered = self._try_recover_fname(start, name_map)
             if recovered is not None:
+                logger.debug(
+                    "read_name: recovered out-of-range index %d at pos %d",
+                    index, start
+                )
                 return recovered
 
         if 0 <= index < len(name_map):
@@ -766,7 +772,7 @@ class FArchive:
         else:
             # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
             # 升级日志级别为 warning
-            self._logger.warning(
+            logger.warning(
                 "read_name: index %d out of range (name_map len=%d) at pos %d",
                 index, len(name_map), self.tell() - 8
             )
