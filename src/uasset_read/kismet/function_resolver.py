@@ -8,8 +8,8 @@ StackNode（FPackageIndex int）解析为可读的 "ClassName::FuncName" 格式�
 - EX_LocalFinalFunction：检测是否为蓝图本地函数（export）
 - unresolved 函数引用统计报告
 """
-
 from __future__ import annotations
+
 
 from typing import TYPE_CHECKING
 
@@ -214,7 +214,7 @@ class FunctionRefResolver:
 
         stats = self.get_statistics()
         lines = [
-            f"函数引用解析统计:",
+            "函数引用解析统计:",
             f"  总尝试: {stats['resolve_attempts']}",
             f"  失败: {stats['resolve_failures']}",
             f"  成功率: {stats['success_rate']}%",

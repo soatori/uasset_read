@@ -42,10 +42,10 @@ def test_trace_captures_exec_pin_name():
         FakePin("Completed", 0, "exec"),
     ])
 
-    # _pin_ref_guid 归一化为大写，所以 pin_lookup 键也必须大写
+    # _pin_ref_guid 归一化为小写无 dash 格式
     pin_lookup = {
-        "PID_CALL": ("guid_call", "Then"),
-        "PID_END": ("guid_end", "Completed"),
+        "pid_call": ("guid_call", "Then"),
+        "pid_end": ("guid_end", "Completed"),
     }
     node_lookup = {
         "guid_event": event,
@@ -70,8 +70,8 @@ def test_find_next_exec_node_returns_pin_name():
         FakePin("Then", 0, "exec"),
     ])
 
-    # _pin_ref_guid 归一化为大写
-    pin_lookup = {"PID_CALL": ("guid_call", "Then")}
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pin_lookup = {"pid_call": ("guid_call", "Then")}
     node_lookup = {"guid_event": event, "guid_call": call_func}
 
     next_node, pin_name = _find_next_exec_node(event, pin_lookup, node_lookup)

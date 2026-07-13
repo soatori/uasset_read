@@ -8,6 +8,7 @@ IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 
 - models/core.py 定义序列化模型，保留 UE 原始类型（int 方向、嵌套对象等）
 - IR Builder 负责从序列化模型（UEdGraph*）转换为呈现模型（GraphIR*）
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -145,6 +146,7 @@ class PinIR:
     linked_to: list[str]
     direction: str
     default_value: str | None
+    pin_guid: str = ""  # Pin GUID（用于建立 pin_guid -> node_guid 索引）
     # --- 结构化类型字段（FEdGraphPinType 拆解） ---
     pin_category: str = ""
     pin_subcategory: str = ""
@@ -178,6 +180,10 @@ class NodeIR:
     pins: list[PinIR]
     execution_flow: list[dict]
     macro_expansion: dict | None = None
+    # Enhanced Input 相关字段（v0.5.2）
+    input_action_path: str | None = None  # Input Action 资产路径
+    trigger_events: list[dict] = field(default_factory=list)  # 触发事件列表
+    event_type: str | None = None  # 事件类型（Triggered/Completed/Started/Stopped/Ongoing）
 
 
 @dataclass
@@ -365,6 +371,7 @@ class DecompiledFunctionIR:
     parameters: list[dict]
     return_type: str
     fallback_reasons: list[str] = field(default_factory=list)
+    bytecode_confidence: str = "verified"  # "verified" | "fallback" | "heuristic"
 
 
 @dataclass
@@ -458,7 +465,7 @@ class DebugIR:
 class PackageIR:
     """顶层 IR 结构。"""
     header: PackageHeaderIR
-    name_map: list[str]
+    name_map: tuple[str, ...]
     imports: list[dict]
     exports: list[ExportIR]
     linker: LinkerSummaryIR | None
@@ -596,6 +603,13 @@ class AnimSequenceIR:
     bone_compression_settings: str | None = None  # FPackageIndex 路径
     curve_compression_settings: str | None = None  # FPackageIndex 路径
     has_compressed_data: bool = False
+
+    # 轨迹数据（FCompressedAnimSequence）
+    compressed_track_count: int = 0          # CompressedTrackToSkeletonMapTable 长度
+    compressed_byte_stream_size: int = 0     # CompressedByteStream 字节数
+    compressed_raw_data_size: int = 0        # 压缩前原始数据大小
+    bone_compression_codec: str | None = None  # 骨骼压缩编解码器名称
+    curve_compression_codec: str | None = None  # 曲线压缩编解码器名称
 
 
 @dataclass

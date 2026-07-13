@@ -79,7 +79,7 @@ def format_cpp_header(ir: CppClassIR) -> str:
 
     # 5. generated_include（始终最后一个 include）
     if ir.header_meta.generated_include:
-        generated_inc = _sanitize_generated_include(ir.header_meta.generated_include, class_name)
+        generated_inc = _sanitize_generated_include(class_name)
         lines.append(f'#include {generated_inc}')
 
     # 6. 空行
@@ -175,7 +175,7 @@ def _sanitize_class_name(name: str) -> str:
     return sanitized
 
 
-def _sanitize_generated_include(include: str, class_name: str) -> str:
+def _sanitize_generated_include(class_name: str) -> str:
     """清理 generated.h 包含路径。
 
     Args:

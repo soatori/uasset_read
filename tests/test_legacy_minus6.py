@@ -1,15 +1,13 @@
-"""legacy -6 文件解析测试 — 验证 StarterContent 等资产。"""
+"""legacy -6 文件解析测试 — 验证本地样本资产。"""
 import os
 import pytest
+from pathlib import Path
 from uasset_read.parse_uasset import parse_package
 
 
 # 测试样本路径
-SAMPLES_DIR = r"E:\Develop\lib\Samples"
-LEGACY_MINUS6_FILE = os.path.join(
-    SAMPLES_DIR,
-    "StarterContent/Content/StarterContent/Blueprints/Blueprint_CeilingLight.uasset"
-)
+SAMPLES_DIR = Path(__file__).parent / "samples"
+LEGACY_MINUS6_FILE = str(SAMPLES_DIR / "StarterContent_M_Wood_Walnut.uasset")
 
 
 @pytest.mark.integration

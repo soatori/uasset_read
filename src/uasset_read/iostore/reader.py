@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """IoStore Reader — UE5.3+ IoStore 容器读取器
 
 等价实现 IoStoreReader.cs
 支持 TOC 解析、Chunk 查找、Perfect Hash 优化、压缩块读取
 """
-from __future__ import annotations
 from io import BytesIO
 from typing import BinaryIO, Dict, List, Optional, Tuple
 from pathlib import Path
@@ -25,6 +26,14 @@ from uasset_read.pak.crypto import decrypt_aes_ecb
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
+
+# 资源上限常量 — 防止恶意 UTOC 头部导致资源耗尽
+MAX_TOC_ENTRIES = 1_000_000          # 最大 Chunk 条目数
+MAX_COMPRESSION_BLOCKS = 1_000_000   # 最大压缩块数
+MAX_COMPRESSION_METHODS = 100        # 最大压缩方法数
+MAX_METHOD_NAME_LENGTH = 256         # 单个方法名最大长度
+MAX_DIRECTORY_INDEX_BYTES = 64 * 1024 * 1024  # 目录索引最大 64MB
+MAX_PARTITION_COUNT = 64             # 最大分区数
 
 
 class IoStoreInfo:
@@ -535,6 +544,10 @@ class IoStoreReader:
             return
 
         count = self._header.toc_entry_count
+        if count > MAX_TOC_ENTRIES:
+            raise ParseError(
+                f"IoStore toc_entry_count {count} 超过上限 {MAX_TOC_ENTRIES}"
+            )
         self._chunk_ids = []
         for _ in range(count):
             data = self._utoc_file.read(12)
@@ -593,6 +606,10 @@ class IoStoreReader:
             return
 
         count = self._header.toc_compressed_block_entry_count
+        if count > MAX_COMPRESSION_BLOCKS:
+            raise ParseError(
+                f"IoStore 压缩块数 {count} 超过上限 {MAX_COMPRESSION_BLOCKS}"
+            )
         self._compression_blocks = []
         for _ in range(count):
             block = FIoStoreTocCompressedBlockEntry.from_stream(self._utoc_file)
@@ -610,6 +627,15 @@ class IoStoreReader:
 
         if name_count == 0 or name_length == 0:
             return
+
+        if name_count > MAX_COMPRESSION_METHODS:
+            raise ParseError(
+                f"IoStore 压缩方法数 {name_count} 超过上限 {MAX_COMPRESSION_METHODS}"
+            )
+        if name_length > MAX_METHOD_NAME_LENGTH:
+            raise ParseError(
+                f"IoStore 压缩方法名长度 {name_length} 超过上限 {MAX_METHOD_NAME_LENGTH}"
+            )
 
         # 读取压缩方法名缓冲区
         buffer_size = name_count * name_length
@@ -663,6 +689,11 @@ class IoStoreReader:
         if self._header.directory_index_size == 0:
             return
 
+        if self._header.directory_index_size > MAX_DIRECTORY_INDEX_BYTES:
+            raise ParseError(
+                f"IoStore 目录索引大小 {self._header.directory_index_size} 超过上限 {MAX_DIRECTORY_INDEX_BYTES}"
+            )
+
         if not (self._read_options & EIoStoreTocReadOptions.ReadDirectoryIndex):
             # 跳过目录索引
             self._utoc_file.seek(self._header.directory_index_size, 1)
@@ -707,21 +738,52 @@ class IoStoreReader:
                 return base
             return base.rstrip("/")
 
-        def read_index(dir_index: int, current_path: str) -> None:
+        MAX_DEPTH = 64
+        MAX_ENTRIES = 100_000
+
+        def read_index(dir_index: int, current_path: str, depth: int = 0,
+                       visited_dirs: set | None = None,
+                       visited_files: set | None = None) -> None:
+            if visited_dirs is None:
+                visited_dirs = set()
+            if visited_files is None:
+                visited_files = set()
+
             while dir_index != invalid and dir_index < len(directory_entries):
+                if dir_index in visited_dirs:
+                    raise ParseError(
+                        f"IoStore 目录索引环: entry {dir_index} 重复访问"
+                    )
+                if depth > MAX_DEPTH:
+                    raise ParseError(
+                        f"IoStore 目录索引深度超过上限 {MAX_DEPTH}"
+                    )
+                if len(visited_dirs) > MAX_ENTRIES:
+                    raise ParseError(
+                        f"IoStore 目录索引条目数超过上限 {MAX_ENTRIES}"
+                    )
+                visited_dirs.add(dir_index)
+
                 entry = directory_entries[dir_index]
                 dir_name = name_at(entry.name)
                 dir_path = join_path(current_path, dir_name)
 
                 file_index = entry.first_file_entry
                 while file_index != invalid and file_index < len(file_entries):
+                    if file_index in visited_files:
+                        raise ParseError(
+                            f"IoStore 文件链环: entry {file_index} 重复访问"
+                        )
+                    visited_files.add(file_index)
+
                     file_entry = file_entries[file_index]
                     full_path = join_path(dir_path, name_at(file_entry.name), is_file=True)
                     if file_entry.user_data < len(self._chunk_ids):
                         self._directory_index[full_path] = self._chunk_ids[file_entry.user_data]
                     file_index = file_entry.next_file_entry
 
-                read_index(entry.first_child_entry, dir_path)
+                read_index(entry.first_child_entry, dir_path, depth + 1,
+                           visited_dirs, visited_files)
                 dir_index = entry.next_sibling_entry
 
         read_index(0, self._mount_point)
@@ -813,6 +875,10 @@ class IoStoreReader:
                 ) from e
         else:
             # 多分区
+            if self._header.partition_count > MAX_PARTITION_COUNT:
+                raise ParseError(
+                    f"IoStore 分区数 {self._header.partition_count} 超过上限 {MAX_PARTITION_COUNT}"
+                )
             for i in range(self._header.partition_count):
                 if i == 0:
                     path = str(base_path) + '.ucas'

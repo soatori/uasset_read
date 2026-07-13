@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """CFG 结构化伪代码发射器。
 
 从 RegionTree 解码 CFG 区域结构，生成结构化语句树，再渲染为伪代码。
@@ -6,7 +8,6 @@
 2. emit_body() 递归渲染 Stmt 树，缩进管理
 """
 
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING

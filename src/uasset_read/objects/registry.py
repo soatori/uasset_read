@@ -2,7 +2,6 @@
 
 等价实现 ObjectTypeRegistry.cs
 """
-from __future__ import annotations
 from typing import Dict, Type
 import logging
 
@@ -44,6 +43,8 @@ class ObjectTypeRegistry:
 
         如果名称以 '_C' 结尾（蓝图生成类），会尝试剥离后缀再查找。
         找不到时返回 UObject 基类。
+
+        注意：当前无调用者，保留以备将来使用。
         """
         # 直接查找
         if serialized_name in self._classes:
@@ -59,11 +60,17 @@ class ObjectTypeRegistry:
         return UObject
 
     def has_class(self, class_name: str) -> bool:
-        """检查是否已注册指定类型"""
+        """检查是否已注册指定类型
+
+        注意：当前无调用者，保留以备将来使用。
+        """
         return class_name in self._classes
 
     def list_classes(self) -> list[str]:
-        """列出所有已注册的类型名称"""
+        """列出所有已注册的类型名称
+
+        注意：当前无调用者，保留以备将来使用。
+        """
         return list(self._classes.keys())
 
 

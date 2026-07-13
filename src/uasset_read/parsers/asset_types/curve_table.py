@@ -9,7 +9,6 @@
 - Engine/Source/Runtime/Engine/Classes/Engine/CurveTable.h
 - Engine/Source/Runtime/Engine/Private/CurveTable.cpp
 """
-from __future__ import annotations
 
 import logging
 import struct
@@ -146,13 +145,13 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
 
             # 类型名 FName
             type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
-            type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")
+            _type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # noqa: F841 - protocol read
 
             # Size: int32
             prop_size = archive.read_i32(f"Row[{row_idx}].Prop.Size")
 
             # ArrayIndex: int32
-            array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")
+            _array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # noqa: F841 - protocol read
 
             if prop_size < 0 or prop_size > archive.total_size():
                 return {

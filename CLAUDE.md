@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。专注未烘焙/编辑器保存的资产（含完整蓝图数据）。版本 0.5.1.19 | Python 3.10+ | 禁止 `pip install`。
+**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。专注未烘焙/编辑器保存的资产（含完整蓝图数据）。版本 0.5.3.23 | Python 3.10+ | 禁止 `pip install`。
 
 ## 常用命令
 
@@ -20,36 +20,64 @@ python run.py file.uasset                        # JSON 输出（默认）
 python run.py file.uasset --markdown             # Markdown + Mermaid
 python run.py file.uasset --strict               # 遇警告停止
 python run.py file.uasset --tolerant             # 容错模式（默认）
+python run.py file.uasset --verbose              # 详细输出
 python run.py --batch-dir path/to/dir/           # 批量导出
+python run.py --list-formats                     # 列出可用格式
+
+# 对比
+python run.py file1.uasset --diff file2.uasset   # 对比两个资产
 
 # 测试
 python -m pytest tests/ -v                        # 运行所有测试
 python -m pytest tests/ -v -m "not slow"          # 运行非慢速测试
 python -m pytest tests/ -v --cov=uasset_read     # 覆盖率
+python -m pytest tests/archive/test_foo.py::test_bar -v  # 运行单个测试
 
 # 质量
 python -m pytest tests/ -v -m "quality"           # 质量门禁
 ```
 
-**Windows 路径**：使用正斜杠 `E:/Develop/...` 或双反斜杠。**测试样本**：`E:\Develop\lib\Samples`。**pytest 标记**：`integration`、`quality`、`regression`、`slow`。
+**Windows 路径**：使用正斜杠 `E:/Develop/...` 或双反斜杠。**测试样本**：`E:\Develop\lib\Samples`。**pytest 标记**：`integration`、`quality`、`regression`、`slow`。**pytest 配置**：`pythonpath = src` 已在 `pytest.ini` 中设置，测试可直接 `import uasset_read`。
+
+### 测试文件创建规则
+
+| 场景 | 位置 | 说明 |
+|---|---|---|
+| **修改现有测试** | `tests/{模块}/test_*.py` | 修复 bug、改进现有功能的测试用例 |
+| **创建新测试** | `tests/{模块}/test_{功能}.py` | 新增功能必须配套测试，按功能模块归类 |
+| **临时测试** | `tmp/test_{用途}.py` | 调试验证、一次性脚本、临时排查，不入库 |
+
+**目录结构**：测试按功能模块分目录，保持与 `src/uasset_read/` 结构对应。主要子目录：`archive/`、`blueprint/`、`core/`、`cpp/`、`graph/`、`integration/`、`ir/`、`kismet/`、`link/`、`linker/`、`parsers/`、`serialization/`、`structs/`。
+
+**命名规范**：`test_{功能描述}.py`，测试函数 `test_{场景}_{预期结果}()`
 
 ## 核心架构
 
 解析器镜像 UE 内部的 `FArchive` 序列化管线：
 
 ```
-.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers
+.uasset → FArchive → Serializers → Parsers → ParseResult
+                                                     ↓
+                                              IR Builder (ir_builder.py)
+                                                     ↓
+                                              PackageIR → Renderers (JSON/Markdown)
 ```
+
+完整管线：`parse_package()` → `ParseResult` → `build_package_ir()` → `PackageIR` → `renderer.render(ir, options)`。渲染器不访问 `ParseResult`，只接收 IR。
 
 ### 关键模块
 
 - **archive.py** — `FArchive` 二进制读取层，镜像 UE 的 FArchive 接口
 - **parse_uasset.py** — 主入口，`parse_package()` 返回 `ParseResult`
-- **core.py** — 高层 API（`parse_single`、`parse_batch`），CLI 和脚本共用
-- **ir_builder.py** — `ParseResult` → `PackageIR`，渲染器只接收 IR
+- **core/__init__.py** — 高层 API（`parse_single`、`parse_batch`、`diff_single`），CLI 和脚本共用
+- **ir_builder.py** — `ParseResult` → `PackageIR`，渲染器只接收 IR（不直接访问 ParseResult）
 - **models/ir.py** — IR 数据结构：`PackageIR → ExportIR → GraphIR → NodeIR → PinIR`
 - **models/result.py** — `ParseResult` 容器（summary、linker、graphs、blueprint）
 - **objects/** — UObject 实例注册表，跨 export 的对象引用解析
+
+### 废弃导出系统
+
+`__init__.py` 通过 `__getattr__` 延迟加载 `_DEPRECATED_IMPORTS` 映射中的内部符号，同时发出 `DeprecationWarning`。新增代码应从子模块直接导入（如 `from .serializers import read_package_summary`），不要使用顶层废弃路径。
 
 ### 蓝图解析链
 

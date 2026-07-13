@@ -7,7 +7,6 @@
 Per D-04: 节点继承结构，子类通过 super() 获取基类字段。
 Per D-05: class_name 字段用于 match/case 类型分派。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, Dict
@@ -56,77 +55,3 @@ class K2NodeFunctionEntry(UEdGraphNode):
     function_reference: Optional[FMemberReference] = None
     extra_flags: int = 0
     b_is_editable: bool = False
-
-
-@dataclass
-class K2NodeMessage(UEdGraphNode):
-    """K2Node_Message 消息调用节点。"""
-    message_name: str = ""
-    message_target: Optional[FMemberReference] = None
-
-
-@dataclass
-class K2NodeCallDelegate(UEdGraphNode):
-    """K2Node_CallDelegate 委托调用节点。"""
-    delegate_name: str = ""
-
-
-@dataclass
-class K2NodeCallArrayFunction(UEdGraphNode):
-    """K2Node_CallArrayFunction 数组操作节点。"""
-    function_name: str = ""
-
-
-@dataclass
-class K2NodeCallParentFunction(UEdGraphNode):
-    """K2Node_CallParentFunction 调用父类函数节点。"""
-    function_name: str = ""
-
-
-@dataclass
-class K2NodeFunctionResult(UEdGraphNode):
-    """K2Node_FunctionResult 函数返回值节点。"""
-    function_name: str = ""
-
-
-@dataclass
-class K2NodeCreateWidget(UEdGraphNode):
-    """K2Node_CreateWidget 创建 UI 控件节点。"""
-    widget_class: str = ""
-
-
-@dataclass
-class K2NodeAddDelegate(UEdGraphNode):
-    """K2Node_AddDelegate 添加委托绑定节点。"""
-    delegate_name: str = ""
-
-
-@dataclass
-class K2NodeMacroInstance(UEdGraphNode):
-    """K2Node_MacroInstance 宏实例节点。"""
-    macro_name: str = ""
-
-
-@dataclass
-class K2NodeAssignDelegate(UEdGraphNode):
-    """K2Node_AssignDelegate 委托赋值节点。"""
-    delegate_name: str = ""
-
-
-@dataclass
-class K2NodeGetDataTableRow(UEdGraphNode):
-    """K2Node_GetDataTableRow 数据表行获取节点。"""
-    data_table: Optional[object] = None
-    row_struct_name: str = ""
-
-
-@dataclass
-class K2NodeLoadAsset(UEdGraphNode):
-    """K2Node_LoadAsset 异步资产加载节点。"""
-    asset_type: Optional[object] = None
-
-
-@dataclass
-class K2NodeSpawnActorFromClass(UEdGraphNode):
-    """K2Node_SpawnActorFromClass Actor 生成节点。"""
-    spawn_class: Optional[object] = None

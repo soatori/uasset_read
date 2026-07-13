@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """src/uasset_read/parsers/class_registry.py — Class Handler Registry。
 
 参考 CUE4Parse ObjectTypeRegistry 模式：
@@ -11,7 +13,6 @@ handler 接口：
 - parse(export, archive, context) -> HandlerResult
 - fallback_policy -> FallbackPolicy
 """
-from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod

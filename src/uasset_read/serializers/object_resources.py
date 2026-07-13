@@ -3,10 +3,11 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函
 
 从 uasset_read.py 提取（第 940-3048 行核心部分）。
 """
+from __future__ import annotations
 
 import logging
 import struct
-from typing import Optional, List, Dict, Any, Tuple, Set, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
@@ -181,43 +182,6 @@ def read_soft_object_paths(
     return soft_refs
 
 
-def detect_circular_deps(import_map: List[ObjectImport]) -> List[List[str]]:
-    """检测 ImportMap 中的包依赖循环。
-
-    通过分析 ImportMap 中的包引用，检测潜在的循环依赖。
-    跳过 /Script/ 开头的引擎包（出现多次是正常的）。
-
-    Returns:
-        循环依赖链列表，每个链是一组相互引用的包名
-    """
-    if not import_map:
-        return []
-
-    # 收集包引用关系
-    package_refs: Dict[str, Set[str]] = {}
-    for imp in import_map:
-        # 获取源包名（从 class_package 或 object_name）
-        source_pkg = ""
-        if imp.class_package:
-            if isinstance(imp.class_package, int):
-                # 需要 name_map，但当前上下文没有
-                continue
-            source_pkg = imp.class_package
-        elif imp.package_name:
-            source_pkg = imp.package_name if isinstance(imp.package_name, str) else ""
-
-        # 跳过引擎包
-        if source_pkg.startswith("/Script/"):
-            continue
-
-        # 记录引用关系
-        if source_pkg not in package_refs:
-            package_refs[source_pkg] = set()
-
-    # 当前实现：返回空列表
-    # 真正的循环依赖检测需要跨包解析和完整的依赖图分析
-    # 这需要在链接器层面实现，而不是在 ImportMap 解析阶段
-    return []
 
 
 def read_export_map(
@@ -265,14 +229,14 @@ def read_export_map(
             # CR-05: 验证 serial_size/serial_offset 非负
             # Tolerant: 负数时设为 0 并记录 warning，后续属性解析会因 size=0 被跳过
             if serial_size < 0:
-                logger.warning(
+                logger.debug(
                     "Export #%d serial_size 为负数: %d, 设为 0",
                     export_idx, serial_size,
                 )
                 serial_size = 0
 
             if serial_offset < 0:
-                logger.warning(
+                logger.debug(
                     "Export #%d serial_offset 为负数: %d, 跳过该 export",
                     export_idx, serial_offset,
                 )
@@ -332,13 +296,13 @@ def read_export_map(
                 script_serialization_end_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationEndOffset")
                 # CR-05: 验证非负（Tolerant: 负数时设为 0 并记录 warning）
                 if script_serialization_start_offset < 0:
-                    logger.warning(
+                    logger.debug(
                         "Export #%d ScriptSerializationStartOffset 为负数: %d, 设为 0",
                         export_idx, script_serialization_start_offset,
                     )
                     script_serialization_start_offset = 0
                 if script_serialization_end_offset < 0:
-                    logger.warning(
+                    logger.debug(
                         "Export #%d ScriptSerializationEndOffset 为负数: %d, 设为 0",
                         export_idx, script_serialization_end_offset,
                     )

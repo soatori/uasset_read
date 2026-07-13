@@ -6,19 +6,34 @@
 - SyncGroupNames（同步组）
 - AnimNodeData（动画节点常量数据）
 """
-from __future__ import annotations
 
 from typing import Any
 
 from uasset_read.models.fallback import ExportParseStatus as ParseStatus
 from uasset_read.models.ir import (
     AnimBlueprintIR,
-    AnimNotifyIR,
     BakedStateMachineIR,
     BakedStateIR,
     BakedExitTransitionIR,
     BakedTransitionIR,
 )
+from uasset_read.parsers.asset_types.anim_common import (
+    ensure_custom_data,
+    parse_anim_notifies,
+)
+from uasset_read.parsers.asset_types.property_extractor import (
+    build_properties_dict,
+    extract_array_property,
+    extract_object_ref,
+    extract_property,
+    parse_dict_list,
+)
+
+
+def _extract_int_array(data: Any, key: str) -> list[int]:
+    """从 dict 提取整数数组，跳过非 int 值。"""
+    arr = data.get(key, [])
+    return [i for i in arr if isinstance(i, int)]
 
 
 class AnimBlueprintHandler:
@@ -46,54 +61,40 @@ class AnimBlueprintHandler:
                 return ParseStatus.PARTIAL
 
             # 将属性列表转换为字典格式（name -> value）
-            properties = {}
-            for prop in properties_list:
-                if hasattr(prop, "name") and hasattr(prop, "value"):
-                    properties[prop.name] = prop.value
+            properties = build_properties_dict(properties_list)
 
             # 构建 AnimBlueprintIR
             anim_ir = AnimBlueprintIR()
 
             # 提取 BakedStateMachines
-            if "BakedStateMachines" in properties:
-                anim_ir.baked_state_machines = self._parse_baked_state_machines(
-                    properties["BakedStateMachines"]
-                )
+            anim_ir.baked_state_machines = extract_array_property(
+                properties, "BakedStateMachines", self._parse_baked_state_machines
+            )
 
             # 提取 AnimNotifies
-            if "AnimNotifies" in properties:
-                anim_ir.anim_notifies = self._parse_anim_notifies(
-                    properties["AnimNotifies"]
-                )
+            anim_ir.anim_notifies = extract_array_property(
+                properties, "AnimNotifies", parse_anim_notifies
+            )
 
-            # 提取 TargetSkeleton
-            if "TargetSkeleton" in properties:
-                skeleton_ref = properties["TargetSkeleton"]
-                if isinstance(skeleton_ref, dict):
-                    anim_ir.target_skeleton = skeleton_ref.get("object_path")
+            # 提取 TargetSkeleton（对象引用）
+            extract_object_ref(properties, "TargetSkeleton", anim_ir, "target_skeleton")
 
             # 提取 SyncGroupNames
-            if "SyncGroupNames" in properties:
-                anim_ir.sync_group_names = self._parse_sync_group_names(
-                    properties["SyncGroupNames"]
-                )
+            anim_ir.sync_group_names = extract_array_property(
+                properties, "SyncGroupNames", self._parse_sync_group_names
+            )
 
-            # 提取 GraphAssetPlayerInformation
-            if "GraphAssetPlayerInformation" in properties:
-                anim_ir.graph_asset_player_info = properties["GraphAssetPlayerInformation"]
-
-            # 提取 GraphBlendOptions
-            if "GraphBlendOptions" in properties:
-                anim_ir.graph_blend_options = properties["GraphBlendOptions"]
-
-            # 提取 AnimNodeData
-            if "AnimNodeData" in properties:
-                anim_ir.anim_node_data = properties["AnimNodeData"]
+            # 提取简单属性
+            extract_property(
+                properties, "GraphAssetPlayerInformation", anim_ir, "graph_asset_player_info"
+            )
+            extract_property(
+                properties, "GraphBlendOptions", anim_ir, "graph_blend_options"
+            )
+            extract_property(properties, "AnimNodeData", anim_ir, "anim_node_data")
 
             # 存储到 export 的自定义数据
-            if not hasattr(export, "custom_data"):
-                export.custom_data = {}
-            export.custom_data["anim_blueprint"] = anim_ir
+            ensure_custom_data(export)["anim_blueprint"] = anim_ir
 
             return ParseStatus.SUCCESS
 
@@ -105,41 +106,28 @@ class AnimBlueprintHandler:
 
     def _parse_baked_state_machines(self, data: Any) -> list[BakedStateMachineIR]:
         """解析烘焙后的状态机数组"""
-        result = []
-        if not isinstance(data, (list, dict)):
-            return result
 
-        machines = data if isinstance(data, list) else [data]
-        for machine_data in machines:
-            if not isinstance(machine_data, dict):
-                continue
-
+        def _parse_machine(machine_data: dict) -> BakedStateMachineIR:
             machine = BakedStateMachineIR(
                 machine_name=machine_data.get("MachineName", ""),
                 initial_state=machine_data.get("InitialState", 0),
             )
-
-            # 解析 States
             states_data = machine_data.get("States", [])
             if isinstance(states_data, list):
                 machine.states = self._parse_baked_states(states_data)
-
-            # 解析 Transitions
             transitions_data = machine_data.get("Transitions", [])
             if isinstance(transitions_data, list):
                 machine.transitions = self._parse_baked_transitions(transitions_data)
+            return machine
 
-            result.append(machine)
-
-        return result
+        if isinstance(data, dict):
+            return [_parse_machine(data)]
+        return parse_dict_list(data, _parse_machine)
 
     def _parse_baked_states(self, data: list) -> list[BakedStateIR]:
         """解析烘焙后的状态数组"""
-        result = []
-        for state_data in data:
-            if not isinstance(state_data, dict):
-                continue
 
+        def _parse_state(state_data: dict) -> BakedStateIR:
             state = BakedStateIR(
                 state_name=state_data.get("StateName", ""),
                 state_root_node_index=state_data.get("StateRootNodeIndex", -1),
@@ -150,38 +138,20 @@ class AnimBlueprintHandler:
                 b_always_reset_on_entry=state_data.get("bAlwaysResetOnEntry", False),
                 b_is_a_conduit=state_data.get("bIsAConduit", False),
             )
-
-            # 解析 PlayerNodeIndices
-            player_indices = state_data.get("PlayerNodeIndices", [])
-            if isinstance(player_indices, list):
-                state.player_node_indices = [
-                    i for i in player_indices if isinstance(i, int)
-                ]
-
-            # 解析 LayerNodeIndices
-            layer_indices = state_data.get("LayerNodeIndices", [])
-            if isinstance(layer_indices, list):
-                state.layer_node_indices = [
-                    i for i in layer_indices if isinstance(i, int)
-                ]
-
-            # 解析退出转换
+            state.player_node_indices = _extract_int_array(state_data, "PlayerNodeIndices")
+            state.layer_node_indices = _extract_int_array(state_data, "LayerNodeIndices")
             transitions_data = state_data.get("Transitions", [])
             if isinstance(transitions_data, list):
                 state.transitions = self._parse_baked_exit_transitions(transitions_data)
+            return state
 
-            result.append(state)
-
-        return result
+        return parse_dict_list(data, _parse_state)
 
     def _parse_baked_exit_transitions(self, data: list) -> list[BakedExitTransitionIR]:
         """解析退出转换规则"""
-        result = []
-        for trans_data in data:
-            if not isinstance(trans_data, dict):
-                continue
 
-            transition = BakedExitTransitionIR(
+        def _parse_transition(trans_data: dict) -> BakedExitTransitionIR:
+            return BakedExitTransitionIR(
                 can_take_delegate_index=trans_data.get("CanTakeDelegateIndex", -1),
                 custom_result_node_index=trans_data.get("CustomResultNodeIndex", -1),
                 transition_index=trans_data.get("TransitionIndex", -1),
@@ -198,17 +168,13 @@ class AnimBlueprintHandler:
                     "bOnlyEvaluateWhenActive", False
                 ),
             )
-            result.append(transition)
 
-        return result
+        return parse_dict_list(data, _parse_transition)
 
     def _parse_baked_transitions(self, data: list) -> list[BakedTransitionIR]:
         """解析状态间转换"""
-        result = []
-        for trans_data in data:
-            if not isinstance(trans_data, dict):
-                continue
 
+        def _parse_transition(trans_data: dict) -> BakedTransitionIR:
             transition = BakedTransitionIR(
                 previous_state=trans_data.get("PreviousState", -1),
                 next_state=trans_data.get("NextState", -1),
@@ -220,60 +186,11 @@ class AnimBlueprintHandler:
                 end_notify=trans_data.get("EndNotify", -1),
                 interrupt_notify=trans_data.get("InterruptNotify", -1),
             )
+            extract_object_ref(trans_data, "CustomCurve", transition, "custom_curve")
+            extract_object_ref(trans_data, "BlendProfile", transition, "blend_profile")
+            return transition
 
-            # 解析对象引用
-            custom_curve = trans_data.get("CustomCurve")
-            if isinstance(custom_curve, dict):
-                transition.custom_curve = custom_curve.get("object_path")
-
-            blend_profile = trans_data.get("BlendProfile")
-            if isinstance(blend_profile, dict):
-                transition.blend_profile = blend_profile.get("object_path")
-
-            result.append(transition)
-
-        return result
-
-    def _parse_anim_notifies(self, data: Any) -> list[AnimNotifyIR]:
-        """解析动画通知数组"""
-        result = []
-        if not isinstance(data, list):
-            return result
-
-        for notify_data in data:
-            if not isinstance(notify_data, dict):
-                continue
-
-            notify = AnimNotifyIR(
-                notify_name=notify_data.get("NotifyName", ""),
-                trigger_time_offset=notify_data.get("TriggerTimeOffset", 0.0),
-                end_trigger_time_offset=notify_data.get("EndTriggerTimeOffset", 0.0),
-                trigger_weight_threshold=notify_data.get("TriggerWeightThreshold", 0.0),
-                duration=notify_data.get("Duration", 0.0),
-                notify_class=notify_data.get("NotifyClass"),
-                notify_state_class=notify_data.get("NotifyStateClass"),
-                montage_tick_type=notify_data.get("MontageTickType"),
-                notify_trigger_chance=notify_data.get("NotifyTriggerChance", 1.0),
-                notify_filter_type=notify_data.get("NotifyFilterType"),
-                notify_filter_lod=notify_data.get("NotifyFilterLOD", 0),
-                b_converted_from_branching_point=notify_data.get(
-                    "bConvertedFromBranchingPoint", False
-                ),
-                track_index=notify_data.get("TrackIndex", 0),
-            )
-
-            # 解析对象引用
-            linked_montage = notify_data.get("LinkedMontage")
-            if isinstance(linked_montage, dict):
-                notify.linked_montage = linked_montage.get("object_path")
-
-            linked_sequence = notify_data.get("LinkedSequence")
-            if isinstance(linked_sequence, dict):
-                notify.linked_sequence = linked_sequence.get("object_path")
-
-            result.append(notify)
-
-        return result
+        return parse_dict_list(data, _parse_transition)
 
     def _parse_sync_group_names(self, data: Any) -> list[str]:
         """解析同步组名称"""

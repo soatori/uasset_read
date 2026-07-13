@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 BPGC Bytecode Extraction — BlueprintGeneratedClass cooked bytecode parsing.
 
@@ -9,12 +11,12 @@ Provides:
 - map_bytecode_to_functions: Map bytecode buffers to Function exports by ordinal position
 - _parse_cooked_bytecode_buffer: Pure logic function for buffer splitting
 """
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
 from uasset_read.exceptions import ParseError
+from uasset_read.constants import UE_NONE_SENTINEL
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -71,6 +73,13 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
 
         # 容错处理 - 如果 size 不合理，尝试跳过
         if size == 0 or size > (data_len - offset):
+            # #343: 区分正常结束（size==0）和数据损坏（size 超出范围）
+            if size != 0:
+                logger.debug(
+                    "BPGC bytecode buffer #%d: 声明 size=%d 超出剩余数据 %d bytes，"
+                    "可能是格式变体或数据损坏",
+                    len(buffers), size, data_len - offset,
+                )
             next_sentinel = _find_next_sentinel(data, offset - 4)
             if next_sentinel > offset + 3:
                 offset = next_sentinel - 3
@@ -82,7 +91,7 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
 
         # Validate buffer ends with expected sentinel (tolerant)
         if buf and buf[-1] not in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
-            logger.warning(
+            logger.debug(
                 "Bytecode buffer #%d ends with 0x%02X, accepting in tolerant mode",
                 len(buffers), buf[-1],
             )
@@ -156,7 +165,7 @@ def extract_bpgc_bytecode(
     tag_count = 0
     while True:
         tag = read_property_tag(archive, name_map)
-        if tag.name == "None":
+        if tag.name == UE_NONE_SENTINEL:
             break
         # Skip property value data using FArchive read_bytes
         archive.read_bytes(tag.size)
@@ -172,7 +181,7 @@ def extract_bpgc_bytecode(
     remaining_bytes = region_end - current_pos
 
     if remaining_bytes <= 0:
-        logger.warning("BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name)
+        logger.debug("BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name)
         return {}
 
     if remaining_bytes > bpgc_export.script_serialization_size:
@@ -187,9 +196,12 @@ def extract_bpgc_bytecode(
     buffers = _parse_cooked_bytecode_buffer(raw_bytecode)
 
     if not buffers:
-        logger.warning(
-            "BPGC '%s': parsed 0 bytecode buffers from %d bytes",
-            bpgc_export.object_name, len(raw_bytecode),
+        # #343: 区分"无字节码"和"解析失败"
+        # 注意：remaining_bytes <= 0 的情况已在第 181-183 行处理
+        logger.debug(
+            "BPGC '%s': _parse_cooked_bytecode_buffer 返回空 (%d bytes 可用），"
+            "可能是格式变体或数据损坏",
+            asset_name, remaining_bytes,
         )
         return {}
 
@@ -247,7 +259,7 @@ def map_bytecode_to_functions(
 
     # Step 5: Log warning on count mismatch
     if buf_count != func_count:
-        logger.warning(
+        logger.debug(
             "Bytecode/function count mismatch: %d buffers vs %d Function exports — "
             "mapping by min count",
             buf_count, func_count,

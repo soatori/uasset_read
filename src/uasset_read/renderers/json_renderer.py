@@ -1,14 +1,15 @@
+from __future__ import annotations
+
 """JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
 
 仅注册 json 格式：完整分析格式，字段最全。
 """
-from __future__ import annotations
 
 import json
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
-from uasset_read.renderers.base import IRenderer, RenderOptions
+from uasset_read.renderers.base import IRenderer, RenderOptions, EDITOR_PROPERTY_NAMES, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 from uasset_read.models.ir import HexViewEntryIR
@@ -34,40 +35,29 @@ class _JSONEncoder(json.JSONEncoder):
 class JSONRenderer(IRenderer):
     """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
 
-    # 编辑器布局属性（不影响运行时和 C++ 翻译）
-    _EDITOR_PROPERTY_NAMES = frozenset({
-        # 节点布局
-        "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
-        "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
-        # 注释相关
-        "CommentColor", "FontSize",
-        "bCommentBubbleVisible_InDetailsPanel",
-        "bCommentBubblePinned", "bCommentBubbleVisible",
-        # 图相关
-        "Schema", "GraphGuid", "ErrorType",
-        "AdvancedPinDisplay", "MoveMode",
-        # 事件/函数引用（已提取到其他字段）
-        "EventReference", "bOverrideFunction",
-    })
-
-    # 编辑器内部变量（不影响运行时和 C++ 翻译）
-    _EDITOR_VARIABLE_NAMES = frozenset({
-        "UbergraphPages",  # 图页面索引列表
-        "FunctionGraphs",  # 函数图索引列表
-        "CategorySorting",  # 编辑器分类排序
-        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
-        "LastEditedDocuments",  # 最后编辑文档
-        "ThumbnailInfo",  # 缩略图信息
-        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
-    })
-
-    # 编辑器内部节点类（不影响运行时，UE 编译时移除）
-    _EDITOR_NODE_CLASSES = frozenset({
-        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
-    })
-
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        all_exports = ir.exports
+        data = self._build_data(ir, options)
+        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
+
+    def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
+        """流式渲染 IR 到 writer，避免构建完整 JSON 字符串。
+
+        输出格式与 render() 一致，直接使用 json.dump 写入 writer。
+        适用于大文件或管道输出场景（不占用中间字符串内存）。
+
+        Args:
+            ir: PackageIR 实例
+            writer: 可写文本流（StringIO、文件对象等）
+            options: 渲染选项，None 时使用默认值
+        """
+        if options is None:
+            options = RenderOptions()
+        data = self._build_data(ir, options)
+        json.dump(data, writer, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
+        writer.write("\n")
+
+    def _build_data(self, ir: PackageIR, options: RenderOptions) -> dict[str, Any]:
+        """构建渲染数据字典（render() 和 render_to() 共用）。"""
         is_debug = options.output_level == "debug"
 
         data: dict[str, Any] = {}
@@ -90,31 +80,28 @@ class JSONRenderer(IRenderer):
         }
         data["exports"] = [
             self._export_to_dict(e, options, is_debug)
-            for e in all_exports
-            if is_debug or e.object_class not in self._EDITOR_NODE_CLASSES
+            for e in ir.exports
+            if is_debug or e.object_class not in EDITOR_NODE_CLASSES
         ]
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:
             data["decompiled_functions"] = [self._decompiled_function_to_dict(f) for f in ir.decompiled_functions]
-        # execution_chains: 过滤空的 chains
         if ir.execution_chains:
             chains = [{"event": c.event, "chain": c.chain} for c in ir.execution_chains]
             if is_debug:
                 data["execution_chains"] = chains
             else:
-                # standard 模式下只保留有内容的 chains
                 chains_with_content = [c for c in chains if c.get("chain")]
                 if chains_with_content:
                     data["execution_chains"] = chains_with_content
         if ir.variables:
-            # standard 模式下过滤编辑器内部变量
             if is_debug:
                 data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
             else:
                 variables = [
                     self._variable_to_dict(v) for v in ir.variables
-                    if v.name not in self._EDITOR_VARIABLE_NAMES
+                    if v.name not in EDITOR_VARIABLE_NAMES
                 ]
                 if variables:
                     data["variables"] = variables
@@ -126,12 +113,10 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
-        # diagnostics: 去重
         if ir.diagnostics:
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
             else:
-                # standard 模式下去重
                 seen = set()
                 unique_diags = []
                 for d in ir.diagnostics:
@@ -150,14 +135,13 @@ class JSONRenderer(IRenderer):
             data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
         if ir.anim_montage:
             data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
-        # HexView 解析轨迹：当 --hex-view 或 output_level=debug 时输出
         if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
             data["debug"] = {
                 "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
             }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
-        return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
+        return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
         # standard 模式下过滤编辑器布局属性
@@ -166,7 +150,7 @@ class JSONRenderer(IRenderer):
         else:
             properties = [
                 self._property_to_dict(p) for p in export.properties
-                if p.name not in self._EDITOR_PROPERTY_NAMES
+                if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
         # graphs: standard 模式下只保留有内容的
@@ -365,6 +349,8 @@ class JSONRenderer(IRenderer):
         d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
         if func.fallback_reasons:
             d["fallback_reasons"] = func.fallback_reasons
+        if func.bytecode_confidence != "verified":
+            d["bytecode_confidence"] = func.bytecode_confidence
         return d
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:

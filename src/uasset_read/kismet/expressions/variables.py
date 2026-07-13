@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """
 Kismet expression subclasses — Variable reference expressions.
 
 All share FKismetPropertyPointer for the Variable field.
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression

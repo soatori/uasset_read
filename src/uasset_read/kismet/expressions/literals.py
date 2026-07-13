@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 """
 Kismet expression subclasses — Numeric and boolean literal constants.
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT

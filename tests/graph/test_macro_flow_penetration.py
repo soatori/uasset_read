@@ -37,9 +37,10 @@ def test_flow_penetrates_macro_instance():
         FakePin("Then", 0, "exec"),
     ])
 
+    # _pin_ref_guid 归一化为小写无 dash 格式
     pin_lookup = {
-        "PID_MACRO": ("guid_macro", "exec"),
-        "PID_AFTER": ("guid_after", "Then"),
+        "pid_macro": ("guid_macro", "exec"),
+        "pid_after": ("guid_after", "Then"),
     }
     node_lookup = {
         "guid_event": event,
@@ -77,9 +78,10 @@ def test_standard_macro_marked():
         FakePin("Then", 0, "exec"),
     ])
 
+    # _pin_ref_guid 归一化为小写无 dash 格式
     pin_lookup = {
-        "PID_FORLOOP": ("guid_forloop", "Loop Body"),
-        "PID_AFTER": ("guid_after", "Then"),
+        "pid_forloop": ("guid_forloop", "Loop Body"),
+        "pid_after": ("guid_after", "Then"),
     }
     node_lookup = {
         "guid_event": event,
@@ -110,9 +112,10 @@ def test_macro_without_reference():
         FakePin("Then", 0, "exec"),
     ])
 
+    # _pin_ref_guid 归一化为小写无 dash 格式
     pin_lookup = {
-        "PID_MACRO": ("guid_macro", "exec"),
-        "PID_AFTER": ("guid_after", "Then"),
+        "pid_macro": ("guid_macro", "exec"),
+        "pid_after": ("guid_after", "Then"),
     }
     node_lookup = {
         "guid_event": event,

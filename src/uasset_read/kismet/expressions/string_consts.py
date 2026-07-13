@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """Kismet 表达式 — 字符串常量表达式。"""
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional

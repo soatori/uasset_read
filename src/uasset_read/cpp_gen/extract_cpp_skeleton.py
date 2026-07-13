@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 C++ 类骨架提取模块 — extract_cpp_class_skeleton()。
 
@@ -11,7 +13,6 @@ Per D-05: 构建完整的 header_meta。
 导出：
     extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
 """
-from __future__ import annotations
 
 import re
 import logging
@@ -47,7 +48,8 @@ from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.blueprint import BlueprintMetadata, BlueprintVariable
-    from uasset_read.models.core import FEdGraphPinType
+    from uasset_read.models.core import FEdGraphPinType, UEdGraph, UEdGraphPin
+    from uasset_read.models.node_types import K2NodeFunctionEntry, K2NodeEvent
 
 logger = logging.getLogger(__name__)
 
@@ -865,7 +867,6 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
 
 def _infer_ufunction_specifiers(
     pins: List["UEdGraphPin"],
-    node_class_name: str,
     is_override: bool,
     extra_flags: int = 0
 ) -> List[str]:
@@ -947,7 +948,6 @@ def _build_cpp_method_from_entry(
 
     specifiers = _infer_ufunction_specifiers(
         fe_node.pins,
-        "K2Node_FunctionEntry",
         is_override=False,
         extra_flags=extra_flags
     )

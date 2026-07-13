@@ -4,7 +4,6 @@
 读取当前位置最多 256 字节样本，返回 raw_offset + sample_size + parse_status。
 使用 make_opaque_stub() 生成，避免每个类型一个空壳文件。
 """
-from __future__ import annotations
 
 from typing import Any, Callable
 

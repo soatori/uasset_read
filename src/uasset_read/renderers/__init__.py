@@ -2,7 +2,6 @@
 
 取代旧的 ExporterRegistry + FORMAT_REGISTRY。
 """
-from __future__ import annotations
 
 from typing import Type
 

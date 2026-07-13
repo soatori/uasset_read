@@ -14,6 +14,42 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
+# ── 渲染器共享常量 ──
+# 以下是各渲染器共用的过滤列表，统一定义于此。
+
+# 编辑器布局属性（不影响运行时和 C++ 翻译）
+EDITOR_PROPERTY_NAMES = frozenset({
+    # 节点布局
+    "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
+    "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
+    # 注释相关
+    "CommentColor", "FontSize",
+    "bCommentBubbleVisible_InDetailsPanel",
+    "bCommentBubblePinned", "bCommentBubbleVisible",
+    # 图相关
+    "Schema", "GraphGuid", "ErrorType",
+    "AdvancedPinDisplay", "MoveMode",
+    # 事件/函数引用（已提取到其他字段）
+    "EventReference", "bOverrideFunction",
+})
+
+# 编辑器内部变量（不影响运行时和 C++ 翻译）
+EDITOR_VARIABLE_NAMES = frozenset({
+    "UbergraphPages",  # 图页面索引列表
+    "FunctionGraphs",  # 函数图索引列表
+    "CategorySorting",  # 编辑器分类排序
+    "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
+    "LastEditedDocuments",  # 最后编辑文档
+    "ThumbnailInfo",  # 缩略图信息
+    "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+})
+
+# 编辑器内部节点类（不影响运行时，UE 编译时移除）
+EDITOR_NODE_CLASSES = frozenset({
+    "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+})
+
+
 def is_blueprint_export(export: ExportIR) -> bool:
     """判断是否为蓝图相关 export。
 

@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Kismet 赋值表达式。
 
 包含 EX_Let 系列赋值指令的表达式子类。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

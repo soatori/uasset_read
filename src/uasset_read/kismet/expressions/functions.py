@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """Kismet 表达式 — 函数调用与结束标记。
 
 包含函数调用相关表达式（EX_FinalFunction / EX_CallMath / EX_VirtualFunction 等）
 以及函数参数结束标记（EX_EndFunctionParms / EX_EndParmValue）。
 """
 
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional

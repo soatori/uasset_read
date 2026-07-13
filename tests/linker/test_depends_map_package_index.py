@@ -13,8 +13,8 @@ from tests.conftest import asset_path, ASSET_MESH_CHAIR
 
 
 # Sample assets 相对路径
-STATIC_MESH_REL = "StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
-BLUEPRINT_REL = "CiciToonCharacterShaderPa/Content/CiciToonCharacterShaderPak/Blueprints/Pawn/BP_Character.uasset"
+STATIC_MESH_REL = "StackOBot_M_BotBase.uasset"
+BLUEPRINT_REL = "StackOBot_BP_Drone.uasset"
 
 
 class TestDependsMapFPackageIndexSemantics:

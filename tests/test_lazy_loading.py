@@ -49,10 +49,10 @@ class TestParsePackageLazy:
 
     def _get_test_asset(self):
         """获取一个可用的测试 .uasset 文件路径"""
-        samples = Path(r"E:\Develop\lib\Samples")
+        samples = Path(__file__).parent / "samples"
         if not samples.exists():
             pytest.skip("测试样本目录不存在")
-        assets = list(samples.rglob("*.uasset"))
+        assets = list(samples.glob("*.uasset"))
         if not assets:
             pytest.skip("无可用 .uasset 测试文件")
         return str(assets[0])

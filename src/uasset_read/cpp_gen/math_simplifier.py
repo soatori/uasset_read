@@ -7,7 +7,6 @@
 导出：
     MathSimplifier: 数学函数简化器类
 """
-from __future__ import annotations
 
 from typing import Optional
 

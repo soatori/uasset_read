@@ -12,7 +12,6 @@ Per D-03: 核心类型硬编码字典 + 可扩展脚本路径策略。
     infer_class_prefix: 父类名 → C++ 前缀推断函数
     resolve_ue_type: 完整 UE 路径 → C++ 类型名解析函数
 """
-from __future__ import annotations
 
 import logging
 import re

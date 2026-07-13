@@ -1,59 +1,20 @@
 """Package bundle and provider helpers."""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Protocol
-import io
+from typing import Dict, Optional
 import logging
 import os
 
-from uasset_read.archive import FArchive
+from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
+from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.exceptions import ParseError
-from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
 
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
 PACKAGE_PAYLOAD_EXTENSIONS = (".uexp", ".ubulk", ".uptnl")
-
-
-class ArchiveLike(Protocol):
-    _byte_swapping: bool
-    _tolerant: bool
-
-    def read(self, size: int) -> bytes: ...
-    def seek(self, pos: int) -> None: ...
-    def tell(self) -> int: ...
-    def close(self) -> None: ...
-    def total_size(self) -> int: ...
-    def set_byte_swapping(self, enabled: bool) -> None: ...
-
-
-class ByteArchive(FArchive):
-    """In-memory archive with the same read API as FArchive."""
-
-    def __init__(self, name: str, data: bytes, tolerant: bool = False):
-        self._path = name
-        self._file = io.BytesIO(data)
-        self._byte_swapping = False
-        self._file_size = len(data)
-        self._tolerant = tolerant
-        self._mmap = None
-        self._use_mmap = False
-        self._mmap_warning = None
-        self._logger = logging.getLogger(__name__)
-        self._diagnostics: list[OffsetRangeDiagnostic] = []
-        self._hex_view_enabled: bool = False
-        self._hex_view_entries: list = []
-        self._hex_view_context: str = ""
-
-    def close(self) -> None:
-        if self._file:
-            self._file.close()
-            self._file = None
-        self._use_mmap = False
 
 
 class PackageArchive(FArchive):
@@ -68,8 +29,13 @@ class PackageArchive(FArchive):
         self._path = getattr(main_archive, "_path", "<package>")
         self._main_archive = main_archive
         self._uexp_archive = uexp_archive
-        self._main_size = main_archive.total_size()
-        self._uexp_size = uexp_archive.total_size() if uexp_archive else 0
+        try:
+            self._main_size = main_archive.total_size()
+            self._uexp_size = uexp_archive.total_size() if uexp_archive else 0
+        except Exception:
+            # 初始化失败时关闭 main_archive
+            main_archive.close()
+            raise
         self._file_size = self._main_size + self._uexp_size
         self._pos = 0
         self._byte_swapping = False
@@ -78,9 +44,9 @@ class PackageArchive(FArchive):
         self._use_mmap = False
         self._mmap_warning = None
         self._logger = logging.getLogger(__name__)
-        self._diagnostics: list[OffsetRangeDiagnostic] = []
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
         self._hex_view_enabled: bool = False
-        self._hex_view_entries: list = []
+        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""
         self._name_map: Optional[list] = None
 
@@ -183,11 +149,17 @@ class PackageBundle:
     def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
         extension = _normalize_ext(extension)
         if extension in self.payloads:
-            return ByteArchive(self.package_files[extension], self.payloads[extension], tolerant=tolerant)
+            return ByteArchive(self.payloads[extension], tolerant=tolerant, name=self.package_files[extension])
         path = self.files.get(extension)
         if path is None:
             raise ParseError(f"Package sidecar not found: {extension}")
         return FArchive(path, tolerant=tolerant)
+
+    def close(self) -> None:
+        """关闭所有打开的资源（幂等）。"""
+        # PackageBundle 本身不持有文件句柄，仅持有 provider 引用
+        # Provider 的生命周期由调用者管理
+        pass
 
 
 class PackageProvider:
@@ -200,6 +172,17 @@ class PackageProvider:
 
     def read_file(self, path: str) -> Optional[bytes]:
         raise NotImplementedError
+
+    def open_file(self, path: str) -> Optional[ArchiveLike]:
+        """打开文件返回 ArchiveLike，支持范围读取（推荐用于大文件）。
+
+        默认实现：读取完整 bytes 并包装为 ByteArchive。
+        子类可覆写此方法以提供更高效的实现（如 FArchive 的 mmap 支持）。
+        """
+        data = self.read_file(path)
+        if data is None:
+            return None
+        return ByteArchive(data, name=path)
 
     def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
         path = self._resolve_package_path(path)
@@ -257,15 +240,39 @@ class FileSystemPackageProvider(PackageProvider):
 
     def __init__(self, root: str | os.PathLike[str] | None = None):
         self.root = Path(root).resolve() if root is not None else None
+        self._list_files_cache: list[str] | None = None
+        self._cache_mtime: float | None = None  # 缓存时的目录修改时间
+
+    def _get_root_mtime(self) -> float:
+        """获取 root 目录的修改时间。"""
+        if self.root is None or not self.root.exists():
+            return 0.0
+        try:
+            return self.root.stat().st_mtime
+        except (OSError, OverflowError):
+            return 0.0
 
     def list_files(self) -> list[str]:
+        current_mtime = self._get_root_mtime()
+        # 检查缓存是否有效：存在且修改时间未变
+        if (self._list_files_cache is not None
+                and self._cache_mtime == current_mtime):
+            return self._list_files_cache
         if self.root is None or self.root.is_file():
             return []
-        return [
+        result = [
             str(path)
             for path in self.root.rglob("*")
             if path.is_file() and path.suffix.lower() in (*PACKAGE_EXTENSIONS, *PACKAGE_PAYLOAD_EXTENSIONS)
         ]
+        self._list_files_cache = result
+        self._cache_mtime = current_mtime
+        return result
+
+    def refresh_file_cache(self) -> None:
+        """清除文件列表缓存，下次 list_files() 调用时重新扫描。"""
+        self._list_files_cache = None
+        self._cache_mtime = None
 
     def read_file(self, path: str) -> Optional[bytes]:
         p = Path(path)
@@ -273,6 +280,13 @@ class FileSystemPackageProvider(PackageProvider):
             return None
         with p.open("rb") as f:
             return f.read()
+
+    def open_file(self, path: str) -> Optional[ArchiveLike]:
+        """打开文件返回 FArchive（支持 mmap 大文件）。"""
+        p = Path(path)
+        if not p.is_file():
+            return None
+        return FArchive(str(p))
 
     def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
         main = Path(path)

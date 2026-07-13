@@ -52,6 +52,9 @@ class HandlerClassAdapter(ClassHandler):
             "AnimBlueprintHandler": {"AnimBlueprintGeneratedClass"},
             "AnimSequenceHandler": {"AnimSequence"},
             "AnimMontageHandler": {"AnimMontage"},
+            "MovieSceneHandler": {"MovieScene"},
+            "MovieSceneControlRigParameterTrackHandler": {"MovieSceneControlRigParameterTrack"},
+            "MovieSceneControlRigParameterSectionHandler": {"MovieSceneControlRigParameterSection"},
         }
         class_name = type(handler_instance).__name__
         return handler_class_map.get(class_name, set())
@@ -85,7 +88,11 @@ class HandlerClassAdapter(ClassHandler):
             data = {}
             if custom_data:
                 # 根据 handler 类型提取对应的数据
-                for key in ["anim_blueprint", "anim_sequence", "anim_montage"]:
+                for key in [
+                    "anim_blueprint", "anim_sequence", "anim_montage",
+                    "movie_scene", "movie_scene_control_rig_track",
+                    "movie_scene_control_rig_section",
+                ]:
                     if key in custom_data:
                         data[key] = custom_data[key]
 
@@ -148,6 +155,9 @@ def discover_handlers() -> Dict[str, Any]:
 # 手动注册的处理器映射（优先级高于自动发现）
 手动注册的处理器: Dict[str, Any] = {}
 
+# 模块级缓存：discover_handlers() 结果，避免每次调用都扫描文件系统
+_handler_cache: Optional[Dict[str, Any]] = None
+
 
 def register_handler(export_type: str, handler: Any) -> None:
     """手动注册处理器（优先级高于自动发现）。"""
@@ -156,6 +166,9 @@ def register_handler(export_type: str, handler: Any) -> None:
 
 def get_handler(export_type: str) -> Optional[Any]:
     """获取处理器，手动注册优先于自动发现。
+
+    使用模块级缓存避免重复扫描文件系统。
+    缓存在模块重新加载时自动失效（_handler_cache 重置为 None）。
 
     Args:
         export_type: UE export 类型名称
@@ -167,10 +180,13 @@ def get_handler(export_type: str) -> Optional[Any]:
     if export_type in 手动注册的处理器:
         return 手动注册的处理器[export_type]
 
-    # 自动发现 fallback
-    _auto_discovered = discover_handlers()
-    if export_type in _auto_discovered:
-        return _auto_discovered[export_type]
+    # 自动发现 fallback（带缓存）
+    global _handler_cache
+    if _handler_cache is None:
+        _handler_cache = discover_handlers()
+
+    if export_type in _handler_cache:
+        return _handler_cache[export_type]
 
     return None
 
@@ -197,6 +213,7 @@ __all__ = [
     "parse_anim_sequence",
     "parse_sound_wave",
     "parse_sound_cue",
+    "parse_level_sequence",
     "register_asset_type_handlers",
     "AnimBlueprintHandler",
     "AnimSequenceHandler",
@@ -298,12 +315,10 @@ def register_asset_type_handlers() -> None:
         ("anim_montage", "AnimMontageHandler", ["AnimMontage"], "AnimMontageHandler"),
         ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
         ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
-        ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
         ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
         ("data_table", "parse_data_table", ["DataTable"], "DataTableHandler"),
         ("curve_table", "parse_curve_table", ["CurveTable"], "CurveTableHandler"),
         ("skeleton", "parse_skeleton", ["Skeleton"], "SkeletonHandler"),
-        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
         ("string_table", "parse_string_table", ["StringTable"], "StringTableHandler"),
         ("pose_asset", "parse_pose_asset", ["PoseAsset"], "PoseAssetHandler"),
         ("anim_bone_compression", "parse_anim_bone_compression_settings", ["AnimBoneCompressionSettings"], "AnimBoneCompressionHandler"),
@@ -311,6 +326,11 @@ def register_asset_type_handlers() -> None:
         ("subsurface_profile", "parse_subsurface_profile", ["SubsurfaceProfile"], "SubsurfaceProfileHandler"),
         ("foliage_type", "parse_foliage_type", ["FoliageType"], "FoliageTypeHandler"),
         ("skeletal_mesh_lod_settings", "parse_skeletal_mesh_lod_settings", ["SkeletalMeshLODSettings"], "SkeletalMeshLODSettingsHandler"),
+        ("movie_scene", "MovieSceneHandler", ["MovieScene"], "MovieSceneHandler"),
+        ("movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler", ["MovieSceneControlRigParameterTrack"], "MovieSceneControlRigParameterTrackHandler"),
+        ("movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler", ["MovieSceneControlRigParameterSection"], "MovieSceneControlRigParameterSectionHandler"),
+        ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
+        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

@@ -1,12 +1,14 @@
 """Lightweight readers for non-package Unreal-adjacent files."""
-from __future__ import annotations
 
 from configparser import ConfigParser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 import json
+import os
 import struct
+
+from uasset_read.memory_safety import ResourceBudget
 
 
 RAW_JSON_EXTENSIONS = {".uplugin", ".upluginmanifest"}
@@ -27,11 +29,14 @@ class RawFileResult:
         return not self.errors
 
 
-def parse_raw_file(path: str) -> RawFileResult:
+def parse_raw_file(path: str, budget: ResourceBudget | None = None) -> RawFileResult:
     """Parse a supported non-package file into lightweight metadata."""
 
     p = Path(path)
     ext = p.suffix.lower()
+    if budget is not None:
+        file_size = os.path.getsize(path)
+        budget.reserve(file_size, "raw_file_read")
     if ext in RAW_JSON_EXTENSIONS:
         return parse_json_descriptor(path)
     if ext in RAW_INI_EXTENSIONS:
@@ -72,14 +77,16 @@ def parse_audio_metadata(path: str) -> RawFileResult:
     p = Path(path)
     result = RawFileResult(path=path, file_type=p.suffix.lower().lstrip("."))
     try:
-        data = p.read_bytes()
+        file_size = p.stat().st_size
+        with open(path, "rb") as f:
+            header = f.read(12)
         result.metadata = {
-            "size": len(data),
-            "magic": data[:4].hex(),
-            "codec": _detect_audio_container(data, p.suffix.lower()),
+            "size": file_size,
+            "magic": header[:4].hex(),
+            "codec": _detect_audio_container(header, p.suffix.lower()),
         }
-        if p.suffix.lower() == ".bnk" and len(data) >= 12:
-            result.metadata["soundbank_id"] = struct.unpack_from("<I", data, 8)[0]
+        if p.suffix.lower() == ".bnk" and len(header) >= 12:
+            result.metadata["soundbank_id"] = struct.unpack_from("<I", header, 8)[0]
     except (OSError, struct.error) as exc:
         result.errors.append(str(exc))
     return result
@@ -125,16 +132,34 @@ def _detect_audio_container(data: bytes, ext: str) -> str:
 
 
 def _scrape_locres_strings(data: bytes) -> list[dict[str, Any]]:
+    """从 locres 二进制数据中提取可读字符串。
+
+    支持 ASCII（32-126）和 UTF-8 多字节序列（0x80-0xFF），
+    以 null 字节（0x00）作为字符串分隔符。
+    """
     strings: list[str] = []
     current = bytearray()
     for byte in data:
-        if 32 <= byte < 127:
+        if byte == 0:
+            # null 字节作为字符串分隔符
+            if len(current) >= 3:
+                decoded = current.decode("utf-8", errors="replace").strip("\x00")
+                if decoded:
+                    strings.append(decoded)
+            current.clear()
+        elif byte >= 32:
+            # 可打印 ASCII (32-126) 和 UTF-8 多字节起始/延续字节 (128-255)
             current.append(byte)
         else:
+            # 控制字符（非 null）— 中断当前字符串
             if len(current) >= 3:
-                strings.append(current.decode("utf-8", errors="replace"))
+                decoded = current.decode("utf-8", errors="replace").strip("\x00")
+                if decoded:
+                    strings.append(decoded)
             current.clear()
     if len(current) >= 3:
-        strings.append(current.decode("utf-8", errors="replace"))
+        decoded = current.decode("utf-8", errors="replace").strip("\x00")
+        if decoded:
+            strings.append(decoded)
     return [{"value": value} for value in strings[:200]]
 

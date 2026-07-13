@@ -4,8 +4,8 @@ Each UObjectInstance represents one entry in the ImportMap or ExportMap,
 with identity (name, type, package_index), references to other
 UObjectInstances (outer, class_ref), and lazily-loaded serialized_properties.
 """
-
 from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional

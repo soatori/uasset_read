@@ -9,6 +9,8 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from uasset_read.core.utils import safe_str as _safe_str, safe_int as _safe_int, normalize_hex_guid
+
 logger = logging.getLogger(__name__)
 
 from uasset_read.models.ir import (
@@ -37,7 +39,11 @@ if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
 
 
-from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
+from uasset_read.constants import (
+    BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS,
+    CONTAINER_TYPE_MAP, CONTAINER_TYPE_PREFIX, UE_NONE_SENTINEL,
+)
+from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 
 
@@ -99,7 +105,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
     ir = PackageIR(
         header=header,
-        name_map=list(result.name_map) if result.name_map else [],
+        name_map=tuple(result.name_map) if result.name_map else (),
         imports=_build_imports(result),
         exports=exports,
         linker=linker,
@@ -130,46 +136,6 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         _bind_implementations(ir.blueprint, ir.decompiled_functions, ir.function_graphs)
 
     return ir
-
-
-def _result_status(result: "ParseResult | LinkerParseResult") -> str:
-    # 非成功分支
-    if not getattr(result, "is_success", False):
-        if (
-            getattr(result, "summary", None) is not None
-            or getattr(result, "name_map", None)
-            or getattr(result, "import_map", None)
-            or getattr(result, "export_map", None)
-        ):
-            return "partial"
-        return "failed"
-
-    # is_success=True 分支：综合检查 export 级 parse_status
-    if getattr(result, "errors", None):
-        return "partial"
-    metadata = getattr(result, "metadata", None) or {}
-    if metadata.get("lightweight_tolerant_parse"):
-        return "partial"
-
-    # 检查 export 级状态
-    export_map = getattr(result, "export_map", None) or []
-    if export_map and isinstance(export_map, list):
-        _PARTIAL_STATUSES = {"opaque", "skipped", "partial_metadata", "opaque_unversioned", "fallback"}
-        _FAILED_STATUSES = {"failed"}
-        failed_count = 0
-        partial_count = 0
-        for exp in export_map:
-            status = getattr(exp, "parse_status", None)
-            if status in _FAILED_STATUSES:
-                failed_count += 1
-            elif status in _PARTIAL_STATUSES:
-                partial_count += 1
-        if failed_count == len(export_map):
-            return "failed"
-        if failed_count > 0 or partial_count > 0:
-            return "partial"
-
-    return "success"
 
 
 def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
@@ -212,7 +178,7 @@ def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -
             elif node_data is not None:
                 ref = getattr(node_data, "function_reference", None)
             raw_name = getattr(ref, "member_name", None) if ref is not None else None
-            if raw_name and raw_name != "None":
+            if raw_name and raw_name != UE_NONE_SENTINEL:
                 function_name = raw_name.split("/")[-1]
             entries.append({
                 "function_name": function_name,
@@ -552,17 +518,45 @@ def _build_node_ir(node) -> NodeIR:
     for pin in getattr(node, "pins", None) or []:
         pins.append(_build_pin_ir(pin))
 
+    # 提取 Enhanced Input 相关字段
+    input_action_path = None
+    trigger_events = []
+    event_type = None
+
+    node_class = _safe_str(getattr(node, "class_name", None))
+    if "EnhancedInputAction" in node_class:
+        # 从 node_data 提取
+        node_data = getattr(node, "node_data", None)
+        if isinstance(node_data, dict):
+            input_action_path = node_data.get("input_action_path")
+            trigger_events = node_data.get("trigger_events", [])
+            event_type = node_data.get("event_type")
+
+        # 从节点属性提取（备用路径）
+        if not input_action_path:
+            input_action_path = getattr(node, "input_action_path", None)
+        if not trigger_events:
+            trigger_events = getattr(node, "trigger_events", []) or []
+        if not event_type:
+            event_type = getattr(node, "event_type", None)
+
     return NodeIR(
         node_guid=_normalize_guid(getattr(node, "node_guid", None)),
-        node_class=_safe_str(getattr(node, "class_name", None)),
+        node_class=node_class,
         node_comment=getattr(node, "node_comment", None),
         pins=pins,
         execution_flow=getattr(node, "execution_flow", None) or [],
         macro_expansion=getattr(node, "macro_expansion", None),
+        input_action_path=input_action_path,
+        trigger_events=trigger_events,
+        event_type=event_type,
     )
 
 
 def _build_pin_ir(pin) -> PinIR:
+    # 提取 pin_guid
+    pin_guid = _normalize_guid(getattr(pin, "pin_guid", None))
+
     linked_to = []
     for ref in getattr(pin, "linked_to_raw", None) or []:
         guid = _extract_pin_guid(ref)
@@ -592,9 +586,8 @@ def _build_pin_ir(pin) -> PinIR:
         pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
 
         # EPinContainerType: None=0, Array=1, Set=2, Map=3
-        _CONTAINER_MAP = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
         _container_int = getattr(pin_type_obj, "container_type", 0)
-        container_type = _CONTAINER_MAP.get(_container_int, "None")
+        container_type = CONTAINER_TYPE_MAP.get(_container_int, "None")
 
         is_reference = bool(getattr(pin_type_obj, "is_reference", False))
         is_const = bool(getattr(pin_type_obj, "is_const", False))
@@ -615,6 +608,7 @@ def _build_pin_ir(pin) -> PinIR:
         )
 
     return PinIR(
+        pin_guid=pin_guid,
         pin_name=_safe_str(getattr(pin, "pin_name", None)),
         pin_type=_safe_str(pin_type_obj),
         linked_to=linked_to,
@@ -782,6 +776,7 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
         # 从 signature 解析 return_type（签名格式："ReturnType FuncName(params)"）
         return_type = _extract_return_type(func.signature)
         parameters = _extract_parameters(func)
+        confidence = _infer_bytecode_confidence(func.fallback_reasons)
         decompiled.append(DecompiledFunctionIR(
             name=func.function_name,
             signature=func.signature,
@@ -789,8 +784,24 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             parameters=parameters,
             return_type=return_type,
             fallback_reasons=func.fallback_reasons,
+            bytecode_confidence=confidence,
         ))
     return decompiled
+
+
+def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
+    """根据 fallback_reasons 推断字节码置信度。
+
+    置信度等级（从高到低）：
+    - verified: 标准 UStruct 提取路径，无 fallback
+    - fallback: BPGC 提取（cooked 资产的正常降级路径）
+    - heuristic: 序列化字节流启发式扫描恢复（最低置信度）
+    """
+    if "serial_scan_recovery" in fallback_reasons:
+        return "heuristic"
+    if "bpgc_bytecode_extraction" in fallback_reasons:
+        return "fallback"
+    return "verified"
 
 
 def _extract_return_type(signature: str) -> str:
@@ -1029,8 +1040,7 @@ def _format_var_type(var) -> str:
     container = getattr(pin_type, "container_type", 0)
 
     # 容器类型前缀（EPinContainerType: None=0, Array=1, Set=2, Map=3）
-    container_map = {1: "TArray", 2: "TSet", 3: "TMap"}
-    prefix = container_map.get(container, "")
+    prefix = CONTAINER_TYPE_PREFIX.get(container, "")
 
     # 基础类型
     if category == "struct" and object_name:
@@ -1123,34 +1133,14 @@ def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
     return None
 
 
-def _safe_str(value) -> str:
-    """安全地将值转为字符串，None 返回空字符串。"""
-    if value is None:
-        return ""
-    return str(value)
-
-
-def _safe_int(value, default: int = 0) -> int:
-    """安全地将值转为 int，仅接受真实 int 和明确数字字符串，其他类型返回 default。
-
-    MagicMock 对象实现了 __int__ 返回 1，因此必须显式排除非 int 对象。
-    """
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
 
 
 def _normalize_guid(guid: str | None) -> str | None:
     """将 GUID 标准化为 32 位小写 hex（无横杠）。"""
     if not guid:
         return None
-    cleaned = str(guid).replace("-", "").lower()
-    if len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
+    cleaned = normalize_hex_guid(str(guid))
+    if cleaned and len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
         return cleaned
     return None
 

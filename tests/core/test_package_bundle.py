@@ -37,8 +37,8 @@ def test_filesystem_bundle_supports_umap(tmp_path: Path):
 
 def test_package_archive_reads_across_uexp_boundary():
     archive = PackageArchive(
-        ByteArchive("A.uasset", b"abcd"),
-        ByteArchive("A.uexp", b"efgh"),
+        ByteArchive(b"abcd", name="A.uasset"),
+        ByteArchive(b"efgh", name="A.uexp"),
     )
 
     archive.seek(2)

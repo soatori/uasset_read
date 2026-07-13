@@ -1,5 +1,4 @@
 """Kismet bytecode expression system -- EExprToken + KismetExpression class hierarchy + FKismetArchive."""
-from __future__ import annotations
 
 from uasset_read.kismet.tokens import (
     EExprToken, ECastToken, EScriptInstrumentationType,

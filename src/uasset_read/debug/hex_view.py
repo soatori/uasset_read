@@ -3,7 +3,6 @@
 结构化字节偏移追踪，记录每次读取操作的字段名称、类型、值和文件偏移范围。
 仅在 --hex-view 模式下启用，避免性能损失。
 """
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -151,7 +150,7 @@ def format_hex_dump(
         # 十六进制部分
         hex_parts = []
         for i, b in enumerate(chunk):
-            offset = line_start + i
+            _offset = line_start + i  # noqa: F841 - computed for context
             hex_parts.append(f"{b:02X}")
         hex_str = " ".join(hex_parts)
         hex_str = hex_str.ljust(bytes_per_line * 3 - 1)
@@ -164,7 +163,7 @@ def format_hex_dump(
         for entry in sorted_entries:
             if entry.start < line_end and entry.stop > line_start:
                 label_start = max(entry.start, line_start)
-                label_end = min(entry.stop, line_end)
+                _label_end = min(entry.stop, line_end)  # noqa: F841 - computed for context
                 if label_start == entry.start:
                     labels.append(entry.key)
         label_str = ", ".join(labels) if labels else ""

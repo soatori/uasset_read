@@ -10,7 +10,6 @@
 - Engine/Source/Runtime/Engine/Classes/Sound/SoundCue.h
 - Engine/Source/Runtime/Engine/Private/Sound/SoundCue.cpp
 """
-from __future__ import annotations
 
 import logging
 import struct

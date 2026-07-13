@@ -8,6 +8,15 @@ uasset_read常量定义
 from enum import IntEnum
 
 # ============================================================================
+# CLI Exit Codes
+# ============================================================================
+
+EXIT_SUCCESS = 0
+EXIT_PARSE_ERROR = 1
+EXIT_FILE_NOT_FOUND = 2
+EXIT_ARGUMENT_ERROR = 3
+
+# ============================================================================
 # Package文件标签（来自UE源码）
 # ============================================================================
 
@@ -38,6 +47,9 @@ MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
 MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
 MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
 MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
+MAX_GENERATIONS = 10_000           # Maximum Generations table entries
+MAX_COMPRESSED_CHUNKS = 100_000    # Maximum CompressedChunks entries
+MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
 MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (降低阈值，减少内存峰值)
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
 MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
@@ -69,7 +81,7 @@ PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
 # 来源: UE 源码 ObjectMacros.h
 # ============================================================================
 
-PKG_None                        = 0x00000000  # No flags
+PKG_None                        = 0x00000000  # No flags — 仅用于 decode_package_flags
 PKG_NewlyCreated                = 0x00000001  # Newly created package, not saved yet. In editor only.
 PKG_ClientOptional              = 0x00000002  # Purely optional for clients.
 PKG_ServerSideOnly              = 0x00000004  # Only needed on the server side.
@@ -154,9 +166,9 @@ def decode_package_flags(flags: int) -> list[str]:
 
 MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
 MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
+MAX_SUBGRAPHS = 1000                   # 单图最大子图数（损坏资产防御）
 MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
 MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
-MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节长度上限（UTF-16 码元对齐）
 
 # ============================================================================
 # 轻量容错解析阈值
@@ -164,23 +176,31 @@ MAX_FTEXT_UTF16_LEN = 20_000           # 20 KB — FText/FString UTF-16 字节�
 
 LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用轻量容错解析
 
+# ControlRig 等大型资产文件的特殊阈值
+# 这些文件的 export 数量天然很大（RigVM 节点、RigHierarchy 元素等），
+# 300 的默认阈值会误触发轻量解析导致蓝图数据丢失
+# 参考: UE ControlRig.cpp / RigVM 相关模块
+CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # ControlRig 类文件的轻量解析阈值
+
+# 已知大型文件类名子串 — export class 名称包含以下任一子串时使用高阈值
+CONTROL_RIG_LARGE_FILE_CLASSES = frozenset({
+    "ControlRig",
+    "RigHierarchy",
+    "RigVM",
+    "RigUnit",
+})
+
 # ============================================================================
-# FPropertyTypeName 最大节点数（UE 源码限制）
+# FPropertyTypeName type node read limit
 # ============================================================================
 
-MAX_TYPENODE_NODES = 20                # FPropertyTypeName 最大节点数
+MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name
 
 # ============================================================================
 # PropertyTag extension flags
 # ============================================================================
 
 PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
-
-# ============================================================================
-# FPropertyTypeName type node read limit (relaxed from MAX_TYPENODE_NODES for complex nested types)
-# ============================================================================
-
-MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name (relaxed from MAX_TYPENODE_NODES=20 for complex nested types)
 
 # ============================================================================
 # UE5版本常量（EUnrealEngineObjectUE5Version）
@@ -210,17 +230,17 @@ UE5_IMPORT_TYPE_HIERARCHIES = 1018
 # ============================================================================
 
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516
-UE4_ADD_STRING_ASSET_REFERENCES_MAP = 516
-UE4_SERIALIZE_TEXT_IN_PACKAGES = 517
-UE4_ADDED_SEARCHABLE_NAMES = 518
-UE4_ADDED_PACKAGE_OWNER = 519
+UE4_ADD_STRING_ASSET_REFERENCES_MAP = 384
+UE4_SERIALIZE_TEXT_IN_PACKAGES = 459
+UE4_ADDED_SEARCHABLE_NAMES = 510
+UE4_ADDED_PACKAGE_OWNER = 518
 UE4_NON_OUTER_PACKAGE_IMPORT = 520
-UE4_NAME_HASHES_SERIALIZED = 514  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
-UE4_LOAD_FOR_EDITOR_GAME = 364
-UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 484
-UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 506
-UE4_TemplateIndex_IN_COOKED_EXPORTS = 507
-UE4_64BIT_EXPORTMAP_SERIALSIZES = 510
+UE4_NAME_HASHES_SERIALIZED = 504  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
+UE4_LOAD_FOR_EDITOR_GAME = 365
+UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
+UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
+UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
+UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
 
 # ============================================================================
 # 更多 CustomVersion GUIDs
@@ -286,8 +306,6 @@ FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
 # ============================================================================
 # FUE5ReleaseStreamObjectVersion Thresholds
 # ============================================================================
-
-FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION = 36
 
 # ============================================================================
 # 蓝图元数据键（UE 编辑器内部字段）
@@ -356,7 +374,7 @@ DATA_BOUNDARY_NODES = frozenset({
 
 ETRIGGER_EVENT_PIN_MAP = {
     "Started": "Started",
-    "Triggered": "Ongoing",
+    "Triggered": "Triggered",
     "Completed": "Completed",
     "Exited": "Exited",
 }
@@ -464,15 +482,6 @@ CPF_AllowSelfReference = 0x1000000000000000  # L494
 CPF_ForcePostConstructLink = 0x2000000000000000  # L495
 
 # ============================================================================
-# CLI退出代码
-# ============================================================================
-
-EXIT_SUCCESS = 0
-EXIT_PARSE_ERROR = 1
-EXIT_FILE_NOT_FOUND = 2
-EXIT_ARGUMENT_ERROR = 3
-
-# ============================================================================
 # 游戏变体枚举（GameVariant）
 # ============================================================================
 
@@ -505,8 +514,63 @@ GAME_VARIANT_VERSIONS = {
     },
 }
 
+# ============================================================================
+# 属性类型名 → 无版本化大小映射（property_parser._fixed_unversioned_size）
+# ============================================================================
+
+FIXED_UNVERSIONED_SIZES: dict[str, int] = {
+    "BoolProperty": 4,
+    "IntProperty": 4,
+    "UInt32Property": 4,
+    "FloatProperty": 4,
+    "DoubleProperty": 8,
+    "Int64Property": 8,
+    "UInt64Property": 8,
+    "Int16Property": 2,
+    "UInt16Property": 2,
+    "Int8Property": 1,
+    "ByteProperty": 1,
+    "ObjectProperty": 4,
+    "ClassProperty": 4,
+    "NameProperty": 8,
+    "GuidProperty": 16,
+}
+
+# ============================================================================
+# EPinContainerType 整数 → 字符串映射
+# ============================================================================
+
+CONTAINER_TYPE_MAP: dict[int, str] = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
+CONTAINER_TYPE_PREFIX: dict[int, str] = {1: "TArray", 2: "TSet", 3: "TMap"}
+
+# ============================================================================
+# UE PropertyTag 终止标记
+# ============================================================================
+
+UE_NONE_SENTINEL = "None"
+
+# ============================================================================
+# 通用安全计数上限
+# ============================================================================
+
+MAX_SAFE_COUNT = 10_000  # 用于 FText args / MulticastDelegate / FieldPath 等子元素计数验证
+
+# ============================================================================
+# GUID 字节格式化
+# ============================================================================
+
+def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
+    """将 16 原始 FGuid 字节格式化为稳定的 8-4-4-4-12 字符串。"""
+    text = (
+        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
+        f"{data[4]:02x}{data[5]:02x}-"
+        f"{data[6]:02x}{data[7]:02x}-"
+        f"{data[8]:02x}{data[9]:02x}-"
+        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
+    )
+    return text.upper() if uppercase else text
+
+
 def get_game_variant_config(variant: GameVariant) -> dict:
     """获取游戏变体配置。"""
     return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
-
-

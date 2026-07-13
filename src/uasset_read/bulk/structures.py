@@ -2,7 +2,6 @@
 
 用于处理大型数据块（纹理、网格体等）的存储和加载。
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntFlag
 

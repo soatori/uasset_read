@@ -408,16 +408,10 @@ class TestPreloadPopulatesProperties:
 # Integration tests with real UE sample assets
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEFAULT_SAMPLE_ROOT = Path(r"E:\Develop\lib\Samples")
+LOCAL_SAMPLE_ROOT = Path(__file__).parent.parent / "samples"
 
-STATIC_MESH = DEFAULT_SAMPLE_ROOT / (
-    "StarterContent/Content/StarterContent/Props/"
-    "SM_Chair.uasset"
-)
-BLUEPRINT = DEFAULT_SAMPLE_ROOT / (
-    "FirstPerson/Content/FirstPerson/Blueprints/"
-    "BP_FirstPersonCharacter.uasset"
-)
+STATIC_MESH = LOCAL_SAMPLE_ROOT / "StackOBot_M_BotBase.uasset"
+BLUEPRINT = LOCAL_SAMPLE_ROOT / "StackOBot_BP_Drone.uasset"
 
 
 @pytest.mark.integration
@@ -531,21 +525,20 @@ class TestLinkerLifecycleIntegration:
 # 合并自 test_lifecycle_preload.py 的集成测试
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEFAULT_SAMPLE_ROOT_LIFECYCLE = Path(r"E:\Develop\lib\Samples")
+LOCAL_SAMPLE_ROOT_LIFECYCLE = Path(__file__).parent.parent / "samples"
 
 
 @pytest.fixture(scope="module")
 def ue_sample_root() -> Path:
-    root = Path(os.environ.get("UE_SAMPLE_ROOT", str(DEFAULT_SAMPLE_ROOT_LIFECYCLE)))
-    if not root.exists():
-        pytest.skip(f"sample root not found: {root}")
-    return root
+    if not LOCAL_SAMPLE_ROOT_LIFECYCLE.exists():
+        pytest.skip(f"sample root not found: {LOCAL_SAMPLE_ROOT_LIFECYCLE}")
+    return LOCAL_SAMPLE_ROOT_LIFECYCLE
 
 
 @pytest.fixture(scope="module")
 def static_mesh_asset(ue_sample_root) -> Path:
     """StaticMesh 测试资产。"""
-    path = ue_sample_root / r"StarterContent/Content/StarterContent/Architecture/SM_AssetPlatform.uasset"
+    path = ue_sample_root / "StackOBot_M_BotBase.uasset"
     if not path.exists():
         pytest.skip(f"asset not found: {path}")
     return path
@@ -554,7 +547,7 @@ def static_mesh_asset(ue_sample_root) -> Path:
 @pytest.fixture(scope="module")
 def blueprint_asset(ue_sample_root) -> Path:
     """Blueprint 测试资产。"""
-    path = ue_sample_root / r"FirstPerson/Content/FirstPerson/Blueprints/BP_FirstPersonCharacter.uasset"
+    path = ue_sample_root / "StackOBot_BP_Drone.uasset"
     if not path.exists():
         pytest.skip(f"asset not found: {path}")
     return path

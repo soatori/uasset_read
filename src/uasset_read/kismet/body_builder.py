@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """
 Kismet Expression → C++ Function Body Builder.
 
 Assembles a list of KismetExpression into a complete
 C++ function body with proper indentation, semicolons, braces, and labels.
 """
-from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.kismet.translator import TypeRegistry
     from uasset_read.link.linker import PackageLinker
+    from uasset_read.kismet.cfg.data import CFG
 
 
 # Statements that already end with ';' internally or shouldn't get one added.
@@ -121,9 +123,9 @@ def _emit_for_block(
     label_set: set[int],
 ) -> list[str]:
     """输出 for 循环块。"""
-    start_idx = for_result["start"]
+    _start_idx = for_result["start"]  # noqa: F841 - extracted for clarity
     body_start = for_result["body_start"]
-    body_end = for_result["body_end"]
+    _body_end = for_result["body_end"]  # noqa: F841 - extracted for clarity
     condition = for_result["condition"]
     inc_start = for_result["increment_start"]
     inc_end = for_result["increment_end"]
@@ -197,7 +199,7 @@ def _emit_while_block(
     label_set: set[int],
 ) -> list[str]:
     """输出 while 循环块。"""
-    start_idx = while_result["start"]
+    _start_idx = while_result["start"]  # noqa: F841 - extracted for clarity
     body_start = while_result["body_start"]
     body_end = while_result["body_end"]
     condition = while_result["condition"]
@@ -521,11 +523,11 @@ class FunctionBodyBuilder:
         Returns:
             (formatted C++ function body, CFG) 元组。
         """
-        from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree, decompose_regions
+        from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree
         from uasset_read.kismet.translator import KismetTranslator
 
         cfg = build_cfg(expressions)
-        dom_tree = compute_dominator_tree(cfg)
+        _dom_tree = compute_dominator_tree(cfg)  # noqa: F841 - computed for future use
 
         translator = KismetTranslator(
             self.type_registry, linker=self._linker, expressions=expressions

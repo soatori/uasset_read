@@ -3,7 +3,6 @@ GameDirectoryProvider — 游戏目录自动扫描提供者。
 
 扫描指定根目录下的游戏资产文件，支持按扩展名过滤和模式匹配。
 """
-from __future__ import annotations
 
 import fnmatch
 import os
@@ -41,6 +40,7 @@ class GameDirectoryProvider:
             raise FileNotFoundError(f"目录不存在: {self._root}")
         if not self._root.is_dir():
             raise NotADirectoryError(f"路径不是目录: {self._root}")
+        self._list_files_cache: dict[str, list[Path]] = {}
 
     @property
     def root(self) -> Path:
@@ -73,7 +73,7 @@ class GameDirectoryProvider:
 
     def list_files(self, extension: str) -> List[Path]:
         """
-        列出指定扩展名的所有文件（递归扫描）。
+        列出指定扩展名的所有文件（递归扫描，带缓存）。
 
         Parameters
         ----------
@@ -87,12 +87,20 @@ class GameDirectoryProvider:
         """
         ext = extension if extension.startswith(".") else f".{extension}"
         ext_lower = ext.lower()
+        if ext_lower in self._list_files_cache:
+            return self._list_files_cache[ext_lower]
         results: List[Path] = []
         for dirpath, _, filenames in os.walk(self._root):
             for fn in filenames:
                 if fn.lower().endswith(ext_lower):
                     results.append(Path(dirpath) / fn)
-        return sorted(results)
+        sorted_results = sorted(results)
+        self._list_files_cache[ext_lower] = sorted_results
+        return sorted_results
+
+    def refresh_file_cache(self) -> None:
+        """清除文件列表缓存，下次 list_files() 调用时重新扫描。"""
+        self._list_files_cache.clear()
 
     def list_uasset_files(self) -> List[Path]:
         """

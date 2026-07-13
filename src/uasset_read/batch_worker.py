@@ -1,8 +1,8 @@
 """Subprocess-isolated per-asset worker for :func:`uasset_read.core.parse_batch`."""
 
-from __future__ import annotations
 
 import argparse
+import collections
 import json
 import logging
 import os
@@ -10,6 +10,7 @@ import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -23,12 +24,94 @@ from uasset_read.memory_safety import (
     _get_process_rss_mb,
 )
 
+# stderr drain 默认上限：保留最后 1 MB 输出
+_STDERR_DRAIN_MAX_BYTES = 1024 * 1024
+_STDERR_DRAIN_MAX_LINES = 10_000
+
+
+class _StderrDrain:
+    """有界 stderr drain — 保留尾部，防止管道死锁。
+
+    使用后台线程持续读取子进程 stderr，避免管道缓冲区填满后子进程阻塞写入
+    导致父进程 ``wait()`` 永远不返回的死锁。内部使用 deque 保留最后 N 行 /
+    N 字节，超出部分自动丢弃。
+    """
+
+    def __init__(
+        self,
+        max_bytes: int = _STDERR_DRAIN_MAX_BYTES,
+        max_lines: int = _STDERR_DRAIN_MAX_LINES,
+    ) -> None:
+        self._max_bytes = max_bytes
+        self._max_lines = max_lines
+        self._lines: collections.deque[str] = collections.deque(maxlen=max_lines)
+        self._total_bytes: int = 0
+        self._dropped_count: int = 0
+        self._thread: threading.Thread | None = None
+
+    def start(self, proc: subprocess.Popen[bytes]) -> None:
+        """启动后台 drain 线程。"""
+        if proc.stderr is None:
+            return
+        self._thread = threading.Thread(
+            target=self._drain_loop,
+            args=(proc,),
+            daemon=True,
+            name="stderr-drain",
+        )
+        self._thread.start()
+
+    def _drain_loop(self, proc: subprocess.Popen[bytes]) -> None:
+        """持续读取 stderr 行直到 EOF。"""
+        try:
+            assert proc.stderr is not None
+            for raw_line in proc.stderr:
+                line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
+                self._append(line)
+        except (OSError, ValueError) as exc:
+            logger.debug("stderr drain 异常: %s", exc)
+
+    def _append(self, line: str) -> None:
+        """添加一行，超出字节上限时丢弃最旧行。"""
+        line_bytes = len(line.encode("utf-8", errors="replace"))
+        # 检查 deque 是否会自动丢弃旧行
+        if self._lines.maxlen is not None and len(self._lines) >= self._lines.maxlen:
+            old = self._lines[0]
+            self._total_bytes -= len(old.encode("utf-8", errors="replace"))
+            self._dropped_count += 1
+        self._lines.append(line)
+        self._total_bytes += line_bytes
+        # 如果总字节数仍超限，继续丢弃旧行
+        while self._total_bytes > self._max_bytes and len(self._lines) > 1:
+            old = self._lines.popleft()
+            self._total_bytes -= len(old.encode("utf-8", errors="replace"))
+            self._dropped_count += 1
+
+    def join(self, timeout: float | None = None) -> None:
+        """等待 drain 线程完成。"""
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+
+    @property
+    def text(self) -> str:
+        """返回收集到的 stderr 文本。"""
+        return "".join(self._lines)
+
+    @property
+    def dropped_count(self) -> int:
+        return self._dropped_count
+
+    @property
+    def total_bytes(self) -> int:
+        return self._total_bytes
+
 
 @dataclass(frozen=True)
 class BatchWorkerRequest:
     file_path: str
     output_path: str
     parse_options: dict[str, Any]
+    logging_options: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +159,7 @@ def _request_to_payload(request: BatchWorkerRequest) -> dict[str, Any]:
         "file_path": request.file_path,
         "output_path": request.output_path,
         "parse_options": options,
+        "logging_options": request.logging_options or {},
     }
 
 
@@ -88,6 +172,7 @@ def _request_from_payload(payload: dict[str, Any]) -> BatchWorkerRequest:
         file_path=payload["file_path"],
         output_path=payload["output_path"],
         parse_options=options,
+        logging_options=payload.get("logging_options") or {},
     )
 
 
@@ -98,7 +183,16 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
     output_path = Path(request.output_path)
     temporary_path = _temporary_output_path(output_path, os.getpid())
     try:
-        rendered = parse_single(request.file_path, **request.parse_options)
+        options = dict(request.parse_options)
+        logging_options = request.logging_options or {}
+        if logging_options:
+            options.update({
+                "log_enabled": logging_options.get("enabled", True),
+                "log_level": logging_options.get("level"),
+                "log_dir": logging_options.get("log_dir"),
+                "log_run_id": logging_options.get("run_id"),
+            })
+        rendered = parse_single(request.file_path, **options)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path.write_text(rendered, encoding="utf-8")
         os.replace(temporary_path, output_path)
@@ -120,7 +214,8 @@ class _SubprocessAdapter:
     def __init__(self, process: subprocess.Popen) -> None:
         self._process = process
         self.pid = process.pid
-        self._stderr_text: str = ""
+        self._stderr_drain = _StderrDrain()
+        self._stderr_drain.start(process)
 
     @property
     def exitcode(self) -> int | None:
@@ -137,23 +232,15 @@ class _SubprocessAdapter:
 
     @property
     def stderr_text(self) -> str:
-        return self._stderr_text
-
-    def _drain_stderr(self) -> None:
-        """读取并缓存 stderr，防止管道资源泄漏。"""
-        if self._process.stderr is not None and self._stderr_text == "":
-            try:
-                raw = self._process.stderr.read()
-                self._stderr_text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
-            except (OSError, ValueError) as exc:
-                logger.debug("读取子进程 stderr 失败: %s", exc)
+        return self._stderr_drain.text
 
     def join(self, timeout=None) -> None:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             logger.debug("子进程 join 超时，继续执行")
-        self._drain_stderr()
+        # 等待 drain 线程消费完管道中剩余数据
+        self._stderr_drain.join(timeout=5)
 
 
 class _ResultFile:

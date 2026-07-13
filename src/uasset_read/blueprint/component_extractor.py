@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.blueprint.transform_parser import extract_component_transforms
 from uasset_read.models.properties import PropertyValue, StructValue, EnumValue
+
+if TYPE_CHECKING:
+    from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
 
 logger = logging.getLogger(__name__)
 

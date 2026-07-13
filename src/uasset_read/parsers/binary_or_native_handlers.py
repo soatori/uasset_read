@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """BinaryOrNative 类型处理器注册表。
 
 对已知的 BinaryOrNative 类型提供解析支持，失败时回退到原始字节。
@@ -5,7 +7,6 @@
 UE BinaryOrNative 序列化用于某些特殊结构（如 FInstancedStruct），
 这些结构使用原生序列化而非属性标签序列化。
 """
-from __future__ import annotations
 
 import logging
 import struct

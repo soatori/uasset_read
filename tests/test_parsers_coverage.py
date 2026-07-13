@@ -17,7 +17,7 @@ import pytest
 from uasset_read.parsers.utils import (
     extract_inner_from_tag,
     make_enum_value,
-    read_validated_count,
+    read_validated_count_tolerant,
     resolve_name_from_index,
 )
 from uasset_read.parsers.custom_properties import (
@@ -101,12 +101,12 @@ class TestExtractInnerFromTag:
 
 
 # ============================================================================
-# parsers/utils — read_validated_count
+# parsers/utils — read_validated_count_tolerant
 # ============================================================================
 
 
 class TestReadValidatedCount:
-    """read_validated_count 应正确验证数量值。"""
+    """read_validated_count_tolerant 应正确验证数量值。"""
 
     def _make_archive(self, data: bytes):
         """创建模拟的 FArchive 对象。"""
@@ -130,17 +130,17 @@ class TestReadValidatedCount:
     def test_valid_count(self):
         import struct
         archive = self._make_archive(struct.pack("<i", 10))
-        assert read_validated_count(archive, 100, "test") == 10
+        assert read_validated_count_tolerant(archive, 100, "test") == 10
 
     def test_negative_count_returns_zero(self):
         import struct
         archive = self._make_archive(struct.pack("<i", -5))
-        assert read_validated_count(archive, 100, "test") == 0
+        assert read_validated_count_tolerant(archive, 100, "test") == 0
 
     def test_over_max_returns_zero(self):
         import struct
         archive = self._make_archive(struct.pack("<i", 200))
-        assert read_validated_count(archive, 100, "test") == 0
+        assert read_validated_count_tolerant(archive, 100, "test") == 0
 
 
 # ============================================================================

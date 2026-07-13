@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Kismet Expression → C++ Pseudocode Translator.
 
@@ -8,7 +10,6 @@ Provides:
 - MathFunctionCleaner: Beautifies UKismetMathLibrary::Add_IntInt(a,b) → a + b
 - KismetTranslator: Central dispatcher with line_cpp() for all expression types
 """
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
@@ -283,7 +284,7 @@ class MathFunctionCleaner:
         if func_name.startswith("RandomFloatInRange"):
             return f"RandomFloatInRange({p[0]}, {p[1]})"
         if func_name.startswith("RandomFloat"):
-            return f"RandomFloat()"
+            return "RandomFloat()"
         if func_name.startswith("MapRangeClamped"):
             return f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})"
         if func_name.startswith("NormalizeToRange"):

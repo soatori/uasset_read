@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """PackageLinker — two-phase loading coordinator.
 
 Mirrors UE's FLinkerLoad pattern: link() creates UObjectInstance shells,
 preload(index) lazily deserializes properties on demand.
 """
-from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, List, Optional
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     )
     from uasset_read.versioning import VersionContainer
 
+from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
@@ -55,14 +57,14 @@ class PackageLinker:
         self._export_objects: List[UObjectInstance] = []
         self._root_objects: List[UObjectInstance] = []
         self._preload_cache: dict[int, bool] = {}
-        self._diagnostics: List[OffsetRangeDiagnostic] = []
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
         self._file_size: int = getattr(archive, '_file_size', 0)
         self._import_verification_errors: List[str] = []
 
     @property
     def diagnostics(self) -> List[OffsetRangeDiagnostic]:
         """返回所有偏移诊断记录。"""
-        return self._diagnostics
+        return list(self._diagnostics.entries)
 
     def link(self) -> None:
         """Create UObjectInstance shells from import/export maps.
@@ -246,6 +248,22 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # === NoneType Guard (#328) ===
+        # 防止 serial_offset/serial_size 为 None 导致 TypeError
+        if self._archive is None:
+            logger.warning("preload: archive is None for export #%d", index)
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+        if instance.serial_offset is None or instance.serial_size is None:
+            logger.warning(
+                "preload: export %d (%s) has None serial_offset or serial_size, skipping",
+                index, instance.object_name,
+            )
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
         # === Class Serialization Strategy Check ===
         # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
         # 对 OPAQUE_CLASS_PAYLOAD 类，设置初始状态但不 early return，
@@ -300,7 +318,7 @@ class PackageLinker:
                     class_name,
                 )
                 # 不 return，继续进入 parse_properties_from_export()
-            # TAGGED_PROPERTIES_ONLY / FULL_SERIALIZER — 继续正常解析
+            # TAGGED_PROPERTIES_ONLY — 继续正常解析
 
         # === Offset Validation ===
         # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
@@ -442,11 +460,12 @@ class PackageLinker:
             if inst is None:
                 continue
 
-            # 验证 class_index
-            if hasattr(imp, 'class_index') and imp.class_index and not imp.class_index.is_null:
-                class_inst = self.resolve_package_index(imp.class_index)
-                if class_inst is None:
-                    errors.append(f"Import {inst.object_name}: class_index 无法解析")
+            # 验证 class_name 在 name_map 中的有效性
+            if isinstance(imp.class_name, int):
+                if imp.class_name < 0 or imp.class_name >= len(self._name_map):
+                    errors.append(f"Import {inst.object_name}: class_name index {imp.class_name} 越界")
+            elif isinstance(imp.class_name, str) and not imp.class_name:
+                errors.append(f"Import {inst.object_name}: class_name 为空")
 
             # 验证 outer_index
             if hasattr(imp, 'outer_index') and imp.outer_index and not imp.outer_index.is_null:
