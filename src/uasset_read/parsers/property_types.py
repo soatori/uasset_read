@@ -60,7 +60,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 40,           # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
-    "TopLevelAssetPath": None,  # 两个 FName，大小可变，走 tagged fallback
+    "TopLevelAssetPath": None,  # 两个 FName，大小可变，由 fast-path 直接处理
     # 时间/帧类型
     "Timespan": 8,           # int64
     "DateTime": 8,           # uint64
@@ -231,8 +231,6 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "BoxSphereBounds3d",
     # BPInterfaceDescription（ImplementedInterfaces 数组元素）
     "BPInterfaceDescription",
-    # TopLevelAssetPath（FName + FName，大小可变）
-    "TopLevelAssetPath",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
