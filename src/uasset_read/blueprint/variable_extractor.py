@@ -119,6 +119,7 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
 
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
+    # 核心蓝图元数据
     "ParentClass",
     "ParentClassProperty",
     "SuperClass",
@@ -136,7 +137,135 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "ModulesToIgnoreInReloadAndBlueprints",
     "None",  # 终止标记
     "NoneProperty",
+    # 内部引擎属性（非用户定义变量）
+    "CachedEditorData",
+    "BlueprintStatus",
+    "BlueprintLogLevel",
+    "BlueprintCompileOptions",
+    "BlueprintGeneratedClass",
+    "OriginalClassName",
+    "HasBeenRegenerated",
+    "RegenerateClassAttemptCount",
+    "bBeingCompiled",
+    "bCompiled",
+    "bRegenerating",
+    "bDuplicating",
+    "bImportedFromAnotherAsset",
+    "bCanUseSimplifiedConstructor",
+    "bIsNewObject",
+    "bHasDocumentedClass",
+    "bDisplayCompileSucceededLog",
+    "bForceFullDeployment",
+    "bQueuedForDeletion",
+    "bRecompileOnLoad",
+    "bDisableCompileOnLoad",
+    "bDeferCompilation",
+    "bForceCompilation",
+    "bCreateNewModule",
+    "bLoadPublicModules",
+    "bRecompileAfterLoad",
+    "bEnableParallelCompilation",
+    "bEnableCompilation",
+    "bForceReregistration",
+    "bForceRegeneration",
+    "bIsIncrementalCompile",
+    "bIsRegeneratingOnLoad",
+    "bIsRegenerating",
+    "bIsRegeneratingClass",
+    "bIsRegeneratingInterface",
+    "bIsRegeneratingStruct",
+    "bIsRegeneratingEnum",
+    "bIsRegeneratingFunction",
+    "bIsRegeneratingVariable",
+    "bIsRegeneratingEvent",
+    "bIsRegeneratingDelegate",
+    "bIsRegeneratingInterfaceFunction",
+    "bIsRegeneratingInterfaceVariable",
+    "bIsRegeneratingInterfaceEvent",
+    "bIsRegeneratingInterfaceDelegate",
+    "bIsRegeneratingStructVariable",
+    "bIsRegeneratingStructFunction",
+    "bIsRegeneratingStructEvent",
+    "bIsRegeneratingStructDelegate",
+    "bIsRegeneratingEnumValue",
+    "bIsRegeneratingEnumFunction",
+    "bIsRegeneratingEnumEvent",
+    "bIsRegeneratingEnumDelegate",
+    # 渲染/编辑器相关
+    "SelectedNodes",
+    "GraphZoom",
+    "PanningAmount",
+    "bAllowRenaming",
+    "bAllowMultipleOutputs",
+    "bAllowMultipleInputs",
+    # 变量描述数组（已通过 NewVariables 处理）
+    "NewVariables",
+    # 函数/事件列表
+    "UbergraphGraph",
+    "FunctionList",
+    "EventGraphs",
 })
+
+def _is_internal_engine_property(prop_name: str) -> bool:
+    """判断属性是否为内部引擎属性（非用户定义变量）。
+
+    通过前缀和模式匹配识别常见内部属性。
+    """
+    # 常见内部引擎属性前缀
+    internal_prefixes = (
+        "b",  # 布尔标志（如 bIsRegenerating）
+        "Cached",
+        "Selected",
+        "Original",
+        "Regeneration",
+        "Compilation",
+        "Import",
+        "Export",
+        "Version",
+        "LOD",
+        "Platform",
+    )
+
+    # 检查前缀
+    for prefix in internal_prefixes:
+        if prop_name.startswith(prefix):
+            # 排除以 'b' 开头但确实是蓝图属性的特殊情况
+            if prefix == "b":
+                # 蓝图属性通常有 CPF_Edit 或 CPF_BlueprintVisible 标志
+                # 但此处无法访问 prop.value，所以仅排除明显的内部标志
+                # 保留 bIsRegenerating 等内部标志
+                internal_b_prefixes = ("bIs", "bHas", "bWas", "bCan", "bShould", "bEnable", "bForce", "bDefer", "bDisable", "bAllow", "bDisplay", "bCreate", "bLoad", "bBeing", "bDuplicating", "bImported", "bRegenerating")
+                for ibp in internal_b_prefixes:
+                    if prop_name.startswith(ibp):
+                        return True
+            else:
+                return True
+
+    # 检查常见内部属性模式
+    internal_patterns = (
+        "Graph",
+        "Node",
+        "Pin",
+        "Edge",
+        "Connection",
+        "Link",
+        "Reference",
+        "Index",
+        "Offset",
+        "Size",
+        "Count",
+        "Type",
+        "Class",
+        "Package",
+        "Module",
+        "Plugin",
+    )
+    for pattern in internal_patterns:
+        if pattern in prop_name and prop_name.startswith(pattern):
+            return True
+
+    return False
+
 
 def _map_property_flags(flags: int) -> Dict[str, bool]:
     """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
@@ -264,6 +393,11 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
 
         # 跳过终止标记、系统属性和蓝图元数据属性
         if prop_name in BLUEPRINT_METADATA_PROPERTY_NAMES:
+            continue
+
+        # 额外过滤：跳过以常见内部引擎属性名开头的属性
+        # 这些属性通常不是用户定义的蓝图变量
+        if _is_internal_engine_property(prop_name):
             continue
 
         # 检测是否为蓝图变量描述属性

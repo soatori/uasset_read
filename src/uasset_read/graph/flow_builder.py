@@ -1363,13 +1363,13 @@ def build_function_graphs(
 
                 annotated_nodes.append(node_info)
 
-            # 构建条目
+            # 构建条目（使用 execution_chains 键与主图保持一致）
             entry: Dict = {
                 "function_name": function_name,
                 "graph_source": graph.graph_name,
                 "entry_node_guid": fe_node.node_guid,
                 "signature": signature,
-                "execution_flows": [{
+                "execution_chains": [{
                     "start_event": f"FunctionEntry.{function_name}",
                     "nodes": annotated_nodes
                 }]
