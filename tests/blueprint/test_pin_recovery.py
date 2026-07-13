@@ -3,7 +3,7 @@ import struct
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock, call
 from uasset_read.constants import MAX_FTEXT_CONSUMPTION
-from uasset_read.serializers.graph import (
+from uasset_read.serializers.graph_pin import (
     read_ue_graph_pin,
     read_pin_reference,
 )
@@ -16,10 +16,18 @@ from uasset_read.serializers.graph_pin import (
 class _TrackingArchive:
     """位置追踪 mock archive，自动管理 tell()/seek() 状态。"""
 
-    def __init__(self, read_increment=4):
+    def __init__(self, read_increment=4, file_size=1024 * 1024):
         self._pos = 0
         self._read_increment = read_increment
         self._seek_calls = []
+        self._file_size = file_size
+
+    def total_size(self):
+        return self._file_size
+
+    def _record_diagnostic(self, **kwargs):
+        """记录诊断信息（mock，不做实际操作）。"""
+        pass
 
     def tell(self):
         return self._pos
@@ -95,18 +103,17 @@ _FTEXT_HEADER_SIZE = 5
 class TestFTextSafetyNet:
     """FText 解析安全网测试。"""
 
-    @patch("uasset_read.serializers.graph.read_pin_array", return_value=[])
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array", return_value=[])
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     @pytest.mark.parametrize("large_consumption", [15000, 20000, 50000],
                              ids=["15KB", "20KB", "50KB"])
     def test_ftext_safety_net_triggers_on_large_consumption(
         self, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
         large_consumption,
     ):
         """验证 PinFriendlyName FText 消耗超过阈值时触发安全网，值被设为 None。"""
@@ -143,16 +150,15 @@ class TestFTextSafetyNet:
             f"seek 目标应大于 OwningNode+PinId 的起始位置 20"
         )
 
-    @patch("uasset_read.serializers.graph.read_pin_array", return_value=[])
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array", return_value=[])
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     def test_ftext_safety_net_allows_normal_consumption(
         self, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 FText 安全网允许正常消耗通过，值被保留。"""
         normal_consumption = 100
@@ -180,16 +186,15 @@ class TestFTextSafetyNet:
         safety_net_seeks = [s for s in archive.seek_calls if s < 100]
         assert len(safety_net_seeks) == 0
 
-    @patch("uasset_read.serializers.graph.read_pin_array", return_value=[])
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array", return_value=[])
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     def test_ftext_safety_net_default_text_value(
         self, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 DefaultTextValue 的 FText 安全网在消耗超过 10KB 时触发。"""
         friendly_name_consumed = 50
@@ -215,16 +220,15 @@ class TestFTextSafetyNet:
         # DefaultTextValue 安全网触发: 设为 None
         assert result.default_text_value is None
 
-    @patch("uasset_read.serializers.graph.read_pin_array", return_value=[])
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array", return_value=[])
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     def test_ftext_exception_seeks_back_to_start(
         self, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 FText 解析抛异常时 archive seek 回到解析前位置 +5（跳过头部）。"""
         archive = _TrackingArchive()
@@ -258,16 +262,15 @@ class TestFTextSafetyNet:
             f"实际为 {archive.seek_calls[0]}"
         )
 
-    @patch("uasset_read.serializers.graph.read_pin_array", return_value=[])
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array", return_value=[])
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     def test_ftext_safety_net_trace_mode(
         self, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证安全网触发时 trace_mode=True 正确执行且不崩溃。"""
         large_consumption = 15000
@@ -298,19 +301,19 @@ class TestPinReferenceGUID:
     """PinReference GUID 格式统一测试。"""
 
     @pytest.mark.parametrize("raw_guid,expected", [
-        ("a1b2c3d4-e5f6-7890-abcd-ef1234567890", "A1B2C3D4E5F67890ABCDEF1234567890"),
-        ("01020304-0506-0708-090a-0b0c0d0e0f10", "0102030405060708090A0B0C0D0E0F10"),
+        ("a1b2c3d4-e5f6-7890-abcd-ef1234567890", "a1b2c3d4e5f67890abcdef1234567890"),
+        ("01020304-0506-0708-090a-0b0c0d0e0f10", "0102030405060708090a0b0c0d0e0f10"),
         ("00000000-0000-0000-0000-000000000000", "0" * 32),
     ], ids=["dashed-upper", "dashed-lower", "zero-guid"])
     def test_read_pin_reference_normalizes_guid(self, raw_guid, expected):
-        """验证 read_pin_reference 将各种 GUID 格式归一化为 32 字符大写 hex。"""
+        """验证 read_pin_reference 将各种 GUID 格式归一化为 32 字符小写 hex。"""
         fake_archive = MagicMock()
         fake_archive.read_i32.side_effect = [0, 1]
 
         export_map = [MagicMock(object_name="TestNode")]
         import_map = []
 
-        with patch("uasset_read.serializers.graph._read_guid", return_value=raw_guid):
+        with patch("uasset_read.serializers.graph_pin._read_guid", return_value=raw_guid):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
         assert result is not None
@@ -338,7 +341,7 @@ class TestPinReferenceGUID:
         export_map = []
         import_map = [MagicMock(object_name="ImportedClass")]
 
-        with patch("uasset_read.serializers.graph._read_guid",
+        with patch("uasset_read.serializers.graph_pin._read_guid",
                     return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
@@ -354,7 +357,7 @@ class TestPinReferenceGUID:
         export_map = [MagicMock(object_name="OnlyNode")]
         import_map = []
 
-        with patch("uasset_read.serializers.graph._read_guid",
+        with patch("uasset_read.serializers.graph_pin._read_guid",
                     return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
@@ -370,7 +373,7 @@ class TestPinReferenceGUID:
         export_map = []
         import_map = [MagicMock(object_name="OnlyImport")]
 
-        with patch("uasset_read.serializers.graph._read_guid",
+        with patch("uasset_read.serializers.graph_pin._read_guid",
                     return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
@@ -385,7 +388,7 @@ class TestPinReferenceGUID:
         export_map = [MagicMock(object_name="Node")]
         import_map = [MagicMock(object_name="Import")]
 
-        with patch("uasset_read.serializers.graph._read_guid",
+        with patch("uasset_read.serializers.graph_pin._read_guid",
                     return_value="a1b2c3d4-e5f6-7890-abcd-ef1234567890"):
             result = read_pin_reference(fake_archive, [], export_map, import_map)
 
@@ -396,18 +399,17 @@ class TestPinReferenceGUID:
 class TestLinkedToRecovery:
     """LinkedTo 恢复机制测试。"""
 
-    @patch("uasset_read.serializers.graph.read_pin_array")
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array")
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
-    @patch("uasset_read.serializers.graph.logger")
+    @patch("uasset_read.serializers.graph_pin.logger")
     def test_recover_to_subpins_result_is_used(
         self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 _try_recover_to_subpins 返回值被正确使用。"""
         mock_pin_array.side_effect = struct.error("LinkedTo parse error")
@@ -444,18 +446,17 @@ class TestLinkedToRecovery:
         assert info_args[1] == 100  # recovered_pos
         assert info_args[2] == "subpins_resync"  # recovery_type
 
-    @patch("uasset_read.serializers.graph.read_pin_array")
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array")
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
-    @patch("uasset_read.serializers.graph.logger")
+    @patch("uasset_read.serializers.graph_pin.logger")
     def test_linkedto_failure_log_dedup_with_pin_name(
         self, mock_logger, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证失败日志去重包含 pin_name。"""
         mock_pin_array.side_effect = struct.error("test error")
@@ -469,7 +470,7 @@ class TestLinkedToRecovery:
         name_map, summary, export_map, import_map = _make_pin_args()
 
         # 使用 patch 清除线程局部状态
-        with patch("uasset_read.serializers.graph._get_thread_local") as mock_tls:
+        with patch("uasset_read.serializers.graph_pin._get_thread_local") as mock_tls:
             tls_obj = MagicMock()
             tls_obj.linkedto_failure_seen = set()
             mock_tls.return_value = tls_obj
@@ -489,19 +490,18 @@ class TestLinkedToRecovery:
             error_args = mock_logger.error.call_args[0]
             assert "LinkedTo read failed at pos" in error_args[0]
 
-    @patch("uasset_read.serializers.graph.read_pin_array")
-    @patch("uasset_read.serializers.graph.read_pin_reference", return_value=None)
-    @patch("uasset_read.serializers.graph._read_guid", return_value="00000000-0000-0000-0000-000000000000")
-    @patch("uasset_read.serializers.graph.peek_valid_pin_array_count", return_value=0)
-    @patch("uasset_read.serializers.graph._read_fstring_safe", return_value="")
-    @patch("uasset_read.serializers.graph.read_ed_graph_pin_type")
-    @patch("uasset_read.serializers.graph._read_ftext_value")
+    @patch("uasset_read.serializers.graph_pin.read_pin_array")
+    @patch("uasset_read.serializers.graph_pin.read_pin_reference", return_value=None)
+    @patch("uasset_read.serializers.graph_pin._read_guid", return_value="00000000-0000-0000-0000-000000000000")
+    @patch("uasset_read.serializers.graph_pin._read_fstring_safe", return_value="")
+    @patch("uasset_read.serializers.graph_pin.read_ed_graph_pin_type")
+    @patch("uasset_read.serializers.graph_pin._read_ftext_value")
     @patch("uasset_read.serializers.graph_pin._try_recover_to_subpins")
-    @patch("uasset_read.serializers.graph._get_thread_local")
-    @patch("uasset_read.serializers.graph.logger")
+    @patch("uasset_read.serializers.graph_pin._get_thread_local")
+    @patch("uasset_read.serializers.graph_pin.logger")
     def test_recovery_result_none_skips_info_log(
         self, mock_logger, mock_tls, mock_recover, mock_ftext, mock_pin_type, mock_fstring,
-        mock_probe, mock_guid, mock_pin_ref, mock_pin_array,
+        mock_guid, mock_pin_ref, mock_pin_array,
     ):
         """验证 _try_recover_to_subpins 返回 None 时不输出 info 日志。"""
         mock_pin_array.side_effect = struct.error("LinkedTo parse error")

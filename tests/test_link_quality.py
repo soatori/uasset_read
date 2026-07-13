@@ -83,14 +83,14 @@ class TestVerifyImportsReturnDiscarded:
         linker = _make_linker(export_count=1, import_count=2)
         linker.link()
 
-        # 构造一个 class_index 越界的 import
+        # 构造一个 outer_index 越界的 import
         imp = linker._import_map[1]
-        imp.class_index = PackageIndex(999)  # 不存在的 export
+        imp.outer_index = PackageIndex(999)  # 不存在的 export
 
         errors = linker._verify_imports()
         assert isinstance(errors, list)
         assert len(errors) > 0
-        assert "class_index 无法解析" in errors[0]
+        assert "outer_index 无法解析" in errors[0]
 
     def test_post_load_preserves_verify_imports_result(self):
         """post_load 保留 _verify_imports 的返回值 — 修复 #250 (M-21)。
@@ -100,9 +100,9 @@ class TestVerifyImportsReturnDiscarded:
         linker = _make_linker(export_count=1, import_count=2)
         linker.link()
 
-        # 构造一个 class_index 越界的 import
+        # 构造一个 outer_index 越界的 import
         imp = linker._import_map[1]
-        imp.class_index = PackageIndex(999)  # 不存在的 export
+        imp.outer_index = PackageIndex(999)  # 不存在的 export
 
         # 手动 preload（mock parser）
         linker._export_objects[0]._preloaded = True
@@ -348,6 +348,7 @@ class TestLinkerParseResultStatus:
             summary=MagicMock(),
             name_map=["Test"],
             export_map=[mock_export],
+            is_success=True,
         )
         assert result.status == "success"
 
@@ -399,6 +400,7 @@ class TestLinkerParseResultStatus:
             summary=MagicMock(),
             name_map=["Test"],
             export_map=[],
+            is_success=True,
         )
         assert result.status == "success"
 

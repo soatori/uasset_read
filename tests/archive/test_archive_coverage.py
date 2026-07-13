@@ -238,9 +238,9 @@ class TestByteArchive:
         assert ar.read_name(name_map) == "First_3"
 
     def test_read_name_out_of_range(self):
-        """索引越界 — 返回 'None'。"""
+        """索引越界 — 容错模式返回 'None'。"""
         name_map = ["First"]
-        ar = ByteArchive(struct.pack('<II', 5, 0))  # index=5 越界
+        ar = ByteArchive(struct.pack('<II', 5, 0), tolerant=True)  # index=5 越界
         assert ar.read_name(name_map) == "None"
 
     def test_read_name_no_map(self):

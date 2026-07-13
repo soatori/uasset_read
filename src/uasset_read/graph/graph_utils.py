@@ -151,11 +151,11 @@ def _is_valid_pin_guid(guid: object) -> bool:
     if normalized == "0" * 32:
         return True
 
-    # 验证 32 字符 hex
+    # 验证 32 字符 hex（normalized 为小写）
     if len(normalized) != 32:
         return False
 
-    return all(c in "0123456789ABCDEF" for c in normalized)
+    return all(c in "0123456789abcdef" for c in normalized)
 
 
 # ============================================================================

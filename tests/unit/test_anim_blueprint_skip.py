@@ -8,5 +8,6 @@ def test_anim_blueprint_generated_class_not_skipped():
 
 
 def test_anim_blueprint_extension_still_skipped():
-    """AnimBlueprintExtension 应该仍在跳过列表中（自定义序列化）"""
-    assert "AnimBlueprintExtension" in SKIP_CLASS_NAMES
+    """AnimBlueprintExtension 应该在 class_serialization_strategy 的跳过列表中（自定义序列化）"""
+    from uasset_read.parsers.class_serialization_strategy import _SKIP_CLASSES
+    assert "AnimBlueprintExtension" in _SKIP_CLASSES

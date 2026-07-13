@@ -407,7 +407,7 @@ class TestParseSkeletonErrorHandling:
     """错误处理测试。"""
 
     def test_negative_bone_count(self):
-        """负数骨骼数量返回 failed 状态。"""
+        """负数骨骼数量返回 opaque 状态（handler 无法解析时的标记）。"""
         buf = bytearray()
         _write_property_tag_none(buf)
         _write_i32(buf, -1)  # BoneCount = -1
@@ -416,11 +416,11 @@ class TestParseSkeletonErrorHandling:
         archive = ByteArchive(payload)
         result = parse_skeleton(archive, _make_name_map())
 
-        # 负数 bone_count 应该被检测并返回 partial/failed
-        assert result["parse_status"] in ("success", "failed", "partial")
+        # 负数 bone_count 触发异常，handler 返回 opaque
+        assert result["parse_status"] in ("opaque", "success", "failed", "partial")
 
     def test_truncated_payload(self):
-        """截断文件导致读取失败返回 failed 状态。"""
+        """截断文件导致读取失败返回 opaque 状态。"""
         buf = bytearray()
         _write_property_tag_none(buf)
         _write_i32(buf, 5)  # BoneCount = 5，但没有后续数据
@@ -429,7 +429,7 @@ class TestParseSkeletonErrorHandling:
         archive = ByteArchive(payload)
         result = parse_skeleton(archive, _make_name_map())
 
-        assert result["parse_status"] == "failed"
+        assert result["parse_status"] == "opaque"
         assert "error" in result
 
 

@@ -99,9 +99,9 @@ def test_count_just_above_max():
 # ---- 诊断日志 ----
 
 def test_negative_count_logs_warning(caplog):
-    """负数 count 应记录 WARNING 日志，包含 count、位置、上限"""
+    """负数 count 应记录 DEBUG 日志，包含 count、位置、上限"""
     archive = _make_archive_with_i32(-5)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         read_validated_count_tolerant(archive, 10_000, "数组数量")
 
     assert any("数量为负数" in r.message for r in caplog.records)
@@ -111,9 +111,9 @@ def test_negative_count_logs_warning(caplog):
 
 
 def test_count_exceeds_max_logs_warning(caplog):
-    """超过上限的 count 应记录 WARNING 日志，包含 count 和上限"""
+    """超过上限的 count 应记录 DEBUG 日志，包含 count 和上限"""
     archive = _make_archive_with_i32(50_000)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         read_validated_count_tolerant(archive, 10_000, "MapProperty 条目数量")
 
     assert any("数量超过最大值" in r.message for r in caplog.records)

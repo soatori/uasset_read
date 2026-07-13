@@ -308,8 +308,8 @@ class TestPinRefGuid:
     """Pin GUID 归一化测试。"""
 
     def test_guid_uppercase(self):
-        """GUID 应转为大写。"""
-        assert _pin_ref_guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890") == "A1B2C3D4E5F67890ABCDEF1234567890"
+        """GUID 应归一化为小写无 dash 格式。"""
+        assert _pin_ref_guid("a1b2c3d4-e5f6-7890-abcd-ef1234567890") == "a1b2c3d4e5f67890abcdef1234567890"
 
     def test_guid_strip_dashes(self):
         """GUID 应移除 dash。"""
@@ -319,12 +319,12 @@ class TestPinRefGuid:
     def test_guid_from_dict_pin_guid(self):
         """从 dict 的 pin_guid 字段提取。"""
         result = _pin_ref_guid({"pin_guid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"})
-        assert result == "A1B2C3D4E5F67890ABCDEF1234567890"
+        assert result == "a1b2c3d4e5f67890abcdef1234567890"
 
     def test_guid_from_dict_pin_id(self):
         """从 dict 的 pin_id 字段提取。"""
         result = _pin_ref_guid({"pin_id": "AABBCCDD"})
-        assert result == "AABBCCDD"
+        assert result == "aabbccdd"
 
     def test_guid_none_returns_none(self):
         """None 输入应返回 None。"""
@@ -424,19 +424,20 @@ class TestKnotChainResolution:
 
     def test_knot_chain_traces_through_to_source(self):
         """从 Knot OutputPin 开始追踪应穿透到 InputPin 的数据源。"""
-        source_pin_id = "SOURCEPIN"
-        knot_input_id = "KNOTIN"
-        knot_output_id = "KNOTOUT"
+        # _pin_ref_guid 归一化为小写无 dash 格式，pin_lookup 键也需小写
+        source_pin_id = "sourcepin"
+        knot_input_id = "knotin"
+        knot_output_id = "knotout"
 
         source_node = FakeNode(node_guid="src", pins=[
-            FakePin(pin_id=source_pin_id, pin_name="ReturnValue", direction=1),
+            FakePin(pin_id="SOURCEPIN", pin_name="ReturnValue", direction=1),
         ])
         knot_node = FakeNode(
             node_guid="knot", class_name="K2Node_Knot",
             pins=[
-                FakePin(pin_id=knot_input_id, pin_name="InputPin", direction=0,
-                        linked_to_raw=[{"pin_id": source_pin_id}]),
-                FakePin(pin_id=knot_output_id, pin_name="OutputPin", direction=1),
+                FakePin(pin_id="KNOTIN", pin_name="InputPin", direction=0,
+                        linked_to_raw=[{"pin_id": "SOURCEPIN"}]),
+                FakePin(pin_id="KNOTOUT", pin_name="OutputPin", direction=1),
             ],
         )
 
@@ -765,10 +766,10 @@ class TestTraceDataSource:
             )],
         )
 
-        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（大写、无 dash）
+        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（小写、无 dash）
         pin_lookup = {
-            "FEPARAMPIN": ("fe-guid", "MyParam"),
-            "CALLERPIN": ("caller-guid", "Value"),
+            "feparampin": ("fe-guid", "MyParam"),
+            "callercallerpin": ("caller-guid", "Value"),
         }
         node_lookup = {
             "fe-guid": fe_node,
@@ -800,10 +801,10 @@ class TestTraceDataSource:
             )],
         )
 
-        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（大写、无 dash）
+        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（小写、无 dash）
         pin_lookup = {
-            "SELFPIN": ("self-guid", "Self"),
-            "CALLERPIN": ("caller-guid", "Target"),
+            "selfpin": ("self-guid", "Self"),
+            "callercallerpin": ("caller-guid", "Target"),
         }
         node_lookup = {
             "self-guid": self_node,
@@ -951,8 +952,8 @@ class TestFindNextExecNode:
                 pin_type=FakePinType(pin_category="exec"),
             )],
         )
-        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（大写、无 dash）
-        pin_lookup = {"PINBIN": ("guid-b", "exec")}
+        # pin_lookup 键必须与 _pin_ref_guid 输出格式一致（小写、无 dash）
+        pin_lookup = {"pinbin": ("guid-b", "exec")}
         node_lookup = {"guid-a": node_a, "guid-b": node_b}
 
         next_node, pin_name = _find_next_exec_node(node_a, pin_lookup, node_lookup)
@@ -1147,9 +1148,9 @@ class TestBuildGraphIndexes:
         graph = FakeGraph(nodes=[node])
 
         pin_lookup, node_lookup, pin_obj_lookup = _build_graph_indexes(graph)
-        # 键应归一化为大写
-        assert pin_lookup["PINA"] == ("guid-1", "InputPin")
-        assert pin_lookup["PINB"] == ("guid-1", "OutputPin")
+        # 键应归一化为小写无 dash 格式
+        assert pin_lookup["pina"] == ("guid-1", "InputPin")
+        assert pin_lookup["pinb"] == ("guid-1", "OutputPin")
         assert node_lookup["guid-1"] is node
 
     def test_empty_graph(self):
@@ -1328,13 +1329,13 @@ class TestBuildNormalizedEdgeIndexes:
         graph = FakeGraph(nodes=[node_a, node_b])
         by_from, by_to = _build_normalized_edge_indexes(graph)
 
-        # from_pin_id 应包含归一化后的 PIN-A-OUT（去 dash，大写）
-        assert "PINAOUT" in by_from
-        assert len(by_from["PINAOUT"]) == 1
+        # from_pin_id 应包含归一化后的 PIN-A-OUT（去 dash，小写）
+        assert "pinaout" in by_from
+        assert len(by_from["pinaout"]) == 1
 
         # to_pin_id 应包含归一化后的 PIN-B-IN
-        assert "PINBIN" in by_to
-        assert len(by_to["PINBIN"]) == 1
+        assert "pinbin" in by_to
+        assert len(by_to["pinbin"]) == 1
 
     def test_empty_graph(self):
         """空图应返回空索引。"""

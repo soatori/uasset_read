@@ -14,15 +14,14 @@ class TestSerializationStrategy:
 
     def test_enum_values(self):
         """枚举值正确定义。"""
-        assert SerializationStrategy.FULL_SERIALIZER.value == "full_serializer"
         assert SerializationStrategy.TAGGED_PROPERTIES_ONLY.value == "tagged_properties_only"
         assert SerializationStrategy.OPAQUE_CLASS_PAYLOAD.value == "opaque_class_payload"
         assert SerializationStrategy.SKIP_UNSUPPORTED.value == "skip_unsupported"
 
     def test_enum_is_string(self):
         """枚举继承 str，可直接比较。"""
-        assert isinstance(SerializationStrategy.FULL_SERIALIZER, str)
-        assert SerializationStrategy.FULL_SERIALIZER == "full_serializer"
+        assert isinstance(SerializationStrategy.TAGGED_PROPERTIES_ONLY, str)
+        assert SerializationStrategy.TAGGED_PROPERTIES_ONLY == "tagged_properties_only"
 
 
 class TestClassStrategyTable:

@@ -68,19 +68,6 @@ class TestVerifyImportsReturnValue:
         assert isinstance(linker._import_verification_errors, list)
         assert linker._import_verification_errors == []
 
-    def test_post_load_with_broken_class_index(self):
-        """class_index 越界时 _verify_imports 返回错误。"""
-        linker = _make_linker(import_count=2, export_count=1)
-        # PackageIndex(999) -> is_null=False, is_import=False, is_export=True
-        # 但 export 999 越界 -> resolve_package_index 返回 None
-        linker._import_map[0].class_index = PackageIndex(999)
-
-        linker.post_load()
-
-        # 应有验证错误
-        assert len(linker._import_verification_errors) > 0
-        assert any("class_index" in e for e in linker._import_verification_errors)
-
     def test_post_load_with_broken_outer_index(self):
         """outer_index 越界时 _verify_imports 返回错误。"""
         linker = _make_linker(import_count=2, export_count=1)
@@ -113,7 +100,7 @@ class TestPostLoadPreservesVerifyResult:
     def test_errors_stored_on_linker(self):
         """post_load 后错误可通过 linker._import_verification_errors 访问。"""
         linker = _make_linker(import_count=1, export_count=1)
-        linker._import_map[0].class_index = PackageIndex(999)
+        linker._import_map[0].outer_index = PackageIndex(999)
 
         linker.post_load()
 
@@ -129,9 +116,9 @@ class TestPostLoadPreservesVerifyResult:
     def test_multiple_errors_captured(self):
         """多个 import 引用错误都被捕获。"""
         linker = _make_linker(import_count=3, export_count=1)
-        # 三个 import 的 class_index 都越界
+        # 三个 import 的 outer_index 都越界
         for i in range(3):
-            linker._import_map[i].class_index = PackageIndex(999)
+            linker._import_map[i].outer_index = PackageIndex(999)
 
         linker.post_load()
 

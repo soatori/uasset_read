@@ -1148,10 +1148,15 @@ class TestMarkdownRendererMermaid:
             node_class="K2Node_Event", node_comment="BeginPlay",
             pins=[pin], execution_flow=[],
         )
+        target_pin = PinIR(
+            pin_name="exec", pin_type="exec",
+            linked_to=[], direction="input", default_value=None,
+            pin_guid="bbccdd1122334455bbccdd1122334455",
+        )
         node2 = NodeIR(
             node_guid="bbccdd1122334455bbccdd1122334455",
             node_class="K2Node_CallFunction", node_comment="DoStuff",
-            pins=[], execution_flow=[],
+            pins=[target_pin], execution_flow=[],
         )
         graph = GraphIR(
             graph_guid="1122334455667788aabbccdd11223344",

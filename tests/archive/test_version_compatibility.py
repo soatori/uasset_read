@@ -77,8 +77,8 @@ class TestUE4LegacyVersionError:
         from uasset_read.serializers.package_summary import read_package_summary
 
         archive = ByteArchive(
-            "P_Fire.uasset",
             _minimal_package_with_legacy_version(-3),
+            name="P_Fire.uasset",
         )
 
         with pytest.raises(VersionError, match=r"Legacy file version -3 indicates UE4 asset") as exc_info:
@@ -98,8 +98,8 @@ class TestUE4LegacyVersionError:
         from uasset_read.serializers.package_summary import read_package_summary
 
         archive = ByteArchive(
-            "test.uasset",
             _minimal_package_with_legacy_version(legacy_version),
+            name="test.uasset",
         )
 
         with pytest.raises(VersionError, match=rf"Legacy file version {legacy_version} indicates UE4 asset"):
@@ -121,8 +121,8 @@ class TestUE4LegacyVersionError:
             file_version_ue5 = 1016  # >= UE5_PACKAGE_SAVED_HASH
 
         archive = ByteArchive(
-            "test.uasset",
             _minimal_package_summary_bytes(legacy_version, file_version_ue5=file_version_ue5),
+            name="test.uasset",
         )
         # UE5 支持的 legacy version 不应抛出 UE4 相关的 VersionError
         # （可能因后续字段不完整抛出其他错误，但不应是 UE4 提示）

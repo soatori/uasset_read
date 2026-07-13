@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """IR（中间表示）数据结构 — PackageIR 层级模型。
 
 IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 ParseResult。
@@ -10,6 +8,8 @@ IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 
 - models/core.py 定义序列化模型，保留 UE 原始类型（int 方向、嵌套对象等）
 - IR Builder 负责从序列化模型（UEdGraph*）转换为呈现模型（GraphIR*）
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any

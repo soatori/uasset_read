@@ -9,11 +9,11 @@ from uasset_read.pak.structures import FPakEntry, FPakCompressedBlock
 from uasset_read.exceptions import ParseError
 
 
-def _make_entry(blocks, uncompressed_size=1024):
+def _make_entry(blocks, uncompressed_size=1024, compression_block_size=65536):
     """构造一个最小 FPakEntry。"""
     entry = FPakEntry.__new__(FPakEntry)
     entry.compression_blocks = blocks
-    entry.compression_block_size = 65536
+    entry.compression_block_size = compression_block_size
     entry.is_encrypted = False
     entry.is_compressed = True
     entry.uncompressed_size = uncompressed_size
@@ -98,7 +98,7 @@ def test_compressed_result_truncated_to_expected_size():
     compressed = zlib.compress(original)
 
     block = FPakCompressedBlock(compressed_start=0, compressed_end=len(compressed))
-    entry = _make_entry([block], uncompressed_size=50)  # 预期 50 字节
+    entry = _make_entry([block], uncompressed_size=50, compression_block_size=100)  # 预期 50 字节
 
     stream = io.BytesIO(compressed)
     result = decompress_entry(stream, entry, compression_method="Zlib")

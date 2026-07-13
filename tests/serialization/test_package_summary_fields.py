@@ -41,11 +41,11 @@ class TestConstants:
             UE4_ADDED_PACKAGE_OWNER,
             UE4_NON_OUTER_PACKAGE_IMPORT,
         )
-        assert UE4_ADD_STRING_ASSET_REFERENCES_MAP == 516
+        assert UE4_ADD_STRING_ASSET_REFERENCES_MAP == 384
         assert UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID == 516
-        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 517
-        assert UE4_ADDED_SEARCHABLE_NAMES == 518
-        assert UE4_ADDED_PACKAGE_OWNER == 519
+        assert UE4_SERIALIZE_TEXT_IN_PACKAGES == 459
+        assert UE4_ADDED_SEARCHABLE_NAMES == 510
+        assert UE4_ADDED_PACKAGE_OWNER == 518
         assert UE4_NON_OUTER_PACKAGE_IMPORT == 520
 
 
@@ -112,6 +112,8 @@ def _minimal_package_summary_bytes(
     data += struct.pack("<i", 0)  # names_referenced_from_export_data_count
     data += struct.pack("<q", 0)  # payload_toc_offset
     data += struct.pack("<i", 0)  # data_resource_offset
+    # 补齐到 MIN_UASSET_SIZE (64 bytes)，避免 _validate_file_size 拒绝
+    data += b"\x00" * max(0, 64 - len(data))
     return bytes(data)
 
 
@@ -126,11 +128,11 @@ class TestLegacyFileVersion:
         # For legacy -7, file_version_ue5 is not present (None)
         file_version_ue5 = None if legacy_file_version == -7 else (1004 if legacy_file_version == -8 else UE5_PACKAGE_SAVED_HASH)
         archive = ByteArchive(
-            "minimal.uasset",
             _minimal_package_summary_bytes(
                 legacy_file_version,
                 file_version_ue5=file_version_ue5,
             ),
+            name="minimal.uasset",
         )
 
         summary = read_package_summary(archive)
@@ -146,7 +148,7 @@ class TestLegacyFileVersion:
         from uasset_read.serializers.package_summary import read_package_summary
 
         # -5 是 UE4 legacy version（UE4 资产 > -6）
-        archive = ByteArchive("minimal.uasset", _minimal_package_summary_bytes(-5))
+        archive = ByteArchive(_minimal_package_summary_bytes(-5), name="minimal.uasset")
 
         with pytest.raises(VersionError, match=r"Legacy file version -5 indicates UE4 asset"):
             read_package_summary(archive)

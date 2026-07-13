@@ -495,10 +495,16 @@ class TestParseResultEdgeCases:
         result = ParseResult()
         assert result.status == "failed"
 
-        # 有数据时状态为 success
+        # 有数据但 is_success=False 时状态为 partial（非 success）
         result.name_map = ["Test"]
-        assert result.status == "success"
+        assert result.status == "partial"
 
         # 有错误时状态为 partial
         result.errors = ["Test error"]
         assert result.status == "partial"
+
+        # is_success=True 且无错误时状态为 success
+        result2 = ParseResult()
+        result2.is_success = True
+        result2.name_map = ["Test"]
+        assert result2.status == "success"

@@ -23,19 +23,19 @@ class TestPropertyParserErrorLogging:
         source = read_source("src/uasset_read/parsers/property_parser.py")
         # 查找 BinaryOrNative handler 块
         assert "BinaryOrNative handler failed" in source
-        assert 'logger.warning("BinaryOrNative handler failed' in source
+        assert 'logger.debug("BinaryOrNative handler failed' in source
 
     def test_custom_property_fd_handler_has_logging(self):
         """CustomProperty_FD handler 应包含 logger.warning 调用。"""
         source = read_source("src/uasset_read/parsers/property_parser.py")
         assert "Custom property handler (0x%02X) failed" in source
-        assert 'logger.warning("Custom property handler (0x%02X) failed' in source
+        assert 'logger.debug("Custom property handler (0x%02X) failed' in source
 
     def test_game_specific_custom_handler_has_logging(self):
         """游戏特定 custom handler 应包含 logger.warning 调用。"""
         source = read_source("src/uasset_read/parsers/property_parser.py")
         assert "Game-specific custom property handler failed" in source
-        assert 'logger.warning("Game-specific custom property handler failed' in source
+        assert 'logger.debug("Game-specific custom property handler failed' in source
 
     def test_resolve_class_name_export_has_logging(self):
         """parse_properties_from_export 中 resolve_class_name 应有 debug 日志。"""

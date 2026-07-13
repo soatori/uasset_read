@@ -153,7 +153,7 @@ class TestAnimGraphNodeParsing:
 
     def test_anim_graph_node_data_structure(self):
         """测试 AnimGraphNode node_data 结构。"""
-        from uasset_read.serializers.graph import _read_anim_graph_node
+        from uasset_read.serializers.graph_node import _read_anim_graph_node
 
         # 模拟 raw_properties
         raw_properties = {
