@@ -4,7 +4,9 @@
 - ReferenceSkeleton（参考骨架）
   - Names: TArray<FName>
   - Parents: TArray<int32>
-  - RefLocalPose: TArray<FTransform>（每 transform 48 bytes）
+  - RefLocalPose: TArray<FTransform>
+    - UE4: 40 bytes (Rotation 16 + Translation 12 + Scale 12)
+    - UE5: 52 bytes (Rotation 16 + Translation 24 + Scale 12)
   - NameToIndexMap: TMap<FName, int32>
 - RetargetSources: TMap<FName, FReferencePose>
 - VirtualBoneGuid: FGuid（16 bytes）
@@ -97,8 +99,13 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
        - BoolVal: u8（如果 TypeName 是 BoolProperty）
        - EnumName: FName（如果 TypeName 是 EnumProperty 或 ByteProperty）
        - StructName: FName（如果 TypeName 是 StructProperty）
+       - InnerTypeName: FName（如果 TypeName 是 ArrayProperty 或 SetProperty）
+       - KeyType + ValueType: 2 x FName（如果 TypeName 是 MapProperty）
        - 以及其他版本相关字段
     4. 然后跳过 Value 数据（Size 字节）
+
+    参照 Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
+    FPropertyTag::Serialize
     """
     max_properties = 10000  # 安全上限
     for _ in range(max_properties):
@@ -144,6 +151,20 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
         if type_name == "StructProperty":
             archive.read_i32()  # index
             archive.read_i32()  # number
+
+        # InnerTypeName: FName（ArrayProperty 或 SetProperty）
+        # 参照 FPropertyTag::Serialize: InnerType.Serialize(Ar)
+        if type_name in ("ArrayProperty", "SetProperty"):
+            archive.read_i32()  # index
+            archive.read_i32()  # number
+
+        # KeyTypeName + ValueTypeName: 2 x FName（MapProperty）
+        # 参照 FPropertyTag::Serialize: KeyType.Serialize(Ar) + ValueType.Serialize(Ar)
+        if type_name == "MapProperty":
+            archive.read_i32()  # key type index
+            archive.read_i32()  # key type number
+            archive.read_i32()  # value type index
+            archive.read_i32()  # value type number
 
         # Guid（PropertyGuid）: bool(i32) + optional FGuid(16)
         has_guid = archive.read_i32()
@@ -217,8 +238,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
         )
 
     transforms: List[Dict[str, Any]] = []
+    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
     for i in range(min(pose_count, bone_count)):
-        transform = _read_ftransform(archive)
+        transform = _read_ftransform(archive, is_ue5=is_ue5)
         transforms.append(transform)
 
     ref_skeleton["transforms"] = transforms
@@ -257,6 +279,7 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
         RetargetSource 列表
     """
     sources: List[Dict[str, Any]] = []
+    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
 
     num_sources = archive.read_i32("RetargetSources.Count")
     if num_sources < 0 or num_sources > 1000:
@@ -284,7 +307,7 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
         pose_count = archive.read_i32(f"RetargetSources[{i}].PoseCount")
         transforms: List[Dict[str, Any]] = []
         for _ in range(pose_count):
-            transform = _read_ftransform(archive)
+            transform = _read_ftransform(archive, is_ue5=is_ue5)
             transforms.append(transform)
         source["transforms"] = transforms
         source["transform_count"] = len(transforms)
@@ -308,26 +331,43 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
     return sources
 
 
-def _read_ftransform(archive: Any) -> Dict[str, Any]:
-    """读取 FTransform。
+def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
+    """读取 FTransform，支持 UE4/UE5 不同布局。
 
-    UE5 FTransform 序列化顺序（property_types.py 参考）：
-    - Translation: 3 x f64 = 24 bytes
-    - Rotation: 4 x f32 = 16 bytes
-    - Scale3D: 3 x f32 = 12 bytes
+    序列化顺序（参照 TransformVectorized.h operator<<）：
+    Rotation → Translation → Scale3D
+
+    UE4 布局（40 bytes）：
+    - Rotation: FQuat4f (4 x f32 = 16 bytes)
+    - Translation: FVector (3 x f32 = 12 bytes)
+    - Scale3D: FVector (3 x f32 = 12 bytes)
+
+    UE5 布局（52 bytes）：
+    - Rotation: FQuat4f (4 x f32 = 16 bytes)
+    - Translation: FVector3d (3 x f64 = 24 bytes)
+    - Scale3D: FVector3f (3 x f32 = 12 bytes)
+
+    Args:
+        archive: FArchive 实例
+        is_ue5: True 表示 UE5 布局（默认），False 表示 UE4 布局
     """
-    # Translation: FVector3d (3 x f64 = 24 bytes)
-    tx = archive.read_f64("Transform.Translation.X")
-    ty = archive.read_f64("Transform.Translation.Y")
-    tz = archive.read_f64("Transform.Translation.Z")
-
-    # Rotation: FQuat (4 x f32 = 16 bytes)
+    # Rotation: FQuat4f (4 x f32 = 16 bytes) — UE4/UE5 相同
     rx = archive.read_f32("Transform.Rotation.X")
     ry = archive.read_f32("Transform.Rotation.Y")
     rz = archive.read_f32("Transform.Rotation.Z")
     rw = archive.read_f32("Transform.Rotation.W")
 
-    # Scale3D: FVector3f (3 x f32 = 12 bytes)
+    # Translation: FVector (UE4: 3 x f32 = 12 bytes) 或 FVector3d (UE5: 3 x f64 = 24 bytes)
+    if is_ue5:
+        tx = archive.read_f64("Transform.Translation.X")
+        ty = archive.read_f64("Transform.Translation.Y")
+        tz = archive.read_f64("Transform.Translation.Z")
+    else:
+        tx = archive.read_f32("Transform.Translation.X")
+        ty = archive.read_f32("Transform.Translation.Y")
+        tz = archive.read_f32("Transform.Translation.Z")
+
+    # Scale3D: FVector3f (3 x f32 = 12 bytes) — UE4/UE5 相同
     sx = archive.read_f32("Transform.Scale.X")
     sy = archive.read_f32("Transform.Scale.Y")
     sz = archive.read_f32("Transform.Scale.Z")
