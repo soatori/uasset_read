@@ -891,7 +891,7 @@ def _parse_unversioned_properties_from_mapping(
             if not tolerant:
                 raise
             if tag.size > 0:
-                seek_target = min(start + tag.size, property_end, archive._file_size)
+                seek_target = min(start + tag.size, property_end, archive.total_size())
                 archive.seek(seek_target)
             fb = PropertyFallback(
                 name=info.name,

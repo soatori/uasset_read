@@ -135,7 +135,12 @@ def skip_export_payload(
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        payload_end = export.serial_offset + export.script_serialization_end_offset
+        # 使用 getattr 安全回退，防止属性不存在时抛出 AttributeError
+        script_serial_end = getattr(export, 'script_serialization_end_offset', None)
+        if script_serial_end is None:
+            # 回退到 serial_size，保持兼容性
+            script_serial_end = export.serial_size
+        payload_end = export.serial_offset + script_serial_end
     else:
         payload_end = export.serial_offset + export.serial_size
 

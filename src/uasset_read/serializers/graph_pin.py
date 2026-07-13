@@ -279,7 +279,15 @@ def _recover_pin_array_count(
 
     current_pos = archive.tell()
     search_start = max(0, error_pos - scan_window)
-    search_end = min(archive._file_size, error_pos + scan_window)
+    # 安全获取 archive 大小：优先使用公开 API total_size()，
+    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    try:
+        archive_size = archive.total_size()
+        if not isinstance(archive_size, int):
+            raise TypeError("total_size() did not return int")
+    except (AttributeError, TypeError):
+        archive_size = getattr(archive, '_file_size', 0)
+    search_end = min(archive_size, error_pos + scan_window)
 
     archive.seek(search_start)
     window = archive.read(search_end - search_start)
@@ -397,7 +405,15 @@ def _try_recover_to_subpins(
     import struct
 
     scan_start = archive.tell()
-    scan_end = min(archive._file_size, scan_start + max_scan)
+    # 安全获取 archive 大小：优先使用公开 API total_size()，
+    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    try:
+        archive_size = archive.total_size()
+        if not isinstance(archive_size, int):
+            raise TypeError("total_size() did not return int")
+    except (AttributeError, TypeError):
+        archive_size = getattr(archive, '_file_size', 0)
+    scan_end = min(archive_size, scan_start + max_scan)
     archive.seek(scan_start)
     window = archive.read(scan_end - scan_start)
 
