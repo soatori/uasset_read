@@ -230,6 +230,35 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
         archive.close()
 
 
+def _cleanup_parse_memory(result) -> None:
+    """统一内存清理 — 打破循环引用、重置全局缓存。
+
+    在 parse_package / parse_package_lazy 的 finally 块中调用，
+    防止批量解析时 UObjectInstance ↔ linker 循环引用导致的内存泄漏，
+    以及全局缓存（ClassHandlerRegistry）无界增长。
+    """
+    # 打破 UObjectInstance ↔ linker 循环引用
+    if result is not None and result.linker is not None:
+        try:
+            for obj in result.linker._export_objects:
+                obj.linker = None
+            for obj in result.linker._import_objects:
+                obj.linker = None
+            result.linker._export_objects.clear()
+            result.linker._import_objects.clear()
+            result.linker._root_objects.clear()
+            result.linker._preload_cache.clear()
+            result.linker._archive = None
+        except Exception:
+            pass
+    # 清理全局缓存，防止无界增长
+    try:
+        from uasset_read.parsers.class_registry import get_class_registry
+        get_class_registry().reset_cache()
+    except Exception:
+        pass
+
+
 def _parse_package_core(
     path: str,
     result,
@@ -346,6 +375,7 @@ def _parse_package_core(
 
         finally:
             _cleanup_archive_diagnostics(result, archive)
+            _cleanup_parse_memory(result)
 
 
 def _resolve_parse_params(
@@ -759,27 +789,6 @@ def parse_package_lazy(
     finally:
         if archive:
             archive.close()
-        # 清理循环引用，防止批量解析时内存泄漏
-        if result is not None and result.linker is not None:
-            try:
-                # 打破 UObjectInstance ↔ linker 循环引用
-                for obj in result.linker._export_objects:
-                    obj.linker = None
-                for obj in result.linker._import_objects:
-                    obj.linker = None
-                result.linker._export_objects.clear()
-                result.linker._import_objects.clear()
-                result.linker._root_objects.clear()
-                result.linker._preload_cache.clear()
-                # 释放 archive 引用
-                result.linker._archive = None
-            except Exception:
-                pass
-        # 清理全局缓存，防止无界增长
-        try:
-            from uasset_read.parsers.class_registry import get_class_registry
-            get_class_registry().reset_cache()
-        except Exception:
-            pass
+        _cleanup_parse_memory(result)
 
     return result

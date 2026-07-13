@@ -64,30 +64,6 @@ class TestFileHandleSafetyNet:
 class TestCacheResetMethods:
     """验证缓存重置方法。"""
 
-    def test_function_ref_resolver_reset(self):
-        """FunctionRefResolver.reset() 应清空所有缓存和计数器。"""
-        from uasset_read.kismet.function_resolver import FunctionRefResolver
-
-        mock_linker = MagicMock()
-        resolver = FunctionRefResolver(mock_linker)
-
-        # 模拟一些缓存数据
-        resolver._cache[123] = ("ClassName", "FuncName")
-        resolver._virtual_class_cache["FuncName"] = "ClassName"
-        resolver._resolve_attempts = 10
-        resolver._resolve_failures = 3
-        resolver._unresolved_refs[456] = 5
-
-        # 调用 reset
-        resolver.reset()
-
-        # 验证所有缓存被清空
-        assert len(resolver._cache) == 0
-        assert len(resolver._virtual_class_cache) == 0
-        assert resolver._resolve_attempts == 0
-        assert resolver._resolve_failures == 0
-        assert len(resolver._unresolved_refs) == 0
-
     def test_class_handler_registry_reset_cache(self):
         """ClassHandlerRegistry.reset_cache() 应只清空查找缓存。"""
         from uasset_read.parsers.class_registry import ClassHandlerRegistry

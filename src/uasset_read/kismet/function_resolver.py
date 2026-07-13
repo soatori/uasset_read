@@ -237,14 +237,3 @@ class FunctionRefResolver:
 
         return "\n".join(lines)
 
-    def reset(self) -> None:
-        """重置所有缓存和统计计数器。
-
-        用于批量解析场景，在 parse_package 的 finally 块中调用，
-        防止 _unresolved_refs 等缓存无界增长。
-        """
-        self._cache.clear()
-        self._virtual_class_cache.clear()
-        self._resolve_attempts = 0
-        self._resolve_failures = 0
-        self._unresolved_refs.clear()
