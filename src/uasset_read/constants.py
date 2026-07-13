@@ -561,6 +561,11 @@ MAX_SAFE_COUNT = 10_000  # 用于 FText args / MulticastDelegate / FieldPath 等
 
 def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
     """将 16 原始 FGuid 字节格式化为稳定的 8-4-4-4-12 字符串。"""
+    if not isinstance(data, (bytes, bytearray)) or len(data) < 16:
+        raise ValueError(
+            f"GUID requires exactly 16 bytes, got {type(data).__name__} of length "
+            f"{len(data) if isinstance(data, (bytes, bytearray)) else 'N/A'}"
+        )
     text = (
         f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
         f"{data[4]:02x}{data[5]:02x}-"

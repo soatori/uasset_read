@@ -153,7 +153,8 @@ def _extract_blueprint_graphs_and_metadata(
                         temp_archive.close()
                 break
 
-    if hasattr(result, 'blueprint'):
+    # 仅在 blueprint_metadata 不为 None 时赋值，避免覆盖已有蓝图数据
+    if blueprint_metadata is not None and hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
     return blueprint_metadata
