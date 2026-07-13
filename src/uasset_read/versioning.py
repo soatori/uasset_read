@@ -4,11 +4,11 @@
 提供基于 GUID 的版本查询和基于流的版本比较，替代各处 hardcode 的版本判断。
 对应 COR-02: FCustomVersion 体系。
 """
-
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, List
+from typing import Protocol
 
 from uasset_read.core.utils import normalize_hex_guid
 
@@ -123,7 +123,7 @@ STREAM_INTERCHANGE = VersionStream(FINTERCHANGE_CUSTOM_VERSION_GUID, "interchang
 STREAM_ASSET_REGISTRY = VersionStream(FASSET_REGISTRY_VERSION_GUID, "asset_registry")
 STREAM_CURVE_EXPRESSION = VersionStream(FCURVE_EXPRESSION_CUSTOM_VERSION_GUID, "curve_expression")
 
-STREAM_MAP: Dict[str, VersionStream] = {
+STREAM_MAP: dict[str, VersionStream] = {
     "framework": STREAM_FRAMEWORK,
     "ue5_mainstream": STREAM_UE5_MAINSTREAM,
     "release": STREAM_RELEASE,
@@ -159,7 +159,7 @@ STREAM_MAP: Dict[str, VersionStream] = {
 # VersionContainer
 # ============================================================================
 
-class _CustomVersionLike:
+class _CustomVersionLike(Protocol):
     """任何具有 guid: str 和 version: int 属性的对象（协议类型）。"""
     guid: str
     version: int
@@ -206,10 +206,10 @@ class VersionContainer:
     从 PackageFileSummary 构建后，提供：
     - get_version(guid) → 查找 CustomVersion 版本号
     """
-    custom_versions: List[_CustomVersionLike] = field(default_factory=list)
+    custom_versions: list[_CustomVersionLike] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
     file_version_ue4: int = 0
-    _guid_cache: Dict[str, int] = field(default_factory=dict, repr=False)
+    _guid_cache: dict[str, int] = field(default_factory=dict, repr=False)
 
     @property
     def file_version(self) -> FPackageFileVersion:
