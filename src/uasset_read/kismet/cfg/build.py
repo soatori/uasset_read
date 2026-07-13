@@ -98,18 +98,13 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
         return cfg
 
     # --- Step 1: 构建偏移→索引映射，识别 leaders ---
-    # 两遍扫描：先建立 stmt_idx → idx 映射（权威映射），
-    # 再用 code_off 查找目标（不覆盖已有映射）。
+    # 使用 StatementIndex 建立权威的 offset → expression index 映射。
+    # CodeOffset 是跳转目标偏移，通过 offset_to_index 查找目标索引。
     offset_to_index: dict[int, int] = {}
     for idx, expr in enumerate(expressions):
         stmt_idx = _get_statement_index(expr)
         if stmt_idx is not None:
             offset_to_index[stmt_idx] = idx
-    # code_off 仅补充未覆盖的目标偏移
-    for idx, expr in enumerate(expressions):
-        code_off = _get_code_offset(expr)
-        if code_off is not None and code_off not in offset_to_index:
-            offset_to_index[code_off] = idx
 
     # 收集所有跳转目标偏移量
     jump_targets: set[int] = set()
