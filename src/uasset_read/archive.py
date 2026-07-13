@@ -18,7 +18,6 @@ from uasset_read.bounded_events import BoundedEventBuffer
 # read_name 索引恢复阈值
 _FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # 超过此值尝试恢复
 
-
 class ArchiveLike(Protocol):
     """统一的 Archive 契约 — 所有 Archive 实现必须满足。"""
 
@@ -28,7 +27,6 @@ class ArchiveLike(Protocol):
     def close(self) -> None: ...
     def total_size(self) -> int: ...
     def set_byte_swapping(self, enabled: bool) -> None: ...
-
 
 class FArchive:
     """
@@ -934,7 +932,6 @@ class FArchive:
             )
         return data
 
-
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
 ) -> bool:
@@ -955,7 +952,6 @@ def _contains_binary_data(
         return False
     check_len = min(len(value), max_check_length)
     return value.count('\x00', 0, check_len) / check_len > threshold
-
 
 class ByteArchive(FArchive):
     """

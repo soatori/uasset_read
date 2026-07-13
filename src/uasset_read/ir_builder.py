@@ -38,14 +38,12 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
     from uasset_read.link.result import LinkerParseResult
 
-
 from uasset_read.constants import (
     BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS,
     CONTAINER_TYPE_MAP, CONTAINER_TYPE_PREFIX, UE_NONE_SENTINEL,
 )
 from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
-
 
 def _classify_variable(var) -> str:
     """分类蓝图变量。"""
@@ -57,7 +55,6 @@ def _classify_variable(var) -> str:
     if "InputAction" in name or "InputAxis" in name:
         return "input_action"
     return "user"
-
 
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     """将 ParseResult 转换为 PackageIR。
@@ -137,7 +134,6 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
     return ir
 
-
 def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
     """Build function_graphs with a simple complexity guard for large graphs."""
     graphs = getattr(result, "graphs", None) or []
@@ -162,7 +158,6 @@ def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> li
     if hasattr(result, 'blueprint') and result.blueprint:
         blueprint_functions = getattr(result.blueprint, 'functions', None)
     return build_function_graphs(graphs, blueprint_functions)
-
 
 def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -> list[dict]:
     entries = []
@@ -189,7 +184,6 @@ def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -
                 "fallback_reason": "graph_complexity_limit",
             })
     return entries
-
 
 def _build_header(result: ParseResult) -> PackageHeaderIR:
     summary = result.summary
@@ -303,7 +297,6 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         data_resource_offset=_safe_int(getattr(summary, "data_resource_offset", 0)),
     )
 
-
 def _get_version_string(result: ParseResult) -> str:
     """从 version_container 提取 UE 版本字符串。"""
     vc = result.version_container
@@ -323,7 +316,6 @@ def _get_version_string(result: ParseResult) -> str:
         return "5.x"
     return "4.x"
 
-
 def _build_imports(result: ParseResult) -> list[ImportIR]:
     imports = []
     for idx, imp in enumerate(result.import_map or []):
@@ -342,7 +334,6 @@ def _build_imports(result: ParseResult) -> list[ImportIR]:
         ))
     return imports
 
-
 def _build_exports(result: ParseResult) -> list[ExportIR]:
     exports = []
     for idx, export in enumerate(result.export_map or []):
@@ -353,7 +344,6 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
             # tolerant 模式：跳过失败的 export
             logger.debug("构建 export %d IR 失败: %s", idx, e, exc_info=True)
     return exports
-
 
 def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
@@ -428,7 +418,6 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         guid=raw.guid,
     )
 
-
 def _build_export_raw_ir(export) -> ExportRawIR:
     """从 ObjectExport 构建 UE 原始导出表字段。"""
 
@@ -458,14 +447,12 @@ def _build_export_raw_ir(export) -> ExportRawIR:
         guid=_safe_str(getattr(export, "guid", "")) or "",
     )
 
-
 def _build_export_diagnostics(export) -> dict | None:
     """从 ObjectExport.transforms 构建诊断信息。"""
     transforms = getattr(export, "transforms", None) or {}
     if not transforms:
         return None
     return dict(transforms)
-
 
 def _build_property_ir(prop) -> PropertyIR:
     return PropertyIR(
@@ -475,7 +462,6 @@ def _build_property_ir(prop) -> PropertyIR:
         array_index=getattr(prop, "array_index", -1) or -1,
         guid=_normalize_guid(getattr(prop, "guid", None)),
     )
-
 
 def _build_graph_ir(graph) -> GraphIR:
     nodes = []
@@ -511,7 +497,6 @@ def _build_graph_ir(graph) -> GraphIR:
         subgraphs=subgraphs,
         graph_type=graph_type,
     )
-
 
 def _build_node_ir(node) -> NodeIR:
     pins = []
@@ -551,7 +536,6 @@ def _build_node_ir(node) -> NodeIR:
         trigger_events=trigger_events,
         event_type=event_type,
     )
-
 
 def _build_pin_ir(pin) -> PinIR:
     # 提取 pin_guid
@@ -629,7 +613,6 @@ def _build_pin_ir(pin) -> PinIR:
         map_key_pin_subcategory_object=map_key_pin_subcategory_object,
     )
 
-
 def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
     """将 PackageIndex 解析为可读路径字符串。"""
     if pkg_index is None or result.linker is None:
@@ -644,7 +627,6 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         return str(obj_ref)
     except (KeyError, IndexError, AttributeError, ValueError):
         return None
-
 
 def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
     """将 DependsMap 的原始 PackageIndex 解析为可读路径。
@@ -668,7 +650,6 @@ def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
         resolved.append(row)
     return resolved
 
-
 def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
     linker = result.linker
     if linker is None:
@@ -691,7 +672,6 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
         import_paths=import_paths,
         export_paths=export_paths,
     )
-
 
 def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
     """从 ParseResult.blueprint 构建 BlueprintIR（完整元数据）。"""
@@ -768,7 +748,6 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
         components=components,
     )
 
-
 def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFunctionIR]:
     """从 ParseResult.decompiled_functions 构建 DecompiledFunctionIR 列表。"""
     decompiled = []
@@ -788,7 +767,6 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
         ))
     return decompiled
 
-
 def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
     """根据 fallback_reasons 推断字节码置信度。
 
@@ -803,7 +781,6 @@ def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
         return "fallback"
     return "verified"
 
-
 def _extract_return_type(signature: str) -> str:
     """从 C++ 函数签名中提取返回类型。
 
@@ -816,7 +793,6 @@ def _extract_return_type(signature: str) -> str:
     if space_idx > 0:
         return signature[:space_idx]
     return "void"
-
 
 def _extract_parameters_from_signature(signature: str) -> list[dict]:
     """从 C++ 函数签名中解析参数列表。
@@ -850,7 +826,6 @@ def _extract_parameters_from_signature(signature: str) -> list[dict]:
             params.append({"name": "", "type": parts[0]})
     return params
 
-
 def _extract_parameters(func) -> list[dict]:
     """从 KismetDecompiledResult 中提取参数信息。
 
@@ -873,7 +848,6 @@ def _extract_parameters(func) -> list[dict]:
 
     return []
 
-
 def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
     """从所有图的执行链构建 ExecutionChainIR 列表。"""
     chains = []
@@ -890,7 +864,6 @@ def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
             if chain:
                 chains.append(ExecutionChainIR(event=event_name, chain=chain))
     return chains
-
 
 def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
     """从 ParseResult.blueprint.variables 构建 VariableIR 列表（完整元数据）。"""
@@ -929,7 +902,6 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
         ))
     return variables
 
-
 # 事件别名映射：Blueprint 事件名 → 常见 C++/蓝图实现函数名
 _EVENT_ALIASES: dict[str, list[str]] = {
     "ReceiveBeginPlay": ["BeginPlay"],
@@ -945,7 +917,6 @@ _EVENT_ALIASES: dict[str, list[str]] = {
     "ReceiveHit": ["Hit"],
     "ReceiveDestroyed": ["Destroyed"],
 }
-
 
 def _bind_implementations(
     blueprint: BlueprintIR,
@@ -981,7 +952,6 @@ def _bind_implementations(
         if aliases:
             candidates.extend(aliases)
         _bind_single_implementation(evt, decompiled_by_name, graph_by_name, candidates)
-
 
 def _bind_single_implementation(
     item,
@@ -1028,7 +998,6 @@ def _bind_single_implementation(
 
     # 无匹配，保持 "missing"
 
-
 def _format_var_type(var) -> str:
     """将 BlueprintVariable 的 var_type 格式化为可读字符串。"""
     pin_type = getattr(var, "var_type", None)
@@ -1060,7 +1029,6 @@ def _format_var_type(var) -> str:
         return f"{prefix}<{base}>"
     return base
 
-
 def _get_event_name_from_node(node) -> str:
     """从事件节点提取事件名称。"""
     # 优先使用 node_comment（事件节点的注释通常是事件名）
@@ -1069,7 +1037,6 @@ def _get_event_name_from_node(node) -> str:
         return comment
     # 回退到类名
     return getattr(node, "class_name", "Unknown") or "Unknown"
-
 
 def _trace_execution_from_node(start_node, graph) -> list[str]:
     """从起始节点追踪执行流链。"""
@@ -1087,7 +1054,6 @@ def _trace_execution_from_node(start_node, graph) -> list[str]:
         next_node = _find_next_exec_node(current, graph, visited)
         current = next_node
     return chain
-
 
 def _find_next_exec_node(node, graph, visited) -> object | None:
     """从节点的执行输出引脚找到下一个节点。"""
@@ -1119,7 +1085,6 @@ def _find_next_exec_node(node, graph, visited) -> object | None:
                 return target_node
     return None
 
-
 def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
     """根据引脚 ID 查找对应的节点（未访问过的）。"""
     for node in graph.nodes or []:
@@ -1132,9 +1097,6 @@ def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
                 return node
     return None
 
-
-
-
 def _normalize_guid(guid: str | None) -> str | None:
     """将 GUID 标准化为 32 位小写 hex（无横杠）。"""
     if not guid:
@@ -1143,7 +1105,6 @@ def _normalize_guid(guid: str | None) -> str | None:
     if cleaned and len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
         return cleaned
     return None
-
 
 def _extract_pin_guid(ref) -> str | None:
     """从 Pin 引用中提取并标准化 GUID。"""
@@ -1155,7 +1116,6 @@ def _extract_pin_guid(ref) -> str | None:
     raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
     return _normalize_guid(raw) if raw else None
 
-
 def _build_asset_registry_data(result) -> dict | None:
     """从 ParseResult 构建 asset_registry_data 字典。"""
     asset_registry_data = getattr(result, "asset_registry_data", None)
@@ -1165,7 +1125,6 @@ def _build_asset_registry_data(result) -> dict | None:
         return asset_registry_data.to_dict()
     except (AttributeError, TypeError, ValueError):
         return None
-
 
 def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
     """将 ParseResult.hex_view_entries 转为 DebugIR。

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from uasset_read.kismet.jump_analyzer import JumpAnalyzer
     from uasset_read.link.linker import PackageLinker
 
-
 # ===========================================================================
 # TypeRegistry — UE → C++ type mapping (Decision D-06, D-07)
 # ===========================================================================
@@ -61,7 +60,6 @@ _UE_TO_CPP_TYPES: dict[str, str] = {
     "FieldPathProperty": "FFieldPath",
     "OptionalProperty": "TOptional",
 }
-
 
 class TypeRegistry:
     """
@@ -130,7 +128,6 @@ class TypeRegistry:
     def ue_to_cpp(self, ue_type: str) -> str:
         """Convert a single UE property type to C++ type string."""
         return _UE_TO_CPP_TYPES.get(ue_type, ue_type)
-
 
 # ===========================================================================
 # MathFunctionCleaner — beautify Kismet library calls (Decision D-04, D-05)
@@ -589,7 +586,6 @@ class MathFunctionCleaner:
             return f"{p[0]}.Length"
 
         return f"BlueprintSetLibrary::{func_name}({', '.join(p)})"
-
 
 # ===========================================================================
 # KismetTranslator — central line_cpp() dispatcher
@@ -1213,7 +1209,6 @@ class KismetTranslator:
                 pairs.append(f"{key}: {val}")
         return pairs
 
-
 # ===========================================================================
 # Module-level convenience functions (D-01 dual API)
 # ===========================================================================
@@ -1231,7 +1226,6 @@ def line_cpp(expr: "KismetExpression") -> str:
     """
     translator = KismetTranslator()
     return translator.line_cpp(expr)
-
 
 # Export module-level constants
 UE_TYPE_MAP = _UE_TO_CPP_TYPES

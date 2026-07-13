@@ -59,7 +59,6 @@ logger = logging.getLogger(__name__)
 
 MAX_INHERITANCE_DEPTH = 50  # 防止无限循环
 
-
 # ============================================================================
 # 从 decompiled_functions 补齐缺失方法（第三条路径）
 # ============================================================================
@@ -87,7 +86,6 @@ def _backfill_missing_methods(
                 body_text=decompiled.cpp_code or "/* no source available */",
             ))
             existing_names.add(sanitized)
-
 
 # ============================================================================
 # 核心提取函数
@@ -190,7 +188,6 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
 
     return ir
 
-
 # ============================================================================
 # 蓝图元数据过滤器（P0 改进）
 # ============================================================================
@@ -220,7 +217,6 @@ BLUEPRINT_METADATA_KEYS = frozenset({
     'UbergraphFrame',
 })
 
-
 def _is_blueprint_metadata(prop_name: str) -> bool:
     """判断属性是否为蓝图内部元数据。
 
@@ -232,7 +228,6 @@ def _is_blueprint_metadata(prop_name: str) -> bool:
     """
     return prop_name in BLUEPRINT_METADATA_KEYS
 
-
 # ============================================================================
 # 组件名称清理（P1 改进）
 # ============================================================================
@@ -243,7 +238,6 @@ _COMPONENT_SUFFIX_PATTERNS = [
     (re.compile(r'_\d+__[A-F0-9]+$'), ''),  # _0__CCE3C0B4 等哈希后缀
     (re.compile(r'_\d+$'), ''),  # _0 等数字后缀
 ]
-
 
 def _clean_component_name(name: str) -> str:
     """清理组件名称，移除 UE 内部后缀。
@@ -263,7 +257,6 @@ def _clean_component_name(name: str) -> str:
     for pattern, replacement in _COMPONENT_SUFFIX_PATTERNS:
         cleaned = pattern.sub(replacement, cleaned)
     return cleaned if cleaned else name
-
 
 # ============================================================================
 # 类名简化（P0 改进）
@@ -299,7 +292,6 @@ def _simplify_class_name(raw_name: str) -> str:
 
     return cleaned
 
-
 # ============================================================================
 # 辅助函数
 # ============================================================================
@@ -320,7 +312,6 @@ def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
             original = param.name.replace('__', ' / ')
             name_map[original] = param.name
     return name_map
-
 
 def _inject_function_bodies(
     methods: List[CppMethodIR],
@@ -405,7 +396,6 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
 
     return f"{prefix}{clean_name}"
 
-
 def _resolve_parent_class(
     blueprint: "BlueprintMetadata",
     linker: Optional[Any]
@@ -428,7 +418,6 @@ def _resolve_parent_class(
         return "UObject"
 
     return ue_package_path_to_cpp_class(parent_path)
-
 
 def _extract_component_properties(
     blueprint: "BlueprintMetadata",
@@ -488,7 +477,6 @@ def _extract_component_properties(
 
     return properties
 
-
 def _create_component_property(var: "BlueprintVariable") -> CppProperty:
     """从 BlueprintVariable 创建组件 CppProperty。
 
@@ -534,7 +522,6 @@ def _create_component_property(var: "BlueprintVariable") -> CppProperty:
         cpp_comment=f"UE type: {ue_type}",
     )
 
-
 def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProperty]:
     """提取变量属性。
 
@@ -558,7 +545,6 @@ def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProp
             properties.append(prop)
 
     return properties
-
 
 def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProperty]:
     """从图节点提取输入动作变量。
@@ -612,7 +598,6 @@ def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProper
 
     return properties
 
-
 def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
     """从 BlueprintVariable 创建变量 CppProperty。
 
@@ -641,7 +626,6 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
         default_value=var.default_value,
         cpp_comment=f"UE type: {ue_type}",
     )
-
 
 def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
     """从 FEdGraphPinType 构建 UE 类型路径。
@@ -711,14 +695,11 @@ def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
     # 其他类型返回 category
     return category
 
-
 # ============================================================================
 # 函数签名映射
 # ============================================================================
 
 # --- 辅助函数（Plan 02） ---
-
-
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
     """将单个引脚转换为 C++ 类型字符串。
@@ -758,7 +739,6 @@ def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
 
     return cpp_type
 
-
 def _extract_parameters_from_pins(
     pins: List["UEdGraphPin"],
     is_event: bool = False
@@ -789,7 +769,6 @@ def _extract_parameters_from_pins(
             direction="input" if pin.direction == 0 else "output",
         ))
     return params
-
 
 # ============================================================================
 # 函数标志位常量（UE5 UFunctionFlags）- 参考 EFunctionFlags.cs
@@ -825,7 +804,6 @@ FUNC_Const = 0x00200000
 FUNC_NetValidate = 0x00400000
 FUNC_BlueprintEvent = 0x08000000
 
-
 def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
     """从 extra_flags 提取函数标志位。
 
@@ -852,7 +830,6 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
         "is_final": bool(flags & FUNC_Final),
         "is_native": bool(flags & FUNC_Native),
     }
-
 
 def _infer_ufunction_specifiers(
     pins: List["UEdGraphPin"],
@@ -887,7 +864,6 @@ def _infer_ufunction_specifiers(
     if has_exec_input or has_exec_output:
         return ["BlueprintCallable"]
     return ["BlueprintPure"]
-
 
 def _build_cpp_method_from_entry(
     fe_node: "K2NodeFunctionEntry",
@@ -963,7 +939,6 @@ def _build_cpp_method_from_entry(
         source_node_type="K2Node_FunctionEntry",
     )
 
-
 def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     """从 K2Node_Event 构建 CppMethodIR（is_override=True）。"""
     # 从 node_data 获取 event_reference
@@ -999,7 +974,6 @@ def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
         is_override=True,
         source_node_type="K2Node_Event",
     )
-
 
 # --- 主入口（Plan 02） ---
 
@@ -1039,7 +1013,6 @@ def extract_cpp_functions(
                         methods.append(method)
     return methods
 
-
 # --- 调用语句提取（Plan 03） ---
 
 def _derive_call_target(
@@ -1064,7 +1037,6 @@ def _derive_call_target(
                     cpp_type = ue_path_to_cpp_type(raw_path)
                     return (cpp_type, "pointer")
     return ("Unknown", "pointer")
-
 
 def extract_cpp_call_statements(
     graphs: List["UEdGraph"],
@@ -1106,11 +1078,9 @@ def extract_cpp_call_statements(
             ))
     return statements
 
-
 # ============================================================================
 # 构造函数提取
 # ============================================================================
-
 
 def extract_cpp_constructor(ir: "CppClassIR") -> str:
     """从 CppClassIR 生成完整的 C++ 构造函数文本。
@@ -1124,7 +1094,6 @@ def extract_cpp_constructor(ir: "CppClassIR") -> str:
         完整的 C++ 构造函数文本
     """
     return format_cpp_constructor(ir)
-
 
 # ============================================================================
 # 导出列表

@@ -45,7 +45,6 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
 # Lazy import + 缓存：避免循环依赖 + 避免每次属性解析重建 dict
 _TYPE_HANDLER_MAP: dict | None = None
 
-
 def _get_parse_functions():
     """获取属性类型 → 解析函数的映射表（模块级缓存，首次调用后不再重建）。"""
     global _TYPE_HANDLER_MAP
@@ -116,7 +115,6 @@ def _get_parse_functions():
     }
     return _TYPE_HANDLER_MAP
 
-
 def _skip_type_tree_nodes(
     archive,
     limit: int,
@@ -161,7 +159,6 @@ def _skip_type_tree_nodes(
             return False
         pending = pending - 1 + inner_count
     return pending == 0
-
 
 def _try_recover_property_tag(
     archive,
@@ -285,7 +282,6 @@ def _try_recover_property_tag(
     archive.seek(current)  # 恢复原始位置
     return False
 
-
 def _try_asset_type_handler(
     export: ObjectExport,
     archive: FArchive,
@@ -350,7 +346,6 @@ def _try_asset_type_handler(
         )
     finally:
         archive.seek(saved_pos)
-
 
 def parse_property_value(
     tag: PropertyTag,
@@ -490,8 +485,6 @@ def parse_property_value(
             tag_data=getattr(tag, "tag_data", None),
             error_message=str(e),
         )
-
-
 
 def parse_properties_from_export(
     export: ObjectExport,
@@ -833,7 +826,6 @@ def parse_properties_from_export(
 
     return properties
 
-
 def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List[ObjectImport]], export_map: List[Any]) -> str:
     if import_map is not None:
         try:
@@ -842,7 +834,6 @@ def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
-
 
 def _parse_unversioned_properties_from_mapping(
     export: ObjectExport,
@@ -933,7 +924,6 @@ def _parse_unversioned_properties_from_mapping(
             ))
     return out
 
-
 def _try_read_unversioned_header(
     archive: FArchive,
     property_end: int,
@@ -991,7 +981,6 @@ def _try_read_unversioned_header(
         archive.seek(start)
         return None
 
-
 def _unversioned_zero_value(prop_type: Any) -> Any:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name in {"BoolProperty"}:
@@ -1013,7 +1002,6 @@ def _unversioned_zero_value(prop_type: Any) -> Any:
         return {"has_value": False, "value": None}
     return None
 
-
 def _ordered_mapping_properties(mappings: Any, struct_mapping: Any) -> list[Any]:
     """Return mapped fields in serialized order, including inherited fields first."""
     chain: list[Any] = []
@@ -1029,7 +1017,6 @@ def _ordered_mapping_properties(mappings: Any, struct_mapping: Any) -> list[Any]
     visit(struct_mapping)
     return chain
 
-
 def _unversioned_property_size(prop_type: Any, archive: FArchive, remaining: int, is_last: bool) -> int:
     fixed = _fixed_unversioned_size(prop_type)
     if fixed > 0:
@@ -1040,7 +1027,6 @@ def _unversioned_property_size(prop_type: Any, archive: FArchive, remaining: int
     if is_last:
         return remaining
     return 0
-
 
 def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remaining: int) -> int:
     """Estimate simple variable-size unversioned containers without consuming bytes."""
@@ -1090,14 +1076,12 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
         archive.seek(current)
     return 0
 
-
 def _fixed_unversioned_size(prop_type: Any) -> int:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name == "EnumProperty":
         inner = getattr(prop_type, "inner_type", None)
         return _fixed_unversioned_size(inner) if inner is not None else 8
     return FIXED_UNVERSIONED_SIZES.get(type_name, 0)
-
 
 def _apply_mapping_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     tag.struct_type = getattr(prop_type, "struct_type", None)

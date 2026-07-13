@@ -34,12 +34,9 @@ LATENT_NODE_TYPES = frozenset({
     "K2Node_Timeline",
 })
 
-
 # ============================================================================
 # 辅助函数 — 大部分已提取到 graph_utils.py，仅保留 flow_builder 专用函数
 # ============================================================================
-
-
 
 def _extract_call_function_parameters(
     node: Any,
@@ -84,7 +81,6 @@ def _extract_call_function_parameters(
             output_params.append(param)
 
     return {"input_params": input_params, "output_params": output_params}
-
 
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """格式化单个节点为紧凑的 Blueprint DTO JSON 结构。
@@ -135,7 +131,6 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
 
     return result
 
-
 def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List[str]:
     """Return export names for nodes inside an EdGraph comment rectangle."""
     data = comment_node.node_data if isinstance(comment_node.node_data, dict) else {}
@@ -155,7 +150,6 @@ def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List
         if left <= node.node_pos_x <= right and top <= node.node_pos_y <= bottom:
             enclosed.append(getattr(node, "_export_object_name", "") or node.node_guid)
     return enclosed
-
 
 def _get_start_event_name(node: UEdGraphNode) -> str:
     """获取起点节点的事件名称（D-19-11）。
@@ -249,7 +243,6 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
 
     return node.class_name
 
-
 def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
     """判断是否为数据流边界节点。
 
@@ -267,7 +260,6 @@ def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
     if pin_lower == "self" or pin_lower == "target":
         return True
     return False
-
 
 def _resolve_knot_chain(
     pin_guid: str,
@@ -327,7 +319,6 @@ def _resolve_knot_chain(
                 break
 
     return (current_pin_guid, False)  # 超过深度限制
-
 
 def _trace_data_source(
     pin: UEdGraphPin,
@@ -448,7 +439,6 @@ def _trace_data_source(
 
     return {"data_sources": sources} if sources else None
 
-
 def _find_next_exec_node(
     node: UEdGraphNode,
     pin_lookup: Dict[str, Tuple[str, str]],
@@ -482,7 +472,6 @@ def _find_next_exec_node(
                 if edge["from_node_guid"] == node.node_guid and edge.get("is_exec"):
                     return (node_lookup.get(edge["to_node_guid"]), edge.get("from_pin"))
     return (None, None)
-
 
 def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict[str, Any]:
     """尝试展开宏实例。
@@ -525,7 +514,6 @@ def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict
             "reason": str(e),
             "macro_name": graph_name or "Unknown",
         }
-
 
 def _trace_execution_from_event(
     start_node: UEdGraphNode,
@@ -680,7 +668,6 @@ def _trace_execution_from_event(
 
     return flow
 
-
 def _trace_execution_from_pin(
     start_node: UEdGraphNode,
     start_pin: UEdGraphPin,
@@ -721,7 +708,6 @@ def _trace_execution_from_pin(
                 )
 
     return []
-
 
 # ============================================================================
 # 主函数
@@ -803,7 +789,6 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     )
 
     return connections, warnings
-
 
 def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[str, Any]] = None) -> List[Dict]:
     """构建执行流路径条目（D-08-07~11, D-19-10~12）。
@@ -891,7 +876,6 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
 
     return execution_flows
 
-
 def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
     """将单个 UEdGraph 转换为 MacroExpander 期望的字典格式。
 
@@ -941,7 +925,6 @@ def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
         "nodes": nodes,
     }
 
-
 def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     """从 UEdGraph 构建宏展开所需的 asset_context。
 
@@ -967,7 +950,6 @@ def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
                 queue.append(subgraph)
 
     return {"graphs": all_graphs}
-
 
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     """构建数据流图（D-19-06~09, LINK-03）。
@@ -1002,7 +984,6 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     data_flows.extend(_build_synthetic_function_data_flows(graph, node_name_lookup, mode))
 
     return data_flows
-
 
 def _build_synthetic_function_data_flows(
     graph: UEdGraph,
@@ -1064,7 +1045,6 @@ def _build_synthetic_function_data_flows(
                     })
 
     return flows
-
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     """格式化蓝图图数据为 JSON 输出（GRAPH-11, GRAPH-12, OUT-02, OUT-04）。
@@ -1141,7 +1121,6 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
     return formatted
 
-
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
     """从 FunctionEntry 节点的 Pins 提取签名（GAP-07）。
 
@@ -1200,7 +1179,6 @@ def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
         "return_type": return_type,
         "parameters": parameters
     }
-
 
 def build_function_graphs(
     graphs: List[UEdGraph],
@@ -1400,7 +1378,6 @@ def build_function_graphs(
             function_graphs.append(entry)
 
     return function_graphs
-
 
 # Public API aliases — internal functions exposed for cross-module consumers.
 # These allow other modules (e.g. kismet/semantic.py) to use graph traversal
