@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 from uasset_read.constants import (
     MAX_PINS_PER_NODE, UE_NONE_SENTINEL,
 )
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin, FMemberReference
@@ -749,7 +749,13 @@ def _read_member_reference_from_tags(
             break
         if inner.value_end_offset is not None and inner.value_end_offset > value_end:
             raise ParseError(
-                f"MemberReference field '{inner.name}' exceeds struct boundary"
+                f"MemberReference field '{inner.name}' exceeds struct boundary",
+                context=ErrorContext(
+                    offset=archive.tell(),
+                    phase="graph",
+                    operation="_read_member_reference_from_tags",
+                    context_name="",
+                ),
             )
 
         def _read_inner(inner=inner):
@@ -908,9 +914,25 @@ def _read_node_pins(
     pins_count = archive.read_i32()
 
     if pins_count < 0:
-        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
+        raise ParseError(
+            f"Invalid pins_count {pins_count} (negative) at node {node_name}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="graph",
+                operation="_read_node_pins",
+                context_name=node_name,
+            ),
+        )
     if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
+        raise ParseError(
+            f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="graph",
+                operation="_read_node_pins",
+                context_name=node_name,
+            ),
+        )
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
