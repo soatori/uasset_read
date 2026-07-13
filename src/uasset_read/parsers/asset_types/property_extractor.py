@@ -96,7 +96,8 @@ def extract_object_ref(
     ref = properties[prop_name]
     if isinstance(ref, dict):
         setattr(target, field_name, ref.get(ref_key))
-    return True
+        return True
+    return False
 
 
 def extract_array_property(
