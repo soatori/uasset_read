@@ -137,6 +137,23 @@ def test_session_auto_cleanup_runs_after_close_and_preserves_current_run(tmp_pat
     assert list(tmp_path.glob("uasset_read-*.log")) == [current_path]
 
 
+def test_nested_scoped_session_is_rejected_without_replacing_outer_handler(tmp_path):
+    with project_logging.project_logging_session(
+        log_dir=tmp_path / "outer",
+        run_id="outer",
+    ) as outer:
+        with pytest.raises(RuntimeError, match="already active"):
+            project_logging.project_logging_session(
+                log_dir=tmp_path / "inner",
+                run_id="inner",
+            )
+        logging.getLogger("uasset_read.session_test").warning("outer remains active")
+
+    output = outer.log_path.read_text(encoding="utf-8")
+    assert "outer remains active" in output
+    assert not (tmp_path / "inner").exists()
+
+
 def test_log_context_adds_run_process_asset_and_stage(tmp_path):
     path = configure_project_logging(
         log_dir=tmp_path,

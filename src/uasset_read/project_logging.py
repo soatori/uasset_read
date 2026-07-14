@@ -19,6 +19,7 @@ _LOGGER_NAME = "uasset_read"
 _HANDLER_MARKER = "_uasset_read_project_log_handler"
 _WORKER_HANDLER_MARKER = "_uasset_read_worker_log_handler"
 _state_lock = threading.Lock()
+_scope_lock = threading.Lock()
 _configured_log_path: Path | None = None
 _configured_run_id: str | None = None
 _configured_signature: tuple | None = None
@@ -165,6 +166,7 @@ class ProjectLogSession:
     max_total_bytes: int | None = None
     older_than_days: int | None = None
     _started_at: float = field(default_factory=time.monotonic)
+    _owns_scope_lock: bool = False
     _closed: bool = False
 
     def __enter__(self) -> "ProjectLogSession":
@@ -175,33 +177,44 @@ class ProjectLogSession:
 
     def close(self) -> None:
         if not self._closed:
-            duration_ms = (time.monotonic() - self._started_at) * 1000
-            logging.getLogger(_LOGGER_NAME).info(
-                "session_end run_id=%s duration_ms=%.1f",
-                self.run_id,
-                duration_ms,
-            )
-            shutdown_project_logging()
-            self._closed = True
-            if self.cleanup_on_close:
-                cleanup_project_logs(
-                    log_dir=self.log_path.parent,
-                    keep_latest=self.keep_latest,
-                    max_total_bytes=self.max_total_bytes,
-                    older_than_days=self.older_than_days,
-                    dry_run=False,
+            try:
+                duration_ms = (time.monotonic() - self._started_at) * 1000
+                logging.getLogger(_LOGGER_NAME).info(
+                    "session_end run_id=%s duration_ms=%.1f",
+                    self.run_id,
+                    duration_ms,
                 )
+                shutdown_project_logging()
+                self._closed = True
+                if self.cleanup_on_close:
+                    cleanup_project_logs(
+                        log_dir=self.log_path.parent,
+                        keep_latest=self.keep_latest,
+                        max_total_bytes=self.max_total_bytes,
+                        older_than_days=self.older_than_days,
+                        dry_run=False,
+                    )
+            finally:
+                if self._owns_scope_lock:
+                    self._owns_scope_lock = False
+                    _scope_lock.release()
 
 
 def project_logging_session(**kwargs) -> ProjectLogSession:
     """Configure and return a scoped project logging session."""
+    if not _scope_lock.acquire(blocking=False):
+        raise RuntimeError("A project logging session is already active")
     cleanup_on_close = bool(kwargs.pop("cleanup_on_close", False))
     keep_latest = kwargs.get("keep_latest")
     max_total_bytes = kwargs.get("max_total_bytes")
     older_than_days = kwargs.get("older_than_days")
-    log_path = configure_project_logging(**kwargs)
-    if log_path is None or _configured_run_id is None:
-        raise RuntimeError("Project logging is disabled")
+    try:
+        log_path = configure_project_logging(**kwargs)
+        if log_path is None or _configured_run_id is None:
+            raise RuntimeError("Project logging is disabled")
+    except BaseException:
+        _scope_lock.release()
+        raise
     logging.getLogger(_LOGGER_NAME).info("session_start run_id=%s", _configured_run_id)
     return ProjectLogSession(
         log_path=log_path,
@@ -210,6 +223,7 @@ def project_logging_session(**kwargs) -> ProjectLogSession:
         keep_latest=keep_latest,
         max_total_bytes=max_total_bytes,
         older_than_days=older_than_days,
+        _owns_scope_lock=True,
     )
 
 
