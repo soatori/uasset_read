@@ -243,11 +243,6 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
-        if instance.serial_size == 0:
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
         # === NoneType Guard (#328) ===
         # 防止 serial_offset/serial_size 为 None 导致 TypeError
         if self._archive is None:
@@ -337,6 +332,30 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # === serial_size 验证 ===
+        # 负值检查（防止 offset+size 产生意外结果）
+        if instance.serial_size < 0:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="serial_size",
+                export_index=index,
+                object_name=instance.object_name,
+                target_offset=instance.serial_offset,
+                read_size=instance.serial_size,
+                file_size=self._file_size,
+                source="preload",
+                error=f"Export #{index} ({instance.object_name}) serial_size {instance.serial_size} 为负数",
+            ))
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
+        # 零值跳过（在偏移校验之后执行，确保无效偏移先被诊断）
+        if instance.serial_size == 0:
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
         # 验证 serial_offset + serial_size 不超出文件
         if instance.serial_offset + instance.serial_size > self._file_size:
             self._diagnostics.append(OffsetRangeDiagnostic(
@@ -406,7 +425,9 @@ class PackageLinker:
         """将 ObjectProperty 的 FPackageIndex 解析为 UObjectInstance 引用。
 
         遍历所有已 preload 的 export 对象，填充 property_references 字段。
+        支持 int 和 PackageIndex 两种值类型。
         """
+        from uasset_read.serializers.object_resources import PackageIndex
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
@@ -417,21 +438,25 @@ class PackageLinker:
                     continue
                 if prop.get('type') == 'ObjectProperty':
                     pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
-                        # 转换为 PackageIndex 并解析
-                        from uasset_read.serializers.object_resources import PackageIndex
+                    if isinstance(pkg_idx, PackageIndex):
+                        resolved = self.resolve_package_index(pkg_idx)
+                    elif isinstance(pkg_idx, int):
                         resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                        if resolved:
-                            prop_name = prop.get('name', '')
-                            if not hasattr(inst, 'property_references'):
-                                inst.property_references = {}
-                            inst.property_references[prop_name] = resolved
+                    else:
+                        continue
+                    if resolved:
+                        prop_name = prop.get('name', '')
+                        if not hasattr(inst, 'property_references'):
+                            inst.property_references = {}
+                        inst.property_references[prop_name] = resolved
 
     def _resolve_weak_references(self) -> None:
         """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
 
         遍历所有已 preload 的 export 对象，填充 weak_references 字段。
+        支持 int 和 PackageIndex 两种值类型。
         """
+        from uasset_read.serializers.object_resources import PackageIndex
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
@@ -442,11 +467,14 @@ class PackageLinker:
                     continue
                 if prop.get('type') == 'WeakObjectProperty':
                     pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
-                        from uasset_read.serializers.object_resources import PackageIndex
+                    if isinstance(pkg_idx, PackageIndex):
+                        resolved = self.resolve_package_index(pkg_idx)
+                    elif isinstance(pkg_idx, int):
                         resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                        if resolved:
-                            inst.weak_references.append(resolved)
+                    else:
+                        continue
+                    if resolved:
+                        inst.weak_references.append(resolved)
 
     def _verify_imports(self) -> List[str]:
         """验证所有导入对象的有效性。
