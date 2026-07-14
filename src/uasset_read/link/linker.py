@@ -7,6 +7,7 @@ preload(index) lazily deserializes properties on demand.
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
@@ -23,6 +24,38 @@ from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
+
+# World Partition 路径规范化正则：匹配路径段末尾的 _数字 后缀
+_WP_HASH_RE = re.compile(r'_(\d{3,})$')
+
+
+def normalize_world_partition_path(path: str) -> str:
+    """去除 World Partition 哈希后缀，规范化导入路径。
+
+    World Partition 为外部子包生成形如 ``/Script/Engine_3103784960`` 的路径，
+    其中 ``_3103784960`` 是基于 MD5 的数字哈希后缀。本函数将此类路径还原为
+    基础模块路径（如 ``/Script/Engine``），以便进行路径匹配。
+
+    只对路径的最后一个段落（split('/') 的最后一段）执行去除，
+    并且要求后缀至少包含 3 位数字以避免误伤正常标识符。
+
+    Args:
+        path: 原始导入路径（如 ``/Script/Engine_3103784960``）
+
+    Returns:
+        规范化后的路径（如 ``/Script/Engine``）。若无哈希后缀则原样返回。
+    """
+    if not path:
+        return path
+    last_slash = path.rfind('/')
+    if last_slash < 0:
+        segment = path
+        prefix = ''
+    else:
+        segment = path[last_slash + 1:]
+        prefix = path[:last_slash + 1]
+    normalized_segment = _WP_HASH_RE.sub('', segment)
+    return prefix + normalized_segment
 
 
 class PackageLinker:
@@ -499,7 +532,17 @@ class PackageLinker:
             if hasattr(imp, 'outer_index') and imp.outer_index and not imp.outer_index.is_null:
                 outer_inst = self.resolve_package_index(imp.outer_index)
                 if outer_inst is None:
-                    errors.append(f"Import {inst.object_name}: outer_index 无法解析")
+                    # World Partition 子包的 hashed 路径（如 /Script/Engine_3103784960）
+                    # 其 outer_index 可能引用了未包含在当前 import 表中的包，
+                    # 这是正常的子包拆分行为，降级为 debug 而非 error。
+                    obj_name = inst.object_name
+                    if isinstance(obj_name, str) and _WP_HASH_RE.search(obj_name):
+                        logger.debug(
+                            "Import %s: outer_index 无法解析（World Partition hashed 路径，已忽略）",
+                            obj_name,
+                        )
+                    else:
+                        errors.append(f"Import {inst.object_name}: outer_index 无法解析")
 
         return errors
 

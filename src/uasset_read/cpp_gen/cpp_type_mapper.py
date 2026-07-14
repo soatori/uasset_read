@@ -284,6 +284,11 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
     if ue_type.startswith("/Script/"):
         if ue_type in UE_TO_CPP_TYPE_MAP:
             return UE_TO_CPP_TYPE_MAP[ue_type]
+        # World Partition hashed 路径规范化（如 /Script/Engine_3103784960 → /Script/Engine）
+        from uasset_read.link.linker import normalize_world_partition_path
+        normalized = normalize_world_partition_path(ue_type)
+        if normalized != ue_type and normalized in UE_TO_CPP_TYPE_MAP:
+            return UE_TO_CPP_TYPE_MAP[normalized]
         return _apply_type_heuristic(ue_type)
 
     # 4. 简单类型名（可能是基本类型或已知类型）

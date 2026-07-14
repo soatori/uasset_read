@@ -317,12 +317,15 @@ def _get_version_string(result: ParseResult) -> str:
     return "4.x"
 
 def _build_imports(result: ParseResult) -> list[ImportIR]:
+    from uasset_read.link.linker import normalize_world_partition_path
+
     imports = []
     for idx, imp in enumerate(result.import_map or []):
         outer_resolved = _resolve_package_index(result, getattr(imp, "outer_index", None))
+        cp_raw = _safe_str(getattr(imp, "class_package", None))
         imports.append(ImportIR(
             index=idx,
-            class_package=_safe_str(getattr(imp, "class_package", None)),
+            class_package=normalize_world_partition_path(cp_raw),
             class_name=_safe_str(getattr(imp, "class_name", None)),
             object_name=_safe_str(getattr(imp, "object_name", None)),
             outer_index=getattr(imp, "outer_index", 0) or 0,
@@ -649,9 +652,13 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
     if linker is None:
         return None
 
+    from uasset_read.link.linker import normalize_world_partition_path
+
     import_paths = []
     for imp in result.import_map or []:
-        path = f"{_safe_str(getattr(imp, 'class_package', None))}.{_safe_str(getattr(imp, 'class_name', None))}"
+        cp = _safe_str(getattr(imp, 'class_package', None))
+        cn = _safe_str(getattr(imp, 'class_name', None))
+        path = f"{normalize_world_partition_path(cp)}.{cn}"
         if path.strip():
             import_paths.append(path)
 

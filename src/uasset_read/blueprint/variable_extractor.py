@@ -858,7 +858,8 @@ def _resolve_parent_class(
                     object_name = prop.value.get('object_name')
                     class_package = prop.value.get('class_package', '')
                     if class_package:
-                        parent_class = f"{class_package}.{object_name}"
+                        from uasset_read.link.linker import normalize_world_partition_path
+                        parent_class = f"{normalize_world_partition_path(class_package)}.{object_name}"
                     else:
                         common_engine_classes = [
                             "Character", "Pawn", "Actor", "ActorComponent",
