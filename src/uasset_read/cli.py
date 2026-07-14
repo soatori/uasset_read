@@ -222,10 +222,11 @@ def _handle_batch(args) -> None:
 
 
 def _handle_clean_logs(args) -> None:
+    config = _log_config_from_args(args)
     planned = cleanup_project_logs(
         log_dir=args.log_dir,
-        keep_latest=args.log_keep_latest,
-        max_total_bytes=_log_max_total_bytes_from_args(args),
+        keep_latest=config.keep_latest,
+        max_total_bytes=config.max_total_bytes,
         dry_run=True,
     )
     print(f"Would delete {len(planned)} log file(s)")

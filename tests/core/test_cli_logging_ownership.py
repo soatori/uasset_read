@@ -67,6 +67,29 @@ def test_cli_help_describes_run_cleanup_and_safe_dry_run():
     assert "pass --log-cleanup to delete" not in normalized
 
 
+def test_clean_logs_dry_run_uses_cli_retention_defaults(monkeypatch, tmp_path):
+    args = cli.create_parser().parse_args([
+        "--clean-logs",
+        "--log-dir",
+        str(tmp_path),
+    ])
+    captured = {}
+
+    def fake_cleanup(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(cli, "cleanup_project_logs", fake_cleanup)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli._handle_clean_logs(args)
+
+    assert exc_info.value.code == 0
+    assert captured["keep_latest"] == 20
+    assert captured["max_total_bytes"] == 500 * 1024 * 1024
+    assert captured["dry_run"] is True
+
+
 def test_cli_single_parse_passes_structured_log_config(monkeypatch, tmp_path):
     asset_path = tmp_path / "asset.uasset"
     asset_path.write_bytes(b"")
