@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 
 
 # Partial 状态集合：这些 export 级状态使 package 状态降为 partial
-# 注："partial" 本身不在此集合中 — 旧 LinkerParseResult.status 会检查 parse_status="partial"，
-# 但当前代码库中没有任何 export 设置 parse_status="partial"，因此无需包含。
+# 完整覆盖所有 partial 变体，确保状态判断一致（#315）
 PARTIAL_STATUSES: frozenset[str] = frozenset({
+    "partial",
     "opaque",
     "skipped",
     "partial_metadata",
