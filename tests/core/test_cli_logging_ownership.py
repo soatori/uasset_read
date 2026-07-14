@@ -58,6 +58,15 @@ def test_python_log_config_does_not_auto_cleanup_by_default():
     assert config.repeat_limit == 5
 
 
+def test_cli_help_describes_run_cleanup_and_safe_dry_run():
+    help_text = cli.create_parser().format_help()
+    normalized = " ".join(help_text.split())
+
+    assert "newest N complete runs" in normalized
+    assert "Dry-run log cleanup plan" in normalized
+    assert "pass --log-cleanup to delete" not in normalized
+
+
 def test_cli_single_parse_passes_structured_log_config(monkeypatch, tmp_path):
     asset_path = tmp_path / "asset.uasset"
     asset_path.write_bytes(b"")

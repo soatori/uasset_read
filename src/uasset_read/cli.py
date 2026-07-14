@@ -97,7 +97,7 @@ def create_parser():
     parser.add_argument('--log-cleanup', action=argparse.BooleanOptionalAction, default=True,
                         help='Clean old run logs automatically (default: enabled)')
     parser.add_argument('--log-keep-latest', metavar='N', type=int,
-                        help='When --log-cleanup is set, keep only the newest N log files')
+                        help='When cleanup is enabled, keep the newest N complete runs')
     parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
                         help='When --log-cleanup is set, cap total log storage to MB megabytes')
     parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
@@ -110,7 +110,7 @@ def create_parser():
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
     parser.add_argument('--clean-logs', action='store_true',
-                        help='Plan log cleanup and exit; pass --log-cleanup to delete')
+                        help='Dry-run log cleanup plan and exit; never deletes files')
     parser.add_argument('--batch', action='store_true', help='Enable batch mode')
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
