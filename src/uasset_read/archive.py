@@ -577,12 +577,26 @@ class FArchive:
             utf16_len = -length * 2
             if utf16_len > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-16 length %d exceeds maximum %d, "
+                        "returning empty string (tolerant)",
+                        pos_before, utf16_len, MAX_FSTRING_LENGTH,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-16 string at pos {pos_before}: length {utf16_len} exceeds "
                     f"maximum {MAX_FSTRING_LENGTH}"
                 )
             if pos_before + 4 + utf16_len > self._file_size:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-16 expected %d bytes but only %d remain, "
+                        "returning empty string (tolerant)",
+                        pos_before, utf16_len, self._file_size - pos_before - 4,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-16 string at pos {pos_before}: expected {utf16_len} bytes "
                     f"but only {self._file_size - pos_before - 4} remain"
@@ -619,12 +633,26 @@ class FArchive:
         else:
             if length > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-8 length %d exceeds maximum %d, "
+                        "returning empty string (tolerant)",
+                        pos_before, length, MAX_FSTRING_LENGTH,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-8 string at pos {pos_before}: length {length} exceeds "
                     f"maximum {MAX_FSTRING_LENGTH}"
                 )
             if pos_before + 4 + length > self._file_size:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-8 expected %d bytes but only %d remain, "
+                        "returning empty string (tolerant)",
+                        pos_before, length, self._file_size - pos_before - 4,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-8 string at pos {pos_before}: expected {length} bytes "
                     f"but only {self._file_size - pos_before - 4} remain"
