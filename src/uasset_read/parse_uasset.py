@@ -385,7 +385,6 @@ def _parse_package_core(
 
         finally:
             _cleanup_archive_diagnostics(result, archive)
-            _cleanup_parse_memory(result)
 
 
 def _resolve_parse_params(
@@ -508,6 +507,7 @@ def parse_package(
         provider=provider,
         **core_kwargs,
     )
+    _cleanup_parse_memory(result)
     return result
 
 
