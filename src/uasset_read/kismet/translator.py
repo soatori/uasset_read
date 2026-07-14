@@ -556,7 +556,7 @@ class MathFunctionCleaner:
     _SET_CLEAN_TABLE: dict[str, any] = {
         "Set_AddItems": lambda p: f"{p[0]}.Add({p[1]})",
         "Set_Clear": lambda p: f"{p[0]}.Clear()",
-        "Set_Difference": lambda p: f"{p[2]} = {p[0]} == {p[1]}",
+        "Set_Difference": lambda p: f"{p[2]} = {p[0]} - {p[1]}",
         "Set_IsEmpty": lambda p: f"{p[0]}.Length == 0",
         "Set_Length": lambda p: f"{p[0]}.Length",
     }
