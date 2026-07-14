@@ -262,17 +262,17 @@ def _cleanup_parse_memory(result) -> None:
 def _parse_package_core(
     path: str,
     result,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     provider: PackageProvider | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
     extra_linker_setup: Callable | None = None,
     check_aes_key: bytes | None = None,
     lightweight_threshold: int | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
@@ -280,17 +280,27 @@ def _parse_package_core(
     Args:
         path: 文件路径
         result: ParseResult 或 LinkerParseResult 实例（被原地修改）
-        tolerant: 容错模式
+        tolerant: 容错模式（None 表示使用默认 True）
         provider: package provider
         mappings_path: 类型映射文件路径
         game: 游戏标识
-        include_parent_assets: 是否解析父资产
+        include_parent_assets: 是否解析父资产（None 表示使用默认 False）
         asset_roots: 资产根目录列表
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
         check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
+        force_full_parse: 强制完整解析大蓝图（None 表示使用默认 False）
+        hex_view: 启用 HexView 字节偏移追踪（None 表示使用默认 False）
     """
+    # 将 None 解析为内部默认值
+    if tolerant is None:
+        tolerant = True
+    if include_parent_assets is None:
+        include_parent_assets = False
+    if force_full_parse is None:
+        force_full_parse = False
+    if hex_view is None:
+        hex_view = False
+
     from uasset_read.memory_safety import (
         MemoryMonitor,
         MemoryPolicy,
@@ -387,26 +397,21 @@ def _resolve_parse_params(
     - 若提供 config，config 的值作为默认，显式传入的旧参数可覆盖。
     - 若未提供 config，旧参数保持原样。
     - 对同时从 config 和旧参数传入的值，发出 DeprecationWarning。
+
+    kwargs 中值为 None 的条目视为"调用方未指定"，不覆盖 config 值。
     """
     if config is None:
         return kwargs
 
-    # 检测是否有旧参数也显式传入了（非默认值）
-    _PARAM_DEFAULTS = {
-        "tolerant": True,
-        "include_parent_assets": False,
-        "asset_roots": None,
-        "mappings_path": None,
-        "game": None,
-        "force_full_parse": False,
-        "hex_view": False,
-        "lightweight_threshold": None,
-        "memory_policy": None,
-    }
+    # 所有旧参数在 parse_package() 签名中默认为 None（哨兵），
+    # 只有调用方显式传入非 None 值才算"显式覆盖"。
+    # 但如果调用方显式传入了与 config 值不同的非 None 值，发出弃用警告。
     conflicting = []
-    for field_name, default in _PARAM_DEFAULTS.items():
-        if field_name in kwargs and kwargs[field_name] != default:
-            conflicting.append(field_name)
+    for fld in config.__dataclass_fields__:
+        if fld in kwargs and kwargs[fld] is not None:
+            config_val = getattr(config, fld)
+            if config_val is not None and kwargs[fld] != config_val:
+                conflicting.append(fld)
 
     if conflicting:
         warnings.warn(
@@ -416,10 +421,11 @@ def _resolve_parse_params(
             stacklevel=3,
         )
 
-    # 用 config 填充缺失的参数
+    # 合并：kwargs 非 None 值覆盖 config，None 不覆盖
     merged = {}
     for fld in config.__dataclass_fields__:
-        merged[fld] = kwargs.get(fld, getattr(config, fld))
+        kw_val = kwargs.get(fld)
+        merged[fld] = kw_val if kw_val is not None else getattr(config, fld)
     # 保留 kwargs 中不在 config 中的键（如 path, provider 等）
     for key in kwargs:
         if key not in merged:
@@ -429,8 +435,8 @@ def _resolve_parse_params(
 
 def parse_package(
     path: str,
-    tolerant: bool = True,
-    include_parent_assets: bool = False,
+    tolerant: bool | None = None,
+    include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
     aes_key: bytes | None = None,
     provider: PackageProvider | None = None,
@@ -438,8 +444,8 @@ def parse_package(
     game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
     lightweight_threshold: int | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
 ) -> ParseResult:
@@ -507,13 +513,13 @@ def parse_package(
 
 def parse_uasset(
     path: str,
-    tolerant: bool = True,
-    include_parent_assets: bool = False,
+    tolerant: bool | None = None,
+    include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
 ) -> ParseResult:
@@ -547,16 +553,16 @@ def parse_uasset(
 
 def parse_uasset_with_linker(
     path: str,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     preload_all: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
     provider: PackageProvider | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
     lightweight_threshold: int | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
 ) -> "LinkerParseResult":

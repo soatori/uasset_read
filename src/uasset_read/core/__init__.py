@@ -103,16 +103,16 @@ def _configure_logging(
 def parse_single(
     file_path: str,
     format: str = "json",
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
     log_level: str | None = None,
@@ -136,16 +136,16 @@ def parse_single(
     Args:
         file_path: .uasset/.umap 文件路径
         format: 输出格式（json, markdown）
-        tolerant: 容错模式，遇到错误继续解析
+        tolerant: 容错模式，遇到错误继续解析。None 表示使用 ParseConfig 或默认值 True
         verbose: 详细输出
         include_schema: 包含 JSON Schema
         include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产
+        include_parent_assets: 解析父资产。None 表示使用 ParseConfig 或默认值 False
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）。None 表示使用 ParseConfig 或默认值 False
+        hex_view: 启用 HexView 字节偏移追踪。None 表示使用 ParseConfig 或默认值 False
         memory_policy: 可选内存策略
         output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
         log_config: 可选 LogConfig 实例，集中管理日志参数。
@@ -236,8 +236,8 @@ def parse_single(
     return renderer.render(ir, options)
 
 
-def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
-    if not tolerant or format not in {"json"}:
+def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
+    if (tolerant is not None and not tolerant) or format not in {"json"}:
         return False
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
@@ -261,16 +261,16 @@ def parse_batch(
     input_dir: str,
     format: str = "json",
     output_dir: str | None = None,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
     skip_large_files: bool | None = None,
     isolate_assets: bool | str = True,  # True/False/"auto"
@@ -464,11 +464,11 @@ def diff_single(
     file_path1: str,
     file_path2: str,
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
     writer: IO[str] | None = None,
     log_level: str | None = None,
     log_dir: str | None = None,
@@ -541,11 +541,11 @@ def _diff_to(
     file_path2: str,
     writer: IO[str],
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
 ) -> None:
     """将 unified diff 流式写入 writer。
 
