@@ -14,10 +14,11 @@ from uasset_read.project_logging import (
 
 
 class TestLogFileOptimization:
-    def test_single_fixed_filename(self):
-        path = _build_log_path(Path(tempfile.mkdtemp()))
+    def test_run_filename_contains_run_id(self):
+        path = _build_log_path(Path(tempfile.mkdtemp()), "test-run")
         basename = os.path.basename(path)
-        assert basename == "uasset_read.log"
+        assert basename.startswith("uasset_read-")
+        assert basename.endswith("-test-run.log")
 
     def test_rotating_handler_used(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -42,6 +43,6 @@ class TestLogFileOptimization:
     def test_log_file_created_in_specified_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             setup_logging(log_dir=tmpdir)
-            log_file = os.path.join(tmpdir, "uasset_read.log")
-            assert os.path.exists(log_file)
+            log_files = list(Path(tmpdir).glob("uasset_read-*.log"))
+            assert len(log_files) == 1
             _reset_logging_state_for_tests()

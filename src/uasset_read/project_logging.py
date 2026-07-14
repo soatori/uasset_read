@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
@@ -12,7 +13,10 @@ _HANDLER_MARKER = "_uasset_read_project_log_handler"
 _state_lock = threading.Lock()
 _configured_log_path: Path | None = None
 _configured_run_id: str | None = None
+_configured_signature: tuple | None = None
 _disabled_by_request = False
+_original_level: int | None = None
+_original_propagate: bool | None = None
 
 
 def _default_project_root() -> Path:
@@ -23,9 +27,14 @@ def new_log_run_id() -> str:
     return uuid4().hex[:12]
 
 
-def _build_log_path(log_dir: Path) -> Path:
+def _build_log_path(log_dir: Path, run_id: str) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir / "uasset_read.log"
+    safe_run_id = "".join(
+        char if char.isalnum() or char in "-_" else "_"
+        for char in run_id
+    )
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{safe_run_id}.log"
 
 
 def _coerce_level(level: str | int | None) -> int:
@@ -49,6 +58,31 @@ def _remove_project_handlers(package_logger: logging.Logger) -> None:
             handler.close()
 
 
+def _shutdown_locked(package_logger: logging.Logger) -> None:
+    global _configured_log_path
+    global _configured_run_id
+    global _configured_signature
+    global _original_level
+    global _original_propagate
+
+    _remove_project_handlers(package_logger)
+    if _original_level is not None:
+        package_logger.setLevel(_original_level)
+    if _original_propagate is not None:
+        package_logger.propagate = _original_propagate
+    _configured_log_path = None
+    _configured_run_id = None
+    _configured_signature = None
+    _original_level = None
+    _original_propagate = None
+
+
+def shutdown_project_logging() -> None:
+    """Flush and remove handlers owned by the current project log session."""
+    with _state_lock:
+        _shutdown_locked(logging.getLogger(_LOGGER_NAME))
+
+
 def configure_project_logging(
     project_root: str | Path | None = None,
     *,
@@ -66,15 +100,15 @@ def configure_project_logging(
     """Configure a per-process file logger under <project>/log/."""
     global _configured_log_path
     global _configured_run_id
+    global _configured_signature
     global _disabled_by_request
+    global _original_level
+    global _original_propagate
 
     with _state_lock:
         package_logger = logging.getLogger(_LOGGER_NAME)
         if not enabled or (isinstance(level, str) and level.lower() == "off"):
-            _remove_project_handlers(package_logger)
-            package_logger.propagate = True
-            _configured_log_path = None
-            _configured_run_id = None
+            _shutdown_locked(package_logger)
             _disabled_by_request = True
             return None
 
@@ -94,12 +128,27 @@ def configure_project_logging(
             return None
         _disabled_by_request = False
 
-        if _configured_log_path is not None:
-            return _configured_log_path
-
         root = Path(project_root) if project_root is not None else _default_project_root()
         root = root.resolve()
         resolved_log_dir = Path(log_dir).resolve() if log_dir is not None else root / "log"
+        log_level = _coerce_level(level)
+        signature = (
+            root,
+            resolved_log_dir,
+            log_level,
+            run_id,
+            max_bytes,
+            backup_count,
+            keep_latest,
+            max_total_bytes,
+            older_than_days,
+            cleanup,
+        )
+        if _configured_log_path is not None and signature == _configured_signature:
+            return _configured_log_path
+        if _configured_log_path is not None:
+            _remove_project_handlers(package_logger)
+
         if cleanup:
             cleanup_project_logs(
                 project_root=root,
@@ -110,11 +159,13 @@ def configure_project_logging(
                 dry_run=False,
             )
         active_run_id = run_id or new_log_run_id()
-        log_path = _build_log_path(resolved_log_dir)
+        log_path = _build_log_path(resolved_log_dir, active_run_id)
 
-        log_level = _coerce_level(level)
+        if _original_level is None:
+            _original_level = package_logger.level
+            _original_propagate = package_logger.propagate
         package_logger.setLevel(min(logging.DEBUG, log_level))
-        package_logger.propagate = False
+        package_logger.propagate = True
 
         handler = RotatingFileHandler(
             log_path,
@@ -134,6 +185,7 @@ def configure_project_logging(
 
         _configured_log_path = log_path
         _configured_run_id = active_run_id
+        _configured_signature = signature
         package_logger.info("Project logging initialized: %s", log_path)
         for existing_handler in package_logger.handlers:
             existing_handler.flush()
@@ -200,14 +252,14 @@ def _reset_logging_state_for_tests() -> None:
     """Remove only handlers installed by configure_project_logging()."""
     global _configured_log_path
     global _configured_run_id
+    global _configured_signature
     global _disabled_by_request
+    global _original_level
+    global _original_propagate
 
     with _state_lock:
         package_logger = logging.getLogger(_LOGGER_NAME)
-        _remove_project_handlers(package_logger)
-        package_logger.propagate = True
-        _configured_log_path = None
-        _configured_run_id = None
+        _shutdown_locked(package_logger)
         _disabled_by_request = False
 
 
