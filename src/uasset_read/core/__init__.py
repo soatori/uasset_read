@@ -81,7 +81,7 @@ def _configure_logging(
         and log_max_bytes == 10_000_000
         and log_backup_count == 5
     ):
-        return configure_project_logging()
+        return None
     kwargs = {
         "level": log_level or "DEBUG",
         "log_dir": log_dir,

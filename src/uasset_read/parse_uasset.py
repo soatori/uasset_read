@@ -468,7 +468,6 @@ def parse_package(
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
-    configure_project_logging()
     result = ParseResult()
 
     # 处理已废弃的 include_linker 参数
@@ -580,7 +579,6 @@ def parse_uasset_with_linker(
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
     """
-    configure_project_logging()
     # 延迟导入 extras 模块（per #117 core/extras 分层）
     from uasset_read.link.result import LinkerParseResult
 

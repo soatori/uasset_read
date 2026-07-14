@@ -93,3 +93,59 @@ def test_same_configuration_is_idempotent(tmp_path):
         if getattr(handler, "_uasset_read_project_log_handler", False)
     ]
     assert len(owned_handlers) == 1
+
+
+def test_project_logging_session_closes_owned_handler(tmp_path):
+    with project_logging.project_logging_session(
+        log_dir=tmp_path,
+        run_id="scoped",
+    ) as session:
+        assert session.log_path.exists()
+        assert session.run_id == "scoped"
+        logging.getLogger("uasset_read.session_test").info("inside scope")
+
+    owned_handlers = [
+        handler
+        for handler in logging.getLogger("uasset_read").handlers
+        if getattr(handler, "_uasset_read_project_log_handler", False)
+    ]
+    assert owned_handlers == []
+
+
+def test_log_context_adds_run_process_asset_and_stage(tmp_path):
+    path = configure_project_logging(
+        log_dir=tmp_path,
+        run_id="context-run",
+    )
+    assert path is not None
+
+    with project_logging.log_context(asset="Asset.uasset", stage="parse"):
+        logging.getLogger("uasset_read.session_test").warning("context detail")
+    project_logging.shutdown_project_logging()
+
+    output = path.read_text(encoding="utf-8")
+    assert "run=context-run" in output
+    assert "pid=" in output
+    assert "asset=Asset.uasset" in output
+    assert "stage=parse" in output
+
+
+def test_repeated_debug_templates_are_summarized_without_suppressing_warnings(tmp_path):
+    path = configure_project_logging(
+        log_dir=tmp_path,
+        run_id="repeat-run",
+        repeat_limit=2,
+    )
+    assert path is not None
+    logger = logging.getLogger("uasset_read.repeat_test")
+
+    for index in range(5):
+        logger.debug("repeated value %d", index)
+    for index in range(3):
+        logger.warning("warning value %d", index)
+    project_logging.shutdown_project_logging()
+
+    output = path.read_text(encoding="utf-8")
+    assert output.count("repeated value") == 3
+    assert "suppressed=3" in output
+    assert output.count("warning value") == 3

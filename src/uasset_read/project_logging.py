@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -10,6 +14,7 @@ from uuid import uuid4
 
 _LOGGER_NAME = "uasset_read"
 _HANDLER_MARKER = "_uasset_read_project_log_handler"
+_WORKER_HANDLER_MARKER = "_uasset_read_worker_log_handler"
 _state_lock = threading.Lock()
 _configured_log_path: Path | None = None
 _configured_run_id: str | None = None
@@ -17,6 +22,55 @@ _configured_signature: tuple | None = None
 _disabled_by_request = False
 _original_level: int | None = None
 _original_propagate: bool | None = None
+_log_asset: ContextVar[str] = ContextVar("uasset_read_log_asset", default="-")
+_log_stage: ContextVar[str] = ContextVar("uasset_read_log_stage", default="-")
+
+
+class _LogContextFilter(logging.Filter):
+    def __init__(self, run_id: str) -> None:
+        super().__init__()
+        self.run_id = run_id
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.run_id = self.run_id
+        record.process_id = record.process
+        record.asset = _log_asset.get()
+        record.stage = _log_stage.get()
+        return True
+
+
+class _RepeatedDebugFilter(logging.Filter):
+    def __init__(self, limit: int) -> None:
+        super().__init__()
+        self.limit = limit
+        self.counts: dict[tuple[str, str, str], int] = {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if self.limit <= 0 or record.levelno != logging.DEBUG:
+            return True
+        key = (_log_asset.get(), record.name, str(record.msg))
+        count = self.counts.get(key, 0) + 1
+        self.counts[key] = count
+        return count <= self.limit
+
+    def summaries(self) -> list[tuple[str, str, str, int]]:
+        return [
+            (asset, logger_name, template, count - self.limit)
+            for (asset, logger_name, template), count in self.counts.items()
+            if count > self.limit
+        ]
+
+
+@contextmanager
+def log_context(*, asset: str | None = None, stage: str | None = None):
+    """Attach asset and stage fields to records emitted in this context."""
+    asset_token = _log_asset.set(asset or _log_asset.get())
+    stage_token = _log_stage.set(stage or _log_stage.get())
+    try:
+        yield
+    finally:
+        _log_stage.reset(stage_token)
+        _log_asset.reset(asset_token)
 
 
 def _default_project_root() -> Path:
@@ -65,6 +119,20 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
     global _original_level
     global _original_propagate
 
+    for handler in list(package_logger.handlers):
+        if not getattr(handler, _HANDLER_MARKER, False):
+            continue
+        for installed_filter in handler.filters:
+            if isinstance(installed_filter, _RepeatedDebugFilter):
+                for asset, logger_name, template, suppressed in installed_filter.summaries():
+                    with log_context(asset=asset):
+                        package_logger.info(
+                            "Repeated DEBUG summary logger=%s template=%s suppressed=%d",
+                            logger_name,
+                            template,
+                            suppressed,
+                        )
+        handler.flush()
     _remove_project_handlers(package_logger)
     if _original_level is not None:
         package_logger.setLevel(_original_level)
@@ -83,6 +151,63 @@ def shutdown_project_logging() -> None:
         _shutdown_locked(logging.getLogger(_LOGGER_NAME))
 
 
+@dataclass
+class ProjectLogSession:
+    """A scoped owner for one project log file."""
+
+    log_path: Path
+    run_id: str
+    _closed: bool = False
+
+    def __enter__(self) -> "ProjectLogSession":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if not self._closed:
+            shutdown_project_logging()
+            self._closed = True
+
+
+def project_logging_session(**kwargs) -> ProjectLogSession:
+    """Configure and return a scoped project logging session."""
+    log_path = configure_project_logging(**kwargs)
+    if log_path is None or _configured_run_id is None:
+        raise RuntimeError("Project logging is disabled")
+    return ProjectLogSession(log_path=log_path, run_id=_configured_run_id)
+
+
+def configure_worker_stream_logging(
+    *,
+    stream=None,
+    level: str | int | None = "DEBUG",
+    run_id: str,
+    asset: str,
+) -> logging.Handler:
+    """Send worker diagnostics to the parent-owned stderr pipe."""
+    package_logger = logging.getLogger(_LOGGER_NAME)
+    for existing in list(package_logger.handlers):
+        if getattr(existing, _WORKER_HANDLER_MARKER, False):
+            package_logger.removeHandler(existing)
+            existing.close()
+    handler = logging.StreamHandler(stream or sys.stderr)
+    setattr(handler, _WORKER_HANDLER_MARKER, True)
+    handler.setLevel(_coerce_level(level))
+    handler.setFormatter(logging.Formatter(
+        fmt=(
+            f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
+            f"asset={asset} stage=worker] %(name)s: %(message)s"
+        ),
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    package_logger.setLevel(logging.DEBUG)
+    package_logger.propagate = False
+    package_logger.addHandler(handler)
+    return handler
+
+
 def configure_project_logging(
     project_root: str | Path | None = None,
     *,
@@ -96,6 +221,7 @@ def configure_project_logging(
     max_total_bytes: int | None = None,
     older_than_days: int | None = None,
     cleanup: bool = False,
+    repeat_limit: int = 5,
 ) -> Path | None:
     """Configure a per-process file logger under <project>/log/."""
     global _configured_log_path
@@ -123,6 +249,7 @@ def configure_project_logging(
             and max_total_bytes is None
             and older_than_days is None
             and cleanup is False
+            and repeat_limit == 5
         )
         if _disabled_by_request and default_request:
             return None
@@ -143,6 +270,7 @@ def configure_project_logging(
             max_total_bytes,
             older_than_days,
             cleanup,
+            repeat_limit,
         )
         if _configured_log_path is not None and signature == _configured_signature:
             return _configured_log_path
@@ -175,9 +303,15 @@ def configure_project_logging(
         )
         setattr(handler, _HANDLER_MARKER, True)
         handler.setLevel(log_level)
+        handler.addFilter(_LogContextFilter(active_run_id))
+        handler.addFilter(_RepeatedDebugFilter(repeat_limit))
         handler.setFormatter(
             logging.Formatter(
-                fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                fmt=(
+                    "%(asctime)s [%(levelname)s] "
+                    "[run=%(run_id)s pid=%(process_id)s asset=%(asset)s stage=%(stage)s] "
+                    "%(name)s: %(message)s"
+                ),
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
@@ -210,38 +344,72 @@ def cleanup_project_logs(
     if not resolved_log_dir.exists():
         return []
 
-    files = sorted(
-        resolved_log_dir.glob("uasset_read*.log*"),
-        key=lambda path: path.stat().st_mtime,
+    files = list(resolved_log_dir.glob("uasset_read*.log*"))
+
+    def family_base(path: Path) -> Path:
+        name = path.name
+        base, separator, suffix = name.rpartition(".")
+        if separator and suffix.isdigit() and base.endswith(".log"):
+            return path.with_name(base)
+        return path
+
+    families: dict[Path, list[Path]] = {}
+    for path in files:
+        families.setdefault(family_base(path), []).append(path)
+    ordered_families = sorted(
+        families,
+        key=lambda base: max(path.stat().st_mtime for path in families[base]),
         reverse=True,
     )
-    selected: set[Path] = set()
+    active_family = family_base(_configured_log_path) if _configured_log_path else None
+    selected_families: set[Path] = set()
 
     if keep_latest is not None:
         if keep_latest < 0:
             raise ValueError("keep_latest must be >= 0")
-        selected.update(files[keep_latest:])
+        selected_families.update(
+            family for family in ordered_families[keep_latest:]
+            if family != active_family
+        )
 
     if older_than_days is not None:
         if older_than_days < 0:
             raise ValueError("older_than_days must be >= 0")
         cutoff = datetime.now() - timedelta(days=older_than_days)
-        selected.update(
-            path for path in files
-            if datetime.fromtimestamp(path.stat().st_mtime) < cutoff
+        selected_families.update(
+            family for family in ordered_families
+            if family != active_family
+            and datetime.fromtimestamp(
+                max(path.stat().st_mtime for path in families[family])
+            ) < cutoff
         )
 
     if max_total_bytes is not None:
         if max_total_bytes < 0:
             raise ValueError("max_total_bytes must be >= 0")
         remaining_total = sum(path.stat().st_size for path in files)
-        for path in reversed(files):
+        remaining_total -= sum(
+            path.stat().st_size
+            for family in selected_families
+            for path in families[family]
+        )
+        newest_family = ordered_families[0] if ordered_families else None
+        for family in reversed(ordered_families):
             if remaining_total <= max_total_bytes:
                 break
-            selected.add(path)
-            remaining_total -= path.stat().st_size
+            if family in selected_families or family in {active_family, newest_family}:
+                continue
+            selected_families.add(family)
+            remaining_total -= sum(path.stat().st_size for path in families[family])
 
-    planned = sorted(selected, key=lambda path: path.stat().st_mtime)
+    planned = sorted(
+        (
+            path
+            for family in selected_families
+            for path in families[family]
+        ),
+        key=lambda path: path.stat().st_mtime,
+    )
     if not dry_run:
         for path in planned:
             path.unlink(missing_ok=True)

@@ -98,10 +98,14 @@ class LogConfig:
     """日志总大小上限（字节）。"""
     cleanup: bool = False
     """是否在启动时清理旧日志。"""
+    auto_cleanup: bool = False
+    """是否在日志会话结束后自动清理旧日志。"""
     max_bytes: int = 10_000_000
     """单个日志文件最大大小（字节），默认 10MB。"""
     backup_count: int = 5
     """保留的备份日志文件数量，默认 5。"""
+    repeat_limit: int = 5
+    """同一 DEBUG 消息模板保留数量，0 表示不聚合。"""
 
     def to_configure_kwargs(self) -> dict:
         """转换为 configure_project_logging() 的关键字参数。"""
@@ -112,8 +116,9 @@ class LogConfig:
             "enabled": effective_enabled,
             "max_bytes": self.max_bytes,
             "backup_count": self.backup_count,
+            "repeat_limit": self.repeat_limit,
             **({"run_id": self.run_id} if self.run_id is not None else {}),
             **({"keep_latest": self.keep_latest} if self.keep_latest is not None else {}),
             **({"max_total_bytes": self.max_total_bytes} if self.max_total_bytes is not None else {}),
-            **({"cleanup": True} if self.cleanup else {}),
+            **({"cleanup": True} if self.cleanup or self.auto_cleanup else {}),
         }
