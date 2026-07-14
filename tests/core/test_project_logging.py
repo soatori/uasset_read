@@ -120,7 +120,7 @@ class TestLoggingIntegration:
             keep_latest=0,  # 标记全部删除
             dry_run=True,
         )
-        assert len(planned) == 3
+        assert len(planned) == 2
 
         # 文件应仍然存在
         remaining = list(log_dir.glob("uasset_read-*.log*"))

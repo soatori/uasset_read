@@ -96,10 +96,12 @@ def test_same_configuration_is_idempotent(tmp_path):
 
 
 def test_project_logging_session_closes_owned_handler(tmp_path):
+    log_path = None
     with project_logging.project_logging_session(
         log_dir=tmp_path,
         run_id="scoped",
     ) as session:
+        log_path = session.log_path
         assert session.log_path.exists()
         assert session.run_id == "scoped"
         logging.getLogger("uasset_read.session_test").info("inside scope")
@@ -110,6 +112,29 @@ def test_project_logging_session_closes_owned_handler(tmp_path):
         if getattr(handler, "_uasset_read_project_log_handler", False)
     ]
     assert owned_handlers == []
+    output = log_path.read_text(encoding="utf-8")
+    assert "session_start" in output
+    assert "session_end" in output
+    assert "duration_ms=" in output
+
+
+def test_session_auto_cleanup_runs_after_close_and_preserves_current_run(tmp_path):
+    old_one = tmp_path / "uasset_read-20260101-000000-000000-pid1-old1.log"
+    old_two = tmp_path / "uasset_read-20260102-000000-000000-pid1-old2.log"
+    old_one.write_text("old one")
+    old_two.write_text("old two")
+
+    with project_logging.project_logging_session(
+        log_dir=tmp_path,
+        run_id="current",
+        cleanup_on_close=True,
+        keep_latest=1,
+        max_total_bytes=0,
+    ) as session:
+        current_path = session.log_path
+
+    assert current_path.exists()
+    assert list(tmp_path.glob("uasset_read-*.log")) == [current_path]
 
 
 def test_log_context_adds_run_process_asset_and_stage(tmp_path):
@@ -149,3 +174,30 @@ def test_repeated_debug_templates_are_summarized_without_suppressing_warnings(tm
     assert output.count("repeated value") == 3
     assert "suppressed=3" in output
     assert output.count("warning value") == 3
+
+
+def test_scoped_api_logs_asset_lifecycle_and_failure_status(tmp_path):
+    @project_logging.scoped_project_logging
+    def failing_api(path: str, *, log_config=None):
+        raise ValueError("broken")
+
+    with pytest.raises(ValueError, match="broken"):
+        failing_api(
+            "Asset.uasset",
+            log_config=project_logging_config(
+                dir=str(tmp_path),
+                run_id="lifecycle",
+            ),
+        )
+
+    path = next(tmp_path.glob("uasset_read-*-lifecycle.log"))
+    output = path.read_text(encoding="utf-8")
+    assert "asset_start" in output
+    assert "asset_end status=error" in output
+    assert "duration_ms=" in output
+
+
+def project_logging_config(**kwargs):
+    from uasset_read.config import LogConfig
+
+    return LogConfig(**kwargs)

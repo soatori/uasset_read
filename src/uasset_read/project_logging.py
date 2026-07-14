@@ -4,9 +4,12 @@ import logging
 import os
 import sys
 import threading
+import inspect
+import time
+from functools import wraps
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -157,6 +160,11 @@ class ProjectLogSession:
 
     log_path: Path
     run_id: str
+    cleanup_on_close: bool = False
+    keep_latest: int | None = None
+    max_total_bytes: int | None = None
+    older_than_days: int | None = None
+    _started_at: float = field(default_factory=time.monotonic)
     _closed: bool = False
 
     def __enter__(self) -> "ProjectLogSession":
@@ -167,16 +175,85 @@ class ProjectLogSession:
 
     def close(self) -> None:
         if not self._closed:
+            duration_ms = (time.monotonic() - self._started_at) * 1000
+            logging.getLogger(_LOGGER_NAME).info(
+                "session_end run_id=%s duration_ms=%.1f",
+                self.run_id,
+                duration_ms,
+            )
             shutdown_project_logging()
             self._closed = True
+            if self.cleanup_on_close:
+                cleanup_project_logs(
+                    log_dir=self.log_path.parent,
+                    keep_latest=self.keep_latest,
+                    max_total_bytes=self.max_total_bytes,
+                    older_than_days=self.older_than_days,
+                    dry_run=False,
+                )
 
 
 def project_logging_session(**kwargs) -> ProjectLogSession:
     """Configure and return a scoped project logging session."""
+    cleanup_on_close = bool(kwargs.pop("cleanup_on_close", False))
+    keep_latest = kwargs.get("keep_latest")
+    max_total_bytes = kwargs.get("max_total_bytes")
+    older_than_days = kwargs.get("older_than_days")
     log_path = configure_project_logging(**kwargs)
     if log_path is None or _configured_run_id is None:
         raise RuntimeError("Project logging is disabled")
-    return ProjectLogSession(log_path=log_path, run_id=_configured_run_id)
+    logging.getLogger(_LOGGER_NAME).info("session_start run_id=%s", _configured_run_id)
+    return ProjectLogSession(
+        log_path=log_path,
+        run_id=_configured_run_id,
+        cleanup_on_close=cleanup_on_close,
+        keep_latest=keep_latest,
+        max_total_bytes=max_total_bytes,
+        older_than_days=older_than_days,
+    )
+
+
+def current_log_run_id() -> str | None:
+    return _configured_run_id
+
+
+def scoped_project_logging(func):
+    """Scope an explicit ``log_config`` argument to one public API call."""
+    signature = inspect.signature(func)
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        bound = signature.bind_partial(*args, **kwargs)
+        config = bound.arguments.get("log_config")
+        if config is None:
+            return func(*args, **kwargs)
+        bound.arguments["log_config"] = None
+        path_value = (
+            bound.arguments.get("file_path")
+            or bound.arguments.get("path")
+            or bound.arguments.get("input_dir")
+        )
+        asset = Path(path_value).name if path_value else "-"
+        with project_logging_session(**config.to_configure_kwargs()):
+            stage = "batch" if func.__name__ == "parse_batch" else "parse"
+            with log_context(asset=asset, stage=stage):
+                started_at = time.monotonic()
+                status = "success"
+                logging.getLogger(_LOGGER_NAME).info("asset_start")
+                try:
+                    return func(*bound.args, **bound.kwargs)
+                except BaseException:
+                    status = "error"
+                    raise
+                finally:
+                    duration_ms = (time.monotonic() - started_at) * 1000
+                    logging.getLogger(_LOGGER_NAME).info(
+                        "asset_end status=%s duration_ms=%.1f",
+                        status,
+                        duration_ms,
+                    )
+
+    return wrapper
 
 
 def configure_worker_stream_logging(
@@ -222,6 +299,7 @@ def configure_project_logging(
     older_than_days: int | None = None,
     cleanup: bool = False,
     repeat_limit: int = 5,
+    cleanup_on_close: bool = False,
 ) -> Path | None:
     """Configure a per-process file logger under <project>/log/."""
     global _configured_log_path
@@ -250,6 +328,7 @@ def configure_project_logging(
             and older_than_days is None
             and cleanup is False
             and repeat_limit == 5
+            and cleanup_on_close is False
         )
         if _disabled_by_request and default_request:
             return None
@@ -271,6 +350,7 @@ def configure_project_logging(
             older_than_days,
             cleanup,
             repeat_limit,
+            cleanup_on_close,
         )
         if _configured_log_path is not None and signature == _configured_signature:
             return _configured_log_path
@@ -367,8 +447,9 @@ def cleanup_project_logs(
     if keep_latest is not None:
         if keep_latest < 0:
             raise ValueError("keep_latest must be >= 0")
+        effective_keep_latest = max(1, keep_latest)
         selected_families.update(
-            family for family in ordered_families[keep_latest:]
+            family for family in ordered_families[effective_keep_latest:]
             if family != active_family
         )
 

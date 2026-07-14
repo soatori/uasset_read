@@ -7,13 +7,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
+import logging
 import warnings
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.config import LogConfig
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
-from uasset_read.project_logging import configure_project_logging, new_log_run_id
+from uasset_read.project_logging import (
+    configure_project_logging,
+    current_log_run_id,
+    new_log_run_id,
+    scoped_project_logging,
+)
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
@@ -30,6 +36,16 @@ class BatchResult:
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _log_batch_summary(result: BatchResult) -> None:
+    logging.getLogger(__name__).info(
+        "batch_summary total=%d success=%d skipped=%d failed=%d",
+        result.total,
+        len(result.success),
+        len(result.skipped),
+        len(result.failed),
+    )
 
 
 def _configure_logging(
@@ -100,6 +116,7 @@ def _configure_logging(
     return configure_project_logging(**kwargs)
 
 
+@scoped_project_logging
 def parse_single(
     file_path: str,
     format: str = "json",
@@ -257,6 +274,7 @@ def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> boo
     return False
 
 
+@scoped_project_logging
 def parse_batch(
     input_dir: str,
     format: str = "json",
@@ -322,7 +340,7 @@ def parse_batch(
             f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
         )
 
-    active_run_id = log_run_id or new_log_run_id()
+    active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
     _configure_logging(
         log_config=log_config,
         log_level=log_level,
@@ -452,6 +470,7 @@ def parse_batch(
         except Exception as exc:
             result.failed.append((str(pf), f"{type(exc).__name__}: {exc}"))
 
+    _log_batch_summary(result)
     return result
 
 
@@ -460,6 +479,7 @@ def list_formats() -> list[str]:
     return _list_renderer_formats()
 
 
+@scoped_project_logging
 def diff_single(
     file_path1: str,
     file_path2: str,

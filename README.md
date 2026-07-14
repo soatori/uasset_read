@@ -127,10 +127,16 @@ python run.py path/to/file.uasset --output-level debug   # Output verbosity leve
 | `--log-dir` | ./log | Log output directory |
 | `--log-max-bytes` | 10000000 | Max size per log file (bytes) |
 | `--log-backup-count` | 5 | Number of backup log files to keep |
-| `--log-cleanup` | false | Clean old logs on startup |
-| `--log-keep-latest` | 5 | Number of latest log files to keep |
-| `--log-max-total-mb` | none | Total log size limit (MB) |
+| `--log-cleanup` / `--no-log-cleanup` | enabled | Enable or disable cleanup after the CLI run |
+| `--log-keep-latest` | 20 | Number of latest complete runs to keep |
+| `--log-max-total-mb` | 500 | Total log storage limit (MB) |
+| `--log-repeat-limit` | 5 | Keep the first N repeated DEBUG templates; 0 disables aggregation |
 | `--clean-logs` | false | Plan cleanup only, do not delete |
+
+Each CLI invocation writes a separate
+`uasset_read-<timestamp>-pid<PID>-<run_id>.log` file. Rotated backups remain
+part of the same run family. Isolated workers forward their diagnostics to the
+parent process, so they do not open or rotate the run file independently.
 
 Or via module:
 
@@ -143,7 +149,7 @@ python -m uasset_read path/to/file.uasset --json
 Simplified high-level API for programmatic use — **recommended entry point**:
 
 ```python
-from uasset_read import parse_single, parse_batch, diff_single, list_formats
+from uasset_read import LogConfig, parse_single, parse_batch, diff_single, list_formats
 
 # Parse a single file (returns formatted string)
 json_str = parse_single("path/to/file.uasset", format="json")
@@ -157,6 +163,14 @@ diff_output = diff_single("file1.uasset", "file2.uasset", format="json")
 
 # List available output formats
 formats = list_formats()
+
+# Python APIs do not create file logs unless LogConfig is explicit.
+log_config = LogConfig(level="debug", dir="./log", run_id="analysis-job")
+json_str = parse_single(
+    "path/to/file.uasset",
+    format="json",
+    log_config=log_config,
+)
 ```
 
 ### Module-level API
