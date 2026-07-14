@@ -97,7 +97,7 @@ def create_parser():
     parser.add_argument('--log-cleanup', action=argparse.BooleanOptionalAction, default=True,
                         help='Clean old run logs automatically (default: enabled)')
     parser.add_argument('--log-keep-latest', metavar='N', type=int,
-                        help='When cleanup is enabled, keep the newest N complete runs')
+                        help='When cleanup is enabled, keep only the newest N complete runs')
     parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
                         help='When --log-cleanup is set, cap total log storage to MB megabytes')
     parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
