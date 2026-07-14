@@ -1,4 +1,8 @@
-"""版本兼容性测试 — 验证 UE4 legacy 资产的 VersionError 提示信息。"""
+"""版本兼容性测试 — 验证 UE4 legacy 资产的 VersionError 提示信息。
+
+版本 -3, -4, -5 现在作为 UE4 Legacy 资产被接受（Task #397）。
+版本 -1, -2 仍被拒绝（非标准/过旧版本）。
+"""
 from __future__ import annotations
 
 import struct
@@ -7,6 +11,7 @@ import pytest
 
 from uasset_read.constants import (
     PACKAGE_FILE_TAG,
+    UE4_LEGACY_VERSIONS,
     UE5_LEGACY_VERSIONS,
     UE5_PACKAGE_SAVED_HASH,
 )
@@ -68,31 +73,15 @@ def _minimal_package_summary_bytes(
 
 
 class TestUE4LegacyVersionError:
-    """验证 UE4 legacy_file_version 触发的 VersionError 包含 UE4 提示。"""
+    """验证 UE4 legacy_file_version 触发的 VersionError 提示信息。
 
-    def test_legacy_version_minus3_raises_version_error_with_ue4_hint(self):
-        """legacy_file_version=-3（UE4 ParticleSystem 等资产）应提示 UE4 不支持。"""
-        from uasset_read.exceptions import VersionError
-        from uasset_read.package import ByteArchive
-        from uasset_read.serializers.package_summary import read_package_summary
+    版本 -3, -4, -5 现在作为 UE4 Legacy 资产被接受（Task #397）。
+    仅 -1, -2 仍被拒绝（非标准/过旧版本）。
+    """
 
-        archive = ByteArchive(
-            _minimal_package_with_legacy_version(-3),
-            name="P_Fire.uasset",
-        )
-
-        with pytest.raises(VersionError, match=r"Legacy file version -3 indicates UE4 asset") as exc_info:
-            read_package_summary(archive)
-
-        # 验证错误消息包含完整提示
-        msg = str(exc_info.value)
-        assert "UE4" in msg
-        assert "UE5" in msg
-        assert "-6 to -9" in msg
-
-    @pytest.mark.parametrize("legacy_version", [-1, -2, -3, -4, -5])
-    def test_all_ue4_legacy_versions_produce_ue4_hint(self, legacy_version: int):
-        """所有 UE4 legacy version（>-6 且不在支持集合中）应统一提示 UE4 不支持。"""
+    @pytest.mark.parametrize("legacy_version", [-1, -2])
+    def test_unsupported_legacy_versions_still_rejected(self, legacy_version: int):
+        """legacy_file_version=-1, -2 应仍被拒绝（非标准/过旧版本）。"""
         from uasset_read.exceptions import VersionError
         from uasset_read.package import ByteArchive
         from uasset_read.serializers.package_summary import read_package_summary
@@ -102,8 +91,31 @@ class TestUE4LegacyVersionError:
             name="test.uasset",
         )
 
-        with pytest.raises(VersionError, match=rf"Legacy file version {legacy_version} indicates UE4 asset"):
+        with pytest.raises(VersionError, match=rf"Unsupported legacy_file_version {legacy_version}"):
             read_package_summary(archive)
+
+    @pytest.mark.parametrize("legacy_version", sorted(UE4_LEGACY_VERSIONS))
+    def test_ue4_legacy_versions_are_accepted(self, legacy_version: int):
+        """UE4 legacy version -3, -4, -5 应被接受，不抛出 VersionError。"""
+        from uasset_read.exceptions import VersionError, ParseError
+        from uasset_read.package import ByteArchive
+        from uasset_read.serializers.package_summary import read_package_summary
+
+        archive = ByteArchive(
+            _minimal_package_with_legacy_version(legacy_version),
+            name="test.uasset",
+        )
+
+        # UE4 legacy version 不应抛出 VersionError
+        # （可能因后续字段不完整抛出 ParseError，但不应是版本错误）
+        try:
+            summary = read_package_summary(archive)
+            assert summary is not None
+            assert summary.is_legacy is True
+        except VersionError:
+            pytest.fail(f"UE4 legacy version {legacy_version} 不应抛出 VersionError")
+        except ParseError:
+            pass  # 最小数据不完整导致的 ParseError 是预期的
 
     @pytest.mark.parametrize("legacy_version", sorted(UE5_LEGACY_VERSIONS))
     def test_ue5_legacy_versions_do_not_raise_ue4_error(self, legacy_version: int):

@@ -188,6 +188,10 @@ def _read_core_tables(
     result.version_container = build_version_container(result.summary)
     archive._file_version_ue5 = result.summary.file_version_ue5
 
+    # 标记 UE4 legacy 资产
+    if getattr(result.summary, "is_legacy", False):
+        result.metadata["is_legacy"] = True
+
     # 截断文件检测：验证导出数据范围
     if validate_range:
         try:
