@@ -205,3 +205,39 @@ class TestStatementIndex:
         expr2 = archive.read_expression()
         assert expr1.StatementIndex == 0
         assert expr2.StatementIndex == 1
+
+
+# ---------------------------------------------------------------------------
+# 枚举外 opcode 容错处理 (#401)
+# ---------------------------------------------------------------------------
+
+class TestEnumOutOfRangeOpcode:
+    """验证不在 EExprToken 枚举中的 opcode 在 tolerant 模式下不抛 ValueError。"""
+
+    def test_enum_out_of_range_opcode_tolerant(self):
+        """0x03 不在 EExprToken 中，tolerant 模式应跳过它并继续解析。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+        from uasset_read.kismet.tokens import EExprToken
+
+        # 0x03 不在枚举中, 0x53 = EX_EndOfScript
+        result = parse_bytecode_stream(bytes([0x03, 0x53]), [], tolerant=True)
+        assert len(result) == 1
+        assert result[0].Token == EExprToken.EX_EndOfScript
+
+    def test_enum_out_of_range_opcode_strict_raises(self):
+        """strict 模式下，枚举外 opcode 应抛 ParseError（不是 ValueError）。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+
+        with pytest.raises(ParseError, match="Unknown EExprToken"):
+            parse_bytecode_stream(bytes([0x03, 0x53]), [], tolerant=False)
+
+    def test_enum_out_of_range_opcode_diagnostic_visible(self):
+        """枚举外 opcode 在 tolerant 模式下应产生可见诊断。"""
+        from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+
+        archive = _archive(bytes([0x03, 0x53]), tolerant=True)
+        # read_expression 应成功跳过 0x03
+        expr = archive.read_expression()
+        # 第一个可解析的 token 是 0x53 (EX_EndOfScript)
+        from uasset_read.kismet.tokens import EExprToken
+        assert expr.Token == EExprToken.EX_EndOfScript
