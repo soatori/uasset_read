@@ -481,6 +481,48 @@ class TestWarningsInIR:
 
 
 # ===========================================================================
+# 边界条件（#32）
+# ===========================================================================
+
+class TestBoundaryConditions:
+    """验证 export 级状态对包级状态的边界条件。"""
+
+    def test_partial_export_status_affects_package(self):
+        """parse_status='partial' 应拉低包级状态。"""
+        from uasset_read.models.result import ParseResult
+        from uasset_read.models.status import _result_status
+
+        result = ParseResult()
+        result.is_success = True
+        result.errors = []
+        result.metadata = {}
+        result.diagnostics = []
+        export = type("Export", (), {"parse_status": "partial"})()
+        result.export_map = [export]
+
+        status = _result_status(result)
+        assert status == "partial", f"partial export 应拉低包级状态, got {status}"
+
+    def test_all_exports_failed_returns_failed(self):
+        """所有 export failed 时应返回 failed。"""
+        from uasset_read.models.result import ParseResult
+        from uasset_read.models.status import _result_status
+
+        result = ParseResult()
+        result.is_success = False
+        result.errors = ["x"]
+        result.summary = type("Summary", (), {})()
+        result.name_map = ["Name"]
+        result.export_map = [
+            type("Export", (), {"parse_status": "failed"})(),
+            type("Export", (), {"parse_status": "failed"})(),
+        ]
+
+        status = _result_status(result)
+        assert status == "failed", f"所有 export failed 应返回 failed, got {status}"
+
+
+# ===========================================================================
 # Markdown 渲染 status/errors/warnings
 # ===========================================================================
 
