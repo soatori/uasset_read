@@ -523,18 +523,19 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             ),
         )
 
-    count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "数组数量")
-    elements: List[Any] = []
-    parse_property_value = _get_parse_property_value()
-
     if tag.size < 4:
         # #345: tag.size < 4 通常是空数组或 RigVM DebugWatch 属性
         # 使用 debug 级别，避免日志噪音
+        # 提前返回，避免无意义地读取 count
         logger.debug(
             "ArrayProperty '%s': tag.size=%d < 4, 返回空数组",
             tag.name, tag.size,
         )
-        return elements
+        return []
+
+    count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "数组数量")
+    elements: List[Any] = []
+    parse_property_value = _get_parse_property_value()
 
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
