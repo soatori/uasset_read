@@ -493,6 +493,7 @@ class PackageIR:
     asset_registry_data_offset: int = 0
     asset_registry_data: dict | None = None
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     status: str = "success"
     status_message: str | None = None
     status_code: str | None = None

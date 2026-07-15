@@ -80,15 +80,20 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     if export_map and isinstance(export_map, list):
         failed_count = 0
         partial_count = 0
+        heuristic_count = 0
         for exp in export_map:
             status = getattr(exp, "parse_status", None)
             if status in FAILED_STATUSES:
                 failed_count += 1
             elif status in PARTIAL_STATUSES:
                 partial_count += 1
+            # heuristic bytecode recovery: serial_scan_recovery fallback 降级
+            fallback_reasons = getattr(exp, "fallback_reasons", None) or []
+            if any("serial_scan_recovery" in r for r in fallback_reasons):
+                heuristic_count += 1
         if failed_count == len(export_map):
             return "failed"
-        if failed_count > 0 or partial_count > 0:
+        if failed_count > 0 or partial_count > 0 or heuristic_count > 0:
             return "partial"
 
     return "success"

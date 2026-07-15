@@ -86,6 +86,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     status = _result_status(result)
     metadata = getattr(result, "metadata", None) or {}
     errors = list(getattr(result, "errors", None) or [])
+    warnings = list(getattr(result, "warnings", None) or [])
 
     if errors:
         status_code = "PARSE_ERROR"
@@ -122,6 +123,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
         asset_registry_data=_build_asset_registry_data(result),
         errors=errors,
+        warnings=warnings,
         status=status,
         status_message=status_message,
         status_code=status_code,

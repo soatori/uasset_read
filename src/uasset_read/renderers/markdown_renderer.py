@@ -114,6 +114,9 @@ class MarkdownRenderer(IRenderer):
         lines.append(f"| UE Version | {_escape_md_cell(ir.header.ue_version)} |")
         lines.append("")
 
+        # === Status / Errors / Warnings ===
+        self._render_status_section(lines, ir)
+
         # === Blueprint Details（仅蓝图资产） ===
         if ir.blueprint:
             lines.append("## Blueprint Details")
@@ -246,6 +249,37 @@ class MarkdownRenderer(IRenderer):
         self._render_diagnostics(lines, ir)
 
         return "\n".join(lines)
+
+    def _render_status_section(self, lines: list[str], ir: PackageIR) -> None:
+        """渲染 Status / Errors / Warnings 章节。"""
+        if ir.status == "success":
+            return
+
+        # Status
+        lines.append("## Status")
+        lines.append("")
+        status_label = ir.status.upper()
+        if ir.status_message:
+            lines.append(f"**{status_label}**: {_escape_md_cell(ir.status_message)}")
+        else:
+            lines.append(f"**{status_label}**")
+        lines.append("")
+
+        # Errors
+        if ir.errors:
+            lines.append("### Errors")
+            lines.append("")
+            for err in ir.errors:
+                lines.append(f"- {_escape_md_cell(err)}")
+            lines.append("")
+
+        # Warnings
+        if ir.warnings:
+            lines.append("### Warnings")
+            lines.append("")
+            for warn in ir.warnings:
+                lines.append(f"- {_escape_md_cell(warn)}")
+            lines.append("")
 
     def _render_event_graph(self, lines: list[str], ir: PackageIR) -> None:
         """渲染 Event Graph 章节 — 每个事件函数一个子章节，包含 C++ 代码块。"""

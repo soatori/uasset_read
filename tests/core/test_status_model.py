@@ -344,3 +344,244 @@ class TestRegression:
     def test_partial_status_in_partial_set(self):
         """partial 本身应在 PARTIAL_STATUSES 中（安全网）。"""
         assert "partial" in PARTIAL_STATUSES
+
+
+# ===========================================================================
+# heuristic bytecode recovery 降级
+# ===========================================================================
+
+class TestHeuristicRecoveryStatus:
+    """heuristic bytecode recovery 应降级为 partial。"""
+
+    def test_heuristic_bytecode_recovery_is_partial(self):
+        """export 有 serial_scan_recovery fallback_reasons 时应降级为 partial。"""
+        r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
+        export = type("Export", (), {
+            "parse_status": "success",
+            "fallback_reasons": ["serial_scan_recovery"],
+        })()
+        r.export_map = [export]
+        status = _result_status(r)
+        assert status == "partial", f"heuristic recovery 应降级为 partial, got {status}"
+
+    def test_non_serial_scan_fallback_not_affected(self):
+        """其他 fallback_reasons（非 serial_scan_recovery）不影响状态。"""
+        r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
+        export = type("Export", (), {
+            "parse_status": "success",
+            "fallback_reasons": ["bpgc_bytecode_extraction"],
+        })()
+        r.export_map = [export]
+        status = _result_status(r)
+        assert status == "success", f"非 serial_scan_recovery 不应降级, got {status}"
+
+    def test_no_fallback_reasons_not_affected(self):
+        """无 fallback_reasons 的 export 不影响状态。"""
+        r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
+        export = type("Export", (), {
+            "parse_status": "success",
+            "fallback_reasons": [],
+        })()
+        r.export_map = [export]
+        status = _result_status(r)
+        assert status == "success", f"空 fallback_reasons 不应降级, got {status}"
+
+    def test_mixed_heuristic_and_success_export(self):
+        """success export + heuristic export 混合时返回 partial。"""
+        r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
+        success_export = type("Export", (), {
+            "parse_status": "success",
+            "fallback_reasons": [],
+        })()
+        heuristic_export = type("Export", (), {
+            "parse_status": "success",
+            "fallback_reasons": ["serial_scan_recovery"],
+        })()
+        r.export_map = [success_export, heuristic_export]
+        status = _result_status(r)
+        assert status == "partial", f"混合 heuristic 应降级为 partial, got {status}"
+
+    def test_no_fallback_reasons_attr_not_affected(self):
+        """无 fallback_reasons 属性的 export 不影响状态。"""
+        r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
+        export = type("Export", (), {
+            "parse_status": "success",
+        })()
+        r.export_map = [export]
+        status = _result_status(r)
+        assert status == "success", f"无 fallback_reasons 属性不应降级, got {status}"
+
+
+# ===========================================================================
+# warnings 传递到 IR
+# ===========================================================================
+
+class TestWarningsInIR:
+    """ParseResult.warnings 应传递到 PackageIR。"""
+
+    def _build_fake_result(self, warnings=None):
+        """构建用于 IR 测试的模拟结果对象。"""
+        result = _FakeResult(
+            is_success=True,
+            metadata={"lightweight_tolerant_parse": False},
+        )
+        result.warnings = warnings or []
+        result.name_map = []
+        result.import_map = []
+        result.export_map = []
+        result.summary = None
+        result.linker = None
+        result.blueprint = None
+        result.decompiled_functions = []
+        result.graphs = []
+        result.diagnostics = []
+        result.resolved_parent_assets = []
+        result.inherited_blueprint_graphs = []
+        result.logic_sources = []
+        result.soft_references = []
+        result.soft_package_references = []
+        result.hex_view_entries = []
+        result.asset_registry_data = None
+        result.version_container = None
+        result.circular_deps = []
+        result.components = []
+        result.imports = []
+        result.soft_object_path_list = []
+        return result
+
+    def test_warnings_propagated_to_package_ir(self):
+        """ParseResult.warnings 应传递到 PackageIR。"""
+        from uasset_read.ir_builder import build_package_ir
+
+        result = self._build_fake_result(warnings=["test warning 1", "test warning 2"])
+        ir = build_package_ir(result)
+        assert hasattr(ir, "warnings"), "PackageIR 应有 warnings 字段"
+        assert len(ir.warnings) == 2, f"应有 2 个 warnings, got {len(ir.warnings)}"
+        assert "test warning 1" in ir.warnings
+        assert "test warning 2" in ir.warnings
+
+    def test_empty_warnings_results_in_empty_list(self):
+        """空 warnings 列表传递为空列表。"""
+        from uasset_read.ir_builder import build_package_ir
+
+        result = self._build_fake_result(warnings=[])
+        ir = build_package_ir(result)
+        assert hasattr(ir, "warnings"), "PackageIR 应有 warnings 字段"
+        assert len(ir.warnings) == 0, f"应有 0 个 warnings, got {len(ir.warnings)}"
+
+    def test_no_warnings_attr_results_in_empty_list(self):
+        """无 warnings 属性时传递为空列表。"""
+        from uasset_read.ir_builder import build_package_ir
+
+        result = self._build_fake_result()
+        del result.warnings
+        ir = build_package_ir(result)
+        assert hasattr(ir, "warnings"), "PackageIR 应有 warnings 字段"
+        assert len(ir.warnings) == 0, f"应有 0 个 warnings, got {len(ir.warnings)}"
+
+
+# ===========================================================================
+# Markdown 渲染 status/errors/warnings
+# ===========================================================================
+
+class TestMarkdownStatusRendering:
+    """Markdown 应渲染 status、errors 和 warnings。"""
+
+    def _make_ir(self, status="success", errors=None, warnings=None):
+        """构建用于 Markdown 测试的 PackageIR。"""
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR
+        return PackageIR(
+            header=PackageHeaderIR(
+                package_name="Test",
+                package_class="",
+                package_flags=0,
+                total_export_count=0,
+                total_import_count=0,
+                ue_version="5.4",
+            ),
+            name_map=(),
+            imports=[],
+            exports=[],
+            linker=None,
+            status=status,
+            status_message="heuristic recovery" if status == "partial" else None,
+            errors=errors or [],
+            warnings=warnings or [],
+        )
+
+    def test_markdown_renders_partial_status(self):
+        """Markdown 应渲染 partial status。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(
+            status="partial",
+            errors=["test error"],
+            warnings=["test warning"],
+        )
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "partial" in output.lower(), "Markdown 应包含 partial status"
+        assert "test error" in output, "Markdown 应包含 errors"
+        assert "test warning" in output, "Markdown 应包含 warnings"
+
+    def test_markdown_hides_success_status(self):
+        """success 状态不应显示 status section。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(status="success")
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "## Status" not in output, "success 时不应显示 Status section"
+
+    def test_markdown_renders_failed_status(self):
+        """Markdown 应渲染 failed status。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(
+            status="failed",
+            errors=["fatal error"],
+        )
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "failed" in output.lower(), "Markdown 应包含 failed status"
+        assert "fatal error" in output, "Markdown 应包含 fatal error"
+
+    def test_markdown_renders_errors_without_warnings(self):
+        """仅有 errors 时应渲染 errors section。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(
+            status="partial",
+            errors=["error 1", "error 2"],
+        )
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "error 1" in output
+        assert "error 2" in output
+
+    def test_markdown_renders_warnings_without_errors(self):
+        """仅有 warnings 时应渲染 warnings section。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(
+            status="partial",
+            warnings=["warning 1"],
+        )
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "warning 1" in output
+
+    def test_markdown_no_status_section_for_empty_lists(self):
+        """空 errors 和 warnings 时不显示对应 section。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = self._make_ir(status="partial")
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions())
+        assert "partial" in output.lower()
