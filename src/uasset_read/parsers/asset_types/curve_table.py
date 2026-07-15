@@ -30,6 +30,9 @@ _MODE_NAMES = {
     _CURVE_TABLE_MODE_RICH: "RichCurves",
 }
 
+# 行数安全上限（与 DataTable 对齐，防止恶意大行数强制构造巨大 rows 列表）
+_MAX_ROWS = 100000
+
 
 def parse_curve_table(
     archive: Any,
@@ -64,6 +67,10 @@ def parse_curve_table(
         if num_rows < 0:
             result["parse_status"] = "partial"
             result["error"] = f"Invalid row count: {num_rows}"
+            return result
+        if num_rows > _MAX_ROWS:
+            result["parse_status"] = "partial"
+            result["error"] = f"Row count {num_rows} exceeds safety limit {_MAX_ROWS}"
             return result
 
         result["row_count"] = num_rows

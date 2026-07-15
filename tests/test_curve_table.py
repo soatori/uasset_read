@@ -243,6 +243,35 @@ class TestParseCurveTableErrorHandling:
         assert result["parse_status"] == "partial"
         assert "Invalid row count" in result["error"]
 
+    def test_row_count_exceeds_max(self):
+        """行数超过 _MAX_ROWS 上限时返回 partial 状态。"""
+        from uasset_read.parsers.asset_types.curve_table import _MAX_ROWS
+
+        buf = bytearray()
+        buf += struct.pack("<i", _MAX_ROWS + 1)  # NumRows 超限
+        buf += struct.pack("<B", 0)               # CurveTableMode
+        archive = ByteArchive(bytes(buf))
+
+        result = parse_curve_table(archive, [])
+
+        assert result["parse_status"] == "partial"
+        assert "exceeds safety limit" in result["error"]
+        assert str(_MAX_ROWS) in result["error"]
+
+    def test_row_count_at_max(self):
+        """行数恰好等于 _MAX_ROWS 上限时应正常解析（边界值）。"""
+        from uasset_read.parsers.asset_types.curve_table import _MAX_ROWS
+
+        buf = bytearray()
+        buf += struct.pack("<i", _MAX_ROWS)  # NumRows 恰好等于上限
+        buf += struct.pack("<B", 0)           # CurveTableMode
+        archive = ByteArchive(bytes(buf))
+
+        result = parse_curve_table(archive, [])
+
+        # 恰好等于上限不触发截断，但由于无后续行数据会因读取失败返回 failed
+        assert result["parse_status"] != "partial" or "exceeds safety limit" not in result.get("error", "")
+
     def test_truncated_payload(self):
         """截断文件导致读取失败返回 failed 状态。"""
         # 写入行数=1但没有后续数据
