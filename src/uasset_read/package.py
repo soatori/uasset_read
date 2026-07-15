@@ -255,6 +255,20 @@ class FileSystemPackageProvider(PackageProvider):
         except (OSError, OverflowError):
             return 0.0
 
+    @staticmethod
+    def _assert_within_root(path: Path, root: Path | None) -> Path:
+        """校验路径在 root 内，返回 resolved 路径。"""
+        if root is None:
+            return path.resolve()
+        resolved = (root / path).resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            raise PermissionError(
+                f"Path '{path}' resolves outside root '{root}': {resolved}"
+            )
+        return resolved
+
     def list_files(self) -> list[str]:
         current_mtime = self._get_root_mtime()
         # 检查缓存是否有效：存在且修改时间未变
@@ -279,6 +293,8 @@ class FileSystemPackageProvider(PackageProvider):
 
     def read_file(self, path: str) -> Optional[bytes]:
         p = Path(path)
+        if self.root is not None:
+            p = self._assert_within_root(p, self.root)
         if not p.is_file():
             return None
         with p.open("rb") as f:
@@ -287,6 +303,8 @@ class FileSystemPackageProvider(PackageProvider):
     def open_file(self, path: str) -> Optional[ArchiveLike]:
         """打开文件返回 FArchive（支持 mmap 大文件）。"""
         p = Path(path)
+        if self.root is not None:
+            p = self._assert_within_root(p, self.root)
         if not p.is_file():
             return None
         return FArchive(str(p))
@@ -297,6 +315,8 @@ class FileSystemPackageProvider(PackageProvider):
             root_relative = self.root / main
             if root_relative.is_file():
                 main = root_relative
+        if self.root is not None:
+            main = self._assert_within_root(main, self.root)
         if main.suffix.lower() not in PACKAGE_EXTENSIONS:
             for ext in PACKAGE_EXTENSIONS:
                 candidate = main.with_suffix(ext)
