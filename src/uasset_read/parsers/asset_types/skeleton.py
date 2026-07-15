@@ -28,6 +28,9 @@ from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
+# 安全上限：防止将垃圾字节解释为计数
+_MAX_SKELETON_COUNT = 100000
+
 # FGuid 序列化大小（字节）
 FGUID_SIZE = 16
 
@@ -52,6 +55,9 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         "parse_status": "success",
     }
 
+    # 收集截断诊断：子函数遇到非法 count 时追加，最后统一升级 parse_status
+    _diagnostics: List[str] = []
+
     try:
         # 第一步：跳过 tagged properties
         # PropertyTag 序列化格式：
@@ -61,11 +67,11 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         _skip_tagged_properties(archive, name_map)
 
         # 第二步：解析 ReferenceSkeleton（custom serialization，非 UPROPERTY）
-        ref_skeleton = _read_reference_skeleton(archive, name_map)
+        ref_skeleton = _read_reference_skeleton(archive, name_map, _diagnostics)
         result["reference_skeleton"] = ref_skeleton
 
         # 第三步：解析 RetargetSources: TMap<FName, FReferencePose>
-        retarget_sources = _read_retarget_sources(archive, name_map)
+        retarget_sources = _read_retarget_sources(archive, name_map, _diagnostics)
         result["retarget_sources"] = retarget_sources
         result["retarget_source_count"] = len(retarget_sources)
 
@@ -82,6 +88,11 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         # 避免整个 package 被判定为 failed（Issue #321）
         result["parse_status"] = "opaque"
         result["error"] = str(e)
+
+    # 非法 count 截断时，标记为 partial 并附带诊断
+    if _diagnostics:
+        result["parse_status"] = "partial"
+        result["diagnostics"] = _diagnostics
 
     return result
 
@@ -182,7 +193,9 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
                 break
 
 
-def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
+def _read_reference_skeleton(
+    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+) -> Dict[str, Any]:
     """读取 FReferenceSkeleton custom serialization。
 
     FReferenceSkeleton 序列化格式（ReferenceSkeleton.cpp:941）：
@@ -192,6 +205,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
        - 每个 FTransform: Translation(FVector3d: 3*8=24) + Rotation(FQuat4f: 4*4=16) + Scale(FVector3f: 3*4=12) = 52 bytes
        注意：FTransform 不是 bulk-serialize，实际布局取决于 UE 版本
     3. RawNameToIndexMap: TMap<FName, int32>
+
+    Args:
+        _diagnostics: 可选的诊断收集列表，截断非法 count 时追加条目
 
     Returns:
         包含 names、parents、transforms 的字典
@@ -231,6 +247,16 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
 
     # 读取 BonePose 数组（TArray<FTransform>）
     pose_count = archive.read_i32("RefSkel.PoseCount")
+    if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
+        logger.debug(
+            "ReferenceSkeleton: 异常的 PoseCount %d（bone_count=%d），截断为 0",
+            pose_count, bone_count,
+        )
+        if _diagnostics is not None:
+            _diagnostics.append(
+                f"ReferenceSkeleton.PoseCount 截断: {pose_count} -> 0"
+            )
+        pose_count = 0
     if pose_count != bone_count:
         logger.debug(
             "ReferenceSkeleton: PoseCount(%d) != BoneCount(%d)",
@@ -249,6 +275,16 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
     # 读取 NameToIndexMap: TMap<FName, int32>
     # TMap 序列化为 count + entries，每个 entry = Key(FName) + Value(int32)
     map_count = archive.read_i32("RefSkel.NameToIndexMap.Count")
+    if map_count < 0 or map_count > _MAX_SKELETON_COUNT:
+        logger.debug(
+            "ReferenceSkeleton: 异常的 NameToIndexMap.Count %d，跳过解析",
+            map_count,
+        )
+        if _diagnostics is not None:
+            _diagnostics.append(
+                f"ReferenceSkeleton.NameToIndexMap.Count 截断: {map_count} -> 0"
+            )
+        map_count = 0
     name_to_index: Dict[str, int] = {}
     for _ in range(map_count):
         key_index = archive.read_i32("RefSkel.NameToIndexMap.Key.Index")
@@ -263,7 +299,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
     return ref_skeleton
 
 
-def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, Any]]:
+def _read_retarget_sources(
+    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+) -> List[Dict[str, Any]]:
     """读取 RetargetSources: TMap<FName, FReferencePose>。
 
     格式（Skeleton.cpp:419-448）：
@@ -305,6 +343,16 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
 
         # 2. ReferencePose: TArray<FTransform>
         pose_count = archive.read_i32(f"RetargetSources[{i}].PoseCount")
+        if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
+            logger.debug(
+                "RetargetSources[%d]: 异常的 PoseCount %d，截断为 0",
+                i, pose_count,
+            )
+            if _diagnostics is not None:
+                _diagnostics.append(
+                    f"RetargetSources[{i}].PoseCount 截断: {pose_count} -> 0"
+                )
+            pose_count = 0
         transforms: List[Dict[str, Any]] = []
         for _ in range(pose_count):
             transform = _read_ftransform(archive, is_ue5=is_ue5)
