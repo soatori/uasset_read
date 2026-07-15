@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters import CppCallStatement
 
 from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppMethodIR, CppCallStatement
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier, sanitize_category, sanitize_uproperty_marks
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,7 @@ def _format_component_property(prop: CppProperty) -> List[str]:
     lines: List[str] = []
 
     # 构建完整 UPROPERTY 参数
-    marks = prop.uproperty_marks.copy()
+    marks = sanitize_uproperty_marks(prop.uproperty_marks)
     uproperty_args = ", ".join(marks)
     uproperty_args += ', Category = "Components"'
     uproperty_args += ', meta = (AllowPrivateAccess = "true")'
@@ -236,7 +237,8 @@ def _format_component_property(prop: CppProperty) -> List[str]:
     lines.append(f"    UPROPERTY({uproperty_args})")
 
     # 属性声明
-    decl = f"    {prop.cpp_type} {prop.name};"
+    safe_name = sanitize_identifier(prop.name)
+    decl = f"    {prop.cpp_type} {safe_name};"
 
     # 添加注释（如果有）
     if prop.cpp_comment:
@@ -263,17 +265,19 @@ def _format_variable_property(prop: CppProperty) -> List[str]:
     lines: List[str] = []
 
     # 构建完整 UPROPERTY 参数
-    marks = prop.uproperty_marks.copy()
+    marks = sanitize_uproperty_marks(prop.uproperty_marks)
     uproperty_args = ", ".join(marks)
 
     # 添加 Category（如果有）
     if prop.category:
-        uproperty_args += f', Category = "{prop.category}"'
+        safe_category = sanitize_category(prop.category)
+        uproperty_args += f', Category = "{safe_category}"'
 
     lines.append(f"    UPROPERTY({uproperty_args})")
 
     # 属性声明
-    decl = f"    {prop.cpp_type} {prop.name}"
+    safe_name = sanitize_identifier(prop.name)
+    decl = f"    {prop.cpp_type} {safe_name}"
 
     # 添加默认值（如果有且非空）
     if prop.default_value is not None:
