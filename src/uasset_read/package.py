@@ -78,7 +78,13 @@ class PackageArchive(FArchive):
 
             take = min(to_read, segment_remaining)
             segment.seek(segment_pos)
-            chunks.append(segment.read(take))
+            chunk = segment.read(take)
+            if len(chunk) < take:
+                raise ParseError(
+                    f"short read: requested {take} bytes at segment offset {segment_pos}, "
+                    f"got {len(chunk)} bytes"
+                )
+            chunks.append(chunk)
             self._pos += take
             to_read -= take
         return b"".join(chunks)
