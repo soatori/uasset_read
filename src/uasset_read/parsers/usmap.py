@@ -451,6 +451,8 @@ class UsmapData:
                 return
             if not lower.endswith(".usmap"):
                 raise ParseError(f"不支持的映射文件类型: {path}")
+            if budget is not None:
+                budget.reserve(os.path.getsize(path), "usmap_file_read")
             with open(path, "rb") as fh:
                 data = fh.read()
             if lower.endswith(".gz"):
