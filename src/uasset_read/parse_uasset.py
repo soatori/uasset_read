@@ -26,7 +26,8 @@ from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
-from uasset_read.project_logging import configure_project_logging
+from uasset_read.config import LogConfig
+from uasset_read.project_logging import scoped_project_logging
 from uasset_read.parse_stages import (
     _record_parse_stage_error,
     _init_parse_env,
@@ -432,6 +433,7 @@ def _resolve_parse_params(
     return merged
 
 
+@scoped_project_logging
 def parse_package(
     path: str,
     tolerant: bool | None = None,
@@ -447,6 +449,7 @@ def parse_package(
     hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
+    log_config: LogConfig | None = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -468,7 +471,6 @@ def parse_package(
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
-    configure_project_logging()
     result = ParseResult()
 
     # 处理已废弃的 include_linker 参数
@@ -551,6 +553,7 @@ def parse_uasset(
     )
 
 
+@scoped_project_logging
 def parse_uasset_with_linker(
     path: str,
     tolerant: bool | None = None,
@@ -565,6 +568,7 @@ def parse_uasset_with_linker(
     hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
+    log_config: LogConfig | None = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -580,7 +584,6 @@ def parse_uasset_with_linker(
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
     """
-    configure_project_logging()
     # 延迟导入 extras 模块（per #117 core/extras 分层）
     from uasset_read.link.result import LinkerParseResult
 

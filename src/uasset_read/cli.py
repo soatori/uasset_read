@@ -9,6 +9,7 @@ import re
 import sys
 from pathlib import Path
 
+from uasset_read.config import LogConfig
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
 from uasset_read.project_logging import cleanup_project_logs
 from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
@@ -93,21 +94,23 @@ def create_parser():
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error', 'off'], default=None,
                         help='File log level: debug, info, warning, error, or off')
     parser.add_argument('--log-dir', metavar='DIR', help='Write project logs to DIR instead of ./log')
-    parser.add_argument('--log-cleanup', action='store_true',
-                        help='Delete old uasset_read logs before creating a new log file')
+    parser.add_argument('--log-cleanup', action=argparse.BooleanOptionalAction, default=True,
+                        help='Clean old run logs automatically (default: enabled)')
     parser.add_argument('--log-keep-latest', metavar='N', type=int,
-                        help='When --log-cleanup is set, keep only the newest N log files')
+                        help='When cleanup is enabled, keep only the newest N complete runs')
     parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
                         help='When --log-cleanup is set, cap total log storage to MB megabytes')
     parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
                         help='Max size per log file in bytes (default: 10MB)')
     parser.add_argument('--log-backup-count', metavar='N', type=int, default=5,
                         help='Number of backup log files to keep (default: 5)')
+    parser.add_argument('--log-repeat-limit', metavar='N', type=int, default=5,
+                        help='Keep the first N repeated DEBUG messages (0 disables aggregation)')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
     parser.add_argument('--clean-logs', action='store_true',
-                        help='Plan log cleanup and exit; pass --log-cleanup to delete')
+                        help='Dry-run log cleanup plan and exit; never deletes files')
     parser.add_argument('--batch', action='store_true', help='Enable batch mode')
     parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
     parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
@@ -155,6 +158,25 @@ def _log_max_total_bytes_from_args(args) -> int | None:
     return args.log_max_total_mb * 1_000_000
 
 
+def _log_config_from_args(args) -> LogConfig:
+    level = args.log_level or "debug"
+    keep_latest = args.log_keep_latest if args.log_keep_latest is not None else 20
+    max_total_bytes = _log_max_total_bytes_from_args(args)
+    if max_total_bytes is None:
+        max_total_bytes = 500 * 1024 * 1024
+    return LogConfig(
+        level=level,
+        dir=args.log_dir,
+        enabled=level != "off",
+        keep_latest=keep_latest,
+        max_total_bytes=max_total_bytes,
+        auto_cleanup=args.log_cleanup,
+        max_bytes=args.log_max_bytes,
+        backup_count=args.log_backup_count,
+        repeat_limit=args.log_repeat_limit,
+    )
+
+
 def _handle_batch(args) -> None:
     """处理批量导出模式。"""
     input_dir = Path(args.file)
@@ -178,14 +200,7 @@ def _handle_batch(args) -> None:
             mappings_path=args.mappings,
             game=args.game,
             force_full_parse=args.full_parse,
-            log_level=args.log_level,
-            log_dir=args.log_dir,
-            log_enabled=_log_enabled_from_args(args),
-            log_keep_latest=args.log_keep_latest,
-            log_max_total_bytes=_log_max_total_bytes_from_args(args),
-            log_cleanup=args.log_cleanup,
-            log_max_bytes=args.log_max_bytes,
-            log_backup_count=args.log_backup_count,
+            log_config=_log_config_from_args(args),
         )
     except Exception as e:
         _logger.debug("Batch export error (full): %s", e, exc_info=True)
@@ -207,14 +222,14 @@ def _handle_batch(args) -> None:
 
 
 def _handle_clean_logs(args) -> None:
+    config = _log_config_from_args(args)
     planned = cleanup_project_logs(
         log_dir=args.log_dir,
-        keep_latest=args.log_keep_latest,
-        max_total_bytes=_log_max_total_bytes_from_args(args),
-        dry_run=not args.log_cleanup,
+        keep_latest=config.keep_latest,
+        max_total_bytes=config.max_total_bytes,
+        dry_run=True,
     )
-    action = "Would delete" if not args.log_cleanup else "Deleted"
-    print(f"{action} {len(planned)} log file(s)")
+    print(f"Would delete {len(planned)} log file(s)")
     for path in planned:
         print(str(path))
     sys.exit(EXIT_SUCCESS)
@@ -301,14 +316,7 @@ def main():
                 str(file2),
                 tolerant=tolerant,
                 context_lines=args.diff_context,
-                log_level=args.log_level,
-                log_dir=args.log_dir,
-                log_enabled=_log_enabled_from_args(args),
-                log_keep_latest=args.log_keep_latest,
-                log_max_total_bytes=_log_max_total_bytes_from_args(args),
-                log_cleanup=args.log_cleanup,
-                log_max_bytes=args.log_max_bytes,
-                log_backup_count=args.log_backup_count,
+                log_config=_log_config_from_args(args),
             )
         except Exception as e:
             _logger.debug("Diff failed (full): %s", e, exc_info=True)
@@ -332,14 +340,7 @@ def main():
             force_full_parse=args.full_parse,
             hex_view=args.hex_view,
             output_level=args.output_level,
-            log_level=args.log_level,
-            log_dir=args.log_dir,
-            log_enabled=_log_enabled_from_args(args),
-            log_keep_latest=args.log_keep_latest,
-            log_max_total_bytes=_log_max_total_bytes_from_args(args),
-            log_cleanup=args.log_cleanup,
-            log_max_bytes=args.log_max_bytes,
-            log_backup_count=args.log_backup_count,
+            log_config=_log_config_from_args(args),
         )
     except ParseError as e:
         _logger.debug("Parse error (full): %s", e, exc_info=True)
