@@ -57,6 +57,7 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # 偏移诊断记录（有界）
+        self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
         self._hex_view_enabled: bool = hex_view
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry]，有界
         self._hex_view_context: str = ""  # 当前上下文前缀（如 "Summary."）
@@ -928,18 +929,20 @@ class FArchive:
                 result = base_name
         else:
             # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
-            # 升级日志级别为 warning
-            logger.warning(
-                "read_name: index %d out of range (name_map len=%d) at pos %d",
-                index, len(name_map), self.tell() - 8
-            )
-            # 添加诊断记录
-            self._record_diagnostic(
-                module="archive", field="read_name",
-                source="read_name", target_offset=self.tell() - 8,
-                file_size=self._file_size,
-                error=f"FName index {index} out of range (name_map len={len(name_map)})",
-            )
+            # 去重：同一越界索引只记录一次警告 (#411)
+            if index not in self._name_warnings_seen:
+                self._name_warnings_seen.add(index)
+                logger.warning(
+                    "read_name: index %d out of range (name_map len=%d) at pos %d",
+                    index, len(name_map), self.tell() - 8
+                )
+                # 添加诊断记录
+                self._record_diagnostic(
+                    module="archive", field="read_name",
+                    source="read_name", target_offset=self.tell() - 8,
+                    file_size=self._file_size,
+                    error=f"FName index {index} out of range (name_map len={len(name_map)})",
+                )
             # strict 模式抛异常
             if not self._tolerant:
                 raise ParseError(
@@ -1145,6 +1148,7 @@ class ByteArchive(FArchive):
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
+        self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
         self._hex_view_enabled: bool = False
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""

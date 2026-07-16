@@ -49,6 +49,7 @@ class TestFnameIndexRecoveryLogging:
         archive._recovery_attempts = 0
         archive._recovery_successes = 0
         archive._recovery_failures = 0
+        archive._name_warnings_seen = set()  # #411 去重追踪
 
         # 模拟 read_u32 返回超阈值索引
         original_pos = 10
