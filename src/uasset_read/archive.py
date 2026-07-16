@@ -612,6 +612,14 @@ class FArchive:
         if length < 0:
             utf16_len = -length * 2
             if utf16_len > MAX_FSTRING_LENGTH:
+                self._record_diagnostic(
+                    module="archive", field="fstring",
+                    source="read_fstring",
+                    target_offset=pos_before, file_size=self.total_size(),
+                    read_size=utf16_len,
+                    error=f"FString at pos {pos_before}: length {utf16_len} "
+                          f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
+                )
                 self.seek(pos_before)
                 if self._tolerant:
                     self._logger.warning(
@@ -668,6 +676,14 @@ class FArchive:
                     )
         else:
             if length > MAX_FSTRING_LENGTH:
+                self._record_diagnostic(
+                    module="archive", field="fstring",
+                    source="read_fstring",
+                    target_offset=pos_before, file_size=self.total_size(),
+                    read_size=length,
+                    error=f"FString at pos {pos_before}: length {length} "
+                          f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
+                )
                 self.seek(pos_before)
                 if self._tolerant:
                     self._logger.warning(
