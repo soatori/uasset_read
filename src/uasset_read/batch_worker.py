@@ -124,6 +124,7 @@ class BatchWorkerOutcome:
     succeeded: bool
     output_path: str = ""
     error: str = ""
+    error_details: str = ""
 
 
 def _temporary_output_path(output_path: str | Path, pid: int) -> Path:
@@ -331,10 +332,14 @@ def _monitor_worker(
     try:
         return result_queue.get(timeout=1)
     except queue.Empty:
+        stderr_out = getattr(process, "stderr_text", "")
+        if stderr_out:
+            logger.error("Worker %s failed without result. stderr:\n%s", process.pid, stderr_out)
         return BatchWorkerOutcome(
             False,
             "",
             f"worker_exit: process exited with code {process.exitcode} without a result",
+            stderr_out,
         )
 
 

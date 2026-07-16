@@ -93,6 +93,7 @@ tests/*
 !tests/iostore/
 !tests/samples/
 !tests/config/
+!tests/batch/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
