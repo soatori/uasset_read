@@ -57,6 +57,7 @@ class PropertyTag:
     tag_start_offset: int | None = None  # PropertyTag 开始读取位置（archive.tell()）
     value_start_offset: int | None = None  # Property value 开始位置（tag 读取后）
     value_end_offset: int | None = None  # Property value 期望结束位置（value_start + size）
+    size_exceeded: bool = False  # True when tag.size exceeds remaining bytes (tolerant mode)
 
 
 @dataclass

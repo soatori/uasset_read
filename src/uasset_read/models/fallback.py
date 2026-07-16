@@ -31,6 +31,7 @@ class FallbackReason(str, Enum):
     PARTIAL_PARSE = "partial_parse"
     MISSING_MAPPING = "missing_mapping"
     CUSTOM_PAYLOAD = "custom_payload"
+    SIZE_EXCEEDED = "size_exceeded"
 
 
 @dataclass

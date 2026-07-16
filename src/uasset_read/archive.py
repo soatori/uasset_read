@@ -149,7 +149,7 @@ class FArchive:
             )
             raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
 
-    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None, property_type: str | None = None) -> None:
+    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None, property_type: str | None = None) -> bool:
         """PropertyTag.Size 完整验证，支持容错模式。
 
         Args:
@@ -157,18 +157,34 @@ class FArchive:
             context: 错误上下文
             tolerant: 是否启用容错模式（None 时使用实例默认值）
             property_type: 属性类型名，用于动态调整阈值（UE5 大型属性类型放宽至 500MB）
+
+        Returns:
+            True 表示验证通过，False 表示 size 超过剩余字节（仅 tolerant 模式）
         """
         if tolerant is None:
             tolerant = self._tolerant
         if size < 0:
             if tolerant:
-                return
+                self._record_diagnostic(
+                    module="archive", field="validate_size",
+                    source=context or "validate_size",
+                    target_offset=self.tell(), file_size=self._file_size,
+                    error=f"Size {size} (negative) at {context}",
+                )
+                return False
             raise ParseError(f"Invalid size {size} (negative) at {context}")
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
             if tolerant:
-                return
+                self._record_diagnostic(
+                    module="archive", field="validate_size",
+                    source=context or "validate_size",
+                    target_offset=current_pos, file_size=self._file_size,
+                    read_size=size,
+                    error=f"Size {size} exceeds remaining {remaining} bytes at {context}",
+                )
+                return False
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
         min_reasonable = 1024
         # 动态 max_reasonable_cap：根据属性类型和引擎版本调整
@@ -193,8 +209,16 @@ class FArchive:
             )
         if size > max_reasonable:
             if tolerant:
-                return
+                self._record_diagnostic(
+                    module="archive", field="validate_size",
+                    source=context or "validate_size",
+                    target_offset=current_pos, file_size=self._file_size,
+                    read_size=size,
+                    error=f"Size {size} exceeds max_reasonable {max_reasonable} at {context}",
+                )
+                return False
             raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
+        return True
 
     def tell(self) -> int:
         """返回当前位置"""

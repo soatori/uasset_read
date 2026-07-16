@@ -692,11 +692,28 @@ def parse_properties_from_export(
                 except (KeyError, AttributeError, IndexError) as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
-            tag = read_property_tag(archive, name_map, mappings=mappings, struct_name=struct_name)
+            tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
 
             # 终止标记：Name == UE_NONE_SENTINEL
             if tag.name == UE_NONE_SENTINEL:
                 break
+
+            # size 超过剩余字节：标记为 partial，跳过值解析
+            if tag.size_exceeded:
+                properties.append(PropertyValue(
+                    name=tag.name,
+                    type=tag.type,
+                    value=PropertyFallback(
+                        name=tag.name,
+                        type=tag.type,
+                        size=tag.size,
+                        raw_bytes=b"",
+                        reason=FallbackReason.SIZE_EXCEEDED,
+                        error_message=f"Size {tag.size} exceeds remaining bytes",
+                    ),
+                    array_index=tag.array_index,
+                ))
+                continue
 
             # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
             remaining = property_end - archive.tell()
