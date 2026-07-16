@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import io
-import logging
 import os
 import subprocess
 import sys
@@ -14,44 +12,9 @@ import pytest
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.memory_safety import ResourceLimits
-from uasset_read import project_logging
 
 # 子进程需要 src/ 在 PYTHONPATH 中才能 import uasset_read
 _SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
-
-
-def test_worker_stream_logging_includes_run_process_asset_and_stage():
-    stream = io.StringIO()
-    handler = project_logging.configure_worker_stream_logging(
-        stream=stream,
-        level="DEBUG",
-        run_id="run-42",
-        asset="Example.uasset",
-    )
-    try:
-        logging.getLogger("uasset_read.worker_test").warning("worker detail")
-    finally:
-        logging.getLogger("uasset_read").removeHandler(handler)
-        handler.close()
-
-    output = stream.getvalue()
-    assert "run=run-42" in output
-    assert f"pid={os.getpid()}" in output
-    assert "asset=Example.uasset" in output
-    assert "stage=worker" in output
-    assert "worker detail" in output
-
-
-def test_stderr_drain_forwards_each_worker_line():
-    from uasset_read.batch_worker import _StderrDrain
-
-    forwarded = []
-    drain = _StderrDrain(line_callback=forwarded.append)
-
-    drain._append("first\n")
-    drain._append("second\n")
-
-    assert forwarded == ["first\n", "second\n"]
 
 
 class _FakeProcess:

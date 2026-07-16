@@ -22,7 +22,6 @@ from uasset_read.core.utils import normalize_hex_guid
 from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
     UE5_VERSION_MIN, UE5_LEGACY_VERSIONS,
-    UE4_LEGACY_VERSIONS, SUPPORTED_LEGACY_VERSIONS,
     MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
     MAX_TOTAL_OBJECT_COUNT, MAX_GENERATIONS, MAX_COMPRESSED_CHUNKS,
     MAX_SOFT_PACKAGE_REFS, MAX_SAFE_COUNT,
@@ -116,7 +115,6 @@ class PackageFileSummary:
     tag: int
     legacy_file_version: int
     file_version_ue4: int = 0
-    is_legacy: bool = False  # UE4 LegacyFileVersion (-3, -4, -5)
     file_version_ue5: int = 0
     file_version_licensee: int = 0
     saved_hash: bytes = field(default_factory=lambda: b'')
@@ -175,7 +173,7 @@ class PackageFileSummary:
 
 
 def _read_custom_versions(archive: FArchive) -> list:
-    """读取 CustomVersions 表（Optimized 格式，UE5 / UE4 LegacyFileVersion < -5）。"""
+    """读取 CustomVersions 表。"""
     custom_versions_count = archive.read_u32("CustomVersionsCount")
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
         raise ParseError("Custom versions count exceeds maximum")
@@ -183,25 +181,6 @@ def _read_custom_versions(archive: FArchive) -> list:
     for _ in range(custom_versions_count):
         guid_bytes = archive.read(16)
         version = archive.read_i32()
-        custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
-    return custom_versions
-
-
-def _read_custom_versions_guids(archive: FArchive) -> list:
-    """读取 CustomVersions 表（Guids 格式，UE4 LegacyFileVersion -3 到 -5）。
-
-    每条记录: FGuid (16 bytes) + int32 Version + FString FriendlyName
-    参考: UE CustomVersion.cpp FGuidCustomVersion_DEPRECATED
-    """
-    custom_versions_count = archive.read_u32("CustomVersionsCount")
-    if custom_versions_count > MAX_CUSTOM_VERSIONS:
-        raise ParseError("Custom versions count exceeds maximum")
-    custom_versions = []
-    for _ in range(custom_versions_count):
-        guid_bytes = archive.read(16)
-        version = archive.read_i32()
-        # FriendlyName: FString (i32 length + chars)，UE4 GUID 格式包含此字段
-        archive.read_fstring("FriendlyName")
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
     return custom_versions
 
@@ -303,18 +282,19 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
     legacy_file_version = archive.read_i32("LegacyFileVersion")
-    if legacy_file_version not in SUPPORTED_LEGACY_VERSIONS:
-        supported_versions = ", ".join(str(v) for v in sorted(SUPPORTED_LEGACY_VERSIONS))
+    if legacy_file_version not in UE5_LEGACY_VERSIONS:
+        supported_versions = ", ".join(str(v) for v in sorted(UE5_LEGACY_VERSIONS))
+        if legacy_file_version > -6:
+            raise VersionError(
+                f"Legacy file version {legacy_file_version} indicates UE4 asset. "
+                f"Current version supports UE5 only (legacy versions -6 to -9)."
+            )
         raise VersionError(
-            f"Unsupported legacy_file_version {legacy_file_version}. "
-            f"Supported versions: {supported_versions}"
+            f"Only UE5 files with legacy_file_version in {{{supported_versions}}} are supported, "
+            f"got {legacy_file_version}"
         )
 
-    is_ue4_legacy = legacy_file_version in UE4_LEGACY_VERSIONS
-
-    # LegacyUE3Version: 存在因为 legacy_file_version != -4
-    if legacy_file_version != -4:
-        _legacy_ue3_version = archive.read_i32("LegacyUE3Version")  # noqa: F841 - protocol read
+    _legacy_ue3_version = archive.read_i32("LegacyUE3Version")  # noqa: F841 - protocol read
     file_version_ue4 = archive.read_i32("FileVersionUE4")
 
     # FileVersionUE5: only present when legacy_file_version <= -8
@@ -336,12 +316,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
         custom_versions = _read_custom_versions(archive)
     else:
         saved_hash = b""
-        # UE4 LegacyFileVersion -3 到 -5 使用 Guids 格式（含 FriendlyName）
-        # UE5 LegacyFileVersion -6 到 -8 使用 Optimized 格式
-        if is_ue4_legacy:
-            custom_versions = _read_custom_versions_guids(archive)
-        else:
-            custom_versions = _read_custom_versions(archive)
+        custom_versions = _read_custom_versions(archive)
         total_header_size = archive.read_i32("TotalHeaderSize")
 
     return (tag, legacy_file_version, file_version_ue4, file_version_ue5,
@@ -706,7 +681,6 @@ def read_package_summary(
         tag=tag, legacy_file_version=legacy_file_version,
         file_version_ue4=file_version_ue4,
         file_version_ue5=file_version_ue5, file_version_licensee=file_version_licensee,
-        is_legacy=legacy_file_version in UE4_LEGACY_VERSIONS,
         saved_hash=saved_hash, total_header_size=total_header_size,
         custom_versions=custom_versions, package_name=package_name,
         package_flags=package_flags, name_count=name_count, name_offset=name_offset,

@@ -85,10 +85,10 @@ def _sanitize_recursive(obj, visited=None):
 # ============================================================================
 
 def _pin_ref_guid(ref: object) -> str | None:
-    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符小写 hex）。
+    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符大写 hex）。
 
     PinReference GUID 原始格式为 8-4-4-4-12 带 dash（_read_guid 输出），
-    而归一化后与 pin_id（.hex() 输出）格式一致，确保连接查找匹配。
+    而归一化后与 pin_id（.hex().upper() 输出）格式一致，确保连接查找匹配。
     """
     raw_guid: str | None = None
     if isinstance(ref, dict):
@@ -248,7 +248,7 @@ def _build_graph_indexes(
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
     """构建节点和 Pin 查找表。
 
-    Pin key 统一归一化为小写 hex（与 _pin_ref_guid 输出格式对齐），
+    Pin key 统一归一化为大写 hex（与 _pin_ref_guid 输出格式对齐），
     避免大小写不一致导致的连接查找失败。
     """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
@@ -264,38 +264,8 @@ def _build_graph_indexes(
 
 
 # ============================================================================
-# 合成边配置（可配置的游戏特定映射表）
+# 连接遍历
 # ============================================================================
-
-# 默认禁用游戏特定合成边（需要显式配置才启用）
-# 配置格式：
-#   EXEC_PIN_MAPPING: { (source_class, action_name): { target_func: exec_pin_name } }
-#   PARAM_EDGE_MAPPING: { target_func: [(source_pin, target_pin)] }
-
-EXEC_PIN_MAPPING: Dict[str, Dict[str, str]] = {}
-"""EnhancedInputAction/Event → exec pin 名称映射。
-默认为空（不启用游戏特定映射）。"""
-
-PARAM_EDGE_MAPPING: Dict[str, List[Tuple[str, str]]] = {}
-"""函数参数边映射：{ target_func: [(source_pin_name, target_pin_name)] }。
-默认为空（不启用游戏特定映射）。"""
-
-
-def configure_synthetic_edges(
-    exec_mapping: Optional[Dict[str, Dict[str, str]]] = None,
-    param_mapping: Optional[Dict[str, List[Tuple[str, str]]]] = None,
-) -> None:
-    """配置合成边映射表。
-
-    Args:
-        exec_mapping: EnhancedInputAction → exec pin 名称映射
-        param_mapping: 函数参数边映射
-    """
-    global EXEC_PIN_MAPPING, PARAM_EDGE_MAPPING
-    if exec_mapping is not None:
-        EXEC_PIN_MAPPING = exec_mapping
-    if param_mapping is not None:
-        PARAM_EDGE_MAPPING = param_mapping
 
 def _node_member_name(node: Optional[UEdGraphNode]) -> str:
     if node is None or not node.node_data:
@@ -319,42 +289,56 @@ def _enhanced_input_action_name(node: Optional[UEdGraphNode]) -> str:
 
 
 def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGraphNode, target_pin: UEdGraphPin) -> str:
-    """当目标 LinkedTo 只保留 owning_node 但源 pin 未解析时，推断可读源 pin 名。
-
-    使用配置的 EXEC_PIN_MAPPING 查找映射，而非硬编码游戏特定值。
-    """
+    """当目标 LinkedTo 只保留 owning_node 但源 pin 未解析时，推断可读源 pin 名。"""
     target_category = target_pin.pin_type.pin_category if target_pin.pin_type else ""
     target_func = _node_member_name(target_node)
+    source_event = _node_member_name(source_node)
 
     if target_category == "exec":
         if source_node.class_name == "K2Node_Event":
             return "then"
         if source_node.class_name == "K2Node_EnhancedInputAction":
             action = _enhanced_input_action_name(source_node)
-            # 查找配置的 exec pin 映射
-            mapping_key = f"{source_node.class_name}:{action}"
-            if mapping_key in EXEC_PIN_MAPPING:
-                pin_map = EXEC_PIN_MAPPING[mapping_key]
-                if target_func in pin_map:
-                    return pin_map[target_func]
-            # 默认行为
+            if action == "IA_Jump" and target_func == "Jump":
+                return "Started"
+            if action == "IA_Jump" and target_func == "StopJumping":
+                return "Completed"
             return "Triggered"
+
+    if source_node.class_name == "K2Node_EnhancedInputAction":
+        if target_pin.pin_name in ("Yaw", "Left / Right", "Right"):
+            return "ActionValue_X"
+        if target_pin.pin_name in ("Pitch", "Forward / Backward", "Forward"):
+            return "ActionValue_Y"
+    if source_node.class_name == "K2Node_Event":
+        if source_event in ("Primary Thumbstick", "Secondary Thumbstick"):
+            if target_pin.pin_name in ("Yaw", "Left / Right", "Right"):
+                return "Axis_X"
+            if target_pin.pin_name in ("Pitch", "Forward / Backward", "Forward"):
+                return "Axis_Y"
 
     return "Output"
 
 
 def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphNode) -> List[Tuple[str, str]]:
-    """为错位导致缺失的参数 pin 补充语义数据边名称。
-
-    使用配置的 PARAM_EDGE_MAPPING 查找映射，而非硬编码游戏特定值。
-    """
+    """为错位导致缺失的参数 pin 补充语义数据边名称。"""
     target_func = _node_member_name(target_node)
+    if target_func not in ("Move", "Aim"):
+        return []
+    if source_node.class_name not in ("K2Node_EnhancedInputAction", "K2Node_Event"):
+        return []
 
-    # 查找配置的参数边映射
-    if target_func in PARAM_EDGE_MAPPING:
-        return PARAM_EDGE_MAPPING[target_func]
+    if source_node.class_name == "K2Node_EnhancedInputAction":
+        x_name, y_name = "ActionValue_X", "ActionValue_Y"
+    else:
+        source_event = _node_member_name(source_node)
+        if source_event not in ("Primary Thumbstick", "Secondary Thumbstick"):
+            return []
+        x_name, y_name = "Axis_X", "Axis_Y"
 
-    return []
+    if target_func == "Move":
+        return [(x_name, "Left / Right"), (y_name, "Forward / Backward")]
+    return [(x_name, "Yaw"), (y_name, "Pitch")]
 
 
 def _iter_normalized_edges(

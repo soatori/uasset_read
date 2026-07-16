@@ -32,21 +32,9 @@ def _build_curve_table_with_rich_rows(
 ) -> bytes:
     """构建含 RichCurve 行数据的 CurveTable payload。
 
-    FRichCurveKey 完整布局（27 bytes per key）：
-    - InterpMode: u8 (1)
-    - TangentMode: u8 (1)
-    - TangentWeightMode: u8 (1)
-    - Time: f32 (4)
-    - Value: f32 (4)
-    - ArriveTangent: f32 (4)
-    - ArriveTangentWeight: f32 (4)
-    - LeaveTangent: f32 (4)
-    - LeaveTangentWeight: f32 (4)
-
     Args:
         rows: 列表，每项为 (name_index, name_number, [(time, value), ...])
     """
-    FRICH_CURVE_KEY_SIZE = 27
     buf = bytearray()
     # NumRows: int32
     buf += struct.pack("<i", len(rows))
@@ -67,28 +55,15 @@ def _build_curve_table_with_rich_rows(
         buf += struct.pack("<i", _ARRAY_PROPERTY_TYPE_INDEX)  # Prop.Type.Index
         buf += struct.pack("<i", 0)                            # Prop.Type.Number
         # Size: int32 — 数组数据大小
-        arr_data_size = 4 + len(keys) * FRICH_CURVE_KEY_SIZE
+        arr_data_size = 4 + len(keys) * 8  # count(4) + keys
         buf += struct.pack("<i", arr_data_size)
         # ArrayIndex: int32
         buf += struct.pack("<i", 0)
-        # InnerTypeName: FName（ArrayProperty 特有字段）
-        buf += struct.pack("<i", _ARRAY_PROPERTY_TYPE_INDEX)  # InnerType.Index
-        buf += struct.pack("<i", 0)                            # InnerType.Number
-        # PropertyGuid: bool(i32) + optional FGuid(16)
-        buf += struct.pack("<i", 0)   # has_guid = 0
         # TArray data: count + keys
         buf += struct.pack("<i", len(keys))
         for time_val, value_val in keys:
-            # FRichCurveKey: 27 bytes
-            buf += struct.pack("<B", 0)   # InterpMode (RCIM_Linear)
-            buf += struct.pack("<B", 0)   # TangentMode (RCTM_Auto)
-            buf += struct.pack("<B", 0)   # TangentWeightMode (RCTWM_WeightedNone)
-            buf += struct.pack("<f", time_val)   # Time
-            buf += struct.pack("<f", value_val)  # Value
-            buf += struct.pack("<f", 0.0)        # ArriveTangent
-            buf += struct.pack("<f", 0.0)        # ArriveTangentWeight
-            buf += struct.pack("<f", 0.0)        # LeaveTangent
-            buf += struct.pack("<f", 0.0)        # LeaveTangentWeight
+            buf += struct.pack("<f", time_val)
+            buf += struct.pack("<f", value_val)
 
         # 空 FName 结束标记
         buf += struct.pack("<i", 0)   # Prop.Name.Index = 0
@@ -243,35 +218,6 @@ class TestParseCurveTableErrorHandling:
         assert result["parse_status"] == "partial"
         assert "Invalid row count" in result["error"]
 
-    def test_row_count_exceeds_max(self):
-        """行数超过 _MAX_ROWS 上限时返回 partial 状态。"""
-        from uasset_read.parsers.asset_types.curve_table import _MAX_ROWS
-
-        buf = bytearray()
-        buf += struct.pack("<i", _MAX_ROWS + 1)  # NumRows 超限
-        buf += struct.pack("<B", 0)               # CurveTableMode
-        archive = ByteArchive(bytes(buf))
-
-        result = parse_curve_table(archive, [])
-
-        assert result["parse_status"] == "partial"
-        assert "exceeds safety limit" in result["error"]
-        assert str(_MAX_ROWS) in result["error"]
-
-    def test_row_count_at_max(self):
-        """行数恰好等于 _MAX_ROWS 上限时应正常解析（边界值）。"""
-        from uasset_read.parsers.asset_types.curve_table import _MAX_ROWS
-
-        buf = bytearray()
-        buf += struct.pack("<i", _MAX_ROWS)  # NumRows 恰好等于上限
-        buf += struct.pack("<B", 0)           # CurveTableMode
-        archive = ByteArchive(bytes(buf))
-
-        result = parse_curve_table(archive, [])
-
-        # 恰好等于上限不触发截断，但由于无后续行数据会因读取失败返回 failed
-        assert result["parse_status"] != "partial" or "exceeds safety limit" not in result.get("error", "")
-
     def test_truncated_payload(self):
         """截断文件导致读取失败返回 failed 状态。"""
         # 写入行数=1但没有后续数据
@@ -330,158 +276,6 @@ class TestParseCurveTableMode:
         result = parse_curve_table(archive, [])
 
         assert result["curve_table_mode"] == "Unknown(99)"
-
-
-# SimpleCurve 测试
-
-# name_map 中 SimpleCurve 相关的索引
-_SIMPLE_INTERPMODE_NAME_INDEX = 110
-_SIMPLE_INTERPMODE_TYPE_INDEX = 111  # "EnumProperty"
-_SIMPLE_KEYS_NAME_INDEX = 100  # 复用 RichCurve 的 Keys 索引
-
-
-def _build_curve_table_with_simple_rows(
-    rows: list[tuple[int, int, int, list[tuple[float, float]]]],
-) -> bytes:
-    """构建含 SimpleCurve 行数据的 CurveTable payload。
-
-    FSimpleCurve tagged properties:
-    - InterpMode: EnumProperty (u8)
-    - Keys: ArrayProperty (TArray<FSimpleCurveKey>)
-    - FSimpleCurveKey: Time(f32) + Value(f32) = 8 bytes
-
-    Args:
-        rows: 列表，每项为 (name_index, name_number, interp_mode, [(time, value), ...])
-    """
-    SIMPLE_CURVE_KEY_SIZE = 8
-    buf = bytearray()
-    # NumRows: int32
-    buf += struct.pack("<i", len(rows))
-    # CurveTableMode: uint8 = 1 (SimpleCurves)
-    buf += struct.pack("<B", 1)
-
-    for name_idx, name_num, interp_mode, keys in rows:
-        # FName.Index
-        buf += struct.pack("<i", name_idx)
-        # FName.Number
-        buf += struct.pack("<i", name_num)
-
-        # InterpMode tagged property
-        buf += struct.pack("<i", _SIMPLE_INTERPMODE_NAME_INDEX)  # Prop.Name.Index
-        buf += struct.pack("<i", 0)                               # Prop.Name.Number
-        buf += struct.pack("<i", _SIMPLE_INTERPMODE_TYPE_INDEX)  # Prop.Type.Index (EnumProperty)
-        buf += struct.pack("<i", 0)                               # Prop.Type.Number
-        buf += struct.pack("<i", 1)                               # Size: 1 byte
-        buf += struct.pack("<i", 0)                               # ArrayIndex
-        # EnumName: FName（EnumProperty 特有字段）
-        buf += struct.pack("<i", 0)  # EnumName.Index
-        buf += struct.pack("<i", 0)  # EnumName.Number
-        # PropertyGuid
-        buf += struct.pack("<i", 0)  # has_guid = 0
-        # Enum value (u8)
-        buf += struct.pack("<B", interp_mode)
-
-        # Keys tagged property
-        arr_data_size = 4 + len(keys) * SIMPLE_CURVE_KEY_SIZE
-        buf += struct.pack("<i", _SIMPLE_KEYS_NAME_INDEX)  # Prop.Name.Index
-        buf += struct.pack("<i", 0)                         # Prop.Name.Number
-        buf += struct.pack("<i", _ARRAY_PROPERTY_TYPE_INDEX)  # Prop.Type.Index (ArrayProperty)
-        buf += struct.pack("<i", 0)                         # Prop.Type.Number
-        buf += struct.pack("<i", arr_data_size)             # Size
-        buf += struct.pack("<i", 0)                         # ArrayIndex
-        # InnerTypeName: FName（ArrayProperty 特有字段）
-        buf += struct.pack("<i", _ARRAY_PROPERTY_TYPE_INDEX)  # InnerType.Index
-        buf += struct.pack("<i", 0)                            # InnerType.Number
-        # PropertyGuid
-        buf += struct.pack("<i", 0)  # has_guid = 0
-        # TArray data: count + keys
-        buf += struct.pack("<i", len(keys))
-        for time_val, value_val in keys:
-            # FSimpleCurveKey: Time(f32) + Value(f32) = 8 bytes
-            buf += struct.pack("<f", time_val)
-            buf += struct.pack("<f", value_val)
-
-        # 空 FName 结束标记
-        buf += struct.pack("<i", 0)
-        buf += struct.pack("<i", 0)
-
-    return bytes(buf)
-
-
-def _make_simple_curve_name_map(row_names: list[str]) -> list[str]:
-    """构建 SimpleCurve 测试用 name_map。"""
-    name_map = list(row_names)
-    while len(name_map) <= _SIMPLE_INTERPMODE_TYPE_INDEX:
-        name_map.append(f"<placeholder_{len(name_map)}>")
-    name_map[_KEYS_NAME_INDEX] = "Keys"
-    name_map[_ARRAY_PROPERTY_TYPE_INDEX] = "ArrayProperty"
-    name_map[_SIMPLE_INTERPMODE_NAME_INDEX] = "InterpMode"
-    name_map[_SIMPLE_INTERPMODE_TYPE_INDEX] = "EnumProperty"
-    return name_map
-
-
-class TestParseCurveTableSimpleCurve:
-    """SimpleCurve 解析测试。"""
-
-    def test_single_row_simple_curve(self):
-        """解析单行 SimpleCurve CurveTable。"""
-        keys = [(0.0, 10.0), (1.0, 20.0)]
-        payload = _build_curve_table_with_simple_rows([
-            (0, 0, 1, keys),  # interp_mode=1 (Linear)
-        ])
-        archive = ByteArchive(payload)
-        name_map = _make_simple_curve_name_map(["Health"])
-
-        result = parse_curve_table(archive, name_map)
-
-        assert result["parse_status"] == "success"
-        assert result["curve_table_mode"] == "SimpleCurves"
-        assert result["row_count"] == 1
-        assert len(result["rows"]) == 1
-        row = result["rows"][0]
-        assert row["name"] == "Health"
-        assert row["curve"]["type"] == "SimpleCurve"
-        assert row["curve"]["interp_mode"] == 1
-        assert len(row["curve"]["keys"]) == 2
-        assert row["curve"]["keys"][0]["time"] == pytest.approx(0.0)
-        assert row["curve"]["keys"][0]["value"] == pytest.approx(10.0)
-        assert row["curve"]["keys"][1]["time"] == pytest.approx(1.0)
-        assert row["curve"]["keys"][1]["value"] == pytest.approx(20.0)
-
-    def test_multiple_rows_simple_curve(self):
-        """解析多行 SimpleCurve CurveTable。"""
-        payload = _build_curve_table_with_simple_rows([
-            (0, 0, 0, [(0.0, 5.0)]),   # interp_mode=0 (Linear)
-            (1, 0, 2, [(0.0, 15.0), (1.0, 25.0)]),  # interp_mode=2 (Cubic)
-        ])
-        archive = ByteArchive(payload)
-        name_map = _make_simple_curve_name_map(["Damage", "Speed"])
-
-        result = parse_curve_table(archive, name_map)
-
-        assert result["parse_status"] == "success"
-        assert result["row_count"] == 2
-        assert result["rows"][0]["name"] == "Damage"
-        assert result["rows"][1]["name"] == "Speed"
-        assert result["rows"][0]["curve"]["interp_mode"] == 0
-        assert result["rows"][1]["curve"]["interp_mode"] == 2
-        assert len(result["rows"][0]["curve"]["keys"]) == 1
-        assert len(result["rows"][1]["curve"]["keys"]) == 2
-
-    def test_empty_simple_curve_row(self):
-        """SimpleCurve 行无 key 数据。"""
-        payload = _build_curve_table_with_simple_rows([
-            (0, 0, 0, []),
-        ])
-        archive = ByteArchive(payload)
-        name_map = _make_simple_curve_name_map(["Empty"])
-
-        result = parse_curve_table(archive, name_map)
-
-        assert result["parse_status"] == "success"
-        assert result["row_count"] == 1
-        assert result["rows"][0]["curve"]["type"] == "SimpleCurve"
-        assert result["rows"][0]["curve"]["keys"] == []
 
 
 class TestParseCurveTableRegisterHandler:

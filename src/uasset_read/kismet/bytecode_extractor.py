@@ -33,11 +33,6 @@ logger = logging.getLogger(__name__)
 # T-72C-04 mitigation: cache is per-module but reset at each decompile_uasset() call context
 _bpgc_bytecode_cache: dict[str, bytes] | None = None
 
-# Retry counter for BPGC fallback: allows transient failures to be retried
-# without permanently caching empty results (#367)
-_bpgc_cache_retries: int = 0
-_BPGC_MAX_RETRIES: int = 3
-
 _PLAUSIBLE_SCRIPT_START_TOKENS = {
     0x04,  # EX_Return
     0x19,  # EX_Context
@@ -133,7 +128,7 @@ def extract_bytecode_bytes(
 
     # Skip PropertyTags until "None" (positions us at bytecode header)
     while True:
-        tag = read_property_tag(archive, name_map)
+        tag = read_property_tag(archive, name_map, summary=summary)
         if tag.name == UE_NONE_SENTINEL:
             break
         archive.skip(tag.size)
@@ -263,7 +258,7 @@ def _bpgc_fallback(
 
     T-72C-03 mitigation: wrapped in try/except, returns None on failure.
     """
-    global _bpgc_bytecode_cache, _bpgc_cache_retries
+    global _bpgc_bytecode_cache
 
     from uasset_read.kismet.bpgc_bytecode import (
         extract_bpgc_bytecode,
@@ -275,7 +270,7 @@ def _bpgc_fallback(
     # Derive asset name from archive filename
     asset_name = os.path.splitext(os.path.basename(archive._path))[0]
 
-    # Populate cache on first fallback call (or retry after transient failure)
+    # Populate cache on first fallback call
     if _bpgc_bytecode_cache is None:
         logger.debug(
             "Falling back to BPGC bytecode extraction for '%s'",
@@ -290,13 +285,7 @@ def _bpgc_fallback(
 
             if bpgc_export is None:
                 logger.debug("No BlueprintGeneratedClass found for '%s'", asset_name)
-                _bpgc_cache_retries += 1
-                if _bpgc_cache_retries >= _BPGC_MAX_RETRIES:
-                    logger.debug(
-                        "BPGC cache: giving up after %d retries (no BPGC export)",
-                        _bpgc_cache_retries,
-                    )
-                    _bpgc_bytecode_cache = {}
+                _bpgc_bytecode_cache = {}  # Empty cache to prevent re-search
                 return None
 
             # Extract all bytecode buffers from BPGC
@@ -306,20 +295,13 @@ def _bpgc_fallback(
 
             if not bytecode_buffers:
                 logger.debug("No bytecode buffers extracted from BPGC '%s'", bpgc_export.object_name)
-                _bpgc_cache_retries += 1
-                if _bpgc_cache_retries >= _BPGC_MAX_RETRIES:
-                    logger.debug(
-                        "BPGC cache: giving up after %d retries (no bytecode buffers)",
-                        _bpgc_cache_retries,
-                    )
-                    _bpgc_bytecode_cache = {}
+                _bpgc_bytecode_cache = {}
                 return None
 
             # Map buffers to Function exports by name
             _bpgc_bytecode_cache = map_bytecode_to_functions(
                 bytecode_buffers, export_map, name_map, import_map, export_map
             )
-            _bpgc_cache_retries = 0  # Reset on success
 
             logger.info(
                 "BPGC fallback: cached %d function bytecode mappings from '%s'",
@@ -329,19 +311,12 @@ def _bpgc_fallback(
         except (OSError, struct.error, ValueError, KeyError) as e:
             # T-72C-03: Return None on failure rather than raising
             logger.error("BPGC bytecode extraction failed: %s", e)
-            _bpgc_cache_retries += 1
-            if _bpgc_cache_retries >= _BPGC_MAX_RETRIES:
-                logger.debug(
-                    "BPGC cache: giving up after %d retries (exception: %s)",
-                    _bpgc_cache_retries, e,
-                )
-                _bpgc_bytecode_cache = {}
+            _bpgc_bytecode_cache = {}
             return None
 
     # Look up function name in cache
     func_name = export.object_name
     if func_name in _bpgc_bytecode_cache:
-        logger.debug("BPGC cache hit for function '%s'", func_name)
         return _bpgc_bytecode_cache[func_name]
 
     logger.debug("Function '%s' not found in BPGC bytecode cache", func_name)
@@ -355,9 +330,8 @@ def reset_bpgc_cache() -> None:
     Called by decompile_uasset() at the start of each invocation to ensure
     fresh cache per file (T-72C-04 mitigation).
     """
-    global _bpgc_bytecode_cache, _bpgc_cache_retries
+    global _bpgc_bytecode_cache
     _bpgc_bytecode_cache = None
-    _bpgc_cache_retries = 0
     # 同时重置 FKismetArchive 的警告去重集合
     from uasset_read.kismet.archive import FKismetArchive
     FKismetArchive.reset_warned_offsets()

@@ -26,7 +26,6 @@ from uasset_read.graph.graph_utils import (
     _pin_container_type,
     _is_exec_pin,
     format_pin_ref,
-    configure_synthetic_edges,
 )
 from uasset_read.graph.flow_builder import (
     _resolve_knot_chain,
@@ -1389,18 +1388,6 @@ class TestEnhancedInputActionName:
 class TestSyntheticParameterEdges:
     """_synthetic_parameter_edges 语义参数边测试。"""
 
-    @pytest.fixture(autouse=True)
-    def _configure_synthetic_edges(self):
-        """配置合成边映射表用于测试。"""
-        configure_synthetic_edges(
-            param_mapping={
-                "Move": [("ActionValue_X", "X"), ("ActionValue_Y", "Y")],
-                "Aim": [("ActionValue_Y", "Yaw"), ("ActionValue_X", "Pitch")],
-            }
-        )
-        yield
-        configure_synthetic_edges(param_mapping={})
-
     def test_move_function_gets_edges(self):
         """目标函数为 Move 时应返回 X/Y 参数边。"""
         source = FakeNode(
@@ -1452,8 +1439,8 @@ class TestSyntheticParameterEdges:
         edges = _synthetic_parameter_edges(source, target)
         assert edges == []
 
-    def test_non_source_type_returns_mapping(self):
-        """非 EnhancedInputAction/Event 源节点仍应返回映射（基于目标函数名）。"""
+    def test_non_source_type_returns_empty(self):
+        """非 EnhancedInputAction/Event 源节点应返回空列表。"""
         source = FakeNode(
             node_guid="src",
             class_name="K2Node_CallFunction",
@@ -1465,8 +1452,7 @@ class TestSyntheticParameterEdges:
             node_data={"function_reference": {"member_name": "Move"}},
         )
         edges = _synthetic_parameter_edges(source, target)
-        # 新实现仅基于目标函数名查找映射，不检查源类型
-        assert len(edges) == 2
+        assert edges == []
 
 
 class TestExtractCallFunctionParameters:

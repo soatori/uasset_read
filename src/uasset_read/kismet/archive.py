@@ -51,13 +51,10 @@ class FKismetArchive(FArchive):
         while True:
             stmt_index = self.tell()
             token_byte = self.read_u8()
-            try:
-                token = EExprToken(token_byte)
-            except ValueError:
-                token = None
+            token = EExprToken(token_byte)
 
-            expr_class = EXPR_CLASS_MAP.get(token) if token is not None else None
-            if token is None or expr_class is None:
+            expr_class = EXPR_CLASS_MAP.get(token)
+            if expr_class is None:
                 if self._tolerant:
                     consecutive_unknown += 1
                     if consecutive_unknown >= 10:
@@ -73,9 +70,8 @@ class FKismetArchive(FArchive):
                     self.seek(stmt_index + 1)
                     continue
                 else:
-                    token_name = token.name if token is not None else "<unknown>"
                     raise ParseError(
-                        f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}"
+                        f"Unknown EExprToken {token.name} (0x{token_byte:02X}) at offset {stmt_index}"
                     )
 
             # Reset consecutive unknown counter on successful token match

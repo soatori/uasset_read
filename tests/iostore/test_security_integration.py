@@ -2,7 +2,6 @@
 import io
 import struct
 import pytest
-from unittest.mock import MagicMock
 
 from uasset_read.iostore.reader import IoStoreReader, MAX_TOC_ENTRIES, MAX_PARTITION_COUNT
 from uasset_read.exceptions import ParseError
@@ -171,61 +170,3 @@ class TestDirectoryIndexSafety:
 
         with pytest.raises(ParseError, match="环|cycle|深度"):
             reader._parse_directory_index()
-
-
-class TestEncryptedBlockShortRead:
-    """加密块二次读取短读验证。"""
-
-    def test_second_read_short_raises_parse_error(self):
-        """第二次 read 返回不足字节时应抛出 ParseError。"""
-        reader = IoStoreReader.__new__(IoStoreReader)
-
-        # 构造假 header — encrypted, 大 partition_size
-        reader._header = type("H", (), {
-            "is_encrypted": True,
-            "partition_size": 0xFFFFFFFFFFFFFFFF,
-        })()
-
-        # compressed_size=17 → aligned_size=32 (16 字节对齐)
-        block = type("Block", (), {
-            "compressed_size": 17,
-            "uncompressed_size": 100,
-            "compression_method_index": 1,
-            "offset": 0,
-        })()
-        reader._compression_blocks = [block]
-        reader._compression_block_size = 64 * 1024 * 1024
-
-        # 第一次 read 返回 17 字节（够 compressed_size）
-        # 第二次 read 返回 5 字节（不够对齐到 32）
-        first_read_data = b'\x00' * 17
-        second_read_data = b'\x00' * 5
-
-        call_count = [0]
-
-        def mock_read(size):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return first_read_data
-            elif call_count[0] == 2:
-                return second_read_data
-            return b''
-
-        mock_stream = MagicMock()
-        mock_stream.read = mock_read
-        mock_stream.seek = MagicMock()
-        reader._ucas_files = [mock_stream]
-        reader._aes_key = b'\x00' * 16
-
-        # mock decrypt 以跳过实际 AES 解密
-        import uasset_read.iostore.reader as reader_mod
-        original_decrypt = reader_mod.decrypt_aes_ecb
-        reader_mod.decrypt_aes_ecb = lambda data, key: data
-
-        try:
-            # compression_block_size=10 使 block 在不同块中，进入多块循环
-            reader._compression_block_size = 10
-            with pytest.raises(ParseError, match="对齐读取不足"):
-                reader._read_data(0, 10)
-        finally:
-            reader_mod.decrypt_aes_ecb = original_decrypt

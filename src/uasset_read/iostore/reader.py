@@ -251,13 +251,6 @@ class IoStoreReader:
                 logger.debug("关闭 ucas 文件失败: %s", e)
         self._ucas_files.clear()
 
-    def __del__(self) -> None:
-        """安全网：确保文件句柄被释放。"""
-        try:
-            self.close()
-        except Exception:
-            pass
-
     def __enter__(self) -> IoStoreReader:
         self.open()
         return self
@@ -493,13 +486,7 @@ class IoStoreReader:
             if self._header and self._header.is_encrypted:
                 aligned_size = (block.compressed_size + 15) & ~15
                 if len(raw_data) < aligned_size:
-                    extra = reader.read(aligned_size - len(raw_data))
-                    raw_data += extra
-                    if len(raw_data) < aligned_size:
-                        raise ParseError(
-                            f"IoStore 加密块 {block_index} 对齐读取不足: "
-                            f"{len(raw_data)} < {aligned_size} bytes"
-                        )
+                    raw_data += reader.read(aligned_size - len(raw_data))
                 raw_data = decrypt_aes_ecb(raw_data, self._aes_key)[:block.compressed_size]
 
             method = self._compression_method_name(block.compression_method_index)

@@ -25,7 +25,6 @@ from uasset_read.cpp_gen.cpp_default_value_formatter import (
     format_cpp_input_action_load,
     format_cpp_transform,
 )
-from uasset_read.cpp_gen.sanitizer import sanitize_identifier, sanitize_string_literal
 from uasset_read.models.transforms import RotatorValue, VectorValue
 
 if TYPE_CHECKING:
@@ -184,22 +183,19 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
     # 1. creation 段 — 拓扑排序（T-059-06）
     sorted_creations = _topological_sort_creations(creations, assignments)
     for creation in sorted_creations:
-        safe_var = sanitize_identifier(creation.variable_name)
-        safe_name = sanitize_string_literal(creation.component_name)
         line = (
-            f"{safe_var} = "
+            f"{creation.variable_name} = "
             f"CreateDefaultSubobject<{creation.cpp_type}>"
-            f'(TEXT("{safe_name}"));'
+            f'(TEXT("{creation.component_name}"));'
         )
         sections["creation"].append(line)
 
     # 2. attach 段
     for assign in assignments:
         if assign.socket_name:
-            safe_socket = sanitize_string_literal(assign.socket_name)
             line = (
                 f"{assign.child_name}->SetupAttachment("
-                f"{assign.parent_name}, FName(\"{safe_socket}\"));"
+                f"{assign.parent_name}, FName(\"{assign.socket_name}\"));"
             )
         else:
             line = f"{assign.child_name}->SetupAttachment({assign.parent_name});"

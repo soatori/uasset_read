@@ -215,8 +215,8 @@ class JSONRenderer(IRenderer):
             "is_weak_pointer": pin.is_weak_pointer,
             "is_uobject_wrapper": pin.is_uobject_wrapper,
         }
-        if pin.pin_subcategory_object_name is not None:
-            d["pin_subcategory_object"] = pin.pin_subcategory_object_name
+        if pin.pin_subcategory_object is not None:
+            d["pin_subcategory_object"] = pin.pin_subcategory_object
         if pin.is_map_key:
             d["is_map_key"] = True
         if pin.is_map_value:
@@ -227,8 +227,8 @@ class JSONRenderer(IRenderer):
                 d["map_key_pin_category"] = pin.map_key_pin_category
             if pin.map_key_pin_subcategory:
                 d["map_key_pin_subcategory"] = pin.map_key_pin_subcategory
-            if pin.map_key_pin_subcategory_object_name is not None:
-                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object_name
+            if pin.map_key_pin_subcategory_object is not None:
+                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object
         return d
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:

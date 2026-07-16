@@ -18,7 +18,6 @@ from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppStatement,
     CppWhileStmt,
 )
-from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 from uasset_read.graph.macro_expander import STANDARD_MACRO_CPP_MAPPING
 
 logger = logging.getLogger(__name__)
@@ -45,6 +44,13 @@ def _build_call_expression(func_name: str, args: List[str]) -> str:
     return inline_fn(*args)
 
 
+def _sanitize_identifier(name: str) -> str:
+    """将 UE pin 名清理为 C++ 标识符。
+
+    委托给 cpp_gen.sanitizer.sanitize_identifier 统一实现。
+    """
+    from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+    return sanitize_identifier(name)
 
 
 def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
@@ -187,7 +193,7 @@ def _extract_call_args(
             if direction in ("exec", "return"):
                 continue
             if name:
-                args.append(sanitize_identifier(name))
+                args.append(_sanitize_identifier(name))
 
     # Fallback: 从 data_sources 推导
     if not args:
@@ -203,7 +209,7 @@ def _extract_call_args(
                             src_type = src.get("source_type", "")
                             if src_type == "function_parameter":
                                 src_pin = src.get("pin", "")
-                                args.append(sanitize_identifier(src_pin))
+                                args.append(_sanitize_identifier(src_pin))
                             elif src_type == "default_value":
                                 args.append(src.get("value", "0"))
                             elif src_type == "pure_function":
@@ -292,7 +298,7 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
                                     return val.lower()
                                 return val
                             elif src.get("source_type") == "function_parameter":
-                                return sanitize_identifier(src.get("pin", "condition"))
+                                return _sanitize_identifier(src.get("pin", "condition"))
 
     # Fallback: 从节点类型推导默认条件
     branch_type = node_info.get("branch_type", "unknown")

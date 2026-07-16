@@ -235,14 +235,8 @@ class MacroExpander:
         graph_guid = macro_ref.get("graph_guid", "")
         graph_name = macro_ref.get("graph_name", "")
 
-        # 优先查找用户定义的宏图（同名时用户定义优先于标准宏）
-        # 如果资产中存在同名图，则展开用户定义版本
-        macro_graph = self._find_macro_graph(macro_ref)
-        if macro_graph is not None:
-            # 用户定义宏优先，正常展开
-            pass
-        elif graph_name in STANDARD_MACROS:
-            # 无同名图时才使用标准宏展开
+        # 检查标准宏（不需要展开内部节点）
+        if graph_name in STANDARD_MACROS:
             return self._create_standard_expansion(graph_name, macro_ref)
 
         # 循环检测
@@ -569,20 +563,16 @@ class MacroExpander:
     ) -> MacroExpansion:
         """为标准宏创建展开结果（不展开内部节点）。"""
         info = STANDARD_MACROS[macro_name]
-        pin_mapping: Dict[str, Dict[str, Any]] = {}
-        # 输入引脚
-        for name in info["inputs"]:
-            pin_mapping[name] = {"instance_direction": "EGPD_Input", "is_standard": True}
-        # 输出引脚
-        for name in info["outputs"]:
-            pin_mapping[name] = {"instance_direction": "EGPD_Output", "is_standard": True}
         return MacroExpansion(
             context=MacroExpansionContext(
                 macro_name=macro_name,
                 macro_guid="",
                 macro_graph_ref=macro_ref,
             ),
-            pin_mapping=pin_mapping,
+            pin_mapping={
+                name: {"instance_direction": "EGPD_Input", "is_standard": True}
+                for name in info["inputs"]
+            },
             expanded_nodes=[],
             internal_flows=[],
         )

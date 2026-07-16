@@ -431,7 +431,7 @@ class TestPropertyModels:
             fields={"X": 0.0, "Y": 0.0, "Z": 0.0},
         )
         assert sv.property_type == "StructProperty"
-        assert sv.parse_status == "success"
+        assert sv.parse_status == "parsed"
 
     def test_map_value(self):
         """MapValue 应可正确实例化。"""

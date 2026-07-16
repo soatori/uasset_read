@@ -128,8 +128,7 @@ class UObjectInstance:
                 return f"{parent_name}.{self.object_name}", True
             return f"{parent_name}.{self.object_name}", False
         elif self.is_import and self.class_package:
-            from uasset_read.link.linker import normalize_world_partition_path
-            return f"{normalize_world_partition_path(self.class_package)}.{self.object_name}", False
+            return f"{self.class_package}.{self.object_name}", False
         elif self.linker and self.linker.summary:
             pkg_name = getattr(self.linker.summary, "package_name", "Unknown")
             if isinstance(pkg_name, int) and self.linker.name_map:

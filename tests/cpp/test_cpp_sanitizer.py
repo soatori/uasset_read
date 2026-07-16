@@ -140,16 +140,16 @@ class TestSanitizeIdentifier:
         """组件名（通常不含空格，但确保安全）"""
         assert sanitize_identifier("FirstPersonCameraComponent") == "FirstPersonCameraComponent"
 
-    # === 通过 sanitize_identifier 直接调用 ===
+    # === 通过 extract_cpp_skeleton 中的 _sanitize_identifier 委托 ===
 
-    def test_sanitize_identifier_direct(self):
-        """验证 sanitize_identifier 直接调用"""
-        from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+    def test_delegation_from_extract_cpp_skeleton(self):
+        """验证 extract_cpp_skeleton._sanitize_identifier 使用新实现"""
+        from uasset_read.cpp_gen.extract_cpp_skeleton import _sanitize_identifier
 
-        assert sanitize_identifier("Target Touch UI") == "Target_Touch_UI"
-        assert sanitize_identifier("MyVar@#$") == "MyVar"
-        assert sanitize_identifier("123Var") == "_123Var"
-        assert sanitize_identifier("") == "_unnamed"
+        assert _sanitize_identifier("Target Touch UI") == "Target_Touch_UI"
+        assert _sanitize_identifier("MyVar@#$") == "MyVar"
+        assert _sanitize_identifier("123Var") == "_123Var"
+        assert _sanitize_identifier("") == "_unnamed"
 
     # === 通过顶层 __init__ 导出 ===
 

@@ -16,18 +16,14 @@ class MockGraph:
 
 
 def test_chain_shows_exec_pin_names():
-    """链式字符串应包含执行引脚名称。
-
-    used_exec_pin_name 设置在源节点上，表示该节点的 exec output pin 名称。
-    链式字符串中箭头的引脚名称来自源节点（names[i]），而非目标节点。
-    """
+    """链式字符串应包含执行引脚名称。"""
     mock_flows = [
         {
             "start_event": "Event.BeginPlay",
             "nodes": [
                 {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
                 {"node_guid": "g2", "node_type": "K2Node_CallFunction", "used_exec_pin_name": "Then"},
-                {"node_guid": "g3", "node_type": "K2Node_CallFunction"},
+                {"node_guid": "g3", "node_type": "K2Node_CallFunction", "used_exec_pin_name": "Completed"},
             ],
         }
     ]
@@ -41,9 +37,9 @@ def test_chain_shows_exec_pin_names():
     chains = build_execution_chains(mock_graph, mock_flows)
     assert len(chains) > 0
     chain_str = chains[0].get("chains", [""])[0]
-    # 链应包含源节点的引脚名称: N0--exec-->N1--Then-->N2
-    assert "exec" in chain_str, f"链应包含 'exec' 引脚名称: {chain_str}"
+    # 链应包含引脚名称: N0--Then-->N1--Completed-->N2
     assert "Then" in chain_str, f"链应包含 'Then' 引脚名称: {chain_str}"
+    assert "Completed" in chain_str, f"链应包含 'Completed' 引脚名称: {chain_str}"
 
 
 def test_chain_fallback_to_arrow_without_pin_names():
@@ -71,18 +67,14 @@ def test_chain_fallback_to_arrow_without_pin_names():
 
 
 def test_chain_mixed_pin_names():
-    """部分节点有引脚名称、部分没有时应正确混合。
-
-    used_exec_pin_name 设置在源节点上。g1 有 "exec"，g2 无引脚名称。
-    g1->g2 应使用 "exec"，g2->g3 应使用简单箭头（因为 g2 无引脚名称）。
-    """
+    """部分节点有引脚名称、部分没有时应正确混合。"""
     mock_flows = [
         {
             "start_event": "Event.BeginPlay",
             "nodes": [
                 {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
                 {"node_guid": "g2", "node_type": "K2Node_CallFunction"},  # 无引脚名称
-                # g3 是最后一个节点
+                {"node_guid": "g3", "node_type": "K2Node_CallFunction", "used_exec_pin_name": "Completed"},
             ],
         }
     ]
@@ -95,12 +87,10 @@ def test_chain_mixed_pin_names():
 
     chains = build_execution_chains(mock_graph, mock_flows)
     chain_str = chains[0].get("chains", [""])[0]
-    # g1 有 "exec" -> 应使用 exec 引脚，g2 无引脚名称 -> 应使用简单箭头
-    assert "exec" in chain_str, f"链应包含 'exec': {chain_str}"
-    # g1->g2 应使用 exec 引脚
-    assert "--exec-->" in chain_str, f"g1->g2 应使用 exec 引脚: {chain_str}"
-    # g2->g3 应使用简单箭头（g2 无引脚名称）
-    assert "->" in chain_str, f"g2->g3 应使用简单箭头: {chain_str}"
+    # g2 无引脚名称 -> 应使用简单箭头，g3 有 Completed
+    assert "Completed" in chain_str, f"链应包含 'Completed': {chain_str}"
+    # g2 到 g3 之间应该有 Completed 引脚
+    assert "--Completed-->" in chain_str, f"g2->g3 应使用 Completed 引脚: {chain_str}"
 
 
 def test_single_node_chain():

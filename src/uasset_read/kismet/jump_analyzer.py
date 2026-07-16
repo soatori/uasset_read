@@ -532,30 +532,15 @@ class JumpAnalyzer:
         return idx in self._backjump_indices
 
     def _build_backjump_cache(self) -> None:
-        """构建回跳索引缓存（延迟初始化）。
+        """构建回跳索引缓存（延迟初始化）。"""
+        from uasset_read.kismet.expressions.control_flow import EX_JumpIfNot
 
-        优化：单次扫描构建，避免对每个 JumpIfNot 调用 detect_while_pattern（O(n²)）。
-        策略：扫描所有 EX_Jump，找到回跳目标在 JumpIfNot 之前的跳转。
-        """
-        from uasset_read.kismet.expressions.control_flow import EX_JumpIfNot, EX_Jump
-
-        # 预计算 JumpIfNot 索引集合
-        jump_if_not_indices: set[int] = set()
-        for idx, expr in enumerate(self._expressions):
-            if isinstance(expr, EX_JumpIfNot):
-                jump_if_not_indices.add(idx)
-
-        # 扫描所有 EX_Jump，找到回跳目标在 JumpIfNot 之前的跳转
-        for idx, expr in enumerate(self._expressions):
-            if not isinstance(expr, EX_Jump):
+        for start_idx in range(len(self._expressions)):
+            if not isinstance(self._expressions[start_idx], EX_JumpIfNot):
                 continue
-            target_offset = expr.CodeOffset
-            target_idx = self.find_label_index(target_offset)
-            if target_idx is None:
-                continue
-            # 回跳目标必须在某个 JumpIfNot 之前或就是该 JumpIfNot
-            if target_idx in jump_if_not_indices:
-                self._backjump_indices.add(idx)
+            while_result = self.detect_while_pattern(start_idx)
+            if while_result is not None:
+                self._backjump_indices.add(while_result["body_end"])
 
     def get_structured_indices(self) -> set[int]:
         """获取所有属于结构化控制流块的表达式索引集合。
@@ -571,21 +556,13 @@ class JumpAnalyzer:
         return set(self._structured_indices)
 
     def _build_structured_indices(self) -> None:
-        """构建结构化索引集合（延迟初始化）。
-
-        优化：跳过已标记为结构化的索引，避免重复检测。
-        """
+        """构建结构化索引集合（延迟初始化）。"""
         from uasset_read.kismet.expressions.control_flow import (
             EX_JumpIfNot, EX_PushExecutionFlow,
         )
         from uasset_read.kismet.expressions.special import EX_SwitchValue
 
-        skip_until = -1
         for idx in range(len(self._expressions)):
-            # 跳过已标记为结构化的索引
-            if idx <= skip_until:
-                continue
-
             expr = self._expressions[idx]
 
             # switch 模式：EX_SwitchValue 自身
@@ -603,7 +580,6 @@ class JumpAnalyzer:
                     )
                     for j in range(push_pop_result["start"], end + 1):
                         self._structured_indices.add(j)
-                    skip_until = end
                     continue
 
             # JumpIfNot 起始的模式
@@ -613,14 +589,12 @@ class JumpAnalyzer:
                 if for_result is not None:
                     for j in range(for_result["start"], for_result["body_end"] + 1):
                         self._structured_indices.add(j)
-                    skip_until = for_result["body_end"]
                     continue
 
                 while_result = self.detect_while_pattern(idx)
                 if while_result is not None:
                     for j in range(while_result["start"], while_result["body_end"] + 1):
                         self._structured_indices.add(j)
-                    skip_until = while_result["body_end"]
                     continue
 
                 if_else_result = self.detect_if_else_pattern(idx)
@@ -631,7 +605,6 @@ class JumpAnalyzer:
                     )
                     for j in range(if_else_result["start"], end + 1):
                         self._structured_indices.add(j)
-                    skip_until = end
 
     # ================================================================
     # 结构化率分析

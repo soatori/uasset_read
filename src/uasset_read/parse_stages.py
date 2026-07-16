@@ -23,7 +23,6 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
-from uasset_read.constants import PKG_Cooked
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
@@ -188,10 +187,6 @@ def _read_core_tables(
     result.version_container = build_version_container(result.summary)
     archive._file_version_ue5 = result.summary.file_version_ue5
 
-    # 标记 UE4 legacy 资产
-    if getattr(result.summary, "is_legacy", False):
-        result.metadata["is_legacy"] = True
-
     # 截断文件检测：验证导出数据范围
     if validate_range:
         try:
@@ -278,7 +273,7 @@ def _read_secondary_tables(
 
     # 读取 AssetRegistryData（资产元数据标签）
     try:
-        is_cooked = bool(result.summary.package_flags & PKG_Cooked)
+        is_cooked = bool(result.summary.package_flags & 0x00000100)  # PKG_FilterEditorOnly
         result.asset_registry_data = read_asset_registry_data(
             archive,
             result.summary.asset_registry_data_offset,
@@ -401,7 +396,6 @@ def _read_package_headers(
     game: Optional[str] = None,
     hex_view: bool = False,
     validate_range: bool = True,
-    check_aes_key: Optional[bytes] = None,
 ) -> tuple:
     """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
 
@@ -414,7 +408,7 @@ def _read_package_headers(
     # 初始化解析环境（archive、bundle、mappings_provider）
     archive, bundle, mappings_provider = _init_parse_env(
         path, result, tolerant, provider, mappings_path, game,
-        check_aes_key=check_aes_key, hex_view=hex_view,
+        check_aes_key=None, hex_view=hex_view,
     )
 
     # 读取核心表（summary/name/import/export）

@@ -85,7 +85,7 @@ def _parse_material_input(
     - MaskB: int32
     - MaskA: int32
     """
-    if tag.size < 32:  # 4 (OutputIndex) + 8 (FName) + 4 (Mask) + 4*4 (RGBA)
+    if tag.size < 28:  # 4 + 4 + 4 + 4*4
         return None
 
     start_pos = archive.tell()
@@ -133,7 +133,7 @@ def _parse_expression_output(
     - MaskB: int32
     - MaskA: int32
     """
-    if tag.size < 28:  # 8 (FName) + 4 (Mask) + 4*4 (RGBA)
+    if tag.size < 24:  # 4 + 4 + 4*4
         return None
 
     start_pos = archive.tell()

@@ -144,8 +144,8 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
         _validate_no_cpp_syntax(str_val)
         return f'FText::FromString("{_escape_cpp_string(str_val)}")'
 
-    # 枚举类型（UE 约定：E + 大写字母，如 EFirstPersonPrimitiveType）— 直接使用值
-    if len(cpp_type) > 1 and cpp_type[0] == "E" and cpp_type[1].isupper():
+    # 枚举类型（以 E 开头）— 直接使用值
+    if cpp_type.startswith("E"):
         return str(value)
 
     # 数组 / StructValue / opaque fallback — 输出空字符串而非 Python repr

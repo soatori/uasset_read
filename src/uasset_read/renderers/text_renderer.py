@@ -7,7 +7,6 @@ from __future__ import annotations
 只注册 text 格式。
 """
 
-import warnings
 from typing import IO, TYPE_CHECKING
 
 from uasset_read.renderers.base import IRenderer, RenderOptions, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
@@ -217,21 +216,11 @@ class TextRenderer(IRenderer):
         return lines
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        warnings.warn(
-            "--text 格式已废弃，请使用 --markdown 替代。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return "\n".join(self._build_lines(ir, options))
 
     def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
         if options is None:
             options = RenderOptions()
-        warnings.warn(
-            "--text 格式已废弃，请使用 --markdown 替代。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         writer.write("\n".join(self._build_lines(ir, options)))
 
 

@@ -129,7 +129,7 @@ class TestParseBatch:
 
         assert run_isolated.call_count == 2
         first_request = run_isolated.call_args_list[0].args[0]
-        assert first_request.parse_options["include_parent_assets"] is None
+        assert first_request.parse_options["include_parent_assets"] is False
         assert "memory_policy" in first_request.parse_options
         assert result.success == [str(first_output)]
         assert result.failed == [

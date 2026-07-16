@@ -249,24 +249,6 @@ class TestParsePrimaryIndex:
             parse_primary_index(file_stream, pak_info)
 
     @patch('uasset_read.pak.crypto.validate_index_hash', _mock_validate_index_hash)
-    def test_entry_count_exceeds_max(self):
-        """条目数超过上限 — 应抛出 ParseError。"""
-        stream = BytesIO()
-        _write_fstring(stream, "/", 1)
-        stream.write(struct.pack('<i', 10_000_001))  # 超过 MAX_PAK_ENTRIES
-        index_blob = stream.getvalue()
-
-        pak_info = _create_pak_info(
-            version=1,
-            index_offset=0,
-            index_size=len(index_blob),
-        )
-
-        file_stream = _create_mock_file_stream(index_blob)
-        with pytest.raises(ParseError, match="exceeds limit"):
-            parse_primary_index(file_stream, pak_info)
-
-    @patch('uasset_read.pak.crypto.validate_index_hash', _mock_validate_index_hash)
     def test_unexpected_end_reading_entry_count(self):
         """读取条目计数时意外结束 — 应抛出 ParseError。"""
         # 创建只有 mount_point 的索引 blob

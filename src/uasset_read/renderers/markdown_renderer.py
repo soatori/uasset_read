@@ -17,14 +17,6 @@ def _escape_md_cell(text: str) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
-def _escape_mermaid_label(text: str) -> str:
-    """转义 Mermaid 标签中的特殊字符，防止图解析失败。"""
-    s = str(text)
-    for ch in ('"', '[', ']', '{', '}'):
-        s = s.replace(ch, f'#{ord(ch)};')
-    return s
-
-
 def _format_transforms(transforms) -> str:
     """格式化 Transform 字典为紧凑字符串。"""
     if not transforms:
@@ -114,9 +106,6 @@ class MarkdownRenderer(IRenderer):
         lines.append(f"| UE Version | {_escape_md_cell(ir.header.ue_version)} |")
         lines.append("")
 
-        # === Status / Errors / Warnings ===
-        self._render_status_section(lines, ir)
-
         # === Blueprint Details（仅蓝图资产） ===
         if ir.blueprint:
             lines.append("## Blueprint Details")
@@ -131,7 +120,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
             comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
-            lines.append(f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |")
+            lines.append(f"| Variables | {var_count} ({comp_count} components, {var_count - comp_count} regular) |")
             lines.append("")
 
             # === Component Hierarchy Mermaid 图 ===
@@ -146,8 +135,7 @@ class MarkdownRenderer(IRenderer):
                     comp_name = comp.get("name", "Unknown") if isinstance(comp, dict) else getattr(comp, "name", "Unknown")
                     comp_class = comp.get("class", "Unknown") if isinstance(comp, dict) else getattr(comp, "class_name", "Unknown")
                     safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in comp_name)
-                    safe_label = _escape_mermaid_label(f"{comp_name}<br/><i>{comp_class}</i>")
-                    lines.append(f"  {root_name} --> {safe_name}[\"{safe_label}\"]")
+                    lines.append(f"  {root_name} --> {safe_name}[\"{comp_name}<br/><i>{comp_class}</i>\"]")
                 lines.append("```")
                 lines.append("")
 
@@ -249,37 +237,6 @@ class MarkdownRenderer(IRenderer):
         self._render_diagnostics(lines, ir)
 
         return "\n".join(lines)
-
-    def _render_status_section(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Status / Errors / Warnings 章节。"""
-        if ir.status == "success":
-            return
-
-        # Status
-        lines.append("## Status")
-        lines.append("")
-        status_label = ir.status.upper()
-        if ir.status_message:
-            lines.append(f"**{status_label}**: {_escape_md_cell(ir.status_message)}")
-        else:
-            lines.append(f"**{status_label}**")
-        lines.append("")
-
-        # Errors
-        if ir.errors:
-            lines.append("### Errors")
-            lines.append("")
-            for err in ir.errors:
-                lines.append(f"- {_escape_md_cell(err)}")
-            lines.append("")
-
-        # Warnings
-        if ir.warnings:
-            lines.append("### Warnings")
-            lines.append("")
-            for warn in ir.warnings:
-                lines.append(f"- {_escape_md_cell(warn)}")
-            lines.append("")
 
     def _render_event_graph(self, lines: list[str], ir: PackageIR) -> None:
         """渲染 Event Graph 章节 — 每个事件函数一个子章节，包含 C++ 代码块。"""
@@ -731,7 +688,7 @@ class MarkdownRenderer(IRenderer):
 
         # 定义节点
         for node in graph.nodes:
-            label = _escape_mermaid_label(node.node_comment or node.node_class)
+            label = node.node_comment or node.node_class
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
             lines.append(f'{prefix}    {safe_guid}["{label}"]')
 

@@ -51,6 +51,7 @@ _PROPERTY_TYPE_TO_PIN_CATEGORY: Dict[str, str] = {
     "SoftClassProperty": "soft_class",
 }
 
+
 # ============================================================================
 # Pin Category 到 C++ 类型映射
 # ============================================================================
@@ -89,6 +90,7 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "multicastdelegate": "void",
 }
 
+
 def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     """将 pin_category 映射到 C++ 类型。
 
@@ -117,9 +119,9 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     # 默认返回原始类型名
     return normalized
 
+
 # Blueprint 资产元数据属性名称（不是用户定义的变量）
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
-    # 核心蓝图元数据
     "ParentClass",
     "ParentClassProperty",
     "SuperClass",
@@ -137,141 +139,7 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "ModulesToIgnoreInReloadAndBlueprints",
     "None",  # 终止标记
     "NoneProperty",
-    # 内部引擎属性（非用户定义变量）
-    "CachedEditorData",
-    "BlueprintStatus",
-    "BlueprintLogLevel",
-    "BlueprintCompileOptions",
-    "BlueprintGeneratedClass",
-    "OriginalClassName",
-    "HasBeenRegenerated",
-    "RegenerateClassAttemptCount",
-    "bBeingCompiled",
-    "bCompiled",
-    "bRegenerating",
-    "bDuplicating",
-    "bImportedFromAnotherAsset",
-    "bCanUseSimplifiedConstructor",
-    "bIsNewObject",
-    "bHasDocumentedClass",
-    "bDisplayCompileSucceededLog",
-    "bForceFullDeployment",
-    "bQueuedForDeletion",
-    "bRecompileOnLoad",
-    "bDisableCompileOnLoad",
-    "bDeferCompilation",
-    "bForceCompilation",
-    "bCreateNewModule",
-    "bLoadPublicModules",
-    "bRecompileAfterLoad",
-    "bEnableParallelCompilation",
-    "bEnableCompilation",
-    "bForceReregistration",
-    "bForceRegeneration",
-    "bIsIncrementalCompile",
-    "bIsRegeneratingOnLoad",
-    "bIsRegenerating",
-    "bIsRegeneratingClass",
-    "bIsRegeneratingInterface",
-    "bIsRegeneratingStruct",
-    "bIsRegeneratingEnum",
-    "bIsRegeneratingFunction",
-    "bIsRegeneratingVariable",
-    "bIsRegeneratingEvent",
-    "bIsRegeneratingDelegate",
-    "bIsRegeneratingInterfaceFunction",
-    "bIsRegeneratingInterfaceVariable",
-    "bIsRegeneratingInterfaceEvent",
-    "bIsRegeneratingInterfaceDelegate",
-    "bIsRegeneratingStructVariable",
-    "bIsRegeneratingStructFunction",
-    "bIsRegeneratingStructEvent",
-    "bIsRegeneratingStructDelegate",
-    "bIsRegeneratingEnumValue",
-    "bIsRegeneratingEnumFunction",
-    "bIsRegeneratingEnumEvent",
-    "bIsRegeneratingEnumDelegate",
-    # 渲染/编辑器相关
-    "SelectedNodes",
-    "GraphZoom",
-    "PanningAmount",
-    "bAllowRenaming",
-    "bAllowMultipleOutputs",
-    "bAllowMultipleInputs",
-    # 变量描述数组（已通过 NewVariables 处理）
-    "NewVariables",
-    # 函数/事件列表
-    "UbergraphGraph",
-    "FunctionList",
-    "EventGraphs",
 })
-
-def _is_internal_engine_property(prop_name: str) -> bool:
-    """判断属性是否为内部引擎属性（非用户定义变量）。
-
-    仅匹配明确的引擎内部属性名（如编译状态标志、蓝图生成类引用等）。
-    不使用前缀匹配，避免误过滤合法蓝图变量（如 bIsPlayer、CachedHealth 等）。
-    """
-    # 明确的内部引擎属性名（精确匹配）
-    internal_exact_names = frozenset({
-        # 编译/生成状态标志
-        "bBeingCompiled",
-        "bCompiled",
-        "bRegenerating",
-        "bDuplicating",
-        "bImportedFromAnotherAsset",
-        "bCanUseSimplifiedConstructor",
-        "bIsNewObject",
-        "bHasDocumentedClass",
-        "bDisplayCompileSucceededLog",
-        "bForceFullDeployment",
-        "bQueuedForDeletion",
-        "bRecompileOnLoad",
-        "bDisableCompileOnLoad",
-        "bDeferCompilation",
-        "bForceCompilation",
-        "bCreateNewModule",
-        "bLoadPublicModules",
-        "bRecompileAfterLoad",
-        "bEnableParallelCompilation",
-        "bEnableCompilation",
-        "bForceReregistration",
-        "bForceRegeneration",
-        "bIsIncrementalCompile",
-        "bIsRegeneratingOnLoad",
-        "bIsRegenerating",
-        "bIsRegeneratingClass",
-        "bIsRegeneratingInterface",
-        "bIsRegeneratingStruct",
-        "bIsRegeneratingEnum",
-        "bIsRegeneratingFunction",
-        "bIsRegeneratingVariable",
-        "bIsRegeneratingEvent",
-        "bIsRegeneratingDelegate",
-        "bIsRegeneratingInterfaceFunction",
-        "bIsRegeneratingInterfaceVariable",
-        "bIsRegeneratingInterfaceEvent",
-        "bIsRegeneratingInterfaceDelegate",
-        "bIsRegeneratingStructVariable",
-        "bIsRegeneratingStructFunction",
-        "bIsRegeneratingStructEvent",
-        "bIsRegeneratingStructDelegate",
-        "bIsRegeneratingEnumValue",
-        "bIsRegeneratingEnumFunction",
-        "bIsRegeneratingEnumEvent",
-        "bIsRegeneratingEnumDelegate",
-        # 蓝图生成类引用
-        "BlueprintGeneratedClass",
-        # 编辑器相关
-        "SelectedNodes",
-        "GraphZoom",
-        "PanningAmount",
-        "bAllowRenaming",
-        "bAllowMultipleOutputs",
-        "bAllowMultipleInputs",
-    })
-
-    return prop_name in internal_exact_names
 
 
 def _map_property_flags(flags: int) -> Dict[str, bool]:
@@ -288,6 +156,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
         "is_rep_notify": bool(flags & CPF_RepNotify),
         "is_save_game": bool(flags & CPF_SaveGame),
     }
+
 
 def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
     """从 PropertyValue 提取 FEdGraphPinType 类型信息。"""
@@ -370,6 +239,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type)
     return FEdGraphPinType(pin_category=pin_category)
 
+
 def extract_blueprint_variables(properties: List[PropertyValue]) -> List[BlueprintVariable]:
     """从已解析的属性数据中提取蓝图变量。
 
@@ -400,11 +270,6 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
 
         # 跳过终止标记、系统属性和蓝图元数据属性
         if prop_name in BLUEPRINT_METADATA_PROPERTY_NAMES:
-            continue
-
-        # 额外过滤：跳过以常见内部引擎属性名开头的属性
-        # 这些属性通常不是用户定义的蓝图变量
-        if _is_internal_engine_property(prop_name):
             continue
 
         # 检测是否为蓝图变量描述属性
@@ -471,6 +336,7 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
 
     return variables
 
+
 def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[BlueprintVariable]:
     """Expand FBPVariableDescription structs from UBlueprint.NewVariables."""
     variables: List[BlueprintVariable] = []
@@ -518,6 +384,7 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         variables.append(var)
     return variables
 
+
 def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
     if isinstance(value, StructValue):
         fields = value.fields
@@ -536,6 +403,7 @@ def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
         pin_subcategory=str(fields.get("PinSubCategory") or fields.get("PinSubcategory") or fields.get("pin_subcategory") or ""),
         container_type=int(fields.get("ContainerType") or fields.get("container_type") or 0),
     )
+
 
 def _guid_from_description(value: Any) -> str:
     # StructValue(Guid, {A:int, B:int, C:int, D:int}) — StructProperty 解析结果
@@ -576,10 +444,12 @@ def _guid_from_description(value: Any) -> str:
         return value
     return ""
 
+
 def _text_or_string(value: Any) -> str:
     if hasattr(value, "source_string"):
         return str(value.source_string)
     return str(value or "")
+
 
 def _metadata_from_description(value: Any) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
@@ -591,6 +461,7 @@ def _metadata_from_description(value: Any) -> Dict[str, str]:
                 metadata[str(key)] = str(fields.get("Value") or fields.get("value") or "")
     return metadata
 
+
 def _replication_condition_value(value: Any) -> int:
     if isinstance(value, int):
         return value
@@ -599,6 +470,7 @@ def _replication_condition_value(value: Any) -> int:
         if text.endswith("COND_None"):
             return 0
     return 0
+
 
 def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]:
     """从已解析的属性数据中提取组件变换属性。
@@ -635,6 +507,7 @@ def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]
 
     return transform
 
+
 def _extract_vector(value: Any) -> Dict[str, float]:
     """从属性值中提取 Vector 结构 {X, Y, Z}。
 
@@ -652,6 +525,7 @@ def _extract_vector(value: Any) -> Dict[str, float]:
         z = fields.get("Z", fields.get("z", 0.0))
         return {"X": float(x), "Y": float(y), "Z": float(z)}
     return {"X": 0.0, "Y": 0.0, "Z": 0.0}
+
 
 def _extract_rotator(value: Any) -> Dict[str, float]:
     """从属性值中提取 Rotator 结构 {Pitch, Yaw, Roll}。
@@ -671,6 +545,7 @@ def _extract_rotator(value: Any) -> Dict[str, float]:
         return {"Pitch": float(pitch), "Yaw": float(yaw), "Roll": float(roll)}
     return {"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}
 
+
 def _extract_mobility(value: Any) -> str:
     """从属性值中提取 Mobility 枚举值。"""
     if isinstance(value, dict):
@@ -678,6 +553,7 @@ def _extract_mobility(value: Any) -> str:
     if isinstance(value, str):
         return value
     return str(value) if value is not None else "Static"
+
 
 def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[BlueprintFunction]:
     """Primary path: Extract functions from BPGC export properties.
@@ -699,6 +575,7 @@ def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[Bluep
                     functions.append(BlueprintFunction(name=func_name))
     return functions
 
+
 def _resolve_property_to_function_name(value: Any) -> Optional[str]:
     """Resolve a property value to a function name string."""
     if value is None:
@@ -719,6 +596,7 @@ def _resolve_property_to_function_name(value: Any) -> Optional[str]:
             raw = str(name)
             return raw.split('.')[-1] if '.' in raw else raw
     return None
+
 
 def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
     """从图的 K2Node_FunctionEntry 和 K2Node_Event 节点提取函数元数据（Fallback 路径）。
@@ -834,6 +712,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
             functions.append(func)
     return functions
 
+
 def _resolve_parent_class(
     properties: List[Any],
     export: Any,
@@ -858,8 +737,7 @@ def _resolve_parent_class(
                     object_name = prop.value.get('object_name')
                     class_package = prop.value.get('class_package', '')
                     if class_package:
-                        from uasset_read.link.linker import normalize_world_partition_path
-                        parent_class = f"{normalize_world_partition_path(class_package)}.{object_name}"
+                        parent_class = f"{class_package}.{object_name}"
                     else:
                         common_engine_classes = [
                             "Character", "Pawn", "Actor", "ActorComponent",
@@ -891,6 +769,7 @@ def _resolve_parent_class(
 
     return parent_class
 
+
 def _extract_and_merge_functions(
     properties: List[Any],
     graphs: Any = None,
@@ -906,6 +785,7 @@ def _extract_and_merge_functions(
             functions.append(func)
     return functions
 
+
 def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[BlueprintEvent]:
     """从函数列表中提取事件（可实现事件和蓝图事件）。"""
     events: List[BlueprintEvent] = []
@@ -920,6 +800,7 @@ def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[B
                 parameters=f.parameters,
             ))
     return events
+
 
 def _extract_interfaces_from_props(
     props_list: List[Any],
@@ -953,6 +834,7 @@ def _extract_interfaces_from_props(
                     result.append(BlueprintInterface(name=iface_name))
             break
     return result
+
 
 def _extract_interfaces(
     properties: List[Any],
@@ -992,6 +874,7 @@ def _extract_interfaces(
                 break
 
     return interfaces
+
 
 def extract_blueprint_metadata(
     export,
@@ -1072,6 +955,7 @@ def extract_blueprint_metadata(
     )
     return meta, None
 
+
 def parse_property_flags_to_labels(flags: int) -> List[str]:
     """将 CPF_* 位标志转换为可读标签列表。
 
@@ -1125,6 +1009,7 @@ def parse_property_flags_to_labels(flags: int) -> List[str]:
         labels.append("Replicated")
 
     return labels
+
 
 def read_blueprint_variable(
     archive,
@@ -1223,6 +1108,7 @@ def read_blueprint_variable(
     var.is_component = is_component_by_name or is_component_by_flag
 
     return var
+
 
 def _read_guid(archive) -> str:
     data = archive.read_bytes(16) if hasattr(archive, "read_bytes") else archive.read(16)

@@ -164,7 +164,7 @@ class TestAdvancedPropertyValues:
         sv = StructValue(struct_type="Vector", fields={"X": 1.0})
         assert sv.struct_type == "Vector"
         assert sv.fields["X"] == 1.0
-        assert sv.parse_status == "success"
+        assert sv.parse_status == "parsed"
         assert sv.property_type == "StructProperty"
         assert isinstance(sv, AdvancedPropertyValue)
 

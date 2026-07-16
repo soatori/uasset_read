@@ -148,9 +148,7 @@ def _scrape_locres_strings(data: bytes) -> list[dict[str, Any]]:
                     strings.append(decoded)
             current.clear()
         elif byte >= 32:
-            # 可打印 ASCII (32-126) 和 UTF-8 多字节起始字节 (128-255)
-            # 注意：128-191 是 UTF-8 延续字节，不应作为字符串起始，
-            # 但在 locres 格式中它们可能出现在多字节序列中间
+            # 可打印 ASCII (32-126) 和 UTF-8 多字节起始/延续字节 (128-255)
             current.append(byte)
         else:
             # 控制字符（非 null）— 中断当前字符串

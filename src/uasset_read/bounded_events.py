@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(eq=False)
+@dataclass
 class BoundedEventBuffer:
     """有界事件缓冲区 — 保留首段、尾段、去重计数。
 
