@@ -272,9 +272,6 @@ def _read_property_tag_legacy(
 
     # Size
     tag.size = archive.read_i32()
-    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
-    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
 
     # ArrayIndex — 旧格式始终存在
     tag.array_index = archive.read_i32()
@@ -314,6 +311,11 @@ def _read_property_tag_legacy(
             # InnerType (FName) + ValueType (FName) — 参考 PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
+
+    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
+    # 注意：必须在类型特定字段读取之后，此时 tag.struct_type 已赋值
+    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
 
     # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (UE5 始终满足)
     # 参考: PropertyTag.cpp:378-393
