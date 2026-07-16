@@ -789,6 +789,78 @@ class FArchive:
                                   pos_before, self.tell())
         return result
 
+    def read_utf8_string(self, tolerant: bool = False) -> str:
+        """读取 UTF-8 字符串（带长度前缀，null-terminated）。
+
+        与 read_fstring() 不同，此方法专门处理 UTF-8 字符串，
+        并在读取前验证声明长度是否超过剩余字节 (#407)。
+
+        Args:
+            tolerant: 容错模式开关。True 时长度越界返回空字符串，
+                      False 时抛出 ParseError。
+
+        Returns:
+            解析后的 UTF-8 字符串
+        """
+        pos_before = self.tell()
+        length = self.read_i32()
+
+        if length == 0:
+            return ""
+
+        # 早期长度验证：声明长度超过剩余字节 (#407)
+        remaining = self.total_size() - self.tell()
+        if length > remaining:
+            self._record_diagnostic(
+                module="archive", field="read_utf8_string",
+                source="read_utf8_string",
+                target_offset=pos_before, file_size=self.total_size(),
+                read_size=length,
+                error=f"UTF-8 length {length} exceeds remaining {remaining}",
+            )
+            if tolerant:
+                self._logger.warning(
+                    "read_utf8_string at pos %d: length %d exceeds remaining %d, "
+                    "returning empty string (tolerant)",
+                    pos_before, length, remaining,
+                )
+                return ""
+            raise ParseError(
+                f"UTF-8 length {length} exceeds remaining {remaining}"
+            )
+
+        # 最大长度检查
+        if length > MAX_FSTRING_LENGTH:
+            if tolerant:
+                self._logger.warning(
+                    "read_utf8_string at pos %d: length %d exceeds maximum %d, "
+                    "returning empty string (tolerant)",
+                    pos_before, length, MAX_FSTRING_LENGTH,
+                )
+                return ""
+            raise ParseError(
+                f"UTF-8 string at pos {pos_before}: length {length} exceeds "
+                f"maximum {MAX_FSTRING_LENGTH}"
+            )
+
+        data = self.read(length)
+        result = data.decode('utf-8', errors='replace').rstrip('\x00')
+
+        # 全空检测：length > 0 但数据全为 null (#302)
+        if not result and length != 0:
+            if not tolerant:
+                raise ParseError(
+                    f"read_utf8_string at pos {pos_before}: length={length}, "
+                    "all nulls (completely corrupted), strict mode"
+                )
+            self._logger.warning(
+                "read_utf8_string at pos %d: length=%d, all nulls, "
+                "returning empty string (tolerant)",
+                pos_before, length,
+            )
+
+        return result
+
     def set_name_map(self, name_map: list) -> None:
         """设置名称表缓存，用于 read_name() 无参调用。
 
