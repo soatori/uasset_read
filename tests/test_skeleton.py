@@ -32,15 +32,29 @@ def _write_f32(buf: bytearray, value: float) -> None:
 
 def _write_ftransform(buf: bytearray, tx=0.0, ty=0.0, tz=0.0,
                        rx=0.0, ry=0.0, rz=0.0, rw=1.0,
-                       sx=1.0, sy=1.0, sz=1.0) -> None:
-    """写入 FTransform：Translation(f64*3) + Rotation(f32*4) + Scale(f32*3)。"""
-    _write_f64(buf, tx)
-    _write_f64(buf, ty)
-    _write_f64(buf, tz)
+                       sx=1.0, sy=1.0, sz=1.0,
+                       is_ue5: bool = False) -> None:
+    """写入 FTransform：按 UE 序列化顺序 Rotation → Translation → Scale3D。
+
+    UE4: Rotation(f32*4=16) + Translation(f32*3=12) + Scale(f32*3=12) = 40 bytes
+    UE5: Rotation(f32*4=16) + Translation(f64*3=24) + Scale(f32*3=12) = 52 bytes
+    默认 UE4 布局（与 ByteArchive 无 _file_version_ue5 时的行为一致）
+    """
+    # Rotation: FQuat4f (4 x f32 = 16 bytes) — UE4/UE5 相同
     _write_f32(buf, rx)
     _write_f32(buf, ry)
     _write_f32(buf, rz)
     _write_f32(buf, rw)
+    # Translation: FVector (UE4: 3 x f32) 或 FVector3d (UE5: 3 x f64)
+    if is_ue5:
+        _write_f64(buf, tx)
+        _write_f64(buf, ty)
+        _write_f64(buf, tz)
+    else:
+        _write_f32(buf, tx)
+        _write_f32(buf, ty)
+        _write_f32(buf, tz)
+    # Scale3D: FVector3f (3 x f32 = 12 bytes) — UE4/UE5 相同
     _write_f32(buf, sx)
     _write_f32(buf, sy)
     _write_f32(buf, sz)
@@ -433,6 +447,153 @@ class TestParseSkeletonErrorHandling:
         assert "error" in result
 
 
+class TestParseSkeletonUE5Layout:
+    """UE5 FTransform 布局测试（Translation 使用 f64）。"""
+
+    def test_ue5_transform_layout(self):
+        """验证 UE5 布局下 FTransform 正确解析（Translation 使用 f64）。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, 1)  # PoseCount
+        # UE5 FTransform: Rotation(f32*4=16) + Translation(f64*3=24) + Scale(f32*3=12) = 52 bytes
+        _write_ftransform(buf, tx=1.5, ty=2.5, tz=3.5, is_ue5=True)
+        _write_i32(buf, 1)  # NameToIndexMap.Count
+        _write_fname(buf, 1, 0)  # key
+        _write_i32(buf, 0)  # value
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        # 模拟 UE5 archive（设置 _file_version_ue5 > 0）
+        archive = ByteArchive(payload)
+        archive._file_version_ue5 = 1000  # UE5 版本号
+        name_map = _make_name_map()
+
+        result = parse_skeleton(archive, name_map)
+
+        assert result["parse_status"] == "success"
+        ref = result["reference_skeleton"]
+        assert ref["bone_count"] == 1
+        # UE5 Translation 使用 f64
+        assert ref["transforms"][0]["translation"]["x"] == pytest.approx(1.5)
+        assert ref["transforms"][0]["translation"]["y"] == pytest.approx(2.5)
+        assert ref["transforms"][0]["translation"]["z"] == pytest.approx(3.5)
+
+    def test_ue4_transform_layout(self):
+        """验证 UE4 布局下 FTransform 正确解析（Translation 使用 f32）。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, 1)  # PoseCount
+        # UE4 FTransform: Rotation(f32*4=16) + Translation(f32*3=12) + Scale(f32*3=12) = 40 bytes
+        _write_ftransform(buf, tx=1.5, ty=2.5, tz=3.5, is_ue5=False)
+        _write_i32(buf, 1)  # NameToIndexMap.Count
+        _write_fname(buf, 1, 0)  # key
+        _write_i32(buf, 0)  # value
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        # 无 _file_version_ue5，默认为 UE4
+        name_map = _make_name_map()
+
+        result = parse_skeleton(archive, name_map)
+
+        assert result["parse_status"] == "success"
+        ref = result["reference_skeleton"]
+        assert ref["bone_count"] == 1
+        # UE4 Translation 使用 f32
+        assert ref["transforms"][0]["translation"]["x"] == pytest.approx(1.5)
+        assert ref["transforms"][0]["translation"]["y"] == pytest.approx(2.5)
+        assert ref["transforms"][0]["translation"]["z"] == pytest.approx(3.5)
+
+
+class TestParseSkeletonPropertyTypes:
+    """Tagged properties 额外字段类型处理测试。"""
+
+    def test_skip_array_property(self):
+        """验证 ArrayProperty 的 InnerTypeName 字段被正确跳过。"""
+        buf = bytearray()
+
+        # 写入一个 ArrayProperty 类型的 PropertyTag
+        _write_fname(buf, 3, 0)  # Name: name_map[3]
+        # TypeName: "ArrayProperty"（需要在 name_map 中）
+        _write_fname(buf, 10, 0)  # TypeName: name_map[10] = "ArrayProperty"
+        _write_i32(buf, 4)  # Size: 4 bytes
+        _write_i32(buf, 0)  # ArrayIndex
+        # InnerTypeName: FName（ArrayProperty 特有字段）
+        _write_fname(buf, 11, 0)  # InnerType: name_map[11] = "IntProperty"
+        _write_i32(buf, 0)  # PropertyGuid: has_guid = 0
+        # Value data (4 bytes)
+        buf += b'\x01\x02\x03\x04'
+
+        # PropertyTag.None 终止标记
+        _write_property_tag_none(buf)
+
+        # ReferenceSkeleton: 空
+        _write_i32(buf, 0)  # BoneCount
+        _write_i32(buf, 0)  # PoseCount
+        _write_i32(buf, 0)  # NameToIndexMap.Count
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+
+        payload = bytes(buf)
+        archive = ByteArchive(payload)
+        name_map = _make_name_map(count=20)
+        name_map[10] = "ArrayProperty"
+        name_map[11] = "IntProperty"
+
+        result = parse_skeleton(archive, name_map)
+
+        assert result["parse_status"] == "success"
+        assert result["reference_skeleton"]["bone_count"] == 0
+
+    def test_skip_map_property(self):
+        """验证 MapProperty 的 KeyType/ValueType 字段被正确跳过。"""
+        buf = bytearray()
+
+        # 写入一个 MapProperty 类型的 PropertyTag
+        _write_fname(buf, 3, 0)  # Name
+        _write_fname(buf, 12, 0)  # TypeName: "MapProperty"
+        _write_i32(buf, 8)  # Size: 8 bytes
+        _write_i32(buf, 0)  # ArrayIndex
+        # KeyType: FName
+        _write_fname(buf, 13, 0)  # KeyType: "NameProperty"
+        # ValueType: FName
+        _write_fname(buf, 14, 0)  # ValueType: "IntProperty"
+        _write_i32(buf, 0)  # PropertyGuid: has_guid = 0
+        # Value data (8 bytes)
+        buf += b'\x01\x02\x03\x04\x05\x06\x07\x08'
+
+        # PropertyTag.None 终止标记
+        _write_property_tag_none(buf)
+
+        # ReferenceSkeleton: 空
+        _write_i32(buf, 0)
+        _write_i32(buf, 0)
+        _write_i32(buf, 0)
+        _write_i32(buf, 0)
+        _write_guid(buf)
+
+        payload = bytes(buf)
+        archive = ByteArchive(payload)
+        name_map = _make_name_map(count=20)
+        name_map[12] = "MapProperty"
+        name_map[13] = "NameProperty"
+        name_map[14] = "IntProperty"
+
+        result = parse_skeleton(archive, name_map)
+
+        assert result["parse_status"] == "success"
+        assert result["reference_skeleton"]["bone_count"] == 0
+
+
 class TestParseSkeletonRegisterHandler:
     """Handler 注册测试。"""
 
@@ -445,3 +606,163 @@ class TestParseSkeletonRegisterHandler:
         """验证 __init__.py 中 _optional 包含 skeleton 条目。"""
         import uasset_read.parsers.asset_types as at_module
         assert hasattr(at_module, "register_asset_type_handlers")
+
+
+class TestParseSkeletonCountValidation:
+    """Count 字段负数和上限校验测试。"""
+
+    def test_negative_pose_count(self):
+        """负数 pose_count 被截断为 0，不影响骨骼解析，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, -5)  # PoseCount = -5（非法）
+        _write_i32(buf, 1)  # NameToIndexMap.Count
+        _write_fname(buf, 1, 0)  # key
+        _write_i32(buf, 0)  # value
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "PoseCount 截断" in result["diagnostics"][0]
+        ref = result["reference_skeleton"]
+        assert ref["pose_count"] == 0
+        assert ref["transforms"] == []
+
+    def test_excessive_pose_count(self):
+        """超上限 pose_count 被截断为 0，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, 999999)  # PoseCount = 999999（超上限）
+        _write_i32(buf, 1)  # NameToIndexMap.Count
+        _write_fname(buf, 1, 0)  # key
+        _write_i32(buf, 0)  # value
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "PoseCount 截断" in result["diagnostics"][0]
+        ref = result["reference_skeleton"]
+        assert ref["pose_count"] == 0
+        assert ref["transforms"] == []
+
+    def test_negative_map_count(self):
+        """负数 NameToIndexMap.Count 被截断为 0，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, 1)  # PoseCount
+        _write_ftransform(buf)  # Transform
+        _write_i32(buf, -10)  # NameToIndexMap.Count = -10（非法）
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "NameToIndexMap.Count 截断" in result["diagnostics"][0]
+        ref = result["reference_skeleton"]
+        assert ref["name_to_index"] == {}
+
+    def test_excessive_map_count(self):
+        """超上限 NameToIndexMap.Count 被截断为 0，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 1)  # BoneCount
+        _write_fname(buf, 1, 0)  # BoneName
+        _write_i32(buf, -1)  # ParentIndex
+        _write_i32(buf, 1)  # PoseCount
+        _write_ftransform(buf)  # Transform
+        _write_i32(buf, 200000)  # NameToIndexMap.Count = 200000（超上限）
+        _write_i32(buf, 0)  # RetargetSources.Count
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "NameToIndexMap.Count 截断" in result["diagnostics"][0]
+        ref = result["reference_skeleton"]
+        assert ref["name_to_index"] == {}
+
+    def test_negative_retarget_source_pose_count(self):
+        """RetargetSources 内部负数 pose_count 被截断为 0，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 0)  # BoneCount
+        _write_i32(buf, 0)  # PoseCount
+        _write_i32(buf, 0)  # NameToIndexMap.Count
+        _write_i32(buf, 1)  # NumOfRetargetSources
+        _write_fname(buf, 5, 0)  # RetargetSourceName
+        _write_fname(buf, 6, 0)  # PoseName
+        _write_i32(buf, -3)  # ReferencePose.PoseCount = -3（非法）
+        _write_soft_object_path(buf, pkg_idx=0, asset_idx=0)  # SourceReferenceMesh
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "RetargetSources" in result["diagnostics"][0]
+        assert "PoseCount 截断" in result["diagnostics"][0]
+        sources = result["retarget_sources"]
+        assert len(sources) == 1
+        assert sources[0]["transforms"] == []
+        assert sources[0]["transform_count"] == 0
+
+    def test_excessive_retarget_source_pose_count(self):
+        """RetargetSources 内部超上限 pose_count 被截断为 0，标记为 partial。"""
+        buf = bytearray()
+        _write_property_tag_none(buf)
+        _write_i32(buf, 0)  # BoneCount
+        _write_i32(buf, 0)  # PoseCount
+        _write_i32(buf, 0)  # NameToIndexMap.Count
+        _write_i32(buf, 1)  # NumOfRetargetSources
+        _write_fname(buf, 5, 0)  # RetargetSourceName
+        _write_fname(buf, 6, 0)  # PoseName
+        _write_i32(buf, 500000)  # ReferencePose.PoseCount = 500000（超上限）
+        _write_soft_object_path(buf, pkg_idx=0, asset_idx=0)  # SourceReferenceMesh
+        _write_guid(buf)
+        payload = bytes(buf)
+
+        archive = ByteArchive(payload)
+        result = parse_skeleton(archive, _make_name_map())
+
+        assert result["parse_status"] == "partial"
+        assert "diagnostics" in result
+        assert len(result["diagnostics"]) == 1
+        assert "RetargetSources" in result["diagnostics"][0]
+        assert "PoseCount 截断" in result["diagnostics"][0]
+        sources = result["retarget_sources"]
+        assert len(sources) == 1
+        assert sources[0]["transforms"] == []
+        assert sources[0]["transform_count"] == 0

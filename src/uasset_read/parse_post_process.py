@@ -153,7 +153,8 @@ def _extract_blueprint_graphs_and_metadata(
                         temp_archive.close()
                 break
 
-    if hasattr(result, 'blueprint'):
+    # 仅在 blueprint_metadata 不为 None 时赋值，避免覆盖已有蓝图数据
+    if blueprint_metadata is not None and hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
     return blueprint_metadata
@@ -343,7 +344,7 @@ def _resolve_parent_assets(
     result.resolved_parent_assets.append({
         "class": parent_class,
         "path": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
+        "status": "success" if parent_result.is_success else "failed",
         "warnings": parent_result.warnings,
         "errors": parent_result.errors,
     })
@@ -351,7 +352,7 @@ def _resolve_parent_assets(
         "source": "parent_asset",
         "class": parent_class,
         "asset": str(parent_file),
-        "status": "parsed" if parent_result.is_success else "failed",
+        "status": "success" if parent_result.is_success else "failed",
     })
     if parent_result.graphs:
         from uasset_read.graph import format_graphs_json

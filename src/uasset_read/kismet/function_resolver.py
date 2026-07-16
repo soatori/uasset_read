@@ -236,3 +236,4 @@ class FunctionRefResolver:
                 lines.append(f"    ... 还有 {len(sorted_refs) - 10} 个")
 
         return "\n".join(lines)
+

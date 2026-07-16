@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 from uasset_read.constants import (
     MAX_PINS_PER_NODE, UE_NONE_SENTINEL,
 )
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin, FMemberReference
@@ -30,7 +30,6 @@ from uasset_read.serializers.graph import (
 from uasset_read.serializers.graph_pin import read_ue_graph_pin
 
 logger = logging.getLogger(__name__)
-
 
 # ============================================================================
 # FMemberReference 读取
@@ -64,7 +63,6 @@ def read_fmember_reference(
         b_self_context=b_self_context,
     )
 
-
 # ============================================================================
 # 5 种节点类型读取器
 # ============================================================================
@@ -93,7 +91,6 @@ def read_k2node_call_function(
         "function_reference": function_reference,
         "b_defaults_to_pure": b_defaults_to_pure,
     }
-
 
 def read_k2node_event(
     archive: FArchive,
@@ -152,11 +149,9 @@ def read_k2node_event(
         "is_event": True,
     }
 
-
 def read_k2node_knot(archive: FArchive) -> Dict[str, Any]:
     """K2Node_Knot 无额外字段。"""
     return {}
-
 
 def read_edgraph_node_comment(raw_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """读取 EdGraphNode_Comment 特有字段，返回字典（作为 node_data）。
@@ -172,7 +167,6 @@ def read_edgraph_node_comment(raw_properties: Optional[Dict[str, Any]] = None) -
         "font_size": raw_properties.get("FontSize"),
         "comment_depth": raw_properties.get("CommentDepth"),
     }
-
 
 def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]:
     """从 EnhancedInputAction 节点的 pins 提取 trigger_events 映射。
@@ -199,7 +193,6 @@ def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]
             if trigger_name in ETRIGGER_EVENT_PIN_MAP:
                 trigger_events[trigger_name] = ETRIGGER_EVENT_PIN_MAP[trigger_name]
     return trigger_events
-
 
 def read_k2node_enhanced_input(
     archive: FArchive,
@@ -246,7 +239,6 @@ def read_k2node_enhanced_input(
         "advanced_pin_display_raw": advanced_pin_display_raw,
     }
 
-
 def read_k2node_functionentry(
     archive: FArchive,
     name_map: List[str],
@@ -278,7 +270,6 @@ def read_k2node_functionentry(
         "b_is_editable": b_is_editable,
     }
 
-
 def read_k2node_message(
     archive: FArchive,
     name_map: List[str],
@@ -301,7 +292,6 @@ def read_k2node_message(
 
     return result
 
-
 def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
     """读取 K2Node_CallDelegate 字段。"""
     result = {}
@@ -312,7 +302,6 @@ def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[st
     except (struct.error, OSError, ValueError) as e:
         logger.debug("K2Node_CallDelegate read failed: %s", e)
     return result
-
 
 def _read_k2node_function_reference(
     raw_properties: Optional[Dict[str, Any]] = None,
@@ -327,14 +316,12 @@ def _read_k2node_function_reference(
 
     return result
 
-
 def read_k2node_call_array_function(
     archive: FArchive, name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_CallArrayFunction 特有字段。"""
     return _read_k2node_function_reference(raw_properties)
-
 
 def read_k2node_call_parent_function(
     archive: FArchive, name_map: List[str],
@@ -343,14 +330,12 @@ def read_k2node_call_parent_function(
     """读取 K2Node_CallParentFunction 特有字段。"""
     return _read_k2node_function_reference(raw_properties)
 
-
 def read_k2node_function_result(
     archive: FArchive, name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_FunctionResult 特有字段。"""
     return _read_k2node_function_reference(raw_properties)
-
 
 def read_k2node_create_widget(
     archive: FArchive, name_map: List[str],
@@ -370,7 +355,6 @@ def read_k2node_create_widget(
 
     return result
 
-
 def _read_k2node_delegate_name(
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -384,14 +368,12 @@ def _read_k2node_delegate_name(
 
     return result
 
-
 def read_k2node_add_delegate(
     archive: FArchive, name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_AddDelegate 特有字段。"""
     return _read_k2node_delegate_name(raw_properties)
-
 
 def read_k2node_macro_instance(
     archive: FArchive, name_map: List[str],
@@ -426,14 +408,12 @@ def read_k2node_macro_instance(
 
     return result
 
-
 def read_k2node_assign_delegate(
     archive: FArchive, name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """读取 K2Node_AssignDelegate 特有字段。"""
     return _read_k2node_delegate_name(raw_properties)
-
 
 def read_k2node_get_data_table_row(
     archive: FArchive, name_map: List[str],
@@ -458,7 +438,6 @@ def read_k2node_get_data_table_row(
 
     return result
 
-
 def read_k2node_load_asset(
     archive: FArchive, name_map: List[str],
     raw_properties: Optional[Dict[str, Any]] = None,
@@ -476,7 +455,6 @@ def read_k2node_load_asset(
         result["asset_type"] = asset_type
 
     return result
-
 
 def read_k2node_spawn_actor_from_class(
     archive: FArchive, name_map: List[str],
@@ -496,7 +474,6 @@ def read_k2node_spawn_actor_from_class(
 
     return result
 
-
 # ============================================================================
 # dispatch 处理器 — 统一签名 (ctx: Dict[str, Any]) -> Dict[str, Any]
 # ctx 包含: archive, name_map, summary, export_map, import_map, linker,
@@ -510,7 +487,6 @@ def _handle_call_function(ctx: Dict[str, Any]) -> Dict[str, Any]:
         function_reference=ctx.get("node_refs", {}).get("function_reference"),
     )
 
-
 def _handle_event(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """K2Node_Event 分发处理器。"""
     refs = ctx.get("node_refs") or {}
@@ -522,7 +498,6 @@ def _handle_event(ctx: Dict[str, Any]) -> Dict[str, Any]:
         custom_function_name=refs.get("custom_function_name"),
         function_flags=refs.get("function_flags"),
     )
-
 
 def _handle_comment(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """EdGraphNode_Comment 分发处理器，含属性回写。"""
@@ -540,7 +515,6 @@ def _handle_comment(ctx: Dict[str, Any]) -> Dict[str, Any]:
                 setattr(base_node, attr, value)
     return node_data
 
-
 def _handle_enhanced_input(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """K2Node_EnhancedInputAction 分发处理器，含 trigger_events 提取。"""
     node_data = read_k2node_enhanced_input(
@@ -549,7 +523,6 @@ def _handle_enhanced_input(ctx: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(node_data, dict):
         node_data["trigger_events"] = _build_trigger_events_from_pins(ctx["base_node"].pins)
     return node_data
-
 
 def _handle_function_entry(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """K2Node_FunctionEntry 分发处理器。"""
@@ -560,7 +533,6 @@ def _handle_function_entry(ctx: Dict[str, Any]) -> Dict[str, Any]:
         raw_properties=ctx.get("raw_properties"),
     )
 
-
 def _handle_full_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """AnimGraphNode 类型的分发处理器。"""
     return _read_anim_graph_node(
@@ -569,67 +541,40 @@ def _handle_full_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["class_name"], ctx.get("raw_properties"),
     )
 
-
 def _handle_unknown_type(ctx: Dict[str, Any]) -> Dict[str, Any]:
     """未知节点类型的兜底处理器。"""
     raw = ctx.get("raw_properties")
-    if raw:
-        return {"_raw_properties": raw}
-    return {}
+    return {"_raw_properties": raw} if raw else {}
 
+# 通用处理器：只需 archive + name_map + raw_properties 的节点类型
+def _handle_simple_raw_props(ctx: Dict[str, Any], reader) -> Dict[str, Any]:
+    return reader(ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"))
+
+def _handle_simple_full(ctx: Dict[str, Any], reader) -> Dict[str, Any]:
+    return reader(ctx["archive"], ctx["name_map"],
+                  ctx["import_map"], ctx["export_map"], ctx["linker"])
 
 # 节点类型 → 处理器映射
-# 处理器签名为 (ctx: dict) -> dict，由 create_node_from_archive 统一调度
 _NODE_TYPE_HANDLERS: Dict[str, Any] = {
-    # K2Node_CallFunction: 需要 node_refs + linker
     "K2Node_CallFunction": _handle_call_function,
-    # K2Node_Event: 需要 node_refs + linker
     "K2Node_Event": _handle_event,
-    # K2Node_Knot: 无额外字段，lambda 提取 archive 参数
     "K2Node_Knot": lambda ctx: read_k2node_knot(ctx["archive"]),
-    # EdGraphNode_Comment: 需要属性回写到 base_node
     "EdGraphNode_Comment": _handle_comment,
-    # K2Node_EnhancedInputAction: 需要 pin 列表提取 trigger_events
     "K2Node_EnhancedInputAction": _handle_enhanced_input,
-    # K2Node_FunctionEntry: 需要 node_refs + raw_properties
     "K2Node_FunctionEntry": _handle_function_entry,
-    # 节点类型只需 archive + name_map（可能加 raw_properties）
-    "K2Node_Message": lambda ctx: read_k2node_message(
-        ctx["archive"], ctx["name_map"], ctx["import_map"], ctx["export_map"], ctx["linker"],
-    ),
+    "K2Node_Message": lambda ctx: _handle_simple_full(ctx, read_k2node_message),
     "K2Node_CallDelegate": lambda ctx: read_k2node_call_delegate(ctx["archive"], ctx["name_map"]),
-    "K2Node_CallArrayFunction": lambda ctx: read_k2node_call_array_function(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_CallParentFunction": lambda ctx: read_k2node_call_parent_function(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_FunctionResult": lambda ctx: read_k2node_function_result(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_CreateWidget": lambda ctx: read_k2node_create_widget(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_AddDelegate": lambda ctx: read_k2node_add_delegate(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_MacroInstance": lambda ctx: read_k2node_macro_instance(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_AssignDelegate": lambda ctx: read_k2node_assign_delegate(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_GetDataTableRow": lambda ctx: read_k2node_get_data_table_row(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_LoadAsset": lambda ctx: read_k2node_load_asset(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
-    "K2Node_SpawnActorFromClass": lambda ctx: read_k2node_spawn_actor_from_class(
-        ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"),
-    ),
+    "K2Node_CallArrayFunction": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_call_array_function),
+    "K2Node_CallParentFunction": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_call_parent_function),
+    "K2Node_FunctionResult": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_function_result),
+    "K2Node_CreateWidget": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_create_widget),
+    "K2Node_AddDelegate": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_add_delegate),
+    "K2Node_MacroInstance": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_macro_instance),
+    "K2Node_AssignDelegate": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_assign_delegate),
+    "K2Node_GetDataTableRow": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_get_data_table_row),
+    "K2Node_LoadAsset": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_load_asset),
+    "K2Node_SpawnActorFromClass": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_spawn_actor_from_class),
 }
-
 
 # ============================================================================
 # AnimGraphNode 读取
@@ -700,7 +645,6 @@ def _read_anim_graph_node(
 
     return result
 
-
 # ============================================================================
 # 节点工厂
 # ============================================================================
@@ -756,7 +700,6 @@ def create_node_from_archive(
 
     return base_node
 
-
 # ============================================================================
 # UEdGraphNode 读取
 # ============================================================================
@@ -782,7 +725,13 @@ def _read_member_reference_from_tags(
             break
         if inner.value_end_offset is not None and inner.value_end_offset > value_end:
             raise ParseError(
-                f"MemberReference field '{inner.name}' exceeds struct boundary"
+                f"MemberReference field '{inner.name}' exceeds struct boundary",
+                context=ErrorContext(
+                    offset=archive.tell(),
+                    phase="graph",
+                    operation="_read_member_reference_from_tags",
+                    context_name="",
+                ),
             )
 
         def _read_inner(inner=inner):
@@ -817,7 +766,6 @@ def _read_member_reference_from_tags(
         member_guid=m_guid,
         b_self_context=m_self,
     )
-
 
 def _read_node_property_tag(
     archive: FArchive,
@@ -924,7 +872,6 @@ def _read_node_property_tag(
 
     return updates
 
-
 def _read_node_pins(
     archive: FArchive,
     name_map: List[str],
@@ -943,9 +890,25 @@ def _read_node_pins(
     pins_count = archive.read_i32()
 
     if pins_count < 0:
-        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
+        raise ParseError(
+            f"Invalid pins_count {pins_count} (negative) at node {node_name}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="graph",
+                operation="_read_node_pins",
+                context_name=node_name,
+            ),
+        )
     if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
+        raise ParseError(
+            f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}",
+            context=ErrorContext(
+                offset=archive.tell(),
+                phase="graph",
+                operation="_read_node_pins",
+                context_name=node_name,
+            ),
+        )
 
     pins: List[UEdGraphPin] = []
     for _ in range(pins_count):
@@ -958,7 +921,7 @@ def _read_node_pins(
 
         header_owning = archive.read_i32()
         header_guid_bytes = archive.read_bytes(16)
-        header_pin_id = header_guid_bytes.hex().upper()
+        header_pin_id = header_guid_bytes.hex()
 
         try:
             pin = read_ue_graph_pin(
@@ -978,7 +941,6 @@ def _read_node_pins(
             continue
 
     return pins
-
 
 def _read_node_script_serial(
     archive: FArchive,
@@ -1077,7 +1039,6 @@ def _read_node_script_serial(
     return (function_reference, event_reference, b_override_function,
             b_internal_event, custom_function_name, function_flags,
             node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
-
 
 def read_ue_graph_node(
     archive: FArchive,

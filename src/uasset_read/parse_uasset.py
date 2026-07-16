@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import struct
 import warnings
-from typing import TYPE_CHECKING, Optional, List, Sequence, Callable
+from typing import TYPE_CHECKING, Sequence, Callable
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -26,7 +26,8 @@ from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
-from uasset_read.project_logging import configure_project_logging
+from uasset_read.config import LogConfig
+from uasset_read.project_logging import scoped_project_logging
 from uasset_read.parse_stages import (
     _record_parse_stage_error,
     _init_parse_env,
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 def _should_use_lightweight_tolerant_parse(
     result,
     tolerant: bool,
-    lightweight_threshold: Optional[int] = None,
+    lightweight_threshold: int | None = None,
     force_full_parse: bool = False,
 ) -> bool:
     if force_full_parse:
@@ -140,7 +141,7 @@ def _build_lightweight_function_graphs(export_map) -> list[dict]:
 def _apply_lightweight_parse(
     result,
     tolerant: bool,
-    lightweight_threshold: Optional[int],
+    lightweight_threshold: int | None,
     force_full_parse: bool,
 ) -> bool:
     """轻量解析路径：若触发则填充 result 并返回 True。"""
@@ -230,38 +231,77 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
         archive.close()
 
 
+def _cleanup_parse_memory(result) -> None:
+    """统一内存清理 — 打破循环引用、重置全局缓存。
+
+    在 parse_package / parse_package_lazy 的 finally 块中调用，
+    防止批量解析时 UObjectInstance ↔ linker 循环引用导致的内存泄漏，
+    以及全局缓存（ClassHandlerRegistry）无界增长。
+    """
+    # 打破 UObjectInstance ↔ linker 循环引用
+    if result is not None and result.linker is not None:
+        try:
+            for obj in result.linker._export_objects:
+                obj.linker = None
+            for obj in result.linker._import_objects:
+                obj.linker = None
+            result.linker._export_objects.clear()
+            result.linker._import_objects.clear()
+            result.linker._root_objects.clear()
+            result.linker._preload_cache.clear()
+            result.linker._archive = None
+        except Exception:
+            pass
+    # 清理全局缓存，防止无界增长
+    try:
+        from uasset_read.parsers.class_registry import get_class_registry
+        get_class_registry().reset_cache()
+    except Exception:
+        pass
+
+
 def _parse_package_core(
     path: str,
     result,
-    tolerant: bool = True,
-    provider: Optional["PackageProvider"] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    extra_linker_setup: Optional[Callable] = None,
-    check_aes_key: Optional[bytes] = None,
-    lightweight_threshold: Optional[int] = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
+    tolerant: bool | None = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    include_parent_assets: bool | None = None,
+    asset_roots: Sequence[str] | None = None,
+    extra_linker_setup: Callable | None = None,
+    check_aes_key: bytes | None = None,
+    lightweight_threshold: int | None = None,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
+    memory_policy: MemoryPolicy | None = None,
 ) -> None:
     """共享核心解析逻辑 — 读取 package 并填充 result。
 
     Args:
         path: 文件路径
         result: ParseResult 或 LinkerParseResult 实例（被原地修改）
-        tolerant: 容错模式
+        tolerant: 容错模式（None 表示使用默认 True）
         provider: package provider
         mappings_path: 类型映射文件路径
         game: 游戏标识
-        include_parent_assets: 是否解析父资产
+        include_parent_assets: 是否解析父资产（None 表示使用默认 False）
         asset_roots: 资产根目录列表
         extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
         check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
+        force_full_parse: 强制完整解析大蓝图（None 表示使用默认 False）
+        hex_view: 启用 HexView 字节偏移追踪（None 表示使用默认 False）
     """
+    # 将 None 解析为内部默认值
+    if tolerant is None:
+        tolerant = True
+    if include_parent_assets is None:
+        include_parent_assets = False
+    if force_full_parse is None:
+        force_full_parse = False
+    if hex_view is None:
+        hex_view = False
+
     from uasset_read.memory_safety import (
         MemoryMonitor,
         MemoryPolicy,
@@ -349,7 +389,7 @@ def _parse_package_core(
 
 
 def _resolve_parse_params(
-    config: Optional["ParseConfig"],
+    config: ParseConfig | None,
     kwargs: dict,
 ) -> dict:
     """将 ParseConfig 和旧风格关键字参数合并为最终参数字典。
@@ -357,26 +397,21 @@ def _resolve_parse_params(
     - 若提供 config，config 的值作为默认，显式传入的旧参数可覆盖。
     - 若未提供 config，旧参数保持原样。
     - 对同时从 config 和旧参数传入的值，发出 DeprecationWarning。
+
+    kwargs 中值为 None 的条目视为"调用方未指定"，不覆盖 config 值。
     """
     if config is None:
         return kwargs
 
-    # 检测是否有旧参数也显式传入了（非默认值）
-    _PARAM_DEFAULTS = {
-        "tolerant": True,
-        "include_parent_assets": False,
-        "asset_roots": None,
-        "mappings_path": None,
-        "game": None,
-        "force_full_parse": False,
-        "hex_view": False,
-        "lightweight_threshold": None,
-        "memory_policy": None,
-    }
+    # 所有旧参数在 parse_package() 签名中默认为 None（哨兵），
+    # 只有调用方显式传入非 None 值才算"显式覆盖"。
+    # 但如果调用方显式传入了与 config 值不同的非 None 值，发出弃用警告。
     conflicting = []
-    for field_name, default in _PARAM_DEFAULTS.items():
-        if field_name in kwargs and kwargs[field_name] != default:
-            conflicting.append(field_name)
+    for fld in config.__dataclass_fields__:
+        if fld in kwargs and kwargs[fld] is not None:
+            config_val = getattr(config, fld)
+            if config_val is not None and kwargs[fld] != config_val:
+                conflicting.append(fld)
 
     if conflicting:
         warnings.warn(
@@ -386,10 +421,11 @@ def _resolve_parse_params(
             stacklevel=3,
         )
 
-    # 用 config 填充缺失的参数
+    # 合并：kwargs 非 None 值覆盖 config，None 不覆盖
     merged = {}
     for fld in config.__dataclass_fields__:
-        merged[fld] = kwargs.get(fld, getattr(config, fld))
+        kw_val = kwargs.get(fld)
+        merged[fld] = kw_val if kw_val is not None else getattr(config, fld)
     # 保留 kwargs 中不在 config 中的键（如 path, provider 等）
     for key in kwargs:
         if key not in merged:
@@ -397,21 +433,23 @@ def _resolve_parse_params(
     return merged
 
 
+@scoped_project_logging
 def parse_package(
     path: str,
-    tolerant: bool = True,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    aes_key: Optional[bytes] = None,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
+    tolerant: bool | None = None,
+    include_parent_assets: bool | None = None,
+    asset_roots: Sequence[str] | None = None,
+    aes_key: bytes | None = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
-    lightweight_threshold: Optional[int] = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    lightweight_threshold: int | None = None,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
+    log_config: LogConfig | None = None,
 ) -> ParseResult:
     """
     主入口：解析 Unreal package（.uasset 或 .umap）。
@@ -433,7 +471,6 @@ def parse_package(
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
-    configure_project_logging()
     result = ParseResult()
 
     # 处理已废弃的 include_linker 参数
@@ -472,20 +509,21 @@ def parse_package(
         provider=provider,
         **core_kwargs,
     )
+    _cleanup_parse_memory(result)
     return result
 
 
 def parse_uasset(
     path: str,
-    tolerant: bool = True,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
+    tolerant: bool | None = None,
+    include_parent_assets: bool | None = None,
+    asset_roots: Sequence[str] | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
     include_linker: bool = True,  # 已废弃，linker 始终创建
-    force_full_parse: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    force_full_parse: bool | None = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
 ) -> ParseResult:
     """
     兼容入口：解析 .uasset 文件。
@@ -515,20 +553,22 @@ def parse_uasset(
     )
 
 
+@scoped_project_logging
 def parse_uasset_with_linker(
     path: str,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     preload_all: bool = False,
-    include_parent_assets: bool = False,
-    asset_roots: Optional[Sequence[str]] = None,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    lightweight_threshold: Optional[int] = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
-    memory_policy: Optional["MemoryPolicy"] = None,
-    config: Optional["ParseConfig"] = None,
+    include_parent_assets: bool | None = None,
+    asset_roots: Sequence[str] | None = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    lightweight_threshold: int | None = None,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
+    memory_policy: MemoryPolicy | None = None,
+    config: ParseConfig | None = None,
+    log_config: LogConfig | None = None,
 ) -> "LinkerParseResult":
     """使用 PackageLinker 的并行解析入口（D-01, D-04）。
 
@@ -544,7 +584,6 @@ def parse_uasset_with_linker(
     Returns:
         LinkerParseResult 实例（含对象图和后处理数据）
     """
-    configure_project_logging()
     # 延迟导入 extras 模块（per #117 core/extras 分层）
     from uasset_read.link.result import LinkerParseResult
 
@@ -588,13 +627,13 @@ def parse_uasset_with_linker(
 
 def parse_package_lazy(
     path: str,
-    export_indices: Optional[List[int]] = None,
+    export_indices: list[int] | None = None,
     store_raw_bytes: bool = False,
     tolerant: bool = True,
-    provider: Optional[PackageProvider] = None,
-    mappings_path: Optional[str] = None,
-    game: Optional[str] = None,
-    memory_policy: Optional["MemoryPolicy"] = None,
+    provider: PackageProvider | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    memory_policy: MemoryPolicy | None = None,
 ) -> ParseResult:
     """懒加载模式解析包 — 按需解析 export body。
 
@@ -716,7 +755,9 @@ def parse_package_lazy(
                     setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
                 except (OSError, struct.error) as e:
                     if not tolerant:
-                        logger.warning("读取 export %s 原始字节失败: %s", export.object_name, e)
+                        raise ParseError(
+                            f"读取 export {export.object_name} 原始字节失败: {e}"
+                        ) from e
                     setattr(export, "lazy_load_archive", None)
 
             # 设置懒加载标记（通过 setattr 兼容 ObjectExport 和 ExportIR）
@@ -757,5 +798,6 @@ def parse_package_lazy(
     finally:
         if archive:
             archive.close()
+        _cleanup_parse_memory(result)
 
     return result

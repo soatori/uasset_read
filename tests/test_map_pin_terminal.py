@@ -56,7 +56,7 @@ class TestMapPinTerminal:
         # Map terminal 类型默认值
         assert pin.map_key_pin_category == ""
         assert pin.map_key_pin_subcategory == ""
-        assert pin.map_key_pin_subcategory_object is None
+        assert pin.map_key_pin_subcategory_object_name is None
 
     @pytest.mark.integration
     def test_json_map_pin_fields(self):
@@ -112,10 +112,10 @@ class TestMapPinTerminal:
                                 f"Map pin {pin.pin_name} 的 map_key_pin_category 不是 str"
                             assert isinstance(pin.map_key_pin_subcategory, str), \
                                 f"Map pin {pin.pin_name} 的 map_key_pin_subcategory 不是 str"
-                            # map_key_pin_subcategory_object 可以是 None 或 str
-                            assert pin.map_key_pin_subcategory_object is None or isinstance(
-                                pin.map_key_pin_subcategory_object, str
-                            ), f"Map pin {pin.pin_name} 的 map_key_pin_subcategory_object 类型错误"
+                            # map_key_pin_subcategory_object_name 可以是 None 或 str
+                            assert pin.map_key_pin_subcategory_object_name is None or isinstance(
+                                pin.map_key_pin_subcategory_object_name, str
+                            ), f"Map pin {pin.pin_name} 的 map_key_pin_subcategory_object_name 类型错误"
 
     def test_fed_graph_pin_type_map_fields(self):
         """验证 FEdGraphPinType 的 Map terminal 类型字段。"""
@@ -175,7 +175,7 @@ class TestMapPinTerminalEndToEnd:
         assert pin_ir.container_type == "Map"
         assert pin_ir.map_key_pin_category == "struct"
         assert pin_ir.map_key_pin_subcategory == "Vector"
-        assert pin_ir.map_key_pin_subcategory_object == "/Script/Engine.Vector"
+        assert pin_ir.map_key_pin_subcategory_object_name == "/Script/Engine.Vector"
 
     def test_non_map_pin_terminal_fields_are_default(self):
         """验证非 Map Pin 的 terminal 类型字段保持默认值。"""
@@ -205,7 +205,7 @@ class TestMapPinTerminalEndToEnd:
         # 非 Map Pin 的 terminal 字段应保持默认
         assert pin_ir.map_key_pin_category == ""
         assert pin_ir.map_key_pin_subcategory == ""
-        assert pin_ir.map_key_pin_subcategory_object is None
+        assert pin_ir.map_key_pin_subcategory_object_name is None
 
     def test_array_pin_terminal_fields_are_default(self):
         """验证 Array Pin 的 terminal 类型字段保持默认值。"""
@@ -230,4 +230,4 @@ class TestMapPinTerminalEndToEnd:
         assert pin_ir.container_type == "Array"
         assert pin_ir.map_key_pin_category == ""
         assert pin_ir.map_key_pin_subcategory == ""
-        assert pin_ir.map_key_pin_subcategory_object is None
+        assert pin_ir.map_key_pin_subcategory_object_name is None

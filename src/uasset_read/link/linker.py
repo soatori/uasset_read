@@ -7,6 +7,7 @@ preload(index) lazily deserializes properties on demand.
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
@@ -23,6 +24,38 @@ from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 
 logger = logging.getLogger(__name__)
+
+# World Partition 路径规范化正则：匹配路径段末尾的 _数字 后缀
+_WP_HASH_RE = re.compile(r'_(\d{3,})$')
+
+
+def normalize_world_partition_path(path: str) -> str:
+    """去除 World Partition 哈希后缀，规范化导入路径。
+
+    World Partition 为外部子包生成形如 ``/Script/Engine_3103784960`` 的路径，
+    其中 ``_3103784960`` 是基于 MD5 的数字哈希后缀。本函数将此类路径还原为
+    基础模块路径（如 ``/Script/Engine``），以便进行路径匹配。
+
+    只对路径的最后一个段落（split('/') 的最后一段）执行去除，
+    并且要求后缀至少包含 3 位数字以避免误伤正常标识符。
+
+    Args:
+        path: 原始导入路径（如 ``/Script/Engine_3103784960``）
+
+    Returns:
+        规范化后的路径（如 ``/Script/Engine``）。若无哈希后缀则原样返回。
+    """
+    if not path:
+        return path
+    last_slash = path.rfind('/')
+    if last_slash < 0:
+        segment = path
+        prefix = ''
+    else:
+        segment = path[last_slash + 1:]
+        prefix = path[:last_slash + 1]
+    normalized_segment = _WP_HASH_RE.sub('', segment)
+    return prefix + normalized_segment
 
 
 class PackageLinker:
@@ -243,11 +276,6 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
-        if instance.serial_size == 0:
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
         # === NoneType Guard (#328) ===
         # 防止 serial_offset/serial_size 为 None 导致 TypeError
         if self._archive is None:
@@ -337,6 +365,30 @@ class PackageLinker:
             self._preload_cache[index] = True
             return
 
+        # === serial_size 验证 ===
+        # 负值检查（防止 offset+size 产生意外结果）
+        if instance.serial_size < 0:
+            self._diagnostics.append(OffsetRangeDiagnostic(
+                module="linker",
+                field="serial_size",
+                export_index=index,
+                object_name=instance.object_name,
+                target_offset=instance.serial_offset,
+                read_size=instance.serial_size,
+                file_size=self._file_size,
+                source="preload",
+                error=f"Export #{index} ({instance.object_name}) serial_size {instance.serial_size} 为负数",
+            ))
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
+        # 零值跳过（在偏移校验之后执行，确保无效偏移先被诊断）
+        if instance.serial_size == 0:
+            instance._preloaded = True
+            self._preload_cache[index] = True
+            return
+
         # 验证 serial_offset + serial_size 不超出文件
         if instance.serial_offset + instance.serial_size > self._file_size:
             self._diagnostics.append(OffsetRangeDiagnostic(
@@ -406,7 +458,9 @@ class PackageLinker:
         """将 ObjectProperty 的 FPackageIndex 解析为 UObjectInstance 引用。
 
         遍历所有已 preload 的 export 对象，填充 property_references 字段。
+        支持 int 和 PackageIndex 两种值类型。
         """
+        from uasset_read.serializers.object_resources import PackageIndex
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
@@ -417,21 +471,25 @@ class PackageLinker:
                     continue
                 if prop.get('type') == 'ObjectProperty':
                     pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
-                        # 转换为 PackageIndex 并解析
-                        from uasset_read.serializers.object_resources import PackageIndex
+                    if isinstance(pkg_idx, PackageIndex):
+                        resolved = self.resolve_package_index(pkg_idx)
+                    elif isinstance(pkg_idx, int):
                         resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                        if resolved:
-                            prop_name = prop.get('name', '')
-                            if not hasattr(inst, 'property_references'):
-                                inst.property_references = {}
-                            inst.property_references[prop_name] = resolved
+                    else:
+                        continue
+                    if resolved:
+                        prop_name = prop.get('name', '')
+                        if not hasattr(inst, 'property_references'):
+                            inst.property_references = {}
+                        inst.property_references[prop_name] = resolved
 
     def _resolve_weak_references(self) -> None:
         """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
 
         遍历所有已 preload 的 export 对象，填充 weak_references 字段。
+        支持 int 和 PackageIndex 两种值类型。
         """
+        from uasset_read.serializers.object_resources import PackageIndex
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
@@ -442,11 +500,14 @@ class PackageLinker:
                     continue
                 if prop.get('type') == 'WeakObjectProperty':
                     pkg_idx = prop.get('value')
-                    if isinstance(pkg_idx, int):
-                        from uasset_read.serializers.object_resources import PackageIndex
+                    if isinstance(pkg_idx, PackageIndex):
+                        resolved = self.resolve_package_index(pkg_idx)
+                    elif isinstance(pkg_idx, int):
                         resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                        if resolved:
-                            inst.weak_references.append(resolved)
+                    else:
+                        continue
+                    if resolved:
+                        inst.weak_references.append(resolved)
 
     def _verify_imports(self) -> List[str]:
         """验证所有导入对象的有效性。
@@ -471,7 +532,17 @@ class PackageLinker:
             if hasattr(imp, 'outer_index') and imp.outer_index and not imp.outer_index.is_null:
                 outer_inst = self.resolve_package_index(imp.outer_index)
                 if outer_inst is None:
-                    errors.append(f"Import {inst.object_name}: outer_index 无法解析")
+                    # World Partition 子包的 hashed 路径（如 /Script/Engine_3103784960）
+                    # 其 outer_index 可能引用了未包含在当前 import 表中的包，
+                    # 这是正常的子包拆分行为，降级为 debug 而非 error。
+                    obj_name = inst.object_name
+                    if isinstance(obj_name, str) and _WP_HASH_RE.search(obj_name):
+                        logger.debug(
+                            "Import %s: outer_index 无法解析（World Partition hashed 路径，已忽略）",
+                            obj_name,
+                        )
+                    else:
+                        errors.append(f"Import {inst.object_name}: outer_index 无法解析")
 
         return errors
 

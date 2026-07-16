@@ -120,7 +120,7 @@ class TestLoggingIntegration:
             keep_latest=0,  # 标记全部删除
             dry_run=True,
         )
-        assert len(planned) == 3
+        assert len(planned) == 2
 
         # 文件应仍然存在
         remaining = list(log_dir.glob("uasset_read-*.log*"))
@@ -156,3 +156,49 @@ class TestLoggingIntegration:
             dry_run=True,
         )
         assert result == []
+
+    def test_cleanup_keeps_or_deletes_complete_run_families(self, tmp_path):
+        from uasset_read.project_logging import cleanup_project_logs
+
+        log_dir = tmp_path / "log"
+        log_dir.mkdir()
+        old_base = log_dir / "uasset_read-20260101-000000-000000-pid1-old.log"
+        old_backup = log_dir / f"{old_base.name}.1"
+        new_base = log_dir / "uasset_read-20260102-000000-000000-pid1-new.log"
+        old_base.write_text("old")
+        old_backup.write_text("old backup")
+        new_base.write_text("new")
+        old_time = (datetime.now() - timedelta(days=2)).timestamp()
+        new_time = (datetime.now() - timedelta(days=1)).timestamp()
+        os.utime(old_base, (old_time, old_time))
+        newest_time = datetime.now().timestamp()
+        os.utime(old_backup, (newest_time, newest_time))
+        os.utime(new_base, (new_time, new_time))
+
+        planned = cleanup_project_logs(
+            log_dir=log_dir,
+            keep_latest=1,
+            dry_run=True,
+        )
+
+        assert set(planned) == {new_base}
+
+    def test_cleanup_never_selects_active_run_family(self, tmp_path):
+        from uasset_read.project_logging import (
+            _reset_logging_state_for_tests,
+            cleanup_project_logs,
+            configure_project_logging,
+        )
+
+        log_dir = tmp_path / "log"
+        active = configure_project_logging(log_dir=log_dir, run_id="active")
+        try:
+            planned = cleanup_project_logs(
+                log_dir=log_dir,
+                keep_latest=0,
+                max_total_bytes=0,
+                dry_run=True,
+            )
+            assert active not in planned
+        finally:
+            _reset_logging_state_for_tests()

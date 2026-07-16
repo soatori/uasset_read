@@ -15,9 +15,10 @@ from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.bounded_events import BoundedEventBuffer
 
+logger = logging.getLogger(__name__)
+
 # read_name 索引恢复阈值
 _FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # 超过此值尝试恢复
-
 
 class ArchiveLike(Protocol):
     """统一的 Archive 契约 — 所有 Archive 实现必须满足。"""
@@ -28,6 +29,10 @@ class ArchiveLike(Protocol):
     def close(self) -> None: ...
     def total_size(self) -> int: ...
     def set_byte_swapping(self, enabled: bool) -> None: ...
+
+
+# 对齐大小集合，用于 padding 检测 (#369)
+_ALIGNMENT_SIZES = frozenset({4, 8, 16, 32, 64})
 
 
 class FArchive:
@@ -269,6 +274,19 @@ class FArchive:
             self._file = None
         self._use_mmap = False
 
+    def __enter__(self) -> "FArchive":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        """安全网：确保文件句柄被释放。"""
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志"""
         self._byte_swapping = enabled
@@ -373,6 +391,30 @@ class FArchive:
 
     # 类型读取方法
 
+    def _read_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
+        """通用字节序感知读取（内部辅助方法）。"""
+        start = self.tell()
+        fmt = '>' if self._byte_swapping else '<'
+        value = struct.unpack(fmt + fmt_char, self.read(size))[0]
+        if key:
+            self._record_hex_view(key, type_name, value, start, start + size)
+        return value
+
+    def _peek_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
+        """通用字节序感知预读（不移动位置）。"""
+        current_pos = self.tell()
+        try:
+            fmt = '>' if self._byte_swapping else '<'
+            data = self.read(size)
+            result = struct.unpack(fmt + fmt_char, data)[0]
+            self.seek(current_pos)
+            if key:
+                self._record_hex_view(key, type_name, result, current_pos, current_pos + size)
+            return result
+        except (struct.error, OSError, ValueError):
+            self.seek(current_pos)
+            raise
+
     def read_u8(self, key: str = "") -> int:
         """读取 unsigned 8-bit integer（字节序无关）"""
 
@@ -403,59 +445,23 @@ class FArchive:
 
     def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'i', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "i32", value, start, start + 4)
-        return value
+        return self._read_swapped('i', 4, "i32", key)
 
     def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
-
-        current_pos = self.tell()
-        try:
-            fmt = '>' if self._byte_swapping else '<'
-            data = self.read(4)
-            result = struct.unpack(fmt + 'i', data)[0]
-            self.seek(current_pos)
-            if key:
-                self._record_hex_view(key, "i32(peek)", result, current_pos, current_pos + 4)
-            return result
-        except (struct.error, OSError, ValueError):
-            self.seek(current_pos)
-            raise
+        return self._peek_swapped('i', 4, "i32(peek)", key)
 
     def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'H', self.read(2))[0]
-        if key:
-            self._record_hex_view(key, "u16", value, start, start + 2)
-        return value
+        return self._read_swapped('H', 2, "u16", key)
 
     def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'h', self.read(2))[0]
-        if key:
-            self._record_hex_view(key, "i16", value, start, start + 2)
-        return value
+        return self._read_swapped('h', 2, "i16", key)
 
     def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'I', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "u32", value, start, start + 4)
-        return value
+        return self._read_swapped('I', 4, "u32", key)
 
     def read_bool(self, key: str = "") -> bool:
         """读取 UE bool 值（序列化为 uint32，4 bytes）。
@@ -486,43 +492,19 @@ class FArchive:
 
     def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'q', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "i64", value, start, start + 8)
-        return value
+        return self._read_swapped('q', 8, "i64", key)
 
     def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'Q', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "u64", value, start, start + 8)
-        return value
+        return self._read_swapped('Q', 8, "u64", key)
 
     def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'f', self.read(4))[0]
-        if key:
-            self._record_hex_view(key, "f32", value, start, start + 4)
-        return value
+        return self._read_swapped('f', 4, "f32", key)
 
     def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
-
-        start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
-        value = struct.unpack(fmt + 'd', self.read(8))[0]
-        if key:
-            self._record_hex_view(key, "f64", value, start, start + 8)
-        return value
+        return self._read_swapped('d', 8, "f64", key)
 
     def serialize_int(self, value: int) -> bytes:
         """序列化 32 位整数（用于 SerializeInt 兼容）。
@@ -560,6 +542,24 @@ class FArchive:
             value = value & mask
         return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
+    def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
+        """判断全零数据是否为对齐 padding 而非真实损坏（#369）。
+
+        启发式条件：
+        1. 字节数为常见对齐大小（4/8/16/32/64）
+        2. 数据起始位置为 4 字节对齐（UE 默认对齐）
+
+        Args:
+            data_start_pos: 数据起始位置（length 字段之后）
+            byte_count: 全零字节数
+
+        Returns:
+            True 如果可能是对齐 padding
+        """
+        if byte_count not in _ALIGNMENT_SIZES:
+            return False
+        return data_start_pos % 4 == 0
+
     def read_fstring(self, key: str = "") -> str:
         """读取 UE FString（带长度前缀的字符串，null-terminated）。
 
@@ -577,12 +577,26 @@ class FArchive:
             utf16_len = -length * 2
             if utf16_len > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-16 length %d exceeds maximum %d, "
+                        "returning empty string (tolerant)",
+                        pos_before, utf16_len, MAX_FSTRING_LENGTH,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-16 string at pos {pos_before}: length {utf16_len} exceeds "
                     f"maximum {MAX_FSTRING_LENGTH}"
                 )
             if pos_before + 4 + utf16_len > self._file_size:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-16 expected %d bytes but only %d remain, "
+                        "returning empty string (tolerant)",
+                        pos_before, utf16_len, self._file_size - pos_before - 4,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-16 string at pos {pos_before}: expected {utf16_len} bytes "
                     f"but only {self._file_size - pos_before - 4} remain"
@@ -603,20 +617,42 @@ class FArchive:
                         f"FString at pos {pos_before}: length={-length}, "
                         f"encoding=UTF-16, all nulls (completely corrupted), strict mode"
                     )
-                self._logger.warning(
-                    "FString at pos %d: length=%d, encoding=UTF-16, "
-                    "all nulls (completely corrupted), consumed=%d bytes",
-                    pos_before, -length, len(data),
-                )
+                # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
+                if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                    self._logger.debug(
+                        "FString at pos %d: length=%d, encoding=UTF-16, "
+                        "all nulls (likely alignment padding), consumed=%d bytes",
+                        pos_before, -length, len(data),
+                    )
+                else:
+                    self._logger.warning(
+                        "FString at pos %d: length=%d, encoding=UTF-16, "
+                        "all nulls (completely corrupted), consumed=%d bytes",
+                        pos_before, -length, len(data),
+                    )
         else:
             if length > MAX_FSTRING_LENGTH:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-8 length %d exceeds maximum %d, "
+                        "returning empty string (tolerant)",
+                        pos_before, length, MAX_FSTRING_LENGTH,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-8 string at pos {pos_before}: length {length} exceeds "
                     f"maximum {MAX_FSTRING_LENGTH}"
                 )
             if pos_before + 4 + length > self._file_size:
                 self.seek(pos_before)
+                if self._tolerant:
+                    self._logger.warning(
+                        "FString at pos %d: UTF-8 expected %d bytes but only %d remain, "
+                        "returning empty string (tolerant)",
+                        pos_before, length, self._file_size - pos_before - 4,
+                    )
+                    return ""
                 raise ParseError(
                     f"UTF-8 string at pos {pos_before}: expected {length} bytes "
                     f"but only {self._file_size - pos_before - 4} remain"
@@ -673,12 +709,21 @@ class FArchive:
                     # Tolerant mode: log and continue with padding zone detection.
                     # Check if remaining file data is also mostly zeros (padding zone).
                     # If so, advance to file end to prevent offset cascade (#138).
-                    self._logger.warning(
-                        "FString at pos %d: length=%d, encoding=UTF-8, "
-                        "all nulls (completely corrupted), "
-                        "consumed=%d bytes, end_pos=%d",
-                        pos_before, length, len(data), self.tell()
-                    )
+                    # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
+                    if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                        self._logger.debug(
+                            "FString at pos %d: length=%d, encoding=UTF-8, "
+                            "all nulls (likely alignment padding), "
+                            "consumed=%d bytes, end_pos=%d",
+                            pos_before, length, len(data), self.tell()
+                        )
+                    else:
+                        self._logger.warning(
+                            "FString at pos %d: length=%d, encoding=UTF-8, "
+                            "all nulls (completely corrupted), "
+                            "consumed=%d bytes, end_pos=%d",
+                            pos_before, length, len(data), self.tell()
+                        )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s",
                         pos_before, data[:32].hex()
@@ -757,6 +802,10 @@ class FArchive:
         if index > _FNAME_INDEX_RECOVERY_THRESHOLD and self._tolerant:
             recovered = self._try_recover_fname(start, name_map)
             if recovered is not None:
+                logger.debug(
+                    "read_name: recovered out-of-range index %d at pos %d",
+                    index, start
+                )
                 return recovered
 
         if 0 <= index < len(name_map):
@@ -768,7 +817,7 @@ class FArchive:
         else:
             # 保持 "None" 返回值（PropertyTag 终止标记依赖它）
             # 升级日志级别为 warning
-            self._logger.warning(
+            logger.warning(
                 "read_name: index %d out of range (name_map len=%d) at pos %d",
                 index, len(name_map), self.tell() - 8
             )
@@ -852,7 +901,7 @@ class FArchive:
                     if test_number > 0:
                         return f"{base_name}_{test_number}"
                     return base_name
-            except Exception:
+            except (ParseError, OSError, struct.error, ValueError):
                 continue
 
         # 恢复失败，回退到原始位置
@@ -934,7 +983,6 @@ class FArchive:
             )
         return data
 
-
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
 ) -> bool:
@@ -955,7 +1003,6 @@ def _contains_binary_data(
         return False
     check_len = min(len(value), max_check_length)
     return value.count('\x00', 0, check_len) / check_len > threshold
-
 
 class ByteArchive(FArchive):
     """

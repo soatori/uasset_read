@@ -70,6 +70,19 @@ class UTexture2D(UObject):
             self.platform_data = pdata
             self.size_x = int(prop_value(pdata, "SizeX", "size_x", default=self.size_x) or 0)
             self.size_y = int(prop_value(pdata, "SizeY", "size_y", default=self.size_y) or 0)
+            # 重新校验 PlatformData 覆盖后的尺寸（#403）
+            if self.size_x < 0 or self.size_x > _MAX_TEXTURE_DIMENSION:
+                _logger.debug(
+                    "Texture2D '%s': PlatformData SizeX=%d 超出合理范围 [0, %d]，置为 0",
+                    getattr(self, 'object_name', '?'), self.size_x, _MAX_TEXTURE_DIMENSION,
+                )
+                self.size_x = 0
+            if self.size_y < 0 or self.size_y > _MAX_TEXTURE_DIMENSION:
+                _logger.debug(
+                    "Texture2D '%s': PlatformData SizeY=%d 超出合理范围 [0, %d]，置为 0",
+                    getattr(self, 'object_name', '?'), self.size_y, _MAX_TEXTURE_DIMENSION,
+                )
+                self.size_y = 0
             self.format = prop_value(pdata, "PixelFormat", "Format", "format", default=self.format)
             mips = as_list(prop_value(pdata, "Mips", "mips"))
             self.mip_levels = [_normalize_mip(mip, archive) for mip in mips]

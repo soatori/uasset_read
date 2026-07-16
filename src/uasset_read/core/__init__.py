@@ -7,13 +7,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
+import logging
 import warnings
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.config import LogConfig
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
-from uasset_read.project_logging import configure_project_logging, new_log_run_id
+from uasset_read.project_logging import (
+    configure_project_logging,
+    current_log_run_id,
+    new_log_run_id,
+    scoped_project_logging,
+)
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
@@ -30,6 +36,16 @@ class BatchResult:
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _log_batch_summary(result: BatchResult) -> None:
+    logging.getLogger(__name__).info(
+        "batch_summary total=%d success=%d skipped=%d failed=%d",
+        result.total,
+        len(result.success),
+        len(result.skipped),
+        len(result.failed),
+    )
 
 
 def _configure_logging(
@@ -81,7 +97,7 @@ def _configure_logging(
         and log_max_bytes == 10_000_000
         and log_backup_count == 5
     ):
-        return configure_project_logging()
+        return None
     kwargs = {
         "level": log_level or "DEBUG",
         "log_dir": log_dir,
@@ -100,19 +116,20 @@ def _configure_logging(
     return configure_project_logging(**kwargs)
 
 
+@scoped_project_logging
 def parse_single(
     file_path: str,
     format: str = "json",
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
     log_level: str | None = None,
@@ -136,16 +153,16 @@ def parse_single(
     Args:
         file_path: .uasset/.umap 文件路径
         format: 输出格式（json, markdown）
-        tolerant: 容错模式，遇到错误继续解析
+        tolerant: 容错模式，遇到错误继续解析。None 表示使用 ParseConfig 或默认值 True
         verbose: 详细输出
         include_schema: 包含 JSON Schema
         include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产
+        include_parent_assets: 解析父资产。None 表示使用 ParseConfig 或默认值 False
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）。None 表示使用 ParseConfig 或默认值 False
+        hex_view: 启用 HexView 字节偏移追踪。None 表示使用 ParseConfig 或默认值 False
         memory_policy: 可选内存策略
         output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
         log_config: 可选 LogConfig 实例，集中管理日志参数。
@@ -213,6 +230,17 @@ def parse_single(
         )
 
     ir = build_package_ir(result)
+
+    # 释放临时大对象，防止批量解析时内存累积
+    try:
+        for export in getattr(result, "export_map", []) or []:
+            if hasattr(export, "_asset_type_data"):
+                delattr(export, "_asset_type_data")
+            if hasattr(export, "_uclass_native_fields"):
+                delattr(export, "_uclass_native_fields")
+    except Exception:
+        pass
+
     renderer = get_renderer(format)
     options = RenderOptions(
         verbose=verbose,
@@ -225,8 +253,8 @@ def parse_single(
     return renderer.render(ir, options)
 
 
-def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
-    if not tolerant or format not in {"json"}:
+def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
+    if (tolerant is not None and not tolerant) or format not in {"json"}:
         return False
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
@@ -246,20 +274,21 @@ def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
     return False
 
 
+@scoped_project_logging
 def parse_batch(
     input_dir: str,
     format: str = "json",
     output_dir: str | None = None,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
     skip_large_files: bool | None = None,
     isolate_assets: bool | str = True,  # True/False/"auto"
@@ -311,7 +340,7 @@ def parse_batch(
             f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
         )
 
-    active_run_id = log_run_id or new_log_run_id()
+    active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
     _configure_logging(
         log_config=log_config,
         log_level=log_level,
@@ -441,6 +470,7 @@ def parse_batch(
         except Exception as exc:
             result.failed.append((str(pf), f"{type(exc).__name__}: {exc}"))
 
+    _log_batch_summary(result)
     return result
 
 
@@ -449,15 +479,16 @@ def list_formats() -> list[str]:
     return _list_renderer_formats()
 
 
+@scoped_project_logging
 def diff_single(
     file_path1: str,
     file_path2: str,
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
     writer: IO[str] | None = None,
     log_level: str | None = None,
     log_dir: str | None = None,
@@ -530,11 +561,11 @@ def _diff_to(
     file_path2: str,
     writer: IO[str],
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
 ) -> None:
     """将 unified diff 流式写入 writer。
 

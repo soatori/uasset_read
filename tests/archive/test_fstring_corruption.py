@@ -48,11 +48,22 @@ class TestFStringCorruption:
         result = archive.read_fstring()
         assert result == "Hello World"
 
-    def test_position_restored_on_boundary_error(self, tmp_path):
-        """长度异常时位置回退到入口。"""
+    def test_position_restored_on_boundary_error_tolerant(self, tmp_path):
+        """tolerant 模式：长度异常时返回空字符串并回退位置。"""
         # length=999999 但后面没有足够数据
         data = b"\x3f\x42\x0f\x00"  # 大长度，无后续数据
-        archive = _make_archive(data, tmp_path)
+        archive = _make_archive(data, tmp_path, tolerant=True)
+        pos_before = archive.tell()
+
+        result = archive.read_fstring()
+        assert result == ""
+        # 位置应回退到入口
+        assert archive.tell() == pos_before
+
+    def test_position_restored_on_boundary_error_strict(self, tmp_path):
+        """strict 模式：长度异常时抛出异常并回退位置。"""
+        data = b"\x3f\x42\x0f\x00"  # 大长度，无后续数据
+        archive = _make_archive(data, tmp_path, tolerant=False)
         pos_before = archive.tell()
 
         with pytest.raises(Exception):

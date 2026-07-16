@@ -22,6 +22,29 @@ from uasset_read.models.core import UEdGraph
 
 logger = logging.getLogger(__name__)
 
+# 已知的 EdGraph 子类名称（用于图类型匹配）
+# 包括引擎内置子类和常见自定义图类型
+EDGRAPH_CLASS_NAMES = frozenset({
+    "EdGraph",
+    "UberEdGraph",
+    # 动画图
+    "AnimGraph",
+    "AnimBlueprintGeneratedClass",
+    # 控制绑定图
+    "ControlRigGraph",
+    "RigGraph",
+    # 材质图
+    "MaterialGraph",
+    "MaterialGraphEdNode",
+    # 粒子系统图
+    "CascadeParticleSystemGraph",
+    # Niagara 图
+    "NiagaraGraph",
+    "NiagaraScript",
+    # 自定义图类型（常见前缀匹配）
+    "K2Node_Graph",
+})
+
 
 def _validate_graph_export_offset(export, archive_size: int) -> bool:
     """验证图 export 的序列化偏移是否在有效范围内。
@@ -114,7 +137,14 @@ def extract_blueprint_graphs(
     for export_idx, export in enumerate(export_map):
         class_name = get_asset_class(export, import_map, export_map)
 
-        if class_name and class_name in ('EdGraph', 'UberEdGraph'):
+        # 扩展图类型匹配：精确匹配 + 后缀匹配（覆盖自定义图子类）
+        is_graph_type = (
+            class_name in EDGRAPH_CLASS_NAMES
+            or class_name.endswith("Graph")
+            or class_name.endswith("EdGraph")
+        )
+
+        if class_name and is_graph_type:
             # 验证图 export 偏移在有效范围内
             if not _validate_graph_export_offset(export, archive_size):
                 logger.warning(

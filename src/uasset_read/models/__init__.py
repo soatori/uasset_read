@@ -71,6 +71,8 @@ from .ir import (
     VariableIR,
     SourceSiteContextIR,
     GatherableTextDataIR,
+    HexViewEntryIR,
+    DebugIR,
     AnimNotifyIR,
     AnimBlueprintIR,
     AnimSequenceIR,
@@ -92,7 +94,7 @@ from .diagnostics import (
 )
 
 __all__ = [
-    # 核心模型（core.py）
+    # 核心模型（models/core.py）
     "FEdGraphPinType",
     "UEdGraphPin",
     "UEdGraphNode",
@@ -153,6 +155,8 @@ __all__ = [
     "VariableIR",
     "SourceSiteContextIR",
     "GatherableTextDataIR",
+    "HexViewEntryIR",
+    "DebugIR",
     "AnimNotifyIR",
     "AnimBlueprintIR",
     "AnimSequenceIR",

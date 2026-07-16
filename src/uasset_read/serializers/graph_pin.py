@@ -153,7 +153,7 @@ def read_pin_reference(
         if import_idx < len(import_map):
             owning_node_name = import_map[import_idx].object_name
 
-    # pin_guid 已在上方归一化为 32 字符大写 hex（无 dash）
+    # pin_guid 已在上方归一化为 32 字符小写 hex（无 dash）
     result = {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
@@ -279,7 +279,15 @@ def _recover_pin_array_count(
 
     current_pos = archive.tell()
     search_start = max(0, error_pos - scan_window)
-    search_end = min(archive._file_size, error_pos + scan_window)
+    # 安全获取 archive 大小：优先使用公开 API total_size()，
+    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    try:
+        archive_size = archive.total_size()
+        if not isinstance(archive_size, int):
+            raise TypeError("total_size() did not return int")
+    except (AttributeError, TypeError):
+        archive_size = getattr(archive, '_file_size', 0)
+    search_end = min(archive_size, error_pos + scan_window)
 
     archive.seek(search_start)
     window = archive.read(search_end - search_start)
@@ -397,7 +405,15 @@ def _try_recover_to_subpins(
     import struct
 
     scan_start = archive.tell()
-    scan_end = min(archive._file_size, scan_start + max_scan)
+    # 安全获取 archive 大小：优先使用公开 API total_size()，
+    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    try:
+        archive_size = archive.total_size()
+        if not isinstance(archive_size, int):
+            raise TypeError("total_size() did not return int")
+    except (AttributeError, TypeError):
+        archive_size = getattr(archive, '_file_size', 0)
+    scan_end = min(archive_size, scan_start + max_scan)
     archive.seek(scan_start)
     window = archive.read(scan_end - scan_start)
 
@@ -688,7 +704,7 @@ def read_ue_graph_pin(
         pin_id = header_pin_id
     else:
         pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
-        pin_id = pin_id_bytes.hex().upper()
+        pin_id = pin_id_bytes.hex()
     if trace_mode:
         _trace_fields_append(_trace_fields, "PinId", _field_start, archive.tell(), pin_id[:16]+"...")
 
@@ -769,7 +785,7 @@ def read_ue_graph_pin(
     persistent_start = archive.tell()
     try:
         persistent_guid = _read_guid(archive)
-    except (struct.error, OSError):
+    except (struct.error, OSError, ParseError):
         persistent_guid = None
     if trace_mode:
         _trace_fields_append(_trace_fields, "PersistentGuid", persistent_start, archive.tell(),

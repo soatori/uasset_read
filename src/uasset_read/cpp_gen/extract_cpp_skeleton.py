@@ -59,7 +59,6 @@ logger = logging.getLogger(__name__)
 
 MAX_INHERITANCE_DEPTH = 50  # 防止无限循环
 
-
 # ============================================================================
 # 从 decompiled_functions 补齐缺失方法（第三条路径）
 # ============================================================================
@@ -76,7 +75,7 @@ def _backfill_missing_methods(
     """
     existing_names = {m.cpp_name for m in methods}
     for decompiled in decompiled_functions:
-        sanitized = _sanitize_identifier(decompiled.function_name)
+        sanitized = sanitize_identifier(decompiled.function_name)
         if sanitized not in existing_names:
             methods.append(CppMethodIR(
                 cpp_name=sanitized,
@@ -87,7 +86,6 @@ def _backfill_missing_methods(
                 body_text=decompiled.cpp_code or "/* no source available */",
             ))
             existing_names.add(sanitized)
-
 
 # ============================================================================
 # 核心提取函数
@@ -190,7 +188,6 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
 
     return ir
 
-
 # ============================================================================
 # 蓝图元数据过滤器（P0 改进）
 # ============================================================================
@@ -220,7 +217,6 @@ BLUEPRINT_METADATA_KEYS = frozenset({
     'UbergraphFrame',
 })
 
-
 def _is_blueprint_metadata(prop_name: str) -> bool:
     """判断属性是否为蓝图内部元数据。
 
@@ -232,7 +228,6 @@ def _is_blueprint_metadata(prop_name: str) -> bool:
     """
     return prop_name in BLUEPRINT_METADATA_KEYS
 
-
 # ============================================================================
 # 组件名称清理（P1 改进）
 # ============================================================================
@@ -243,7 +238,6 @@ _COMPONENT_SUFFIX_PATTERNS = [
     (re.compile(r'_\d+__[A-F0-9]+$'), ''),  # _0__CCE3C0B4 等哈希后缀
     (re.compile(r'_\d+$'), ''),  # _0 等数字后缀
 ]
-
 
 def _clean_component_name(name: str) -> str:
     """清理组件名称，移除 UE 内部后缀。
@@ -263,7 +257,6 @@ def _clean_component_name(name: str) -> str:
     for pattern, replacement in _COMPONENT_SUFFIX_PATTERNS:
         cleaned = pattern.sub(replacement, cleaned)
     return cleaned if cleaned else name
-
 
 # ============================================================================
 # 类名简化（P0 改进）
@@ -299,7 +292,6 @@ def _simplify_class_name(raw_name: str) -> str:
 
     return cleaned
 
-
 # ============================================================================
 # 辅助函数
 # ============================================================================
@@ -320,7 +312,6 @@ def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
             original = param.name.replace('__', ' / ')
             name_map[original] = param.name
     return name_map
-
 
 def _inject_function_bodies(
     methods: List[CppMethodIR],
@@ -349,7 +340,7 @@ def _inject_function_bodies(
 
         # 清理后匹配
         if method is None:
-            sanitized = _sanitize_identifier(func_name)
+            sanitized = sanitize_identifier(func_name)
             method = method_index.get(sanitized)
 
         # 大小写不敏感匹配
@@ -405,7 +396,6 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
 
     return f"{prefix}{clean_name}"
 
-
 def _resolve_parent_class(
     blueprint: "BlueprintMetadata",
     linker: Optional[Any]
@@ -428,7 +418,6 @@ def _resolve_parent_class(
         return "UObject"
 
     return ue_package_path_to_cpp_class(parent_path)
-
 
 def _extract_component_properties(
     blueprint: "BlueprintMetadata",
@@ -488,7 +477,6 @@ def _extract_component_properties(
 
     return properties
 
-
 def _create_component_property(var: "BlueprintVariable") -> CppProperty:
     """从 BlueprintVariable 创建组件 CppProperty。
 
@@ -534,7 +522,6 @@ def _create_component_property(var: "BlueprintVariable") -> CppProperty:
         cpp_comment=f"UE type: {ue_type}",
     )
 
-
 def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProperty]:
     """提取变量属性。
 
@@ -558,7 +545,6 @@ def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProp
             properties.append(prop)
 
     return properties
-
 
 def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProperty]:
     """从图节点提取输入动作变量。
@@ -612,7 +598,6 @@ def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProper
 
     return properties
 
-
 def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
     """从 BlueprintVariable 创建变量 CppProperty。
 
@@ -642,94 +627,50 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
         cpp_comment=f"UE type: {ue_type}",
     )
 
-
 def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
-    """从 FEdGraphPinType 构建 UE 类型路径。
-
-    Args:
-        pin_type: FEdGraphPinType
-
-    Returns:
-        UE 类型路径字符串
-    """
+    """从 FEdGraphPinType 构建 UE 类型路径。"""
     category = pin_type.pin_category
-    subcategory = pin_type.pin_subcategory
+    subcategory = pin_type.pin_subcategory or ""
 
     # 属性类型（Property）→ 映射到对应的 UE 基本类型
-    if category in ("IntProperty",):
-        return "int32"
-    if category in ("FloatProperty", "DoubleProperty"):
-        return "float" if category == "FloatProperty" else "double"
-    if category in ("BoolProperty",):
-        return "bool"
+    _PROP_TYPE_MAP = {
+        "IntProperty": "int32", "FloatProperty": "float", "DoubleProperty": "double",
+        "BoolProperty": "bool",
+        "StrProperty": "FString", "NameProperty": "FName", "TextProperty": "FText",
+    }
+    if category in _PROP_TYPE_MAP:
+        return _PROP_TYPE_MAP[category]
     if category in ("ObjectProperty", "SoftObjectProperty"):
-        # ObjectProperty 总是指针类型
-        cpp_type = subcategory if subcategory else "UObject"
-        if not cpp_type.endswith("*"):
-            cpp_type = f"{cpp_type}*"
-        return cpp_type
+        cpp_type = subcategory or "UObject"
+        return cpp_type if cpp_type.endswith("*") else f"{cpp_type}*"
     if category in ("ArrayProperty", "SetProperty", "MapProperty"):
-        # 对于集合类型，返回元素类型（从 pin_type 中提取）
-        # 如果没有 subcategory，返回基本类型
-        return subcategory if subcategory else "FString"
-    if category in ("StrProperty", "NameProperty", "TextProperty"):
-        cpp_type_map = {
-            "StrProperty": "FString",
-            "NameProperty": "FName",
-            "TextProperty": "FText",
-        }
-        return cpp_type_map.get(category, category)
+        return subcategory or "FString"
 
     # 基本类型直接返回
-    if category in ("float", "double", "bool", "int", "int32", "int64",
-                     "byte", "string", "name", "text"):
+    _BASIC_TYPES = frozenset({"float", "double", "bool", "int", "int32", "int64",
+                               "byte", "string", "name", "text"})
+    if category in _BASIC_TYPES:
         return category
 
-    # object 类型：subcategory 是类名
+    # object 类型
     if category == "object":
         if subcategory:
-            if subcategory.startswith("/Script/"):
-                return subcategory
-            # 补全路径
-            return f"/Script/Engine.{subcategory}"
-        return "UObject"  # 未知 object 类型
+            return subcategory if subcategory.startswith("/Script/") else f"/Script/Engine.{subcategory}"
+        return "UObject"
 
-    # struct 类型：subcategory 是结构名
+    # struct 类型
     if category in ("struct", "StructProperty"):
         if subcategory:
-            if subcategory.startswith("/Script/"):
-                return subcategory
-            # 常见结构体补全路径
-            common_structs = ("Vector", "Rotator", "Transform", "Vector2D",
-                              "LinearColor", "Color", "Guid", "Quat", "Box")
-            if subcategory in common_structs:
-                return f"/Script/CoreUObject.{subcategory}"
-            return f"/Script/CoreUObject.{subcategory}"
-        # StructProperty 无 subcategory — 使用通用 FStruct 占位
+            return subcategory if subcategory.startswith("/Script/") else f"/Script/CoreUObject.{subcategory}"
         return "FStruct"
 
-    # 其他类型返回 category
     return category
-
 
 # ============================================================================
 # 函数签名映射
 # ============================================================================
 
 # --- 辅助函数（Plan 02） ---
-
-def _sanitize_identifier(name: str) -> str:
-    """将 UE 引脚名转换为有效 C++ 标识符。
-
-    委托给 sanitizer.sanitize_identifier。
-
-    "Left / Right" → "Left__Right"
-    "Primary Thumbstick" → "Primary_Thumbstick"
-    "2DValue" → "_2DValue"
-    "Target Touch UI" → "Target_Touch_UI"
-    """
-    return sanitize_identifier(name)
-
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
     """将单个引脚转换为 C++ 类型字符串。
@@ -769,7 +710,6 @@ def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
 
     return cpp_type
 
-
 def _extract_parameters_from_pins(
     pins: List["UEdGraphPin"],
     is_event: bool = False
@@ -795,12 +735,11 @@ def _extract_parameters_from_pins(
             continue
 
         params.append(CppCallParameter(
-            name=_sanitize_identifier(pin.pin_name),
+            name=sanitize_identifier(pin.pin_name),
             cpp_type=cpp_type,
             direction="input" if pin.direction == 0 else "output",
         ))
     return params
-
 
 # ============================================================================
 # 函数标志位常量（UE5 UFunctionFlags）- 参考 EFunctionFlags.cs
@@ -836,7 +775,6 @@ FUNC_Const = 0x00200000
 FUNC_NetValidate = 0x00400000
 FUNC_BlueprintEvent = 0x08000000
 
-
 def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
     """从 extra_flags 提取函数标志位。
 
@@ -849,9 +787,9 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
         函数标志字典
     """
     return {
-        # 访问修饰符（需要从其他信息推断）
-        "is_public": False,  # 默认
-        "is_protected": True,  # 默认
+        # 访问修饰符（C++ 默认 public）
+        "is_public": True,  # 默认
+        "is_protected": False,  # 默认
         "is_private": False,
         # 函数类型
         "is_blueprint_pure": bool(flags & FUNC_BlueprintPure),
@@ -863,7 +801,6 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
         "is_final": bool(flags & FUNC_Final),
         "is_native": bool(flags & FUNC_Native),
     }
-
 
 def _infer_ufunction_specifiers(
     pins: List["UEdGraphPin"],
@@ -898,7 +835,6 @@ def _infer_ufunction_specifiers(
     if has_exec_input or has_exec_output:
         return ["BlueprintCallable"]
     return ["BlueprintPure"]
-
 
 def _build_cpp_method_from_entry(
     fe_node: "K2NodeFunctionEntry",
@@ -935,7 +871,7 @@ def _build_cpp_method_from_entry(
         return_type = bp_func.return_type or "void"
         parameters = [
             CppCallParameter(
-                name=_sanitize_identifier(p.name),
+                name=sanitize_identifier(p.name),
                 cpp_type=ue_path_to_cpp_type(p.param_type),
                 direction="input" if p.is_input else "output",
             )
@@ -960,7 +896,7 @@ def _build_cpp_method_from_entry(
         access_modifier = "private"
 
     return CppMethodIR(
-        cpp_name=_sanitize_identifier(func_name),
+        cpp_name=sanitize_identifier(func_name),
         return_type=return_type,
         parameters=parameters,
         ufunction_specifiers=specifiers,
@@ -973,7 +909,6 @@ def _build_cpp_method_from_entry(
         access_modifier=access_modifier,
         source_node_type="K2Node_FunctionEntry",
     )
-
 
 def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     """从 K2Node_Event 构建 CppMethodIR（is_override=True）。"""
@@ -1003,14 +938,13 @@ def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     parameters = _extract_parameters_from_pins(event_node.pins, is_event=True)
 
     return CppMethodIR(
-        cpp_name=_sanitize_identifier(event_name),
+        cpp_name=sanitize_identifier(event_name),
         return_type="void",
         parameters=parameters,
         ufunction_specifiers=[],
         is_override=True,
         source_node_type="K2Node_Event",
     )
-
 
 # --- 主入口（Plan 02） ---
 
@@ -1050,7 +984,6 @@ def extract_cpp_functions(
                         methods.append(method)
     return methods
 
-
 # --- 调用语句提取（Plan 03） ---
 
 def _derive_call_target(
@@ -1075,7 +1008,6 @@ def _derive_call_target(
                     cpp_type = ue_path_to_cpp_type(raw_path)
                     return (cpp_type, "pointer")
     return ("Unknown", "pointer")
-
 
 def extract_cpp_call_statements(
     graphs: List["UEdGraph"],
@@ -1106,7 +1038,7 @@ def extract_cpp_call_statements(
                     continue
                 if pin.pin_name in ("self", "then"):
                     continue
-                args.append(_sanitize_identifier(pin.pin_name))
+                args.append(sanitize_identifier(pin.pin_name))
 
             statements.append(CppCallStatement(
                 method_name=member_name,
@@ -1117,11 +1049,9 @@ def extract_cpp_call_statements(
             ))
     return statements
 
-
 # ============================================================================
 # 构造函数提取
 # ============================================================================
-
 
 def extract_cpp_constructor(ir: "CppClassIR") -> str:
     """从 CppClassIR 生成完整的 C++ 构造函数文本。
@@ -1135,7 +1065,6 @@ def extract_cpp_constructor(ir: "CppClassIR") -> str:
         完整的 C++ 构造函数文本
     """
     return format_cpp_constructor(ir)
-
 
 # ============================================================================
 # 导出列表

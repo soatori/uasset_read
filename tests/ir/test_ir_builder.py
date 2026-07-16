@@ -310,7 +310,7 @@ class TestBuildPinIR:
         assert pin_ir.direction == "EGPD_Input"
         assert pin_ir.pin_name == "Target"
         assert pin_ir.pin_category == "object"
-        assert pin_ir.pin_subcategory_object == "Actor"
+        assert pin_ir.pin_subcategory_object_name == "Actor"
         assert pin_ir.container_type == "None"
 
     def test_pin_linked_to_raw_dicts(self):
@@ -380,7 +380,7 @@ class TestBuildPinIR:
 
         pin_ir = _build_pin_ir(mock_pin)
         assert pin_ir.pin_category == "struct"
-        assert pin_ir.pin_subcategory_object == "/Script/Engine.Vector"
+        assert pin_ir.pin_subcategory_object_name == "/Script/Engine.Vector"
         assert pin_ir.container_type == "Array"
         assert pin_ir.is_reference is True
         assert pin_ir.is_const is False
@@ -558,7 +558,7 @@ class TestPinIR:
             linked_to=["abc123def456789012345678abcdef01"],
             direction="EGPD_Input", default_value="SomeValue",
             pin_category="object", pin_subcategory="",
-            pin_subcategory_object="/Script/Engine.Actor",
+            pin_subcategory_object_name="/Script/Engine.Actor",
             container_type="None", is_reference=False,
             is_const=False, is_weak_pointer=False,
             is_uobject_wrapper=False, is_map_key=False, is_map_value=False,
@@ -566,7 +566,7 @@ class TestPinIR:
         assert len(pin.linked_to) == 1
         assert pin.default_value == "SomeValue"
         assert pin.pin_category == "object"
-        assert pin.pin_subcategory_object == "/Script/Engine.Actor"
+        assert pin.pin_subcategory_object_name == "/Script/Engine.Actor"
         assert pin.container_type == "None"
 
     def test_pin_ir_container_array(self):
