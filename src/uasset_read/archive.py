@@ -824,7 +824,9 @@ class FArchive:
                     "returning empty string (tolerant)",
                     pos_before, length, remaining,
                 )
+                self.seek(pos_before)
                 return ""
+            self.seek(pos_before)
             raise ParseError(
                 f"UTF-8 length {length} exceeds remaining {remaining}"
             )
@@ -837,7 +839,9 @@ class FArchive:
                     "returning empty string (tolerant)",
                     pos_before, length, MAX_FSTRING_LENGTH,
                 )
+                self.seek(pos_before)
                 return ""
+            self.seek(pos_before)
             raise ParseError(
                 f"UTF-8 string at pos {pos_before}: length {length} exceeds "
                 f"maximum {MAX_FSTRING_LENGTH}"
@@ -849,6 +853,7 @@ class FArchive:
         # 全空检测：length > 0 但数据全为 null (#302)
         if not result and length != 0:
             if not tolerant:
+                self.seek(pos_before)
                 raise ParseError(
                     f"read_utf8_string at pos {pos_before}: length={length}, "
                     "all nulls (completely corrupted), strict mode"
