@@ -179,3 +179,17 @@ def pytest_sessionfinish(session, exitstatus):
         f"\n[MemorySafety] Final memory: process RSS={stats.process_rss_mb:.0f}MB, "
         f"system {stats.usage_percent*100:.1f}% used, {stats.available_mb:.0f}MB available"
     )
+
+
+@pytest.fixture(autouse=True)
+def clean_global_state():
+    """每个测试前清理全局注册表状态，防止测试间状态泄漏"""
+    from uasset_read.renderers import RENDERER_REGISTRY
+
+    original_renderers = RENDERER_REGISTRY.copy()
+
+    yield
+
+    # 恢复状态
+    RENDERER_REGISTRY.clear()
+    RENDERER_REGISTRY.update(original_renderers)
