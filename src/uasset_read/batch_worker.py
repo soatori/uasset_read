@@ -12,9 +12,18 @@ import sys
 import tempfile
 import threading
 import time
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+# 抑制 runpy 的 RuntimeWarning — 当通过 `python -m uasset_read.batch_worker` 启动时，
+# runpy 先导入包再执行模块，导致 "found in sys.modules after import" 警告
+warnings.filterwarnings(
+    "ignore",
+    message=".*found in sys.modules after import.*",
+    category=RuntimeWarning,
+)
 
 logger = logging.getLogger(__name__)
 
