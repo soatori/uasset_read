@@ -49,6 +49,7 @@ class PackageArchive(FArchive):
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""
         self._name_map: Optional[list] = None
+        self._name_warnings_seen: set[int] = set()  # 已见的越界索引（去重用）
 
     def read(self, size: int) -> bytes:
         if size < 0:
