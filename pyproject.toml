@@ -27,6 +27,13 @@ Homepage = "https://github.com/soatori/uasset_read"
 Repository = "https://github.com/soatori/uasset_read"
 Issues = "https://github.com/soatori/uasset_read/issues"
 
+[project.optional-dependencies]
+compression = [
+    "brotli",
+    "lz4",
+    "zstandard",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
