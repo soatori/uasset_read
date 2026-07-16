@@ -588,3 +588,37 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
 def get_game_variant_config(variant: GameVariant) -> dict:
     """获取游戏变体配置。"""
     return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
+
+
+# ============================================================================
+# UE5 大型属性类型阈值 (#404)
+# ============================================================================
+
+MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — 标准属性大小上限
+
+UE5_LARGE_PROPERTY_TYPES = frozenset({
+    "BoneAnimationTracks",
+    "PoseContainer",
+    "ArrayConnectionMap",
+    "RigVM",
+})
+
+UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 大型属性上限
+
+
+def get_max_reasonable(property_type: str, engine_version: int) -> int:
+    """根据属性类型和引擎版本返回合理的大小上限。
+
+    对 UE5 已知的大型属性类型（BoneAnimationTracks、PoseContainer、
+    ArrayConnectionMap、RigVM），放宽阈值至 500MB。
+
+    Args:
+        property_type: 属性类型名（如 "IntProperty"、"StructProperty"）
+        engine_version: 引擎版本（4 或 5）
+
+    Returns:
+        该属性类型允许的最大合理大小（字节）
+    """
+    if engine_version >= 5 and property_type in UE5_LARGE_PROPERTY_TYPES:
+        return UE5_LARGE_PROPERTY_MAX_REASONABLE
+    return MAX_REASONABLE_CAP

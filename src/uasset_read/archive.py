@@ -11,7 +11,10 @@ import struct
 from typing import Optional, Dict, BinaryIO, Callable, Any, Protocol
 
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT
+from uasset_read.constants import (
+    MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT,
+    get_max_reasonable, MAX_REASONABLE_CAP,
+)
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.bounded_events import BoundedEventBuffer
 
@@ -146,13 +149,14 @@ class FArchive:
             )
             raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
 
-    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None) -> None:
+    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None, property_type: str | None = None) -> None:
         """PropertyTag.Size 完整验证，支持容错模式。
 
         Args:
             size: 待验证的大小
             context: 错误上下文
             tolerant: 是否启用容错模式（None 时使用实例默认值）
+            property_type: 属性类型名，用于动态调整阈值（UE5 大型属性类型放宽至 500MB）
         """
         if tolerant is None:
             tolerant = self._tolerant
@@ -167,14 +171,21 @@ class FArchive:
                 return
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
         min_reasonable = 1024
-        max_reasonable_cap = 100 * 1024 * 1024
+        # 动态 max_reasonable_cap：根据属性类型和引擎版本调整
+        # - UE5 大型属性类型（BoneAnimationTracks、PoseContainer 等）：500MB
+        # - 其他属性类型：100MB
+        engine_version = getattr(self, '_file_version_ue5', 0)
+        max_reasonable_cap = get_max_reasonable(property_type or "", engine_version)
         # 自适应 max_reasonable：
         # - 小文件（<100KB）：使用 file_size // 2，不再使用 remaining 作为 fallback
-        # - 大文件（>=100KB）：沿用 file_size // 10
-        # - 始终不超过 max_reasonable_cap（100MB）
+        # - 大文件（>=100KB）：沿用 file_size // 10，但不超过 max_reasonable_cap
+        # - UE5 大型属性类型：直接使用 max_reasonable_cap 作为上限（不受 file_size // 10 限制）
         if self._file_size < 100 * 1024:
             # 小文件：允许最大 50% 文件大小（不再使用 remaining 作为 fallback）
             max_reasonable = min(self._file_size // 2, max_reasonable_cap)
+        elif property_type and max_reasonable_cap > MAX_REASONABLE_CAP:
+            # UE5 大型属性类型：直接使用动态上限（不受 file_size // 10 限制）
+            max_reasonable = max_reasonable_cap
         else:
             max_reasonable = max(
                 min_reasonable,

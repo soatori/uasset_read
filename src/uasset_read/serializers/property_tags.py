@@ -196,7 +196,9 @@ def read_property_tag(
             tag.tag_data = prop_info.mapping_type
             _apply_property_type_to_tag(tag, prop_info.mapping_type)
     tag.size = archive.read_i32()
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
+    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
     tag.flags = archive.read_u8()
     if tag.flags & PROP_TAG_SKIPPED_SERIALIZE:
         tag.serialize_type = "Skipped"
@@ -270,7 +272,9 @@ def _read_property_tag_legacy(
 
     # Size
     tag.size = archive.read_i32()
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
+    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
+    archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
 
     # ArrayIndex — 旧格式始终存在
     tag.array_index = archive.read_i32()
