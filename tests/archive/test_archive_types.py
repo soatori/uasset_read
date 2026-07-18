@@ -1,11 +1,7 @@
-"""FString / FName 综合测试
+"""FString / FName 类型测试（archive/types）。
 
-合并以下测试文件：
-- test_fstring_all_null.py   — 全 null 检测与降噪（#369）
-- test_fstring_corruption.py — 损坏数据处理（Task 3）
-- test_fstring_utf16.py      — UTF-16 代理对处理（#183）
-- test_utf_string.py         — UTF 长度异常容错（#395）
-- test_fname_index_recovery.py — FName 索引越界恢复
+合并自：
+- test_fstring_fname.py — FString 全 null 检测、损坏处理、UTF-16 代理对、长度异常容错、FName 索引恢复
 """
 import logging
 import struct

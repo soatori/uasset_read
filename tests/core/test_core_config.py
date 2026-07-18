@@ -1,9 +1,6 @@
-"""ParseConfig 参数合并、FString/FText 安全容错与 StructProperty 解析测试。
+"""Core 配置测试 — 合并自 test_config_and_limits.py。
 
-合并测试文件：
-- test_parse_config.py — ParseConfig 参数合并测试
-- test_fstring_limit.py — FString/FText 安全与容错测试
-- test_struct_property.py — StructProperty Transform 解析测试
+覆盖：ParseConfig 参数合并、FString/FText 安全容错、StructProperty 解析。
 """
 from __future__ import annotations
 

@@ -1,11 +1,7 @@
-"""C++ 输出质量集成测试。
+"""C++ 输出质量与清理器测试 — 合并自 test_cpp_output_quality.py、test_cpp_sanitizer.py 和 test_sanitization.py。
 
-使用 mock 蓝图数据验证 cpp_gen 模块生成的 C++ 代码质量：
-- 头文件宏结构（UCLASS/UPROPERTY/UFUNCTION）
-- 函数体完整性
-- 变量默认值格式化
-- 类名前缀约定
-- 占位符比例控制
+覆盖：C++ 头文件/实现质量、标识符清理、字符串字面量清理、UPROPERTY marks 清理、
+Category 清理、MathSimplifier、#include 去重。
 """
 from __future__ import annotations
 
@@ -694,3 +690,456 @@ class TestHeaderIncludesDedup:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ==============================================================================
+# 以下来自 test_cpp_sanitizer.py
+# ==============================================================================
+
+"""
+C++ 标识符清理器单元测试。
+
+测试 sanitize_identifier 的各种边界情况。
+"""
+import pytest
+
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+
+
+class TestSanitizeIdentifier:
+    """sanitize_identifier 函数测试。"""
+
+    # === 验收用例（需求文档明确要求） ===
+
+    def test_spaces_to_underscores(self):
+        """空格 → 下划线"""
+        assert sanitize_identifier("Target Touch UI") == "Target_Touch_UI"
+
+    def test_special_chars_removed(self):
+        """特殊字符被移除"""
+        assert sanitize_identifier("MyVar@#$") == "MyVar"
+
+    def test_digit_prefix(self):
+        """数字开头 → 前缀 _"""
+        assert sanitize_identifier("123Var") == "_123Var"
+
+    def test_empty_string(self):
+        """空字符串 → _unnamed"""
+        assert sanitize_identifier("") == "_unnamed"
+
+    # === 空格处理 ===
+
+    def test_single_space(self):
+        assert sanitize_identifier("My Var") == "My_Var"
+
+    def test_multiple_spaces(self):
+        assert sanitize_identifier("A B C D") == "A_B_C_D"
+
+    def test_leading_space(self):
+        assert sanitize_identifier(" LeadingSpace") == "_LeadingSpace"
+
+    def test_trailing_space(self):
+        assert sanitize_identifier("TrailingSpace ") == "TrailingSpace_"
+
+    def test_only_spaces(self):
+        """全是空格 → 全是下划线"""
+        assert sanitize_identifier("   ") == "___"
+
+    # === 特殊字符处理 ===
+
+    def test_slash_removed(self):
+        """斜杠被移除"""
+        assert sanitize_identifier("Left / Right") == "Left__Right"
+
+    def test_at_sign_removed(self):
+        assert sanitize_identifier("var@name") == "varname"
+
+    def test_hash_removed(self):
+        assert sanitize_identifier("my#var") == "myvar"
+
+    def test_dollar_sign_removed(self):
+        assert sanitize_identifier("$price") == "price"
+
+    def test_dot_removed(self):
+        assert sanitize_identifier("obj.property") == "objproperty"
+
+    def test_hyphen_removed(self):
+        assert sanitize_identifier("my-var") == "myvar"
+
+    def test_parentheses_removed(self):
+        assert sanitize_identifier("func(arg)") == "funcarg"
+
+    def test_brackets_removed(self):
+        assert sanitize_identifier("arr[0]") == "arr0"
+
+    def test_multiple_special_chars(self):
+        assert sanitize_identifier("var!@#$%^&*()") == "var"
+
+    # === 数字开头 ===
+
+    def test_pure_digits(self):
+        assert sanitize_identifier("123") == "_123"
+
+    def test_single_digit(self):
+        assert sanitize_identifier("0") == "_0"
+
+    def test_digit_then_letter(self):
+        assert sanitize_identifier("2DValue") == "_2DValue"
+
+    # === 已经合法的标识符 ===
+
+    def test_valid_identifier(self):
+        assert sanitize_identifier("ValidName") == "ValidName"
+
+    def test_valid_with_underscore(self):
+        assert sanitize_identifier("_valid") == "_valid"
+
+    def test_valid_with_digits(self):
+        assert sanitize_identifier("var123") == "var123"
+
+    def test_valid_mixed(self):
+        assert sanitize_identifier("_MyVar_123") == "_MyVar_123"
+
+    # === 边界情况 ===
+
+    def test_none_like_empty(self):
+        """空字符串等价于 None"""
+        assert sanitize_identifier("") == "_unnamed"
+
+    def test_only_special_chars(self):
+        """全是特殊字符 → _unnamed"""
+        assert sanitize_identifier("@#$%") == "_unnamed"
+
+    def test_only_special_chars_with_space(self):
+        """特殊字符+空格 → 下划线"""
+        assert sanitize_identifier("! @") == "_"
+
+    def test_unicode_removed(self):
+        """Unicode 字符被移除"""
+        assert sanitize_identifier("变量名") == "_unnamed"
+
+    def test_mixed_unicode_and_ascii(self):
+        assert sanitize_identifier("My变量Name") == "MyName"
+
+    # === 常见 UE 蓝图名称 ===
+
+    def test_primary_thumbstick(self):
+        """UE 常见的摇杆输入名"""
+        assert sanitize_identifier("Primary Thumbstick") == "Primary_Thumbstick"
+
+    def test_move_forward(self):
+        assert sanitize_identifier("Move Forward") == "Move_Forward"
+
+    def test_target_touch_ui(self):
+        """原始 bug 报告的用例"""
+        assert sanitize_identifier("Target Touch UI") == "Target_Touch_UI"
+
+    def test_camera_component_name(self):
+        """组件名（通常不含空格，但确保安全）"""
+        assert sanitize_identifier("FirstPersonCameraComponent") == "FirstPersonCameraComponent"
+
+    # === 通过 sanitize_identifier 直接调用 ===
+
+    def test_sanitize_identifier_direct(self):
+        """验证 sanitize_identifier 直接调用"""
+        from uasset_read.cpp_gen.sanitizer import sanitize_identifier
+
+        assert sanitize_identifier("Target Touch UI") == "Target_Touch_UI"
+        assert sanitize_identifier("MyVar@#$") == "MyVar"
+        assert sanitize_identifier("123Var") == "_123Var"
+        assert sanitize_identifier("") == "_unnamed"
+
+    # === 通过顶层 __init__ 导出 ===
+
+    def test_exported_from_cpp_gen(self):
+        """验证从 cpp_gen 包可导入"""
+        from uasset_read.cpp_gen import sanitize_identifier as fn
+        assert fn("Test Var") == "Test_Var"
+
+    def test_exported_from_top_level(self):
+        """验证从顶层包可导入"""
+        from uasset_read import sanitize_identifier as fn
+        assert fn("Test Var") == "Test_Var"
+
+
+# ==============================================================================
+# 以下来自 test_sanitization.py
+# ==============================================================================
+
+"""
+C++ sanitizer 模块单元测试。
+
+覆盖 sanitize_string_literal、sanitize_uproperty_marks、
+sanitize_category 三个函数。
+sanitize_identifier 测试已移至 tests/cpp/test_cpp_sanitizer.py。
+"""
+
+import pytest
+from uasset_read.cpp_gen.sanitizer import (
+    sanitize_string_literal,
+    sanitize_uproperty_marks,
+    sanitize_category,
+)
+from uasset_read.cpp_gen.math_simplifier import MathSimplifier
+
+
+# ============================================================================
+# sanitize_string_literal 测试
+# ============================================================================
+
+
+class TestSanitizeStringLiteral:
+    """sanitize_string_literal 函数测试。"""
+
+    def test_plain_string(self):
+        """普通字符串不变。"""
+        assert sanitize_string_literal("Hello World") == "Hello World"
+
+    def test_escape_backslash(self):
+        """反斜杠转义。"""
+        assert sanitize_string_literal("C:\\path") == "C:\\\\path"
+
+    def test_escape_double_quote(self):
+        """双引号转义。"""
+        assert sanitize_string_literal('Hello "World"') == 'Hello \\"World\\"'
+
+    def test_escape_newline(self):
+        """换行符转义。"""
+        assert sanitize_string_literal("line1\nline2") == "line1\\nline2"
+
+    def test_escape_carriage_return(self):
+        """回车符转义。"""
+        assert sanitize_string_literal("cr\rhere") == "cr\\rhere"
+
+    def test_escape_tab(self):
+        """制表符转义。"""
+        assert sanitize_string_literal("tab\there") == "tab\\there"
+
+    def test_none_returns_empty(self):
+        """None 返回空字符串。"""
+        assert sanitize_string_literal(None) == ""
+
+    def test_empty_string(self):
+        """空字符串不变。"""
+        assert sanitize_string_literal("") == ""
+
+    def test_combined_escapes(self):
+        """混合转义场景。"""
+        assert sanitize_string_literal('path\\to"file"') == 'path\\\\to\\"file\\"'
+
+    def test_backslash_before_quote(self):
+        """反斜杠在引号前——反斜杠先转义。"""
+        # 输入: a\"b → a\\\"b
+        assert sanitize_string_literal('a\\"b') == 'a\\\\\\"b'
+
+
+# ============================================================================
+# sanitize_uproperty_marks 测试
+# ============================================================================
+
+
+class TestSanitizeUpropertyMarks:
+    """sanitize_uproperty_marks 函数测试。"""
+
+    def test_valid_marks(self):
+        """合法 specifier 保留。"""
+        result = sanitize_uproperty_marks(["EditAnywhere", "BlueprintReadWrite"])
+        assert result == ["EditAnywhere", "BlueprintReadWrite"]
+
+    def test_filters_invalid_marks(self):
+        """非法 specifier 被过滤。"""
+        result = sanitize_uproperty_marks(["EditAnywhere", "INJECTED_CODE", "Transient"])
+        assert result == ["EditAnywhere", "Transient"]
+
+    def test_none_returns_empty(self):
+        """None 返回空列表。"""
+        assert sanitize_uproperty_marks(None) == []
+
+    def test_empty_list(self):
+        """空列表返回空列表。"""
+        assert sanitize_uproperty_marks([]) == []
+
+    def test_deduplication(self):
+        """重复 specifier 去重。"""
+        result = sanitize_uproperty_marks(["EditAnywhere", "EditAnywhere"])
+        assert result == ["EditAnywhere"]
+
+    def test_all_whitelist_specifiers(self):
+        """白名单中所有 specifier 都通过。"""
+        marks = [
+            "EditAnywhere", "EditInstanceOnly", "EditDefaultsOnly",
+            "VisibleAnywhere", "VisibleInstanceOnly", "VisibleDefaultsOnly",
+            "BlueprintReadWrite", "BlueprintReadOnly", "BlueprintCallable",
+            "BlueprintAssignable", "BlueprintPure", "BlueprintType",
+            "Transient", "Config", "SaveGame", "Replicated",
+            "DuplicateTransient", "Instanced", "NoClear", "Interp",
+            "ExposeOnSpawn", "AllowPrivateAccess", "Deprecated",
+            "AdvancedDisplay", "Protected",
+        ]
+        result = sanitize_uproperty_marks(marks)
+        assert result == marks
+
+    def test_empty_string_mark(self):
+        """空字符串标记被过滤。"""
+        assert sanitize_uproperty_marks(["", "EditAnywhere"]) == ["EditAnywhere"]
+
+    def test_non_string_mark(self):
+        """非字符串标记被过滤。"""
+        assert sanitize_uproperty_marks([123, "EditAnywhere"]) == ["EditAnywhere"]
+
+    def test_case_sensitive(self):
+        """大小写敏感——小写变体不通过。"""
+        assert sanitize_uproperty_marks(["editanywhere"]) == []
+        assert sanitize_uproperty_marks(["EDITANYWHERE"]) == []
+
+
+# ============================================================================
+# sanitize_category 测试
+# ============================================================================
+
+
+class TestSanitizeCategory:
+    """sanitize_category 函数测试。"""
+
+    def test_valid_category(self):
+        """合法 Category 不变。"""
+        assert sanitize_category("My Category") == "My Category"
+
+    def test_remove_double_quotes(self):
+        """移除双引号。"""
+        assert sanitize_category('My "Category"') == "My Category"
+
+    def test_remove_single_quotes(self):
+        """移除单引号。"""
+        assert sanitize_category("My 'Category'") == "My Category"
+
+    def test_remove_backslash(self):
+        """移除反斜杠。"""
+        assert sanitize_category("C:\\path/to") == "Cpathto"
+
+    def test_remove_newline(self):
+        """移除换行符。"""
+        assert sanitize_category("line\nbreak") == "linebreak"
+
+    def test_remove_carriage_return(self):
+        """移除回车符。"""
+        assert sanitize_category("line\rbreak") == "linebreak"
+
+    def test_tab_to_space(self):
+        """制表符转空格。"""
+        assert sanitize_category("my\tcategory") == "my category"
+
+    def test_empty_returns_empty(self):
+        """空字符串返回空。"""
+        assert sanitize_category("") == ""
+
+    def test_none_returns_empty(self):
+        """None 返回空字符串。"""
+        assert sanitize_category(None) == ""
+
+    def test_trim_whitespace(self):
+        """去除首尾空格。"""
+        assert sanitize_category("  Trimmed  ") == "Trimmed"
+
+    def test_compress_spaces(self):
+        """压缩连续空格。"""
+        assert sanitize_category("My  Big  Category") == "My Big Category"
+
+    def test_preserve_underscore(self):
+        """保留下划线。"""
+        assert sanitize_category("Valid_Category 123") == "Valid_Category 123"
+
+    def test_remove_special_chars(self):
+        """移除特殊字符。"""
+        assert sanitize_category("My!@#$%Category") == "MyCategory"
+
+    def test_injection_attempt(self):
+        """注入攻击被清除。"""
+        assert sanitize_category('"); // INJECTED') == "INJECTED"
+
+    def test_null_bytes(self):
+        """null 字节被移除。"""
+        assert sanitize_category("abc\0def") == "abcdef"
+
+
+# ============================================================================
+# MathSimplifier 测试（合并自 test_math_simplifier.py）
+# ============================================================================
+
+
+class TestMathSimplifier:
+    """蓝图数学函数简化器单元测试。"""
+
+    def test_add_int_simplification(self):
+        """测试 Int 加法简化"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("Add_IntInt")
+        assert result == "+"
+
+    def test_multiply_float_simplification(self):
+        """测试 Float 乘法简化"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("Multiply_FloatFloat")
+        assert result == "*"
+
+    def test_boolean_and_simplification(self):
+        """测试布尔与简化"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("BooleanAND")
+        assert result == "&&"
+
+    def test_is_math_library_function(self):
+        """测试判断是否为数学库函数"""
+        simplifier = MathSimplifier()
+        assert simplifier.is_math_library_function("Add_IntInt") is True
+        assert simplifier.is_math_library_function("UnknownFunction") is False
+
+    def test_get_operator_info(self):
+        """测试获取运算符信息"""
+        simplifier = MathSimplifier()
+        info = simplifier.get_operator_info("Add_IntInt")
+        assert info["type"] == "arithmetic"
+        assert info["operator"] == "+"
+
+    def test_simplify_unknown_function(self):
+        """测试简化未知函数返回 None"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("UnknownFunction")
+        assert result is None
+
+    def test_simplify_without_type_suffix(self):
+        """测试不带类型后缀的简化"""
+        simplifier = MathSimplifier()
+        # 测试直接匹配（不带类型后缀的函数）
+        result = simplifier.simplify("Sin")
+        assert result == "FMath::Sin"
+
+    def test_get_operator_info_unknown(self):
+        """测试获取未知函数的运算符信息返回 None"""
+        simplifier = MathSimplifier()
+        info = simplifier.get_operator_info("UnknownFunction")
+        assert info is None
+
+    def test_comparison_operator(self):
+        """测试比较运算符"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("Greater_FloatFloat")
+        assert result == ">"
+        info = simplifier.get_operator_info("Greater_FloatFloat")
+        assert info["type"] == "comparison"
+
+    def test_logical_operator(self):
+        """测试逻辑运算符"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("BooleanOR")
+        assert result == "||"
+        info = simplifier.get_operator_info("BooleanOR")
+        assert info["type"] == "logical"
+
+    def test_math_function(self):
+        """测试数学函数保持函数形式"""
+        simplifier = MathSimplifier()
+        result = simplifier.simplify("Sqrt")
+        assert result == "FMath::Sqrt"
+        info = simplifier.get_operator_info("Sqrt")
+        assert info["type"] == "function"
