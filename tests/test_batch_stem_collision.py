@@ -15,7 +15,7 @@ import pytest
 from uasset_read.core import parse_batch
 
 
-_FAKE_OUTPUT = '{"status": {"status": "ok"}}'
+_FAKE_OUTPUT = '{"status": {"status": "success"}}'
 
 
 def _make_fake_uasset(path: Path) -> None:
