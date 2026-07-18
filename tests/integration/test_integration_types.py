@@ -1,13 +1,12 @@
-"""
-UE 保真度改进集成测试
+"""动画资产 + UE 保真度集成测试
 
-验证所有 6 项改进协同工作：
-1. 生命周期：link → preload → post_load
-2. 偏移策略：SerialOffset 默认
-3. 类策略：opaque 标记
-4. 软引用：索引解析
-5. 依赖图：FPackageIndex 语义
-6. 状态模型：success|partial|failed
+合并以下测试文件：
+- test_animation_assets.py (AnimBlueprint / AnimMontage / AnimSequence)
+- test_ue_fidelity_integration.py (UE 保真度改进)
+
+覆盖：
+1. AnimBlueprint / AnimMontage / AnimSequence 集成测试
+2. UE 保真度改进集成测试（生命周期、偏移策略、类策略、软引用、依赖图、状态模型）
 """
 import gc
 import pytest
@@ -16,6 +15,117 @@ from uasset_read.parse_uasset import parse_uasset, parse_uasset_with_linker
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.memory_safety import cleanup_after_parse
 from tests.conftest import asset_path, ASSET_MESH_CHAIR
+
+
+# ============================================================
+# 测试样本路径（动画资产）
+# ============================================================
+SAMPLE_DIR = Path("E:/Develop/lib/Samples/GameAnimationSample")
+ANIM_BP_SAMPLE = SAMPLE_DIR / "Content/MetaHumans/Common/Common/RTG_metahuman_base_skel_AnimBP.uasset"
+ANIM_MONTAGE_SAMPLE = SAMPLE_DIR / "Content/Characters/UEFN_Mannequin/Animations/Interactions/Bench/M_interaction_bench_idle_loop_Montage.uasset"
+ANIM_SEQUENCE_SAMPLE = SAMPLE_DIR / "Content/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop.uasset"
+
+
+# ============================================================
+# AnimBlueprint 集成测试
+# ============================================================
+@pytest.mark.integration
+class TestAnimBlueprintIntegration:
+    def test_anim_blueprint_parses_successfully(self):
+        """AnimBlueprint 应该能完整解析"""
+        if not ANIM_BP_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_BP_SAMPLE))
+        assert result is not None
+        assert result.status in ("success", "partial")
+
+    def test_anim_blueprint_has_graphs(self):
+        """AnimBlueprint 应该包含图结构"""
+        if not ANIM_BP_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_BP_SAMPLE))
+        assert len(result.graphs) > 0
+
+    def test_anim_blueprint_has_anim_notifies(self):
+        """AnimBlueprint 应该提取 AnimNotifies"""
+        if not ANIM_BP_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_BP_SAMPLE))
+        # 检查解析是否成功（status 不是 failed）
+        assert result.status != "failed"
+        # 检查是否有图结构（动画蓝图应该有 AnimGraph）
+        assert len(result.graphs) > 0
+
+
+# ============================================================
+# AnimMontage 集成测试
+# ============================================================
+@pytest.mark.integration
+class TestAnimMontageIntegration:
+    def test_anim_montage_parses_successfully(self):
+        """AnimMontage 应该能完整解析"""
+        if not ANIM_MONTAGE_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_MONTAGE_SAMPLE))
+        assert result is not None
+        assert result.status in ("success", "partial")
+
+    def test_anim_montage_has_metadata(self):
+        """AnimMontage 应该提取元数据"""
+        if not ANIM_MONTAGE_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_MONTAGE_SAMPLE))
+        # 检查解析是否成功
+        assert result.status != "failed"
+        # 检查是否有 export_map
+        assert len(result.export_map) > 0
+
+    def test_anim_montage_has_anim_montage_data(self):
+        """AnimMontage 应该包含 anim_montage 数据"""
+        if not ANIM_MONTAGE_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_MONTAGE_SAMPLE))
+        # 查找 AnimMontage export
+        anim_montage_export = None
+        for export in result.export_map:
+            class_name = resolve_class_name(export.class_index, result.import_map, result.export_map)
+            if class_name == "AnimMontage":
+                anim_montage_export = export
+                break
+        # 如果找到 AnimMontage export，检查 custom_data 中是否有 anim_montage
+        if anim_montage_export:
+            custom_data = getattr(anim_montage_export, "custom_data", {})
+            assert "anim_montage" in custom_data, "AnimMontage export 应包含 anim_montage 数据"
+            assert custom_data["anim_montage"] is not None
+
+
+# ============================================================
+# AnimSequence 集成测试
+# ============================================================
+@pytest.mark.integration
+class TestAnimSequenceIntegration:
+    def test_anim_sequence_parses_successfully(self):
+        """AnimSequence 应该能完整解析"""
+        if not ANIM_SEQUENCE_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_SEQUENCE_SAMPLE))
+        assert result is not None
+        assert result.status in ("success", "partial")
+
+    def test_anim_sequence_has_metadata(self):
+        """AnimSequence 应该提取元数据"""
+        if not ANIM_SEQUENCE_SAMPLE.exists():
+            pytest.skip("测试样本不存在")
+        result = parse_uasset_with_linker(str(ANIM_SEQUENCE_SAMPLE))
+        # 检查解析是否成功
+        assert result.status != "failed"
+        # 检查是否有 export_map
+        assert len(result.export_map) > 0
+
+
+# ============================================================
+# UE 保真度改进集成测试
+# ============================================================
 
 # 测试资产相对路径
 BLUEPRINT_ASSET_REL = "StackOBot_BP_Drone.uasset"

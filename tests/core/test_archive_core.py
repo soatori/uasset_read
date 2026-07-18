@@ -1,16 +1,72 @@
-"""read_name() 索引越界增强测试 (#334) + 越界警告去重测试 (#411) + archive skip 测试"""
+"""Archive 核心测试 — 合并自 test_archive_read_name.py 和 test_archive_provider_renderer.py。
+
+覆盖：read_name() 索引越界/恢复/去重、skip()、
+ByteArchive 基础操作、GameDirectoryProvider、TextRenderer、CLI format 解析。
+"""
+import types
+from unittest.mock import MagicMock
+
 import pytest
+
 from uasset_read.archive import ByteArchive
 from uasset_read.exceptions import ParseError
 
 
+# ===========================================================================
+# ByteArchive 基础操作
+# ===========================================================================
+
+
+def test_byte_archive_read_bytes_basic():
+    """read_bytes 返回正确子节"""
+    archive = ByteArchive(b"\xAA\xBB\xCC\xDD", name="test")
+    result = archive.read_bytes(2)
+    assert result == b"\xAA\xBB"
+    assert archive.tell() == 2
+    archive.close()
+
+
+def test_byte_archive_name_sets_path():
+    """name 参数正确赋值 _path"""
+    archive = ByteArchive(b"\x00", name="my_asset")
+    assert archive._path == "my_asset"
+    archive.close()
+
+
+def test_byte_archive_read_overflow_raises():
+    """读取超出缓冲区时抛 ParseError"""
+    archive = ByteArchive(b"\x01\x02", name="test")
+    with pytest.raises(ParseError, match="Cannot read"):
+        archive.read(5)
+    archive.close()
+
+
+def test_byte_archive_read_negative_size_raises():
+    """负数 size 抛 ParseError"""
+    archive = ByteArchive(b"\x01", name="test")
+    with pytest.raises(ParseError, match="negative size"):
+        archive.read(-1)
+    archive.close()
+
+
+def test_byte_archive_close_releases_buffer():
+    """close 清空缓冲区并重置大小"""
+    archive = ByteArchive(b"\x01\x02\x03", name="test")
+    archive.close()
+    assert archive._file_size == 0
+    assert archive._buffer == b""
+
+
+# ===========================================================================
+# read_name() 索引越界测试 (#334)
+# ===========================================================================
+
+
 def test_read_name_index_out_of_range():
     """read_name() 索引越界时应返回 'None' 而非崩溃。"""
-    # 构造一个只包含索引数据的 archive
-    # index=5 (u32), number=0 (u32)
     data = b'\x05\x00\x00\x00\x00\x00\x00\x00'
     archive = ByteArchive(data, tolerant=True)
-    name_map = ["Name0", "Name1", "Name2"]  # 只有 3 个名称
+    name_map = ["Name0", "Name1", "Name2"]
 
     result = archive.read_name(name_map)
     assert result == "None"
@@ -28,7 +84,6 @@ def test_read_name_index_out_of_range_strict():
 
 def test_read_name_index_negative():
     """read_name() 负索引应返回 'None'。"""
-    # index=0xFFFFFFFF (-1 as signed), number=0
     data = b'\xff\xff\xff\xff\x00\x00\x00\x00'
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1"]
@@ -39,7 +94,6 @@ def test_read_name_index_negative():
 
 def test_read_name_valid_index():
     """read_name() 正常索引应正确返回名称。"""
-    # index=1, number=0
     data = b'\x01\x00\x00\x00\x00\x00\x00\x00'
     archive = ByteArchive(data)
     name_map = ["Name0", "Name1", "Name2"]
@@ -50,7 +104,6 @@ def test_read_name_valid_index():
 
 def test_read_name_with_number():
     """read_name() 带 number 后缀应正确格式化。"""
-    # index=0, number=5
     data = b'\x00\x00\x00\x00\x05\x00\x00\x00'
     archive = ByteArchive(data)
     name_map = ["MyName"]
@@ -61,24 +114,20 @@ def test_read_name_with_number():
 
 def test_read_name_large_index_recovery():
     """read_name() 检测到异常大索引时应尝试恢复。"""
-    # 模拟 SerializationControlExtensions 导致的偏移错位
-    # 构造数据：2字节偏移 + 正常 FName (index=0, number=0)
-    # 前面填充垃圾字节模拟错位，垃圾字节 + 后续数据组合产生 > 1000 的 u32
-    garbage = b'\x00\x10\x00\x00\x00\x00'  # 6字节垃圾数据
-    valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'  # index=0, number=0
+    garbage = b'\x00\x10\x00\x00\x00\x00'
+    valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
     name_map = ["TestName"]
 
-    # 应该能够恢复并读取到正确的名称
     result = archive.read_name(name_map)
     assert result == "TestName"
 
 
 def test_read_name_large_index_recovery_with_number():
     """read_name() 恢复时保留 number 后缀。"""
-    garbage = b'\x5B\x00'  # 2字节垃圾数据
-    valid_name = b'\x01\x00\x00\x00\x03\x00\x00\x00'  # index=1, number=3
+    garbage = b'\x5B\x00'
+    valid_name = b'\x01\x00\x00\x00\x03\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1"]
@@ -101,13 +150,11 @@ def test_read_name_recovery_disabled_in_strict_mode():
 
 def test_read_name_recovery_no_valid_offset():
     """所有偏移调整均无效时，应返回 'None'。"""
-    # 构造数据使得所有偏移调整后的索引均无效
-    # 垃圾字节 + 异常数据，name_map 为空
     garbage = b'\xE9\x03\x00\x00'
     valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
-    name_map = []  # 空 name_map，任何索引均越界
+    name_map = []
 
     result = archive.read_name(name_map)
     assert result == "None"
@@ -115,8 +162,8 @@ def test_read_name_recovery_no_valid_offset():
 
 def test_read_name_recovery_1byte_offset():
     """1字节偏移也能恢复。"""
-    garbage = b'\x00\x10\x00\x00'  # 4字节垃圾数据（u32 读取产生大索引）
-    valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'  # index=0, number=0
+    garbage = b'\x00\x10\x00\x00'
+    valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
     name_map = ["TestName"]
@@ -127,21 +174,18 @@ def test_read_name_recovery_1byte_offset():
 
 def test_read_name_recovery_threshold():
     """read_name() 只在索引超过阈值时尝试恢复。"""
-    # 索引刚好在阈值以下（999 < 1000），不应触发恢复
-    data = b'\xE7\x03\x00\x00\x00\x00\x00\x00'  # index=999, number=0
+    data = b'\xE7\x03\x00\x00\x00\x00\x00\x00'
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name"] * 1000
 
     result = archive.read_name(name_map)
-    assert result == "Name"  # number=0 时不带后缀，正常读取不恢复
+    assert result == "Name"
 
 
 def test_read_name_recovery_with_number():
     """read_name() 恢复后应正确处理 number 后缀。"""
-    # 模拟偏移错位：2字节垃圾 + 有效 FName (index=0, number=5)
-    # garbage 须产生 > 1000 的 u32 以触发恢复（b'\xE9\x03' = 1001）
     garbage = b'\xE9\x03'
-    valid_name = b'\x00\x00\x00\x00\x05\x00\x00\x00'  # index=0, number=5
+    valid_name = b'\x00\x00\x00\x00\x05\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
     name_map = ["TestName"]
@@ -152,7 +196,6 @@ def test_read_name_recovery_with_number():
 
 def test_read_name_recovery_failure():
     """read_name() 恢复失败时应返回 'None'。"""
-    # 所有位置都是无效索引
     data = b'\xFF\x00\x00\x00\x00\x00\x00\x00' * 5
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1"]
@@ -162,6 +205,7 @@ def test_read_name_recovery_failure():
 
 
 # --- 恢复统计诊断测试 ---
+
 
 def test_recovery_stats_initial_zero():
     """新 archive 的恢复统计应为零。"""
@@ -175,7 +219,7 @@ def test_recovery_stats_initial_zero():
 
 def test_recovery_stats_success():
     """恢复成功时应正确计数。"""
-    garbage = b'\xE9\x03'  # 产生大索引，触发恢复
+    garbage = b'\xE9\x03'
     valid_name = b'\x00\x00\x00\x00\x00\x00\x00\x00'
     data = garbage + valid_name
     archive = ByteArchive(data, tolerant=True)
@@ -190,10 +234,9 @@ def test_recovery_stats_success():
 
 def test_recovery_stats_failure():
     """恢复失败时应正确计数。"""
-    # index=1001 (> threshold) 触发恢复，name_map 为空使所有恢复偏移均无效
     data = b'\xE9\x03\x00\x00\x00\x00\x00\x00'
     archive = ByteArchive(data, tolerant=True)
-    name_map = []  # 空 name_map → 恢复必失败
+    name_map = []
 
     archive.read_name(name_map)
     stats = archive.get_read_name_recovery_stats()
@@ -204,18 +247,15 @@ def test_recovery_stats_failure():
 
 def test_recovery_stats_multiple_attempts():
     """多次调用应累积统计。"""
-    # 第一次：恢复成功（2字节垃圾 + 有效 FName）
     garbage1 = b'\xE9\x03'
     valid1 = b'\x00\x00\x00\x00\x00\x00\x00\x00'
-    # 第二次：恢复失败（index=1001, 空 name_map）
     fail_data = b'\xE9\x03\x00\x00\x00\x00\x00\x00'
     data = garbage1 + valid1 + fail_data
     archive = ByteArchive(data, tolerant=True)
     name_map = ["TestName"]
 
-    archive.read_name(name_map)  # 恢复成功
-    # 第二次读取位置在 10，fail_data 从索引 10 开始，index=1001 触发恢复
-    archive.read_name(name_map)  # 恢复失败（name_map 只有 1 个元素，恢复偏移产生的 index 不在范围内）
+    archive.read_name(name_map)
+    archive.read_name(name_map)
 
     stats = archive.get_read_name_recovery_stats()
     assert stats["recovery_attempts"] == 2
@@ -272,7 +312,7 @@ def test_farchive_skip_negative_raises():
     data = b'\x00' * 100
     archive = ByteArchive(data)
 
-    with pytest.raises(Exception):  # ParseError from seek validation
+    with pytest.raises(Exception):
         archive.skip(-5)
 
 
@@ -281,8 +321,7 @@ def test_farchive_skip_negative_raises():
 
 def test_read_name_duplicate_index_only_one_diagnostic():
     """重复的越界索引只应记录一次诊断。"""
-    # index=5 (u32), number=0 (u32) — name_map 只有 3 个元素
-    data = b'\x05\x00\x00\x00\x00\x00\x00\x00' * 3  # 3 次读取同一越界索引
+    data = b'\x05\x00\x00\x00\x00\x00\x00\x00' * 3
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1", "Name2"]
 
@@ -290,25 +329,23 @@ def test_read_name_duplicate_index_only_one_diagnostic():
         archive.read_name(name_map)
 
     diagnostics = archive.get_diagnostics()
-    # 只有第一次出现时记录诊断
     out_of_range = [d for d in diagnostics if d.field == "read_name"]
     assert len(out_of_range) == 1
 
 
 def test_read_name_different_indices_each_recorded():
     """不同的越界索引应各自记录一次诊断。"""
-    # index=3 (u32), number=0; index=5 (u32), number=0; index=7 (u32), number=0
     data = (
         b'\x03\x00\x00\x00\x00\x00\x00\x00'
         b'\x05\x00\x00\x00\x00\x00\x00\x00'
         b'\x07\x00\x00\x00\x00\x00\x00\x00'
     )
     archive = ByteArchive(data, tolerant=True)
-    name_map = ["Name0", "Name1", "Name2"]  # 只有 3 个元素
+    name_map = ["Name0", "Name1", "Name2"]
 
-    archive.read_name(name_map)  # index=3, out of range
-    archive.read_name(name_map)  # index=5, out of range
-    archive.read_name(name_map)  # index=7, out of range
+    archive.read_name(name_map)
+    archive.read_name(name_map)
+    archive.read_name(name_map)
 
     diagnostics = archive.get_diagnostics()
     out_of_range = [d for d in diagnostics if d.field == "read_name"]
@@ -317,18 +354,17 @@ def test_read_name_different_indices_each_recorded():
 
 def test_read_name_mixed_valid_and_invalid():
     """有效和无效索引混合时，只记录无效索引的诊断。"""
-    # index=1 (valid), index=5 (invalid), index=0 (valid)
     data = (
-        b'\x01\x00\x00\x00\x00\x00\x00\x00'  # index=1, valid
-        b'\x05\x00\x00\x00\x00\x00\x00\x00'  # index=5, invalid
-        b'\x00\x00\x00\x00\x00\x00\x00\x00'  # index=0, valid
+        b'\x01\x00\x00\x00\x00\x00\x00\x00'
+        b'\x05\x00\x00\x00\x00\x00\x00\x00'
+        b'\x00\x00\x00\x00\x00\x00\x00\x00'
     )
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1", "Name2"]
 
-    archive.read_name(name_map)  # Name1
-    archive.read_name(name_map)  # None (index=5 out of range)
-    archive.read_name(name_map)  # Name0
+    archive.read_name(name_map)
+    archive.read_name(name_map)
+    archive.read_name(name_map)
 
     diagnostics = archive.get_diagnostics()
     out_of_range = [d for d in diagnostics if d.field == "read_name"]
@@ -338,7 +374,6 @@ def test_read_name_mixed_valid_and_invalid():
 
 def test_read_name_duplicate_invalid_then_valid():
     """先重复越界，再有效索引，诊断只记录一次。"""
-    # index=10 (u32), number=0 — 重复 5 次
     data = b'\x0A\x00\x00\x00\x00\x00\x00\x00' * 5
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0", "Name1"]
@@ -354,7 +389,6 @@ def test_read_name_duplicate_invalid_then_valid():
 
 def test_read_name_negative_index_dedup():
     """负索引（0xFFFFFFFF）也应去重。"""
-    # 0xFFFFFFFF as u32 = 4294967295, 越界
     data = b'\xff\xff\xff\xff\x00\x00\x00\x00' * 3
     archive = ByteArchive(data, tolerant=True)
     name_map = ["Name0"]
@@ -368,8 +402,7 @@ def test_read_name_negative_index_dedup():
 
 
 def test_read_name_strict_mode_still_deduplicates():
-    """strict 模式下，同一越界索引第二次也应被去重（不会触发第二次异常前的诊断）。"""
-    # strict 模式第一次就越界直接抛异常，不会执行到第二次
+    """strict 模式下，同一越界索引第二次也应被去重。"""
     data = b'\x05\x00\x00\x00\x00\x00\x00\x00'
     archive = ByteArchive(data, tolerant=False)
     name_map = ["Name0", "Name1", "Name2"]
@@ -414,3 +447,179 @@ def test_read_name_all_returns_none_for_invalid():
     for _ in range(3):
         result = archive.read_name(name_map)
         assert result == "None"
+
+
+# ===========================================================================
+# GameDirectoryProvider 测试
+# ===========================================================================
+
+
+def test_provider_list_files_cache_hit(tmp_path):
+    """第二次 list_files 调用命中缓存，不重新扫描"""
+    from uasset_read.providers import GameDirectoryProvider
+
+    (tmp_path / "a.uasset").touch()
+    provider = GameDirectoryProvider(tmp_path)
+
+    first = provider.list_files(".uasset")
+    assert ".uasset" in provider._list_files_cache
+
+    second = provider.list_files(".uasset")
+    assert first is second
+
+
+def test_provider_refresh_clears_cache(tmp_path):
+    """refresh_file_cache 清空缓存字典"""
+    from uasset_read.providers import GameDirectoryProvider
+
+    (tmp_path / "a.uasset").touch()
+    provider = GameDirectoryProvider(tmp_path)
+
+    provider.list_files(".uasset")
+    assert len(provider._list_files_cache) > 0
+
+    provider.refresh_file_cache()
+    assert len(provider._list_files_cache) == 0
+
+
+def test_provider_list_uasset_files_filters_extensions(tmp_path):
+    """list_uasset_files 仅返回 .uasset 和 .umap"""
+    from uasset_read.providers import GameDirectoryProvider
+
+    (tmp_path / "char.uasset").touch()
+    (tmp_path / "level.umap").touch()
+    (tmp_path / "readme.txt").touch()
+    (tmp_path / "data.upak").touch()
+    provider = GameDirectoryProvider(tmp_path)
+
+    result = provider.list_uasset_files()
+    names = [p.name for p in result]
+    assert "char.uasset" in names
+    assert "level.umap" in names
+    assert "readme.txt" not in names
+    assert "data.upak" not in names
+
+
+def test_provider_constructor_nonexistent_dir_raises():
+    """构造不存在的目录抛 FileNotFoundError"""
+    from uasset_read.providers import GameDirectoryProvider
+
+    with pytest.raises(FileNotFoundError):
+        GameDirectoryProvider("/nonexistent_path_xyz_12345")
+
+
+# ===========================================================================
+# TextRenderer 测试
+# ===========================================================================
+
+
+def _make_package_ir(name: str = "TestPackage") -> MagicMock:
+    """构造最小 PackageIR mock，满足 TextRenderer.render 需求。"""
+    header = MagicMock()
+    header.package_name = name
+    header.package_class = "BlueprintGeneratedClass"
+    header.ue_version = "5.4"
+    header.package_flags = 0
+    header.total_export_count = 1
+    header.total_import_count = 0
+    header.folder_name = ""
+
+    ir = MagicMock()
+    ir.header = header
+    ir.imports = []
+    ir.exports = []
+    ir.linker = None
+    ir.blueprint = None
+    ir.decompiled_functions = []
+    ir.execution_chains = []
+    ir.variables = []
+    ir.diagnostics = []
+    ir.function_graphs = []
+    ir.resolved_parent_assets = []
+    ir.inherited_blueprint_graphs = []
+    ir.logic_sources = []
+    ir.soft_object_paths = []
+    ir.soft_package_references = []
+    ir.depends_map = []
+    ir.resolved_depends_map = []
+    ir.asset_registry_data = None
+    ir.errors = []
+    ir.status = "success"
+    ir.status_message = None
+    ir.anim_blueprint = None
+    ir.anim_sequence = None
+    ir.anim_montage = None
+    ir.debug = None
+    return ir
+
+
+def test_text_renderer_render_returns_nonempty():
+    """render() 返回非空字符串"""
+    from uasset_read.renderers.text_renderer import TextRenderer
+    from uasset_read.renderers.base import RenderOptions
+
+    renderer = TextRenderer()
+    result = renderer.render(_make_package_ir(), RenderOptions())
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_text_renderer_includes_package_name():
+    """render 输出包含包名"""
+    from uasset_read.renderers.text_renderer import TextRenderer
+    from uasset_read.renderers.base import RenderOptions
+
+    renderer = TextRenderer()
+    result = renderer.render(_make_package_ir("MyAwesomeBP"), RenderOptions())
+    assert "MyAwesomeBP" in result
+
+
+def test_text_renderer_debug_shows_editor_variables():
+    """debug 模式显示编辑器内部变量，standard 模式过滤"""
+    from uasset_read.renderers.text_renderer import TextRenderer
+    from uasset_read.renderers.base import RenderOptions, EDITOR_VARIABLE_NAMES
+    from uasset_read.models.ir import VariableIR
+
+    editor_var_name = next(iter(EDITOR_VARIABLE_NAMES))
+    var = VariableIR(name=editor_var_name, type="ArrayProperty", default_value=None)
+    ir = _make_package_ir()
+    ir.variables = [var]
+
+    renderer = TextRenderer()
+    standard = renderer.render(ir, RenderOptions(output_level="standard"))
+    debug = renderer.render(ir, RenderOptions(output_level="debug"))
+
+    assert editor_var_name not in standard
+    assert editor_var_name in debug
+
+
+# ===========================================================================
+# CLI format 解析测试
+# ===========================================================================
+
+
+def test_resolve_format_named_flags():
+    """--text -> 'text'，--markdown -> 'markdown'"""
+    from uasset_read.cli import resolve_format
+
+    args_text = types.SimpleNamespace(text=True, markdown=False, json=False)
+    assert resolve_format(args_text) == "text"
+
+    args_md = types.SimpleNamespace(text=False, markdown=True, json=False)
+    assert resolve_format(args_md) == "markdown"
+
+
+def test_resolve_format_default_json():
+    """无格式标志 -> 'json'"""
+    from uasset_read.cli import resolve_format
+
+    args = types.SimpleNamespace(text=False, markdown=False, json=False)
+    assert resolve_format(args) == "json"
+
+
+def test_list_formats_contains_text():
+    """list_formats() 包含 'text'"""
+    from uasset_read.core import list_formats
+
+    formats = list_formats()
+    assert "text" in formats

@@ -1,8 +1,9 @@
-"""constants 和 versioning 模块单元测试。
+"""常量与版本测试 — 合并自 tests/constants/ 目录。
 
-覆盖范围：
-- constants: 版本常量存在性、值正确性、边界常量、decode_package_flags、
-  公式组合标志、节点集合、图类型映射、Framework 版本阈值
+覆盖：
+- constants: 版本常量、边界常量、Package Flags、decode_package_flags、
+  PropertyTag 标志、Framework 版本阈值、节点集合、图常量、CustomVersion GUID
+- CPF_* 常量与 UE ObjectMacros.h 对齐
 - versioning: EUEVersion 枚举、VersionStream、VersionContainer、
   FPackageFileVersion 比较运算、build_version_container
 """
@@ -289,6 +290,214 @@ class TestCustomVersionGUIDs:
         # UE GUID 格式: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (35 chars, 3 dashes)
         assert len(guid) == 35
         assert guid.count("-") == 3
+
+
+# ============================================================================
+# CPF_* 常量与 UE ObjectMacros.h 对齐
+# ============================================================================
+
+
+class TestCPFConstantsAlignment:
+    """CPF_* 常量与 UE ObjectMacros.h 逐位对齐。"""
+
+    def test_cpf_edit(self):
+        assert constants.CPF_Edit == 0x01
+
+    def test_cpf_const_parm(self):
+        assert constants.CPF_ConstParm == 0x02
+
+    def test_cpf_blueprint_visible(self):
+        assert constants.CPF_BlueprintVisible == 0x04
+
+    def test_cpf_export_object(self):
+        assert constants.CPF_ExportObject == 0x08
+
+    def test_cpf_blueprint_read_only(self):
+        assert constants.CPF_BlueprintReadOnly == 0x10
+
+    def test_cpf_net(self):
+        assert constants.CPF_Net == 0x20
+
+    def test_cpf_edit_fixed_size(self):
+        assert constants.CPF_EditFixedSize == 0x40
+
+    def test_cpf_parm(self):
+        assert constants.CPF_Parm == 0x80
+
+    def test_cpf_out_parm(self):
+        assert constants.CPF_OutParm == 0x100
+
+    def test_cpf_zero_constructor(self):
+        assert constants.CPF_ZeroConstructor == 0x200
+
+    def test_cpf_return_parm(self):
+        assert constants.CPF_ReturnParm == 0x400
+
+    def test_cpf_disable_edit_on_template(self):
+        assert constants.CPF_DisableEditOnTemplate == 0x800
+
+    def test_cpf_non_nullable(self):
+        assert constants.CPF_NonNullable == 0x1000
+
+    def test_cpf_transient(self):
+        assert constants.CPF_Transient == 0x2000
+
+    def test_cpf_config(self):
+        assert constants.CPF_Config == 0x4000
+
+    def test_cpf_required_parm(self):
+        assert constants.CPF_RequiredParm == 0x8000
+
+    def test_cpf_disable_edit_on_instance(self):
+        assert constants.CPF_DisableEditOnInstance == 0x10000
+
+    def test_cpf_edit_const(self):
+        assert constants.CPF_EditConst == 0x20000
+
+    def test_cpf_global_config(self):
+        assert constants.CPF_GlobalConfig == 0x40000
+
+    def test_cpf_instanced_reference(self):
+        assert constants.CPF_InstancedReference == 0x80000
+
+    def test_cpf_duplicate_transient(self):
+        assert constants.CPF_DuplicateTransient == 0x200000
+
+    def test_cpf_save_game(self):
+        assert constants.CPF_SaveGame == 0x1000000
+
+    def test_cpf_no_clear(self):
+        assert constants.CPF_NoClear == 0x2000000
+
+    def test_cpf_virtual(self):
+        assert constants.CPF_Virtual == 0x4000000
+
+    def test_cpf_reference_parm(self):
+        assert constants.CPF_ReferenceParm == 0x8000000
+
+    def test_cpf_blueprint_assignable(self):
+        assert constants.CPF_BlueprintAssignable == 0x10000000
+
+    def test_cpf_deprecated(self):
+        assert constants.CPF_Deprecated == 0x20000000
+
+    def test_cpf_is_plain_old_data(self):
+        assert constants.CPF_IsPlainOldData == 0x40000000
+
+    def test_cpf_rep_skip(self):
+        assert constants.CPF_RepSkip == 0x80000000
+
+    def test_cpf_rep_notify(self):
+        assert constants.CPF_RepNotify == 0x100000000
+
+    def test_cpf_interp(self):
+        assert constants.CPF_Interp == 0x200000000
+
+    def test_cpf_non_transactional(self):
+        assert constants.CPF_NonTransactional == 0x400000000
+
+    def test_cpf_editor_only(self):
+        assert constants.CPF_EditorOnly == 0x800000000
+
+    def test_cpf_no_destructor(self):
+        assert constants.CPF_NoDestructor == 0x1000000000
+
+    def test_cpf_auto_weak(self):
+        assert constants.CPF_AutoWeak == 0x4000000000
+
+    def test_cpf_contains_instanced_reference(self):
+        assert constants.CPF_ContainsInstancedReference == 0x8000000000
+
+    def test_cpf_asset_registry_searchable(self):
+        assert constants.CPF_AssetRegistrySearchable == 0x10000000000
+
+    def test_cpf_simple_display(self):
+        assert constants.CPF_SimpleDisplay == 0x20000000000
+
+    def test_cpf_advanced_display(self):
+        assert constants.CPF_AdvancedDisplay == 0x40000000000
+
+    def test_cpf_protected(self):
+        assert constants.CPF_Protected == 0x80000000000
+
+    def test_cpf_blueprint_callable(self):
+        assert constants.CPF_BlueprintCallable == 0x100000000000
+
+    def test_cpf_blueprint_authority_only(self):
+        assert constants.CPF_BlueprintAuthorityOnly == 0x200000000000
+
+    def test_cpf_text_export_transient(self):
+        assert constants.CPF_TextExportTransient == 0x400000000000
+
+    def test_cpf_non_pie_duplicate_transient(self):
+        assert constants.CPF_NonPIEDuplicateTransient == 0x800000000000
+
+    def test_cpf_expose_on_spawn(self):
+        assert constants.CPF_ExposeOnSpawn == 0x1000000000000
+
+    def test_cpf_persistent_instance(self):
+        assert constants.CPF_PersistentInstance == 0x2000000000000
+
+    def test_cpf_uobject_wrapper(self):
+        assert constants.CPF_UObjectWrapper == 0x4000000000000
+
+    def test_cpf_has_value_type_hash(self):
+        assert constants.CPF_HasGetValueTypeHash == 0x8000000000000
+
+    def test_cpf_native_access_specifier_public(self):
+        assert constants.CPF_NativeAccessSpecifierPublic == 0x10000000000000
+
+    def test_cpf_native_access_specifier_protected(self):
+        assert constants.CPF_NativeAccessSpecifierProtected == 0x20000000000000
+
+    def test_cpf_native_access_specifier_private(self):
+        assert constants.CPF_NativeAccessSpecifierPrivate == 0x40000000000000
+
+    def test_cpf_skip_serialization(self):
+        assert constants.CPF_SkipSerialization == 0x80000000000000
+
+    def test_cpf_tobject_ptr(self):
+        assert constants.CPF_TObjectPtr == 0x100000000000000
+
+    def test_cpf_allow_self_reference(self):
+        assert constants.CPF_AllowSelfReference == 0x1000000000000000
+
+    def test_cpf_experimental_overridable_logic(self):
+        assert constants.CPF_ExperimentalOverridableLogic == 0x0200000000000000
+
+    def test_cpf_experimental_always_overriden(self):
+        assert constants.CPF_ExperimentalAlwaysOverriden == 0x0400000000000000
+
+    def test_cpf_experimental_never_overriden(self):
+        assert constants.CPF_ExperimentalNeverOverriden == 0x0800000000000000
+
+    def test_cpf_force_post_construct_link(self):
+        assert constants.CPF_ForcePostConstructLink == 0x2000000000000000
+
+    def test_no_nonexistent_flags(self):
+        """验证不存在的标志位已被移除。"""
+        import uasset_read.constants as c
+        removed = [
+            'CPF_BlueprintPure', 'CPF_BlueprintCompilerGenerated',
+            'CPF_NetSerialize', 'CPF_RepRetry', 'CPF_Constructed',
+            'CPF_NaturalizePropertyIndex', 'CPF_Required',
+            'CPF_ReferencePersisted',
+        ]
+        for name in removed:
+            assert not hasattr(c, name), f"{name} 不应存在于 constants 中"
+
+    def test_all_flags_are_power_of_two(self):
+        """所有 CPF_* 常量必须是 2 的幂（位掩码）。"""
+        import uasset_read.constants as c
+        flags = [v for k, v in vars(c).items() if k.startswith('CPF_') and isinstance(v, int)]
+        for flag in flags:
+            assert flag > 0 and (flag & (flag - 1)) == 0, f"CPF_* 值 {flag:#x} 不是 2 的幂"
+
+    def test_no_duplicate_values(self):
+        """CPF_* 常量值不得重复。"""
+        import uasset_read.constants as c
+        flags = [v for k, v in vars(c).items() if k.startswith('CPF_') and isinstance(v, int)]
+        assert len(flags) == len(set(flags)), "存在重复的 CPF_* 值"
 
 
 # ============================================================================

@@ -1,20 +1,176 @@
-"""IoStore 综合测试 — 目录索引环检测、头部资源限制、安全集成。"""
+"""IoStore 综合测试 — 合并自 tests/iostore/ 目录。
+
+覆盖：
+- FIoStoreTocHeader 字段偏移对齐
+- 目录索引环检测
+- 头部资源限制
+- 安全集成
+- 分区读取不足回归
+- 加密块二次读取短读验证
+"""
 import io
 import struct
 import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from uasset_read.iostore.reader import IoStoreReader, MAX_TOC_ENTRIES, MAX_PARTITION_COUNT
-from uasset_read.iostore.structures import FIoStoreTocHeader, FIoStoreTocCompressedBlockEntry
+from uasset_read.iostore.structures import (
+    FIoStoreTocHeader,
+    FIoStoreTocCompressedBlockEntry,
+    TOC_HEADER_SIZE,
+    TOC_MAGIC,
+)
 from uasset_read.exceptions import ParseError
 
 
 # ============================================================
-# 辅助函数：构造畸形目录索引 buffer
+# test_iostore_header.py — FIoStoreTocHeader 字段偏移对齐
 # ============================================================
+
+
+class TestFIoStoreTocHeaderOffsets:
+    """头部字段偏移对齐 UE IoStore.h。"""
+
+    def _build_header(self, container_id=0x1234, encryption_key_guid=None,
+                      container_flags=0x05, toc_chunk_perfect_hash_seeds_count=10,
+                      partition_size=0x1000):
+        """构建 144 字节 IoStore TOC 头部。
+
+        UE 布局（IoStore.h）：
+        Offset 0:   toc_magic (16 bytes)
+        Offset 16:  version(u8), reserved0(u8), reserved1(u16)
+        Offset 20:  toc_header_size(u32), toc_entry_count(u32)
+        Offset 28:  toc_compressed_block_entry_count(u32),
+                    toc_compressed_block_entry_size(u32)
+        Offset 36:  compression_method_name_count(u32),
+                    compression_method_name_length(u32)
+        Offset 44:  compression_block_size(u32),
+                    directory_index_size(u32)
+        Offset 52:  partition_count(u32)
+        Offset 56:  container_id (uint64)
+        Offset 64:  encryption_key_guid (16 bytes)
+        Offset 80:  container_flags (uint8)
+        Offset 81:  reserved3 (1 byte)
+        Offset 82:  reserved4 (2 bytes) — uint16
+        Offset 84:  toc_chunk_perfect_hash_seeds_count (uint32)
+        Offset 88:  partition_size (uint64)
+        Offset 96:  toc_chunks_without_perfect_hash_count (uint32)
+        Offset 100: reserved7 (uint32)
+        Offset 104: reserved8 (5 x uint64 = 40 bytes)
+        """
+        if encryption_key_guid is None:
+            encryption_key_guid = b'\x00' * 16
+
+        buf = bytearray(TOC_HEADER_SIZE)
+
+        # toc_magic
+        buf[0:16] = TOC_MAGIC
+
+        # version(1) + reserved0(1) + reserved1(2) at offset 16
+        struct.pack_into('<BBH', buf, 16, 0, 0, 0)
+
+        # toc_header_size(4) + toc_entry_count(4) at offset 20
+        struct.pack_into('<II', buf, 20, TOC_HEADER_SIZE, 100)
+
+        # toc_compressed_block_entry_count(4) + toc_compressed_block_entry_size(4) at offset 28
+        struct.pack_into('<II', buf, 28, 5, 12)
+
+        # compression_method_name_count(4) + compression_method_name_length(4) at offset 36
+        struct.pack_into('<II', buf, 36, 4, 32)
+
+        # compression_block_size(4) + directory_index_size(4) at offset 44
+        struct.pack_into('<II', buf, 44, 65536, 256)
+
+        # partition_count(4) + reserved2(4) at offset 52
+        struct.pack_into('<II', buf, 52, 1, 0)
+
+        # container_id (uint64) at offset 56
+        struct.pack_into('<Q', buf, 56, container_id)
+
+        # encryption_key_guid (16 bytes) at offset 64
+        buf[64:80] = encryption_key_guid
+
+        # container_flags (uint8) at offset 80
+        buf[80] = container_flags
+
+        # reserved3(1) + reserved4(2) at offset 81-83
+        # (already zero)
+
+        # toc_chunk_perfect_hash_seeds_count (uint32) at offset 84
+        struct.pack_into('<I', buf, 84, toc_chunk_perfect_hash_seeds_count)
+
+        # partition_size (uint64) at offset 88
+        struct.pack_into('<Q', buf, 88, partition_size)
+
+        # toc_chunks_without_perfect_hash_count (uint32) at offset 96
+        struct.pack_into('<I', buf, 96, 0)
+
+        # reserved7 (uint32) at offset 100
+        # (already zero)
+
+        # reserved8 (5 x uint64 = 40 bytes) at offset 104-143
+        # (already zero)
+
+        return bytes(buf)
+
+    def test_container_id_offset(self):
+        """container_id 在 offset 56。"""
+        header_data = self._build_header(container_id=0xABCD)
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
+        assert header.container_id == 0xABCD
+
+    def test_encryption_key_guid_offset(self):
+        """encryption_key_guid 在 offset 64。"""
+        guid = b'\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F\x10'
+        header_data = self._build_header(encryption_key_guid=guid)
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
+        assert header.encryption_key_guid == guid
+
+    def test_container_flags_offset(self):
+        """container_flags(uint8) 在 offset 80。"""
+        header_data = self._build_header(container_flags=0x05)
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
+        assert header.container_flags == 0x05
+
+    def test_container_flags_is_uint8(self):
+        """container_flags 是 uint8（1 字节），不是 uint32。"""
+        # 写入 0xFF 到 offset 80，后面 3 字节也非零
+        header_data = bytearray(self._build_header())
+        header_data[80] = 0xFF
+        header_data[81] = 0x01  # reserved3
+        header_data[82] = 0x02  # reserved4 low byte
+        header_data[83] = 0x03  # reserved4 high byte
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(bytes(header_data)))
+        assert header.container_flags == 0xFF
+
+    def test_toc_chunk_perfect_hash_seeds_count_offset(self):
+        """toc_chunk_perfect_hash_seeds_count 在 offset 84（UE IoStore.h:65）。"""
+        header_data = self._build_header(toc_chunk_perfect_hash_seeds_count=42)
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
+        assert header.toc_chunk_perfect_hash_seeds_count == 42
+
+    def test_partition_size_offset(self):
+        """partition_size 在 offset 88（UE IoStore.h:66）。"""
+        header_data = self._build_header(partition_size=0xDEADBEEF)
+        header = FIoStoreTocHeader.from_stream(io.BytesIO(header_data))
+        assert header.partition_size == 0xDEADBEEF
+
+    def test_header_size_144(self):
+        """TOC_HEADER_SIZE == 144。"""
+        assert TOC_HEADER_SIZE == 144
+
+
+# ============================================================
+# test_iostore.py — 目录索引环检测、头部资源限制、安全集成
+# ============================================================
+
+
+# ── 辅助函数：构造畸形目录索引 buffer ─────────────────────────────────
+
 
 def _build_cyclic_directory_index() -> bytes:
     """构造一个包含环的目录索引 buffer。
@@ -94,9 +250,8 @@ def _build_reader_with_directory_index(index_bytes: bytes) -> IoStoreReader:
     return reader
 
 
-# ============================================================
-# 目录索引环检测测试
-# ============================================================
+# ── 目录索引环检测测试 ────────────────────────────────────────────────
+
 
 def test_cyclic_directory_index_raises_parse_error():
     """目录索引环应抛出 ParseError，而非 RecursionError。"""
@@ -208,9 +363,8 @@ except Exception:
     )
 
 
-# ============================================================
-# 头部资源限制测试
-# ============================================================
+# ── 头部资源限制测试 ─────────────────────────────────────────────────
+
 
 def test_toc_entry_count_too_large():
     """toc_entry_count 超过上限应拒绝。"""
@@ -288,9 +442,8 @@ def test_partition_count_too_large():
         reader._open_container_files()
 
 
-# ============================================================
-# 安全集成测试 — 覆盖恶意输入场景
-# ============================================================
+# ── 安全集成测试 — 覆盖恶意输入场景 ─────────────────────────────────
+
 
 class TestIoStoreResourceLimits:
     """头部资源限制集成测试。"""
@@ -515,9 +668,8 @@ class TestEncryptedBlockShortRead:
             reader_mod.decrypt_aes_ecb = original_decrypt
 
 
-# ============================================================
-# 分区读取不足回归测试
-# ============================================================
+# ── 分区读取不足回归测试 ─────────────────────────────────────────────
+
 
 def _make_reader_with_short_partition(data: bytes, length: int) -> IoStoreReader:
     """构造一个 UCAS 分区数据不足的 IoStoreReader。"""
