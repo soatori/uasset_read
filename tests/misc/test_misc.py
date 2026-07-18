@@ -1,13 +1,31 @@
-"""tests/test_hex_view.py — HexView 调试系统测试。
+"""tests/misc/test_misc.py — 杂项功能合并测试。
 
-验证 HexViewEntry 数据类、FArchive hex_view 记录、格式化输出。
+合并来源：
+  - test_hex_view.py          (HexView 调试系统)
+  - test_framerate_animnotify.py (FrameRate / AnimNotifyTag tagged fallback)
+  - test_sound_attenuation.py (USoundAttenuation 解析器)
+  - test_anim_data_model.py   (UAnimDataModel 解析器)
 """
+from __future__ import annotations
+
 import struct
+from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
 
 from uasset_read.archive import FArchive
 from uasset_read.debug.hex_view import HexViewEntry, format_hex_view, format_hex_dump
+from uasset_read.parsers.property_types import (
+    _TAGGED_FALLBACK_STRUCTS,
+    _TAGGED_FALLBACK_STRUCT_SCHEMAS,
+    _EXPECTED_STRUCT_SIZES,
+)
 
+
+# ---------------------------------------------------------------------------
+#  HexView 测试夹具
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def sample_archive(tmp_path):
@@ -30,6 +48,10 @@ def hex_archive(tmp_path):
     yield ar
     ar.close()
 
+
+# ===========================================================================
+#  HexView 调试系统测试
+# ===========================================================================
 
 class TestHexViewEntry:
     """HexViewEntry 数据类测试。"""
@@ -364,3 +386,237 @@ class TestFormatHexDump:
         lines = result.strip().split('\n')
         assert "first_16" in lines[0]
         assert "second_16" in lines[1]
+
+
+# ===========================================================================
+#  FrameRate / AnimNotifyTag tagged fallback 测试
+# ===========================================================================
+
+class TestFrameRateFallback:
+    """验证 FrameRate 在 tagged fallback 中。"""
+
+    def test_framerate_in_tagged_fallback_structs(self):
+        """FrameRate 应在 _TAGGED_FALLBACK_STRUCTS 中。"""
+        assert "FrameRate" in _TAGGED_FALLBACK_STRUCTS
+
+    def test_framerate_in_fallback_schemas(self):
+        """FrameRate 应有 tagged fallback schema。
+
+        Numerator 类型为 IntProperty（UE 源码 int32 Numerator），
+        实际二进制数据已通过 raw hex 验证。Denominator 在部分资产中
+        未被序列化，由 tagged 循环自然处理。
+        """
+        assert "FrameRate" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+        schema = _TAGGED_FALLBACK_STRUCT_SCHEMAS["FrameRate"]
+        assert ("Numerator", "IntProperty") in schema
+
+    def test_framerate_expected_size(self):
+        """FrameRate 应在预期大小表中。"""
+        assert "FrameRate" in _EXPECTED_STRUCT_SIZES
+        assert _EXPECTED_STRUCT_SIZES["FrameRate"] == 8
+
+
+class TestAnimNotifyTrackFallback:
+    """验证 AnimNotifyTrack 在 tagged fallback 中。"""
+
+    def test_animnotifytrack_in_tagged_fallback_structs(self):
+        """AnimNotifyTrack 应在 _TAGGED_FALLBACK_STRUCTS 中。"""
+        assert "AnimNotifyTrack" in _TAGGED_FALLBACK_STRUCTS
+
+    def test_animnotifytrack_in_fallback_schemas(self):
+        """AnimNotifyTrack 应有 tagged fallback schema。"""
+        assert "AnimNotifyTrack" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+        schema = _TAGGED_FALLBACK_STRUCT_SCHEMAS["AnimNotifyTrack"]
+        assert ("TrackIndex", "Int64Property") in schema
+        assert ("TrackName", "NameProperty") in schema
+
+    def test_animnotifytrack_expected_size(self):
+        """AnimNotifyTrack 应在预期大小表中。"""
+        assert "AnimNotifyTrack" in _EXPECTED_STRUCT_SIZES
+        assert _EXPECTED_STRUCT_SIZES["AnimNotifyTrack"] == 8
+
+
+class TestExistingFallbacks:
+    """确保现有 tagged fallback 不受影响。"""
+
+    def test_member_reference_still_present(self):
+        assert "MemberReference" in _TAGGED_FALLBACK_STRUCTS
+        assert "MemberReference" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+
+    def test_simple_member_reference(self):
+        assert "SimpleMemberReference" in _TAGGED_FALLBACK_STRUCTS
+
+    def test_new_variables(self):
+        assert "NewVariables" in _TAGGED_FALLBACK_STRUCT_SCHEMAS
+
+
+class TestMaterialParameterFallbacks:
+    """验证材质参数结构体在 tagged fallback 中（issue #135）。"""
+
+    def test_vector_parameter_value(self):
+        assert "VectorParameterValue" in _TAGGED_FALLBACK_STRUCTS
+
+    def test_texture_parameter_value(self):
+        assert "TextureParameterValue" in _TAGGED_FALLBACK_STRUCTS
+
+    def test_material_texture_info(self):
+        assert "MaterialTextureInfo" in _TAGGED_FALLBACK_STRUCTS
+
+
+class TestTaggedFallbackByteLimit:
+    """验证 tag.size=0 的边界保护常量存在。"""
+
+    def test_byte_limit_constant_exists(self):
+        """_MAX_TAGGED_FALLBACK_BYTES 应在模块中定义。"""
+        from uasset_read.parsers import property_types
+        assert hasattr(property_types, '_MAX_TAGGED_FALLBACK_BYTES') or True
+        # 通过源码检查确认常量在 parse_struct_property 函数中定义
+        import inspect
+        source = inspect.getsource(property_types.parse_struct_property)
+        assert "_MAX_TAGGED_FALLBACK_BYTES" in source
+
+
+# ===========================================================================
+#  USoundAttenuation 解析器测试
+# ===========================================================================
+
+class TestSoundAttenuation:
+    """USoundAttenuation 解析器测试。"""
+
+    def test_parse_sound_attenuation_returns_dict(self):
+        """验证 parse_sound_attenuation 返回正确的字典结构。"""
+        from uasset_read.parsers.asset_types.sound_attenuation import parse_sound_attenuation
+
+        archive = MagicMock()
+        archive.tell.return_value = 0
+        archive.total_size.return_value = 512
+        archive.read.return_value = b"\x00" * 256
+
+        result = parse_sound_attenuation(archive, [])
+
+        assert isinstance(result, dict)
+        assert "parse_status" in result
+        assert result["parse_status"] == "partial_metadata"
+        assert "raw_offset" in result
+        assert "sample_size" in result
+
+    def test_sound_attenuation_not_skipped(self):
+        """验证 SoundAttenuation 不再被 tolerant skip。"""
+        from uasset_read.parsers.class_specific_skip import should_skip_export_for_tolerant_parsing
+
+        export = MagicMock()
+        export.object_name = "ATT_Footstep_PC"
+
+        # class_name 参数传入 "SoundAttenuation"
+        result = should_skip_export_for_tolerant_parsing(export, class_name="SoundAttenuation")
+        assert result is False
+
+    def test_sound_attenuation_strategy_is_tagged(self):
+        """验证 SoundAttenuation 策略为 TAGGED_PROPERTIES_ONLY。"""
+        from uasset_read.parsers.class_serialization_strategy import (
+            SerializationStrategy,
+            get_serialization_strategy,
+        )
+
+        strategy = get_serialization_strategy("SoundAttenuation")
+        assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+    def test_sound_attenuation_handler_registered(self):
+        """验证 SoundAttenuation handler 已注册到 registry。"""
+        from uasset_read.parsers.class_registry import get_class_registry
+
+        registry = get_class_registry()
+        handler = registry.find_handler("SoundAttenuation")
+        assert handler is not None
+        assert handler.handler_name == "SoundAttenuationHandler"
+
+    @pytest.mark.integration
+    def test_parse_local_sample_asset_sound_attenuation(self):
+        """验证本地样本资产不再被 skipped（SoundAttenuation 关注点）。"""
+        from uasset_read.parse_uasset import parse_uasset_with_linker
+
+        asset_path = Path(__file__).parent.parent / "samples" / "StackOBot_BP_Drone.uasset"
+        if not asset_path.exists():
+            pytest.skip("asset not found")
+
+        r = parse_uasset_with_linker(str(asset_path), tolerant=True)
+
+        # 验证不再是 failed
+        assert r.status != "failed"
+
+        # 验证所有 export 不再是 skipped
+        for export in r.export_map:
+            assert export.parse_status != "skipped"
+
+
+# ===========================================================================
+#  UAnimDataModel 解析器测试
+# ===========================================================================
+
+class TestAnimDataModel:
+    """UAnimDataModel 解析器测试。"""
+
+    def test_parse_anim_data_model_returns_dict(self):
+        """验证 parse_anim_data_model 返回正确的字典结构。"""
+        from uasset_read.parsers.asset_types.anim_data_model import parse_anim_data_model
+
+        archive = MagicMock()
+        archive.tell.return_value = 0
+        archive.total_size.return_value = 1024
+        archive.read.return_value = b"\x00" * 256
+
+        result = parse_anim_data_model(archive, [])
+
+        assert isinstance(result, dict)
+        assert "parse_status" in result
+        assert result["parse_status"] == "partial_metadata"
+        assert "raw_offset" in result
+        assert "sample_size" in result
+
+    def test_anim_data_model_handler_registered(self):
+        """验证 AnimationDataModel handler 已注册到 registry。"""
+        from uasset_read.parsers.class_registry import get_class_registry
+
+        registry = get_class_registry()
+        handler = registry.find_handler("AnimationDataModel")
+        assert handler is not None
+        assert handler.handler_name == "AnimDataModelHandler"
+
+    def test_anim_data_model_not_skipped(self):
+        """验证 AnimationDataModel 不再被 tolerant skip。"""
+        from uasset_read.parsers.class_specific_skip import should_skip_export_for_tolerant_parsing
+
+        export = MagicMock()
+        export.object_name = "AM_MM_Rifle_DryFire"
+
+        # class_name 参数传入 "AnimationDataModel"
+        result = should_skip_export_for_tolerant_parsing(export, class_name="AnimationDataModel")
+        assert result is False
+
+    def test_anim_data_model_strategy_is_tagged(self):
+        """验证 AnimationDataModel 策略为 TAGGED_PROPERTIES_ONLY。"""
+        from uasset_read.parsers.class_serialization_strategy import (
+            SerializationStrategy,
+            get_serialization_strategy,
+        )
+
+        strategy = get_serialization_strategy("AnimationDataModel")
+        assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+    @pytest.mark.integration
+    def test_parse_local_sample_asset_anim_data_model(self):
+        """验证本地样本资产不再被 skipped（AnimDataModel 关注点）。"""
+        from uasset_read.parse_uasset import parse_uasset_with_linker
+
+        asset_path = Path(__file__).parent.parent / "samples" / "StackOBot_BP_Drone.uasset"
+        if not asset_path.exists():
+            pytest.skip("asset not found")
+
+        r = parse_uasset_with_linker(str(asset_path), tolerant=True)
+
+        # 验证不再是 failed
+        assert r.status != "failed"
+
+        # 验证所有 export 不再是 skipped
+        for export in r.export_map:
+            assert export.parse_status != "skipped"
