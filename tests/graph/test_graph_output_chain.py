@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 
 
 class TestGraphOutputChain:
