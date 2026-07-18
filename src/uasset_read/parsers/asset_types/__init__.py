@@ -325,7 +325,6 @@ def register_asset_type_handlers() -> None:
         ("movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler", ["MovieSceneControlRigParameterTrack"], "MovieSceneControlRigParameterTrackHandler"),
         ("movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler", ["MovieSceneControlRigParameterSection"], "MovieSceneControlRigParameterSectionHandler"),
         ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
-        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

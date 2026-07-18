@@ -473,7 +473,10 @@ def parse_batch(
             result.success.append(str(out_file))
         except Exception as exc:
             import traceback
-            result.failed.append((str(pf), f"{type(exc).__name__}: {exc}", traceback.format_exc()))
+            tb = traceback.format_exc()
+            error_msg = f"{type(exc).__name__}: {exc}"
+            result.failed.append((str(pf), error_msg, tb))
+            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
 
     elapsed = time.monotonic() - start_time
     _log_batch_summary(result, elapsed_seconds=elapsed)

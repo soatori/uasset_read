@@ -60,7 +60,6 @@ _OPAQUE_CLASSES = frozenset({
     "AnimMontage",
     "SoundWave",
     "SoundCue",
-    "LevelSequence",
     "ParticleSystem",
     "NiagaraSystem",
     # #164: MovieScene/Sequencer 类（MovieScene/ControlRig 已迁移到 TAGGED_PROPERTIES_ONLY）
