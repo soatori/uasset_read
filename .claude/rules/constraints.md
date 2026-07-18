@@ -14,6 +14,7 @@
 ## v0.5.1 新增约束
 
 - **统一状态模型** — 所有输出格式使用 `success | partial | failed`，禁止使用旧的 `fail`/`error`
+- **Export 级状态验证** — parse_status 必须是 ExportParseStatus 枚举值之一
 - **UE 风格加载生命周期** — 执行顺序必须为 `link() → preload(idx) × N → post_load()`，禁止在 export 解析前调用 post_load
 - **类序列化策略** — 通过 `class_serialization_strategy.py` 注册，禁止在核心管线硬编码类名判断
 - **Payload 偏移默认策略** — 默认使用 `SerialOffset/SerialSize`（与 UE LinkerLoad.cpp:4793 对齐），ScriptSerialization 偏移仅保留为诊断字段

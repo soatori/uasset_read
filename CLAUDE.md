@@ -101,6 +101,12 @@ serializers/graph.py → graph/flow_builder.py
 - **AnimMontage** — 混合参数 / 通知 / 同步组解析
 - **动画子图** — StateMachine / State / Transition / Conduit 类型识别
 
+### 状态模型
+
+- **包级别**: `success | partial | failed`
+- **Export 级**: 9 个值（success, partial, failed, opaque, skipped, partial_metadata, opaque_unversioned, fallback, metadata）
+- **验证**: 所有 parse_status 赋值点都经过 validate_parse_status() 验证
+
 ### 容错模式
 
 - **strict**：遇警告停止
