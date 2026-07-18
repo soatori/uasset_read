@@ -117,8 +117,8 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["success", "partial", "failed", "opaque", "skipped", "partial_metadata", "opaque_unversioned", "fallback", "metadata"],
-          "description": "解析状态"
+          "enum": ["success", "partial", "failed"],
+          "description": "解析状态（包级别）"
         },
         "message": {
           "type": ["string", "null"],
