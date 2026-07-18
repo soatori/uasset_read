@@ -354,62 +354,47 @@ class TestHeuristicRecoveryStatus:
     """heuristic bytecode recovery 应降级为 partial。"""
 
     def test_heuristic_bytecode_recovery_is_partial(self):
-        """export 有 serial_scan_recovery fallback_reasons 时应降级为 partial。"""
+        """decompiled_functions 有 serial_scan_recovery 时应降级为 partial。"""
         r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
-        export = type("Export", (), {
-            "parse_status": "success",
-            "fallback_reasons": ["serial_scan_recovery"],
-        })()
-        r.export_map = [export]
+        r.decompiled_functions = [
+            type("DecompiledResult", (), {"fallback_reasons": ["serial_scan_recovery"]})()
+        ]
         status = _result_status(r)
         assert status == "partial", f"heuristic recovery 应降级为 partial, got {status}"
 
     def test_non_serial_scan_fallback_not_affected(self):
         """其他 fallback_reasons（非 serial_scan_recovery）不影响状态。"""
         r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
-        export = type("Export", (), {
-            "parse_status": "success",
-            "fallback_reasons": ["bpgc_bytecode_extraction"],
-        })()
-        r.export_map = [export]
+        r.decompiled_functions = [
+            type("DecompiledResult", (), {"fallback_reasons": ["bpgc_bytecode_extraction"]})()
+        ]
         status = _result_status(r)
         assert status == "success", f"非 serial_scan_recovery 不应降级, got {status}"
 
     def test_no_fallback_reasons_not_affected(self):
-        """无 fallback_reasons 的 export 不影响状态。"""
+        """无 fallback_reasons 的 decompiled function 不影响状态。"""
         r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
-        export = type("Export", (), {
-            "parse_status": "success",
-            "fallback_reasons": [],
-        })()
-        r.export_map = [export]
+        r.decompiled_functions = [
+            type("DecompiledResult", (), {"fallback_reasons": []})()
+        ]
         status = _result_status(r)
         assert status == "success", f"空 fallback_reasons 不应降级, got {status}"
 
     def test_mixed_heuristic_and_success_export(self):
-        """success export + heuristic export 混合时返回 partial。"""
+        """success + heuristic decompiled functions 混合时返回 partial。"""
         r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
-        success_export = type("Export", (), {
-            "parse_status": "success",
-            "fallback_reasons": [],
-        })()
-        heuristic_export = type("Export", (), {
-            "parse_status": "success",
-            "fallback_reasons": ["serial_scan_recovery"],
-        })()
-        r.export_map = [success_export, heuristic_export]
+        r.decompiled_functions = [
+            type("DecompiledResult", (), {"fallback_reasons": []})(),
+            type("DecompiledResult", (), {"fallback_reasons": ["serial_scan_recovery"]})(),
+        ]
         status = _result_status(r)
         assert status == "partial", f"混合 heuristic 应降级为 partial, got {status}"
 
-    def test_no_fallback_reasons_attr_not_affected(self):
-        """无 fallback_reasons 属性的 export 不影响状态。"""
+    def test_no_decompiled_functions_attr_not_affected(self):
+        """无 decompiled_functions 属性时不降级。"""
         r = _make_result(is_success=True, metadata={"lightweight_tolerant_parse": False})
-        export = type("Export", (), {
-            "parse_status": "success",
-        })()
-        r.export_map = [export]
         status = _result_status(r)
-        assert status == "success", f"无 fallback_reasons 属性不应降级, got {status}"
+        assert status == "success", f"无 decompiled_functions 属性不应降级, got {status}"
 
 
 # ===========================================================================

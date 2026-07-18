@@ -94,11 +94,11 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     if has_structural_diagnostic:
         return "partial"
 
-    # 3.4 检查 heuristic recovery（来自 Task 2）
-    if export_map and isinstance(export_map, list):
-        for exp in export_map:
-            fallback_reasons = getattr(exp, "fallback_reasons", None) or []
-            if any("serial_scan_recovery" in r for r in fallback_reasons):
-                return "partial"
+    # 3.4 检查 heuristic recovery（来自 decompiled functions）
+    decompiled_functions = getattr(result, "decompiled_functions", None) or []
+    for func in decompiled_functions:
+        fallback_reasons = getattr(func, "fallback_reasons", None) or []
+        if "serial_scan_recovery" in fallback_reasons:
+            return "partial"
 
     return "success"

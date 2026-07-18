@@ -53,6 +53,43 @@ class MockParseResult:
         return None
 
 
+class MockDecompiledResult:
+    """模拟 KismetDecompiledResult。"""
+    def __init__(self, fallback_reasons=None):
+        self.fallback_reasons = fallback_reasons or []
+
+
+class TestHeuristicStatus:
+    """heuristic bytecode recovery 状态降级测试。"""
+
+    def test_serial_scan_recovery_in_decompiled_functions_returns_partial(self):
+        """decompiled_functions 有 serial_scan_recovery 时应返回 partial。"""
+        from uasset_read.models.status import _result_status
+        result = MockParseResult()
+        result.decompiled_functions = [
+            MockDecompiledResult(fallback_reasons=["serial_scan_recovery"])
+        ]
+        assert _result_status(result) == "partial"
+
+    def test_no_serial_scan_recovery_returns_success(self):
+        """无 serial_scan_recovery 时保持 success。"""
+        from uasset_read.models.status import _result_status
+        result = MockParseResult()
+        result.decompiled_functions = [
+            MockDecompiledResult(fallback_reasons=[])
+        ]
+        assert _result_status(result) == "success"
+
+    def test_bpgc_only_returns_success(self):
+        """仅有 bpgc_bytecode_extraction（非 heuristic）时保持 success。"""
+        from uasset_read.models.status import _result_status
+        result = MockParseResult()
+        result.decompiled_functions = [
+            MockDecompiledResult(fallback_reasons=["bpgc_bytecode_extraction"])
+        ]
+        assert _result_status(result) == "success"
+
+
 class TestStatusModel:
     """状态模型测试套件。"""
 
