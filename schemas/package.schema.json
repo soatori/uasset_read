@@ -117,7 +117,7 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["success", "partial", "failed"],
+          "enum": ["success", "partial", "failed", "opaque", "skipped", "partial_metadata", "opaque_unversioned", "fallback", "metadata"],
           "description": "解析状态"
         },
         "message": {
@@ -207,7 +207,7 @@
         },
         "parse_status": {
           "type": "string",
-          "enum": ["success", "partial", "failed"],
+          "enum": ["success", "partial", "failed", "opaque", "skipped", "partial_metadata", "opaque_unversioned", "fallback", "metadata"],
           "description": "解析状态（仅非 success 时存在）"
         },
         "fallback_reason": {
