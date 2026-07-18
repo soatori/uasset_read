@@ -93,7 +93,6 @@ python run.py path/to/file.uasset --output output.json   # Save to file
 # Output modes
 python run.py path/to/file.uasset --json         # JSON output (default)
 python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
-python run.py path/to/file.uasset --text         # Human-readable text summary
 python run.py path/to/file.uasset --list-formats # List available formats
 
 # Batch export (input directory + output directory)

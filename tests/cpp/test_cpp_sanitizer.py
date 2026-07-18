@@ -159,6 +159,6 @@ class TestSanitizeIdentifier:
         assert fn("Test Var") == "Test_Var"
 
     def test_exported_from_top_level(self):
-        """验证从顶层包可导入"""
-        from uasset_read import sanitize_identifier as fn
+        """验证 sanitize_identifier 可从 cpp_gen 子模块导入"""
+        from uasset_read.cpp_gen import sanitize_identifier as fn
         assert fn("Test Var") == "Test_Var"

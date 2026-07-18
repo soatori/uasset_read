@@ -105,6 +105,14 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     errors = list(getattr(result, "errors", None) or [])
     warnings = list(getattr(result, "warnings", None) or [])
 
+    # 聚合 decompiled function 级 warnings
+    _decompiled_warnings = set()
+    for func in result.decompiled_functions or []:
+        for w in func.warnings or []:
+            if w not in _decompiled_warnings:
+                _decompiled_warnings.add(w)
+                warnings.append(f"[bytecode] {w}")
+
     if errors:
         status_code = "PARSE_ERROR"
         status_message = errors[0]

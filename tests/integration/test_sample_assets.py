@@ -9,7 +9,6 @@ from uasset_read.parse_uasset import parse_package
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.renderers.json_renderer import JSONRenderer
 from uasset_read.renderers.markdown_renderer import MarkdownRenderer
-from uasset_read.renderers.text_renderer import TextRenderer
 
 from tests.integration.sample_assets import (
     LOCAL_SAMPLES,
@@ -62,23 +61,6 @@ class TestLocalSampleParsing:
         assert ir is not None
         assert ir.header is not None
         assert ir.header.package_name == result.summary.package_name
-
-    @pytest.mark.parametrize(
-        "asset",
-        [pytest_param_for_asset(a) for a in LOCAL_SAMPLES],
-        ids=[f"{a.category}:{a.label}" for a in LOCAL_SAMPLES],
-    )
-    def test_text_renderer_produces_output(self, asset):
-        """TextRenderer 能够渲染解析结果。"""
-        path = require_local_sample_path(asset)
-        result = parse_package(str(path))
-        ir = build_package_ir(result)
-        renderer = TextRenderer()
-        output = renderer.render(ir, RenderOptions())
-
-        assert isinstance(output, str)
-        assert len(output) > 0
-        assert result.summary.package_name in output
 
     @pytest.mark.parametrize(
         "asset",

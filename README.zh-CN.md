@@ -93,7 +93,6 @@ python run.py path/to/file.uasset --output output.json   # 保存到文件
 # 输出模式
 python run.py path/to/file.uasset --json             # JSON 输出（默认）
 python run.py path/to/file.uasset --markdown         # Markdown + Mermaid
-python run.py path/to/file.uasset --text             # 纯文本摘要
 python run.py path/to/file.uasset --list-formats     # 列出可用格式
 
 # 批量导出（输入目录 + 输出目录）

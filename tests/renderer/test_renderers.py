@@ -207,12 +207,11 @@ class TestRendererListFormats:
         fmts = list_formats()
         assert "json" in fmts
         assert "markdown" in fmts
-        assert "text" in fmts
-        assert len(fmts) == 3
+        assert len(fmts) == 2
 
     def test_get_renderer_all_registered(self):
         from uasset_read.renderers import get_renderer
-        formats = ["json", "markdown", "text"]
+        formats = ["json", "markdown"]
         for fmt in formats:
             r = get_renderer(fmt)
             assert r.format_name == fmt
@@ -709,13 +708,13 @@ class TestOnlyJsonAndMarkdownFormats:
     """验证只支持 json 和 markdown 两种格式。"""
 
     def test_only_json_and_markdown_formats(self):
-        """应支持 json、markdown 和 text 三种格式"""
+        """应只支持 json 和 markdown 两种格式"""
         from uasset_read.renderers import list_formats
 
         formats = list_formats()
         assert "json" in formats, "json 格式应存在"
         assert "markdown" in formats, "markdown 格式应存在"
-        assert "text" in formats, "text 格式应存在"
+        assert "text" not in formats, "text 格式应已移除"
         assert "text_summary" not in formats, "text_summary 格式应被移除"
         assert "blueprint_text" not in formats, "blueprint_text 格式应被移除"
         assert "blueprint_ue_text" not in formats, "blueprint_ue_text 格式应被移除"

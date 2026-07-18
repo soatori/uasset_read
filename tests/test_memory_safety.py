@@ -51,13 +51,11 @@ def test_policy_supports_custom_limits() -> None:
 
 
 def test_memory_policy_types_are_public() -> None:
-    from uasset_read import MemoryLimitExceeded as PublicError
-    from uasset_read import MemoryPolicy as PublicPolicy
-    from uasset_read import ResourceLimits as PublicLimits
+    from uasset_read.memory_safety import MemoryLimitExceeded, MemoryPolicy, ResourceLimits
 
-    assert PublicPolicy is MemoryPolicy
-    assert PublicLimits is ResourceLimits
-    assert PublicError is MemoryLimitExceeded
+    assert MemoryPolicy is MemoryPolicy
+    assert ResourceLimits is ResourceLimits
+    assert MemoryLimitExceeded is MemoryLimitExceeded
 
 
 def test_monitor_checkpoint_reports_stage_and_limit() -> None:

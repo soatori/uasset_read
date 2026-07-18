@@ -225,13 +225,9 @@ class IRenderer(ABC):
 | 渲染器 | 格式 | 说明 |
 |--------|------|------|
 | JSONRenderer | json | 递归序列化 IR 为 JSON，包含 status 字段 |
-| TextRenderer | text | YAML 风格缩进，与 JSON 等价 |
 | MarkdownRenderer | markdown | 标题 + Mermaid 流程图 |
-| BlueprintTextRenderer | blueprint_text | 紧凑节点列表 |
-| BlueprintUERenderer | blueprint_ue | 模拟 UE Ctrl+C 文本 |
-| CppSkeletonRenderer | cpp_skeleton | C++ 头文件骨架（可选） |
 
-> N2C 渲染器已删除（对应 n2c/ 模块整体移除）
+> TextRenderer、BlueprintTextRenderer、BlueprintUERenderer、CppSkeletonRenderer 已在 v0.5.4 移除
 
 ### JSON 输出结构
 
@@ -469,12 +465,7 @@ print(parse_single(path, format=fmt))
 ```python
 RENDERER_REGISTRY: dict[str, type[IRenderer]] = {
     "json": JSONRenderer,
-    "text": TextRenderer,
-    "text_summary": TextRenderer,
     "markdown": MarkdownRenderer,
-    "blueprint_text": BlueprintTextRenderer,
-    "blueprint_ue_text": BlueprintUERenderer,
-    "cpp_skeleton": CppSkeletonRenderer,
 }
 
 def get_renderer(format: str) -> IRenderer:
@@ -522,7 +513,7 @@ output = renderer.render(ir, RenderOptions(verbose=verbose, indent=2))
 | IR 构建正确性 | 每种支持的资产类型 | IR 中 exports/properties/graphs 不为空 |
 | JSON 渲染等价性 | 已知通过的真实资产 | 新输出关键字段与旧输出一致 |
 | 渲染器独立性 | 固定 IR fixture | 给定同一 IR，输出可重复 |
-| CLI 回归 | `--json/--text/--markdown` | CLI 输出格式正确 |
+| CLI 回归 | `--json/--markdown` | CLI 输出格式正确 |
 | 蓝图 Pin 连接 | ≥ 2 种蓝图资产 | linked_to 正确，GUID 统一 |
 | export() 函数 | 每种格式 | 输出与现有 CLI 等价 |
 | 快捷脚本 | `python diag.py <path>` | 正确输出 |
