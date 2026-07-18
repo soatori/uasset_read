@@ -69,7 +69,6 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
-    group.add_argument('--text', action='store_true', help='Output human-readable text summary')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -126,8 +125,6 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
-    if args.text:
-        return "text"
     if args.json:
         return "json"
     return "json"
@@ -179,12 +176,15 @@ def _log_config_from_args(args) -> LogConfig:
 
 def _handle_batch(args) -> None:
     """处理批量导出模式。"""
+    import time
+
     input_dir = Path(args.file)
     if not input_dir.is_dir():
         print(f"Error: Not a directory: {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     output_dir = args.batch_dir or str(input_dir / "output")
+    start_time = time.monotonic()
 
     try:
         result = parse_batch(
@@ -207,14 +207,15 @@ def _handle_batch(args) -> None:
         print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 
-    print(f"Batch export complete: {result.total} files", file=sys.stderr)
+    elapsed = time.monotonic() - start_time
+    print(f"Batch export complete: {result.total} files in {elapsed:.1f}s", file=sys.stderr)
     print(f"  Success: {len(result.success)}", file=sys.stderr)
     if result.skipped:
         print(f"  Skipped: {len(result.skipped)}", file=sys.stderr)
     if result.failed:
         print(f"  Failed: {len(result.failed)}", file=sys.stderr)
-        for path, error in result.failed:
-            _logger.debug("Batch file failed (full): %s — %s", path, error)
+        for path, error, details in result.failed:
+            _logger.debug("Batch file failed (full): %s — %s\n%s", path, error, details)
             print(f"    - {Path(path).name}: {_sanitize_error_message(error)}", file=sys.stderr)
         sys.exit(EXIT_PARSE_ERROR)
 

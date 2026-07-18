@@ -49,6 +49,32 @@ _PLAUSIBLE_SCRIPT_START_TOKENS = {
     # 产生裸数字（如 1509949440）等错误反编译输出。
 }
 
+# ---------------------------------------------------------------------------
+# 伪数据检测 (#424)
+# ---------------------------------------------------------------------------
+
+
+def _has_false_positive_pattern(data: bytes) -> bool:
+    """检测伪数据特征：过多连续常量 token 或重复字节模式。
+
+    serial_scan_recovery 在 export serial 中搜索可解析字节码时，
+    可能将内嵌数据（如属性表、整数数组）误判为合法表达式流。
+    该函数通过统计特征过滤明显非代码段的候选。
+    """
+    if len(data) < 4:
+        return False
+    # 检测连续 IntConst (0x1D) 后跟 4 字节整数的模式
+    int_const_count = sum(1 for i in range(len(data) - 5) if data[i] == 0x1D)
+    if int_const_count > 3:
+        return True
+    # 检测超过 50% 的字节是相同值（伪数据特征）
+    from collections import Counter
+    most_common_count = Counter(data).most_common(1)[0][1]
+    if most_common_count / len(data) > 0.5:
+        return True
+    return False
+
+
 # 扫描复杂度限制 — 防止大型蓝图组合爆炸导致超时
 _MAX_SCAN_ATTEMPTS = 500       # 单个函数最多尝试的 (start, end) 组合数
 _MAX_CANDIDATE_SIZE = 4096     # 单个候选字节流最大长度（字节）
@@ -203,6 +229,8 @@ def _scan_export_serial_for_bytecode(
             if len(candidate) > _MAX_CANDIDATE_SIZE:
                 # Larger candidates are unlikely; skip further end positions
                 break
+            if _has_false_positive_pattern(candidate):
+                continue
             attempts += 1
             if attempts > _MAX_SCAN_ATTEMPTS:
                 logger.debug(

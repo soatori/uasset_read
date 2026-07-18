@@ -1,7 +1,7 @@
 """ULevelSequence 资产类型处理器
 
 解析 ULevelSequence 的 custom serialization 数据：
-- MovieScene: int32（opaque pointer，指向 UMovieScene 对象）
+- MovieScene: FSoftObjectPtr（资产引用，序列化为 FSoftObjectPath）
 - MovieSceneSource: int32（TSoftObjectPtr，资产源引用）
 - MovieSceneLicense: FString（许可证字符串）
 - DisplayRate: FFrameRate（显示帧率，Numerator + Denominator 各 int32）
@@ -37,9 +37,9 @@ def parse_level_sequence(archive: Any, name_map: List[str]) -> Dict[str, Any]:
     }
 
     try:
-        # 1. MovieScene: int32 — opaque pointer to UMovieScene
-        #    LevelSequence.cpp: ULevelSequence::Serialize 序列化 MovieScene 指针
-        result["movie_scene"] = archive.read_i32("LevelSequence.MovieScene")
+        # 1. MovieScene: FSoftObjectPtr — 资产引用
+        #    序列化为 FSoftObjectPath（AssetPath + SubPath 两个 FString）
+        result["movie_scene"] = archive.read_fsoftobjectpath("LevelSequence.MovieScene")
 
         # 2. MovieSceneSource: TSoftObjectPtr — 资产源引用（序列化为 int32 对象索引）
         result["movie_scene_source"] = archive.read_i32("LevelSequence.MovieSceneSource")

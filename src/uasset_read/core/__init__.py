@@ -35,16 +35,17 @@ class BatchResult:
     total: int = 0
     success: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
+    failed: list[tuple[str, str, str]] = field(default_factory=list)  # (path, error, details)
 
 
-def _log_batch_summary(result: BatchResult) -> None:
+def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
     logging.getLogger(__name__).info(
-        "batch_summary total=%d success=%d skipped=%d failed=%d",
+        "batch_summary total=%d success=%d skipped=%d failed=%d elapsed=%.1fs",
         result.total,
         len(result.success),
         len(result.skipped),
         len(result.failed),
+        elapsed_seconds,
     )
 
 
@@ -412,6 +413,9 @@ def parse_batch(
     if isolate_assets == "auto":
         from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
 
+    import time
+    start_time = time.monotonic()
+
     for idx, pf in enumerate(package_files):
         stats = get_memory_stats()
         if stats.usage_percent > system_usage_limit:
@@ -453,7 +457,7 @@ def parse_batch(
                 if outcome.succeeded:
                     result.success.append(outcome.output_path)
                 else:
-                    result.failed.append((str(pf), outcome.error))
+                    result.failed.append((str(pf), outcome.error, outcome.error_details))
                 continue
 
             output_str = parse_single(
@@ -468,9 +472,11 @@ def parse_batch(
             out_file.write_text(output_str, encoding="utf-8")
             result.success.append(str(out_file))
         except Exception as exc:
-            result.failed.append((str(pf), f"{type(exc).__name__}: {exc}"))
+            import traceback
+            result.failed.append((str(pf), f"{type(exc).__name__}: {exc}", traceback.format_exc()))
 
-    _log_batch_summary(result)
+    elapsed = time.monotonic() - start_time
+    _log_batch_summary(result, elapsed_seconds=elapsed)
     return result
 
 

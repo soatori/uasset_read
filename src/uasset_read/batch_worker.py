@@ -214,10 +214,12 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         os.replace(temporary_path, output_path)
         return BatchWorkerOutcome(True, str(output_path), "")
     except BaseException as exc:
+        import traceback
         return BatchWorkerOutcome(
             False,
             "",
             f"{type(exc).__name__}: {exc}",
+            traceback.format_exc(),
         )
     finally:
         if worker_handler is not None:

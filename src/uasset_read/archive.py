@@ -883,6 +883,19 @@ class FArchive:
 
         return result
 
+    def read_fsoftobjectpath(self, key: str = "") -> Dict[str, str]:
+        """读取 FSoftObjectPath（传统 FString 格式）。
+
+        FSoftObjectPath 序列化为两个连续的 FString：
+        - AssetPath: 资产路径（如 "/Game/MovieScene.DefaultMovieScene"）
+        - SubPath: 子路径（可为空字符串）
+
+        UE5.7+ 使用索引格式（int32 → SoftObjectPathList），此方法仅处理传统格式。
+        """
+        asset_path = self.read_fstring(f"{key}.AssetPath" if key else "")
+        sub_path = self.read_fstring(f"{key}.SubPath" if key else "")
+        return {"asset_path": asset_path, "sub_path": sub_path}
+
     def set_name_map(self, name_map: list) -> None:
         """设置名称表缓存，用于 read_name() 无参调用。
 

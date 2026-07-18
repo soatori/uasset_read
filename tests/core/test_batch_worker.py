@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
+from uasset_read.batch_worker import BatchWorkerRequest, BatchWorkerOutcome, run_isolated_asset
 from uasset_read.memory_safety import ResourceLimits
 from uasset_read import project_logging
 
@@ -179,3 +179,14 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
     assert completed.returncode == 0, completed.stderr
     # 无效 uasset 文件在 isolated 模式下容忍解析成功，输出 JSON 并计入 success
     assert completed.stdout.strip() == "1 0"
+
+
+def test_batch_worker_outcome_includes_error_details():
+    """验证 BatchWorkerOutcome.error_details 包含完整错误信息"""
+    outcome = BatchWorkerOutcome(
+        succeeded=False,
+        error="ValueError: Invalid property tag",
+        error_details="Traceback (most recent call last):\n  File ...\nValueError: Invalid property tag at offset 1234"
+    )
+    assert outcome.error_details  # 不为空
+    assert "Traceback" in outcome.error_details  # 包含堆栈
