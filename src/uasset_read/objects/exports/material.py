@@ -88,7 +88,7 @@ class UMaterialInstance(UObject):
         )
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = (
+        self.parse_status = validate_parse_status(
             "metadata"
             if self.parent or self.scalar_parameters or self.vector_parameters
             or self.texture_parameters or self.static_switch_parameters
