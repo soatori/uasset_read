@@ -7,7 +7,7 @@ import sys
 import pytest
 from pathlib import Path
 
-ARCHIVE_PATH = Path(__file__).resolve().parent.parent / "src" / "uasset_read" / "archive.py"
+ARCHIVE_PATH = Path(__file__).resolve().parent.parent.parent / "src" / "uasset_read" / "archive.py"
 
 
 # ---------------------------------------------------------------------------

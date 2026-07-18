@@ -1,15 +1,17 @@
-"""FString 超长声明长度诊断增强测试 (#413)
+"""FString/FText 安全与容错测试
 
-验证 read_fstring() 对声明长度超过 MAX_FSTRING_LENGTH 的检测和容错行为：
-- UTF-8: length > MAX_FSTRING_LENGTH
-- UTF-16: -length*2 > MAX_FSTRING_LENGTH
-- strict/tolerant 两种模式的表现差异
-- 诊断信息包含 position, length, max, ratio
+合并测试文件：
+- test_fstring_limit.py — FString 超长声明长度诊断增强测试 (#413)
+- test_fstring_corruption.py — FString 全空损坏检测测试 (#330)
+- test_ftext_args.py — FText args 数量限制测试
+- test_ftext_safety.py — FTEXT-SAFETY 恢复位置测试
 """
 import struct
 import pytest
+from unittest.mock import MagicMock, patch
 from uasset_read.archive import ByteArchive, MAX_FSTRING_LENGTH
 from uasset_read.exceptions import ParseError
+from uasset_read.serializers.graph import read_ftext_with_history
 
 
 # --- UTF-8 超长 ---
@@ -166,3 +168,109 @@ def test_fstring_issue413_value_419430400():
     diags = archive.get_diagnostics()
     assert len(diags) == 1
     assert diags[0].read_size == 419430400
+
+
+# --- FString 全空损坏检测 (#330) ---
+
+def test_fstring_all_nulls_utf8_tolerant():
+    """UTF-8 FString 全空在 tolerant 模式应返回空字符串。"""
+    # length=5 (u32 LE), 5 个 null 字节
+    data = b'\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    archive = ByteArchive(data, tolerant=True)
+
+    result = archive.read_fstring()
+    assert result == ""
+
+
+def test_fstring_all_nulls_utf16_tolerant():
+    """UTF-16 FString 全空在 tolerant 模式应返回空字符串。"""
+    # length=-3 (i32 LE) → utf16_len=6, 6 个 null 字节
+    data = b'\xfd\xff\xff\xff\x00\x00\x00\x00\x00\x00'
+    archive = ByteArchive(data, tolerant=True)
+
+    result = archive.read_fstring()
+    assert result == ""
+
+
+def test_fstring_all_nulls_utf8_strict():
+    """UTF-8 FString 全空在 strict 模式应抛出 ParseError。"""
+    data = b'\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    archive = ByteArchive(data, tolerant=False)
+
+    with pytest.raises(ParseError):
+        archive.read_fstring()
+
+
+def test_fstring_all_nulls_utf16_strict():
+    """UTF-16 FString 全空在 strict 模式应抛出 ParseError。"""
+    data = b'\xfd\xff\xff\xff\x00\x00\x00\x00\x00\x00'
+    archive = ByteArchive(data, tolerant=False)
+
+    with pytest.raises(ParseError):
+        archive.read_fstring()
+
+
+# --- FText args 数量限制 ---
+
+def test_ftext_named_format_arg_overflow():
+    """FText NamedFormat arg_count 超限时应容错而非崩溃。"""
+    from uasset_read.constants import MAX_SAFE_COUNT
+
+    # 构造一个畸形的 FText 数据
+    # format_text 是一个完整的 FText（history_type = -1, None）
+    # history_type = 1 (NamedFormat)
+    # arg_count = MAX_SAFE_COUNT + 1 (超限)
+    data = b'\x00\x00\x00\x00'  # format_text 的 flags
+    data += b'\xFF'  # format_text 的 history_type = -1 (None)
+    data += b'\x00\x00\x00\x00'  # format_text 的 bHasCultureInvariantString = False
+    data += (MAX_SAFE_COUNT + 1).to_bytes(4, 'little', signed=True)  # arg_count
+
+    archive = ByteArchive(data, tolerant=True)
+
+    # 在 tolerant 模式下应返回空字符串而非崩溃
+    value, consumed = read_ftext_with_history(archive, history_type=1, tolerant=True)
+    assert isinstance(value, str)
+
+
+def test_ftext_named_format_negative_arg_count():
+    """FText NamedFormat 负 arg_count 应容错而非崩溃。"""
+    # 构造一个畸形的 FText 数据
+    # format_text 是一个完整的 FText（history_type = -1, None）
+    # history_type = 1 (NamedFormat)
+    # arg_count = -1 (负数)
+    data = b'\x00\x00\x00\x00'  # format_text 的 flags
+    data += b'\xFF'  # format_text 的 history_type = -1 (None)
+    data += b'\x00\x00\x00\x00'  # format_text 的 bHasCultureInvariantString = False
+    data += (-1).to_bytes(4, 'little', signed=True)  # -1
+
+    archive = ByteArchive(data, tolerant=True)
+
+    # 在 tolerant 模式下应返回空字符串而非崩溃
+    value, consumed = read_ftext_with_history(archive, history_type=1, tolerant=True)
+    assert isinstance(value, str)
+
+
+# --- FTEXT-SAFETY 恢复位置 ---
+
+def test_ftext_safety_recovery_position():
+    """FTEXT-SAFETY 消耗超限时应回退到字段起始位置。"""
+    from uasset_read.serializers.graph_pin import _read_pin_ftext_field
+    from uasset_read.constants import MAX_FTEXT_CONSUMPTION
+
+    mock_archive = MagicMock()
+    # tell() 首次返回 0（字段起始），_read_ftext_value 后返回超限值
+    mock_archive.tell.side_effect = [0, MAX_FTEXT_CONSUMPTION + 100]
+
+    # 模拟一个消耗大量字节的 FText
+    def mock_read_ftext_value(archive, tolerant=True):
+        return ("value", 0, 0, MAX_FTEXT_CONSUMPTION + 100)
+
+    with patch('uasset_read.serializers.graph_pin._read_ftext_value', mock_read_ftext_value):
+        trace_fields = {}
+        value, success = _read_pin_ftext_field(
+            mock_archive, "TestField", False, trace_fields
+        )
+
+        # 应回退到 _start（字段起始位置），而非 _start + 5
+        # 验证 seek 被调用且参数为 0（_start）
+        mock_archive.seek.assert_called_with(0)

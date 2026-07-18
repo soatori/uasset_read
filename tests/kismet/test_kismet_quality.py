@@ -649,3 +649,296 @@ class TestBytecodeExtractor:
             assert expressions == []
             assert error is None
             assert reason == "none"
+
+
+# ============================================================================
+# 起始 token 集合与可疑 IntConst 测试（合并自 test_bytecode_scanner_fix.py）
+# ============================================================================
+
+class TestPlausibleStartTokens:
+    """验证 scanner 起始 token 集合已排除误匹配 token。"""
+
+    def test_removed_tokens_not_in_start_set(self):
+        """0x1D (EX_IntConst)、0x5A (EX_WireTracepoint)、0x5E (EX_Tracepoint)
+        不应出现在 _PLAUSIBLE_SCRIPT_START_TOKENS 中。"""
+        from uasset_read.kismet.bytecode_extractor import _PLAUSIBLE_SCRIPT_START_TOKENS
+
+        assert 0x1D not in _PLAUSIBLE_SCRIPT_START_TOKENS, \
+            "0x1D (EX_IntConst) 应已从起始 token 集合中移除"
+        assert 0x5A not in _PLAUSIBLE_SCRIPT_START_TOKENS, \
+            "0x5A (EX_WireTracepoint) 应已从起始 token 集合中移除"
+        assert 0x5E not in _PLAUSIBLE_SCRIPT_START_TOKENS, \
+            "0x5E (EX_Tracepoint) 应已从起始 token 集合中移除"
+
+    def test_retained_tokens_present(self):
+        """保留的安全起始 token 仍应存在。"""
+        from uasset_read.kismet.bytecode_extractor import _PLAUSIBLE_SCRIPT_START_TOKENS
+
+        expected = {0x04, 0x19, 0x1B, 0x1C, 0x46}
+        assert expected.issubset(_PLAUSIBLE_SCRIPT_START_TOKENS), \
+            f"预期保留的 token {expected} 应全部存在"
+
+    def test_start_token_set_exactly_five(self):
+        """起始 token 集合应恰好包含 5 个元素。"""
+        from uasset_read.kismet.bytecode_extractor import _PLAUSIBLE_SCRIPT_START_TOKENS
+
+        assert len(_PLAUSIBLE_SCRIPT_START_TOKENS) == 5, \
+            f"预期 5 个起始 token，实际 {len(_PLAUSIBLE_SCRIPT_START_TOKENS)} 个"
+
+
+class TestSuspiciousIntConst:
+    """验证 EX_IntConst 翻译器对可疑值的安全网。"""
+
+    def _make_int_const(self, value: int):
+        """创建 EX_IntConst 表达式实例。"""
+        from uasset_read.kismet.expressions import EX_IntConst
+        return EX_IntConst(Value=value)
+
+    def test_suspicious_value_emits_comment(self):
+        """0x5A000000 (1509949440) 应输出为可疑注释，而非裸数字。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        expr = self._make_int_const(0x5A000000)  # 1509949440
+        result = line_cpp(expr)
+        assert result.startswith("/* suspicious:"), \
+            f"可疑值应输出注释，实际: {result}"
+        assert "0x5A000000" in result, \
+            f"注释应包含十六进制表示，实际: {result}"
+
+    def test_another_suspicious_value(self):
+        """0x1D000000 也应触发安全网。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        expr = self._make_int_const(0x1D000000)
+        result = line_cpp(expr)
+        assert result.startswith("/* suspicious:"), \
+            f"可疑值应输出注释，实际: {result}"
+
+    def test_normal_int_const_still_works(self):
+        """正常整数常量应保持不变。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        for val in [0, 1, 42, -1, 255, 1024, 0xFFFFFF, -0x80000000]:
+            expr = self._make_int_const(val)
+            result = line_cpp(expr)
+            assert result == str(val), \
+                f"正常值 {val} 应直接输出为字符串，实际: {result}"
+
+    def test_non_aligned_value_not_suspicious(self):
+        """低位非零的大整数不应触发安全网（如 0x5A000001）。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        expr = self._make_int_const(0x5A000001)
+        result = line_cpp(expr)
+        assert result == "1509949441", \
+            f"低位非零值不应触发安全网，实际: {result}"
+
+    def test_boundary_below_threshold_not_suspicious(self):
+        """值 <= 0xFFFFFF 不应触发安全网。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        expr = self._make_int_const(0xFFFFFF)
+        result = line_cpp(expr)
+        assert result == "16777215", \
+            f"边界值 0xFFFFFF 不应触发安全网，实际: {result}"
+
+    def test_aligned_above_threshold_suspicious(self):
+        """刚好超过 0xFFFFFF 且低位全零的值应触发安全网。"""
+        from uasset_read.kismet.translator import line_cpp
+
+        expr = self._make_int_const(0x01000000)
+        result = line_cpp(expr)
+        assert result.startswith("/* suspicious:"), \
+            f"0x01000000 应触发安全网，实际: {result}"
+
+
+# ============================================================================
+# Deprecated / Instrumentation token 测试（合并自 test_kismet_deprecated_tokens.py）
+# ============================================================================
+
+class TestDeprecatedTokenSilentSkip:
+    """deprecated / instrumentation token 应返回空字符串。"""
+
+    def test_deprecated_op4a_returns_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_DeprecatedOp4A
+
+        translator = KismetTranslator()
+        expr = EX_DeprecatedOp4A()
+        result = translator.line_cpp(expr)
+        assert result == "", f"EX_DeprecatedOp4A 应返回空字符串，实际: {result!r}"
+
+    def test_breakpoint_returns_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_Breakpoint
+
+        translator = KismetTranslator()
+        expr = EX_Breakpoint()
+        result = translator.line_cpp(expr)
+        assert result == "", f"EX_Breakpoint 应返回空字符串，实际: {result!r}"
+
+    def test_tracepoint_returns_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_Tracepoint
+
+        translator = KismetTranslator()
+        expr = EX_Tracepoint()
+        result = translator.line_cpp(expr)
+        assert result == "", f"EX_Tracepoint 应返回空字符串，实际: {result!r}"
+
+    def test_wire_tracepoint_returns_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_WireTracepoint
+
+        translator = KismetTranslator()
+        expr = EX_WireTracepoint()
+        result = translator.line_cpp(expr)
+        assert result == "", f"EX_WireTracepoint 应返回空字符串，实际: {result!r}"
+
+    def test_instrumentation_event_returns_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_InstrumentationEvent
+        from uasset_read.kismet.tokens import EScriptInstrumentationType
+
+        translator = KismetTranslator()
+        expr = EX_InstrumentationEvent(
+            EventType=EScriptInstrumentationType.Entry,
+            EventName="TestFunc",
+        )
+        result = translator.line_cpp(expr)
+        assert result == "", f"EX_InstrumentationEvent 应返回空字符串，实际: {result!r}"
+
+
+class TestSkippedTokenCounter:
+    """统计计数器应正确记录各类 deprecated token 数量。"""
+
+    def test_counter_initially_empty(self):
+        from uasset_read.kismet.translator import KismetTranslator
+
+        translator = KismetTranslator()
+        assert translator.skipped_tokens == {}
+
+    def test_deprecated_op4a_counter(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_DeprecatedOp4A
+
+        translator = KismetTranslator()
+        expr = EX_DeprecatedOp4A()
+        translator.line_cpp(expr)
+        assert translator.skipped_tokens.get("EX_DeprecatedOp4A") == 1
+
+    def test_breakpoint_counter(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_Breakpoint
+
+        translator = KismetTranslator()
+        expr = EX_Breakpoint()
+        translator.line_cpp(expr)
+        assert translator.skipped_tokens.get("EX_Breakpoint") == 1
+
+    def test_tracepoint_counter(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_Tracepoint
+
+        translator = KismetTranslator()
+        expr = EX_Tracepoint()
+        translator.line_cpp(expr)
+        assert translator.skipped_tokens.get("EX_Tracepoint") == 1
+
+    def test_wire_tracepoint_counter(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_WireTracepoint
+
+        translator = KismetTranslator()
+        expr = EX_WireTracepoint()
+        translator.line_cpp(expr)
+        assert translator.skipped_tokens.get("EX_WireTracepoint") == 1
+
+    def test_instrumentation_event_counter(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import EX_InstrumentationEvent
+        from uasset_read.kismet.tokens import EScriptInstrumentationType
+
+        translator = KismetTranslator()
+        expr = EX_InstrumentationEvent(
+            EventType=EScriptInstrumentationType.Exit,
+            EventName="TestFunc",
+        )
+        translator.line_cpp(expr)
+        assert translator.skipped_tokens.get("EX_InstrumentationEvent") == 1
+
+    def test_multiple_tokens_accumulate(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import (
+            EX_DeprecatedOp4A, EX_InstrumentationEvent,
+        )
+        from uasset_read.kismet.tokens import EScriptInstrumentationType
+
+        translator = KismetTranslator()
+        # 翻译 3 个 deprecated + 2 个 instrumentation
+        for _ in range(3):
+            translator.line_cpp(EX_DeprecatedOp4A())
+        for _ in range(2):
+            translator.line_cpp(EX_InstrumentationEvent(
+                EventType=EScriptInstrumentationType.Entry,
+            ))
+        assert translator.skipped_tokens["EX_DeprecatedOp4A"] == 3
+        assert translator.skipped_tokens["EX_InstrumentationEvent"] == 2
+        assert sum(translator.skipped_tokens.values()) == 5
+
+    def test_mixed_token_types_counted_separately(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import (
+            EX_DeprecatedOp4A, EX_InstrumentationEvent,
+            EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint,
+        )
+        from uasset_read.kismet.tokens import EScriptInstrumentationType
+
+        translator = KismetTranslator()
+        translator.line_cpp(EX_DeprecatedOp4A())
+        translator.line_cpp(EX_Breakpoint())
+        translator.line_cpp(EX_Tracepoint())
+        translator.line_cpp(EX_WireTracepoint())
+        translator.line_cpp(EX_InstrumentationEvent(
+            EventType=EScriptInstrumentationType.PureEntry,
+        ))
+        assert translator.skipped_tokens == {
+            "EX_DeprecatedOp4A": 1,
+            "EX_Breakpoint": 1,
+            "EX_Tracepoint": 1,
+            "EX_WireTracepoint": 1,
+            "EX_InstrumentationEvent": 1,
+        }
+
+    def test_no_deprecated_no_counter(self):
+        """正常表达式不应影响计数器。"""
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions import EX_IntConst
+
+        translator = KismetTranslator()
+        translator.line_cpp(EX_IntConst(Value=42))
+        assert translator.skipped_tokens == {}
+
+
+class TestNoDeprecatedCommentInOutput:
+    """确保翻译输出中不再包含 /* deprecated */ 或 /* instrumentation */ 注释。"""
+
+    def test_output_does_not_contain_deprecated_comment(self):
+        from uasset_read.kismet.translator import KismetTranslator
+        from uasset_read.kismet.expressions.special import (
+            EX_DeprecatedOp4A, EX_InstrumentationEvent,
+            EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint,
+        )
+        from uasset_read.kismet.tokens import EScriptInstrumentationType
+
+        translator = KismetTranslator()
+        translator.line_cpp(EX_DeprecatedOp4A())
+        translator.line_cpp(EX_Breakpoint())
+        translator.line_cpp(EX_Tracepoint())
+        translator.line_cpp(EX_WireTracepoint())
+        translator.line_cpp(EX_InstrumentationEvent(
+            EventType=EScriptInstrumentationType.Entry,
+            EventName="Foo",
+        ))
+        # 所有返回值都应为空字符串
+        assert translator.skipped_tokens  # 确认确实翻译了这些 token

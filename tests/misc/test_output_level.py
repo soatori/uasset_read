@@ -3,7 +3,7 @@ import json
 import pytest
 from pathlib import Path
 
-SAMPLE_DIR = Path(__file__).parent / "samples"
+SAMPLE_DIR = Path(__file__).parent.parent / "samples"
 SAMPLE_BP = SAMPLE_DIR / "StackOBot_BP_Drone.uasset"
 
 

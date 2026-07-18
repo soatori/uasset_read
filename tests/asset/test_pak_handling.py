@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import io
 from io import BytesIO
+from pathlib import Path
 import struct
 import zlib
 
 import pytest
 
 from uasset_read.exceptions import ParseError
+from uasset_read.iostore.reader import IoStoreReader
+from uasset_read.iostore.structures import FIoStoreTocCompressedBlockEntry, FIoStoreTocHeader
 import uasset_read.pak.crypto as pak_crypto
 import uasset_read.pak.reader as pak_reader_module
 from uasset_read.pak.constants import PakFileVersion
 from uasset_read.pak.decompress import decompress_entry
 from uasset_read.pak.reader import PakFileReader
 from uasset_read.pak.structures import FPakCompressedBlock, FPakEntry, FPakInfo
+from uasset_read.raw import parse_audio_metadata, parse_ini_file, parse_json_descriptor, parse_raw_file
 
 
 def test_decompress_entry_reads_uncompressed_plain_bytes():
@@ -214,3 +219,213 @@ def test_legacy_v2_entry_does_not_consume_timestamp():
     # version 2 (< 3): CompressionBlockSize 不存在于流中，保持默认值 0
     assert entry.compression_block_size == 0
     assert stream.tell() == len(stream.getvalue())
+
+
+# ===========================================================================
+# 原始文件解析器测试
+# ===========================================================================
+
+def test_parse_uplugin_descriptor(tmp_path: Path):
+    path = tmp_path / "Example.uplugin"
+    path.write_text('{"FileVersion": 3, "FriendlyName": "Example"}', encoding="utf-8")
+
+    result = parse_json_descriptor(str(path))
+
+    assert result.is_success
+    assert result.file_type == "uplugin"
+    assert result.metadata["FriendlyName"] == "Example"
+
+
+def test_parse_ini_file(tmp_path: Path):
+    path = tmp_path / "DefaultGame.ini"
+    path.write_text("[/Script/Game]\nName=Demo\n", encoding="utf-8")
+
+    result = parse_ini_file(str(path))
+
+    assert result.is_success
+    assert result.metadata["/Script/Game"]["Name"] == "Demo"
+
+
+def test_parse_audio_metadata_reads_size_and_magic(tmp_path: Path):
+    path = tmp_path / "Sound.bnk"
+    path.write_bytes(b"BKHD\x00\x00\x00\x00\x7b\x00\x00\x00")
+
+    result = parse_audio_metadata(str(path))
+
+    assert result.is_success
+    assert result.metadata["codec"] == "wwise-bank"
+    assert result.metadata["soundbank_id"] == 123
+
+
+def test_parse_raw_file_rejects_unknown_type(tmp_path: Path):
+    path = tmp_path / "unknown.txt"
+    path.write_text("x", encoding="utf-8")
+
+    result = parse_raw_file(str(path))
+
+    assert not result.is_success
+    assert result.file_type == "unknown"
+
+
+# ===========================================================================
+# IoStore Reader 分区读取回归测试
+# ===========================================================================
+
+def _make_reader_with_short_partition(data: bytes, length: int) -> IoStoreReader:
+    """构造一个 UCAS 分区数据不足的 IoStoreReader。"""
+    reader = IoStoreReader.__new__(IoStoreReader)
+    # 模拟一个只有 data 长度的分区流
+    reader._ucas_files = [io.BytesIO(data)]
+    reader._header = FIoStoreTocHeader.__new__(FIoStoreTocHeader)
+    reader._header.partition_size = 0  # 不限分区大小
+    reader._header.container_flags = 0  # 无加密
+    return reader
+
+
+def _make_reader_with_compressed_block(
+    block_data: bytes, uncompressed_size: int, method_index: int = 1
+) -> IoStoreReader:
+    """构造一个压缩块数据不足的 IoStoreReader。"""
+    reader = IoStoreReader.__new__(IoStoreReader)
+    reader._ucas_files = [io.BytesIO(block_data)]
+    reader._header = FIoStoreTocHeader.__new__(FIoStoreTocHeader)
+    reader._header.container_flags = 0
+    reader._header.partition_size = len(block_data) + 100  # 确保块在第一个分区内
+    reader._compression_blocks = [
+        FIoStoreTocCompressedBlockEntry(
+            offset=0,
+            compressed_size=len(block_data) + 50,  # 声称比实际数据大
+            uncompressed_size=uncompressed_size,
+            compression_method_index=method_index,
+        )
+    ]
+    reader._compression_methods = ["None", "Zlib"]
+    reader._compression_block_size = 64 * 1024 * 1024  # 64MB
+    return reader
+
+
+def test_uncompressed_partition_short_read_raises():
+    """分区读取不足时应抛 ParseError 而非静默返回短数据。"""
+    reader = _make_reader_with_short_partition(b"ab", length=10)
+    with pytest.raises(ParseError, match="分区读取不足"):
+        reader._read_uncompressed_partitions(
+            partition_index=0, partition_offset=0, length=10
+        )
+
+
+def test_uncompressed_partition_normal_read():
+    """正常分区读取应返回完整数据。"""
+    data = b"hello world"
+    reader = _make_reader_with_short_partition(data, length=len(data))
+    result = reader._read_uncompressed_partitions(
+        partition_index=0, partition_offset=0, length=len(data)
+    )
+    assert result == data
+
+
+def test_compressed_block_short_read_raises():
+    """压缩块读取不足时应抛 ParseError 而非静默返回短数据。"""
+    # TOC 声称 compressed_size=52，但实际只有 2 字节
+    reader = _make_reader_with_compressed_block(b"ab", uncompressed_size=10)
+    with pytest.raises(ParseError, match="压缩块.*读取不足"):
+        reader._read_data(0, 2)  # 读取 2 字节触发块加载
+
+
+# ===========================================================================
+# Pak 解压缩块校验回归测试
+# ===========================================================================
+
+def _make_entry(blocks, uncompressed_size=1024, compression_block_size=65536):
+    """构造一个最小 FPakEntry。"""
+    entry = FPakEntry.__new__(FPakEntry)
+    entry.compression_blocks = blocks
+    entry.compression_block_size = compression_block_size
+    entry.is_encrypted = False
+    entry.is_compressed = True
+    entry.uncompressed_size = uncompressed_size
+    entry.compression_method_index = 1
+    entry.offset = 0
+    entry.size = sum(b.compressed_end - b.compressed_start for b in blocks)
+    entry.compression_method = "Zlib"
+    entry.hash = b"\x00" * 20
+    return entry
+
+
+def test_compressed_end_before_start_raises():
+    """compressed_end < compressed_start 应抛 ParseError。"""
+    block = FPakCompressedBlock(compressed_start=100, compressed_end=50)
+    entry = _make_entry([block])
+
+    stream = BytesIO(b"\x00" * 200)
+    with pytest.raises(ParseError, match="compressed_end.*compressed_start"):
+        decompress_entry(stream, entry, compression_method="Zlib")
+
+
+def test_short_read_raises():
+    """块读取不足时应抛 ParseError。"""
+    block = FPakCompressedBlock(compressed_start=0, compressed_end=100)
+    entry = _make_entry([block])
+
+    stream = BytesIO(b"\x00" * 10)  # 只有 10 字节，期望 100
+    with pytest.raises(ParseError, match="读取不足"):
+        decompress_entry(stream, entry, compression_method="Zlib")
+
+
+def test_uncompressed_short_read_raises():
+    """非压缩 entry 读取不足时应抛 ParseError。"""
+    entry = FPakEntry.__new__(FPakEntry)
+    entry.is_compressed = False
+    entry.is_encrypted = False
+    entry.offset = 0
+    entry.uncompressed_size = 100
+    entry.compression_blocks = []
+
+    stream = BytesIO(b"\x00" * 10)  # 只有 10 字节，期望 100
+    with pytest.raises(ParseError, match="非压缩短读"):
+        decompress_entry(stream, entry, compression_method="None")
+
+
+def test_uncompressed_normal_read():
+    """非压缩 entry 正常读取应返回完整数据。"""
+    entry = FPakEntry.__new__(FPakEntry)
+    entry.is_compressed = False
+    entry.is_encrypted = False
+    entry.offset = 0
+    entry.uncompressed_size = 5
+    entry.compression_blocks = []
+
+    data = b"hello"
+    stream = BytesIO(data)
+    result = decompress_entry(stream, entry, compression_method="None")
+    assert result == data
+
+
+def test_uncompressed_encrypted_short_read_at_aligned_size():
+    """加密非压缩 entry：读取不足 aligned raw_size 时应抛错。"""
+    entry = FPakEntry.__new__(FPakEntry)
+    entry.is_compressed = False
+    entry.is_encrypted = True
+    entry.offset = 0
+    entry.uncompressed_size = 13  # 不是 16 的倍数 → aligned 为 16
+    entry.compression_blocks = []
+
+    # 只提供 13 字节，不够 16 字节 aligned raw_size
+    stream = BytesIO(b"x" * 13)
+    dummy_key = b"\x00" * 32
+    with pytest.raises(ParseError, match="Pak 非压缩短读"):
+        decompress_entry(stream, entry, compression_method="None", encryption_key=dummy_key)
+
+
+def test_compressed_result_truncated_to_expected_size():
+    """压缩结果超过预期大小时应截断到 uncompressed_size。"""
+    # 构造一个返回过多数据的压缩块
+    original = b"x" * 100
+    compressed = zlib.compress(original)
+
+    block = FPakCompressedBlock(compressed_start=0, compressed_end=len(compressed))
+    entry = _make_entry([block], uncompressed_size=50, compression_block_size=100)  # 预期 50 字节
+
+    stream = BytesIO(compressed)
+    result = decompress_entry(stream, entry, compression_method="Zlib")
+    assert len(result) == 50
+    assert result == original[:50]

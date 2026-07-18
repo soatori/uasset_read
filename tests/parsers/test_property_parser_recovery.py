@@ -1,6 +1,23 @@
-"""PropertyTag 偏移恢复机制测试。"""
+"""PropertyTag 偏移恢复机制测试。
+
+合并来源：
+- test_array_property_bounds.py
+- test_property_types_warnings.py
+- test_top_level_asset_path.py
+"""
+import logging
+
+import pytest
 from unittest.mock import MagicMock
+
 from uasset_read.parsers.property_parser import _try_recover_property_tag
+from uasset_read.parsers.property_types import (
+    _EXPECTED_STRUCT_SIZES,
+    _TAGGED_FALLBACK_STRUCTS,
+    parse_array_property,
+    parse_struct_property,
+)
+from uasset_read.models.properties import PropertyTag
 from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
 
 
@@ -335,3 +352,224 @@ class TestPropertyTagRecovery:
         result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
         assert result is True
         assert archive.tell() == 200
+
+
+# ============================================================================
+# ArrayProperty tag.size < 4 测试（合并自 test_array_property_bounds.py）
+# ============================================================================
+
+
+class TrackingArchive:
+    """记录 read_i32 调用次数。"""
+    def __init__(self):
+        self.pos = 0
+        self.read_count = 0
+    def tell(self):
+        return self.pos
+    def read_i32(self):
+        self.read_count += 1
+        self.pos += 4
+        return 0
+    def read_fstring(self):
+        return ""
+    def read_byte(self):
+        return 0
+
+
+def test_small_tag_size_skips_count_read():
+    """tag.size < 4 不应读取 count。"""
+    for size in (0, 1, 3):
+        a = TrackingArchive()
+        tag = PropertyTag(name="A", type="ArrayProperty", size=size)
+        result = parse_array_property(tag, a, [], [])
+        assert result == [], f"size={size}: 应返回空数组"
+        assert a.read_count == 0, f"size={size}: 不应调用 read_i32 (count)"
+
+
+# ============================================================================
+# 属性类型日志级别测试（合并自 test_property_types_warnings.py）
+# ============================================================================
+
+
+class TestTransformWarningDowngrade:
+    """#340: Transform size 警告应降级为 debug。"""
+
+    def test_unknown_transform_variant_logs_debug_not_warning(self):
+        """未知 Transform 变体应使用 debug 级别（不触发 warning）。"""
+        # 创建 mock tag 和 archive
+        tag = MagicMock()
+        tag.name = "TestTransform"
+        tag.type = "StructProperty"
+        tag.struct_type = "Transform"
+        tag.size = 48  # 非标准 size (float=40, double=80)
+        tag.array_index = 0
+
+        archive = MagicMock()
+        archive.read_f32 = MagicMock(return_value=0.0)
+        archive.read_f64 = MagicMock(return_value=0.0)
+        archive.read_bytes = MagicMock(return_value=b'\x00' * 48)
+        archive.tell = MagicMock(return_value=0)
+        archive.total_size = MagicMock(return_value=1000)
+        archive._tolerant = True
+
+        name_map = []
+        export_map = []
+
+        # 直接设置 logger 级别确保 debug 消息被捕获
+        test_logger = logging.getLogger("uasset_read.parsers.property_types")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
+            try:
+                parse_struct_property(tag, archive, name_map, export_map)
+            except Exception:
+                pass  # mock 不完整，关注日志级别
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
+
+        # 应该有 debug 日志（标记 size 不匹配），无 warning
+        debug_msgs = [r for r in captured if r.levelno == logging.DEBUG]
+        warning_msgs = [r for r in captured if r.levelno == logging.WARNING
+                        and 'Transform' in r.message]
+        assert len(debug_msgs) > 0, f"Expected debug logs but got none"
+        assert len(warning_msgs) == 0, f"Expected no warnings but got: {warning_msgs}"
+
+    def test_unknown_non_lwc_struct_variant_logs_debug_not_warning(self):
+        """非 LWC 结构体的未知变体也应使用 debug 级别。"""
+        tag = MagicMock()
+        tag.name = "TestStruct"
+        tag.type = "StructProperty"
+        tag.struct_type = "Vector"  # 在 _EXPECTED_STRUCT_SIZES 中（非 LWC 变体），但 size 不匹配
+        tag.size = 99  # 不匹配预期的 12，触发非 LWC 分支（line 749）
+        tag.array_index = 0
+
+        archive = MagicMock()
+        archive.read_f32 = MagicMock(return_value=0.0)
+        archive.read_f64 = MagicMock(return_value=0.0)
+        archive.read_bytes = MagicMock(return_value=b'\x00' * 99)
+        archive.tell = MagicMock(return_value=0)
+        archive.total_size = MagicMock(return_value=1000)
+
+        name_map = []
+        export_map = []
+
+        # 直接设置 logger 级别确保 debug 消息被捕获
+        test_logger = logging.getLogger("uasset_read.parsers.property_types")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
+            try:
+                parse_struct_property(tag, archive, name_map, export_map)
+            except Exception:
+                pass  # mock 不完整，关注日志级别
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
+
+        # 应该有 debug 日志，没有 warning
+        debug_msgs = [r for r in captured if r.levelno == logging.DEBUG]
+        warning_msgs = [r for r in captured if r.levelno == logging.WARNING
+                        and 'Vector' in r.message]
+        assert len(debug_msgs) > 0 and len(warning_msgs) == 0
+
+    def test_standard_transform_size_no_warning(self, caplog):
+        """标准 Transform size (40 或 80) 不应产生任何日志。"""
+        tag = MagicMock()
+        tag.name = "TestTransform"
+        tag.type = "StructProperty"
+        tag.struct_type = "Transform"
+        tag.size = 40  # 标准 float 尺寸
+        tag.array_index = 0
+
+        archive = MagicMock()
+        archive.read_f32 = MagicMock(return_value=0.0)
+        archive.read_f64 = MagicMock(return_value=0.0)
+        archive.read_bytes = MagicMock(return_value=b'\x00' * 40)
+        archive.tell = MagicMock(return_value=0)
+        archive.total_size = MagicMock(return_value=1000)
+
+        name_map = []
+        export_map = []
+
+        with caplog.at_level(logging.DEBUG):
+            try:
+                parse_struct_property(tag, archive, name_map, export_map)
+            except Exception:
+                pass
+
+        # 标准尺寸不应有 size mismatch 相关日志
+        size_mismatch_msgs = [r for r in caplog.records
+                              if 'tag.size' in r.message and 'Transform' in r.message]
+        assert len(size_mismatch_msgs) == 0
+
+
+class TestArrayPropertySmallSize:
+    """#345: ArrayProperty tag.size < 4 处理测试。"""
+
+    def test_empty_array_no_warning(self, caplog):
+        """tag.size=0 表示空数组，不应输出 warning。"""
+        tag = MagicMock()
+        tag.name = "DebugWatch_RigVMModel___Test"
+        tag.type = "ArrayProperty"
+        tag.size = 0  # 空数组
+        tag.array_index = 0
+        tag.inner_type = "IntProperty"
+
+        archive = MagicMock()
+        archive.read_i32 = MagicMock(return_value=0)  # count = 0
+        archive.tell = MagicMock(return_value=0)
+
+        with caplog.at_level(logging.WARNING):
+            result = parse_array_property(tag, archive, [], [])
+
+        assert result == []
+        # 不应有 warning 关于 tag.size < 4
+        size_warnings = [r for r in caplog.records
+                        if r.levelno >= logging.WARNING and 'tag.size' in r.message]
+        assert len(size_warnings) == 0
+
+    def test_tag_size_1_no_warning(self, caplog):
+        """tag.size=1 也应静默处理（RigVM DebugWatch 场景）。"""
+        tag = MagicMock()
+        tag.name = "DebugWatch_RigVMModel___Test[0]"
+        tag.type = "ArrayProperty"
+        tag.size = 1
+        tag.array_index = 0
+        tag.inner_type = "IntProperty"
+
+        archive = MagicMock()
+        archive.read_i32 = MagicMock(return_value=0)
+        archive.tell = MagicMock(return_value=0)
+
+        with caplog.at_level(logging.WARNING):
+            result = parse_array_property(tag, archive, [], [])
+
+        assert result == []
+        size_warnings = [r for r in caplog.records
+                        if r.levelno >= logging.WARNING and 'tag.size' in r.message]
+        assert len(size_warnings) == 0
+
+
+# ============================================================================
+# TopLevelAssetPath 结构体测试（合并自 test_top_level_asset_path.py）
+# ============================================================================
+
+
+class TestTopLevelAssetPath:
+    def test_expected_size_is_none(self):
+        """TopLevelAssetPath 应为 None（可变大小，由 fast-path 直接处理）。"""
+        size = _EXPECTED_STRUCT_SIZES.get("TopLevelAssetPath")
+        assert size is None
+
+    def test_not_in_tagged_fallback_structs(self):
+        """TopLevelAssetPath 不应在 _TAGGED_FALLBACK_STRUCTS 中（expected_size=None 时 size-mismatch 块被跳过）。"""
+        assert "TopLevelAssetPath" not in _TAGGED_FALLBACK_STRUCTS

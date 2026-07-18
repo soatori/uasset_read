@@ -8,6 +8,7 @@ session 状态管理、cleanup、轮转、debug 聚合。
 import importlib
 import io
 import logging
+import logging.handlers
 import os
 import subprocess
 import sys
@@ -23,8 +24,10 @@ from uasset_read.config import LogConfig
 from uasset_read.core import _configure_logging
 from uasset_read import project_logging
 from uasset_read.project_logging import (
+    _build_log_path,
     _reset_logging_state_for_tests,
     configure_project_logging,
+    setup_logging,
 )
 
 
@@ -702,3 +705,42 @@ def test_scoped_api_logs_asset_lifecycle_and_failure_status(tmp_path):
     assert "asset_start" in output
     assert "asset_end status=error" in output
     assert "duration_ms=" in output
+
+
+# ===========================================================================
+# 7. 日志文件优化（合并自 test_log_file_optimization）
+# ===========================================================================
+
+class TestLogFileOptimization:
+    def test_run_filename_contains_run_id(self):
+        path = _build_log_path(Path(tempfile.mkdtemp()), "test-run")
+        basename = os.path.basename(path)
+        assert basename.startswith("uasset_read-")
+        assert basename.endswith("-test-run.log")
+
+    def test_rotating_handler_used(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup_logging(log_dir=tmpdir)
+            root_logger = logging.getLogger("uasset_read")
+            rotating = [h for h in root_logger.handlers
+                        if isinstance(h, logging.handlers.RotatingFileHandler)]
+            assert len(rotating) >= 1
+            _reset_logging_state_for_tests()
+
+    def test_rotation_configured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup_logging(log_dir=tmpdir)
+            root_logger = logging.getLogger("uasset_read")
+            rotating = [h for h in root_logger.handlers
+                        if isinstance(h, logging.handlers.RotatingFileHandler)]
+            handler = rotating[0]
+            assert handler.maxBytes >= 1024 * 1024
+            assert handler.backupCount >= 1
+            _reset_logging_state_for_tests()
+
+    def test_log_file_created_in_specified_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            setup_logging(log_dir=tmpdir)
+            log_files = list(Path(tmpdir).glob("uasset_read-*.log"))
+            assert len(log_files) == 1
+            _reset_logging_state_for_tests()

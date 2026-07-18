@@ -1,4 +1,10 @@
-"""IR 构建器测试 — build_package_ir 从 ParseResult 到 PackageIR 的转换。"""
+"""IR 构建器测试 — build_package_ir 从 ParseResult 到 PackageIR 的转换。
+
+合并来源：
+  - test_export_dependency.py
+"""
+from __future__ import annotations
+
 import pytest
 from unittest.mock import MagicMock
 from uasset_read.ir_builder import (
@@ -18,7 +24,7 @@ from uasset_read.ir_builder import (
 )
 from uasset_read.models.ir import (
     PackageIR, ExportIR, PackageHeaderIR, GraphIR, NodeIR, PinIR,
-    PropertyIR, LinkerSummaryIR,
+    PropertyIR, LinkerSummaryIR, ExportDependencyIR,
 )
 
 
@@ -648,3 +654,56 @@ class TestLinkerSummaryIR:
                              export_paths=["/Game/Test"])
         assert ls.has_linker is True
         assert len(ls.import_paths) == 1
+
+
+# ===========================================================================
+# ExportDependencyIR 数据结构测试（原 test_export_dependency.py）
+# ===========================================================================
+
+def test_export_dependency_ir_basic():
+    """测试 ExportDependencyIR 基本创建和字段访问"""
+    ir = ExportDependencyIR(
+        export_index=0,
+        serialization_before_serialization=[1, 2],
+        create_before_serialization=[3],
+        serialization_before_create=[],
+        create_before_create=[4]
+    )
+    assert ir.export_index == 0
+    assert len(ir.serialization_before_serialization) == 2
+    assert ir.serialization_before_serialization == [1, 2]
+    assert ir.create_before_serialization == [3]
+    assert ir.serialization_before_create == []
+    assert ir.create_before_create == [4]
+
+
+def test_export_dependency_ir_empty_dependencies():
+    """测试所有依赖列表为空的情况"""
+    ir = ExportDependencyIR(
+        export_index=5,
+        serialization_before_serialization=[],
+        create_before_serialization=[],
+        serialization_before_create=[],
+        create_before_create=[]
+    )
+    assert ir.export_index == 5
+    assert len(ir.serialization_before_serialization) == 0
+    assert len(ir.create_before_serialization) == 0
+    assert len(ir.serialization_before_create) == 0
+    assert len(ir.create_before_create) == 0
+
+
+def test_export_dependency_ir_multiple_dependencies():
+    """测试多个依赖的情况"""
+    ir = ExportDependencyIR(
+        export_index=10,
+        serialization_before_serialization=[0, 1, 2, 3],
+        create_before_serialization=[4, 5],
+        serialization_before_create=[6, 7, 8],
+        create_before_create=[9]
+    )
+    assert ir.export_index == 10
+    assert len(ir.serialization_before_serialization) == 4
+    assert len(ir.create_before_serialization) == 2
+    assert len(ir.serialization_before_create) == 3
+    assert len(ir.create_before_create) == 1

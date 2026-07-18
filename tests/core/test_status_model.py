@@ -14,6 +14,8 @@ from typing import Any
 import pytest
 
 from uasset_read.models.status import _result_status, PARTIAL_STATUSES, FAILED_STATUSES
+from uasset_read.models.fallback import ExportParseStatus
+from uasset_read.models.validators import validate_parse_status
 
 
 # ---------------------------------------------------------------------------
@@ -612,3 +614,34 @@ class TestMarkdownStatusRendering:
         renderer = MarkdownRenderer()
         output = renderer.render(ir, RenderOptions())
         assert "partial" in output.lower()
+
+
+# ===========================================================================
+# parse_status 验证器
+# ===========================================================================
+
+class TestParseStatusValidation:
+    """parse_status 验证器测试。"""
+
+    def test_validate_parse_status_valid(self):
+        """有效 parse_status 值应原样返回。"""
+        assert validate_parse_status("success") == "success"
+        assert validate_parse_status("opaque") == "opaque"
+        assert validate_parse_status("partial_metadata") == "partial_metadata"
+
+    def test_validate_parse_status_all_valid(self):
+        """所有 ExportParseStatus 枚举值均应通过验证。"""
+        for status in ExportParseStatus:
+            assert validate_parse_status(status.value) == status.value
+
+    def test_validate_parse_status_invalid(self):
+        """无效 parse_status 应抛出 ValueError。"""
+        with pytest.raises(ValueError):
+            validate_parse_status("invalid_status")
+        with pytest.raises(ValueError):
+            validate_parse_status("ok")
+
+    def test_validate_parse_status_error_message(self):
+        """错误信息应包含无效值和合法值集合。"""
+        with pytest.raises(ValueError, match=r"Invalid parse_status.*bogus"):
+            validate_parse_status("bogus")

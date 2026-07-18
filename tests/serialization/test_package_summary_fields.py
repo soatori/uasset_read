@@ -1,19 +1,52 @@
-"""PackageFileSummary 字段解析和常量验证测试。"""
+"""PackageFileSummary 字段解析、常量验证与包元数据测试。
+
+合并来源:
+- test_package_summary_fields.py — 常量/字段/legacy version/skeletal mesh
+- test_package_summary.py — package_name 填充验证 (#175)
+- test_is_cooked.py — is_cooked 标志位判断 (#381)
+- test_graph_pin_recovery.py — P73-RECOVERY 置信度评估 (#344)
+- test_graph_diagnostics.py — graph serializer recovery path diagnostics
+- test_payload_offset_strategy.py — 属性偏移策略测试
+- test_property_tag_retry.py — 重试逻辑验证 (#276)
+- test_property_tag_legacy_struct_type.py — legacy path struct_type ordering (#404)
+- test_property_parser_error_handling.py — 异常处理日志验证
+"""
 from __future__ import annotations
 
+import logging
 import os
+import re
 import struct
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from uasset_read.constants import (
+    PKG_Cooked,
     PKG_FilterEditorOnly,
+    PKG_UncookedOnly,
     PACKAGE_FILE_TAG,
     UE5_IMPORT_TYPE_HIERARCHIES,
     UE5_LEGACY_VERSION,
     UE5_PACKAGE_SAVED_HASH,
 )
+from uasset_read.archive import FArchive
+from uasset_read.exceptions import ParseError
+from uasset_read.models.diagnostics import OffsetRangeDiagnostic, DiagnosticSeverity
+from uasset_read.models.properties import PropertyTag, PropertyValue
+from uasset_read.parsers.property_parser import (
+    parse_properties_from_export,
+    _parse_unversioned_properties_from_mapping,
+    _resolve_mapping_struct_name,
+    parse_property_value,
+)
+from uasset_read.serializers.graph import _read_fstring_safe, validate_pin_reference_at
+from uasset_read.serializers.graph_pin import _recover_pin_array_count
+from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+from uasset_read.serializers.property_tags import read_property_tag
+from tests.conftest import asset_path
 
 
 class TestConstants:
@@ -171,3 +204,152 @@ class TestSkeletalMeshParsing:
         r = parse_uasset_with_linker(path, tolerant=True)
         assert r.is_success, f"Errors: {r.errors}"
         assert len(r.summary.generations) > 0
+
+
+# ---------------------------------------------------------------------------
+# package_name 填充验证 (#175) — 原 test_package_summary.py
+# ---------------------------------------------------------------------------
+
+
+class TestPackageName:
+    """package_name 字段正确性。"""
+
+    def test_package_name_not_none_string(self, sample_root: Path):
+        """package_name 不应为字符串 'None'"""
+        from uasset_read.parse_uasset import parse_package
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        result = parse_package(str(texture_path))
+        assert result.summary is not None
+        assert result.summary.package_name is not None
+        assert result.summary.package_name != "None"
+        assert len(result.summary.package_name) > 0
+
+    def test_package_name_not_none_type(self, sample_root: Path):
+        """package_name 不应为 None 类型"""
+        from uasset_read.parse_uasset import parse_package
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        result = parse_package(str(texture_path))
+        assert result.summary is not None
+        assert isinstance(result.summary.package_name, str)
+
+    def test_package_name_derived_from_path_when_none(self, sample_root: Path):
+        """当二进制中存储 'None' 时，应从文件路径推导 package_name"""
+        from uasset_read.parse_uasset import parse_package
+        from tests.conftest import asset_path, ASSET_TEXTURE_BRICK
+        texture_path = asset_path(sample_root, ASSET_TEXTURE_BRICK)
+        result = parse_package(str(texture_path))
+        assert result.summary is not None
+        # 本地样本资产的包名
+        assert result.summary.package_name is not None
+        assert len(result.summary.package_name) > 0
+
+    def test_package_name_valid_fstring_assets(self, sample_root: Path):
+        """正常存储 package_name 的资产应保持不变"""
+        import glob
+        from uasset_read.parse_uasset import parse_package
+        samples = glob.glob(
+            str(sample_root / "**/BP_*.uasset"), recursive=True
+        )
+        if not samples:
+            pytest.skip("No BP_ samples found")
+        # 只测试前 3 个
+        for path in samples[:3]:
+            result = parse_package(path)
+            assert result.summary is not None
+            assert result.summary.package_name != "None"
+            assert len(result.summary.package_name) > 0
+
+
+# ---------------------------------------------------------------------------
+# is_cooked 标志位判断 (#381) — 原 test_is_cooked.py
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_result(package_flags):
+    """构造模拟的 ParseResult，确保 _read_secondary_tables 能走到 read_asset_registry_data。"""
+    from uasset_read.models.result import ParseResult
+    mock_result = MagicMock(spec=ParseResult)
+    mock_result.summary.package_flags = package_flags
+    mock_result.summary.asset_registry_data_offset = 100
+    mock_result.summary.file_version_ue4 = 510
+    mock_result.name_map = []
+    # MagicMock 的 hasattr 总是返回 True，所以必须设置这些属性为 0，
+    # 让条件判断 `> 0` 返回 False，跳过不需要的读取步骤
+    mock_result.summary.soft_package_references_count = 0
+    mock_result.summary.soft_object_paths_count = 0
+    # depends_offset 和 preload_dependency_count 不参与 > 0 比较，
+    # hasattr 总是 True，但 read_depends_map / read_preload_dependencies 已被 patch，安全
+    return mock_result
+
+
+def _call_secondary_tables(mock_result):
+    """调用 _read_secondary_tables，patch 中间依赖函数以隔离 is_cooked 逻辑。"""
+    from uasset_read.parse_stages import _read_secondary_tables
+    with patch('uasset_read.parse_stages.read_asset_registry_data') as mock_read, \
+         patch('uasset_read.parse_stages.read_depends_map'), \
+         patch('uasset_read.parse_stages.read_preload_dependencies'), \
+         patch('uasset_read.parse_stages.read_soft_package_references'), \
+         patch('uasset_read.parse_stages.read_soft_object_paths'):
+        mock_read.return_value = None
+        _read_secondary_tables(
+            archive=MagicMock(),
+            result=mock_result,
+            tolerant=True,
+            linker=MagicMock(),
+            mappings_provider=MagicMock(),
+            path="test.uasset",
+            memory_monitor=MagicMock(),
+        )
+        return mock_read
+
+
+class TestIsCookedFlag:
+    """测试 is_cooked 标志位判断"""
+
+    def test_is_cooked_uses_pkg_cooked_flag(self):
+        """验证 is_cooked 使用 PKG_Cooked (0x200) 而非 PKG_UncookedOnly (0x100)"""
+        mock_result = _make_mock_result(PKG_Cooked)  # 0x200
+        mock_read = _call_secondary_tables(mock_result)
+
+        assert mock_read.called, "read_asset_registry_data 应被调用"
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs.get('is_cooked') is True, \
+            "PKG_Cooked 设置时 is_cooked 应为 True"
+
+    def test_not_cooked_when_no_flag(self):
+        """验证无 PKG_Cooked 标志时 is_cooked=False"""
+        mock_result = _make_mock_result(0)  # 无标志
+        mock_read = _call_secondary_tables(mock_result)
+
+        assert mock_read.called, "read_asset_registry_data 应被调用"
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs.get('is_cooked') is False, \
+            "无 PKG_Cooked 标志时 is_cooked 应为 False"
+
+    def test_pkg_uncooked_only_does_not_affect_is_cooked(self):
+        """验证 PKG_UncookedOnly (0x100) 不影响 is_cooked 判断"""
+        mock_result = _make_mock_result(PKG_UncookedOnly)  # 0x100
+        mock_read = _call_secondary_tables(mock_result)
+
+        assert mock_read.called, "read_asset_registry_data 应被调用"
+        call_kwargs = mock_read.call_args[1]
+        assert call_kwargs.get('is_cooked') is False, \
+            "PKG_UncookedOnly 不应影响 is_cooked（应为 False）"
+
+    def test_both_flags_set(self):
+        """验证同时设置 PKG_Cooked 和 PKG_UncookedOnly 时的行为"""
+        mock_result = _make_mock_result(PKG_Cooked | PKG_UncookedOnly)
+        mock_read = _call_secondary_tables(mock_result)
+
+        assert mock_read.called, "read_asset_registry_data 应被调用"
+        call_kwargs = mock_read.call_args[1]
+        # PKG_Cooked 存在，所以 is_cooked 应为 True
+        assert call_kwargs.get('is_cooked') is True, \
+            "PKG_Cooked 存在时 is_cooked 应为 True"
+
+    def test_constants_values(self):
+        """验证常量值正确"""
+        assert PKG_Cooked == 0x200, "PKG_Cooked 应为 0x200"
+        assert PKG_UncookedOnly == 0x100, "PKG_UncookedOnly 应为 0x100"

@@ -14,6 +14,7 @@ archive.py 覆盖率补充测试
 """
 from __future__ import annotations
 
+import inspect
 import struct
 import pytest
 from io import BytesIO
@@ -22,6 +23,7 @@ from uasset_read.archive import FArchive, ByteArchive, _contains_binary_data
 from uasset_read.constants import MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT
 from uasset_read.exceptions import ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.package import PackageArchive
 
 
 # ===========================================================================
@@ -333,6 +335,37 @@ class TestByteArchive:
         with pytest.raises(ParseError, match="element_count.*负数"):
             ar.read_bulk_array(4, -1)
 
+    def test_read_bulk_array_zero_elements(self):
+        """零元素 BulkArray — 返回空字节。"""
+        data = b'\x00' * 10
+        ar = ByteArchive(data)
+        result = ar.read_bulk_array(element_size=4, element_count=0)
+        assert len(result) == 0
+        assert result == b''
+
+    def test_read_bulk_array_single_element(self):
+        """单元素 BulkArray。"""
+        data = b'\xAB\xCD\xEF\x01'
+        ar = ByteArchive(data)
+        result = ar.read_bulk_array(element_size=4, element_count=1)
+        assert len(result) == 4
+        assert result == data
+
+    def test_read_bulk_array_advances_position(self):
+        """读取后文件位置正确推进。"""
+        data = b'\x00' * 30
+        ar = ByteArchive(data)
+        assert ar.tell() == 0
+        ar.read_bulk_array(element_size=4, element_count=5)
+        assert ar.tell() == 20
+
+    def test_read_bulk_array_element_size_one(self):
+        """element_size=1 时等价于 read(count)。"""
+        data = bytes(range(10))
+        ar = ByteArchive(data)
+        result = ar.read_bulk_array(element_size=1, element_count=10)
+        assert result == data
+
     def test_validate_size_negative(self):
         """validate_size 负数大小 — 容错模式返回，严格模式抛异常。"""
         data = b'\x01\x02\x03'
@@ -575,6 +608,85 @@ class TestByteArchive:
         assert entries[0].key == "arr_key"
         assert entries[0].type == "array[2]"
 
+    def test_empty_data(self):
+        """空数据创建。"""
+        ar = ByteArchive(b'')
+        assert ar.total_size() == 0
+        assert ar.tell() == 0
+
+    def test_seek_backward(self):
+        """向后 seek 回退。"""
+        ar = ByteArchive(b'\x00\x01\x02\x03\x04')
+        ar.read(3)
+        ar.seek(1)
+        assert ar.tell() == 1
+        assert ar.read(2) == b'\x01\x02'
+
+    def test_seek_to_start(self):
+        """seek 回起始位置。"""
+        ar = ByteArchive(b'\x0a\x0b\x0c')
+        ar.read(3)
+        ar.seek(0)
+        assert ar.tell() == 0
+        assert ar.read(1) == b'\x0a'
+
+    def test_seek_to_end(self):
+        """seek 到末尾 — 读取应抛出 ParseError。"""
+        ar = ByteArchive(b'\x0a\x0b\x0c')
+        ar.seek(3)
+        assert ar.tell() == 3
+        with pytest.raises(ParseError):
+            ar.read(1)
+
+    def test_repeated_seek_read(self):
+        """反复 seek + read 验证稳定性。"""
+        data = bytes(range(256))
+        ar = ByteArchive(data)
+        for i in range(0, 256, 17):
+            ar.seek(i)
+            assert ar.tell() == i
+            val = ar.read(1)
+            assert val == bytes([i])
+
+
+class TestByteArchiveFromMemoryview:
+    """从 memoryview 创建 ByteArchive 的测试。"""
+
+    def test_basic_read(self):
+        """从 memoryview 创建并读取数据。"""
+        raw = bytearray(b'\x0a\x0b\x0c\x0d')
+        mv = memoryview(raw)
+        ar = ByteArchive(mv)
+        assert ar.total_size() == 4
+        assert ar.read(2) == b'\x0a\x0b'
+        assert ar.read(2) == b'\x0c\x0d'
+
+
+# ===========================================================================
+# archive.py 代码质量验证测试
+# ===========================================================================
+
+class TestArchiveQuality:
+    """验证 archive.py 代码质量改进。"""
+
+    def test_archive_has_type_annotations(self):
+        """FArchive 方法应有类型注解。"""
+        sig = inspect.signature(FArchive.read_u32)
+        assert sig.return_annotation != inspect.Parameter.empty
+
+    def test_farchive_repr(self, tmp_path):
+        """FArchive 应有可读的 repr，包含路径和文件大小。"""
+        test_file = tmp_path / "test.uasset"
+        test_file.write_bytes(b'\x00' * 256)
+        ar = FArchive(str(test_file))
+        try:
+            r = repr(ar)
+            assert 'FArchive' in r
+            assert str(test_file) in r
+            assert '256' in r
+        finally:
+            ar.close()
+
 
 # ===========================================================================
 # _contains_binary_data 函数测试
@@ -611,3 +723,55 @@ class TestContainsBinaryData:
         # 前 10 个字符都是 null，但超过 max_check_length 后有正常字符
         binary_str = "\x00" * 10 + "a" * 256
         assert _contains_binary_data(binary_str, max_check_length=10) is True
+
+
+# ===========================================================================
+# PackageArchive.read() 短读校验
+# ===========================================================================
+
+class ShortReadArchive:
+    """模拟短读的底层 archive。"""
+    def __init__(self):
+        self.pos = 0
+    def read(self, size):
+        return b"X"  # 总是只返回 1 字节
+    def seek(self, pos):
+        self.pos = pos
+    def tell(self):
+        return self.pos
+    def close(self):
+        pass
+    def total_size(self):
+        return 4
+    def set_byte_swapping(self, enabled):
+        pass
+
+
+def test_package_archive_short_read_raises():
+    """短读应抛 ParseError 而非静默推进位置。"""
+    archive = PackageArchive(ShortReadArchive())
+    with pytest.raises(ParseError, match="short read"):
+        archive.read(4)
+
+
+def test_package_archive_normal_read_ok():
+    """正常读取应正常工作。"""
+    class GoodArchive:
+        def __init__(self):
+            self.pos = 0
+        def read(self, size):
+            return b"\x00" * size
+        def seek(self, pos):
+            self.pos = pos
+        def tell(self):
+            return self.pos
+        def close(self):
+            pass
+        def total_size(self):
+            return 4
+        def set_byte_swapping(self, enabled):
+            pass
+
+    archive = PackageArchive(GoodArchive())
+    data = archive.read(4)
+    assert len(data) == 4

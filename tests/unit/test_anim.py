@@ -6,10 +6,13 @@
 - test_anim_graph_types.py
 - test_anim_ir_builder.py
 - test_anim_ir_models.py
+- test_handler_parametrize.py
 """
 import pytest
 from unittest.mock import MagicMock
 
+from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
+from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
 from uasset_read.parsers.class_specific_skip import SKIP_CLASS_NAMES
 from uasset_read.parsers.class_serialization_strategy import (
     get_serialization_strategy,
@@ -17,6 +20,7 @@ from uasset_read.parsers.class_serialization_strategy import (
     _SKIP_CLASSES,
 )
 from uasset_read.ir_builder import _build_export_ir, _build_graph_ir
+from uasset_read.models.fallback import ExportParseStatus
 from uasset_read.models.ir import (
     AnimBlueprintIR,
     AnimMontageIR,
@@ -341,3 +345,38 @@ class TestAnimMontageIR:
         assert ir.rate_scale == 1.0
         assert ir.notifies == []
         assert ir.composite_sections == []
+
+
+# ============================================================
+# Handler 参数化测试（原 test_handler_parametrize.py）
+# ============================================================
+
+HANDLER_CLASSES = [
+    ("AnimBlueprintHandler", AnimBlueprintHandler),
+    ("AnimMontageHandler", AnimMontageHandler),
+]
+
+
+@pytest.mark.parametrize("name,cls", HANDLER_CLASSES, ids=[h[0] for h in HANDLER_CLASSES])
+def test_handler_exists(name, cls):
+    """Handler 类应该存在"""
+    assert cls is not None
+
+
+@pytest.mark.parametrize("name,cls", HANDLER_CLASSES, ids=[h[0] for h in HANDLER_CLASSES])
+def test_handler_has_handle_method(name, cls):
+    """Handler 应该有 handle 方法"""
+    handler = cls()
+    assert hasattr(handler, "handle")
+
+
+@pytest.mark.parametrize("name,cls", HANDLER_CLASSES, ids=[h[0] for h in HANDLER_CLASSES])
+def test_handler_returns_parse_status(name, cls):
+    """handle 方法应该返回 ParseStatus"""
+    handler = cls()
+    export = MagicMock()
+    export.instance = MagicMock()
+    export.instance.properties = {}
+    context = MagicMock()
+    result = handler.handle(export, context)
+    assert isinstance(result, ExportParseStatus)

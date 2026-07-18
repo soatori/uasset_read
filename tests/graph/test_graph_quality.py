@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -41,6 +41,11 @@ from uasset_read.graph.flow_builder import (
     build_execution_flow_entries,
     build_data_flows,
 )
+from uasset_read.graph.chain_builder import build_execution_chains
+from pathlib import Path
+
+from uasset_read.constants import CONTROL_FLOW_NODES, BRANCH_TYPE_MAP, PKG_Cooked
+from uasset_read.graph.parser import extract_blueprint_graphs
 
 
 # ============================================================================
@@ -1533,3 +1538,714 @@ class TestExtractCallFunctionParameters:
         )
         result = _extract_call_function_parameters(node)
         assert result["input_params"][0]["is_reference"] is True
+
+
+# ============================================================================
+# 来自 test_control_flow_expansion.py — 控制流节点常量验证
+# ============================================================================
+
+REQUIRED_CONTROL_FLOW = {
+    "K2Node_IfThenElse",
+    "K2Node_Switch",
+    "K2Node_SwitchString",
+    "K2Node_SwitchEnum",
+    "K2Node_SwitchInteger",
+    "K2Node_MacroInstance",
+    # 新增
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    "K2Node_Select",
+    "K2Node_ExecutionSequence",
+}
+
+REQUIRED_BRANCH_TYPES = {
+    "K2Node_IfThenElse",
+    "K2Node_Switch",
+    "K2Node_SwitchString",
+    "K2Node_SwitchEnum",
+    "K2Node_SwitchInteger",
+    "K2Node_MacroInstance",
+    # 新增
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    "K2Node_Select",
+}
+
+
+class TestControlFlowExpansion:
+    """CONTROL_FLOW_NODES / BRANCH_TYPE_MAP 完整性验证。"""
+
+    def test_control_flow_nodes_complete(self):
+        """CONTROL_FLOW_NODES 应包含所有已知控制流节点。"""
+        missing = REQUIRED_CONTROL_FLOW - CONTROL_FLOW_NODES
+        assert not missing, f"CONTROL_FLOW_NODES 缺少: {missing}"
+
+    def test_branch_type_map_complete(self):
+        """BRANCH_TYPE_MAP 应包含所有控制流节点的分支类型。"""
+        missing = REQUIRED_BRANCH_TYPES - set(BRANCH_TYPE_MAP.keys())
+        assert not missing, f"BRANCH_TYPE_MAP 缺少: {missing}"
+
+
+# ============================================================================
+# 来自 test_exec_pin_names.py — 链式输出显示执行引脚名称
+# ============================================================================
+
+class _ExecPinMockNode:
+    """模拟 UEdGraphNode，仅保留链构建所需的属性。"""
+    def __init__(self, guid, class_name=""):
+        self.node_guid = guid
+        self.class_name = class_name
+
+
+class _ExecPinMockGraph:
+    """模拟 UEdGraph，仅保留链构建所需的属性。"""
+    def __init__(self, nodes):
+        self.nodes = nodes
+
+
+class TestExecPinNames:
+    """验证链式输出显示执行引脚名称。"""
+
+    def test_chain_shows_exec_pin_names(self):
+        """链式字符串应包含执行引脚名称。
+
+        used_exec_pin_name 设置在源节点上，表示该节点的 exec output pin 名称。
+        链式字符串中箭头的引脚名称来自源节点（names[i]），而非目标节点。
+        """
+        mock_flows = [
+            {
+                "start_event": "Event.BeginPlay",
+                "nodes": [
+                    {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
+                    {"node_guid": "g2", "node_type": "K2Node_CallFunction", "used_exec_pin_name": "Then"},
+                    {"node_guid": "g3", "node_type": "K2Node_CallFunction"},
+                ],
+            }
+        ]
+
+        mock_graph = _ExecPinMockGraph([
+            _ExecPinMockNode("g1", "K2Node_Event"),
+            _ExecPinMockNode("g2", "K2Node_CallFunction"),
+            _ExecPinMockNode("g3", "K2Node_CallFunction"),
+        ])
+
+        chains = build_execution_chains(mock_graph, mock_flows)
+        assert len(chains) > 0
+        chain_str = chains[0].get("chains", [""])[0]
+        # 链应包含源节点的引脚名称: N0--exec-->N1--Then-->N2
+        assert "exec" in chain_str, f"链应包含 'exec' 引脚名称: {chain_str}"
+        assert "Then" in chain_str, f"链应包含 'Then' 引脚名称: {chain_str}"
+
+    def test_chain_fallback_to_arrow_without_pin_names(self):
+        """无引脚名称时应使用简单的箭头格式。"""
+        mock_flows = [
+            {
+                "start_event": "Event.BeginPlay",
+                "nodes": [
+                    {"node_guid": "g1", "node_type": "K2Node_Event"},
+                    {"node_guid": "g2", "node_type": "K2Node_CallFunction"},
+                ],
+            }
+        ]
+
+        mock_graph = _ExecPinMockGraph([
+            _ExecPinMockNode("g1", "K2Node_Event"),
+            _ExecPinMockNode("g2", "K2Node_CallFunction"),
+        ])
+
+        chains = build_execution_chains(mock_graph, mock_flows)
+        chain_str = chains[0].get("chains", [""])[0]
+        assert "->" in chain_str, f"链应包含箭头: {chain_str}"
+        # 不应包含 -- 引脚名称格式
+        assert "--" not in chain_str, f"无引脚名称时不应包含 '--': {chain_str}"
+
+
+# ============================================================================
+# 来自 test_chain_exec_pins.py — 链式执行引脚测试
+# ============================================================================
+
+class _ChainMockNode:
+    """模拟 UEdGraphNode，仅保留链构建所需的属性。"""
+    def __init__(self, guid, class_name=""):
+        self.node_guid = guid
+        self.class_name = class_name
+
+
+class _ChainMockGraph:
+    """模拟 UEdGraph，仅保留链构建所需的属性。"""
+    def __init__(self, nodes):
+        self.nodes = nodes
+
+
+class TestChainExecPins:
+    """链式执行引脚测试。"""
+
+    def test_chain_mixed_pin_names(self):
+        """部分节点有引脚名称、部分没有时应正确混合。
+
+        used_exec_pin_name 设置在源节点上。g1 有 "exec"，g2 无引脚名称。
+        g1->g2 应使用 "exec"，g2->g3 应使用简单箭头（因为 g2 无引脚名称）。
+        """
+        mock_flows = [
+            {
+                "start_event": "Event.BeginPlay",
+                "nodes": [
+                    {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
+                    {"node_guid": "g2", "node_type": "K2Node_CallFunction"},  # 无引脚名称
+                    # g3 是最后一个节点
+                ],
+            }
+        ]
+
+        mock_graph = _ChainMockGraph([
+            _ChainMockNode("g1", "K2Node_Event"),
+            _ChainMockNode("g2", "K2Node_CallFunction"),
+            _ChainMockNode("g3", "K2Node_CallFunction"),
+        ])
+
+        chains = build_execution_chains(mock_graph, mock_flows)
+        chain_str = chains[0].get("chains", [""])[0]
+        # g1 有 "exec" -> 应使用 exec 引脚，g2 无引脚名称 -> 应使用简单箭头
+        assert "exec" in chain_str, f"链应包含 'exec': {chain_str}"
+        # g1->g2 应使用 exec 引脚
+        assert "--exec-->" in chain_str, f"g1->g2 应使用 exec 引脚: {chain_str}"
+        # g2->g3 应使用简单箭头（g2 无引脚名称）
+        assert "->" in chain_str, f"g2->g3 应使用简单箭头: {chain_str}"
+
+    def test_single_node_chain(self):
+        """单节点链不应包含任何箭头。"""
+        mock_flows = [
+            {
+                "start_event": "Event.BeginPlay",
+                "nodes": [
+                    {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
+                ],
+            }
+        ]
+
+        mock_graph = _ChainMockGraph([_ChainMockNode("g1", "K2Node_Event")])
+
+        chains = build_execution_chains(mock_graph, mock_flows)
+        chain_str = chains[0].get("chains", [""])[0]
+        assert chain_str == "N0", f"单节点链应为 'N0': {chain_str}"
+        assert "->" not in chain_str, f"单节点链不应包含箭头: {chain_str}"
+
+    def test_chain_with_branch_split(self):
+        """分支点应将链分割为多个片段。"""
+        mock_flows = [
+            {
+                "start_event": "Event.BeginPlay",
+                "nodes": [
+                    {"node_guid": "g1", "node_type": "K2Node_Event", "used_exec_pin_name": "exec"},
+                    {"node_guid": "g2", "node_type": "K2Node_IfThenElse", "branch_type": "branch"},
+                    {"node_guid": "g3", "node_type": "K2Node_CallFunction", "used_exec_pin_name": "Completed"},
+                ],
+            }
+        ]
+
+        mock_graph = _ChainMockGraph([
+            _ChainMockNode("g1", "K2Node_Event"),
+            _ChainMockNode("g2", "K2Node_IfThenElse"),
+            _ChainMockNode("g3", "K2Node_CallFunction"),
+        ])
+
+        chains = build_execution_chains(mock_graph, mock_flows)
+        assert len(chains) > 0
+        entry = chains[0]
+        # 分支点会将链分割
+        chain_list = entry.get("chains", [])
+        assert len(chain_list) >= 2, f"分支应产生至少 2 条链: {chain_list}"
+        # 元数据应记录分支数
+        assert entry.get("chain_metadata", {}).get("branch_count", 0) >= 1
+
+
+# ============================================================================
+# 来自 test_execution_trace_safety.py — 执行流追踪安全防护
+# ============================================================================
+
+class TestExecutionTraceSafety:
+    """执行流追踪安全防护测试。"""
+
+    def test_no_guid_self_loop_terminates(self):
+        """单个无 GUID 节点（无出边）应立即终止。"""
+        node = FakeNode(node_guid=None, class_name="K2Node_CallFunction")
+        flow = _trace_execution_from_event(
+            node, pin_lookup={}, node_lookup={}, node_name_lookup={},
+            asset_context={},
+        )
+        assert len(flow) >= 1
+        assert flow[0].get("warning") == "missing node_guid"
+
+    def test_no_guid_repeated_node_stops(self):
+        """同一个无 GUID 节点自环应 cycle_detected 终止。"""
+        pin_in = FakePin(
+            pin_id="AA", pin_name="exec",
+            direction=0, pin_type=FakePinType(pin_category="exec"),
+        )
+        pin_out = FakePin(
+            pin_id="BB", pin_name="then",
+            direction=1, pin_type=FakePinType(pin_category="exec"),
+            linked_to_raw=["AA"],
+        )
+        node = FakeNode(node_guid=None, class_name="K2Node_CallFunction", pins=[pin_out, pin_in])
+
+        pin_lookup = {"aa": (None, "exec")}
+        node_lookup = {None: node}
+
+        flow = _trace_execution_from_event(
+            node, pin_lookup, node_lookup, node_name_lookup={},
+            asset_context={},
+        )
+        assert any(f.get("cycle_detected") for f in flow), f"Expected cycle_detected in flow: {flow}"
+
+    def test_guid_node_cycle_detected(self):
+        """有 GUID 节点自环应 cycle_detected 终止。"""
+        pin_in = FakePin(
+            pin_id="AA", pin_name="exec",
+            direction=0, pin_type=FakePinType(pin_category="exec"),
+        )
+        pin_out = FakePin(
+            pin_id="BB", pin_name="then",
+            direction=1, pin_type=FakePinType(pin_category="exec"),
+            linked_to_raw=["AA"],
+        )
+        node = FakeNode(
+            node_guid="guid-self",
+            class_name="K2Node_CallFunction",
+            pins=[pin_out, pin_in],
+        )
+        pin_lookup = {"aa": ("guid-self", "exec")}
+        node_lookup = {"guid-self": node}
+
+        flow = _trace_execution_from_event(
+            node, pin_lookup, node_lookup, node_name_lookup={"guid-self": "Self"},
+            asset_context={},
+        )
+        assert any(f.get("cycle_detected") for f in flow), f"Expected cycle_detected in flow: {flow}"
+
+    def test_max_steps_exceeded(self):
+        """超过最大步数应 stopped_at max_steps_exceeded。"""
+        nodes = []
+        for i in range(502):
+            pin_in = FakePin(
+                pin_id=f"IN{i:04d}", pin_name="exec",
+                direction=0, pin_type=FakePinType(pin_category="exec"),
+            )
+            pin_out = FakePin(
+                pin_id=f"OUT{i:04d}", pin_name="then",
+                direction=1, pin_type=FakePinType(pin_category="exec"),
+            )
+            if i < 501:
+                pin_out.linked_to_raw = [f"IN{i+1:04d}"]
+            node = FakeNode(
+                node_guid=f"guid-{i:04d}",
+                class_name="K2Node_CallFunction",
+                pins=[pin_out, pin_in],
+            )
+            nodes.append(node)
+
+        pin_lookup = {}
+        node_lookup = {}
+        node_name_lookup = {}
+        for i in range(501):
+            pin_lookup[f"in{i+1:04d}"] = (f"guid-{i+1:04d}", "exec")
+            node_lookup[f"guid-{i:04d}"] = nodes[i]
+            node_name_lookup[f"guid-{i:04d}"] = f"Node{i}"
+        node_lookup["guid-501"] = nodes[501]
+
+        flow = _trace_execution_from_event(
+            nodes[0], pin_lookup, node_lookup, node_name_lookup,
+            asset_context={},
+        )
+        assert any(f.get("stopped_at") == "max_steps_exceeded" for f in flow), \
+            f"Expected max_steps_exceeded in flow"
+
+
+# ============================================================================
+# 来自 test_latent_detection.py — Latent/Async 动作标记
+# ============================================================================
+
+class _LatentFakePinType:
+    def __init__(self, category):
+        self.pin_category = category
+
+
+class _LatentFakePin:
+    def __init__(self, name, direction, pin_category="exec", linked_to=None):
+        self.pin_name = name
+        self.direction = direction
+        self.pin_type = _LatentFakePinType(pin_category)
+        self.linked_to_raw = linked_to or []
+        self.pin_id = f"pid_{name}"
+
+
+class _LatentFakeNode:
+    def __init__(self, guid, class_name, pins=None, node_data=None):
+        self.node_guid = guid
+        self.class_name = class_name
+        self.pins = pins or []
+        self.node_data = node_data
+
+
+class TestLatentDetection:
+    """Latent/Async 动作在执行流中标记测试。"""
+
+    def test_async_action_marked_as_latent(self):
+        """K2Node_AsyncAction 应在执行流中标记 latent=True。"""
+        pid_async_input = "b" * 32
+        pid_end_input = "d" * 32
+
+        event = _LatentFakeNode("guid_event", "K2Node_Event", [
+            _LatentFakePin("exec", 1, "exec", ["B" * 32]),
+        ])
+        async_node = _LatentFakeNode("guid_async", "K2Node_AsyncAction", [
+            _LatentFakePin("Then", 0, "exec"),
+            _LatentFakePin("Completed", 1, "exec", ["D" * 32]),
+        ])
+        end_node = _LatentFakeNode("guid_end", "K2Node_MakeVariable", [
+            _LatentFakePin("Completed", 0, "exec"),
+        ])
+
+        pin_lookup = {
+            pid_async_input: ("guid_async", "Then"),
+            pid_end_input: ("guid_end", "Completed"),
+        }
+        node_lookup = {
+            "guid_event": event,
+            "guid_async": async_node,
+            "guid_end": end_node,
+        }
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        async_flow = next(f for f in flow if f["node_type"] == "K2Node_AsyncAction")
+        assert async_flow.get("latent") is True, "Latent 动作应标记 latent=True"
+
+    def test_timeline_marked_as_latent(self):
+        """K2Node_Timeline 应在执行流中标记 latent=True。"""
+        pid_timeline_input = "b" * 32
+
+        event = _LatentFakeNode("guid_event", "K2Node_Event", [
+            _LatentFakePin("exec", 1, "exec", ["B" * 32]),
+        ])
+        timeline = _LatentFakeNode("guid_timeline", "K2Node_Timeline", [
+            _LatentFakePin("Update", 0, "exec"),
+        ])
+
+        pin_lookup = {
+            pid_timeline_input: ("guid_timeline", "Update"),
+        }
+        node_lookup = {
+            "guid_event": event,
+            "guid_timeline": timeline,
+        }
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        tl_flow = next(f for f in flow if f["node_type"] == "K2Node_Timeline")
+        assert tl_flow.get("latent") is True
+
+    def test_normal_node_not_latent(self):
+        """普通节点不应有 latent 标记。"""
+        pid_call_input = "b" * 32
+
+        event = _LatentFakeNode("guid_event", "K2Node_Event", [
+            _LatentFakePin("exec", 1, "exec", ["B" * 32]),
+        ])
+        call_func = _LatentFakeNode("guid_call", "K2Node_CallFunction", [
+            _LatentFakePin("Then", 0, "exec"),
+        ])
+
+        pin_lookup = {pid_call_input: ("guid_call", "Then")}
+        node_lookup = {"guid_event": event, "guid_call": call_func}
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        call_flow = next(f for f in flow if f["node_type"] == "K2Node_CallFunction")
+        assert "latent" not in call_flow or call_flow.get("latent") is False
+
+
+# ============================================================================
+# 来自 test_macro_flow_penetration.py — 宏实例穿透测试
+# ============================================================================
+
+class _MacroFakePinType:
+    def __init__(self, category):
+        self.pin_category = category
+
+
+class _MacroFakePin:
+    def __init__(self, name, direction, pin_category="exec", linked_to=None):
+        self.pin_name = name
+        self.direction = direction
+        self.pin_type = _MacroFakePinType(pin_category)
+        self.linked_to_raw = linked_to or []
+        self.pin_id = f"PID_{name.upper()}"
+
+
+class _MacroFakeNode:
+    def __init__(self, guid, class_name, pins=None, node_data=None):
+        self.node_guid = guid
+        self.class_name = class_name
+        self.pins = pins or []
+        self.node_data = node_data
+
+
+class TestMacroFlowPenetration:
+    """执行链穿透宏实例测试。"""
+
+    def test_flow_penetrates_macro_instance(self):
+        """执行链应穿透 MacroInstance 到其内部节点。"""
+        event = _MacroFakeNode("guid_event", "K2Node_Event", [
+            _MacroFakePin("exec", 1, "exec", ["PID_MACRO"]),
+        ])
+        macro = _MacroFakeNode("guid_macro", "K2Node_MacroInstance", [
+            _MacroFakePin("exec", 0, "exec"),
+            _MacroFakePin("Then", 1, "exec", ["PID_AFTER"]),
+        ])
+        after = _MacroFakeNode("guid_after", "K2Node_CallFunction", [
+            _MacroFakePin("Then", 0, "exec"),
+        ])
+
+        pin_lookup = {
+            "pid_macro": ("guid_macro", "exec"),
+            "pid_after": ("guid_after", "Then"),
+        }
+        node_lookup = {
+            "guid_event": event,
+            "guid_macro": macro,
+            "guid_after": after,
+        }
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+        assert "macro_expansion" in macro_flow, \
+            "MacroInstance 应包含 macro_expansion 字段"
+
+        after_flow = next((f for f in flow if f["node_type"] == "K2Node_CallFunction"), None)
+        assert after_flow is not None, "执行链应穿透 MacroInstance 到达后续节点"
+
+    def test_standard_macro_marked(self):
+        """标准宏（如 ForLoop）应被识别并标记为标准宏。"""
+        event = _MacroFakeNode("guid_event", "K2Node_Event", [
+            _MacroFakePin("exec", 1, "exec", ["PID_FORLOOP"]),
+        ])
+        forloop = _MacroFakeNode("guid_forloop", "K2Node_MacroInstance", [
+            _MacroFakePin("exec", 0, "exec"),
+            _MacroFakePin("Loop Body", 1, "exec", ["PID_AFTER"]),
+        ], node_data={
+            "macro_graph_reference": {
+                "graph_name": "ForLoop",
+                "graph_guid": "",
+            }
+        })
+        after = _MacroFakeNode("guid_after", "K2Node_CallFunction", [
+            _MacroFakePin("Then", 0, "exec"),
+        ])
+
+        pin_lookup = {
+            "pid_forloop": ("guid_forloop", "Loop Body"),
+            "pid_after": ("guid_after", "Then"),
+        }
+        node_lookup = {
+            "guid_event": event,
+            "guid_forloop": forloop,
+            "guid_after": after,
+        }
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+        expansion = macro_flow.get("macro_expansion", {})
+        assert expansion.get("macro_name") == "ForLoop", \
+            "标准宏名称应被识别"
+        assert expansion.get("is_standard") is True, \
+            "标准宏应标记 is_standard=True"
+
+    def test_macro_without_reference(self):
+        """无 macro_graph_reference 的宏实例应标记 unresolved。"""
+        event = _MacroFakeNode("guid_event", "K2Node_Event", [
+            _MacroFakePin("exec", 1, "exec", ["PID_MACRO"]),
+        ])
+        macro = _MacroFakeNode("guid_macro", "K2Node_MacroInstance", [
+            _MacroFakePin("exec", 0, "exec"),
+            _MacroFakePin("Then", 1, "exec", ["PID_AFTER"]),
+        ], node_data={})
+        after = _MacroFakeNode("guid_after", "K2Node_CallFunction", [
+            _MacroFakePin("Then", 0, "exec"),
+        ])
+
+        pin_lookup = {
+            "pid_macro": ("guid_macro", "exec"),
+            "pid_after": ("guid_after", "Then"),
+        }
+        node_lookup = {
+            "guid_event": event,
+            "guid_macro": macro,
+            "guid_after": after,
+        }
+
+        flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+        macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+        expansion = macro_flow.get("macro_expansion", {})
+        assert expansion.get("unresolved") is True, "无引用的宏应标记为 unresolved"
+
+
+# ============================================================================
+# 来自 test_graph_output_chain.py — ParseResult → ExportIR 输出链
+# ============================================================================
+
+_GRAPH_SAMPLES_DIR = Path(__file__).parent.parent / "samples"
+
+
+class TestGraphOutputChain:
+    """图数据输出链测试。"""
+
+    @pytest.mark.integration
+    def test_parse_result_graphs_count(self):
+        """验证 ParseResult.graphs 包含图数据。"""
+        from uasset_read.parse_uasset import parse_package
+
+        path = _GRAPH_SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
+        if not path.exists():
+            pytest.skip("测试样本不存在")
+
+        result = parse_package(str(path))
+        # 本地样本可能只有少量图
+        assert len(result.graphs) >= 1, f"应有至少 1 个图，实际: {len(result.graphs)}"
+
+    @pytest.mark.integration
+    def test_export_ir_graphs_not_empty(self):
+        """验证 ExportIR.graphs 包含图数据。"""
+        from uasset_read.parse_uasset import parse_package
+        from uasset_read.ir_builder import build_package_ir
+
+        path = _GRAPH_SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
+        if not path.exists():
+            pytest.skip("测试样本不存在")
+
+        result = parse_package(str(path))
+        ir = build_package_ir(result)
+
+        # 找到蓝图 export（以 _C 结尾）
+        bp_exports = [e for e in ir.exports if e.object_name.endswith("_C")]
+        assert len(bp_exports) > 0, "应有蓝图 export"
+
+        # 至少一个蓝图 export 应有图
+        has_graphs = any(len(e.graphs) > 0 for e in bp_exports)
+        assert has_graphs, "蓝图 export 应包含图数据"
+
+    @pytest.mark.integration
+    def test_json_output_contains_graphs(self):
+        """验证 JSON 输出包含图数据。"""
+        from uasset_read.parse_uasset import parse_package
+        from uasset_read.ir_builder import build_package_ir
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        path = _GRAPH_SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
+        if not path.exists():
+            pytest.skip("测试样本不存在")
+
+        result = parse_package(str(path))
+        ir = build_package_ir(result)
+        renderer = JSONRenderer()
+        output = renderer.render(ir, RenderOptions(output_level="normal"))
+
+        import json
+        data = json.loads(output)
+
+        # 检查 exports 中是否有图
+        exports_with_graphs = [e for e in data.get("exports", []) if e.get("graphs")]
+        assert len(exports_with_graphs) > 0, "JSON 输出应包含图数据"
+
+    @pytest.mark.integration
+    def test_markdown_output_contains_graph_sections(self):
+        """验证 Markdown 输出包含图章节。"""
+        from uasset_read.parse_uasset import parse_package
+        from uasset_read.ir_builder import build_package_ir
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        path = _GRAPH_SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
+        if not path.exists():
+            pytest.skip("测试样本不存在")
+
+        result = parse_package(str(path))
+        ir = build_package_ir(result)
+        renderer = MarkdownRenderer()
+        output = renderer.render(ir, RenderOptions(output_level="normal"))
+
+        # 检查是否有图章节
+        assert "## Graph:" in output or "## Event Graph" in output, \
+            "Markdown 输出应包含图章节"
+
+
+# ============================================================================
+# 来自 test_graph_parser.py — extract_blueprint_graphs 基本接口测试
+# ============================================================================
+
+
+class TestExtractBlueprintGraphsCallable:
+    """extract_blueprint_graphs 应可调用。"""
+
+    def test_callable(self):
+        assert callable(extract_blueprint_graphs)
+
+
+class TestExtractBlueprintGraphsCookedSkip:
+    """cooked 包应跳过图解析。"""
+
+    def _make_summary(self, flags: int):
+        class FakeSummary:
+            package_flags = flags
+        return FakeSummary()
+
+    def test_cooked_package_returns_empty(self):
+        summary = self._make_summary(PKG_Cooked)
+        result = extract_blueprint_graphs(
+            archive=None,
+            summary=summary,
+            name_map=[],
+            import_map=[],
+            export_map=[],
+        )
+        assert result == []
+
+    def test_non_cooked_package_not_skipped(self):
+        """非 cooked 包不会因 flags 被跳过（可能因无 EdGraph export 而返回空）。"""
+        summary = self._make_summary(0)
+        result = extract_blueprint_graphs(
+            archive=None,
+            summary=summary,
+            name_map=[],
+            import_map=[],
+            export_map=[],
+        )
+        assert result == []
+
+
+class TestExtractBlueprintGraphsEmptyExports:
+    """空 export_map 应返回空列表。"""
+
+    def test_empty_export_map(self):
+        class FakeSummary:
+            package_flags = 0
+
+        result = extract_blueprint_graphs(
+            archive=None,
+            summary=FakeSummary(),
+            name_map=[],
+            import_map=[],
+            export_map=[],
+        )
+        assert result == []
+        assert isinstance(result, list)

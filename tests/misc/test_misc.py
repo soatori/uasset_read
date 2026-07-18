@@ -5,9 +5,12 @@
   - test_framerate_animnotify.py (FrameRate / AnimNotifyTag tagged fallback)
   - test_sound_attenuation.py (USoundAttenuation 解析器)
   - test_anim_data_model.py   (UAnimDataModel 解析器)
+  - test_game_variant.py      (GameVariant 枚举)
+  - test_legacy_minus6.py     (legacy -6 文件解析)
 """
 from __future__ import annotations
 
+import os
 import struct
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -15,7 +18,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from uasset_read.archive import FArchive
+from uasset_read.constants import GameVariant, get_game_variant_config
 from uasset_read.debug.hex_view import HexViewEntry, format_hex_view, format_hex_dump
+from uasset_read.parse_uasset import parse_package
 from uasset_read.parsers.property_types import (
     _TAGGED_FALLBACK_STRUCTS,
     _TAGGED_FALLBACK_STRUCT_SCHEMAS,
@@ -620,3 +625,84 @@ class TestAnimDataModel:
         # 验证所有 export 不再是 skipped
         for export in r.export_map:
             assert export.parse_status != "skipped"
+
+
+# ===========================================================================
+#  GameVariant 枚举测试（原 test_game_variant.py）
+# ===========================================================================
+
+def test_game_variant_enum():
+    """测试 GameVariant 枚举"""
+    assert GameVariant.NONE.value == 0
+    assert GameVariant.FORTNITE.value == 1001
+
+
+def test_get_game_variant_config():
+    """测试获取游戏变体配置"""
+    config = get_game_variant_config(GameVariant.FORTNITE)
+    assert "feature_flags" in config
+    assert config["feature_flags"]["use_new_cooked_format"] == True
+
+
+def test_get_game_variant_config_none():
+    """测试获取 NONE 游戏变体配置"""
+    config = get_game_variant_config(GameVariant.NONE)
+    assert config["feature_flags"] == {}
+
+
+# ===========================================================================
+#  Legacy -6 文件解析测试（原 test_legacy_minus6.py）
+# ===========================================================================
+
+# 测试样本路径
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
+LEGACY_MINUS6_FILE = str(SAMPLES_DIR / "StarterContent_M_Wood_Walnut.uasset")
+
+
+@pytest.mark.integration
+class TestLegacyMinus6Parsing:
+    """legacy -6 格式文件解析验证。"""
+
+    @pytest.mark.skipif(
+        not os.path.exists(LEGACY_MINUS6_FILE),
+        reason="测试样本不存在"
+    )
+    def test_starter_content_parses_successfully(self):
+        """StarterContent 资产应解析成功。"""
+        result = parse_package(LEGACY_MINUS6_FILE, tolerant=True)
+        assert result.is_success or result.summary is not None, (
+            f"解析失败: {result.errors}"
+        )
+
+    @pytest.mark.skipif(
+        not os.path.exists(LEGACY_MINUS6_FILE),
+        reason="测试样本不存在"
+    )
+    def test_no_generations_error(self):
+        """不应出现 generations count 负数错误。"""
+        result = parse_package(LEGACY_MINUS6_FILE, tolerant=True)
+        assert not any("generations" in e.lower() for e in result.errors), (
+            f"Generations 解析错误: {result.errors}"
+        )
+
+    @pytest.mark.skipif(
+        not os.path.exists(LEGACY_MINUS6_FILE),
+        reason="测试样本不存在"
+    )
+    def test_summary_parsed(self):
+        """应成功解析出 summary。"""
+        result = parse_package(LEGACY_MINUS6_FILE, tolerant=True)
+        assert result.summary is not None, (
+            f"Summary 未解析: {result.errors}"
+        )
+
+
+class TestLegacyMinus6FieldOrder:
+    """legacy -6 字段顺序单元测试（不依赖真实文件）。"""
+
+    def test_num_texture_allocations_read(self):
+        """验证 NumTextureAllocations 字段被读取。"""
+        # 此测试验证代码路径，实际解析需要真实文件
+        from uasset_read.serializers.package_summary import read_package_summary
+        # 函数存在且可导入
+        assert callable(read_package_summary)

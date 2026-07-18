@@ -9,16 +9,29 @@
 - tolerant 模式下空表达式 → 返回 bytecode_status="failed" 的结果
 - 非 tolerant 模式下异常 → 仍然 raise
 - 一个函数失败、一个函数成功时，后处理正确合并结果
+
+BPGC 字节码缓存行为测试 (#367)。
+验证 MathFunctionCleaner 对 BlueprintSetLibrary 的语义翻译。
 """
 
 from __future__ import annotations
 
+import logging
+import struct
+import unittest.mock
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from uasset_read.kismet.bytecode_extractor import (
+    _bpgc_bytecode_cache,
+    _bpgc_cache_retries,
+    _BPGC_MAX_RETRIES,
+    reset_bpgc_cache,
+)
 from uasset_read.kismet.pipeline import decompile_single_function
 from uasset_read.kismet.result import KismetDecompiledResult
+from uasset_read.kismet.translator import MathFunctionCleaner
 
 
 # ---------------------------------------------------------------------------
@@ -275,3 +288,227 @@ class TestMixedFunctionResults:
         assert all(r.bytecode_status == "failed" for r in results)
         assert results[0].function_name == "Func1"
         assert results[1].function_name == "Func2"
+
+
+# ---------------------------------------------------------------------------
+# BPGC 字节码缓存测试 (merged from test_bpgc_cache.py)
+# ---------------------------------------------------------------------------
+
+
+class TestBpgcCache:
+    """Tests for BPGC bytecode cache retry behavior."""
+
+    def setup_method(self):
+        reset_bpgc_cache()
+
+    def test_initial_state_is_none(self):
+        """Cache starts as None (uninitialized)."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        assert mod._bpgc_bytecode_cache is None
+        assert mod._bpgc_cache_retries == 0
+
+    def test_reset_clears_retry_counter(self):
+        """reset_bpgc_cache() resets both cache and retry counter."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        mod._bpgc_cache_retries = 2
+        mod._bpgc_bytecode_cache = {}
+        reset_bpgc_cache()
+        assert mod._bpgc_bytecode_cache is None
+        assert mod._bpgc_cache_retries == 0
+
+    def test_cache_hit_returns_bytecode(self):
+        """When function is in cache, its bytecode is returned."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        mod._bpgc_bytecode_cache = {"TestFunc": b'\x00\x01\x02'}
+        # Simulate cache lookup (the inline logic in _bpgc_fallback)
+        func_name = "TestFunc"
+        assert mod._bpgc_bytecode_cache.get(func_name) == b'\x00\x01\x02'
+
+    def test_cache_miss_returns_none(self):
+        """When function is not in cache, lookup returns None."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        mod._bpgc_bytecode_cache = {}
+        func_name = "MissingFunc"
+        assert mod._bpgc_bytecode_cache.get(func_name) is None
+
+    def test_failure_does_not_permanently_cache_empty(self):
+        """After first failure, cache stays None (allows retry), not {}."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        reset_bpgc_cache()
+        assert mod._bpgc_bytecode_cache is None
+
+        # Simulate first failure: increment retry but don't set cache to {}
+        mod._bpgc_cache_retries += 1
+        # Cache should still be None (not {}), so next call retries
+        assert mod._bpgc_bytecode_cache is None
+        assert mod._bpgc_cache_retries == 1
+
+    def test_retry_limit_prevents_infinite_retry(self):
+        """After _BPGC_MAX_RETRIES failures, cache is set to {} to stop retrying."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        reset_bpgc_cache()
+
+        # Simulate failures up to the limit
+        for i in range(_BPGC_MAX_RETRIES):
+            mod._bpgc_cache_retries += 1
+            if mod._bpgc_cache_retries >= _BPGC_MAX_RETRIES:
+                mod._bpgc_bytecode_cache = {}
+                break
+
+        assert mod._bpgc_bytecode_cache == {}
+        # Cache is {} (not None), so `if _bpgc_bytecode_cache is None` will be False
+        # and no further retries occur
+
+    def test_success_resets_retry_counter(self):
+        """After successful cache population, retry counter resets to 0."""
+        import uasset_read.kismet.bytecode_extractor as mod
+        reset_bpgc_cache()
+        mod._bpgc_cache_retries = 2  # Simulate prior failures
+
+        # Simulate successful extraction
+        mod._bpgc_bytecode_cache = {"Func1": b'\xAA', "Func2": b'\xBB'}
+        mod._bpgc_cache_retries = 0  # Reset on success
+
+        assert mod._bpgc_cache_retries == 0
+        assert len(mod._bpgc_bytecode_cache) == 2
+
+    def test_max_retries_constant_is_sane(self):
+        """_BPGC_MAX_RETRIES should be a positive integer."""
+        assert isinstance(_BPGC_MAX_RETRIES, int)
+        assert _BPGC_MAX_RETRIES > 0
+
+
+# ---------------------------------------------------------------------------
+# BPGC 字节码解析诊断测试 (merged from test_bpgc_cache.py)
+# ---------------------------------------------------------------------------
+
+
+class TestBpgcBytecodeDiagnostics:
+    """#343: BPGC 字节码诊断改进测试。"""
+
+    def test_empty_bytecode_logs_info_not_warning(self, caplog):
+        """空字节码（无数据）应使用 info 级别。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        with caplog.at_level(logging.INFO):
+            result = _parse_cooked_bytecode_buffer(b'')
+
+        assert result == []
+        # 空数据不应有 warning
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert len(warnings) == 0
+
+    def test_corrupted_bytecode_logs_debug(self):
+        """损坏字节码应使用 debug 级别记录容错诊断。"""
+        from uasset_read.kismet.bpgc_bytecode import _parse_cooked_bytecode_buffer
+
+        # 构造损坏数据：无效 size（unsigned 解释后远超剩余数据）
+        corrupted = struct.pack('<i', -1) + b'\x00' * 10
+
+        # 用 Handler 捕获日志，避免 caplog 在全量测试中受根日志器级别影响
+        test_logger = logging.getLogger("uasset_read.kismet.bpgc_bytecode")
+        old_level = test_logger.level
+        test_logger.setLevel(logging.DEBUG)
+        captured: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: captured.append(record)
+        test_logger.addHandler(handler)
+        try:
+            _result = _parse_cooked_bytecode_buffer(corrupted)
+        finally:
+            test_logger.removeHandler(handler)
+            test_logger.setLevel(old_level)
+
+        debugs = [r for r in captured if r.levelno == logging.DEBUG]
+        assert len(debugs) > 0, f"Expected debug logs but got none"
+
+
+def test_remaining_bytes_zero_early_return():
+    """当 remaining_bytes <= 0 时，应在早期返回而非到达原第 198 行的死代码分支。"""
+    from uasset_read.kismet.bpgc_bytecode import extract_bpgc_bytecode
+
+    # 创建 mock 对象
+    mock_archive = MagicMock()
+    mock_export = MagicMock()
+    mock_export.object_name = "TestBPGC"
+    mock_export.serial_offset = 100
+    mock_export.serial_size = 50
+    mock_export.script_serialization_size = 100
+    mock_export.has_script_serialization = True
+    mock_summary = MagicMock()
+    mock_summary.file_version_ue5 = 0
+
+    # 设置 archive.tell() 返回大于 region_end 的值，使 remaining_bytes < 0
+    # region_end = 100 + 50 = 150, tell() 返回 200 → remaining_bytes = -50
+    mock_archive.tell.return_value = 200
+
+    # 设置 detect_blueprint_generated_class 返回 True
+    with patch(
+        "uasset_read.serializers.object_resources.detect_blueprint_generated_class",
+        return_value=True,
+    ):
+        # 设置 read_property_tag 返回 None 终止符
+        mock_tag = MagicMock()
+        mock_tag.name = "None"
+        with patch(
+            "uasset_read.serializers.property_tags.read_property_tag",
+            return_value=mock_tag,
+        ):
+            result = extract_bpgc_bytecode(
+                mock_archive, mock_export, mock_summary,
+                "TestAsset", [], [], [],
+            )
+
+    # 验证返回空字典（早期返回）
+    assert result == {}
+    # 验证 read_bytes 未被调用（死代码未执行）
+    mock_archive.read_bytes.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Set 语义翻译测试 (merged from test_translator_set.py)
+# ---------------------------------------------------------------------------
+
+
+class TestSetDifference:
+    """Set_Difference 语义回归测试（Issue #387 残留）。"""
+
+    def test_set_difference_uses_minus_operator(self):
+        """Set_Difference 应输出 A - B，而非 A == B。"""
+        result = MathFunctionCleaner._clean_set(
+            "Set_Difference", ["setA", "setB", "result"]
+        )
+        assert "-" in result
+        assert "==" not in result
+        assert result == "result = setA - setB"
+
+    def test_set_difference_no_equality(self):
+        """确保 Set_Difference 输出中不包含相等比较符号。"""
+        result = MathFunctionCleaner._clean_set(
+            "Set_Difference", ["MySet", "OtherSet", "Diff"]
+        )
+        assert "Diff = MySet - OtherSet" == result
+
+
+class TestSetCleanTable:
+    """其他 Set 库函数的翻译验证。"""
+
+    def test_set_add_items(self):
+        result = MathFunctionCleaner._clean_set("Set_AddItems", ["s", "item"])
+        assert result == "s.Add(item)"
+
+    def test_set_clear(self):
+        result = MathFunctionCleaner._clean_set("Set_Clear", ["s"])
+        assert result == "s.Clear()"
+
+    def test_set_is_empty(self):
+        result = MathFunctionCleaner._clean_set("Set_IsEmpty", ["s"])
+        assert result == "s.Length == 0"
+
+    def test_set_length(self):
+        result = MathFunctionCleaner._clean_set("Set_Length", ["s"])
+        assert result == "s.Length"
+
+    def test_set_unknown_fallback(self):
+        result = MathFunctionCleaner._clean_set("Set_Unknown", ["a", "b"])
+        assert result == "BlueprintSetLibrary::Set_Unknown(a, b)"

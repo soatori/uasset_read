@@ -1,11 +1,17 @@
-"""TextRenderer 单元测试。"""
+"""TextRenderer 单元测试。
 
+合并来源：
+  - test_text_deprecated.py
+"""
+import warnings
 from io import StringIO
 
 import pytest
 
+from uasset_read.renderers import get_renderer
 from uasset_read.renderers.text_renderer import TextRenderer
 from uasset_read.renderers.base import RenderOptions
+from uasset_read.models.ir import PackageIR, PackageHeaderIR
 
 
 @pytest.fixture
@@ -986,3 +992,127 @@ class TestTextRendererEdgeCases:
         assert "[Execution Chains]" in result
         assert "[Diagnostics]" in result
         assert "[Exports]" in result
+
+
+# ---------------------------------------------------------------------------
+# diff_single 测试（合并自 tests/test_text_renderer.py）
+# ---------------------------------------------------------------------------
+
+class TestDiffSingle:
+    """diff_single 函数测试。"""
+
+    def test_same_file_no_diff(self):
+        from uasset_read.core import diff_single
+
+        # 使用 mock 的 IR 无法直接测试，但可以验证函数签名
+        # 实际测试使用真实文件
+        assert callable(diff_single)
+
+    def test_returns_str(self):
+        """验证返回类型为 str。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("nonexistent1.uasset", "nonexistent2.uasset")
+        assert isinstance(result, str)
+
+    def test_nonexistent_files_contain_error(self):
+        """验证不存在的文件在 diff 输出中包含错误信息。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("nonexistent1.uasset", "nonexistent2.uasset")
+        assert "FileNotFoundError" in result or "failed" in result
+
+    def test_diff_header_present(self):
+        """验证 diff 输出包含文件名头信息。"""
+        from uasset_read.core import diff_single
+
+        result = diff_single("foo.uasset", "bar.uasset")
+        assert "a/foo.uasset" in result
+        assert "b/bar.uasset" in result
+
+
+# ---------------------------------------------------------------------------
+# get_renderer 可用性（合并自 tests/test_text_renderer.py）
+# ---------------------------------------------------------------------------
+
+class TestTextRendererRegistration:
+    """Text renderer 注册验证。"""
+
+    def test_text_renderer_registered(self):
+        renderer = get_renderer("text")
+        assert renderer is not None
+        assert type(renderer).__name__ == "TextRenderer"
+
+    def test_json_renderer_still_works(self):
+        renderer = get_renderer("json")
+        assert renderer is not None
+
+    def test_markdown_renderer_still_works(self):
+        renderer = get_renderer("markdown")
+        assert renderer is not None
+
+
+# ---------------------------------------------------------------------------
+# Text 渲染器废弃警告测试（原 test_text_deprecated.py）
+# ---------------------------------------------------------------------------
+
+def _make_minimal_ir() -> PackageIR:
+    """创建最小 PackageIR 用于测试。"""
+    header = PackageHeaderIR(
+        package_name="Test",
+        package_class="None",
+        package_flags=0,
+        total_export_count=0,
+        total_import_count=0,
+        ue_version="5.4.0",
+    )
+    return PackageIR(
+        header=header,
+        name_map=(),
+        imports=[],
+        exports=[],
+        linker=None,
+    )
+
+
+class TestTextDeprecated:
+    def test_text_format_emits_deprecation_warning(self):
+        """--text 格式应发出 DeprecationWarning。"""
+        from uasset_read.renderers.text_renderer import TextRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = _make_minimal_ir()
+        renderer = TextRenderer()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            renderer.render(ir, RenderOptions())
+
+        dep_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(dep_warnings) >= 1
+        assert "markdown" in str(dep_warnings[0].message).lower()
+
+    def test_markdown_format_no_deprecation_warning(self):
+        """--markdown 格式不应发出 DeprecationWarning。"""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = _make_minimal_ir()
+        renderer = MarkdownRenderer()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            renderer.render(ir, RenderOptions())
+
+        dep_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+        assert len(dep_warnings) == 0
+
+    def test_text_renderer_still_works(self):
+        """废弃后 Text 渲染器仍应正常工作。"""
+        from uasset_read.renderers.text_renderer import TextRenderer
+        from uasset_read.renderers.base import RenderOptions
+
+        ir = _make_minimal_ir()
+        renderer = TextRenderer()
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            result = renderer.render(ir, RenderOptions())
+        assert "=== Test ===" in result

@@ -1,19 +1,32 @@
 """容错解析相关测试 — 合并自以下测试文件：
 - test_tolerant_early_parse_diagnostics.py — 容错早期解析诊断回归测试
 - test_tolerant_class_specific.py — Class-specific tolerant skip 测试
+- test_error_recovery.py — 错误恢复机制测试
+- test_ue4_legacy.py — UE4 Legacy 资产版本支持测试
 """
 from __future__ import annotations
 
 import gc
 import json
 import struct
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uasset_read.constants import PACKAGE_FILE_TAG, UE5_PACKAGE_SAVED_HASH
+from uasset_read.constants import (
+    PACKAGE_FILE_TAG,
+    UE4_LEGACY_VERSIONS,
+    UE5_LEGACY_VERSIONS,
+    UE5_PACKAGE_SAVED_HASH,
+    SUPPORTED_LEGACY_VERSIONS,
+)
 from uasset_read.core import ParseError, parse_single
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
+from uasset_read.parsers.utils import read_validated_count_tolerant
+from uasset_read.parsers.property_parser import parse_properties_from_export
+from uasset_read.archive import FArchive
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 MAX_PARAM_COUNT = 20  # 参数化资产数量上限

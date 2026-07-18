@@ -1,5 +1,7 @@
 """宏展开引擎测试。"""
 import pytest
+from uasset_read.constants import CONTROL_FLOW_NODES, BRANCH_TYPE_MAP
+from uasset_read.graph.flow_builder import _trace_execution_from_event
 from uasset_read.graph.macro_expander import (
     MacroExpander,
     MacroExpansion,
@@ -613,3 +615,276 @@ class TestMacroExpansionPreservesTunnelPinData:
         # 执行流应包含 node1
         node_guids = [n.get("node_guid") for n in flow["nodes"]]
         assert "node1" in node_guids
+
+
+# ============================================================================
+# 宏穿透、控制流、潜伏检测 — 合并自 test_macro_flow_penetration / test_control_flow_expansion / test_latent_detection
+# ============================================================================
+
+
+class FakePinType:
+    def __init__(self, category):
+        self.pin_category = category
+
+
+class FakePin:
+    def __init__(self, name, direction, pin_category="exec", linked_to=None):
+        self.pin_name = name
+        self.direction = direction
+        self.pin_type = FakePinType(pin_category)
+        self.linked_to_raw = linked_to or []
+        self.pin_id = f"PID_{name.upper()}"
+
+
+class FakeNode:
+    def __init__(self, guid, class_name, pins=None, node_data=None):
+        self.node_guid = guid
+        self.class_name = class_name
+        self.pins = pins or []
+        self.node_data = node_data
+
+
+# --- test_macro_flow_penetration (3 tests) ---
+
+
+def test_flow_penetrates_macro_instance():
+    """执行链应穿透 MacroInstance 到其内部节点。"""
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["PID_MACRO"]),
+    ])
+    macro = FakeNode("guid_macro", "K2Node_MacroInstance", [
+        FakePin("exec", 0, "exec"),
+        FakePin("Then", 1, "exec", ["PID_AFTER"]),
+    ])
+    after = FakeNode("guid_after", "K2Node_CallFunction", [
+        FakePin("Then", 0, "exec"),
+    ])
+
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pin_lookup = {
+        "pid_macro": ("guid_macro", "exec"),
+        "pid_after": ("guid_after", "Then"),
+    }
+    node_lookup = {
+        "guid_event": event,
+        "guid_macro": macro,
+        "guid_after": after,
+    }
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    # 验证 MacroInstance 节点包含 macro_expansion 字段
+    macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+    assert "macro_expansion" in macro_flow, \
+        "MacroInstance 应包含 macro_expansion 字段"
+
+    # 验证执行链穿透到了 after 节点
+    after_flow = next((f for f in flow if f["node_type"] == "K2Node_CallFunction"), None)
+    assert after_flow is not None, "执行链应穿透 MacroInstance 到达后续节点"
+
+
+def test_standard_macro_marked():
+    """标准宏（如 ForLoop）应被识别并标记为标准宏。"""
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["PID_FORLOOP"]),
+    ])
+    forloop = FakeNode("guid_forloop", "K2Node_MacroInstance", [
+        FakePin("exec", 0, "exec"),
+        FakePin("Loop Body", 1, "exec", ["PID_AFTER"]),
+    ], node_data={
+        "macro_graph_reference": {
+            "graph_name": "ForLoop",
+            "graph_guid": "",
+        }
+    })
+    after = FakeNode("guid_after", "K2Node_CallFunction", [
+        FakePin("Then", 0, "exec"),
+    ])
+
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pin_lookup = {
+        "pid_forloop": ("guid_forloop", "Loop Body"),
+        "pid_after": ("guid_after", "Then"),
+    }
+    node_lookup = {
+        "guid_event": event,
+        "guid_forloop": forloop,
+        "guid_after": after,
+    }
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+    expansion = macro_flow.get("macro_expansion", {})
+    assert expansion.get("macro_name") == "ForLoop", \
+        "标准宏名称应被识别"
+    assert expansion.get("is_standard") is True, \
+        "标准宏应标记 is_standard=True"
+
+
+def test_macro_without_reference():
+    """无 macro_graph_reference 的宏实例应标记 unresolved。"""
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["PID_MACRO"]),
+    ])
+    macro = FakeNode("guid_macro", "K2Node_MacroInstance", [
+        FakePin("exec", 0, "exec"),
+        FakePin("Then", 1, "exec", ["PID_AFTER"]),
+    ], node_data={})
+    after = FakeNode("guid_after", "K2Node_CallFunction", [
+        FakePin("Then", 0, "exec"),
+    ])
+
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pin_lookup = {
+        "pid_macro": ("guid_macro", "exec"),
+        "pid_after": ("guid_after", "Then"),
+    }
+    node_lookup = {
+        "guid_event": event,
+        "guid_macro": macro,
+        "guid_after": after,
+    }
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    macro_flow = next(f for f in flow if f["node_type"] == "K2Node_MacroInstance")
+    expansion = macro_flow.get("macro_expansion", {})
+    assert expansion.get("unresolved") is True, "无引用的宏应标记为 unresolved"
+
+
+# --- test_control_flow_expansion (2 tests) ---
+
+
+REQUIRED_CONTROL_FLOW = {
+    "K2Node_IfThenElse",
+    "K2Node_Switch",
+    "K2Node_SwitchString",
+    "K2Node_SwitchEnum",
+    "K2Node_SwitchInteger",
+    "K2Node_MacroInstance",
+    # 新增
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    "K2Node_Select",
+    "K2Node_ExecutionSequence",
+}
+
+REQUIRED_BRANCH_TYPES = {
+    "K2Node_IfThenElse",
+    "K2Node_Switch",
+    "K2Node_SwitchString",
+    "K2Node_SwitchEnum",
+    "K2Node_SwitchInteger",
+    "K2Node_MacroInstance",
+    # 新增
+    "K2Node_ForLoop",
+    "K2Node_WhileLoop",
+    "K2Node_DoOnce",
+    "K2Node_Sequence",
+    "K2Node_MultiGate",
+    "K2Node_Select",
+}
+
+
+def test_control_flow_nodes_complete():
+    """CONTROL_FLOW_NODES 应包含所有已知控制流节点。"""
+    missing = REQUIRED_CONTROL_FLOW - CONTROL_FLOW_NODES
+    assert not missing, f"CONTROL_FLOW_NODES 缺少: {missing}"
+
+
+def test_branch_type_map_complete():
+    """BRANCH_TYPE_MAP 应包含所有控制流节点的分支类型。"""
+    missing = REQUIRED_BRANCH_TYPES - set(BRANCH_TYPE_MAP.keys())
+    assert not missing, f"BRANCH_TYPE_MAP 缺少: {missing}"
+
+
+# --- test_latent_detection (3 tests) ---
+
+
+def test_async_action_marked_as_latent():
+    """K2Node_AsyncAction 应在执行流中标记 latent=True。"""
+    # 使用 32 字符 hex GUID 以通过 _is_valid_pin_guid 验证
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_async_input = "b" * 32
+    pid_async_output = "c" * 32
+    pid_end_input = "d" * 32
+
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["B" * 32]),
+    ])
+    async_node = FakeNode("guid_async", "K2Node_AsyncAction", [
+        FakePin("Then", 0, "exec"),
+        FakePin("Completed", 1, "exec", ["D" * 32]),
+    ])
+    end_node = FakeNode("guid_end", "K2Node_MakeVariable", [
+        FakePin("Completed", 0, "exec"),
+    ])
+
+    pin_lookup = {
+        pid_async_input: ("guid_async", "Then"),
+        pid_end_input: ("guid_end", "Completed"),
+    }
+    node_lookup = {
+        "guid_event": event,
+        "guid_async": async_node,
+        "guid_end": end_node,
+    }
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    async_flow = next(f for f in flow if f["node_type"] == "K2Node_AsyncAction")
+    assert async_flow.get("latent") is True, "Latent 动作应标记 latent=True"
+
+
+def test_timeline_marked_as_latent():
+    """K2Node_Timeline 应在执行流中标记 latent=True。"""
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_timeline_input = "b" * 32
+
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["B" * 32]),
+    ])
+    timeline = FakeNode("guid_timeline", "K2Node_Timeline", [
+        FakePin("Update", 0, "exec"),
+    ])
+
+    pin_lookup = {
+        pid_timeline_input: ("guid_timeline", "Update"),
+    }
+    node_lookup = {
+        "guid_event": event,
+        "guid_timeline": timeline,
+    }
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    tl_flow = next(f for f in flow if f["node_type"] == "K2Node_Timeline")
+    assert tl_flow.get("latent") is True
+
+
+def test_normal_node_not_latent():
+    """普通节点不应有 latent 标记。"""
+    # _pin_ref_guid 归一化为小写无 dash 格式
+    pid_event_exec = "a" * 32
+    pid_call_input = "b" * 32
+
+    event = FakeNode("guid_event", "K2Node_Event", [
+        FakePin("exec", 1, "exec", ["B" * 32]),
+    ])
+    call_func = FakeNode("guid_call", "K2Node_CallFunction", [
+        FakePin("Then", 0, "exec"),
+    ])
+
+    pin_lookup = {pid_call_input: ("guid_call", "Then")}
+    node_lookup = {"guid_event": event, "guid_call": call_func}
+
+    flow = _trace_execution_from_event(event, pin_lookup, node_lookup)
+
+    call_flow = next(f for f in flow if f["node_type"] == "K2Node_CallFunction")
+    assert "latent" not in call_flow or call_flow.get("latent") is False
