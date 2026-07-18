@@ -24,8 +24,14 @@ def _build_fstring_utf16(text: str) -> bytes:
     return struct.pack("<i", -char_count) + encoded + b"\x00\x00"
 
 
+def _build_fsoftobjectpath(asset_path: str, sub_path: str = "") -> bytes:
+    """构建 FSoftObjectPath（两个连续 FString）。"""
+    return _build_fstring_utf16(asset_path) + _build_fstring_utf16(sub_path)
+
+
 def _build_level_sequence_payload(
-    movie_scene: int = 0,
+    asset_path: str = "",
+    sub_path: str = "",
     movie_scene_source: int = 0,
     license: str = "DefaultLicense",
     display_rate_num: int = 24,
@@ -36,7 +42,8 @@ def _build_level_sequence_payload(
     """构建 LevelSequence payload。
 
     Args:
-        movie_scene: MovieScene int32 (opaque pointer)
+        asset_path: MovieScene 资产路径
+        sub_path: MovieScene 子路径
         movie_scene_source: MovieSceneSource int32 (TSoftObjectPtr)
         license: MovieSceneLicense FString
         display_rate_num: DisplayRate Numerator int32
@@ -45,7 +52,8 @@ def _build_level_sequence_payload(
         tick_resolution_den: TickResolution Denominator int32
     """
     buf = bytearray()
-    buf += struct.pack("<i", movie_scene)
+    # MovieScene: FSoftObjectPtr（AssetPath + SubPath 两个 FString）
+    buf += _build_fsoftobjectpath(asset_path, sub_path)
     buf += struct.pack("<i", movie_scene_source)
     buf += _build_fstring_utf16(license)
     buf += struct.pack("<i", display_rate_num)
@@ -61,7 +69,8 @@ class TestParseLevelSequenceBasic:
     def test_parse_level_sequence(self):
         """解析标准 LevelSequence — 验证所有字段。"""
         payload = _build_level_sequence_payload(
-            movie_scene=42,
+            asset_path="/Game/MovieScene.DefaultMovieScene",
+            sub_path="",
             movie_scene_source=7,
             license="TestLicense",
             display_rate_num=30,
@@ -74,7 +83,7 @@ class TestParseLevelSequenceBasic:
         result = parse_level_sequence(archive, [])
 
         assert result["parse_status"] == "success"
-        assert result["movie_scene"] == 42
+        assert result["movie_scene"] == {"asset_path": "/Game/MovieScene.DefaultMovieScene", "sub_path": ""}
         assert result["movie_scene_source"] == 7
         assert result["movie_scene_license"] == "TestLicense"
         assert result["display_rate"]["numerator"] == 30
@@ -90,7 +99,7 @@ class TestParseLevelSequenceBasic:
         result = parse_level_sequence(archive, [])
 
         assert result["parse_status"] == "success"
-        assert result["movie_scene"] == 0
+        assert result["movie_scene"] == {"asset_path": "", "sub_path": ""}
         assert result["movie_scene_source"] == 0
         assert result["movie_scene_license"] == "DefaultLicense"
         assert result["display_rate"]["numerator"] == 24
@@ -139,10 +148,9 @@ class TestParseLevelSequenceErrorHandling:
 
     def test_truncated_payload(self):
         """截断文件导致读取失败返回 failed 状态。"""
-        # 只写入 MovieScene 和 MovieSceneSource，缺少后续字段
+        # 只写入 MovieScene 的一部分（不完整的 FSoftObjectPath）
         buf = bytearray()
-        buf += struct.pack("<i", 0)   # MovieScene
-        buf += struct.pack("<i", 0)   # MovieSceneSource
+        buf += struct.pack("<i", 0)   # 不完整的 FSoftObjectPath
         archive = ByteArchive(bytes(buf))
 
         result = parse_level_sequence(archive, [])

@@ -110,11 +110,13 @@ class TestParseBatch:
                 succeeded=True,
                 output_path=str(first_output),
                 error="",
+                error_details="",
             ),
             SimpleNamespace(
                 succeeded=False,
                 output_path="",
                 error="memory_limit: 1025.0MB > 1024.0MB",
+                error_details="",
             ),
         ]
         with patch(
@@ -132,9 +134,9 @@ class TestParseBatch:
         assert first_request.parse_options["include_parent_assets"] is None
         assert "memory_policy" in first_request.parse_options
         assert result.success == [str(first_output)]
-        assert result.failed == [
-            (str(second), "memory_limit: 1025.0MB > 1024.0MB")
-        ]
+        assert len(result.failed) == 1
+        assert result.failed[0][0] == str(second)
+        assert result.failed[0][1] == "memory_limit: 1025.0MB > 1024.0MB"
         assert result.skipped == []
 
     def test_parse_batch_warns_for_deprecated_skip_large_files(self, tmp_path):
