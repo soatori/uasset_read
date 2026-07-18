@@ -18,9 +18,13 @@ class ExportParseStatus(str, Enum):
     """Export 级解析状态。"""
     SUCCESS = "success"
     PARTIAL = "partial"
-    FALLBACK = "fallback"
-    SKIPPED = "skipped"
     FAILED = "failed"
+    OPAQUE = "opaque"
+    SKIPPED = "skipped"
+    PARTIAL_METADATA = "partial_metadata"
+    OPAQUE_UNVERSIONED = "opaque_unversioned"
+    FALLBACK = "fallback"
+    METADATA = "metadata"
 
 
 class FallbackReason(str, Enum):

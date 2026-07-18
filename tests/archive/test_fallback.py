@@ -132,6 +132,16 @@ class TestFallbackModels:
         assert ExportParseStatus.SKIPPED == "skipped"
         assert ExportParseStatus.FAILED == "failed"
 
+    def test_export_parse_status_complete(self):
+        """验证 ExportParseStatus 包含所有运行时使用的值。"""
+        expected_values = {
+            "success", "partial", "failed",
+            "opaque", "skipped", "partial_metadata",
+            "opaque_unversioned", "fallback", "metadata"
+        }
+        actual_values = {s.value for s in ExportParseStatus}
+        assert actual_values == expected_values
+
     def test_fallback_reason_enum(self):
         """FallbackReason 枚举值。"""
         assert FallbackReason.UNSUPPORTED_TYPE == "unsupported_type"
