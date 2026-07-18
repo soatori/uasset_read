@@ -1,19 +1,57 @@
-"""Core 工具与杂项测试 — 合并自 test_utils.py、test_batch_hybrid.py、test_entry_points.py、
-test_locres_and_graph_node.py 和 test_status_model.py。
+"""Core 全量测试 — 合并自 test_core_utils.py、test_constants.py、test_quality_gates.py。
 
-覆盖：工具函数、批量解析、入口点参数、locres 提取、Graph 节点容错、状态模型。
+覆盖：工具函数、常量、版本、批量解析、入口点、状态模型、质量门禁。
 """
 from __future__ import annotations
 
+import ast
+import importlib
+import inspect
+import io
+import json
+import logging
+import os
+import queue
 import struct
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, PropertyMock, patch
+
 import pytest
-from unittest.mock import MagicMock, PropertyMock
-from uasset_read.core.utils import safe_str, safe_int, normalize_hex_guid
+
+import uasset_read
+from uasset_read import constants, core, project_logging
 from uasset_read.archive import ByteArchive
+from uasset_read.batch_worker import BatchWorkerRequest, _monitor_worker, _StderrDrain, run_isolated_asset
+from uasset_read.core import parse_batch
+from uasset_read.core.error_handling import tolerant_parse
+from uasset_read.core.utils import safe_str, safe_int, normalize_hex_guid
 from uasset_read.exceptions import ParseError
+from uasset_read.memory_safety import ResourceLimits
+from uasset_read.models.fallback import ExportParseStatus
+from uasset_read.models.result import ParseResult
+from uasset_read.models.status import _result_status, PARTIAL_STATUSES, FAILED_STATUSES
+from uasset_read.models.validators import validate_parse_status
+from uasset_read.pak.constants import PAK_INFO_SIZES
+from uasset_read.parse_uasset import _handle_parse_error
+from uasset_read.raw import _scrape_locres_strings
+from uasset_read.versioning import (
+    EUEVersion,
+    FPackageFileVersion,
+    STREAM_MAP,
+    STREAM_FRAMEWORK,
+    VersionContainer,
+    VersionStream,
+    build_version_container,
+)
 
 
-# --- safe_str ---
+# ============================================================================
+# safe_str
+# ============================================================================
 
 def test_safe_str_none():
     assert safe_str(None) == ""
@@ -39,7 +77,9 @@ def test_safe_str_float():
     assert safe_str(3.14) == "3.14"
 
 
-# --- safe_int ---
+# ============================================================================
+# safe_int
+# ============================================================================
 
 def test_safe_int_none():
     assert safe_int(None) == 0
@@ -88,7 +128,9 @@ def test_safe_int_empty_str():
     assert safe_int("") == 0
 
 
-# --- normalize_hex_guid ---
+# ============================================================================
+# normalize_hex_guid
+# ============================================================================
 
 def test_normalize_hex_guid_none():
     assert normalize_hex_guid(None) is None
@@ -131,7 +173,9 @@ def test_normalize_hex_guid_all_uppercase_no_dashes():
         "a1b2c3d4e5f67890abcdef1234567890"
 
 
-# --- UTF-8 字符串长度越界验证测试 (#407) ---
+# ============================================================================
+# UTF-8 字符串长度越界验证测试 (#407)
+# ============================================================================
 
 
 def test_utf8_length_exceeds_remaining_bytes_tolerant():
@@ -197,7 +241,9 @@ def test_utf8_length_records_diagnostic():
     assert any("UTF-8 length" in d.error for d in diagnostics)
 
 
-# --- Tests for PackageLinker.preload() NoneType 防护 (#328) ---
+# ============================================================================
+# PackageLinker.preload() NoneType 防护 (#328)
+# ============================================================================
 
 
 def test_preload_none_serial_offset():
@@ -299,7 +345,9 @@ def test_preload_none_serial_size():
     assert mock_instance._preloaded == True
 
 
-# --- DependsMap 异常数量防护测试 (#336) ---
+# ============================================================================
+# DependsMap 异常数量防护测试 (#336)
+# ============================================================================
 
 
 # depends_offset 必须 > 0（函数入口检查），但 ByteArchive 会 seek 到该位置
@@ -405,32 +453,9 @@ def test_depends_map_zero_offset():
     assert result == []
 
 
-# ==============================================================================
-# 以下来自 test_batch_hybrid.py
-# ==============================================================================
-
-"""批量解析混合模式测试。"""
-import io
-import json
-import logging
-import os
-import queue
-import subprocess
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-from uasset_read import project_logging
-from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
-from uasset_read.core import parse_batch
-from uasset_read.memory_safety import ResourceLimits
-
-
-# ---------------------------------------------------------------------------
+# ============================================================================
 # TestHybridIsolation — #346 智能混合模式测试
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 class TestHybridIsolation:
     """#346: 智能混合模式测试。"""
@@ -474,9 +499,7 @@ class TestHybridIsolation:
 
     def test_auto_mode_integration(self):
         """parse_batch auto 模式应调用 should_isolate 决定隔离策略。"""
-        import logging
-        from uasset_read.core import parse_batch
-        from pathlib import Path, PurePosixPath
+        from pathlib import PurePosixPath
 
         # 保存 uasset_read logger 的日志配置状态
         ua_logger = logging.getLogger("uasset_read")
@@ -519,7 +542,6 @@ def test_auto_mode_integration_does_not_configure_logging():
     old_propagate = ua_logger.propagate
     old_level = ua_logger.level
 
-    from uasset_read.core import parse_batch
     from pathlib import PurePosixPath
 
     fake_file = PurePosixPath('/tmp/fake/test.uasset')
@@ -556,8 +578,6 @@ def test_auto_mode_integration_does_not_configure_logging():
 
 def test_parse_batch_invalid_isolate_assets():
     """parse_batch 应拒绝无效的 isolate_assets 值。"""
-    from uasset_read.core import parse_batch
-    from pathlib import Path
 
     with patch.object(Path, 'is_dir', return_value=True):
         with patch.object(Path, 'rglob', side_effect=[[], []]):
@@ -568,14 +588,12 @@ def test_parse_batch_invalid_isolate_assets():
                 )
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Tests for batch worker error logging (#414)
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 def test_monitor_worker_logs_stderr_on_empty_result(caplog):
     """When result_queue.get() raises queue.Empty, stderr should be logged."""
-    from uasset_read.batch_worker import _monitor_worker
-    from uasset_read.memory_safety import ResourceLimits
 
     # Create a mock process that has already exited
     mock_process = MagicMock()
@@ -607,8 +625,6 @@ def test_monitor_worker_logs_stderr_on_empty_result(caplog):
 
 def test_monitor_worker_includes_stderr_in_outcome():
     """When result_queue.get() raises queue.Empty, stderr should be in outcome."""
-    from uasset_read.batch_worker import _monitor_worker
-    from uasset_read.memory_safety import ResourceLimits
 
     mock_process = MagicMock()
     mock_process.is_alive.return_value = False
@@ -632,9 +648,9 @@ def test_monitor_worker_includes_stderr_in_outcome():
     assert "ImportError: No module named 'foo'" in result.error_details
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Tests for batch worker startup behavior (#415)
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 def test_batch_worker_no_runtime_warning():
     """batch worker 启动不应触发 RuntimeWarning"""
@@ -646,9 +662,9 @@ def test_batch_worker_no_runtime_warning():
     assert "RuntimeWarning" not in result.stderr
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # batch 同 stem 覆盖测试 — #278
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 _FAKE_OUTPUT = '{"status": {"status": "success"}}'
 
@@ -792,9 +808,9 @@ class TestBatchStemCollision:
         assert not (output_dir / "Same.json").exists()
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Parent-side isolated worker monitoring tests
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 # 子进程需要 src/ 在 PYTHONPATH 中才能 import uasset_read
 _SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
@@ -823,8 +839,6 @@ def test_worker_stream_logging_includes_run_process_asset_and_stage():
 
 
 def test_stderr_drain_forwards_each_worker_line():
-    from uasset_read.batch_worker import _StderrDrain
-
     forwarded = []
     drain = _StderrDrain(line_callback=forwarded.append)
 
@@ -855,8 +869,6 @@ class _FakeProcess:
 
 
 def test_monitor_terminates_worker_over_rss_limit() -> None:
-    from uasset_read.batch_worker import _monitor_worker
-
     process = _FakeProcess()
     outcome = _monitor_worker(
         process=process,
@@ -874,8 +886,6 @@ def test_monitor_terminates_worker_over_rss_limit() -> None:
 
 
 def test_monitor_terminates_worker_after_timeout() -> None:
-    from uasset_read.batch_worker import _monitor_worker
-
     process = _FakeProcess()
     times = iter([0.0, 11.0])
     outcome = _monitor_worker(
@@ -961,27 +971,9 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
     assert completed.stdout.strip() == "1 0"
 
 
-# ==============================================================================
-# 以下来自 test_entry_points.py
-# ==============================================================================
-
-"""入口点测试 — 模块导入冒烟 + 参数完整性验证"""
-
-import importlib
-import inspect
-import subprocess
-import sys
-import os
-
-import pytest
-
-from uasset_read import core
-from uasset_read.pak.constants import PAK_INFO_SIZES
-
-
-# ---------------------------------------------------------------------------
-# 模块导入冒烟测试 — 验证所有核心模块可导入且结构正确
-# ---------------------------------------------------------------------------
+# ============================================================================
+# 入口点测试 — 模块导入冒烟 + 参数完整性验证
+# ============================================================================
 
 # 所有核心模块列表（已验证可导入）
 MODULES = [
@@ -1061,7 +1053,6 @@ def test_public_api_structure():
 
 def test_archive_read_u8():
     """ByteArchive 基本读取"""
-    from uasset_read.archive import ByteArchive
     archive = ByteArchive(b"\x42\x00\xff", name="test")
     assert archive.read_u8() == 0x42
     assert archive.read_u8() == 0x00
@@ -1070,14 +1061,12 @@ def test_archive_read_u8():
 
 
 def test_archive_read_u32():
-    from uasset_read.archive import ByteArchive
     archive = ByteArchive(b"\x01\x00\x00\x00", name="test")
     assert archive.read_u32() == 1
     archive.close()
 
 
 def test_archive_seek_tell():
-    from uasset_read.archive import ByteArchive
     archive = ByteArchive(b"\x00\x01\x02\x03\x04", name="test")
     archive.seek(2)
     assert archive.tell() == 2
@@ -1122,7 +1111,6 @@ def test_status_model():
 
 
 def test_fallback_status():
-    from uasset_read.models.fallback import ExportParseStatus
     assert ExportParseStatus.SUCCESS.value == "success"
     assert ExportParseStatus.PARTIAL.value == "partial"
 
@@ -1248,7 +1236,6 @@ class TestPostProcessSplit:
 
     def _get_module(self):
         """获取 parse_uasset 模块（避免 __init__.py 函数名遮蔽）。"""
-        import sys
         return sys.modules["uasset_read.parse_uasset"]
 
     def test_post_process_sub_functions_exist(self):
@@ -1270,7 +1257,6 @@ class TestPostProcessSplit:
 
     def test_post_process_shorter(self):
         """_post_process 函数体应比拆分前短。"""
-        import inspect
         pu = self._get_module()
         source = inspect.getsource(pu._post_process)
         line_count = len(source.splitlines())
@@ -1280,28 +1266,9 @@ class TestPostProcessSplit:
         )
 
 
-# ==============================================================================
-# 以下来自 test_locres_and_graph_node.py
-# ==============================================================================
-
-"""locres 字符串提取、集成流程与 Graph 节点容错测试。"""
-
-import struct
-
-import pytest
-from unittest.mock import MagicMock, patch
-
-from uasset_read.archive import ByteArchive
-from uasset_read.core.error_handling import tolerant_parse
-from uasset_read.exceptions import ParseError
-from uasset_read.models.result import ParseResult
-from uasset_read.parse_uasset import _handle_parse_error
-from uasset_read.raw import _scrape_locres_strings
-
-
-# ---------------------------------------------------------------------------
-# locres 字符串提取
-# ---------------------------------------------------------------------------
+# ============================================================================
+# locres 字符串提取、集成流程与 Graph 节点容错测试
+# ============================================================================
 
 class TestScrapeLocresStrings:
     """_scrape_locres_strings 二进制字符串提取。"""
@@ -1347,10 +1314,6 @@ class TestScrapeLocresStrings:
         result = _scrape_locres_strings(data)
         assert len(result) == 200
 
-
-# ---------------------------------------------------------------------------
-# 集成测试
-# ---------------------------------------------------------------------------
 
 class TestTolerantParseIntegration:
     """tolerant_parse + _handle_parse_error 端到端。"""
@@ -1411,9 +1374,9 @@ class TestByteArchiveIntegration:
         archive.close()
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Graph 节点读取异常容错测试 (#331)
-# ---------------------------------------------------------------------------
+# ============================================================================
 
 def _make_mock_node_export(name="BadNode", outer_idx=0):
     """创建带有 outer_index 的 mock node export。"""
@@ -1693,28 +1656,9 @@ def test_subgraphs_invalid_indices_skipped():
     assert isinstance(graph.subgraphs, list)
 
 
-# ==============================================================================
-# 以下来自 test_status_model.py
-# ==============================================================================
-
-"""状态模型单元测试 — 验证 _result_status() 统一状态推导逻辑（#315）。
-
-覆盖场景：
-- PARTIAL_STATUSES / FAILED_STATUSES 集合完整性
-- ParseResult 各分支状态推导
-- PackageIR 与 ParseResult 状态一致性
-- 所有 export 均 failed 时整体为 failed
-"""
-
-from dataclasses import dataclass, field
-from typing import Any
-
-import pytest
-
-from uasset_read.models.status import _result_status, PARTIAL_STATUSES, FAILED_STATUSES
-from uasset_read.models.fallback import ExportParseStatus
-from uasset_read.models.validators import validate_parse_status
-
+# ============================================================================
+# 状态模型单元测试 — 验证 _result_status() 统一状态推导逻辑（#315）
+# ============================================================================
 
 # ---------------------------------------------------------------------------
 # 辅助工具
@@ -2174,9 +2118,6 @@ class TestBoundaryConditions:
 
     def test_partial_export_status_affects_package(self):
         """parse_status='partial' 应拉低包级状态。"""
-        from uasset_read.models.result import ParseResult
-        from uasset_read.models.status import _result_status
-
         result = ParseResult()
         result.is_success = True
         result.errors = []
@@ -2190,9 +2131,6 @@ class TestBoundaryConditions:
 
     def test_all_exports_failed_returns_failed(self):
         """所有 export failed 时应返回 failed。"""
-        from uasset_read.models.result import ParseResult
-        from uasset_read.models.status import _result_status
-
         result = ParseResult()
         result.is_success = False
         result.errors = ["x"]
@@ -2343,3 +2281,901 @@ class TestParseStatusValidation:
         """错误信息应包含无效值和合法值集合。"""
         with pytest.raises(ValueError, match=r"Invalid parse_status.*bogus"):
             validate_parse_status("bogus")
+
+
+# ============================================================================
+# Constants — 版本常量
+# ============================================================================
+
+
+class TestVersionConstantsExist:
+    """关键版本常量应存在。"""
+
+    def test_ue4_added_package_owner(self):
+        assert hasattr(constants, "UE4_ADDED_PACKAGE_OWNER")
+        assert constants.UE4_ADDED_PACKAGE_OWNER == 518
+
+    def test_ue4_added_package_summary_localization_id(self):
+        assert constants.UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID == 516
+
+    def test_ue4_non_outer_package_import(self):
+        assert constants.UE4_NON_OUTER_PACKAGE_IMPORT == 520
+
+    def test_ue4_name_hashes_serialized(self):
+        assert constants.UE4_NAME_HASHES_SERIALIZED == 504
+
+    def test_ue5_script_serialization_offset(self):
+        assert constants.UE5_SCRIPT_SERIALIZATION_OFFSET == 1010
+
+    def test_ue5_property_tag_extension(self):
+        assert constants.UE5_PROPERTY_TAG_EXTENSION == 1011
+
+    def test_ue5_import_type_hierarchies(self):
+        assert constants.UE5_IMPORT_TYPE_HIERARCHIES == 1018
+
+    def test_ue5_legacy_versions_is_frozenset(self):
+        assert isinstance(constants.UE5_LEGACY_VERSIONS, frozenset)
+        assert -9 in constants.UE5_LEGACY_VERSIONS
+        assert -8 in constants.UE5_LEGACY_VERSIONS
+
+
+class TestPackageFileTags:
+    """Package 文件标签值应正确。"""
+
+    def test_file_tag(self):
+        assert constants.PACKAGE_FILE_TAG == 0x9E2A83C1
+
+    def test_swapped_file_tag(self):
+        assert constants.PACKAGE_FILE_TAG_SWAPPED == 0xC1832A9E
+
+    def test_tags_are_distinct(self):
+        assert constants.PACKAGE_FILE_TAG != constants.PACKAGE_FILE_TAG_SWAPPED
+
+
+# ============================================================================
+# Constants — 边界验证常量
+# ============================================================================
+
+
+class TestBoundaryConstants:
+    """边界验证常量值应合理。"""
+
+    def test_max_name_count(self):
+        assert constants.MAX_NAME_COUNT == 10_000_000
+
+    def test_max_import_count(self):
+        assert constants.MAX_IMPORT_COUNT == 1_000_000
+
+    def test_max_export_count(self):
+        assert constants.MAX_EXPORT_COUNT == 1_000_000
+
+    def test_max_custom_versions(self):
+        assert constants.MAX_CUSTOM_VERSIONS == 10_000
+
+    def test_min_uasset_size(self):
+        assert constants.MIN_UASSET_SIZE == 64
+
+    def test_max_array_count(self):
+        assert constants.MAX_ARRAY_COUNT == 1_000_000
+
+    def test_max_fstring_length(self):
+        assert constants.MAX_FSTRING_LENGTH == 10_000_000
+
+    def test_max_recursion_depth(self):
+        assert constants.MAX_RECURSION_DEPTH == 50
+
+    def test_max_property_count(self):
+        assert constants.MAX_PROPERTY_COUNT == 10_000
+
+
+# ============================================================================
+# Constants — Package Flags
+# ============================================================================
+
+
+class TestPackageFlags:
+    """PKG_* 标志位值应与 UE 源码对齐。"""
+
+    def test_pkg_none(self):
+        assert constants.PKG_None == 0x00000000
+
+    def test_pkg_cooked(self):
+        assert constants.PKG_Cooked == 0x00000200
+
+    def test_pkg_editor_only(self):
+        assert constants.PKG_EditorOnly == 0x00000040
+
+    def test_pkg_filter_editor_only(self):
+        assert constants.PKG_FilterEditorOnly == 0x80000000
+
+    def test_pkg_transient_flags_compound(self):
+        assert (
+            constants.PKG_TransientFlags
+            == constants.PKG_NewlyCreated | constants.PKG_IsSaving | constants.PKG_ReloadingForCooker
+        )
+
+    def test_pkg_in_memory_only_compound(self):
+        assert (
+            constants.PKG_InMemoryOnly
+            == constants.PKG_CompiledIn | constants.PKG_NewlyCreated
+        )
+
+
+# ============================================================================
+# Constants — decode_package_flags
+# ============================================================================
+
+
+class TestDecodePackageFlags:
+    """decode_package_flags 应正确解码标志位。"""
+
+    def test_zero_returns_pkg_none(self):
+        result = constants.decode_package_flags(0)
+        assert result == ["PKG_None"]
+
+    def test_single_flag(self):
+        result = constants.decode_package_flags(constants.PKG_Cooked)
+        assert "PKG_Cooked" in result
+
+    def test_multiple_flags(self):
+        flags = constants.PKG_Cooked | constants.PKG_EditorOnly
+        result = constants.decode_package_flags(flags)
+        assert "PKG_Cooked" in result
+        assert "PKG_EditorOnly" in result
+
+    def test_unknown_bits(self):
+        flags = 0x04000000  # 未定义的位
+        result = constants.decode_package_flags(flags)
+        assert any("Unknown_" in name for name in result)
+
+
+# ============================================================================
+# Constants — PropertyTag 标志
+# ============================================================================
+
+
+class TestPropertyTagFlags:
+    """PropertyTag 标志位值应正确。"""
+
+    def test_prop_tag_none(self):
+        assert constants.PROP_TAG_NONE == 0x00
+
+    def test_prop_tag_has_array_index(self):
+        assert constants.PROP_TAG_HAS_ARRAY_INDEX == 0x01
+
+    def test_prop_tag_has_property_guid(self):
+        assert constants.PROP_TAG_HAS_PROPERTY_GUID == 0x02
+
+    def test_prop_tag_has_extensions(self):
+        assert constants.PROP_TAG_HAS_EXTENSIONS == 0x04
+
+    def test_prop_tag_has_binary_or_native(self):
+        assert constants.PROP_TAG_HAS_BINARY_OR_NATIVE == 0x08
+
+    def test_prop_tag_bool_true(self):
+        assert constants.PROP_TAG_BOOL_TRUE == 0x10
+
+
+# ============================================================================
+# Constants — Framework 版本阈值
+# ============================================================================
+
+
+class TestFrameworkVersionThresholds:
+    """Framework 版本阈值应正确。"""
+
+    def test_ed_graph_pin_container_type(self):
+        assert constants.FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE == 15
+
+    def test_pins_store_fname(self):
+        assert constants.FFRAMEWORK_VERSION_PINS_STORE_FNAME == 19
+
+    def test_ue5_pin_source_index(self):
+        assert constants.FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX == 50
+
+    def test_release_pin_type_uobject_wrapper(self):
+        assert constants.FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER == 10
+
+    def test_float_pin_defaults_single_precision(self):
+        """FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION 已移除，验证不存在。"""
+        assert not hasattr(constants, "FUE5RELEASESTREAM_VERSION_SERIALIZE_FLOAT_PIN_DEFAULTS_AS_SINGLE_PRECISION")
+
+
+# ============================================================================
+# Constants — 节点集合 & 图常量
+# ============================================================================
+
+
+class TestNodeCollections:
+    """蓝图图解析相关集合常量应正确。"""
+
+    def test_control_flow_nodes_is_frozenset(self):
+        assert isinstance(constants.CONTROL_FLOW_NODES, frozenset)
+
+    def test_start_event_types_is_frozenset(self):
+        assert isinstance(constants.START_EVENT_TYPES, frozenset)
+
+    def test_data_boundary_nodes_is_frozenset(self):
+        assert isinstance(constants.DATA_BOUNDARY_NODES, frozenset)
+
+    def test_blueprint_metadata_keys_is_frozenset(self):
+        assert isinstance(constants.BLUEPRINT_METADATA_KEYS, frozenset)
+
+    def test_control_flow_nodes_contains_if_then_else(self):
+        assert "K2Node_IfThenElse" in constants.CONTROL_FLOW_NODES
+
+    def test_start_event_types_contains_event(self):
+        assert "K2Node_Event" in constants.START_EVENT_TYPES
+
+    def test_branch_type_map_values_are_strings(self):
+        for val in constants.BRANCH_TYPE_MAP.values():
+            assert isinstance(val, str)
+
+    def test_graph_type_map(self):
+        assert constants.GRAPH_TYPE_MAP["EdGraph"] == "event"
+        assert constants.GRAPH_TYPE_MAP["UberEdGraph"] == "uber"
+
+    def test_etrigger_event_pin_map(self):
+        assert constants.ETRIGGER_EVENT_PIN_MAP["Started"] == "Started"
+        assert constants.ETRIGGER_EVENT_PIN_MAP["Triggered"] == "Triggered"
+
+
+# ============================================================================
+# Constants — CustomVersion GUID 格式
+# ============================================================================
+
+
+class TestCustomVersionGUIDs:
+    """CustomVersion GUID 应为合法格式。"""
+
+    @pytest.mark.parametrize(
+        "guid_name",
+        [
+            "FFRAMEWORK_OBJECT_VERSION_GUID",
+            "FUE5_MAINSTREAM_VERSION_GUID",
+            "FRELEASE_OBJECT_VERSION_GUID",
+            "FUE5RELEASESTREAM_OBJECT_VERSION_GUID",
+            "FBLUEPRINTS_OBJECT_VERSION_GUID",
+            "FCORE_OBJECT_VERSION_GUID",
+            "FEDITOR_OBJECT_VERSION_GUID",
+            "FANIM_OBJECT_VERSION_GUID",
+            "FPHYSICS_OBJECT_VERSION_GUID",
+            "FRENDERING_OBJECT_VERSION_GUID",
+            "FSEQUENCER_OBJECT_VERSION_GUID",
+        ],
+    )
+    def test_guid_format(self, guid_name):
+        guid = getattr(constants, guid_name)
+        assert isinstance(guid, str)
+        # UE GUID 格式: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (35 chars, 3 dashes)
+        assert len(guid) == 35
+        assert guid.count("-") == 3
+
+
+# ============================================================================
+# CPF_* 常量与 UE ObjectMacros.h 对齐
+# ============================================================================
+
+
+class TestCPFConstantsAlignment:
+    """CPF_* 常量与 UE ObjectMacros.h 逐位对齐。"""
+
+    def test_cpf_edit(self):
+        assert constants.CPF_Edit == 0x01
+
+    def test_cpf_const_parm(self):
+        assert constants.CPF_ConstParm == 0x02
+
+    def test_cpf_blueprint_visible(self):
+        assert constants.CPF_BlueprintVisible == 0x04
+
+    def test_cpf_export_object(self):
+        assert constants.CPF_ExportObject == 0x08
+
+    def test_cpf_blueprint_read_only(self):
+        assert constants.CPF_BlueprintReadOnly == 0x10
+
+    def test_cpf_net(self):
+        assert constants.CPF_Net == 0x20
+
+    def test_cpf_edit_fixed_size(self):
+        assert constants.CPF_EditFixedSize == 0x40
+
+    def test_cpf_parm(self):
+        assert constants.CPF_Parm == 0x80
+
+    def test_cpf_out_parm(self):
+        assert constants.CPF_OutParm == 0x100
+
+    def test_cpf_zero_constructor(self):
+        assert constants.CPF_ZeroConstructor == 0x200
+
+    def test_cpf_return_parm(self):
+        assert constants.CPF_ReturnParm == 0x400
+
+    def test_cpf_disable_edit_on_template(self):
+        assert constants.CPF_DisableEditOnTemplate == 0x800
+
+    def test_cpf_non_nullable(self):
+        assert constants.CPF_NonNullable == 0x1000
+
+    def test_cpf_transient(self):
+        assert constants.CPF_Transient == 0x2000
+
+    def test_cpf_config(self):
+        assert constants.CPF_Config == 0x4000
+
+    def test_cpf_required_parm(self):
+        assert constants.CPF_RequiredParm == 0x8000
+
+    def test_cpf_disable_edit_on_instance(self):
+        assert constants.CPF_DisableEditOnInstance == 0x10000
+
+    def test_cpf_edit_const(self):
+        assert constants.CPF_EditConst == 0x20000
+
+    def test_cpf_global_config(self):
+        assert constants.CPF_GlobalConfig == 0x40000
+
+    def test_cpf_instanced_reference(self):
+        assert constants.CPF_InstancedReference == 0x80000
+
+    def test_cpf_duplicate_transient(self):
+        assert constants.CPF_DuplicateTransient == 0x200000
+
+    def test_cpf_save_game(self):
+        assert constants.CPF_SaveGame == 0x1000000
+
+    def test_cpf_no_clear(self):
+        assert constants.CPF_NoClear == 0x2000000
+
+    def test_cpf_virtual(self):
+        assert constants.CPF_Virtual == 0x4000000
+
+    def test_cpf_reference_parm(self):
+        assert constants.CPF_ReferenceParm == 0x8000000
+
+    def test_cpf_blueprint_assignable(self):
+        assert constants.CPF_BlueprintAssignable == 0x10000000
+
+    def test_cpf_deprecated(self):
+        assert constants.CPF_Deprecated == 0x20000000
+
+    def test_cpf_is_plain_old_data(self):
+        assert constants.CPF_IsPlainOldData == 0x40000000
+
+    def test_cpf_rep_skip(self):
+        assert constants.CPF_RepSkip == 0x80000000
+
+    def test_cpf_rep_notify(self):
+        assert constants.CPF_RepNotify == 0x100000000
+
+    def test_cpf_interp(self):
+        assert constants.CPF_Interp == 0x200000000
+
+    def test_cpf_non_transactional(self):
+        assert constants.CPF_NonTransactional == 0x400000000
+
+    def test_cpf_editor_only(self):
+        assert constants.CPF_EditorOnly == 0x800000000
+
+    def test_cpf_no_destructor(self):
+        assert constants.CPF_NoDestructor == 0x1000000000
+
+    def test_cpf_auto_weak(self):
+        assert constants.CPF_AutoWeak == 0x4000000000
+
+    def test_cpf_contains_instanced_reference(self):
+        assert constants.CPF_ContainsInstancedReference == 0x8000000000
+
+    def test_cpf_asset_registry_searchable(self):
+        assert constants.CPF_AssetRegistrySearchable == 0x10000000000
+
+    def test_cpf_simple_display(self):
+        assert constants.CPF_SimpleDisplay == 0x20000000000
+
+    def test_cpf_advanced_display(self):
+        assert constants.CPF_AdvancedDisplay == 0x40000000000
+
+    def test_cpf_protected(self):
+        assert constants.CPF_Protected == 0x80000000000
+
+    def test_cpf_blueprint_callable(self):
+        assert constants.CPF_BlueprintCallable == 0x100000000000
+
+    def test_cpf_blueprint_authority_only(self):
+        assert constants.CPF_BlueprintAuthorityOnly == 0x200000000000
+
+    def test_cpf_text_export_transient(self):
+        assert constants.CPF_TextExportTransient == 0x400000000000
+
+    def test_cpf_non_pie_duplicate_transient(self):
+        assert constants.CPF_NonPIEDuplicateTransient == 0x800000000000
+
+    def test_cpf_expose_on_spawn(self):
+        assert constants.CPF_ExposeOnSpawn == 0x1000000000000
+
+    def test_cpf_persistent_instance(self):
+        assert constants.CPF_PersistentInstance == 0x2000000000000
+
+    def test_cpf_uobject_wrapper(self):
+        assert constants.CPF_UObjectWrapper == 0x4000000000000
+
+    def test_cpf_has_value_type_hash(self):
+        assert constants.CPF_HasGetValueTypeHash == 0x8000000000000
+
+    def test_cpf_native_access_specifier_public(self):
+        assert constants.CPF_NativeAccessSpecifierPublic == 0x10000000000000
+
+    def test_cpf_native_access_specifier_protected(self):
+        assert constants.CPF_NativeAccessSpecifierProtected == 0x20000000000000
+
+    def test_cpf_native_access_specifier_private(self):
+        assert constants.CPF_NativeAccessSpecifierPrivate == 0x40000000000000
+
+    def test_cpf_skip_serialization(self):
+        assert constants.CPF_SkipSerialization == 0x80000000000000
+
+    def test_cpf_tobject_ptr(self):
+        assert constants.CPF_TObjectPtr == 0x100000000000000
+
+    def test_cpf_allow_self_reference(self):
+        assert constants.CPF_AllowSelfReference == 0x1000000000000000
+
+    def test_cpf_experimental_overridable_logic(self):
+        assert constants.CPF_ExperimentalOverridableLogic == 0x0200000000000000
+
+    def test_cpf_experimental_always_overriden(self):
+        assert constants.CPF_ExperimentalAlwaysOverriden == 0x0400000000000000
+
+    def test_cpf_experimental_never_overriden(self):
+        assert constants.CPF_ExperimentalNeverOverriden == 0x0800000000000000
+
+    def test_cpf_force_post_construct_link(self):
+        assert constants.CPF_ForcePostConstructLink == 0x2000000000000000
+
+    def test_no_nonexistent_flags(self):
+        """验证不存在的标志位已被移除。"""
+        import uasset_read.constants as c
+        removed = [
+            'CPF_BlueprintPure', 'CPF_BlueprintCompilerGenerated',
+            'CPF_NetSerialize', 'CPF_RepRetry', 'CPF_Constructed',
+            'CPF_NaturalizePropertyIndex', 'CPF_Required',
+            'CPF_ReferencePersisted',
+        ]
+        for name in removed:
+            assert not hasattr(c, name), f"{name} 不应存在于 constants 中"
+
+    def test_all_flags_are_power_of_two(self):
+        """所有 CPF_* 常量必须是 2 的幂（位掩码）。"""
+        import uasset_read.constants as c
+        flags = [v for k, v in vars(c).items() if k.startswith('CPF_') and isinstance(v, int)]
+        for flag in flags:
+            assert flag > 0 and (flag & (flag - 1)) == 0, f"CPF_* 值 {flag:#x} 不是 2 的幂"
+
+    def test_no_duplicate_values(self):
+        """CPF_* 常量值不得重复。"""
+        import uasset_read.constants as c
+        flags = [v for k, v in vars(c).items() if k.startswith('CPF_') and isinstance(v, int)]
+        assert len(flags) == len(set(flags)), "存在重复的 CPF_* 值"
+
+
+# ============================================================================
+# Versioning — EUEVersion 枚举
+# ============================================================================
+
+
+class TestEUEVersion:
+    """EUEVersion 枚举值应正确。"""
+
+    def test_ue4_23(self):
+        assert EUEVersion.UE4_23 == 516
+
+    def test_ue5_0(self):
+        assert EUEVersion.UE5_0 == 1000
+
+    def test_ue5_2(self):
+        assert EUEVersion.UE5_2 == 1005
+
+    def test_ue5_5(self):
+        assert EUEVersion.UE5_5 == 1012
+
+    def test_ue5_8(self):
+        assert EUEVersion.UE5_8 == 1018
+
+    def test_is_int_enum(self):
+        assert isinstance(EUEVersion.UE5_0, int)
+
+    def test_ordering(self):
+        assert EUEVersion.UE4_23 < EUEVersion.UE5_0
+        assert EUEVersion.UE5_0 < EUEVersion.UE5_8
+
+
+# ============================================================================
+# Versioning — VersionStream
+# ============================================================================
+
+
+class TestVersionStream:
+    """VersionStream 应正确创建和比较。"""
+
+    def test_stream_framework(self):
+        assert STREAM_FRAMEWORK.guid == constants.FFRAMEWORK_OBJECT_VERSION_GUID
+        assert STREAM_FRAMEWORK.name == "framework"
+
+    def test_stream_map_count(self):
+        assert len(STREAM_MAP) >= 27
+
+    def test_stream_frozen(self):
+        with pytest.raises(AttributeError):
+            STREAM_FRAMEWORK.name = "changed"
+
+    def test_all_streams_have_guid_and_name(self):
+        for key, stream in STREAM_MAP.items():
+            assert isinstance(stream.guid, str)
+            assert isinstance(stream.name, str)
+            assert len(stream.guid) > 0
+
+
+# ============================================================================
+# Versioning — VersionContainer
+# ============================================================================
+
+
+class TestVersionContainer:
+    """VersionContainer 版本查询应正确工作。"""
+
+    def test_empty_container_get_version_returns_default(self):
+        vc = VersionContainer()
+        assert vc.get_version("any-guid") == 0
+
+    def test_empty_container_get_version_custom_default(self):
+        vc = VersionContainer()
+        assert vc.get_version("any-guid", default=42) == 42
+
+    def test_container_with_custom_versions(self):
+        class FakeVersion:
+            def __init__(self, guid, version):
+                self.guid = guid
+                self.version = version
+
+        vc = VersionContainer(
+            custom_versions=[
+                FakeVersion("FFC743F-43B04480-939114DF-171D2073", 7),
+            ],
+        )
+        # 有横杠
+        assert vc.get_version("FFC743F-43B04480-939114DF-171D2073") == 7
+        # 无横杠
+        assert vc.get_version("FFC743F43B04480939114DF171D2073") == 7
+        # 大小写不敏感
+        assert vc.get_version("ffc743f43b04480939114df171d2073") == 7
+
+    def test_container_is_ue5(self):
+        vc = VersionContainer(file_version_ue5=1012)
+        assert vc.is_ue5 is True
+
+    def test_container_ue4_only(self):
+        """file_version_ue5=0 时 is_ue5 仍为 True（UE5_VERSION_MIN=0），
+        这是 UE 设计行为：is_ue5 仅判断 file_version_ue5 >= 0。"""
+        vc = VersionContainer(file_version_ue5=0, file_version_ue4=520)
+        # UE5_VERSION_MIN=0，所以 0 >= 0 → True
+        assert vc.is_ue5 is True
+
+    def test_file_version_property(self):
+        vc = VersionContainer(file_version_ue4=520, file_version_ue5=1012)
+        fv = vc.file_version
+        assert isinstance(fv, FPackageFileVersion)
+        assert fv.file_version_ue4 == 520
+        assert fv.file_version_ue5 == 1012
+
+
+# ============================================================================
+# Versioning — FPackageFileVersion
+# ============================================================================
+
+
+class TestFPackageFileVersion:
+    """FPackageFileVersion 应正确比较。"""
+
+    def test_to_value_ue5_priority(self):
+        fv = FPackageFileVersion(file_version_ue4=520, file_version_ue5=1012)
+        assert fv.to_value() == 1012
+
+    def test_to_value_ue4_fallback(self):
+        fv = FPackageFileVersion(file_version_ue4=520, file_version_ue5=0)
+        assert fv.to_value() == 520
+
+    def test_ge(self):
+        fv = FPackageFileVersion(file_version_ue5=1012)
+        assert fv >= 1012
+        assert fv >= 1000
+        assert not fv >= 1013
+
+    def test_gt(self):
+        fv = FPackageFileVersion(file_version_ue5=1012)
+        assert fv > 1011
+        assert not fv > 1012
+
+    def test_le(self):
+        fv = FPackageFileVersion(file_version_ue5=1012)
+        assert fv <= 1012
+        assert fv <= 1013
+        assert not fv <= 1011
+
+    def test_lt(self):
+        fv = FPackageFileVersion(file_version_ue5=1012)
+        assert fv < 1013
+        assert not fv < 1012
+
+
+# ============================================================================
+# Versioning — build_version_container
+# ============================================================================
+
+
+class TestBuildVersionContainer:
+    """build_version_container 应从 summary 构建 VersionContainer。"""
+
+    def test_build_from_summary(self):
+        class FakeCustomVersion:
+            def __init__(self, guid, version):
+                self.guid = guid
+                self.version = version
+
+        class FakeSummary:
+            custom_versions = [
+                FakeCustomVersion("FFC743F-43B04480-939114DF-171D2073", 7),
+            ]
+            file_version_ue5 = 1012
+            file_version_ue4 = 520
+
+        vc = build_version_container(FakeSummary())
+        assert vc.file_version_ue5 == 1012
+        assert vc.file_version_ue4 == 520
+        assert vc.get_version("FFC743F-43B04480-939114DF-171D2073") == 7
+
+    def test_build_from_summary_no_ue4(self):
+        class FakeSummary:
+            custom_versions = []
+            file_version_ue5 = 0
+
+        vc = build_version_container(FakeSummary())
+        assert vc.file_version_ue4 == 0
+        # is_ue5 始终为 True（UE5_VERSION_MIN=0）
+        assert vc.is_ue5 is True
+
+
+# ============================================================================
+# 质量门禁测试 — 静默异常检测
+# ============================================================================
+
+
+def _find_silent_exceptions(filepath):
+    """检测文件中的 except + pass 模式（允许已知的安全网和清理代码）"""
+    with open(filepath, "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    issues = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            for handler in node.handlers:
+                if len(handler.body) == 1 and isinstance(handler.body[0], ast.Pass):
+                    issues.append(f"行 {handler.lineno}: except {handler.type}")
+    return issues
+
+
+def test_no_silent_exceptions():
+    """src/ 目录下应无静默异常吞没（允许已知的安全网和清理代码）"""
+    src_dir = os.path.join(os.path.dirname(__file__), "..", "src", "uasset_read")
+    # 允许的静默异常模式（cleanup/safety-net），匹配相对路径
+    allowed_files = {
+        "archive.py",  # __del__ 安全网
+        "parse_uasset.py",  # 清理代码
+        "core/__init__.py",  # 清理代码
+        "iostore/reader.py",  # 安全网
+        "pak/reader.py",  # 安全网
+    }
+    all_issues = []
+    for root, _, files in os.walk(src_dir):
+        for f in files:
+            if f.endswith(".py"):
+                filepath = os.path.join(root, f)
+                # 计算相对路径用于匹配
+                rel_path = os.path.relpath(filepath, src_dir).replace(os.sep, "/")
+                if rel_path in allowed_files:
+                    continue
+                issues = _find_silent_exceptions(filepath)
+                for issue in issues:
+                    all_issues.append(f"{filepath}: {issue}")
+    assert len(all_issues) == 0, (
+        f"发现 {len(all_issues)} 处静默异常吞没:\n" + "\n".join(all_issues[:10])
+    )
+
+
+# ============================================================================
+# 质量门禁 — 可变默认参数检测
+# ============================================================================
+
+
+def test_flow_builder_no_mutable_defaults():
+    """flow_builder 应无可变默认参数"""
+    from uasset_read.graph import flow_builder
+
+    issues = []
+    for name, obj in inspect.getmembers(flow_builder, inspect.isfunction):
+        sig = inspect.signature(obj)
+        for param_name, param in sig.parameters.items():
+            if param.default is not inspect.Parameter.empty:
+                if isinstance(param.default, (dict, list, set)):
+                    issues.append(f"{name}({param_name}={param.default})")
+    assert len(issues) == 0, f"flow_builder 存在可变默认参数: {issues}"
+
+
+# ============================================================================
+# 质量门禁 — 核心导入分层验证
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "needle",
+    ["kismet", "cpp_gen", "graph", "pak", "iostore"],
+)
+def test_core_import_does_not_load_extras(needle: str):
+    """导入 parse_package 不应加载 extras 模块"""
+    modules_before = set(sys.modules.keys())
+    from uasset_read.parse_uasset import parse_package
+    modules_after = set(sys.modules.keys())
+    new_modules = modules_after - modules_before
+    assert not any(needle in m for m in new_modules), (
+        f"parse_package 导入意外加载了 {needle} 模块: "
+        f"{[m for m in sorted(new_modules) if needle in m]}"
+    )
+
+
+# ============================================================================
+# 质量门禁 — FULL_SERIALIZER 清理验证
+# ============================================================================
+
+
+def test_full_serializer_not_used():
+    """SerializationStrategy.FULL_SERIALIZER 不应在生产代码中使用。"""
+    from uasset_read.parsers.class_serialization_strategy import CLASS_STRATEGY_TABLE
+    for cls, strategy in CLASS_STRATEGY_TABLE.items():
+        assert strategy.value != "full_serializer", (
+            f"{cls} 使用了未实现的 FULL_SERIALIZER 策略"
+        )
+
+
+def test_full_serializer_removed_from_enum():
+    """FULL_SERIALIZER 已从 SerializationStrategy 枚举中移除。"""
+    from uasset_read.parsers.class_serialization_strategy import SerializationStrategy
+    assert not hasattr(SerializationStrategy, "FULL_SERIALIZER"), (
+        "FULL_SERIALIZER 仍存在于 SerializationStrategy 枚举中"
+    )
+
+
+# ============================================================================
+# 质量门禁 — include_linker 废弃验证
+# ============================================================================
+
+
+def test_include_linker_deprecated():
+    """parse_package() 的 include_linker 参数应触发 DeprecationWarning。"""
+    from uasset_read.parse_uasset import parse_package
+
+    # 参数应仍然存在于签名中（向后兼容）
+    sig = inspect.signature(parse_package)
+    assert "include_linker" in sig.parameters
+
+    # 非默认值应触发 DeprecationWarning
+    with pytest.warns(DeprecationWarning, match="include_linker"):
+        try:
+            parse_package("nonexistent.uasset", include_linker=False)
+        except (FileNotFoundError, ValueError):
+            pass  # 预期失败，但警告应该已经触发
+
+
+# ============================================================================
+# 质量门禁 — 入口合同测试
+# ============================================================================
+
+
+class TestEntryContracts:
+    """入口模块与公共 API 的稳定合同。"""
+
+    def test_public_api_exports_and_list_formats(self):
+        """包级公共 API 可导出且 list_formats 返回常见格式。"""
+        importlib.reload(uasset_read)
+
+        for name in ("parse_single", "parse_batch", "list_formats"):
+            assert hasattr(uasset_read, name)
+            assert callable(getattr(uasset_read, name))
+            assert name in uasset_read.__all__
+
+        formats = uasset_read.list_formats()
+        assert {"json", "markdown"}.issubset(set(formats))
+
+    def test_entrypoint_symbols_are_callable(self):
+        """入口模块导出的函数应可调用。"""
+        from uasset_read.parse_uasset import (
+            parse_package,
+            parse_package_lazy,
+            parse_uasset,
+            parse_uasset_with_linker,
+        )
+
+        for func in (parse_package, parse_package_lazy, parse_uasset, parse_uasset_with_linker):
+            assert callable(func)
+
+    def test_parse_package_signature(self):
+        """parse_package 签名应包含核心参数。"""
+        from uasset_read.parse_uasset import parse_package
+
+        sig = inspect.signature(parse_package)
+        params = sig.parameters
+        required = {"path", "tolerant", "provider", "mappings_path", "game", "force_full_parse"}
+        assert required.issubset(params)
+        assert "return" in parse_package.__annotations__
+
+    def test_core_parse_signatures_stay_aligned(self):
+        """parse_single 与 parse_batch 的共享参数默认值应保持一致。"""
+        single_sig = inspect.signature(core.parse_single)
+        batch_sig = inspect.signature(core.parse_batch)
+
+        for name in ("tolerant", "verbose", "include_schema", "include_function_graphs", "include_parent_assets", "asset_roots", "mappings_path", "game", "force_full_parse", "hex_view", "memory_policy", "output_level"):
+            assert name in single_sig.parameters
+            assert name in batch_sig.parameters
+            assert batch_sig.parameters[name].default == single_sig.parameters[name].default
+
+        assert "input_dir" in batch_sig.parameters
+        assert "file_path" in single_sig.parameters
+        assert "return" in core.parse_batch.__annotations__
+
+    def test_entry_modules_delegate_without_print_or_sys_exit(self):
+        """入口模块不应包含 sys.exit / print，parse_uasset 仍应委托给 parse_package。"""
+        parse_uasset_mod = importlib.import_module("uasset_read.parse_uasset")
+
+        for mod in (parse_uasset_mod, core):
+            src = inspect.getsource(mod)
+            tree = ast.parse(src)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    if isinstance(func, ast.Attribute) and func.attr == "exit":
+                        if isinstance(func.value, ast.Name) and func.value.id == "sys":
+                            pytest.fail(f"{mod.__name__} 第 {node.lineno} 行包含 sys.exit() 调用")
+                    if isinstance(func, ast.Name) and func.id == "print":
+                        pytest.fail(f"{mod.__name__} 第 {node.lineno} 行包含 print() 调用")
+
+        assert "parse_package" in inspect.getsource(parse_uasset_mod.parse_uasset)
+        assert "linker_formats" in inspect.getsource(core.parse_single)
+
+    def test_pak_info_size_contract(self):
+        """PAK_INFO_SIZES 应保持当前已知序列化大小。"""
+        expected = {
+            "v1-6": 45,
+            "v7": 61,
+            "v8": 221,
+            "v9": 222,
+            "v10+": 221,
+        }
+        for version, size in expected.items():
+            assert PAK_INFO_SIZES[version] == size
+
+
+# ============================================================================
+# 质量门禁 — 测试套件形状检查
+# ============================================================================
+
+ROOT = Path(__file__).resolve().parents[2]
+TESTS = ROOT / "tests"
+
+
+def test_total_test_file_count_is_capped():
+    files = sorted(TESTS.rglob("test_*.py"))
+    assert len(files) <= 100
+
+
+def test_core_benchmark_file_count_is_capped():
+    files = sorted((TESTS / "integration").glob("test_*.py"))
+    assert len(files) <= 10

@@ -1,23 +1,50 @@
-"""结构体解析综合测试。
+"""unit 核心测试 — 合并自多个 unit 测试模块。
 
-合并以下测试模块：
-- test_struct_lwc.py — LWC 版本感知尺寸查询和解析
-- test_struct_scalar_param.py — ScalarParameterValue tagged fallback
-- test_struct_blend_sample.py — FBlendSample tagged fallback
-- test_struct_editor_element.py — FEditorElement tagged fallback
-- test_box_sphere_bounds.py — BoxSphereBounds 解析验证
+合并自：
+- test_unit_handlers.py — Opaque 类 handler 注册、策略、stub 工厂 + Texture2D 尺寸校验
+- test_material_instance_params.py — UMaterialInstance 参数提取 + BasePropertyOverrides + 代码质量 + PackageProvider + 游戏版本
+- test_struct_parsing.py — LWC 版本感知、tagged fallback、BoxSphereBounds
 """
 from __future__ import annotations
 
+import ast
+import inspect
 import logging
 import os
 import struct
+import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from uasset_read.archive import FArchive
+from uasset_read.graph import flow_builder
+from uasset_read.models.fallback import ExportParseStatus
 from uasset_read.models.properties import PropertyTag, StructValue
+from uasset_read.objects.exports.material import (
+    _collect_base_property_overrides,
+    _BASE_PROPERTY_OVERRIDE_NAMES,
+)
+from uasset_read.objects.exports.texture import UTexture2D, _MAX_TEXTURE_DIMENSION
+from uasset_read.package import FileSystemPackageProvider
+from uasset_read.pak.constants import PakFileVersion
+from uasset_read.pak.game_versions import (
+    EGame,
+    GAME_PAK_VERSION_MAP,
+    MAGIC_TO_GAME_MAP,
+    detect_game_from_magic,
+    get_pak_version_for_game,
+    get_game_info,
+)
+from uasset_read.parsers.asset_types import register_asset_type_handlers
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+from uasset_read.parsers.class_registry import get_class_registry, reset_class_registry
+from uasset_read.parsers.class_serialization_strategy import (
+    get_serialization_strategy,
+    is_opaque_class,
+    SerializationStrategy,
+)
 from uasset_read.parsers.property_types import (
     _EXPECTED_STRUCT_SIZES,
     _TAGGED_FALLBACK_STRUCTS,
@@ -30,8 +57,531 @@ from uasset_read.versioning import VersionContainer
 from tests.conftest import asset_path, ASSET_MESH_CHAIR
 
 
+# ============================================================
+# Opaque 类测试数据（来自 test_unit_handlers.py）
+# ============================================================
+
+# 所有应返回 partial_metadata 的 opaque class（16 个）
+OPAQUE_CLASSES = [
+    "FoliageType",
+    "SkeletalMeshLODSettings",
+    "AnimBoneCompressionSettings",
+    "AnimCurveCompressionCodec",
+    "PoseAsset",
+    "SubsurfaceProfile",
+    "AnimationDataModel",
+    "Material",
+    "MaterialInstanceConstant",
+    "SkeletalMesh",
+    "StaticMesh",
+    "Texture2D",
+    "TextureCube",
+    "SoundWave",
+    "SoundAttenuation",
+    "StringTable",
+]
+
+
+# ============================================================
+# Opaque Fixtures
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def _fresh_registry():
+    """每个测试前重置 registry"""
+    reset_class_registry()
+    register_asset_type_handlers()
+    yield
+    reset_class_registry()
+
+
+# ============================================================
+# Opaque handler 注册路径和返回值测试
+# ============================================================
+
+@pytest.mark.parametrize("class_name", OPAQUE_CLASSES)
+def test_opaque_handler_registered(class_name):
+    """opaque class 应有注册的 handler"""
+    registry = get_class_registry()
+    handler = registry.find_handler(class_name)
+    assert handler is not None, f"{class_name} 未注册 handler"
+
+
+@pytest.mark.parametrize("class_name", OPAQUE_CLASSES)
+def test_opaque_handler_returns_partial_metadata(class_name):
+    """opaque handler 返回值应包含 parse_status: partial_metadata"""
+    registry = get_class_registry()
+    handler = registry.find_handler(class_name)
+    assert handler is not None
+
+    # 创建 mock export 和 archive
+    export = MagicMock()
+    export.object_name = f"Test{class_name}"
+    archive = MagicMock()
+    archive.tell.return_value = 0
+    archive.total_size.return_value = 1024
+    archive.read.return_value = b"\x00" * 256
+
+    result = handler.parse(export, archive)
+    assert result.success is True
+    assert result.data["parse_status"] == "partial_metadata"
+    assert result.data["sample_size"] == 256
+
+
+# ============================================================
+# class_serialization_strategy 策略测试
+# ============================================================
+
+def test_foliage_type_is_opaque():
+    """FoliageType 应为 OPAQUE_CLASS_PAYLOAD"""
+    assert is_opaque_class("FoliageType") is True
+    assert get_serialization_strategy("FoliageType") == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
+
+
+def test_skeletal_mesh_lod_settings_is_opaque():
+    """SkeletalMeshLODSettings 应为 OPAQUE_CLASS_PAYLOAD"""
+    assert is_opaque_class("SkeletalMeshLODSettings") is True
+    assert get_serialization_strategy("SkeletalMeshLODSettings") == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
+
+
+def test_unknown_class_defaults_to_tagged():
+    """未知 class 应默认返回 TAGGED_PROPERTIES_ONLY"""
+    assert get_serialization_strategy("UnknownClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+# ============================================================
+# opaque_stub 工厂函数测试
+# ============================================================
+
+def test_make_opaque_stub_returns_callable():
+    """make_opaque_stub 应返回可调用对象"""
+    fn = make_opaque_stub("TestClass")
+    assert callable(fn)
+
+
+def test_make_opaque_stub_read_sample():
+    """返回的函数应读取最多 256 字节样本"""
+    fn = make_opaque_stub("TestClass")
+    archive = MagicMock()
+    archive.tell.return_value = 100
+    archive.total_size.return_value = 500
+    archive.read.return_value = b"\x00" * 256
+    result = fn(archive, [])
+    assert result["raw_offset"] == 100
+    assert result["sample_size"] == 256
+    assert result["parse_status"] == "partial_metadata"
+
+
+def test_make_opaque_stub_small_remainder():
+    """剩余不足 256 字节时应读取全部剩余"""
+    fn = make_opaque_stub("TestClass")
+    archive = MagicMock()
+    archive.tell.return_value = 480
+    archive.total_size.return_value = 500
+    archive.read.return_value = b"\x00" * 20
+    result = fn(archive, [])
+    assert result["sample_size"] == 20
+
+
+def test_make_opaque_stub_empty_archive():
+    """archive 为空时应返回零样本"""
+    fn = make_opaque_stub("TestClass")
+    archive = MagicMock()
+    archive.tell.return_value = 100
+    archive.total_size.return_value = 100
+    archive.read.return_value = b""
+    result = fn(archive, [])
+    assert result["sample_size"] == 0
+    assert result["parse_status"] == "partial_metadata"
+
+
+# ============================================================
+# Texture2D 辅助函数
+# ============================================================
+
+def _make_texture(**props) -> UTexture2D:
+    """构造带指定 properties 的 UTexture2D 实例"""
+    tex = UTexture2D(name="TestTexture")
+    for k, v in props.items():
+        tex.set_property(k, v)
+    return tex
+
+
+def _make_archive() -> MagicMock:
+    """构造最小 mock archive"""
+    archive = MagicMock()
+    archive.tell.return_value = 0
+    archive.total_size.return_value = 1024
+    return archive
+
+
+# ============================================================
+# Texture2D PlatformData 尺寸范围校验测试 (#403)
+# ============================================================
+
+class TestPlatformDataBounds:
+    """PlatformData 覆盖尺寸后重新校验"""
+
+    def test_platformdata_negative_sizex_clamped(self):
+        """PlatformData 中 SizeX 为负值时应置为 0"""
+        tex = _make_texture(
+            PlatformData={"SizeX": -100, "SizeY": 256, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 0
+        assert tex.size_y == 256
+
+    def test_platformdata_negative_sizey_clamped(self):
+        """PlatformData 中 SizeY 为负值时应置为 0"""
+        tex = _make_texture(
+            PlatformData={"SizeX": 256, "SizeY": -50, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 256
+        assert tex.size_y == 0
+
+    def test_platformdata_oversized_sizex_clamped(self):
+        """PlatformData 中 SizeX 超过上限时应置为 0"""
+        tex = _make_texture(
+            PlatformData={"SizeX": _MAX_TEXTURE_DIMENSION + 1, "SizeY": 128, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 0
+        assert tex.size_y == 128
+
+    def test_platformdata_oversized_sizey_clamped(self):
+        """PlatformData 中 SizeY 超过上限时应置为 0"""
+        tex = _make_texture(
+            PlatformData={"SizeX": 64, "SizeY": _MAX_TEXTURE_DIMENSION + 999, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 64
+        assert tex.size_y == 0
+
+    def test_platformdata_both_invalid_clamped(self):
+        """PlatformData 中 SizeX/SizeY 均非法时均置为 0"""
+        tex = _make_texture(
+            PlatformData={"SizeX": -1, "SizeY": _MAX_TEXTURE_DIMENSION + 1, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 0
+        assert tex.size_y == 0
+
+    def test_platformdata_valid_values_preserved(self):
+        """合法的 PlatformData 尺寸不应被篡改"""
+        tex = _make_texture(
+            PlatformData={"SizeX": 1024, "SizeY": 2048, "PixelFormat": 2, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 1024
+        assert tex.size_y == 2048
+
+    def test_imported_invalid_overridden_by_valid_platformdata(self):
+        """初始 SizeX 非法但 PlatformData 合法时，PlatformData 覆盖后保留合法值"""
+        tex = _make_texture(
+            SizeX=99999, SizeY=99999,
+            PlatformData={"SizeX": 512, "SizeY": 512, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        # 初始校验将 99999 置为 0，PlatformData 再覆盖为 512
+        assert tex.size_x == 512
+        assert tex.size_y == 512
+
+    def test_imported_valid_overridden_by_invalid_platformdata(self):
+        """初始 SizeX 合法但 PlatformData 非法时，PlatformData 覆盖后应置为 0"""
+        tex = _make_texture(
+            SizeX=256, SizeY=256,
+            PlatformData={"SizeX": -10, "SizeY": _MAX_TEXTURE_DIMENSION + 1, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 0
+        assert tex.size_y == 0
+
+    def test_no_platformdata_keeps_imported_bounds(self):
+        """无 PlatformData 时，初始校验结果应保留"""
+        tex = _make_texture(SizeX=200, SizeY=300)
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 200
+        assert tex.size_y == 300
+
+    def test_zero_boundary_values(self):
+        """边界值 0 和 _MAX_TEXTURE_DIMENSION 应被接受"""
+        tex = _make_texture(
+            PlatformData={"SizeX": 0, "SizeY": _MAX_TEXTURE_DIMENSION, "PixelFormat": 1, "Mips": []},
+        )
+        tex.deserialize(_make_archive(), offset=0, size=100)
+        assert tex.size_x == 0
+        assert tex.size_y == _MAX_TEXTURE_DIMENSION
+
+
+# ============================================================
+# UMaterialInstance 参数提取（来自 test_material_instance_params.py）
+# ============================================================
+
+
+class TestCollectParametersEnhanced:
+    def test_collect_parameters_extracts_association(self):
+        """_collect_parameters 应提取 Association 字段"""
+        from uasset_read.objects.exports.material import _collect_parameters
+
+        source = [{
+            "ParameterInfo": {"Name": "BaseColor", "Association": 0, "Index": -1},
+            "ParameterValue": [1.0, 0.0, 0.0, 1.0],
+        }]
+        result = _collect_parameters(source, value_names=("ParameterValue",))
+        assert "BaseColor" in result
+        assert result["BaseColor"]["association"] == 0
+        assert result["BaseColor"]["index"] == -1
+
+    def test_collect_parameters_extracts_index(self):
+        """_collect_parameters 应提取 Index 字段"""
+        from uasset_read.objects.exports.material import _collect_parameters
+
+        source = [{
+            "ParameterInfo": {"Name": "LayerMask", "Association": 1, "Index": 2},
+            "ParameterValue": 0.5,
+        }]
+        result = _collect_parameters(source, value_names=("ParameterValue",))
+        assert result["LayerMask"]["index"] == 2
+
+    def test_collect_parameters_preserves_value(self):
+        """_collect_parameters 应保留原有 value 字段"""
+        from uasset_read.objects.exports.material import _collect_parameters
+
+        source = [{
+            "ParameterInfo": {"Name": "Roughness"},
+            "ParameterValue": 0.3,
+        }]
+        result = _collect_parameters(source, value_names=("ParameterValue",))
+        assert result["Roughness"]["value"] == 0.3
+
+
+class TestStaticSwitchParameters:
+    def test_static_switch_parameters_extracted(self):
+        """UMaterialInstance 应提取 StaticSwitchParameters"""
+        from uasset_read.objects.exports.material import UMaterialInstance
+
+        mock_archive = MagicMock()
+        instance = UMaterialInstance()
+        # 模拟属性标签数据
+        instance.properties = {
+            "StaticSwitchParameters": [{
+                "ParameterInfo": {"Name": "UseNormalMap"},
+                "Value": True,
+                "bOverride": True,
+            }]
+        }
+        instance.deserialize(mock_archive, 0, 100)
+        assert "UseNormalMap" in instance.static_switch_parameters
+        assert instance.static_switch_parameters["UseNormalMap"] is True
+
+
+# ============================================================
+# BasePropertyOverrides 测试
+# ============================================================
+
+class TestBasePropertyOverrides(unittest.TestCase):
+    """测试 _collect_base_property_overrides"""
+
+    def test_empty_source(self):
+        """空输入返回空 dict"""
+        self.assertEqual(_collect_base_property_overrides(None), {})
+        self.assertEqual(_collect_base_property_overrides({}), {})
+        self.assertEqual(_collect_base_property_overrides([]), {})
+
+    def test_dict_passthrough(self):
+        """dict 输入直接返回"""
+        data = {"BlendMode": 1, "TwoSided": True}
+        result = _collect_base_property_overrides(data)
+        self.assertEqual(result, data)
+
+    def test_extracts_overridden_properties(self):
+        """提取被 override 的属性"""
+        mock_obj = MagicMock()
+        # 模拟 prop_value 调用
+        mock_props = {
+            "bOverride_BlendMode": True,
+            "BlendMode": 2,
+            "bOverride_TwoSided": True,
+            "TwoSided": True,
+            "bOverride_ShadingModel": False,  # 未 override
+            "ShadingModel": 1,  # 即使有值也不应被提取
+        }
+        def mock_prop_value(obj, *names, default=None):
+            for name in names:
+                if name in mock_props:
+                    return mock_props[name]
+            return default
+
+        import uasset_read.objects.exports.material as mat_mod
+        original_prop_value = mat_mod.prop_value
+        mat_mod.prop_value = mock_prop_value
+        try:
+            result = _collect_base_property_overrides(mock_obj)
+            self.assertEqual(result, {"BlendMode": 2, "TwoSided": True})
+        finally:
+            mat_mod.prop_value = original_prop_value
+
+    def test_override_flag_names(self):
+        """确认所有 override 标记名格式正确"""
+        for name in _BASE_PROPERTY_OVERRIDE_NAMES:
+            self.assertTrue(name[0].isupper() or name.startswith("b"),
+                            f"属性名应以大写字母或 b 开头: {name}")
+
+
+# ============================================================
+# 代码质量静态检查测试
+# ============================================================
+
+class TestNoMutableDefaults:
+    """验证 flow_builder 中无可变默认参数。"""
+
+    def _get_functions_with_mutable_defaults(self, module):
+        """扫描模块中所有函数的可变默认参数。"""
+        issues = []
+        for name, obj in inspect.getmembers(module, inspect.isfunction):
+            sig = inspect.signature(obj)
+            for param_name, param in sig.parameters.items():
+                if param.default is not inspect.Parameter.empty:
+                    if isinstance(param.default, (dict, list, set)):
+                        issues.append(f"{name}({param_name}={param.default})")
+        return issues
+
+    def test_flow_builder_no_mutable_defaults(self):
+        """flow_builder 应无可变默认参数。"""
+        issues = self._get_functions_with_mutable_defaults(flow_builder)
+        assert len(issues) == 0, (
+            f"flow_builder 存在可变默认参数: {issues}"
+        )
+
+
+class TestNoSilentExceptions:
+    """验证无 except + pass 的静默吞没。"""
+
+    def _find_silent_exceptions(self, filepath):
+        """检测文件中的 except + pass 模式。"""
+        with open(filepath, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+
+        issues = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Try):
+                for handler in node.handlers:
+                    if len(handler.body) == 1 and isinstance(handler.body[0], ast.Pass):
+                        issues.append(f"行 {handler.lineno}: except {handler.type}")
+        return issues
+
+    def test_src_no_silent_exceptions(self):
+        """src/ 目录下应无静默异常吞没（允许已知的安全网和清理代码）。"""
+        src_dir = os.path.join(os.path.dirname(__file__), "..", "..", "src", "uasset_read")
+        # 允许的静默异常模式（cleanup/safety-net），匹配相对路径
+        allowed_files = {
+            "archive.py",  # __del__ 安全网
+            "parse_uasset.py",  # 清理代码
+            "core/__init__.py",  # 清理代码
+            "iostore/reader.py",  # 安全网
+            "pak/reader.py",  # 安全网
+        }
+        all_issues = []
+        for root, _, files in os.walk(src_dir):
+            for f in files:
+                if f.endswith(".py"):
+                    filepath = os.path.join(root, f)
+                    # 计算相对路径用于匹配
+                    rel_path = os.path.relpath(filepath, src_dir).replace(os.sep, "/")
+                    if rel_path in allowed_files:
+                        continue
+                    issues = self._find_silent_exceptions(filepath)
+                    for issue in issues:
+                        all_issues.append(f"{filepath}: {issue}")
+        assert len(all_issues) == 0, (
+            f"发现 {len(all_issues)} 处静默异常吞没:\n" + "\n".join(all_issues[:10])
+        )
+
+
+# ============================================================
+# FileSystemPackageProvider root containment 校验
+# ============================================================
+
+def test_read_file_outside_root_raises():
+    """read_file 应拒绝 root 外路径。"""
+    root = Path(__file__).parent
+    provider = FileSystemPackageProvider(root)
+    with pytest.raises(PermissionError, match="outside root"):
+        provider.read_file(str(root / ".." / "README.md"))
+
+
+def test_open_file_outside_root_raises():
+    """open_file 应拒绝 root 外路径。"""
+    root = Path(__file__).parent
+    provider = FileSystemPackageProvider(root)
+    with pytest.raises(PermissionError, match="outside root"):
+        provider.open_file(str(root / ".." / "README.md"))
+
+
+def test_open_package_bundle_outside_root_raises():
+    """open_package_bundle 应拒绝 root 外路径。"""
+    root = Path(__file__).parent
+    provider = FileSystemPackageProvider(root)
+    with pytest.raises(PermissionError, match="outside root"):
+        provider.open_package_bundle(str(root / ".." / "some.uasset"))
+
+
+def test_read_file_within_root_ok():
+    """read_file 应允许 root 内路径。"""
+    root = Path(__file__).parent
+    provider = FileSystemPackageProvider(root)
+    result = provider.read_file(str(Path(__file__)))
+    assert result is not None
+
+
+# ============================================================
+# 游戏版本映射测试
+# ============================================================
+
+class TestEGameExpansion(unittest.TestCase):
+    """EGame 枚举扩展测试"""
+
+    def test_popular_ue5_games_exist(self):
+        """EGame 应包含热门 UE5 游戏"""
+        self.assertTrue(hasattr(EGame, "BLACK_MYTH_WUKONG"))
+        self.assertTrue(hasattr(EGame, "STALKER_2"))
+        self.assertTrue(hasattr(EGame, "MARVEL_RIVALS"))
+        self.assertTrue(hasattr(EGame, "THE_FIRST_DESCENDANT"))
+        self.assertTrue(hasattr(EGame, "INFINITY_NIKKI"))
+
+    def test_popular_ue4_games_exist(self):
+        """EGame 应包含热门 UE4 游戏"""
+        self.assertTrue(hasattr(EGame, "PUBG"))
+        self.assertTrue(hasattr(EGame, "FORTNITE"))
+        self.assertTrue(hasattr(EGame, "APEX_LEGENDS"))
+
+    def test_game_pak_version_mapping(self):
+        """新增游戏应有 PAK 版本映射"""
+        self.assertIn(EGame.BLACK_MYTH_WUKONG, GAME_PAK_VERSION_MAP)
+        self.assertEqual(
+            GAME_PAK_VERSION_MAP[EGame.BLACK_MYTH_WUKONG],
+            PakFileVersion.Utf8PakDirectory,
+        )
+
+    def test_game_info_returns_name(self):
+        """get_game_info 应返回正确游戏名称"""
+        name, version = get_game_info(EGame.BLACK_MYTH_WUKONG)
+        self.assertEqual(name, "Black Myth: Wukong")
+
+    def test_custom_magic_games_unchanged(self):
+        """自定义魔数游戏应保持原有映射"""
+        self.assertEqual(
+            detect_game_from_magic(0xA590ED1E), EGame.OUTLAST_TRIALS
+        )
+        self.assertEqual(
+            get_pak_version_for_game(EGame.OUTLAST_TRIALS),
+            PakFileVersion.PathHashIndex,
+        )
+
+
 # ============================================================================
-# 辅助函数
+# 辅助函数（来自 test_struct_parsing.py）
 # ============================================================================
 
 def _archive(tmp_path: Path, data: bytes) -> FArchive:
@@ -363,25 +913,10 @@ class TestScalarParameterValueSchema:
 
 
 class TestScalarParameterValueTaggedParse:
-    """验证 ScalarParameterValue tagged fallback 解析行为。
-
-    模拟材质资产中 ScalarParameterValues 数组元素的 tagged 序列化格式：
-    每个元素包含 PropertyTag 循环（ParameterInfo: StructProperty, ParameterValue: FloatProperty, bOverride: BoolProperty, None 终止）。
-    """
+    """验证 ScalarParameterValue tagged fallback 解析行为。"""
 
     def test_tagged_parse_material_parameter_info(self, tmp_path):
         """FMaterialParameterInfo tagged 格式解析。"""
-        # 构造 FMaterialParameterInfo 的 tagged 数据：
-        # - FName "BaseColor" (3 chars, utf-8) + index=0
-        # - int32 Index = 0
-        # - bool bOverride = false (0)
-        fname_bytes = b"BaseColor"
-        name_data = struct.pack("<i", len(fname_bytes)) + fname_bytes
-        # FName 序列化: 可能是 FNameEntrySerialized 格式
-        # 在 tagged 解析中 FName 通过 read_name 读取
-        # 但 read_property_tag 先读 name + type，然后 read_tag_value 读值
-        # 对于 NameProperty，值是 FName = 8 bytes (comparison_id + number)
-
         # 简化：直接验证 schema 注册和结构正确性，而非构造完整二进制
         schema = _TAGGED_FALLBACK_STRUCT_SCHEMAS["FMaterialParameterInfo"]
         assert len(schema) == 3

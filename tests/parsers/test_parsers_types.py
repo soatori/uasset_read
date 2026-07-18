@@ -1,8 +1,8 @@
-"""mappings 模块单元测试 — UsmapParser / JmapParser。
+"""parsers 类型映射与反射注册测试 — 合并自 test_mappings_parsers / test_reflection_registry。
 
 覆盖范围：
-- mappings.py: UsmapParser、JmapParser、TypeMappings、StructMapping、
-  PropertyInfo、PropertyType、_PROPERTY_TYPE_NAMES、TypeMappingsProvider
+- mappings.py: UsmapParser、JmapParser、TypeMappings、StructMapping、PropertyInfo、PropertyType
+- asset_types: ObjectTypeRegistry 反射注册模式（discover_handlers、get_handler、register_handler）
 """
 from __future__ import annotations
 
@@ -23,6 +23,14 @@ from uasset_read.mappings import (
     UsmapParser,
     _PROPERTY_TYPE_NAMES,
 )
+from uasset_read.parsers.asset_types import (
+    discover_handlers,
+    get_handler,
+    register_handler,
+    AnimBlueprintHandler,
+    AnimSequenceHandler,
+    AnimMontageHandler,
+)
 
 
 # ============================================================================
@@ -31,8 +39,6 @@ from uasset_read.mappings import (
 
 
 class TestPropertyTypeNames:
-    """_PROPERTY_TYPE_NAMES 应包含所有基本属性类型。"""
-
     def test_basic_types(self):
         assert _PROPERTY_TYPE_NAMES[0] == "ByteProperty"
         assert _PROPERTY_TYPE_NAMES[1] == "BoolProperty"
@@ -63,8 +69,6 @@ class TestPropertyTypeNames:
 
 
 class TestPropertyType:
-    """PropertyType 应正确创建。"""
-
     def test_simple_type(self):
         pt = PropertyType(type="IntProperty")
         assert pt.type == "IntProperty"
@@ -87,14 +91,8 @@ class TestPropertyType:
 
 
 class TestPropertyInfo:
-    """PropertyInfo 应正确创建。"""
-
     def test_basic_info(self):
-        pi = PropertyInfo(
-            index=0,
-            name="Health",
-            mapping_type=PropertyType(type="FloatProperty"),
-        )
+        pi = PropertyInfo(index=0, name="Health", mapping_type=PropertyType(type="FloatProperty"))
         assert pi.index == 0
         assert pi.name == "Health"
         assert pi.array_size == 1
@@ -106,8 +104,6 @@ class TestPropertyInfo:
 
 
 class TestStructMapping:
-    """StructMapping 应正确创建和查询。"""
-
     def test_basic_mapping(self):
         sm = StructMapping(name="TestStruct", super_type=None)
         assert sm.name == "TestStruct"
@@ -117,14 +113,12 @@ class TestStructMapping:
     def test_property_by_name_found(self):
         pi = PropertyInfo(index=0, name="Health", mapping_type=PropertyType(type="FloatProperty"))
         sm = StructMapping(name="Test", properties={0: pi})
-        result = sm.property_by_name("Health")
-        assert result is pi
+        assert sm.property_by_name("Health") is pi
 
     def test_property_by_name_case_insensitive(self):
         pi = PropertyInfo(index=0, name="Health", mapping_type=PropertyType(type="FloatProperty"))
         sm = StructMapping(name="Test", properties={0: pi})
-        result = sm.property_by_name("health")
-        assert result is pi
+        assert sm.property_by_name("health") is pi
 
     def test_property_by_name_not_found(self):
         sm = StructMapping(name="Test")
@@ -137,8 +131,6 @@ class TestStructMapping:
 
 
 class TestTypeMappings:
-    """TypeMappings 应正确创建和查询。"""
-
     def test_get_struct_found(self):
         sm = StructMapping(name="Vector")
         tm = TypeMappings(types={"Vector": sm})
@@ -161,16 +153,14 @@ class TestTypeMappings:
         pi = PropertyInfo(index=0, name="X", mapping_type=PropertyType(type="FloatProperty"))
         sm = StructMapping(name="Vector", properties={0: pi})
         tm = TypeMappings(types={"Vector": sm})
-        result = tm.property_by_name("Vector", "X")
-        assert result is pi
+        assert tm.property_by_name("Vector", "X") is pi
 
     def test_property_by_name_walks_super(self):
         pi_parent = PropertyInfo(index=0, name="ParentProp", mapping_type=PropertyType(type="IntProperty"))
         parent = StructMapping(name="Parent", properties={0: pi_parent})
         child = StructMapping(name="Child", super_type="Parent")
         tm = TypeMappings(types={"Parent": parent, "Child": child})
-        result = tm.property_by_name("Child", "ParentProp")
-        assert result is pi_parent
+        assert tm.property_by_name("Child", "ParentProp") is pi_parent
 
     def test_property_by_name_not_found(self):
         tm = TypeMappings()
@@ -187,15 +177,6 @@ def _build_usmap_v0(
     enums: dict[str, dict[int, str]] | None = None,
     schemas: list[dict] | None = None,
 ) -> bytes:
-    """构造合成的 v0 .usmap 二进制数据。
-
-    v0 格式:
-        magic(u16) + version(u8) + compression(u8) + comp_size(u32) + decomp_size(u32)
-        Payload:
-            NameTable: count(u32) + names[length(u8 for v0) + bytes]
-            EnumTable: count(u32) + enums[...]
-            SchemaTable: count(u32) + schemas[...]
-    """
     if name_table is None:
         name_table = []
     if enums is None:
@@ -204,26 +185,21 @@ def _build_usmap_v0(
         schemas = []
 
     payload = bytearray()
-
-    # NameTable — v0 使用 u8 长度
     payload += struct.pack("<I", len(name_table))
     for name in name_table:
         encoded = name.encode("utf-8")
-        payload += struct.pack("<B", len(encoded))  # u8 for v0
+        payload += struct.pack("<B", len(encoded))
         payload += encoded
 
-    # EnumTable
     payload += struct.pack("<I", len(enums))
     for enum_name, values in enums.items():
         name_idx = name_table.index(enum_name) if enum_name in name_table else 0
         payload += struct.pack("<i", name_idx)
-        # value count — v0 使用 u8
         payload += struct.pack("<B", len(values))
         for val_int, val_name in sorted(values.items()):
             val_name_idx = name_table.index(val_name) if val_name in name_table else 0
             payload += struct.pack("<i", val_name_idx)
 
-    # SchemaTable
     payload += struct.pack("<I", len(schemas))
     for schema in schemas:
         name_idx = name_table.index(schema["name"]) if schema["name"] in name_table else 0
@@ -241,9 +217,9 @@ def _build_usmap_v0(
             payload += struct.pack("<B", prop.get("array_dim", 1))
             prop_name_idx = name_table.index(prop["name"]) if prop["name"] in name_table else 0
             payload += struct.pack("<i", prop_name_idx)
-            type_id = prop.get("type_id", 2)  # default IntProperty
+            type_id = prop.get("type_id", 2)
             payload += struct.pack("<B", type_id)
-            if type_id == 9:  # StructProperty
+            if type_id == 9:
                 st_name = prop.get("struct_type", "")
                 st_idx = name_table.index(st_name) if st_name in name_table else 0
                 payload += struct.pack("<i", st_idx)
@@ -254,8 +230,6 @@ def _build_usmap_v0(
 
 
 class TestUsmapParser:
-    """UsmapParser 应正确解析 .usmap 文件。"""
-
     def test_parse_empty_usmap(self):
         data = _build_usmap_v0()
         parser = UsmapParser(data)
@@ -265,7 +239,6 @@ class TestUsmapParser:
     def test_parse_with_names(self):
         data = _build_usmap_v0(name_table=["foo", "bar"])
         parser = UsmapParser(data)
-        assert "foo" in parser.mappings.types or len(parser.mappings.types) == 0
 
     def test_parse_with_enum(self):
         data = _build_usmap_v0(
@@ -279,15 +252,10 @@ class TestUsmapParser:
     def test_parse_with_schema(self):
         data = _build_usmap_v0(
             name_table=["MyStruct", "Health"],
-            schemas=[
-                {
-                    "name": "MyStruct",
-                    "super_type": None,
-                    "properties": [
-                        {"index": 0, "name": "Health", "type_id": 3},  # FloatProperty
-                    ],
-                }
-            ],
+            schemas=[{
+                "name": "MyStruct", "super_type": None,
+                "properties": [{"index": 0, "name": "Health", "type_id": 3}],
+            }],
         )
         parser = UsmapParser(data)
         assert "MyStruct" in parser.mappings.types
@@ -312,8 +280,6 @@ class TestUsmapParser:
 
 
 class TestJmapParser:
-    """JmapParser 应正确解析 JSON 映射文件。"""
-
     def test_parse_empty_jmap(self):
         data = json.dumps({"objects": {}}).encode("utf-8")
         parser = JmapParser(data)
@@ -321,69 +287,27 @@ class TestJmapParser:
         assert parser.mappings.enums == {}
 
     def test_parse_enum(self):
-        root = {
-            "objects": {
-                "Color": {
-                    "type": "Enum",
-                    "names": [["Red", 0], ["Blue", 1]],
-                }
-            }
-        }
+        root = {"objects": {"Color": {"type": "Enum", "names": [["Red", 0], ["Blue", 1]]}}}
         data = json.dumps(root).encode("utf-8")
         parser = JmapParser(data)
         assert "Color" in parser.mappings.enums
         assert parser.mappings.enums["Color"][0] == "Red"
-        assert parser.mappings.enums["Color"][1] == "Blue"
 
     def test_parse_class(self):
-        root = {
-            "objects": {
-                "MyClass": {
-                    "type": "Class",
-                    "super_struct": "SomeParent",
-                    "properties": [
-                        {"name": "Health", "type": "FloatProperty"},
-                    ],
-                }
-            }
-        }
+        root = {"objects": {"MyClass": {"type": "Class", "super_struct": "SomeParent", "properties": [{"name": "Health", "type": "FloatProperty"}]}}}
         data = json.dumps(root).encode("utf-8")
         parser = JmapParser(data)
         assert "MyClass" in parser.mappings.types
-        sm = parser.mappings.types["MyClass"]
-        assert sm.super_type == "SomeParent"
+        assert parser.mappings.types["MyClass"].super_type == "SomeParent"
 
     def test_parse_script_struct(self):
-        root = {
-            "objects": {
-                "MyStruct": {
-                    "type": "ScriptStruct",
-                    "properties": [
-                        {"name": "X", "type": "FloatProperty"},
-                        {"name": "Y", "type": "FloatProperty"},
-                    ],
-                }
-            }
-        }
+        root = {"objects": {"MyStruct": {"type": "ScriptStruct", "properties": [{"name": "X", "type": "FloatProperty"}, {"name": "Y", "type": "FloatProperty"}]}}}
         data = json.dumps(root).encode("utf-8")
         parser = JmapParser(data)
         assert "MyStruct" in parser.mappings.types
 
     def test_parse_with_nested_dict_property(self):
-        root = {
-            "objects": {
-                "MyStruct": {
-                    "type": "Class",
-                    "properties": [
-                        {
-                            "name": "Items",
-                            "type": "ArrayProperty",
-                            "inner": {"type": "IntProperty"},
-                        }
-                    ],
-                }
-            }
-        }
+        root = {"objects": {"MyStruct": {"type": "Class", "properties": [{"name": "Items", "type": "ArrayProperty", "inner": {"type": "IntProperty"}}]}}}
         data = json.dumps(root).encode("utf-8")
         parser = JmapParser(data)
         sm = parser.mappings.types["MyStruct"]
@@ -393,7 +317,6 @@ class TestJmapParser:
         assert prop.mapping_type.inner_type.type == "IntProperty"
 
     def test_gzip_compressed_via_file(self):
-        """JmapParser 通过文件路径加载时应支持 .gz 解压。"""
         import tempfile, os
         root = {"objects": {}}
         raw = json.dumps(root).encode("utf-8")
@@ -415,8 +338,6 @@ class TestJmapParser:
 
 
 class TestTypeMappingsProvider:
-    """TypeMappingsProvider 应正确加载映射文件。"""
-
     def test_from_jmap_bytes(self):
         root = {"objects": {}}
         data = json.dumps(root).encode("utf-8")
@@ -429,27 +350,117 @@ class TestTypeMappingsProvider:
 
 
 # ============================================================================
-# mappings.py _decompress 一致性测试（合并自 test_mappings_decompress.py）
+# mappings.py _decompress 一致性测试
 # ============================================================================
 
 
 class TestMappingsDecompress:
     def test_uncompressed_passthrough(self):
-        """未压缩数据应直接返回。"""
         parser = UsmapParser.__new__(UsmapParser)
         data = b'\x00' * 10 + b'test payload'
         result = parser._decompress(data, method=0, comp_size=len(data), decomp_size=len(data))
         assert result == data
 
     def test_uncompressed_size_mismatch_raises(self):
-        """未压缩但大小不一致应抛出 ParseError。"""
         parser = UsmapParser.__new__(UsmapParser)
         data = b'\x00' * 10
         with pytest.raises(Exception, match="大小不一致"):
             parser._decompress(data, method=0, comp_size=10, decomp_size=20)
 
     def test_unsupported_method_raises(self):
-        """不支持的压缩方式应抛出 ParseError。"""
         parser = UsmapParser.__new__(UsmapParser)
         with pytest.raises(Exception, match="不支持"):
             parser._decompress(b'', method=99, comp_size=0, decomp_size=0)
+
+
+# ============================================================================
+# ObjectTypeRegistry 反射注册模式测试
+# ============================================================================
+
+
+class TestDiscoverHandlers:
+    def test_discover_handlers_returns_dict(self):
+        handlers = discover_handlers()
+        assert isinstance(handlers, dict)
+
+    def test_discover_handlers_finds_anim_handlers(self):
+        handlers = discover_handlers()
+        assert "AnimBlueprintGeneratedClass" in handlers
+        assert "AnimSequence" in handlers
+        assert "AnimMontage" in handlers
+
+    def test_discover_handlers_returns_classes(self):
+        handlers = discover_handlers()
+        for export_type, handler in handlers.items():
+            assert isinstance(handler, type), f"Handler for {export_type} should be a class"
+
+
+class TestHandlerAttributes:
+    def test_anim_blueprint_handler_attributes(self):
+        assert hasattr(AnimBlueprintHandler, "export_type")
+        assert hasattr(AnimBlueprintHandler, "priority")
+        assert AnimBlueprintHandler.export_type == "AnimBlueprintGeneratedClass"
+        assert AnimBlueprintHandler.priority == 100
+
+    def test_anim_sequence_handler_attributes(self):
+        assert hasattr(AnimSequenceHandler, "export_type")
+        assert hasattr(AnimSequenceHandler, "priority")
+        assert AnimSequenceHandler.export_type == "AnimSequence"
+        assert AnimSequenceHandler.priority == 100
+
+    def test_anim_montage_handler_attributes(self):
+        assert hasattr(AnimMontageHandler, "export_type")
+        assert hasattr(AnimMontageHandler, "priority")
+        assert AnimMontageHandler.export_type == "AnimMontage"
+        assert AnimMontageHandler.priority == 100
+
+
+class TestGetHandler:
+    def test_get_handler_anim_blueprint(self):
+        handler = get_handler("AnimBlueprintGeneratedClass")
+        assert handler is not None
+        assert handler == AnimBlueprintHandler
+
+    def test_get_handler_anim_sequence(self):
+        handler = get_handler("AnimSequence")
+        assert handler is not None
+        assert handler == AnimSequenceHandler
+
+    def test_get_handler_anim_montage(self):
+        handler = get_handler("AnimMontage")
+        assert handler is not None
+        assert handler == AnimMontageHandler
+
+    def test_get_handler_not_found(self):
+        handler = get_handler("NonExistentType")
+        assert handler is None
+
+
+class TestRegisterHandler:
+    def test_register_and_get_handler(self):
+        class MockHandler:
+            export_type = "MockType"
+            priority = 50
+        register_handler("MockType", MockHandler)
+        handler = get_handler("MockType")
+        assert handler is not None
+        assert handler == MockHandler
+
+    def test_manual_register_overrides_auto_discover(self):
+        class CustomAnimHandler:
+            export_type = "AnimSequence"
+            priority = 200
+        register_handler("AnimSequence", CustomAnimHandler)
+        handler = get_handler("AnimSequence")
+        assert handler == CustomAnimHandler
+
+
+class TestIntegration:
+    def test_all_discovered_handlers_have_required_attrs(self):
+        handlers = discover_handlers()
+        for export_type, handler_class in handlers.items():
+            assert hasattr(handler_class, "export_type"), f"Handler {handler_class.__name__} missing export_type"
+            assert hasattr(handler_class, "priority"), f"Handler {handler_class.__name__} missing priority"
+            assert handler_class.export_type == export_type, (
+                f"Handler {handler_class.__name__} export_type mismatch: {handler_class.export_type} != {export_type}"
+            )

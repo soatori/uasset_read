@@ -1,7 +1,9 @@
-"""本地样本资产验证测试。
+"""集成测试核心 — 验证真实资产解析、蓝图对比和 Provider 功能。
 
-验证本地样本资产的解析准确性。
-合并自 test_ue_mcp_blueprint_comparison.py（MCP 蓝图对比测试）。
+合并自：
+- test_real_assets.py — 本地样本资产验证 + MCP 蓝图对比
+- test_bp_firstpersoncharacter_validation.py — 蓝图解析验证
+- test_providers.py — GameDirectoryProvider 测试
 """
 from __future__ import annotations
 
@@ -18,13 +20,21 @@ from urllib.parse import urlsplit
 import pytest
 
 from uasset_read.parse_uasset import parse_uasset_with_linker
+from uasset_read.providers import GameDirectoryProvider
 
-# 本地样本资产路径
+# ============================================================================
+# 共享路径
+# ============================================================================
+
 LOCAL_SAMPLE_ROOT = Path(__file__).parent.parent / "samples"
 ASSET_PATH = LOCAL_SAMPLE_ROOT / "StackOBot_BP_Drone.uasset"
 
 pytestmark = pytest.mark.integration
 
+
+# ============================================================================
+# Fixtures
+# ============================================================================
 
 @pytest.fixture(scope="module")
 def bp_result():
@@ -36,8 +46,9 @@ def bp_result():
 
 
 # ============================================================================
-# 基础测试
+# 基础解析验证（来自 test_real_assets.py）
 # ============================================================================
+
 
 class TestBasicParsing:
     """基础解析验证。"""
@@ -56,8 +67,9 @@ class TestBasicParsing:
 
 
 # ============================================================================
-# 图列表测试
+# 图列表验证（来自 test_real_assets.py）
 # ============================================================================
+
 
 class TestGraphList:
     """图列表验证。"""
@@ -77,8 +89,9 @@ class TestGraphList:
 
 
 # ============================================================================
-# 变量测试
+# 变量验证（来自 test_real_assets.py）
 # ============================================================================
+
 
 class TestVariables:
     """变量验证。"""
@@ -101,8 +114,9 @@ class TestVariables:
 
 
 # ============================================================================
-# 节点拓扑测试
+# 节点拓扑验证（来自 test_real_assets.py）
 # ============================================================================
+
 
 class TestGraphTopology:
     """图节点拓扑验证。"""
@@ -125,8 +139,9 @@ class TestGraphTopology:
 
 
 # ============================================================================
-# 诊断测试
+# 诊断验证（来自 test_real_assets.py）
 # ============================================================================
+
 
 class TestDiagnostics:
     """诊断信息验证。"""
@@ -139,7 +154,7 @@ class TestDiagnostics:
 
 
 # ============================================================================
-# MCP 蓝图对比测试（合并自 test_ue_mcp_blueprint_comparison.py）
+# MCP 蓝图对比测试（来自 test_real_assets.py）
 # ============================================================================
 
 BLUEPRINT_TOOLSET = "editor_toolset.toolsets.blueprint.BlueprintTools"
@@ -340,6 +355,9 @@ def test_real_blueprint_parser_matches_unreal_mcp_graphs_and_variables(
     assert editor_graphs <= parser_graphs
 
 
+# ── MCP 辅助函数 ──────────────────────────────────────────────────────────────
+
+
 def _post_mcp(
     endpoint: str,
     payload: dict,
@@ -505,3 +523,136 @@ def _blueprint_ref_path(relative_asset_path: Path) -> str:
 
 def _graph_name_from_ref(ref_path: str) -> str:
     return ref_path.rsplit(":", 1)[-1]
+
+
+# ============================================================================
+# GameDirectoryProvider 测试（来自 test_providers.py）
+# ============================================================================
+
+# 测试样本根目录（使用较小的子目录避免扫描全量 20K+ 文件）
+SAMPLES_ROOT = Path("E:/Develop/lib/Samples")
+SMALL_PROJECT = Path("E:/Develop/lib/Samples/LyraStarterGame")
+
+
+class TestGameDirectoryProviderInit:
+    """GameDirectoryProvider 初始化测试。"""
+
+    def test_game_directory_provider_init(self):
+        """初始化测试 — 验证有效的游戏目录可以成功初始化。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT)
+        assert provider.root == SAMPLES_ROOT.resolve()
+
+    def test_init_with_string_path(self):
+        """使用字符串路径初始化。"""
+        provider = GameDirectoryProvider(str(SAMPLES_ROOT))
+        assert provider.root == SAMPLES_ROOT.resolve()
+
+    def test_init_with_path_object(self):
+        """使用 Path 对象初始化。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT)
+        assert isinstance(provider.root, Path)
+
+    def test_init_nonexistent_directory(self):
+        """不存在的目录应抛出 FileNotFoundError。"""
+        with pytest.raises(FileNotFoundError):
+            GameDirectoryProvider("E:/Develop/nonexistent_directory_xyz")
+
+    def test_init_with_file_path(self):
+        """文件路径（非目录）应抛出 NotADirectoryError。"""
+        with pytest.raises(NotADirectoryError):
+            GameDirectoryProvider(SAMPLES_ROOT / "README.md" if (SAMPLES_ROOT / "README.md").exists()
+                                 else SAMPLES_ROOT / "StarterContent" / "contents.txt")
+
+    def test_has_uproject_true(self):
+        """检测到 .uproject 文件应返回 True。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        assert provider.has_uproject() is True
+
+    def test_get_uproject_file(self):
+        """应能获取 .uproject 文件路径。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        uproject = provider.get_uproject_file()
+        assert uproject is not None
+        assert uproject.suffix == ".uproject"
+        assert uproject.name == "Lyra.uproject"
+
+
+class TestGameDirectoryProviderListFiles:
+    """文件列表功能测试。"""
+
+    def test_game_directory_provider_list_uassets(self):
+        """列出 uasset 文件 — 验证能扫描到 .uasset 文件。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.list_uasset_files()
+        assert len(files) > 0
+        extensions = {f.suffix.lower() for f in files}
+        assert ".uasset" in extensions
+
+    def test_list_uasset_files_are_paths(self):
+        """返回的每个元素都应是 Path 对象。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.list_uasset_files()
+        for f in files:
+            assert isinstance(f, Path)
+
+    def test_list_uasset_files_sorted(self):
+        """返回的文件列表应按字母顺序排序。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.list_uasset_files()
+        assert files == sorted(files)
+
+    def test_list_files_custom_extension(self):
+        """使用自定义扩展名列出文件。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        files = provider.list_files(".uproject")
+        assert len(files) == 1
+        assert files[0].suffix == ".uproject"
+
+    def test_list_files_without_dot(self):
+        """扩展名不带前导点也应正常工作。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        files = provider.list_files("uproject")
+        assert len(files) == 1
+
+    def test_list_pak_files_empty(self):
+        """示例目录中无 .upak 文件，应返回空列表。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.list_pak_files()
+        assert files == []
+
+    def test_list_utoc_files_empty(self):
+        """示例目录中无 .utoc 文件，应返回空列表。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.list_utoc_files()
+        assert files == []
+
+
+class TestGameDirectoryProviderFindFile:
+    """模式匹配功能测试。"""
+
+    def test_find_file_by_name(self):
+        """按精确文件名匹配。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        files = provider.find_file("Lyra.uproject")
+        assert len(files) == 1
+        assert files[0].name == "Lyra.uproject"
+
+    def test_find_file_by_wildcard(self):
+        """使用通配符匹配。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.find_file("*.uasset")
+        assert len(files) > 0
+        for f in files:
+            assert f.suffix == ".uasset"
+
+    def test_find_file_no_match(self):
+        """无匹配时应返回空列表。"""
+        provider = GameDirectoryProvider(SAMPLES_ROOT / "Lyra")
+        files = provider.find_file("nonexistent_*.xyz")
+        assert files == []
+
+    def test_find_file_sorted(self):
+        """匹配结果应按字母顺序排序。"""
+        provider = GameDirectoryProvider(SMALL_PROJECT)
+        files = provider.find_file("*.uasset")
+        assert files == sorted(files)
