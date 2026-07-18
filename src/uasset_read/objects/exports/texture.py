@@ -8,6 +8,7 @@ import logging
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+from uasset_read.models.validators import validate_parse_status
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -100,7 +101,7 @@ class UTexture2D(UObject):
             }
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = "metadata" if self.platform_data else "opaque"
+        self.parse_status = validate_parse_status("metadata") if self.platform_data else validate_parse_status("opaque")
 
 
 @global_registry.register("TextureCube")

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+from uasset_read.models.validators import validate_parse_status
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -55,7 +56,7 @@ class UStaticMesh(UObject):
         self.material_slots = as_list(prop_value(self, "StaticMaterials", "Materials", "material_slots"))
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = "metadata" if self.render_data or self.material_slots else "opaque"
+        self.parse_status = validate_parse_status("metadata") if self.render_data or self.material_slots else validate_parse_status("opaque")
 
 
 @global_registry.register("SkeletalMesh")
@@ -86,7 +87,7 @@ class USkeletalMesh(UObject):
         self.material_slots = as_list(prop_value(self, "Materials", "SkeletalMaterials", "material_slots"))
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = "metadata" if self.ref_skeleton or self.lod_models or self.material_slots else "opaque"
+        self.parse_status = validate_parse_status("metadata") if self.ref_skeleton or self.lod_models or self.material_slots else validate_parse_status("opaque")
 
 
 def _normalize_lod(lod: Any) -> Dict[str, Any]:

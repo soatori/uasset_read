@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+from uasset_read.models.validators import validate_parse_status
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -37,7 +38,7 @@ class UMaterial(UObject):
         self.expressions = [as_mapping(item) or {"value": item} for item in expressions]
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = "metadata" if self.expressions or self.domain or self.blend_mode else "opaque"
+        self.parse_status = validate_parse_status("metadata") if self.expressions or self.domain or self.blend_mode else validate_parse_status("opaque")
 
 
 @global_registry.register("MaterialInstance")

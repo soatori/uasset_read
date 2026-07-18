@@ -25,6 +25,7 @@ from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
 from uasset_read.constants import PKG_Cooked
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +332,7 @@ def _parse_export_properties(
                         tolerant=tolerant,
                     )
                 if not getattr(export, "parse_status", None):
-                    setattr(export, "parse_status", "success")
+                    setattr(export, "parse_status", validate_parse_status("success"))
                 elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
                     pass
             except MemoryLimitExceeded:
@@ -342,7 +343,7 @@ def _parse_export_properties(
                     getattr(export, "object_name", "?"), e
                 )
                 export.properties = []
-                setattr(export, "parse_status", "partial")
+                setattr(export, "parse_status", validate_parse_status("partial"))
                 setattr(export, "fallback_reason", "memory_error_partial")
                 setattr(export, "error_message", str(e))
                 if not tolerant:
@@ -352,7 +353,7 @@ def _parse_export_properties(
                     raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                 result.errors.append(f"Property parse error in {export.object_name}: {e}")
                 export.properties = []
-                setattr(export, "parse_status", "failed")
+                setattr(export, "parse_status", validate_parse_status("failed"))
                 setattr(export, "fallback_reason", "parse_error")
                 setattr(export, "error_message", str(e))
 

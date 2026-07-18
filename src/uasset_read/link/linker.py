@@ -22,6 +22,7 @@ from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
@@ -307,9 +308,9 @@ class PackageLinker:
             exp = self._export_map[index]
             if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
                 # 完全不支持的类，直接跳过（无 asset handler）
-                setattr(instance, "parse_status", "skipped")
+                setattr(instance, "parse_status", validate_parse_status("skipped"))
                 setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
-                setattr(exp, "parse_status", "skipped")
+                setattr(exp, "parse_status", validate_parse_status("skipped"))
                 setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
                 # 确保 properties 至少为空列表
                 exp.properties = []
@@ -326,9 +327,9 @@ class PackageLinker:
                 # Opaque payload — 设置初始状态，但不 early return
                 # 让 parse_properties_from_export() 调用 asset type handler
                 # handler 可能会更新 parse_status 为 partial_metadata
-                setattr(instance, "parse_status", "opaque")
+                setattr(instance, "parse_status", validate_parse_status("opaque"))
                 setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
-                setattr(exp, "parse_status", "opaque")
+                setattr(exp, "parse_status", validate_parse_status("opaque"))
                 setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
                 # 存储 ScriptSerialization 绝对偏移用于诊断
                 if hasattr(exp, 'script_serialization_start_offset'):

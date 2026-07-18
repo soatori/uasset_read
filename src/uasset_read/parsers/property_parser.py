@@ -26,6 +26,7 @@ from uasset_read.constants import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
@@ -566,7 +567,7 @@ def parse_properties_from_export(
             skip_export_payload(archive, export, summary)
         except (_struct.error, OSError, ValueError) as e:
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
-        setattr(export, "parse_status", "skipped")
+        setattr(export, "parse_status", validate_parse_status("skipped"))
         setattr(export, "fallback_reason", "unsupported_type")
         setattr(export, "class_name", _skip_class_name or "")
         return []
@@ -647,7 +648,7 @@ def parse_properties_from_export(
             export.object_name, len(raw_bytes),
         )
         # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
-        setattr(export, "parse_status", "opaque_unversioned")
+        setattr(export, "parse_status", validate_parse_status("opaque_unversioned"))
         setattr(export, "fallback_reason", "missing_mapping")
         return [PropertyFallback(
             name=export.object_name,
