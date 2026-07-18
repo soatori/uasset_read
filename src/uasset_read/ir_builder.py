@@ -56,6 +56,23 @@ def _classify_variable(var) -> str:
         return "input_action"
     return "user"
 
+def _has_heuristic_recovery(result: "ParseResult | LinkerParseResult") -> bool:
+    """检查是否有 heuristic bytecode recovery。"""
+    for func in result.decompiled_functions or []:
+        if "serial_scan_recovery" in (func.fallback_reasons or []):
+            return True
+    return False
+
+
+def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int:
+    """统计 heuristic recovery 的函数数量。"""
+    count = 0
+    for func in result.decompiled_functions or []:
+        if "serial_scan_recovery" in (func.fallback_reasons or []):
+            count += 1
+    return count
+
+
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     """将 ParseResult 转换为 PackageIR。
 
@@ -96,6 +113,14 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status_message = (
             f"轻量容错解析：导出数量过多"
             f"({getattr(result.summary, 'export_count', '?')})，已降级处理"
+        )
+    elif status == "partial" and _has_heuristic_recovery(result):
+        status_code = "HEURISTIC_BYTECODE_RECOVERY"
+        heuristic_count = _count_heuristic_functions(result)
+        total_count = len(result.decompiled_functions or [])
+        status_message = (
+            f"字节码启发式恢复：{heuristic_count}/{total_count} 个函数通过 serial scan 恢复，"
+            f"置信度较低"
         )
     else:
         status_code = None

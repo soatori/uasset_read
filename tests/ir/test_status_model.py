@@ -379,3 +379,55 @@ class TestStatusModelUnitTests:
 
         result.export_map = [MockExport()]
         assert result.status == "success"
+
+
+class TestBuildIrHeuristicStatus:
+    """build_package_ir heuristic 状态聚合测试。"""
+
+    def test_heuristic_recovery_sets_status_message(self):
+        """serial_scan_recovery 应设置 status_message 和 status_code。"""
+        from uasset_read.ir_builder import build_package_ir
+        from uasset_read.models.result import ParseResult
+        from uasset_read.kismet.result import KismetDecompiledResult
+
+        # 构建最小 ParseResult
+        result = ParseResult()
+        result.is_success = True
+        result.summary = type("S", (), {"export_count": 1, "export_offset": 0, "import_count": 0, "import_offset": 0,
+            "package_name": "/Test", "package_class": "None", "package_flags": 0, "ue_version": "5.0",
+            "file_version_ue4": 0, "file_version_ue5": 0, "file_version_licensee": 0,
+            "total_header_size": 0, "custom_versions": [], "folder_name": "",
+            "name_count": 0, "name_offset": 0, "soft_object_paths_count": 0, "soft_object_paths_offset": 0,
+            "localization_id": "", "gatherable_text_data_count": 0, "gatherable_text_data_offset": 0,
+            "metadata_offset": 0, "depends_offset": 0, "soft_package_references_count": 0,
+            "soft_package_references_offset": 0, "searchable_names_offset": 0, "thumbnail_table_offset": 0,
+            "import_type_hierarchies_count": 0, "import_type_hierarchies_offset": 0,
+            "persistent_guid": "", "generations": [], "saved_by_engine_version": "",
+            "compatible_with_engine_version": "", "compression_flags": 0, "package_source": 0,
+            "bulk_data_start_offset": 0, "world_tile_info_data_offset": 0, "chunk_ids": [],
+            "preload_dependency_count": 0, "preload_dependency_offset": 0,
+            "names_referenced_from_export_data_count": 0, "payload_toc_offset": 0,
+            "data_resource_offset": 0, "saved_hash": b"", "depends_map": []
+        })()
+        result.export_map = []
+        result.import_map = []
+        result.name_map = ["test"]
+        result.decompiled_functions = [
+            KismetDecompiledResult(
+                function_name="TestFunc",
+                signature="void TestFunc()",
+                local_variables=[],
+                cpp_code="",
+                fallback_reasons=["serial_scan_recovery"],
+            )
+        ]
+        result.warnings = []
+        result.errors = []
+        result.diagnostics = []
+        result.metadata = {}
+
+        ir = build_package_ir(result)
+        assert ir.status == "partial"
+        assert ir.status_code == "HEURISTIC_BYTECODE_RECOVERY"
+        assert ir.status_message is not None
+        assert "heuristic" in ir.status_message.lower() or "serial scan" in ir.status_message.lower()
