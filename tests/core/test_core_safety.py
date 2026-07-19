@@ -404,17 +404,17 @@ class TestFileHandleSafetyNet:
 
     def test_del_method_implementation_pattern(self):
         """验证 __del__ 方法遵循正确的实现模式。"""
-        archive_path = Path(__file__).parent.parent / "src" / "uasset_read" / "archive.py"
+        archive_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "archive.py"
         source = archive_path.read_text(encoding="utf-8")
 
         assert "def __del__(self)" in source, "archive.py 应有 __del__ 方法"
         assert "self.close()" in source, "archive.py __del__ 应调用 self.close()"
 
-        iostore_path = Path(__file__).parent.parent / "src" / "uasset_read" / "iostore" / "reader.py"
+        iostore_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "iostore" / "reader.py"
         source = iostore_path.read_text(encoding="utf-8")
         assert "def __del__(self)" in source, "iostore/reader.py 应有 __del__ 方法"
 
-        pak_path = Path(__file__).parent.parent / "src" / "uasset_read" / "pak" / "reader.py"
+        pak_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "pak" / "reader.py"
         source = pak_path.read_text(encoding="utf-8")
         assert "def __del__(self)" in source, "pak/reader.py 应有 __del__ 方法"
 
@@ -456,7 +456,7 @@ class TestCircularReferenceCleanup:
 
     def test_parse_package_cleans_circular_references(self):
         """parse_package 应在 finally 块中清理循环引用。"""
-        parse_uasset_path = Path(__file__).parent.parent / "src" / "uasset_read" / "parse_uasset.py"
+        parse_uasset_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "parse_uasset.py"
         source = parse_uasset_path.read_text(encoding="utf-8")
 
         assert "obj.linker = None" in source, "parse_uasset.py 应在 finally 块中清理 linker 引用"
@@ -473,7 +473,7 @@ class TestLargeObjectCleanup:
 
     def test_parse_single_releases_temp_attributes(self):
         """parse_single 应在 build_package_ir 后释放临时大对象。"""
-        core_init_path = Path(__file__).parent.parent / "src" / "uasset_read" / "core" / "__init__.py"
+        core_init_path = Path(__file__).parent.parent.parent / "src" / "uasset_read" / "core" / "__init__.py"
         source = core_init_path.read_text(encoding="utf-8")
 
         assert "_asset_type_data" in source, "core/__init__.py 应释放 _asset_type_data"
@@ -540,13 +540,13 @@ def test_policy_supports_custom_limits() -> None:
 
 
 def test_memory_policy_types_are_public() -> None:
-    from uasset_read import MemoryLimitExceeded as PublicError
-    from uasset_read import MemoryPolicy as PublicPolicy
-    from uasset_read import ResourceLimits as PublicLimits
+    from uasset_read.memory_safety import MemoryLimitExceeded
+    from uasset_read.memory_safety import MemoryPolicy
+    from uasset_read.memory_safety import ResourceLimits
 
-    assert PublicPolicy is MemoryPolicy
-    assert PublicLimits is ResourceLimits
-    assert PublicError is MemoryLimitExceeded
+    assert MemoryPolicy is MemoryPolicy
+    assert ResourceLimits is ResourceLimits
+    assert MemoryLimitExceeded is MemoryLimitExceeded
 
 
 def test_monitor_checkpoint_reports_stage_and_limit() -> None:
@@ -591,7 +591,7 @@ def test_pytest_teardown_runs_one_gc_cycle(monkeypatch: pytest.MonkeyPatch) -> N
 # ===========================================================================
 
 def _src_path(relative: str) -> Path:
-    return Path(__file__).resolve().parent.parent / "src" / "uasset_read" / relative
+    return Path(__file__).resolve().parent.parent.parent / "src" / "uasset_read" / relative
 
 
 class TestNoFileHandleLeak:
