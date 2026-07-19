@@ -907,8 +907,7 @@ class TestRendererListFormatsCompat:
         fmts = list_formats()
         assert "json" in fmts
         assert "markdown" in fmts
-        assert "text" in fmts
-        assert len(fmts) == 3
+        assert len(fmts) == 2
 
 
 class TestJSONOnlyBlueprintExportsCompat:
@@ -963,7 +962,7 @@ class TestOnlyJsonAndMarkdownFormatsCompat:
         formats = list_formats()
         assert "json" in formats
         assert "markdown" in formats
-        assert "text" in formats
+        assert "text" not in formats
         assert "text_summary" not in formats
         assert "blueprint_text" not in formats
 
