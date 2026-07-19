@@ -193,3 +193,50 @@ def clean_global_state():
     # 恢复状态
     RENDERER_REGISTRY.clear()
     RENDERER_REGISTRY.update(original_renderers)
+
+
+# ---------------------------------------------------------------------------
+# core 模块 fixture
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def reset_project_logging_after_each():
+    """每个测试结束后重置 project_logging 全局状态。
+
+    parse_package() 调用 configure_project_logging() 会设置
+    package_logger.propagate=False，导致后续测试的 caplog
+    无法捕获日志。此 fixture 在每个测试完成后立即恢复状态，
+    防止全局日志配置泄漏到其他测试模块。
+    """
+    yield
+    from uasset_read.project_logging import _reset_logging_state_for_tests
+    _reset_logging_state_for_tests()
+
+
+# ---------------------------------------------------------------------------
+# parsers 模块辅助类
+# ---------------------------------------------------------------------------
+
+class FakeProperty:
+    """模拟属性对象"""
+    def __init__(self, name: str, value):
+        self.name = name
+        self.value = value
+
+
+class FakeExport:
+    """模拟 export 对象"""
+    def __init__(self, properties=None):
+        if isinstance(properties, dict):
+            self.properties = [FakeProperty(k, v) for k, v in properties.items()]
+        elif isinstance(properties, list):
+            self.properties = properties
+        else:
+            self.properties = []
+        self.custom_data = {}
+
+
+class FakeContext:
+    """模拟解析上下文"""
+    def __init__(self):
+        self.warnings = []
