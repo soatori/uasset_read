@@ -22,8 +22,8 @@ def test_batch_failure_logged_to_same_file(tmp_path):
 
     log_dir = tmp_path / "logs"
 
-    # 模拟 parse_single 抛出异常（isolate_assets=False 走非隔离路径）
-    with patch("uasset_read.core.parse_single", side_effect=ValueError("corrupted asset")):
+    # 模拟解析抛出异常（isolate_assets=False 走非隔离路径）
+    with patch("uasset_read.core._parse_and_render", side_effect=ValueError("corrupted asset")):
         result = parse_batch(
             str(batch_dir),
             isolate_assets=False,

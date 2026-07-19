@@ -218,8 +218,13 @@ class TestParseBatch:
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)  # dummy data
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.return_value = '{"status": "success"}'
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_result = MagicMock()
+            mock_result.is_success = True
+            mock_result.export_map = []
+            mock_result.errors = []
+            mock_result.hex_view_entries = None
+            mock_parse.return_value = ('{"status": "success"}', mock_result)
 
             result = parse_batch(
                 str(tmp_path),
@@ -235,8 +240,8 @@ class TestParseBatch:
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.side_effect = ParseError("test error")
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_parse.side_effect = ParseError("test error")
 
             result = parse_batch(
                 str(tmp_path),
@@ -257,8 +262,13 @@ class TestCLIBatchOptions:
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.return_value = '{"status": "success"}'
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_result = MagicMock()
+            mock_result.is_success = True
+            mock_result.export_map = []
+            mock_result.errors = []
+            mock_result.hex_view_entries = None
+            mock_parse.return_value = ('{"status": "success"}', mock_result)
 
             # 模拟 CLI 调用 parse_batch 时传递所有选项
             result = parse_batch(
@@ -277,9 +287,9 @@ class TestCLIBatchOptions:
             )
 
             assert isinstance(result, BatchResult)
-            # 验证 parse_single 被调用时携带了所有选项
-            mock_parse_single.assert_called_once()
-            call_kwargs = mock_parse_single.call_args
+            # 验证 _parse_and_render 被调用时携带了所有选项
+            mock_parse.assert_called_once()
+            call_kwargs = mock_parse.call_args
             assert call_kwargs.kwargs.get("verbose") is True or call_kwargs[1].get("verbose") is True
 
 

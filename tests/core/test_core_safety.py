@@ -874,7 +874,7 @@ def test_batch_summary_reports_result_counts(caplog):
 
     core._log_batch_summary(result)
 
-    assert "batch_summary total=4 success=1 skipped=1 failed=2" in caplog.text
+    assert "batch_summary total=4 success=1 partial=0 skipped=1 failed=2" in caplog.text
 
 
 # ===========================================================================

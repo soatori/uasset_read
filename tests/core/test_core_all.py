@@ -520,9 +520,13 @@ class TestHybridIsolation:
                             with patch('uasset_read.memory_safety.FileSizeTier') as mock_tier:
                                 mock_tier.from_size.return_value = 'SMALL'
                                 with patch('uasset_read.memory_safety.should_isolate', return_value=False) as mock_should:
-                                    with patch('uasset_read.core.parse_single') as mock_parse:
-                                        mock_parse.return_value = MagicMock()
-                                        mock_parse.return_value.status = 'success'
+                                    with patch('uasset_read.core._parse_and_render') as mock_parse:
+                                        mock_result = MagicMock()
+                                        mock_result.is_success = True
+                                        mock_result.export_map = []
+                                        mock_result.errors = []
+                                        mock_result.hex_view_entries = None
+                                        mock_parse.return_value = ('{"status": "success"}', mock_result)
                                         parse_batch(
                                             '/tmp/fake',
                                             isolate_assets="auto",
@@ -557,9 +561,13 @@ def test_auto_mode_integration_does_not_configure_logging():
                         with patch('uasset_read.memory_safety.FileSizeTier') as mock_tier:
                             mock_tier.from_size.return_value = 'SMALL'
                             with patch('uasset_read.memory_safety.should_isolate', return_value=False):
-                                with patch('uasset_read.core.parse_single') as mock_parse:
-                                    mock_parse.return_value = MagicMock()
-                                    mock_parse.return_value.status = 'success'
+                                with patch('uasset_read.core._parse_and_render') as mock_parse:
+                                    mock_result = MagicMock()
+                                    mock_result.is_success = True
+                                    mock_result.export_map = []
+                                    mock_result.errors = []
+                                    mock_result.hex_view_entries = None
+                                    mock_parse.return_value = ('{"status": "success"}', mock_result)
                                     parse_batch(
                                         '/tmp/fake',
                                         isolate_assets="auto",
@@ -669,6 +677,16 @@ def test_batch_worker_no_runtime_warning():
 _FAKE_OUTPUT = '{"status": {"status": "success"}}'
 
 
+def _mock_parse_and_render(output_str: str = _FAKE_OUTPUT):
+    """返回 _parse_and_render 的 mock 返回值 (output_str, mock_result)。"""
+    mock_result = MagicMock()
+    mock_result.is_success = True
+    mock_result.export_map = []
+    mock_result.errors = []
+    mock_result.hex_view_entries = None
+    return (output_str, mock_result)
+
+
 def _make_fake_uasset(path: Path) -> None:
     """创建一个假的 .uasset/.umap 文件（仅需文件名匹配 glob 即可）。"""
     path.write_bytes(b"\x00" * 128)
@@ -687,8 +705,8 @@ class TestBatchStemCollision:
         _make_fake_uasset(asset_dir / "Same.umap")
 
         with patch(
-            "uasset_read.core.parse_single",
-            return_value=_FAKE_OUTPUT,
+            "uasset_read.core._parse_and_render",
+            return_value=_mock_parse_and_render(),
         ):
             result = parse_batch(
                 str(asset_dir),
@@ -712,8 +730,8 @@ class TestBatchStemCollision:
         _make_fake_uasset(asset_dir / "Foo.uasset")
 
         with patch(
-            "uasset_read.core.parse_single",
-            return_value=_FAKE_OUTPUT,
+            "uasset_read.core._parse_and_render",
+            return_value=_mock_parse_and_render(),
         ):
             result = parse_batch(
                 str(asset_dir),
@@ -738,8 +756,8 @@ class TestBatchStemCollision:
         _make_fake_uasset(asset_dir / "Solo.uasset")
 
         with patch(
-            "uasset_read.core.parse_single",
-            return_value=_FAKE_OUTPUT,
+            "uasset_read.core._parse_and_render",
+            return_value=_mock_parse_and_render(),
         ):
             result = parse_batch(
                 str(asset_dir),
@@ -768,8 +786,8 @@ class TestBatchStemCollision:
         _make_fake_uasset(asset_dir / "Level.umap")
 
         with patch(
-            "uasset_read.core.parse_single",
-            return_value="# Level",
+            "uasset_read.core._parse_and_render",
+            return_value=_mock_parse_and_render("# Level"),
         ):
             result = parse_batch(
                 str(asset_dir),
@@ -792,8 +810,8 @@ class TestBatchStemCollision:
         _make_fake_uasset(asset_dir / "Same.umap")
 
         with patch(
-            "uasset_read.core.parse_single",
-            return_value=_FAKE_OUTPUT,
+            "uasset_read.core._parse_and_render",
+            return_value=_mock_parse_and_render(),
         ):
             parse_batch(
                 str(asset_dir),
@@ -3148,7 +3166,7 @@ class TestEntryContracts:
                         pytest.fail(f"{mod.__name__} 第 {node.lineno} 行包含 print() 调用")
 
         assert "parse_package" in inspect.getsource(parse_uasset_mod.parse_uasset)
-        assert "linker_formats" in inspect.getsource(core.parse_single)
+        assert "linker_formats" in inspect.getsource(core._parse_and_render)
 
     def test_pak_info_size_contract(self):
         """PAK_INFO_SIZES 应保持当前已知序列化大小。"""

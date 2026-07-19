@@ -36,6 +36,7 @@ def test_batch_summary_counts():
     """验证摘要中各计数正确"""
     result = BatchResult(total=6)
     result.success = ["a.json", "b.json", "c.json"]
+    result.partial = ["b.json"]
     result.skipped = [("d.json", "memory limit")]
     result.failed = [("e.json", "parse error", ""), ("f.json", "timeout", "")]
 
@@ -43,9 +44,10 @@ def test_batch_summary_counts():
         _log_batch_summary(result, elapsed_seconds=5.0)
         mock_info.assert_called_once()
         args, kwargs = mock_info.call_args
-        # 格式字符串 + 5 个参数
+        # 格式字符串 + 6 个参数（total, success, partial, skipped, failed, elapsed）
         assert args[1] == 6    # total
         assert args[2] == 3    # success
-        assert args[3] == 1    # skipped
-        assert args[4] == 2    # failed
-        assert args[5] == 5.0  # elapsed
+        assert args[3] == 1    # partial
+        assert args[4] == 1    # skipped
+        assert args[5] == 2    # failed
+        assert args[6] == 5.0  # elapsed
