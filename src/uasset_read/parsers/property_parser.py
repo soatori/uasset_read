@@ -43,8 +43,26 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
     0x80: "Unknown_Bit7",
 }
 
-# #341: PropertyTag 损坏恢复最大扫描字节数
-_MAX_RECOVERY_SCAN = 256
+# #341/#428: PropertyTag 损坏恢复最大扫描字节数
+_MAX_RECOVERY_SCAN = 512
+
+# #428: 已知属性类型名称集合（用于恢复扫描时过滤候选）
+_KNOWN_PROPERTY_TYPES = {
+    "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
+    "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property",
+    "FloatProperty", "DoubleProperty",
+    "StrProperty", "NameProperty", "ObjectProperty", "SoftObjectProperty",
+    "ArrayProperty", "StructProperty", "MapProperty", "SetProperty",
+    "EnumProperty", "TextProperty", "DelegateProperty",
+    "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
+    "ClassProperty", "SoftClassProperty", "AssetObjectProperty", "AssetClassProperty",
+    "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
+    "MulticastSparseDelegateProperty", "InterfaceProperty",
+    "FieldPathProperty", "OptionalProperty",
+    "VerseStringProperty", "VerseClassProperty", "VerseFunctionProperty",
+    "VerseDynamicProperty", "VerseCellProperty", "VerseValueProperty",
+    "AnsiStrProperty", "GuidProperty",
+}
 
 # Lazy import + 缓存：避免循环依赖 + 避免每次属性解析重建 dict
 _TYPE_HANDLER_MAP: dict | None = None
@@ -250,6 +268,9 @@ def _try_recover_property_tag(
                 type_name = name_map[type_idx]
                 if not type_name or type_name.isdigit() or type_name == "None":
                     continue
+                # #428: 验证 type_name 是已知属性类型
+                if type_name not in _KNOWN_PROPERTY_TYPES:
+                    continue
                 # 验证 size
                 archive.seek(size_pos)
                 size_raw = archive.read(4)
@@ -261,7 +282,20 @@ def _try_recover_property_tag(
                     size_valid = True
             else:
                 # UE5.3+ 格式：type 为 FPropertyTypeName 前序遍历树
-                # 跳过 name(8) 到类型树起始位置（candidate+8）
+                # 读取第一个节点名称（属性类型）并验证
+                archive.seek(candidate + 8)
+                first_node_raw = archive.read(8)
+                if len(first_node_raw) < 8:
+                    continue
+                first_idx, first_ic = _struct.unpack('<II', first_node_raw)
+                if not (0 <= first_idx < map_len):
+                    continue
+                first_type_name = name_map[first_idx]
+                # #428: 验证类型树根节点是已知属性类型
+                if first_type_name not in _KNOWN_PROPERTY_TYPES:
+                    continue
+                # 跳过剩余类型树（已读取第一个节点，inner_count=first_ic）
+                # 重新 seek 并使用 _skip_type_tree_nodes 完整跳过
                 archive.seek(candidate + 8)
                 if not _skip_type_tree_nodes(archive, limit, name_map, map_len):
                     continue
@@ -513,7 +547,7 @@ def _handle_serialization_control(
     overridden_operation = None
     if serialization_control & 0x02:
         overridden_operation = archive.read_u8()
-    # 记录未知位（非已知位 0x01|0x02 的位）— 降级为 debug 而非 warning
+    # 记录未知位（非已知位 0x01|0x02 的位）
     unknown_bits = serialization_control & ~_KNOWN_SERIALIZATION_CONTROL_BITS
     if unknown_bits:
         # 详细记录哪些位被设置
@@ -521,8 +555,8 @@ def _handle_serialization_control(
         for bit, name in _SERIALIZATION_CONTROL_BIT_NAMES.items():
             if unknown_bits & bit:
                 bit_names.append(name)
-        logger.debug(
-            "Export '%s' SerializationControlExtensions 未知位: 0x%02X (bits: %s) at offset %d",
+        logger.warning(
+            "Export '%s' SerializationControlExtensions 未知位: 0x%02X (bits: %s) at offset %d — 跳过后续读取",
             getattr(export, "object_name", ""), unknown_bits,
             ", ".join(bit_names), control_offset,
         )
@@ -534,6 +568,17 @@ def _handle_serialization_control(
             file_size=getattr(archive, '_file_size', 0),
             error=f"SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} ({', '.join(bit_names)})",
         )
+        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        if not hasattr(export, "transforms") or export.transforms is None:
+            export.transforms = {}
+        export.transforms["serialization_control"] = {
+            "value": serialization_control,
+            "overridden_operation": None,
+            "unknown_bits": unknown_bits,
+            "offset": control_offset,
+        }
+        # 未知位可能导致后续字节解读错位，提前返回让调用方处理恢复
+        return
     # 存储到 export 的 transforms 中，供 IR/JSON 输出
     if not hasattr(export, "transforms") or export.transforms is None:
         export.transforms = {}
@@ -740,12 +785,28 @@ def _read_property_loop(
                     struct_name = export.object_name
             tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
 
+            # 记录 tag 读取完成后的当前位置（用于 size_exceeded 恢复和边界验证）
+            start_pos = archive.tell()
+
             # 终止标记：Name == UE_NONE_SENTINEL
             if tag.name == UE_NONE_SENTINEL:
                 break
 
-            # size 超过剩余字节：标记为 partial，跳过值解析
+            # size 超过剩余字节：尝试恢复，失败则标记为 partial
             if tag.size_exceeded:
+                # #429: 尝试恢复 — 从 start_pos 扫描下一个有效 PropertyTag
+                if start_pos is not None:
+                    archive.seek(start_pos)
+                    recovered = _try_recover_property_tag(
+                        archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
+                    )
+                    if recovered:
+                        logger.debug(
+                            "size_exceeded 后恢复到疑似有效位置 (offset=%d)",
+                            archive.tell(),
+                        )
+                        continue
+                # 恢复失败，创建 PropertyFallback
                 properties.append(PropertyValue(
                     name=tag.name,
                     type=tag.type,
@@ -773,9 +834,6 @@ def _read_property_loop(
                         context_name=str(tag.name),
                     )
                 )
-
-            # 记录起始位置用于边界验证
-            start_pos = archive.tell()
 
             # 分派到类型特定解析器
             value = read_tag_value_bounded(
