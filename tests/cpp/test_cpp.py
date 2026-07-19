@@ -72,7 +72,7 @@ def _build_actor_blueprint_ir() -> CppClassIR:
         _make_method("ReceiveBeginPlay", body_text="// custom logic"),
     ]
     return CppClassIR(
-        class_name="AMyActor_C",
+        name="AMyActor_C",
         parent_class="AActor",
         properties=properties,
         methods=methods,
@@ -112,5 +112,6 @@ class TestSanitizeIdentifier:
 
 class TestMathSimplifier:
     def test_add_int_simplification(self):
-        """Add_IntInt 应简化为 a + b。"""
-        assert MathSimplifier.simplify("KismetMathLibrary", "Add_IntInt", ["a", "b"]) == "a + b"
+        """Add_IntInt 应简化为 +。"""
+        simplifier = MathSimplifier()
+        assert simplifier.simplify("Add_IntInt") == "+"
