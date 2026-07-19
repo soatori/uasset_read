@@ -44,18 +44,29 @@ class _LogContextFilter(logging.Filter):
 
 
 class _RepeatedDebugFilter(logging.Filter):
-    def __init__(self, limit: int) -> None:
+    def __init__(self, repeat_limit: int) -> None:
         super().__init__()
-        self.limit = limit
+        self.limit = repeat_limit
+        self.repeat_limit = repeat_limit
         self.counts: dict[tuple[str, str, str], int] = {}
+        self.message_counts: dict[str, int] = {}
+        self.suppressed_count: int = 0
 
     def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if msg not in self.message_counts:
+            self.message_counts[msg] = 0
+        self.message_counts[msg] += 1
+        # Legacy: only suppress DEBUG messages, grouped by raw template
         if self.limit <= 0 or record.levelno != logging.DEBUG:
             return True
         key = (_log_asset.get(), record.name, str(record.msg))
         count = self.counts.get(key, 0) + 1
         self.counts[key] = count
-        return count <= self.limit
+        if count > self.limit:
+            self.suppressed_count += 1
+            return False
+        return True
 
     def summaries(self) -> list[tuple[str, str, str, int]]:
         return [
@@ -63,6 +74,17 @@ class _RepeatedDebugFilter(logging.Filter):
             for (asset, logger_name, template), count in self.counts.items()
             if count > self.limit
         ]
+
+    def get_summary(self) -> str:
+        if not self.suppressed_count:
+            return ""
+        summary_parts = []
+        for msg, count in self.message_counts.items():
+            if count > self.repeat_limit:
+                summary_parts.append(
+                    f"{msg} (suppressed {count - self.repeat_limit} times)"
+                )
+        return "Repeated warnings: " + "; ".join(summary_parts)
 
 
 @contextmanager
