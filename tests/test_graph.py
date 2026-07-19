@@ -1,12 +1,13 @@
 """图模块合并测试。
 
 合并自 test_graph_core.py、test_graph_flow.py。
-保留 4 个关键用例：核心图解析、流构建。
+保留 4 个关键用例：核心图解析、流构建；新增 script_serial 容错测试。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import List, Optional
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -209,3 +210,114 @@ class TestCustomEventNaming:
         name = _get_start_event_name(node)
         assert name == "CustomEvent.OnPlayerDeath", \
             f"期望 'CustomEvent.OnPlayerDeath'，得到 '{name}'"
+
+
+class TestScriptSerialUnknownCtrlBits:
+    """script_serial 未知 SerializationControlExtensions 位容错。"""
+
+    def test_unknown_ctrl_bits_returns_early(self):
+        """ctrl byte 含未知高位时应立即返回，不触发偏移错位级联。"""
+        from uasset_read.serializers.graph_node import _read_node_script_serial
+
+        # 构造 mock archive：ctrl = 0x05（bit0 + bit2，bit2 为未知位）
+        mock_archive = MagicMock()
+        mock_archive.read_u8.return_value = 0x05
+        mock_archive.tell.return_value = 100
+
+        mock_summary = MagicMock()
+        mock_summary.file_version_ue5 = 1011  # 触发 SerializationControlExtensions 分支
+
+        mock_export = MagicMock()
+        mock_export.has_script_serialization = True
+        mock_export.serial_offset = 0
+        mock_export.script_serialization_start_offset = 100
+        mock_export.script_serialization_end_offset = 200
+        mock_export.script_serialization_size = 100
+
+        result = _read_node_script_serial(
+            archive=mock_archive,
+            name_map=[],
+            summary=mock_summary,
+            node_export=mock_export,
+            import_map=[],
+            export_map=[],
+            linker=None,
+            node_name="TestNode",
+        )
+
+        # read_u8 只调用一次（读 ctrl byte），不应继续读取后续数据
+        assert mock_archive.read_u8.call_count == 1
+        # 返回默认值元组（11 个元素）
+        assert len(result) == 11
+        assert result[0] is None   # function_reference
+        assert result[1] is None   # event_reference
+        assert result[8] == ""     # node_guid
+
+    def test_known_ctrl_bits_normal_parse(self):
+        """ctrl byte 仅含已知位（0x00-0x03）时应正常继续解析。"""
+        from uasset_read.serializers.graph_node import _read_node_script_serial
+
+        # ctrl = 0x00：无任何标志位，tell() 始终返回 script_end 使 while 循环不进入
+        mock_archive = MagicMock()
+        mock_archive.read_u8.return_value = 0x00
+        mock_archive.tell.return_value = 200  # >= script_end, while 循环不执行
+
+        mock_summary = MagicMock()
+        mock_summary.file_version_ue5 = 1011
+
+        mock_export = MagicMock()
+        mock_export.has_script_serialization = True
+        mock_export.serial_offset = 0
+        mock_export.script_serialization_start_offset = 100
+        mock_export.script_serialization_end_offset = 200
+        mock_export.script_serialization_size = 100
+
+        result = _read_node_script_serial(
+            archive=mock_archive,
+            name_map=[],
+            summary=mock_summary,
+            node_export=mock_export,
+            import_map=[],
+            export_map=[],
+            linker=None,
+            node_name="TestNode",
+        )
+
+        # read_u8 调用一次（ctrl byte），然后 while 循环因 tell() >= script_end 退出
+        assert mock_archive.read_u8.call_count == 1
+        assert len(result) == 11
+
+    def test_ctrl_with_extra_byte_returns_early(self):
+        """ctrl=0x06（bit1 + 未知 bit2）应读取 extra byte 后立即返回。"""
+        from uasset_read.serializers.graph_node import _read_node_script_serial
+
+        # 第一次 read_u8 返回 ctrl=0x06，第二次返回 extra byte
+        mock_archive = MagicMock()
+        mock_archive.read_u8.side_effect = [0x06, 0x00]
+        mock_archive.tell.return_value = 100
+
+        mock_summary = MagicMock()
+        mock_summary.file_version_ue5 = 1011
+
+        mock_export = MagicMock()
+        mock_export.has_script_serialization = True
+        mock_export.serial_offset = 0
+        mock_export.script_serialization_start_offset = 100
+        mock_export.script_serialization_end_offset = 200
+        mock_export.script_serialization_size = 100
+
+        result = _read_node_script_serial(
+            archive=mock_archive,
+            name_map=[],
+            summary=mock_summary,
+            node_export=mock_export,
+            import_map=[],
+            export_map=[],
+            linker=None,
+            node_name="TestNode",
+        )
+
+        # read_u8 调用两次：ctrl byte + extra byte（bit1 标志），然后因未知位返回
+        assert mock_archive.read_u8.call_count == 2
+        assert len(result) == 11
+        assert result[0] is None  # function_reference 未解析

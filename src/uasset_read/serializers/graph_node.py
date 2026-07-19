@@ -1087,6 +1087,15 @@ def _read_node_script_serial(
         ctrl = archive.read_u8()
         if ctrl & 0x02:
             archive.read_u8()
+        # 未知高位处理：停止解析 script_serial 防止偏移错位级联
+        if ctrl & ~0x03:
+            logger.debug(
+                "Node script_serial: 未知 SerializationControlExtensions 位 0x%02X, 跳过后续属性, node=%s",
+                ctrl, node_name
+            )
+            return (function_reference, event_reference, b_override_function,
+                    b_internal_event, custom_function_name, function_flags,
+                    node_pos_x, node_pos_y, node_guid, node_comment, raw_properties)
 
     max_property_iterations = max(1000, node_export.script_serialization_size)
     _property_iterations = 0
