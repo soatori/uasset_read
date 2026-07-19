@@ -46,19 +46,11 @@ class _MappingEntry:
 
 
 # ===========================================================================
-# 映射表：常见蓝图节点 → C++ 语义调用
+# 映射表：按类别拆分的子函数
 # ===========================================================================
 
-def _make_mappings() -> dict[str, _MappingEntry]:
-    """构建映射表，键为 "ClassName::FuncName" 规范化格式。"""
-    entries: list[_MappingEntry] = []
-
-    def _add(cls: str, func: str, handler: Callable[[list[str]], str]) -> None:
-        entries.append(_MappingEntry(cls, func, handler))
-
-    # ------------------------------------------------------------------
-    # ACharacter 移动控制
-    # ------------------------------------------------------------------
+def _add_character_mappings(_add: Callable) -> None:
+    """ACharacter 移动控制映射。"""
     _add("Character", "AddMovementInput",
          lambda p: f"AddMovementInput({p[0]}, {p[1]})" if len(p) >= 2
          else f"AddMovementInput({', '.join(p)})")
@@ -88,9 +80,10 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("Character", "IsCrouched",
          lambda p: "IsCrouched()")
 
-    # ------------------------------------------------------------------
+
+def _add_actor_mappings(_add: Callable) -> None:
+    """AActor 通用操作映射（含 KismetSystemLibrary、GameplayStatics 等）。"""
     # AActor 位置/变换
-    # ------------------------------------------------------------------
     _add("Actor", "K2_GetActorLocation",
          lambda p: "GetActorLocation()")
 
@@ -131,9 +124,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("Actor", "GetActorUpVector",
          lambda p: "GetActorUpVector()")
 
-    # ------------------------------------------------------------------
     # AActor 生命周期 / 通用
-    # ------------------------------------------------------------------
     _add("Actor", "K2_DestroyActor",
          lambda p: "Destroy()")
 
@@ -162,9 +153,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"SetActorTickEnabled({p[0]})"
          if p else "SetActorTickEnabled()")
 
-    # ------------------------------------------------------------------
     # AActor 组件
-    # ------------------------------------------------------------------
     _add("Actor", "GetComponentByClass",
          lambda p: f"GetComponentByClass<{p[0]}>()"
          if p else "GetComponentByClass()")
@@ -173,9 +162,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"GetComponentsByClass<{p[0]}>()"
          if p else "GetComponentsByClass()")
 
-    # ------------------------------------------------------------------
     # AActor 附着
-    # ------------------------------------------------------------------
     _add("Actor", "K2_AttachToActor",
          lambda p: f"AttachToActor({p[0]}, {p[1]}, {p[2]}, {p[3]})"
          if len(p) >= 4 else f"AttachToActor({', '.join(p)})")
@@ -188,9 +175,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"DetachFromActor({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"DetachFromActor({', '.join(p)})")
 
-    # ------------------------------------------------------------------
     # UKismetSystemLibrary 定时器
-    # ------------------------------------------------------------------
     _add("KismetSystemLibrary", "K2_SetTimer",
          lambda p: f"GetWorldTimerManager().SetTimer({p[0]}, {p[1]}, {p[2]}, {p[3]})"
          if len(p) >= 4 else f"GetWorldTimerManager().SetTimer({', '.join(p)})")
@@ -227,9 +212,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"GetWorldTimerManager().GetTimerRemainingTime({p[0]})"
          if p else "GetWorldTimerManager().GetTimerRemainingTime()")
 
-    # ------------------------------------------------------------------
     # UKismetSystemLibrary 调试
-    # ------------------------------------------------------------------
     _add("KismetSystemLibrary", "PrintString",
          lambda p: f'UE_LOG(LogTemp, Log, TEXT({p[0]}))'
          if p else 'UE_LOG(LogTemp, Log, TEXT(""))')
@@ -246,9 +229,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f'UE_LOG(LogTemp, Error, TEXT({p[0]}))'
          if p else 'UE_LOG(LogTemp, Error, TEXT(""))')
 
-    # ------------------------------------------------------------------
     # UKismetSystemLibrary 碰撞/射线检测
-    # ------------------------------------------------------------------
     _add("KismetSystemLibrary", "LineTraceSingle",
          lambda p: f"GetWorld()->LineTraceSingleByChannel({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"LineTraceSingle({', '.join(p)})")
@@ -261,16 +242,12 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"GetWorld()->OverlapMultiByChannel({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"SphereOverlapActors({', '.join(p)})")
 
-    # ------------------------------------------------------------------
     # UKismetSystemLibrary 延迟/异步
-    # ------------------------------------------------------------------
     _add("KismetSystemLibrary", "Delay",
          lambda p: f"UKismetSystemLibrary::Delay(this, {p[0]}, {{}})"
          if p else "UKismetSystemLibrary::Delay(this, 0.0f, {})")
 
-    # ------------------------------------------------------------------
     # UKismetMathLibrary 常见数学（补充 MathFunctionCleaner 未覆盖的语义映射）
-    # ------------------------------------------------------------------
     _add("KismetMathLibrary", "RandomUnitVector",
          lambda p: "FMath::VRand()")
 
@@ -289,9 +266,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"({p[1]} - {p[0]}).Rotation()"
          if len(p) >= 2 else f"FindLookAtRotation({', '.join(p)})")
 
-    # ------------------------------------------------------------------
     # GameplayStatics
-    # ------------------------------------------------------------------
     _add("GameplayStatics", "GetPlayerController",
          lambda p: f"UGameplayStatics::GetPlayerController(this, {p[0]})"
          if p else "UGameplayStatics::GetPlayerController(this, 0)")
@@ -326,9 +301,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("GameplayStatics", "GetGameState",
          lambda p: "UGameplayStatics::GetGameState(this)")
 
-    # ------------------------------------------------------------------
     # Controller
-    # ------------------------------------------------------------------
     _add("Controller", "GetControlRotation",
          lambda p: "GetControlRotation()")
 
@@ -345,9 +318,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("Controller", "UnPossess",
          lambda p: "UnPossess()")
 
-    # ------------------------------------------------------------------
     # PlayerController
-    # ------------------------------------------------------------------
     _add("PlayerController", "GetHUD",
          lambda p: "GetHUD()")
 
@@ -367,33 +338,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"GetInputMouseDelta({p[0]}, {p[1]})"
          if len(p) >= 2 else f"GetInputMouseDelta({', '.join(p)})")
 
-    # ------------------------------------------------------------------
-    # Pawn
-    # ------------------------------------------------------------------
-    _add("Pawn", "AddControllerYawInput",
-         lambda p: f"AddControllerYawInput({p[0]})"
-         if p else "AddControllerYawInput()")
-
-    _add("Pawn", "AddControllerPitchInput",
-         lambda p: f"AddControllerPitchInput({p[0]})"
-         if p else "AddControllerPitchInput()")
-
-    _add("Pawn", "AddControllerRollInput",
-         lambda p: f"AddControllerRollInput({p[0]})"
-         if p else "AddControllerRollInput()")
-
-    _add("Pawn", "GetController",
-         lambda p: "GetController()")
-
-    _add("Pawn", "IsControlled",
-         lambda p: "IsControlled()")
-
-    _add("Pawn", "IsPlayerControlled",
-         lambda p: "IsPlayerControlled()")
-
-    # ------------------------------------------------------------------
     # SceneComponent
-    # ------------------------------------------------------------------
     _add("SceneComponent", "K2_SetWorldLocation",
          lambda p: f"SetWorldLocation({p[0]}, {p[1]})"
          if len(p) >= 2 else f"SetWorldLocation({', '.join(p)})")
@@ -428,9 +373,7 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("SceneComponent", "GetUpVector",
          lambda p: "GetUpVector()")
 
-    # ------------------------------------------------------------------
     # PrimitiveComponent
-    # ------------------------------------------------------------------
     _add("PrimitiveComponent", "SetSimulatePhysics",
          lambda p: f"SetSimulatePhysics({p[0]})"
          if p else "SetSimulatePhysics()")
@@ -462,9 +405,33 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"SetCollisionResponseToAllChannels({p[0]})"
          if p else "SetCollisionResponseToAllChannels()")
 
-    # ------------------------------------------------------------------
-    # AnimInstance
-    # ------------------------------------------------------------------
+
+def _add_pawn_mappings(_add: Callable) -> None:
+    """APawn 角色控制映射。"""
+    _add("Pawn", "AddControllerYawInput",
+         lambda p: f"AddControllerYawInput({p[0]})"
+         if p else "AddControllerYawInput()")
+
+    _add("Pawn", "AddControllerPitchInput",
+         lambda p: f"AddControllerPitchInput({p[0]})"
+         if p else "AddControllerPitchInput()")
+
+    _add("Pawn", "AddControllerRollInput",
+         lambda p: f"AddControllerRollInput({p[0]})"
+         if p else "AddControllerRollInput()")
+
+    _add("Pawn", "GetController",
+         lambda p: "GetController()")
+
+    _add("Pawn", "IsControlled",
+         lambda p: "IsControlled()")
+
+    _add("Pawn", "IsPlayerControlled",
+         lambda p: "IsPlayerControlled()")
+
+
+def _add_anim_mappings(_add: Callable) -> None:
+    """AnimInstance 动画映射。"""
     _add("AnimInstance", "Montage_Play",
          lambda p: f"Montage_Play({p[0]}, {p[1]})"
          if len(p) >= 2 else f"Montage_Play({', '.join(p)})")
@@ -484,9 +451,9 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("AnimInstance", "TryGetPawnOwner",
          lambda p: "TryGetPawnOwner()")
 
-    # ------------------------------------------------------------------
-    # Widget 相关
-    # ------------------------------------------------------------------
+
+def _add_widget_mappings(_add: Callable) -> None:
+    """UserWidget UI 映射。"""
     _add("UserWidget", "SetVisibility",
          lambda p: f"SetVisibility({p[0]})"
          if p else "SetVisibility()")
@@ -504,9 +471,9 @@ def _make_mappings() -> dict[str, _MappingEntry]:
          lambda p: f"SetIsEnabled({p[0]})"
          if p else "SetIsEnabled()")
 
-    # ------------------------------------------------------------------
-    # Niagara 粒子
-    # ------------------------------------------------------------------
+
+def _add_niagara_mappings(_add: Callable) -> None:
+    """NiagaraComponent 粒子映射。"""
     _add("NiagaraComponent", "SetNiagaraVariableFloat",
          lambda p: f"SetNiagaraVariableFloat({p[0]}, {p[1]})"
          if len(p) >= 2 else f"SetNiagaraVariableFloat({', '.join(p)})")
@@ -521,7 +488,25 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     _add("NiagaraComponent", "Deactivate",
          lambda p: "Deactivate()")
 
-    # 构建字典：键为 "ClassName::FuncName"
+
+# ===========================================================================
+# 映射表构建入口
+# ===========================================================================
+
+def _make_mappings() -> dict[str, _MappingEntry]:
+    """构建映射表，键为 "ClassName::FuncName" 规范化格式。"""
+    entries: list[_MappingEntry] = []
+
+    def _add(cls: str, func: str, handler: Callable[[list[str]], str]) -> None:
+        entries.append(_MappingEntry(cls, func, handler))
+
+    _add_character_mappings(_add)
+    _add_actor_mappings(_add)
+    _add_pawn_mappings(_add)
+    _add_anim_mappings(_add)
+    _add_widget_mappings(_add)
+    _add_niagara_mappings(_add)
+
     result: dict[str, _MappingEntry] = {}
     for entry in entries:
         key = f"{entry.class_name}::{entry.func_name}"

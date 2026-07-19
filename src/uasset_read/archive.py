@@ -321,7 +321,7 @@ class FArchive:
         try:
             self.close()
         except Exception:
-            pass
+            logger.debug("FArchive.__del__ 清理失败", exc_info=True)
 
     def set_byte_swapping(self, enabled: bool) -> None:
         """设置字节交换标志"""

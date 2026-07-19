@@ -14,6 +14,7 @@ from uasset_read.kismet.expressions.literals import (
     EX_IntConst, EX_FloatConst, EX_ByteConst, EX_IntConstByte,
     EX_Int64Const, EX_UInt64Const, EX_DoubleConst,
     EX_IntZero, EX_IntOne, EX_True, EX_False,
+    EX_NoObject, EX_NoInterface, EX_Self, EX_Nothing,
 )
 
 # String constants
@@ -81,8 +82,7 @@ from uasset_read.kismet.expressions.delegates import (
 # Special
 from uasset_read.kismet.expressions.special import (
     FKismetSwitchCase,
-    EX_Return, EX_Assert, EX_Nothing, EX_NothingInt32,
-    EX_Self, EX_NoObject, EX_NoInterface, EX_SwitchValue,
+    EX_Return, EX_Assert, EX_NothingInt32, EX_SwitchValue,
     EX_InstrumentationEvent, EX_DeprecatedOp4A, EX_Breakpoint,
     EX_Tracepoint, EX_WireTracepoint, EX_FieldPathConst,
     EX_ObjectConst, EX_NameConst,

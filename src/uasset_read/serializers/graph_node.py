@@ -767,31 +767,43 @@ def _read_member_reference_from_tags(
         b_self_context=m_self,
     )
 
-def _read_node_property_tag(
-    archive: FArchive,
-    tag,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"],
-    raw_properties: Dict[str, Any],
-) -> dict:
-    """读取单个 node PropertyTag 并更新局部变量。返回需要更新的 named 属性。"""
-    updates: Dict[str, Any] = {}
+# ============================================================================
+# node PropertyTag 分发处理器
+# ============================================================================
 
-    if tag.name == "NodePosX":
-        updates["node_pos_x"] = _read_tag_i32(archive, tag)
-    elif tag.name == "NodePosY":
-        updates["node_pos_y"] = _read_tag_i32(archive, tag)
-    elif tag.name == "NodeGuid" and tag.size > 0:
-        updates["node_guid"] = archive.read_bytes(16).hex()
+def _handle_node_pos_x(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 NodePosX 标签。"""
+    return {"node_pos_x": _read_tag_i32(archive, tag)}
+
+
+def _handle_node_pos_y(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 NodePosY 标签。"""
+    return {"node_pos_y": _read_tag_i32(archive, tag)}
+
+
+def _handle_node_guid(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 NodeGuid 标签。"""
+    if tag.size > 0:
+        val = archive.read_bytes(16).hex()
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name == "NodeComment" and tag.size > 0:
-        updates["node_comment"] = archive.read_fstring()
+        return {"node_guid": val}
+    return {}
+
+
+def _handle_node_comment(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 NodeComment 标签。"""
+    if tag.size > 0:
+        val = archive.read_fstring()
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name == "InputAction" and tag.size > 0:
+        return {"node_comment": val}
+    return {}
+
+
+def _handle_input_action(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 InputAction 标签。"""
+    if tag.size > 0:
         pkg_idx = archive.read_i32()
         input_action_path = (
             _rcn(PackageIndex(pkg_idx), import_map, export_map, linker)
@@ -805,7 +817,12 @@ def _read_node_property_tag(
         raw_properties["InputActionPackageIndex"] = pkg_idx
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name == "CommentColor" and tag.size >= 16:
+    return {}
+
+
+def _handle_comment_color(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 CommentColor 标签（RGBA 四分量 float）。"""
+    if tag.size >= 16:
         raw_properties[tag.name] = (
             archive.read_f32(),
             archive.read_f32(),
@@ -814,47 +831,92 @@ def _read_node_property_tag(
         )
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name in ("NodeWidth", "NodeHeight", "FontSize") and tag.size > 0:
+    return {}
+
+
+def _handle_i32_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 I32 类型标签（NodeWidth、NodeHeight、FontSize、CommentDepth、ExtraFlags）。"""
+    if tag.size > 0:
         raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "bCommentBubbleVisible_InDetailsPanel":
-        raw_properties[tag.name] = _read_tag_bool(archive, tag)
-    elif tag.name == "CommentDepth" and tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "ExtraFlags" and tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    elif tag.name == "AdvancedPinDisplay" and tag.size > 0:
+    return {}
+
+
+def _handle_bool_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理布尔类型标签（bCommentBubbleVisible_InDetailsPanel、bIsEditable）。"""
+    raw_properties[tag.name] = _read_tag_bool(archive, tag)
+    return {}
+
+
+def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 AdvancedPinDisplay 标签（枚举值 + 格式化名称）。"""
+    if tag.size > 0:
         raw_val = _read_tag_i32(archive, tag)
         raw_properties[tag.name] = raw_val
         enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
         raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
-    elif tag.name == "bOverrideFunction":
-        updates["b_override_function"] = _read_tag_bool(archive, tag)
-        raw_properties[tag.name] = updates["b_override_function"]
-    elif tag.name == "bInternalEvent":
-        updates["b_internal_event"] = _read_tag_bool(archive, tag)
-        raw_properties[tag.name] = updates["b_internal_event"]
-    elif tag.name == "bIsEditable":
-        raw_properties[tag.name] = _read_tag_bool(archive, tag)
-    elif tag.name == "CustomFunctionName":
-        updates["custom_function_name"] = _read_tag_fname(archive, tag, name_map)
-        raw_properties[tag.name] = updates["custom_function_name"]
-    elif tag.name == "FunctionFlags" and tag.size > 0:
-        updates["function_flags"] = _read_tag_i32(archive, tag)
-        raw_properties[tag.name] = updates["function_flags"]
-    elif tag.name == "CustomGeneratedFunctionName":
-        raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
-    elif tag.name in ("EditorStateMachineGraph", "BoundGraph") and tag.size > 0:
+    return {}
+
+
+def _handle_override_function(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 bOverrideFunction 标签（同时写入 updates 和 raw_properties）。"""
+    val = _read_tag_bool(archive, tag)
+    raw_properties[tag.name] = val
+    return {"b_override_function": val}
+
+
+def _handle_internal_event(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 bInternalEvent 标签（同时写入 updates 和 raw_properties）。"""
+    val = _read_tag_bool(archive, tag)
+    raw_properties[tag.name] = val
+    return {"b_internal_event": val}
+
+
+def _handle_custom_function_name(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 CustomFunctionName 标签（FName，同时写入 updates 和 raw_properties）。"""
+    val = _read_tag_fname(archive, tag, name_map)
+    raw_properties[tag.name] = val
+    return {"custom_function_name": val}
+
+
+def _handle_function_flags(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 FunctionFlags 标签（同时写入 updates 和 raw_properties）。"""
+    if tag.size > 0:
+        val = _read_tag_i32(archive, tag)
+        raw_properties[tag.name] = val
+        return {"function_flags": val}
+    return {}
+
+
+def _handle_fname_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 FName 类型标签（CustomGeneratedFunctionName）。"""
+    raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
+    return {}
+
+
+def _handle_package_index(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 PackageIndex 类型标签（EditorStateMachineGraph、BoundGraph）。"""
+    if tag.size > 0:
         pkg_idx = archive.read_i32()
         raw_properties[tag.name] = pkg_idx
         raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name == "MoveMode" and tag.size > 0:
+    return {}
+
+
+def _handle_move_mode(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 MoveMode 标签（单字节枚举值）。"""
+    if tag.size > 0:
         raw_val = archive.read_u8() if tag.size >= 1 else 0
         raw_properties[tag.name] = raw_val
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
-    elif tag.name == "NodeDetails" and tag.size > 0:
+    return {}
+
+
+def _handle_node_details(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+    """处理 NodeDetails 标签（FText 带历史记录）。"""
+    if tag.size > 0:
         try:
             _flags = archive.read_i32()  # noqa: F841 - protocol read
             history_type_raw = archive.read_u8()
@@ -865,12 +927,58 @@ def _read_node_property_tag(
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
         raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
-    elif tag.size > 0:
+    return {}
+
+
+# 标签名 → 处理函数的分发字典
+_NODE_TAG_HANDLERS: Dict[str, Any] = {
+    "NodePosX": _handle_node_pos_x,
+    "NodePosY": _handle_node_pos_y,
+    "NodeGuid": _handle_node_guid,
+    "NodeComment": _handle_node_comment,
+    "InputAction": _handle_input_action,
+    "CommentColor": _handle_comment_color,
+    "NodeWidth": _handle_i32_to_raw,
+    "NodeHeight": _handle_i32_to_raw,
+    "FontSize": _handle_i32_to_raw,
+    "bCommentBubbleVisible_InDetailsPanel": _handle_bool_to_raw,
+    "CommentDepth": _handle_i32_to_raw,
+    "ExtraFlags": _handle_i32_to_raw,
+    "AdvancedPinDisplay": _handle_advanced_pin_display,
+    "bOverrideFunction": _handle_override_function,
+    "bInternalEvent": _handle_internal_event,
+    "bIsEditable": _handle_bool_to_raw,
+    "CustomFunctionName": _handle_custom_function_name,
+    "FunctionFlags": _handle_function_flags,
+    "CustomGeneratedFunctionName": _handle_fname_to_raw,
+    "EditorStateMachineGraph": _handle_package_index,
+    "BoundGraph": _handle_package_index,
+    "MoveMode": _handle_move_mode,
+    "NodeDetails": _handle_node_details,
+}
+
+
+def _read_node_property_tag(
+    archive: FArchive,
+    tag,
+    name_map: List[str],
+    import_map: List[ObjectImport],
+    export_map: List[ObjectExport],
+    linker: Optional["PackageLinker"],
+    raw_properties: Dict[str, Any],
+) -> dict:
+    """读取单个 node PropertyTag 并更新局部变量。返回需要更新的 named 属性。"""
+    handler = _NODE_TAG_HANDLERS.get(tag.name)
+    if handler:
+        return handler(archive, tag, name_map, import_map, export_map, linker, raw_properties)
+
+    # 未匹配的标签：有数据时跳过字节，避免偏移错乱
+    if tag.size > 0:
         value_start = archive.tell()
         raw_properties[tag.name] = {"size": tag.size, "offset": value_start}
         archive.seek(tag.value_end_offset)
 
-    return updates
+    return {}
 
 def _read_node_pins(
     archive: FArchive,

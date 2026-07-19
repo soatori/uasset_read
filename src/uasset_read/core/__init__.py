@@ -268,14 +268,6 @@ def _parse_and_render(
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
-    # HexView 文本旁路：仅非 json 格式时直接返回文本（json 格式走 IR 管线）
-    if hex_view and result.hex_view_entries and format != "json":
-        from uasset_read.debug.hex_view import format_hex_view
-        return format_hex_view(
-            result.hex_view_entries,
-            file_size=result.summary.uncompressed_size if result.summary else 0,
-        ), result
-
     ir = build_package_ir(result)
 
     # 释放临时大对象，防止批量解析时内存累积
@@ -286,14 +278,13 @@ def _parse_and_render(
             if hasattr(export, "_uclass_native_fields"):
                 delattr(export, "_uclass_native_fields")
     except Exception:
-        pass
+        logger.debug("批量清理临时大对象失败", exc_info=True)
 
     renderer = get_renderer(format)
     options = RenderOptions(
         verbose=verbose,
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
-        linker_result=None,
         output_level=output_level,
         hex_view=hex_view,
     )

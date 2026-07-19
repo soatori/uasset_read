@@ -72,3 +72,44 @@ class KismetExpressionT(KismetExpression, Generic[T]):
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} token={self.Token.name} value={self.Value!r}>"
+
+
+def make_simple_expression(token: EExprToken):
+    """创建简单表达式类（无额外字段，仅返回 Token 值）。
+
+    用于 EX_Nothing, EX_IntZero, EX_IntOne 等无数据的表达式。
+    """
+    @dataclass
+    class _SimpleExpr(KismetExpression):
+        @property
+        def Token(self) -> EExprToken:
+            return token
+
+    _SimpleExpr.__name__ = token.name
+    _SimpleExpr.__qualname__ = token.name
+    return _SimpleExpr
+
+
+def make_value_expression(token: EExprToken, read_func_name: str):
+    """创建带值的表达式类（从 archive 读取单个值）。
+
+    用于 EX_IntConst, EX_FloatConst 等读取单个值的表达式。
+
+    Args:
+        token: 对应的 EExprToken 枚举值
+        read_func_name: FArchive 上的读取方法名（如 "read_i32", "read_f32"）
+    """
+    @dataclass
+    class _ValueExpr(KismetExpressionT):
+        @property
+        def Token(self) -> EExprToken:
+            return token
+
+        @classmethod
+        def from_archive(cls, archive, name_map):
+            reader = getattr(archive, read_func_name)
+            return cls(Value=reader())
+
+    _ValueExpr.__name__ = token.name
+    _ValueExpr.__qualname__ = token.name
+    return _ValueExpr

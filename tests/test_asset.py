@@ -23,50 +23,14 @@ from uasset_read.models.ir import (
 )
 from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
 
+from conftest import FakeArchive
+
 
 # ---------------------------------------------------------------------------
 # 测试辅助
 # ---------------------------------------------------------------------------
 
 _DATA_OFFSET = 16
-
-
-class FakeArchive:
-    def __init__(self, data: bytes):
-        self._data = data
-        self._pos = 0
-
-    def seek(self, offset: int):
-        self._pos = offset
-
-    def tell(self) -> int:
-        return self._pos
-
-    def total_size(self) -> int:
-        return len(self._data)
-
-    def read(self, n: int) -> bytes:
-        result = self._data[self._pos:self._pos + n]
-        self._pos += n
-        return result
-
-    def read_i32(self) -> int:
-        return struct.unpack("<i", self.read(4))[0]
-
-    def read_i64(self) -> int:
-        return struct.unpack("<q", self.read(8))[0]
-
-    def read_fstring(self) -> str:
-        length = self.read_i32()
-        if length == 0:
-            return ""
-        if length > 0:
-            raw = self.read(length)
-            return raw[:-1].decode("utf-8", errors="replace") if raw.endswith(b"\x00") else raw.decode("utf-8", errors="replace")
-        else:
-            byte_count = -length * 2
-            raw = self.read(byte_count)
-            return raw[:-2].decode("utf-16-le", errors="replace") if raw.endswith(b"\x00\x00") else raw.decode("utf-16-le", errors="replace")
 
 
 def _build_fstring(s: str) -> bytes:

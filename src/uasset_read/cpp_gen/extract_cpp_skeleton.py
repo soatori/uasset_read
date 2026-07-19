@@ -11,7 +11,7 @@ Per D-05: 构建完整的 header_meta。
 从 decompiled_functions 注入函数体到 body_text。
 
 导出：
-    extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
+    extract_cpp_class_skeleton: PackageIR → CppClassIR 提取函数
 """
 
 import re
@@ -46,7 +46,7 @@ from uasset_read.cpp_gen.cpp_constructor_formatter import (
 from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 
 if TYPE_CHECKING:
-    from uasset_read.link.result import LinkerParseResult
+    from uasset_read.models.ir import PackageIR, BlueprintIR, VariableIR, DecompiledFunctionIR
     from uasset_read.models.blueprint import BlueprintMetadata, BlueprintVariable
     from uasset_read.models.core import FEdGraphPinType, UEdGraph, UEdGraphPin
     from uasset_read.models.node_types import K2NodeFunctionEntry, K2NodeEvent
@@ -75,7 +75,8 @@ def _backfill_missing_methods(
     """
     existing_names = {m.cpp_name for m in methods}
     for decompiled in decompiled_functions:
-        sanitized = sanitize_identifier(decompiled.function_name)
+        func_name = getattr(decompiled, 'function_name', None) or decompiled.name
+        sanitized = sanitize_identifier(func_name)
         if sanitized not in existing_names:
             methods.append(CppMethodIR(
                 cpp_name=sanitized,
@@ -91,66 +92,61 @@ def _backfill_missing_methods(
 # 核心提取函数
 # ============================================================================
 
-def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
-    """从 LinkerParseResult 提取 C++ 类骨架。
+def extract_cpp_class_skeleton(ir: "PackageIR") -> CppClassIR:
+    """从 PackageIR 提取 C++ 类骨架。
 
-    Per D-02: 从 BlueprintMetadata.parent_class 追溯继承链。
+    Per D-02: 从 BlueprintIR.parent_class 追溯继承链。
     Per D-03: 将 UE 类型映射为 C++ 类型名。
     Per D-04: 将 CPF 标志转换为 UPROPERTY 标记。
     Per D-05: 构建 header_meta（includes + generated_include）。
-    从图节点提取方法声明填充 methods。
+    从蓝图函数/事件 IR 提取方法声明填充 methods。
 
     Args:
-        result: LinkerParseResult（来自 parse_uasset_with_linker）
+        ir: PackageIR（来自 build_package_ir）
 
     Returns:
         CppClassIR: C++ 类骨架中间表示
 
     Raises:
-        ValueError: 如果 result.blueprint 为 None 或不是蓝图
+        ValueError: 如果 ir.blueprint 为 None
     """
     # 验证输入
-    if result.blueprint is None:
-        raise ValueError("LinkerParseResult.blueprint is None — cannot extract skeleton")
-    if not result.blueprint.is_blueprint:
-        raise ValueError("LinkerParseResult.blueprint.is_blueprint is False — not a blueprint")
+    if ir.blueprint is None:
+        raise ValueError("PackageIR.blueprint is None — cannot extract skeleton")
 
-    blueprint = result.blueprint
+    blueprint = ir.blueprint
 
     # 1. 提取类名
-    class_name = _extract_class_name(result)
+    class_name = _extract_class_name(ir)
 
     # 2. 解析继承链（Per D-02）
-    parent_class = _resolve_parent_class(blueprint, result.linker)
+    parent_class = _resolve_parent_class(blueprint, ir.linker)
 
     # 3. 提取组件属性
     properties: List[CppProperty] = []
-    properties.extend(_extract_component_properties(blueprint, result.components))
+    component_vars = [v for v in ir.variables if v.kind == "component"]
+    properties.extend(_extract_component_properties(component_vars, blueprint.components))
 
     # 4. 提取变量属性
-    properties.extend(_extract_variable_properties(blueprint))
+    user_vars = [v for v in ir.variables if v.kind == "user"]
+    properties.extend(_extract_variable_properties(user_vars))
 
-    # 5. 提取输入动作变量（从图节点）
-    if result.graphs:
-        properties.extend(_extract_input_action_properties(result.graphs))
+    # 5. 提取输入动作变量（从 IR 变量）
+    input_vars = [v for v in ir.variables if v.kind == "input_action"]
+    if input_vars:
+        properties.extend(_extract_input_action_properties_from_ir(input_vars))
 
-    # 6. 提取方法声明
+    # 6. 提取方法声明（从 BlueprintIR 的 functions/events）
     methods: List[CppMethodIR] = []
-    if result.graphs:
-        blueprint_functions = getattr(blueprint, 'functions', None)
-        methods = extract_cpp_functions(
-            result.graphs,
-            blueprint_functions=blueprint_functions,
-            linker=result.linker,
-        )
+    methods.extend(_build_methods_from_blueprint_ir(blueprint))
 
     # 6. 补齐缺失方法（第三条路径 — 从 decompiled_functions 直接生成 CppMethodIR）
-    if hasattr(result, 'decompiled_functions') and result.decompiled_functions:
-        _backfill_missing_methods(methods, result.decompiled_functions)
+    if ir.decompiled_functions:
+        _backfill_missing_methods(methods, ir.decompiled_functions)
 
     # 6. 注入函数体（从 decompiled_functions）
-    if methods and hasattr(result, 'decompiled_functions') and result.decompiled_functions:
-        _inject_function_bodies(methods, result.decompiled_functions)
+    if methods and ir.decompiled_functions:
+        _inject_function_bodies(methods, ir.decompiled_functions)
 
     # 6.1 设置 class_name（用于 .cpp 实现中 ClassName::Method 前缀）
     for method in methods:
@@ -161,7 +157,7 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     header_meta = CppHeaderMeta.build_from_parent(parent_class, class_name)
 
     # 7. 构建 CppClassIR
-    ir = CppClassIR(
+    skeleton = CppClassIR(
         name=class_name,
         parent_class=parent_class,
         header_meta=header_meta,
@@ -175,18 +171,18 @@ def extract_cpp_class_skeleton(result: "LinkerParseResult") -> CppClassIR:
     )
 
     # 填充 constructor 字典
-    components = result.components or []
-    ir.constructor["component_creations"] = build_component_creations(ir)
-    ir.constructor["component_assignments"] = build_component_assignments(components)
-    ir.constructor["default_values"] = build_default_values(ir, blueprint.variables)
+    components = blueprint.components or []
+    skeleton.constructor["component_creations"] = build_component_creations(skeleton)
+    skeleton.constructor["component_assignments"] = build_component_assignments(components)
+    skeleton.constructor["default_values"] = build_default_values(skeleton, ir.variables)
 
     # Blocker 2 fix: transform 数据也流入 default_values
-    ir.constructor["default_values"].extend(build_transform_assignments(ir, components))
+    skeleton.constructor["default_values"].extend(build_transform_assignments(skeleton, components))
 
     # 生成完整构造函数文本
-    ir.constructor["constructor_text"] = format_cpp_constructor(ir)
+    skeleton.constructor["constructor_text"] = format_cpp_constructor(skeleton)
 
-    return ir
+    return skeleton
 
 # ============================================================================
 # 蓝图元数据过滤器（P0 改进）
@@ -333,7 +329,7 @@ def _inject_function_bodies(
     method_index: Dict[str, CppMethodIR] = {m.cpp_name: m for m in methods}
 
     for decompiled in decompiled_functions:
-        func_name = decompiled.function_name
+        func_name = getattr(decompiled, 'function_name', None) or decompiled.name
 
         # 精确匹配
         method = method_index.get(func_name)
@@ -357,7 +353,7 @@ def _inject_function_bodies(
                 body = body.replace(original, sanitized)
             method.body_text = body
 
-def _extract_class_name(result: "LinkerParseResult") -> str:
+def _extract_class_name(ir: "PackageIR") -> str:
     """提取 C++ 类名。
 
     根据蓝图名称和父类类型确定 C++ 前缀：
@@ -366,27 +362,27 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
     - 否则添加推导的前缀
 
     Args:
-        result: LinkerParseResult
+        ir: PackageIR
 
     Returns:
         C++ 类名（带前缀）
     """
-    # 从 summary.package_name 或 name_map[0] 获取名称
+    # 从 header.package_name 或 name_map[0] 获取名称
     raw_name = ""
-    if result.summary and hasattr(result.summary, 'package_name'):
-        raw_name = result.summary.package_name
-    elif result.name_map and len(result.name_map) > 0:
-        raw_name = result.name_map[0]
+    if ir.header and hasattr(ir.header, 'package_name'):
+        raw_name = ir.header.package_name
+    elif ir.name_map and len(ir.name_map) > 0:
+        raw_name = ir.name_map[0]
 
     if not raw_name:
-        logger.warning("Could not determine class name from result")
+        logger.warning("Could not determine class name from PackageIR")
         return "UUnknownClass"
 
     # 简化类名
     clean_name = _simplify_class_name(raw_name)
 
     # 从父类推导前缀（使用 infer_class_prefix 统一逻辑）
-    parent_class_path = result.blueprint.parent_class or ""
+    parent_class_path = ir.blueprint.parent_class or ""
     parent_cpp = ue_package_path_to_cpp_class(parent_class_path)
     prefix = infer_class_prefix(parent_cpp)
 
@@ -397,53 +393,52 @@ def _extract_class_name(result: "LinkerParseResult") -> str:
     return f"{prefix}{clean_name}"
 
 def _resolve_parent_class(
-    blueprint: "BlueprintMetadata",
+    blueprint: "BlueprintIR",
     linker: Optional[Any]
 ) -> str:
     """解析父类名。
 
-    Per D-02: 从 blueprint.parent_class 提取并转换为 C++ 类名。
+    Per D-02: 从 BlueprintIR.parent_class 提取并转换为 C++ 类名。
     未来支持通过 linker 深度追溯继承链（当前仅直接父类）。
 
     Args:
-        blueprint: BlueprintMetadata
-        linker: PackageLinker（可选，用于深度追溯）
+        blueprint: BlueprintIR
+        linker: LinkerSummaryIR（可选，用于深度追溯）
 
     Returns:
         C++ 父类名
     """
     parent_path = blueprint.parent_class
     if not parent_path:
-        logger.warning("BlueprintMetadata.parent_class is None — using UObject as default")
+        logger.warning("BlueprintIR.parent_class is None — using UObject as default")
         return "UObject"
 
     return ue_package_path_to_cpp_class(parent_path)
 
 def _extract_component_properties(
-    blueprint: "BlueprintMetadata",
+    component_vars: List["VariableIR"],
     components: List[Dict]
 ) -> List[CppProperty]:
     """提取组件属性。
 
-    从 blueprint.variables 中筛选 is_component=True 的变量，
-    以及 result.components 列表中的 SCS 组件。
+    从 VariableIR 列表中筛选 kind="component" 的变量，
+    以及 BlueprintIR.components 列表中的 SCS 组件。
 
     Args:
-        blueprint: BlueprintMetadata
-        components: result.components 列表
+        component_vars: kind="component" 的 VariableIR 列表
+        components: BlueprintIR.components 列表
 
     Returns:
         CppProperty 列表（category="component"）
     """
     properties: List[CppProperty] = []
 
-    # 从 blueprint.variables 提取组件
-    for var in blueprint.variables:
-        if var.is_component:
-            prop = _create_component_property(var)
-            properties.append(prop)
+    # 从 VariableIR 提取组件
+    for var in component_vars:
+        prop = _create_component_property(var)
+        properties.append(prop)
 
-    # 从 result.components 提取 SCS 组件（如果有）
+    # 从 BlueprintIR.components 提取 SCS 组件（如果有）
     for comp in components:
         comp_name = comp.get("name", "")
         comp_class = comp.get("class", "")
@@ -477,33 +472,26 @@ def _extract_component_properties(
 
     return properties
 
-def _create_component_property(var: "BlueprintVariable") -> CppProperty:
-    """从 BlueprintVariable 创建组件 CppProperty。
+def _create_component_property(var: "VariableIR") -> CppProperty:
+    """从 VariableIR 创建组件 CppProperty。
 
     P1 改进：使用 _clean_component_name 清理组件名称。
 
     Args:
-        var: BlueprintVariable（is_component=True）
+        var: VariableIR（kind="component"）
 
     Returns:
         CppProperty
     """
     # P1 改进：清理组件名称
-    clean_name = _clean_component_name(var.var_name)
+    clean_name = _clean_component_name(var.name)
 
-    # 从 var_type 提取类型路径
-    var_type = var.var_type
-    ue_type = ""
+    # 从 type 字段提取类型路径
+    ue_type = var.type or ""
 
-    if var_type.pin_category == "object":
-        # object 类型：pin_subcategory 是类名
-        ue_type = var_type.pin_subcategory
-        if not ue_type.startswith("/Script/"):
-            # 补全路径
-            ue_type = f"/Script/Engine.{ue_type}"
-    else:
-        # 其他类型直接使用 category
-        ue_type = var_type.pin_category
+    # 补全路径（如果不是完整路径）
+    if ue_type and not ue_type.startswith("/Script/") and not ue_type.startswith("/"):
+        ue_type = f"/Script/Engine.{ue_type}"
 
     # 转换为 C++ 类型（组件是指针）
     cpp_type = ue_path_to_cpp_type(ue_type)
@@ -522,27 +510,26 @@ def _create_component_property(var: "BlueprintVariable") -> CppProperty:
         cpp_comment=f"UE type: {ue_type}",
     )
 
-def _extract_variable_properties(blueprint: "BlueprintMetadata") -> List[CppProperty]:
+def _extract_variable_properties(user_vars: List["VariableIR"]) -> List[CppProperty]:
     """提取变量属性。
 
-    从 blueprint.variables 中筛选 is_component=False 的变量。
+    从 VariableIR 列表中筛选 kind="user" 的变量。
     P0 改进：过滤蓝图内部元数据属性。
 
     Args:
-        blueprint: BlueprintMetadata
+        user_vars: kind="user" 的 VariableIR 列表
 
     Returns:
         CppProperty 列表（category="variable"）
     """
     properties: List[CppProperty] = []
 
-    for var in blueprint.variables:
-        if not var.is_component:
-            # P0 改进：过滤蓝图元数据
-            if _is_blueprint_metadata(var.var_name):
-                continue
-            prop = _create_variable_property(var)
-            properties.append(prop)
+    for var in user_vars:
+        # P0 改进：过滤蓝图元数据
+        if _is_blueprint_metadata(var.name):
+            continue
+        prop = _create_variable_property(var)
+        properties.append(prop)
 
     return properties
 
@@ -598,19 +585,17 @@ def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProper
 
     return properties
 
-def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
-    """从 BlueprintVariable 创建变量 CppProperty。
+def _create_variable_property(var: "VariableIR") -> CppProperty:
+    """从 VariableIR 创建变量 CppProperty。
 
     Args:
-        var: BlueprintVariable（is_component=False）
+        var: VariableIR（kind="user"）
 
     Returns:
         CppProperty
     """
-    var_type = var.var_type
-
-    # 构建 UE 类型路径
-    ue_type = _build_ue_type_from_pin_type(var_type)
+    # 从 type 字段获取 UE 类型路径
+    ue_type = var.type or ""
 
     # 转换为 C++ 类型
     cpp_type = ue_path_to_cpp_type(ue_type)
@@ -620,12 +605,112 @@ def _create_variable_property(var: "BlueprintVariable") -> CppProperty:
 
     return CppProperty(
         cpp_type=cpp_type,
-        name=sanitize_identifier(var.var_name),
+        name=sanitize_identifier(var.name),
         uproperty_marks=marks,
         category="variable",
         default_value=var.default_value,
         cpp_comment=f"UE type: {ue_type}",
     )
+
+def _extract_input_action_properties_from_ir(
+    input_vars: List["VariableIR"],
+) -> List[CppProperty]:
+    """从 VariableIR 列表提取输入动作属性。
+
+    从 kind="input_action" 的 VariableIR 生成 UInputAction* 成员变量。
+
+    Args:
+        input_vars: kind="input_action" 的 VariableIR 列表
+
+    Returns:
+        CppProperty 列表（category="input"）
+    """
+    properties: List[CppProperty] = []
+
+    for var in input_vars:
+        action_path = var.type or ""
+        var_name = var.name
+
+        prop = CppProperty(
+            cpp_type="UInputAction*",
+            name=var_name,
+            uproperty_marks=["EditAnywhere"],
+            category="input",
+            default_value=None,
+            cpp_comment=f"Input Action: {action_path}",
+        )
+        properties.append(prop)
+
+    return properties
+
+def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethodIR]:
+    """从 BlueprintIR 的 functions 和 events 构建 CppMethodIR 列表。
+
+    Args:
+        blueprint: BlueprintIR
+
+    Returns:
+        CppMethodIR 列表
+    """
+    methods: List[CppMethodIR] = []
+
+    # 从 functions 构建方法
+    for func in blueprint.functions:
+        parameters = [
+            CppCallParameter(
+                name=sanitize_identifier(p.get("name", "")),
+                cpp_type=ue_path_to_cpp_type(p.get("type", "")),
+                direction="input" if p.get("is_input", True) else "output",
+            )
+            for p in func.parameters
+        ]
+
+        # 推断 UFUNCTION 修饰符
+        specifiers: List[str] = []
+        if func.is_pure:
+            specifiers.append("BlueprintPure")
+        elif func.is_blueprint_callable:
+            specifiers.append("BlueprintCallable")
+
+        # 确定访问修饰符
+        access_modifier = "public"
+        if func.access_specifier:
+            access_modifier = func.access_specifier.lower()
+
+        methods.append(CppMethodIR(
+            cpp_name=sanitize_identifier(func.name),
+            return_type=func.return_type or "void",
+            parameters=parameters,
+            ufunction_specifiers=specifiers,
+            is_override=False,
+            is_const=func.is_const,
+            is_static=func.is_static,
+            is_pure=func.is_pure,
+            access_modifier=access_modifier,
+            source_node_type="BlueprintFunctionIR",
+        ))
+
+    # 从 events 构建方法
+    for event in blueprint.events:
+        parameters = [
+            CppCallParameter(
+                name=sanitize_identifier(p.get("name", "")),
+                cpp_type=ue_path_to_cpp_type(p.get("type", "")),
+                direction="input" if p.get("is_input", True) else "output",
+            )
+            for p in event.parameters
+        ]
+
+        methods.append(CppMethodIR(
+            cpp_name=sanitize_identifier(event.name),
+            return_type="void",
+            parameters=parameters,
+            ufunction_specifiers=[],
+            is_override=event.is_override,
+            source_node_type="BlueprintEventIR",
+        ))
+
+    return methods
 
 def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
     """从 FEdGraphPinType 构建 UE 类型路径。"""

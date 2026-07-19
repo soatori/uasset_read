@@ -74,7 +74,7 @@ pytest 标记：`integration`、`quality`、`regression`、`slow`；`pytest.ini`
 - `serializers/graph.py` → `graph/flow_builder.py` → `blueprint/` → `kismet/`：蓝图图与字节码链路。
 - `cpp_gen/`：蓝图结果到 C++ 类骨架；`renderers/`：通过 `RENDERER_REGISTRY` 注册输出格式。
 
-新增代码不得使用顶层废弃导出；`__init__.py` 的 `_DEPRECATED_IMPORTS` 仅用于兼容，并会发出 `DeprecationWarning`。
+顶层废弃导出已全部移除，新增代码不得重新引入。
 
 状态：包级 `success | partial | failed`；Export 级状态必须通过 `validate_parse_status()`。`strict` 遇警告停止，`tolerant`（默认）遇错继续并标记 `partial`；`export_count > 300` 时自动跳过完整蓝图解析。
 

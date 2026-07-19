@@ -18,7 +18,7 @@ class EX_Context(KismetExpression):
     ContextExpression: KismetExpression = None
 
     @property
-    def Token(self): return EExprToken.EX_Context
+    def Token(self) -> EExprToken: return EExprToken.EX_Context
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Context:
@@ -33,13 +33,13 @@ class EX_Context(KismetExpression):
 @dataclass
 class EX_Context_FailSilent(EX_Context):
     @property
-    def Token(self): return EExprToken.EX_Context_FailSilent
+    def Token(self) -> EExprToken: return EExprToken.EX_Context_FailSilent
 
 
 @dataclass
 class EX_ClassContext(EX_Context):
     @property
-    def Token(self): return EExprToken.EX_ClassContext
+    def Token(self) -> EExprToken: return EExprToken.EX_ClassContext
 
 
 @dataclass
@@ -47,7 +47,7 @@ class EX_InterfaceContext(KismetExpression):
     InterfaceValue: KismetExpression = None
 
     @property
-    def Token(self): return EExprToken.EX_InterfaceContext
+    def Token(self) -> EExprToken: return EExprToken.EX_InterfaceContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InterfaceContext:
@@ -61,7 +61,7 @@ class EX_StructMemberContext(KismetExpression):
     StructExpression: KismetExpression = None
 
     @property
-    def Token(self): return EExprToken.EX_StructMemberContext
+    def Token(self) -> EExprToken: return EExprToken.EX_StructMemberContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructMemberContext:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import gc
+import io
 import json
 import os
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +13,7 @@ from typing import Iterable
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from uasset_read.memory_safety import (
     LARGE_FILE_THRESHOLD,
     MAX_ASSET_COUNT,
@@ -240,3 +243,50 @@ class FakeContext:
     """模拟解析上下文"""
     def __init__(self):
         self.warnings = []
+
+
+class FakeArchive:
+    """基于 BytesIO 的轻量 FArchive 模拟。"""
+    def __init__(self, data: bytes) -> None:
+        self._buf = io.BytesIO(data)
+
+    def read(self, size: int) -> bytes:
+        return self._buf.read(size)
+
+    def read_i32(self) -> int:
+        return struct.unpack("<i", self.read(4))[0]
+
+    def read_i64(self) -> int:
+        return struct.unpack("<q", self.read(8))[0]
+
+    def read_fstring(self) -> str:
+        length = self.read_i32()
+        if length == 0:
+            return ""
+        if length > 0:
+            raw = self.read(length)
+            return raw[:-1].decode("utf-8", errors="replace") if raw.endswith(b"\x00") else raw.decode("utf-8", errors="replace")
+        else:
+            byte_count = -length * 2
+            raw = self.read(byte_count)
+            return raw[:-2].decode("utf-16-le", errors="replace") if raw.endswith(b"\x00\x00") else raw.decode("utf-16-le", errors="replace")
+
+    def read_name(self, name_map=None) -> str:
+        idx = self.read_i32()
+        _number = self.read_i32()
+        if name_map and 0 <= idx < len(name_map):
+            return name_map[idx]
+        return f"Name_{idx}"
+
+    def tell(self) -> int:
+        return self._buf.tell()
+
+    def seek(self, pos: int) -> None:
+        self._buf.seek(pos)
+
+    def total_size(self) -> int:
+        pos = self._buf.tell()
+        self._buf.seek(0, 2)
+        end = self._buf.tell()
+        self._buf.seek(pos)
+        return end

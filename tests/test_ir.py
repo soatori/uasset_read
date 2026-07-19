@@ -17,6 +17,7 @@ from uasset_read.ir_builder import (
 )
 from uasset_read.models.ir import (
     PackageIR, ExportIR, PackageHeaderIR, GraphIR, NodeIR, PinIR,
+    AnimSequenceIR, AnimMontageIR,
 )
 
 
@@ -144,3 +145,20 @@ class TestStatusModel:
 
         status = _result_status(result)
         assert status == "partial"
+
+
+# ============================================================================
+# 动画 IR 数据模型（合并自 test_unit.py）
+# ============================================================================
+
+class TestAnimIRModels:
+    def test_anim_sequence_ir_defaults(self):
+        """AnimSequenceIR 默认值。"""
+        ir = AnimSequenceIR()
+        assert ir.target_skeleton is None
+        assert ir.sequence_length == 0.0
+
+    def test_anim_montage_ir_defaults(self):
+        """AnimMontageIR 默认值。"""
+        ir = AnimMontageIR()
+        assert ir.rate_scale == 1.0

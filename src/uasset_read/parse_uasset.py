@@ -251,13 +251,13 @@ def _cleanup_parse_memory(result) -> None:
             result.linker._preload_cache.clear()
             result.linker._archive = None
         except Exception:
-            pass
+            logger.debug("linker 资源清理失败", exc_info=True)
     # 清理全局缓存，防止无界增长
     try:
         from uasset_read.parsers.class_registry import get_class_registry
         get_class_registry().reset_cache()
     except Exception:
-        pass
+        logger.debug("class_registry.reset_cache() 失败", exc_info=True)
 
 
 def _parse_package_core(

@@ -95,7 +95,7 @@ class PakFileReader:
         try:
             self.close()
         except Exception:
-            pass
+            logger.debug("PakFileReader.__del__ 清理失败", exc_info=True)
 
     def __enter__(self) -> "PakFileReader":
         self.open()

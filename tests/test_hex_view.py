@@ -1,4 +1,4 @@
-"""Misc 模块合并测试。
+"""HexView 调试系统测试。
 
 覆盖 HexView 调试系统：
 1. HexViewEntry 数据类

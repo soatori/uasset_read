@@ -28,6 +28,8 @@ from uasset_read.parsers.class_registry import (
     ClassHandler,
     HandlerResult,
     FallbackPolicy,
+    get_class_registry,
+    reset_class_registry,
 )
 from uasset_read.parsers.class_serialization_strategy import (
     SerializationStrategy,
@@ -36,8 +38,11 @@ from uasset_read.parsers.class_serialization_strategy import (
     should_skip_class,
     is_opaque_class,
 )
+from uasset_read.parsers.asset_types import register_asset_type_handlers
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+from conftest import FakeArchive
 
 
 # ============================================================================
@@ -89,26 +94,6 @@ class FakePropertyTag:
     bool_val: int = 0
     serialize_type: str = "BinaryOrNative"
     type_name: Any = None
-
-
-class FakeArchive:
-    """基于 BytesIO 的轻量 FArchive 模拟。"""
-    def __init__(self, data: bytes) -> None:
-        self._buf = io.BytesIO(data)
-    def read(self, size: int) -> bytes:
-        return self._buf.read(size)
-    def read_i32(self) -> int:
-        return struct.unpack("<i", self.read(4))[0]
-    def read_name(self, name_map=None) -> str:
-        idx = self.read_i32()
-        _number = self.read_i32()
-        if name_map and 0 <= idx < len(name_map):
-            return name_map[idx]
-        return f"Name_{idx}"
-    def tell(self) -> int:
-        return self._buf.tell()
-    def seek(self, pos: int) -> None:
-        self._buf.seek(pos)
 
 
 # ============================================================================
@@ -287,3 +272,25 @@ class TestMaterialInput:
         result = _parse_material_input(tag, archive, [], [], None)
         assert result is None
         assert archive.tell() == pos_before
+
+
+# ============================================================================
+# 用例 5: Opaque handler 注册（合并自 test_unit.py）
+# ============================================================================
+
+@pytest.fixture()
+def _fresh_registry():
+    """重置 class_registry 并注册默认 handler。"""
+    reset_class_registry()
+    register_asset_type_handlers()
+    yield
+    reset_class_registry()
+
+
+@pytest.mark.usefixtures("_fresh_registry")
+class TestOpaqueHandlers:
+    def test_handler_registered_foliage(self):
+        """FoliageType 应有注册的 handler。"""
+        registry = get_class_registry()
+        handler = registry.find_handler("FoliageType")
+        assert handler is not None

@@ -256,7 +256,7 @@ class IoStoreReader:
         try:
             self.close()
         except Exception:
-            pass
+            logger.debug("IoStoreReader.__del__ 清理失败", exc_info=True)
 
     def __enter__(self) -> IoStoreReader:
         self.open()

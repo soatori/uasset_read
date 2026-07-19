@@ -94,6 +94,11 @@ class MarkdownRenderer(IRenderer):
     """Markdown + Mermaid 流程图渲染器。"""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
+        # 如果启用 hex_view 且 IR 中有 hex_view 数据，返回 hex 视图格式
+        if options.hex_view and ir.debug and ir.debug.hex_view:
+            from uasset_read.debug.hex_view import format_hex_view
+            return format_hex_view(ir.debug.hex_view)
+
         lines: list[str] = []
 
         # 标题
