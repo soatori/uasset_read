@@ -210,6 +210,11 @@ def _handle_batch(args) -> None:
     elapsed = time.monotonic() - start_time
     print(f"Batch export complete: {result.total} files in {elapsed:.1f}s", file=sys.stderr)
     print(f"  Success: {len(result.success)}", file=sys.stderr)
+    if result.partial:
+        print(f"  Partial: {len(result.partial)}", file=sys.stderr)
+        if result.partial_reasons:
+            for reason, files in result.partial_reasons.items():
+                print(f"    {reason.replace('_', ' ').title()}: {len(files)}", file=sys.stderr)
     if result.skipped:
         print(f"  Skipped: {len(result.skipped)}", file=sys.stderr)
     if result.failed:
