@@ -44,21 +44,22 @@ class _LogContextFilter(logging.Filter):
 
 
 class _RepeatedDebugFilter(logging.Filter):
-    def __init__(self, repeat_limit: int) -> None:
+    def __init__(self, repeat_limit: int, suppress_levels: set[int] | None = None) -> None:
         super().__init__()
         self.limit = repeat_limit
         self.repeat_limit = repeat_limit
         self.counts: dict[tuple[str, str, str], int] = {}
         self.message_counts: dict[str, int] = {}
         self.suppressed_count: int = 0
+        self.suppress_levels = suppress_levels or {logging.DEBUG}
 
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
         if msg not in self.message_counts:
             self.message_counts[msg] = 0
         self.message_counts[msg] += 1
-        # Legacy: only suppress DEBUG messages, grouped by raw template
-        if self.limit <= 0 or record.levelno != logging.DEBUG:
+        # 按 suppress_levels 抑制重复消息，按原始模板分组
+        if self.limit <= 0 or record.levelno not in self.suppress_levels:
             return True
         key = (_log_asset.get(), record.name, str(record.msg))
         count = self.counts.get(key, 0) + 1
@@ -153,7 +154,7 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
                 for asset, logger_name, template, suppressed in installed_filter.summaries():
                     with log_context(asset=asset):
                         package_logger.info(
-                            "Repeated DEBUG summary logger=%s template=%s suppressed=%d",
+                            "Repeated message summary logger=%s template=%s suppressed=%d",
                             logger_name,
                             template,
                             suppressed,
@@ -420,7 +421,10 @@ def configure_project_logging(
         setattr(handler, _HANDLER_MARKER, True)
         handler.setLevel(log_level)
         handler.addFilter(_LogContextFilter(active_run_id))
-        handler.addFilter(_RepeatedDebugFilter(repeat_limit))
+        handler.addFilter(_RepeatedDebugFilter(
+            repeat_limit,
+            suppress_levels={logging.DEBUG, logging.WARNING}
+        ))
         handler.setFormatter(
             logging.Formatter(
                 fmt=(
