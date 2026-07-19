@@ -113,6 +113,8 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.errors:
             data["errors"] = ir.errors
+        if ir.warnings:
+            data["warnings"] = ir.warnings
         if ir.diagnostics:
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
@@ -141,6 +143,7 @@ class JSONRenderer(IRenderer):
             }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
+        data["statistics"] = self._calculate_statistics(ir)
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
@@ -352,6 +355,32 @@ class JSONRenderer(IRenderer):
         if func.bytecode_confidence != "verified":
             d["bytecode_confidence"] = func.bytecode_confidence
         return d
+
+    def _calculate_statistics(self, ir: PackageIR) -> dict:
+        """计算导出统计信息，包括 opaque 类分布。"""
+        stats = {
+            "total_exports": len(ir.exports),
+            "success_count": 0,
+            "partial_count": 0,
+            "opaque_count": 0,
+            "failed_count": 0,
+            "opaque_classes": {},
+        }
+
+        for export in ir.exports:
+            status = getattr(export, 'parse_status', 'success')
+            if status == 'success':
+                stats["success_count"] += 1
+            elif status in ('partial', 'partial_metadata'):
+                stats["partial_count"] += 1
+            elif status == 'opaque':
+                stats["opaque_count"] += 1
+                cls = getattr(export, 'object_class', 'unknown')
+                stats["opaque_classes"][cls] = stats["opaque_classes"].get(cls, 0) + 1
+            elif status == 'failed':
+                stats["failed_count"] += 1
+
+        return stats
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
         """直接返回 IR 中已构建的 function_graphs 数据。"""
