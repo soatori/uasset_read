@@ -117,6 +117,18 @@ class MarkdownRenderer(IRenderer):
         # === Status / Errors / Warnings ===
         self._render_status_section(lines, ir)
 
+        # === Opaque Classes ===
+        opaque_count = sum(1 for e in ir.exports if getattr(e, 'parse_status', None) == 'opaque')
+        if opaque_count > 0:
+            lines.append(f"\n### Opaque Classes ({opaque_count})\n")
+            opaque_classes = {}
+            for export in ir.exports:
+                if getattr(export, 'parse_status', None) == 'opaque':
+                    cls = getattr(export, 'object_class', 'unknown')
+                    opaque_classes[cls] = opaque_classes.get(cls, 0) + 1
+            for cls, count in sorted(opaque_classes.items(), key=lambda x: -x[1]):
+                lines.append(f"- {cls}: {count}")
+
         # === Blueprint Details（仅蓝图资产） ===
         if ir.blueprint:
             lines.append("## Blueprint Details")
@@ -618,23 +630,46 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染诊断信息章节 — 偏移范围诊断表格。"""
+        """渲染诊断信息章节 — 按严重度分组并显示图标。"""
         if not ir.diagnostics:
             return
 
-        lines.append("## 诊断信息")
-        lines.append("")
-        lines.append("| 类型 | 模块 | 对象名 | 字段 | 错误信息 |")
-        lines.append("|------|------|--------|------|----------|")
+        severity_icons = {
+            "critical": "🔴",
+            "error": "❌",
+            "warning": "⚠️",
+            "info": "ℹ️",
+        }
+
+        # 按严重度分组
+        by_severity: dict[str, list] = {}
         for diag in ir.diagnostics:
             d = diag.to_dict() if hasattr(diag, "to_dict") else {}
-            kind = _escape_md_cell(d.get("kind", ""))
-            module = _escape_md_cell(d.get("module", ""))
-            object_name = _escape_md_cell(d.get("object_name", ""))
-            field_name = _escape_md_cell(d.get("field", ""))
-            error = _escape_md_cell(d.get("error", ""))
-            lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
+            severity = d.get("severity", "info")
+            if severity not in by_severity:
+                by_severity[severity] = []
+            by_severity[severity].append(d)
+
+        lines.append("## 诊断信息")
         lines.append("")
+
+        for severity in ["critical", "error", "warning", "info"]:
+            if severity not in by_severity:
+                continue
+            diagnostics = by_severity[severity]
+            icon = severity_icons.get(severity, "")
+            lines.append(f"### {icon} {severity.upper()} ({len(diagnostics)})")
+            lines.append("")
+            lines.append("| 类型 | 模块 | 对象名 | 字段 | 错误信息 |")
+            lines.append("|------|------|--------|------|----------|")
+            for d in diagnostics:
+                kind = _escape_md_cell(d.get("kind", ""))
+                module = _escape_md_cell(d.get("module", ""))
+                object_name = _escape_md_cell(d.get("object_name", ""))
+                field_name = _escape_md_cell(d.get("field", ""))
+                error = _escape_md_cell(d.get("error", ""))
+                lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
+            lines.append("")
 
     def _render_export_properties(self, lines: list[str], export) -> None:
         """渲染 export 的属性表格。"""
