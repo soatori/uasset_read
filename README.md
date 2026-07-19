@@ -69,7 +69,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Text** — human-readable text summary
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown, Text)
+- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown)
 - **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 
@@ -274,7 +274,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
 | **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance) |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (JSON, Markdown, Text) |
+| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (JSON, Markdown) |
 
 ## Testing
 

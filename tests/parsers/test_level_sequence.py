@@ -39,3 +39,23 @@ def test_level_sequence_display_rate_from_properties():
     }
     assert mock_prop.value["numerator"] == 24
     assert mock_prop.value["denominator"] == 1000
+
+
+def test_level_sequence_has_no_dedicated_handler():
+    """LevelSequence 不应有专属 archive-reading handler。"""
+    import importlib
+    # level_sequence.py 模块不应存在
+    try:
+        mod = importlib.import_module("uasset_read.parsers.asset_types.level_sequence")
+        # 如果模块存在，确认它不包含 parse_level_sequence
+        assert not hasattr(mod, "parse_level_sequence"), (
+            "parse_level_sequence 已移除，不应存在"
+        )
+    except ModuleNotFoundError:
+        pass  # 预期行为：模块已删除
+
+
+def test_level_sequence_strategy_is_tagged():
+    """LevelSequence 策略必须是 TAGGED_PROPERTIES_ONLY。"""
+    strategy = get_serialization_strategy("LevelSequence")
+    assert strategy == SerializationStrategy.TAGGED_PROPERTIES_ONLY

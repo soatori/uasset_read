@@ -69,7 +69,7 @@
 - **Text** — 纯文本摘要
 
 ### 架构
-- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON、Markdown、Text）
+- **渲染器系统** — 可插拔 `IRenderer` 抽象类与格式注册表（JSON、Markdown）
 - **核心 API** — `parse_single()`、`parse_batch()`、`diff_single()`、`list_formats()` 简化编程访问
 - **CLI 委托** — 轻量 CLI 委托到 `core.py`
 
@@ -247,7 +247,7 @@ parse_module = importlib.import_module("uasset_read.parse_uasset")
 | **IoStore** | `iostore/` | IoStore 容器读取器 |
 | **Bulk Data** | `bulk/` | BulkData 头部解析 |
 | **UObject** | `objects/` | UObject 类型体系、类型注册表、导出类型（StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance） |
-| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（JSON、Markdown、Text） |
+| **渲染器** | `renderers/` | 可插拔 IRenderer 抽象类与格式注册表（JSON、Markdown） |
 
 ## 测试
 

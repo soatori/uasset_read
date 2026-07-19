@@ -1,7 +1,7 @@
 """Core API 测试 — 合并自 test_core_api.py 和 test_archive_core.py。
 
 覆盖：core API、CLI、PackageArchive、read_name、ByteArchive、
-GameDirectoryProvider、TextRenderer、package bundle。
+GameDirectoryProvider、package bundle。
 """
 from __future__ import annotations
 
@@ -705,10 +705,9 @@ def test_parse_package_aes_key_rejection():
 """Archive 核心测试 — 合并自 test_archive_read_name.py 和 test_archive_provider_renderer.py。
 
 覆盖：read_name() 索引越界/恢复/去重、skip()、
-ByteArchive 基础操作、GameDirectoryProvider、TextRenderer、CLI format 解析。
+ByteArchive 基础操作、GameDirectoryProvider、CLI format 解析。
 """
 import types
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -1213,117 +1212,34 @@ def test_provider_constructor_nonexistent_dir_raises():
 
 
 # ===========================================================================
-# TextRenderer 测试
-# ===========================================================================
-
-
-def _make_package_ir(name: str = "TestPackage") -> MagicMock:
-    """构造最小 PackageIR mock，满足 TextRenderer.render 需求。"""
-    header = MagicMock()
-    header.package_name = name
-    header.package_class = "BlueprintGeneratedClass"
-    header.ue_version = "5.4"
-    header.package_flags = 0
-    header.total_export_count = 1
-    header.total_import_count = 0
-    header.folder_name = ""
-
-    ir = MagicMock()
-    ir.header = header
-    ir.imports = []
-    ir.exports = []
-    ir.linker = None
-    ir.blueprint = None
-    ir.decompiled_functions = []
-    ir.execution_chains = []
-    ir.variables = []
-    ir.diagnostics = []
-    ir.function_graphs = []
-    ir.resolved_parent_assets = []
-    ir.inherited_blueprint_graphs = []
-    ir.logic_sources = []
-    ir.soft_object_paths = []
-    ir.soft_package_references = []
-    ir.depends_map = []
-    ir.resolved_depends_map = []
-    ir.asset_registry_data = None
-    ir.errors = []
-    ir.status = "success"
-    ir.status_message = None
-    ir.anim_blueprint = None
-    ir.anim_sequence = None
-    ir.anim_montage = None
-    ir.debug = None
-    return ir
-
-
-def test_text_renderer_render_returns_nonempty():
-    """render() 返回非空字符串"""
-    from uasset_read.renderers.text_renderer import TextRenderer
-    from uasset_read.renderers.base import RenderOptions
-
-    renderer = TextRenderer()
-    result = renderer.render(_make_package_ir(), RenderOptions())
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-def test_text_renderer_includes_package_name():
-    """render 输出包含包名"""
-    from uasset_read.renderers.text_renderer import TextRenderer
-    from uasset_read.renderers.base import RenderOptions
-
-    renderer = TextRenderer()
-    result = renderer.render(_make_package_ir("MyAwesomeBP"), RenderOptions())
-    assert "MyAwesomeBP" in result
-
-
-def test_text_renderer_debug_shows_editor_variables():
-    """debug 模式显示编辑器内部变量，standard 模式过滤"""
-    from uasset_read.renderers.text_renderer import TextRenderer
-    from uasset_read.renderers.base import RenderOptions, EDITOR_VARIABLE_NAMES
-    from uasset_read.models.ir import VariableIR
-
-    editor_var_name = next(iter(EDITOR_VARIABLE_NAMES))
-    var = VariableIR(name=editor_var_name, type="ArrayProperty", default_value=None)
-    ir = _make_package_ir()
-    ir.variables = [var]
-
-    renderer = TextRenderer()
-    standard = renderer.render(ir, RenderOptions(output_level="standard"))
-    debug = renderer.render(ir, RenderOptions(output_level="debug"))
-
-    assert editor_var_name not in standard
-    assert editor_var_name in debug
-
-
-# ===========================================================================
 # CLI format 解析测试
 # ===========================================================================
 
 
 def test_resolve_format_named_flags():
-    """--text -> 'text'，--markdown -> 'markdown'"""
+    """--markdown -> 'markdown'，--json -> 'json'"""
     from uasset_read.cli import resolve_format
 
-    args_text = types.SimpleNamespace(text=True, markdown=False, json=False)
-    assert resolve_format(args_text) == "text"
-
-    args_md = types.SimpleNamespace(text=False, markdown=True, json=False)
+    args_md = types.SimpleNamespace(markdown=True, json=False)
     assert resolve_format(args_md) == "markdown"
+
+    args_json = types.SimpleNamespace(markdown=False, json=True)
+    assert resolve_format(args_json) == "json"
 
 
 def test_resolve_format_default_json():
     """无格式标志 -> 'json'"""
     from uasset_read.cli import resolve_format
 
-    args = types.SimpleNamespace(text=False, markdown=False, json=False)
+    args = types.SimpleNamespace(markdown=False, json=False)
     assert resolve_format(args) == "json"
 
 
-def test_list_formats_contains_text():
-    """list_formats() 包含 'text'"""
+def test_list_formats_excludes_text():
+    """list_formats() 不包含已移除的 'text'"""
     from uasset_read.core import list_formats
 
     formats = list_formats()
-    assert "text" in formats
+    assert "text" not in formats
+    assert "json" in formats
+    assert "markdown" in formats
