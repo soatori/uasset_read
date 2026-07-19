@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.4.44] — 2026-07-19
+
+Code quality, report quality, and test consolidation release.
+
+### Breaking Changes
+- 移除 `--text` 格式和 TextRenderer — 使用 `--markdown` 替代
+
+### Report Quality
+- 批量模式新增 partial 状态统计，按原因分类显示
+- JSON renderer 新增 `warnings` 和 `statistics` 顶层字段
+- Markdown renderer 诊断信息按严重度分组并显示图标
+- 结构化摘要生成（ReportSummary）
+
+### Bug Fixes
+- #422: LevelSequence 改为走 tagged properties 路线
+- #423: batch 失败时记录完整 traceback 到日志文件
+- #424: serial_scan_recovery 增加伪 EExprToken 启发式过滤
+- CI resource-safety job 指向现存测试文件
+- Ruff: 移除无插值 f-string 前缀，移除未使用变量
+
+### Improvements
+- #421: batch_summary 新增 elapsed_seconds 字段
+- 测试目录扁平化 — 合并子目录到 tests/ 根目录，正式测试 ≤20 文件
+- 清理已删除 API 残留测试
+
 ## [0.5.4] — 2026-07-13
 
 Code quality and maintenance release.

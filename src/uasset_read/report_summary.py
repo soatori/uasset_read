@@ -62,13 +62,13 @@ class ReportSummary:
     def to_text(self) -> str:
         """Generate human-readable text summary."""
         lines = [
-            f"=== Parse Summary ===",
+            "=== Parse Summary ===",
             f"Total files: {self.total}",
             f"Success: {self.success} ({self.success*100//max(self.total,1)}%)",
             f"Partial: {self.partial} ({self.partial*100//max(self.total,1)}%)",
             f"Failed: {self.failed} ({self.failed*100//max(self.total,1)}%)",
-            f"",
-            f"Statistics:",
+            "",
+            "Statistics:",
             f"  Total exports: {self.total_exports}",
             f"  Avg exports per file: {self.avg_exports_per_file:.1f}",
             f"  Total warnings: {self.total_warnings}",
