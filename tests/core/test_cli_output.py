@@ -1,4 +1,8 @@
-"""CLI 输出格式测试。"""
+"""CLI 输出格式测试 — 合并自 test_cli_output.py、test_core_api.py CLI 部分。
+
+覆盖：批量输出 partial 统计、格式解析、CLI 错误路径。
+"""
+import types
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -30,6 +34,10 @@ def _run_handle_batch(args, result):
             _handle_batch(args)
 
 
+# ============================================================================
+# 1. 批量输出 partial 统计
+# ============================================================================
+
 def test_batch_output_includes_partial_statistics(tmp_path, capsys):
     """批量导出 CLI 输出应包含 partial 统计信息。"""
     from uasset_read.core import BatchResult
@@ -52,6 +60,10 @@ def test_batch_output_includes_partial_statistics(tmp_path, capsys):
     assert "Partial Metadata: 2" in captured.err
 
 
+# ============================================================================
+# 2. partial 为空时不输出
+# ============================================================================
+
 def test_batch_output_no_partial_when_empty(tmp_path, capsys):
     """partial 为空时不应输出 Partial 行。"""
     from uasset_read.core import BatchResult
@@ -67,3 +79,30 @@ def test_batch_output_no_partial_when_empty(tmp_path, capsys):
     _run_handle_batch(_make_args(tmp_path), result)
     captured = capsys.readouterr()
     assert "Partial" not in captured.err
+
+
+# ============================================================================
+# 3. CLI 格式解析
+# ============================================================================
+
+def test_resolve_format_named_flags():
+    """--markdown -> 'markdown'，--json -> 'json'。"""
+    from uasset_read.cli import resolve_format
+
+    args_md = types.SimpleNamespace(markdown=True, json=False)
+    assert resolve_format(args_md) == "markdown"
+
+    args_json = types.SimpleNamespace(markdown=False, json=True)
+    assert resolve_format(args_json) == "json"
+
+
+# ============================================================================
+# 4. CLI 非目录输入错误路径
+# ============================================================================
+
+def test_parse_batch_raises_on_non_directory():
+    """parse_batch 在非目录输入时抛出 ValueError。"""
+    from uasset_read.core import parse_batch
+
+    with pytest.raises(ValueError, match="Not a directory"):
+        parse_batch("nonexistent_directory")
