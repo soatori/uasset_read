@@ -178,6 +178,9 @@ class TestJSONRendererBasicQuality:
         assert "output_version" not in data
         assert "summary" in data
         assert "exports" in data
+        # NEW: statistics 字段始终存在
+        assert "statistics" in data
+        assert "total_exports" in data["statistics"]
 
     def test_render_export_basic_fields(self):
         ir = _make_ir()
@@ -189,6 +192,51 @@ class TestJSONRendererBasicQuality:
         assert export["object_class"] == "BlueprintGeneratedClass"
         assert export["serial_size"] == 1024
         assert export["parent_class"] == "/Engine/Actor"
+
+    def test_statistics_field_content(self):
+        """statistics 字段包含正确的导出计数。"""
+        ir = _make_ir()
+        renderer = get_renderer("json")
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+        stats = data["statistics"]
+        assert stats["total_exports"] == 1
+        assert stats["success_count"] == 1
+        assert stats["partial_count"] == 0
+        assert stats["opaque_count"] == 0
+        assert stats["failed_count"] == 0
+        assert isinstance(stats["opaque_classes"], dict)
+
+    def test_statistics_opaque_count(self):
+        """opaque export 统计正确。"""
+        export = _make_export(parse_status="opaque", object_class="Texture2D")
+        ir = _make_ir(exports=[export])
+        renderer = get_renderer("json")
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+        stats = data["statistics"]
+        assert stats["opaque_count"] == 1
+        assert stats["success_count"] == 0
+        assert stats["opaque_classes"]["Texture2D"] == 1
+
+    def test_warnings_field_present_when_set(self):
+        """warnings 字段在 IR 有警告时出现。"""
+        ir = _make_ir()
+        ir.warnings = ["parse incomplete", "missing export"]
+        renderer = get_renderer("json")
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+        assert "warnings" in data
+        assert len(data["warnings"]) == 2
+        assert "parse incomplete" in data["warnings"]
+
+    def test_warnings_field_absent_when_empty(self):
+        """warnings 字段在无警告时不出现。"""
+        ir = _make_ir()
+        renderer = get_renderer("json")
+        result = renderer.render(ir, RenderOptions())
+        data = json.loads(result)
+        assert "warnings" not in data
 
 
 class TestJSONRendererOutputLevel:
