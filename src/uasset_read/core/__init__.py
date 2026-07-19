@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
     from uasset_read.link.result import LinkerParseResult
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class BatchResult:

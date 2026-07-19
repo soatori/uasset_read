@@ -103,24 +103,22 @@ class FakePropertyTag:
 class TestSerializationStrategy:
     """SerializationStrategy 枚举与 CLASS_STRATEGY_TABLE 测试。"""
 
-    def test_enum_values(self):
-        """枚举值正确定义。"""
+    def test_enum_values_and_strategy_table(self):
+        """枚举值正确定义，策略表映射正确。"""
+        # 枚举值
         assert SerializationStrategy.TAGGED_PROPERTIES_ONLY.value == "tagged_properties_only"
         assert SerializationStrategy.OPAQUE_CLASS_PAYLOAD.value == "opaque_class_payload"
         assert SerializationStrategy.SKIP_UNSUPPORTED.value == "skip_unsupported"
 
-    def test_tagged_properties_classes(self):
-        """Tagged properties 类正确映射。"""
+        # Tagged properties 类
         for cls in ["BlueprintGeneratedClass", "Function", "EdGraph"]:
             assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
-    def test_opaque_classes(self):
-        """Opaque payload 类正确映射。"""
+        # Opaque payload 类
         for cls in ["StaticMesh", "Texture2D", "Material", "AnimSequence"]:
             assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
 
-    def test_unknown_class_defaults_to_tagged(self):
-        """未知类默认返回 TAGGED_PROPERTIES_ONLY。"""
+        # 未知类默认返回 TAGGED_PROPERTIES_ONLY
         assert get_serialization_strategy("UnknownCustomClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
     def test_no_overlap_between_categories(self):

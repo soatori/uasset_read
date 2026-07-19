@@ -299,30 +299,44 @@ def _build_recovery_data(
 
 
 class TestPropertyTagRecovery:
-    def test_property_tag_recovery_larger_offset(self):
-        """#428: 恢复扫描应支持 > 256 字节的偏移漂移。"""
-        name_map: list[str] = ["None"]  # 索引 0 保留
-        # 有效 tag 放在偏移 300 处（超过旧的 256 字节窗口）
-        valid_offset = 300
-        data = _build_recovery_data(name_map, valid_offset, tag_name="MyProp", tag_type="FloatProperty")
+    def test_property_tag_recovery_valid_and_known_type(self):
+        """#428: 恢复扫描应支持大偏移并接受已知属性类型。
 
+        合并测试：大偏移恢复、已知类型接受、扫描窗口增大。
+        """
+        # 验证扫描窗口已增大
+        assert _MAX_RECOVERY_SCAN == 512
+
+        # 验证已知属性类型集合
+        expected_types = {"IntProperty", "FloatProperty", "StrProperty", "BoolProperty",
+                          "StructProperty", "ObjectProperty", "ArrayProperty", "MapProperty"}
+        assert expected_types.issubset(_KNOWN_PROPERTY_TYPES)
+
+        name_map: list[str] = ["None"]
+
+        # 测试 1: 大偏移恢复（> 256 字节）
+        data = _build_recovery_data(name_map, 300, tag_name="MyProp", tag_type="FloatProperty")
         archive = _FakeArchiveForRecovery(data)
-        archive._file_version_ue5 = 500  # legacy 格式
-
-        # 从偏移 0 开始扫描
+        archive._file_version_ue5 = 500
         result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
-
         assert result is True
-        assert archive.tell() == valid_offset
+        assert archive.tell() == 300
+
+        # 测试 2: 已知类型接受
+        name_map2: list[str] = ["None"]
+        data2 = _build_recovery_data(name_map2, 50, tag_name="ValidProp", tag_type="StrProperty")
+        archive2 = _FakeArchiveForRecovery(data2)
+        archive2._file_version_ue5 = 500
+        result2 = _try_recover_property_tag(archive2, name_map2, max_scan=_MAX_RECOVERY_SCAN)
+        assert result2 is True
+        assert archive2.tell() == 50
 
     def test_property_tag_recovery_rejects_unknown_type(self):
         """#428: 恢复扫描应拒绝未知属性类型名称。"""
         name_map: list[str] = ["None"]
-        # 构造一个 type 名称为 "NotARealProperty" 的候选
         valid_offset = 100
         garbage = b"\xff" * valid_offset
 
-        # 添加一个看起来像 FName 但类型名无效的 tag
         name_map.append("SomeName")     # idx 1
         name_map.append("NotARealProperty")  # idx 2 — 不在 _KNOWN_PROPERTY_TYPES 中
 
@@ -337,26 +351,3 @@ class TestPropertyTagRecovery:
 
         result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
         assert result is False
-
-    def test_property_tag_recovery_accepts_known_type(self):
-        """#428: 恢复扫描应接受已知属性类型名称。"""
-        name_map: list[str] = ["None"]
-        valid_offset = 50
-        data = _build_recovery_data(name_map, valid_offset, tag_name="ValidProp", tag_type="StrProperty")
-
-        archive = _FakeArchiveForRecovery(data)
-        archive._file_version_ue5 = 500
-
-        result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
-        assert result is True
-        assert archive.tell() == valid_offset
-
-    def test_max_recovery_scan_increased_to_512(self):
-        """#428: _MAX_RECOVERY_SCAN 应为 512。"""
-        assert _MAX_RECOVERY_SCAN == 512
-
-    def test_known_property_types_contains_common_types(self):
-        """#428: _KNOWN_PROPERTY_TYPES 应包含常见属性类型。"""
-        expected = {"IntProperty", "FloatProperty", "StrProperty", "BoolProperty",
-                    "StructProperty", "ObjectProperty", "ArrayProperty", "MapProperty"}
-        assert expected.issubset(_KNOWN_PROPERTY_TYPES)
