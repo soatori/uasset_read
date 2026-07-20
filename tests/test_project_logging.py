@@ -7,18 +7,9 @@ import pytest
 
 from uasset_read.config import LogConfig
 from uasset_read.project_logging import (
-    configure_project_logging,
     current_log_run_id,
     project_logging_session,
-    _reset_logging_state_for_tests,
 )
-
-
-@pytest.fixture(autouse=True)
-def _reset_logging():
-    """每个测试后重置全局日志状态。"""
-    yield
-    _reset_logging_state_for_tests()
 
 
 class TestDisabledLogSession:
@@ -66,27 +57,16 @@ class TestDisabledLogSession:
         session2.close()
 
     def test_logconfig_level_off_via_scoped(self, tmp_path: Path):
-        """LogConfig(level='off') 经 scoped_project_logging 包装的调用应完成。"""
+        """LogConfig(level='off') 经 scoped_project_logging 包装不应抛出日志禁用异常。"""
         from uasset_read.core import parse_single
 
         config = LogConfig(level="off")
-        # 使用不存在的文件路径，期望解析失败而非日志异常
-        # 关键是不抛出 RuntimeError("Project logging is disabled")
-        with pytest.raises(Exception) as exc_info:
-            parse_single(
-                str(tmp_path / "nonexistent.uasset"),
-                log_config=config,
-            )
-        assert "Project logging is disabled" not in str(exc_info.value)
+        # 关键：不抛出 RuntimeError("Project logging is disabled")
+        parse_single(str(tmp_path / "nonexistent.uasset"), log_config=config)
 
     def test_logconfig_enabled_false_via_scoped(self, tmp_path: Path):
-        """LogConfig(enabled=False) 经 scoped_project_logging 包装的调用应完成。"""
+        """LogConfig(enabled=False) 经 scoped_project_logging 包装不应抛出日志禁用异常。"""
         from uasset_read.core import parse_single
 
         config = LogConfig(enabled=False)
-        with pytest.raises(Exception) as exc_info:
-            parse_single(
-                str(tmp_path / "nonexistent.uasset"),
-                log_config=config,
-            )
-        assert "Project logging is disabled" not in str(exc_info.value)
+        parse_single(str(tmp_path / "nonexistent.uasset"), log_config=config)

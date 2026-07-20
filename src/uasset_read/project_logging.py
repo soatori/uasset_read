@@ -223,7 +223,27 @@ class ProjectLogSession:
                     _scope_lock.release()
 
 
-def project_logging_session(**kwargs) -> ProjectLogSession:
+class _DisabledLogSession:
+    """无操作日志会话 — 日志禁用时的占位实现。"""
+
+    _owns_scope_lock: bool = False
+    _closed: bool = False
+
+    def __enter__(self) -> "_DisabledLogSession":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            if self._owns_scope_lock:
+                self._owns_scope_lock = False
+                _scope_lock.release()
+
+
+def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession:
     """Configure and return a scoped project logging session."""
     if not _scope_lock.acquire(blocking=False):
         raise RuntimeError("A project logging session is already active")
@@ -231,13 +251,11 @@ def project_logging_session(**kwargs) -> ProjectLogSession:
     keep_latest = kwargs.get("keep_latest")
     max_total_bytes = kwargs.get("max_total_bytes")
     older_than_days = kwargs.get("older_than_days")
-    try:
-        log_path = configure_project_logging(**kwargs)
-        if log_path is None or _configured_run_id is None:
-            raise RuntimeError("Project logging is disabled")
-    except BaseException:
-        _scope_lock.release()
-        raise
+    log_path = configure_project_logging(**kwargs)
+    if log_path is None or _configured_run_id is None:
+        session = _DisabledLogSession()
+        session._owns_scope_lock = True
+        return session
     logging.getLogger(_LOGGER_NAME).info("session_start run_id=%s", _configured_run_id)
     return ProjectLogSession(
         log_path=log_path,
