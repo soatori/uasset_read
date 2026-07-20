@@ -1,8 +1,13 @@
 """CLI 输出格式测试 — 合并自 test_cli_output.py、test_core_api.py CLI 部分。
 
-覆盖：批量输出 partial 统计、格式解析、CLI 错误路径。
+覆盖：批量输出 partial 统计、格式解析、CLI 错误路径、--log-level off 回归。
 """
+import json
+import subprocess
+import sys
 import types
+from pathlib import Path
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -106,3 +111,26 @@ def test_parse_batch_raises_on_non_directory():
 
     with pytest.raises(ValueError, match="Not a directory"):
         parse_batch("nonexistent_directory")
+
+
+# ============================================================================
+# 5. --log-level off CLI 回归
+# ============================================================================
+
+def test_cli_log_level_off(tmp_path):
+    """--log-level off 应正常输出 JSON 而非崩溃。"""
+    sample = Path(__file__).parent / "samples" / "FirstPerson_BP_FirstPersonCharacter.uasset"
+    if not sample.exists():
+        pytest.skip("测试样本不存在")
+
+    result = subprocess.run(
+        [sys.executable, "run.py", str(sample), "--json", "--log-level", "off"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+        timeout=30,
+    )
+    assert result.returncode == 0, f"exit={result.returncode}\nstderr={result.stderr}"
+    assert "Project logging is disabled" not in result.stderr
+    # stdout 应为可解析 JSON
+    json.loads(result.stdout)
