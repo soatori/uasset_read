@@ -251,7 +251,11 @@ def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession
     keep_latest = kwargs.get("keep_latest")
     max_total_bytes = kwargs.get("max_total_bytes")
     older_than_days = kwargs.get("older_than_days")
-    log_path = configure_project_logging(**kwargs)
+    try:
+        log_path = configure_project_logging(**kwargs)
+    except BaseException:
+        _scope_lock.release()
+        raise
     if log_path is None or _configured_run_id is None:
         session = _DisabledLogSession()
         session._owns_scope_lock = True
