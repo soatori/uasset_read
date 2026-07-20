@@ -120,31 +120,23 @@ class TestStructSizeLWC:
 
 class TestRepeatedFilter:
     def test_repeated_warning_suppression(self):
-        """重复的 WARNING 消息应被抑制并生成摘要。"""
+        """重复 WARNING 被抑制；INFO 不被抑制。"""
         import logging
         from uasset_read.project_logging import _RepeatedDebugFilter
 
         filt = _RepeatedDebugFilter(repeat_limit=3, suppress_levels={logging.DEBUG, logging.WARNING})
-        record = logging.LogRecord("test", logging.WARNING, "", 0, "test message", (), None)
-
-        # 前 3 次通过
-        assert filt.filter(record) is True
-        assert filt.filter(record) is True
-        assert filt.filter(record) is True
-        # 第 4 次被抑制
-        assert filt.filter(record) is False
+        # WARNING: 前3次通过，第4次抑制
+        warn = logging.LogRecord("t", logging.WARNING, "", 0, "w", (), None)
+        assert filt.filter(warn) is True
+        assert filt.filter(warn) is True
+        assert filt.filter(warn) is True
+        assert filt.filter(warn) is False
         assert filt.suppressed_count == 1
-
-    def test_info_level_not_suppressed_by_default(self):
-        """INFO 级别消息不应被 _RepeatedDebugFilter 抑制。"""
-        import logging
-        from uasset_read.project_logging import _RepeatedDebugFilter
-
-        filt = _RepeatedDebugFilter(repeat_limit=2, suppress_levels={logging.DEBUG, logging.WARNING})
-        record = logging.LogRecord("test", logging.INFO, "", 0, "info message", (), None)
-
+        # INFO: 永不抑制
+        filt2 = _RepeatedDebugFilter(repeat_limit=2, suppress_levels={logging.DEBUG, logging.WARNING})
+        info = logging.LogRecord("t", logging.INFO, "", 0, "i", (), None)
         for _ in range(10):
-            assert filt.filter(record) is True
+            assert filt2.filter(info) is True
 
 
 # ============================================================================

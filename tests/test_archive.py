@@ -47,13 +47,10 @@ class TestBasicReadAndSeek:
 class TestNumericReads:
     """各数值类型读取验证。"""
 
-    def test_read_i32(self):
-        """32 位有符号整数。"""
+    def test_read_i32_and_f32(self):
+        """32 位有符号整数和浮点数。"""
         ar = ByteArchive(struct.pack('<i', 12345))
         assert ar.read_i32() == 12345
-
-    def test_read_f32(self):
-        """32 位浮点数。"""
         ar = ByteArchive(struct.pack('<f', 3.14159))
         assert abs(ar.read_f32() - 3.14159) < 0.001
 
@@ -100,16 +97,14 @@ class TestTolerantAndDiagnostics:
 class TestFStringRead:
     """FString 读取：UTF-8、UTF-16、空字符串和边界。"""
 
-    def test_read_fstring_utf8(self):
-        """UTF-8 FString 正确读取。"""
+    def test_read_fstring_utf8_and_utf16(self):
+        """UTF-8 和 UTF-16 FString 均正确读取。"""
         text = "Hello"
+        # UTF-8
         data = struct.pack('<i', len(text)) + text.encode('utf-8') + b'\x00'
         ar = ByteArchive(data)
         assert ar.read_fstring() == "Hello"
-
-    def test_read_fstring_utf16(self):
-        """UTF-16 FString 正确读取（负数长度前缀）。"""
-        text = "Hello"
+        # UTF-16
         utf16_data = text.encode('utf-16-le')
         data = struct.pack('<i', -len(text)) + utf16_data + b'\x00\x00'
         ar = ByteArchive(data)

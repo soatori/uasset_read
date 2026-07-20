@@ -13,6 +13,7 @@ Provides:
 """
 
 import logging
+import struct
 from typing import TYPE_CHECKING
 
 from uasset_read.exceptions import ParseError
@@ -31,19 +32,17 @@ _END_OF_SCRIPT = 0x53        # EX_EndOfScript — standard
 _COOKED_END_SENTINEL = 0xDD  # Cooked format variant seen in some UE5 assets
 
 
-def _find_next_sentinel(data: bytes, start: int) -> int:
-    """在 data 中查找下一个 EX_EndOfScript 或 0xDD 标记。"""
-    for i in range(start, len(data)):
-        if data[i] in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
-            return i
-    return len(data)
-
-
 def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
-    """Parse raw BPGC script region bytes into per-function bytecode buffers.
+    """Parse BPGC script region bytes into per-function bytecode buffers.
 
-    Cooked format: sequence of [u32 size][size bytes of bytecode], where each
-    bytecode buffer should end with EX_EndOfScript (0x53) or cooked variant (0xDD).
+    BPGC cooked 格式 (per UStruct/FStructScriptLoader + 实测验证):
+    1. [i32 BytecodeBufferSize] — BPGC class 自身脚本大小
+    2. [i32 SerializedScriptSize] — BPGC class 脚本序列化大小
+    3. [i32 num_functions] — 函数字节码条目数
+    4. [num_functions × i32 bytecode_size] — 各函数字节码大小
+    5. [concatenated bytecode data] — 拼接的字节码
+
+    当 SerializedScriptSize > 0 时，跳过对应字节的 class 脚本数据。
 
     Pure logic function — no archive or I/O dependency.
 
@@ -54,46 +53,91 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> list[bytes]:
         List of bytecode buffers, one per function
 
     Stops on:
-        - size == 0
+        - data too short for header
+        - num_functions > 10000 (unreasonable)
         - size exceeding remaining bytes
-        - no more data
     """
     buffers: list[bytes] = []
-    offset = 0
     data_len = len(data)
+    offset = 0
 
-    while offset < data_len:
-        # Need at least 4 bytes for size prefix
-        if offset + 4 > data_len:
-            break
+    # Step 1: Read BPGC class's own script header (BytecodeBufferSize + SerializedScriptSize)
+    if data_len < 8:
+        logger.debug("BPGC bytecode: data too short for header (%d bytes)", data_len)
+        return buffers
 
-        # Read u32 size (little-endian, matching UE FArchive format)
-        size = int.from_bytes(data[offset:offset + 4], byteorder='little', signed=False)
+    _bb_size = struct.unpack_from('<i', data, offset)[0]
+    ss_size = struct.unpack_from('<i', data, offset + 4)[0]
+    offset += 8
+
+    # Skip class script data if present (SerializedScriptSize > 0)
+    if ss_size > 0:
+        if offset + ss_size > data_len:
+            logger.debug(
+                "BPGC bytecode: class script SerializedScriptSize=%d exceeds data (%d bytes)",
+                ss_size, data_len - offset,
+            )
+            return buffers
+        offset += ss_size
+
+    # Step 2: Read function count
+    if offset + 4 > data_len:
+        logger.debug("BPGC bytecode: no room for function count at offset %d", offset)
+        return buffers
+
+    num_functions = struct.unpack_from('<I', data, offset)[0]
+    offset += 4
+
+    if num_functions == 0:
+        logger.debug("BPGC bytecode: 0 functions declared")
+        return buffers
+
+    if num_functions > 10000:
+        logger.debug(
+            "BPGC bytecode: unreasonable function count %d at offset %d",
+            num_functions, offset - 4,
+        )
+        return buffers
+
+    # Step 3: Read function bytecode sizes
+    sizes_end = offset + num_functions * 4
+    if sizes_end > data_len:
+        logger.debug(
+            "BPGC bytecode: not enough data for %d function sizes (need %d, have %d)",
+            num_functions, sizes_end - offset, data_len - offset,
+        )
+        return buffers
+
+    sizes: list[int] = []
+    for i in range(num_functions):
+        sz = struct.unpack_from('<i', data, offset)[0]
+        sizes.append(sz)
         offset += 4
 
-        # 容错处理 - 如果 size 不合理，尝试跳过
-        if size == 0 or size > (data_len - offset):
-            # #343: 区分正常结束（size==0）和数据损坏（size 超出范围）
-            if size != 0:
-                logger.debug(
-                    "BPGC bytecode buffer #%d: 声明 size=%d 超出剩余数据 %d bytes，"
-                    "可能是格式变体或数据损坏",
-                    len(buffers), size, data_len - offset,
-                )
-            next_sentinel = _find_next_sentinel(data, offset - 4)
-            if next_sentinel > offset + 3:
-                offset = next_sentinel - 3
-                continue
-            break
+    # Step 4: Extract function bytecodes from concatenated data
+    for i, sz in enumerate(sizes):
+        if sz <= 0:
+            buffers.append(b'')
+            continue
 
-        buf = data[offset:offset + size]
-        offset += size
+        if offset + sz > data_len:
+            logger.debug(
+                "BPGC bytecode buffer #%d: size=%d exceeds remaining %d bytes",
+                i, sz, data_len - offset,
+            )
+            # 尝试读取剩余数据
+            sz = data_len - offset
+            if sz <= 0:
+                break
+
+        buf = data[offset:offset + sz]
+        offset += sz
 
         # Validate buffer ends with expected sentinel (tolerant)
         if buf and buf[-1] not in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
             logger.debug(
                 "Bytecode buffer #%d ends with 0x%02X, accepting in tolerant mode",
-                len(buffers), buf[-1],
+                i, buf[-1],
             )
 
         buffers.append(buf)
@@ -184,11 +228,8 @@ def extract_bpgc_bytecode(
         logger.debug("BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name)
         return {}
 
-    if remaining_bytes > bpgc_export.script_serialization_size:
-        # Clamp to script_serial_region bounds
-        remaining_bytes = bpgc_export.script_serialization_size - (current_pos - script_start)
-        if remaining_bytes <= 0:
-            return {}
+    # 注意: script_serialization_size 仅覆盖 PropertyTags 区域，不包含字节码数据。
+    # 字节码数据位于 serial region 的剩余部分（PropertyTags 之后）。
 
     raw_bytecode = archive.read_bytes(remaining_bytes)
 
