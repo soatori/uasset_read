@@ -133,11 +133,26 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     # v0.5.1 新增：export 级别 partial 时补充 message（#432）
     # ExportParseStatus 是 StrEnum；.value 取 bare string，避免 str() 返回类限定名
     elif non_success_statuses := {
-        str(export.parse_status.value)
+        str(export.parse_status.value) if hasattr(export.parse_status, "value") else str(export.parse_status)
         for export in result.export_map or []
         if (getattr(export, "parse_status", None) or "success") != "success"
     }:
-        status_message = f"Export 级别状态: {', '.join(sorted(non_success_statuses))}"
+        # 按状态分组统计，附带 fallback_reason 示例便于定位
+        status_groups: dict[str, list[str]] = {}
+        for export in result.export_map or []:
+            ps = getattr(export, "parse_status", None)
+            if ps is not None:
+                ps_str = str(ps.value) if hasattr(ps, "value") else str(ps)
+                if ps_str != "success":
+                    reason = str(getattr(export, "fallback_reason", None) or "")
+                    status_groups.setdefault(ps_str, []).append(reason)
+        parts = []
+        for st in sorted(status_groups):
+            reasons = status_groups[st]
+            unique_reasons = list(dict.fromkeys(r for r in reasons if r))[:3]
+            reason_hint = f" ({'; '.join(unique_reasons)})" if unique_reasons else ""
+            parts.append(f"{st}×{len(reasons)}{reason_hint}")
+        status_message = f"Export 级别状态: {', '.join(parts)}"
         status_code = "EXPORT_PARTIAL"
     else:
         status_code = None

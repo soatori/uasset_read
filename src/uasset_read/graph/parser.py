@@ -139,9 +139,12 @@ def extract_blueprint_graphs(
 
         # 扩展图类型匹配：精确匹配 + 后缀匹配（覆盖自定义图子类）
         is_graph_type = (
-            class_name in EDGRAPH_CLASS_NAMES
-            or class_name.endswith("Graph")
-            or class_name.endswith("EdGraph")
+            class_name is not None
+            and (
+                class_name in EDGRAPH_CLASS_NAMES
+                or class_name.endswith("Graph")
+                or class_name.endswith("EdGraph")
+            )
         )
 
         if class_name and is_graph_type:

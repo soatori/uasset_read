@@ -85,6 +85,9 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
         return "partial"
 
     # 3.3 检查结构性诊断
+    # 注意：当前所有 OffsetRangeDiagnostic 均使用 WARNING severity，
+    # is_structural() 永远返回 False。此路径为防御性保留。
+    # 若未来引入 ERROR/CRITICAL severity 诊断，需同步 ir_builder.py 添加消息分支。
     diagnostics = getattr(result, "diagnostics", None) or []
     has_structural_diagnostic = any(
         getattr(d, "is_structural", lambda: False)()
