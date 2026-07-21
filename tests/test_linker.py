@@ -130,24 +130,17 @@ class TestLifecycleOrder:
     """link -> preload -> post_load 生命周期顺序。"""
 
     def test_preload_then_post_load_order(self):
-        """post_load 在所有 preload 完成后执行。"""
+        """post_load 在 preload 完成后执行；ObjectProperty 被解析为实例。"""
         linker = _make_linker(export_count=2)
-
-        # 初始状态：所有 export 未预加载
         for inst in linker._export_objects:
             assert not inst._preloaded
-
-        # 手动设置 _preloaded 和 serialized_properties
+        # preload
         for i, inst in enumerate(linker._export_objects):
             inst._preloaded = True
             inst.serialized_properties = [
                 {"name": f"Prop{i}", "type": "ObjectProperty", "value": 0}
             ]
-
-        # 调用 post_load
         linker.post_load()
-
-        # post_load 应已执行：property_references 字段被初始化
         for inst in linker._export_objects:
             assert hasattr(inst, "property_references")
 
@@ -156,18 +149,13 @@ class TestPropertyReferenceResolution:
     """ObjectProperty 引用被正确解析。"""
 
     def test_object_property_resolved_to_instance(self):
-        """ObjectProperty 的 FPackageIndex 被解析为 UObjectInstance。"""
+        """ObjectProperty→UObjectInstance；链表验证。"""
         linker = _make_linker(export_count=2)
-
         inst0 = linker._export_objects[0]
         inst0._preloaded = True
         inst0.serialized_properties = [
             {"name": "TargetObj", "type": "ObjectProperty", "value": 2}
         ]
-
         linker._resolve_property_references()
-
-        assert "TargetObj" in inst0.property_references
         resolved = inst0.property_references["TargetObj"]
-        assert isinstance(resolved, UObjectInstance)
-        assert resolved is linker._export_objects[1]
+        assert isinstance(resolved, UObjectInstance) and resolved is linker._export_objects[1]

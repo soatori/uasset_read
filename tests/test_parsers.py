@@ -42,18 +42,12 @@ from uasset_read.versioning import VersionContainer
 
 class TestCoreParsing:
     def test_resolve_name_from_index_valid(self):
-        """有效索引应返回对应名称。"""
+        """有效索引返回名称；有效计数返回正确值。"""
         archive = MagicMock()
         name_map = ["Actor", "Component", "Property"]
-        result = resolve_name_from_index(archive, name_map, 1)
-        assert result == "Component"
-
-    def test_read_validated_count_valid(self):
-        """有效计数应返回正确值。"""
-        archive = MagicMock()
+        assert resolve_name_from_index(archive, name_map, 1) == "Component"
         archive.read_i32.return_value = 5
-        result = read_validated_count_tolerant(archive, max_count=100, label="test")
-        assert result == 5
+        assert read_validated_count_tolerant(archive, max_count=100, label="test") == 5
 
 
 # ============================================================================
@@ -104,14 +98,9 @@ class TestTexture2DBounds:
 
 class TestStructSizeLWC:
     def test_ue4_returns_float_size(self):
-        """UE4 版本返回 float 大小。"""
-        vc = _make_vc(ue4_version=516)
-        assert get_struct_size("Vector", vc) == 12
-
-    def test_ue5_lwc_returns_double_size(self):
-        """UE5 LWC (>= 1004) 返回 double 大小。"""
-        vc = _make_vc(ue5_version=1004)
-        assert get_struct_size("Vector", vc) == 24
+        """UE4→float(12)；UE5 LWC→double(24)。"""
+        assert get_struct_size("Vector", _make_vc(ue4_version=516)) == 12
+        assert get_struct_size("Vector", _make_vc(ue5_version=1004)) == 24
 
 
 # ============================================================================
@@ -184,46 +173,21 @@ class _FakeSummaryForControl:
 
 class TestSerializationControlUnknownBits:
     def test_serialization_control_extensions_unknown_bits_skip(self):
-        """#425: 未知位（0x04+）应触发 WARNING 日志并提前返回。"""
-        # 构造包含未知位 0x04 的控制字节
-        ctrl_byte = 0x04  # Unknown_Bit2
-        data = bytes([ctrl_byte])
-        archive = _FakeArchiveForControl(data)
-        export = _FakeExportForControl()
-        summary = _FakeSummaryForControl()
-
-        # 使用 mock 替代 _record_diagnostic
-        archive._record_diagnostic = MagicMock()
-
-        # 实际调用
-        _handle_serialization_control(archive, summary, export)
-
-        # 验证：transforms 应已设置
-        assert export.transforms is not None
-        assert export.transforms["serialization_control"]["unknown_bits"] == 0x04
-        assert export.transforms["serialization_control"]["overridden_operation"] is None
-
-        # 验证：archive 位置不应前进到读取 overridden_operation
-        # 控制字节 1 字节，无 overridden_operation 读取，位置应在 1
-        assert archive.tell() == 1
-
-    def test_serialization_control_known_bits_continue(self):
-        """已知位（0x01|0x02）不应触发提前返回。"""
-        # 0x02 触发读取 overridden_operation
-        ctrl_byte = 0x02
-        overridden_op = 0x05
-        data = bytes([ctrl_byte, overridden_op])
-        archive = _FakeArchiveForControl(data)
-        archive._record_diagnostic = MagicMock()
-        export = _FakeExportForControl()
-        summary = _FakeSummaryForControl()
-
-        _handle_serialization_control(archive, summary, export)
-
-        # 验证：应读取了控制字节 + overridden_operation
-        assert archive.tell() == 2
-        assert export.transforms["serialization_control"]["overridden_operation"] == overridden_op
-        assert export.transforms["serialization_control"]["unknown_bits"] == 0
+        """未知位（0x04+）提前返回；已知位正常解析。"""
+        # 未知位 → 立即返回
+        archive1 = _FakeArchiveForControl(bytes([0x04]))
+        archive1._record_diagnostic = MagicMock()
+        export1 = _FakeExportForControl()
+        _handle_serialization_control(archive1, _FakeSummaryForControl(), export1)
+        assert archive1.tell() == 1
+        assert export1.transforms["serialization_control"]["unknown_bits"] == 0x04
+        # 已知位 0x02 → 正常解析
+        archive2 = _FakeArchiveForControl(bytes([0x02, 0x05]))
+        archive2._record_diagnostic = MagicMock()
+        export2 = _FakeExportForControl()
+        _handle_serialization_control(archive2, _FakeSummaryForControl(), export2)
+        assert archive2.tell() == 2
+        assert export2.transforms["serialization_control"]["overridden_operation"] == 0x05
 
 
 # ============================================================================

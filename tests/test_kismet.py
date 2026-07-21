@@ -133,10 +133,6 @@ class TestBytecodeRecovery:
 
 class TestMathFunctionCleaner:
     def test_add_int_int(self):
-        """Add_IntInt 应简化为 a + b。"""
+        """Add_IntInt->a+b；未知->ClassName::FuncName。"""
         assert MathFunctionCleaner.clean("KismetMathLibrary", "Add_IntInt", ["a", "b"]) == "a + b"
-
-    def test_fallback_unknown_func(self):
-        """未知函数应回退到 ClassName::FuncName 格式。"""
-        result = MathFunctionCleaner.clean("KismetMathLibrary", "SomeUnknownFunc", ["a", "b"])
-        assert result == "KismetMathLibrary::SomeUnknownFunc(a, b)"
+        assert MathFunctionCleaner.clean("KismetMathLibrary", "SomeUnknownFunc", ["a", "b"]) == "KismetMathLibrary::SomeUnknownFunc(a, b)"

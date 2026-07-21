@@ -85,18 +85,15 @@ class TestFPakEntryBitfield:
 
 class TestDecompressSafety:
     def test_zlib_output_clamped_to_declared_size(self):
-        """Zlib 解压输出必须限制在 declared size 以内。"""
-        payload = b"A" * (5 * 1024 * 1024)
-        bomb = zlib.compress(payload, 9)
-        result = decompress_block(bomb, uncompressed_size=1, method="Zlib")
-        assert len(result) <= 1024
-
-    def test_normal_zlib_decompress_works(self):
-        """正常 Zlib 解压不受影响。"""
-        payload = os.urandom(8192)
-        compressed = zlib.compress(payload)
-        result = decompress_block(compressed, uncompressed_size=len(payload), method="Zlib")
-        assert result == payload
+        """Zlib 炸弹→限制到 declared size；正常解压→不受影响。"""
+        # bomb
+        payload_bomb = b"A" * (5 * 1024 * 1024)
+        bomb = zlib.compress(payload_bomb, 9)
+        assert len(decompress_block(bomb, uncompressed_size=1, method="Zlib")) <= 1024
+        # normal
+        payload_normal = os.urandom(8192)
+        compressed = zlib.compress(payload_normal)
+        assert decompress_block(compressed, uncompressed_size=len(payload_normal), method="Zlib") == payload_normal
 
 
 # ---------------------------------------------------------------------------

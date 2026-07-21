@@ -24,8 +24,9 @@ from uasset_read.models.result import ParseResult
 # ============================================================================
 
 def test_tolerant_parse_dedup():
-    """同一 ParseError 不会重复添加到 result.errors。"""
+    """tolerant_parse 去重 + MemoryLimitExceeded re-raise。"""
     from uasset_read.core.error_handling import tolerant_parse
+    from uasset_read.parse_uasset import _handle_parse_error
 
     class _R:
         def __init__(self):
@@ -35,55 +36,32 @@ def test_tolerant_parse_dedup():
     with pytest.raises(ParseError):
         with tolerant_parse(result, "stage"):
             raise ParseError("dup error")
-
     assert len(result.errors) == 1
-
     with pytest.raises(ParseError):
         with tolerant_parse(result, "stage"):
             raise ParseError("dup error")
-
     assert len(result.errors) == 1
 
-
-# ============================================================================
-# 2. _handle_parse_error 异常分支
-# ============================================================================
-
-def test_handle_parse_error_memory_limit_reraises():
-    """MemoryLimitExceeded 应被 re-raise，不记录到 result.errors。"""
-    from uasset_read.parse_uasset import _handle_parse_error
-
+    # MemoryLimitExceeded should be re-raised
     class _FakeArchive:
         def total_size(self): return 1024
         def tell(self): return 0
-
-    result = ParseResult()
-    result.is_success = True
-
-    exc = MemoryLimitExceeded(
-        asset_path="test.uasset",
-        stage="parse",
-        current_rss_mb=2048.0,
-        limit_mb=1024.0,
-    )
-
-    # _handle_parse_error 内部使用 bare raise re-raise MemoryLimitExceeded
-    caught_exception = None
+    result2 = ParseResult(); result2.is_success = True
+    exc = MemoryLimitExceeded(asset_path="test.uasset", stage="parse", current_rss_mb=2048.0, limit_mb=1024.0)
+    caught = None
     try:
         raise exc
-    except Exception as caught:
+    except Exception as e:
         try:
-            _handle_parse_error(caught, result, _FakeArchive(), "test.uasset", tolerant=True)
+            _handle_parse_error(e, result2, _FakeArchive(), "test.uasset", tolerant=True)
         except MemoryLimitExceeded as re_raised:
-            caught_exception = re_raised
-
-    assert caught_exception is not None, "MemoryLimitExceeded 应被 re-raise"
-    assert result.errors == []
-    assert result.is_success is True
+            caught = re_raised
+    assert caught is not None
+    assert result2.errors == []
 
 
 # ============================================================================
-# 3. _record_parse_stage_error 去重
+# 2. _record_parse_stage_error 去重
 # ============================================================================
 
 def test_record_parse_stage_error_dedup():

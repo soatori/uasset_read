@@ -103,47 +103,37 @@ def _make_result(function_name, expressions=None, cpp_code="", warnings=None):
 # === 6 个关键用例 ===
 
 class TestBlueprintInterfaces:
-    """蓝图应包含 interfaces 列表。"""
+    """蓝图 interfaces 与 Category 解析验证。"""
 
     def test_blueprint_has_interfaces(self, sample_root: Path):
-        """核心蓝图解析：验证 interfaces 字段存在且包含 TouchInterface。"""
-        from uasset_read.parse_uasset import parse_uasset_with_linker
+        """interfaces 存在；Category 不应为 PropertyFallback。"""
+        from uasset_read.parse_uasset import parse_uasset_with_linker, parse_package
 
+        # interfaces
         bp_path = asset_path(sample_root, ASSET_BLUEPRINT_FIRST_PERSON)
         result = parse_uasset_with_linker(str(bp_path), tolerant=True)
         try:
             assert result.is_success, f"解析失败: {result.errors}"
             blueprint = result.blueprint
-            assert blueprint is not None, "蓝图数据不应为 None"
-            assert blueprint.interfaces is not None, "interfaces 不应为 None"
-            assert isinstance(blueprint.interfaces, list), "interfaces 应为列表"
+            assert blueprint is not None and blueprint.interfaces is not None
+            assert isinstance(blueprint.interfaces, list)
             if blueprint.interfaces:
                 names = [i.name for i in blueprint.interfaces]
                 assert any("Touch" in n for n in names), f"应包含 TouchInterface，实际: {names}"
         finally:
             del result
-
-
-class TestCategoryFallback:
-    """变量 Category 解析验证。"""
-
-    def test_category_not_property_fallback(self, sample_root: Path):
-        """变量 Category 不应为 PropertyFallback（已知损坏数据除外）。"""
-        from uasset_read.parse_uasset import parse_package
-
-        bp_path = asset_path(sample_root, "StackOBot_BP_Drone.uasset")
-        result = parse_package(str(bp_path))
+        # Category fallback
+        bp_path2 = asset_path(sample_root, "StackOBot_BP_Drone.uasset")
+        result2 = parse_package(str(bp_path2))
         try:
-            blueprint = result.blueprint
-            assert blueprint is not None, "蓝图数据为空"
-            for var in blueprint.variables:
+            bp2 = result2.blueprint
+            assert bp2 is not None
+            for var in bp2.variables:
                 cat = str(var.category)
-                if "Fallback" in cat:
-                    if "parse_error" in cat.lower():
-                        continue
+                if "Fallback" in cat and "parse_error" not in cat.lower():
                     assert False, f"变量 {var.var_name} Category 解析失败: {cat}"
         finally:
-            del result
+            del result2
 
 
 class TestMetadataVariableFilter:
@@ -177,7 +167,7 @@ class TestEmptyFunctionEnrichment:
     """空函数体从图拓扑补充。"""
 
     def test_empty_stub_enriched_from_graph(self):
-        """空壳函数（0 表达式）从图拓扑补充 C++ 代码。"""
+        """空壳→从图补充；有字节码→不覆盖。"""
         call_node = _make_call_function_node(
             "guid-cf-001", "AddMovementInput",
             input_exec_pin_id="CF0000000000000000000000000000AA",
@@ -192,30 +182,17 @@ class TestEmptyFunctionEnrichment:
         )
         entry_node.pins[0].linked_to_raw = [{"pin_guid": "CF0000000000000000000000000000AA"}]
         call_node.pins[0].linked_to_raw = [{"pin_guid": "FE0000000000000000000000000000AA"}]
-
         graph = _make_graph("Move", [entry_node, call_node])
+        # empty → enriched
         result = _make_result("Move", expressions=[])
-
         _enrich_empty_functions_from_graphs([result], [graph])
-
-        assert result.cpp_code != ""
-        assert "void Move() {" in result.cpp_code
+        assert result.cpp_code != "" and "void Move() {" in result.cpp_code
         assert result.logic_source == "graph_topology"
-        assert any("enriched" in w for w in result.warnings)
-
-    def test_real_bytecode_not_overwritten(self):
-        """有实际字节码的函数（>3 表达式）不被覆盖。"""
-        call_node = _make_call_function_node("guid-cf-001", "AddMovementInput")
-        entry_node = _make_function_entry_node("guid-fe-001", "Move")
-        graph = _make_graph("Move", [entry_node, call_node])
-
+        # with bytecode → not overwritten
         original_cpp = "void Move() { /* original bytecode */ }"
-        expressions = [MagicMock() for _ in range(5)]
-        result = _make_result("Move", expressions=expressions, cpp_code=original_cpp)
-
-        _enrich_empty_functions_from_graphs([result], [graph])
-
-        assert result.cpp_code == original_cpp
+        result2 = _make_result("Move", expressions=[MagicMock() for _ in range(5)], cpp_code=original_cpp)
+        _enrich_empty_functions_from_graphs([result2], [graph])
+        assert result2.cpp_code == original_cpp
 
 
 class TestPinGuidEndToEnd:

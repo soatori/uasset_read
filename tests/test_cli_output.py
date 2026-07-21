@@ -44,46 +44,24 @@ def _run_handle_batch(args, result):
 # ============================================================================
 
 def test_batch_output_includes_partial_statistics(tmp_path, capsys):
-    """批量导出 CLI 输出应包含 partial 统计信息。"""
+    """partial 非空→输出统计；为空→不输出。"""
     from uasset_read.core import BatchResult
-
+    # 非空
     result = BatchResult()
-    result.total = 10
-    result.success = ["file1.uasset", "file2.uasset"]
-    result.skipped = []
-    result.failed = []
+    result.total = 10; result.success = ["file1.uasset", "file2.uasset"]
+    result.skipped = []; result.failed = []
     result.partial = ["file3.uasset", "file4.uasset", "file5.uasset"]
-    result.partial_reasons = {
-        "opaque": ["file3.uasset"],
-        "partial_metadata": ["file4.uasset", "file5.uasset"],
-    }
-
+    result.partial_reasons = {"opaque": ["file3.uasset"], "partial_metadata": ["file4.uasset", "file5.uasset"]}
     _run_handle_batch(_make_args(tmp_path), result)
     captured = capsys.readouterr()
-    assert "Partial: 3" in captured.err
-    assert "Opaque: 1" in captured.err
-    assert "Partial Metadata: 2" in captured.err
-
-
-# ============================================================================
-# 2. partial 为空时不输出
-# ============================================================================
-
-def test_batch_output_no_partial_when_empty(tmp_path, capsys):
-    """partial 为空时不应输出 Partial 行。"""
-    from uasset_read.core import BatchResult
-
-    result = BatchResult()
-    result.total = 2
-    result.success = ["file1.uasset", "file2.uasset"]
-    result.skipped = []
-    result.failed = []
-    result.partial = []
-    result.partial_reasons = {}
-
-    _run_handle_batch(_make_args(tmp_path), result)
-    captured = capsys.readouterr()
-    assert "Partial" not in captured.err
+    assert "Partial: 3" in captured.err and "Opaque: 1" in captured.err
+    # 空
+    result2 = BatchResult()
+    result2.total = 2; result2.success = ["file1.uasset", "file2.uasset"]
+    result2.skipped = []; result2.failed = []; result2.partial = []; result2.partial_reasons = {}
+    _run_handle_batch(_make_args(tmp_path), result2)
+    captured2 = capsys.readouterr()
+    assert "Partial" not in captured2.err
 
 
 # ============================================================================

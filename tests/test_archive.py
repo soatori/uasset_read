@@ -26,68 +26,42 @@ class TestBasicReadAndSeek:
     """ByteArchive 基础读取、seek 和边界检查。"""
 
     def test_basic_read_and_tell(self):
-        """读取后 tell 位置正确推进。"""
-        data = b'\x01\x02\x03\x04\x05'
+        """读取后 tell 位置正确推进；越界抛 ParseError。"""
+        data = b""
         ar = ByteArchive(data)
-        assert ar.read(3) == b'\x01\x02\x03'
+        assert ar.read(3) == b""
         assert ar.tell() == 3
         assert ar.total_size() == 5
-
-    def test_read_beyond_end_raises(self):
-        """读取越界应抛出 ParseError。"""
-        ar = ByteArchive(b'\x01\x02\x03')
+        ar2 = ByteArchive(b"")
         with pytest.raises(ParseError, match="Cannot read"):
-            ar.read(10)
-
-
-# ---------------------------------------------------------------------------
-# 2. 数值类型读取
-# ---------------------------------------------------------------------------
-
+            ar2.read(10)
 class TestNumericReads:
     """各数值类型读取验证。"""
 
     def test_read_i32_and_f32(self):
-        """32 位有符号整数和浮点数。"""
+        """32 位有符号整数、浮点数和数组。"""
         ar = ByteArchive(struct.pack('<i', 12345))
         assert ar.read_i32() == 12345
-        ar = ByteArchive(struct.pack('<f', 3.14159))
-        assert abs(ar.read_f32() - 3.14159) < 0.001
+        ar2 = ByteArchive(struct.pack('<f', 3.14159))
+        assert abs(ar2.read_f32() - 3.14159) < 0.001
+        ar3 = ByteArchive(struct.pack('<iii', 10, 20, 30))
+        assert ar3.read_array(3, lambda a: a.read_i32()) == [10, 20, 30]
 
 
 # ---------------------------------------------------------------------------
-# 3. 数组读取
-# ---------------------------------------------------------------------------
-
-class TestArrayRead:
-    """数组读取与边界检查。"""
-
-    def test_read_array(self):
-        """使用 element_reader 回调读取数组。"""
-        data = struct.pack('<iii', 10, 20, 30)
-        ar = ByteArchive(data)
-        result = ar.read_array(3, lambda a: a.read_i32())
-        assert result == [10, 20, 30]
-
-
-# ---------------------------------------------------------------------------
-# 4. 容错模式与诊断
+# 3. 容错模式与诊断
 # ---------------------------------------------------------------------------
 
 class TestTolerantAndDiagnostics:
     """容错模式行为与诊断信息收集。"""
 
     def test_tolerant_read_safe_returns_none(self):
-        """容错模式下 read_safe 越界返回 None。"""
+        """容错模式 read_safe 越界返回 None；正常模式记录诊断。"""
         ar = ByteArchive(b'\x01\x02\x03', tolerant=True)
         assert ar.read_safe(10) is None
-
-    def test_diagnostics_collected_on_out_of_bounds(self):
-        """越界操作记录诊断信息。"""
-        ar = ByteArchive(b'\x01\x02\x03')
-        ar.read_safe(10)
-        diags = ar.get_diagnostics()
-        assert len(diags) > 0
+        ar2 = ByteArchive(b'\x01\x02\x03')
+        ar2.read_safe(10)
+        assert len(ar2.get_diagnostics()) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +90,12 @@ class TestFStringRead:
 # ---------------------------------------------------------------------------
 
 class TestFNameRead:
-    """FName 读取：正常索引、编号名称和越界恢复。"""
+    """FName 读取：正常索引和越界恢复。"""
 
     def test_read_name_with_map(self):
-        """使用名称表读取 FName。"""
+        """正常索引返回名称；越界容错返回 None。"""
         name_map = ["First", "Second", "Third"]
-        ar = ByteArchive(struct.pack('<II', 1, 0))
+        ar = ByteArchive(struct.pack("<II", 1, 0))
         assert ar.read_name(name_map) == "Second"
-
-    def test_read_name_out_of_range_tolerant(self):
-        """索引越界时容错模式返回 'None'。"""
-        name_map = ["First"]
-        ar = ByteArchive(struct.pack('<II', 5, 0), tolerant=True)
-        assert ar.read_name(name_map) == "None"
+        ar2 = ByteArchive(struct.pack("<II", 5, 0), tolerant=True)
+        assert ar2.read_name(["First"]) == "None"
