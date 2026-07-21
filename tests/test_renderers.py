@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -76,6 +77,15 @@ class TestRendererRegistry:
         formats = list_formats()
         assert "json" in formats
         assert "markdown" in formats
+
+    def test_is_blueprint_export_handles_none_object_name(self):
+        """#433: object_name 为 None 时不应抛出 AttributeError"""
+        from uasset_read.renderers.base import is_blueprint_export
+
+        export = MagicMock()
+        export.object_name = None
+        export.graphs = []
+        assert not is_blueprint_export(export)
 
 
 # ============================================================================

@@ -146,6 +146,36 @@ class TestStatusModel:
         status = _result_status(result)
         assert status == "partial"
 
+    def test_partial_export_has_status_message(self):
+        """#432: partial 包必须包含 status_message"""
+        from uasset_read.models.fallback import ExportParseStatus
+
+        export = MagicMock()
+        export.parse_status = ExportParseStatus.OPAQUE
+        export.object_name = "TestExport"
+        export.export_index = 0
+        export.class_name = "None"
+        export.is_function = False
+        export.is_blueprint = False
+        export.cooked_size = 0
+        export.properties = {}
+
+        result = MagicMock()
+        result.package_name = "/Game/TestPackage"
+        result.include_decompiled = False
+        result.errors = []
+        result.warnings = []
+        result.decompiled_functions = []
+        result.metadata = {}
+        result.exports = [export]
+        result.export_map = [export]
+
+        ir = build_package_ir(result)
+
+        assert ir.status == "partial"
+        assert ir.status_message is not None, "partial 包的 status_message 不应为 None"
+        assert "opaque" in ir.status_message
+
 
 # ============================================================================
 # 动画 IR 数据模型（合并自 test_unit.py）

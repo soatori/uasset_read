@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
 import logging
+import os
+import tempfile
 import warnings
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
@@ -527,7 +529,25 @@ def parse_batch(
                     if exp_status and exp_status in PARTIAL_STATUSES:
                         result.partial_reasons.setdefault(exp_status, []).append(str(pf))
 
-            out_file.write_text(output_str, encoding="utf-8")
+            # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
+            tmp_fd = -1
+            tmp_path = ""
+            try:
+                tmp_fd, tmp_path = tempfile.mkstemp(
+                    dir=str(output_path.parent), suffix=".tmp"
+                )
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
+                    tmp_f.write(output_str)
+                tmp_fd = -1  # fdopen 已接管 fd，无需再 close
+                os.replace(tmp_path, str(out_file))
+            except BaseException:
+                if tmp_fd >= 0:
+                    os.close(tmp_fd)
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             result.success.append(str(out_file))
         except Exception as exc:
             import traceback

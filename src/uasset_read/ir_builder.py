@@ -130,6 +130,22 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             f"字节码启发式恢复：{heuristic_count}/{total_count} 个函数通过 serial scan 恢复，"
             f"置信度较低"
         )
+    # v0.5.1 新增：export 级别 partial 时补充 message（#432）
+    elif any(
+        (ps := getattr(export, "parse_status", None))
+        and ps != "success"
+        for export in result.export_map or []
+    ):
+        ps_values = sorted(
+            {
+                str(getattr(getattr(export, "parse_status", None), "value", ""))
+                for export in result.export_map or []
+                if getattr(export, "parse_status", None)
+                and getattr(export, "parse_status", None).value != "success"
+            }
+        )
+        status_message = f"Export 级别状态: {', '.join(ps_values)}"
+        status_code = "EXPORT_PARTIAL"
     else:
         status_code = None
         status_message = None
