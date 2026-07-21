@@ -21,17 +21,21 @@ class TestDisabledLogSession:
         assert session is not None
         session.close()
 
-    def test_enabled_false_does_not_raise(self):
-        """enabled=False 时 project_logging_session() 应正常返回。"""
-        session = project_logging_session(enabled=False)
-        assert session is not None
-        session.close()
+        # enabled=False 时 project_logging_session() 应正常返回
+        session2 = project_logging_session(enabled=False)
+        assert session2 is not None
+        session2.close()
 
     def test_disabled_session_no_run_id(self):
         """禁用会话期间 current_log_run_id() 应保持 None。"""
         session = project_logging_session(enabled=False, level="off")
         assert current_log_run_id() is None
         session.close()
+
+        # 禁用会话应支持 with 语句
+        with project_logging_session(enabled=False, level="off") as session_ctx:
+            assert session_ctx is not None
+            assert current_log_run_id() is None
 
     def test_disabled_session_no_log_file(self, tmp_path: Path):
         """禁用会话不应创建项目日志文件。"""
@@ -42,17 +46,9 @@ class TestDisabledLogSession:
         session.close()
         assert not log_dir.exists() or not list(log_dir.glob("*.log"))
 
-    def test_disabled_session_context_manager(self):
-        """禁用会话应支持 with 语句。"""
-        with project_logging_session(enabled=False, level="off") as session:
-            assert session is not None
-            assert current_log_run_id() is None
-
-    def test_disabled_session_releases_lock(self):
-        """禁用会话退出后 _scope_lock 应被释放，允许后续正常会话。"""
+        # 禁用会话退出后 _scope_lock 应被释放，允许后续正常会话
         session1 = project_logging_session(enabled=False, level="off")
         session1.close()
-        # 第二次调用不应抛出"A project logging session is already active"
         session2 = project_logging_session(enabled=False, level="off")
         session2.close()
 
@@ -64,9 +60,6 @@ class TestDisabledLogSession:
         # 关键：不抛出 RuntimeError("Project logging is disabled")
         parse_single(str(tmp_path / "nonexistent.uasset"), log_config=config)
 
-    def test_logconfig_enabled_false_via_scoped(self, tmp_path: Path):
-        """LogConfig(enabled=False) 经 scoped_project_logging 包装不应抛出日志禁用异常。"""
-        from uasset_read.core import parse_single
-
-        config = LogConfig(enabled=False)
-        parse_single(str(tmp_path / "nonexistent.uasset"), log_config=config)
+        # LogConfig(enabled=False) 经 scoped_project_logging 包装不应抛出日志禁用异常
+        config2 = LogConfig(enabled=False)
+        parse_single(str(tmp_path / "nonexistent.uasset"), log_config=config2)

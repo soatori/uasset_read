@@ -120,31 +120,24 @@ class TestStatusModel:
         status = _result_status(result)
         assert status == "success"
 
-    def test_opaque_export_makes_partial(self):
-        """存在 opaque export 时 package 状态为 partial。"""
-
-        class MockExport:
-            def __init__(self, status):
-                self.parse_status = status
-
-        exports = [
+        # 存在 opaque export 时 package 状态为 partial
+        exports_opaque = [
             MockExport("success"),
             MockExport("opaque"),
             MockExport("success"),
         ]
-        result = MagicMock()
-        result.is_success = True
-        result.errors = []
-        result.metadata = {}
-        result.export_map = exports
-        result.summary = MagicMock()
-        result.summary.export_count = 3
-        result.name_map = ["test"]
-        result.import_map = {"test": "value"}
-        result.graphs = None
+        result_opaque = MagicMock()
+        result_opaque.is_success = True
+        result_opaque.errors = []
+        result_opaque.metadata = {}
+        result_opaque.export_map = exports_opaque
+        result_opaque.summary = MagicMock()
+        result_opaque.summary.export_count = 3
+        result_opaque.name_map = ["test"]
+        result_opaque.import_map = {"test": "value"}
+        result_opaque.graphs = None
 
-        status = _result_status(result)
-        assert status == "partial"
+        assert _result_status(result_opaque) == "partial"
 
     def test_partial_export_has_status_message(self):
         """#432: partial 包必须包含 status_message"""
@@ -197,49 +190,35 @@ class TestStatusModel:
         status = _result_status(result)
         assert status == "failed"
 
-    def test_mixed_failed_success_makes_partial(self):
-        """部分 failed + 部分 success 时 package 状态为 partial。"""
+        # 部分 failed + 部分 success 时 package 状态为 partial
+        exports_mixed = [MockExport("success"), MockExport("failed"), MockExport("success")]
+        result_mixed = MagicMock()
+        result_mixed.is_success = True
+        result_mixed.errors = []
+        result_mixed.metadata = {}
+        result_mixed.export_map = exports_mixed
+        result_mixed.summary = MagicMock()
+        result_mixed.summary.export_count = 3
+        result_mixed.name_map = ["test"]
+        result_mixed.import_map = {"test": "value"}
+        result_mixed.graphs = None
 
-        class MockExport:
-            def __init__(self, status):
-                self.parse_status = status
+        assert _result_status(result_mixed) == "partial"
 
-        exports = [MockExport("success"), MockExport("failed"), MockExport("success")]
-        result = MagicMock()
-        result.is_success = True
-        result.errors = []
-        result.metadata = {}
-        result.export_map = exports
-        result.summary = MagicMock()
-        result.summary.export_count = 3
-        result.name_map = ["test"]
-        result.import_map = {"test": "value"}
-        result.graphs = None
+        # parse_status='skipped' 时 package 状态为 partial
+        exports_skipped = [MockExport("success"), MockExport("skipped")]
+        result_skipped = MagicMock()
+        result_skipped.is_success = True
+        result_skipped.errors = []
+        result_skipped.metadata = {}
+        result_skipped.export_map = exports_skipped
+        result_skipped.summary = MagicMock()
+        result_skipped.summary.export_count = 2
+        result_skipped.name_map = ["test"]
+        result_skipped.import_map = {"test": "value"}
+        result_skipped.graphs = None
 
-        status = _result_status(result)
-        assert status == "partial"
-
-    def test_skipped_export_makes_partial(self):
-        """parse_status='skipped' 时 package 状态为 partial。"""
-
-        class MockExport:
-            def __init__(self, status):
-                self.parse_status = status
-
-        exports = [MockExport("success"), MockExport("skipped")]
-        result = MagicMock()
-        result.is_success = True
-        result.errors = []
-        result.metadata = {}
-        result.export_map = exports
-        result.summary = MagicMock()
-        result.summary.export_count = 2
-        result.name_map = ["test"]
-        result.import_map = {"test": "value"}
-        result.graphs = None
-
-        status = _result_status(result)
-        assert status == "partial"
+        assert _result_status(result_skipped) == "partial"
 
     def test_is_success_false_with_core_data(self):
         """is_success=False 但有核心数据时状态为 partial。"""
@@ -257,52 +236,46 @@ class TestStatusModel:
         status = _result_status(result)
         assert status == "partial"
 
-    def test_is_success_false_without_core_data(self):
-        """is_success=False 且无核心数据时状态为 failed。"""
-        result = MagicMock()
-        result.is_success = False
-        result.errors = []
-        result.metadata = {}
-        result.export_map = []
-        result.summary = None
-        result.name_map = None
-        result.import_map = None
-        result.graphs = None
+        # is_success=False 且无核心数据时状态为 failed
+        result_no_data = MagicMock()
+        result_no_data.is_success = False
+        result_no_data.errors = []
+        result_no_data.metadata = {}
+        result_no_data.export_map = []
+        result_no_data.summary = None
+        result_no_data.name_map = None
+        result_no_data.import_map = None
+        result_no_data.graphs = None
 
-        status = _result_status(result)
-        assert status == "failed"
+        assert _result_status(result_no_data) == "failed"
 
-    def test_errors_make_partial(self):
-        """is_success=True 但有 errors 时状态为 partial。"""
-        result = MagicMock()
-        result.is_success = True
-        result.errors = ["some error"]
-        result.metadata = {}
-        result.export_map = []
-        result.summary = MagicMock()
-        result.summary.export_count = 0
-        result.name_map = ["test"]
-        result.import_map = {"test": "value"}
-        result.graphs = None
+        # is_success=True 但有 errors 时状态为 partial
+        result_errors = MagicMock()
+        result_errors.is_success = True
+        result_errors.errors = ["some error"]
+        result_errors.metadata = {}
+        result_errors.export_map = []
+        result_errors.summary = MagicMock()
+        result_errors.summary.export_count = 0
+        result_errors.name_map = ["test"]
+        result_errors.import_map = {"test": "value"}
+        result_errors.graphs = None
 
-        status = _result_status(result)
-        assert status == "partial"
+        assert _result_status(result_errors) == "partial"
 
-    def test_lightweight_tolerant_parse_makes_partial(self):
-        """lightweight_tolerant_parse 标记时状态为 partial。"""
-        result = MagicMock()
-        result.is_success = True
-        result.errors = []
-        result.metadata = {"lightweight_tolerant_parse": True}
-        result.export_map = []
-        result.summary = MagicMock()
-        result.summary.export_count = 0
-        result.name_map = ["test"]
-        result.import_map = {"test": "value"}
-        result.graphs = None
+        # lightweight_tolerant_parse 标记时状态为 partial
+        result_lightweight = MagicMock()
+        result_lightweight.is_success = True
+        result_lightweight.errors = []
+        result_lightweight.metadata = {"lightweight_tolerant_parse": True}
+        result_lightweight.export_map = []
+        result_lightweight.summary = MagicMock()
+        result_lightweight.summary.export_count = 0
+        result_lightweight.name_map = ["test"]
+        result_lightweight.import_map = {"test": "value"}
+        result_lightweight.graphs = None
 
-        status = _result_status(result)
-        assert status == "partial"
+        assert _result_status(result_lightweight) == "partial"
 
     def test_export_partial_status_message_includes_reasons(self):
         """#431: EXPORT_PARTIAL 消息应包含 fallback_reason 示例。"""

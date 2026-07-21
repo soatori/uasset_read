@@ -210,11 +210,10 @@ class TestValidateRecoveredBytecode:
         assert level == BytecodeConfidenceLevel.UNRECOVERABLE
         assert any("空" in w for w in warnings)
 
-    def test_too_short(self):
-        """过短字节码应返回 UNRECOVERABLE。"""
-        level, warnings = validate_recovered_bytecode(b'\x04')
-        assert level == BytecodeConfidenceLevel.UNRECOVERABLE
-        assert any("过短" in w for w in warnings)
+        # 过短字节码应返回 UNRECOVERABLE
+        level_short, warnings_short = validate_recovered_bytecode(b'\x04')
+        assert level_short == BytecodeConfidenceLevel.UNRECOVERABLE
+        assert any("过短" in w for w in warnings_short)
 
     def test_high_confidence(self):
         """以 EX_EndOfScript 结尾的有效字节码应返回 HIGH。"""
@@ -224,18 +223,16 @@ class TestValidateRecoveredBytecode:
         assert level == BytecodeConfidenceLevel.HIGH
         assert len(warnings) == 0
 
-    def test_medium_sentinel_mismatch(self):
-        """未以预期哨兵结尾应返回 MEDIUM。"""
-        data = bytes([0x04, 0x00, 0x00, 0x00, 0xFF])
-        level, warnings = validate_recovered_bytecode(data)
-        assert level == BytecodeConfidenceLevel.MEDIUM
-        assert any("尾部" in w for w in warnings)
+        # 未以预期哨兵结尾应返回 MEDIUM
+        data_mismatch = bytes([0x04, 0x00, 0x00, 0x00, 0xFF])
+        level_mismatch, warnings_mismatch = validate_recovered_bytecode(data_mismatch)
+        assert level_mismatch == BytecodeConfidenceLevel.MEDIUM
+        assert any("尾部" in w for w in warnings_mismatch)
 
-    def test_cooked_sentinel_accepted(self):
-        """Cooked 哨兵 0xDD 也应返回 HIGH。"""
-        data = bytes([0x04, 0x00, 0x00, 0x00, _COOKED_END_SENTINEL])
-        level, warnings = validate_recovered_bytecode(data)
-        assert level == BytecodeConfidenceLevel.HIGH
+        # Cooked 哨兵 0xDD 也应返回 HIGH
+        data_cooked = bytes([0x04, 0x00, 0x00, 0x00, _COOKED_END_SENTINEL])
+        level_cooked, _ = validate_recovered_bytecode(data_cooked)
+        assert level_cooked == BytecodeConfidenceLevel.HIGH
 
     def test_with_metrics_truncated(self):
         """带截断 metrics 应降低置信度。"""
@@ -245,12 +242,10 @@ class TestValidateRecoveredBytecode:
         assert level in (BytecodeConfidenceLevel.MEDIUM, BytecodeConfidenceLevel.LOW)
         assert any("截断" in w for w in warnings)
 
-    def test_with_metrics_mapping_mismatch(self):
-        """带映射不匹配 metrics 应添加警告。"""
-        data = bytes([0x04, 0x00, 0x00, 0x00, _END_OF_SCRIPT])
-        metrics = BPGCExtractionMetrics(mapping_mismatch=True)
-        level, warnings = validate_recovered_bytecode(data, metrics=metrics)
-        assert any("不一致" in w for w in warnings)
+        # 带映射不匹配 metrics 应添加警告
+        metrics_mismatch = BPGCExtractionMetrics(mapping_mismatch=True)
+        _, warnings_mismatch = validate_recovered_bytecode(data, metrics=metrics_mismatch)
+        assert any("不一致" in w for w in warnings_mismatch)
 
     def test_fill_byte_token(self):
         """以 0x00/0xFF 开头应添加填充值警告。"""

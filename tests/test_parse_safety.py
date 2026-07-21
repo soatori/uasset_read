@@ -44,21 +44,15 @@ def test_tolerant_parse_dedup():
 
     assert len(result.errors) == 1
 
-
-# ============================================================================
-# 2. _handle_parse_error 异常分支
-# ============================================================================
-
-def test_handle_parse_error_memory_limit_reraises():
-    """MemoryLimitExceeded 应被 re-raise，不记录到 result.errors。"""
+    # _handle_parse_error 异常分支: MemoryLimitExceeded 应被 re-raise，不记录到 result.errors
     from uasset_read.parse_uasset import _handle_parse_error
 
     class _FakeArchive:
         def total_size(self): return 1024
         def tell(self): return 0
 
-    result = ParseResult()
-    result.is_success = True
+    result_mem = ParseResult()
+    result_mem.is_success = True
 
     exc = MemoryLimitExceeded(
         asset_path="test.uasset",
@@ -73,17 +67,17 @@ def test_handle_parse_error_memory_limit_reraises():
         raise exc
     except Exception as caught:
         try:
-            _handle_parse_error(caught, result, _FakeArchive(), "test.uasset", tolerant=True)
+            _handle_parse_error(caught, result_mem, _FakeArchive(), "test.uasset", tolerant=True)
         except MemoryLimitExceeded as re_raised:
             caught_exception = re_raised
 
     assert caught_exception is not None, "MemoryLimitExceeded 应被 re-raise"
-    assert result.errors == []
-    assert result.is_success is True
+    assert result_mem.errors == []
+    assert result_mem.is_success is True
 
 
 # ============================================================================
-# 3. _record_parse_stage_error 去重
+# 2. _record_parse_stage_error 去重
 # ============================================================================
 
 def test_record_parse_stage_error_dedup():

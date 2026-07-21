@@ -121,8 +121,7 @@ class TestSerializationStrategy:
         # 未知类默认返回 TAGGED_PROPERTIES_ONLY
         assert get_serialization_strategy("UnknownCustomClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
-    def test_no_overlap_between_categories(self):
-        """三个类别无重叠。"""
+        # 三个类别无重叠
         tagged = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.TAGGED_PROPERTIES_ONLY}
         opaque = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.OPAQUE_CLASS_PAYLOAD}
         skip = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.SKIP_UNSUPPORTED}
