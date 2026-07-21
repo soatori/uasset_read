@@ -175,33 +175,26 @@ class TestPinOptimization:
         assert "default_value" not in result
         assert "pin_subcategory" not in result
 
-    def test_debug_mode_preserves_all_fields(self):
-        """debug 模式下所有字段保持不变。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        pin = _make_pin()
-        result = renderer._pin_to_dict(pin, output_level="debug")
-        assert "pin_type" in result
-        assert result["is_reference"] is False
-        assert result["is_const"] is False
-        assert result["default_value"] == ""
-        assert result["pin_subcategory"] == ""
+        # debug 模式下所有字段保持不变
+        result_debug = renderer._pin_to_dict(pin, output_level="debug")
+        assert "pin_type" in result_debug
+        assert result_debug["is_reference"] is False
+        assert result_debug["is_const"] is False
+        assert result_debug["default_value"] == ""
+        assert result_debug["pin_subcategory"] == ""
 
-    def test_standard_mode_keeps_non_default_values(self):
-        """standard 模式下非默认值不被省略。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        pin = _make_pin(
+        # standard 模式下非默认值不被省略
+        pin_non_default = _make_pin(
             is_reference=True,
             is_const=True,
             default_value="true",
             pin_subcategory="native",
         )
-        result = renderer._pin_to_dict(pin, output_level="standard")
-        assert result["is_reference"] is True
-        assert result["is_const"] is True
-        assert result["default_value"] == "true"
-        assert result["pin_subcategory"] == "native"
+        result_non_default = renderer._pin_to_dict(pin_non_default, output_level="standard")
+        assert result_non_default["is_reference"] is True
+        assert result_non_default["is_const"] is True
+        assert result_non_default["default_value"] == "true"
+        assert result_non_default["pin_subcategory"] == "native"
 
 
 # ============================================================================
@@ -225,16 +218,13 @@ class TestDiagnosticsFolding:
         assert result[0]["pos_range"]["max"] == 300
         assert result[0]["error_pattern"] == "adjusted {n} bytes"
 
-    def test_folding_preserves_different_patterns(self):
-        """不同 (kind, field) 的 diagnostics 不被合并。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        diags = [
+        # 不同 (kind, field) 的 diagnostics 不被合并
+        diags_different = [
             {"kind": "read_name_recovery", "field": "name_map[42]", "error": "adjusted 128 bytes", "current_pos": 100},
             {"kind": "read_name_recovery", "field": "name_map[43]", "error": "adjusted 256 bytes", "current_pos": 200},
         ]
-        result = renderer._fold_diagnostics(diags)
-        assert len(result) == 2
+        result_different = renderer._fold_diagnostics(diags_different)
+        assert len(result_different) == 2
 
     def test_single_item_not_folded(self):
         """单条 diagnostics 不折叠，保持原格式。"""
@@ -248,12 +238,9 @@ class TestDiagnosticsFolding:
         assert result[0]["error"] == "adjusted 128 bytes"
         assert "count" not in result[0]
 
-    def test_empty_diagnostics(self):
-        """空列表返回空列表。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        result = renderer._fold_diagnostics([])
-        assert result == []
+        # 空列表返回空列表
+        result_empty = renderer._fold_diagnostics([])
+        assert result_empty == []
 
     def test_error_pattern_extraction(self):
         """error 模式提取正确替换数字为 {n}。"""
@@ -262,10 +249,7 @@ class TestDiagnosticsFolding:
         pattern = renderer._extract_error_pattern("adjusted 128 bytes pos 1234567")
         assert pattern == "adjusted {n} bytes pos {n}"
 
-    def test_position_extraction(self):
-        """从 diagnostic 字典中正确提取位置。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
+        # 从 diagnostic 字典中正确提取位置
         pos = renderer._extract_position({"current_pos": 1234567})
         assert pos == 1234567
         assert renderer._extract_position({"current_pos": 0}) == 0
@@ -343,3 +327,34 @@ class TestOutputLevelIntegration:
         assert debug_pin["is_const"] is False
         assert debug_pin["default_value"] == ""
         assert debug_pin["pin_subcategory"] == ""
+
+
+# ============================================================================
+# parent_class null 省略测试
+# ============================================================================
+
+class TestNullFieldOmission:
+    def test_standard_omits_parent_class_when_none(self):
+        """standard 模式下 parent_class 为 None 时省略该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        export = _make_export(parent_class=None)
+        result = renderer._export_to_dict(export, RenderOptions(output_level="standard"))
+        assert "parent_class" not in result
+
+    def test_standard_keeps_parent_class_when_set(self):
+        """standard 模式下 parent_class 有值时保留该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        export = _make_export(parent_class="/Engine/Actor")
+        result = renderer._export_to_dict(export, RenderOptions(output_level="standard"))
+        assert result["parent_class"] == "/Engine/Actor"
+
+    def test_debug_keeps_parent_class_when_none(self):
+        """debug 模式下 parent_class 为 None 时仍保留该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        export = _make_export(parent_class=None)
+        result = renderer._export_to_dict(export, RenderOptions(output_level="debug"), is_debug=True)
+        assert "parent_class" in result
+        assert result["parent_class"] is None

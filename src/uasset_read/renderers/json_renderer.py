@@ -160,8 +160,10 @@ class JSONRenderer(IRenderer):
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
-            "parent_class": export.parent_class,
         }
+        # parent_class: debug 模式下始终包含，standard 模式下仅非 None 时包含
+        if is_debug or export.parent_class is not None:
+            d["parent_class"] = export.parent_class
         # standard 模式下只添加非空字段
         if properties or is_debug:
             d["properties"] = properties
