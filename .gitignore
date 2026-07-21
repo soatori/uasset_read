@@ -41,6 +41,7 @@ desktop.ini
 
 # Temp and output
 temp/
+tmp/
 test/
 /output/
 /debug/
@@ -116,3 +117,4 @@ docs/compose/
 # Wiki submodule (external)
 wiki/
 worktrees/
+.worktrees/
