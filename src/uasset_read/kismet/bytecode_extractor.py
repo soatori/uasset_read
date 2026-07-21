@@ -296,6 +296,7 @@ def _bpgc_fallback(
     from uasset_read.kismet.bpgc_bytecode import (
         extract_bpgc_bytecode,
         map_bytecode_to_functions,
+        BPGCExtractionMetrics,
     )
     from uasset_read.serializers.object_resources import find_main_blueprint_generated_class
     import os
@@ -328,7 +329,7 @@ def _bpgc_fallback(
                 return None
 
             # Extract all bytecode buffers from BPGC
-            bytecode_buffers = extract_bpgc_bytecode(
+            bytecode_buffers, bpgc_metrics = extract_bpgc_bytecode(
                 archive, bpgc_export, summary, asset_name, name_map, import_map, export_map
             )
 
@@ -343,15 +344,17 @@ def _bpgc_fallback(
                     _bpgc_bytecode_cache = {}
                 return None
 
-            # Map buffers to Function exports by name
+            # Map buffers to Function exports by name (传入 metrics 以记录映射质量)
             _bpgc_bytecode_cache = map_bytecode_to_functions(
-                bytecode_buffers, export_map, name_map, import_map, export_map
+                bytecode_buffers, export_map, name_map, import_map, export_map,
+                metrics=bpgc_metrics,
             )
             _bpgc_cache_retries = 0  # Reset on success
 
             logger.info(
-                "BPGC fallback: cached %d function bytecode mappings from '%s'",
+                "BPGC fallback: cached %d function bytecode mappings from '%s' (confidence=%s)",
                 len(_bpgc_bytecode_cache), bpgc_export.object_name,
+                bpgc_metrics.confidence.value,
             )
 
         except (OSError, struct.error, ValueError, KeyError) as e:

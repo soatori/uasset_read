@@ -52,6 +52,7 @@ Unreal Engine .uasset 文件格式知识库。核心原则：**解析 .uasset �
 | [cooked-vs-uncooked.md](cooked/cooked-vs-uncooked.md) | 格式对比 | 15 项差异、PKG 标志 |
 | [pak.md](cooked/pak.md) | Pak 容器 | UE4 Pak 文件格式 |
 | [iostore.md](cooked/iostore.md) | IoStore 容器 | UE5 IoStore 格式 |
+| [bpgc.md](bpgc.md) | BPGC Cooked 字节码 | BlueprintGeneratedClass 字节码布局、格式变体、诊断指标 |
 
 ### 版本演进 (version/)
 | 文档 | 内容 | 版本范围 |
