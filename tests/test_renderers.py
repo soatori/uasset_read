@@ -321,6 +321,7 @@ class TestOutputLevelIntegration:
 # ============================================================================
 
 class TestNullFieldOmission:
+    # --- parent_class 测试 ---
     def test_standard_omits_parent_class_when_none(self):
         """standard 模式下 parent_class 为 None 时省略该字段。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
@@ -346,11 +347,12 @@ class TestNullFieldOmission:
         assert "parent_class" in result
         assert result["parent_class"] is None
 
+    # --- property guid/array_index 测试 ---
     def test_property_standard_omits_null_guid(self):
         """standard 模式下 property.guid 为 None 时省略该字段。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=0, guid=None)
+        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid=None)
         result = renderer._property_to_dict(prop, is_debug=False)
         assert "guid" not in result
 
@@ -358,7 +360,7 @@ class TestNullFieldOmission:
         """standard 模式下 property.guid 有值时保留该字段。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=0, guid="abc123")
+        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid="abc123")
         result = renderer._property_to_dict(prop, is_debug=False)
         assert result["guid"] == "abc123"
 
@@ -366,7 +368,7 @@ class TestNullFieldOmission:
         """standard 模式下 property.array_index 为 -1 时省略该字段。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=-1, guid=None)
+        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=-1, guid=None)
         result = renderer._property_to_dict(prop, is_debug=False)
         assert "array_index" not in result
 
@@ -374,7 +376,7 @@ class TestNullFieldOmission:
         """standard 模式下 property.array_index 非 -1 时保留该字段。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="MyProp", type="ArrayProperty", value=[], array_index=3, guid=None)
+        prop = PropertyIR(name="P", type="ArrayProperty", value=[], array_index=3, guid=None)
         result = renderer._property_to_dict(prop, is_debug=False)
         assert result["array_index"] == 3
 
@@ -382,7 +384,7 @@ class TestNullFieldOmission:
         """debug 模式下所有字段保持不变。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=-1, guid=None)
+        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=-1, guid=None)
         result = renderer._property_to_dict(prop, is_debug=True)
         assert "guid" in result
         assert result["guid"] is None
