@@ -54,7 +54,16 @@ class TestNumericReads:
         ar = ByteArchive(struct.pack('<f', 3.14159))
         assert abs(ar.read_f32() - 3.14159) < 0.001
 
-        # 数组读取与边界检查
+
+# ---------------------------------------------------------------------------
+# 3. 数组读取
+# ---------------------------------------------------------------------------
+
+class TestArrayRead:
+    """数组读取与边界检查。"""
+
+    def test_read_array(self):
+        """使用 element_reader 回调读取数组。"""
         data = struct.pack('<iii', 10, 20, 30)
         ar = ByteArchive(data)
         result = ar.read_array(3, lambda a: a.read_i32())
@@ -62,7 +71,7 @@ class TestNumericReads:
 
 
 # ---------------------------------------------------------------------------
-# 3. 容错模式与诊断
+# 4. 容错模式与诊断
 # ---------------------------------------------------------------------------
 
 class TestTolerantAndDiagnostics:
@@ -73,10 +82,11 @@ class TestTolerantAndDiagnostics:
         ar = ByteArchive(b'\x01\x02\x03', tolerant=True)
         assert ar.read_safe(10) is None
 
-        # 越界操作记录诊断信息
-        ar2 = ByteArchive(b'\x01\x02\x03')
-        ar2.read_safe(10)
-        diags = ar2.get_diagnostics()
+    def test_diagnostics_collected_on_out_of_bounds(self):
+        """越界操作记录诊断信息。"""
+        ar = ByteArchive(b'\x01\x02\x03')
+        ar.read_safe(10)
+        diags = ar.get_diagnostics()
         assert len(diags) > 0
 
 

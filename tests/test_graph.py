@@ -287,26 +287,30 @@ class TestScriptSerialUnknownCtrlBits:
         assert mock_archive.read_u8.call_count == 1
         assert len(result) == 11
 
-        # ctrl=0x06（bit1 + 未知 bit2）应读取 extra byte 后立即返回
-        mock_archive2 = MagicMock()
-        mock_archive2.read_u8.side_effect = [0x06, 0x00]
-        mock_archive2.tell.return_value = 100
+    def test_ctrl_with_extra_byte_returns_early(self):
+        """ctrl=0x06（bit1 + 未知 bit2）应读取 extra byte 后立即返回。"""
+        from uasset_read.serializers.graph_node import _read_node_script_serial
 
-        mock_summary2 = MagicMock()
-        mock_summary2.file_version_ue5 = 1011
+        # 第一次 read_u8 返回 ctrl=0x06，第二次返回 extra byte
+        mock_archive = MagicMock()
+        mock_archive.read_u8.side_effect = [0x06, 0x00]
+        mock_archive.tell.return_value = 100
 
-        mock_export2 = MagicMock()
-        mock_export2.has_script_serialization = True
-        mock_export2.serial_offset = 0
-        mock_export2.script_serialization_start_offset = 100
-        mock_export2.script_serialization_end_offset = 200
-        mock_export2.script_serialization_size = 100
+        mock_summary = MagicMock()
+        mock_summary.file_version_ue5 = 1011
 
-        result2 = _read_node_script_serial(
-            archive=mock_archive2,
+        mock_export = MagicMock()
+        mock_export.has_script_serialization = True
+        mock_export.serial_offset = 0
+        mock_export.script_serialization_start_offset = 100
+        mock_export.script_serialization_end_offset = 200
+        mock_export.script_serialization_size = 100
+
+        result = _read_node_script_serial(
+            archive=mock_archive,
             name_map=[],
-            summary=mock_summary2,
-            node_export=mock_export2,
+            summary=mock_summary,
+            node_export=mock_export,
             import_map=[],
             export_map=[],
             linker=None,
@@ -314,6 +318,6 @@ class TestScriptSerialUnknownCtrlBits:
         )
 
         # read_u8 调用两次：ctrl byte + extra byte（bit1 标志），然后因未知位返回
-        assert mock_archive2.read_u8.call_count == 2
-        assert len(result2) == 11
-        assert result2[0] is None  # function_reference 未解析
+        assert mock_archive.read_u8.call_count == 2
+        assert len(result) == 11
+        assert result[0] is None  # function_reference 未解析
