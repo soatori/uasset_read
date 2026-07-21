@@ -119,16 +119,10 @@ class JSONRenderer(IRenderer):
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
             else:
-                seen = set()
-                unique_diags = []
-                for d in ir.diagnostics:
-                    d_dict = d.to_dict()
-                    key = (d_dict.get("field"), d_dict.get("error"))
-                    if key not in seen:
-                        seen.add(key)
-                        unique_diags.append(d_dict)
-                if unique_diags:
-                    data["diagnostics"] = unique_diags
+                all_diags = [d.to_dict() for d in ir.diagnostics]
+                folded = self._fold_diagnostics(all_diags)
+                if folded:
+                    data["diagnostics"] = folded
         if ir.asset_registry_data:
             data["asset_registry_data"] = ir.asset_registry_data
         if ir.anim_blueprint:
@@ -187,7 +181,7 @@ class JSONRenderer(IRenderer):
         result = {
             "graph_name": graph.graph_name,
             "graph_guid": graph.graph_guid,
-            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "nodes": [self._node_to_dict(n, options.output_level) for n in graph.nodes],
             "execution_chains": graph.execution_chains,
         }
         if graph.graph_type:
@@ -196,28 +190,45 @@ class JSONRenderer(IRenderer):
             result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
         return result
 
-    def _node_to_dict(self, node) -> dict[str, Any]:
-        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+    def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
+        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p, output_level) for p in node.pins], "execution_flow": node.execution_flow}
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
         return d
 
-    def _pin_to_dict(self, pin) -> dict[str, Any]:
+    def _pin_to_dict(self, pin, output_level: str = "standard") -> dict[str, Any]:
+        is_debug = output_level == "debug"
         d: dict[str, Any] = {
             "pin_name": pin.pin_name,
-            "pin_type": pin.pin_type,
             "linked_to": pin.linked_to,
             "direction": pin.direction,
-            "default_value": pin.default_value,
-            # 结构化类型字段
             "pin_category": pin.pin_category,
-            "pin_subcategory": pin.pin_subcategory,
             "container_type": pin.container_type,
-            "is_reference": pin.is_reference,
-            "is_const": pin.is_const,
-            "is_weak_pointer": pin.is_weak_pointer,
-            "is_uobject_wrapper": pin.is_uobject_wrapper,
         }
+        if is_debug:
+            # debug 模式：保留所有字段
+            d["pin_type"] = pin.pin_type
+            d["default_value"] = pin.default_value
+            d["pin_subcategory"] = pin.pin_subcategory
+            d["is_reference"] = pin.is_reference
+            d["is_const"] = pin.is_const
+            d["is_weak_pointer"] = pin.is_weak_pointer
+            d["is_uobject_wrapper"] = pin.is_uobject_wrapper
+        else:
+            # standard 模式：只输出非默认值
+            if pin.default_value:
+                d["default_value"] = pin.default_value
+            if pin.pin_subcategory:
+                d["pin_subcategory"] = pin.pin_subcategory
+            if pin.is_reference:
+                d["is_reference"] = True
+            if pin.is_const:
+                d["is_const"] = True
+            if pin.is_weak_pointer:
+                d["is_weak_pointer"] = True
+            if pin.is_uobject_wrapper:
+                d["is_uobject_wrapper"] = True
+        # 条件字段（两种模式都适用）
         if pin.pin_subcategory_object_name is not None:
             d["pin_subcategory_object"] = pin.pin_subcategory_object_name
         if pin.is_map_key:
@@ -233,6 +244,55 @@ class JSONRenderer(IRenderer):
             if pin.map_key_pin_subcategory_object_name is not None:
                 d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object_name
         return d
+
+    def _extract_error_pattern(self, error: str) -> str:
+        """提取 error 模式，替换数字为 {n} 占位符。"""
+        import re
+        return re.sub(r'\d+', '{n}', error)
+
+    def _extract_position(self, diag: dict) -> int | None:
+        """从 diagnostic 字典中提取位置（使用 current_pos 字段）。"""
+        return diag.get("current_pos")
+
+    def _fold_diagnostics(self, diagnostics: list) -> list:
+        """折叠相同 (kind, field) 模式的 diagnostics。
+
+        单条不折叠，多条折叠为一条含 count 和 pos_range 的记录。
+        """
+        if not diagnostics:
+            return diagnostics
+
+        # 按 (kind, field) 分组
+        groups: dict[tuple[str, str], list] = {}
+        for diag in diagnostics:
+            key = (diag.get("kind", ""), diag.get("field", ""))
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(diag)
+
+        folded = []
+        for (kind, field), items in groups.items():
+            if len(items) == 1:
+                folded.append(items[0])
+            else:
+                error_pattern = self._extract_error_pattern(items[0].get("error", ""))
+                positions = []
+                for item in items:
+                    pos = self._extract_position(item)
+                    if pos is not None:
+                        positions.append(pos)
+                folded.append({
+                    "kind": kind,
+                    "field": field,
+                    "error_pattern": error_pattern,
+                    "count": len(items),
+                    "pos_range": {
+                        "min": min(positions) if positions else 0,
+                        "max": max(positions) if positions else 0,
+                    },
+                })
+
+        return folded
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
