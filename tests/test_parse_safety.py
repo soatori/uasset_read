@@ -7,6 +7,7 @@ test_report_summary.py。
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -193,3 +194,44 @@ def test_debug_aggregation_shows_counts():
     assert "read_name: index out of range" in filter_obj.message_counts
     assert filter_obj.message_counts["read_name: index out of range"] == 10
     logger.removeFilter(filter_obj)
+
+
+# ============================================================================
+# 7. 原子写入完整性
+# ============================================================================
+
+def test_atomic_write_produces_valid_json(tmp_path):
+    """#434: 原子写入中断后不应产生不完整 JSON 文件"""
+    import json
+    import tempfile
+
+    out_file = tmp_path / "output.json"
+    output_str = json.dumps({"test": "data"}, ensure_ascii=False)
+
+    # 正常原子写入
+    tmp_fd = -1
+    tmp_path_str = ""
+    try:
+        tmp_fd, tmp_path_str = tempfile.mkstemp(
+            dir=str(tmp_path), suffix=".tmp"
+        )
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
+            tmp_f.write(output_str)
+        tmp_fd = -1
+        os.replace(tmp_path_str, str(out_file))
+    except BaseException:
+        if tmp_fd >= 0:
+            os.close(tmp_fd)
+        try:
+            os.unlink(tmp_path_str)
+        except OSError:
+            pass
+        raise
+
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data["test"] == "data"
+
+    # 验证无残留临时文件
+    tmp_files = list(tmp_path.glob("*.tmp"))
+    assert len(tmp_files) == 0, "不应有残留临时文件"

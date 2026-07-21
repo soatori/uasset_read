@@ -57,7 +57,7 @@ def is_blueprint_export(export: ExportIR) -> bool:
     - 类名以 _C 结尾（如 BP_Character_C）
     - 或有 graphs 数据
     """
-    if export.object_name.endswith("_C"):
+    if getattr(export, "object_name", None) is not None and export.object_name.endswith("_C"):
         return True
     if export.graphs:
         return True
