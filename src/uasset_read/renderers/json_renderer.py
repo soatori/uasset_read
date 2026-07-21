@@ -144,10 +144,10 @@ class JSONRenderer(IRenderer):
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
         # standard 模式下过滤编辑器布局属性
         if is_debug:
-            properties = [self._property_to_dict(p) for p in export.properties]
+            properties = [self._property_to_dict(p, is_debug=True) for p in export.properties]
         else:
             properties = [
-                self._property_to_dict(p) for p in export.properties
+                self._property_to_dict(p, is_debug=False) for p in export.properties
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
@@ -177,8 +177,14 @@ class JSONRenderer(IRenderer):
             d["error_message"] = export.error_message
         return d
 
-    def _property_to_dict(self, prop) -> dict[str, Any]:
-        return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
+    def _property_to_dict(self, prop, is_debug: bool = False) -> dict[str, Any]:
+        d: dict[str, Any] = {"name": prop.name, "type": prop.type, "value": prop.value}
+        # standard 模式下省略默认值字段
+        if is_debug or prop.array_index != -1:
+            d["array_index"] = prop.array_index
+        if is_debug or prop.guid is not None:
+            d["guid"] = prop.guid
+        return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
         result = {

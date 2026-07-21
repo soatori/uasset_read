@@ -345,3 +345,45 @@ class TestNullFieldOmission:
         result = renderer._export_to_dict(export, RenderOptions(output_level="debug"), is_debug=True)
         assert "parent_class" in result
         assert result["parent_class"] is None
+
+    def test_property_standard_omits_null_guid(self):
+        """standard 模式下 property.guid 为 None 时省略该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=0, guid=None)
+        result = renderer._property_to_dict(prop, is_debug=False)
+        assert "guid" not in result
+
+    def test_property_standard_keeps_non_null_guid(self):
+        """standard 模式下 property.guid 有值时保留该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=0, guid="abc123")
+        result = renderer._property_to_dict(prop, is_debug=False)
+        assert result["guid"] == "abc123"
+
+    def test_property_standard_omits_default_array_index(self):
+        """standard 模式下 property.array_index 为 -1 时省略该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=-1, guid=None)
+        result = renderer._property_to_dict(prop, is_debug=False)
+        assert "array_index" not in result
+
+    def test_property_standard_keeps_non_default_array_index(self):
+        """standard 模式下 property.array_index 非 -1 时保留该字段。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        prop = PropertyIR(name="MyProp", type="ArrayProperty", value=[], array_index=3, guid=None)
+        result = renderer._property_to_dict(prop, is_debug=False)
+        assert result["array_index"] == 3
+
+    def test_property_debug_preserves_all_fields(self):
+        """debug 模式下所有字段保持不变。"""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        renderer = JSONRenderer()
+        prop = PropertyIR(name="MyProp", type="BoolProperty", value=True, array_index=-1, guid=None)
+        result = renderer._property_to_dict(prop, is_debug=True)
+        assert "guid" in result
+        assert result["guid"] is None
+        assert result["array_index"] == -1
