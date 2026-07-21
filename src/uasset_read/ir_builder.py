@@ -131,20 +131,13 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             f"置信度较低"
         )
     # v0.5.1 新增：export 级别 partial 时补充 message（#432）
-    elif any(
-        (ps := getattr(export, "parse_status", None))
-        and ps != "success"
+    # ExportParseStatus 是 StrEnum；.value 取 bare string，避免 str() 返回类限定名
+    elif non_success_statuses := {
+        str(export.parse_status.value)
         for export in result.export_map or []
-    ):
-        ps_values = sorted(
-            {
-                str(getattr(getattr(export, "parse_status", None), "value", ""))
-                for export in result.export_map or []
-                if getattr(export, "parse_status", None)
-                and getattr(export, "parse_status", None).value != "success"
-            }
-        )
-        status_message = f"Export 级别状态: {', '.join(ps_values)}"
+        if (getattr(export, "parse_status", None) or "success") != "success"
+    }:
+        status_message = f"Export 级别状态: {', '.join(sorted(non_success_statuses))}"
         status_code = "EXPORT_PARTIAL"
     else:
         status_code = None
