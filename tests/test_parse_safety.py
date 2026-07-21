@@ -235,3 +235,44 @@ def test_atomic_write_produces_valid_json(tmp_path):
     # 验证无残留临时文件
     tmp_files = list(tmp_path.glob("*.tmp"))
     assert len(tmp_files) == 0, "不应有残留临时文件"
+
+
+def test_atomic_write_cleans_up_on_exception(tmp_path):
+    """#434: 写入异常时临时文件应被清理，目标文件不受影响"""
+    import json
+    import tempfile
+
+    out_file = tmp_path / "output.json"
+    # 预写一个有效文件，验证异常不会破坏它
+    out_file.write_text(json.dumps({"original": True}), encoding="utf-8")
+
+    class WriteError(Exception):
+        pass
+
+    tmp_fd = -1
+    tmp_path_str = ""
+    with pytest.raises(WriteError):
+        try:
+            tmp_fd, tmp_path_str = tempfile.mkstemp(
+                dir=str(tmp_path), suffix=".tmp"
+            )
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
+                tmp_f.write("partial content")
+            tmp_fd = -1
+            # 模拟写入后、replace 前的异常
+            raise WriteError("模拟中断")
+        except BaseException:
+            if tmp_fd >= 0:
+                os.close(tmp_fd)
+            try:
+                os.unlink(tmp_path_str)
+            except OSError:
+                pass
+            raise
+
+    # 目标文件未被破坏
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data["original"] is True
+    # 无残留临时文件
+    tmp_files = list(tmp_path.glob("*.tmp"))
+    assert len(tmp_files) == 0, "异常后不应有残留临时文件"

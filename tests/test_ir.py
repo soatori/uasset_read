@@ -167,7 +167,6 @@ class TestStatusModel:
         result.warnings = []
         result.decompiled_functions = []
         result.metadata = {}
-        result.exports = [export]
         result.export_map = [export]
 
         ir = build_package_ir(result)
