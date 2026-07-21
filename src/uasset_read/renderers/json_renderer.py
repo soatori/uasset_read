@@ -6,6 +6,7 @@ from __future__ import annotations
 """
 
 import json
+import re
 import dataclasses
 from typing import IO, TYPE_CHECKING, Any
 
@@ -247,7 +248,6 @@ class JSONRenderer(IRenderer):
 
     def _extract_error_pattern(self, error: str) -> str:
         """提取 error 模式，替换数字为 {n} 占位符。"""
-        import re
         return re.sub(r'\d+', '{n}', error)
 
     def _extract_position(self, diag: dict) -> int | None:
@@ -275,22 +275,26 @@ class JSONRenderer(IRenderer):
             if len(items) == 1:
                 folded.append(items[0])
             else:
-                error_pattern = self._extract_error_pattern(items[0].get("error", ""))
+                first_error = items[0].get("error", "")
+                error_pattern = self._extract_error_pattern(first_error)
                 positions = []
                 for item in items:
                     pos = self._extract_position(item)
                     if pos is not None:
                         positions.append(pos)
-                folded.append({
+                folded_item: dict[str, Any] = {
                     "kind": kind,
                     "field": field,
+                    "error": first_error,
                     "error_pattern": error_pattern,
                     "count": len(items),
-                    "pos_range": {
-                        "min": min(positions) if positions else 0,
-                        "max": max(positions) if positions else 0,
-                    },
-                })
+                }
+                if positions:
+                    folded_item["pos_range"] = {
+                        "min": min(positions),
+                        "max": max(positions),
+                    }
+                folded.append(folded_item)
 
         return folded
 
