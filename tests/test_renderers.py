@@ -97,19 +97,11 @@ class TestRendererRegistry:
 
 class TestJSONRendererBasic:
     def test_render_produces_valid_json(self):
-        """渲染结果应为有效 JSON。"""
+        """渲染结果应为有效 JSON，包含 status、exports。"""
         ir = _make_ir()
         renderer = get_renderer("json")
-        result = renderer.render(ir, RenderOptions())
-        data = json.loads(result)
+        data = json.loads(renderer.render(ir, RenderOptions()))
         assert isinstance(data, dict)
-
-    def test_render_contains_required_keys(self):
-        """输出应包含 status、summary、exports、statistics。"""
-        ir = _make_ir()
-        renderer = get_renderer("json")
-        result = renderer.render(ir, RenderOptions())
-        data = json.loads(result)
         assert "status" in data
         assert "exports" in data
 
@@ -120,19 +112,14 @@ class TestJSONRendererBasic:
 
 class TestMarkdownRendererBasic:
     def test_render_produces_string(self):
-        """渲染结果应为非空字符串。"""
+        """渲染结果应为非空字符串，带路径包名只显示最后一段。"""
+        renderer = get_renderer("markdown")
         ir = _make_ir()
-        renderer = get_renderer("markdown")
         result = renderer.render(ir, RenderOptions())
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_render_with_package_name_slash(self):
-        """带路径的包名应只显示最后一段作为标题。"""
-        ir = _make_ir(header=_make_header(package_name="/Game/Blueprints/BP_MyAsset"))
-        renderer = get_renderer("markdown")
-        result = renderer.render(ir, RenderOptions())
-        assert "# BP_MyAsset" in result
+        assert isinstance(result, str) and len(result) > 0
+        # 带路径包名
+        ir2 = _make_ir(header=_make_header(package_name="/Game/Blueprints/BP_MyAsset"))
+        assert "# BP_MyAsset" in renderer.render(ir2, RenderOptions())
 
 
 # ============================================================================
