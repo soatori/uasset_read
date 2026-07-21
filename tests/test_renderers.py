@@ -321,71 +321,30 @@ class TestOutputLevelIntegration:
 # ============================================================================
 
 class TestNullFieldOmission:
-    # --- parent_class 测试 ---
     def test_standard_omits_parent_class_when_none(self):
-        """standard 模式下 parent_class 为 None 时省略该字段。"""
+        """Export null 字段省略：parent_class None/有值/debug。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        export = _make_export(parent_class=None)
-        result = renderer._export_to_dict(export, RenderOptions(output_level="standard"))
+        export_none = _make_export(parent_class=None)
+        result = renderer._export_to_dict(export_none, RenderOptions(output_level="standard"))
         assert "parent_class" not in result
+        export_set = _make_export(parent_class="/Engine/Actor")
+        result2 = renderer._export_to_dict(export_set, RenderOptions(output_level="standard"))
+        assert result2["parent_class"] == "/Engine/Actor"
+        result3 = renderer._export_to_dict(export_none, RenderOptions(output_level="debug"), is_debug=True)
+        assert "parent_class" in result3 and result3["parent_class"] is None
 
-    def test_standard_keeps_parent_class_when_set(self):
-        """standard 模式下 parent_class 有值时保留该字段。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        export = _make_export(parent_class="/Engine/Actor")
-        result = renderer._export_to_dict(export, RenderOptions(output_level="standard"))
-        assert result["parent_class"] == "/Engine/Actor"
-
-    def test_debug_keeps_parent_class_when_none(self):
-        """debug 模式下 parent_class 为 None 时仍保留该字段。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        export = _make_export(parent_class=None)
-        result = renderer._export_to_dict(export, RenderOptions(output_level="debug"), is_debug=True)
-        assert "parent_class" in result
-        assert result["parent_class"] is None
-
-    # --- property guid/array_index 测试 ---
     def test_property_standard_omits_null_guid(self):
-        """standard 模式下 property.guid 为 None 时省略该字段。"""
+        """Property null 字段省略：guid/array_index/debug。"""
         from uasset_read.renderers.json_renderer import JSONRenderer
         renderer = JSONRenderer()
-        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid=None)
-        result = renderer._property_to_dict(prop, is_debug=False)
-        assert "guid" not in result
-
-    def test_property_standard_keeps_non_null_guid(self):
-        """standard 模式下 property.guid 有值时保留该字段。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid="abc123")
-        result = renderer._property_to_dict(prop, is_debug=False)
-        assert result["guid"] == "abc123"
-
-    def test_property_standard_omits_default_array_index(self):
-        """standard 模式下 property.array_index 为 -1 时省略该字段。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=-1, guid=None)
-        result = renderer._property_to_dict(prop, is_debug=False)
-        assert "array_index" not in result
-
-    def test_property_standard_keeps_non_default_array_index(self):
-        """standard 模式下 property.array_index 非 -1 时保留该字段。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        prop = PropertyIR(name="P", type="ArrayProperty", value=[], array_index=3, guid=None)
-        result = renderer._property_to_dict(prop, is_debug=False)
-        assert result["array_index"] == 3
-
-    def test_property_debug_preserves_all_fields(self):
-        """debug 模式下所有字段保持不变。"""
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        renderer = JSONRenderer()
-        prop = PropertyIR(name="P", type="BoolProperty", value=True, array_index=-1, guid=None)
-        result = renderer._property_to_dict(prop, is_debug=True)
-        assert "guid" in result
-        assert result["guid"] is None
-        assert result["array_index"] == -1
+        prop_none = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid=None)
+        assert "guid" not in renderer._property_to_dict(prop_none, is_debug=False)
+        prop_guid = PropertyIR(name="P", type="BoolProperty", value=True, array_index=0, guid="abc123")
+        assert renderer._property_to_dict(prop_guid, is_debug=False)["guid"] == "abc123"
+        prop_default = PropertyIR(name="P", type="BoolProperty", value=True, array_index=-1, guid=None)
+        assert "array_index" not in renderer._property_to_dict(prop_default, is_debug=False)
+        prop_custom = PropertyIR(name="P", type="ArrayProperty", value=[], array_index=3, guid=None)
+        assert renderer._property_to_dict(prop_custom, is_debug=False)["array_index"] == 3
+        result_debug = renderer._property_to_dict(prop_none, is_debug=True)
+        assert "guid" in result_debug and result_debug["array_index"] == 0

@@ -121,8 +121,7 @@ class TestSerializationStrategy:
         # 未知类默认返回 TAGGED_PROPERTIES_ONLY
         assert get_serialization_strategy("UnknownCustomClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
-    def test_no_overlap_between_categories(self):
-        """三个类别无重叠。"""
+        # 三个类别无重叠
         tagged = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.TAGGED_PROPERTIES_ONLY}
         opaque = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.OPAQUE_CLASS_PAYLOAD}
         skip = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.SKIP_UNSUPPORTED}
@@ -156,28 +155,14 @@ class TestClassHandlerRegistry:
     """ClassHandlerRegistry 注册与查找测试。"""
 
     def test_registry_register_and_lookup(self):
-        """注册和精确查找。"""
+        """注册->查找->未注册返回 None->缓存命中。"""
         reg = ClassHandlerRegistry()
         handler = _MockHandler("TestHandler", ["MyClass"])
         reg.register(handler)
         found = reg.find_handler("MyClass")
-        assert found is not None
-        assert found.handler_name == "TestHandler"
-
-    def test_registry_unknown_class_returns_none(self):
-        """未知 class 无 handler。"""
-        reg = ClassHandlerRegistry()
-        reg.register(_MockHandler("TestHandler", ["KnownClass"]))
+        assert found is not None and found.handler_name == "TestHandler"
         assert reg.find_handler("UnknownClass") is None
-
-    def test_registry_cache_hits(self):
-        """缓存命中返回同一对象。"""
-        reg = ClassHandlerRegistry()
-        handler = _MockHandler("H1", ["CachedClass"])
-        reg.register(handler)
-        first = reg.find_handler("CachedClass")
-        second = reg.find_handler("CachedClass")
-        assert first is second
+        assert reg.find_handler("MyClass") is reg.find_handler("MyClass")
 
 
 # ============================================================================
