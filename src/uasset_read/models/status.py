@@ -6,27 +6,23 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .fallback import ExportParseStatus
+
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
     from uasset_read.link.result import LinkerParseResult
 
 
-# Partial 状态集合：这些 export 级状态使 package 状态降为 partial
+# Partial 状态集合：由 ExportParseStatus.is_partial 自动生成
 # 完整覆盖所有 partial 变体，确保状态判断一致（#315）
-PARTIAL_STATUSES: frozenset[str] = frozenset({
-    "partial",
-    "opaque",
-    "skipped",
-    "partial_metadata",
-    "opaque_unversioned",
-    "fallback",
-    "metadata",
-})
+PARTIAL_STATUSES: frozenset[str] = frozenset(
+    s.value for s in ExportParseStatus if s.is_partial
+)
 
-# Failed 状态集合：所有 export 都是 failed 时 package 状态为 failed
-FAILED_STATUSES: frozenset[str] = frozenset({
-    "failed",
-})
+# Failed 状态集合：由 ExportParseStatus.is_failed 自动生成
+FAILED_STATUSES: frozenset[str] = frozenset(
+    s.value for s in ExportParseStatus if s.is_failed
+)
 
 
 def _result_status(result: "ParseResult | LinkerParseResult") -> str:

@@ -26,6 +26,16 @@ class ExportParseStatus(str, Enum):
     FALLBACK = "fallback"
     METADATA = "metadata"
 
+    @property
+    def is_partial(self) -> bool:
+        return self.value.startswith("partial") or self.value in (
+            "opaque", "skipped", "opaque_unversioned", "fallback", "metadata"
+        )
+
+    @property
+    def is_failed(self) -> bool:
+        return self.value == "failed"
+
 
 class FallbackReason(str, Enum):
     """Fallback 原因。"""
