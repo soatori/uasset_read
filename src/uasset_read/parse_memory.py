@@ -15,20 +15,26 @@ def _cleanup_parse_memory(result) -> None:
     """
     # 打破 UObjectInstance ↔ linker 循环引用
     if result is not None and result.linker:
-        if hasattr(result.linker, '_export_objects'):
-            for obj in result.linker._export_objects:
-                obj.linker = None
-        if hasattr(result.linker, '_import_objects'):
-            for obj in result.linker._import_objects:
-                obj.linker = None
-        result.linker._export_objects.clear()
-        result.linker._import_objects.clear()
-        result.linker._root_objects.clear()
-        result.linker._preload_cache.clear()
-        result.linker._archive = None
-        logger.debug("linker 循环引用已打破，导出/导入对象已清理")
+        try:
+            if hasattr(result.linker, '_export_objects'):
+                for obj in result.linker._export_objects:
+                    obj.linker = None
+            if hasattr(result.linker, '_import_objects'):
+                for obj in result.linker._import_objects:
+                    obj.linker = None
+            result.linker._export_objects.clear()
+            result.linker._import_objects.clear()
+            result.linker._root_objects.clear()
+            result.linker._preload_cache.clear()
+            result.linker._archive = None
+            logger.debug("linker 循环引用已打破，导出/导入对象已清理")
+        except Exception as e:
+            logger.debug("linker 循环引用清理异常，已忽略: %s", e)
 
     # 重置全局 class_registry 缓存
-    from uasset_read.parsers.class_registry import get_class_registry
-    get_class_registry().reset_cache()
-    logger.debug("class_registry.reset_cache() 已调用")
+    try:
+        from uasset_read.parsers.class_registry import get_class_registry
+        get_class_registry().reset_cache()
+        logger.debug("class_registry.reset_cache() 已调用")
+    except Exception as e:
+        logger.debug("class_registry.reset_cache() 异常，已忽略: %s", e)
