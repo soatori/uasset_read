@@ -187,22 +187,6 @@ class JSONRenderer(IRenderer):
             d["array_index"] = prop.array_index
         if is_debug or prop.guid is not None:
             d["guid"] = prop.guid
-        # StructValue 元数据精简（standard 模式）
-        if not is_debug and hasattr(prop.value, "__dataclass_fields__"):
-            value_dict = dataclasses.asdict(prop.value)
-            for field_name, default in [
-                ("parse_status", "success"),
-                ("property_type", "StructProperty"),
-                ("kind", "struct_binary_decoded"),
-            ]:
-                if value_dict.get(field_name) == default:
-                    value_dict.pop(field_name, None)
-            d["value"] = value_dict
-        # ObjectProperty full_name 省略（standard 模式）
-        if not is_debug and isinstance(d.get("value"), dict):
-            val = d["value"]
-            if "full_name" in val and "object_name" in val:
-                val.pop("full_name", None)
         return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
