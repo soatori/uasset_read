@@ -140,7 +140,7 @@ jobs:
 
       - name: Run resource safety tests
         run: |
-          python -m pytest tests/core/test_batch_hybrid.py tests/core/test_error_handling_v2.py -v
+          python -m pytest tests/test_parse_safety.py -v
 
   ruff-check:
     runs-on: ubuntu-latest

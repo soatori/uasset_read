@@ -68,9 +68,17 @@ from .ir import (
     BlueprintIR,
     DecompiledFunctionIR,
     ExecutionChainIR,
+    FunctionGraphIR,
     VariableIR,
     SourceSiteContextIR,
     GatherableTextDataIR,
+    HexViewEntryIR,
+    DebugIR,
+    AnimationDataIR,
+    PackageDependenciesIR,
+    DiagnosticsDataIR,
+)
+from .ir_anim import (
     AnimNotifyIR,
     AnimBlueprintIR,
     AnimSequenceIR,
@@ -92,7 +100,7 @@ from .diagnostics import (
 )
 
 __all__ = [
-    # 核心模型（core.py）
+    # 核心模型（models/core.py）
     "FEdGraphPinType",
     "UEdGraphPin",
     "UEdGraphNode",
@@ -150,9 +158,16 @@ __all__ = [
     "BlueprintIR",
     "DecompiledFunctionIR",
     "ExecutionChainIR",
+    "FunctionGraphIR",
     "VariableIR",
     "SourceSiteContextIR",
     "GatherableTextDataIR",
+    "HexViewEntryIR",
+    "DebugIR",
+    "AnimationDataIR",
+    "PackageDependenciesIR",
+    "DiagnosticsDataIR",
+    # 动画 IR（ir_anim.py）
     "AnimNotifyIR",
     "AnimBlueprintIR",
     "AnimSequenceIR",

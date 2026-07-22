@@ -32,12 +32,14 @@ from uasset_read.models.ir import (
     VariableIR,
     HexViewEntryIR,
     DebugIR,
+    AnimationDataIR,
+    PackageDependenciesIR,
+    DiagnosticsDataIR,
 )
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
     from uasset_read.link.result import LinkerParseResult
-
 
 from uasset_read.constants import (
     BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS,
@@ -45,7 +47,6 @@ from uasset_read.constants import (
 )
 from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
-
 
 def _classify_variable(var) -> str:
     """分类蓝图变量。"""
@@ -57,6 +58,47 @@ def _classify_variable(var) -> str:
     if "InputAction" in name or "InputAxis" in name:
         return "input_action"
     return "user"
+
+def _has_heuristic_recovery(result: "ParseResult | LinkerParseResult") -> bool:
+    """检查是否有 heuristic bytecode recovery。"""
+    for func in result.decompiled_functions or []:
+        if "serial_scan_recovery" in (func.fallback_reasons or []):
+            return True
+    return False
+
+
+def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int:
+    """统计 heuristic recovery 的函数数量。"""
+    count = 0
+    for func in result.decompiled_functions or []:
+        if "serial_scan_recovery" in (func.fallback_reasons or []):
+            count += 1
+    return count
+
+
+def _build_animation_data(result: "ParseResult | LinkerParseResult") -> AnimationDataIR | None:
+    """从 ParseResult 聚合动画数据（anim_blueprint, anim_sequence, anim_montage）。
+
+    动画数据来源于各 Export 的 custom_data 字段，需要从所有 export 中聚合。
+    """
+    anim_bp = None
+    anim_seq = None
+    anim_mon = None
+    for export in result.export_map or []:
+        custom = getattr(export, "custom_data", None) or {}
+        if not anim_bp and custom.get("anim_blueprint"):
+            anim_bp = custom["anim_blueprint"]
+        if not anim_seq and custom.get("anim_sequence"):
+            anim_seq = custom["anim_sequence"]
+        if not anim_mon and custom.get("anim_montage"):
+            anim_mon = custom["anim_montage"]
+    if anim_bp or anim_seq or anim_mon:
+        return AnimationDataIR(
+            anim_blueprint=anim_bp,
+            anim_sequence=anim_seq,
+            anim_montage=anim_mon,
+        )
+    return None
 
 
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
@@ -89,6 +131,15 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     status = _result_status(result)
     metadata = getattr(result, "metadata", None) or {}
     errors = list(getattr(result, "errors", None) or [])
+    warnings = list(getattr(result, "warnings", None) or [])
+
+    # 聚合 decompiled function 级 warnings
+    _decompiled_warnings = set()
+    for func in result.decompiled_functions or []:
+        for w in func.warnings or []:
+            if w not in _decompiled_warnings:
+                _decompiled_warnings.add(w)
+                warnings.append(f"[bytecode] {w}")
 
     if errors:
         status_code = "PARSE_ERROR"
@@ -99,6 +150,38 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             f"轻量容错解析：导出数量过多"
             f"({getattr(result.summary, 'export_count', '?')})，已降级处理"
         )
+    elif status == "partial" and _has_heuristic_recovery(result):
+        status_code = "HEURISTIC_BYTECODE_RECOVERY"
+        heuristic_count = _count_heuristic_functions(result)
+        total_count = len(result.decompiled_functions or [])
+        status_message = (
+            f"字节码启发式恢复：{heuristic_count}/{total_count} 个函数通过 serial scan 恢复，"
+            f"置信度较低"
+        )
+    # v0.5.1 新增：export 级别 partial 时补充 message（#432）
+    # ExportParseStatus 是 StrEnum；.value 取 bare string，避免 str() 返回类限定名
+    elif non_success_statuses := {
+        str(export.parse_status.value) if hasattr(export.parse_status, "value") else str(export.parse_status)
+        for export in result.export_map or []
+        if (getattr(export, "parse_status", None) or "success") != "success"
+    }:
+        # 按状态分组统计，附带 fallback_reason 示例便于定位
+        status_groups: dict[str, list[str]] = {}
+        for export in result.export_map or []:
+            ps = getattr(export, "parse_status", None)
+            if ps is not None:
+                ps_str = str(ps.value) if hasattr(ps, "value") else str(ps)
+                if ps_str != "success":
+                    reason = str(getattr(export, "fallback_reason", None) or "")
+                    status_groups.setdefault(ps_str, []).append(reason)
+        parts = []
+        for st in sorted(status_groups):
+            reasons = status_groups[st]
+            unique_reasons = list(dict.fromkeys(r for r in reasons if r))[:3]
+            reason_hint = f" ({'; '.join(unique_reasons)})" if unique_reasons else ""
+            parts.append(f"{st}×{len(reasons)}{reason_hint}")
+        status_message = f"Export 级别状态: {', '.join(parts)}"
+        status_code = "EXPORT_PARTIAL"
     else:
         status_code = None
         status_message = None
@@ -113,21 +196,27 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         decompiled_functions=_build_decompiled_functions_ir(result),
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
+        animation=_build_animation_data(result),
         diagnostics=result.diagnostics or [],
         function_graphs=function_graphs,
-        resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
-        inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
         logic_sources=list(getattr(result, "logic_sources", None) or []),
-        soft_object_paths=list(getattr(result, "soft_references", None) or []),
-        soft_package_references=list(getattr(result, "soft_package_references", None) or []),
-        depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
-        resolved_depends_map=_build_resolved_depends_map(result),
-        asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
-        asset_registry_data=_build_asset_registry_data(result),
-        errors=errors,
-        status=status,
-        status_message=status_message,
-        status_code=status_code,
+        dependencies=PackageDependenciesIR(
+            resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
+            inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
+            depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
+            resolved_depends_map=_build_resolved_depends_map(result),
+            soft_object_paths=list(getattr(result, "soft_references", None) or []),
+            soft_package_references=list(getattr(result, "soft_package_references", None) or []),
+            asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
+            asset_registry_data=_build_asset_registry_data(result),
+        ),
+        diagnostics_data=DiagnosticsDataIR(
+            errors=errors,
+            warnings=warnings,
+            status=status,
+            status_message=status_message,
+            status_code=status_code,
+        ),
         debug=_build_debug_ir(getattr(result, 'hex_view_entries', [])),
     )
 
@@ -136,7 +225,6 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         _bind_implementations(ir.blueprint, ir.decompiled_functions, ir.function_graphs)
 
     return ir
-
 
 def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
     """Build function_graphs with a simple complexity guard for large graphs."""
@@ -163,7 +251,6 @@ def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> li
         blueprint_functions = getattr(result.blueprint, 'functions', None)
     return build_function_graphs(graphs, blueprint_functions)
 
-
 def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -> list[dict]:
     entries = []
     for graph in getattr(result, "graphs", None) or []:
@@ -189,7 +276,6 @@ def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -
                 "fallback_reason": "graph_complexity_limit",
             })
     return entries
-
 
 def _build_header(result: ParseResult) -> PackageHeaderIR:
     summary = result.summary
@@ -303,7 +389,6 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         data_resource_offset=_safe_int(getattr(summary, "data_resource_offset", 0)),
     )
 
-
 def _get_version_string(result: ParseResult) -> str:
     """从 version_container 提取 UE 版本字符串。"""
     vc = result.version_container
@@ -323,14 +408,16 @@ def _get_version_string(result: ParseResult) -> str:
         return "5.x"
     return "4.x"
 
-
 def _build_imports(result: ParseResult) -> list[ImportIR]:
+    from uasset_read.link.linker import normalize_world_partition_path
+
     imports = []
     for idx, imp in enumerate(result.import_map or []):
         outer_resolved = _resolve_package_index(result, getattr(imp, "outer_index", None))
+        cp_raw = _safe_str(getattr(imp, "class_package", None))
         imports.append(ImportIR(
             index=idx,
-            class_package=_safe_str(getattr(imp, "class_package", None)),
+            class_package=normalize_world_partition_path(cp_raw),
             class_name=_safe_str(getattr(imp, "class_name", None)),
             object_name=_safe_str(getattr(imp, "object_name", None)),
             outer_index=getattr(imp, "outer_index", 0) or 0,
@@ -342,7 +429,6 @@ def _build_imports(result: ParseResult) -> list[ImportIR]:
         ))
     return imports
 
-
 def _build_exports(result: ParseResult) -> list[ExportIR]:
     exports = []
     for idx, export in enumerate(result.export_map or []):
@@ -353,7 +439,6 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
             # tolerant 模式：跳过失败的 export
             logger.debug("构建 export %d IR 失败: %s", idx, e, exc_info=True)
     return exports
-
 
 def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
@@ -415,19 +500,43 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         anim_blueprint=getattr(export, "custom_data", {}).get("anim_blueprint"),
         anim_sequence=getattr(export, "custom_data", {}).get("anim_sequence"),
         anim_montage=getattr(export, "custom_data", {}).get("anim_montage"),
-        # 直接访问字段（从 ExportRawIR 提升）
-        template_index=raw.template_index,
-        object_flags=raw.object_flags,
-        package_flags=raw.package_flags,
-        b_forced_export=raw.b_forced_export,
-        b_not_for_client=raw.b_not_for_client,
-        b_not_for_server=raw.b_not_for_server,
-        b_is_asset=raw.b_is_asset,
-        b_generate_public_hash=raw.b_generate_public_hash,
-        b_not_always_loaded_for_editor_game=raw.b_not_always_loaded_for_editor_game,
-        guid=raw.guid,
     )
 
+def _build_export_raw_ir(export) -> ExportRawIR:
+    """从 ObjectExport 构建 UE 原始导出表字段。"""
+
+    def _pkg_index_raw(pi) -> int:
+        """提取 PackageIndex 原始整数值。"""
+        if pi is None:
+            return 0
+        return getattr(pi, "index", 0)
+
+    return ExportRawIR(
+        class_index=_pkg_index_raw(getattr(export, "class_index", None)),
+        super_index=_pkg_index_raw(getattr(export, "super_index", None)),
+        outer_index=_pkg_index_raw(getattr(export, "outer_index", None)),
+        template_index=_pkg_index_raw(getattr(export, "template_index", None)),
+        object_flags=getattr(export, "object_flags", 0) or 0,
+        serial_offset=getattr(export, "serial_offset", 0) or 0,
+        package_flags=getattr(export, "package_flags", 0) or 0,
+        b_forced_export=bool(getattr(export, "b_forced_export", False)),
+        b_not_for_client=bool(getattr(export, "b_not_for_client", False)),
+        b_not_for_server=bool(getattr(export, "b_not_for_server", False)),
+        b_is_inherited_instance=bool(getattr(export, "b_is_inherited_instance", False)),
+        b_not_always_loaded_for_editor_game=bool(getattr(export, "b_not_always_loaded_for_editor_game", True)),
+        b_is_asset=bool(getattr(export, "b_is_asset", False)),
+        b_generate_public_hash=bool(getattr(export, "b_generate_public_hash", False)),
+        script_serialization_start_offset=getattr(export, "script_serialization_start_offset", 0) or 0,
+        script_serialization_end_offset=getattr(export, "script_serialization_end_offset", 0) or 0,
+        guid=_safe_str(getattr(export, "guid", "")) or "",
+    )
+
+def _build_export_diagnostics(export) -> dict | None:
+    """从 ObjectExport.transforms 构建诊断信息。"""
+    transforms = getattr(export, "transforms", None) or {}
+    if not transforms:
+        return None
+    return dict(transforms)
 
 def _build_export_raw_ir(export) -> ExportRawIR:
     """从 ObjectExport 构建 UE 原始导出表字段。"""
@@ -476,7 +585,6 @@ def _build_property_ir(prop) -> PropertyIR:
         guid=_normalize_guid(getattr(prop, "guid", None)),
     )
 
-
 def _build_graph_ir(graph) -> GraphIR:
     nodes = []
     for node in getattr(graph, "nodes", None) or []:
@@ -487,20 +595,18 @@ def _build_graph_ir(graph) -> GraphIR:
     for subgraph in getattr(graph, "subgraphs", None) or []:
         subgraphs.append(_build_graph_ir(subgraph))
 
-    # 推断图类型
+    # 推断图类型（按优先级排序：更具体的模式优先于更宽泛的模式）
     graph_type = None
     graph_class = _safe_str(getattr(graph, "graph_class", None))
     if graph_class:
-        if "StateMachine" in graph_class:
-            graph_type = "state_machine"
-        elif "Conduit" in graph_class:
-            graph_type = "conduit"
-        elif "State" in graph_class:
-            graph_type = "state"
-        elif "Transition" in graph_class:
-            graph_type = "transition"
-        elif "AnimGraph" in graph_class or "Animation" in graph_class:
-            graph_type = "animation"
+        for kw, gtype in (
+            ("StateMachine", "state_machine"), ("Transition", "transition"),
+            ("Conduit", "conduit"), ("State", "state"),
+            ("AnimGraph", "animation"), ("Animation", "animation"),
+        ):
+            if kw in graph_class:
+                graph_type = gtype
+                break
 
     return GraphIR(
         graph_guid=_normalize_guid(getattr(graph, "graph_guid", None)),
@@ -511,7 +617,6 @@ def _build_graph_ir(graph) -> GraphIR:
         subgraphs=subgraphs,
         graph_type=graph_type,
     )
-
 
 def _build_node_ir(node) -> NodeIR:
     pins = []
@@ -552,7 +657,6 @@ def _build_node_ir(node) -> NodeIR:
         event_type=event_type,
     )
 
-
 def _build_pin_ir(pin) -> PinIR:
     # 提取 pin_guid
     pin_guid = _normalize_guid(getattr(pin, "pin_guid", None))
@@ -579,16 +683,15 @@ def _build_pin_ir(pin) -> PinIR:
     is_uobject_wrapper = False
     is_map_key = False
     is_map_value = False
+    map_key_pin_category = ""
+    map_key_pin_subcategory = ""
+    map_key_pin_subcategory_object = None
 
     if pin_type_obj is not None:
         pin_category = _safe_str(getattr(pin_type_obj, "pin_category", None))
         pin_subcategory = _safe_str(getattr(pin_type_obj, "pin_subcategory", None))
         pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
-
-        # EPinContainerType: None=0, Array=1, Set=2, Map=3
-        _container_int = getattr(pin_type_obj, "container_type", 0)
-        container_type = CONTAINER_TYPE_MAP.get(_container_int, "None")
-
+        container_type = CONTAINER_TYPE_MAP.get(getattr(pin_type_obj, "container_type", 0), "None")
         is_reference = bool(getattr(pin_type_obj, "is_reference", False))
         is_const = bool(getattr(pin_type_obj, "is_const", False))
         is_weak_pointer = bool(getattr(pin_type_obj, "is_weak_pointer", False))
@@ -596,16 +699,13 @@ def _build_pin_ir(pin) -> PinIR:
         is_map_key = bool(getattr(pin_type_obj, "is_map_key", False))
         is_map_value = bool(getattr(pin_type_obj, "is_map_value", False))
 
-    # Map terminal 类型（key 的类型信息）
-    map_key_pin_category = ""
-    map_key_pin_subcategory = ""
-    map_key_pin_subcategory_object = None
-    if pin_type_obj is not None and getattr(pin_type_obj, "container_type", 0) == 3:
-        map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
-        map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
-        map_key_pin_subcategory_object = getattr(
-            pin_type_obj, "map_key_terminal_sub_category_object_name", None
-        )
+        # Map terminal 类型（key 的类型信息）
+        if getattr(pin_type_obj, "container_type", 0) == 3:
+            map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
+            map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
+            map_key_pin_subcategory_object = getattr(
+                pin_type_obj, "map_key_terminal_sub_category_object_name", None
+            )
 
     return PinIR(
         pin_guid=pin_guid,
@@ -616,7 +716,7 @@ def _build_pin_ir(pin) -> PinIR:
         default_value=getattr(pin, "default_value", None),
         pin_category=pin_category,
         pin_subcategory=pin_subcategory,
-        pin_subcategory_object=pin_subcategory_object,
+        pin_subcategory_object_name=pin_subcategory_object,
         container_type=container_type,
         is_reference=is_reference,
         is_const=is_const,
@@ -626,9 +726,8 @@ def _build_pin_ir(pin) -> PinIR:
         is_map_value=is_map_value,
         map_key_pin_category=map_key_pin_category,
         map_key_pin_subcategory=map_key_pin_subcategory,
-        map_key_pin_subcategory_object=map_key_pin_subcategory_object,
+        map_key_pin_subcategory_object_name=map_key_pin_subcategory_object,
     )
-
 
 def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
     """将 PackageIndex 解析为可读路径字符串。"""
@@ -645,6 +744,27 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
     except (KeyError, IndexError, AttributeError, ValueError):
         return None
 
+def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
+    """将 DependsMap 的原始 PackageIndex 解析为可读路径。
+
+    Returns:
+        二维列表：外层按 export 索引，内层为 [{index, path}] 列表。
+    """
+    if not result.summary:
+        return []
+    raw_map = getattr(result.summary, "depends_map", None) or []
+    if not raw_map:
+        return []
+
+    resolved: list[list[dict]] = []
+    for dep_indices in raw_map:
+        row: list[dict] = []
+        for idx in dep_indices:
+            pkg_idx = PackageIndex(idx)
+            path = _resolve_package_index(result, pkg_idx)
+            row.append({"index": idx, "path": path})
+        resolved.append(row)
+    return resolved
 
 def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
     """将 DependsMap 的原始 PackageIndex 解析为可读路径。
@@ -674,10 +794,14 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
     if linker is None:
         return None
 
+    from uasset_read.link.linker import normalize_world_partition_path
+
     import_paths = []
     for imp in result.import_map or []:
-        path = f"{_safe_str(getattr(imp, 'class_package', None))}.{_safe_str(getattr(imp, 'class_name', None))}"
-        if path.strip("."):
+        cp = _safe_str(getattr(imp, 'class_package', None))
+        cn = _safe_str(getattr(imp, 'class_name', None))
+        path = f"{normalize_world_partition_path(cp)}.{cn}"
+        if path.strip():
             import_paths.append(path)
 
     export_paths = []
@@ -691,7 +815,6 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
         import_paths=import_paths,
         export_paths=export_paths,
     )
-
 
 def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
     """从 ParseResult.blueprint 构建 BlueprintIR（完整元数据）。"""
@@ -768,7 +891,6 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
         components=components,
     )
 
-
 def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFunctionIR]:
     """从 ParseResult.decompiled_functions 构建 DecompiledFunctionIR 列表。"""
     decompiled = []
@@ -788,6 +910,19 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
         ))
     return decompiled
 
+def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
+    """根据 fallback_reasons 推断字节码置信度。
+
+    置信度等级（从高到低）：
+    - verified: 标准 UStruct 提取路径，无 fallback
+    - fallback: BPGC 提取（cooked 资产的正常降级路径）
+    - heuristic: 序列化字节流启发式扫描恢复（最低置信度）
+    """
+    if "serial_scan_recovery" in fallback_reasons:
+        return "heuristic"
+    if "bpgc_bytecode_extraction" in fallback_reasons:
+        return "fallback"
+    return "verified"
 
 def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
     """根据 fallback_reasons 推断字节码置信度。
@@ -817,6 +952,37 @@ def _extract_return_type(signature: str) -> str:
         return signature[:space_idx]
     return "void"
 
+def _extract_parameters_from_signature(signature: str) -> list[dict]:
+    """从 C++ 函数签名中解析参数列表。
+
+    签名格式: "ReturnType FuncName(param1, param2, ...)"
+    返回: [{"name": "param1", "type": "int32"}, ...]
+    """
+    if not signature:
+        return []
+
+    # 提取括号内的参数部分
+    match = re.search(r'\(([^)]*)\)', signature)
+    if not match:
+        return []
+
+    params_str = match.group(1).strip()
+    if not params_str:
+        return []
+
+    params = []
+    for param in params_str.split(','):
+        param = param.strip()
+        if not param:
+            continue
+        # 分离类型和名称: "int32 EntryPoint" → ("int32", "EntryPoint")
+        parts = param.rsplit(None, 1)
+        if len(parts) == 2:
+            params.append({"name": parts[1], "type": parts[0]})
+        elif len(parts) == 1:
+            # 只有类型没有名称
+            params.append({"name": "", "type": parts[0]})
+    return params
 
 def _extract_parameters_from_signature(signature: str) -> list[dict]:
     """从 C++ 函数签名中解析参数列表。
@@ -873,7 +1039,6 @@ def _extract_parameters(func) -> list[dict]:
 
     return []
 
-
 def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
     """从所有图的执行链构建 ExecutionChainIR 列表。"""
     chains = []
@@ -890,7 +1055,6 @@ def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
             if chain:
                 chains.append(ExecutionChainIR(event=event_name, chain=chain))
     return chains
-
 
 def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
     """从 ParseResult.blueprint.variables 构建 VariableIR 列表（完整元数据）。"""
@@ -929,6 +1093,101 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
         ))
     return variables
 
+# 事件别名映射：Blueprint 事件名 → 常见 C++/蓝图实现函数名
+_EVENT_ALIASES: dict[str, list[str]] = {
+    "ReceiveBeginPlay": ["BeginPlay"],
+    "ReceiveTick": ["Tick"],
+    "ReceiveEndPlay": ["EndPlay"],
+    "ReceiveAnyDamage": ["AnyDamage"],
+    "ReceivePointDamage": ["PointDamage"],
+    "ReceiveRadialDamage": ["RadialDamage"],
+    "ReceiveActorBeginOverlap": ["ActorBeginOverlap"],
+    "ReceiveActorEndOverlap": ["ActorEndOverlap"],
+    "ReceiveActorBeginCursorOver": ["ActorBeginCursorOver"],
+    "ReceiveActorEndCursorOver": ["ActorEndCursorOver"],
+    "ReceiveHit": ["Hit"],
+    "ReceiveDestroyed": ["Destroyed"],
+}
+
+def _bind_implementations(
+    blueprint: BlueprintIR,
+    decompiled: list[DecompiledFunctionIR],
+    function_graphs: list[dict],
+) -> None:
+    """将 decompiled_functions 和 function_graphs 关联到 blueprint 的函数/事件。
+
+    匹配优先级：
+    1. 精确函数名匹配 decompiled_functions.name
+    2. 事件别名匹配（如 ReceiveBeginPlay → BeginPlay）
+    3. function_graphs[].function_name 匹配
+    4. 均未匹配 → implementation_status 保持 "missing"
+    """
+    # 构建查找索引
+    decompiled_by_name: dict[str, DecompiledFunctionIR] = {}
+    for f in decompiled:
+        if f.name not in decompiled_by_name:
+            decompiled_by_name[f.name] = f
+
+    graph_by_name: dict[str, dict] = {}
+    for g in function_graphs:
+        fn = g.get("function_name", "")
+        if fn and fn not in graph_by_name:
+            graph_by_name[fn] = g
+
+    for func in blueprint.functions:
+        _bind_single_implementation(func, decompiled_by_name, graph_by_name, [func.name])
+
+    for evt in blueprint.events:
+        candidates = [evt.name]
+        aliases = _EVENT_ALIASES.get(evt.name)
+        if aliases:
+            candidates.extend(aliases)
+        _bind_single_implementation(evt, decompiled_by_name, graph_by_name, candidates)
+
+def _bind_single_implementation(
+    item,
+    decompiled_by_name: dict[str, DecompiledFunctionIR],
+    graph_by_name: dict[str, dict],
+    candidate_names: list[str],
+) -> None:
+    """绑定单个函数/事件的实现。"""
+    matched_decompiled = None
+    match_count = 0
+
+    for name in candidate_names:
+        df = decompiled_by_name.get(name)
+        if df:
+            matched_decompiled = df
+            match_count += 1
+
+    if matched_decompiled:
+        item.implementation = {
+            "name": matched_decompiled.name,
+            "signature": matched_decompiled.signature,
+            "cpp_code": matched_decompiled.cpp_code,
+            "parameters": matched_decompiled.parameters,
+            "return_type": matched_decompiled.return_type,
+        }
+        if matched_decompiled.fallback_reasons:
+            item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
+        item.implementation_status = "decompiled"
+        if match_count > 1:
+            item.implementation["ambiguous_match"] = True
+        return
+
+    # 尝试 function_graphs
+    for name in candidate_names:
+        fg = graph_by_name.get(name)
+        if fg:
+            item.function_graph = {
+                "function_name": fg.get("function_name", ""),
+                "graph_source": fg.get("graph_source", ""),
+                "entry_node_guid": fg.get("entry_node_guid", ""),
+            }
+            item.implementation_status = "graph_only"
+            return
+
+    # 无匹配，保持 "missing"
 
 # 事件别名映射：Blueprint 事件名 → 常见 C++/蓝图实现函数名
 _EVENT_ALIASES: dict[str, list[str]] = {
@@ -1060,7 +1319,6 @@ def _format_var_type(var) -> str:
         return f"{prefix}<{base}>"
     return base
 
-
 def _get_event_name_from_node(node) -> str:
     """从事件节点提取事件名称。"""
     # 优先使用 node_comment（事件节点的注释通常是事件名）
@@ -1069,7 +1327,6 @@ def _get_event_name_from_node(node) -> str:
         return comment
     # 回退到类名
     return getattr(node, "class_name", "Unknown") or "Unknown"
-
 
 def _trace_execution_from_node(start_node, graph) -> list[str]:
     """从起始节点追踪执行流链。"""
@@ -1087,7 +1344,6 @@ def _trace_execution_from_node(start_node, graph) -> list[str]:
         next_node = _find_next_exec_node(current, graph, visited)
         current = next_node
     return chain
-
 
 def _find_next_exec_node(node, graph, visited) -> object | None:
     """从节点的执行输出引脚找到下一个节点。"""
@@ -1119,7 +1375,6 @@ def _find_next_exec_node(node, graph, visited) -> object | None:
                 return target_node
     return None
 
-
 def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
     """根据引脚 ID 查找对应的节点（未访问过的）。"""
     for node in graph.nodes or []:
@@ -1132,9 +1387,6 @@ def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
                 return node
     return None
 
-
-
-
 def _normalize_guid(guid: str | None) -> str | None:
     """将 GUID 标准化为 32 位小写 hex（无横杠）。"""
     if not guid:
@@ -1143,7 +1395,6 @@ def _normalize_guid(guid: str | None) -> str | None:
     if cleaned and len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
         return cleaned
     return None
-
 
 def _extract_pin_guid(ref) -> str | None:
     """从 Pin 引用中提取并标准化 GUID。"""
@@ -1155,7 +1406,6 @@ def _extract_pin_guid(ref) -> str | None:
     raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
     return _normalize_guid(raw) if raw else None
 
-
 def _build_asset_registry_data(result) -> dict | None:
     """从 ParseResult 构建 asset_registry_data 字典。"""
     asset_registry_data = getattr(result, "asset_registry_data", None)
@@ -1165,7 +1415,6 @@ def _build_asset_registry_data(result) -> dict | None:
         return asset_registry_data.to_dict()
     except (AttributeError, TypeError, ValueError):
         return None
-
 
 def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
     """将 ParseResult.hex_view_entries 转为 DebugIR。

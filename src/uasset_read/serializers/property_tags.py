@@ -153,7 +153,6 @@ def read_property_tag(
     archive: FArchive,
     name_map: List[str],
     tolerant: bool = False,
-    summary: Optional[Any] = None,  # 向后兼容，接受但不使用
     mappings: Optional[Any] = None,
     struct_name: Optional[str] = None,
 ) -> PropertyTag:
@@ -163,7 +162,6 @@ def read_property_tag(
         archive: FArchive 实例
         name_map: 名称映射列表
         tolerant: 是否启用容错模式
-        summary: PackageFileSummary 实例（向后兼容参数，当前未使用）
 
     Returns:
         PropertyTag 实例
@@ -198,7 +196,14 @@ def read_property_tag(
             tag.tag_data = prop_info.mapping_type
             _apply_property_type_to_tag(tag, prop_info.mapping_type)
     tag.size = archive.read_i32()
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
+    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
+    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
+    size_valid = archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
+    if not size_valid:
+        tag.size_exceeded = True
+        # size 超过剩余字节，跳过后续字段读取（flags/array_index/guid 等数据不可靠）
+        tag.serialize_type = "Property"
+        return tag
     tag.flags = archive.read_u8()
     if tag.flags & PROP_TAG_SKIPPED_SERIALIZE:
         tag.serialize_type = "Skipped"
@@ -272,7 +277,6 @@ def _read_property_tag_legacy(
 
     # Size
     tag.size = archive.read_i32()
-    archive.validate_size(tag.size, tag.name, tolerant=tolerant)
 
     # ArrayIndex — 旧格式始终存在
     tag.array_index = archive.read_i32()
@@ -312,6 +316,15 @@ def _read_property_tag_legacy(
             # InnerType (FName) + ValueType (FName) — 参考 PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
+
+    # 传递属性类型用于动态阈值（StructProperty 传递 struct_type）
+    # 注意：必须在类型特定字段读取之后，此时 tag.struct_type 已赋值
+    effective_type = tag.struct_type if tag.type == "StructProperty" and tag.struct_type else tag.type
+    size_valid = archive.validate_size(tag.size, tag.name, tolerant=tolerant, property_type=effective_type)
+    if not size_valid:
+        tag.size_exceeded = True
+        tag.serialize_type = "Property"
+        return tag
 
     # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (UE5 始终满足)
     # 参考: PropertyTag.cpp:378-393

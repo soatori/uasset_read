@@ -85,7 +85,7 @@ def _parse_material_input(
     - MaskB: int32
     - MaskA: int32
     """
-    if tag.size < 28:  # 4 + 4 + 4 + 4*4
+    if tag.size < 32:  # 4 (OutputIndex) + 8 (FName) + 4 (Mask) + 4*4 (RGBA)
         return None
 
     start_pos = archive.tell()
@@ -133,7 +133,7 @@ def _parse_expression_output(
     - MaskB: int32
     - MaskA: int32
     """
-    if tag.size < 24:  # 4 + 4 + 4*4
+    if tag.size < 28:  # 8 (FName) + 4 (Mask) + 4*4 (RGBA)
         return None
 
     start_pos = archive.tell()
@@ -258,6 +258,195 @@ def _parse_struct_binary(
         "struct_type": struct_type,
         "size": size,
         "fields": fields,
+    }
+
+
+# ============================================================================
+# 结构体二进制解码器（按 struct_type + size 分派）
+# ============================================================================
+
+def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Vector / Vector3f / Vector3d（12 或 24 字节）。"""
+    import struct as _struct
+    fmt = "<ddd" if size == 24 else "<fff"
+    x, y, z = _struct.unpack(fmt, raw[:size])
+    return {"X": x, "Y": y, "Z": z}
+
+
+def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Rotator / Rotator3f / Rotator3d（12 或 24 字节）。"""
+    import struct as _struct
+    fmt = "<ddd" if size == 24 else "<fff"
+    pitch, yaw, roll = _struct.unpack(fmt, raw[:size])
+    return {"Pitch": pitch, "Yaw": yaw, "Roll": roll}
+
+
+def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Vector2D / Vector2f / Vector2d（8 或 16 字节）。"""
+    import struct as _struct
+    fmt = "<dd" if size == 16 else "<ff"
+    x, y = _struct.unpack(fmt, raw[:size])
+    return {"X": x, "Y": y}
+
+
+def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Vector4 / Vector4f / Vector4d（16 或 32 字节）。"""
+    import struct as _struct
+    fmt = "<dddd" if size == 32 else "<ffff"
+    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    return {"X": x, "Y": y, "Z": z, "W": w}
+
+
+def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Quat / Quat4f / Quat4d（16 或 32 字节）。"""
+    import struct as _struct
+    fmt = "<dddd" if size == 32 else "<ffff"
+    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    return {"X": x, "Y": y, "Z": z, "W": w}
+
+
+def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 LinearColor（16 字节，4 个 float RGBA）。"""
+    import struct as _struct
+    r, g, b, a = _struct.unpack("<ffff", raw[:16])
+    return {"R": r, "G": g, "B": b, "A": a}
+
+
+def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Color（4 字节，4 个 uint8 RGBA）。"""
+    import struct as _struct
+    r, g, b, a = _struct.unpack("<BBBB", raw[:4])
+    return {"R": r, "G": g, "B": b, "A": a}
+
+
+def _decode_guid(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Guid（16 字节，4 个 uint32）。"""
+    import struct as _struct
+    a, b, c, d = _struct.unpack("<IIII", raw[:16])
+    return {"A": a, "B": b, "C": c, "D": d}
+
+
+def _decode_int_point(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 IntPoint（8 字节，2 个 int32）。"""
+    import struct as _struct
+    x, y = _struct.unpack("<ii", raw[:8])
+    return {"X": x, "Y": y}
+
+
+def _decode_int_vector(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 IntVector / IntVector3（12 字节，3 个 int32）。"""
+    import struct as _struct
+    x, y, z = _struct.unpack("<iii", raw[:12])
+    return {"X": x, "Y": y, "Z": z}
+
+
+def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 TwoVectors（24 或 48 字节，两组三分量向量）。"""
+    import struct as _struct
+    fmt = "<ddd" if size == 48 else "<fff"
+    elem_size = size // 2
+    v1 = _struct.unpack(fmt, raw[:elem_size])
+    v2 = _struct.unpack(fmt, raw[elem_size:size])
+    return {
+        "V1": {"X": v1[0], "Y": v1[1], "Z": v1[2]},
+        "V2": {"X": v2[0], "Y": v2[1], "Z": v2[2]},
+    }
+
+
+def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Plane / Plane4f / Plane4d（16 或 32 字节）。"""
+    import struct as _struct
+    fmt = "<dddd" if size == 32 else "<ffff"
+    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    return {"X": x, "Y": y, "Z": z, "W": w}
+
+
+def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
+    """解码 Sphere / Sphere3f / Sphere3d（16 或 32 字节，中心 + 半径）。"""
+    import struct as _struct
+    fmt = "<dddd" if size == 32 else "<ffff"
+    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    return {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
+
+
+# struct_type → (合法字节大小集合, 解码函数) 的分发字典
+_STRUCT_DECODERS: Dict[str, tuple] = {
+    "Vector":       ((12, 24), _decode_vector),
+    "Vector3f":     ((12, 24), _decode_vector),
+    "Vector3d":     ((12, 24), _decode_vector),
+    "Rotator":      ((12, 24), _decode_rotator),
+    "Rotator3f":    ((12, 24), _decode_rotator),
+    "Rotator3d":    ((12, 24), _decode_rotator),
+    "Vector2D":     ((8, 16),  _decode_vector2d),
+    "Vector2f":     ((8, 16),  _decode_vector2d),
+    "Vector2d":     ((8, 16),  _decode_vector2d),
+    "Vector4":      ((16, 32), _decode_vector4),
+    "Vector4f":     ((16, 32), _decode_vector4),
+    "Vector4d":     ((16, 32), _decode_vector4),
+    "Quat":         ((16, 32), _decode_quat),
+    "Quat4f":       ((16, 32), _decode_quat),
+    "Quat4d":       ((16, 32), _decode_quat),
+    "LinearColor":  ((16,),    _decode_linear_color),
+    "Color":        ((4,),     _decode_color),
+    "Guid":         ((16,),    _decode_guid),
+    "IntPoint":     ((8,),     _decode_int_point),
+    "IntVector":    ((12,),    _decode_int_vector),
+    "IntVector3":   ((12,),    _decode_int_vector),
+    "TwoVectors":   ((24, 48), _decode_two_vectors),
+    "Plane":        ((16, 32), _decode_plane),
+    "Plane4f":      ((16, 32), _decode_plane),
+    "Plane4d":      ((16, 32), _decode_plane),
+    "Sphere":       ((16, 32), _decode_sphere),
+    "Sphere3f":     ((16, 32), _decode_sphere),
+    "Sphere3d":     ((16, 32), _decode_sphere),
+}
+
+
+def _parse_struct_binary(
+    tag: "PropertyTag",
+    archive: "FArchive",
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Any,
+) -> Optional[Dict[str, Any]]:
+    """解析 BinaryOrNative 格式的 StructProperty。
+
+    当 serialize_type 为 BinaryOrNative 时，结构体数据以原生二进制存储，
+    无 PropertyTag 循环。根据 struct_type 和 size 解码为可读字段。
+    """
+    struct_type = getattr(tag, "struct_type", None) or "UnknownStruct"
+    size = tag.size
+
+    if size <= 0:
+        return None
+
+    start_pos = archive.tell()
+    try:
+        raw = archive.read(size)
+    except (struct.error, OSError):
+        archive.seek(start_pos)
+        return None
+
+    # 按 struct_type + size 分派解码器
+    decoder_entry = _STRUCT_DECODERS.get(struct_type)
+    if decoder_entry:
+        valid_sizes, decoder = decoder_entry
+        if size in valid_sizes:
+            fields = decoder(raw, size)
+            return {
+                "kind": "struct_binary_decoded",
+                "struct_type": struct_type,
+                "size": size,
+                "fields": fields,
+            }
+
+    # 未知结构体类型或 size 不匹配 — 返回 raw bytes 供下游保留
+    return {
+        "kind": "binary_or_native_property",
+        "type": tag.type,
+        "size": size,
+        "raw_data": raw,
+        "struct_type": struct_type,
     }
 
 

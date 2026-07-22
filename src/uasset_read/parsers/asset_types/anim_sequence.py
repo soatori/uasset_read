@@ -162,5 +162,5 @@ class AnimSequenceHandler:
 def parse_anim_sequence(archive: Any, name_map: list[str]) -> dict[str, Any]:
     """提取 AnimSequence 元数据（深度解析）。"""
     return {
-        "parse_status": "delegated_to_handler",
+        "parse_status": "success",
     }

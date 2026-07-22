@@ -60,6 +60,13 @@ class EX_AutoRtfmStopTransact(KismetExpression):
 class EX_AutoRtfmAbortIfNot(KismetExpression):
     """AutoRTFM: evaluate bool condition, abort transaction on false."""
 
+    BoolExpression: KismetExpression = None
+
     @property
     def Token(self):
         return EExprToken.EX_AutoRtfmAbortIfNot
+
+    @classmethod
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmAbortIfNot:
+        bool_expr = archive.read_expression()
+        return cls(BoolExpression=bool_expr)

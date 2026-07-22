@@ -3,97 +3,29 @@ from __future__ import annotations
 """
 Kismet expression subclasses — Numeric and boolean literal constants.
 """
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
-from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
+from __future__ import annotations
+
+from uasset_read.kismet.expressions.base import (
+    make_simple_expression, make_value_expression,
+)
 from uasset_read.kismet.tokens import EExprToken
 
-if TYPE_CHECKING:
-    from uasset_read.kismet.archive import FKismetArchive
 
+# 单值表达式：从 archive 读取一个值
+EX_IntConst = make_value_expression(EExprToken.EX_IntConst, "read_i32")
+EX_FloatConst = make_value_expression(EExprToken.EX_FloatConst, "read_f32")
+EX_ByteConst = make_value_expression(EExprToken.EX_ByteConst, "read_u8")
+EX_IntConstByte = make_value_expression(EExprToken.EX_IntConstByte, "read_u8")
+EX_Int64Const = make_value_expression(EExprToken.EX_Int64Const, "read_i64")
+EX_UInt64Const = make_value_expression(EExprToken.EX_UInt64Const, "read_u64")
+EX_DoubleConst = make_value_expression(EExprToken.EX_DoubleConst, "read_f64")
 
-@dataclass
-class EX_IntConst(KismetExpressionT[int]):
-    @property
-    def Token(self): return EExprToken.EX_IntConst
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_IntConst:
-        return cls(Value=archive.read_i32())
-
-
-@dataclass
-class EX_FloatConst(KismetExpressionT[float]):
-    @property
-    def Token(self): return EExprToken.EX_FloatConst
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FloatConst:
-        return cls(Value=archive.read_f32())
-
-
-@dataclass
-class EX_ByteConst(KismetExpressionT[int]):
-    @property
-    def Token(self): return EExprToken.EX_ByteConst
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ByteConst:
-        return cls(Value=archive.read_u8())
-
-
-@dataclass
-class EX_IntConstByte(KismetExpressionT[int]):
-    @property
-    def Token(self): return EExprToken.EX_IntConstByte
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_IntConstByte:
-        return cls(Value=archive.read_u8())
-
-
-@dataclass
-class EX_Int64Const(KismetExpressionT[int]):
-    @property
-    def Token(self): return EExprToken.EX_Int64Const
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Int64Const:
-        return cls(Value=archive.read_i64())
-
-
-@dataclass
-class EX_UInt64Const(KismetExpressionT[int]):
-    @property
-    def Token(self): return EExprToken.EX_UInt64Const
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UInt64Const:
-        return cls(Value=archive.read_u64())
-
-
-@dataclass
-class EX_DoubleConst(KismetExpressionT[float]):
-    @property
-    def Token(self): return EExprToken.EX_DoubleConst
-    @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_DoubleConst:
-        return cls(Value=archive.read_f64())
-
-
-@dataclass
-class EX_IntZero(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_IntZero
-
-
-@dataclass
-class EX_IntOne(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_IntOne
-
-
-@dataclass
-class EX_True(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_True
-
-
-@dataclass
-class EX_False(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_False
+# 无数据表达式：仅返回 Token
+EX_IntZero = make_simple_expression(EExprToken.EX_IntZero)
+EX_IntOne = make_simple_expression(EExprToken.EX_IntOne)
+EX_True = make_simple_expression(EExprToken.EX_True)
+EX_False = make_simple_expression(EExprToken.EX_False)
+EX_NoObject = make_simple_expression(EExprToken.EX_NoObject)
+EX_NoInterface = make_simple_expression(EExprToken.EX_NoInterface)
+EX_Self = make_simple_expression(EExprToken.EX_Self)
+EX_Nothing = make_simple_expression(EExprToken.EX_Nothing)

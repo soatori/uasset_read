@@ -22,6 +22,8 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from uasset_read.exceptions import ParseError
+
 
 
 logger = logging.getLogger(__name__)
@@ -146,7 +148,7 @@ def read_asset_registry_data(
             if obj_data is not None:
                 result.objects.append(obj_data)
 
-    except (struct.error, OSError, ValueError) as e:
+    except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("AssetRegistryData 解析异常: %s", e)
         # 返回已解析的部分数据
         return result
@@ -178,6 +180,6 @@ def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
             tags=tags,
         )
 
-    except (struct.error, OSError, ValueError) as e:
+    except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("AssetRegistryData: 读取对象数据异常: %s", e)
         return None

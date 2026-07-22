@@ -6,10 +6,15 @@ from __future__ import annotations
 """
 
 import json
+import re
 import dataclasses
 from typing import IO, TYPE_CHECKING, Any
 
-from uasset_read.renderers.base import IRenderer, RenderOptions, EDITOR_PROPERTY_NAMES, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
+from uasset_read.renderers.base import (
+    IRenderer, RenderOptions,
+    EDITOR_PROPERTY_NAMES,
+    filter_editor_items, filter_variables,
+)
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 from uasset_read.models.ir import HexViewEntryIR
@@ -64,9 +69,9 @@ class JSONRenderer(IRenderer):
         if options.include_schema:
             data["$schema"] = "package.schema.json"
         data["status"] = {
-            "status": ir.status,
-            "message": ir.status_message,
-            "code": ir.status_code,
+            "status": ir.diagnostics_data.status if ir.diagnostics_data else "success",
+            "message": ir.diagnostics_data.status_message if ir.diagnostics_data else None,
+            "code": ir.diagnostics_data.status_code if ir.diagnostics_data else None,
         }
         data["summary"] = {
             "package_name": ir.header.package_name,
@@ -78,10 +83,10 @@ class JSONRenderer(IRenderer):
             "ue_version": ir.header.ue_version,
             "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
         }
+        all_exports = ir.exports if is_debug else filter_editor_items(ir.exports)
         data["exports"] = [
             self._export_to_dict(e, options, is_debug)
-            for e in ir.exports
-            if is_debug or e.object_class not in EDITOR_NODE_CLASSES
+            for e in all_exports
         ]
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
@@ -100,56 +105,52 @@ class JSONRenderer(IRenderer):
                 data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
             else:
                 variables = [
-                    self._variable_to_dict(v) for v in ir.variables
-                    if v.name not in EDITOR_VARIABLE_NAMES
+                    self._variable_to_dict(v) for v in filter_variables(ir.variables)
                 ]
                 if variables:
                     data["variables"] = variables
-        if ir.resolved_parent_assets:
-            data["resolved_parent_assets"] = ir.resolved_parent_assets
-        if ir.inherited_blueprint_graphs:
-            data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
+        if ir.dependencies and ir.dependencies.resolved_parent_assets:
+            data["resolved_parent_assets"] = ir.dependencies.resolved_parent_assets
+        if ir.dependencies and ir.dependencies.inherited_blueprint_graphs:
+            data["inherited_blueprint_graphs"] = ir.dependencies.inherited_blueprint_graphs
         if ir.logic_sources:
             data["logic_sources"] = ir.logic_sources
-        if ir.errors:
-            data["errors"] = ir.errors
+        if ir.diagnostics_data and ir.diagnostics_data.errors:
+            data["errors"] = ir.diagnostics_data.errors
+        if ir.diagnostics_data and ir.diagnostics_data.warnings:
+            data["warnings"] = ir.diagnostics_data.warnings
         if ir.diagnostics:
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
             else:
-                seen = set()
-                unique_diags = []
-                for d in ir.diagnostics:
-                    d_dict = d.to_dict()
-                    key = (d_dict.get("field"), d_dict.get("error"))
-                    if key not in seen:
-                        seen.add(key)
-                        unique_diags.append(d_dict)
-                if unique_diags:
-                    data["diagnostics"] = unique_diags
-        if ir.asset_registry_data:
-            data["asset_registry_data"] = ir.asset_registry_data
-        if ir.anim_blueprint:
-            data["anim_blueprint"] = self._anim_blueprint_to_dict(ir.anim_blueprint)
-        if ir.anim_sequence:
-            data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
-        if ir.anim_montage:
-            data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
+                all_diags = [d.to_dict() for d in ir.diagnostics]
+                folded = self._fold_diagnostics(all_diags)
+                if folded:
+                    data["diagnostics"] = folded
+        if ir.dependencies and ir.dependencies.asset_registry_data:
+            data["asset_registry_data"] = ir.dependencies.asset_registry_data
+        if ir.animation and ir.animation.anim_blueprint:
+            data["anim_blueprint"] = self._anim_blueprint_to_dict(ir.animation.anim_blueprint)
+        if ir.animation and ir.animation.anim_sequence:
+            data["anim_sequence"] = self._anim_sequence_to_dict(ir.animation.anim_sequence)
+        if ir.animation and ir.animation.anim_montage:
+            data["anim_montage"] = self._anim_montage_to_dict(ir.animation.anim_montage)
         if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
             data["debug"] = {
                 "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
             }
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
+        data["statistics"] = self._calculate_statistics(ir)
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
         # standard 模式下过滤编辑器布局属性
         if is_debug:
-            properties = [self._property_to_dict(p) for p in export.properties]
+            properties = [self._property_to_dict(p, is_debug=True) for p in export.properties]
         else:
             properties = [
-                self._property_to_dict(p) for p in export.properties
+                self._property_to_dict(p, is_debug=False) for p in export.properties
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
@@ -162,8 +163,10 @@ class JSONRenderer(IRenderer):
             "object_name": export.object_name,
             "object_class": export.object_class,
             "serial_size": export.serial_size,
-            "parent_class": export.parent_class,
         }
+        # parent_class: debug 模式下始终包含，standard 模式下仅非 None 时包含
+        if is_debug or export.parent_class is not None:
+            d["parent_class"] = export.parent_class
         # standard 模式下只添加非空字段
         if properties or is_debug:
             d["properties"] = properties
@@ -177,14 +180,36 @@ class JSONRenderer(IRenderer):
             d["error_message"] = export.error_message
         return d
 
-    def _property_to_dict(self, prop) -> dict[str, Any]:
-        return {"name": prop.name, "type": prop.type, "value": prop.value, "array_index": prop.array_index, "guid": prop.guid}
+    def _property_to_dict(self, prop, is_debug: bool = False) -> dict[str, Any]:
+        d: dict[str, Any] = {"name": prop.name, "type": prop.type, "value": prop.value}
+        # standard 模式下省略默认值字段
+        if is_debug or prop.array_index != -1:
+            d["array_index"] = prop.array_index
+        if is_debug or prop.guid is not None:
+            d["guid"] = prop.guid
+        # StructValue 元数据精简（standard 模式）
+        if not is_debug and hasattr(prop.value, "__dataclass_fields__"):
+            value_dict = dataclasses.asdict(prop.value)
+            for field_name, default in [
+                ("parse_status", "success"),
+                ("property_type", "StructProperty"),
+                ("kind", "struct_binary_decoded"),
+            ]:
+                if value_dict.get(field_name) == default:
+                    value_dict.pop(field_name, None)
+            d["value"] = value_dict
+        # ObjectProperty full_name 省略（standard 模式）
+        if not is_debug and d.get("type") == "ObjectProperty" and isinstance(d.get("value"), dict):
+            val = d["value"]
+            if "full_name" in val and "object_name" in val:
+                d["value"] = {k: v for k, v in val.items() if k != "full_name"}
+        return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
         result = {
             "graph_name": graph.graph_name,
             "graph_guid": graph.graph_guid,
-            "nodes": [self._node_to_dict(n) for n in graph.nodes],
+            "nodes": [self._node_to_dict(n, options.output_level) for n in graph.nodes],
             "execution_chains": graph.execution_chains,
         }
         if graph.graph_type:
@@ -193,30 +218,67 @@ class JSONRenderer(IRenderer):
             result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
         return result
 
-    def _node_to_dict(self, node) -> dict[str, Any]:
-        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p) for p in node.pins], "execution_flow": node.execution_flow}
+    def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
+        is_debug = output_level == "debug"
+        d: dict[str, Any] = {
+            "node_guid": node.node_guid,
+            "node_class": node.node_class,
+            "pins": [self._pin_to_dict(p, output_level) for p in node.pins],
+        }
+        # node_comment: standard 模式下省略 null
+        if is_debug or node.node_comment is not None:
+            d["node_comment"] = node.node_comment
+        # execution_flow: standard 模式下省略空列表
+        if is_debug or node.execution_flow:
+            d["execution_flow"] = node.execution_flow
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
+        # Enhanced Input 字段: standard 模式下省略 null/空
+        if is_debug or node.input_action_path is not None:
+            d["input_action_path"] = node.input_action_path
+        if is_debug or node.trigger_events:
+            d["trigger_events"] = node.trigger_events
+        if is_debug or node.event_type is not None:
+            d["event_type"] = node.event_type
         return d
 
-    def _pin_to_dict(self, pin) -> dict[str, Any]:
+    def _pin_to_dict(self, pin, output_level: str = "standard") -> dict[str, Any]:
+        is_debug = output_level == "debug"
         d: dict[str, Any] = {
             "pin_name": pin.pin_name,
-            "pin_type": pin.pin_type,
             "linked_to": pin.linked_to,
             "direction": pin.direction,
-            "default_value": pin.default_value,
-            # 结构化类型字段
             "pin_category": pin.pin_category,
-            "pin_subcategory": pin.pin_subcategory,
-            "container_type": pin.container_type,
-            "is_reference": pin.is_reference,
-            "is_const": pin.is_const,
-            "is_weak_pointer": pin.is_weak_pointer,
-            "is_uobject_wrapper": pin.is_uobject_wrapper,
         }
-        if pin.pin_subcategory_object is not None:
-            d["pin_subcategory_object"] = pin.pin_subcategory_object
+        # container_type: standard 模式下省略默认值 "None"
+        if is_debug or pin.container_type != "None":
+            d["container_type"] = pin.container_type
+        if is_debug:
+            # debug 模式：保留所有字段
+            d["pin_type"] = pin.pin_type
+            d["default_value"] = pin.default_value
+            d["pin_subcategory"] = pin.pin_subcategory
+            d["is_reference"] = pin.is_reference
+            d["is_const"] = pin.is_const
+            d["is_weak_pointer"] = pin.is_weak_pointer
+            d["is_uobject_wrapper"] = pin.is_uobject_wrapper
+        else:
+            # standard 模式：只输出非默认值
+            if pin.default_value:
+                d["default_value"] = pin.default_value
+            if pin.pin_subcategory:
+                d["pin_subcategory"] = pin.pin_subcategory
+            if pin.is_reference:
+                d["is_reference"] = True
+            if pin.is_const:
+                d["is_const"] = True
+            if pin.is_weak_pointer:
+                d["is_weak_pointer"] = True
+            if pin.is_uobject_wrapper:
+                d["is_uobject_wrapper"] = True
+        # 条件字段（两种模式都适用）
+        if pin.pin_subcategory_object_name is not None:
+            d["pin_subcategory_object"] = pin.pin_subcategory_object_name
         if pin.is_map_key:
             d["is_map_key"] = True
         if pin.is_map_value:
@@ -227,9 +289,61 @@ class JSONRenderer(IRenderer):
                 d["map_key_pin_category"] = pin.map_key_pin_category
             if pin.map_key_pin_subcategory:
                 d["map_key_pin_subcategory"] = pin.map_key_pin_subcategory
-            if pin.map_key_pin_subcategory_object is not None:
-                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object
+            if pin.map_key_pin_subcategory_object_name is not None:
+                d["map_key_pin_subcategory_object"] = pin.map_key_pin_subcategory_object_name
         return d
+
+    def _extract_error_pattern(self, error: str) -> str:
+        """提取 error 模式，替换数字为 {n} 占位符。"""
+        return re.sub(r'\d+', '{n}', error)
+
+    def _extract_position(self, diag: dict) -> int | None:
+        """从 diagnostic 字典中提取位置（使用 current_pos 字段）。"""
+        return diag.get("current_pos")
+
+    def _fold_diagnostics(self, diagnostics: list) -> list:
+        """折叠相同 (kind, field) 模式的 diagnostics。
+
+        单条不折叠，多条折叠为一条含 count 和 pos_range 的记录。
+        """
+        if not diagnostics:
+            return diagnostics
+
+        # 按 (kind, field) 分组
+        groups: dict[tuple[str, str], list] = {}
+        for diag in diagnostics:
+            key = (diag.get("kind", ""), diag.get("field", ""))
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(diag)
+
+        folded = []
+        for (kind, field), items in groups.items():
+            if len(items) == 1:
+                folded.append(items[0])
+            else:
+                first_error = items[0].get("error", "")
+                error_pattern = self._extract_error_pattern(first_error)
+                positions = []
+                for item in items:
+                    pos = self._extract_position(item)
+                    if pos is not None:
+                        positions.append(pos)
+                folded_item: dict[str, Any] = {
+                    "kind": kind,
+                    "field": field,
+                    "error": first_error,
+                    "error_pattern": error_pattern,
+                    "count": len(items),
+                }
+                if positions:
+                    folded_item["pos_range"] = {
+                        "min": min(positions),
+                        "max": max(positions),
+                    }
+                folded.append(folded_item)
+
+        return folded
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """序列化 BlueprintIR 为字典（完整元数据）。"""
@@ -352,6 +466,32 @@ class JSONRenderer(IRenderer):
         if func.bytecode_confidence != "verified":
             d["bytecode_confidence"] = func.bytecode_confidence
         return d
+
+    def _calculate_statistics(self, ir: PackageIR) -> dict:
+        """计算导出统计信息，包括 opaque 类分布。"""
+        stats = {
+            "total_exports": len(ir.exports),
+            "success_count": 0,
+            "partial_count": 0,
+            "opaque_count": 0,
+            "failed_count": 0,
+            "opaque_classes": {},
+        }
+
+        for export in ir.exports:
+            status = getattr(export, 'parse_status', 'success')
+            if status == 'success':
+                stats["success_count"] += 1
+            elif status in ('partial', 'partial_metadata'):
+                stats["partial_count"] += 1
+            elif status == 'opaque':
+                stats["opaque_count"] += 1
+                cls = getattr(export, 'object_class', 'unknown')
+                stats["opaque_classes"][cls] = stats["opaque_classes"].get(cls, 0) + 1
+            elif status == 'failed':
+                stats["failed_count"] += 1
+
+        return stats
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
         """直接返回 IR 中已构建的 function_graphs 数据。"""

@@ -451,6 +451,8 @@ class UsmapData:
                 return
             if not lower.endswith(".usmap"):
                 raise ParseError(f"不支持的映射文件类型: {path}")
+            if budget is not None:
+                budget.reserve(os.path.getsize(path), "usmap_file_read")
             with open(path, "rb") as fh:
                 data = fh.read()
             if lower.endswith(".gz"):
@@ -547,13 +549,17 @@ class UsmapData:
         return None
 
 
-def _jmap_prop_type(prop: Dict[str, object]) -> UsmapProperty:
+def _jmap_prop_type(prop: Dict[str, object], depth: int = 0) -> UsmapProperty:
     """从 jmap 属性 dict 构建 UsmapProperty（递归）。"""
+    _MAX_JMAP_RECURSION = 64
+    if depth > _MAX_JMAP_RECURSION:
+        raise ValueError(f"jmap 属性递归深度超过限制 ({_MAX_JMAP_RECURSION})")
+
     type_name = str(prop.get("type") or "Unknown")
     inner_src = prop.get("container") or prop.get("inner") or prop.get("key_prop")
     value_src = prop.get("value_prop")
-    inner = _jmap_prop_type(inner_src) if isinstance(inner_src, dict) else None
-    value = _jmap_prop_type(value_src) if isinstance(value_src, dict) else None
+    inner = _jmap_prop_type(inner_src, depth + 1) if isinstance(inner_src, dict) else None
+    value = _jmap_prop_type(value_src, depth + 1) if isinstance(value_src, dict) else None
     return UsmapProperty(
         index=0,
         name="",

@@ -14,6 +14,9 @@ from uasset_read.kismet.bytecode_extractor import (
     extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES,
     reset_bpgc_cache,
 )
+from uasset_read.kismet.bpgc_bytecode import (
+    BPGCExtractionMetrics, BytecodeConfidenceLevel, validate_recovered_bytecode,
+)
 
 # C++ pseudocode translator
 from uasset_read.kismet.translator import (

@@ -4,7 +4,9 @@
 - ReferenceSkeleton（参考骨架）
   - Names: TArray<FName>
   - Parents: TArray<int32>
-  - RefLocalPose: TArray<FTransform>（每 transform 48 bytes）
+  - RefLocalPose: TArray<FTransform>
+    - UE4: 40 bytes (Rotation 16 + Translation 12 + Scale 12)
+    - UE5: 52 bytes (Rotation 16 + Translation 24 + Scale 12)
   - NameToIndexMap: TMap<FName, int32>
 - RetargetSources: TMap<FName, FReferencePose>
 - VirtualBoneGuid: FGuid（16 bytes）
@@ -25,6 +27,9 @@ from typing import Any, Dict, List
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
+
+# 安全上限：防止将垃圾字节解释为计数
+_MAX_SKELETON_COUNT = 100000
 
 # FGuid 序列化大小（字节）
 FGUID_SIZE = 16
@@ -50,6 +55,9 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         "parse_status": "success",
     }
 
+    # 收集截断诊断：子函数遇到非法 count 时追加，最后统一升级 parse_status
+    _diagnostics: List[str] = []
+
     try:
         # 第一步：跳过 tagged properties
         # PropertyTag 序列化格式：
@@ -59,11 +67,11 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         _skip_tagged_properties(archive, name_map)
 
         # 第二步：解析 ReferenceSkeleton（custom serialization，非 UPROPERTY）
-        ref_skeleton = _read_reference_skeleton(archive, name_map)
+        ref_skeleton = _read_reference_skeleton(archive, name_map, _diagnostics)
         result["reference_skeleton"] = ref_skeleton
 
         # 第三步：解析 RetargetSources: TMap<FName, FReferencePose>
-        retarget_sources = _read_retarget_sources(archive, name_map)
+        retarget_sources = _read_retarget_sources(archive, name_map, _diagnostics)
         result["retarget_sources"] = retarget_sources
         result["retarget_source_count"] = len(retarget_sources)
 
@@ -81,6 +89,11 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         result["parse_status"] = "opaque"
         result["error"] = str(e)
 
+    # 非法 count 截断时，标记为 partial 并附带诊断
+    if _diagnostics:
+        result["parse_status"] = "partial"
+        result["diagnostics"] = _diagnostics
+
     return result
 
 
@@ -97,8 +110,13 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
        - BoolVal: u8（如果 TypeName 是 BoolProperty）
        - EnumName: FName（如果 TypeName 是 EnumProperty 或 ByteProperty）
        - StructName: FName（如果 TypeName 是 StructProperty）
+       - InnerTypeName: FName（如果 TypeName 是 ArrayProperty 或 SetProperty）
+       - KeyType + ValueType: 2 x FName（如果 TypeName 是 MapProperty）
        - 以及其他版本相关字段
     4. 然后跳过 Value 数据（Size 字节）
+
+    参照 Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
+    FPropertyTag::Serialize
     """
     max_properties = 10000  # 安全上限
     for _ in range(max_properties):
@@ -145,6 +163,20 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
             archive.read_i32()  # index
             archive.read_i32()  # number
 
+        # InnerTypeName: FName（ArrayProperty 或 SetProperty）
+        # 参照 FPropertyTag::Serialize: InnerType.Serialize(Ar)
+        if type_name in ("ArrayProperty", "SetProperty"):
+            archive.read_i32()  # index
+            archive.read_i32()  # number
+
+        # KeyTypeName + ValueTypeName: 2 x FName（MapProperty）
+        # 参照 FPropertyTag::Serialize: KeyType.Serialize(Ar) + ValueType.Serialize(Ar)
+        if type_name == "MapProperty":
+            archive.read_i32()  # key type index
+            archive.read_i32()  # key type number
+            archive.read_i32()  # value type index
+            archive.read_i32()  # value type number
+
         # Guid（PropertyGuid）: bool(i32) + optional FGuid(16)
         has_guid = archive.read_i32()
         if has_guid != 0:
@@ -161,7 +193,9 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
                 break
 
 
-def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
+def _read_reference_skeleton(
+    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+) -> Dict[str, Any]:
     """读取 FReferenceSkeleton custom serialization。
 
     FReferenceSkeleton 序列化格式（ReferenceSkeleton.cpp:941）：
@@ -171,6 +205,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
        - 每个 FTransform: Translation(FVector3d: 3*8=24) + Rotation(FQuat4f: 4*4=16) + Scale(FVector3f: 3*4=12) = 52 bytes
        注意：FTransform 不是 bulk-serialize，实际布局取决于 UE 版本
     3. RawNameToIndexMap: TMap<FName, int32>
+
+    Args:
+        _diagnostics: 可选的诊断收集列表，截断非法 count 时追加条目
 
     Returns:
         包含 names、parents、transforms 的字典
@@ -210,6 +247,16 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
 
     # 读取 BonePose 数组（TArray<FTransform>）
     pose_count = archive.read_i32("RefSkel.PoseCount")
+    if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
+        logger.debug(
+            "ReferenceSkeleton: 异常的 PoseCount %d（bone_count=%d），截断为 0",
+            pose_count, bone_count,
+        )
+        if _diagnostics is not None:
+            _diagnostics.append(
+                f"ReferenceSkeleton.PoseCount 截断: {pose_count} -> 0"
+            )
+        pose_count = 0
     if pose_count != bone_count:
         logger.debug(
             "ReferenceSkeleton: PoseCount(%d) != BoneCount(%d)",
@@ -217,8 +264,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
         )
 
     transforms: List[Dict[str, Any]] = []
+    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
     for i in range(min(pose_count, bone_count)):
-        transform = _read_ftransform(archive)
+        transform = _read_ftransform(archive, is_ue5=is_ue5)
         transforms.append(transform)
 
     ref_skeleton["transforms"] = transforms
@@ -227,6 +275,16 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
     # 读取 NameToIndexMap: TMap<FName, int32>
     # TMap 序列化为 count + entries，每个 entry = Key(FName) + Value(int32)
     map_count = archive.read_i32("RefSkel.NameToIndexMap.Count")
+    if map_count < 0 or map_count > _MAX_SKELETON_COUNT:
+        logger.debug(
+            "ReferenceSkeleton: 异常的 NameToIndexMap.Count %d，跳过解析",
+            map_count,
+        )
+        if _diagnostics is not None:
+            _diagnostics.append(
+                f"ReferenceSkeleton.NameToIndexMap.Count 截断: {map_count} -> 0"
+            )
+        map_count = 0
     name_to_index: Dict[str, int] = {}
     for _ in range(map_count):
         key_index = archive.read_i32("RefSkel.NameToIndexMap.Key.Index")
@@ -241,7 +299,9 @@ def _read_reference_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any
     return ref_skeleton
 
 
-def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, Any]]:
+def _read_retarget_sources(
+    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+) -> List[Dict[str, Any]]:
     """读取 RetargetSources: TMap<FName, FReferencePose>。
 
     格式（Skeleton.cpp:419-448）：
@@ -257,6 +317,7 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
         RetargetSource 列表
     """
     sources: List[Dict[str, Any]] = []
+    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
 
     num_sources = archive.read_i32("RetargetSources.Count")
     if num_sources < 0 or num_sources > 1000:
@@ -282,9 +343,19 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
 
         # 2. ReferencePose: TArray<FTransform>
         pose_count = archive.read_i32(f"RetargetSources[{i}].PoseCount")
+        if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
+            logger.debug(
+                "RetargetSources[%d]: 异常的 PoseCount %d，截断为 0",
+                i, pose_count,
+            )
+            if _diagnostics is not None:
+                _diagnostics.append(
+                    f"RetargetSources[{i}].PoseCount 截断: {pose_count} -> 0"
+                )
+            pose_count = 0
         transforms: List[Dict[str, Any]] = []
         for _ in range(pose_count):
-            transform = _read_ftransform(archive)
+            transform = _read_ftransform(archive, is_ue5=is_ue5)
             transforms.append(transform)
         source["transforms"] = transforms
         source["transform_count"] = len(transforms)
@@ -308,26 +379,43 @@ def _read_retarget_sources(archive: Any, name_map: List[str]) -> List[Dict[str, 
     return sources
 
 
-def _read_ftransform(archive: Any) -> Dict[str, Any]:
-    """读取 FTransform。
+def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
+    """读取 FTransform，支持 UE4/UE5 不同布局。
 
-    UE5 FTransform 序列化顺序（property_types.py 参考）：
-    - Translation: 3 x f64 = 24 bytes
-    - Rotation: 4 x f32 = 16 bytes
-    - Scale3D: 3 x f32 = 12 bytes
+    序列化顺序（参照 TransformVectorized.h operator<<）：
+    Rotation → Translation → Scale3D
+
+    UE4 布局（40 bytes）：
+    - Rotation: FQuat4f (4 x f32 = 16 bytes)
+    - Translation: FVector (3 x f32 = 12 bytes)
+    - Scale3D: FVector (3 x f32 = 12 bytes)
+
+    UE5 布局（52 bytes）：
+    - Rotation: FQuat4f (4 x f32 = 16 bytes)
+    - Translation: FVector3d (3 x f64 = 24 bytes)
+    - Scale3D: FVector3f (3 x f32 = 12 bytes)
+
+    Args:
+        archive: FArchive 实例
+        is_ue5: True 表示 UE5 布局（默认），False 表示 UE4 布局
     """
-    # Translation: FVector3d (3 x f64 = 24 bytes)
-    tx = archive.read_f64("Transform.Translation.X")
-    ty = archive.read_f64("Transform.Translation.Y")
-    tz = archive.read_f64("Transform.Translation.Z")
-
-    # Rotation: FQuat (4 x f32 = 16 bytes)
+    # Rotation: FQuat4f (4 x f32 = 16 bytes) — UE4/UE5 相同
     rx = archive.read_f32("Transform.Rotation.X")
     ry = archive.read_f32("Transform.Rotation.Y")
     rz = archive.read_f32("Transform.Rotation.Z")
     rw = archive.read_f32("Transform.Rotation.W")
 
-    # Scale3D: FVector3f (3 x f32 = 12 bytes)
+    # Translation: FVector (UE4: 3 x f32 = 12 bytes) 或 FVector3d (UE5: 3 x f64 = 24 bytes)
+    if is_ue5:
+        tx = archive.read_f64("Transform.Translation.X")
+        ty = archive.read_f64("Transform.Translation.Y")
+        tz = archive.read_f64("Transform.Translation.Z")
+    else:
+        tx = archive.read_f32("Transform.Translation.X")
+        ty = archive.read_f32("Transform.Translation.Y")
+        tz = archive.read_f32("Transform.Translation.Z")
+
+    # Scale3D: FVector3f (3 x f32 = 12 bytes) — UE4/UE5 相同
     sx = archive.read_f32("Transform.Scale.X")
     sy = archive.read_f32("Transform.Scale.Y")
     sz = archive.read_f32("Transform.Scale.Z")

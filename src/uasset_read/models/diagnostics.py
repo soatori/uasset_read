@@ -6,7 +6,15 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
+
+
+class DiagnosticSeverity(Enum):
+    """诊断严重度级别。"""
+    INFO = "info"           # 信息性，不影响状态
+    WARNING = "warning"     # 警告，可能影响完整性
+    ERROR = "error"         # 错误，肯定影响完整性
+    CRITICAL = "critical"   # 严重错误，解析失败
 
 
 class DiagnosticSeverity(Enum):
@@ -22,30 +30,30 @@ class OffsetRangeDiagnostic:
     """偏移范围诊断记录 — 捕获解析过程中的偏移异常。"""
 
     kind: str = "offset_range_diagnostic"
-    severity: str = "warning"  # 严重度：info|warning|error|critical
+    severity: DiagnosticSeverity = DiagnosticSeverity.WARNING
     asset_path: str = ""
     asset_type: str = ""
     module: str = ""  # linker|property|graph|pin|kismet|pak|iostore
     object_name: str = ""
-    export_index: Optional[int] = None
-    import_index: Optional[int] = None
+    export_index: int | None = None
+    import_index: int | None = None
     field: str = ""  # serial_offset|script_serial_offset|ValueEndOffset|CodeOffset|LinkedTo
     current_pos: int = 0
     target_offset: int = 0
     read_size: int = 0
     file_size: int = 0
-    range_start: Optional[int] = None
-    range_end: Optional[int] = None
+    range_start: int | None = None
+    range_end: int | None = None
     source: str = ""
     error: str = ""
     fallback_used: bool = False
     fallback_result: str = ""  # failed|partial|success
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转为 JSON 兼容字典。None 值字段自动省略。"""
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "kind": self.kind,
-            "severity": self.severity,
+            "severity": self.severity.value,
         }
         # 字符串字段：非空时输出
         for str_field in (
@@ -70,4 +78,4 @@ class OffsetRangeDiagnostic:
 
     def is_structural(self) -> bool:
         """判断是否为结构性诊断（会影响状态）。"""
-        return self.severity in ("error", "critical")
+        return self.severity in (DiagnosticSeverity.ERROR, DiagnosticSeverity.CRITICAL)
