@@ -199,10 +199,10 @@ class JSONRenderer(IRenderer):
                     value_dict.pop(field_name, None)
             d["value"] = value_dict
         # ObjectProperty full_name 省略（standard 模式）
-        if not is_debug and isinstance(d.get("value"), dict):
+        if not is_debug and d.get("type") == "ObjectProperty" and isinstance(d.get("value"), dict):
             val = d["value"]
             if "full_name" in val and "object_name" in val:
-                val.pop("full_name", None)
+                d["value"] = {k: v for k, v in val.items() if k != "full_name"}
         return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
