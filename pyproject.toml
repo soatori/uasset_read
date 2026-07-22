@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uasset-read"
-version = "0.5.4.44"
+dynamic = ["version"]
 description = "虚幻引擎 .uasset 文件的 Python 解析器，零运行时依赖"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,3 +42,6 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["F821", "F841", "F811", "F541", "B023"]
+
+[tool.setuptools.dynamic]
+version = {attr = "uasset_read.__version__"}

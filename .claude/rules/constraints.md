@@ -1,25 +1,19 @@
-# 项目约束
+# Project Constraints
 
-## 核心约束
+## Core
 
-- **仅支持未烘焙/编辑器保存的资产** — Cooked 资产的图数据已被剥离
-- **只读** — 仅解析，不支持修改或写入
-- **零运行时依赖** — 不向 `dependencies` 添加第三方包（PAK 可选依赖在 `optional-dependencies` 中）
-- **禁止 pip install** — 项目采用直接脚本运行（`python run.py`），禁止 `pip install -e .` 或 `pip install uasset_read`。CI 中的 `pip install pytest` 仅用于测试框架，不安装项目本身
-- **必须参考 UE 源码** — 格式理解必须追溯到 UE C++ 源码，禁止猜测二进制
-- **GUID 格式统一** — Pin GUID 在源头标准化为 32 位小写 hex（无 dashes），比较前统一格式
-- **FText 偏移安全网** — 图序列化器包含 safety net 检测偏移错位，遇到时自动校正
-- **临时文件放 `temp/`** — 脚本、中间输出、调试日志、测试产物一律放在项目根目录 `temp/` 子目录
+- **Unbaked/editor-saved assets only** — Cooked assets have graph data stripped
+- **Read-only** — Parse only; no modification or writing
+- **Zero runtime dependencies** — No third-party packages in `dependencies` (PAK optional deps in `optional-dependencies`)
+- **No `pip install`** — Run via `python run.py` directly; CI `pip install pytest` is test-only
+- **UE source required** — Format understanding must trace to UE C++ source; no binary guessing
+- **Temp files in `temp/`** — Scripts, intermediate output, debug logs, test artifacts
 
-## v0.5.1 新增约束
+## v0.5.1 Constraints
 
-- **统一状态模型** — 所有输出格式使用 `success | partial | failed`，禁止使用旧的 `fail`/`error`
-- **Export 级状态验证** — parse_status 必须是 ExportParseStatus 枚举值之一
-- **UE 风格加载生命周期** — 执行顺序必须为 `link() → preload(idx) × N → post_load()`，禁止在 export 解析前调用 post_load
-- **类序列化策略** — 通过 `class_serialization_strategy.py` 注册，禁止在核心管线硬编码类名判断
-- **Payload 偏移默认策略** — 默认使用 `SerialOffset/SerialSize`（与 UE LinkerLoad.cpp:4793 对齐），ScriptSerialization 偏移仅保留为诊断字段
-- **Opaque 类标记** — OPAQUE_CLASS_PAYLOAD 类必须同时设置 instance 和 export 的 parse_status，禁止仅设置一方
-
-## CodeGraph 使用
-
-优先使用 `codegraph_*` 工具回答结构化问题（符号定义、调用链、影响范围）。详细规则见全局 CLAUDE.md。
+- **Unified status model** — All output formats use `success | partial | failed`; no legacy `fail`/`error`
+- **Export-level status validation** — `parse_status` must be an `ExportParseStatus` enum value
+- **UE-style load lifecycle** — Execution order: `link() → preload(idx) × N → post_load()`; no post_load before export parsing
+- **Class serialization strategy** — Registered via `class_serialization_strategy.py`; no hardcoded class names in core pipeline
+- **Payload offset default** — Use `SerialOffset/SerialSize` (aligned with UE LinkerLoad.cpp:4793); ScriptSerialization offset kept as diagnostic only
+- **Opaque class marking** — `OPAQUE_CLASS_PAYLOAD` must set both instance and export `parse_status`

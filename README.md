@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 [中文版](README.zh-CN.md) | [English](README.md)
 
-> 📦 **v0.5.4.44** — Code quality and maintenance release: dead code removal, deprecated exports cleanup, duplicate code consolidation.
+> 📦 **v0.5.4** — Zero runtime dependencies · Python 3.10+ · 492 tests · 175 source files · 28 asset types
 
 ## Why uasset_read?
 
