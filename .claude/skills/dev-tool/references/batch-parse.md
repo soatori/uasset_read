@@ -1,12 +1,12 @@
-# 批量解析报告
+# Batch Parse Report
 
-对指定目录执行批量解析，收集所有错误和警告，生成分组错误报告。
+Run batch parsing on a target directory, collect all errors and warnings, generate a grouped error report.
 
-## 参数
+## Parameters
 
-用户可指定目录和限制数量，默认 `E:\Develop\lib\Samples`。
+User may specify directory and limit; default is `E:\Develop\lib\Samples`.
 
-## Step 1: 确定解析目标
+## Step 1: Determine Parse Target
 
 ```python
 import os, sys
@@ -27,9 +27,9 @@ for root, dirs, fnames in os.walk(target):
 print(f"Found {len(files)} .uasset files")
 ```
 
-## Step 2: 批量解析
+## Step 2: Batch Parse
 
-使用 `parse_package()`（非 `parse_single()`），以访问 errors/warnings 属性：
+Use `parse_package()` (not `parse_single()`) to access errors/warnings attributes:
 
 ```python
 from uasset_read.core import parse_package
@@ -53,7 +53,7 @@ for i, fpath in enumerate(files):
         print(f"Progress: {i+1}/{len(files)}")
 ```
 
-## Step 3: 分组归类
+## Step 3: Group & Classify
 
 ```python
 from collections import Counter
@@ -65,42 +65,42 @@ for e in errors:
     error_types[error_type] += 1
 ```
 
-## Step 4: 生成报告
+## Step 4: Generate Report
 
-输出到 `temp/batch_parse_report.md`：
+Output to `temp/batch_parse_report.md`:
 
 ```markdown
-## 批量解析报告
+## Batch Parse Report
 
-- **时间**: YYYY-MM-DD HH:MM
-- **目标目录**: <path>
-- **文件总数**: N
-- **解析耗时**: Xs (Y files/s)
+- **Date**: YYYY-MM-DD HH:MM
+- **Target directory**: <path>
+- **Total files**: N
+- **Parse time**: Xs (Y files/s)
 
-### 汇总
+### Summary
 
-| 状态 | 数量 | 占比 |
-|------|------|------|
+| Status | Count | Percentage |
+|--------|-------|------------|
 | success | N | X% |
 | partial | N | X% |
 | failed | N | X% |
 
-### 错误分类 (Top 20)
+### Error Classification (Top 20)
 
-| 类型 | 次数 | 示例文件 |
-|------|------|----------|
+| Type | Count | Sample File |
+|------|-------|-------------|
 | <error_type> | N | <sample_path> |
 
-### 警告分类 (Top 10)
+### Warning Classification (Top 10)
 
-| 类型 | 次数 |
-|------|------|
+| Type | Count |
+|------|-------|
 | <warn_type> | N |
 ```
 
-## 约束
+## Constraints
 
-- 使用 `parse_package()` 获取完整错误信息
-- `tolerant=True` 避免单文件失败中断批量
-- 报告保存到 `temp/batch_parse_report.md`
-- 超过 500 文件时显示进度
+- Use `parse_package()` for full error information
+- `tolerant=True` to prevent single-file failure from breaking batch
+- Report saved to `temp/batch_parse_report.md`
+- Show progress for > 500 files
