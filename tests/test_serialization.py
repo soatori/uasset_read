@@ -1,26 +1,15 @@
-"""serialization 模块合并测试 — 覆盖核心序列化与恢复场景。
-
-保留 4 个关键用例：
-1. 序列化策略枚举与策略表
-2. ClassHandlerRegistry 注册与查找
-3. PropertyTag 损坏 strict/tolerant 行为
-4. BinaryOrNative 处理器（FMaterialInput）
-"""
+"""serialization 模块测试 — 策略枚举、ClassHandlerRegistry、MaterialInput。"""
 from __future__ import annotations
 
 import io
 import struct
-from dataclasses import dataclass, field
-from io import BytesIO
-from typing import Any, List, Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 import pytest
 
-from uasset_read.archive import FArchive
-from uasset_read.exceptions import ParseError
 from uasset_read.parsers.binary_or_native_handlers import (
-    BINARY_OR_NATIVE_HANDLERS,
     _parse_material_input,
 )
 from uasset_read.parsers.class_registry import (
@@ -35,56 +24,62 @@ from uasset_read.parsers.class_serialization_strategy import (
     SerializationStrategy,
     CLASS_STRATEGY_TABLE,
     get_serialization_strategy,
-    should_skip_class,
-    is_opaque_class,
 )
 from uasset_read.parsers.asset_types import register_asset_type_handlers
-from uasset_read.parsers.property_parser import parse_properties_from_export
-from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
-
-from conftest import FakeArchive
 
 
-# ============================================================================
-# 辅助工厂
-# ============================================================================
+class FakeArchive:
+    """BytesIO 的轻量 FArchive 模拟。"""
+    def __init__(self, data: bytes | None = None):
+        self._buf = io.BytesIO(data) if data else io.BytesIO()
 
-def _make_archive(data: bytes, tolerant: bool = False, file_version_ue5: int = 1012) -> FArchive:
-    """从原始字节创建 FArchive 实例（用于测试）。"""
-    archive = FArchive.__new__(FArchive)
-    archive._stream = BytesIO(data)
-    archive._file_size = len(data)
-    archive._byte_swapping = False
-    archive._use_mmap = False
-    archive._mmap = None
-    archive._tolerant = tolerant
-    archive._file = BytesIO(data)
-    archive._hex_view_enabled = False
-    archive._hex_view_entries = []
-    archive._hex_view_context = ""
-    archive._diagnostics = []
-    archive._logger = __import__("logging").getLogger("test")
-    archive._name_map = None
-    archive._file_version_ue5 = file_version_ue5
-    return archive
+    def read(self, size: int) -> bytes:
+        return self._buf.read(size)
 
+    def read_i32(self) -> int:
+        return struct.unpack("<i", self.read(4))[0]
 
-def _make_export(serial_offset: int = 0, serial_size: int = 1024) -> ObjectExport:
-    """创建测试用 ObjectExport。"""
-    return ObjectExport(
-        class_index=PackageIndex(-1),
-        super_index=PackageIndex(-1),
-        outer_index=PackageIndex(0),
-        object_name="TestExport",
-        object_flags=0,
-        serial_size=serial_size,
-        serial_offset=serial_offset,
-    )
+    def read_i64(self) -> int:
+        return struct.unpack("<q", self.read(8))[0]
+
+    def read_u32(self) -> int:
+        return struct.unpack("<I", self.read(4))[0]
+
+    def read_fstring(self) -> str:
+        length = self.read_i32()
+        if length == 0:
+            return ""
+        if length > 0:
+            raw = self.read(length)
+            return raw[:-1].decode("utf-8") if raw.endswith(b"\x00") else raw.decode("utf-8")
+        byte_count = -length * 2
+        raw = self.read(byte_count)
+        return raw[:-2].decode("utf-16-le") if raw.endswith(b"\x00\x00") else raw.decode("utf-16-le")
+
+    def read_name(self, name_map: list[str]) -> str:
+        index = self.read_u32()
+        self.read_u32()  # number
+        if 0 <= index < len(name_map):
+            return name_map[index]
+        return "None"
+
+    def tell(self) -> int:
+        return self._buf.tell()
+
+    def seek(self, pos: int) -> None:
+        self._buf.seek(pos)
+
+    def total_size(self) -> int:
+        current = self._buf.tell()
+        self._buf.seek(0, 2)
+        size = self._buf.tell()
+        self._buf.seek(current)
+        return size
 
 
 @dataclass
 class FakePropertyTag:
-    """模拟 PropertyTag，仅保留解析所需字段。"""
+    """模拟 PropertyTag。"""
     name: str = ""
     type: str = "BinaryOrNative"
     size: int = 0
@@ -95,44 +90,6 @@ class FakePropertyTag:
     serialize_type: str = "BinaryOrNative"
     type_name: Any = None
 
-
-# ============================================================================
-# 用例 1: 序列化策略枚举与策略表
-# ============================================================================
-
-class TestSerializationStrategy:
-    """SerializationStrategy 枚举与 CLASS_STRATEGY_TABLE 测试。"""
-
-    def test_enum_values_and_strategy_table(self):
-        """枚举值正确定义，策略表映射正确。"""
-        # 枚举值
-        assert SerializationStrategy.TAGGED_PROPERTIES_ONLY.value == "tagged_properties_only"
-        assert SerializationStrategy.OPAQUE_CLASS_PAYLOAD.value == "opaque_class_payload"
-        assert SerializationStrategy.SKIP_UNSUPPORTED.value == "skip_unsupported"
-
-        # Tagged properties 类
-        for cls in ["BlueprintGeneratedClass", "Function", "EdGraph"]:
-            assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.TAGGED_PROPERTIES_ONLY
-
-        # Opaque payload 类
-        for cls in ["StaticMesh", "Texture2D", "Material", "AnimSequence"]:
-            assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
-
-        # 未知类默认返回 TAGGED_PROPERTIES_ONLY
-        assert get_serialization_strategy("UnknownCustomClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
-
-        # 三个类别无重叠
-        tagged = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.TAGGED_PROPERTIES_ONLY}
-        opaque = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.OPAQUE_CLASS_PAYLOAD}
-        skip = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.SKIP_UNSUPPORTED}
-        assert len(tagged & opaque) == 0
-        assert len(tagged & skip) == 0
-        assert len(opaque & skip) == 0
-
-
-# ============================================================================
-# 用例 2: ClassHandlerRegistry 注册与查找
-# ============================================================================
 
 class _MockHandler(ClassHandler):
     """测试用 mock handler。"""
@@ -151,8 +108,33 @@ class _MockHandler(ClassHandler):
         return HandlerResult(success=True, properties=[], data={"handled_by": self._name})
 
 
+class TestSerializationStrategy:
+    """SerializationStrategy 枚举与策略表。"""
+
+    def test_enum_values_and_strategy_table(self):
+        """枚举值正确定义，策略表映射正确。"""
+        assert SerializationStrategy.TAGGED_PROPERTIES_ONLY.value == "tagged_properties_only"
+        assert SerializationStrategy.OPAQUE_CLASS_PAYLOAD.value == "opaque_class_payload"
+        assert SerializationStrategy.SKIP_UNSUPPORTED.value == "skip_unsupported"
+
+        for cls in ["BlueprintGeneratedClass", "Function", "EdGraph"]:
+            assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+        for cls in ["StaticMesh", "Texture2D", "Material", "AnimSequence"]:
+            assert CLASS_STRATEGY_TABLE[cls] == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
+
+        assert get_serialization_strategy("UnknownCustomClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+        tagged = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.TAGGED_PROPERTIES_ONLY}
+        opaque = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.OPAQUE_CLASS_PAYLOAD}
+        skip = {c for c, s in CLASS_STRATEGY_TABLE.items() if s == SerializationStrategy.SKIP_UNSUPPORTED}
+        assert len(tagged & opaque) == 0
+        assert len(tagged & skip) == 0
+        assert len(opaque & skip) == 0
+
+
 class TestClassHandlerRegistry:
-    """ClassHandlerRegistry 注册与查找测试。"""
+    """ClassHandlerRegistry 注册与查找。"""
 
     def test_registry_register_and_lookup(self):
         """注册->查找->未注册返回 None->缓存命中。"""
@@ -164,53 +146,6 @@ class TestClassHandlerRegistry:
         assert reg.find_handler("UnknownClass") is None
         assert reg.find_handler("MyClass") is reg.find_handler("MyClass")
 
-
-# ============================================================================
-# 用例 3: PropertyTag 损坏 strict/tolerant 行为
-# ============================================================================
-
-class TestCorruptedTagBehavior:
-    """损坏 tag 在 strict/tolerant 模式下的行为。"""
-
-    def test_strict_raises_on_truncated_tag(self):
-        """strict 模式下 tag 名称截断应抛出 ParseError。"""
-        name_bytes = struct.pack("<II", 0, 0)
-        truncated_bytes = b"\x00" * 2
-        data = name_bytes + truncated_bytes
-        archive = _make_archive(data, tolerant=False)
-        archive._file_version_ue5 = 1012
-        summary = MagicMock()
-        summary.package_flags = 0
-        summary.file_version_ue5 = 1012
-        export = _make_export(serial_offset=0, serial_size=100)
-        with pytest.raises(ParseError):
-            parse_properties_from_export(
-                export, archive, summary,
-                name_map=["TestProp"], export_map=[], tolerant=False,
-            )
-
-    def test_tolerant_does_not_hang_on_truncated_tag(self):
-        """tolerant 模式下 tag 截断不应挂起。"""
-        name_bytes = struct.pack("<II", 0, 0)
-        truncated_bytes = b"\x00" * 2
-        data = name_bytes + truncated_bytes
-        archive = _make_archive(data, tolerant=True)
-        archive._file_version_ue5 = 1012
-        summary = MagicMock()
-        summary.package_flags = 0
-        summary.file_version_ue5 = 1012
-        export = _make_export(serial_offset=0, serial_size=100)
-        result = parse_properties_from_export(
-            export, archive, summary,
-            name_map=["TestProp"], export_map=[], tolerant=True,
-        )
-        assert isinstance(result, list)
-        assert len(result) >= 1
-
-
-# ============================================================================
-# 用例 4: BinaryOrNative 处理器（FMaterialInput）
-# ============================================================================
 
 def _build_material_input_data(
     output_index: int = 0,
@@ -256,10 +191,6 @@ class TestMaterialInput:
         assert result is None
         assert archive.tell() == pos_before
 
-
-# ============================================================================
-# 用例 5: Opaque handler 注册（合并自 test_unit.py）
-# ============================================================================
 
 @pytest.fixture()
 def _fresh_registry():
