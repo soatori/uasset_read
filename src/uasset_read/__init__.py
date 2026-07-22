@@ -1,14 +1,14 @@
 """
-uasset_read - Unreal Engine .uasset 文件解析器
+uasset_read - Unreal Engine .uasset file parser
 
-版本 0.5.4
+Version 0.5.4
 
-公共API通过__all__控制。
+Public API is controlled via __all__.
 """
 __version__ = "0.5.4"
 
 # ============================================================================
-# 稳定公共 API（直接导入）
+# Stable Public API (direct imports)
 # ============================================================================
 
 from .core import parse_single, parse_batch, diff_single, list_formats, BatchResult
@@ -32,22 +32,22 @@ __all__ = [
     "diff_single",
     "list_formats",
     "BatchResult",
-    # 配置
+    # Configuration
     "ParseConfig",
     "LogConfig",
-    # 解析管线
+    # Parsing pipeline
     "parse_package",
     "parse_uasset",
     "parse_uasset_with_linker",
-    # 日志
+    # Logging
     "configure_project_logging",
     "ProjectLogSession",
     "project_logging_session",
     "shutdown_project_logging",
-    # 核心模型
+    # Core models
     "ParseResult",
-    # 异常
+    # Exceptions
     "ParseError",
-    # 二进制读取器
+    # Binary reader
     "FArchive",
 ]

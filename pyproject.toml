@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "uasset-read"
 dynamic = ["version"]
-description = "虚幻引擎 .uasset 文件的 Python 解析器，零运行时依赖"
+description = "Python parser for Unreal Engine .uasset files, zero runtime dependencies"
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["unreal-engine", "uasset", "parser", "blueprint"]

@@ -4,9 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-[中文版](README.zh-CN.md) | [English](README.md)
-
-> 📦 **v0.5.4** — Zero runtime dependencies · Python 3.10+ · 492 tests · 175 source files · 28 asset types
+> 📦 **v0.5.4** — Zero runtime dependencies · Python 3.10+ · 181 source files · 28 asset types
 
 ## Why uasset_read?
 
@@ -26,8 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 |--------|-------|
 | Version | 0.5.4 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Tests | 492 collected (integration tests skip when sample assets unavailable) |
-| Modules | 175 source files across 21 subpackages |
+| Modules | 181 source files across 21 subpackages |
 
 ## Features
 
