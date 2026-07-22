@@ -1,7 +1,6 @@
-"""属性数据类 — PropertyTag, PropertyValue 及高级属性值容器。
+"""Property data classes — PropertyTag, PropertyValue and advanced property containers."""
 
-等价迁移 uasset_read.py 第 1294-1427 行。
-"""
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -9,7 +8,7 @@ from typing import Any
 
 @dataclass
 class PropertyTypeName:
-    """递归 FPropertyTypeName 节点。"""
+    """Recursive FPropertyTypeName node."""
     name: str
     children: list[PropertyTypeName] = field(default_factory=list)
 

@@ -10,19 +10,11 @@ from typing import Any
 
 
 class DiagnosticSeverity(Enum):
-    """诊断严重度级别。"""
-    INFO = "info"           # 信息性，不影响状态
-    WARNING = "warning"     # 警告，可能影响完整性
-    ERROR = "error"         # 错误，肯定影响完整性
-    CRITICAL = "critical"   # 严重错误，解析失败
-
-
-class DiagnosticSeverity(Enum):
-    """诊断严重度级别。"""
-    INFO = "info"           # 信息性，不影响状态
-    WARNING = "warning"     # 警告，可能影响完整性
-    ERROR = "error"         # 错误，肯定影响完整性
-    CRITICAL = "critical"   # 严重错误，解析失败
+    """Diagnostic severity levels."""
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
 
 
 @dataclass

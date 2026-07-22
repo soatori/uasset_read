@@ -743,6 +743,7 @@ def _read_property_loop(
     mappings: Optional[Any],
     property_end: int,
     tolerant: bool,
+    skip_class_name: Optional[str] = None,
 ) -> List[PropertyValue]:
     """属性读取主循环。"""
     properties: List[PropertyValue] = []
@@ -877,11 +878,10 @@ def _read_property_loop(
                 e, tag, start_pos, archive, name_map, property_end,
             ))
 
-    # Asset type handler dispatch: 在属性解析完成后调用
-    # 此时 properties 已解析完成，handler 从 property_end 读取自定义 payload
-    if _skip_class_name is not None:
+    # Asset type handler dispatch: called after property parsing
+    if skip_class_name is not None:
         _try_asset_type_handler(
-            export, archive, name_map, _skip_class_name,
+            export, archive, name_map, skip_class_name,
             parsed_properties=properties, property_end=property_end,
         )
 
@@ -950,14 +950,14 @@ def parse_properties_from_export(
         skip_export_payload,
     )
     # 解析 export 的 class name 用于 skip 检查
-    _skip_class_name = None
+    skip_class_name = None
     if import_map is not None:
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
-            _skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
+            skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve class name for export: %s", e)
-    if should_skip_export_for_tolerant_parsing(export, class_name=_skip_class_name):
+    if should_skip_export_for_tolerant_parsing(export, class_name=skip_class_name):
         logger.debug(
             "Tolerant skip: class-specific payload '%s', skipping property parsing",
             export.object_name,
@@ -968,7 +968,7 @@ def parse_properties_from_export(
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
         setattr(export, "parse_status", validate_parse_status("skipped"))
         setattr(export, "fallback_reason", "unsupported_type")
-        setattr(export, "class_name", _skip_class_name or "")
+        setattr(export, "class_name", skip_class_name or "")
         return []
 
     # D-02: SerializationControlExtensions 头部处理
@@ -991,13 +991,13 @@ def parse_properties_from_export(
     properties = _read_property_loop(
         export, archive, summary, name_map, export_map,
         import_map, linker, mappings, property_end, tolerant,
+        skip_class_name=skip_class_name,
     )
 
-    # Asset type handler dispatch: 在属性解析完成后调用
-    # 此时 properties 已解析完成，handler 从 property_end 读取自定义 payload
-    if _skip_class_name is not None:
+    # Asset type handler dispatch: called after property parsing
+    if skip_class_name is not None:
         _try_asset_type_handler(
-            export, archive, name_map, _skip_class_name,
+            export, archive, name_map, skip_class_name,
             parsed_properties=properties, property_end=property_end,
         )
 

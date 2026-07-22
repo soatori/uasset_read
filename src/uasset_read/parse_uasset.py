@@ -27,7 +27,7 @@ from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
-from uasset_read.project_logging import scoped_project_logging
+from uasset_read.project_logging import scoped_project_logging, configure_project_logging
 from uasset_read.parse_stages import (
     _record_parse_stage_error,
     _init_parse_env,

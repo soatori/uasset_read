@@ -5,6 +5,8 @@ Version 0.5.4
 
 Public API is controlled via __all__.
 """
+import warnings
+
 __version__ = "0.5.4"
 
 # ============================================================================
@@ -66,7 +68,7 @@ def __getattr__(name: str):
         import importlib
         mod = importlib.import_module(module_path, __package__)
         value = getattr(mod, attr_name)
-        _warnings.warn(
+        warnings.warn(
             f"uasset_read.{name} 已废弃，请从子模块直接导入 "
             f"（如 from {module_path} import {attr_name}），"
             "此导出将在未来版本移除。",

@@ -11,8 +11,6 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.status import _result_status
 
-from uasset_read.models.status import _result_status
-
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectImport, ObjectExport

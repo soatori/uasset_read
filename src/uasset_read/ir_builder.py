@@ -158,13 +158,11 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             f"字节码启发式恢复：{heuristic_count}/{total_count} 个函数通过 serial scan 恢复，"
             f"置信度较低"
         )
-    # v0.5.1 新增：export 级别 partial 时补充 message（#432）
-    # ExportParseStatus 是 StrEnum；.value 取 bare string，避免 str() 返回类限定名
-    elif non_success_statuses := {
-        str(export.parse_status.value) if hasattr(export.parse_status, "value") else str(export.parse_status)
+    # v0.5.1: export-level partial status message (#432)
+    elif any(
+        (getattr(export, "parse_status", None) or "success") != "success"
         for export in result.export_map or []
-        if (getattr(export, "parse_status", None) or "success") != "success"
-    }:
+    ):
         # 按状态分组统计，附带 fallback_reason 示例便于定位
         status_groups: dict[str, list[str]] = {}
         for export in result.export_map or []:

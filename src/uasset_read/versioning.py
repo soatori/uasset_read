@@ -12,8 +12,6 @@ from typing import Protocol
 
 from uasset_read.core.utils import normalize_hex_guid
 
-from uasset_read.core.utils import normalize_hex_guid
-
 from uasset_read.constants import (
     FFRAMEWORK_OBJECT_VERSION_GUID,
     FUE5_MAINSTREAM_VERSION_GUID,

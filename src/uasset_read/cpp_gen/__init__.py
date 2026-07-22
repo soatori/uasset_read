@@ -98,9 +98,6 @@ from uasset_read.cpp_gen.sanitizer import (
 from uasset_read.cpp_gen.math_simplifier import (
     MathSimplifier,
 )
-from uasset_read.cpp_gen.math_simplifier import (
-    MathSimplifier,
-)
 
 __all__ = [
     # 类型映射
