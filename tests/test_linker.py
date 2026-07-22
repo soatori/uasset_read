@@ -1,19 +1,13 @@
-"""Linker 模块合并测试。
-
-合并自 test_linker_core.py、test_linker_safety.py。
-保留 5 个关键用例：核心链接、安全边界。
-"""
+"""Linker 模块测试 — 生命周期、preload、post_load。"""
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from uasset_read.link.linker import PackageLinker
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.serializers.object_resources import PackageIndex
 
-
-# === 辅助工厂 ===
 
 def _make_linker(
     import_count: int = 2,
@@ -69,8 +63,6 @@ def _make_instance(name, package_index=1, is_import=False, outer=None, linker=No
     )
 
 
-# === 5 个关键用例 ===
-
 class TestVerifyImportsResultPreserved:
     """post_load() 保留 _verify_imports 返回值。"""
 
@@ -82,9 +74,7 @@ class TestVerifyImportsResultPreserved:
         linker.post_load()
 
         assert hasattr(linker, '_import_verification_errors')
-        assert len(linker._import_verification_errors) > 0, (
-            "post_load 应保留 _verify_imports 的错误"
-        )
+        assert len(linker._import_verification_errors) > 0
 
 
 class TestCircularOuterDetection:
@@ -134,11 +124,10 @@ class TestLifecycleOrder:
         linker = _make_linker(export_count=2)
         for inst in linker._export_objects:
             assert not inst._preloaded
-        # preload
         for i, inst in enumerate(linker._export_objects):
             inst._preloaded = True
             inst.serialized_properties = [
-                {"name": f"Prop{i}", "type": "ObjectProperty", "value": 0}
+                {"name": f"Prop{i}", "type": "ObjectProperty", "value": 2}
             ]
         linker.post_load()
         for inst in linker._export_objects:
@@ -156,6 +145,6 @@ class TestPropertyReferenceResolution:
         inst0.serialized_properties = [
             {"name": "TargetObj", "type": "ObjectProperty", "value": 2}
         ]
-        linker._resolve_property_references()
+        linker.post_load()
         resolved = inst0.property_references["TargetObj"]
         assert isinstance(resolved, UObjectInstance) and resolved is linker._export_objects[1]
