@@ -50,6 +50,23 @@ EDITOR_NODE_CLASSES = frozenset({
 })
 
 
+def filter_editor_items(
+    items: list,
+    class_field: str = "object_class",
+    exclude_classes: frozenset = EDITOR_NODE_CLASSES,
+) -> list:
+    """过滤编辑器专用项（供渲染器共用）。"""
+    return [item for item in items if getattr(item, class_field, None) not in exclude_classes]
+
+
+def filter_variables(
+    variables: list,
+    exclude_names: frozenset = EDITOR_VARIABLE_NAMES,
+) -> list:
+    """过滤编辑器内部变量（供渲染器共用）。"""
+    return [v for v in variables if v.name not in exclude_names]
+
+
 def is_blueprint_export(export: ExportIR) -> bool:
     """判断是否为蓝图相关 export。
 

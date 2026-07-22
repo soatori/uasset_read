@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.renderers.base import IRenderer, RenderOptions, is_blueprint_export, EDITOR_PROPERTY_NAMES, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
+from uasset_read.renderers.base import (
+    IRenderer, RenderOptions, is_blueprint_export,
+    EDITOR_PROPERTY_NAMES,
+    filter_editor_items, filter_variables,
+)
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 
@@ -207,8 +211,8 @@ class MarkdownRenderer(IRenderer):
 
         # 导出 — 只显示蓝图 export，过滤编辑器节点类 export（与 JSON 渲染器一致）
         blueprint_exports = [
-            e for e in ir.exports
-            if is_blueprint_export(e) and e.object_class not in EDITOR_NODE_CLASSES
+            e for e in filter_editor_items(ir.exports)
+            if is_blueprint_export(e)
         ]
         if blueprint_exports:
             lines.append("## Exports")
@@ -458,10 +462,7 @@ class MarkdownRenderer(IRenderer):
             return
 
         # 过滤编辑器内部变量（与 JSON 渲染器一致）
-        filtered_variables = [
-            v for v in ir.variables
-            if v.name not in EDITOR_VARIABLE_NAMES
-        ]
+        filtered_variables = filter_variables(ir.variables)
         if not filtered_variables:
             return
 

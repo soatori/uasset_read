@@ -10,7 +10,11 @@ import re
 import dataclasses
 from typing import IO, TYPE_CHECKING, Any
 
-from uasset_read.renderers.base import IRenderer, RenderOptions, EDITOR_PROPERTY_NAMES, EDITOR_VARIABLE_NAMES, EDITOR_NODE_CLASSES
+from uasset_read.renderers.base import (
+    IRenderer, RenderOptions,
+    EDITOR_PROPERTY_NAMES,
+    filter_editor_items, filter_variables,
+)
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 from uasset_read.models.ir import HexViewEntryIR
@@ -79,10 +83,10 @@ class JSONRenderer(IRenderer):
             "ue_version": ir.header.ue_version,
             "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
         }
+        all_exports = ir.exports if is_debug else filter_editor_items(ir.exports)
         data["exports"] = [
             self._export_to_dict(e, options, is_debug)
-            for e in ir.exports
-            if is_debug or e.object_class not in EDITOR_NODE_CLASSES
+            for e in all_exports
         ]
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
@@ -101,8 +105,7 @@ class JSONRenderer(IRenderer):
                 data["variables"] = [self._variable_to_dict(v) for v in ir.variables]
             else:
                 variables = [
-                    self._variable_to_dict(v) for v in ir.variables
-                    if v.name not in EDITOR_VARIABLE_NAMES
+                    self._variable_to_dict(v) for v in filter_variables(ir.variables)
                 ]
                 if variables:
                     data["variables"] = variables
@@ -200,7 +203,23 @@ class JSONRenderer(IRenderer):
         return result
 
     def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
-        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p, output_level) for p in node.pins], "execution_flow": node.execution_flow}
+        is_debug = output_level == "debug"
+        d: dict[str, Any] = {
+            "node_guid": node.node_guid,
+            "node_class": node.node_class,
+            "pins": [self._pin_to_dict(p, output_level) for p in node.pins],
+        }
+        if is_debug or node.node_comment:
+            d["node_comment"] = node.node_comment
+        if is_debug or node.execution_flow:
+            d["execution_flow"] = node.execution_flow
+        # v0.5.2 字段：同样条件输出
+        if is_debug or node.trigger_events:
+            d["trigger_events"] = node.trigger_events
+        if is_debug or node.event_type:
+            d["event_type"] = node.event_type
+        if is_debug or node.input_action_path:
+            d["input_action_path"] = node.input_action_path
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
         return d
@@ -212,8 +231,10 @@ class JSONRenderer(IRenderer):
             "linked_to": pin.linked_to,
             "direction": pin.direction,
             "pin_category": pin.pin_category,
-            "container_type": pin.container_type,
         }
+        # standard 模式：省略默认值
+        if is_debug or pin.container_type != "None":
+            d["container_type"] = pin.container_type
         if is_debug:
             # debug 模式：保留所有字段
             d["pin_type"] = pin.pin_type
