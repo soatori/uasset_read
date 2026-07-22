@@ -157,19 +157,29 @@ CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = {
 
 
 def get_serialization_strategy(class_name: str) -> SerializationStrategy:
-    """获取给定 class 的序列化策略。
+    """获取给定 class 的序列化策略（支持精确名和前缀匹配）。
+
+    查找顺序：
+    1. CLASS_STRATEGY_TABLE 精确名匹配
+    2. class_specific_skip 模块的前缀匹配（SKIP_CLASS_PREFIXES）
+    3. 默认 TAGGED_PROPERTIES_ONLY
 
     Args:
         class_name: UE class 名称（如 "StaticMesh"）
 
     Returns:
-        SerializationStrategy 枚举值，默认返回 TAGGED_PROPERTIES_ONLY
-        （表示可以用通用 parser 尝试）
+        SerializationStrategy 枚举值
     """
-    return CLASS_STRATEGY_TABLE.get(
-        class_name,
-        SerializationStrategy.TAGGED_PROPERTIES_ONLY,
-    )
+    # 精确名匹配
+    if class_name in CLASS_STRATEGY_TABLE:
+        return CLASS_STRATEGY_TABLE[class_name]
+
+    # 前缀匹配：从 class_specific_skip 模块获取
+    from uasset_read.parsers.class_specific_skip import should_skip_export_class_prefix
+    if should_skip_export_class_prefix(class_name):
+        return SerializationStrategy.SKIP_UNSUPPORTED
+
+    return SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
 
 def should_skip_class(class_name: str) -> bool:
