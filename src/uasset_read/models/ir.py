@@ -390,6 +390,17 @@ class ExecutionChainIR:
 
 
 @dataclass
+class FunctionGraphIR:
+    """函数图数据（基于 _build_function_graphs_safe() 实际字段）。"""
+    function_name: str
+    graph_source: str = ""
+    entry_node_guid: str = ""
+    signature: dict = field(default_factory=dict)
+    execution_flows: list[dict] = field(default_factory=list)
+    fallback_reason: str | None = None
+
+
+@dataclass
 class LinkerSummaryIR:
     """包链接摘要。"""
     has_linker: bool
@@ -505,7 +516,7 @@ class PackageIR:
     """顶层 IR 结构（重组后）。"""
     header: PackageHeaderIR
     name_map: tuple[str, ...]
-    imports: list[dict]
+    imports: list[ImportIR]  # 修正：原 list[dict] 是类型注解 bug
     exports: list[ExportIR]
     linker: LinkerSummaryIR | None
     blueprint: BlueprintIR | None = None
