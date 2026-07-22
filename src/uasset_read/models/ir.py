@@ -470,8 +470,39 @@ class DebugIR:
 
 
 @dataclass
+class AnimationDataIR:
+    """动画数据聚合。"""
+    anim_blueprint: AnimBlueprintIR | None = None
+    anim_sequence: AnimSequenceIR | None = None
+    anim_montage: AnimMontageIR | None = None
+
+
+@dataclass
+class PackageDependenciesIR:
+    """包依赖数据。"""
+    resolved_parent_assets: list[dict] = field(default_factory=list)
+    inherited_blueprint_graphs: list[dict] = field(default_factory=list)
+    depends_map: list[list[int]] = field(default_factory=list)
+    resolved_depends_map: list[list[dict]] = field(default_factory=list)
+    soft_object_paths: list[dict] = field(default_factory=list)
+    soft_package_references: list[str] = field(default_factory=list)
+    asset_registry_data_offset: int = 0
+    asset_registry_data: dict | None = None
+
+
+@dataclass
+class DiagnosticsDataIR:
+    """诊断和状态数据。"""
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    status: str = "success"
+    status_message: str | None = None
+    status_code: str | None = None
+
+
+@dataclass
 class PackageIR:
-    """顶层 IR 结构。"""
+    """顶层 IR 结构（重组后）。"""
     header: PackageHeaderIR
     name_map: tuple[str, ...]
     imports: list[dict]
@@ -481,25 +512,12 @@ class PackageIR:
     decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
+    animation: AnimationDataIR | None = None
     diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
-    function_graphs: list[dict] = field(default_factory=list)  # 顶层函数图数据
-    resolved_parent_assets: list[dict] = field(default_factory=list)
-    inherited_blueprint_graphs: list[dict] = field(default_factory=list)
+    function_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
-    soft_object_paths: list[dict] = field(default_factory=list)
-    soft_package_references: list[str] = field(default_factory=list)
-    depends_map: list[list[int]] = field(default_factory=list)
-    resolved_depends_map: list[list[dict]] = field(default_factory=list)
-    asset_registry_data_offset: int = 0
-    asset_registry_data: dict | None = None
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-    status: str = "success"
-    status_message: str | None = None
-    status_code: str | None = None
-    anim_blueprint: AnimBlueprintIR | None = None
-    anim_sequence: AnimSequenceIR | None = None
-    anim_montage: AnimMontageIR | None = None
+    dependencies: PackageDependenciesIR | None = None
+    diagnostics_data: DiagnosticsDataIR | None = None
     debug: DebugIR | None = None
 
 

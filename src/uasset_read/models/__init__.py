@@ -73,6 +73,9 @@ from .ir import (
     GatherableTextDataIR,
     HexViewEntryIR,
     DebugIR,
+    AnimationDataIR,
+    PackageDependenciesIR,
+    DiagnosticsDataIR,
 )
 from .ir_anim import (
     AnimNotifyIR,
@@ -159,6 +162,9 @@ __all__ = [
     "GatherableTextDataIR",
     "HexViewEntryIR",
     "DebugIR",
+    "AnimationDataIR",
+    "PackageDependenciesIR",
+    "DiagnosticsDataIR",
     # 动画 IR（ir_anim.py）
     "AnimNotifyIR",
     "AnimBlueprintIR",

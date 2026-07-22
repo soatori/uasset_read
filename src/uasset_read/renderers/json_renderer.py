@@ -65,9 +65,9 @@ class JSONRenderer(IRenderer):
         if options.include_schema:
             data["$schema"] = "package.schema.json"
         data["status"] = {
-            "status": ir.status,
-            "message": ir.status_message,
-            "code": ir.status_code,
+            "status": ir.diagnostics_data.status if ir.diagnostics_data else "success",
+            "message": ir.diagnostics_data.status_message if ir.diagnostics_data else None,
+            "code": ir.diagnostics_data.status_code if ir.diagnostics_data else None,
         }
         data["summary"] = {
             "package_name": ir.header.package_name,
@@ -106,16 +106,16 @@ class JSONRenderer(IRenderer):
                 ]
                 if variables:
                     data["variables"] = variables
-        if ir.resolved_parent_assets:
-            data["resolved_parent_assets"] = ir.resolved_parent_assets
-        if ir.inherited_blueprint_graphs:
-            data["inherited_blueprint_graphs"] = ir.inherited_blueprint_graphs
+        if ir.dependencies and ir.dependencies.resolved_parent_assets:
+            data["resolved_parent_assets"] = ir.dependencies.resolved_parent_assets
+        if ir.dependencies and ir.dependencies.inherited_blueprint_graphs:
+            data["inherited_blueprint_graphs"] = ir.dependencies.inherited_blueprint_graphs
         if ir.logic_sources:
             data["logic_sources"] = ir.logic_sources
-        if ir.errors:
-            data["errors"] = ir.errors
-        if ir.warnings:
-            data["warnings"] = ir.warnings
+        if ir.diagnostics_data and ir.diagnostics_data.errors:
+            data["errors"] = ir.diagnostics_data.errors
+        if ir.diagnostics_data and ir.diagnostics_data.warnings:
+            data["warnings"] = ir.diagnostics_data.warnings
         if ir.diagnostics:
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
@@ -124,14 +124,14 @@ class JSONRenderer(IRenderer):
                 folded = self._fold_diagnostics(all_diags)
                 if folded:
                     data["diagnostics"] = folded
-        if ir.asset_registry_data:
-            data["asset_registry_data"] = ir.asset_registry_data
-        if ir.anim_blueprint:
-            data["anim_blueprint"] = self._anim_blueprint_to_dict(ir.anim_blueprint)
-        if ir.anim_sequence:
-            data["anim_sequence"] = self._anim_sequence_to_dict(ir.anim_sequence)
-        if ir.anim_montage:
-            data["anim_montage"] = self._anim_montage_to_dict(ir.anim_montage)
+        if ir.dependencies and ir.dependencies.asset_registry_data:
+            data["asset_registry_data"] = ir.dependencies.asset_registry_data
+        if ir.animation and ir.animation.anim_blueprint:
+            data["anim_blueprint"] = self._anim_blueprint_to_dict(ir.animation.anim_blueprint)
+        if ir.animation and ir.animation.anim_sequence:
+            data["anim_sequence"] = self._anim_sequence_to_dict(ir.animation.anim_sequence)
+        if ir.animation and ir.animation.anim_montage:
+            data["anim_montage"] = self._anim_montage_to_dict(ir.animation.anim_montage)
         if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
             data["debug"] = {
                 "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]

@@ -32,6 +32,9 @@ from uasset_read.models.ir import (
     VariableIR,
     HexViewEntryIR,
     DebugIR,
+    AnimationDataIR,
+    PackageDependenciesIR,
+    DiagnosticsDataIR,
 )
 
 if TYPE_CHECKING:
@@ -71,6 +74,31 @@ def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int
         if "serial_scan_recovery" in (func.fallback_reasons or []):
             count += 1
     return count
+
+
+def _build_animation_data(result: "ParseResult | LinkerParseResult") -> AnimationDataIR | None:
+    """从 ParseResult 聚合动画数据（anim_blueprint, anim_sequence, anim_montage）。
+
+    动画数据来源于各 Export 的 custom_data 字段，需要从所有 export 中聚合。
+    """
+    anim_bp = None
+    anim_seq = None
+    anim_mon = None
+    for export in result.export_map or []:
+        custom = getattr(export, "custom_data", None) or {}
+        if not anim_bp and custom.get("anim_blueprint"):
+            anim_bp = custom["anim_blueprint"]
+        if not anim_seq and custom.get("anim_sequence"):
+            anim_seq = custom["anim_sequence"]
+        if not anim_mon and custom.get("anim_montage"):
+            anim_mon = custom["anim_montage"]
+    if anim_bp or anim_seq or anim_mon:
+        return AnimationDataIR(
+            anim_blueprint=anim_bp,
+            anim_sequence=anim_seq,
+            anim_montage=anim_mon,
+        )
+    return None
 
 
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
@@ -168,22 +196,27 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         decompiled_functions=_build_decompiled_functions_ir(result),
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
+        animation=_build_animation_data(result),
         diagnostics=result.diagnostics or [],
         function_graphs=function_graphs,
-        resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
-        inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
         logic_sources=list(getattr(result, "logic_sources", None) or []),
-        soft_object_paths=list(getattr(result, "soft_references", None) or []),
-        soft_package_references=list(getattr(result, "soft_package_references", None) or []),
-        depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
-        resolved_depends_map=_build_resolved_depends_map(result),
-        asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
-        asset_registry_data=_build_asset_registry_data(result),
-        errors=errors,
-        warnings=warnings,
-        status=status,
-        status_message=status_message,
-        status_code=status_code,
+        dependencies=PackageDependenciesIR(
+            resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
+            inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
+            depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
+            resolved_depends_map=_build_resolved_depends_map(result),
+            soft_object_paths=list(getattr(result, "soft_references", None) or []),
+            soft_package_references=list(getattr(result, "soft_package_references", None) or []),
+            asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
+            asset_registry_data=_build_asset_registry_data(result),
+        ),
+        diagnostics_data=DiagnosticsDataIR(
+            errors=errors,
+            warnings=warnings,
+            status=status,
+            status_message=status_message,
+            status_code=status_code,
+        ),
         debug=_build_debug_ir(getattr(result, 'hex_view_entries', [])),
     )
 

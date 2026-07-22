@@ -88,4 +88,4 @@ class TestStatusModelIntegration:
         asset_path = _get_test_asset()
         result = parse_package(str(asset_path), tolerant=True)
         ir = build_package_ir(result)
-        assert ir.status in ["success", "partial", "failed"]
+        assert ir.diagnostics_data.status in ["success", "partial", "failed"]

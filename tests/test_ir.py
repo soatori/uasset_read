@@ -111,7 +111,7 @@ class TestStatusModel:
         assert _result_status(_make_result([MockExport("success"), MockExport("opaque")])) == "partial"
 
     def test_partial_export_has_status_message(self):
-        """#432: partial 包必须包含 status_message"""
+        """#432: partial 包必须包含 status_message；#431: EXPORT_PARTIAL 消息应包含 fallback_reason。"""
         from uasset_read.models.fallback import ExportParseStatus
 
         export = MagicMock()
@@ -135,9 +135,9 @@ class TestStatusModel:
 
         ir = build_package_ir(result)
 
-        assert ir.status == "partial"
-        assert ir.status_message is not None, "partial 包的 status_message 不应为 None"
-        assert "opaque" in ir.status_message
+        assert ir.diagnostics_data.status == "partial"
+        assert ir.diagnostics_data.status_message is not None, "partial 包的 status_message 不应为 None"
+        assert "opaque" in ir.diagnostics_data.status_message
 
     def test_all_failed_exports_makes_failed(self):
         """全 failed->failed；混合/ skipped ->partial。"""
@@ -195,11 +195,11 @@ class TestStatusModel:
 
         ir = build_package_ir(result)
 
-        assert ir.status == "partial"
-        assert ir.status_code == "EXPORT_PARTIAL"
-        assert "opaque×2" in ir.status_message
-        assert "skipped×1" in ir.status_message
-        assert "StaticMesh" in ir.status_message
+        assert ir.diagnostics_data.status == "partial"
+        assert ir.diagnostics_data.status_code == "EXPORT_PARTIAL"
+        assert "opaque×2" in ir.diagnostics_data.status_message
+        assert "skipped×1" in ir.diagnostics_data.status_message
+        assert "StaticMesh" in ir.diagnostics_data.status_message
 
 
 # ============================================================================

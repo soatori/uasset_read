@@ -269,32 +269,33 @@ class MarkdownRenderer(IRenderer):
 
     def _render_status_section(self, lines: list[str], ir: PackageIR) -> None:
         """渲染 Status / Errors / Warnings 章节。"""
-        if ir.status == "success":
+        dd = ir.diagnostics_data
+        if not dd or dd.status == "success":
             return
 
         # Status
         lines.append("## Status")
         lines.append("")
-        status_label = ir.status.upper()
-        if ir.status_message:
-            lines.append(f"**{status_label}**: {_escape_md_cell(ir.status_message)}")
+        status_label = dd.status.upper()
+        if dd.status_message:
+            lines.append(f"**{status_label}**: {_escape_md_cell(dd.status_message)}")
         else:
             lines.append(f"**{status_label}**")
         lines.append("")
 
         # Errors
-        if ir.errors:
+        if dd.errors:
             lines.append("### Errors")
             lines.append("")
-            for err in ir.errors:
+            for err in dd.errors:
                 lines.append(f"- {_escape_md_cell(err)}")
             lines.append("")
 
         # Warnings
-        if ir.warnings:
+        if dd.warnings:
             lines.append("### Warnings")
             lines.append("")
-            for warn in ir.warnings:
+            for warn in dd.warnings:
                 lines.append(f"- {_escape_md_cell(warn)}")
             lines.append("")
 
@@ -475,7 +476,7 @@ class MarkdownRenderer(IRenderer):
 
     def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
         """渲染 Asset Registry Data 章节 — 资产元数据标签。"""
-        data = ir.asset_registry_data
+        data = ir.dependencies.asset_registry_data if ir.dependencies else None
         if not data:
             return
 
@@ -505,36 +506,40 @@ class MarkdownRenderer(IRenderer):
 
     def _render_anim_data(self, lines: list[str], ir: PackageIR) -> None:
         """渲染动画数据章节 — AnimBlueprint, AnimSequence, AnimMontage。"""
+        anim = ir.animation
+        if not anim:
+            return
+
         # AnimBlueprint
-        if ir.anim_blueprint:
+        if anim.anim_blueprint:
             lines.append("## Animation Blueprint")
             lines.append("")
-            if ir.anim_blueprint.target_skeleton:
-                lines.append(f"**Target Skeleton**: `{ir.anim_blueprint.target_skeleton}`")
+            if anim.anim_blueprint.target_skeleton:
+                lines.append(f"**Target Skeleton**: `{anim.anim_blueprint.target_skeleton}`")
                 lines.append("")
-            if ir.anim_blueprint.sync_group_names:
-                lines.append(f"**Sync Groups**: {', '.join(ir.anim_blueprint.sync_group_names)}")
+            if anim.anim_blueprint.sync_group_names:
+                lines.append(f"**Sync Groups**: {', '.join(anim.anim_blueprint.sync_group_names)}")
                 lines.append("")
-            if ir.anim_blueprint.graph_asset_player_info:
+            if anim.anim_blueprint.graph_asset_player_info:
                 lines.append("### Graph Asset Player Info")
                 lines.append("")
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
-                for key, value in ir.anim_blueprint.graph_asset_player_info.items():
+                for key, value in anim.anim_blueprint.graph_asset_player_info.items():
                     lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
-            if ir.anim_blueprint.graph_blend_options:
+            if anim.anim_blueprint.graph_blend_options:
                 lines.append("### Graph Blend Options")
                 lines.append("")
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
-                for key, value in ir.anim_blueprint.graph_blend_options.items():
+                for key, value in anim.anim_blueprint.graph_blend_options.items():
                     lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
-            if ir.anim_blueprint.anim_node_data:
+            if anim.anim_blueprint.anim_node_data:
                 lines.append("### Anim Node Data")
                 lines.append("")
-                for idx, node_data in enumerate(ir.anim_blueprint.anim_node_data):
+                for idx, node_data in enumerate(anim.anim_blueprint.anim_node_data):
                     lines.append(f"**Node {idx}**:")
                     lines.append("")
                     if isinstance(node_data, dict):
@@ -543,7 +548,7 @@ class MarkdownRenderer(IRenderer):
                     else:
                         lines.append(f"- {node_data}")
                     lines.append("")
-            for sm in ir.anim_blueprint.baked_state_machines:
+            for sm in anim.anim_blueprint.baked_state_machines:
                 lines.append(f"### State Machine: {sm.machine_name}")
                 lines.append("")
                 lines.append("| State | Root Node | Conduit |")
@@ -552,86 +557,86 @@ class MarkdownRenderer(IRenderer):
                     conduit = "Yes" if state.b_is_a_conduit else "No"
                     lines.append(f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |")
                 lines.append("")
-            if ir.anim_blueprint.anim_notifies:
+            if anim.anim_blueprint.anim_notifies:
                 lines.append("### Anim Notifies")
                 lines.append("")
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
-                for notify in ir.anim_blueprint.anim_notifies:
+                for notify in anim.anim_blueprint.anim_notifies:
                     lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
                 lines.append("")
 
         # AnimSequence
-        if ir.anim_sequence:
+        if anim.anim_sequence:
             lines.append("## Animation Sequence")
             lines.append("")
-            if ir.anim_sequence.target_skeleton:
-                lines.append(f"**Target Skeleton**: `{ir.anim_sequence.target_skeleton}`")
-            if ir.anim_sequence.sequence_length:
-                lines.append(f"**Sequence Length**: {ir.anim_sequence.sequence_length:.2f}s")
-            if ir.anim_sequence.rate_scale != 1.0:
-                lines.append(f"**Rate Scale**: {ir.anim_sequence.rate_scale}")
-            if ir.anim_sequence.additive_anim_type:
-                lines.append(f"**Additive Type**: {ir.anim_sequence.additive_anim_type}")
-            if ir.anim_sequence.notifies:
+            if anim.anim_sequence.target_skeleton:
+                lines.append(f"**Target Skeleton**: `{anim.anim_sequence.target_skeleton}`")
+            if anim.anim_sequence.sequence_length:
+                lines.append(f"**Sequence Length**: {anim.anim_sequence.sequence_length:.2f}s")
+            if anim.anim_sequence.rate_scale != 1.0:
+                lines.append(f"**Rate Scale**: {anim.anim_sequence.rate_scale}")
+            if anim.anim_sequence.additive_anim_type:
+                lines.append(f"**Additive Type**: {anim.anim_sequence.additive_anim_type}")
+            if anim.anim_sequence.notifies:
                 lines.append("")
                 lines.append("### Anim Notifies")
                 lines.append("")
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
-                for notify in ir.anim_sequence.notifies:
+                for notify in anim.anim_sequence.notifies:
                     lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
-            if ir.anim_sequence.float_curve_names:
+            if anim.anim_sequence.float_curve_names:
                 lines.append("")
-                lines.append(f"**Float Curves**: {', '.join(ir.anim_sequence.float_curve_names)}")
-            lines.append(f"**Has Compressed Data**: {ir.anim_sequence.has_compressed_data}")
+                lines.append(f"**Float Curves**: {', '.join(anim.anim_sequence.float_curve_names)}")
+            lines.append(f"**Has Compressed Data**: {anim.anim_sequence.has_compressed_data}")
             lines.append("")
 
         # AnimMontage
-        if ir.anim_montage:
+        if anim.anim_montage:
             lines.append("## Animation Montage")
             lines.append("")
-            if ir.anim_montage.blend_mode_in:
-                lines.append(f"**Blend In Mode**: {ir.anim_montage.blend_mode_in}")
-            if ir.anim_montage.blend_mode_out:
-                lines.append(f"**Blend Out Mode**: {ir.anim_montage.blend_mode_out}")
-            if ir.anim_montage.blend_in_option:
-                lines.append(f"**Blend In Option**: {ir.anim_montage.blend_in_option}")
-            if ir.anim_montage.blend_out_option:
-                lines.append(f"**Blend Out Option**: {ir.anim_montage.blend_out_option}")
-            if ir.anim_montage.sync_group:
-                lines.append(f"**Sync Group**: {ir.anim_montage.sync_group}")
-            if ir.anim_montage.rate_scale != 1.0:
-                lines.append(f"**Rate Scale**: {ir.anim_montage.rate_scale}")
-            if ir.anim_montage.composite_sections:
+            if anim.anim_montage.blend_mode_in:
+                lines.append(f"**Blend In Mode**: {anim.anim_montage.blend_mode_in}")
+            if anim.anim_montage.blend_mode_out:
+                lines.append(f"**Blend Out Mode**: {anim.anim_montage.blend_mode_out}")
+            if anim.anim_montage.blend_in_option:
+                lines.append(f"**Blend In Option**: {anim.anim_montage.blend_in_option}")
+            if anim.anim_montage.blend_out_option:
+                lines.append(f"**Blend Out Option**: {anim.anim_montage.blend_out_option}")
+            if anim.anim_montage.sync_group:
+                lines.append(f"**Sync Group**: {anim.anim_montage.sync_group}")
+            if anim.anim_montage.rate_scale != 1.0:
+                lines.append(f"**Rate Scale**: {anim.anim_montage.rate_scale}")
+            if anim.anim_montage.composite_sections:
                 lines.append("")
                 lines.append("### Composite Sections")
                 lines.append("")
-                for i, section in enumerate(ir.anim_montage.composite_sections):
+                for i, section in enumerate(anim.anim_montage.composite_sections):
                     lines.append(f"{i}. {section}")
-            if ir.anim_montage.slot_anim_tracks:
+            if anim.anim_montage.slot_anim_tracks:
                 lines.append("")
                 lines.append("### Slot Anim Tracks")
                 lines.append("")
-                for i, track in enumerate(ir.anim_montage.slot_anim_tracks):
+                for i, track in enumerate(anim.anim_montage.slot_anim_tracks):
                     lines.append(f"{i}. {track}")
-            if ir.anim_montage.branching_point_markers:
+            if anim.anim_montage.branching_point_markers:
                 lines.append("")
                 lines.append("### Branching Point Markers")
                 lines.append("")
-                for marker in ir.anim_montage.branching_point_markers:
+                for marker in anim.anim_montage.branching_point_markers:
                     lines.append(f"- {marker}")
-            if ir.anim_montage.notifies:
+            if anim.anim_montage.notifies:
                 lines.append("")
                 lines.append("### Anim Notifies")
                 lines.append("")
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
-                for notify in ir.anim_montage.notifies:
+                for notify in anim.anim_montage.notifies:
                     lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
-            if ir.anim_montage.float_curve_names:
+            if anim.anim_montage.float_curve_names:
                 lines.append("")
-                lines.append(f"**Float Curves**: {', '.join(ir.anim_montage.float_curve_names)}")
+                lines.append(f"**Float Curves**: {', '.join(anim.anim_montage.float_curve_names)}")
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
