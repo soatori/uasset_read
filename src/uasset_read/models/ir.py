@@ -287,17 +287,48 @@ class ExportIR:
     # 懒加载标记
     is_loaded: bool = False
     lazy_load_archive: bytes | None = None
-    # 直接访问字段（从 ExportRawIR 提升，方便渲染层直接读取）
-    template_index: int = 0
-    object_flags: int = 0
-    package_flags: int = 0
-    b_forced_export: bool = False
-    b_not_for_client: bool = False
-    b_not_for_server: bool = False
-    b_is_asset: bool = False
-    b_generate_public_hash: bool = False
-    b_not_always_loaded_for_editor_game: bool = False
-    guid: str = ""
+
+    # --- 从 ExportRawIR 代理的属性（保持向后兼容） ---
+
+    @property
+    def template_index(self) -> int:
+        return self.ue_export_raw.template_index if self.ue_export_raw else 0
+
+    @property
+    def object_flags(self) -> int:
+        return self.ue_export_raw.object_flags if self.ue_export_raw else 0
+
+    @property
+    def package_flags(self) -> int:
+        return self.ue_export_raw.package_flags if self.ue_export_raw else 0
+
+    @property
+    def b_forced_export(self) -> bool:
+        return self.ue_export_raw.b_forced_export if self.ue_export_raw else False
+
+    @property
+    def b_not_for_client(self) -> bool:
+        return self.ue_export_raw.b_not_for_client if self.ue_export_raw else False
+
+    @property
+    def b_not_for_server(self) -> bool:
+        return self.ue_export_raw.b_not_for_server if self.ue_export_raw else False
+
+    @property
+    def b_is_asset(self) -> bool:
+        return self.ue_export_raw.b_is_asset if self.ue_export_raw else False
+
+    @property
+    def b_generate_public_hash(self) -> bool:
+        return self.ue_export_raw.b_generate_public_hash if self.ue_export_raw else False
+
+    @property
+    def b_not_always_loaded_for_editor_game(self) -> bool:
+        return self.ue_export_raw.b_not_always_loaded_for_editor_game if self.ue_export_raw else False
+
+    @property
+    def guid(self) -> str:
+        return self.ue_export_raw.guid if self.ue_export_raw else ""
 
 
 @dataclass

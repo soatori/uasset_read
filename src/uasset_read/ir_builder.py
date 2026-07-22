@@ -500,17 +500,6 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         anim_blueprint=getattr(export, "custom_data", {}).get("anim_blueprint"),
         anim_sequence=getattr(export, "custom_data", {}).get("anim_sequence"),
         anim_montage=getattr(export, "custom_data", {}).get("anim_montage"),
-        # 直接访问字段（从 ExportRawIR 提升）
-        template_index=raw.template_index,
-        object_flags=raw.object_flags,
-        package_flags=raw.package_flags,
-        b_forced_export=raw.b_forced_export,
-        b_not_for_client=raw.b_not_for_client,
-        b_not_for_server=raw.b_not_for_server,
-        b_is_asset=raw.b_is_asset,
-        b_generate_public_hash=raw.b_generate_public_hash,
-        b_not_always_loaded_for_editor_game=raw.b_not_always_loaded_for_editor_game,
-        guid=raw.guid,
     )
 
 def _build_export_raw_ir(export) -> ExportRawIR:
