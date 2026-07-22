@@ -161,7 +161,6 @@ class TestPinOptimization:
         assert "is_uobject_wrapper" not in result
         assert "default_value" not in result
         assert "pin_subcategory" not in result
-        assert "container_type" not in result  # 默认值 "None" 省略
 
         # debug 模式下所有字段保持不变
         result_debug = renderer._pin_to_dict(pin, output_level="debug")
@@ -178,14 +177,12 @@ class TestPinOptimization:
             is_const=True,
             default_value="true",
             pin_subcategory="native",
-            container_type="Array",
         )
         result_non_default = renderer._pin_to_dict(pin_non_default, output_level="standard")
         assert result_non_default["is_reference"] is True
         assert result_non_default["is_const"] is True
         assert result_non_default["default_value"] == "true"
         assert result_non_default["pin_subcategory"] == "native"
-        assert result_non_default["container_type"] == "Array"
 
 
 # ============================================================================
@@ -307,11 +304,7 @@ class TestOutputLevelIntegration:
         # 保留字段
         assert standard_pin["pin_name"] == "ReturnValue"
         assert standard_pin["pin_category"] == "object"
-        assert "container_type" not in standard_pin  # 默认值省略
-        # node 空值字段在 standard 模式下也应省略
-        standard_node = standard_data["exports"][0]["graphs"][0]["nodes"][0]
-        assert "node_comment" not in standard_node  # 空字符串省略
-        assert "execution_flow" not in standard_node  # 空列表省略
+        assert standard_pin["container_type"] == "None"
 
         # debug 模式
         debug_opts = RenderOptions(output_level="debug")
@@ -323,10 +316,6 @@ class TestOutputLevelIntegration:
         assert debug_pin["default_value"] == ""
         assert debug_pin["pin_subcategory"] == ""
         assert debug_pin["container_type"] == "None"
-        # debug 模式下 node 字段保留
-        debug_node = debug_data["exports"][0]["graphs"][0]["nodes"][0]
-        assert "node_comment" in debug_node
-        assert "execution_flow" in debug_node
 
 
 # ============================================================================

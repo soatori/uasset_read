@@ -187,6 +187,22 @@ class JSONRenderer(IRenderer):
             d["array_index"] = prop.array_index
         if is_debug or prop.guid is not None:
             d["guid"] = prop.guid
+        # StructValue 元数据精简（standard 模式）
+        if not is_debug and hasattr(prop.value, "__dataclass_fields__"):
+            value_dict = dataclasses.asdict(prop.value)
+            for field_name, default in [
+                ("parse_status", "success"),
+                ("property_type", "StructProperty"),
+                ("kind", "struct_binary_decoded"),
+            ]:
+                if value_dict.get(field_name) == default:
+                    value_dict.pop(field_name, None)
+            d["value"] = value_dict
+        # ObjectProperty full_name 省略（standard 模式）
+        if not is_debug and isinstance(d.get("value"), dict):
+            val = d["value"]
+            if "full_name" in val and "object_name" in val:
+                val.pop("full_name", None)
         return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
@@ -203,23 +219,7 @@ class JSONRenderer(IRenderer):
         return result
 
     def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
-        is_debug = output_level == "debug"
-        d: dict[str, Any] = {
-            "node_guid": node.node_guid,
-            "node_class": node.node_class,
-            "pins": [self._pin_to_dict(p, output_level) for p in node.pins],
-        }
-        if is_debug or node.node_comment:
-            d["node_comment"] = node.node_comment
-        if is_debug or node.execution_flow:
-            d["execution_flow"] = node.execution_flow
-        # v0.5.2 字段：同样条件输出
-        if is_debug or node.trigger_events:
-            d["trigger_events"] = node.trigger_events
-        if is_debug or node.event_type:
-            d["event_type"] = node.event_type
-        if is_debug or node.input_action_path:
-            d["input_action_path"] = node.input_action_path
+        d = {"node_guid": node.node_guid, "node_class": node.node_class, "node_comment": node.node_comment, "pins": [self._pin_to_dict(p, output_level) for p in node.pins], "execution_flow": node.execution_flow}
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
         return d
@@ -231,10 +231,8 @@ class JSONRenderer(IRenderer):
             "linked_to": pin.linked_to,
             "direction": pin.direction,
             "pin_category": pin.pin_category,
+            "container_type": pin.container_type,
         }
-        # standard 模式：省略默认值
-        if is_debug or pin.container_type != "None":
-            d["container_type"] = pin.container_type
         if is_debug:
             # debug 模式：保留所有字段
             d["pin_type"] = pin.pin_type
