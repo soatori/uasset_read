@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Kismet expression subclasses — Numeric and boolean literal constants.
 """
