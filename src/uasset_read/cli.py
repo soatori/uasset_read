@@ -131,7 +131,7 @@ def resolve_format(args) -> str:
 
 
 def _write_output(output_str: str, output_path: str | None) -> None:
-    """统一输出写入。"""
+    """Unified output writer."""
     if output_path:
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -142,7 +142,7 @@ def _write_output(output_str: str, output_path: str | None) -> None:
             print(f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
-        print(output_str)
+        sys.stdout.buffer.write(output_str.encode('utf-8'))
 
 
 def _log_enabled_from_args(args) -> bool:
