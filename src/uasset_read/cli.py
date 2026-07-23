@@ -142,7 +142,11 @@ def _write_output(output_str: str, output_path: str | None) -> None:
             print(f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
-        sys.stdout.buffer.write(output_str.encode('utf-8'))
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError):
+            pass
+        print(output_str)
 
 
 def _log_enabled_from_args(args) -> bool:

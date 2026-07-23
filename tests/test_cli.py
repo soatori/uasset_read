@@ -88,6 +88,7 @@ def test_cli_log_level_off(tmp_path):
         text=True,
         cwd=Path(__file__).resolve().parents[1],
         timeout=60,
+        env={**__import__('os').environ, "PYTHONIOENCODING": "utf-8"},
     )
     assert result.returncode == 0, (
         f"exit={result.returncode}\nstdout={result.stdout[:500]}\nstderr={result.stderr[:500]}"
