@@ -82,16 +82,18 @@ def test_cli_log_level_off(tmp_path):
     if not sample.exists():
         pytest.skip("Test sample not found")
 
+    env = {**__import__('os').environ, "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(
         [sys.executable, "-W", "ignore", "run.py", str(sample), "--json", "--log-level", "off"],
         capture_output=True,
-        text=True,
         cwd=Path(__file__).resolve().parents[1],
         timeout=60,
-        env={**__import__('os').environ, "PYTHONIOENCODING": "utf-8"},
+        env=env,
     )
+    stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
     assert result.returncode == 0, (
-        f"exit={result.returncode}\nstdout={result.stdout[:500]}\nstderr={result.stderr[:500]}"
+        f"exit={result.returncode}\nstdout={stdout[:500]}\nstderr={stderr[:500]}"
     )
-    assert "Project logging is disabled" not in result.stderr
-    json.loads(result.stdout)
+    assert "Project logging is disabled" not in stderr
+    json.loads(stdout)
