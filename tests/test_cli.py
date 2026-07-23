@@ -83,7 +83,7 @@ def test_cli_log_level_off(tmp_path):
         pytest.skip("Test sample not found")
 
     result = subprocess.run(
-        [sys.executable, "run.py", str(sample), "--json", "--log-level", "off"],
+        [sys.executable, "-W", "ignore", "run.py", str(sample), "--json", "--log-level", "off"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).resolve().parents[1],
