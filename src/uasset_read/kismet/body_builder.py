@@ -144,7 +144,7 @@ def _emit_for_block(
 
     # 输出循环体（不含递增和回跳）
     for j in range(body_start, inc_start):
-        byte_off = getattr(expressions[j], "byte_offset", None)
+        byte_off = getattr(expressions[j], "StatementIndex", None)
         if byte_off is not None and byte_off in jump_targets:
             target_idx = offset_to_index.get(byte_off)
             if target_idx is not None and target_idx not in label_set:
@@ -210,7 +210,7 @@ def _emit_while_block(
     # 输出循环体（跳过回跳 EX_Jump，由 while 结构处理）
     for j in range(body_start, body_end):
         # 检查是否是跳转目标（标签）
-        byte_off = getattr(expressions[j], "byte_offset", None)
+        byte_off = getattr(expressions[j], "StatementIndex", None)
         if byte_off is not None and byte_off in jump_targets:
             target_idx = offset_to_index.get(byte_off)
             if target_idx is not None and target_idx not in label_set:
@@ -342,12 +342,12 @@ class FunctionBodyBuilder:
         jump_analyzer = JumpAnalyzer(expressions)
         translator = KismetTranslator(self.type_registry, linker=self._linker, expressions=expressions)
 
-        # Build byte_offset → expression index map for label generation
+        # Build StatementIndex → expression index map for label generation
         offset_to_index: dict[int, int] = {}
         for idx, expr in enumerate(expressions):
-            byte_offset = getattr(expr, "byte_offset", None)
-            if byte_offset is not None:
-                offset_to_index[byte_offset] = idx
+            stmt_idx = getattr(expr, "StatementIndex", None)
+            if stmt_idx is not None:
+                offset_to_index[stmt_idx] = idx
             # Also track CodeOffset attributes for jump targets
             if hasattr(expr, "CodeOffset"):
                 offset_to_index[expr.CodeOffset] = idx
@@ -441,9 +441,9 @@ class FunctionBodyBuilder:
         # 构建辅助映射
         offset_to_index: dict[int, int] = {}
         for idx, expr in enumerate(expressions):
-            byte_offset = getattr(expr, "byte_offset", None)
-            if byte_offset is not None:
-                offset_to_index[byte_offset] = idx
+            stmt_idx = getattr(expr, "StatementIndex", None)
+            if stmt_idx is not None:
+                offset_to_index[stmt_idx] = idx
             if hasattr(expr, "CodeOffset"):
                 offset_to_index[expr.CodeOffset] = idx
 
@@ -533,12 +533,12 @@ class FunctionBodyBuilder:
             self.type_registry, linker=self._linker, expressions=expressions
         )
 
-        # Build byte_offset → expression index map for label generation
+        # Build StatementIndex → expression index map for label generation
         offset_to_index: dict[int, int] = {}
         for idx, expr in enumerate(expressions):
-            byte_offset = getattr(expr, "byte_offset", None)
-            if byte_offset is not None:
-                offset_to_index[byte_offset] = idx
+            stmt_idx = getattr(expr, "StatementIndex", None)
+            if stmt_idx is not None:
+                offset_to_index[stmt_idx] = idx
             if hasattr(expr, "CodeOffset"):
                 offset_to_index[expr.CodeOffset] = idx
 
@@ -567,11 +567,11 @@ class FunctionBodyBuilder:
                 expr = expressions[expr_idx]
 
                 # 检查是否是跳转目标（标签）
-                byte_off = getattr(expr, "byte_offset", None)
-                if byte_off is not None and byte_off in jump_targets:
-                    target_idx = offset_to_index.get(byte_off)
+                stmt_idx = getattr(expr, "StatementIndex", None)
+                if stmt_idx is not None and stmt_idx in jump_targets:
+                    target_idx = offset_to_index.get(stmt_idx)
                     if target_idx is not None and target_idx not in label_set:
-                        lines.append(f"Label_{byte_off}:")
+                        lines.append(f"Label_{stmt_idx}:")
                         label_set.add(target_idx)
 
                 cpp_line = translator.line_cpp(expr, index=expr_idx)

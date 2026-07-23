@@ -10,29 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
 
 
-@dataclass
-class EX_EndParmValue(KismetExpression):
-    """可选函数参数默认值的结束标记。"""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_EndParmValue
-
-
-@dataclass
-class EX_EndFunctionParms(KismetExpression):
-    """函数调用参数列表的结束标记。"""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_EndFunctionParms
+# 无数据表达式：仅返回 Token
+EX_EndParmValue = make_simple_expression(EExprToken.EX_EndParmValue)
+EX_EndFunctionParms = make_simple_expression(EExprToken.EX_EndFunctionParms)
 
 
 @dataclass
@@ -43,7 +30,7 @@ class EX_FinalFunction(KismetExpression):
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_FinalFunction
 
     @classmethod
@@ -64,7 +51,7 @@ class EX_CallMath(EX_FinalFunction):
     """静态纯函数调用（本地调用空间）。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_CallMath
 
 
@@ -73,7 +60,7 @@ class EX_LocalFinalFunction(EX_FinalFunction):
     """仅本地执行的 final 函数调用。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LocalFinalFunction
 
 
@@ -85,7 +72,7 @@ class EX_VirtualFunction(KismetExpression):
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_VirtualFunction
 
     @classmethod
@@ -107,7 +94,7 @@ class EX_LocalVirtualFunction(EX_VirtualFunction):
     """仅本地执行的虚函数调用。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LocalVirtualFunction
 
 
@@ -120,7 +107,7 @@ class EX_CallMulticastDelegate(KismetExpression):
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_CallMulticastDelegate
 
     @classmethod

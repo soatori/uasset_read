@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 from uasset_read.models.core import UEdGraph
 from uasset_read.kismet.result import KismetDecompiledResult
 
@@ -12,13 +13,6 @@ logger = logging.getLogger(__name__)
 _EMPTY_BODY_THRESHOLD = 3
 
 
-def _sanitize_cpp_name(name: str) -> str:
-    """将 UE pin 名清理为 C++ 兼容标识符。
-
-    委托给 cpp_gen.sanitizer.sanitize_identifier 统一实现。
-    """
-    from uasset_read.cpp_gen.sanitizer import sanitize_identifier
-    return sanitize_identifier(name)
 
 
 def enrich_decompiled_functions(
@@ -312,7 +306,7 @@ def _format_call_node(
 
         # 优先使用 data_source 追踪到的真实参数名
         resolved_name = _resolve_param_name(param)
-        final_name = resolved_name if resolved_name else _sanitize_cpp_name(name)
+        final_name = resolved_name if resolved_name else sanitize_identifier(name)
         args.append(final_name)
 
     return f"{func_name}({', '.join(args)})"
@@ -376,7 +370,7 @@ def _resolve_param_name(param: Dict[str, Any]) -> str:
 
     if source_type == "function_parameter":
         # FunctionEntry 参数 → 使用 pin 名（如 "Yaw", "Pitch"）
-        return _sanitize_cpp_name(src.get("pin", ""))
+        return sanitize_identifier(src.get("pin", ""))
 
     if source_type == "default_value":
         # 默认值字面量
@@ -481,7 +475,7 @@ def _call_args_from_flow(call_info: Dict[str, Any]) -> List[str]:
         category = param.get("pin_category") if isinstance(param, dict) else None
         if not name or name in ("self", "Target") or category == "exec":
             continue
-        args.append(_sanitize_cpp_name(name))
+        args.append(sanitize_identifier(name))
     return args
 
 

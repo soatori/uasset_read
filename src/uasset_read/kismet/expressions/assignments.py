@@ -46,7 +46,7 @@ class EX_Let(KismetExpression):
     Assignment: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Let
 
     @classmethod
@@ -71,7 +71,7 @@ class EX_LetBool(EX_LetBase):
     """布尔类型赋值。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetBool
 
 
@@ -80,7 +80,7 @@ class EX_LetDelegate(EX_LetBase):
     """委托类型赋值。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetDelegate
 
 
@@ -89,7 +89,7 @@ class EX_LetMulticastDelegate(EX_LetBase):
     """多播委托类型赋值。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetMulticastDelegate
 
 
@@ -98,7 +98,7 @@ class EX_LetObj(EX_LetBase):
     """对象类型赋值。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetObj
 
 
@@ -107,7 +107,7 @@ class EX_LetWeakObjPtr(EX_LetBase):
     """弱对象指针赋值。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetWeakObjPtr
 
 
@@ -119,7 +119,7 @@ class EX_LetValueOnPersistentFrame(KismetExpression):
     AssignmentExpression: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_LetValueOnPersistentFrame
 
     @classmethod

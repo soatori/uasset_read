@@ -2,8 +2,8 @@
 
 ## 当前规模
 
-本目录当前包含 5 个 `test_*.py` 文件，`python -m pytest --collect-only -q`
-在本地收集到 104 个测试用例。集成测试在样本资产、Unreal Editor 或 MCP
+本目录当前包含 16 个 `test_*.py` 文件，`python -m pytest --collect-only -q`
+在本地收集到 94 个测试用例。集成测试在样本资产、Unreal Editor 或 MCP
 不可用时会按测试自身条件 skip。
 
 默认测试套件只保留必项回归和当前公开能力验收。历史补充或功能探索测试放在

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
@@ -50,6 +50,23 @@ EDITOR_NODE_CLASSES = frozenset({
 })
 
 
+def filter_editor_items(
+    items: list,
+    class_field: str = "object_class",
+    exclude_classes: frozenset = EDITOR_NODE_CLASSES,
+) -> list:
+    """过滤编辑器专用项（供渲染器共用）。"""
+    return [item for item in items if getattr(item, class_field, None) not in exclude_classes]
+
+
+def filter_variables(
+    variables: list,
+    exclude_names: frozenset = EDITOR_VARIABLE_NAMES,
+) -> list:
+    """过滤编辑器内部变量（供渲染器共用）。"""
+    return [v for v in variables if v.name not in exclude_names]
+
+
 def is_blueprint_export(export: ExportIR) -> bool:
     """判断是否为蓝图相关 export。
 
@@ -57,7 +74,7 @@ def is_blueprint_export(export: ExportIR) -> bool:
     - 类名以 _C 结尾（如 BP_Character_C）
     - 或有 graphs 数据
     """
-    if export.object_name.endswith("_C"):
+    if getattr(export, "object_name", None) is not None and export.object_name.endswith("_C"):
         return True
     if export.graphs:
         return True
@@ -71,7 +88,6 @@ class RenderOptions:
     indent: int = 2
     include_schema: bool = False
     include_function_graphs: bool = False
-    linker_result: Any = None  # LinkerParseResult，供需要 linker 数据的格式使用
     output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
     hex_view: bool = False  # 输出 HexView 解析轨迹数据
 
@@ -91,6 +107,21 @@ class IRenderer(ABC):
             渲染后的字符串
         """
         ...
+
+    def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
+        """渲染到文件/流。
+
+        默认实现写入 render() 结果。
+        JSONRenderer 覆盖此方法以使用 json.dump() 流式写入。
+
+        Args:
+            ir: PackageIR 实例
+            writer: 可写文本流
+            options: 渲染选项，None 时使用默认值
+        """
+        if options is None:
+            options = RenderOptions()
+        writer.write(self.render(ir, options))
 
     @property
     @abstractmethod

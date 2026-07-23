@@ -70,9 +70,9 @@ class StructuredControlFlow:
         for idx, expr in enumerate(expressions):
             if hasattr(expr, "CodeOffset"):
                 offset_map[expr.CodeOffset] = idx
-            byte_offset = getattr(expr, "byte_offset", None)
-            if byte_offset is not None:
-                offset_map[byte_offset] = idx
+            stmt_idx = getattr(expr, "StatementIndex", None)
+            if stmt_idx is not None:
+                offset_map[stmt_idx] = idx
 
         # Collect all jump targets
         jump_targets: set[int] = set()
@@ -222,9 +222,9 @@ class StructuredControlFlow:
         if offset_to_index is None:
             offset_to_index = {}
             for idx, expr in enumerate(expressions):
-                byte_offset = getattr(expr, "byte_offset", None)
-                if byte_offset is not None:
-                    offset_to_index[byte_offset] = idx
+                stmt_idx = getattr(expr, "StatementIndex", None)
+                if stmt_idx is not None:
+                    offset_to_index[stmt_idx] = idx
                 if hasattr(expr, "CodeOffset"):
                     offset_to_index[expr.CodeOffset] = idx
 

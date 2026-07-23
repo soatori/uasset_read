@@ -90,6 +90,13 @@ class PakFileReader:
             self._file.close()
             self._file = None
 
+    def __del__(self) -> None:
+        """安全网：确保文件句柄被释放。"""
+        try:
+            self.close()
+        except Exception:
+            logger.debug("PakFileReader.__del__ 清理失败", exc_info=True)
+
     def __enter__(self) -> "PakFileReader":
         self.open()
         return self

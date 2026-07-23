@@ -18,9 +18,23 @@ class ExportParseStatus(str, Enum):
     """Export 级解析状态。"""
     SUCCESS = "success"
     PARTIAL = "partial"
-    FALLBACK = "fallback"
-    SKIPPED = "skipped"
     FAILED = "failed"
+    OPAQUE = "opaque"
+    SKIPPED = "skipped"
+    PARTIAL_METADATA = "partial_metadata"
+    OPAQUE_UNVERSIONED = "opaque_unversioned"
+    FALLBACK = "fallback"
+    METADATA = "metadata"
+
+    @property
+    def is_partial(self) -> bool:
+        return self.value.startswith("partial") or self.value in (
+            "opaque", "skipped", "opaque_unversioned", "fallback", "metadata"
+        )
+
+    @property
+    def is_failed(self) -> bool:
+        return self.value == "failed"
 
 
 class FallbackReason(str, Enum):
@@ -31,6 +45,7 @@ class FallbackReason(str, Enum):
     PARTIAL_PARSE = "partial_parse"
     MISSING_MAPPING = "missing_mapping"
     CUSTOM_PAYLOAD = "custom_payload"
+    SIZE_EXCEEDED = "size_exceeded"
 
 
 @dataclass

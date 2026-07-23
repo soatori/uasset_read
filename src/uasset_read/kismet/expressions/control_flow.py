@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
+from uasset_read.kismet.expressions.base import (
+    KismetExpression, KismetExpressionT, make_simple_expression,
+)
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
@@ -23,7 +25,7 @@ class EX_Jump(KismetExpression):
     CodeOffset: int = 0
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Jump
 
     @classmethod
@@ -44,7 +46,7 @@ class EX_JumpIfNot(EX_Jump):
     BooleanExpression: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_JumpIfNot
 
     @classmethod
@@ -68,7 +70,7 @@ class EX_Skip(EX_Jump):
     SkipExpression: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Skip
 
     @classmethod
@@ -92,7 +94,7 @@ class EX_ComputedJump(KismetExpression):
     CodeOffsetExpression: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_ComputedJump
 
     @classmethod
@@ -115,7 +117,7 @@ class EX_PushExecutionFlow(KismetExpression):
     PushingAddress: int = 0
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_PushExecutionFlow
 
     @classmethod
@@ -129,13 +131,8 @@ class EX_PushExecutionFlow(KismetExpression):
         return d
 
 
-@dataclass
-class EX_PopExecutionFlow(KismetExpression):
-    """从执行流栈弹出并跳转到该地址。"""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_PopExecutionFlow
+# 无数据表达式：仅返回 Token
+EX_PopExecutionFlow = make_simple_expression(EExprToken.EX_PopExecutionFlow)
 
 
 @dataclass
@@ -145,7 +142,7 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
     BooleanExpression: KismetExpression | None = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_PopExecutionFlowIfNot
 
     @classmethod
@@ -161,13 +158,8 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
         return d
 
 
-@dataclass
-class EX_EndOfScript(KismetExpression):
-    """脚本结束标记。"""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_EndOfScript
+# 无数据表达式：仅返回 Token
+EX_EndOfScript = make_simple_expression(EExprToken.EX_EndOfScript)
 
 
 @dataclass
@@ -175,7 +167,7 @@ class EX_SkipOffsetConst(KismetExpressionT[int]):
     """Skip 偏移量常量。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_SkipOffsetConst
 
     @classmethod

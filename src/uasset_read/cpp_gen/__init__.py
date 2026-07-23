@@ -24,7 +24,7 @@ C++ 代码生成模块。
         cpf_flags_to_uproperty_marks: CPF 标志 → UPROPERTY 标记列表转换函数
 
     骨架提取：
-        extract_cpp_class_skeleton: LinkerParseResult → CppClassIR 提取函数
+        extract_cpp_class_skeleton: PackageIR → CppClassIR 提取函数
 
     JSON IR 格式化（从 formatters 子模块）：
         CppProperty: 单个 C++ UPROPERTY 声明数据模型
@@ -91,6 +91,9 @@ from uasset_read.cpp_gen.extract_cpp_skeleton import (
 )
 from uasset_read.cpp_gen.sanitizer import (
     sanitize_identifier,
+    sanitize_string_literal,
+    sanitize_uproperty_marks,
+    sanitize_category,
 )
 from uasset_read.cpp_gen.math_simplifier import (
     MathSimplifier,
@@ -144,6 +147,9 @@ __all__ = [
     "extract_cpp_constructor",
     # C++ 标识符清理
     "sanitize_identifier",
+    "sanitize_string_literal",
+    "sanitize_uproperty_marks",
+    "sanitize_category",
     # 数学函数简化
     "MathSimplifier",
 ]

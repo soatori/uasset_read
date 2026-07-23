@@ -32,6 +32,15 @@ UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定�
 # -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
 UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
 
+# UE4 LegacyFileVersion（GUID-based custom versions）
+# -3: GUID-based custom versions, 有 LegacyUE3Version
+# -4: GUID-based custom versions, 无 LegacyUE3Version（移除 UE3 版本字段）
+# -5: GUID-based custom versions, 有 LegacyUE3Version（替换 UE3 版本字段）
+UE4_LEGACY_VERSIONS = frozenset({-3, -4, -5})
+
+# 所有支持的 LegacyFileVersion（UE4 + UE5）
+SUPPORTED_LEGACY_VERSIONS = UE5_LEGACY_VERSIONS | UE4_LEGACY_VERSIONS
+
 # ============================================================================
 # CustomVersion GUIDs
 # ============================================================================
@@ -561,6 +570,11 @@ MAX_SAFE_COUNT = 10_000  # 用于 FText args / MulticastDelegate / FieldPath 等
 
 def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
     """将 16 原始 FGuid 字节格式化为稳定的 8-4-4-4-12 字符串。"""
+    if not isinstance(data, (bytes, bytearray)) or len(data) < 16:
+        raise ValueError(
+            f"GUID requires exactly 16 bytes, got {type(data).__name__} of length "
+            f"{len(data) if isinstance(data, (bytes, bytearray)) else 'N/A'}"
+        )
     text = (
         f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
         f"{data[4]:02x}{data[5]:02x}-"
@@ -574,3 +588,37 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
 def get_game_variant_config(variant: GameVariant) -> dict:
     """获取游戏变体配置。"""
     return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
+
+
+# ============================================================================
+# UE5 大型属性类型阈值 (#404)
+# ============================================================================
+
+MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — 标准属性大小上限
+
+UE5_LARGE_PROPERTY_TYPES = frozenset({
+    "BoneAnimationTracks",
+    "PoseContainer",
+    "ArrayConnectionMap",
+    "RigVM",
+})
+
+UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 大型属性上限
+
+
+def get_max_reasonable(property_type: str, engine_version: int) -> int:
+    """根据属性类型和引擎版本返回合理的大小上限。
+
+    对 UE5 已知的大型属性类型（BoneAnimationTracks、PoseContainer、
+    ArrayConnectionMap、RigVM），放宽阈值至 500MB。
+
+    Args:
+        property_type: 属性类型名（如 "IntProperty"、"StructProperty"）
+        engine_version: 引擎版本（4 或 5）
+
+    Returns:
+        该属性类型允许的最大合理大小（字节）
+    """
+    if engine_version >= 5 and property_type in UE5_LARGE_PROPERTY_TYPES:
+        return UE5_LARGE_PROPERTY_MAX_REASONABLE
+    return MAX_REASONABLE_CAP

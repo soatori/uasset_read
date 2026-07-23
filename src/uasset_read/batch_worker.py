@@ -12,9 +12,18 @@ import sys
 import tempfile
 import threading
 import time
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
+
+# 抑制 runpy 的 RuntimeWarning — 当通过 `python -m uasset_read.batch_worker` 启动时，
+# runpy 先导入包再执行模块，导致 "found in sys.modules after import" 警告
+warnings.filterwarnings(
+    "ignore",
+    message=".*found in sys.modules after import.*",
+    category=RuntimeWarning,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +50,7 @@ class _StderrDrain:
         self,
         max_bytes: int = _STDERR_DRAIN_MAX_BYTES,
         max_lines: int = _STDERR_DRAIN_MAX_LINES,
+        line_callback: Callable[[str], None] | None = None,
     ) -> None:
         self._max_bytes = max_bytes
         self._max_lines = max_lines
@@ -48,6 +58,7 @@ class _StderrDrain:
         self._total_bytes: int = 0
         self._dropped_count: int = 0
         self._thread: threading.Thread | None = None
+        self._line_callback = line_callback
 
     def start(self, proc: subprocess.Popen[bytes]) -> None:
         """启动后台 drain 线程。"""
@@ -64,7 +75,8 @@ class _StderrDrain:
     def _drain_loop(self, proc: subprocess.Popen[bytes]) -> None:
         """持续读取 stderr 行直到 EOF。"""
         try:
-            assert proc.stderr is not None
+            if proc.stderr is None:
+                return
             for raw_line in proc.stderr:
                 line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
                 self._append(line)
@@ -81,6 +93,8 @@ class _StderrDrain:
             self._dropped_count += 1
         self._lines.append(line)
         self._total_bytes += line_bytes
+        if self._line_callback is not None:
+            self._line_callback(line)
         # 如果总字节数仍超限，继续丢弃旧行
         while self._total_bytes > self._max_bytes and len(self._lines) > 1:
             old = self._lines.popleft()
@@ -119,6 +133,7 @@ class BatchWorkerOutcome:
     succeeded: bool
     output_path: str = ""
     error: str = ""
+    error_details: str = ""
 
 
 def _temporary_output_path(output_path: str | Path, pid: int) -> Path:
@@ -182,28 +197,36 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
 
     output_path = Path(request.output_path)
     temporary_path = _temporary_output_path(output_path, os.getpid())
+    worker_handler = None
     try:
         options = dict(request.parse_options)
         logging_options = request.logging_options or {}
-        if logging_options:
-            options.update({
-                "log_enabled": logging_options.get("enabled", True),
-                "log_level": logging_options.get("level"),
-                "log_dir": logging_options.get("log_dir"),
-                "log_run_id": logging_options.get("run_id"),
-            })
+        if logging_options.get("enabled", True):
+            from uasset_read.project_logging import configure_worker_stream_logging
+            worker_handler = configure_worker_stream_logging(
+                level=logging_options.get("level") or "DEBUG",
+                run_id=logging_options.get("run_id") or "-",
+                asset=Path(request.file_path).name,
+            )
         rendered = parse_single(request.file_path, **options)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path.write_text(rendered, encoding="utf-8")
         os.replace(temporary_path, output_path)
         return BatchWorkerOutcome(True, str(output_path), "")
     except BaseException as exc:
+        import traceback
         return BatchWorkerOutcome(
             False,
             "",
             f"{type(exc).__name__}: {exc}",
+            traceback.format_exc(),
         )
     finally:
+        if worker_handler is not None:
+            package_logger = logging.getLogger("uasset_read")
+            package_logger.removeHandler(worker_handler)
+            worker_handler.close()
+            package_logger.propagate = True
         try:
             temporary_path.unlink(missing_ok=True)
         except OSError as e:
@@ -214,8 +237,17 @@ class _SubprocessAdapter:
     def __init__(self, process: subprocess.Popen) -> None:
         self._process = process
         self.pid = process.pid
-        self._stderr_drain = _StderrDrain()
+        self._stderr_drain = _StderrDrain(line_callback=self._forward_stderr_line)
         self._stderr_drain.start(process)
+
+    def _forward_stderr_line(self, line: str) -> None:
+        rendered = line.rstrip("\r\n")
+        level = logging.DEBUG
+        for name in ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"):
+            if f"[{name}]" in rendered:
+                level = getattr(logging, name)
+                break
+        logger.log(level, "worker[%d] %s", self.pid, rendered)
 
     @property
     def exitcode(self) -> int | None:
@@ -311,10 +343,14 @@ def _monitor_worker(
     try:
         return result_queue.get(timeout=1)
     except queue.Empty:
+        stderr_out = getattr(process, "stderr_text", "")
+        if stderr_out:
+            logger.error("Worker %s failed without result. stderr:\n%s", process.pid, stderr_out)
         return BatchWorkerOutcome(
             False,
             "",
             f"worker_exit: process exited with code {process.exitcode} without a result",
+            stderr_out,
         )
 
 

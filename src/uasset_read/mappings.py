@@ -190,9 +190,7 @@ class UsmapParser:
         comp_size = reader.u32()
         decomp_size = reader.u32()
         payload = reader.read(comp_size)
-        if budget is not None:
-            budget.reserve(decomp_size, "usmap_decompress")
-        data = self._decompress(payload, compression, comp_size, decomp_size)
+        data = self._decompress(payload, compression, comp_size, decomp_size, budget=budget)
         ar = _BytesReader(data)
 
         name_count = ar.u32()
@@ -223,19 +221,34 @@ class UsmapParser:
             mappings.types[struct.name] = struct
         return mappings
 
-    def _decompress(self, payload: bytes, method: int, comp_size: int, decomp_size: int) -> bytes:
+    def _decompress(self, payload: bytes, method: int, comp_size: int, decomp_size: int,
+                     budget: "ResourceBudget | None" = None) -> bytes:
         if method == 0:
             if comp_size != decomp_size:
-                raise ParseError("Usmap 未压缩数据大小不一致")
+                raise ParseError(
+                    f"Usmap 无压缩模式下大小不一致: {comp_size} != {decomp_size}"
+                )
             return payload
         if method == 2:
-            import brotli  # type: ignore
-            return brotli.decompress(payload)
+            try:
+                import brotli  # type: ignore
+            except ImportError as exc:
+                raise ParseError("Usmap Brotli 压缩需要安装 brotli 包") from exc
+            if budget is not None:
+                budget.reserve(decomp_size, "usmap_brotli_decompress")
+            result = brotli.decompress(payload)
+            if len(result) > decomp_size:
+                raise ParseError(
+                    f"Usmap Brotli 解压后大小超出预期: {len(result)} > {decomp_size}"
+                )
+            return result
         if method == 3:
             try:
                 import zstandard as zstd  # type: ignore
             except ImportError as exc:
-                raise ParseError("Usmap ZStandard 压缩需要可用的 zstandard 后端") from exc
+                raise ParseError("Usmap ZStandard 压缩需要安装 zstandard 包") from exc
+            if budget is not None:
+                budget.reserve(decomp_size, "usmap_zstd_decompress")
             return zstd.ZstdDecompressor().decompress(payload, max_output_size=decomp_size)
         raise ParseError(f"不支持的 Usmap 压缩方式: {method}")
 

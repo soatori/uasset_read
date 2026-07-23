@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ class EX_SetArray(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_SetArray
+    def Token(self) -> EExprToken: return EExprToken.EX_SetArray
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
@@ -29,10 +29,8 @@ class EX_SetArray(KismetExpression):
         return cls(AssigningProperty=prop, Elements=elements)
 
 
-@dataclass
-class EX_EndArray(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndArray
+# 无数据表达式：仅返回 Token
+EX_EndArray = make_simple_expression(EExprToken.EX_EndArray)
 
 
 @dataclass
@@ -41,7 +39,7 @@ class EX_SetMap(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_SetMap
+    def Token(self) -> EExprToken: return EExprToken.EX_SetMap
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetMap:
@@ -50,10 +48,8 @@ class EX_SetMap(KismetExpression):
         return cls(MapProperty=prop, Elements=elements)
 
 
-@dataclass
-class EX_EndMap(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndMap
+# 无数据表达式：仅返回 Token
+EX_EndMap = make_simple_expression(EExprToken.EX_EndMap)
 
 
 @dataclass
@@ -62,7 +58,7 @@ class EX_SetSet(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_SetSet
+    def Token(self) -> EExprToken: return EExprToken.EX_SetSet
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetSet:
@@ -71,10 +67,8 @@ class EX_SetSet(KismetExpression):
         return cls(SetProperty=prop, Elements=elements)
 
 
-@dataclass
-class EX_EndSet(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndSet
+# 无数据表达式：仅返回 Token
+EX_EndSet = make_simple_expression(EExprToken.EX_EndSet)
 
 
 @dataclass
@@ -83,7 +77,7 @@ class EX_ArrayConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_ArrayConst
+    def Token(self) -> EExprToken: return EExprToken.EX_ArrayConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayConst:
@@ -93,10 +87,8 @@ class EX_ArrayConst(KismetExpression):
         return cls(InnerProperty=prop, Elements=elements)
 
 
-@dataclass
-class EX_EndArrayConst(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndArrayConst
+# 无数据表达式：仅返回 Token
+EX_EndArrayConst = make_simple_expression(EExprToken.EX_EndArrayConst)
 
 
 @dataclass
@@ -106,7 +98,7 @@ class EX_MapConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_MapConst
+    def Token(self) -> EExprToken: return EExprToken.EX_MapConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MapConst:
@@ -117,10 +109,8 @@ class EX_MapConst(KismetExpression):
         return cls(KeyProperty=key_prop, ValueProperty=val_prop, Elements=elements)
 
 
-@dataclass
-class EX_EndMapConst(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndMapConst
+# 无数据表达式：仅返回 Token
+EX_EndMapConst = make_simple_expression(EExprToken.EX_EndMapConst)
 
 
 @dataclass
@@ -129,7 +119,7 @@ class EX_SetConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self): return EExprToken.EX_SetConst
+    def Token(self) -> EExprToken: return EExprToken.EX_SetConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetConst:
@@ -139,10 +129,8 @@ class EX_SetConst(KismetExpression):
         return cls(InnerProperty=prop, Elements=elements)
 
 
-@dataclass
-class EX_EndSetConst(KismetExpression):
-    @property
-    def Token(self): return EExprToken.EX_EndSetConst
+# 无数据表达式：仅返回 Token
+EX_EndSetConst = make_simple_expression(EExprToken.EX_EndSetConst)
 
 
 @dataclass
@@ -151,7 +139,7 @@ class EX_ArrayGetByRef(KismetExpression):
     ArrayIndex: KismetExpression = None
 
     @property
-    def Token(self): return EExprToken.EX_ArrayGetByRef
+    def Token(self) -> EExprToken: return EExprToken.EX_ArrayGetByRef
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayGetByRef:

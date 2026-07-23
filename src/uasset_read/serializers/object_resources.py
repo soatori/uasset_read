@@ -26,7 +26,7 @@ from uasset_read.constants import (
     UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT, UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
     UE4_TemplateIndex_IN_COOKED_EXPORTS, UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
-from uasset_read.exceptions import ParseError, ErrorContext
+from uasset_read.exceptions import ParseError
 
 
 @dataclass
@@ -326,14 +326,10 @@ def read_export_map(
                 guid=package_guid,
             ))
         except (struct.error, OSError, ValueError, AttributeError) as e:
-            context = ErrorContext(
-                offset=archive.tell(), phase="export_map", operation="read_export",
-                context_name=object_name, export_index=export_idx
-            )
-            raise ParseError(
-                f"导出表解析失败（导出 #{export_idx}）：{str(e)}",
-                partial_result={"export_map": export_map},
-                context=context
+            # 容错模式：记录错误并跳过失败的导出，保留已成功解析的导出
+            logger.warning(
+                "导出 #%d 解析失败（%s），跳过继续解析后续导出",
+                export_idx, str(e),
             )
     return export_map
 

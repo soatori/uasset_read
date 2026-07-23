@@ -64,6 +64,10 @@ SKIP_CLASS_PREFIXES = (
 # 需要跳过的精确 class 名称（不使用前缀匹配）
 # 这些 class 使用完全自定义的序列化格式，无法用通用 parser 处理
 #
+# 注意：完整 skip/strategy 以 CLASS_STRATEGY_TABLE（class_serialization_strategy.py）
+# 为唯一权威来源。本模块的 SKIP_CLASS_NAMES 和 SKIP_CLASS_PREFIXES 作为
+# property_parser 层级的二次安全网和 linker.preload() 层级前缀匹配的查询接口。
+#
 # 注意：已迁移到 class_serialization_strategy.py _SKIP_CLASSES 的类不再列出，
 # 包括：NiagaraGraph, NiagaraScript, NiagaraDataInterface 及其子类、
 # NiagaraSystem（保留在 _OPAQUE_CLASSES）、AnimBlueprintExtension、
@@ -79,6 +83,18 @@ SKIP_CLASS_NAMES = {
     "NiagaraRendererProperties",
     "NiagaraEmitterProperties",
 }
+
+
+def should_skip_export_class_prefix(class_name: str) -> bool:
+    """判断类名是否匹配 SKIP_CLASS_PREFIXES 前缀。
+
+    Args:
+        class_name: UE class 名称
+
+    Returns:
+        True 表示类名以 SKIP_CLASS_PREFIXES 中任一前缀开头
+    """
+    return class_name.startswith(SKIP_CLASS_PREFIXES)
 
 
 def should_skip_export_for_tolerant_parsing(
@@ -135,7 +151,12 @@ def skip_export_payload(
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        payload_end = export.serial_offset + export.script_serialization_end_offset
+        # 使用 getattr 安全回退，防止属性不存在时抛出 AttributeError
+        script_serial_end = getattr(export, 'script_serialization_end_offset', None)
+        if script_serial_end is None:
+            # 回退到 serial_size，保持兼容性
+            script_serial_end = export.serial_size
+        payload_end = export.serial_offset + script_serial_end
     else:
         payload_end = export.serial_offset + export.serial_size
 

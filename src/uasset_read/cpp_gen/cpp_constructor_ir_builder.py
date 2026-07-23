@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters.cpp_json_ir import CppClassIR
     from uasset_read.models.blueprint import BlueprintVariable
+    from uasset_read.models.ir import VariableIR
 
 
 from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS
@@ -240,12 +241,12 @@ def build_component_assignments(
 
 def build_default_values(
     ir: "CppClassIR",
-    blueprint_vars: Optional[List["BlueprintVariable"]] = None,
+    blueprint_vars: Optional[List["VariableIR"]] = None,
 ) -> List[CppDefaultValue]:
-    """从 CppClassIR.properties 和 blueprint.variables 中提取默认值。
+    """从 CppClassIR.properties 和 VariableIR 列表中提取默认值。
 
     遍历 ir.properties 中 category == "variable" 的条目，以及可选的
-    blueprint_vars 列表，生成 CppDefaultValue 条目。
+    VariableIR 列表，生成 CppDefaultValue 条目。
 
     特殊处理：
     - UInputAction* 类型：标记 needs_load_object=True（需要 LoadObject 加载）
@@ -254,7 +255,7 @@ def build_default_values(
 
     Args:
         ir: CppClassIR 实例
-        blueprint_vars: 可选的 BlueprintVariable 列表
+        blueprint_vars: 可选的 VariableIR 列表
 
     Returns:
         CppDefaultValue 列表
@@ -291,27 +292,30 @@ def build_default_values(
             cpp_type=prop.cpp_type,
         ))
 
-    # 从 blueprint_vars 补充提取
+    # 从 VariableIR 列表补充提取
     if blueprint_vars:
         for var in blueprint_vars:
-            if var.is_component:
+            # 兼容 VariableIR（kind）和 BlueprintVariable（is_component）
+            is_comp = getattr(var, 'kind', None) == "component" or getattr(var, 'is_component', False)
+            if is_comp:
                 continue
             if var.default_value is None:
                 continue
-            if _is_blueprint_metadata(var.var_name):
+            var_name = getattr(var, 'name', None) or getattr(var, 'var_name', '')
+            if _is_blueprint_metadata(var_name):
                 continue
 
             # 跳过已经在 ir.properties 中处理过的变量
             already_processed = any(
-                d.target == var.var_name for d in defaults
+                d.target == var_name for d in defaults
             )
             if already_processed:
                 continue
 
-            cpp_type = _blueprint_var_type_to_cpp(var)
+            cpp_type = _variable_type_to_cpp(var)
             value_str = _sanitize_value(str(var.default_value), cpp_type)
             defaults.append(CppDefaultValue(
-                target=var.var_name,
+                target=var_name,
                 value=value_str,
                 cpp_type=cpp_type,
             ))
@@ -416,18 +420,29 @@ def _sanitize_value(value: str, cpp_type: str) -> str:
     return value
 
 
-def _blueprint_var_type_to_cpp(var: "BlueprintVariable") -> str:
-    """从 BlueprintVariable 的 var_type 推导 C++ 类型。
+def _variable_type_to_cpp(var: Any) -> str:
+    """从 VariableIR 或 BlueprintVariable 推导 C++ 类型。
+
+    支持 VariableIR（type 字段为 str）和 BlueprintVariable（var_type 为 FEdGraphPinType）。
 
     Args:
-        var: BlueprintVariable 实例
+        var: VariableIR 或 BlueprintVariable 实例
 
     Returns:
         C++ 类型字符串
     """
     from uasset_read.cpp_gen.cpp_type_mapper import ue_path_to_cpp_type
 
-    var_type = var.var_type
+    # VariableIR: type 字段为 str
+    if hasattr(var, 'type') and isinstance(var.type, str):
+        ue_type = var.type
+        if not ue_type:
+            return "FString"
+        cpp_type = ue_path_to_cpp_type(ue_type)
+        return cpp_type
+
+    # BlueprintVariable: var_type 为 FEdGraphPinType
+    var_type = getattr(var, 'var_type', None)
     category = var_type.pin_category if var_type else ""
     subcategory = var_type.pin_subcategory if var_type else ""
 

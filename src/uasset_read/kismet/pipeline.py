@@ -57,23 +57,42 @@ def decompile_single_function(
         tolerant: If True, skip unknown tokens instead of raising
 
     Returns:
-        KismetDecompiledResult if bytecode found and parsed successfully,
-        None if export has no bytecode or is not a UStruct type.
-
-    On any exception during bytecode extraction/parsing, returns None
-    (caller handles error logging via tolerant mode).
+        KismetDecompiledResult if bytecode found and parsed successfully.
+        In tolerant mode, returns a result with bytecode_status="failed" and
+        error details in fallback_reasons when decompilation fails.
+        Returns None only if export is not a UStruct type (no bytecode at all).
     """
+    func_name = export.object_name
+
+    def _failed_result(reason: str) -> KismetDecompiledResult:
+        """构建失败结果，保留 per-function failure 信号。"""
+        return KismetDecompiledResult(
+            function_name=func_name,
+            signature=f"void {func_name}()",
+            local_variables=[],
+            cpp_code="",
+            bytecode_source="unknown",
+            bytecode_status="failed",
+            warnings=[],
+            fallback_reasons=[reason],
+        )
+
     # 复用 extract_and_parse() 提取和解析字节码
     try:
         expressions, error, extraction_reason = extract_and_parse(
             archive, export, summary, name_map, import_map, export_map,
             tolerant=tolerant,
         )
-    except (ParseError, ValueError, IndexError, KeyError):
+    except (ParseError, ValueError, IndexError, KeyError) as exc:
         # Expected failures from corrupted/malformed bytecode
-        return None
+        if tolerant:
+            return _failed_result(f"bytecode extraction error: {exc}")
+        raise
 
     if error or not expressions:
+        if tolerant:
+            reason = error if error else "no bytecode expressions extracted"
+            return _failed_result(reason)
         return None
 
     # 构建退回原因列表
@@ -84,9 +103,6 @@ def decompile_single_function(
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
     builder = FunctionBodyBuilder(type_registry, linker=linker)
-
-    # Use export.object_name as function name
-    func_name = export.object_name
 
     # Generate C++ code (use structured flow first, fallback to goto)
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
@@ -163,7 +179,9 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
         tolerant: If True, use tolerant mode for bytecode parsing
 
     Returns:
-        list[KismetDecompiledResult] - may be empty if no bytecode found
+        list[KismetDecompiledResult] - may be empty if no bytecode found.
+        In tolerant mode, includes results with bytecode_status="failed" for
+        functions that errored during decompilation.
 
     Raises:
         FileNotFoundError: If the file does not exist

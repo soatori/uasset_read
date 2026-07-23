@@ -41,6 +41,7 @@ desktop.ini
 
 # Temp and output
 temp/
+tmp/
 test/
 /output/
 /debug/
@@ -92,6 +93,8 @@ tests/*
 !tests/parsers/
 !tests/iostore/
 !tests/samples/
+!tests/config/
+!tests/batch/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
@@ -113,3 +116,5 @@ docs/compose/
 
 # Wiki submodule (external)
 wiki/
+worktrees/
+.worktrees/

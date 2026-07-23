@@ -1,148 +1,42 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Project conventions for Claude Code in this repository.
 
-## 行为规则
+## Basic Rules
 
-- **语言**：所有对话、代码注释、错误提示、文档统一使用中文
-- **输出**：专业简洁，避免冗余
-- **CodeGraph**：优先使用 `codegraph_*` 工具回答结构化问题（详见全局 CLAUDE.md）
+- All conversations, code comments, error messages, and documentation are in English; keep output professional and concise.
+- Project: `uasset_read` is a Python 3.10+ zero-runtime-dependency Unreal `.uasset` parser for unbaked/editor-saved assets (including full Blueprint data).
+- Format understanding must reference UE source code (`E:\Develop\lib\UnrealEngine`); no guessing binary formats.
+- Use `E:/Develop/...` or double backslashes for Windows paths; test samples are at `E:\Develop\lib\Samples`.
+- Temp files, debug logs, and test artifacts go in the project root `temp/` directory.
 
-## 项目概述
+## Constraints
 
-**uasset_read** — 虚幻引擎 `.uasset` 文件的 Python 解析器，零运行时依赖。专注未烘焙/编辑器保存的资产（含完整蓝图数据）。版本 0.5.3.23 | Python 3.10+ | 禁止 `pip install`。
+Full constraints are in `.claude/rules/constraints.md`. Key points: read-only, zero runtime dependencies, no `pip install`.
 
-## 常用命令
+## Branches and Commits
 
-```bash
-# 解析
-python run.py file.uasset                        # JSON 输出（默认）
-python run.py file.uasset --markdown             # Markdown + Mermaid
-python run.py file.uasset --strict               # 遇警告停止
-python run.py file.uasset --tolerant             # 容错模式（默认）
-python run.py file.uasset --verbose              # 详细输出
-python run.py --batch-dir path/to/dir/           # 批量导出
-python run.py --list-formats                     # 列出可用格式
+- `develop` daily development; `master` releases; `wiki/master` Wiki maintenance.
+- `master` allows only `src/`, CI, README, `CLAUDE.md`, `pytest.ini`, `run.py`, `tests/`, specified `docs/`, `.claude/rules/`.
+- Commit: `<type>: <brief>`, types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `release`.
 
-# 对比
-python run.py file1.uasset --diff file2.uasset   # 对比两个资产
+## Documentation Structure
 
-# 测试
-python -m pytest tests/ -v                        # 运行所有测试
-python -m pytest tests/ -v -m "not slow"          # 运行非慢速测试
-python -m pytest tests/ -v --cov=uasset_read     # 覆盖率
-python -m pytest tests/archive/test_foo.py::test_bar -v  # 运行单个测试
+- `wiki/`: developer guides
+- `docs/formats/uasset/`: UE format reference
+- `docs/designs/`, `docs/reference/`, `docs/release-notes/`: design, reference, and release docs
+- Issue tracker: GitHub Issues (`gh` CLI); see `docs/agents/issue-tracker.md`
 
-# 质量
-python -m pytest tests/ -v -m "quality"           # 质量门禁
-```
+## Agent skills
 
-**Windows 路径**：使用正斜杠 `E:/Develop/...` 或双反斜杠。**测试样本**：`E:\Develop\lib\Samples`。**pytest 标记**：`integration`、`quality`、`regression`、`slow`。**pytest 配置**：`pythonpath = src` 已在 `pytest.ini` 中设置，测试可直接 `import uasset_read`。
+### Issue tracker
 
-### 测试文件创建规则
+Issues live in GitHub Issues, accessed via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
-| 场景 | 位置 | 说明 |
-|---|---|---|
-| **修改现有测试** | `tests/{模块}/test_*.py` | 修复 bug、改进现有功能的测试用例 |
-| **创建新测试** | `tests/{模块}/test_{功能}.py` | 新增功能必须配套测试，按功能模块归类 |
-| **临时测试** | `tmp/test_{用途}.py` | 调试验证、一次性脚本、临时排查，不入库 |
+### Triage labels
 
-**目录结构**：测试按功能模块分目录，保持与 `src/uasset_read/` 结构对应。主要子目录：`archive/`、`blueprint/`、`core/`、`cpp/`、`graph/`、`integration/`、`ir/`、`kismet/`、`link/`、`linker/`、`parsers/`、`serialization/`、`structs/`。
+Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
-**命名规范**：`test_{功能描述}.py`，测试函数 `test_{场景}_{预期结果}()`
+### Domain docs
 
-## 核心架构
-
-解析器镜像 UE 内部的 `FArchive` 序列化管线：
-
-```
-.uasset → FArchive → Serializers → Parsers → ParseResult
-                                                     ↓
-                                              IR Builder (ir_builder.py)
-                                                     ↓
-                                              PackageIR → Renderers (JSON/Markdown)
-```
-
-完整管线：`parse_package()` → `ParseResult` → `build_package_ir()` → `PackageIR` → `renderer.render(ir, options)`。渲染器不访问 `ParseResult`，只接收 IR。
-
-### 关键模块
-
-- **archive.py** — `FArchive` 二进制读取层，镜像 UE 的 FArchive 接口
-- **parse_uasset.py** — 主入口，`parse_package()` 返回 `ParseResult`
-- **core/__init__.py** — 高层 API（`parse_single`、`parse_batch`、`diff_single`），CLI 和脚本共用
-- **ir_builder.py** — `ParseResult` → `PackageIR`，渲染器只接收 IR（不直接访问 ParseResult）
-- **models/ir.py** — IR 数据结构：`PackageIR → ExportIR → GraphIR → NodeIR → PinIR`
-- **models/result.py** — `ParseResult` 容器（summary、linker、graphs、blueprint）
-- **objects/** — UObject 实例注册表，跨 export 的对象引用解析
-
-### 废弃导出系统
-
-`__init__.py` 通过 `__getattr__` 延迟加载 `_DEPRECATED_IMPORTS` 映射中的内部符号，同时发出 `DeprecationWarning`。新增代码应从子模块直接导入（如 `from .serializers import read_package_summary`），不要使用顶层废弃路径。
-
-### 蓝图解析链
-
-```
-serializers/graph.py → graph/flow_builder.py
-  → blueprint/variable_extractor.py → kismet/（字节码 → AST → C++）
-```
-
-### C++ 生成子系统
-
-`cpp_gen/` 将蓝图解析结果转换为 C++ 类骨架：类型映射、UPROPERTY 宏、构造函数格式化、函数体提取。
-
-### 渲染器系统
-
-渲染器通过 `RENDERER_REGISTRY` 自动注册。新增格式：在 `renderers/` 实现 `IRenderer` 子类 → 调用 `register_renderer()` → 在 `renderers/__init__.py` 添加 import。
-
-### 动画蓝图支持
-
-- **AnimBlueprintGeneratedClass** — 完整解析 BakedStateMachines / AnimNotifies / AnimNodeData
-- **AnimSequence** — 深度元数据提取（不含压缩轨迹数据）
-- **AnimMontage** — 混合参数 / 通知 / 同步组解析
-- **动画子图** — StateMachine / State / Transition / Conduit 类型识别
-
-### 容错模式
-
-- **strict**：遇警告停止
-- **tolerant**（默认）：遇错继续，标记 partial
-- **轻量解析**：export_count > 300 时自动跳过完整蓝图解析
-
-## 分支管理与提交规范
-
-### 分支策略
-
-| 分支 | 用途 |
-|---|---|
-| `develop` | **日常开发**（默认工作分支），包含完整文件 |
-| `master` | **发布分支**，仅 src/CI/README/tests/docs |
-| `wiki/master` | Wiki 专用，独立维护 |
-
-### master 文件白名单
-
-允许：`src/`、`.github/workflows/`、`README.md`、`CLAUDE.md`、`pytest.ini`、`run.py`、`tests/`、`docs/formats/`、`docs/designs/`、`docs/reference/`、`docs/agents/`、`docs/release-notes/`、`.claude/rules/`
-
-排除：`wiki/`、`scripts/`、`.claude/skills/`、`.claude/workflows/`、`.claude/agents/`、`temp/`、`docs/guides/`、`docs/superpowers/`、`docs/reports/`
-
-### 版本发布流程
-
-从 develop 合并到 master 时排除仅开发文件（wiki/scripts/.claude/skills 等），CI 会自动校验白名单合规。
-
-### 提交信息格式
-
-`<type>: <简要描述>` — 类型：`feat`、`fix`、`refactor`、`test`、`docs`、`chore`、`release`
-
-## 关键约束
-
-见 [.claude/rules/constraints.md](.claude/rules/constraints.md)。核心：
-- 仅支持未烘焙/编辑器保存的资产
-- 只读，不支持修改或写入
-- 零运行时依赖
-- 必须参考 UE 源码（`E:\Develop\lib\UnrealEngine`），禁止猜测二进制格式
-- 临时文件放 `temp/`
-
-## 文档与工具
-
-- `wiki/` — 开发指南 | `docs/formats/uasset/` — UE 格式参考（60+ 文件）
-- `docs/designs/` — 设计规格 | `docs/reference/` — 技术参考 | `docs/release-notes/` — 发布说明
-
-**Issue tracker**：GitHub Issues（gh CLI）。详见 `docs/agents/issue-tracker.md`。
+Single-context repo — one `CONTEXT.md` + `docs/adr/` at the repo root (neither exists yet). See `docs/agents/domain.md`.

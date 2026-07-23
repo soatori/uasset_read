@@ -38,7 +38,7 @@ class EX_Cast(KismetExpression):
     Target: Optional[KismetExpression] = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Cast
 
     @classmethod
@@ -58,7 +58,7 @@ class EX_MetaCast(EX_CastBase):
     """元类转换（metaclass cast）。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_MetaCast
 
 
@@ -67,7 +67,7 @@ class EX_DynamicCast(EX_CastBase):
     """安全动态类转换。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_DynamicCast
 
 
@@ -76,7 +76,7 @@ class EX_ObjToInterfaceCast(EX_CastBase):
     """对象引用转原生接口。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_ObjToInterfaceCast
 
 
@@ -85,7 +85,7 @@ class EX_CrossInterfaceCast(EX_CastBase):
     """接口转接口转换。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_CrossInterfaceCast
 
 
@@ -94,5 +94,5 @@ class EX_InterfaceToObjCast(EX_CastBase):
     """接口引用转对象。"""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_InterfaceToObjCast

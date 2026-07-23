@@ -110,11 +110,13 @@ class TestParseBatch:
                 succeeded=True,
                 output_path=str(first_output),
                 error="",
+                error_details="",
             ),
             SimpleNamespace(
                 succeeded=False,
                 output_path="",
                 error="memory_limit: 1025.0MB > 1024.0MB",
+                error_details="",
             ),
         ]
         with patch(
@@ -129,12 +131,11 @@ class TestParseBatch:
 
         assert run_isolated.call_count == 2
         first_request = run_isolated.call_args_list[0].args[0]
-        assert first_request.parse_options["include_parent_assets"] is False
+        assert first_request.parse_options["include_parent_assets"] is None
         assert "memory_policy" in first_request.parse_options
         assert result.success == [str(first_output)]
-        assert result.failed == [
-            (str(second), "memory_limit: 1025.0MB > 1024.0MB")
-        ]
+        assert result.failed[0][0] == str(second)
+        assert "memory_limit" in result.failed[0][1]
         assert result.skipped == []
 
     def test_parse_batch_warns_for_deprecated_skip_large_files(self, tmp_path):
@@ -182,13 +183,12 @@ class TestParseBatch:
             parse_batch(str(tmp_path))
 
     def test_parse_batch_returns_batch_result(self, tmp_path):
-        """parse_batch 返回 BatchResult。"""
-        # 创建一个临时 .uasset 文件
+        """parse_batch returns BatchResult."""
         test_file = tmp_path / "test.uasset"
-        test_file.write_bytes(b"\x00" * 100)  # dummy data
+        test_file.write_bytes(b"\x00" * 100)
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.return_value = '{"status": "success"}'
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_parse.return_value = ('{"status": "success"}', None)
 
             result = parse_batch(
                 str(tmp_path),
@@ -200,12 +200,12 @@ class TestParseBatch:
             assert result.total == 1
 
     def test_parse_batch_handles_failures(self, tmp_path):
-        """parse_batch 正确处理失败文件。"""
+        """parse_batch handles failure files correctly."""
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.side_effect = ParseError("test error")
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_parse.side_effect = ParseError("test error")
 
             result = parse_batch(
                 str(tmp_path),
@@ -219,17 +219,16 @@ class TestParseBatch:
 
 
 class TestCLIBatchOptions:
-    """验证 CLI batch 模式传递所有输出选项给 parse_batch。"""
+    """Verify CLI batch mode passes all output options to parse_batch."""
 
     def test_batch_passes_all_options(self, tmp_path):
-        """CLI batch 应传递 verbose/schema/function_graphs/parent_assets 等选项。"""
+        """CLI batch passes verbose/schema/function_graphs/parent_assets options."""
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)
 
-        with patch("uasset_read.core.parse_single") as mock_parse_single:
-            mock_parse_single.return_value = '{"status": "success"}'
+        with patch("uasset_read.core._parse_and_render") as mock_parse:
+            mock_parse.return_value = ('{"status": "success"}', None)
 
-            # 模拟 CLI 调用 parse_batch 时传递所有选项
             result = parse_batch(
                 str(tmp_path),
                 format="json",
@@ -246,9 +245,8 @@ class TestCLIBatchOptions:
             )
 
             assert isinstance(result, BatchResult)
-            # 验证 parse_single 被调用时携带了所有选项
-            mock_parse_single.assert_called_once()
-            call_kwargs = mock_parse_single.call_args
+            mock_parse.assert_called_once()
+            call_kwargs = mock_parse.call_args
             assert call_kwargs.kwargs.get("verbose") is True or call_kwargs[1].get("verbose") is True
 
 

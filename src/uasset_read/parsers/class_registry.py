@@ -110,6 +110,15 @@ class ClassHandlerRegistry:
         self._handlers.clear()
         self._cache.clear()
 
+    def reset_cache(self) -> None:
+        """清空 class_name → handler 查找缓存。
+
+        用于批量解析场景，在 parse_package 的 finally 块中调用，
+        防止 _cache 字典在批量解析时无界增长。
+        注意：不清空已注册的 handlers。
+        """
+        self._cache.clear()
+
 
 # 全局默认 registry 实例
 _default_registry: Optional[ClassHandlerRegistry] = None

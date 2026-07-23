@@ -7,13 +7,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
+import logging
+import os
+import tempfile
 import warnings
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.config import LogConfig
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
-from uasset_read.project_logging import configure_project_logging, new_log_run_id
+from uasset_read.project_logging import (
+    configure_project_logging,
+    current_log_run_id,
+    new_log_run_id,
+    scoped_project_logging,
+)
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
@@ -21,6 +29,10 @@ from uasset_read.exceptions import ParseError as ParseError  # Re-export for bac
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
     from uasset_read.config import ParseConfig
+    from uasset_read.models.result import ParseResult
+    from uasset_read.link.result import LinkerParseResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,8 +40,22 @@ class BatchResult:
     """批量导出结果。"""
     total: int = 0
     success: list[str] = field(default_factory=list)
+    partial: list[str] = field(default_factory=list)
+    partial_reasons: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
+    failed: list[tuple[str, str, str]] = field(default_factory=list)  # (path, error, details)
+
+
+def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
+    logging.getLogger(__name__).info(
+        "batch_summary total=%d success=%d partial=%d skipped=%d failed=%d elapsed=%.1fs",
+        result.total,
+        len(result.success),
+        len(result.partial),
+        len(result.skipped),
+        len(result.failed),
+        elapsed_seconds,
+    )
 
 
 def _configure_logging(
@@ -81,7 +107,7 @@ def _configure_logging(
         and log_max_bytes == 10_000_000
         and log_backup_count == 5
     ):
-        return configure_project_logging()
+        return None
     kwargs = {
         "level": log_level or "DEBUG",
         "log_dir": log_dir,
@@ -100,19 +126,20 @@ def _configure_logging(
     return configure_project_logging(**kwargs)
 
 
+@scoped_project_logging
 def parse_single(
     file_path: str,
     format: str = "json",
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
     log_level: str | None = None,
@@ -136,16 +163,16 @@ def parse_single(
     Args:
         file_path: .uasset/.umap 文件路径
         format: 输出格式（json, markdown）
-        tolerant: 容错模式，遇到错误继续解析
+        tolerant: 容错模式，遇到错误继续解析。None 表示使用 ParseConfig 或默认值 True
         verbose: 详细输出
         include_schema: 包含 JSON Schema
         include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产
+        include_parent_assets: 解析父资产。None 表示使用 ParseConfig 或默认值 False
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
         game: 游戏名称
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
+        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）。None 表示使用 ParseConfig 或默认值 False
+        hex_view: 启用 HexView 字节偏移追踪。None 表示使用 ParseConfig 或默认值 False
         memory_policy: 可选内存策略
         output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
         log_config: 可选 LogConfig 实例，集中管理日志参数。
@@ -171,7 +198,48 @@ def parse_single(
         log_backup_count=log_backup_count,
     )
 
-    # 需要 linker 的格式
+    output_str, _ = _parse_and_render(
+        file_path,
+        format=format,
+        tolerant=tolerant,
+        verbose=verbose,
+        include_schema=include_schema,
+        include_function_graphs=include_function_graphs,
+        include_parent_assets=include_parent_assets,
+        asset_roots=asset_roots,
+        mappings_path=mappings_path,
+        game=game,
+        force_full_parse=force_full_parse,
+        hex_view=hex_view,
+        memory_policy=memory_policy,
+        output_level=output_level,
+        parse_config=parse_config,
+    )
+    return output_str
+
+
+def _parse_and_render(
+    file_path: str,
+    *,
+    format: str = "json",
+    tolerant: bool | None = None,
+    verbose: bool = False,
+    include_schema: bool = False,
+    include_function_graphs: bool = False,
+    include_parent_assets: bool | None = None,
+    asset_roots: list[str] | None = None,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
+    memory_policy: "MemoryPolicy | None" = None,
+    output_level: str = "standard",
+    parse_config: "ParseConfig | None" = None,
+) -> tuple[str, "ParseResult | LinkerParseResult"]:
+    """解析并渲染，返回 (output_str, parse_result)。
+
+    parse_single 和 parse_batch 共用的核心逻辑。
+    """
     linker_formats = {"json"}
 
     if format in linker_formats:
@@ -204,29 +272,31 @@ def parse_single(
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
-    # HexView 文本旁路：仅非 json 格式时直接返回文本（json 格式走 IR 管线）
-    if hex_view and result.hex_view_entries and format != "json":
-        from uasset_read.debug.hex_view import format_hex_view
-        return format_hex_view(
-            result.hex_view_entries,
-            file_size=result.summary.uncompressed_size if result.summary else 0,
-        )
-
     ir = build_package_ir(result)
+
+    # 释放临时大对象，防止批量解析时内存累积
+    try:
+        for export in getattr(result, "export_map", []) or []:
+            if hasattr(export, "_asset_type_data"):
+                delattr(export, "_asset_type_data")
+            if hasattr(export, "_uclass_native_fields"):
+                delattr(export, "_uclass_native_fields")
+    except Exception:
+        logger.debug("批量清理临时大对象失败", exc_info=True)
+
     renderer = get_renderer(format)
     options = RenderOptions(
         verbose=verbose,
         include_schema=include_schema,
         include_function_graphs=include_function_graphs,
-        linker_result=None,
         output_level=output_level,
         hex_view=hex_view,
     )
-    return renderer.render(ir, options)
+    return renderer.render(ir, options), result
 
 
-def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
-    if not tolerant or format not in {"json"}:
+def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
+    if (tolerant is not None and not tolerant) or format not in {"json"}:
         return False
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
@@ -246,20 +316,21 @@ def _can_render_tolerant_json(result, format: str, tolerant: bool) -> bool:
     return False
 
 
+@scoped_project_logging
 def parse_batch(
     input_dir: str,
     format: str = "json",
     output_dir: str | None = None,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
     include_function_graphs: bool = False,
-    include_parent_assets: bool = False,
+    include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
-    hex_view: bool = False,
+    force_full_parse: bool | None = None,
+    hex_view: bool | None = None,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
     skip_large_files: bool | None = None,
     isolate_assets: bool | str = True,  # True/False/"auto"
@@ -311,7 +382,7 @@ def parse_batch(
             f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
         )
 
-    active_run_id = log_run_id or new_log_run_id()
+    active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
     _configure_logging(
         log_config=log_config,
         log_level=log_level,
@@ -383,6 +454,9 @@ def parse_batch(
     if isolate_assets == "auto":
         from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
 
+    import time
+    start_time = time.monotonic()
+
     for idx, pf in enumerate(package_files):
         stats = get_memory_stats()
         if stats.usage_percent > system_usage_limit:
@@ -424,23 +498,66 @@ def parse_batch(
                 if outcome.succeeded:
                     result.success.append(outcome.output_path)
                 else:
-                    result.failed.append((str(pf), outcome.error))
+                    result.failed.append((str(pf), outcome.error, outcome.error_details))
                 continue
 
-            output_str = parse_single(
+            output_str, parse_result = _parse_and_render(
                 str(pf),
-                **parse_options,
-                log_config=log_config,
-                log_level=log_level,
-                log_dir=log_dir,
-                log_enabled=log_enabled,
-                log_run_id=active_run_id,
+                format=format,
+                tolerant=tolerant,
+                verbose=verbose,
+                include_schema=include_schema,
+                include_function_graphs=include_function_graphs,
+                include_parent_assets=include_parent_assets,
+                asset_roots=asset_roots,
+                mappings_path=mappings_path,
+                game=game,
+                force_full_parse=force_full_parse,
+                hex_view=hex_view,
+                memory_policy=policy,
+                output_level=output_level,
+                parse_config=parse_config,
             )
-            out_file.write_text(output_str, encoding="utf-8")
+
+            # 检查 partial 状态并追踪原因
+            from uasset_read.models.status import _result_status, PARTIAL_STATUSES
+            status = _result_status(parse_result)
+            if status == "partial":
+                result.partial.append(str(pf))
+                for exp in (getattr(parse_result, "export_map", None) or []):
+                    exp_status = getattr(exp, "parse_status", None)
+                    if exp_status and exp_status in PARTIAL_STATUSES:
+                        result.partial_reasons.setdefault(exp_status, []).append(str(pf))
+
+            # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
+            tmp_fd = -1
+            tmp_path = ""
+            try:
+                tmp_fd, tmp_path = tempfile.mkstemp(
+                    dir=str(output_path.parent), suffix=".tmp"
+                )
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
+                    tmp_f.write(output_str)
+                tmp_fd = -1  # fdopen 已接管 fd，无需再 close
+                os.replace(tmp_path, str(out_file))
+            except BaseException:
+                if tmp_fd >= 0:
+                    os.close(tmp_fd)
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             result.success.append(str(out_file))
         except Exception as exc:
-            result.failed.append((str(pf), f"{type(exc).__name__}: {exc}"))
+            import traceback
+            tb = traceback.format_exc()
+            error_msg = f"{type(exc).__name__}: {exc}"
+            result.failed.append((str(pf), error_msg, tb))
+            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
 
+    elapsed = time.monotonic() - start_time
+    _log_batch_summary(result, elapsed_seconds=elapsed)
     return result
 
 
@@ -449,15 +566,16 @@ def list_formats() -> list[str]:
     return _list_renderer_formats()
 
 
+@scoped_project_logging
 def diff_single(
     file_path1: str,
     file_path2: str,
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
     writer: IO[str] | None = None,
     log_level: str | None = None,
     log_dir: str | None = None,
@@ -530,11 +648,11 @@ def _diff_to(
     file_path2: str,
     writer: IO[str],
     *,
-    tolerant: bool = True,
+    tolerant: bool | None = None,
     context_lines: int = 3,
     mappings_path: str | None = None,
     game: str | None = None,
-    force_full_parse: bool = False,
+    force_full_parse: bool | None = None,
 ) -> None:
     """将 unified diff 流式写入 writer。
 

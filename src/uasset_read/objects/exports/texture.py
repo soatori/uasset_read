@@ -8,6 +8,16 @@ import logging
 from uasset_read.objects.uobject import UObject
 from uasset_read.objects.registry import global_registry
 from uasset_read.objects.exports.helpers import as_list, as_mapping, prop_value
+from uasset_read.models.validators import validate_parse_status
+
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+
+# Texture2D 合理尺寸上限（256MB 像素等价）
+_MAX_TEXTURE_DIMENSION = 32768
+_MAX_BULK_DATA_SIZE = 256 * 1024 * 1024  # 256 MB
+
+_logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -70,6 +80,19 @@ class UTexture2D(UObject):
             self.platform_data = pdata
             self.size_x = int(prop_value(pdata, "SizeX", "size_x", default=self.size_x) or 0)
             self.size_y = int(prop_value(pdata, "SizeY", "size_y", default=self.size_y) or 0)
+            # 重新校验 PlatformData 覆盖后的尺寸（#403）
+            if self.size_x < 0 or self.size_x > _MAX_TEXTURE_DIMENSION:
+                _logger.debug(
+                    "Texture2D '%s': PlatformData SizeX=%d 超出合理范围 [0, %d]，置为 0",
+                    getattr(self, 'object_name', '?'), self.size_x, _MAX_TEXTURE_DIMENSION,
+                )
+                self.size_x = 0
+            if self.size_y < 0 or self.size_y > _MAX_TEXTURE_DIMENSION:
+                _logger.debug(
+                    "Texture2D '%s': PlatformData SizeY=%d 超出合理范围 [0, %d]，置为 0",
+                    getattr(self, 'object_name', '?'), self.size_y, _MAX_TEXTURE_DIMENSION,
+                )
+                self.size_y = 0
             self.format = prop_value(pdata, "PixelFormat", "Format", "format", default=self.format)
             mips = as_list(prop_value(pdata, "Mips", "mips"))
             self.mip_levels = [_normalize_mip(mip, archive) for mip in mips]
@@ -87,7 +110,7 @@ class UTexture2D(UObject):
             }
         self.raw_offset = offset
         self.raw_size = size
-        self.parse_status = "metadata" if self.platform_data else "opaque"
+        self.parse_status = validate_parse_status("metadata") if self.platform_data else validate_parse_status("opaque")
 
 
 @global_registry.register("TextureCube")

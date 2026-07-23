@@ -10,7 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
+from uasset_read.kismet.expressions.base import (
+    KismetExpression, KismetExpressionT, make_simple_expression,
+)
 from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
 
 if TYPE_CHECKING:
@@ -40,7 +42,7 @@ class EX_Return(KismetExpression):
     ReturnExpression: KismetExpression = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Return
 
     @classmethod
@@ -58,7 +60,7 @@ class EX_Assert(KismetExpression):
     AssertExpression: KismetExpression = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Assert
 
     @classmethod
@@ -70,54 +72,18 @@ class EX_Assert(KismetExpression):
 
 
 @dataclass
-class EX_Nothing(KismetExpression):
-    """No operation."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_Nothing
-
-
-@dataclass
 class EX_NothingInt32(KismetExpressionT[int]):
     """No operation with an int32 argument."""
 
     Value: int = 0
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_NothingInt32
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NothingInt32:
         return cls(Value=archive.read_i32())
-
-
-@dataclass
-class EX_Self(KismetExpression):
-    """Self object reference."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_Self
-
-
-@dataclass
-class EX_NoObject(KismetExpression):
-    """Null object reference."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_NoObject
-
-
-@dataclass
-class EX_NoInterface(KismetExpression):
-    """Null interface reference."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_NoInterface
 
 
 @dataclass
@@ -130,7 +96,7 @@ class EX_SwitchValue(KismetExpression):
     DefaultTerm: KismetExpression = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_SwitchValue
 
     @classmethod
@@ -154,7 +120,7 @@ class EX_InstrumentationEvent(KismetExpression):
     EventName: Optional[str] = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_InstrumentationEvent
 
     @classmethod
@@ -167,40 +133,11 @@ class EX_InstrumentationEvent(KismetExpression):
         return cls(EventType=evt_type, EventName=name)
 
 
-@dataclass
-class EX_DeprecatedOp4A(KismetExpression):
-    """Deprecated opcode 0x4A."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_DeprecatedOp4A
-
-
-@dataclass
-class EX_Breakpoint(KismetExpression):
-    """Breakpoint (editor only, else EX_Nothing)."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_Breakpoint
-
-
-@dataclass
-class EX_Tracepoint(KismetExpression):
-    """Tracepoint (editor only)."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_Tracepoint
-
-
-@dataclass
-class EX_WireTracepoint(KismetExpression):
-    """Wire tracepoint (editor only)."""
-
-    @property
-    def Token(self):
-        return EExprToken.EX_WireTracepoint
+# 无数据表达式：仅返回 Token
+EX_DeprecatedOp4A = make_simple_expression(EExprToken.EX_DeprecatedOp4A)
+EX_Breakpoint = make_simple_expression(EExprToken.EX_Breakpoint)
+EX_Tracepoint = make_simple_expression(EExprToken.EX_Tracepoint)
+EX_WireTracepoint = make_simple_expression(EExprToken.EX_WireTracepoint)
 
 
 @dataclass
@@ -210,7 +147,7 @@ class EX_FieldPathConst(KismetExpression):
     Value: KismetExpression = None
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_FieldPathConst
 
     @classmethod
@@ -226,7 +163,7 @@ class EX_ObjectConst(KismetExpressionT[int]):
     Value: int = 0
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_ObjectConst
 
     @classmethod
@@ -241,7 +178,7 @@ class EX_NameConst(KismetExpressionT[str]):
     Value: str = ""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_NameConst
 
     @classmethod
@@ -260,7 +197,7 @@ class EX_Unknown6E(KismetExpressionT[bytes]):
     Value: bytes = b""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_6E
 
     @classmethod
@@ -276,7 +213,7 @@ class EX_Unknown6F(KismetExpressionT[bytes]):
     Value: bytes = b""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_6F
 
     @classmethod
@@ -295,7 +232,7 @@ class EX_UnknownF9(KismetExpressionT[bytes]):
     Value: bytes = b""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_F9
 
     @classmethod
@@ -310,7 +247,7 @@ class EX_UnknownFD(KismetExpressionT[bytes]):
     Value: bytes = b""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_FD
 
     @classmethod
@@ -325,7 +262,7 @@ class EX_UnknownFE(KismetExpressionT[bytes]):
     Value: bytes = b""
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_FE
 
     @classmethod
@@ -343,7 +280,7 @@ class EX_MaxSentinel(KismetExpression):
     """
 
     @property
-    def Token(self):
+    def Token(self) -> EExprToken:
         return EExprToken.EX_Max
 
     @classmethod
