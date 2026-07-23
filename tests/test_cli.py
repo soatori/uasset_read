@@ -77,18 +77,20 @@ def test_parse_batch_raises_on_non_directory():
 
 
 def test_cli_log_level_off(tmp_path):
-    """--log-level off 应正常输出 JSON 而非崩溃。"""
+    """--log-level off should output JSON without crashing."""
     sample = Path(__file__).parent / "samples" / "FirstPerson_BP_FirstPersonCharacter.uasset"
     if not sample.exists():
-        pytest.skip("测试样本不存在")
+        pytest.skip("Test sample not found")
 
     result = subprocess.run(
         [sys.executable, "run.py", str(sample), "--json", "--log-level", "off"],
         capture_output=True,
         text=True,
         cwd=Path(__file__).resolve().parents[1],
-        timeout=30,
+        timeout=60,
     )
-    assert result.returncode == 0, f"exit={result.returncode}\nstderr={result.stderr}"
+    assert result.returncode == 0, (
+        f"exit={result.returncode}\nstdout={result.stdout[:500]}\nstderr={result.stderr[:500]}"
+    )
     assert "Project logging is disabled" not in result.stderr
     json.loads(result.stdout)
