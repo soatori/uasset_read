@@ -71,10 +71,17 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
     """Collect linker/FArchive diagnostics and close archive at the end."""
     if result.linker and getattr(result.linker, 'diagnostics', None):
         result.diagnostics.extend(result.linker.diagnostics)
+        # Aggregate linker BoundedEventBuffer truncation counts
+        linker_diag_buf = getattr(result.linker, '_diagnostics', None)
+        if linker_diag_buf is not None:
+            result.diagnostics_dropped_count += getattr(linker_diag_buf, 'dropped_count', 0)
     if archive:
         archive_diagnostics = archive.get_diagnostics()
         if archive_diagnostics:
             result.diagnostics = archive_diagnostics + result.diagnostics
+        # Propagate archive BoundedEventBuffer truncation counts
+        result.diagnostics_dropped_count += archive.diagnostics_dropped_count
+        result.hex_view_dropped_count += archive.hex_view_dropped_count
         if archive.is_hex_view_enabled():
             result.hex_view_entries = archive.get_hex_view_entries()
         archive.close()

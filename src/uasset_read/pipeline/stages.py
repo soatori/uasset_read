@@ -136,6 +136,7 @@ def _init_parse_env(
     game: Optional[str],
     check_aes_key: Optional[bytes],
     hex_view: bool,
+    budget=None,
 ):
     """Initialize parse environment: validate parameters, open archive, read mmap info.
 
@@ -150,12 +151,12 @@ def _init_parse_env(
     mappings_provider = None
     if mappings_path:
         from uasset_read.mappings import TypeMappingsProvider
-        mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+        mappings_provider = TypeMappingsProvider.from_file(mappings_path, budget=budget)
         result.metadata["mappings_path"] = mappings_path
     if game:
         result.metadata["game"] = game
 
-    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant, budget=budget)
     archive = bundle.open_archive(tolerant=tolerant)
     if hex_view:
         archive.enable_hex_view(True)
@@ -176,6 +177,7 @@ def _read_core_tables(
     memory_monitor=None,
     mappings_provider=None,
     validate_range: bool = True,
+    budget=None,
 ) -> bool:
     """Read summary + name + import + export core tables.
 
@@ -185,7 +187,7 @@ def _read_core_tables(
     result.summary = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="package_summary", field="summary",
-        reader=lambda: read_package_summary(archive),
+        reader=lambda: read_package_summary(archive, budget=budget),
     )
     if result.summary is None:
         return False
@@ -259,11 +261,12 @@ def _read_secondary_tables(
     path: str,
     memory_monitor,
     extra_linker_setup=None,
+    budget=None,
 ) -> None:
     """Read DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData."""
     # Read DependsMap (dependency table) and PreloadDependencies (preload dependencies)
     if hasattr(result.summary, 'depends_offset'):
-        result.summary.depends_map = read_depends_map(archive, result.summary)
+        result.summary.depends_map = read_depends_map(archive, result.summary, budget=budget)
     if hasattr(result.summary, 'preload_dependency_count'):
         result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
@@ -296,6 +299,15 @@ def _read_secondary_tables(
             raise ParseError(f"AssetRegistryData parse failed: {e}") from e
         result.warnings.append(f"AssetRegistryData parse failed: {e}")
         result.asset_registry_data = None
+    else:
+        # Parser succeeded but returned corrupted data -- surface degradation
+        if (
+            result.asset_registry_data is not None
+            and getattr(result.asset_registry_data, "corrupted", False)
+        ):
+            result.warnings.append(
+                "AssetRegistryData is corrupted -- only partial data was recovered"
+            )
 
 
 def _parse_export_properties(
@@ -306,6 +318,7 @@ def _parse_export_properties(
     mappings_provider,
     game: str,
     memory_monitor,
+    budget=None,
 ) -> None:
     """Parse ExportMap properties — unified dispatch via linker.preload()."""
     # Lazy import of extras module (per #117 core/extras layering)

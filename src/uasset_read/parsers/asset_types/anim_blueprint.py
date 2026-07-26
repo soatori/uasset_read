@@ -7,6 +7,7 @@ Parse UAnimBlueprintGeneratedClass animation-specific data:
 - AnimNodeData (animation node constant data)
 """
 
+import logging
 from typing import Any
 
 from uasset_read.models.fallback import ExportParseStatus as ParseStatus
@@ -28,6 +29,8 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_int_array(data: Any, key: str) -> list[int]:
@@ -99,7 +102,8 @@ class AnimBlueprintHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error but do not abort parsing
+            # Log error and record in context warnings for visibility
+            logger.warning("AnimBlueprint parse error: %s", e)
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimBlueprint parse error: {e}")
             return ParseStatus.PARTIAL

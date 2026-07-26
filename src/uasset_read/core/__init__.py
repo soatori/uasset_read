@@ -216,7 +216,9 @@ def parse_single(
         ValueError: Render format does not exist
     """
     # #423: Skip reconfiguration when scoped_project_logging already owns the session.
-    already_configured = (log_config is None and current_log_run_id() is not None)
+    # A set _configured_run_id means the scoped wrapper already configured logging,
+    # regardless of whether log_config is None or not.
+    already_configured = current_log_run_id() is not None
     if not already_configured:
         _configure_logging(
             log_config=log_config,
@@ -420,9 +422,9 @@ def parse_batch(
 
     active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
     # #423: Skip reconfiguration when scoped_project_logging already owns the session.
-    # A non-None log_config means the caller set it explicitly (outside scoped wrapper).
-    # A set _configured_run_id means the scoped wrapper already configured logging.
-    already_configured = (log_config is None and current_log_run_id() is not None)
+    # A set _configured_run_id means the scoped wrapper already configured logging,
+    # regardless of whether log_config is None or not.
+    already_configured = current_log_run_id() is not None
     if not already_configured:
         _configure_logging(
             log_config=log_config,
@@ -533,6 +535,13 @@ def parse_batch(
                     result.success.append(outcome.output_path)
                 else:
                     result.failed.append((str(pf), outcome.error, outcome.error_details))
+                    # #423: Log worker error details inside the session so they
+                    # appear in the caller-specified log file, not just stderr.
+                    logging.getLogger(__name__).error(
+                        "parse_batch worker failed: %s\n%s",
+                        outcome.error,
+                        outcome.error_details,
+                    )
                 continue
 
             asset_start = time.monotonic()
@@ -593,7 +602,12 @@ def parse_batch(
             tb = traceback.format_exc()
             error_msg = f"{type(exc).__name__}: {exc}"
             result.failed.append((str(pf), error_msg, tb))
-            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
+            # #423: Log full traceback inside the session so it appears in the
+            # caller-specified log file, not just in BatchResult.failed.
+            logging.getLogger(__name__).error(
+                "parse_batch asset failed: %s — %s\n%s",
+                pf, error_msg, tb,
+            )
 
     elapsed = time.monotonic() - start_time
     _log_batch_summary(result, elapsed_seconds=elapsed)

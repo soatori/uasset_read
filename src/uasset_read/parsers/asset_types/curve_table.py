@@ -244,7 +244,7 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
 
     except (struct.error, OSError, ValueError, ParseError) as e:
         # Return partially parsed data on parse failure
-        logger.debug("RichCurve Parse failed: %s", e, exc_info=True)
+        logger.warning("RichCurve parse failed: %s", e, exc_info=True)
 
     return {"type": "RichCurve", "keys": keys}
 
@@ -347,7 +347,7 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
 
     except (struct.error, OSError, ValueError, ParseError) as e:
         # Return partially parsed data on parse failure
-        logger.debug("SimpleCurve Parse failed: %s", e, exc_info=True)
+        logger.warning("SimpleCurve parse failed: %s", e, exc_info=True)
 
     return {"type": "SimpleCurve", "interp_mode": interp_mode, "keys": keys}
 

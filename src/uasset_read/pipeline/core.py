@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.config import ParseConfig
 
-from uasset_read.memory_safety import MemoryLimitExceeded
+from uasset_read.memory_safety import MemoryLimitExceeded, ResourceBudget
 from uasset_read.constants import (
     LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD,
     CONTROL_RIG_LARGE_FILE_THRESHOLD,
@@ -73,10 +73,17 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
     """Collect linker/FArchive diagnostic records and close archive at the end."""
     if result.linker and getattr(result.linker, 'diagnostics', None):
         result.diagnostics.extend(result.linker.diagnostics)
+        # Aggregate linker BoundedEventBuffer truncation counts
+        linker_diag_buf = getattr(result.linker, '_diagnostics', None)
+        if linker_diag_buf is not None:
+            result.diagnostics_dropped_count += getattr(linker_diag_buf, 'dropped_count', 0)
     if archive:
         archive_diagnostics = archive.get_diagnostics()
         if archive_diagnostics:
             result.diagnostics = archive_diagnostics + result.diagnostics
+        # Propagate archive BoundedEventBuffer truncation counts
+        result.diagnostics_dropped_count += archive.diagnostics_dropped_count
+        result.hex_view_dropped_count += archive.hex_view_dropped_count
         if archive.is_hex_view_enabled():
             result.hex_view_entries = archive.get_hex_view_entries()
         archive.close()
@@ -125,8 +132,10 @@ def _parse_package_core(
         hex_view = False
 
     from uasset_read.memory_safety import (
+        AllocationLimits,
         MemoryMonitor,
         MemoryPolicy,
+        ResourceBudget,
     )
 
     archive = None
@@ -139,13 +148,14 @@ def _parse_package_core(
         asset_path=path,
         limits=policy.limits_for_size(file_size),
     )
+    budget = ResourceBudget()
 
     with memory_monitor:
         try:
             # Initialize environment
             init_result = _init_parse_env(
                 path, result, tolerant, provider, mappings_path, game,
-                check_aes_key, hex_view,
+                check_aes_key, hex_view, budget=budget,
             )
             if init_result is None:
                 return
@@ -154,6 +164,7 @@ def _parse_package_core(
             # Read core tables (summary/name/import/export)
             if not _read_core_tables(
                 archive, result, path, tolerant, memory_monitor, mappings_provider,
+                budget=budget,
             ):
                 return
 
@@ -162,6 +173,7 @@ def _parse_package_core(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
                 path=path, memory_monitor=memory_monitor,
+                budget=budget,
             )
             linker = _create_linker(
                 archive, result.summary, result.name_map,
@@ -178,6 +190,7 @@ def _parse_package_core(
             # Full parse: preload -> post_load -> post_process
             _parse_export_properties(
                 archive, result, linker, tolerant, mappings_provider, game, memory_monitor,
+                budget=budget,
             )
             memory_monitor.checkpoint("post_load")
             _run_linker_post_load(linker, result, tolerant)
@@ -440,6 +453,7 @@ def parse_package_lazy(
     result = ParseResult()
     archive = None
     linker = None
+    budget = ResourceBudget()
 
     # When provider offers open_file(), use it directly to obtain archive,
     # to avoid loading the entire file into memory via open_package_bundle().
@@ -454,7 +468,7 @@ def parse_package_lazy(
         mappings_provider = None
         if mappings_path:
             from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            mappings_provider = TypeMappingsProvider.from_file(mappings_path, budget=budget)
             result.metadata["mappings_path"] = mappings_path
         if game:
             result.metadata["game"] = game
@@ -468,7 +482,7 @@ def parse_package_lazy(
             # Read core tables
             if not _read_core_tables(
                 archive, result, path, tolerant,
-                validate_range=True,
+                validate_range=True, budget=budget,
             ):
                 if result.summary is None:
                     return result
@@ -478,6 +492,7 @@ def parse_package_lazy(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
                 path=path, memory_monitor=None,
+                budget=budget,
             )
         else:
             # Fallback path: read via bundle (read_file)

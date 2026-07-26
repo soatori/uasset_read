@@ -63,7 +63,7 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
     2. InpActEvt_*_K2Node_EnhancedInputActionEvent_* function names in decompiled_functions (fallback)
     """
     import re
-    input_actions: list[tuple[str, dict]] = []
+    input_actions: list[tuple[str, list[dict]]] = []
     seen_actions: set[str] = set()
 
     # Source 1: nodes in graphs (prefer new fields)
@@ -89,7 +89,7 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
             if action_name not in seen_actions:
                 seen_actions.add(action_name)
                 # Fallback: parse from function name, no detailed info available
-                input_actions.append((action_name, {}))
+                input_actions.append((action_name, []))
 
     return input_actions
 

@@ -7,6 +7,7 @@ Parse UAnimMontage animation-specific data:
 - RateScale (rate scale)
 """
 
+import logging
 from typing import Any
 
 from uasset_read.models.fallback import ExportParseStatus as ParseStatus
@@ -23,6 +24,8 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AnimMontageHandler:
@@ -101,6 +104,8 @@ class AnimMontageHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
+            # Log error and record in context warnings for visibility
+            logger.warning("AnimMontage parse error: %s", e)
             if hasattr(context, "warnings"):
                 context.warnings.append(f"AnimMontage parse error: {e}")
             return ParseStatus.PARTIAL

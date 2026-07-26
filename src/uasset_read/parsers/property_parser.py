@@ -44,7 +44,7 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
 }
 
 # #341/#428: PropertyTag corruption recovery max scan bytes
-_MAX_RECOVERY_SCAN = 512
+_MAX_RECOVERY_SCAN = 2048
 
 # #428: Known property type name set (used to filter candidates during recovery scan)
 _KNOWN_PROPERTY_TYPES = {
@@ -208,8 +208,9 @@ def _try_recover_property_tag(
     """
     current = archive.tell()
     limit = current + max_scan
-    if property_end is not None:
-        limit = min(limit, property_end)
+    # #341: Do NOT limit scan by property_end — when the preceding property's size
+    # was miscalculated, property_end itself may be wrong.  Limit only by the
+    # scan budget and actual file size to maximise recovery chance.
     file_size = getattr(archive, '_file_size', None)
     if isinstance(file_size, int):
         limit = min(limit, file_size)
@@ -228,6 +229,10 @@ def _try_recover_property_tag(
     # Get UE5 version number to determine PropertyTag type field format
     from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
     file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
+
+    # #341: Use file_size for size validation (not property_end) to avoid rejecting
+    # valid candidates whose size spans beyond property_end but within file.
+    size_boundary = file_size if isinstance(file_size, int) else data_boundary
 
     for candidate in range(current + 1, limit):
         remaining = limit - candidate
@@ -277,7 +282,7 @@ def _try_recover_property_tag(
                 if len(size_raw) < 4:
                     continue
                 tag_size = _struct.unpack('<i', size_raw)[0]
-                size_remaining = data_boundary - (size_pos + 4)
+                size_remaining = size_boundary - (size_pos + 4)
                 if 0 <= tag_size <= size_remaining:
                     size_valid = True
             else:
@@ -306,7 +311,7 @@ def _try_recover_property_tag(
                 if len(size_raw) < 4:
                     continue
                 tag_size = _struct.unpack('<i', size_raw)[0]
-                size_remaining = data_boundary - (size_pos + 4)
+                size_remaining = size_boundary - (size_pos + 4)
                 if 0 <= tag_size <= size_remaining:
                     size_valid = True
 
@@ -795,15 +800,38 @@ def _read_property_loop(
                     struct_name = export.object_name
             try:
                 tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
-            except ParseError:
-                # #341: FName index out of range near property_end likely means we've
-                # entered DataTable row payload or other non-property data.
-                # Stop gracefully when the remaining bytes are too small for a
-                # valid PropertyTag (min ~16 bytes: FName + type + size).
+            except ParseError as e:
+                # #341: PropertyTag read failed — try recovery scan for next valid tag
                 remaining = property_end - archive.tell()
                 if remaining < 32:
                     break
-                raise
+                if not tolerant:
+                    raise
+                # Try smart recovery: scan forward for next valid PropertyTag boundary
+                recovered = _try_recover_property_tag(
+                    archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
+                )
+                if recovered:
+                    logger.debug(
+                        "#341: PropertyTag read failed at offset %d, recovered to %d",
+                        current_pos, archive.tell(),
+                    )
+                    # Record a PropertyFallback for the corrupted tag
+                    properties.append(PropertyValue(
+                        name="Corrupted",
+                        type="Warning",
+                        value=PropertyFallback(
+                            name="Corrupted",
+                            type="Unknown",
+                            size=0,
+                            raw_bytes=b"",
+                            reason=FallbackReason.PARSE_ERROR,
+                            error_message=f"PropertyTag read failed: {e}",
+                        ),
+                    ))
+                    continue
+                # Recovery failed — break to avoid infinite loop
+                break
 
             # Record current position after tag read (for size_exceeded recovery and boundary verification)
             start_pos = archive.tell()
@@ -814,17 +842,35 @@ def _read_property_loop(
 
             # size exceeds remaining bytes: try recovery, mark as partial on failure
             if tag.size_exceeded:
-                # #429: Try recovery -- scan from start_pos for next valid PropertyTag
-                if start_pos is not None:
-                    archive.seek(start_pos)
+                # #341/#429: Try recovery — scan from tag_start_offset (the position where
+                # the corrupted tag began) rather than start_pos (after the tag).  When the
+                # tag read consumed bytes that actually belong to the next valid tag,
+                # starting from after the tag skips past the real boundary.
+                recovered_from = tag.tag_start_offset if tag.tag_start_offset is not None else start_pos
+                if recovered_from is not None:
+                    archive.seek(recovered_from)
                     recovered = _try_recover_property_tag(
                         archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
                     )
                     if recovered:
                         logger.debug(
-                            "size_exceeded: recovered to a potentially valid position (offset=%d)",
-                            archive.tell(),
+                            "size_exceeded: recovered from %d to a potentially valid position (offset=%d)",
+                            recovered_from, archive.tell(),
                         )
+                        # Record a PropertyFallback for the skipped corrupted tag
+                        properties.append(PropertyValue(
+                            name=tag.name,
+                            type="Warning",
+                            value=PropertyFallback(
+                                name=tag.name,
+                                type=tag.type,
+                                size=tag.size,
+                                raw_bytes=b"",
+                                reason=FallbackReason.SIZE_EXCEEDED,
+                                error_message=f"Size {tag.size} exceeds remaining bytes; "
+                                              f"skipped to next valid PropertyTag",
+                            ),
+                        ))
                         continue
                 # Recovery failed, create PropertyFallback
                 properties.append(PropertyValue(

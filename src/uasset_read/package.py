@@ -542,6 +542,8 @@ class FileSystemPackageProvider(PackageProvider):
             sidecar = main.with_suffix(payload_ext)
             if sidecar.is_file():
                 files[payload_ext] = str(sidecar)
+        if budget is not None:
+            budget.reserve(main.stat().st_size, f"bundle_main:{main.name}")
         return PackageBundle(
             main_path=str(main),
             package_kind=package_kind,

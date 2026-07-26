@@ -363,6 +363,11 @@ class FArchive:
         """Return the number of diagnostic entries dropped due to buffer limit."""
         return self._diagnostics.dropped_count
 
+    @property
+    def name_warnings_dropped_count(self) -> int:
+        """Return the number of name warning entries dropped due to set limit."""
+        return self._name_warnings_seen.dropped_count
+
     # HexView support
 
     def enable_hex_view(self, enabled: bool = True) -> None:
