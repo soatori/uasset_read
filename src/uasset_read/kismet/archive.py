@@ -4,7 +4,6 @@ import io
 import logging
 
 from uasset_read.archive import FArchive
-from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
@@ -22,17 +21,11 @@ class FKismetArchive(FArchive):
     _warned_offsets: set[int] = set()
 
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
-        self._path = name
+        self._init_archive_attrs(name, tolerant, hex_view=False)
         self._file = io.BytesIO(data)
         self._file_size = len(data)
-        self._tolerant = tolerant
-        self._byte_swapping = False
-        self._mmap = None
-        self._use_mmap = False
-        self._mmap_warning = None
         self._name_map = name_map
         self._expression_depth = 0
-        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
