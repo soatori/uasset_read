@@ -29,7 +29,6 @@ from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
 from uasset_read.project_logging import scoped_project_logging, configure_project_logging
 from uasset_read.parse_stages import (
-    _record_parse_stage_error,
     _init_parse_env,
     _read_core_tables,
     _read_secondary_tables,
@@ -449,10 +448,17 @@ def parse_package_lazy(
         ParseResult instance (export bodies parsed on demand)
     """
     from uasset_read.blueprint import extract_component_transforms
+    from uasset_read.pipeline.error_handler import _handle_parse_error
 
     result = ParseResult()
     archive = None
     linker = None
+
+    # Set up memory monitoring (consistent with _parse_package_core)
+    from uasset_read.memory_safety import MemoryMonitor, MemoryPolicy
+    policy = memory_policy or MemoryPolicy()
+    file_size = Path(path).stat().st_size if Path(path).is_file() else 0
+    memory_monitor = MemoryMonitor(asset_path=path, limits=policy.limits_for_size(file_size))
 
     # When provider offers open_file(), use it directly to obtain the archive,
     # avoiding reading the entire file into memory via open_package_bundle().
@@ -463,7 +469,8 @@ def parse_package_lazy(
         and callable(getattr(provider, 'open_file', None))
     )
 
-    try:
+    with memory_monitor:
+      try:
         mappings_provider = None
         if mappings_path:
             from uasset_read.mappings import TypeMappingsProvider
@@ -571,24 +578,11 @@ def parse_package_lazy(
         result.metadata["loaded_exports"] = sorted(parse_indices)
         result.metadata["total_exports"] = len(result.export_map or [])
 
-    except VersionError as e:
-        _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
-        result.is_success = False
-        if not tolerant:
-            raise
-    except ParseError as e:
-        _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
-        result.is_success = False
-        if not tolerant:
-            raise
-    except Exception as e:
-        _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
-        result.is_success = False
-        if not tolerant:
-            raise
-    finally:
-        if archive:
-            archive.close()
-        _cleanup_parse_memory(result)
+      except Exception as e:
+          _handle_parse_error(e, result, archive, path, tolerant)
+      finally:
+          if archive:
+              archive.close()
+          _cleanup_parse_memory(result)
 
     return result

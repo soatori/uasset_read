@@ -16,15 +16,19 @@ Format reference:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from uasset_read.models.fallback import ExportParseStatus as ParseStatus
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
+
 from uasset_read.parsers.asset_types.anim_common import ensure_custom_data
 from uasset_read.parsers.asset_types.property_extractor import (
     build_properties_dict,
     extract_array_property,
     extract_property,
 )
+from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -82,28 +86,45 @@ class _MovieSceneData:
         return {"type": "MovieScene", **{slot: getattr(self, slot) for slot in self.__slots__}}
 
 
-class MovieSceneHandler:
+class MovieSceneHandler(ClassHandler):
     """UMovieScene Asset type handler"""
 
     # Reflection registration metadata
     export_type: str = "MovieScene"
     priority: int = 100
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle MovieScene export.
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "MovieScene"
+
+    @property
+    def handler_name(self) -> str:
+        return "MovieSceneHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse MovieScene export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             # Extract properties from export
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             # Convert property list to dictionary format (name -> value)
             properties = build_properties_dict(properties_list)
@@ -133,8 +154,16 @@ class MovieSceneHandler:
             # Store to export custom data
             ensure_custom_data(export)["movie_scene"] = data.to_dict()
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"movie_scene": data.to_dict()},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("MovieScene parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )

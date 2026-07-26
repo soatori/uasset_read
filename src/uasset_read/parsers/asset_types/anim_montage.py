@@ -8,9 +8,12 @@ Parse UAnimMontage animation-specific data:
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from uasset_read.models.fallback import ExportParseStatus as ParseStatus
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
+
 from uasset_read.models.ir import AnimMontageIR
 from uasset_read.parsers.asset_types.anim_common import (
     ensure_custom_data,
@@ -24,31 +27,49 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
+from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 
 logger = logging.getLogger(__name__)
 
 
-class AnimMontageHandler:
+class AnimMontageHandler(ClassHandler):
     """AnimMontage Asset type handler"""
 
     # Reflection registration metadata
     export_type: str = "AnimMontage"
     priority: int = 100
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle AnimMontage export
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "AnimMontage"
+
+    @property
+    def handler_name(self) -> str:
+        return "AnimMontageHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse AnimMontage export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             properties = build_properties_dict(properties_list)
 
@@ -101,11 +122,19 @@ class AnimMontageHandler:
 
             ensure_custom_data(export)["anim_montage"] = anim_ir
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"anim_montage": anim_ir},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("AnimMontage parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
     def _parse_composite_sections(self, data: Any) -> list[dict]:
         """Parse CompositeSections array"""

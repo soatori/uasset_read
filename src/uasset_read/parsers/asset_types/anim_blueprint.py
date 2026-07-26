@@ -8,9 +8,12 @@ Parse UAnimBlueprintGeneratedClass animation-specific data:
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from uasset_read.models.fallback import ExportParseStatus as ParseStatus
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
+
 from uasset_read.models.ir import (
     AnimBlueprintIR,
     BakedStateMachineIR,
@@ -29,6 +32,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
+from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -39,29 +43,46 @@ def _extract_int_array(data: Any, key: str) -> list[int]:
     return [i for i in arr if isinstance(i, int)]
 
 
-class AnimBlueprintHandler:
+class AnimBlueprintHandler(ClassHandler):
     """AnimBlueprint Asset type handler"""
 
     # Reflection registration metadata
     export_type: str = "AnimBlueprintGeneratedClass"
     priority: int = 100
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle AnimBlueprintGeneratedClass export
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "AnimBlueprintGeneratedClass"
+
+    @property
+    def handler_name(self) -> str:
+        return "AnimBlueprintHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse AnimBlueprintGeneratedClass export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             # Extract property data from export
             # ObjectExport has a properties attribute (parsed property list)
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             # Convert property list to dictionary format（name -> value）
             properties = build_properties_dict(properties_list)
@@ -99,11 +120,19 @@ class AnimBlueprintHandler:
             # Store in export custom data
             ensure_custom_data(export)["anim_blueprint"] = anim_ir
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"anim_blueprint": anim_ir},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("AnimBlueprint parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
     def _parse_baked_state_machines(self, data: Any) -> list[BakedStateMachineIR]:
         """Parse baked state machine array"""

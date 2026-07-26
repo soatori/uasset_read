@@ -10,9 +10,12 @@ Parse UAnimSequence animation-specific data:
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from uasset_read.models.fallback import ExportParseStatus as ParseStatus
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
+
 from uasset_read.models.ir import AnimSequenceIR
 from uasset_read.parsers.asset_types.anim_common import (
     ensure_custom_data,
@@ -25,32 +28,50 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_object_ref,
     extract_property,
 )
+from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 
 logger = logging.getLogger(__name__)
 
 
-class AnimSequenceHandler:
+class AnimSequenceHandler(ClassHandler):
     """AnimSequence Asset type handler"""
 
     # Reflection registration metadata
     export_type: str = "AnimSequence"
     priority: int = 100
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle AnimSequence export
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "AnimSequence"
+
+    @property
+    def handler_name(self) -> str:
+        return "AnimSequenceHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse AnimSequence export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             # Extract property data from export
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             # Convert property list to dictionary format（name -> value）
             properties = build_properties_dict(properties_list)
@@ -95,11 +116,19 @@ class AnimSequenceHandler:
             # Store in export custom data
             ensure_custom_data(export)["anim_sequence"] = anim_ir
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"anim_sequence": anim_ir},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("AnimSequence parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
     def _parse_compressed_data(self, data: Any, anim_ir: AnimSequenceIR) -> None:
         """Parse FCompressedAnimSequence track data

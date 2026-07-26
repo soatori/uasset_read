@@ -15,15 +15,19 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from uasset_read.models.fallback import ExportParseStatus as ParseStatus
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
+
 from uasset_read.parsers.asset_types.anim_common import ensure_custom_data
 from uasset_read.parsers.asset_types.property_extractor import (
     build_properties_dict,
     extract_array_property,
     extract_property,
 )
+from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,27 +51,44 @@ def _as_list(value: Any) -> list:
     return value if isinstance(value, list) else []
 
 
-class MovieSceneControlRigParameterTrackHandler:
+class MovieSceneControlRigParameterTrackHandler(ClassHandler):
     """MovieSceneControlRigParameterTrack Asset type handler"""
 
     # Reflection registration metadata
     export_type: str = "MovieSceneControlRigParameterTrack"
     priority: int = 100
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle MovieSceneControlRigParameterTrack export.
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "MovieSceneControlRigParameterTrack"
+
+    @property
+    def handler_name(self) -> str:
+        return "MovieSceneControlRigParameterTrackHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse MovieSceneControlRigParameterTrack export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             properties = build_properties_dict(properties_list)
 
@@ -105,14 +126,22 @@ class MovieSceneControlRigParameterTrackHandler:
             # Store to export custom data
             ensure_custom_data(export)["movie_scene_control_rig_track"] = vars(ns)
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"movie_scene_control_rig_track": vars(ns)},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("MovieSceneControlRigParameterTrack parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
 
-class MovieSceneControlRigParameterSectionHandler:
+class MovieSceneControlRigParameterSectionHandler(ClassHandler):
     """MovieSceneControlRigParameterSection Asset type handler"""
 
     # Reflection registration metadata
@@ -131,20 +160,37 @@ class MovieSceneControlRigParameterSectionHandler:
         ("IntegerParameterNamesAndCurves", "integer"),
     ]
 
-    def handle(self, export: Any, context: Any) -> ParseStatus:
-        """Handle MovieSceneControlRigParameterSection export.
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == "MovieSceneControlRigParameterSection"
+
+    @property
+    def handler_name(self) -> str:
+        return "MovieSceneControlRigParameterSectionHandler"
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        """Parse MovieSceneControlRigParameterSection export.
 
         Args:
             export: ObjectExport instance
+            archive: Archive for reading (unused by this handler)
             context: parse context
 
         Returns:
-            ParseStatus: SUCCESS or PARTIAL
+            HandlerResult with success status and data
         """
         try:
             properties_list = getattr(export, "properties", [])
             if not properties_list:
-                return ParseStatus.PARTIAL
+                return HandlerResult(
+                    success=False,
+                    error_message="No properties found",
+                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                )
 
             properties = build_properties_dict(properties_list)
 
@@ -195,8 +241,16 @@ class MovieSceneControlRigParameterSectionHandler:
             # Store to export custom data
             ensure_custom_data(export)["movie_scene_control_rig_section"] = vars(ns)
 
-            return ParseStatus.SUCCESS
+            return HandlerResult(
+                success=True,
+                data={"movie_scene_control_rig_section": vars(ns)},
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
 
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("MovieSceneControlRigParameterSection parse error: %s", e)
-            return ParseStatus.PARTIAL
+            return HandlerResult(
+                success=False,
+                error_message=str(e),
+                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+            )
