@@ -477,145 +477,146 @@ def parse_package_lazy(
         and callable(getattr(provider, 'open_file', None))
     )
 
+    resource_budget = ResourceBudget()
+
+    # Create MemoryMonitor from memory_policy (aligned with _parse_package_core)
+    policy = memory_policy or _MemoryPolicy()
     try:
-        resource_budget = ResourceBudget()
+        file_size = Path(path).stat().st_size if Path(path).is_file() else 0
+    except OSError:
+        file_size = 0
+    memory_monitor = MemoryMonitor(
+        asset_path=path,
+        limits=policy.limits_for_size(file_size),
+    )
 
-        # Create MemoryMonitor from memory_policy (aligned with _parse_package_core)
-        policy = memory_policy or _MemoryPolicy()
+    with memory_monitor:
         try:
-            file_size = Path(path).stat().st_size if Path(path).is_file() else 0
-        except OSError:
-            file_size = 0
-        memory_monitor = MemoryMonitor(
-            asset_path=path,
-            limits=policy.limits_for_size(file_size),
-        )
+            mappings_provider = None
+            if mappings_path:
+                from uasset_read.mappings import TypeMappingsProvider
+                mappings_provider = TypeMappingsProvider.from_file(
+                    mappings_path, budget=resource_budget,
+                )
+                result.metadata["mappings_path"] = mappings_path
+            if game:
+                result.metadata["game"] = game
 
-        mappings_provider = None
-        if mappings_path:
-            from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(
-                mappings_path, budget=resource_budget,
-            )
-            result.metadata["mappings_path"] = mappings_path
-        if game:
-            result.metadata["game"] = game
+            if use_direct_archive:
+                # Fast path: obtain archive via open_file(), no full-file read
+                archive = provider.open_file(path)
+                if archive is None:
+                    raise FileNotFoundError(f"Package not found: {path}")
 
-        if use_direct_archive:
-            # Fast path: obtain archive via open_file(), no full-file read
-            archive = provider.open_file(path)
-            if archive is None:
-                raise FileNotFoundError(f"Package not found: {path}")
+                # Read core tables (with memory_monitor checkpoints)
+                if not _read_core_tables(
+                    archive, result, path, tolerant,
+                    memory_monitor=memory_monitor,
+                    validate_range=True, budget=resource_budget,
+                ):
+                    if result.summary is None:
+                        return result
 
-            # Read core tables (with memory_monitor checkpoints)
-            if not _read_core_tables(
-                archive, result, path, tolerant,
-                memory_monitor=memory_monitor,
-                validate_range=True, budget=resource_budget,
-            ):
+                # Read secondary tables (with memory_monitor)
+                _read_secondary_tables(
+                    archive, result, tolerant, linker=None,
+                    mappings_provider=mappings_provider,
+                    path=path, memory_monitor=memory_monitor,
+                    budget=resource_budget,
+                )
+            else:
+                # Fallback path: read via bundle (read_file)
+                bundle_obj, archive, linker, mappings_provider = _read_package_headers(
+                    path, result,
+                    tolerant=tolerant, provider=provider,
+                    mappings_path=mappings_path, game=game,
+                    budget=resource_budget,
+                )
                 if result.summary is None:
                     return result
 
-            # Read secondary tables (with memory_monitor)
-            _read_secondary_tables(
-                archive, result, tolerant, linker=None,
-                mappings_provider=mappings_provider,
-                path=path, memory_monitor=memory_monitor,
-                budget=resource_budget,
-            )
-        else:
-            # Fallback path: read via bundle (read_file)
-            bundle_obj, archive, linker, mappings_provider = _read_package_headers(
-                path, result,
-                tolerant=tolerant, provider=provider,
-                mappings_path=mappings_path, game=game,
-                budget=resource_budget,
-            )
-            if result.summary is None:
-                return result
+            # Parse specified export bodies on demand
+            parse_indices = set(export_indices) if export_indices else set()
+            _mappings = mappings_provider.mappings if mappings_provider else None
 
-        # Parse specified export bodies on demand
-        parse_indices = set(export_indices) if export_indices else set()
-        _mappings = mappings_provider.mappings if mappings_provider else None
-
-        for idx, export in enumerate(result.export_map or []):
-            if idx in parse_indices and export.serial_size > 0:
-                try:
-                    if linker is not None:
-                        linker.preload(
-                            idx, mappings=_mappings, game=game, tolerant=tolerant,
-                        )
-                        inst = linker._export_objects[idx]
-                        export.properties = inst.serialized_properties
-                    else:
-                        export.properties = parse_properties_from_export(
-                            export, archive, result.summary, result.name_map,
-                            result.export_map or [], result.import_map,
-                            linker=linker, mappings=_mappings, game=game,
-                            tolerant=tolerant,
-                        )
-                    if not getattr(export, "parse_status", None):
-                        setattr(export, "parse_status", validate_parse_status("success"))
-                    elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
-                        pass
-                except MemoryLimitExceeded:
-                    raise
-                except MemoryError as e:
-                    logger.error(
-                        "MemoryError parsing export %s: %s",
-                        getattr(export, "object_name", "?"), e,
-                    )
-                    export.properties = []
-                    setattr(export, "parse_status", validate_parse_status("partial"))
-                    setattr(export, "fallback_reason", "memory_error_partial")
-                    setattr(export, "error_message", str(e))
-                    if not tolerant:
+            for idx, export in enumerate(result.export_map or []):
+                if idx in parse_indices and export.serial_size > 0:
+                    try:
+                        if linker is not None:
+                            linker.preload(
+                                idx, mappings=_mappings, game=game, tolerant=tolerant,
+                            )
+                            inst = linker._export_objects[idx]
+                            export.properties = inst.serialized_properties
+                        else:
+                            export.properties = parse_properties_from_export(
+                                export, archive, result.summary, result.name_map,
+                                result.export_map or [], result.import_map,
+                                linker=linker, mappings=_mappings, game=game,
+                                tolerant=tolerant,
+                            )
+                        if not getattr(export, "parse_status", None):
+                            setattr(export, "parse_status", validate_parse_status("success"))
+                        elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
+                            pass
+                    except MemoryLimitExceeded:
                         raise
-                except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
-                    if not tolerant:
-                        raise ParseError(
+                    except MemoryError as e:
+                        logger.error(
+                            "MemoryError parsing export %s: %s",
+                            getattr(export, "object_name", "?"), e,
+                        )
+                        export.properties = []
+                        setattr(export, "parse_status", validate_parse_status("partial"))
+                        setattr(export, "fallback_reason", "memory_error_partial")
+                        setattr(export, "error_message", str(e))
+                        if not tolerant:
+                            raise
+                    except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
+                        if not tolerant:
+                            raise ParseError(
+                                f"Property parse error in {export.object_name}: {e}"
+                            ) from e
+                        result.errors.append(
                             f"Property parse error in {export.object_name}: {e}"
-                        ) from e
-                    result.errors.append(
-                        f"Property parse error in {export.object_name}: {e}"
-                    )
-                    export.properties = []
-                    setattr(export, "parse_status", validate_parse_status("failed"))
-                    setattr(export, "fallback_reason", "parse_error")
-                    setattr(export, "error_message", str(e))
+                        )
+                        export.properties = []
+                        setattr(export, "parse_status", validate_parse_status("failed"))
+                        setattr(export, "fallback_reason", "parse_error")
+                        setattr(export, "error_message", str(e))
 
-                # Extract component transform properties
-                if export.properties:
-                    export.transforms = extract_component_transforms(export.properties)
+                    # Extract component transform properties
+                    if export.properties:
+                        export.transforms = extract_component_transforms(export.properties)
 
-            # Store raw bytes (optional)
-            if store_raw_bytes and export.serial_size > 0:
-                try:
-                    archive.seek(export.serial_offset)
-                    setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
-                except (OSError, struct.error) as e:
-                    if not tolerant:
-                        raise ParseError(
-                            f"Failed to read raw bytes for export {export.object_name}: {e}"
-                        ) from e
-                    setattr(export, "lazy_load_archive", None)
+                # Store raw bytes (optional)
+                if store_raw_bytes and export.serial_size > 0:
+                    try:
+                        archive.seek(export.serial_offset)
+                        setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
+                    except (OSError, struct.error) as e:
+                        if not tolerant:
+                            raise ParseError(
+                                f"Failed to read raw bytes for export {export.object_name}: {e}"
+                            ) from e
+                        setattr(export, "lazy_load_archive", None)
 
-            # Set lazy-load flag (via setattr for ObjectExport and ExportIR compat)
-            setattr(export, "is_loaded", idx in parse_indices)
+                # Set lazy-load flag (via setattr for ObjectExport and ExportIR compat)
+                setattr(export, "is_loaded", idx in parse_indices)
 
-        # post_load
-        if linker is not None:
-            _run_linker_post_load(linker, result, tolerant)
+            # post_load
+            if linker is not None:
+                _run_linker_post_load(linker, result, tolerant)
 
-        result.is_success = not result.errors
-        result.metadata["lazy_loading"] = True
-        result.metadata["loaded_exports"] = sorted(parse_indices)
-        result.metadata["total_exports"] = len(result.export_map or [])
+            result.is_success = not result.errors
+            result.metadata["lazy_loading"] = True
+            result.metadata["loaded_exports"] = sorted(parse_indices)
+            result.metadata["total_exports"] = len(result.export_map or [])
 
-    except Exception as e:
-        _handle_parse_error(e, result, archive, path, tolerant)
-    finally:
-        _cleanup_archive_diagnostics(result, archive)
-        _cleanup_parse_memory(result)
+        except Exception as e:
+            _handle_parse_error(e, result, archive, path, tolerant)
+        finally:
+            _cleanup_archive_diagnostics(result, archive)
+            _cleanup_parse_memory(result)
 
     return result
