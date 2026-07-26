@@ -20,6 +20,7 @@ from .node_types import (
     K2NodeFunctionEntry,
 )
 from .result import (
+    BaseResult,
     ParseResult,
     StatusInfo,
 )
@@ -114,6 +115,7 @@ __all__ = [
     "K2NodeEnhancedInputAction",
     "K2NodeFunctionEntry",
     # 结果（result.py）
+    "BaseResult",
     "ParseResult",
     "StatusInfo",
     # 蓝图元数据（blueprint.py）

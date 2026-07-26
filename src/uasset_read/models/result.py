@@ -1,8 +1,11 @@
 """
-解析结果数据类 — BaseResult、ParseResult 和 StatusInfo。
+Parse result data classes -- BaseResult, ParseResult, and StatusInfo.
 
-BaseResult 是 ParseResult 和 LinkerParseResult 的共享基类，
-包含所有公共字段和统一的 status 属性。
+BaseResult is the single shared base for ParseResult and LinkerParseResult,
+holding all common fields including post-process data and the unified
+``status`` property.
+
+Hierarchy:  BaseResult -> ParseResult -> LinkerParseResult
 """
 from __future__ import annotations
 
@@ -25,15 +28,22 @@ if TYPE_CHECKING:
 
 @dataclass
 class BaseResult:
-    """ParseResult 和 LinkerParseResult 的共享基类。
+    """Single shared base for all parse result types.
 
-    包含所有公共字段和统一的 status 属性。
-    状态计算委托给 status._result_status()。
+    Contains the core table fields (summary, name/import/export maps),
+    error/warning accumulators, and all post-process fields that
+    ``_post_process()`` populates for both ``ParseResult`` and
+    ``LinkerParseResult``.
+
+    Status derivation is delegated to ``status._result_status()``.
     """
+    # -- Core table fields --
     summary: PackageFileSummary | None = None
     name_map: list[str] = field(default_factory=list)
     import_map: list[ObjectImport] = field(default_factory=list)
     export_map: list[ObjectExport] = field(default_factory=list)
+
+    # -- Error / warning accumulators --
     errors: list[str] = field(default_factory=list)
     is_success: bool = False
     mmap_used: bool = False
@@ -41,25 +51,13 @@ class BaseResult:
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
-    _error_keys: set = field(default_factory=set)  # 错误去重用：(异常类型, 阶段, 消息)
+    _error_keys: set = field(default_factory=set)
 
-    @property
-    def status(self) -> str:
-        """Unified status: success | partial | failed.
-
-        委托给 status._result_status() 实现统一状态推导。
-        """
-        return _result_status(self)
-
-
-@dataclass
-class ParseResult(BaseResult):
-    """解析结果（D-15 部分结果）。"""
+    # -- Post-process fields (shared by ParseResult & LinkerParseResult) --
     blueprint: BlueprintMetadata | None = None
     graphs: list[UEdGraph] = field(default_factory=list)
     imports: list[dict] = field(default_factory=list)
     soft_references: list[dict] = field(default_factory=list)
-    soft_package_references: list[str] = field(default_factory=list)
     soft_object_path_list: list[dict] = field(default_factory=list)
     """SoftObjectPathList for index-based SoftObjectProperty resolution (UE5.7+)."""
     circular_deps: list[list[str]] = field(default_factory=list)
@@ -70,7 +68,26 @@ class ParseResult(BaseResult):
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
     linker: PackageLinker | None = None
-    hex_view_entries: list = field(default_factory=list)  # List[HexViewEntry]
+
+    @property
+    def status(self) -> str:
+        """Unified status: success | partial | failed.
+
+        Delegates to ``status._result_status()``.
+        """
+        return _result_status(self)
+
+
+@dataclass
+class ParseResult(BaseResult):
+    """Standard parse result returned by ``parse_package`` and ``parse_package_lazy``.
+
+    Extends ``BaseResult`` with parse-path-specific fields that do not
+    apply to the linker path.
+    """
+    soft_package_references: list[str] = field(default_factory=list)
+    hex_view_entries: list = field(default_factory=list)
+    """List[HexViewEntry] -- populated when hex_view=True."""
     asset_registry_data: AssetRegistryData | None = None
 
 
