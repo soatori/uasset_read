@@ -857,11 +857,23 @@ def read_depends_map(
     archive: FArchive,
     summary: PackageFileSummary,
     budget: "_ResourceBudgetType | None" = None,
+    warnings: "List[str] | None" = None,
 ) -> List[List[int]]:
     """读取 DependsMap（依赖表）。
 
     UE 格式：TArray<TArray<FPackageIndex>>
     每个 Export 对应一个依赖列表，依赖列表中的值是 PackageIndex（int32）。
+
+    PackageIndex 编码（UE FPackageIndex）：
+        0       → null（无引用）
+        > 0     → 引用 Import（1-based: PackageIndex 1 = import 0）
+        < 0     → 引用 Export（0-based negated: PackageIndex -1 = export 0）
+
+    Args:
+        archive: 文件归档读取器
+        summary: 包文件摘要
+        budget: 可选资源预算跟踪器
+        warnings: 可选警告列表，用于收集降级信息（如无效条目）
 
     Returns:
         二维列表，第一维是 Export 索引，第二维是依赖的 PackageIndex 列表
@@ -872,20 +884,56 @@ def read_depends_map(
     archive.seek(summary.depends_offset)
 
     depends_map: List[List[int]] = []
+    skipped_entries = 0
+    invalid_indices = 0
+
     for i in range(summary.export_count):
         # 读取每个 Export 的依赖列表
         dep_count = archive.read_i32(f"DependsMap[{i}].Count")
         # 容错：异常值跳过该条目（保留空列表），而非中断整个表解析
         if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
-            logger.debug("DependsMap: 异常的依赖数量 %d, 跳过", dep_count)
+            logger.debug("DependsMap: 异常的依赖数量 %d at export %d, 跳过", dep_count, i)
             depends_map.append([])
+            skipped_entries += 1
             continue
         if budget is not None and dep_count > 0:
             budget.reserve(dep_count * 4, f"DependsMap[{i}]")
         deps = []
         for j in range(dep_count):
-            deps.append(archive.read_i32(f"DependsMap[{i}][{j}]"))
+            pkg_index = archive.read_i32(f"DependsMap[{i}][{j}]")
+            # Validate PackageIndex range:
+            #   0 → null (valid)
+            #   > 0 → import reference (1-based), valid if pkg_index <= import_count
+            #   < 0 → export reference (negated 0-based), valid if |pkg_index| <= export_count
+            if pkg_index > 0 and pkg_index > summary.import_count:
+                invalid_indices += 1
+                logger.debug(
+                    "DependsMap: out-of-range import index %d at export %d dep %d "
+                    "(import_count=%d)",
+                    pkg_index, i, j, summary.import_count,
+                )
+            elif pkg_index < 0 and abs(pkg_index) > summary.export_count:
+                invalid_indices += 1
+                logger.debug(
+                    "DependsMap: out-of-range export index %d at export %d dep %d "
+                    "(export_count=%d)",
+                    pkg_index, i, j, summary.export_count,
+                )
+            deps.append(pkg_index)
         depends_map.append(deps)
+
+    # Surface degradation as warnings
+    if warnings is not None:
+        if skipped_entries > 0:
+            warnings.append(
+                f"DependsMap: {skipped_entries}/{summary.export_count} entries skipped "
+                f"due to invalid dependency count"
+            )
+        if invalid_indices > 0:
+            warnings.append(
+                f"DependsMap: {invalid_indices} PackageIndex value(s) reference "
+                f"non-existent imports/exports"
+            )
 
     return depends_map
 
