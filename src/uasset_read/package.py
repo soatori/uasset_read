@@ -7,7 +7,7 @@ import logging
 import os
 
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
-from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
+from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 
@@ -27,7 +27,9 @@ class PackageArchive(FArchive):
         uexp_archive: Optional[ArchiveLike] = None,
         tolerant: bool = False,
     ):
-        self._path = getattr(main_archive, "_path", "<package>")
+        self._init_archive_attrs(
+            getattr(main_archive, "_path", "<package>"), tolerant, hex_view=False
+        )
         self._main_archive = main_archive
         self._uexp_archive = uexp_archive
         try:
@@ -41,18 +43,6 @@ class PackageArchive(FArchive):
             raise
         self._file_size = self._main_size + self._uexp_size
         self._pos = 0
-        self._byte_swapping = False
-        self._tolerant = tolerant
-        self._mmap = None
-        self._use_mmap = False
-        self._mmap_warning = None
-        self._logger = logging.getLogger(__name__)
-        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
-        self._hex_view_enabled: bool = False
-        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
-        self._hex_view_context: str = ""
-        self._name_map: Optional[list] = None
-        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # Seen out-of-bounds indices (for dedup, #481)
 
     def read(self, size: int) -> bytes:
         if size < 0:

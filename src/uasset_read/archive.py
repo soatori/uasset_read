@@ -44,9 +44,13 @@ class FArchive:
     Supports byte-order detection and swapping, boundary validation.
     """
 
-    def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
+    def _init_archive_attrs(self, path: str, tolerant: bool = False, hex_view: bool = False):
+        """Initialize common archive attributes without opening a file.
+
+        Subclasses that do not read from a file (ByteArchive, FKismetArchive)
+        call this instead of super().__init__() to avoid the file-open step.
+        """
         self._path = path
-        # Initialize all attributes before try block for safe close() on exception
         self._file: Optional[BinaryIO] = None
         self._byte_swapping: bool = False
         self._file_size: int = 0
@@ -61,6 +65,9 @@ class FArchive:
         self._hex_view_enabled: bool = hex_view
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
+
+    def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
+        self._init_archive_attrs(path, tolerant, hex_view)
 
         try:
             self._file = open(path, 'rb')
@@ -1176,22 +1183,7 @@ class ByteArchive(FArchive):
             tolerant: tolerance mode switch
             name: optional name/path (for diagnostic information)
         """
-        # Do not call FArchive.__init__ to avoid opening a file
-        # Set all FArchive instance attributes directly
-        self._path = name
-        self._file: Optional[BinaryIO] = None
-        self._byte_swapping: bool = False
-        self._tolerant: bool = tolerant
-        self._mmap: Optional[mmap.mmap] = None
-        self._use_mmap: bool = False
-        self._mmap_warning: Optional[str] = None
-        self._logger = logging.getLogger(__name__)
-        self._name_map: Optional[list] = None
-        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
-        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # read_name out-of-bounds index dedup (#411, #481)
-        self._hex_view_enabled: bool = False
-        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
-        self._hex_view_context: str = ""
+        self._init_archive_attrs(name, tolerant, hex_view=False)
         # ByteArchive-specific attributes
         self._buffer: memoryview | bytes = data
         self._file_size: int = len(data)
