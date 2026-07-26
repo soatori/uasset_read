@@ -453,14 +453,19 @@ class IoStoreReader:
             if block and block.compression_method_index == 0:
                 # No compression, read directly
                 reader = self._ucas_files[partition_index]
+                if self._header and self._header.is_encrypted:
+                    return self._read_encrypted_range(
+                        reader,
+                        partition_offset,
+                        length,
+                        "IoStore uncompressed block read insufficient",
+                    )
                 reader.seek(partition_offset)
                 raw = reader.read(length)
                 if len(raw) < length:
                     raise ParseError(
                         f"IoStore uncompressed block read insufficient: {len(raw)} < {length} bytes"
                     )
-                if self._header and self._header.is_encrypted:
-                    raw = decrypt_aes_ecb(raw, self._aes_key)[:length]
                 return raw
 
         # Multi-block or compressed data — read block by block and concatenate
@@ -519,6 +524,32 @@ class IoStoreReader:
 
         return bytes(result)
 
+    def _read_encrypted_range(
+        self,
+        reader: BinaryIO,
+        offset: int,
+        length: int,
+        error_prefix: str,
+    ) -> bytes:
+        """Read and decrypt an AES-ECB range without decrypting partial blocks."""
+        if length == 0:
+            return b""
+
+        aligned_offset = offset & ~15
+        aligned_end = (offset + length + 15) & ~15
+        aligned_length = aligned_end - aligned_offset
+
+        reader.seek(aligned_offset)
+        ciphertext = reader.read(aligned_length)
+        if len(ciphertext) < aligned_length:
+            raise ParseError(
+                f"{error_prefix}: {len(ciphertext)} < {aligned_length} bytes"
+            )
+
+        plaintext = decrypt_aes_ecb(ciphertext, self._aes_key)
+        slice_offset = offset - aligned_offset
+        return plaintext[slice_offset:slice_offset + length]
+
     def _read_uncompressed_partitions(self, partition_index: int, partition_offset: int, length: int) -> bytes:
         """Read an uncompressed range, crossing UCAS partitions when necessary."""
         result = bytearray()
@@ -536,15 +567,22 @@ class IoStoreReader:
                 readable = min(remaining, self._header.partition_size - current_offset)
             else:
                 readable = remaining
-            raw = reader.read(readable)
             if self._header and self._header.is_encrypted:
-                raw = decrypt_aes_ecb(raw, self._aes_key)[:readable]
-            result.extend(raw)
+                raw = self._read_encrypted_range(
+                    reader,
+                    current_offset,
+                    readable,
+                    "IoStore partition read insufficient",
+                )
+            else:
+                reader.seek(current_offset)
+                raw = reader.read(readable)
             if len(raw) < readable:
                 raise ParseError(
                     f"IoStore partition read insufficient: read {len(raw)} < expected {readable} bytes "
                     f"(partition {current_partition})"
                 )
+            result.extend(raw)
             remaining -= readable
             current_partition += 1
             current_offset = 0
