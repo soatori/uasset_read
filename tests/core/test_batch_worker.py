@@ -142,3 +142,46 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
     assert completed.returncode == 0, completed.stderr
     # 无效 uasset 文件在 isolated 模式下容忍解析成功，输出 JSON 并计入 success
     assert completed.stdout.strip() == "1 0"
+
+
+class TestParseConfigSerialization:
+    """#453: ParseConfig must survive JSON roundtrip in batch worker protocol."""
+
+    def test_parse_config_roundtrip(self):
+        """ParseConfig with MemoryPolicy survives to_payload → from_payload."""
+        from uasset_read.batch_worker import _request_to_payload, _request_from_payload
+        from uasset_read.config import ParseConfig
+        from uasset_read.memory_safety import MemoryPolicy
+
+        policy = MemoryPolicy()
+        cfg = ParseConfig(tolerant=False, game="Fortnite", memory_policy=policy)
+        request = BatchWorkerRequest(
+            file_path="test.uasset",
+            output_path="test.json",
+            parse_options={"parse_config": cfg},
+        )
+
+        payload = _request_to_payload(request)
+        # Must be JSON-serializable
+        json_str = json.dumps(payload, ensure_ascii=False)
+        assert isinstance(json_str, str)
+
+        restored = _request_from_payload(json.loads(json_str))
+        restored_cfg = restored.parse_options["parse_config"]
+        assert isinstance(restored_cfg, ParseConfig)
+        assert restored_cfg.tolerant is False
+        assert restored_cfg.game == "Fortnite"
+        assert isinstance(restored_cfg.memory_policy, MemoryPolicy)
+
+    def test_parse_config_none_passthrough(self):
+        """None parse_config passes through without error."""
+        from uasset_read.batch_worker import _request_to_payload, _request_from_payload
+
+        request = BatchWorkerRequest(
+            file_path="test.uasset",
+            output_path="test.json",
+            parse_options={},
+        )
+        payload = _request_to_payload(request)
+        restored = _request_from_payload(payload)
+        assert restored.parse_options.get("parse_config") is None

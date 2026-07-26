@@ -32,6 +32,7 @@ from uasset_read.memory_safety import (
     ResourceLimits,
     _get_process_rss_mb,
 )
+from uasset_read.config import ParseConfig
 
 # stderr drain 默认上限：保留最后 1 MB 输出
 _STDERR_DRAIN_MAX_BYTES = 1024 * 1024
@@ -170,6 +171,25 @@ def _request_to_payload(request: BatchWorkerRequest) -> dict[str, Any]:
     policy = options.get("memory_policy")
     if isinstance(policy, MemoryPolicy):
         options["memory_policy"] = {"__memory_policy__": _policy_to_payload(policy)}
+    # #453: Serialize ParseConfig (contains MemoryPolicy which is not JSON-serializable)
+    parse_cfg = options.get("parse_config")
+    if isinstance(parse_cfg, ParseConfig):
+        inner_policy = parse_cfg.memory_policy
+        cfg_dict = {
+            "tolerant": parse_cfg.tolerant,
+            "force_full_parse": parse_cfg.force_full_parse,
+            "hex_view": parse_cfg.hex_view,
+            "include_parent_assets": parse_cfg.include_parent_assets,
+            "asset_roots": list(parse_cfg.asset_roots) if parse_cfg.asset_roots else None,
+            "mappings_path": parse_cfg.mappings_path,
+            "game": parse_cfg.game,
+            "lightweight_threshold": parse_cfg.lightweight_threshold,
+        }
+        if isinstance(inner_policy, MemoryPolicy):
+            cfg_dict["memory_policy"] = {"__memory_policy__": _policy_to_payload(inner_policy)}
+        else:
+            cfg_dict["memory_policy"] = inner_policy
+        options["parse_config"] = {"__parse_config__": cfg_dict}
     return {
         "file_path": request.file_path,
         "output_path": request.output_path,
@@ -183,6 +203,26 @@ def _request_from_payload(payload: dict[str, Any]) -> BatchWorkerRequest:
     policy = options.get("memory_policy")
     if isinstance(policy, dict) and "__memory_policy__" in policy:
         options["memory_policy"] = _policy_from_payload(policy["__memory_policy__"])
+    # #453: Deserialize ParseConfig
+    parse_cfg = options.get("parse_config")
+    if isinstance(parse_cfg, dict) and "__parse_config__" in parse_cfg:
+        cfg_dict = parse_cfg["__parse_config__"]
+        inner_policy_raw = cfg_dict.get("memory_policy")
+        if isinstance(inner_policy_raw, dict) and "__memory_policy__" in inner_policy_raw:
+            inner_policy = _policy_from_payload(inner_policy_raw["__memory_policy__"])
+        else:
+            inner_policy = inner_policy_raw
+        options["parse_config"] = ParseConfig(
+            tolerant=cfg_dict.get("tolerant", True),
+            force_full_parse=cfg_dict.get("force_full_parse", False),
+            hex_view=cfg_dict.get("hex_view", False),
+            include_parent_assets=cfg_dict.get("include_parent_assets", False),
+            asset_roots=cfg_dict.get("asset_roots"),
+            mappings_path=cfg_dict.get("mappings_path"),
+            game=cfg_dict.get("game"),
+            lightweight_threshold=cfg_dict.get("lightweight_threshold"),
+            memory_policy=inner_policy,
+        )
     return BatchWorkerRequest(
         file_path=payload["file_path"],
         output_path=payload["output_path"],
