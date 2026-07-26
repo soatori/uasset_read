@@ -15,11 +15,13 @@ python run.py file1.uasset --diff file2.uasset  # Diff
 ## Testing & Quality
 
 ```bash
+python -m pytest --collect-only -q
 python -m pytest tests/ -v
-python -m pytest tests/ -v -m "not slow"
+python -m pytest tests/ -v -m benchmark
+python -m pytest tests/ -v -m samples
 python -m pytest tests/ -v --cov=uasset_read
-python -m pytest tests/{module}/test_x.py::test_y -v
-python -m pytest tests/ -v -m quality
+python -m pytest tests/test_benchmark_parse.py -v
 ```
 
-pytest markers: `integration`, `quality`, `regression`, `slow`; `pytest.ini` sets `pythonpath = src`.
+pytest markers: `benchmark`, `samples`; `pytest.ini` sets `pythonpath = src`
+and excludes `tests/temp/` from collection.

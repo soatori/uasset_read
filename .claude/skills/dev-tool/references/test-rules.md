@@ -1,25 +1,25 @@
 # Test Script Rules
 
-These rules govern new and migrated tests; existing tests are not auto-deleted or bulk-migrated.
+## Formal Suite
+
+The `tests/` root contains exactly six formal `test_*.py` scripts:
+
+1. Five stable public-contract benchmarks.
+2. One parameterized test for every tracked asset in `tests/samples/`.
+
+Benchmark changes require user approval. Prefer semantic assertions over
+golden snapshots and private implementation details. Performance measurements
+are informational unless the user explicitly approves a threshold.
 
 ## File Placement
 
 | Scenario | Location | Rule |
 |----------|----------|------|
-| Modify existing test | `tests/{module}/test_*.py` | Prefer reusing and merging existing tests |
-| Formal test | `tests/{module}/test_{feature}.py` | Only keep tests with long-term maintenance value |
-| Core benchmarks | `tests/core/` | Minimal regression set only, max 5 files |
-| Quick/temp tests | `temp/test_{purpose}.py` | One-off verification, local debugging; not part of formal suite |
+| Benchmark change | Existing `tests/test_benchmark_*.py` | Explain and obtain approval first |
+| Sample contract change | `tests/test_samples.py` | Keep dynamic coverage of every tracked sample |
+| Test asset | `tests/samples/*.uasset` | Binary assets only; no Python files |
+| Experimental test | `tests/temp/test_*.py` | Excluded from default pytest collection |
 
-## Quantity & Cleanup Requirements
-
-- Total formal `test_*.py` files under `tests/` must not exceed **20**; at the limit, merge duplicates, delete outdated tests, or migrate low-value tests first.
-- Core benchmarks must not exceed **5**; cover only main parsing path, critical safety boundaries, and most important user-visible output; module details must not bypass limits via this directory.
-- Total test cases (`test_*` functions) under `tests/` must not exceed **100**; at the limit, merge same-scenario cases, delete low-value tests, or migrate to `temp/`.
-- Same module, same input type, same output target, or same boundary class: prefer merging into existing scripts; no duplicate files without clear isolation need.
-- Special or new features may only get a standalone test file when they have independent boundaries, independent I/O, or independent regression value.
-- Before creating a new file, evaluate existing scripts: check for duplicate coverage, mergeable cases, outdated cases, and misclassification; state the reason for reuse, merge, migration, deletion, or new creation.
-- When cleaning tests, ensure behavioral coverage does not decrease: merge cases and keep key regression assertions first, then delete duplicate/broken scripts; category changes require同步 updates to paths, imports, and commands.
-- `temp/` tests should be deleted, archived as documentation evidence, or promoted to formal tests at task end; they must not become a second long-term test suite.
-- New formal test commits must list the module, core quota usage, current total, and post-addition total; over-limit proposals must not be merged.
-- Test directories mirror `src/uasset_read/` by functional module; name files `test_{feature}.py`, functions `test_{scenario}_{expected}()`.
+Do not create a seventh formal script. Merge durable public-contract coverage
+into the closest existing benchmark. Delete experimental tests when the task
+ends or promote their essential assertion into an approved benchmark change.
