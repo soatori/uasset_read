@@ -12,7 +12,6 @@ Claude Code project specification for this repository.
 ## Code Understanding
 
 - CodeGraph (`.codegraph/`) is the primary tool for code exploration and call-path tracing.
-- For code search, go-to-definition, find-references, refactoring, and deep analysis, **prefer LSP-based plugins** (`pylsp`, `pyright`, `jedi`) over raw grep/find.
 
 ## LLM Wiki Retrieval
 
@@ -24,9 +23,9 @@ Keywords cover the following areas (by `wiki/` directory structure):
 |------|----------|
 | Architecture | `IR`, `FArchive`, `Pipeline`, `ExportTable`, `ImportTable` |
 | Core Modules | `Models`, `Parsers`, `Serializers`, `Exceptions` |
-| Advanced Features | `Blueprint`, `Kismet`, `Linker`, `Graph` |
+| Advanced Features | `Blueprint`, `Kismet`, `Linker`, `Graph`, `UEdGraph`, `UEdGraphNode` |
 | Container Systems | `PAK`, `IoStore`, `RawFiles` |
-| Output Formats | `Formatters`, `Renderers`, `CLI` |
+| Output Formats | `JSON`, `Markdown` |
 | UE Format Reference | `UProperty`, `UFunction`, `UClass`, `FFieldNode`, `SerializationStrategy` |
 
 ## Constraints

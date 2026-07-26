@@ -488,8 +488,21 @@ def run_isolated_asset(
             except OSError as e:
                 logger.debug("Failed to clean up temp output file: %s", e)
             process.close()
-        request_path.unlink(missing_ok=True)
-        result_path.unlink(missing_ok=True)
+            # On Windows, wait for process to fully release file handles
+            # before deleting protocol files (WinError 32: file in use)
+            if sys.platform == "win32":
+                time.sleep(0.1)
+        # Retry file deletion with backoff for Windows file handle issues
+        for attempt in range(3):
+            try:
+                request_path.unlink(missing_ok=True)
+                result_path.unlink(missing_ok=True)
+                break
+            except OSError as e:
+                if attempt < 2 and sys.platform == "win32":
+                    time.sleep(0.1 * (attempt + 1))
+                else:
+                    logger.debug("Failed to clean up protocol files: %s", e)
 
 
 def _worker_main(argv: list[str] | None = None) -> int:
