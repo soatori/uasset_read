@@ -23,6 +23,7 @@ class _FakeProcess:
 
     def __init__(self) -> None:
         self.terminated = False
+        self.closed = False
 
     def is_alive(self) -> bool:
         return not self.terminated
@@ -35,6 +36,9 @@ class _FakeProcess:
 
     def kill(self) -> None:
         self.terminated = True
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_monitor_terminates_worker_over_rss_limit() -> None:

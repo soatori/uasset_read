@@ -60,11 +60,13 @@ class _StderrDrain:
         self._dropped_count: int = 0
         self._thread: threading.Thread | None = None
         self._line_callback = line_callback
+        self._stderr_pipe: object | None = None
 
     def start(self, proc: subprocess.Popen[bytes]) -> None:
         """启动后台 drain 线程。"""
         if proc.stderr is None:
             return
+        self._stderr_pipe = proc.stderr
         self._thread = threading.Thread(
             target=self._drain_loop,
             args=(proc,),
@@ -103,9 +105,19 @@ class _StderrDrain:
             self._dropped_count += 1
 
     def join(self, timeout: float | None = None) -> None:
-        """等待 drain 线程完成。"""
+        """Wait for the drain thread to finish."""
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
+
+    def close(self) -> None:
+        """Join the drain thread and close the stderr pipe.
+
+        Must be called after the worker process has exited to ensure
+        no ResourceWarning or unclosed-file issues.
+        """
+        self.join(timeout=5)
+        if self._stderr_pipe is not None and not self._stderr_pipe.closed:
+            self._stderr_pipe.close()
 
     @property
     def text(self) -> str:
@@ -314,6 +326,20 @@ class _SubprocessAdapter:
         # 等待 drain 线程消费完管道中剩余数据
         self._stderr_drain.join(timeout=5)
 
+    def close(self) -> None:
+        """Close stderr pipe and process file descriptors.
+
+        Ensures no ResourceWarning or unclosed-file issues in all exit paths.
+        Safe to call multiple times.
+        """
+        if self._stderr_drain is not None:
+            self._stderr_drain.close()
+            self._stderr_drain = None
+        if self._process is not None and self._process.stderr is not None:
+            self._process.stderr.close()
+            self._process.stderr = None
+        self._process = None
+
 
 class _ResultFile:
     def __init__(self, path: Path) -> None:
@@ -455,6 +481,7 @@ def run_isolated_asset(
                 )
             except OSError as e:
                 logger.debug("清理临时输出文件失败: %s", e)
+            process.close()
         request_path.unlink(missing_ok=True)
         result_path.unlink(missing_ok=True)
 
