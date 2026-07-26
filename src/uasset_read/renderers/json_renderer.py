@@ -119,6 +119,8 @@ class JSONRenderer(IRenderer):
             data["errors"] = ir.diagnostics_data.errors
         if ir.diagnostics_data and ir.diagnostics_data.warnings:
             data["warnings"] = ir.diagnostics_data.warnings
+        if ir.diagnostics_data and ir.diagnostics_data.diagnostics_truncated_count > 0:
+            data["diagnostics_truncated_count"] = ir.diagnostics_data.diagnostics_truncated_count
         if ir.diagnostics:
             if is_debug:
                 data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
@@ -135,10 +137,14 @@ class JSONRenderer(IRenderer):
             data["anim_sequence"] = self._anim_sequence_to_dict(ir.animation.anim_sequence)
         if ir.animation and ir.animation.anim_montage:
             data["anim_montage"] = self._anim_montage_to_dict(ir.animation.anim_montage)
-        if (options.hex_view or options.output_level == "debug") and ir.debug and ir.debug.hex_view:
-            data["debug"] = {
-                "hex_view": [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
-            }
+        if (options.hex_view or options.output_level == "debug") and ir.debug:
+            debug_dict: dict[str, Any] = {}
+            if ir.debug.hex_view:
+                debug_dict["hex_view"] = [self._hex_view_entry_to_dict(e) for e in ir.debug.hex_view]
+            if ir.debug.hex_view_truncated_count > 0:
+                debug_dict["hex_view_truncated_count"] = ir.debug.hex_view_truncated_count
+            if debug_dict:
+                data["debug"] = debug_dict
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
         data["statistics"] = self._calculate_statistics(ir)

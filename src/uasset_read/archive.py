@@ -358,6 +358,11 @@ class FArchive:
         """返回收集到的偏移诊断记录。"""
         return self._diagnostics.entries
 
+    @property
+    def diagnostics_dropped_count(self) -> int:
+        """返回因缓冲区上限而被丢弃的诊断条目数。"""
+        return self._diagnostics.dropped_count
+
     # HexView 支持
 
     def enable_hex_view(self, enabled: bool = True) -> None:
@@ -409,6 +414,11 @@ class FArchive:
     def get_hex_view_entries_raw(self) -> list:
         """返回原始 hex_view 条目列表（不复制）。"""
         return self._hex_view_entries.entries
+
+    @property
+    def hex_view_dropped_count(self) -> int:
+        """返回因缓冲区上限而被丢弃的 HexView 条目数。"""
+        return self._hex_view_entries.dropped_count
 
     # 类型读取方法
 

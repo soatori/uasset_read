@@ -214,8 +214,12 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             status=status,
             status_message=status_message,
             status_code=status_code,
+            diagnostics_truncated_count=getattr(result, 'diagnostics_dropped_count', 0),
         ),
-        debug=_build_debug_ir(getattr(result, 'hex_view_entries', [])),
+        debug=_build_debug_ir(
+            getattr(result, 'hex_view_entries', []),
+            hex_view_truncated_count=getattr(result, 'hex_view_dropped_count', 0),
+        ),
     )
 
     # 绑定函数/事件实现关联
@@ -1424,12 +1428,15 @@ def _build_asset_registry_data(result) -> dict | None:
     except (AttributeError, TypeError, ValueError):
         return None
 
-def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
+def _build_debug_ir(
+    hex_view_entries: list,
+    hex_view_truncated_count: int = 0,
+) -> DebugIR | None:
     """将 ParseResult.hex_view_entries 转为 DebugIR。
 
-    如果没有 hex_view 条目则返回 None。
+    如果没有 hex_view 条目且无截断计数则返回 None。
     """
-    if not hex_view_entries:
+    if not hex_view_entries and hex_view_truncated_count == 0:
         return None
     entries = []
     for e in hex_view_entries:
@@ -1444,4 +1451,7 @@ def _build_debug_ir(hex_view_entries: list) -> DebugIR | None:
             semantic_type=getattr(e, "semantic_type", None),
         )
         entries.append(entry)
-    return DebugIR(hex_view=entries)
+    return DebugIR(
+        hex_view=entries,
+        hex_view_truncated_count=hex_view_truncated_count,
+    )

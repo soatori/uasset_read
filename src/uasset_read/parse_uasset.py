@@ -75,8 +75,10 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
         archive_diagnostics = archive.get_diagnostics()
         if archive_diagnostics:
             result.diagnostics = archive_diagnostics + result.diagnostics
+        result.diagnostics_dropped_count = archive.diagnostics_dropped_count
         if archive.is_hex_view_enabled():
             result.hex_view_entries = archive.get_hex_view_entries()
+            result.hex_view_dropped_count = archive.hex_view_dropped_count
         archive.close()
 
 

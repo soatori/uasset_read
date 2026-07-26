@@ -101,7 +101,13 @@ class MarkdownRenderer(IRenderer):
         # 如果启用 hex_view 且 IR 中有 hex_view 数据，返回 hex 视图格式
         if options.hex_view and ir.debug and ir.debug.hex_view:
             from uasset_read.debug.hex_view import format_hex_view
-            return format_hex_view(ir.debug.hex_view)
+            result = format_hex_view(ir.debug.hex_view)
+            if ir.debug.hex_view_truncated_count > 0:
+                result += (
+                    f"\n\n> **Note**: {ir.debug.hex_view_truncated_count} hex view entries "
+                    f"dropped due to buffer size limit."
+                )
+            return result
 
         lines: list[str] = []
 
@@ -644,7 +650,10 @@ class MarkdownRenderer(IRenderer):
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
         """渲染诊断信息章节 — 按严重度分组并显示图标。"""
-        if not ir.diagnostics:
+        # Show section header if there are diagnostics or truncation to report
+        dd = ir.diagnostics_data
+        has_truncation = dd and dd.diagnostics_truncated_count > 0
+        if not ir.diagnostics and not has_truncation:
             return
 
         severity_icons = {
@@ -665,6 +674,14 @@ class MarkdownRenderer(IRenderer):
 
         lines.append("## 诊断信息")
         lines.append("")
+
+        # Show truncation notice if any diagnostics were dropped
+        if has_truncation:
+            lines.append(
+                f"> **Note**: {dd.diagnostics_truncated_count} diagnostics "
+                f"dropped due to buffer size limit."
+            )
+            lines.append("")
 
         for severity in ["critical", "error", "warning", "info"]:
             if severity not in by_severity:

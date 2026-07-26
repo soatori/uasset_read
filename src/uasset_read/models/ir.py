@@ -509,6 +509,8 @@ class HexViewEntryIR:
 class DebugIR:
     """调试数据 IR（解析轨迹信息）。"""
     hex_view: list[HexViewEntryIR] = field(default_factory=list)
+    hex_view_truncated_count: int = 0
+    """Number of hex view entries dropped by BoundedEventBuffer truncation."""
 
 
 @dataclass
@@ -540,6 +542,8 @@ class DiagnosticsDataIR:
     status: str = "success"
     status_message: str | None = None
     status_code: str | None = None
+    diagnostics_truncated_count: int = 0
+    """Number of diagnostics entries dropped by BoundedEventBuffer truncation."""
 
 
 @dataclass

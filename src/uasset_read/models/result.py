@@ -41,6 +41,8 @@ class BaseResult:
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
+    diagnostics_dropped_count: int = 0
+    """Number of diagnostics entries dropped by BoundedEventBuffer truncation."""
     _error_keys: set = field(default_factory=set)  # 错误去重用：(异常类型, 阶段, 消息)
 
     @property
@@ -71,6 +73,8 @@ class ParseResult(BaseResult):
     logic_sources: list[dict] = field(default_factory=list)
     linker: PackageLinker | None = None
     hex_view_entries: list = field(default_factory=list)  # List[HexViewEntry]
+    hex_view_dropped_count: int = 0
+    """Number of hex view entries dropped by BoundedEventBuffer truncation."""
     asset_registry_data: AssetRegistryData | None = None
 
 

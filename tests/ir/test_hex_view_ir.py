@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from uasset_read.debug.hex_view import HexViewEntry
-from uasset_read.models.ir import HexViewEntryIR, DebugIR, PackageIR, PackageHeaderIR
+from uasset_read.models.ir import HexViewEntryIR, DebugIR, PackageIR, PackageHeaderIR, DiagnosticsDataIR
 from uasset_read.ir_builder import _build_debug_ir, build_package_ir
 from uasset_read.renderers.json_renderer import JSONRenderer
 from uasset_read.renderers.base import RenderOptions
@@ -298,6 +298,8 @@ class TestCoreBypassLogic:
         mock_result.hex_view_entries = [
             HexViewEntry(key="x", type="u8", value=1, start=0, stop=1),
         ]
+        mock_result.hex_view_dropped_count = 0
+        mock_result.diagnostics_dropped_count = 0
         mock_result.summary = MagicMock()
         mock_result.summary.uncompressed_size = 1024
 
@@ -327,3 +329,244 @@ class TestCoreBypassLogic:
             assert "summary" in output
             assert "debug" in output
             assert output["debug"]["hex_view"][0]["key"] == "Magic"
+
+
+# ===========================================================================
+# Truncation visibility tests (#447)
+# ===========================================================================
+
+
+class TestDebugIRTruncationVisibility:
+    """DebugIR and DiagnosticsDataIR expose truncation metadata."""
+
+    def test_debug_ir_hex_view_truncated_count_default(self):
+        """DebugIR defaults hex_view_truncated_count to 0."""
+        ir = DebugIR()
+        assert ir.hex_view_truncated_count == 0
+
+    def test_debug_ir_hex_view_truncated_count_set(self):
+        """DebugIR hex_view_truncated_count is settable."""
+        ir = DebugIR(hex_view_truncated_count=42)
+        assert ir.hex_view_truncated_count == 42
+
+    def test_debug_ir_not_none_when_only_truncated(self):
+        """_build_debug_ir returns DebugIR when entries are empty but truncation > 0."""
+        from uasset_read.ir_builder import _build_debug_ir
+        result = _build_debug_ir([], hex_view_truncated_count=5)
+        assert result is not None
+        assert result.hex_view == []
+        assert result.hex_view_truncated_count == 5
+
+    def test_debug_ir_none_when_no_entries_and_no_truncation(self):
+        """_build_debug_ir returns None when both entries and truncation are empty."""
+        from uasset_read.ir_builder import _build_debug_ir
+        result = _build_debug_ir([])
+        assert result is None
+
+    def test_diagnostics_data_truncated_count_default(self):
+        """DiagnosticsDataIR defaults diagnostics_truncated_count to 0."""
+        dd = DiagnosticsDataIR()
+        assert dd.diagnostics_truncated_count == 0
+
+    def test_diagnostics_data_truncated_count_set(self):
+        """DiagnosticsDataIR diagnostics_truncated_count is settable."""
+        dd = DiagnosticsDataIR(diagnostics_truncated_count=10)
+        assert dd.diagnostics_truncated_count == 10
+
+
+class TestBoundedEventBufferTruncation:
+    """BoundedEventBuffer tracks dropped entries correctly."""
+
+    def test_dropped_count_zero_when_under_limit(self):
+        """No entries dropped when under max_entries."""
+        from uasset_read.bounded_events import BoundedEventBuffer
+        buf = BoundedEventBuffer(max_entries=10)
+        buf.append("a")
+        buf.append("b")
+        assert buf.dropped_count == 0
+
+    def test_dropped_count_increments_when_over_limit(self):
+        """dropped_count increments when buffer is full."""
+        from uasset_read.bounded_events import BoundedEventBuffer
+        buf = BoundedEventBuffer(max_entries=3)
+        for i in range(10):
+            buf.append(f"entry_{i}")
+        assert buf.dropped_count == 7  # 10 - 3 = 7
+
+    def test_dropped_count_bytes_limit(self):
+        """dropped_count increments when byte limit is exceeded."""
+        from uasset_read.bounded_events import BoundedEventBuffer
+        buf = BoundedEventBuffer(max_entries=1000, max_bytes=20)
+        buf.append("short")       # 5 bytes
+        buf.append("short")       # 5 bytes (total 10)
+        buf.append("short")       # 5 bytes (total 15)
+        buf.append("short")       # 5 bytes (total 20)
+        buf.append("overflow")    # exceeds 20 bytes -> dropped
+        assert buf.dropped_count == 1
+
+    def test_dropped_count_resets_on_clear(self):
+        """dropped_count resets to 0 after clear()."""
+        from uasset_read.bounded_events import BoundedEventBuffer
+        buf = BoundedEventBuffer(max_entries=2)
+        for i in range(10):
+            buf.append(f"e_{i}")
+        assert buf.dropped_count == 8
+        buf.clear()
+        assert buf.dropped_count == 0
+
+
+class TestArchiveTruncationExposure:
+    """FArchive exposes dropped counts from BoundedEventBuffer."""
+
+    def test_diagnostics_dropped_count_zero_initially(self):
+        """ByteArchive.diagnostics_dropped_count starts at 0."""
+        from uasset_read.archive import ByteArchive
+        ar = ByteArchive(b'\x00' * 100)
+        assert ar.diagnostics_dropped_count == 0
+
+    def test_hex_view_dropped_count_zero_initially(self):
+        """ByteArchive.hex_view_dropped_count starts at 0."""
+        from uasset_read.archive import ByteArchive
+        ar = ByteArchive(b'\x00' * 100)
+        ar.enable_hex_view(True)
+        assert ar.hex_view_dropped_count == 0
+
+
+class TestPackageIRTruncationPropagation:
+    """Verify truncation metadata propagates through PackageIR."""
+
+    def _make_header(self):
+        return PackageHeaderIR(
+            package_name="Test",
+            package_class="Normal",
+            package_flags=0,
+            total_export_count=0,
+            total_import_count=0,
+            ue_version="5.4",
+        )
+
+    def _make_ir(self, **kwargs):
+        defaults = dict(
+            header=self._make_header(),
+            name_map=(),
+            imports=[],
+            exports=[],
+            linker=None,
+        )
+        defaults.update(kwargs)
+        return PackageIR(**defaults)
+
+    def test_package_ir_debug_has_truncation(self):
+        """PackageIR.debug carries hex_view_truncated_count."""
+        ir = self._make_ir(
+            debug=DebugIR(hex_view_truncated_count=15),
+        )
+        assert ir.debug.hex_view_truncated_count == 15
+
+    def test_package_ir_diagnostics_data_has_truncation(self):
+        """PackageIR.diagnostics_data carries diagnostics_truncated_count."""
+        ir = self._make_ir(
+            diagnostics_data=DiagnosticsDataIR(diagnostics_truncated_count=3),
+        )
+        assert ir.diagnostics_data.diagnostics_truncated_count == 3
+
+
+class TestJSONRendererTruncationVisibility:
+    """JSON renderer surfaces truncation metadata."""
+
+    def _make_header(self):
+        return PackageHeaderIR(
+            package_name="Test",
+            package_class="Normal",
+            package_flags=0,
+            total_export_count=0,
+            total_import_count=0,
+            ue_version="5.4",
+        )
+
+    def _make_ir(self, **kwargs):
+        defaults = dict(
+            header=self._make_header(),
+            name_map=(),
+            imports=[],
+            exports=[],
+            linker=None,
+        )
+        defaults.update(kwargs)
+        return PackageIR(**defaults)
+
+    def test_json_includes_diagnostics_truncated_count(self):
+        """JSON output includes diagnostics_truncated_count when > 0."""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        renderer = JSONRenderer()
+        options = RenderOptions()
+        ir = self._make_ir(
+            diagnostics_data=DiagnosticsDataIR(diagnostics_truncated_count=42),
+        )
+        result = renderer.render(ir, options)
+        assert "diagnostics_truncated_count" in result
+        assert "42" in result
+
+    def test_json_includes_hex_view_truncated_count(self):
+        """JSON output includes hex_view_truncated_count in debug when > 0."""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        renderer = JSONRenderer()
+        options = RenderOptions(hex_view=True)
+        ir = self._make_ir(
+            debug=DebugIR(hex_view_truncated_count=99),
+        )
+        result = renderer.render(ir, options)
+        assert "hex_view_truncated_count" in result
+        assert "99" in result
+
+    def test_json_omits_truncated_count_when_zero(self):
+        """JSON output omits truncation counts when they are 0."""
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        from uasset_read.renderers.base import RenderOptions
+        renderer = JSONRenderer()
+        options = RenderOptions()
+        ir = self._make_ir(
+            diagnostics_data=DiagnosticsDataIR(diagnostics_truncated_count=0),
+        )
+        result = renderer.render(ir, options)
+        assert "diagnostics_truncated_count" not in result
+
+
+class TestMarkdownRendererTruncationVisibility:
+    """Markdown renderer surfaces truncation notices."""
+
+    def _make_header(self):
+        return PackageHeaderIR(
+            package_name="Test",
+            package_class="Normal",
+            package_flags=0,
+            total_export_count=0,
+            total_import_count=0,
+            ue_version="5.4",
+        )
+
+    def _make_ir(self, **kwargs):
+        defaults = dict(
+            header=self._make_header(),
+            name_map=(),
+            imports=[],
+            exports=[],
+            linker=None,
+        )
+        defaults.update(kwargs)
+        return PackageIR(**defaults)
+
+    def test_markdown_includes_diagnostics_truncation_notice(self):
+        """Markdown output includes truncation notice when diagnostics dropped."""
+        from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+        from uasset_read.renderers.base import RenderOptions
+        renderer = MarkdownRenderer()
+        options = RenderOptions()
+        ir = self._make_ir(
+            diagnostics_data=DiagnosticsDataIR(diagnostics_truncated_count=5),
+        )
+        result = renderer.render(ir, options)
+        assert "dropped" in result.lower()
+        assert "5" in result
