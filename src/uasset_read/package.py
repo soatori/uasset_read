@@ -9,6 +9,7 @@ import os
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
 from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
 from uasset_read.exceptions import ParseError
+from uasset_read.memory_safety import ResourceBudget
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,8 @@ class PackageProvider:
             return None
         return ByteArchive(data, name=path)
 
-    def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
+    def open_package_bundle(self, path: str, tolerant: bool = False,
+                            budget: ResourceBudget | None = None) -> PackageBundle:
         path = self._resolve_package_path(path)
         ext = Path(path).suffix.lower()
         package_kind = "map" if ext == ".umap" else "asset"
@@ -205,11 +207,15 @@ class PackageProvider:
         payloads: dict[str, bytes] = {}
         main_data = self.read_file(path)
         if main_data is not None:
+            if budget is not None:
+                budget.reserve(len(main_data), f"bundle_main:{Path(path).name}")
             payloads[ext] = main_data
         for payload_ext in PACKAGE_PAYLOAD_EXTENSIONS:
             sidecar = stem + payload_ext
             data = self.read_file(sidecar)
             if data is not None:
+                if budget is not None:
+                    budget.reserve(len(data), f"bundle_sidecar:{Path(sidecar).name}")
                 payloads[payload_ext] = data
         return PackageBundle(
             main_path=path,
@@ -318,7 +324,8 @@ class FileSystemPackageProvider(PackageProvider):
             return None
         return FArchive(str(p))
 
-    def open_package_bundle(self, path: str, tolerant: bool = False) -> PackageBundle:
+    def open_package_bundle(self, path: str, tolerant: bool = False,
+                            budget: ResourceBudget | None = None) -> PackageBundle:
         main = Path(path)
         if self.root is not None and not main.is_file() and not main.is_absolute():
             root_relative = self.root / main
@@ -385,12 +392,13 @@ def open_package_bundle(
     path: str,
     provider: Optional[PackageProvider] = None,
     tolerant: bool = False,
+    budget: ResourceBudget | None = None,
 ) -> PackageBundle:
     """Discover a package bundle from a filesystem path or provider path."""
 
     if provider is not None:
-        return provider.open_package_bundle(path, tolerant=tolerant)
-    return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant)
+        return provider.open_package_bundle(path, tolerant=tolerant, budget=budget)
+    return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant, budget=budget)
 
 
 def _normalize_ext(extension: str) -> str:

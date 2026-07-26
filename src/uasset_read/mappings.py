@@ -8,7 +8,8 @@ import struct
 from typing import Dict, Optional, Any
 
 from uasset_read.exceptions import ParseError
-from uasset_read.memory_safety import ResourceBudget
+from uasset_read.memory_safety import ResourceBudget, MemoryLimitExceeded
+from uasset_read.constants import MAX_ARRAY_DIM
 
 
 MAX_RECURSION_DEPTH: int = 64
@@ -306,8 +307,11 @@ class JmapParser:
                 data = fh.read()
             if path_or_bytes.lower().endswith(".gz"):
                 if budget is not None:
-                    budget.reserve(len(data), "jmap_gzip_decompress")
-                data = gzip.decompress(data)
+                    budget.reserve(len(data), "jmap_gzip_input")
+                raw_gz = data
+                data = gzip.decompress(raw_gz)
+                if budget is not None:
+                    budget.reserve(len(data), "jmap_gzip_decompress_output")
         self.mappings = self._parse(json.loads(data.decode("utf-8")))
 
     def _parse(self, root: Dict[str, Any]) -> TypeMappings:
@@ -342,11 +346,18 @@ class JmapParser:
         return mappings
 
     def _parse_property_info(self, prop: Dict[str, Any], index: int) -> PropertyInfo:
+        raw_dim = prop.get("array_dim")
+        array_dim = int(raw_dim) if raw_dim is not None else 1
+        if array_dim < 1 or array_dim > MAX_ARRAY_DIM:
+            raise ParseError(
+                f"Jmap array_dim out of range: {array_dim} "
+                f"(must be 1..{MAX_ARRAY_DIM})"
+            )
         return PropertyInfo(
             index=index,
             name=str(prop.get("name") or ""),
             mapping_type=self._parse_property_type(prop),
-            array_size=int(prop.get("array_dim") or 1),
+            array_size=array_dim,
         )
 
     def _parse_property_type(self, prop: Dict[str, Any], depth: int = 0) -> PropertyType:

@@ -65,6 +65,7 @@ MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶�
 MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
                                       # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
 MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
+MAX_ARRAY_DIM = 256               # Maximum array dimension in mapping property info
 MAX_FSTRING_LENGTH = 10_000_000   # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================

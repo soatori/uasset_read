@@ -125,6 +125,8 @@ def _parse_package_core(
     from uasset_read.memory_safety import (
         MemoryMonitor,
         MemoryPolicy,
+        ResourceBudget,
+        AllocationLimits,
     )
 
     archive = None
@@ -137,13 +139,14 @@ def _parse_package_core(
         asset_path=path,
         limits=policy.limits_for_size(file_size),
     )
+    resource_budget = ResourceBudget()
 
     with memory_monitor:
         try:
             # 初始化环境
             init_result = _init_parse_env(
                 path, result, tolerant, provider, mappings_path, game,
-                check_aes_key, hex_view,
+                check_aes_key, hex_view, budget=resource_budget,
             )
             if init_result is None:
                 return
@@ -152,6 +155,7 @@ def _parse_package_core(
             # 读取核心表（summary/name/import/export）
             if not _read_core_tables(
                 archive, result, path, tolerant, memory_monitor, mappings_provider,
+                budget=resource_budget,
             ):
                 return
 
@@ -459,10 +463,15 @@ def parse_package_lazy(
     )
 
     try:
+        from uasset_read.memory_safety import ResourceBudget
+        resource_budget = ResourceBudget()
+
         mappings_provider = None
         if mappings_path:
             from uasset_read.mappings import TypeMappingsProvider
-            mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+            mappings_provider = TypeMappingsProvider.from_file(
+                mappings_path, budget=resource_budget,
+            )
             result.metadata["mappings_path"] = mappings_path
         if game:
             result.metadata["game"] = game
@@ -476,7 +485,7 @@ def parse_package_lazy(
             # 读取核心表
             if not _read_core_tables(
                 archive, result, path, tolerant,
-                validate_range=True,
+                validate_range=True, budget=resource_budget,
             ):
                 if result.summary is None:
                     return result
@@ -493,6 +502,7 @@ def parse_package_lazy(
                 path, result,
                 tolerant=tolerant, provider=provider,
                 mappings_path=mappings_path, game=game,
+                budget=resource_budget,
             )
             if result.summary is None:
                 return result

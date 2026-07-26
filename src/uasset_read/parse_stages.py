@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional, List, Callable
 if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.package import PackageProvider
+    from uasset_read.memory_safety import ResourceBudget
 
 from uasset_read.exceptions import ParseError, VersionError
 from uasset_read.package import open_package_bundle
@@ -131,6 +132,7 @@ def _init_parse_env(
     game: Optional[str],
     check_aes_key: Optional[bytes],
     hex_view: bool,
+    budget: "ResourceBudget | None" = None,
 ):
     """初始化解析环境：验证参数、打开 archive、读取 mmap 信息。
 
@@ -145,12 +147,13 @@ def _init_parse_env(
     mappings_provider = None
     if mappings_path:
         from uasset_read.mappings import TypeMappingsProvider
-        mappings_provider = TypeMappingsProvider.from_file(mappings_path)
+        mappings_provider = TypeMappingsProvider.from_file(mappings_path, budget=budget)
         result.metadata["mappings_path"] = mappings_path
     if game:
         result.metadata["game"] = game
 
-    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant)
+    bundle = open_package_bundle(path, provider=provider, tolerant=tolerant,
+                                 budget=budget)
     archive = bundle.open_archive(tolerant=tolerant)
     if hex_view:
         archive.enable_hex_view(True)
@@ -171,6 +174,7 @@ def _read_core_tables(
     memory_monitor=None,
     mappings_provider=None,
     validate_range: bool = True,
+    budget: "ResourceBudget | None" = None,
 ) -> bool:
     """读取 summary + name + import + export 核心表。
 
@@ -180,7 +184,7 @@ def _read_core_tables(
     result.summary = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="package_summary", field="summary",
-        reader=lambda: read_package_summary(archive),
+        reader=lambda: read_package_summary(archive, budget=budget),
     )
     if result.summary is None:
         return False
@@ -403,6 +407,7 @@ def _read_package_headers(
     hex_view: bool = False,
     validate_range: bool = True,
     check_aes_key: Optional[bytes] = None,
+    budget: "ResourceBudget | None" = None,
 ) -> tuple:
     """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
 
@@ -415,13 +420,13 @@ def _read_package_headers(
     # 初始化解析环境（archive、bundle、mappings_provider）
     archive, bundle, mappings_provider = _init_parse_env(
         path, result, tolerant, provider, mappings_path, game,
-        check_aes_key=check_aes_key, hex_view=hex_view,
+        check_aes_key=check_aes_key, hex_view=hex_view, budget=budget,
     )
 
     # 读取核心表（summary/name/import/export）
     if not _read_core_tables(
         archive, result, path, tolerant,
-        validate_range=validate_range,
+        validate_range=validate_range, budget=budget,
     ):
         return bundle, archive, None, mappings_provider
 
