@@ -53,6 +53,8 @@ class AssetRegistryData:
     """AssetRegistryData 解析结果。"""
     dependency_data_offset: int = 0
     objects: List[AssetRegistryObjectData] = field(default_factory=list)
+    corrupted: bool = False
+    """True when the data was only partially parsed due to malformed input."""
 
     @property
     def object_count(self) -> int:
@@ -60,7 +62,7 @@ class AssetRegistryData:
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典（用于 JSON 序列化）。"""
-        return {
+        d = {
             "dependency_data_offset": self.dependency_data_offset,
             "object_count": self.object_count,
             "objects": [
@@ -72,6 +74,9 @@ class AssetRegistryData:
                 for obj in self.objects
             ],
         }
+        if self.corrupted:
+            d["corrupted"] = True
+        return d
 
 
 def read_asset_registry_data(
@@ -147,10 +152,15 @@ def read_asset_registry_data(
             obj_data = _read_object_data(archive)
             if obj_data is not None:
                 result.objects.append(obj_data)
+            else:
+                # _read_object_data returned None — object could not be read
+                # (truncated data, malformed fields, etc.). Flag corruption.
+                result.corrupted = True
 
     except (struct.error, OSError, ValueError, ParseError) as e:
         logger.debug("AssetRegistryData 解析异常: %s", e)
-        # 返回已解析的部分数据
+        # 返回已解析的部分数据并标记为 corrupted
+        result.corrupted = True
         return result
 
     return result

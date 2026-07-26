@@ -293,6 +293,11 @@ def _read_secondary_tables(
             file_version_ue4=result.summary.file_version_ue4,
             is_cooked=is_cooked,
         )
+        # Surface corruption as a warning so status surfaces degradation
+        if result.asset_registry_data is not None and result.asset_registry_data.corrupted:
+            result.warnings.append(
+                "AssetRegistryData is corrupted — only partial data was recovered"
+            )
     except (struct.error, OSError, ValueError) as e:
         if not tolerant:
             raise ParseError(f"AssetRegistryData parse failed: {e}") from e
