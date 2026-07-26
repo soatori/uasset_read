@@ -164,6 +164,32 @@ def test_subprocess_adapter_close_calls_popen_close():
     mock_popen.close.assert_called_once()
 
 
+def test_subprocess_adapter_close_windows_fallback():
+    """On Windows (no Popen.close), adapter closes stdin/stdout pipes manually."""
+    from unittest.mock import MagicMock
+    from uasset_read.batch_worker import _SubprocessAdapter
+
+    mock_popen = MagicMock()
+    mock_popen.pid = 12345
+    mock_popen.stderr = MagicMock()
+    mock_popen.stderr.closed = False
+    # Simulate Windows: no close() method
+    del mock_popen.close
+    # Set up stdin/stdout as open pipes
+    mock_stdin = MagicMock()
+    mock_stdin.closed = False
+    mock_popen.stdin = mock_stdin
+    mock_stdout = MagicMock()
+    mock_stdout.closed = False
+    mock_popen.stdout = mock_stdout
+
+    adapter = _SubprocessAdapter(mock_popen)
+    adapter.close()
+
+    mock_stdin.close.assert_called_once()
+    mock_stdout.close.assert_called_once()
+
+
 class TestParseConfigSerialization:
     """#453: ParseConfig must survive JSON roundtrip in batch worker protocol."""
 
