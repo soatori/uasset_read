@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import struct
-import warnings
 from typing import TYPE_CHECKING, Sequence, Callable
 from pathlib import Path
 
@@ -221,11 +220,9 @@ def parse_package(
     tolerant: bool | None = None,
     include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
-    aes_key: bytes | None = None,
     provider: PackageProvider | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # 已废弃，linker 始终创建
     lightweight_threshold: int | None = None,
     force_full_parse: bool | None = None,
     hex_view: bool | None = None,
@@ -234,24 +231,18 @@ def parse_package(
     log_config: LogConfig | None = None,
 ) -> ParseResult:
     """
-    主入口：解析 Unreal package（.uasset 或 .umap）。
+    Main entry: parse an Unreal package (.uasset or .umap).
 
     Args:
-        path: .uasset/.umap 文件路径
-        tolerant: 是否启用容错模式（默认开启）
-        aes_key: Deprecated. Construct encrypted container readers/providers with
-            their AES key instead; the parser no longer accepts an unused key.
-        provider: 可选 package provider（filesystem/pak/iostore）
-        include_linker: Deprecated. Linker is now always created for complete
-            object graph resolution. Parameter retained for backward compatibility.
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
-        config: 可选 ParseConfig 实例，集中管理解析参数。
-            传入 config 时，旧风格的个别参数仍可覆盖 config 中的值
-            （但不推荐混用）。
+        path: .uasset/.umap file path
+        tolerant: Enable tolerant mode (default True)
+        provider: Optional package provider (filesystem/pak/iostore)
+        force_full_parse: Force full parse for large blueprints (ignore lightweight threshold)
+        hex_view: Enable HexView byte offset tracking
+        config: Optional ParseConfig instance for centralized parameter management.
 
     Returns:
-        ParseResult 实例（含解析数据和错误信息）
+        ParseResult instance with parsed data and error information
     """
     # #448: Don't reconfigure logging when already inside a scoped session
     # (e.g. called from parse_single/parse_batch with an active log_config).
@@ -259,24 +250,6 @@ def parse_package(
     if not already_configured:
         configure_project_logging()
     result = ParseResult()
-
-    # 处理已废弃的 include_linker 参数
-    if include_linker is not True:
-        warnings.warn(
-            "include_linker 参数已废弃，linker 始终包含在结果中。"
-            "请移除该参数调用。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    # Handle deprecated aes_key inline (don't pass to core)
-    if aes_key is not None:
-        result.errors.append(
-            "Unsupported argument: aes_key. Pass the key "
-            "when constructing the Pak/IoStore reader and provider"
-        )
-        result.is_success = False
-        return result
 
     # 合并 config 和旧参数
     core_kwargs = _resolve_parse_params(config, {
@@ -307,25 +280,16 @@ def parse_uasset(
     asset_roots: Sequence[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # 已废弃，linker 始终创建
     force_full_parse: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
 ) -> ParseResult:
     """
-    兼容入口：解析 .uasset 文件。
+    Compatibility entry: parse a .uasset file.
 
     Internally delegates to parse_package(), so sidecar payload discovery is
     shared with .umap/package parsing.
     """
-    # 处理已废弃的 include_linker 参数
-    if include_linker is not True:
-        warnings.warn(
-            "include_linker 参数已废弃，linker 始终包含在结果中。"
-            "请移除该参数调用。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
 
     return parse_package(
         path,

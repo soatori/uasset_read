@@ -45,15 +45,3 @@ def test_parse_package_with_mappings():
         pytest.skip("No test assets found")
     result = parse_package(str(test_assets[0]))
     assert "mappings_path" not in result.metadata  # 未提供 mappings
-
-
-def test_parse_package_aes_key_rejection():
-    """parse_package 应拒绝 aes_key 参数。"""
-    from uasset_read.parse_uasset import parse_package
-    from uasset_read.exceptions import ParseError
-    test_assets = list(Path("tests/assets").glob("*.uasset"))[:1]
-    if not test_assets:
-        pytest.skip("No test assets found")
-    result = parse_package(str(test_assets[0]), aes_key=b"\x00" * 16)
-    assert not result.is_success
-    assert "aes_key" in result.errors[0]
