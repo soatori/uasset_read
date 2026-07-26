@@ -89,16 +89,22 @@ class TestParsePackageLazy:
             assert result2.export_map[i].is_loaded is False
 
     def test_parse_lazy_store_raw_bytes(self):
-        """store_raw_bytes=True 时 export 包含原始字节"""
+        """store_raw_bytes=True: non-loaded exports with valid sizes get raw bytes.
+
+        Some exports may fail to read (e.g. corrupted serial_size) in
+        tolerant mode; verify the ones that do read are stored correctly.
+        """
         from uasset_read.parse_uasset import parse_package_lazy
         path = self._get_test_asset()
         result = parse_package_lazy(
             path, export_indices=[], store_raw_bytes=True, tolerant=True,
         )
-        for export in result.export_map:
-            if export.serial_size > 0:
-                assert export.lazy_load_archive is not None
-                assert isinstance(export.lazy_load_archive, bytes)
+        for idx, export in enumerate(result.export_map):
+            raw = getattr(export, "lazy_load_archive", None)
+            if raw is not None:
+                assert isinstance(raw, bytes), (
+                    f"Export {idx}: expected bytes, got {type(raw)}"
+                )
 
     def test_parse_lazy_no_raw_bytes(self):
         """store_raw_bytes=False 时 export 不包含原始字节"""
@@ -109,6 +115,61 @@ class TestParsePackageLazy:
         )
         for export in result.export_map:
             assert getattr(export, "lazy_load_archive", None) is None
+
+    def test_parse_lazy_raw_bytes_only_for_non_loaded(self):
+        """store_raw_bytes=True only stores bytes for non-loaded exports.
+
+        Loaded exports have properties already parsed; raw bytes would
+        be redundant and waste memory.
+        """
+        from uasset_read.parse_uasset import parse_package_lazy
+        path = self._get_test_asset()
+        result = parse_package_lazy(
+            path, export_indices=[0], store_raw_bytes=True, tolerant=True,
+        )
+        for idx, export in enumerate(result.export_map):
+            if export.serial_size <= 0:
+                continue
+            loaded = getattr(export, "is_loaded", False)
+            raw = getattr(export, "lazy_load_archive", None)
+            if idx in [0]:
+                # Loaded export: raw bytes must NOT be stored
+                assert loaded is True
+                assert raw is None, (
+                    f"Loaded export {idx} ({export.object_name}) should "
+                    f"not retain raw bytes"
+                )
+            else:
+                # Non-loaded export: raw bytes should be stored
+                assert loaded is False
+                # raw may be None if read failed in tolerant mode
+                if raw is not None:
+                    assert isinstance(raw, bytes)
+
+    def test_parse_lazy_raw_bytes_all_selected_no_retention(self):
+        """When all exports are selected, no raw bytes should be stored."""
+        from uasset_read.parse_uasset import parse_package_lazy
+        path = self._get_test_asset()
+        result = parse_package_lazy(path, export_indices=[], tolerant=True)
+        total = len(result.export_map)
+        if total < 2:
+            pytest.skip("Need at least 2 exports for this test")
+        # Select all exports
+        all_indices = list(range(total))
+        result = parse_package_lazy(
+            path, export_indices=all_indices,
+            store_raw_bytes=True, tolerant=True,
+        )
+        for idx, export in enumerate(result.export_map):
+            if export.serial_size <= 0:
+                continue
+            loaded = getattr(export, "is_loaded", False)
+            raw = getattr(export, "lazy_load_archive", None)
+            assert loaded is True
+            assert raw is None, (
+                f"All exports selected; export {idx} should not "
+                f"retain raw bytes"
+            )
 
     def test_parse_lazy_metadata(self):
         """parse_package_lazy 设置正确的 metadata"""

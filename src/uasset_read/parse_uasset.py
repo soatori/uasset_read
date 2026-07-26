@@ -447,7 +447,9 @@ def parse_package_lazy(
         export_indices: export indices whose bodies should be parsed;
             None means skip all bodies
         store_raw_bytes: whether to store raw export bytes in
-            lazy_load_archive (default False to save memory)
+            lazy_load_archive for non-loaded exports only
+            (default False to save memory). Loaded exports have
+            properties already parsed; raw bytes are redundant.
         tolerant: tolerant mode
         provider: optional package provider
         mappings_path: type mappings file path
@@ -589,12 +591,14 @@ def parse_package_lazy(
                     if export.properties:
                         export.transforms = extract_component_transforms(export.properties)
 
-                # Store raw bytes (optional)
-                if store_raw_bytes and export.serial_size > 0:
+                # Store raw bytes for non-loaded exports only (optional).
+                # Loaded exports have properties parsed; raw bytes are
+                # redundant and would waste memory.
+                if store_raw_bytes and idx not in parse_indices and export.serial_size > 0:
                     try:
                         archive.seek(export.serial_offset)
                         setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
-                    except (OSError, struct.error) as e:
+                    except (OSError, struct.error, ParseError) as e:
                         if not tolerant:
                             raise ParseError(
                                 f"Failed to read raw bytes for export {export.object_name}: {e}"
