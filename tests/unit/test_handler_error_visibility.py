@@ -21,6 +21,7 @@ from uasset_read.parsers.asset_types import (
     AssetTypeHandler,
     HandlerClassAdapter,
 )
+from uasset_read.models.fallback import ExportParseStatus as ParseStatus
 
 
 # ---------------------------------------------------------------------------
@@ -442,3 +443,199 @@ class TestRegistryErrorVisibility:
         handler = self._registry.find_handler("FailingResultClass")
         assert handler is not None
         assert handler.handler_name == "FailingResultHandler"
+
+
+# ---------------------------------------------------------------------------
+# Asset type handler error visibility (issue #479)
+# ---------------------------------------------------------------------------
+
+class TestAssetTypeHandlerErrorVisibilityIssue479:
+    """Asset type handlers must log at WARNING level and not crash on bad data.
+
+    Issue #479: Multiple asset type handlers silently swallow parse errors.
+    They catch (KeyError, TypeError, ValueError) and either only append to
+    context.warnings (which may not exist) or just log at debug level.
+    Callers cannot detect that parsing failed.
+    """
+
+    def _make_export_with_properties(self, properties):
+        """Create a mock export with the given properties list."""
+        export = MagicMock()
+        export.object_name = "TestExport"
+        export.properties = properties
+        return export
+
+    def _make_context(self):
+        """Create a mock context with warnings list."""
+        context = MagicMock()
+        context.warnings = []
+        return context
+
+    def _make_context_without_warnings(self):
+        """Create a mock context without warnings attribute."""
+        context = MagicMock(spec=[])  # no attributes
+        return context
+
+    def _make_bad_property(self, name, value):
+        """Create a mock property with name and value attributes."""
+        prop = MagicMock()
+        prop.name = name
+        prop.value = value
+        return prop
+
+    @pytest.mark.parametrize(
+        "handler_module,handler_cls_name,handler_name",
+        [
+            ("uasset_read.parsers.asset_types.anim_blueprint", "AnimBlueprintHandler", "AnimBlueprint"),
+            ("uasset_read.parsers.asset_types.anim_sequence", "AnimSequenceHandler", "AnimSequence"),
+            ("uasset_read.parsers.asset_types.anim_montage", "AnimMontageHandler", "AnimMontage"),
+            ("uasset_read.parsers.asset_types.movie_scene", "MovieSceneHandler", "MovieScene"),
+        ],
+    )
+    def test_handler_logs_warning_on_error(self, handler_module, handler_cls_name, handler_name, caplog):
+        """Handler should log at WARNING level when parsing fails."""
+        import importlib
+        from unittest.mock import patch
+
+        module = importlib.import_module(handler_module)
+        handler_cls = getattr(module, handler_cls_name)
+        handler = handler_cls()
+
+        export = self._make_export_with_properties([
+            self._make_bad_property("SomeProperty", "value"),
+        ])
+        context = self._make_context()
+
+        # Patch build_properties_dict to raise TypeError, simulating corrupted data
+        with patch(f"{handler_module}.build_properties_dict", side_effect=TypeError("corrupt property data")):
+            with caplog.at_level(logging.WARNING, logger="uasset_read.parsers.asset_types"):
+                result = handler.handle(export, context)
+
+        # Primary criterion: warning was logged (not silently swallowed)
+        assert any(record.levelno == logging.WARNING for record in caplog.records), \
+            f"No WARNING logged by {handler_name}"
+        assert any(handler_name in record.message for record in caplog.records), \
+            f"WARNING from {handler_name} not found in log records"
+
+    @pytest.mark.parametrize(
+        "handler_module,handler_cls_name,handler_name",
+        [
+            ("uasset_read.parsers.asset_types.anim_blueprint", "AnimBlueprintHandler", "AnimBlueprint"),
+            ("uasset_read.parsers.asset_types.anim_sequence", "AnimSequenceHandler", "AnimSequence"),
+            ("uasset_read.parsers.asset_types.anim_montage", "AnimMontageHandler", "AnimMontage"),
+            ("uasset_read.parsers.asset_types.movie_scene", "MovieSceneHandler", "MovieScene"),
+        ],
+    )
+    def test_handler_appends_to_context_warnings(self, handler_module, handler_cls_name, handler_name):
+        """Handler should append to context.warnings when available."""
+        import importlib
+        from unittest.mock import patch
+
+        module = importlib.import_module(handler_module)
+        handler_cls = getattr(module, handler_cls_name)
+        handler = handler_cls()
+
+        export = self._make_export_with_properties([
+            self._make_bad_property("SomeProperty", "value"),
+        ])
+        context = self._make_context()
+
+        with patch(f"{handler_module}.build_properties_dict", side_effect=TypeError("corrupt property data")):
+            result = handler.handle(export, context)
+
+        assert result == ParseStatus.PARTIAL
+        assert len(context.warnings) == 1
+        assert handler_name in context.warnings[0]
+
+    @pytest.mark.parametrize(
+        "handler_module,handler_cls_name",
+        [
+            ("uasset_read.parsers.asset_types.anim_blueprint", "AnimBlueprintHandler"),
+            ("uasset_read.parsers.asset_types.anim_sequence", "AnimSequenceHandler"),
+            ("uasset_read.parsers.asset_types.anim_montage", "AnimMontageHandler"),
+            ("uasset_read.parsers.asset_types.movie_scene", "MovieSceneHandler"),
+        ],
+    )
+    def test_handler_does_not_crash_without_context_warnings(self, handler_module, handler_cls_name):
+        """Handler should not crash when context lacks warnings attribute."""
+        import importlib
+        from unittest.mock import patch
+
+        module = importlib.import_module(handler_module)
+        handler_cls = getattr(module, handler_cls_name)
+        handler = handler_cls()
+
+        export = self._make_export_with_properties([
+            self._make_bad_property("SomeProperty", "value"),
+        ])
+        context = self._make_context_without_warnings()
+
+        with patch(f"{handler_module}.build_properties_dict", side_effect=TypeError("corrupt property data")):
+            # Should not raise
+            result = handler.handle(export, context)
+        assert result == ParseStatus.PARTIAL
+
+    @pytest.mark.parametrize(
+        "handler_module,handler_cls_name",
+        [
+            ("uasset_read.parsers.asset_types.movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler"),
+            ("uasset_read.parsers.asset_types.movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler"),
+        ],
+    )
+    def test_control_rig_handler_logs_warning_on_error(self, handler_module, handler_cls_name, caplog):
+        """ControlRig handler should log at WARNING level when parsing fails."""
+        import importlib
+        from unittest.mock import patch
+
+        module = importlib.import_module(handler_module)
+        handler_cls = getattr(module, handler_cls_name)
+        handler = handler_cls()
+
+        export = self._make_export_with_properties([
+            self._make_bad_property("SomeProperty", "value"),
+        ])
+        context = self._make_context()
+
+        with patch(f"{handler_module}.build_properties_dict", side_effect=TypeError("corrupt property data")):
+            with caplog.at_level(logging.WARNING, logger="uasset_read.parsers.asset_types"):
+                result = handler.handle(export, context)
+
+        assert result == ParseStatus.PARTIAL
+        assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+    def test_curve_table_logs_warning_on_struct_error(self, caplog):
+        """CurveTable _read_rich_curve should log at WARNING on struct error."""
+        from uasset_read.parsers.asset_types.curve_table import _read_rich_curve
+
+        # Create a mock archive that raises struct.error
+        archive = MagicMock()
+        archive.read_i32.side_effect = struct.error("unpack requires a buffer of 4 bytes")
+        archive.total_size.return_value = 1024
+
+        name_map = ["TestRow"]
+
+        with caplog.at_level(logging.WARNING, logger="uasset_read.parsers.asset_types"):
+            result = _read_rich_curve(archive, 0, name_map)
+
+        assert result["type"] == "RichCurve"
+        assert result["keys"] == []
+        assert any("RichCurve parse failed" in record.message for record in caplog.records)
+        assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+    def test_curve_table_simple_logs_warning_on_struct_error(self, caplog):
+        """CurveTable _read_simple_curve should log at WARNING on struct error."""
+        from uasset_read.parsers.asset_types.curve_table import _read_simple_curve
+
+        archive = MagicMock()
+        archive.read_i32.side_effect = struct.error("unpack requires a buffer of 4 bytes")
+        archive.total_size.return_value = 1024
+
+        name_map = ["TestRow"]
+
+        with caplog.at_level(logging.WARNING, logger="uasset_read.parsers.asset_types"):
+            result = _read_simple_curve(archive, 0, name_map)
+
+        assert result["type"] == "SimpleCurve"
+        assert result["keys"] == []
+        assert any("SimpleCurve parse failed" in record.message for record in caplog.records)
+        assert any(record.levelno == logging.WARNING for record in caplog.records)

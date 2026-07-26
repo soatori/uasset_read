@@ -570,3 +570,118 @@ class TestMarkdownRendererTruncationVisibility:
         result = renderer.render(ir, options)
         assert "dropped" in result.lower()
         assert "5" in result
+
+
+class TestCleanupArchiveDiagnosticsPropagation:
+    """Verify _cleanup_archive_diagnostics propagates dropped counts to ParseResult."""
+
+    def test_archive_diagnostics_dropped_count_propagates(self):
+        """Archive diagnostics_dropped_count is added to result."""
+        from unittest.mock import MagicMock
+        from uasset_read.parse_uasset import _cleanup_archive_diagnostics
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        archive = MagicMock()
+        archive.get_diagnostics.return_value = []
+        archive.is_hex_view_enabled.return_value = False
+        archive.diagnostics_dropped_count = 42
+        archive.hex_view_dropped_count = 0
+
+        _cleanup_archive_diagnostics(result, archive)
+
+        assert result.diagnostics_dropped_count == 42
+
+    def test_archive_hex_view_dropped_count_propagates(self):
+        """Archive hex_view_dropped_count is added to result."""
+        from unittest.mock import MagicMock
+        from uasset_read.parse_uasset import _cleanup_archive_diagnostics
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        archive = MagicMock()
+        archive.get_diagnostics.return_value = []
+        archive.is_hex_view_enabled.return_value = False
+        archive.diagnostics_dropped_count = 0
+        archive.hex_view_dropped_count = 17
+
+        _cleanup_archive_diagnostics(result, archive)
+
+        assert result.hex_view_dropped_count == 17
+
+    def test_both_counts_propagate(self):
+        """Both diagnostics and hex_view dropped counts propagate together."""
+        from unittest.mock import MagicMock
+        from uasset_read.parse_uasset import _cleanup_archive_diagnostics
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        archive = MagicMock()
+        archive.get_diagnostics.return_value = []
+        archive.is_hex_view_enabled.return_value = False
+        archive.diagnostics_dropped_count = 10
+        archive.hex_view_dropped_count = 25
+
+        _cleanup_archive_diagnostics(result, archive)
+
+        assert result.diagnostics_dropped_count == 10
+        assert result.hex_view_dropped_count == 25
+
+    def test_counts_accumulate_with_existing(self):
+        """Dropped counts accumulate with any pre-existing result counts."""
+        from unittest.mock import MagicMock
+        from uasset_read.parse_uasset import _cleanup_archive_diagnostics
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        result.diagnostics_dropped_count = 5  # pre-existing from linker
+        archive = MagicMock()
+        archive.get_diagnostics.return_value = []
+        archive.is_hex_view_enabled.return_value = False
+        archive.diagnostics_dropped_count = 3
+        archive.hex_view_dropped_count = 8
+
+        _cleanup_archive_diagnostics(result, archive)
+
+        assert result.diagnostics_dropped_count == 8  # 5 + 3
+        assert result.hex_view_dropped_count == 8
+
+    def test_linker_diagnostics_dropped_count_propagates(self):
+        """Linker _diagnostics.dropped_count is aggregated into result."""
+        from unittest.mock import MagicMock
+        from uasset_read.parse_uasset import _cleanup_archive_diagnostics
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        linker = MagicMock()
+        linker.diagnostics = [MagicMock()]  # non-empty to trigger extend()
+        linker._diagnostics = MagicMock()
+        linker._diagnostics.dropped_count = 12
+        result.linker = linker
+
+        archive = MagicMock()
+        archive.get_diagnostics.return_value = []
+        archive.is_hex_view_enabled.return_value = False
+        archive.diagnostics_dropped_count = 0
+        archive.hex_view_dropped_count = 0
+
+        _cleanup_archive_diagnostics(result, archive)
+
+        assert result.diagnostics_dropped_count == 12
+
+    def test_result_dropped_counts_reflect_in_ir(self):
+        """ParseResult dropped counts flow into IR diagnostics_data and debug."""
+        from uasset_read.ir_builder import build_package_ir
+        from uasset_read.models.result import ParseResult
+
+        result = ParseResult()
+        result.diagnostics_dropped_count = 30
+        result.hex_view_dropped_count = 50
+        result.name_map = ["Test"]
+
+        ir = build_package_ir(result)
+
+        assert ir.diagnostics_data is not None
+        assert ir.diagnostics_data.diagnostics_truncated_count == 30
+        assert ir.debug is not None
+        assert ir.debug.hex_view_truncated_count == 50

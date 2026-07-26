@@ -98,7 +98,7 @@ def _build_recovery_data(
 class TestPropertyTagRecovery:
     def test_property_tag_recovery_valid_and_known_type(self):
         """恢复扫描应支持大偏移并接受已知属性类型。"""
-        assert _MAX_RECOVERY_SCAN == 512
+        assert _MAX_RECOVERY_SCAN == 2048
 
         expected_types = {"IntProperty", "FloatProperty", "StrProperty", "BoolProperty",
                           "StructProperty", "ObjectProperty", "ArrayProperty", "MapProperty"}

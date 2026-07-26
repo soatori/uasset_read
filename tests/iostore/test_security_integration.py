@@ -1,4 +1,4 @@
-"""IoStore 安全集成测试 — 覆盖恶意输入场景。"""
+"""IoStore security integration tests -- covering adversarial input scenarios."""
 import io
 import struct
 import pytest
@@ -8,22 +8,22 @@ from uasset_read.exceptions import ParseError
 
 
 class TestIoStoreResourceLimits:
-    """头部资源限制集成测试。"""
+    """Header resource limit integration tests."""
 
     def test_max_toc_entries_respected(self):
-        """toc_entry_count = 10 应正常处理（小规模边界值）。"""
+        """toc_entry_count = 10 should be handled normally (small-scale boundary value)."""
         reader = IoStoreReader.__new__(IoStoreReader)
         reader._utoc_file = io.BytesIO(b"\x00" * 12 * 10)
         reader._header = type("H", (), {"toc_entry_count": 10, "version": 8})()
         reader._chunk_ids = []
-        # 不应抛异常
+        # Should not throw exception
         reader._load_chunk_ids()
         assert len(reader._chunk_ids) == 10
 
     def test_toc_entries_exactly_at_limit(self):
-        """toc_entry_count 恰好等于 100 应通过。"""
+        """toc_entry_count exactly equal to 100 should pass."""
         reader = IoStoreReader.__new__(IoStoreReader)
-        # 需要足够的数据
+        # Need sufficient data
         data = b"\x00" * (12 * 100)
         reader._utoc_file = io.BytesIO(data)
         reader._header = type("H", (), {"toc_entry_count": 100, "version": 8})()
@@ -32,7 +32,7 @@ class TestIoStoreResourceLimits:
         assert len(reader._chunk_ids) == 100
 
     def test_partition_count_limit(self):
-        """分区数超过上限应拒绝。"""
+        """Partition count exceeding limit should be rejected."""
         reader = IoStoreReader.__new__(IoStoreReader)
         reader._header = type("H", (), {
             "partition_count": MAX_PARTITION_COUNT + 1,
@@ -47,12 +47,12 @@ class TestIoStoreResourceLimits:
 
 
 class TestDirectoryIndexSafety:
-    """目录索引安全测试。"""
+    """Directory index safety tests."""
 
     def _build_sibling_cycle_index(self) -> bytes:
-        """构造 sibling 链环的目录索引 buffer。
+        """Build a directory index buffer with a sibling chain cycle.
 
-        两个目录 entry 互相指向对方为 next_sibling，形成环。
+        Two directory entries point to each other as next_sibling, forming a cycle.
         """
         buf = bytearray()
 
@@ -71,7 +71,7 @@ class TestDirectoryIndexSafety:
         # entry 1
         buf += struct.pack("<i", 1)    # name
         buf += struct.pack("<i", -1)   # first_child
-        buf += struct.pack("<i", 0)    # next_sibling = 0 → 环！
+        buf += struct.pack("<i", 0)    # next_sibling = 0 -> cycle!
         buf += struct.pack("<i", -1)   # first_file
 
         # file_entries
@@ -86,7 +86,7 @@ class TestDirectoryIndexSafety:
         return bytes(buf)
 
     def test_sibling_chain_cycle(self):
-        """sibling 链环应被检测。"""
+        """sibling chain cycle should be detected."""
         reader = IoStoreReader.__new__(IoStoreReader)
         reader._directory_index_buffer = self._build_sibling_cycle_index()
         reader._header = None
@@ -99,25 +99,25 @@ class TestDirectoryIndexSafety:
             reader._parse_directory_index()
 
     def test_file_chain_cycle(self):
-        """文件链环应被检测。"""
+        """file chain cycle should be detected."""
         buf = bytearray()
         # mount_point
         mount = b"/\x00"
         buf += struct.pack("<i", len(mount))
         buf += mount
 
-        # directory_entries: 1 entry（无子目录）
+        # directory_entries: 1 entry (no subdirectories)
         buf += struct.pack("<i", 1)
         buf += struct.pack("<i", -1)  # name = invalid
         buf += struct.pack("<i", -1)  # first_child_entry = invalid
         buf += struct.pack("<i", -1)  # next_sibling_entry = invalid
         buf += struct.pack("<i", 0)   # first_file_entry = 0
 
-        # file_entries: 1 entry，next_file_entry = 0（环）
+        # file_entries: 1 entry, next_file_entry = 0 (cycle)
         buf += struct.pack("<i", 1)
         buf += struct.pack("<i", 0)   # name
         buf += struct.pack("<i", 0)   # user_data
-        buf += struct.pack("<i", 0)   # next_file_entry = 0 → 环！
+        buf += struct.pack("<i", 0)   # next_file_entry = 0 -> cycle!
 
         # string_table
         buf += struct.pack("<i", 1)
@@ -137,17 +137,17 @@ class TestDirectoryIndexSafety:
             reader._parse_directory_index()
 
     def test_self_referencing_child_cycle(self):
-        """first_child_entry 自引用环应被检测。"""
+        """first_child_entry self-referencing cycle should be detected."""
         buf = bytearray()
         # mount_point
         mount = b"/\x00"
         buf += struct.pack("<i", len(mount))
         buf += mount
 
-        # directory_entries: 1 entry，first_child = 自身
+        # directory_entries: 1 entry, first_child = self
         buf += struct.pack("<i", 1)
         buf += struct.pack("<i", 0)   # name
-        buf += struct.pack("<i", 0)   # first_child = 0 → 自引用！
+        buf += struct.pack("<i", 0)   # first_child = 0 -> self-referencing!
         buf += struct.pack("<i", -1)  # next_sibling = invalid
         buf += struct.pack("<i", -1)  # first_file = invalid
 

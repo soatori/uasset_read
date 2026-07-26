@@ -4,7 +4,8 @@ Task #485: trigger_events is list[dict], not dict.
 """
 import pytest
 from uasset_read.models.ir import (
-    BlueprintIR, ExportIR, GraphIR, NodeIR, PackageHeaderIR, PackageIR, PinIR,
+    BlueprintIR, DecompiledFunctionIR, ExportIR, GraphIR, NodeIR,
+    PackageHeaderIR, PackageIR, PinIR,
 )
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.renderers.markdown_renderer import MarkdownRenderer
@@ -139,3 +140,37 @@ class TestMarkdownInputActions:
         md = renderer.render(pkg, RenderOptions())
 
         assert "Input Action Bindings" not in md
+
+    def test_fallback_via_decompiled_functions(self):
+        """Fallback path uses decompiled function names, not graph nodes."""
+        decompiled = [
+            DecompiledFunctionIR(
+                name="InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2",
+                signature="void InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2()",
+                cpp_code="",
+                parameters=[],
+                return_type="void",
+            ),
+        ]
+        header = PackageHeaderIR(
+            package_name="TestPkg",
+            package_class="BlueprintGeneratedClass",
+            package_flags=0,
+            total_export_count=0,
+            total_import_count=0,
+            ue_version="5.4",
+        )
+        pkg = PackageIR(
+            header=header,
+            name_map=(),
+            imports=[],
+            exports=[],
+            linker=None,
+            blueprint=BlueprintIR(parent_class=None),
+            decompiled_functions=decompiled,
+        )
+        renderer = MarkdownRenderer()
+        md = renderer.render(pkg, RenderOptions())
+
+        assert "### Input Action Bindings" in md
+        assert "IA_Jump" in md

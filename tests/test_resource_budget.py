@@ -329,3 +329,143 @@ class TestBudgetCreationInPipeline:
                 bytes_per_entry=16,
                 budget=budget,
             )
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: budget tracks cumulative decompression across multiple stages
+# ---------------------------------------------------------------------------
+
+class TestBudgetCumulativeTracking:
+    """Prove that budget accumulates across reserve calls and rejects overflow."""
+
+    def test_multiple_reserves_accumulate_and_reject(self):
+        """Budget accumulates decompressed bytes and rejects when total is exceeded."""
+        budget = ResourceBudget(AllocationLimits(
+            max_single_read_bytes=1024 * 1024,
+            max_decompressed_block_bytes=1024 * 1024,
+            max_total_decompressed_bytes=3000,
+        ))
+        budget.reserve(1024, "stage_a")
+        budget.reserve(1024, "stage_b")
+        assert budget.total_decompressed == 2048
+        with pytest.raises(MemoryLimitExceeded):
+            budget.reserve(1024, "stage_c")
+
+    def test_checkpoint_and_rollback_restores_budget(self):
+        """Budget checkpoint/rollback restores decompressed byte counter."""
+        budget = ResourceBudget(AllocationLimits(
+            max_single_read_bytes=1024 * 1024,
+            max_decompressed_block_bytes=1024 * 1024,
+            max_total_decompressed_bytes=8192,
+        ))
+        budget.reserve(1024, "before_checkpoint")
+        budget.checkpoint()
+        budget.reserve(1024, "after_checkpoint")
+        assert budget.total_decompressed == 2048
+        budget.rollback()
+        assert budget.total_decompressed == 1024
+        # Can now reserve more
+        budget.reserve(1024, "after_rollback")
+        assert budget.total_decompressed == 2048
+
+
+# ---------------------------------------------------------------------------
+# Adversarial: budget flows through pipeline stages
+# ---------------------------------------------------------------------------
+
+class TestBudgetPassThrough:
+    """Prove that budget is passed from entry points to sub-stages."""
+
+    def test_init_parse_env_passes_budget_to_bundle(self):
+        """_init_parse_env passes budget to open_package_bundle."""
+        from unittest.mock import patch, MagicMock
+        from uasset_read.pipeline.stages import _init_parse_env
+        from uasset_read.models.result import ParseResult
+
+        budget = ResourceBudget()
+        result = ParseResult()
+        bundle_kwargs = {}
+
+        archive_mock = MagicMock()
+        archive_mock.get_mmap_info.return_value = {"used": False, "warning": None}
+        bundle_mock = MagicMock()
+        bundle_mock.open_archive.return_value = archive_mock
+
+        def spy_bundle(path, **kwargs):
+            bundle_kwargs.update(kwargs)
+            return bundle_mock
+
+        with patch("uasset_read.pipeline.stages.open_package_bundle", spy_bundle):
+            _init_parse_env(
+                "test.uasset", result, tolerant=True,
+                provider=None, mappings_path=None,
+                game=None, check_aes_key=None, hex_view=False,
+                budget=budget,
+            )
+
+        assert "budget" in bundle_kwargs
+        assert bundle_kwargs["budget"] is budget
+
+    def test_init_parse_env_passes_budget_to_mappings(self):
+        """_init_parse_env passes budget to TypeMappingsProvider.from_file."""
+        from unittest.mock import patch, MagicMock
+        from uasset_read.pipeline.stages import _init_parse_env
+        from uasset_read.models.result import ParseResult
+
+        budget = ResourceBudget()
+        result = ParseResult()
+        called_kwargs = {}
+
+        def spy_from_file(path, **kwargs):
+            called_kwargs.update(kwargs)
+            raise FileNotFoundError("expected")
+
+        mock_tp = MagicMock()
+        mock_tp.from_file = spy_from_file
+        with patch("uasset_read.mappings.TypeMappingsProvider", mock_tp):
+            try:
+                _init_parse_env(
+                    "nonexistent.uasset", result, tolerant=True,
+                    provider=None, mappings_path="/fake.mappings",
+                    game=None, check_aes_key=None, hex_view=False,
+                    budget=budget,
+                )
+            except (FileNotFoundError, Exception):
+                pass
+
+        assert "budget" in called_kwargs
+        assert called_kwargs["budget"] is budget
+
+    def test_decompression_chunked_reserves_budget(self):
+        """decompress_block_chunked reserves uncompressed_size from budget."""
+        from uasset_read.pak.decompress import decompress_block_chunked
+
+        budget = ResourceBudget(AllocationLimits(
+            max_single_read_bytes=1024 * 1024,
+            max_decompressed_block_bytes=256,
+            max_total_decompressed_bytes=1024 * 1024,
+        ))
+        # Should raise because uncompressed_size (300) > max_decompressed_block (256)
+        with pytest.raises(MemoryLimitExceeded):
+            list(decompress_block_chunked(
+                b"\x00" * 10,
+                uncompressed_size=300,
+                method="Zlib",
+                budget=budget,
+            ))
+
+    def test_decompression_chunked_no_budget_skips_check(self):
+        """decompress_block_chunked skips reserve when budget is None."""
+        import zlib
+        from uasset_read.pak.decompress import decompress_block_chunked
+
+        original = b"hello world test data"
+        compressed = zlib.compress(original)
+        chunks = list(decompress_block_chunked(
+            compressed,
+            uncompressed_size=len(original),
+            method="Zlib",
+            budget=None,
+        ))
+        result = b"".join(chunks)
+        assert result == original

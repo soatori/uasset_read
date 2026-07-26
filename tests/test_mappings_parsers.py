@@ -424,5 +424,5 @@ class TestTypeMappingsProvider:
         assert isinstance(provider.mappings, TypeMappings)
 
     def test_unsupported_extension_raises(self):
-        with pytest.raises(ParseError, match="unsupported mapping file type|unsupported.*mapping"):
+        with pytest.raises(ParseError, match="[Uu]nsupported mapping file type|[Uu]nsupported.*mapping"):
             TypeMappingsProvider.from_file("test.xyz")

@@ -5,6 +5,7 @@ When AssetRegistryData is malformed/truncated, the result status must be
 """
 import struct
 from io import BytesIO
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -218,3 +219,98 @@ class TestStatusSurfaceDegradation:
 
         status = _result_status(FakeResult())
         assert status == "success"
+
+
+class _MinimalSummary:
+    """Summary-like object with only the fields _read_secondary_tables checks.
+
+    Excludes depends_offset, preload_dependency_count, soft_package_references_count,
+    soft_object_paths_count so those branches are skipped.
+    """
+
+    def __init__(self):
+        self.package_flags = 0
+        self.asset_registry_data_offset = 1
+        self.file_version_ue4 = 510
+
+
+class _FakeResult:
+    """Lightweight result with real warnings list for _result_status inspection."""
+
+    def __init__(self, summary):
+        self.is_success = True
+        self.errors = []
+        self.warnings = []
+        self.metadata = {}
+        self.diagnostics = []
+        self.summary = summary
+        self.asset_registry_data = None
+        self.name_map = []
+        self.soft_package_references = []
+        self.soft_object_path_list = []
+
+
+class TestPipelineCorruptionSurface:
+    """Verify that _read_secondary_tables surfaces corrupted AssetRegistryData."""
+
+    def _run(self, registry_return_value):
+        """Helper: call _read_secondary_tables with the given return value."""
+        from uasset_read.pipeline.stages import _read_secondary_tables
+
+        summary = _MinimalSummary()
+        result = _FakeResult(summary)
+        archive = MagicMock()
+
+        with patch(
+            "uasset_read.pipeline.stages.read_asset_registry_data",
+            return_value=registry_return_value,
+        ):
+            _read_secondary_tables(
+                archive, result, tolerant=True, linker=None,
+                mappings_provider=None, path="test.uasset",
+                memory_monitor=MagicMock(),
+            )
+        return result
+
+    def test_corrupted_registry_adds_warning(self):
+        """When parser returns corrupted=True, _read_secondary_tables adds a warning."""
+        corrupted_data = AssetRegistryData()
+        corrupted_data.corrupted = True
+        corrupted_data.objects = []
+
+        result = self._run(corrupted_data)
+
+        corruption_warnings = [w for w in result.warnings if "corrupted" in w]
+        assert len(corruption_warnings) == 1
+        assert "AssetRegistryData is corrupted" in corruption_warnings[0]
+        assert result.asset_registry_data is corrupted_data
+
+    def test_absent_registry_no_warning(self):
+        """When parser returns None (section absent), no corruption warning is added."""
+        result = self._run(None)
+
+        corruption_warnings = [w for w in result.warnings if "corrupted" in w]
+        assert len(corruption_warnings) == 0
+        assert result.asset_registry_data is None
+
+    def test_clean_registry_no_warning(self):
+        """When parser returns valid data, no corruption warning is added."""
+        clean_data = AssetRegistryData()
+        clean_data.corrupted = False
+        clean_data.objects = []
+
+        result = self._run(clean_data)
+
+        corruption_warnings = [w for w in result.warnings if "corrupted" in w]
+        assert len(corruption_warnings) == 0
+        assert result.asset_registry_data is clean_data
+
+    def test_corrupted_registry_yields_partial_status(self):
+        """End-to-end: corrupted AssetRegistryData results in 'partial' status."""
+        corrupted_data = AssetRegistryData()
+        corrupted_data.corrupted = True
+        corrupted_data.objects = []
+
+        result = self._run(corrupted_data)
+
+        assert _result_status(result) == "partial"
