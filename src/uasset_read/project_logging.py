@@ -9,6 +9,7 @@ import time
 from functools import wraps
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
@@ -28,6 +29,39 @@ _original_level: int | None = None
 _original_propagate: bool | None = None
 _log_asset: ContextVar[str] = ContextVar("uasset_read_log_asset", default="-")
 _log_stage: ContextVar[str] = ContextVar("uasset_read_log_stage", default="-")
+_last_parse_result: ContextVar[Any] = ContextVar("uasset_read_last_parse_result", default=None)
+
+
+def set_last_parse_result(result: Any) -> None:
+    """Store the most recent parse result for summary logging."""
+    _last_parse_result.set(result)
+
+
+def get_last_parse_result() -> Any:
+    """Retrieve the most recent parse result."""
+    return _last_parse_result.get()
+
+
+def _count_export_categories(result: Any) -> dict[str, int]:
+    """Count export-level parse categories for summary logging."""
+    export_map = getattr(result, "export_map", None) or []
+    fallback_count = 0
+    opaque_count = 0
+    recovery_count = 0
+    for exp in export_map:
+        prs = getattr(exp, "parse_status", None)
+        if prs in ("opaque", "partial_metadata"):
+            opaque_count += 1
+        fr = getattr(exp, "fallback_reason", None)
+        if fr:
+            fallback_count += 1
+            if "recovery" in fr or "serial_scan" in fr:
+                recovery_count += 1
+    return {
+        "fallback": fallback_count,
+        "opaque": opaque_count,
+        "recovery": recovery_count,
+    }
 
 
 class _LogContextFilter(logging.Filter):
@@ -48,7 +82,7 @@ class _RepeatedDebugFilter(logging.Filter):
         super().__init__()
         self.limit = repeat_limit
         self.repeat_limit = repeat_limit
-        self.counts: dict[tuple[str, str, str], int] = {}
+        self.counts: dict[tuple[str, str, str, str], int] = {}
         self.message_counts: dict[str, int] = {}
         self.suppressed_count: int = 0
         self.suppress_levels = suppress_levels or {logging.DEBUG}
@@ -61,7 +95,7 @@ class _RepeatedDebugFilter(logging.Filter):
         # 按 suppress_levels 抑制重复消息，按原始模板分组
         if self.limit <= 0 or record.levelno not in self.suppress_levels:
             return True
-        key = (_log_asset.get(), record.name, str(record.msg))
+        key = (_log_asset.get(), _log_stage.get(), record.name, str(record.msg))
         count = self.counts.get(key, 0) + 1
         self.counts[key] = count
         if count > self.limit:
@@ -69,10 +103,10 @@ class _RepeatedDebugFilter(logging.Filter):
             return False
         return True
 
-    def summaries(self) -> list[tuple[str, str, str, int]]:
+    def summaries(self) -> list[tuple[str, str, str, str, int]]:
         return [
-            (asset, logger_name, template, count - self.limit)
-            for (asset, logger_name, template), count in self.counts.items()
+            (asset, stage, logger_name, template, count - self.limit)
+            for (asset, stage, logger_name, template), count in self.counts.items()
             if count > self.limit
         ]
 
@@ -151,8 +185,8 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
             continue
         for installed_filter in handler.filters:
             if isinstance(installed_filter, _RepeatedDebugFilter):
-                for asset, logger_name, template, suppressed in installed_filter.summaries():
-                    with log_context(asset=asset):
+                for asset, stage, logger_name, template, suppressed in installed_filter.summaries():
+                    with log_context(asset=asset, stage=stage):
                         package_logger.info(
                             "Repeated message summary logger=%s template=%s suppressed=%d",
                             logger_name,
@@ -306,11 +340,42 @@ def scoped_project_logging(func):
                     raise
                 finally:
                     duration_ms = (time.monotonic() - started_at) * 1000
-                    logging.getLogger(_LOGGER_NAME).info(
-                        "asset_end status=%s duration_ms=%.1f",
-                        status,
-                        duration_ms,
-                    )
+                    log = logging.getLogger(_LOGGER_NAME)
+                    result = get_last_parse_result()
+                    if result is not None:
+                        parse_status = getattr(result, "status", "unknown")
+                        export_count = len(getattr(result, "export_map", None) or [])
+                        diagnostics_count = (
+                            len(getattr(result, "diagnostics", None) or [])
+                            + getattr(result, "diagnostics_dropped_count", 0)
+                        )
+                        error_count = len(getattr(result, "errors", None) or [])
+                        warning_count = len(getattr(result, "warnings", None) or [])
+                        cats = _count_export_categories(result)
+                        log.info(
+                            "asset_end status=%s parse_status=%s duration_ms=%.1f "
+                            "exports=%d diagnostics=%d fallback=%d opaque=%d "
+                            "recovery=%d errors=%d warnings=%d",
+                            status, parse_status, duration_ms,
+                            export_count, diagnostics_count,
+                            cats["fallback"], cats["opaque"], cats["recovery"],
+                            error_count, warning_count,
+                        )
+                        log.info(
+                            "asset_summary input=%s parse_status=%s duration_ms=%.1f "
+                            "exports=%d diagnostics=%d fallback=%d opaque=%d "
+                            "recovery=%d errors=%d warnings=%d",
+                            path_value or "-", parse_status, duration_ms,
+                            export_count, diagnostics_count,
+                            cats["fallback"], cats["opaque"], cats["recovery"],
+                            error_count, warning_count,
+                        )
+                    else:
+                        log.info(
+                            "asset_end status=%s duration_ms=%.1f",
+                            status,
+                            duration_ms,
+                        )
 
     return wrapper
 

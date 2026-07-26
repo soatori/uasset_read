@@ -19,8 +19,10 @@ from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 from uasset_read.project_logging import (
     configure_project_logging,
     current_log_run_id,
+    log_context,
     new_log_run_id,
     scoped_project_logging,
+    set_last_parse_result,
 )
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
@@ -58,6 +60,31 @@ def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
     )
 
 
+def _log_asset_summary(name: str, result: object) -> None:
+    """Emit per-asset summary line within a batch loop."""
+    from uasset_read.project_logging import _count_export_categories
+
+    parse_status = getattr(result, "status", "unknown")
+    export_count = len(getattr(result, "export_map", None) or [])
+    diagnostics_count = (
+        len(getattr(result, "diagnostics", None) or [])
+        + getattr(result, "diagnostics_dropped_count", 0)
+    )
+    error_count = len(getattr(result, "errors", None) or [])
+    warning_count = len(getattr(result, "warnings", None) or [])
+    cats = _count_export_categories(result)
+    with log_context(asset=name):
+        logging.getLogger(__name__).info(
+            "asset_summary input=%s parse_status=%s "
+            "exports=%d diagnostics=%d fallback=%d opaque=%d "
+            "recovery=%d errors=%d warnings=%d",
+            name, parse_status,
+            export_count, diagnostics_count,
+            cats["fallback"], cats["opaque"], cats["recovery"],
+            error_count, warning_count,
+        )
+
+
 def _configure_logging(
     *,
     log_config: LogConfig | None = None,
@@ -87,8 +114,9 @@ def _configure_logging(
         }.items())
         if has_legacy:
             warnings.warn(
-                "同时传入 log_config 和旧风格日志参数，旧参数将被忽略。"
-                "请统一使用 LogConfig。",
+                "Both log_config and legacy log parameters provided; "
+                "legacy parameters will be ignored. "
+                "Use LogConfig instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -243,6 +271,8 @@ def _parse_and_render(
 
     parse_single 和 parse_batch 共用的核心逻辑。
     """
+    set_last_parse_result(None)
+
     linker_formats = {"json"}
 
     if format in linker_formats:
@@ -272,6 +302,8 @@ def _parse_and_render(
             config=parse_config,
         )
 
+    set_last_parse_result(result)
+
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
@@ -285,7 +317,7 @@ def _parse_and_render(
             if hasattr(export, "_uclass_native_fields"):
                 delattr(export, "_uclass_native_fields")
     except Exception:
-        logger.debug("批量清理临时大对象失败", exc_info=True)
+        logger.debug("Failed to clean up temporary large objects in batch", exc_info=True)
 
     renderer = get_renderer(format)
     options = RenderOptions(
@@ -527,7 +559,10 @@ def parse_batch(
                 parse_config=parse_config,
             )
 
-            # 检查 partial 状态并追踪原因
+            # Per-asset summary for non-isolated batch assets
+            _log_asset_summary(pf.name, parse_result)
+
+            # Check partial status and track reasons
             from uasset_read.models.status import _result_status, PARTIAL_STATUSES
             status = _result_status(parse_result)
             if status == "partial":
@@ -680,7 +715,7 @@ def _diff_to(
             force_full_parse=force_full_parse,
         )
     except Exception as e:
-        text1 = f"[解析错误] {Path(file_path1).name}: {e}"
+        text1 = f"[Parse error] {Path(file_path1).name}: {e}"
 
     # 解析文件 2
     try:
@@ -694,7 +729,7 @@ def _diff_to(
             force_full_parse=force_full_parse,
         )
     except Exception as e:
-        text2 = f"[解析错误] {Path(file_path2).name}: {e}"
+        text2 = f"[Parse error] {Path(file_path2).name}: {e}"
 
     name1 = Path(file_path1).name
     name2 = Path(file_path2).name
@@ -716,4 +751,4 @@ def _diff_to(
         wrote_any = True
 
     if not wrote_any:
-        writer.write(f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n")
+        writer.write(f"--- a/{name1}\n+++ b/{name2}\n(no differences)\n")
