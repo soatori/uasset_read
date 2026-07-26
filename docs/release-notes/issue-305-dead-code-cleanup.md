@@ -78,7 +78,7 @@ previously active implementations.
 
 ## Verification contract
 
-`tests/test_dead_code_contract.py` rejects future same-scope rebinding and the
+`tests/temp/test_dead_code_contract.py` rejects future same-scope rebinding and the
 reintroduction of the removed shadow-only struct helper family. The release
 acceptance loop also imports every discoverable package module, exercises the
 lazy asset-handler registry, runs the full test suite and lint/compile checks,
