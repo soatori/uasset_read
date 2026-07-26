@@ -27,7 +27,7 @@ from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
-from uasset_read.project_logging import scoped_project_logging, configure_project_logging
+from uasset_read.project_logging import scoped_project_logging, configure_project_logging, current_log_run_id
 from uasset_read.parse_stages import (
     _record_parse_stage_error,
     _init_parse_env,
@@ -246,7 +246,11 @@ def parse_package(
     Returns:
         ParseResult 实例（含解析数据和错误信息）
     """
-    configure_project_logging()
+    # #448: Don't reconfigure logging when already inside a scoped session
+    # (e.g. called from parse_single/parse_batch with an active log_config).
+    already_configured = log_config is None and current_log_run_id() is not None
+    if not already_configured:
+        configure_project_logging()
     result = ParseResult()
 
     # 处理已废弃的 include_linker 参数
@@ -364,6 +368,12 @@ def parse_uasset_with_linker(
     from uasset_read.link.result import LinkerParseResult
 
     result = LinkerParseResult()
+
+    # #448: Don't reconfigure logging when already inside a scoped session
+    # (e.g. called from parse_single/parse_batch with an active log_config).
+    already_configured = log_config is None and current_log_run_id() is not None
+    if not already_configured:
+        configure_project_logging()
 
     def extra_linker_setup(linker, res):
         res.all_objects = linker._import_objects + linker._export_objects
