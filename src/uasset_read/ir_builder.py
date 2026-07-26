@@ -632,7 +632,17 @@ def _build_node_ir(node) -> NodeIR:
         node_data = getattr(node, "node_data", None)
         if isinstance(node_data, dict):
             input_action_path = node_data.get("input_action_path")
-            trigger_events = node_data.get("trigger_events", [])
+            raw_triggers = node_data.get("trigger_events", {})
+            # Convert dict[str, str] from serializer to list[dict] per IR contract
+            if isinstance(raw_triggers, dict):
+                trigger_events = [
+                    {"trigger_name": k, "event_type": v}
+                    for k, v in raw_triggers.items()
+                ]
+            elif isinstance(raw_triggers, list):
+                trigger_events = raw_triggers
+            else:
+                trigger_events = []
             event_type = node_data.get("event_type")
 
         # 从节点属性提取（备用路径）

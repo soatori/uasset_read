@@ -55,7 +55,7 @@ def _format_transforms(transforms) -> str:
     return " ".join(parts) if parts else "Identity"
 
 
-def _collect_input_actions(ir) -> list[tuple[str, dict]]:
+def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
     """从 PackageIR 收集 Enhanced Input Action 绑定。
 
     支持两种来源：
@@ -73,7 +73,7 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
                 if node.node_class == "K2Node_EnhancedInputAction":
                     # 使用新字段
                     path = node.input_action_path or "?"
-                    triggers = node.trigger_events or {}
+                    triggers = node.trigger_events or []
 
                     if path not in seen_actions:
                         seen_actions.add(path)
@@ -199,7 +199,9 @@ class MarkdownRenderer(IRenderer):
                     action_name = _escape_md_cell(path)
                     if triggers:
                         first_trigger = True
-                        for trigger_name, event_type in triggers.items():
+                        for trigger in triggers:
+                            trigger_name = trigger.get("trigger_name", "?")
+                            event_type = trigger.get("event_type", "?")
                             if first_trigger:
                                 lines.append(f"| {action_name} | {trigger_name} | {event_type} |")
                                 first_trigger = False
