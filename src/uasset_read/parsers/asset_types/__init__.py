@@ -2,7 +2,9 @@
 
 所有 handler 返回 opaque partial metadata（原始字节样本），
 不尝试解析 UE 标准 Serialize 布局。
-在模块加载时自动注册为 ClassHandler，集成到主解析管线。
+
+Handlers are bootstrapped deterministically by ``get_class_registry()``
+on first access — no module-level side effects required.
 
 支持两种注册方式：
 1. 手动注册：通过 register_asset_type_handlers() 显式注册
@@ -355,7 +357,3 @@ def register_asset_type_handlers() -> None:
     for handler in handlers:
         registry.register(handler)
         logger.debug("Registered asset type handler: %s", handler.handler_name)
-
-
-# 模块加载时自动注册
-register_asset_type_handlers()

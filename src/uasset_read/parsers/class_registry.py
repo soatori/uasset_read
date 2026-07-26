@@ -122,17 +122,43 @@ class ClassHandlerRegistry:
 
 # 全局默认 registry 实例
 _default_registry: Optional[ClassHandlerRegistry] = None
+_bootstrap_done: bool = False
+
+
+def _bootstrap_handlers() -> None:
+    """Register all built-in asset type handlers into the default registry.
+
+    Uses a lazy import of ``uasset_read.parsers.asset_types`` to avoid
+    circular-import issues while keeping registration deterministic.
+    Called exactly once on the first ``get_class_registry()`` invocation.
+    """
+    global _bootstrap_done
+    if _bootstrap_done:
+        return
+    _bootstrap_done = True
+    try:
+        from uasset_read.parsers.asset_types import register_asset_type_handlers
+        register_asset_type_handlers()
+    except Exception:
+        logger.debug("Failed to bootstrap asset type handlers", exc_info=True)
 
 
 def get_class_registry() -> ClassHandlerRegistry:
-    """获取全局默认 class handler registry。"""
+    """获取全局默认 class handler registry。
+
+    The first call automatically bootstraps all built-in asset type
+    handlers, so callers never need to import or call
+    ``register_asset_type_handlers()`` themselves.
+    """
     global _default_registry
     if _default_registry is None:
         _default_registry = ClassHandlerRegistry()
+        _bootstrap_handlers()
     return _default_registry
 
 
 def reset_class_registry() -> None:
     """重置全局默认 registry（测试用）。"""
-    global _default_registry
+    global _default_registry, _bootstrap_done
     _default_registry = None
+    _bootstrap_done = False

@@ -1,8 +1,7 @@
 # tests/unit/test_opaque_handlers.py
-"""Opaque handler 注册路径和返回值测试"""
+"""Opaque handler registration path and return value tests."""
 import pytest
 from unittest.mock import MagicMock
-from uasset_read.parsers.asset_types import register_asset_type_handlers
 from uasset_read.parsers.class_registry import get_class_registry
 
 
@@ -29,10 +28,12 @@ OPAQUE_CLASSES = [
 
 @pytest.fixture(autouse=True)
 def _fresh_registry():
-    """每个测试前重置 registry"""
+    """Reset and re-bootstrap registry before each test."""
     from uasset_read.parsers.class_registry import reset_class_registry
     reset_class_registry()
-    register_asset_type_handlers()
+    # get_class_registry() triggers deterministic bootstrap — no explicit
+    # register_asset_type_handlers() call needed.
+    get_class_registry()
     yield
     reset_class_registry()
 

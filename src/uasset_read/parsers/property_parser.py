@@ -338,8 +338,6 @@ def _try_asset_type_handler(
     将已解析的 properties 列表设置到 export.properties，
     以便 handler 提取结构化元数据。
     """
-    # 延迟导入确保 handlers 在首次调用时注册
-    from uasset_read.parsers import asset_types  # noqa: F401
     from uasset_read.parsers.class_registry import get_class_registry
 
     registry = get_class_registry()
