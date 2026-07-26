@@ -10,16 +10,17 @@
 
 The historical #305 inventory is not a deletion checklist. This pass rebuilt the
 candidate matrix from the current source tree, tests, public exports, CLI paths,
-module imports, and lazy/reflection-sensitive registration paths. It removes only
-bindings that Python had already replaced at module or class creation time.
+module imports, and lazy/reflection-sensitive registration paths. AST-identical
+duplicate definitions were collapsed to one canonical copy. Distinct definitions
+were removed only when Python had already replaced them at module creation time.
 
-| Module | Removed unreachable source | Canonical implementation retained |
+| Module | Collapsed or removed source | Canonical implementation retained |
 | --- | --- | --- |
-| `blueprint.variable_extractor` | Earlier definitions of `_resolve_parent_class`, `_extract_and_merge_functions`, `_extract_events_from_functions`, `_extract_interfaces_from_props`, and `_extract_interfaces` | The final definitions previously selected by normal Python module loading |
-| `ir_builder` | Earlier definitions of `_build_export_raw_ir`, `_build_export_diagnostics`, `_build_resolved_depends_map`, `_infer_bytecode_confidence`, `_extract_parameters_from_signature`, `_bind_implementations`, and `_bind_single_implementation`; the earlier duplicate `_EVENT_ALIASES` binding | The final definitions and alias table previously selected by normal Python module loading |
+| `blueprint.variable_extractor` | AST-identical duplicate definitions of `_extract_and_merge_functions`, `_extract_events_from_functions`, `_extract_interfaces_from_props`, and `_extract_interfaces`; the shadowed, behaviorally distinct `_resolve_parent_class` variant | One canonical definition per name, preserving the bindings used at runtime before cleanup |
+| `ir_builder` | AST-identical duplicate definitions of `_build_export_raw_ir`, `_build_export_diagnostics`, `_build_resolved_depends_map`, `_infer_bytecode_confidence`, `_extract_parameters_from_signature`, `_bind_implementations`, and `_bind_single_implementation`, plus the duplicate `_EVENT_ALIASES` table | One equivalent canonical definition and alias table per name |
 | `parsers.binary_or_native_handlers` | The earlier inline `_parse_struct_binary` implementation | The registered `_STRUCT_DECODERS` implementation bound in `BINARY_OR_NATIVE_HANDLERS` |
 | `parsers.property_types` | The earlier table-driven `_try_fast_path_struct`, `_FAST_PATH_STRUCT_HANDLERS`, `_make_fp_vec3`, and its `_fp_*` helper family | The branch-based `_try_fast_path_struct` previously used by `parse_struct_property` |
-| `renderers.markdown_renderer` | The earlier identical `MarkdownRenderer._render_export_properties` definition | The final identical method previously selected when the class was created |
+| `renderers.markdown_renderer` | AST-identical duplicate `MarkdownRenderer._render_export_properties` definitions | One equivalent canonical method |
 | `cli` | The no-op `--tolerant` flag, whose value was never read | Tolerant mode remains the default; `--strict` remains the single switch that changes it |
 
 This removes 16 shadowed same-scope bindings, the private helper family that

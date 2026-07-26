@@ -452,14 +452,26 @@ class IoStoreReader:
             block = self._compression_blocks[first_block_index] if first_block_index < len(self._compression_blocks) else None
             if block and block.compression_method_index == 0:
                 # No compression, read directly
-                reader = self._ucas_files[partition_index]
                 if self._header and self._header.is_encrypted:
+                    physical_offset = block.offset + (offset % compression_block_size)
+                    if self._header.partition_size > 0:
+                        block_partition_index = int(physical_offset // self._header.partition_size)
+                        block_partition_offset = physical_offset % self._header.partition_size
+                    else:
+                        block_partition_index = 0
+                        block_partition_offset = physical_offset
+                    if block_partition_index >= len(self._ucas_files):
+                        raise ParseError(
+                            f"IoStore partition index {block_partition_index} out of range "
+                            f"(total {len(self._ucas_files)} partitions)"
+                        )
                     return self._read_encrypted_range(
-                        reader,
-                        partition_offset,
+                        self._ucas_files[block_partition_index],
+                        block_partition_offset,
                         length,
                         "IoStore uncompressed block read insufficient",
                     )
+                reader = self._ucas_files[partition_index]
                 reader.seek(partition_offset)
                 raw = reader.read(length)
                 if len(raw) < length:

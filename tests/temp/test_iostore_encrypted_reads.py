@@ -1,4 +1,4 @@
-"""Regression coverage for AES-aligned encrypted IoStore range reads."""
+"""Verification coverage for AES-aligned encrypted IoStore range reads."""
 
 from __future__ import annotations
 
@@ -51,8 +51,24 @@ def test_encrypted_uncompressed_partitions_aligns_range_before_decryption(monkey
 def test_encrypted_single_uncompressed_block_aligns_range_before_decryption(monkeypatch):
     plaintext = bytes(range(32))
     ciphertext = b"c" * 32
-    block = SimpleNamespace(compression_method_index=0)
+    block = SimpleNamespace(offset=0, compression_method_index=0)
     reader = _make_reader(ciphertext, compression_blocks=[block])
+    decrypted_inputs = _assert_aligned_decryption(monkeypatch, plaintext, ciphertext)
+
+    assert reader._read_data(5, 19) == plaintext[5:24]
+    assert decrypted_inputs == [ciphertext]
+
+
+def test_encrypted_single_uncompressed_block_uses_physical_block_range(monkeypatch):
+    plaintext = bytes(range(32))
+    ciphertext = b"p" * 32
+    block = SimpleNamespace(offset=80, compression_method_index=0)
+    reader = _make_reader(b"l" * 64, compression_blocks=[block])
+    reader._header.partition_size = 64
+    reader._ucas_files = [
+        BytesIO(b"l" * 64),
+        BytesIO(b"x" * 16 + ciphertext + b"y" * 16),
+    ]
     decrypted_inputs = _assert_aligned_decryption(monkeypatch, plaintext, ciphertext)
 
     assert reader._read_data(5, 19) == plaintext[5:24]

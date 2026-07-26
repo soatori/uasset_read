@@ -1,4 +1,4 @@
-"""Structural contracts for the verified dead-code cleanup."""
+"""Verification contracts for the dead-code cleanup."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import uasset_read.cli as cli_module
 from uasset_read.cli import create_parser
 
 
-SOURCE_ROOT = Path(__file__).parents[1] / "src" / "uasset_read"
+SOURCE_ROOT = Path(__file__).parents[2] / "src" / "uasset_read"
 
 
 def _iter_scopes(
