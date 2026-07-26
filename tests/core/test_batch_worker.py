@@ -148,6 +148,22 @@ def test_parse_batch_works_in_script_without_main_guard(tmp_path) -> None:
     assert completed.stdout.strip() == "1 0"
 
 
+def test_subprocess_adapter_close_calls_popen_close():
+    """_SubprocessAdapter.close() must call Popen.close() to release file descriptors."""
+    from unittest.mock import MagicMock
+    from uasset_read.batch_worker import _SubprocessAdapter
+
+    mock_popen = MagicMock()
+    mock_popen.pid = 12345
+    mock_popen.stderr = MagicMock()
+    mock_popen.stderr.closed = False
+
+    adapter = _SubprocessAdapter(mock_popen)
+    adapter.close()
+
+    mock_popen.close.assert_called_once()
+
+
 class TestParseConfigSerialization:
     """#453: ParseConfig must survive JSON roundtrip in batch worker protocol."""
 

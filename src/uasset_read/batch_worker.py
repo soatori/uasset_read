@@ -336,7 +336,15 @@ class _SubprocessAdapter:
         if self._stderr_drain is not None:
             self._stderr_drain.close()
             self._stderr_drain = None
-        self._process = None
+        if self._process is not None:
+            # Popen.close() is POSIX-only; on Windows clean up pipes manually
+            if hasattr(self._process, "close"):
+                self._process.close()
+            else:
+                for stream in (self._process.stdin, self._process.stdout):
+                    if stream is not None and not stream.closed:
+                        stream.close()
+            self._process = None
 
 
 class _ResultFile:
