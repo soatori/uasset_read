@@ -533,42 +533,6 @@ def _build_export_raw_ir(export) -> ExportRawIR:
         guid=_safe_str(getattr(export, "guid", "")) or "",
     )
 
-def _build_export_diagnostics(export) -> dict | None:
-    """Build diagnostic info from ObjectExport.transforms."""
-    transforms = getattr(export, "transforms", None) or {}
-    if not transforms:
-        return None
-    return dict(transforms)
-
-def _build_export_raw_ir(export) -> ExportRawIR:
-    """Build UE raw export table fields from ObjectExport."""
-
-    def _pkg_index_raw(pi) -> int:
-        """Extract raw integer value from PackageIndex."""
-        if pi is None:
-            return 0
-        return getattr(pi, "index", 0)
-
-    return ExportRawIR(
-        class_index=_pkg_index_raw(getattr(export, "class_index", None)),
-        super_index=_pkg_index_raw(getattr(export, "super_index", None)),
-        outer_index=_pkg_index_raw(getattr(export, "outer_index", None)),
-        template_index=_pkg_index_raw(getattr(export, "template_index", None)),
-        object_flags=getattr(export, "object_flags", 0) or 0,
-        serial_offset=getattr(export, "serial_offset", 0) or 0,
-        package_flags=getattr(export, "package_flags", 0) or 0,
-        b_forced_export=bool(getattr(export, "b_forced_export", False)),
-        b_not_for_client=bool(getattr(export, "b_not_for_client", False)),
-        b_not_for_server=bool(getattr(export, "b_not_for_server", False)),
-        b_is_inherited_instance=bool(getattr(export, "b_is_inherited_instance", False)),
-        b_not_always_loaded_for_editor_game=bool(getattr(export, "b_not_always_loaded_for_editor_game", True)),
-        b_is_asset=bool(getattr(export, "b_is_asset", False)),
-        b_generate_public_hash=bool(getattr(export, "b_generate_public_hash", False)),
-        script_serialization_start_offset=getattr(export, "script_serialization_start_offset", 0) or 0,
-        script_serialization_end_offset=getattr(export, "script_serialization_end_offset", 0) or 0,
-        guid=_safe_str(getattr(export, "guid", "")) or "",
-    )
-
 
 def _build_export_diagnostics(export) -> dict | None:
     """Build diagnostic info from ObjectExport.transforms."""
@@ -778,28 +742,6 @@ def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
         resolved.append(row)
     return resolved
 
-def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
-    """Resolve raw PackageIndex values in DependsMap to human-readable paths.
-
-    Returns:
-        2D list: outer level indexed by export, inner level is a list of [{index, path}].
-    """
-    if not result.summary:
-        return []
-    raw_map = getattr(result.summary, "depends_map", None) or []
-    if not raw_map:
-        return []
-
-    resolved: list[list[dict]] = []
-    for dep_indices in raw_map:
-        row: list[dict] = []
-        for idx in dep_indices:
-            pkg_idx = PackageIndex(idx)
-            path = _resolve_package_index(result, pkg_idx)
-            row.append({"index": idx, "path": path})
-        resolved.append(row)
-    return resolved
-
 
 def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
     linker = result.linker
@@ -936,20 +878,6 @@ def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
         return "fallback"
     return "verified"
 
-def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
-    """Infer bytecode confidence level from fallback_reasons.
-
-    Confidence levels (high to low):
-    - verified: Standard UStruct extraction path, no fallback
-    - fallback: BPGC extraction (normal degradation for cooked assets)
-    - heuristic: Serialized byte stream heuristic scan recovery (lowest confidence)
-    """
-    if "serial_scan_recovery" in fallback_reasons:
-        return "heuristic"
-    if "bpgc_bytecode_extraction" in fallback_reasons:
-        return "fallback"
-    return "verified"
-
 
 def _extract_return_type(signature: str) -> str:
     """Extract return type from a C++ function signature.
@@ -963,38 +891,6 @@ def _extract_return_type(signature: str) -> str:
     if space_idx > 0:
         return signature[:space_idx]
     return "void"
-
-def _extract_parameters_from_signature(signature: str) -> list[dict]:
-    """Parse parameter list from a C++ function signature.
-
-    Signature format: "ReturnType FuncName(param1, param2, ...)"
-    Returns: [{"name": "param1", "type": "int32"}, ...]
-    """
-    if not signature:
-        return []
-
-    # Extract the parameter portion inside parentheses
-    match = re.search(r'\(([^)]*)\)', signature)
-    if not match:
-        return []
-
-    params_str = match.group(1).strip()
-    if not params_str:
-        return []
-
-    params = []
-    for param in params_str.split(','):
-        param = param.strip()
-        if not param:
-            continue
-        # Separate type and name: "int32 EntryPoint" -> ("int32", "EntryPoint")
-        parts = param.rsplit(None, 1)
-        if len(parts) == 2:
-            params.append({"name": parts[1], "type": parts[0]})
-        elif len(parts) == 1:
-            # Type only, no name
-            params.append({"name": "", "type": parts[0]})
-    return params
 
 def _extract_parameters_from_signature(signature: str) -> list[dict]:
     """Parse parameter list from a C++ function signature.
@@ -1104,102 +1000,6 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
             is_save_game=getattr(var, "is_save_game", False),
         ))
     return variables
-
-# Event alias mapping: Blueprint event names -> common C++/Blueprint implementation function names
-_EVENT_ALIASES: dict[str, list[str]] = {
-    "ReceiveBeginPlay": ["BeginPlay"],
-    "ReceiveTick": ["Tick"],
-    "ReceiveEndPlay": ["EndPlay"],
-    "ReceiveAnyDamage": ["AnyDamage"],
-    "ReceivePointDamage": ["PointDamage"],
-    "ReceiveRadialDamage": ["RadialDamage"],
-    "ReceiveActorBeginOverlap": ["ActorBeginOverlap"],
-    "ReceiveActorEndOverlap": ["ActorEndOverlap"],
-    "ReceiveActorBeginCursorOver": ["ActorBeginCursorOver"],
-    "ReceiveActorEndCursorOver": ["ActorEndCursorOver"],
-    "ReceiveHit": ["Hit"],
-    "ReceiveDestroyed": ["Destroyed"],
-}
-
-def _bind_implementations(
-    blueprint: BlueprintIR,
-    decompiled: list[DecompiledFunctionIR],
-    function_graphs: list[dict],
-) -> None:
-    """Bind decompiled_functions and function_graphs to blueprint functions/events.
-
-    Matching priority:
-    1. Exact function name match with decompiled_functions.name
-    2. Event alias match (e.g. ReceiveBeginPlay -> BeginPlay)
-    3. function_graphs[].function_name match
-    4. No match -> implementation_status stays "missing"
-    """
-    # Build lookup indices
-    decompiled_by_name: dict[str, DecompiledFunctionIR] = {}
-    for f in decompiled:
-        if f.name not in decompiled_by_name:
-            decompiled_by_name[f.name] = f
-
-    graph_by_name: dict[str, dict] = {}
-    for g in function_graphs:
-        fn = g.get("function_name", "")
-        if fn and fn not in graph_by_name:
-            graph_by_name[fn] = g
-
-    for func in blueprint.functions:
-        _bind_single_implementation(func, decompiled_by_name, graph_by_name, [func.name])
-
-    for evt in blueprint.events:
-        candidates = [evt.name]
-        aliases = _EVENT_ALIASES.get(evt.name)
-        if aliases:
-            candidates.extend(aliases)
-        _bind_single_implementation(evt, decompiled_by_name, graph_by_name, candidates)
-
-def _bind_single_implementation(
-    item,
-    decompiled_by_name: dict[str, DecompiledFunctionIR],
-    graph_by_name: dict[str, dict],
-    candidate_names: list[str],
-) -> None:
-    """Bind implementation for a single function/event."""
-    matched_decompiled = None
-    match_count = 0
-
-    for name in candidate_names:
-        df = decompiled_by_name.get(name)
-        if df:
-            matched_decompiled = df
-            match_count += 1
-
-    if matched_decompiled:
-        item.implementation = {
-            "name": matched_decompiled.name,
-            "signature": matched_decompiled.signature,
-            "cpp_code": matched_decompiled.cpp_code,
-            "parameters": matched_decompiled.parameters,
-            "return_type": matched_decompiled.return_type,
-        }
-        if matched_decompiled.fallback_reasons:
-            item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
-        item.implementation_status = "decompiled"
-        if match_count > 1:
-            item.implementation["ambiguous_match"] = True
-        return
-
-    # Try function_graphs
-    for name in candidate_names:
-        fg = graph_by_name.get(name)
-        if fg:
-            item.function_graph = {
-                "function_name": fg.get("function_name", ""),
-                "graph_source": fg.get("graph_source", ""),
-                "entry_node_guid": fg.get("entry_node_guid", ""),
-            }
-            item.implementation_status = "graph_only"
-            return
-
-    # No match, keep "missing"
 
 # Event alias mapping: Blueprint event names -> common C++/Blueprint implementation function names
 _EVENT_ALIASES: dict[str, list[str]] = {

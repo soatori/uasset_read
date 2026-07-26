@@ -729,34 +729,6 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"| {name} | {prop_type} | {value_str} |")
         lines.append("")
 
-    def _render_export_properties(self, lines: list[str], export) -> None:
-        """Render export property table."""
-        # Filter editor properties (standard output level)
-        filtered_props = [
-            p for p in (export.properties or [])
-            if p.name not in EDITOR_PROPERTY_NAMES
-        ]
-        if not filtered_props:
-            return
-
-        lines.append("### Properties")
-        lines.append("")
-        lines.append("| Name | Type | Value |")
-        lines.append("|------|------|-------|")
-        for prop in filtered_props:
-            name = _escape_md_cell(prop.name)
-            prop_type = _escape_md_cell(prop.type)
-            value = prop.value if prop.value is not None else "null"
-
-            # Truncate long values
-            value_str = str(value)
-            if len(value_str) > 50:
-                value_str = value_str[:50]
-            value_str = _escape_md_cell(value_str)
-
-            lines.append(f"| {name} | {prop_type} | {value_str} |")
-        lines.append("")
-
     def _find_decompiled(self, ir: PackageIR, name: str):
         """Find decompiled function by function name."""
         for func in ir.decompiled_functions:
