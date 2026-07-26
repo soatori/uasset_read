@@ -88,7 +88,7 @@ class PakFileVersion(IntEnum):
 class ECompressionFlags(IntFlag):
     """Legacy compression flags (pre-version 8).
 
-    Version >= 8 使用 FPakInfo.compression_methods 表替代位标志。
+    Version >= 8 uses FPakInfo.compression_methods table instead of bit flags.
     """
     NONE = 0
     Zlib = 1
@@ -96,10 +96,6 @@ class ECompressionFlags(IntFlag):
     LZ4 = 4
     Zstd = 8
     Oodle = 16
-
-    # Deprecated flags (for reference only)
-    COMPRESS_ZLIB_DEPRECATED = 256
-    COMPRESS_GZIP_DEPRECATED = 512
 
 
 # ============================================================================

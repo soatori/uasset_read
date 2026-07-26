@@ -138,21 +138,6 @@ class TestParseBatch:
         assert "memory_limit" in result.failed[0][1]
         assert result.skipped == []
 
-    def test_parse_batch_warns_for_deprecated_skip_large_files(self, tmp_path):
-        test_file = tmp_path / "test.uasset"
-        test_file.write_bytes(b"\x00" * 100)
-
-        with patch(
-            "uasset_read.core.run_isolated_asset",
-            create=True,
-            return_value=SimpleNamespace(
-                succeeded=True,
-                output_path=str(tmp_path / "output" / "test.json"),
-                error="",
-            ),
-        ), pytest.warns(DeprecationWarning, match="skip_large_files"):
-            parse_batch(str(tmp_path), skip_large_files=True)
-
     def test_parse_batch_stops_launching_workers_at_system_memory_limit(
         self,
         tmp_path,

@@ -332,7 +332,6 @@ def parse_batch(
     force_full_parse: bool | None = None,
     hex_view: bool | None = None,
     max_memory_usage: float = 0.85,  # 内存使用上限（85%）
-    skip_large_files: bool | None = None,
     isolate_assets: bool | str = True,  # True/False/"auto"
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
@@ -398,13 +397,6 @@ def parse_batch(
 
     from uasset_read.memory_safety import MemoryPolicy, get_memory_stats
 
-    if skip_large_files is not None:
-        warnings.warn(
-            "skip_large_files is deprecated; file size now selects an isolated "
-            "worker resource tier",
-            DeprecationWarning,
-            stacklevel=2,
-        )
     if not 0.0 < max_memory_usage <= 1.0:
         raise ValueError("max_memory_usage must be in (0.0, 1.0]")
 
