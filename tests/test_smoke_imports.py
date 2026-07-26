@@ -55,7 +55,6 @@ MODULES = [
     "uasset_read.bounded_events",
     "uasset_read.versioning",
     "uasset_read.ir_builder",
-    "uasset_read.objects",
     "uasset_read.raw",
     "uasset_read.mappings",
     "uasset_read.batch_worker",

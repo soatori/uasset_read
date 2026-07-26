@@ -404,12 +404,4 @@ DEPRECATED_IMPORTS: dict[str, tuple[str, str]] = {
     # --- Bulk Data ---
     "FBulkDataHeader": (".bulk", "FBulkDataHeader"),
     "BulkDataFlags": (".bulk", "BulkDataFlags"),
-    # --- UObject 类型体系 ---
-    "UObject": (".objects", "UObject"),
-    "ObjectTypeRegistry": (".objects", "ObjectTypeRegistry"),
-    "UStaticMesh": (".objects.exports", "UStaticMesh"),
-    "USkeletalMesh": (".objects.exports", "USkeletalMesh"),
-    "UTexture2D": (".objects.exports", "UTexture2D"),
-    "UMaterial": (".objects.exports", "UMaterial"),
-    "UMaterialInstance": (".objects.exports", "UMaterialInstance"),
 }
