@@ -90,7 +90,7 @@ class TestVerifyImportsReturnDiscarded:
         errors = linker._verify_imports()
         assert isinstance(errors, list)
         assert len(errors) > 0
-        assert "outer_index 无法解析" in errors[0]
+        assert "outer_index unresolvable" in errors[0]
 
     def test_post_load_preserves_verify_imports_result(self):
         """post_load 保留 _verify_imports 的返回值 — 修复 #250 (M-21)。

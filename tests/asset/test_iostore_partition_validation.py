@@ -45,7 +45,7 @@ def _make_reader_with_compressed_block(
 def test_uncompressed_partition_short_read_raises():
     """分区读取不足时应抛 ParseError 而非静默返回短数据。"""
     reader = _make_reader_with_short_partition(b"ab", length=10)
-    with pytest.raises(ParseError, match="分区读取不足"):
+    with pytest.raises(ParseError, match="partition read insufficient"):
         reader._read_uncompressed_partitions(
             partition_index=0, partition_offset=0, length=10
         )
@@ -65,5 +65,5 @@ def test_compressed_block_short_read_raises():
     """压缩块读取不足时应抛 ParseError 而非静默返回短数据。"""
     # TOC 声称 compressed_size=52，但实际只有 2 字节
     reader = _make_reader_with_compressed_block(b"ab", uncompressed_size=10)
-    with pytest.raises(ParseError, match="压缩块.*读取不足"):
+    with pytest.raises(ParseError, match="compressed block.*read insufficient|compressed block.*insufficient read"):
         reader._read_data(0, 2)  # 读取 2 字节触发块加载

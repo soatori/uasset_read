@@ -302,7 +302,7 @@ class TestUsmapParser:
 
     def test_invalid_version_raises(self):
         data = struct.pack("<HBB II", 0x30C4, 99, 0, 0, 0)
-        with pytest.raises(ParseError, match="版本"):
+        with pytest.raises(ParseError, match="version"):
             UsmapParser(data)
 
 
@@ -424,5 +424,5 @@ class TestTypeMappingsProvider:
         assert isinstance(provider.mappings, TypeMappings)
 
     def test_unsupported_extension_raises(self):
-        with pytest.raises(ParseError, match="不支持的映射文件类型"):
+        with pytest.raises(ParseError, match="unsupported mapping file type|unsupported.*mapping"):
             TypeMappingsProvider.from_file("test.xyz")

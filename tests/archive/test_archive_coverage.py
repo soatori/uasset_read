@@ -296,15 +296,15 @@ class TestByteArchive:
         assert result == []
 
     def test_read_array_negative_count(self):
-        """负数元素数量 — 应抛出 ParseError。"""
+        """Negative element count — should raise ParseError."""
         ar = ByteArchive(b'')
-        with pytest.raises(ParseError, match="负数元素数量"):
+        with pytest.raises(ParseError, match="negative element count"):
             ar.read_array(-1, lambda a: a.read_i32())
 
     def test_read_array_exceeds_limit(self):
         """超出最大限制 — 应抛出 ParseError。"""
         ar = ByteArchive(b'')
-        with pytest.raises(ParseError, match="超过最大限制"):
+        with pytest.raises(ParseError, match="exceeds maximum limit"):
             ar.read_array(MAX_ARRAY_COUNT + 1, lambda a: a.read_i32())
 
     def test_read_bulk_array(self):
@@ -324,13 +324,13 @@ class TestByteArchive:
     def test_read_bulk_array_negative_element_size(self):
         """负数元素大小 — 应抛出 ParseError。"""
         ar = ByteArchive(b'')
-        with pytest.raises(ParseError, match="element_size.*负数"):
+        with pytest.raises(ParseError, match="element_size.*negative"):
             ar.read_bulk_array(-1, 10)
 
     def test_read_bulk_array_negative_element_count(self):
-        """负数元素数量 — 应抛出 ParseError。"""
+        """Negative element count — should raise ParseError."""
         ar = ByteArchive(b'')
-        with pytest.raises(ParseError, match="element_count.*负数"):
+        with pytest.raises(ParseError, match="element_count.*negative"):
             ar.read_bulk_array(4, -1)
 
     def test_validate_size_negative(self):

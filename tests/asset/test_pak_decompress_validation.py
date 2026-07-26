@@ -41,7 +41,7 @@ def test_short_read_raises():
     entry = _make_entry([block])
 
     stream = io.BytesIO(b"\x00" * 10)  # 只有 10 字节，期望 100
-    with pytest.raises(ParseError, match="读取不足"):
+    with pytest.raises(ParseError, match="read insufficient|insufficient read"):
         decompress_entry(stream, entry, compression_method="Zlib")
 
 
@@ -55,7 +55,7 @@ def test_uncompressed_short_read_raises():
     entry.compression_blocks = []
 
     stream = io.BytesIO(b"\x00" * 10)  # 只有 10 字节，期望 100
-    with pytest.raises(ParseError, match="非压缩短读"):
+    with pytest.raises(ParseError, match="uncompressed.*read|uncompressed short read"):
         decompress_entry(stream, entry, compression_method="None")
 
 
@@ -86,7 +86,7 @@ def test_uncompressed_encrypted_short_read_at_aligned_size():
     # 只提供 13 字节，不够 16 字节 aligned raw_size
     stream = io.BytesIO(b"x" * 13)
     dummy_key = b"\x00" * 32
-    with pytest.raises(ParseError, match="Pak 非压缩短读"):
+    with pytest.raises(ParseError, match="Pak uncompressed.*read|Pak uncompressed short read"):
         decompress_entry(stream, entry, compression_method="None", encryption_key=dummy_key)
 
 

@@ -44,7 +44,7 @@ class TestDecompressionBomb:
             compressed = gzip.compress(payload, compresslevel=9)
 
         # 声明 200KB 输出 → 比率 ≈ 200KB/10KB ≈ 20:1 > 10:1 上限
-        with pytest.raises(ParseError, match="压缩比"):
+        with pytest.raises(ParseError, match="compression ratio|ratio too high"):
             decompress_block(compressed, uncompressed_size=200 * 1024, method=method)
 
     def test_lz4_uses_uncompressed_size_param(self):

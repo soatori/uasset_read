@@ -150,7 +150,7 @@ class TestDecompressEntrySafety:
 
         fake_stream = io.BytesIO(b'\x00' * 0x10000)
 
-        with pytest.raises(ParseError, match="缺少 compression_blocks"):
+        with pytest.raises(ParseError, match="missing compression_blocks|missing.*compression_blocks"):
             decompress_entry(fake_stream, entry, compression_method="Zlib")
 
     def test_uncompressed_entry_empty_blocks_ok(self):

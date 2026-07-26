@@ -58,7 +58,7 @@ def test_zlib_extreme_ratio_raises():
     payload = b"\x00" * (10 * 1024 * 1024)
     compressed = zlib.compress(payload, 9)
     # 声明 100KB → 压缩比 > 100:1
-    with pytest.raises(ParseError, match="压缩比"):
+    with pytest.raises(ParseError, match="compression ratio|ratio too high"):
         decompress_block(compressed, uncompressed_size=100 * 1024, method="Zlib")
 
 

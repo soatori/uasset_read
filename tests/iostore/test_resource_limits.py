@@ -22,7 +22,7 @@ def test_toc_entry_count_too_large():
     })()
     reader._chunk_ids = []
 
-    with pytest.raises(ParseError, match="上限"):
+    with pytest.raises(ParseError, match="limit|exceeds"):
         reader._load_chunk_ids()
 
 
@@ -36,7 +36,7 @@ def test_compression_block_count_too_large():
     })()
     reader._compression_blocks = []
 
-    with pytest.raises(ParseError, match="上限"):
+    with pytest.raises(ParseError, match="limit|exceeds"):
         reader._load_compression_blocks()
 
 
@@ -52,7 +52,7 @@ def test_compression_method_buffer_too_large():
     })()
     reader._compression_methods = ["None"]
 
-    with pytest.raises(ParseError, match="上限"):
+    with pytest.raises(ParseError, match="limit|exceeds"):
         reader._load_compression_methods()
 
 
@@ -68,7 +68,7 @@ def test_directory_index_size_too_large():
     reader._read_options = 0xFF
     reader._directory_index_buffer = None
 
-    with pytest.raises(ParseError, match="上限"):
+    with pytest.raises(ParseError, match="limit|exceeds"):
         reader._load_directory_index()
 
 
@@ -82,7 +82,7 @@ def test_partition_count_too_large():
     reader._ucas_files = []
     reader.utoc_path = "dummy/path.utoc"
 
-    with pytest.raises(ParseError, match="上限"):
+    with pytest.raises(ParseError, match="limit|exceeds"):
         reader._open_container_files()
 
 

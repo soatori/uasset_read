@@ -52,7 +52,7 @@ def test_cyclic_directory_index_raises_parse_error():
     reader._mount_point = ""
 
     # 不应是 RecursionError
-    with pytest.raises(ParseError, match="环|cycle|深度"):
+    with pytest.raises(ParseError, match="cycle|depth"):
         reader._parse_directory_index()
 
 
@@ -91,7 +91,7 @@ def test_file_chain_cycle_raises():
     reader._directory_index = {}
     reader._mount_point = ""
 
-    with pytest.raises(ParseError, match="环|cycle|深度"):
+    with pytest.raises(ParseError, match="cycle|depth"):
         reader._parse_directory_index()
 
 
@@ -138,7 +138,7 @@ def test_sibling_cycle_raises_parse_error():
     reader._directory_index = {}
     reader._mount_point = ""
 
-    with pytest.raises(ParseError, match="环|cycle|深度"):
+    with pytest.raises(ParseError, match="cycle|depth"):
         reader._parse_directory_index()
 
 

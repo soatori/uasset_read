@@ -42,7 +42,7 @@ class TestIoStoreResourceLimits:
         reader.utoc_path = "/fake/test.utoc"
         reader._ucas_path_override = None
 
-        with pytest.raises(ParseError, match="上限"):
+        with pytest.raises(ParseError, match="limit|exceeds"):
             reader._open_container_files()
 
 
@@ -95,7 +95,7 @@ class TestDirectoryIndexSafety:
         reader._directory_index = {}
         reader._mount_point = ""
 
-        with pytest.raises(ParseError, match="环|cycle|深度"):
+        with pytest.raises(ParseError, match="cycle|depth"):
             reader._parse_directory_index()
 
     def test_file_chain_cycle(self):
@@ -133,7 +133,7 @@ class TestDirectoryIndexSafety:
         reader._directory_index = {}
         reader._mount_point = ""
 
-        with pytest.raises(ParseError, match="环|cycle|深度"):
+        with pytest.raises(ParseError, match="cycle|depth"):
             reader._parse_directory_index()
 
     def test_self_referencing_child_cycle(self):
@@ -168,5 +168,5 @@ class TestDirectoryIndexSafety:
         reader._directory_index = {}
         reader._mount_point = ""
 
-        with pytest.raises(ParseError, match="环|cycle|深度"):
+        with pytest.raises(ParseError, match="cycle|depth"):
             reader._parse_directory_index()
