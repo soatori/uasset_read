@@ -185,18 +185,21 @@ def parse_single(
         ParseError: 解析失败
         ValueError: 渲染格式不存在
     """
-    _configure_logging(
-        log_config=log_config,
-        log_level=log_level,
-        log_dir=log_dir,
-        log_enabled=log_enabled,
-        log_run_id=log_run_id,
-        log_keep_latest=log_keep_latest,
-        log_max_total_bytes=log_max_total_bytes,
-        log_cleanup=log_cleanup,
-        log_max_bytes=log_max_bytes,
-        log_backup_count=log_backup_count,
-    )
+    # #423: Skip reconfiguration when scoped_project_logging already owns the session.
+    already_configured = (log_config is None and current_log_run_id() is not None)
+    if not already_configured:
+        _configure_logging(
+            log_config=log_config,
+            log_level=log_level,
+            log_dir=log_dir,
+            log_enabled=log_enabled,
+            log_run_id=log_run_id,
+            log_keep_latest=log_keep_latest,
+            log_max_total_bytes=log_max_total_bytes,
+            log_cleanup=log_cleanup,
+            log_max_bytes=log_max_bytes,
+            log_backup_count=log_backup_count,
+        )
 
     output_str, _ = _parse_and_render(
         file_path,
@@ -383,18 +386,23 @@ def parse_batch(
         )
 
     active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
-    _configure_logging(
-        log_config=log_config,
-        log_level=log_level,
-        log_dir=log_dir,
-        log_enabled=log_enabled,
-        log_run_id=active_run_id,
-        log_keep_latest=log_keep_latest,
-        log_max_total_bytes=log_max_total_bytes,
-        log_cleanup=log_cleanup,
-        log_max_bytes=log_max_bytes,
-        log_backup_count=log_backup_count,
-    )
+    # #423: Skip reconfiguration when scoped_project_logging already owns the session.
+    # A non-None log_config means the caller set it explicitly (outside scoped wrapper).
+    # A set _configured_run_id means the scoped wrapper already configured logging.
+    already_configured = (log_config is None and current_log_run_id() is not None)
+    if not already_configured:
+        _configure_logging(
+            log_config=log_config,
+            log_level=log_level,
+            log_dir=log_dir,
+            log_enabled=log_enabled,
+            log_run_id=active_run_id,
+            log_keep_latest=log_keep_latest,
+            log_max_total_bytes=log_max_total_bytes,
+            log_cleanup=log_cleanup,
+            log_max_bytes=log_max_bytes,
+            log_backup_count=log_backup_count,
+        )
 
     from uasset_read.memory_safety import MemoryPolicy, get_memory_stats
 

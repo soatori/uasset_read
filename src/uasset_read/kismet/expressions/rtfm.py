@@ -34,7 +34,7 @@ class EX_AutoRtfmTransact(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmTransact:
         id_ = archive.read_i32()
         offset = archive.read_u32()
-        params = archive.read_expression_array(EExprToken.EX_EndOfScript)
+        params = archive.read_expression_array(EExprToken.EX_AutoRtfmStopTransact)
         return cls(Id=id_, CodeOffset=offset, Parameters=params)
 
 

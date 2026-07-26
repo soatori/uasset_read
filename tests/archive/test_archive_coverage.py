@@ -363,6 +363,24 @@ class TestByteArchive:
         ar._tolerant = True
         ar.validate_size(100 * 1024 * 1024 + 1, "test")  # 不应抛异常
 
+    def test_validate_size_large_property_small_file_strict(self):
+        """#302: property size > file_size // 10 but < max_reasonable_cap accepted in strict.
+
+        Before #302, a file_size // 10 heuristic rejected real properties
+        that occupied a substantial share of a small package.
+        """
+        # 20KB file, property size 3KB — exceeds file_size//10 (2KB) but is legitimate
+        data = b'\x00' * (20 * 1024)
+        ar = ByteArchive(data)
+        # Should NOT raise — 3KB is well within max_reasonable_cap (100MB)
+        assert ar.validate_size(3 * 1024, "CurveMetaData") is True
+
+    def test_validate_size_large_property_small_file_tolerant(self):
+        """#302: same scenario in tolerant mode returns True."""
+        data = b'\x00' * (20 * 1024)
+        ar = ByteArchive(data, tolerant=True)
+        assert ar.validate_size(3 * 1024, "CurveMetaData") is True
+
     def test_check_remaining_sufficient(self):
         """check_remaining 剩余足够 — 返回 True。"""
         data = b'\x01\x02\x03\x04\x05'

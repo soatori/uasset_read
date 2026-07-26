@@ -16,7 +16,7 @@ from uasset_read.constants import (
     get_max_reasonable, MAX_REASONABLE_CAP,
 )
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
-from uasset_read.bounded_events import BoundedEventBuffer
+from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # 偏移诊断记录（有界）
-        self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
+        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # read_name 越界索引去重 (#411, #481)
         self._hex_view_enabled: bool = hex_view
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry]，有界
         self._hex_view_context: str = ""  # 当前上下文前缀（如 "Summary."）
@@ -187,27 +187,12 @@ class FArchive:
                 )
                 return False
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
-        min_reasonable = 1024
-        # 动态 max_reasonable_cap：根据属性类型和引擎版本调整
-        # - UE5 大型属性类型（BoneAnimationTracks、PoseContainer 等）：500MB
-        # - 其他属性类型：100MB
+        # max_reasonable_cap: per-type ceiling (100 MB standard, 500 MB UE5 large types).
+        # The actual archive-safety boundary is the remaining-bytes check above.
+        # No file-size percentage heuristic — real assets legitimately have large
+        # properties relative to file size (#302).
         engine_version = getattr(self, '_file_version_ue5', 0)
-        max_reasonable_cap = get_max_reasonable(property_type or "", engine_version)
-        # 自适应 max_reasonable：
-        # - 小文件（<100KB）：使用 file_size // 2，不再使用 remaining 作为 fallback
-        # - 大文件（>=100KB）：沿用 file_size // 10，但不超过 max_reasonable_cap
-        # - UE5 大型属性类型：直接使用 max_reasonable_cap 作为上限（不受 file_size // 10 限制）
-        if self._file_size < 100 * 1024:
-            # 小文件：允许最大 50% 文件大小（不再使用 remaining 作为 fallback）
-            max_reasonable = min(self._file_size // 2, max_reasonable_cap)
-        elif property_type and max_reasonable_cap > MAX_REASONABLE_CAP:
-            # UE5 大型属性类型：直接使用动态上限（不受 file_size // 10 限制）
-            max_reasonable = max_reasonable_cap
-        else:
-            max_reasonable = max(
-                min_reasonable,
-                min(self._file_size // 10, max_reasonable_cap),
-            )
+        max_reasonable = get_max_reasonable(property_type or "", engine_version)
         if size > max_reasonable:
             if tolerant:
                 self._record_diagnostic(
@@ -654,13 +639,15 @@ class FArchive:
             # UTF-16 null terminator (\x00\x00) is legal — rstrip handles it.
             # Internal single nulls between valid chars are unusual but not fatal.
             # All-null detection: if result is empty after rstrip, the data was all nulls.
+            # Known UE pattern — return empty string in both modes with diagnostic (#405).
             if not result and length != 0:
-                if not self._tolerant:
-                    self.seek(pos_before)
-                    raise ParseError(
-                        f"FString at pos {pos_before}: length={-length}, "
-                        f"encoding=UTF-16, all nulls (completely corrupted), strict mode"
-                    )
+                self._record_diagnostic(
+                    module="archive", field="read_fstring",
+                    source="read_fstring", target_offset=pos_before,
+                    file_size=self._file_size, read_size=-length,
+                    error=f"FString at pos {pos_before}: length={-length}, "
+                          f"encoding=UTF-16, all nulls (empty result)",
+                )
                 # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
                 if self._is_likely_alignment_padding(pos_before + 4, len(data)):
                     self._logger.debug(
@@ -671,7 +658,7 @@ class FArchive:
                 else:
                     self._logger.warning(
                         "FString at pos %d: length=%d, encoding=UTF-16, "
-                        "all nulls (completely corrupted), consumed=%d bytes",
+                        "all nulls → empty string, consumed=%d bytes",
                         pos_before, -length, len(data),
                     )
         else:
@@ -713,15 +700,21 @@ class FArchive:
             result = data.decode('utf-8', errors='replace').rstrip('\x00')
 
             # All-null detection: if result is empty after rstrip but length was non-zero,
-            # the data was entirely null bytes — completely corrupted (#302).
+            # the data was entirely null bytes.  This is a known UE pattern (all-null
+            # FText namespaces/keys in valid assets) — return empty string in both modes
+            # and emit a diagnostic so callers can surface it if needed (#405).
             if not result and length != 0:
-                if not self._tolerant:
-                    self.seek(pos_before)
-                    raise ParseError(
-                        f"FString at pos {pos_before}: length={length}, "
-                        f"encoding=UTF-8, all nulls (completely corrupted), strict mode"
-                    )
-                # Tolerant mode: return empty string.
+                self._record_diagnostic(
+                    module="archive", field="read_fstring",
+                    source="read_fstring", target_offset=pos_before,
+                    file_size=self._file_size, read_size=length,
+                    error=f"FString at pos {pos_before}: length={length}, "
+                          f"encoding=UTF-8, all nulls (empty result)",
+                )
+                self._logger.warning(
+                    "FString at pos %d: length=%d, encoding=UTF-8, all nulls → empty string",
+                    pos_before, length,
+                )
 
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
             # Improved handling — truncate at first null rather than
@@ -751,14 +744,14 @@ class FArchive:
                     return truncated
                 else:
                     # All nulls from start — likely file tail padding (zero-filled region).
-                    # In strict mode, fail immediately to prevent offset cascade (#302).
-                    if not self._tolerant:
-                        self.seek(pos_before)
-                        raise ParseError(
-                            f"FString at pos {pos_before}: length={length}, "
-                            f"encoding=UTF-8, all nulls (completely corrupted), strict mode"
-                        )
-                    # Tolerant mode: log and continue with padding zone detection.
+                    # Return empty string in both modes with diagnostic (#405).
+                    self._record_diagnostic(
+                        module="archive", field="read_fstring",
+                        source="read_fstring", target_offset=pos_before,
+                        file_size=self._file_size, read_size=length,
+                        error=f"FString at pos {pos_before}: length={length}, "
+                              f"encoding=UTF-8, all nulls from start (empty result)",
+                    )
                     # Check if remaining file data is also mostly zeros (padding zone).
                     # If so, advance to file end to prevent offset cascade (#138).
                     # 对齐 padding 降噪：常见对齐大小 + 4 字节对齐位置 → debug (#369)
@@ -1177,7 +1170,7 @@ class ByteArchive(FArchive):
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
-        self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
+        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # read_name 越界索引去重 (#411, #481)
         self._hex_view_enabled: bool = False
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""

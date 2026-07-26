@@ -784,7 +784,17 @@ def _read_property_loop(
                 except (KeyError, AttributeError, IndexError) as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
-            tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
+            try:
+                tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
+            except ParseError:
+                # #341: FName index out of range near property_end likely means we've
+                # entered DataTable row payload or other non-property data.
+                # Stop gracefully when the remaining bytes are too small for a
+                # valid PropertyTag (min ~16 bytes: FName + type + size).
+                remaining = property_end - archive.tell()
+                if remaining < 32:
+                    break
+                raise
 
             # 记录 tag 读取完成后的当前位置（用于 size_exceeded 恢复和边界验证）
             start_pos = archive.tell()
