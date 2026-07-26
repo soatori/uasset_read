@@ -177,7 +177,7 @@ class TestEdgeKind:
     """EdgeKind 枚举测试。"""
 
     def test_all_members(self):
-        kinds = [EdgeKind.FALLTHROUGH, EdgeKind.CONDITIONAL,
+        kinds = [EdgeKind.FALLTHROUGH, EdgeKind.TRUE_BRANCH,
                  EdgeKind.FALSE_BRANCH, EdgeKind.UNCONDITIONAL,
                  EdgeKind.BACK_EDGE]
         assert len(kinds) == 5
@@ -326,11 +326,11 @@ class TestBuildCfgConditional:
         assert cfg.block_count == 4
 
         bb0 = cfg.blocks[0]
-        assert EdgeKind.CONDITIONAL in bb0.edge_kinds.values()
+        assert EdgeKind.TRUE_BRANCH in bb0.edge_kinds.values()
         assert EdgeKind.FALSE_BRANCH in bb0.edge_kinds.values()
 
     def test_conditional_edges(self):
-        """条件跳转产生 CONDITIONAL + FALSE_BRANCH 边。"""
+        """EX_JumpIfNot produces TRUE_BRANCH (fall-through) + FALSE_BRANCH (jump target) edges."""
         let0 = _make_let(0)
         jmp = _make_jump_if_not(8, 24)
         let1 = _make_let(16)
@@ -340,7 +340,7 @@ class TestBuildCfgConditional:
 
         bb0 = cfg.blocks[0]
         edge_kinds = set(bb0.edge_kinds.values())
-        assert EdgeKind.CONDITIONAL in edge_kinds
+        assert EdgeKind.TRUE_BRANCH in edge_kinds
         assert EdgeKind.FALSE_BRANCH in edge_kinds
 
     def test_unconditional_jump(self):
@@ -677,3 +677,67 @@ class TestFullPipeline:
         cond_regions = [r for r in regions.regions.values()
                         if r.kind in {RegionKind.IF_THEN, RegionKind.IF_THEN_ELSE}]
         assert len(cond_regions) >= 1
+
+
+class TestEdgeKindSemantics:
+    """Regression: EdgeKind TRUE_BRANCH / FALSE_BRANCH must match UE EX_JumpIfNot semantics.
+
+    UE source (ScriptCore.cpp execJumpIfNot):
+        EX_JumpIfNot pops a boolean.
+        If FALSE  -> jump to CodeOffset  (FALSE_BRANCH)
+        If TRUE   -> fall through        (TRUE_BRANCH)
+    """
+
+    def test_jump_if_not_false_branch_is_jump_target(self):
+        """FALSE_BRANCH edge points to the jump target (CodeOffset).
+
+        Layout (expression indices):
+            0: let0       \
+            1: jmp        - BB0 (terminator = JumpIfNot)
+            2: let_fall    / BB1 (fall-through, TRUE path)
+            3: let_target / BB2 (jump target, FALSE path)
+            4: end
+
+        UE semantics: if FALSE -> jump to offset 24 (let_target);
+                      if TRUE  -> fall through (let_fall).
+        """
+        let0 = _make_let(0)
+        jmp = _make_jump_if_not(8, 24)  # CodeOffset=24 maps to let_target
+        let_fall = _make_let(16)
+        let_target = _make_let(24)
+        end = _make_end(32)
+
+        cfg = build_cfg([let0, jmp, let_fall, let_target, end])
+
+        bb0 = cfg.entry
+        assert len(bb0.successors) == 2
+
+        # Identify blocks by their start_idx in the expression list
+        jump_target_bid = None
+        fall_through_bid = None
+        for succ_bid in bb0.successors:
+            succ_block = cfg.blocks[succ_bid]
+            if succ_block.start_idx == 3:  # let_target at expression index 3
+                jump_target_bid = succ_bid
+            elif succ_block.start_idx == 2:  # let_fall at expression index 2
+                fall_through_bid = succ_bid
+
+        assert jump_target_bid is not None, "jump target block not found"
+        assert fall_through_bid is not None, "fall-through block not found"
+
+        # Jump target (FALSE path) must be FALSE_BRANCH
+        assert bb0.edge_kinds[jump_target_bid] == EdgeKind.FALSE_BRANCH, (
+            f"Jump target block should be FALSE_BRANCH, "
+            f"got {bb0.edge_kinds[jump_target_bid]}"
+        )
+
+        # Fall-through (TRUE path) must be TRUE_BRANCH
+        assert bb0.edge_kinds[fall_through_bid] == EdgeKind.TRUE_BRANCH, (
+            f"Fall-through block should be TRUE_BRANCH, "
+            f"got {bb0.edge_kinds[fall_through_bid]}"
+        )
+
+    def test_true_branch_cannot_be_false_branch(self):
+        """Ensure TRUE_BRANCH and FALSE_BRANCH are distinct enum values."""
+        assert EdgeKind.TRUE_BRANCH is not EdgeKind.FALSE_BRANCH
+        assert EdgeKind.TRUE_BRANCH != EdgeKind.FALSE_BRANCH

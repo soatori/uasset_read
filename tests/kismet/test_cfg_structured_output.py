@@ -636,7 +636,7 @@ class TestRegionDecoderIfElse:
         cfg = build_cfg([let0, jmp, let1, let2, end])
         bb0 = cfg.blocks[0]
         edge_kinds = set(bb0.edge_kinds.values())
-        assert EdgeKind.CONDITIONAL in edge_kinds
+        assert EdgeKind.TRUE_BRANCH in edge_kinds
         assert EdgeKind.FALSE_BRANCH in edge_kinds
 
 

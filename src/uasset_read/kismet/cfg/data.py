@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 class EdgeKind(Enum):
     """CFG 边类型。"""
 
-    FALLTHROUGH = auto()  # fall-through 到下一条
-    CONDITIONAL = auto()  # 条件为真（JumpIfNot 的 false 分支目标）
-    FALSE_BRANCH = auto()  # 条件跳转的 fall-through（true 分支）
-    UNCONDITIONAL = auto()  # 无条件跳转
-    BACK_EDGE = auto()  # 回边（循环）
+    FALLTHROUGH = auto()  # fall-through to next (non-conditional)
+    TRUE_BRANCH = auto()  # EX_JumpIfNot true path (fall-through when condition is TRUE)
+    FALSE_BRANCH = auto()  # EX_JumpIfNot false path (jump target when condition is FALSE)
+    UNCONDITIONAL = auto()  # unconditional jump
+    BACK_EDGE = auto()  # back edge (loop)
 
 
 @dataclass

@@ -178,9 +178,9 @@ def decompose_regions(
             then_block: int = -1
             else_block: int = -1
 
-            if kind0 == EdgeKind.CONDITIONAL:
+            if kind0 == EdgeKind.TRUE_BRANCH:
                 then_block, else_block = s0, s1
-            elif kind1 == EdgeKind.CONDITIONAL:
+            elif kind1 == EdgeKind.TRUE_BRANCH:
                 then_block, else_block = s1, s0
             elif kind0 == EdgeKind.FALSE_BRANCH:
                 else_block, then_block = s0, s1

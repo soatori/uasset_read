@@ -183,11 +183,11 @@ class RegionDecoder:
             # 根据边类型区分 then/else
             for succ in block.successors:
                 kind = block.edge_kinds.get(succ)
-                if kind == EdgeKind.CONDITIONAL:
-                    # CONDITIONAL → then 分支
+                if kind == EdgeKind.TRUE_BRANCH:
+                    # TRUE_BRANCH → then branch (fall-through when condition is TRUE)
                     then_blocks.append(succ)
                 elif kind == EdgeKind.FALSE_BRANCH:
-                    # FALSE_BRANCH → else 分支
+                    # FALSE_BRANCH → else branch (jump target when condition is FALSE)
                     else_blocks.append(succ)
                 else:
                     then_blocks.append(succ)

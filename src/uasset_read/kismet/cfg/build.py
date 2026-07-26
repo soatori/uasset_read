@@ -192,7 +192,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
                         block.successors.append(target_bid)
                     if bid not in blocks[target_bid].predecessors:
                         blocks[target_bid].predecessors.append(bid)
-                    block.edge_kinds[target_bid] = EdgeKind.CONDITIONAL
+                    block.edge_kinds[target_bid] = EdgeKind.FALSE_BRANCH
 
             # True branch → fall-through (next block)
             next_leader_idx = block.end_idx + 1
@@ -202,7 +202,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
                     block.successors.append(next_bid)
                 if bid not in blocks[next_bid].predecessors:
                     blocks[next_bid].predecessors.append(bid)
-                block.edge_kinds[next_bid] = EdgeKind.FALSE_BRANCH
+                block.edge_kinds[next_bid] = EdgeKind.TRUE_BRANCH
 
         elif _is_end_of_script(last_expr):
             # 连接到 sink
