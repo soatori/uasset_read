@@ -34,6 +34,8 @@ MAX_COMPRESSION_METHODS = 100        # 最大压缩方法数
 MAX_METHOD_NAME_LENGTH = 256         # 单个方法名最大长度
 MAX_DIRECTORY_INDEX_BYTES = 64 * 1024 * 1024  # 目录索引最大 64MB
 MAX_PARTITION_COUNT = 64             # 最大分区数
+MAX_DIRECTORY_ARRAY_COUNT = 1_000_000  # 目录/文件索引条目最大数
+MAX_STRING_TABLE_COUNT = 1_000_000      # 字符串表最大条目数
 
 
 class IoStoreInfo:
@@ -231,7 +233,7 @@ class IoStoreReader:
                 self._compression_methods,
             )
 
-        except (OSError, struct.error, ValueError):
+        except (OSError, struct.error, ValueError, ParseError):
             self.close()
             raise
 
@@ -824,6 +826,10 @@ class IoStoreReader:
         count = struct.unpack("<i", count_data)[0]
         if count < 0:
             raise ValueError(f"IoStore directory array count is invalid: {count}")
+        if count > MAX_DIRECTORY_ARRAY_COUNT:
+            raise ParseError(
+                f"IoStore directory array count {count} exceeds limit {MAX_DIRECTORY_ARRAY_COUNT}"
+            )
         return [item_reader(stream) for _ in range(count)]
 
     @staticmethod
@@ -834,6 +840,10 @@ class IoStoreReader:
         count = struct.unpack("<i", count_data)[0]
         if count < 0:
             raise ValueError(f"IoStore string table count is invalid: {count}")
+        if count > MAX_STRING_TABLE_COUNT:
+            raise ParseError(
+                f"IoStore string table count {count} exceeds limit {MAX_STRING_TABLE_COUNT}"
+            )
         return [IoStoreReader._read_fstring_from(stream) for _ in range(count)]
 
     @staticmethod
