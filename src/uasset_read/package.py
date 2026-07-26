@@ -7,7 +7,7 @@ import logging
 import os
 
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
-from uasset_read.bounded_events import BoundedEventBuffer
+from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,9 @@ class PackageArchive(FArchive):
             self._main_size = main_archive.total_size()
             self._uexp_size = uexp_archive.total_size() if uexp_archive else 0
         except Exception:
-            # 初始化失败时关闭 main_archive
+            # 初始化失败时关闭所有已打开的归档（#464）
+            if uexp_archive is not None:
+                uexp_archive.close()
             main_archive.close()
             raise
         self._file_size = self._main_size + self._uexp_size
@@ -49,7 +51,7 @@ class PackageArchive(FArchive):
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""
         self._name_map: Optional[list] = None
-        self._name_warnings_seen: set[int] = set()  # 已见的越界索引（去重用）
+        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # 已见的越界索引（去重用，#481）
 
     def read(self, size: int) -> bytes:
         if size < 0:
