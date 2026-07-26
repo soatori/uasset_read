@@ -7,6 +7,7 @@ import struct
 import pytest
 from uasset_read.archive import ByteArchive
 from uasset_read.serializers.package_summary import read_depends_map, PackageFileSummary
+from uasset_read.models.status import _result_status
 
 
 # depends_offset must be > 0 (function entry check), but ByteArchive seeks there
@@ -242,3 +243,53 @@ def test_depends_map_no_warnings_param():
     # No warnings param — should not crash
     result = read_depends_map(archive, summary)
     assert result == [[99]]
+
+
+# ---------------------------------------------------------------------------
+# _result_status integration (#451)
+# ---------------------------------------------------------------------------
+
+class TestResultStatusDependsMap:
+    """Verify _result_status returns 'partial' when DependsMap warnings are present."""
+
+    def _fake_result(self, warnings: list[str]):
+        class FakeResult:
+            is_success = True
+            errors = []
+            metadata = {}
+            diagnostics = []
+            decompiled_functions = []
+            summary = None
+            name_map = None
+            import_map = None
+            export_map = None
+        r = FakeResult()
+        r.warnings = warnings
+        return r
+
+    def test_depends_map_skip_warning_triggers_partial(self):
+        """'DependsMap: N/M entries skipped' warning must yield 'partial' status."""
+        result = self._fake_result([
+            "DependsMap: 1/3 entries skipped (abnormal dep_count=50000)"
+        ])
+        assert _result_status(result) == "partial"
+
+    def test_depends_map_package_index_warning_triggers_partial(self):
+        """'DependsMap: PackageIndex ...' warning must yield 'partial' status."""
+        result = self._fake_result([
+            "DependsMap: 2 PackageIndex values out of range"
+        ])
+        assert _result_status(result) == "partial"
+
+    def test_depends_map_mixed_warnings_triggers_partial(self):
+        """Multiple DependsMap warnings must still yield 'partial' status."""
+        result = self._fake_result([
+            "DependsMap: 1/2 entries skipped",
+            "DependsMap: 1 PackageIndex value out of range",
+        ])
+        assert _result_status(result) == "partial"
+
+    def test_no_depends_map_warning_stays_success(self):
+        """Unrelated warnings must not trigger partial for DependsMap."""
+        result = self._fake_result(["Some unrelated warning"])
+        assert _result_status(result) == "success"

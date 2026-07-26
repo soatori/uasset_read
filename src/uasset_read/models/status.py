@@ -75,9 +75,11 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     if getattr(result, "errors", None):
         return "partial"
 
-    # 3.2 检查 AssetRegistryData corruption 降级
+    # 3.2 检查 warning-based degradation (corruption / data-skip)
     warnings = getattr(result, "warnings", None) or []
     if any("AssetRegistryData is corrupted" in w for w in warnings):
+        return "partial"
+    if any("DependsMap" in w for w in warnings):
         return "partial"
 
     # 3.3 检查轻量容错解析
