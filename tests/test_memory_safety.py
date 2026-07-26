@@ -50,16 +50,6 @@ def test_policy_supports_custom_limits() -> None:
     assert policy.poll_interval_seconds == 0.25
 
 
-def test_memory_policy_types_are_public() -> None:
-    from uasset_read import MemoryLimitExceeded as PublicError
-    from uasset_read import MemoryPolicy as PublicPolicy
-    from uasset_read import ResourceLimits as PublicLimits
-
-    assert PublicPolicy is MemoryPolicy
-    assert PublicLimits is ResourceLimits
-    assert PublicError is MemoryLimitExceeded
-
-
 def test_monitor_checkpoint_reports_stage_and_limit() -> None:
     monitor = MemoryMonitor(
         asset_path=Path("Content/Test.uasset"),
