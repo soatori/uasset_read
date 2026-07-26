@@ -1,4 +1,4 @@
-﻿"""Property data classes — PropertyTag, PropertyValue and advanced property containers."""
+"""Property data classes — PropertyTag, PropertyValue and advanced property containers."""
 
 from __future__ import annotations
 
