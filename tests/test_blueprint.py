@@ -257,7 +257,7 @@ class TestBuildCfg:
     """CFG 构建。"""
 
     def test_conditional_edges(self):
-        """JumpIfNot 应产生 CONDITIONAL + FALSE_BRANCH 边。"""
+        """JumpIfNot 应产生 TRUE_BRANCH + FALSE_BRANCH 边。"""
         let0 = _make_let(0)
         jmp = _make_jump_if_not(8, 24)
         let1 = _make_let(16)
