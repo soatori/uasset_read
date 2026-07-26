@@ -1,6 +1,8 @@
-"""主解析管线入口 — parse_uasset() 函数。
+"""Core parse pipeline -- parse_package(), parse_uasset_with_linker(), parse_package_lazy().
 
-等价迁移 uasset_read.py §6223-6412。
+This module is the canonical location for the uasset parse lifecycle.
+Extracted from ``uasset_read.parse_uasset`` as part of the pipeline
+consolidation (task #458).
 """
 from __future__ import annotations
 
@@ -27,8 +29,8 @@ from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
-from uasset_read.project_logging import scoped_project_logging, configure_project_logging
-from uasset_read.parse_stages import (
+from uasset_read.project_logging import scoped_project_logging, configure_project_logging, current_log_run_id
+from uasset_read.pipeline.stages import (
     _record_parse_stage_error,
     _init_parse_env,
     _read_core_tables,
@@ -37,8 +39,8 @@ from uasset_read.parse_stages import (
     _create_linker,
     _read_package_headers,
 )
-from uasset_read.parse_post_process import _post_process
-from uasset_read.parse_utils import (
+from uasset_read.pipeline.post_process import _post_process
+from uasset_read.pipeline.config import (
     _should_use_lightweight_tolerant_parse,
     _is_large_file_asset,
     _build_lightweight_graphs,
@@ -46,8 +48,8 @@ from uasset_read.parse_utils import (
     _apply_lightweight_parse,
     _resolve_parse_params,
 )
-from uasset_read.parse_error_handler import _handle_parse_error
-from uasset_read.parse_memory import _cleanup_parse_memory
+from uasset_read.pipeline.error_handler import _handle_parse_error
+from uasset_read.pipeline.memory import _cleanup_parse_memory
 
 logger = logging.getLogger(__name__)
 
