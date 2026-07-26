@@ -60,7 +60,9 @@ def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
     )
 
 
-def _log_asset_summary(name: str, result: object) -> None:
+def _log_asset_summary(
+    name: str, result: object, *, duration_ms: float = 0.0,
+) -> None:
     """Emit per-asset summary line within a batch loop."""
     from uasset_read.project_logging import _count_export_categories
 
@@ -75,10 +77,10 @@ def _log_asset_summary(name: str, result: object) -> None:
     cats = _count_export_categories(result)
     with log_context(asset=name):
         logging.getLogger(__name__).info(
-            "asset_summary input=%s parse_status=%s "
+            "asset_summary input=%s parse_status=%s duration_ms=%.1f "
             "exports=%d diagnostics=%d fallback=%d opaque=%d "
             "recovery=%d errors=%d warnings=%d",
-            name, parse_status,
+            name, parse_status, duration_ms,
             export_count, diagnostics_count,
             cats["fallback"], cats["opaque"], cats["recovery"],
             error_count, warning_count,
@@ -541,6 +543,7 @@ def parse_batch(
                     result.failed.append((str(pf), outcome.error, outcome.error_details))
                 continue
 
+            asset_start = time.monotonic()
             output_str, parse_result = _parse_and_render(
                 str(pf),
                 format=format,
@@ -558,9 +561,10 @@ def parse_batch(
                 output_level=output_level,
                 parse_config=parse_config,
             )
+            asset_duration_ms = (time.monotonic() - asset_start) * 1000
 
             # Per-asset summary for non-isolated batch assets
-            _log_asset_summary(pf.name, parse_result)
+            _log_asset_summary(pf.name, parse_result, duration_ms=asset_duration_ms)
 
             # Check partial status and track reasons
             from uasset_read.models.status import _result_status, PARTIAL_STATUSES

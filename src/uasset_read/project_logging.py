@@ -361,15 +361,6 @@ def scoped_project_logging(func):
                             cats["fallback"], cats["opaque"], cats["recovery"],
                             error_count, warning_count,
                         )
-                        log.info(
-                            "asset_summary input=%s parse_status=%s duration_ms=%.1f "
-                            "exports=%d diagnostics=%d fallback=%d opaque=%d "
-                            "recovery=%d errors=%d warnings=%d",
-                            path_value or "-", parse_status, duration_ms,
-                            export_count, diagnostics_count,
-                            cats["fallback"], cats["opaque"], cats["recovery"],
-                            error_count, warning_count,
-                        )
                     else:
                         log.info(
                             "asset_end status=%s duration_ms=%.1f",
