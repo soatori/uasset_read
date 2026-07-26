@@ -426,37 +426,51 @@ def parse_package_lazy(
     game: str | None = None,
     memory_policy: MemoryPolicy | None = None,
 ) -> ParseResult:
-    """懒加载模式解析包 — 按需解析 export body。
+    """Lazy-parse mode — parse export bodies on demand.
 
-    始终解析：Header、NameMap、ImportMap、ExportMap（元数据）。
-    仅解析指定 export_indices 的 body；未指定时所有 export 标记为未加载。
+    Always parses: Header, NameMap, ImportMap, ExportMap (metadata).
+    Only parses body for specified export_indices; unspecified exports
+    are marked as not loaded.
 
-    当 provider 提供 open_file() 时，优先使用它获取 archive（支持 mmap
-    范围读取），避免将整个文件读入内存；否则回退到 read_file() 路径。
+    When provider offers open_file(), the archive is obtained directly
+    (supporting mmap range reads) instead of reading the whole file.
+
+    Error and status semantics are aligned with ``_parse_package_core``:
+    - ``MemoryMonitor`` is created from *memory_policy* for RSS checking
+    - ``MemoryError`` during export parsing sets status to ``"partial"``
+    - ``MemoryLimitExceeded`` is re-raised (never swallowed)
+    - All ``parse_status`` values are validated via ``validate_parse_status()``
+    - Top-level exceptions use ``_handle_parse_error()``
 
     Args:
-        path: .uasset/.umap 文件路径
-        export_indices: 需要解析 body 的 export 索引列表，None 表示全部跳过
-        store_raw_bytes: 是否将 export body 原始字节存入 lazy_load_archive
-            （默认 False — 懒加载场景不缓存原始字节以节省内存）
-        tolerant: 容错模式
-        provider: 可选 package provider
-        mappings_path: 类型映射文件路径
-        game: 游戏标识
-        memory_policy: 内存策略
+        path: .uasset/.umap file path
+        export_indices: export indices whose bodies should be parsed;
+            None means skip all bodies
+        store_raw_bytes: whether to store raw export bytes in
+            lazy_load_archive (default False to save memory)
+        tolerant: tolerant mode
+        provider: optional package provider
+        mappings_path: type mappings file path
+        game: game identifier
+        memory_policy: memory policy controlling RSS limits
 
     Returns:
-        ParseResult 实例（export body 按需解析）
+        ParseResult instance (export bodies parsed on demand)
     """
     from uasset_read.blueprint import extract_component_transforms
+    from uasset_read.memory_safety import (
+        MemoryMonitor,
+        MemoryPolicy as _MemoryPolicy,
+        ResourceBudget,
+    )
+    from uasset_read.models.validators import validate_parse_status
 
     result = ParseResult()
     archive = None
     linker = None
 
-    # 当 provider 提供 open_file() 时，直接用它获取 archive，
-    # 避免通过 open_package_bundle() 将整个文件读入内存。
-    # open_file() 支持 mmap 范围读取，适合懒加载场景。
+    # When provider offers open_file(), obtain archive directly
+    # (supports mmap range reads) instead of reading the whole file.
     use_direct_archive = (
         provider is not None
         and hasattr(provider, 'open_file')
@@ -464,8 +478,18 @@ def parse_package_lazy(
     )
 
     try:
-        from uasset_read.memory_safety import ResourceBudget
         resource_budget = ResourceBudget()
+
+        # Create MemoryMonitor from memory_policy (aligned with _parse_package_core)
+        policy = memory_policy or _MemoryPolicy()
+        try:
+            file_size = Path(path).stat().st_size if Path(path).is_file() else 0
+        except OSError:
+            file_size = 0
+        memory_monitor = MemoryMonitor(
+            asset_path=path,
+            limits=policy.limits_for_size(file_size),
+        )
 
         mappings_provider = None
         if mappings_path:
@@ -478,28 +502,29 @@ def parse_package_lazy(
             result.metadata["game"] = game
 
         if use_direct_archive:
-            # 快速路径：通过 open_file() 获取 archive，不读取整个文件
+            # Fast path: obtain archive via open_file(), no full-file read
             archive = provider.open_file(path)
             if archive is None:
                 raise FileNotFoundError(f"Package not found: {path}")
 
-            # 读取核心表
+            # Read core tables (with memory_monitor checkpoints)
             if not _read_core_tables(
                 archive, result, path, tolerant,
+                memory_monitor=memory_monitor,
                 validate_range=True, budget=resource_budget,
             ):
                 if result.summary is None:
                     return result
 
-            # 读取 secondary 表
+            # Read secondary tables (with memory_monitor)
             _read_secondary_tables(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
-                path=path, memory_monitor=None,
+                path=path, memory_monitor=memory_monitor,
                 budget=resource_budget,
             )
         else:
-            # 回退路径：通过 bundle 读取（read_file）
+            # Fallback path: read via bundle (read_file)
             bundle_obj, archive, linker, mappings_provider = _read_package_headers(
                 path, result,
                 tolerant=tolerant, provider=provider,
@@ -509,7 +534,7 @@ def parse_package_lazy(
             if result.summary is None:
                 return result
 
-        # 按需解析指定 export body
+        # Parse specified export bodies on demand
         parse_indices = set(export_indices) if export_indices else set()
         _mappings = mappings_provider.mappings if mappings_provider else None
 
@@ -530,23 +555,40 @@ def parse_package_lazy(
                             tolerant=tolerant,
                         )
                     if not getattr(export, "parse_status", None):
-                        setattr(export, "parse_status", "success")
+                        setattr(export, "parse_status", validate_parse_status("success"))
                     elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
                         pass
+                except MemoryLimitExceeded:
+                    raise
+                except MemoryError as e:
+                    logger.error(
+                        "MemoryError parsing export %s: %s",
+                        getattr(export, "object_name", "?"), e,
+                    )
+                    export.properties = []
+                    setattr(export, "parse_status", validate_parse_status("partial"))
+                    setattr(export, "fallback_reason", "memory_error_partial")
+                    setattr(export, "error_message", str(e))
+                    if not tolerant:
+                        raise
                 except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
                     if not tolerant:
-                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
-                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
+                        raise ParseError(
+                            f"Property parse error in {export.object_name}: {e}"
+                        ) from e
+                    result.errors.append(
+                        f"Property parse error in {export.object_name}: {e}"
+                    )
                     export.properties = []
-                    setattr(export, "parse_status", "failed")
+                    setattr(export, "parse_status", validate_parse_status("failed"))
                     setattr(export, "fallback_reason", "parse_error")
                     setattr(export, "error_message", str(e))
 
-                # 提取组件变换属性
+                # Extract component transform properties
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
-            # 存储原始字节（可选）
+            # Store raw bytes (optional)
             if store_raw_bytes and export.serial_size > 0:
                 try:
                     archive.seek(export.serial_offset)
@@ -554,48 +596,26 @@ def parse_package_lazy(
                 except (OSError, struct.error) as e:
                     if not tolerant:
                         raise ParseError(
-                            f"读取 export {export.object_name} 原始字节失败: {e}"
+                            f"Failed to read raw bytes for export {export.object_name}: {e}"
                         ) from e
                     setattr(export, "lazy_load_archive", None)
 
-            # 设置懒加载标记（通过 setattr 兼容 ObjectExport 和 ExportIR）
+            # Set lazy-load flag (via setattr for ObjectExport and ExportIR compat)
             setattr(export, "is_loaded", idx in parse_indices)
 
         # post_load
         if linker is not None:
-            try:
-                linker.post_load()
-            except (OSError, struct.error, ValueError, AttributeError) as e:
-                if not tolerant:
-                    raise ParseError(f"Linker post_load failed: {e}") from e
-                result.errors.append(f"Linker post_load failed: {e}")
-            # Propagate import verification errors from linker to result
-            if hasattr(linker, '_import_verification_errors') and linker._import_verification_errors:
-                result.errors.extend(linker._import_verification_errors)
+            _run_linker_post_load(linker, result, tolerant)
 
         result.is_success = not result.errors
         result.metadata["lazy_loading"] = True
         result.metadata["loaded_exports"] = sorted(parse_indices)
         result.metadata["total_exports"] = len(result.export_map or [])
 
-    except VersionError as e:
-        _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
-        result.is_success = False
-        if not tolerant:
-            raise
-    except ParseError as e:
-        _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
-        result.is_success = False
-        if not tolerant:
-            raise
     except Exception as e:
-        _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
-        result.is_success = False
-        if not tolerant:
-            raise
+        _handle_parse_error(e, result, archive, path, tolerant)
     finally:
-        if archive:
-            archive.close()
+        _cleanup_archive_diagnostics(result, archive)
         _cleanup_parse_memory(result)
 
     return result

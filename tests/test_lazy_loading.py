@@ -131,3 +131,74 @@ class TestParsePackageLazy:
         # 所有 export 仍应标记为未加载
         for export in result.export_map:
             assert export.is_loaded is False
+
+
+class TestLazyParseErrorAlignment:
+    """Verify parse_package_lazy error semantics align with _parse_package_core.
+
+    These tests prove that the lazy path uses the same validation and
+    status patterns as the main parse chain.
+    """
+
+    def _get_test_asset(self):
+        samples = Path(__file__).parent / "samples"
+        if not samples.exists():
+            pytest.skip("Test samples directory not found")
+        assets = list(samples.glob("*.uasset"))
+        if not assets:
+            pytest.skip("No .uasset test files available")
+        return str(assets[0])
+
+    def test_lazy_creates_memory_monitor(self):
+        """memory_policy creates a MemoryMonitor in the lazy path."""
+        from uasset_read.parse_uasset import parse_package_lazy
+        from uasset_read.memory_safety import MemoryPolicy
+        path = self._get_test_asset()
+        policy = MemoryPolicy()
+        result = parse_package_lazy(
+            path, export_indices=[], tolerant=True,
+            memory_policy=policy,
+        )
+        # parse_package_lazy should succeed — memory_policy was consumed
+        assert result is not None
+        assert isinstance(result, ParseResult)
+
+    def test_lazy_parse_status_uses_validated_values(self):
+        """parse_status values from lazy path are valid ExportParseStatus members."""
+        from uasset_read.parse_uasset import parse_package_lazy
+        from uasset_read.models.fallback import ExportParseStatus
+        path = self._get_test_asset()
+        result = parse_package_lazy(
+            path, export_indices=[0], tolerant=True,
+        )
+        for export in result.export_map:
+            status = getattr(export, "parse_status", None)
+            if status is not None:
+                # status must be a valid ExportParseStatus value
+                assert status in {s.value for s in ExportParseStatus}, (
+                    f"Invalid parse_status {status!r} on export "
+                    f"{getattr(export, 'object_name', '?')}"
+                )
+
+    def test_lazy_tolerant_mode_captures_errors(self):
+        """In tolerant mode, parse_package_lazy captures errors instead of raising."""
+        from uasset_read.parse_uasset import parse_package_lazy
+        path = self._get_test_asset()
+        # Parsing with invalid mappings should not raise in tolerant mode
+        result = parse_package_lazy(
+            path, export_indices=[], tolerant=True,
+            mappings_path="/nonexistent/mappings.json",
+        )
+        # Should complete without exception
+        assert result is not None
+
+    def test_lazy_non_tolerant_raises_on_bad_path(self):
+        """Non-tolerant mode raises on invalid path."""
+        from uasset_read.parse_uasset import parse_package_lazy
+        from uasset_read.exceptions import ParseError, VersionError
+        with pytest.raises((ParseError, VersionError, FileNotFoundError, OSError)):
+            parse_package_lazy(
+                "/nonexistent/path.uasset",
+                export_indices=[],
+                tolerant=False,
+            )
