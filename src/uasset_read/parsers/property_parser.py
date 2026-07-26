@@ -847,11 +847,6 @@ def _read_property_loop(
                 # tag read consumed bytes that actually belong to the next valid tag,
                 # starting from after the tag skips past the real boundary.
                 recovered_from = tag.tag_start_offset if tag.tag_start_offset is not None else start_pos
-                if recovered_from is None:
-                    logger.debug(
-                        "size_exceeded: no recovery offset available (tag_start_offset=%r, start_pos=%r), creating fallback",
-                        tag.tag_start_offset, start_pos,
-                    )
                 if recovered_from is not None:
                     archive.seek(recovered_from)
                     recovered = _try_recover_property_tag(
