@@ -375,8 +375,19 @@ def _try_asset_type_handler(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
                 handler.handler_name, export.object_name, handler_status,
             )
+        elif not result.success:
+            # Handler reported a recoverable failure via HandlerResult.
+            # Record the error on the export so callers see it in parse_status.
+            setattr(export, "parse_status", validate_parse_status("partial"))
+            if result.error_message:
+                setattr(export, "handler_error", result.error_message)
+            logger.warning(
+                "AssetTypeHandler '%s' failed for '%s' (%s): %s",
+                handler.handler_name, export.object_name,
+                class_name, result.error_message,
+            )
     except (KeyError, TypeError, ValueError) as e:
-        logger.debug(
+        logger.warning(
             "AssetTypeHandler failed for '%s' (%s): %s",
             export.object_name, class_name, e,
         )

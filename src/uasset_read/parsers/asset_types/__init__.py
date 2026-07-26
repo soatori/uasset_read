@@ -107,7 +107,7 @@ class HandlerClassAdapter(ClassHandler):
                 fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
         except (KeyError, TypeError, ValueError, struct.error) as e:
-            logger.debug(
+            logger.warning(
                 "HandlerClassAdapter '%s' failed for '%s': %s",
                 self._handler_name, export.object_name, e,
             )
@@ -261,7 +261,7 @@ class AssetTypeHandler(ClassHandler):
                 fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
         except (KeyError, TypeError, ValueError, struct.error) as e:
-            logger.debug(
+            logger.warning(
                 "AssetTypeHandler '%s' failed for '%s': %s",
                 self._handler_name, export.object_name, e,
             )
