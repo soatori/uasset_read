@@ -469,3 +469,40 @@ class TestBudgetPassThrough:
         ))
         result = b"".join(chunks)
         assert result == original
+
+
+class TestBudgetPassThroughLazyFallback:
+    """Prove that budget is passed through the lazy path fallback branch."""
+
+    def test_read_package_headers_accepts_budget(self):
+        """_read_package_headers should accept a budget parameter and pass it downstream."""
+        from unittest.mock import patch, MagicMock
+        from uasset_read.pipeline.stages import _read_package_headers
+        from uasset_read.models.result import ParseResult
+
+        budget = ResourceBudget()
+        result = ParseResult()
+        init_kwargs = {}
+
+        archive_mock = MagicMock()
+        archive_mock.get_mmap_info.return_value = {"used": False, "warning": None}
+        bundle_mock = MagicMock()
+        bundle_mock.open_archive.return_value = archive_mock
+
+        def spy_init(path, result, tolerant, provider, mappings_path, game, check_aes_key, hex_view, budget=None):
+            init_kwargs["budget"] = budget
+            return archive_mock, bundle_mock, None
+
+        with patch("uasset_read.pipeline.stages._init_parse_env", spy_init):
+            try:
+                _read_package_headers(
+                    "test.uasset", result,
+                    tolerant=True, provider=None,
+                    mappings_path=None, game=None,
+                    budget=budget,
+                )
+            except Exception:
+                pass
+
+        assert "budget" in init_kwargs
+        assert init_kwargs["budget"] is budget

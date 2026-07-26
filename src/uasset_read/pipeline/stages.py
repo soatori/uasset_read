@@ -421,6 +421,7 @@ def _read_package_headers(
     hex_view: bool = False,
     validate_range: bool = True,
     check_aes_key: Optional[bytes] = None,
+    budget=None,
 ) -> tuple:
     """Read package file header (Summary + NameTable + ImportMap + ExportMap + Linker).
 
@@ -434,12 +435,14 @@ def _read_package_headers(
     archive, bundle, mappings_provider = _init_parse_env(
         path, result, tolerant, provider, mappings_path, game,
         check_aes_key=check_aes_key, hex_view=hex_view,
+        budget=budget,
     )
 
     # Read core tables (summary/name/import/export)
     if not _read_core_tables(
         archive, result, path, tolerant,
         validate_range=validate_range,
+        budget=budget,
     ):
         return bundle, archive, None, mappings_provider
 
