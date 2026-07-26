@@ -63,7 +63,7 @@ class _StderrDrain:
         self._stderr_pipe: object | None = None
 
     def start(self, proc: subprocess.Popen[bytes]) -> None:
-        """启动后台 drain 线程。"""
+        """Start background drain thread."""
         if proc.stderr is None:
             return
         self._stderr_pipe = proc.stderr
@@ -335,9 +335,6 @@ class _SubprocessAdapter:
         if self._stderr_drain is not None:
             self._stderr_drain.close()
             self._stderr_drain = None
-        if self._process is not None and self._process.stderr is not None:
-            self._process.stderr.close()
-            self._process.stderr = None
         self._process = None
 
 
