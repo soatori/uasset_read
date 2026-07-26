@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import logging
 import os
 
@@ -126,6 +126,41 @@ class PackageArchive(FArchive):
 
 
 @dataclass
+class SourceProvenance:
+    """Records which source served a file read.
+
+    Attributes:
+        mount_root: Logical mount root prefix (e.g. "/Game/Content/").
+        provider_label: Human-readable label for the provider (e.g. "base_pak").
+        container: Provider container type (e.g. "filesystem", "pak", "iostore").
+    """
+
+    mount_root: str
+    provider_label: str
+    container: str
+
+    def __str__(self) -> str:
+        return f"SourceProvenance(root={self.mount_root!r}, label={self.provider_label!r}, container={self.container!r})"
+
+
+@dataclass
+class MountPoint:
+    """A mounted source with a logical path prefix.
+
+    Attributes:
+        mount_root: Logical path prefix (e.g. "/Game/Content/").
+        provider: The provider serving files from this mount.
+        priority: Higher values are checked first (default 0).
+        label: Human-readable source name for provenance tracking.
+    """
+
+    mount_root: str
+    provider: "PackageProvider"
+    priority: int = 0
+    label: str = ""
+
+
+@dataclass
 class PackageBundle:
     """A discovered package plus sidecar payloads."""
 
@@ -135,6 +170,7 @@ class PackageBundle:
     files: Dict[str, str] = field(default_factory=dict)
     payloads: Dict[str, bytes] = field(default_factory=dict)
     provider: Optional["PackageProvider"] = None
+    source: Optional[SourceProvenance] = None
 
     @property
     def package_files(self) -> Dict[str, str]:
@@ -251,6 +287,164 @@ class PackageProvider:
                 if candidate_normalized.lower().endswith(f"/{lowered}{ext}"):
                     return candidate
         raise FileNotFoundError(path)
+
+
+class MultiSourceProvider(PackageProvider):
+    """Provider that composes multiple mounted sources with priority-based resolution.
+
+    Each mount point has a logical path prefix (mount_root) and a provider.
+    When resolving a path, mounts are checked in descending priority order.
+    The first mount whose provider can resolve the path wins.
+
+    Attributes:
+        container: Always "multi" for composed providers.
+    """
+
+    container = "multi"
+
+    def __init__(self, mounts: List[MountPoint] | None = None):
+        self._mounts: List[MountPoint] = []
+        for m in mounts or []:
+            self._mounts.append(m)
+        self._mounts.sort(key=lambda m: -m.priority)
+
+    def add_mount(self, mount: MountPoint) -> None:
+        """Add a mount point and re-sort by priority."""
+        self._mounts.append(mount)
+        self._mounts.sort(key=lambda m: -m.priority)
+
+    def remove_mount(self, mount_root: str) -> None:
+        """Remove all mounts with the given logical root."""
+        self._mounts = [m for m in self._mounts if m.mount_root != mount_root]
+
+    @property
+    def mounts(self) -> List[MountPoint]:
+        """Return a copy of the current mount list (sorted by priority)."""
+        return list(self._mounts)
+
+    def list_files(self) -> List[str]:
+        """List all files across all mounts as logical paths.
+
+        Files from higher-priority mounts shadow lower-priority mounts
+        with the same logical path.
+        """
+        seen: set[str] = set()
+        result: list[str] = []
+        for mount in self._mounts:
+            for physical in mount.provider.list_files():
+                logical = self._to_logical(physical, mount)
+                if logical not in seen:
+                    seen.add(logical)
+                    result.append(logical)
+        return result
+
+    def read_file(self, path: str) -> bytes | None:
+        """Read a file by logical path, checking mounts in priority order."""
+        for mount in self._mounts:
+            physical = self._to_physical(path, mount)
+            if physical is not None:
+                data = mount.provider.read_file(physical)
+                if data is not None:
+                    return data
+        return None
+
+    def open_package_bundle(
+        self,
+        path: str,
+        tolerant: bool = False,
+        budget: "ResourceBudget | None" = None,
+    ) -> PackageBundle:
+        """Open a package bundle by logical path with source-provenance tracking.
+
+        The bundle's ``source`` field records which mount served it, and the
+        ``provider`` field is set to this ``MultiSourceProvider`` so that
+        sidecar resolution is source-consistent (sidecars come from the same
+        provider that served the main file).
+
+        Raises:
+            FileNotFoundError: If no mount can resolve the logical path.
+        """
+        for mount in self._mounts:
+            physical = self._to_physical(path, mount)
+            if physical is not None:
+                bundle = mount.provider.open_package_bundle(
+                    physical, tolerant=tolerant, budget=budget,
+                )
+                # Set provenance from this mount
+                bundle.source = SourceProvenance(
+                    mount_root=mount.mount_root,
+                    provider_label=mount.label or mount.provider.container,
+                    container=mount.provider.container,
+                )
+                # Set provider to self so caller sees the composed provider
+                bundle.provider = self
+                return bundle
+        raise FileNotFoundError(path)
+
+    def resolve_source(self, path: str) -> SourceProvenance | None:
+        """Resolve which source serves a given logical path.
+
+        Returns ``None`` if no mount can resolve the path.
+        """
+        for mount in self._mounts:
+            physical = self._to_physical(path, mount)
+            if physical is not None:
+                return SourceProvenance(
+                    mount_root=mount.mount_root,
+                    provider_label=mount.label or mount.provider.container,
+                    container=mount.provider.container,
+                )
+        return None
+
+    def _to_logical(self, physical_path: str, mount: MountPoint) -> str:
+        """Convert a physical path (from a provider) to a logical path.
+
+        For filesystem providers, the physical path is absolute and must be
+        made relative to the provider's root before prepending the mount root.
+        For other providers, the path is treated as already relative.
+        """
+        physical = physical_path.replace("\\", "/")
+        mount_root = mount.mount_root.rstrip("/") + "/"
+        # Strip provider root if present (filesystem providers return absolute paths)
+        provider_root = getattr(mount.provider, "root", None)
+        if provider_root is not None:
+            root_str = str(provider_root).replace("\\", "/").rstrip("/") + "/"
+            if physical.startswith(root_str):
+                physical = physical[len(root_str):]
+        # If the physical path already starts with the mount root, strip it
+        if physical.startswith(mount_root):
+            relative = physical[len(mount_root):]
+            return mount_root + relative if relative else mount_root.rstrip("/")
+        # Otherwise, just prefix with mount root
+        return mount_root + physical.lstrip("/")
+
+    def _to_physical(self, logical_path: str, mount: MountPoint) -> str | None:
+        """Convert a logical path to a physical path for a given mount.
+
+        Returns ``None`` if the logical path does not belong to this mount
+        or if the mount's provider cannot resolve the physical path.
+
+        For filesystem providers, the result is an absolute path by prepending
+        the provider's root. For other providers, the result is a relative path.
+        """
+        logical = logical_path.replace("\\", "/")
+        mount_root = mount.mount_root.rstrip("/") + "/"
+        # Check if the logical path belongs to this mount's prefix
+        if not logical.startswith(mount_root) and not logical.startswith(mount.mount_root):
+            return None
+        # Strip the mount root to get the relative path
+        if logical.startswith(mount_root):
+            relative = logical[len(mount_root):]
+        else:
+            relative = logical[len(mount.mount_root):]
+        if not relative:
+            return None
+        # For filesystem providers, prepend root to get absolute physical path
+        provider_root = getattr(mount.provider, "root", None)
+        if provider_root is not None:
+            root_str = str(provider_root).replace("\\", "/").rstrip("/")
+            return root_str + "/" + relative
+        return relative
 
 
 class FileSystemPackageProvider(PackageProvider):
