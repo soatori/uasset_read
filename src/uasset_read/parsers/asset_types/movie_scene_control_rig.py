@@ -108,10 +108,7 @@ class MovieSceneControlRigParameterTrackHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error and record in context warnings for visibility
             logger.warning("MovieSceneControlRigParameterTrack parse error: %s", e)
-            if hasattr(context, "warnings"):
-                context.warnings.append(f"MovieSceneControlRigParameterTrack parse error: {e}")
             return ParseStatus.PARTIAL
 
 
@@ -201,8 +198,5 @@ class MovieSceneControlRigParameterSectionHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error and record in context warnings for visibility
             logger.warning("MovieSceneControlRigParameterSection parse error: %s", e)
-            if hasattr(context, "warnings"):
-                context.warnings.append(f"MovieSceneControlRigParameterSection parse error: {e}")
             return ParseStatus.PARTIAL

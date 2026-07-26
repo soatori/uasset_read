@@ -102,10 +102,7 @@ class AnimBlueprintHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error and record in context warnings for visibility
             logger.warning("AnimBlueprint parse error: %s", e)
-            if hasattr(context, "warnings"):
-                context.warnings.append(f"AnimBlueprint parse error: {e}")
             return ParseStatus.PARTIAL
 
     def _parse_baked_state_machines(self, data: Any) -> list[BakedStateMachineIR]:

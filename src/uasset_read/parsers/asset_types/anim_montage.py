@@ -104,10 +104,7 @@ class AnimMontageHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error and record in context warnings for visibility
             logger.warning("AnimMontage parse error: %s", e)
-            if hasattr(context, "warnings"):
-                context.warnings.append(f"AnimMontage parse error: {e}")
             return ParseStatus.PARTIAL
 
     def _parse_composite_sections(self, data: Any) -> list[dict]:

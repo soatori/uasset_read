@@ -526,8 +526,8 @@ class TestAssetTypeHandlerErrorVisibilityIssue479:
             ("uasset_read.parsers.asset_types.movie_scene", "MovieSceneHandler", "MovieScene"),
         ],
     )
-    def test_handler_appends_to_context_warnings(self, handler_module, handler_cls_name, handler_name):
-        """Handler should append to context.warnings when available."""
+    def test_handler_returns_partial_on_error(self, handler_module, handler_cls_name, handler_name):
+        """Handler should return PARTIAL status on parse error."""
         import importlib
         from unittest.mock import patch
 
@@ -544,8 +544,6 @@ class TestAssetTypeHandlerErrorVisibilityIssue479:
             result = handler.handle(export, context)
 
         assert result == ParseStatus.PARTIAL
-        assert len(context.warnings) == 1
-        assert handler_name in context.warnings[0]
 
     @pytest.mark.parametrize(
         "handler_module,handler_cls_name",

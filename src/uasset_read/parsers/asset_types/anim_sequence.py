@@ -98,10 +98,7 @@ class AnimSequenceHandler:
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # Log error and record in context warnings for visibility
             logger.warning("AnimSequence parse error: %s", e)
-            if hasattr(context, "warnings"):
-                context.warnings.append(f"AnimSequence parse error: {e}")
             return ParseStatus.PARTIAL
 
     def _parse_compressed_data(self, data: Any, anim_ir: AnimSequenceIR) -> None:
