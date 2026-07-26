@@ -68,7 +68,7 @@ previously active implementations.
 | --- | --- | --- |
 | `GameDirectoryProvider` | Retain | It is a documented independent provider API in `README.md`; lack of a main parser caller is not evidence that it is dead. |
 | `parsers.asset_types` handlers | Retain | `get_class_registry()` lazily bootstraps optional modules; the runtime registry currently discovers 26 handlers. Static direct-call counts do not describe this path. |
-| `debug.HexView` and `format_hex_dump` | Retain | HexView is connected from CLI/config through archive recording, IR conversion, and JSON/Markdown rendering; `format_hex_dump` is an explicit `debug.__all__` export. |
+| HexView rendering chain and `debug` exports | Retain | HexView is connected from CLI/config through archive recording, IR conversion, and JSON/Markdown rendering; `HexViewEntry`, `format_hex_view`, and `format_hex_dump` are explicit `debug.__all__` exports. |
 | `graph.parser.extract_blueprint_graphs` | Retain | `pipeline.post_process` imports and calls it, and `graph.__all__` exports it. |
 | `PackageLinker` / `UObjectInstance` helpers | Retain | Both classes are documented public link APIs. Removing methods solely because the repository has no direct caller would repeat the independent-API false positive. |
 | Pak and IoStore models/helpers | Retain | Their package `__all__` lists define standalone container-reader APIs, including exported structure types and lookup helpers. |

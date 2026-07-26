@@ -5,7 +5,10 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterable
 from pathlib import Path
+import sys
 
+import pytest
+import uasset_read.cli as cli_module
 from uasset_read.cli import create_parser
 
 
@@ -101,3 +104,42 @@ def test_cli_does_not_expose_noop_tolerant_flag() -> None:
 
     assert "--tolerant" not in actions
     assert "--strict" in actions
+
+
+@pytest.mark.parametrize(
+    ("cli_args", "expected_tolerant"),
+    [
+        pytest.param([], True, id="default"),
+        pytest.param(["--strict"], False, id="strict"),
+    ],
+)
+def test_cli_forwards_strict_mode_to_parse_single(
+    cli_args: list[str],
+    expected_tolerant: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    asset_path = tmp_path / "asset.uasset"
+    asset_path.write_bytes(b"")
+    forwarded: dict[str, object] = {}
+
+    def fake_parse_single(file_path: str, **kwargs: object) -> str:
+        forwarded["file_path"] = file_path
+        forwarded["tolerant"] = kwargs["tolerant"]
+        return "{}"
+
+    monkeypatch.setattr(cli_module, "parse_single", fake_parse_single)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["uasset_read", str(asset_path), *cli_args],
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli_module.main()
+
+    assert exit_info.value.code == 0
+    assert forwarded == {
+        "file_path": str(asset_path),
+        "tolerant": expected_tolerant,
+    }
