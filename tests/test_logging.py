@@ -7,6 +7,7 @@ import pytest
 
 from uasset_read.config import LogConfig
 from uasset_read.project_logging import (
+    _reset_logging_state_for_tests,
     current_log_run_id,
     project_logging_session,
 )
@@ -55,18 +56,19 @@ class TestDirectPackageLogConfig:
     """#448: parse_package() and parse_uasset_with_linker() must consume log_config."""
 
     def test_parse_package_level_off_no_log_file(self, tmp_path: Path):
-        """LogConfig(level='off') must not create any log files."""
+        """LogConfig(level='off') must not create any log files in the default log dir."""
         from uasset_read.parse_uasset import parse_package
 
-        log_dir = tmp_path / "logs_disabled"
-        log_dir.mkdir()
+        _reset_logging_state_for_tests()
+        default_log_dir = Path("log")
+        before = {p.name for p in default_log_dir.iterdir()} if default_log_dir.exists() else set()
         parse_package(
             str(_SAMPLE_ASSET),
-            log_config=LogConfig(level="off", dir=str(log_dir)),
+            log_config=LogConfig(level="off"),
         )
-        assert not list(log_dir.glob("*.log")), (
-            "LogConfig(level='off') should not produce log files"
-        )
+        _reset_logging_state_for_tests()
+        after = {p.name for p in default_log_dir.iterdir()} if default_log_dir.exists() else set()
+        assert after == before, "no new log files should appear when level is 'off'"
 
     def test_parse_package_custom_dir_creates_log(self, tmp_path: Path):
         """LogConfig(dir=...) must route logs to the specified directory."""
@@ -74,26 +76,29 @@ class TestDirectPackageLogConfig:
 
         custom_dir = tmp_path / "my_logs"
         custom_dir.mkdir()
+        _reset_logging_state_for_tests()
         parse_package(
             str(_SAMPLE_ASSET),
             log_config=LogConfig(dir=str(custom_dir)),
         )
         log_files = list(custom_dir.glob("*.log"))
+        _reset_logging_state_for_tests()
         assert log_files, "LogConfig(dir=...) should create at least one log file"
 
     def test_parse_uasset_with_linker_level_off_no_log_file(self, tmp_path: Path):
-        """LogConfig(level='off') must not create any log files."""
+        """LogConfig(level='off') must not create any log files in the default log dir."""
         from uasset_read.parse_uasset import parse_uasset_with_linker
 
-        log_dir = tmp_path / "logs_disabled"
-        log_dir.mkdir()
+        _reset_logging_state_for_tests()
+        default_log_dir = Path("log")
+        before = {p.name for p in default_log_dir.iterdir()} if default_log_dir.exists() else set()
         parse_uasset_with_linker(
             str(_SAMPLE_ASSET),
-            log_config=LogConfig(level="off", dir=str(log_dir)),
+            log_config=LogConfig(level="off"),
         )
-        assert not list(log_dir.glob("*.log")), (
-            "LogConfig(level='off') should not produce log files"
-        )
+        _reset_logging_state_for_tests()
+        after = {p.name for p in default_log_dir.iterdir()} if default_log_dir.exists() else set()
+        assert after == before, "no new log files should appear when level is 'off'"
 
     def test_parse_uasset_with_linker_custom_dir_creates_log(self, tmp_path: Path):
         """LogConfig(dir=...) must route logs to the specified directory."""
@@ -101,11 +106,13 @@ class TestDirectPackageLogConfig:
 
         custom_dir = tmp_path / "my_logs"
         custom_dir.mkdir()
+        _reset_logging_state_for_tests()
         parse_uasset_with_linker(
             str(_SAMPLE_ASSET),
             log_config=LogConfig(dir=str(custom_dir)),
         )
         log_files = list(custom_dir.glob("*.log"))
+        _reset_logging_state_for_tests()
         assert log_files, "LogConfig(dir=...) should create at least one log file"
 
 

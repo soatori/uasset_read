@@ -253,7 +253,10 @@ def parse_package(
     Returns:
         ParseResult instance (containing parsed data and error messages)
     """
-    configure_project_logging()
+    if log_config is not None:
+        configure_project_logging(**log_config.to_configure_kwargs())
+    else:
+        configure_project_logging()
     result = ParseResult()
 
     # Handle deprecated include_linker parameter
@@ -369,6 +372,11 @@ def parse_uasset_with_linker(
     """
     # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.link.result import LinkerParseResult
+
+    if log_config is not None:
+        configure_project_logging(**log_config.to_configure_kwargs())
+    else:
+        configure_project_logging()
 
     result = LinkerParseResult()
 
