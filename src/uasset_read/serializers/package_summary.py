@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 """
-Package Summary 序列化 — PackageFileSummary 及相关读取函数。
+Package Summary serialization — PackageFileSummary and related read functions.
 
-从 uasset_read.py 提取（第 901-2543 行）。
-UE5.7 专用版本 — 已移除 UE4 兼容代码。
+Extracted from uasset_read.py (lines 901-2543).
+UE5.7-only version — UE4 compatibility code removed.
 """
 
 import logging
@@ -45,7 +45,7 @@ from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.constants import MIN_UASSET_SIZE
 
-# 可选的 ResourceBudget（延迟导入，避免循环依赖）
+# Optional ResourceBudget (lazy import to avoid circular dependencies)
 try:
     from uasset_read.memory_safety import ResourceBudget as _ResourceBudgetType
 except ImportError:
@@ -59,21 +59,21 @@ def read_validated_count_strict(
     bytes_per_entry: int,
     budget: "ResourceBudget | None" = None,
 ) -> int:
-    """读取并验证表计数的物理可行性（严格版：超限抛出 ParseError）。
+    """Read and validate table count physical feasibility (strict: raises ParseError on excess).
 
     Args:
-        count: 从归档读取的原始计数值
-        max_value: 该表允许的最大计数上限
-        stage: 阶段名（用于异常和预算日志）
-        bytes_per_entry: 每条记录占用的字节数（用于 budget.reserve）
-        budget: 可选的资源预算跟踪器
+        count: Raw count read from archive
+        max_value: Maximum allowed count for this table
+        stage: Stage name (for exceptions and budget logs)
+        bytes_per_entry: Bytes per record (for budget.reserve)
+        budget: Optional resource budget tracker
 
     Returns:
-        验证后的 count 值
+        Validated count value
 
     Raises:
-        ParseError: count 超过 max_value 时抛出
-        MemoryLimitExceeded: budget.reserve 超限时抛出
+        ParseError: When count exceeds max_value
+        MemoryLimitExceeded: When budget.reserve exceeds limit
     """
     if count < 0:
         raise ParseError(f"Negative {stage} count: {count}")
@@ -88,14 +88,14 @@ def read_validated_count_strict(
 
 @dataclass
 class GenerationInfo:
-    """FGenerationInfo 版本世代信息。"""
+    """FGenerationInfo — version generation info."""
     export_count: int = 0
     name_count: int = 0
 
 
 @dataclass
 class EngineVersion:
-    """FEngineVersion 引擎版本信息。"""
+    """FEngineVersion — engine version info."""
     major: int = 0
     minor: int = 0
     patch: int = 0
@@ -105,14 +105,14 @@ class EngineVersion:
 
 @dataclass
 class CustomVersion:
-    """自定义版本（GUID + 版本号）。"""
+    """Custom version (GUID + version number)."""
     guid: str
     version: int
 
 
 @dataclass
 class PackageFileSummary:
-    """PackageFileSummary 文件头。"""
+    """PackageFileSummary file header."""
     tag: int
     legacy_file_version: int
     file_version_ue4: int = 0
@@ -166,7 +166,7 @@ class PackageFileSummary:
     preload_dependencies: List[int] = field(default_factory=list)
 
     def get_custom_version(self, guid: str, default: int = 0) -> int:
-        """查找 CustomVersion 版本值。"""
+        """Find CustomVersion version value."""
         normalized_guid = normalize_hex_guid(guid)
         for cv in self.custom_versions:
             if cv.guid == normalized_guid:
@@ -175,7 +175,7 @@ class PackageFileSummary:
 
 
 def _read_custom_versions(archive: FArchive) -> list:
-    """读取 CustomVersions 表（Optimized 格式，UE5 / UE4 LegacyFileVersion < -5）。"""
+    """Read CustomVersions table (Optimized format, UE5 / UE4 LegacyFileVersion < -5)."""
     custom_versions_count = archive.read_u32("CustomVersionsCount")
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
         raise ParseError("Custom versions count exceeds maximum")
@@ -188,10 +188,10 @@ def _read_custom_versions(archive: FArchive) -> list:
 
 
 def _read_custom_versions_guids(archive: FArchive) -> list:
-    """读取 CustomVersions 表（Guids 格式，UE4 LegacyFileVersion -3 到 -5）。
+    """Read CustomVersions table (Guids format, UE4 LegacyFileVersion -3 to -5).
 
-    每条记录: FGuid (16 bytes) + int32 Version + FString FriendlyName
-    参考: UE CustomVersion.cpp FGuidCustomVersion_DEPRECATED
+    Each record: FGuid (16 bytes) + int32 Version + FString FriendlyName
+    Reference: UE CustomVersion.cpp FGuidCustomVersion_DEPRECATED
     """
     custom_versions_count = archive.read_u32("CustomVersionsCount")
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
@@ -200,14 +200,14 @@ def _read_custom_versions_guids(archive: FArchive) -> list:
     for _ in range(custom_versions_count):
         guid_bytes = archive.read(16)
         version = archive.read_i32()
-        # FriendlyName: FString (i32 length + chars)，UE4 GUID 格式包含此字段
+        # FriendlyName: FString (i32 length + chars), included in UE4 GUID format
         archive.read_fstring("FriendlyName")
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
     return custom_versions
 
 
 def _read_generations(archive: FArchive, budget: "_ResourceBudgetType | None" = None) -> list:
-    """读取 Generations 表。"""
+    """Read Generations table."""
     generations_count = archive.read_i32("GenerationsCount")
     read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8, budget)
     generations = []
@@ -219,7 +219,7 @@ def _read_generations(archive: FArchive, budget: "_ResourceBudgetType | None" = 
 
 
 def _read_engine_version(archive: FArchive) -> "EngineVersion":
-    """读取 FEngineVersion 结构。"""
+    """Read FEngineVersion structure."""
     return EngineVersion(
         major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
         changelist=archive.read_u32(), branch=archive.read_fstring()
@@ -227,7 +227,7 @@ def _read_engine_version(archive: FArchive) -> "EngineVersion":
 
 
 def _read_cell_counts(archive: FArchive) -> tuple:
-    """读取 Verse Cell 计数和偏移（UE5.7+）。"""
+    """Read Verse Cell count and offset (UE5.7+)."""
     cell_export_count = archive.read_i32("CellExportCount")
     if cell_export_count < 0:
         raise ParseError(f"Negative cell export count: {cell_export_count}")
@@ -244,22 +244,22 @@ def _read_cell_counts(archive: FArchive) -> tuple:
 
 
 def _read_payload_toc_offset(archive: FArchive) -> int:
-    """读取 PayloadTocOffset 并验证合理性。"""
+    """Read PayloadTocOffset and validate reasonableness."""
     payload_toc_offset = archive.read_i64("PayloadTocOffset")
     if payload_toc_offset < 0:
-        logger.debug("PayloadTocOffset 为负数: %d, 设为 0", payload_toc_offset)
+        logger.debug("PayloadTocOffset is negative: %d, setting to 0", payload_toc_offset)
         payload_toc_offset = 0
     elif payload_toc_offset > 0:
         file_size = archive.total_size()
         if file_size > 0 and payload_toc_offset > file_size * 10:
             logger.debug(
-                "PayloadTocOffset %d 明显越界（文件大小 %d），设为 0",
+                "PayloadTocOffset %d clearly out of bounds (file size %d), setting to 0",
                 payload_toc_offset, file_size,
             )
             payload_toc_offset = 0
         elif file_size > 0 and payload_toc_offset > file_size:
             logger.debug(
-                "PayloadTocOffset %d 超过文件大小 %d，可能是 virtualized payload",
+                "PayloadTocOffset %d exceeds file size %d, may be virtualized payload",
                 payload_toc_offset, file_size,
             )
         else:
@@ -268,7 +268,7 @@ def _read_payload_toc_offset(archive: FArchive) -> int:
 
 
 def _validate_file_size(archive: FArchive) -> None:
-    """截断文件检测：文件过小时直接报错。"""
+    """Truncated file detection: raise error when file is too small."""
     file_size = archive.total_size()
     if file_size < MIN_UASSET_SIZE:
         archive._diagnostics.append(OffsetRangeDiagnostic(
@@ -278,23 +278,23 @@ def _validate_file_size(archive: FArchive) -> None:
             file_size=file_size,
             source="read_package_summary",
             error=(
-                f"文件大小 {file_size} 字节，小于最小合法大小 {MIN_UASSET_SIZE} 字节，"
-                f"文件可能已截断或损坏"
+                f"File size {file_size} bytes, smaller than minimum valid size {MIN_UASSET_SIZE} bytes, "
+                f"file may be truncated or corrupted"
             ),
         ))
         raise ParseError(
-            f"文件过小（{file_size} 字节），无法解析为 .uasset 文件。"
-            f"最小合法大小为 {MIN_UASSET_SIZE} 字节，文件可能已截断或损坏"
+            f"File too small ({file_size} bytes), cannot parse as .uasset file. "
+            f"Minimum valid size is {MIN_UASSET_SIZE} bytes, file may be truncated or corrupted"
         )
 
 
 def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes, int, list]:
-    """读取魔数、版本号、SavedHash、CustomVersions。
+    """Read magic number, version, SavedHash, CustomVersions.
 
-    返回 (tag, legacy_file_version, file_version_ue4, file_version_ue5,
+    Returns (tag, legacy_file_version, file_version_ue4, file_version_ue5,
            saved_hash, total_header_size, custom_versions)。
     """
-    # 魔数
+    # Magic number
     tag = archive.read_u32("Tag")
     if tag == PACKAGE_FILE_TAG_SWAPPED:
         archive.set_byte_swapping(True)
@@ -312,7 +312,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
 
     is_ue4_legacy = legacy_file_version in UE4_LEGACY_VERSIONS
 
-    # LegacyUE3Version: 存在因为 legacy_file_version != -4
+    # LegacyUE3Version: exists because legacy_file_version != -4
     if legacy_file_version != -4:
         _legacy_ue3_version = archive.read_i32("LegacyUE3Version")  # noqa: F841 - protocol read
     file_version_ue4 = archive.read_i32("FileVersionUE4")
@@ -336,8 +336,8 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
         custom_versions = _read_custom_versions(archive)
     else:
         saved_hash = b""
-        # UE4 LegacyFileVersion -3 到 -5 使用 Guids 格式（含 FriendlyName）
-        # UE5 LegacyFileVersion -6 到 -8 使用 Optimized 格式
+        # UE4 LegacyFileVersion -3 to -5 uses Guids format (with FriendlyName)
+        # UE5 LegacyFileVersion -6 to -8 uses Optimized format
         if is_ue4_legacy:
             custom_versions = _read_custom_versions_guids(archive)
         else:
@@ -349,7 +349,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
 
 
 def _read_package_identity(archive: FArchive) -> tuple[str, int]:
-    """读取 PackageName 和 PackageFlags。"""
+    """Read PackageName and PackageFlags."""
     package_name = archive.read_fstring("PackageName")
     if package_name == UE_NONE_SENTINEL:
         package_name = ""
@@ -358,7 +358,7 @@ def _read_package_identity(archive: FArchive) -> tuple[str, int]:
 
 
 def _read_name_table_offsets(archive: FArchive) -> tuple[int, int]:
-    """读取 NameCount 和 NameOffset。"""
+    """Read NameCount and NameOffset."""
     name_count = archive.read_i32("NameCount")
     if name_count < 0:
         raise ParseError(f"Negative name count: {name_count}")
@@ -370,7 +370,7 @@ def _read_name_table_offsets(archive: FArchive) -> tuple[int, int]:
 
 
 def _read_export_import_offsets(archive: FArchive) -> tuple[int, int, int, int]:
-    """读取 Export/Import 表的 count 和 offset。"""
+    """Read Export/Import table count and offset."""
     export_count = archive.read_i32("ExportCount")
     if export_count < 0:
         raise ParseError(f"Negative export count: {export_count}")
@@ -401,7 +401,7 @@ def _read_pre_export_optional_fields(
     file_version_ue4: int,
     has_filter_editor_only: bool,
 ) -> dict:
-    """读取 NameOffset 之后、ExportCount 之前的版本门控字段。"""
+    """Read version-gated fields between NameOffset and ExportCount."""
     # SoftObjectPaths（UE5 >= 1011）
     soft_object_paths_count = 0
     soft_object_paths_offset = 0
@@ -411,7 +411,7 @@ def _read_pre_export_optional_fields(
         if soft_object_paths_offset > 0:
             archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
-    # LocalizationId（非 FilterEditorOnly, UE4 >= 516）
+    # LocalizationId (non FilterEditorOnly, UE4 >= 516)
     localization_id = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
         localization_id = archive.read_fstring("LocalizationId")
@@ -438,8 +438,8 @@ def _read_post_import_optional_fields(
     archive: FArchive,
     file_version_ue5: int,
 ) -> dict:
-    """读取 ImportOffset 之后、DependsOffset 之前的版本门控字段。"""
-    # CellExport/CellImport（UE5 >= cell 版本）
+    """Read version-gated fields between ImportOffset and DependsOffset."""
+    # CellExport/CellImport (UE5 >= cell version)
     cell_export_count = 0
     cell_export_offset = 0
     cell_import_count = 0
@@ -447,7 +447,7 @@ def _read_post_import_optional_fields(
     if file_version_ue5 >= UE5_VERSE_CELLS:
         cell_export_count, cell_export_offset, cell_import_count, cell_import_offset = _read_cell_counts(archive)
 
-    # MetaDataOffset（UE5 >= meta 版本）
+    # MetaDataOffset (UE5 >= meta version)
     metadata_offset = 0
     if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
         metadata_offset = archive.read_i32("MetadataOffset")
@@ -468,7 +468,7 @@ def _read_secondary_offset_fields(
     file_version_ue4: int,
     budget: "_ResourceBudgetType | None" = None,
 ) -> dict:
-    """读取 DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable。"""
+    """Read DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable."""
     depends_offset = archive.read_i32("DependsOffset")
 
     soft_package_references_count = 0
@@ -499,7 +499,7 @@ def _read_secondary_offset_fields(
 
 
 def _read_import_type_hierarchies(archive: FArchive, file_version_ue5: int) -> tuple[int, int]:
-    """读取 ImportTypeHierarchies（UE5 >= 1015）。"""
+    """Read ImportTypeHierarchies (UE5 >= 1015)."""
     if file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
         count = archive.read_i32("ImportTypeHierarchiesCount")
         if count < 0:
@@ -518,20 +518,20 @@ def _read_guids(
     file_version_ue5: int,
     has_filter_editor_only: bool,
 ) -> str:
-    """读取 LegacyGuid / PersistentGuid / OwnerPersistentGuid。"""
-    # LegacyGuid（UE5 < 1016 时存在）
+    """Read LegacyGuid / PersistentGuid / OwnerPersistentGuid."""
+    # LegacyGuid (exists when UE5 < 1016)
     if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
         archive.read(16)
 
-    # PersistentGuid（UE 源码: PackageFileSummary.cpp:357）
-    # 仅当 FileVersionUE >= VER_UE4_ADDED_PACKAGE_OWNER (518) 时从文件读取
-    # 旧版本通过 SavedHash 派生，不需要从文件读取
+    # PersistentGuid (UE source: PackageFileSummary.cpp:357)
+    # Only read from file when FileVersionUE >= VER_UE4_ADDED_PACKAGE_OWNER (518)
+    # Older versions derive via SavedHash, no need to read from file
     persistent_guid = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER:
         guid_bytes = archive.read(16)
         persistent_guid = guid_bytes.hex()
 
-    # OwnerPersistentGuid（仅 UE4 519 精确值）
+    # OwnerPersistentGuid (only UE4 519 exact value)
     if (
         not has_filter_editor_only
         and file_version_ue4 >= UE4_ADDED_PACKAGE_OWNER
@@ -545,7 +545,7 @@ def _read_guids(
 def _read_compression_and_source(
     archive: FArchive, budget: "_ResourceBudgetType | None" = None,
 ) -> tuple[int, int]:
-    """读取 CompressionFlags、CompressedChunks、PackageSource。"""
+    """Read CompressionFlags, CompressedChunks, PackageSource."""
     compression_flags = archive.read_u32("CompressionFlags")
 
     compressed_chunks_count = archive.read_i32("CompressedChunksCount")
@@ -561,7 +561,7 @@ def _read_compression_and_source(
 
 
 def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> None:
-    """读取 AdditionalPackagesToCook 和 NumTextureAllocations（legacy -6）。"""
+    """Read AdditionalPackagesToCook and NumTextureAllocations (legacy -6)."""
     additional_packages_count = archive.read_i32("AdditionalPackagesCount")
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
@@ -573,7 +573,7 @@ def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> No
 
 
 def _read_tail_offsets(archive: FArchive) -> dict:
-    """读取 AssetRegistry、BulkData、WorldTile、ChunkIDs。"""
+    """Read AssetRegistry, BulkData, WorldTile, ChunkIDs."""
     asset_registry_data_offset = archive.read_i32("AssetRegistryDataOffset")
     if asset_registry_data_offset > 0:
         archive.validate_offset(asset_registry_data_offset, "AssetRegistryDataOffset")
@@ -604,7 +604,7 @@ def _read_late_versioned_fields(
     file_version_ue4: int,
     file_version_ue5: int,
 ) -> dict:
-    """读取 PreloadDependencies、NamesReferenced、PayloadToc、DataResource。"""
+    """Read PreloadDependencies, NamesReferenced, PayloadToc, DataResource."""
     preload_dependency_count = -1
     preload_dependency_offset = 0
     if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
@@ -640,66 +640,66 @@ def read_package_summary(
     archive: FArchive,
     budget: "_ResourceBudgetType | None" = None,
 ) -> PackageFileSummary:
-    """读取 PackageFileSummary 文件头（UE5.7 专用）。"""
+    """Read PackageFileSummary header (UE5.7-only)."""
     _validate_file_size(archive)
 
     archive.seek(0)
     archive.set_hex_view_context("Summary.")
 
-    # 第 1-3 步：版本号 + SavedHash + CustomVersions
+    # Step 1-3: Version + SavedHash + CustomVersions
     (tag, legacy_file_version, file_version_ue4, file_version_ue5,
      file_version_licensee, saved_hash, total_header_size,
      custom_versions) = _read_version_and_tag(archive)
 
-    # 第 4 步：PackageName + PackageFlags
+    # Step 4: PackageName + PackageFlags
     package_name, package_flags = _read_package_identity(archive)
     has_filter_editor_only = (package_flags & PKG_FilterEditorOnly) != 0
 
-    # 第 5 步：NameCount + NameOffset
+    # Step 5: NameCount + NameOffset
     name_count, name_offset = _read_name_table_offsets(archive)
 
-    # 第 6-8 步：SoftObjectPaths / Localization / GatherableText（NameOffset 之后、ExportCount 之前）
+    # Step 6-8: SoftObjectPaths / Localization / GatherableText (between NameOffset and ExportCount)
     pre_export = _read_pre_export_optional_fields(
         archive, file_version_ue5, file_version_ue4, has_filter_editor_only,
     )
 
-    # 第 9-10 步：ExportCount/Offset + ImportCount/Offset
+    # Step 9-10: ExportCount/Offset + ImportCount/Offset
     export_count, export_offset, import_count, import_offset = (
         _read_export_import_offsets(archive)
     )
 
-    # 第 11-12 步：Cells / MetaData（ImportOffset 之后、DependsOffset 之前）
+    # Step 11-12: Cells / MetaData (between ImportOffset and DependsOffset)
     post_import = _read_post_import_optional_fields(archive, file_version_ue5)
 
-    # 第 13-14 步：DependsOffset + SoftPackageRefs + SearchableNames + Thumbnail
+    # Step 13-14: DependsOffset + SoftPackageRefs + SearchableNames + Thumbnail
     secondary = _read_secondary_offset_fields(archive, file_version_ue4, budget)
 
-    # 第 15 步：ImportTypeHierarchies
+    # Step 15: ImportTypeHierarchies
     import_type_hierarchies_count, import_type_hierarchies_offset = (
         _read_import_type_hierarchies(archive, file_version_ue5)
     )
 
-    # 第 16 步：GUIDs
+    # Step 16: GUIDs
     persistent_guid = _read_guids(
         archive, legacy_file_version, file_version_ue4,
         file_version_ue5, has_filter_editor_only,
     )
 
-    # 第 17-19 步：Generations + EngineVersions
+    # Step 17-19: Generations + EngineVersions
     generations = _read_generations(archive, budget)
     saved_by_engine_version = _read_engine_version(archive)
     compatible_with_engine_version = _read_engine_version(archive)
 
-    # 第 20-22 步：Compression + PackageSource
+    # Step 20-22: Compression + PackageSource
     compression_flags, package_source = _read_compression_and_source(archive, budget)
 
-    # 第 23 步：AdditionalPackages + TextureAllocations
+    # Step 23: AdditionalPackages + TextureAllocations
     _read_additional_packages(archive, legacy_file_version)
 
-    # 第 24-27 步：AssetRegistry/BulkData/WorldTile/ChunkIDs
+    # Step 24-27: AssetRegistry/BulkData/WorldTile/ChunkIDs
     tail = _read_tail_offsets(archive)
 
-    # 第 28-31 步：PreloadDeps / NamesReferenced / PayloadToc / DataResource
+    # Step 28-31: PreloadDeps / NamesReferenced / PayloadToc / DataResource
     late = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
 
     return PackageFileSummary(
@@ -749,25 +749,25 @@ def validate_export_data_range(
     archive: FArchive,
     summary: PackageFileSummary,
 ) -> None:
-    """验证导出数据偏移是否超出文件范围。
+    """Validate export data offsets against file bounds.
 
-    检查每个导出条目的 serial_offset + serial_size 是否在文件范围内。
-    截断文件的导出表可能指向超出文件末尾的偏移。
+    Checks whether each export entry's serial_offset + serial_size is within file range.
+    Truncated files may have export table entries pointing past end of file.
 
     Args:
-        archive: 文件归档读取器
-        summary: 包文件摘要
+        archive: File archive reader
+        summary: Package file summary
 
-    注：此函数仅记录诊断，不抛出异常（容错模式友好）。
+    Note: This function only logs diagnostics, does not raise exceptions (fault-tolerant).
     """
 
     file_size = archive.total_size()
     if file_size <= 0 or summary.export_count <= 0:
         return
 
-    # 导出表本身占用的空间检查
-    # 每个导出表条目约 100+ 字节（FObjectExport 结构）
-    export_table_min_entry_size = 72  # 最小 FObjectExport 大小
+    # Export table space check
+    # Each export table entry ~100+ bytes (FObjectExport structure)
+    export_table_min_entry_size = 72  # Minimum FObjectExport size
     export_table_end = summary.export_offset + summary.export_count * export_table_min_entry_size
     if export_table_end > file_size:
         archive._diagnostics.append(OffsetRangeDiagnostic(
@@ -779,51 +779,51 @@ def validate_export_data_range(
             file_size=file_size,
             source="validate_export_data_range",
             error=(
-                f"导出表区域 [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
-                f"超出文件大小 0x{file_size:X}，文件可能在导出表区域被截断"
+                f"Export table region [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
+                f"exceeds file size 0x{file_size:X}, file may be truncated in export table region"
             ),
         ))
 
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
-    """读取名称表。
+    """Read name table.
 
-    每个名称条目格式：
-    - NameString (FString) - 名称字符串
-    - NonCasePreservingHash (uint16) - 非大小写保留哈希
-    - CasePreservingHash (uint16) - 大小写保留哈希
-    （两个 uint16 共 4 字节，仅 VER_UE4_NAME_HASHES_SERIALIZED 及之后版本存在）
+    Each name entry format:
+    - NameString (FString) - name string
+    - NonCasePreservingHash (uint16) - non-case-preserving hash
+    - CasePreservingHash (uint16) - case-preserving hash
+    (two uint16s = 4 bytes total, only present in VER_UE4_NAME_HASHES_SERIALIZED and later)
 
-    UE5 资产始终有 name hashes（4 bytes）。
+    UE5 assets always have name hashes (4 bytes).
 
     Args:
-        archive: 文件归档读取器
-        summary: 包文件摘要，含 name_offset 和 name_count
+        archive: File archive reader
+        summary: Package file summary with name_offset and name_count
 
     Returns:
-        名称字符串列表。
+        List of name strings.
 
     Raises:
-        ParseError: 如果 name_count 为 0、name_offset 无效或读取后名称表为空。
-            每个 UE 包必须有非空的名称表，否则后续所有名称查找都会失败。
+        ParseError: If name_count is 0, name_offset is invalid, or name table is empty after reading.
+            Every UE package must have a non-empty name table, otherwise all subsequent name lookups will fail.
     """
-    # 防御性检查：name_count 为 0 时抛出错误（UE 包必须有名称表）
+    # Defensive check: raise error when name_count is 0 (UE package must have name table)
     if summary.name_count <= 0:
         raise ParseError(
-            f"name_count={summary.name_count}，UE 包必须有非空名称表"
+            f"name_count={summary.name_count}, UE package must have non-empty name table"
         )
 
-    # 验证 name_offset 有效性
+    # Validate name_offset
     if summary.name_offset <= 0:
         raise ParseError(
-            f"name_offset={summary.name_offset} 无效，无法读取名称表"
+            f"name_offset={summary.name_offset} invalid, cannot read name table"
         )
 
     try:
         archive.seek(summary.name_offset)
     except (OSError, OverflowError) as e:
         raise ParseError(
-            f"seek({summary.name_offset}) 失败，无法读取名称表: {e}"
+            f"seek({summary.name_offset}) failed, cannot read name table: {e}"
         ) from e
 
     name_map: List[str] = []
@@ -831,23 +831,23 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
         try:
             name = archive.read_fstring(f"NameTable[{i}].Name")
             name_map.append(name)
-            # 名称哈希字段：仅当 file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED (803) 时存在
-            # UE5 资产始终有 name hashes (4 bytes)
-            # 旧 UE4 资产（如 legacy -6 且 version < 803）没有哈希字段
+            # Name hash fields: only present when file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED (803)
+            # UE5 assets always have name hashes (4 bytes)
+            # Old UE4 assets (e.g. legacy -6 with version < 803) don't have hash fields
             from uasset_read.constants import UE4_NAME_HASHES_SERIALIZED
             if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
                 archive.read(4)
         except (struct.error, OSError, ValueError) as e:
             logger.debug(
-                "read_name_table: 读取名称条目 %d/%d 失败: %s（已读取 %d 个名称）",
+                "read_name_table: failed to read name entry %d/%d: %s (read %d names so far)",
                 i, summary.name_count, e, len(name_map),
             )
             break
 
     if not name_map:
         raise ParseError(
-            f"名称表为空（name_count={summary.name_count}, name_offset={summary.name_offset}），"
-            f"无法继续解析"
+            f"Name table is empty (name_count={summary.name_count}, name_offset={summary.name_offset}), "
+            f"cannot continue parsing"
         )
 
     return name_map
@@ -859,24 +859,24 @@ def read_depends_map(
     budget: "_ResourceBudgetType | None" = None,
     warnings: "List[str] | None" = None,
 ) -> List[List[int]]:
-    """读取 DependsMap（依赖表）。
+    """Read DependsMap (dependency table).
 
-    UE 格式：TArray<TArray<FPackageIndex>>
-    每个 Export 对应一个依赖列表，依赖列表中的值是 PackageIndex（int32）。
+    UE format: TArray<TArray<FPackageIndex>>
+    Each export has a dependency list, values are PackageIndex (int32).
 
-    PackageIndex 编码（UE FPackageIndex）：
-        0       → null（无引用）
-        > 0     → 引用 Import（1-based: PackageIndex 1 = import 0）
-        < 0     → 引用 Export（0-based negated: PackageIndex -1 = export 0）
+    PackageIndex encoding (UE FPackageIndex):
+        0       -> null (no reference)
+        > 0     -> Import reference (1-based: PackageIndex 1 = import 0)
+        < 0     -> Export reference (0-based negated: PackageIndex -1 = export 0)
 
     Args:
-        archive: 文件归档读取器
-        summary: 包文件摘要
-        budget: 可选资源预算跟踪器
-        warnings: 可选警告列表，用于收集降级信息（如无效条目）
+        archive: File archive reader
+        summary: Package file summary
+        budget: Optional resource budget tracker
+        warnings: Optional warnings list for collecting degradation info (e.g. invalid entries)
 
     Returns:
-        二维列表，第一维是 Export 索引，第二维是依赖的 PackageIndex 列表
+        2D list: first dimension is export index, second dimension is dependency PackageIndex list
     """
     if summary.depends_offset <= 0 or summary.export_count <= 0:
         return []
@@ -888,11 +888,11 @@ def read_depends_map(
     invalid_indices = 0
 
     for i in range(summary.export_count):
-        # 读取每个 Export 的依赖列表
+        # Read dependency list for each export
         dep_count = archive.read_i32(f"DependsMap[{i}].Count")
-        # 容错：异常值跳过该条目（保留空列表），而非中断整个表解析
+        # Fault-tolerant: skip invalid entries (preserve empty list) instead of aborting entire table parse
         if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
-            logger.debug("DependsMap: 异常的依赖数量 %d at export %d, 跳过", dep_count, i)
+            logger.debug("DependsMap: abnormal dependency count %d at export %d, skipping", dep_count, i)
             depends_map.append([])
             skipped_entries += 1
             continue
@@ -943,13 +943,13 @@ def read_soft_package_references(
     summary: PackageFileSummary,
     name_map: List[str],
 ) -> List[str]:
-    """读取 SoftPackageReferences（软包引用表）。
+    """Read SoftPackageReferences (soft package reference table).
 
-    UE 格式：TArray<FName> — 包路径名称列表。
-    仅当 file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP (516) 时存在。
+    UE format: TArray<FName> — package path name list.
+    Only present when file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP (516).
 
     Returns:
-        包路径名称列表（已从 FName 索引解析为字符串）
+        Package path name list (resolved from FName index to strings)
     """
     if summary.soft_package_references_count <= 0 or summary.soft_package_references_offset <= 0:
         return []
@@ -964,13 +964,13 @@ def read_soft_package_references(
 
 
 def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
-    """读取 PreloadDependencies（预加载依赖）。
+    """Read PreloadDependencies (preload dependencies).
 
-    UE 格式：TArray<FPackageIndex>
-    一维数组，包含所有预加载依赖的 PackageIndex。
+    UE format: TArray<FPackageIndex>
+    1D array containing all preload dependency PackageIndex values.
 
     Returns:
-        PackageIndex 列表
+        List of PackageIndex
     """
     if summary.preload_dependency_offset <= 0 or summary.preload_dependency_count <= 0:
         return []

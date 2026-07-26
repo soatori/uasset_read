@@ -1,5 +1,5 @@
 """
-Pak 文件解析模块
+Pak file parsing module.
 
 Public API:
 - PakFileReader: Main orchestrator for .pak file parsing

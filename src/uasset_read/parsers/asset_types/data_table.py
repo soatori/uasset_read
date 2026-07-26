@@ -1,10 +1,10 @@
-"""DataTable 资产类型处理器
+"""DataTable Asset type handler
 
-解析 UDataTable 的 LoadStructData（在 tagged properties 之后）：
+Parse UDataTable LoadStructData (after tagged properties):
 - NumRows: int32
-- 每行: FName(Index + Number, 各 int32) + RowPayload(size int32 + data)
+- Per row: FName(Index + Number, each int32) + RowPayload(size int32 + data)
 
-格式参考：
+Format reference:
 - Engine/Source/Runtime/Engine/Classes/Engine/DataTable.h
 - Engine/Source/Runtime/Engine/Private/DataTable.cpp — UDataTable::Serialize / LoadStructData
 """
@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 
 from uasset_read.exceptions import ParseError
 
-# 安全上限：防止将垃圾字节解释为行数
+# Safety limit: prevent garbage bytes from being interpreted as row count
 _MAX_ROWS = 100000
 
 
@@ -22,17 +22,17 @@ def parse_data_table(
     archive: Any,
     name_map: List[str],
 ) -> Dict[str, Any]:
-    """解析 DataTable 资产元数据。
+    """Parse DataTable asset metadata.
 
-    archive 已定位到 tagged properties 之后的自定义 payload 起始位置。
-    读取 NumRows + (FName + RowPayload) 序列。
+    archive is positioned at the start of the custom payload after tagged properties.
+    Reads the NumRows + (FName + RowPayload) sequence.
 
     Args:
-        archive: FArchive 实例（已定位到 property_end）
-        name_map: 名称表
+        archive: FArchive instance (positioned at property_end)
+        name_map: name map
 
     Returns:
-        解析结果字典，包含 row_count、rows 等
+        Parse result dictionary containing row_count, rows, etc.
     """
     result: Dict[str, Any] = {
         "parse_status": "success",
@@ -41,7 +41,7 @@ def parse_data_table(
     }
 
     try:
-        # NumRows: int32 — DataTable.cpp: LoadStructData 起始
+        # NumRows: int32 — DataTable.cpp: LoadStructData start
         row_count = archive.read_i32("NumRows")
         if row_count < 0:
             result["parse_status"] = "partial"
@@ -60,7 +60,7 @@ def parse_data_table(
             name_index = archive.read_i32(f"Row[{i}].FName.Index")
             name_number = archive.read_i32(f"Row[{i}].FName.Number")
 
-            # 解析名称
+            # Parse name
             if 0 <= name_index < len(name_map):
                 row_name = name_map[name_index]
             else:

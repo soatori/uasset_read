@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""属性解析分派器和导出条目属性循环。
+"""Property parsing dispatcher and export entry property loop.
 
-等价迁移 uasset_read.py 第 6007-6220 行。
+Equivalent migration of uasset_read.py lines 6007-6220.
 """
 
 import logging
@@ -30,7 +30,7 @@ from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
-# D-02: SerializationControlExtensions 位名常量（模块级，避免每次调用重建）
+# D-02: SerializationControlExtensions bit name constants (module-level to avoid rebuild per call)
 _KNOWN_SERIALIZATION_CONTROL_BITS = 0x03  # 0x01 | 0x02
 _SERIALIZATION_CONTROL_BIT_NAMES = {
     0x01: "ReserveForFutureUse",
@@ -43,10 +43,10 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
     0x80: "Unknown_Bit7",
 }
 
-# #341/#428: PropertyTag 损坏恢复最大扫描字节数
+# #341/#428: PropertyTag corruption recovery max scan bytes
 _MAX_RECOVERY_SCAN = 512
 
-# #428: 已知属性类型名称集合（用于恢复扫描时过滤候选）
+# #428: Known property type name set (used to filter candidates during recovery scan)
 _KNOWN_PROPERTY_TYPES = {
     "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
     "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property",
@@ -64,11 +64,11 @@ _KNOWN_PROPERTY_TYPES = {
     "AnsiStrProperty", "GuidProperty",
 }
 
-# Lazy import + 缓存：避免循环依赖 + 避免每次属性解析重建 dict
+# Lazy import + cache: avoid circular dependency + avoid rebuilding dict per property parse
 _TYPE_HANDLER_MAP: dict | None = None
 
 def _get_parse_functions():
-    """获取属性类型 → 解析函数的映射表（模块级缓存，首次调用后不再重建）。"""
+    """Get property type -> parse function mapping（module-level cache, not rebuilt after first call）。"""
     global _TYPE_HANDLER_MAP
     if _TYPE_HANDLER_MAP is not None:
         return _TYPE_HANDLER_MAP
@@ -143,36 +143,36 @@ def _skip_type_tree_nodes(
     name_map: List[str],
     map_len: int,
 ) -> bool:
-    """尝试跳过 UE5.3+ FPropertyTypeName 类型树，定位到 size 字段起始位置。
+    """Try to skip UE5.3+ FPropertyTypeName type tree, locating to the size field start position.
 
-    FPropertyTypeName 使用前序遍历：每个节点为 FName(8) + inner_count(4)，
-    inner_count 表示子节点数量。按 inner_count 逐节点跳过整个树。
+    FPropertyTypeName uses preorder traversal: each node is FName(8) + inner_count(4),
+    inner_count indicates child node count. Skip the tree node by node using inner_count.
 
     Args:
-        archive: 已定位到类型树起始位置的 FArchive
-        limit: 可读上限（扫描窗口或数据边界）
-        name_map: 名称表
-        map_len: 名称表长度
+        archive: FArchive positioned at the type tree start
+        limit: readable upper bound (scan window or data boundary)
+        name_map: name table
+        map_len: name table length
 
     Returns:
-        True 如果成功跳过树（archive 已定位到 size 前），False 表示数据不足或无效
+        True if tree was skipped successfully (archive positioned before size), False indicates insufficient or invalid data
     """
     pending = 1
-    max_nodes = 50  # 与 _read_property_type_name 一致的安全上限
+    max_nodes = 50  # safety limit consistent with _read_property_type_name
     for _ in range(max_nodes):
         if pending <= 0:
             break
         remaining = limit - archive.tell()
-        if remaining < 12:  # 最小节点: FName(8) + inner_count(4)
+        if remaining < 12:  # minimum node: FName(8) + inner_count(4)
             return False
-        # 读取节点 FName
+        # read node FName
         node_raw = archive.read(8)
         if len(node_raw) < 8:
             return False
         node_idx, _ = _struct.unpack('<II', node_raw)
         if not (0 <= node_idx < map_len):
             return False
-        # 读取 inner_count
+        # read inner_count
         ic_raw = archive.read(4)
         if len(ic_raw) < 4:
             return False
@@ -189,22 +189,22 @@ def _try_recover_property_tag(
     max_scan: int = 64,
     property_end: int | None = None,
 ) -> bool:
-    """#341: 尝试定位下一个有效的 PropertyTag 起始位置。
+    """#341: Try to locate the next valid PropertyTag start position.
 
-    扫描策略：在当前位置向前搜索有效的 FName 签名，然后按版本验证后续
-    PropertyTag 结构（type + size）。
+    Scan strategy: search forward for valid FName signatures from current position, then verify subsequent
+    PropertyTag structure (type + size) by version.
 
-    - legacy (ue5 < 1012): name(8) + type_fname(8) → size at +16
-    - UE5.3+ (ue5 >= 1012): name(8) + FPropertyTypeName 树 → size 在树后
+    - legacy (ue5 < 1012): name(8) + type_fname(8) -> size at +16
+    - UE5.3+ (ue5 >= 1012): name(8) + FPropertyTypeName tree -> size after tree
 
     Args:
-        archive: FArchive 实例
-        name_map: 名称表，用于验证候选索引的有效性
-        max_scan: 最大扫描字节数
-        property_end: 属性数据边界（可选）
+        archive: FArchive instance
+        name_map: name table, used to validate candidate index validity
+        max_scan: maximum scan byte count
+        property_end: property data boundary (optional)
 
     Returns:
-        True 如果找到疑似有效位置（已 seek），False 否则。
+        True if a potentially valid position is found (seeked), False otherwise.
     """
     current = archive.tell()
     limit = current + max_scan
@@ -214,7 +214,7 @@ def _try_recover_property_tag(
     if isinstance(file_size, int):
         limit = min(limit, file_size)
 
-    # size 验证使用实际数据边界（不含 max_scan），避免扫描窗口截断导致误判
+    # Size validation uses actual data boundary (excluding max_scan) to avoid false positives from scan window truncation
     if property_end is not None and isinstance(file_size, int):
         data_boundary = min(property_end, file_size)
     elif property_end is not None:
@@ -225,13 +225,13 @@ def _try_recover_property_tag(
         data_boundary = limit
 
     map_len = len(name_map)
-    # 获取 UE5 版本号，决定 PropertyTag 类型字段格式
+    # Get UE5 version number to determine PropertyTag type field format
     from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
     file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
 
     for candidate in range(current + 1, limit):
         remaining = limit - candidate
-        if remaining < 8:  # 最小 FName: 4(index) + 4(number) = 8 bytes
+        if remaining < 8:  # Minimum FName: 4(index) + 4(number) = 8 bytes
             break
         archive.seek(candidate)
         try:
@@ -239,27 +239,27 @@ def _try_recover_property_tag(
             if len(raw) < 8:
                 continue
             index, number = _struct.unpack('<II', raw)
-            # 验证 index 在 name_map 范围内
+            # Verify index is within name_map range
             if not (0 <= index < map_len):
                 continue
-            # 验证 number 为合理的小非负整数（UE 中 number 通常为 0-100）
+            # Verify number is a reasonable small non-negative integer (in UE, number is typically 0-100)
             if number > 10000:
                 continue
-            # 额外验证：名称不应是纯数字、空或 "None"（排除误命中）
+            # Extra validation: name should not be a pure number, empty, or "None" (exclude false hits)
             name = name_map[index]
             if not name or name.isdigit() or name == "None":
                 continue
 
-            # #341 增强：按版本验证后续 PropertyTag 结构
+            # #341 enhancement: validate subsequent PropertyTag structure by version
             size_valid = False
 
             if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
-                # legacy 格式：type 为简单 FName(8)，size 在 candidate+16
+                # legacy format: type is simple FName(8), size at candidate+16
                 size_pos = candidate + 16
                 if size_pos + 4 > limit:
                     continue
-                # 验证 type FNAME index
-                type_raw = archive.read(8)  # 已 seek 到 candidate+8（name 后）
+                # Validate type FNAME index
+                type_raw = archive.read(8)  # already seeked to candidate+8 (after name)
                 if len(type_raw) < 8:
                     continue
                 type_idx, _ = _struct.unpack('<II', type_raw)
@@ -268,10 +268,10 @@ def _try_recover_property_tag(
                 type_name = name_map[type_idx]
                 if not type_name or type_name.isdigit() or type_name == "None":
                     continue
-                # #428: 验证 type_name 是已知属性类型
+                # #428: validate type_name is a known property type
                 if type_name not in _KNOWN_PROPERTY_TYPES:
                     continue
-                # 验证 size
+                # Validate size
                 archive.seek(size_pos)
                 size_raw = archive.read(4)
                 if len(size_raw) < 4:
@@ -281,8 +281,8 @@ def _try_recover_property_tag(
                 if 0 <= tag_size <= size_remaining:
                     size_valid = True
             else:
-                # UE5.3+ 格式：type 为 FPropertyTypeName 前序遍历树
-                # 读取第一个节点名称（属性类型）并验证
+                # UE5.3+ format: type is FPropertyTypeName preorder traversal tree
+                # Read first node name (property type) and validate
                 archive.seek(candidate + 8)
                 first_node_raw = archive.read(8)
                 if len(first_node_raw) < 8:
@@ -291,11 +291,11 @@ def _try_recover_property_tag(
                 if not (0 <= first_idx < map_len):
                     continue
                 first_type_name = name_map[first_idx]
-                # #428: 验证类型树根节点是已知属性类型
+                # #428: validate type tree root node is a known property type
                 if first_type_name not in _KNOWN_PROPERTY_TYPES:
                     continue
-                # 跳过剩余类型树（已读取第一个节点，inner_count=first_ic）
-                # 重新 seek 并使用 _skip_type_tree_nodes 完整跳过
+                # Skip remaining type tree (first node already read, inner_count=first_ic)
+                # Re-seek and use _skip_type_tree_nodes to fully skip
                 archive.seek(candidate + 8)
                 if not _skip_type_tree_nodes(archive, limit, name_map, map_len):
                     continue
@@ -317,7 +317,7 @@ def _try_recover_property_tag(
         except (_struct.error, OSError):
             continue
 
-    archive.seek(current)  # 恢复原始位置
+    archive.seek(current)  # restore original position
     return False
 
 def _try_asset_type_handler(
@@ -328,15 +328,15 @@ def _try_asset_type_handler(
     parsed_properties: Optional[List["PropertyValue"]] = None,
     property_end: int = 0,
 ) -> None:
-    """尝试使用已注册的 ClassHandler 提取原始二进制数据。
+    """Try to extract raw binary data using a registered ClassHandler.
 
-    对 StaticMesh、SkeletalMesh、Material、Texture2D 等资产类型，
-    handler 从 property_end（Super::Serialize 完成位置）读取自定义 payload，
-    结果附加到 export 对象的 _asset_type_data 属性上。
+    For asset types like StaticMesh, SkeletalMesh, Material, Texture2D,
+    handler reads custom payload from property_end (Super::Serialize completion position),
+    attaching results to the export objects _asset_type_data attribute.
 
-    对动画类型（AnimBlueprint/AnimSequence/AnimMontage），
-    将已解析的 properties 列表设置到 export.properties，
-    以便 handler 提取结构化元数据。
+    For animation types（AnimBlueprint/AnimSequence/AnimMontage），
+    Set parsed properties list to export.properties,
+    so the handler can extract structured metadata.
     """
     from uasset_read.parsers.class_registry import get_class_registry
 
@@ -345,20 +345,20 @@ def _try_asset_type_handler(
     if handler is None:
         return
 
-    # 将已解析的 properties 设置到 export 对象上
-    # 供动画 handler（AnimBlueprint/AnimSequence/AnimMontage）提取元数据
+    # Set parsed properties to the export object
+    # For animation handlers (AnimBlueprint/AnimSequence/AnimMontage) to extract metadata
     if parsed_properties is not None:
         export.properties = parsed_properties
 
     saved_pos = archive.tell()
     try:
-        # 不 seek 到 property_end — 属性解析结束后当前位置已在 Super::Serialize 之后，
-        # DataTable 等资产的自定义 payload 紧跟属性之后，而非在 export 数据末尾。
+        # Do not seek to property_end -- After property parsing the current position is already past Super::Serialize.
+        # Custom payloads for assets like DataTable follow immediately after properties, rather than at the export data end.
         result = handler.parse(export, archive, context=name_map)
         if result.success and result.data:
-            # 附加到 export 对象，供下游使用
+            # Attach to export object for downstream use
             setattr(export, "_asset_type_data", result.data)
-            # 同步动画数据到 custom_data（供 ir_builder 使用）
+            # Sync animation data to custom_data (for ir_builder use)
             custom_data = getattr(export, "custom_data", {})
             if not custom_data:
                 custom_data = {}
@@ -367,7 +367,7 @@ def _try_asset_type_handler(
                     custom_data[key] = result.data[key]
             if custom_data:
                 setattr(export, "custom_data", custom_data)
-            # 将 handler 的 parse_status 传播到 export 级别
+            # Propagate handler parse_status to export level
             handler_status = result.data.get("parse_status")
             if handler_status and handler_status != "success":
                 setattr(export, "parse_status", handler_status)
@@ -403,20 +403,20 @@ def parse_property_value(
     depth: int = 0,
     tolerant: bool = True,
 ) -> Any:
-    """分派属性值解析（PROP-02 至 PROP-06, ADVP-01 至 ADVP-06）。
+    """Dispatch property value parsing (PROP-02 to PROP-06, ADVP-01 to ADVP-06).
 
     Unknown types return PropertyFallback (per D-05).
 
     Args:
-        tag: PropertyTag 实例
-        archive: FArchive 实例
-        name_map: 名称表
-        export_map: 导出表
-        summary: PackageFileSummary 实例（可选）
-        depth: 递归深度（默认 0）
+        tag: PropertyTag instance
+        archive: FArchive instance
+        name_map: name table
+        export_map: export table
+        summary: PackageFileSummary instance (optional)
+        depth: recursion depth (default 0)
 
     Returns:
-        解析后的属性值，未知类型返回 PropertyFallback
+        Parsed property value, unknown types return PropertyFallback
     """
     mappings = getattr(summary, "_mappings", None)
     game = getattr(summary, "_game", None)
@@ -430,7 +430,7 @@ def parse_property_value(
             "raw_data": raw_data,
         }
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
-        # 尝试使用已知类型的解析器
+        # Try to use a known type parser
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
         handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
         if handler is not None:
@@ -438,7 +438,7 @@ def parse_property_value(
                 result = handler(tag, archive, name_map, export_map, summary)
                 if result is not None:
                     return result
-                # Handler 返回 None（未知类型/解析失败），继续回退到 raw_data
+                # Handler returned None (unknown type/parse failed), continue falling back to raw_data
             except (_struct.error, OSError, ValueError) as e:
                 logger.debug("BinaryOrNative handler failed for %s: %s", tag.type, e)
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
@@ -452,8 +452,8 @@ def parse_property_value(
     parsers = _get_parse_functions()
     handler = parsers.get(tag.type)
     if handler is None:
-        # D-05: 未知类型 — 返回结构化 PropertyFallback 替代 None
-        # 先尝试自定义属性处理 (0xFD/0xFE)
+        # D-05: Unknown type -- return structured PropertyFallback instead of None
+        # First try custom property handling (0xFD/0xFE)
         from uasset_read.parsers.custom_properties import CUSTOM_PROPERTY_HANDLERS, handle_custom_property
         type_parts = getattr(tag, "type_parts", None)
         if type_parts:
@@ -472,7 +472,7 @@ def parse_property_value(
             except (_struct.error, OSError, ValueError) as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
-        # 所有 handler 均不匹配 — 读取 raw bytes 并返回 PropertyFallback
+        # All handlers do not match -- read raw bytes and return PropertyFallback
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return PropertyFallback(
             name=tag.name,
@@ -535,7 +535,7 @@ def parse_property_value(
         )
 
 # ---------------------------------------------------------------------------
-# parse_properties_from_export 子函数
+# parse_properties_from_export sub-functions
 # ---------------------------------------------------------------------------
 
 def _handle_serialization_control(
@@ -543,33 +543,33 @@ def _handle_serialization_control(
     summary: "PackageFileSummary",
     export: ObjectExport,
 ) -> None:
-    """处理 SerializationControlExtensions 头部（D-02）。
+    """Handle SerializationControlExtensions header (D-02).
 
-    UE5 >= 1011: 根级 overridable serialization 控制头。
-    对所有 UObject export 序列化（通过 UObject::SerializeScriptProperties → ObjClass->SerializeTaggedProperties）。
-    ObjClass 是 UClass*，故 IsA<UClass>() 始终为 true。
-    已知位：0x01 = ReserveForFutureUse, 0x02 = OverridableSerializationInformation。
-    未知高位（0x04+）可能是 UE5.6+ 新增标志，记录为诊断信息但不影响偏移。
+    UE5 >= 1011: root-level overridable serialization control header.
+    Applied to all UObject exports (via UObject::SerializeScriptProperties -> ObjClass->SerializeTaggedProperties).
+    ObjClass is UClass*, so IsA<UClass>() is always true.
+    Known bits: 0x01 = ReserveForFutureUse, 0x02 = OverridableSerializationInformation.
+    Unknown high bits (0x04+) may be new UE5.6+ flags; record as diagnostic info without affecting offsets.
     """
     control_offset = archive.tell()
     serialization_control = archive.read_u8()
     overridden_operation = None
     if serialization_control & 0x02:
         overridden_operation = archive.read_u8()
-    # 记录未知位（非已知位 0x01|0x02 的位）
+    # Record unknown bits (bits other than known bits 0x01|0x02)
     unknown_bits = serialization_control & ~_KNOWN_SERIALIZATION_CONTROL_BITS
     if unknown_bits:
-        # 详细记录哪些位被设置
+        # Record which bits are set in detail
         bit_names = []
         for bit, name in _SERIALIZATION_CONTROL_BIT_NAMES.items():
             if unknown_bits & bit:
                 bit_names.append(name)
         logger.warning(
-            "Export '%s' SerializationControlExtensions 未知位: 0x%02X (bits: %s) at offset %d — 跳过后续读取",
+            "Export '%s' SerializationControlExtensions unknown bits: 0x%02X (bits: %s) at offset %d — Skip subsequent reads",
             getattr(export, "object_name", ""), unknown_bits,
             ", ".join(bit_names), control_offset,
         )
-        # 记录诊断信息
+        # Record diagnostic info
         archive._record_diagnostic(
             module="property_parser", field="serialization_control",
             source="parse_properties_from_export",
@@ -577,7 +577,7 @@ def _handle_serialization_control(
             file_size=getattr(archive, '_file_size', 0),
             error=f"SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} ({', '.join(bit_names)})",
         )
-        # 存储到 export 的 transforms 中，供 IR/JSON 输出
+        # Store in export transforms, for IR/JSON output
         if not hasattr(export, "transforms") or export.transforms is None:
             export.transforms = {}
         export.transforms["serialization_control"] = {
@@ -586,9 +586,9 @@ def _handle_serialization_control(
             "unknown_bits": unknown_bits,
             "offset": control_offset,
         }
-        # 未知位可能导致后续字节解读错位，提前返回让调用方处理恢复
+        # Unknown bits may cause subsequent byte misalignment; return early so caller handles recovery
         return
-    # 存储到 export 的 transforms 中，供 IR/JSON 输出
+    # Store in export transforms, for IR/JSON output
     if not hasattr(export, "transforms") or export.transforms is None:
         export.transforms = {}
     export.transforms["serialization_control"] = {
@@ -610,7 +610,7 @@ def _handle_unversioned_properties(
     property_end: int,
     tolerant: bool,
 ) -> Optional[List[PropertyValue]]:
-    """处理未版本化属性。返回解析结果或 None（需回退到普通解析）。"""
+    """Handle unversioned properties. Return parse result or None (need to fall back to normal parsing)."""
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if not uses_unversioned:
         return None
@@ -624,7 +624,7 @@ def _handle_unversioned_properties(
                 mapped, struct_name, property_end, tolerant=tolerant,
             )
 
-    # Unversioned 包无可靠 mapping → 输出 opaque 区块，不猜测字段
+    # Unversioned package with no reliable mapping -> output opaque block, do not guess fields
     opaque_size = property_end - archive.tell()
     if opaque_size > 0:
         raw_bytes = archive.read(opaque_size)
@@ -634,7 +634,7 @@ def _handle_unversioned_properties(
         "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
         export.object_name, len(raw_bytes),
     )
-    # 标记 export 状态为 opaque_unversioned，不要在最终报告中当作完整成功
+    # Mark export status as opaque_unversioned, not as a full success in the final report
     setattr(export, "parse_status", validate_parse_status("opaque_unversioned"))
     setattr(export, "fallback_reason", "missing_mapping")
     return [PropertyFallback(
@@ -654,9 +654,9 @@ def _resolve_object_property(
     export_map: List[Any],
     name_map: List[str],
 ) -> Optional[Any]:
-    """ObjectProperty 增强：优先通过 linker 解析，回退到 import_map 解析。
+    """ObjectProperty enhancement: prefer linker resolution, fall back to import_map resolution.
 
-    返回解析后的引用字典，或 None 表示无需替换。
+    Return the resolved reference dictionary, or None if no replacement needed.
     """
     if tag.type != "ObjectProperty" or not isinstance(value, int):
         return None
@@ -687,20 +687,20 @@ def _handle_property_parse_error(
     name_map: List[str],
     property_end: int,
 ) -> PropertyValue:
-    """处理属性解析错误，返回 PropertyFallback 包装的 PropertyValue。
+    """Handle property parse error, return PropertyValue wrapped in PropertyFallback.
 
-    负责智能跳过损坏数据，防止无限循环。
+    Responsible for smart skip of corrupted data, preventing infinite loops.
     """
     # D-19: Smart continue - skip damaged property using PropertyTag.Size
     if tag is not None and start_pos is not None:
         target_pos = start_pos + tag.size
-        # 安全网：如果 target_pos 回退或原地不动，强制前进至少 1 字节
+        # Safety net: if target_pos goes backward or stays in place, force advance by at least 1 byte
         if target_pos > start_pos:
             archive.seek(target_pos)
         else:
             archive.seek(min(start_pos + 1, getattr(archive, '_file_size', start_pos + 1)))
     else:
-        # start_pos 未知（tag 读取早期失败），尝试智能恢复
+        # start_pos unknown (tag read failed early), try smart recovery
         recover_start = archive.tell()
         recovered = _try_recover_property_tag(
             archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
@@ -708,22 +708,22 @@ def _handle_property_parse_error(
         if recovered:
             scan_distance = archive.tell() - recover_start
             logger.debug(
-                "PropertyTag 早期损坏，已恢复到疑似有效位置 (offset=%d, 扫描距离=%d)",
+                "PropertyTag early corruption, recovered to a potentially valid position (offset=%d, scan distance=%d)",
                 archive.tell(), scan_distance,
             )
         else:
-            # 恢复失败，前进 1 字节防止无限循环
+            # Recovery failed, advance 1 byte to prevent infinite loop
             next_pos = archive.tell() + 1
             file_size = getattr(archive, '_file_size', None)
             if isinstance(file_size, int):
                 next_pos = min(next_pos, file_size)
             logger.debug(
-                "PropertyTag 早期损坏，无法恢复 (已扫描 %d 字节)，跳过 1 字节 (offset=%d)",
+                "PropertyTag early corruption, cannot recover (scanned %d bytes), skip 1 byte (offset=%d)",
                 _MAX_RECOVERY_SCAN, archive.tell(),
             )
             archive.seek(next_pos)
 
-    # 使用 PropertyFallback 替代纯字符串错误信息
+    # Use PropertyFallback instead of a plain string error message
     fb = PropertyFallback(
         name=tag.name if tag is not None else "Unknown",
         type=tag.type if tag is not None else "Unknown",
@@ -754,7 +754,7 @@ def _read_property_loop(
     tolerant: bool,
     skip_class_name: Optional[str] = None,
 ) -> List[PropertyValue]:
-    """属性读取主循环。"""
+    """Main property reading loop."""
     properties: List[PropertyValue] = []
     property_count = 0
 
@@ -776,11 +776,11 @@ def _read_property_loop(
         start_pos = None
 
         try:
-            # 边界检查：当前位置不应超过属性数据范围
+            # Boundary check: current position should not exceed property data range
             current_pos = archive.tell()
             if current_pos >= property_end:
                 break
-            # #276: EOF 检查 — 防止 archive 数据不足时在 EOF 处无限重试
+            # #276: EOF check — prevent infinite retry at EOF when archive data is insufficient
             file_size = getattr(archive, '_file_size', None)
             if isinstance(file_size, int) and current_pos >= file_size:
                 break
@@ -805,16 +805,16 @@ def _read_property_loop(
                     break
                 raise
 
-            # 记录 tag 读取完成后的当前位置（用于 size_exceeded 恢复和边界验证）
+            # Record current position after tag read (for size_exceeded recovery and boundary verification)
             start_pos = archive.tell()
 
-            # 终止标记：Name == UE_NONE_SENTINEL
+            # Termination marker: Name == UE_NONE_SENTINEL
             if tag.name == UE_NONE_SENTINEL:
                 break
 
-            # size 超过剩余字节：尝试恢复，失败则标记为 partial
+            # size exceeds remaining bytes: try recovery, mark as partial on failure
             if tag.size_exceeded:
-                # #429: 尝试恢复 — 从 start_pos 扫描下一个有效 PropertyTag
+                # #429: Try recovery -- scan from start_pos for next valid PropertyTag
                 if start_pos is not None:
                     archive.seek(start_pos)
                     recovered = _try_recover_property_tag(
@@ -822,11 +822,11 @@ def _read_property_loop(
                     )
                     if recovered:
                         logger.debug(
-                            "size_exceeded 后恢复到疑似有效位置 (offset=%d)",
+                            "size_exceeded: recovered to a potentially valid position (offset=%d)",
                             archive.tell(),
                         )
                         continue
-                # 恢复失败，创建 PropertyFallback
+                # Recovery failed, create PropertyFallback
                 properties.append(PropertyValue(
                     name=tag.name,
                     type=tag.type,
@@ -842,7 +842,7 @@ def _read_property_loop(
                 ))
                 continue
 
-            # 边界检查：PropertyTag.Size 不应超过剩余属性数据范围
+            # Boundary check: PropertyTag.Size should not exceed remaining property data range
             remaining = property_end - archive.tell()
             if tag.size > remaining:
                 raise ParseError(
@@ -855,8 +855,8 @@ def _read_property_loop(
                     )
                 )
 
-            # 分派到类型特定解析器
-            # lambda 在 read_tag_value_bounded 内部立即执行，tag 在调用时已绑定
+            # Dispatch to type-specific parser
+            # lambda executes immediately inside read_tag_value_bounded, tag is bound at call time
             value = read_tag_value_bounded(
                 archive,
                 tag,
@@ -865,7 +865,7 @@ def _read_property_loop(
                 ),
             )
 
-            # 如果解析返回 None（旧路径或 handler 显式返回 None），转为 PropertyFallback
+            # If parsing returns None (old path or handler explicitly returns None), convert to PropertyFallback
             if value is None:
                 value = PropertyFallback(
                     name=tag.name,
@@ -884,13 +884,13 @@ def _read_property_loop(
                 array_index=tag.array_index
             ))
 
-            # ObjectProperty 增强：优先通过 linker 解析，回退到 import_map 解析
+            # ObjectProperty enhancement: prefer linker resolution, fall back to import_map resolution
             resolved = _resolve_object_property(tag, value, linker, import_map, export_map, name_map)
             if resolved is not None:
                 properties[-1].value = resolved
 
         except ParseError as e:
-            # #276: strict 模式下直接传播，不重试
+            # #276: strict mode: propagate directly, no retry
             if not tolerant:
                 raise
             properties.append(_handle_property_parse_error(
@@ -908,7 +908,7 @@ def _read_property_loop(
 
 
 # ---------------------------------------------------------------------------
-# parse_properties_from_export — 主入口
+# parse_properties_from_export -- main entry point
 # ---------------------------------------------------------------------------
 
 def parse_properties_from_export(
@@ -923,37 +923,37 @@ def parse_properties_from_export(
     game: Optional[str] = None,
     tolerant: bool = True,
 ) -> List[PropertyValue]:
-    """从 export 条目读取所有属性（PROP-01）。
+    """Read all properties from an export entry (PROP-01).
 
-    参考 Class.cpp SerializeVersionedTaggedProperties 模式：
-    1. Seek 到属性起始位置
-    2. 循环读取 PropertyTag 直到 Name == "None"
-    3. 分派到类型特定解析函数
-    4. 边界验证（seek 到 start + tag.size）
+    Reference: Class.cpp SerializeVersionedTaggedProperties pattern:
+    1. Seek to property start position
+    2. Loop reading PropertyTag until Name == "None"
+    3. Dispatch to type-specific parsing function
+    4. Boundary verification (seek to start + tag.size)
 
     Args:
-        export: ObjectExport 实例
-        archive: FArchive 实例
-        summary: PackageFileSummary 实例（版本信息）
-        name_map: 名称表
-        export_map: 导出表
-        import_map: 导入表（ObjectProperty 解析需要，linker 未提供时使用）
-        linker: PackageLinker 实例（可选，优先用于 ObjectProperty 解析）
+        export: ObjectExport instance
+        archive: FArchive instance
+        summary: PackageFileSummary instance (version info)
+        name_map: name table
+        export_map: export table
+        import_map: import table (needed for ObjectProperty parsing, used when linker is not provided)
+        linker: PackageLinker instance (optional, preferred for ObjectProperty parsing)
 
     Returns:
-        List[PropertyValue] 属性值列表
+        List[PropertyValue] property value list
     """
     if mappings is not None:
         setattr(summary, "_mappings", mappings)
     if game is not None:
         setattr(summary, "_game", game)
 
-    # UE default: 始终从 SerialOffset 开始属性解析
-    # ScriptSerializationStartOffset 仅在特殊编辑器场景使用
-    # （property bag placeholder 或 class mismatch）— 参见 LinkerLoad.cpp:4793
+    # UE default: always start property parsing from SerialOffset
+    # ScriptSerializationStartOffset only used in special editor scenarios
+    # (property bag placeholder or class mismatch) -- see LinkerLoad.cpp:4793
     property_start = export.serial_offset
 
-    # 存储 ScriptSerialization 绝对偏移用于诊断和 opt-in 策略
+    # Store ScriptSerialization absolute offsets for diagnostics and opt-in strategy
     export._script_serialization_start_absolute = (
         export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
     )
@@ -963,12 +963,12 @@ def parse_properties_from_export(
 
     archive.seek(property_start)
 
-    # Tolerant skip: 对已知不兼容的 class-specific payload 直接跳过
+    # Tolerant skip: directly skip known incompatible class-specific payloads
     from uasset_read.parsers.class_specific_skip import (
         should_skip_export_for_tolerant_parsing,
         skip_export_payload,
     )
-    # 解析 export 的 class name 用于 skip 检查
+    # Parse export class name for skip check
     skip_class_name = None
     if import_map is not None:
         try:
@@ -990,15 +990,15 @@ def parse_properties_from_export(
         setattr(export, "class_name", skip_class_name or "")
         return []
 
-    # D-02: SerializationControlExtensions 头部处理
+    # D-02: SerializationControlExtensions header handling
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         _handle_serialization_control(archive, summary, export)
 
-    # 计算属性数据边界
-    # UE default: 使用 SerialSize 作为属性边界
+    # Calculate property data boundary
+    # UE default: use SerialSize as property boundary
     property_end = export.serial_offset + export.serial_size
 
-    # 未版本化属性处理（含 opaque 回退）
+    # Unversioned property handling (including opaque fallback)
     unversioned_result = _handle_unversioned_properties(
         export, archive, summary, name_map, export_map,
         mappings, import_map, property_end, tolerant,
@@ -1006,7 +1006,7 @@ def parse_properties_from_export(
     if unversioned_result is not None:
         return unversioned_result
 
-    # 属性读取主循环
+    # Main property reading loop
     properties = _read_property_loop(
         export, archive, summary, name_map, export_map,
         import_map, linker, mappings, property_end, tolerant,
@@ -1077,7 +1077,7 @@ def _parse_unversioned_properties_from_mapping(
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
-            # #276: strict 模式下直接传播
+            # #276: strict mode: propagate directly
             if not tolerant:
                 raise
             if tag.size > 0:
@@ -1099,7 +1099,7 @@ def _parse_unversioned_properties_from_mapping(
         out.append(PropertyValue(info.name, tag.type, value))
     if archive.tell() < property_end:
         remaining = property_end - archive.tell()
-        # #276: 安全读取 tail，防止 property_end 超出 archive 实际大小
+        # #276: Safely read tail, prevent property_end from exceeding actual archive size
         current_pos = archive.tell()
         file_size = getattr(archive, '_file_size', None)
         if isinstance(file_size, int):
@@ -1286,7 +1286,7 @@ def _apply_mapping_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     value = getattr(prop_type, "value_type", None)
     if inner is not None:
         tag.inner_type = getattr(inner, "type", None)
-        # 对于 Array/Set 中内层为 StructProperty 的情况，保存 inner struct_type
+        # For Array/Set inner elements that are StructProperty, save inner struct_type
         if tag.type in ("ArrayProperty", "SetProperty"):
             tag.inner_type_struct = getattr(inner, "struct_type", None)
         if tag.type == "MapProperty":

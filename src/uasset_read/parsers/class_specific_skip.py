@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""class-specific payload 类型识别 + tolerant skip 辅助函数。
+"""Class-specific payload type identification + tolerant skip helper functions.
 
-当通用 property parser 进入不支持的专用序列化区域时，
-此模块提供类型识别和安全跳过逻辑。
+When the generic property parser enters an unsupported serialization region,
+this module provides type identification and safe skip logic.
 """
 
 import logging
@@ -21,61 +21,61 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# 需要跳过的 export class 名称前缀/关键字
-# 这些 class 的序列化数据不完全兼容通用 property parser
+# Export class name prefixes/keywords that need skipping.
+# These classes have serialization data not fully compatible with the generic property parser.
 SKIP_CLASS_PREFIXES = (
     # P0: Builder / Brush
     "CubeBuilder",
     "GeomModifier_",
     "BrushBuilder",
-    # P0: Animation — 已移至 opaque 白名单（#166）
+    # P0: Animation -- migrated to opaque whitelist (#166)
     # "AnimationDataModel",
     # P1: Niagara
     "NiagaraMeshRendererProperties",
     "NiagaraNodeParameterMapGet",
     "NiagaraNode",
     "NiagaraSystem",
-    # P1: MovieScene — 已移至 opaque 白名单（#164）
+    # P1: MovieScene -- moved to opaque whitelist (#164)
     # "MovieScene",
     # "MovieSceneSceneCaptureParams",
-    # P2: MetaSound — 已移至 opaque 白名单（#165）
+    # P2: MetaSound -- moved to opaque whitelist (#165)
     # "MetasoundEditorGraph",
     # "MetasoundEditorGraphInputObjectArray",
     # "MetasoundEditorGraphMemberDefaultObjectArray",
     # P2: K2Node
-    # K2Node_FunctionEntry 已从 skip 列表移除（#286）：
-    # 通用 tagged property parser 可处理，K2Node_FunctionEntry 的特有字段
-    # 通过 PropertyTag 序列化，不需要跳过。跳过会导致合法资产被标记 partial。
+    # K2Node_FunctionEntry removed from skip list (#286):
+    # Generic tagged property parser can handle it. K2Node_FunctionEntry specific fields
+    # are serialized via PropertyTag, no skip needed. Skipping would mark legitimate assets as partial.
     # "K2Node_FunctionEntry",
     "K2Node_FormatText",
     # P2: Material
-    # MaterialExpressionDynamicParameter 已从 skip 列表移除（#136 延伸）：
-    # 通用 tagged property parser 可处理，失败时由 generic fallback 兜底。
-    # MaterialExpression 已从 skip 列表移除（#136）：
-    # 通用 tagged property parser 可处理大部分 MaterialExpression 子类。
-    # 解析失败的子类由 generic fallback（opaque/partial）兜底。
+    # MaterialExpressionDynamicParameter removed from skip list (#136 extension):
+    # Generic tagged property parser can handle it; failures handled by generic fallback.
+    # MaterialExpression removed from skip list (#136):
+    # Generic tagged property parser can handle most MaterialExpression subclasses.
+    # Subclasses that fail to parse are handled by generic fallback (opaque/partial).
     # "MaterialExpression",
-    # P3: 其他
+    # P3: Other
     "SkySphereMesh",
     "InheritableComponentHandler",
     "AggGeom_",
 )
 
-# 需要跳过的精确 class 名称（不使用前缀匹配）
-# 这些 class 使用完全自定义的序列化格式，无法用通用 parser 处理
+# Exact class names to skip (no prefix matching)
+# These classes use fully custom serialization formats, cannot be handled by generic parser
 #
-# 注意：完整 skip/strategy 以 CLASS_STRATEGY_TABLE（class_serialization_strategy.py）
-# 为唯一权威来源。本模块的 SKIP_CLASS_NAMES 和 SKIP_CLASS_PREFIXES 作为
-# property_parser 层级的二次安全网和 linker.preload() 层级前缀匹配的查询接口。
+# Note: complete skip/strategy uses CLASS_STRATEGY_TABLE (class_serialization_strategy.py)
+# as the single authoritative source. This module's SKIP_CLASS_NAMES and SKIP_CLASS_PREFIXES serve as
+# secondary safety net at property_parser level and query interface for prefix matching at linker.preload() level.
 #
-# 注意：已迁移到 class_serialization_strategy.py _SKIP_CLASSES 的类不再列出，
-# 包括：NiagaraGraph, NiagaraScript, NiagaraDataInterface 及其子类、
-# NiagaraSystem（保留在 _OPAQUE_CLASSES）、AnimBlueprintExtension、
-# AnimComposite、AnimPoseSnapshot、ImpulseResponse、SoundConcurrency、
-# SoundMix、SoundClass、ReverbEffect、AmbientSound。
-# 完整 skip 策略以 CLASS_STRATEGY_TABLE 为唯一权威来源。
+# Note: classes migrated to class_serialization_strategy.py _SKIP_CLASSES are no longer listed,
+# Includes: NiagaraGraph, NiagaraScript, NiagaraDataInterface and its subclasses,
+# NiagaraSystem (kept in _OPAQUE_CLASSES), AnimBlueprintExtension,
+# AnimComposite, AnimPoseSnapshot, ImpulseResponse, SoundConcurrency,
+# SoundMix, SoundClass, ReverbEffect, AmbientSound.
+# Complete skip strategy uses CLASS_STRATEGY_TABLE as the single authoritative source.
 SKIP_CLASS_NAMES = {
-    # Niagara — Renderer / Emitter（前缀匹配由 SKIP_CLASS_PREFIXES 处理）
+    # Niagara -- Renderer / Emitter (prefix matching handled by SKIP_CLASS_PREFIXES)
     "NiagaraEmitter",
     "NiagaraSpriteRendererProperties",
     "NiagaraMeshRendererProperties",
@@ -86,13 +86,13 @@ SKIP_CLASS_NAMES = {
 
 
 def should_skip_export_class_prefix(class_name: str) -> bool:
-    """判断类名是否匹配 SKIP_CLASS_PREFIXES 前缀。
+    """Determine whether class name matches SKIP_CLASS_PREFIXES prefix.
 
     Args:
-        class_name: UE class 名称
+        class_name: UE class name
 
     Returns:
-        True 表示类名以 SKIP_CLASS_PREFIXES 中任一前缀开头
+        True if class name starts with any SKIP_CLASS_PREFIXES prefix
     """
     return class_name.startswith(SKIP_CLASS_PREFIXES)
 
@@ -101,29 +101,29 @@ def should_skip_export_for_tolerant_parsing(
     export: "ObjectExport",
     class_name: Optional[str] = None,
 ) -> bool:
-    """判断是否应对某 export 使用 tolerant skip（不尝试解析属性）。
+    """Determine whether tolerant skip should be used for an export (no property parsing attempted).
 
-    检查顺序：
-    1. class handler registry 中是否有 handler 且其 fallback_policy == SKIP
-    2. export.object_name 是否以 SKIP_CLASS_PREFIXES 开头
-    3. class_name 是否在 SKIP_CLASS_NAMES 中（精确匹配）
-    4. class_name 是否以 SKIP_CLASS_PREFIXES 开头
+    Check order:
+    1. class handler registry has a handler with fallback_policy == SKIP
+    2. Whether export.object_name starts with SKIP_CLASS_PREFIXES
+    3. Whether class_name is in SKIP_CLASS_NAMES (exact match)
+    4. Whether class_name starts with SKIP_CLASS_PREFIXES
 
     Args:
-        export: ObjectExport 实例
-        class_name: 可选的类名（从 class_index 解析）
+        export: ObjectExport instance
+        class_name: Optional class name (resolved from class_index)
 
     Returns:
-        True 表示应跳过属性解析，仅保留 export 元数据
+        True if property parsing should be skipped, keeping only export metadata
     """
-    # 检查 1: registry handler fallback policy
+    # Check 1: registry handler fallback policy
     if class_name is not None:
         registry = get_class_registry()
         handler = registry.find_handler(class_name)
         if handler is not None and handler.fallback_policy == FallbackPolicy.SKIP:
             return True
 
-    # 检查 2-4: 原有 skip list（作为 fallback policy）
+    # Check 2-4: original skip list (as fallback policy)
     object_name = str(export.object_name)
     if object_name.startswith(SKIP_CLASS_PREFIXES):
         return True
@@ -139,28 +139,28 @@ def skip_export_payload(
     export: "ObjectExport",
     summary: "PackageFileSummary",
 ) -> None:
-    """安全跳过单个 export 的 payload 数据。
+    """Safely skip the payload data of a single export.
 
-    Seek 过该 export 的属性区域，不尝试解析。
+    Seek past the export property region without attempting to parse.
 
     Args:
-        archive: FArchive 实例
-        export: ObjectExport 实例
-        summary: PackageFileSummary 实例
+        archive: FArchive instance
+        export: ObjectExport instance
+        summary: PackageFileSummary instance
     """
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-        # 使用 getattr 安全回退，防止属性不存在时抛出 AttributeError
+        # Use getattr for safe fallback to prevent AttributeError when attribute does not exist
         script_serial_end = getattr(export, 'script_serialization_end_offset', None)
         if script_serial_end is None:
-            # 回退到 serial_size，保持兼容性
+            # Fall back to serial_size for compatibility
             script_serial_end = export.serial_size
         payload_end = export.serial_offset + script_serial_end
     else:
         payload_end = export.serial_offset + export.serial_size
 
-    # 确保不超过文件大小
+    # Ensure it does not exceed file size
     file_size = archive.total_size()
     safe_end = min(payload_end, file_size)
 

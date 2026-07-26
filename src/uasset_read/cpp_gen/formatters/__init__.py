@@ -1,15 +1,15 @@
 """
-C++ 代码生成格式化子模块。
+C++ code generation formatting sub-module.
 
-提供 C++ 类骨架 JSON IR 格式化功能和 .h 头文件生成功能。
+Provides C++ class skeleton JSON IR formatting and .h header file generation.
 
-导出符号：
-    CppProperty: 单个 C++ UPROPERTY 声明数据模型
-    CppHeaderMeta: 头文件元数据模型
-    CppClassIR: 完整 C++ 类骨架 IR 数据模型
-    format_cpp_class_json: JSON IR 格式化函数
-    format_cpp_header: .h 头文件文本生成函数
-    kismet_to_cpp_body: Kismet 表达式 → 结构化 C++ 语句列表
+Exports:
+    CppProperty: Single C++ UPROPERTY declaration data model
+    CppHeaderMeta: Header file metadata model
+    CppClassIR: Complete C++ class skeleton IR data model
+    format_cpp_class_json: JSON IR formatting function
+    format_cpp_header: .h header file text generation function
+    kismet_to_cpp_body: Kismet expression -> structured C++ statement list
 """
 from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppProperty,

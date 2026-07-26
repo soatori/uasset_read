@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""BinaryOrNative 类型处理器注册表。
+"""BinaryOrNative type handler registry.
 
-对已知的 BinaryOrNative 类型提供解析支持，失败时回退到原始字节。
+Provides parsing support for known BinaryOrNative types; falls back to raw bytes on failure.
 
-UE BinaryOrNative 序列化用于某些特殊结构（如 FInstancedStruct），
-这些结构使用原生序列化而非属性标签序列化。
+UE BinaryOrNative serialization is used for certain special structs (e.g. FInstancedStruct)
+that use native serialization instead of property tag serialization.
 """
 
 import logging
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# BinaryOrNative 处理器类型签名
+# BinaryOrNative handler type signature
 BinaryOrNativeHandler = Callable[
     ["PropertyTag", "FArchive", List[str], List[Any], Any],
     Optional[Dict[str, Any]]
@@ -32,21 +32,21 @@ def _parse_instanced_struct(
     export_map: List[Any],
     summary: Any,
 ) -> Optional[Dict[str, Any]]:
-    """解析 FInstancedStruct BinaryOrNative 数据。
+    """Parse FInstancedStruct BinaryOrNative data.
 
-    FInstancedStruct 格式：
+    FInstancedStruct format:
     - ScriptStruct: ObjectProperty (FPackageIndex)
-    - StructData: 原生序列化的结构体数据
+    - StructData: natively serialized struct data
     """
     if tag.size < 4:
         return None
 
     start_pos = archive.tell()
     try:
-        # 读取 ScriptStruct 引用
+        # Read ScriptStruct reference
         script_struct_index = archive.read_i32()
 
-        # 剩余数据是结构体内容
+        # Remaining data is struct content
         remaining_size = tag.size - 4
         if remaining_size > 0:
             struct_data = archive.read(remaining_size)
@@ -61,9 +61,9 @@ def _parse_instanced_struct(
             "struct_data": struct_data,
         }
     except (struct.error, OSError, ValueError) as e:
-        # 解析失败，回退到原始字节
+        # Parse failed, fall back to raw bytes
         archive.seek(start_pos)
-        logger.debug("FInstancedStruct 解析失败: %s", e)
+        logger.debug("FInstancedStruct parse failed: %s", e)
         return None
 
 
@@ -74,9 +74,9 @@ def _parse_material_input(
     export_map: List[Any],
     summary: Any,
 ) -> Optional[Dict[str, Any]]:
-    """解析材质输入 BinaryOrNative 数据。
+    """Parse material input BinaryOrNative data.
 
-    FMaterialInput 格式：
+    FMaterialInput format:
     - OutputIndex: int32
     - InputName: FName
     - Mask: int32
@@ -112,7 +112,7 @@ def _parse_material_input(
         }
     except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
-        logger.debug("MaterialInput 解析失败: %s", e)
+        logger.debug("MaterialInput parse failed: %s", e)
         return None
 
 
@@ -123,9 +123,9 @@ def _parse_expression_output(
     export_map: List[Any],
     summary: Any,
 ) -> Optional[Dict[str, Any]]:
-    """解析表达式输出 BinaryOrNative 数据。
+    """Parse expression output BinaryOrNative data.
 
-    FExpressionOutput 格式：
+    FExpressionOutput format:
     - OutputName: FName
     - Mask: int32
     - MaskR: int32
@@ -158,7 +158,7 @@ def _parse_expression_output(
         }
     except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
-        logger.debug("ExpressionOutput 解析失败: %s", e)
+        logger.debug("ExpressionOutput parse failed: %s", e)
         return None
 
 
@@ -169,10 +169,10 @@ def _parse_struct_binary(
     export_map: List[Any],
     summary: Any,
 ) -> Optional[Dict[str, Any]]:
-    """解析 BinaryOrNative 格式的 StructProperty。
+    """Parse StructProperty in BinaryOrNative format.
 
-    当 serialize_type 为 BinaryOrNative 时，结构体数据以原生二进制存储，
-    无 PropertyTag 循环。根据 struct_type 和 size 解码为可读字段。
+    When serialize_type is BinaryOrNative, struct data is stored as native binary
+    without a PropertyTag loop. Decodes into readable fields based on struct_type and size.
     """
     import struct as _struct
     struct_type = getattr(tag, "struct_type", None) or "UnknownStruct"
@@ -190,7 +190,7 @@ def _parse_struct_binary(
 
     fields: Dict[str, Any] = {}
 
-    # 按 struct_type + size 解码
+    # Decode by struct_type + size
     if struct_type in ("Vector", "Vector3f", "Vector3d") and size in (12, 24):
         fmt = "<ddd" if size == 24 else "<fff"
         x, y, z = _struct.unpack(fmt, raw[:size])
@@ -244,7 +244,7 @@ def _parse_struct_binary(
         x, y, z, w = _struct.unpack(fmt, raw[:size])
         fields = {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
     else:
-        # 未知结构体类型 — 返回 raw bytes 供下游保留，避免丢失数据
+        # Unknown struct type -- return raw bytes for downstream to preserve, avoiding data loss
         return {
             "kind": "binary_or_native_property",
             "type": tag.type,
@@ -262,11 +262,11 @@ def _parse_struct_binary(
 
 
 # ============================================================================
-# 结构体二进制解码器（按 struct_type + size 分派）
+# Struct binary decoders (dispatched by struct_type + size)
 # ============================================================================
 
 def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Vector / Vector3f / Vector3d（12 或 24 字节）。"""
+    """Decode Vector / Vector3f / Vector3d (12 or 24 bytes)."""
     import struct as _struct
     fmt = "<ddd" if size == 24 else "<fff"
     x, y, z = _struct.unpack(fmt, raw[:size])
@@ -274,7 +274,7 @@ def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Rotator / Rotator3f / Rotator3d（12 或 24 字节）。"""
+    """Decode Rotator / Rotator3f / Rotator3d (12 or 24 bytes)."""
     import struct as _struct
     fmt = "<ddd" if size == 24 else "<fff"
     pitch, yaw, roll = _struct.unpack(fmt, raw[:size])
@@ -282,7 +282,7 @@ def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Vector2D / Vector2f / Vector2d（8 或 16 字节）。"""
+    """Decode Vector2D / Vector2f / Vector2d (8 or 16 bytes)."""
     import struct as _struct
     fmt = "<dd" if size == 16 else "<ff"
     x, y = _struct.unpack(fmt, raw[:size])
@@ -290,7 +290,7 @@ def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Vector4 / Vector4f / Vector4d（16 或 32 字节）。"""
+    """Decode Vector4 / Vector4f / Vector4d (16 or 32 bytes)."""
     import struct as _struct
     fmt = "<dddd" if size == 32 else "<ffff"
     x, y, z, w = _struct.unpack(fmt, raw[:size])
@@ -298,7 +298,7 @@ def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Quat / Quat4f / Quat4d（16 或 32 字节）。"""
+    """Decode Quat / Quat4f / Quat4d (16 or 32 bytes)."""
     import struct as _struct
     fmt = "<dddd" if size == 32 else "<ffff"
     x, y, z, w = _struct.unpack(fmt, raw[:size])
@@ -306,42 +306,42 @@ def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 LinearColor（16 字节，4 个 float RGBA）。"""
+    """Decode LinearColor (16 bytes, 4 float RGBA)."""
     import struct as _struct
     r, g, b, a = _struct.unpack("<ffff", raw[:16])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
 def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Color（4 字节，4 个 uint8 RGBA）。"""
+    """Decode Color (4 bytes, 4 uint8 RGBA)."""
     import struct as _struct
     r, g, b, a = _struct.unpack("<BBBB", raw[:4])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
 def _decode_guid(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Guid（16 字节，4 个 uint32）。"""
+    """Decode Guid (16 bytes, 4 uint32)."""
     import struct as _struct
     a, b, c, d = _struct.unpack("<IIII", raw[:16])
     return {"A": a, "B": b, "C": c, "D": d}
 
 
 def _decode_int_point(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 IntPoint（8 字节，2 个 int32）。"""
+    """Decode IntPoint (8 bytes, 2 int32)."""
     import struct as _struct
     x, y = _struct.unpack("<ii", raw[:8])
     return {"X": x, "Y": y}
 
 
 def _decode_int_vector(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 IntVector / IntVector3（12 字节，3 个 int32）。"""
+    """Decode IntVector / IntVector3 (12 bytes, 3 int32)."""
     import struct as _struct
     x, y, z = _struct.unpack("<iii", raw[:12])
     return {"X": x, "Y": y, "Z": z}
 
 
 def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 TwoVectors（24 或 48 字节，两组三分量向量）。"""
+    """Decode TwoVectors (24 or 48 bytes, two sets of three-component vectors)."""
     import struct as _struct
     fmt = "<ddd" if size == 48 else "<fff"
     elem_size = size // 2
@@ -354,7 +354,7 @@ def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Plane / Plane4f / Plane4d（16 或 32 字节）。"""
+    """Decode Plane / Plane4f / Plane4d (16 or 32 bytes)."""
     import struct as _struct
     fmt = "<dddd" if size == 32 else "<ffff"
     x, y, z, w = _struct.unpack(fmt, raw[:size])
@@ -362,14 +362,14 @@ def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
-    """解码 Sphere / Sphere3f / Sphere3d（16 或 32 字节，中心 + 半径）。"""
+    """Decode Sphere / Sphere3f / Sphere3d (16 or 32 bytes, center + radius)."""
     import struct as _struct
     fmt = "<dddd" if size == 32 else "<ffff"
     x, y, z, w = _struct.unpack(fmt, raw[:size])
     return {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
 
 
-# struct_type → (合法字节大小集合, 解码函数) 的分发字典
+# struct_type -> (set of valid byte sizes, decoder function) dispatch dictionary
 _STRUCT_DECODERS: Dict[str, tuple] = {
     "Vector":       ((12, 24), _decode_vector),
     "Vector3f":     ((12, 24), _decode_vector),
@@ -409,10 +409,10 @@ def _parse_struct_binary(
     export_map: List[Any],
     summary: Any,
 ) -> Optional[Dict[str, Any]]:
-    """解析 BinaryOrNative 格式的 StructProperty。
+    """Parse StructProperty in BinaryOrNative format.
 
-    当 serialize_type 为 BinaryOrNative 时，结构体数据以原生二进制存储，
-    无 PropertyTag 循环。根据 struct_type 和 size 解码为可读字段。
+    When serialize_type is BinaryOrNative, struct data is stored as native binary
+    without a PropertyTag loop. Decodes into readable fields based on struct_type and size.
     """
     struct_type = getattr(tag, "struct_type", None) or "UnknownStruct"
     size = tag.size
@@ -427,7 +427,7 @@ def _parse_struct_binary(
         archive.seek(start_pos)
         return None
 
-    # 按 struct_type + size 分派解码器
+    # Dispatch decoder by struct_type + size
     decoder_entry = _STRUCT_DECODERS.get(struct_type)
     if decoder_entry:
         valid_sizes, decoder = decoder_entry
@@ -440,7 +440,7 @@ def _parse_struct_binary(
                 "fields": fields,
             }
 
-    # 未知结构体类型或 size 不匹配 — 返回 raw bytes 供下游保留
+    # Unknown struct type or size mismatch -- return raw bytes for downstream to preserve
     return {
         "kind": "binary_or_native_property",
         "type": tag.type,
@@ -451,11 +451,11 @@ def _parse_struct_binary(
 
 
 # ============================================================================
-# 处理器注册表
+# Handler registry
 # ============================================================================
 
 BINARY_OR_NATIVE_HANDLERS: Dict[str, BinaryOrNativeHandler] = {
-    # 材质相关
+    # Material-related
     "FMaterialInput": _parse_material_input,
     "FColorMaterialInput": _parse_material_input,
     "FScalarMaterialInput": _parse_material_input,
@@ -463,9 +463,9 @@ BINARY_OR_NATIVE_HANDLERS: Dict[str, BinaryOrNativeHandler] = {
     "FVector2MaterialInput": _parse_material_input,
     "FExpressionOutput": _parse_expression_output,
 
-    # 通用结构体
+    # General structs
     "FInstancedStruct": _parse_instanced_struct,
 
-    # StructProperty 二进制解码（按 struct_type + size 分派）
+    # StructProperty binary decode (dispatched by struct_type + size)
     "StructProperty": _parse_struct_binary,
 }

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""JSON 渲染器 — 递归序列化 PackageIR 为 JSON。
+"""JSON renderer — Recursively serializes PackageIR to JSON.
 
-仅注册 json 格式：完整分析格式，字段最全。
+Only registers the json format: full analysis format, most comprehensive fields.
 """
 
 import json
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class _JSONEncoder(json.JSONEncoder):
-    """自定义 JSON 编码器，处理 dataclass 等非原生类型。"""
+    """Custom JSON encoder, handles non-native types like dataclass."""
 
     def default(self, o):
         to_dict = getattr(type(o), "to_dict", None)
@@ -38,22 +38,22 @@ class _JSONEncoder(json.JSONEncoder):
 
 
 class JSONRenderer(IRenderer):
-    """JSON 渲染器 — 完整分析格式。递归序列化 IR 为 JSON。"""
+    """JSON renderer — Full analysis format. Recursively serializes IR to JSON."""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         data = self._build_data(ir, options)
         return json.dumps(data, indent=options.indent, ensure_ascii=False, cls=_JSONEncoder)
 
     def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
-        """流式渲染 IR 到 writer，避免构建完整 JSON 字符串。
+        """Stream IR to writer, avoiding building the full JSON string.
 
-        输出格式与 render() 一致，直接使用 json.dump 写入 writer。
-        适用于大文件或管道输出场景（不占用中间字符串内存）。
+        Output format is consistent with render(), uses json.dump to write directly to writer.
+        Suitable for large files or pipeline output scenarios (no intermediate string memory usage).
 
         Args:
-            ir: PackageIR 实例
-            writer: 可写文本流（StringIO、文件对象等）
-            options: 渲染选项，None 时使用默认值
+            ir: PackageIR instance
+            writer: Writable text stream (StringIO, file object, etc.)
+            options: Render options, defaults to RenderOptions() when None
         """
         if options is None:
             options = RenderOptions()
@@ -62,7 +62,7 @@ class JSONRenderer(IRenderer):
         writer.write("\n")
 
     def _build_data(self, ir: PackageIR, options: RenderOptions) -> dict[str, Any]:
-        """构建渲染数据字典（render() 和 render_to() 共用）。"""
+        """Build the render data dictionary (shared by render() and render_to())."""
         is_debug = options.output_level == "debug"
 
         data: dict[str, Any] = {}
@@ -151,7 +151,7 @@ class JSONRenderer(IRenderer):
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
-        # standard 模式下过滤编辑器布局属性
+        # Filter editor layout properties in standard mode
         if is_debug:
             properties = [self._property_to_dict(p, is_debug=True) for p in export.properties]
         else:
@@ -160,7 +160,7 @@ class JSONRenderer(IRenderer):
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
-        # graphs: standard 模式下只保留有内容的
+        # graphs: in standard mode, only keep graphs with content
         graphs = [self._graph_to_dict(g, options) for g in export.graphs]
         if not is_debug:
             graphs = [g for g in graphs if g.get("nodes")]
@@ -170,10 +170,10 @@ class JSONRenderer(IRenderer):
             "object_class": export.object_class,
             "serial_size": export.serial_size,
         }
-        # parent_class: debug 模式下始终包含，standard 模式下仅非 None 时包含
+        # parent_class: always included in debug mode, only included when non-None in standard mode
         if is_debug or export.parent_class is not None:
             d["parent_class"] = export.parent_class
-        # standard 模式下只添加非空字段
+        # In standard mode, only add non-empty fields
         if properties or is_debug:
             d["properties"] = properties
         if graphs or is_debug:
@@ -188,12 +188,12 @@ class JSONRenderer(IRenderer):
 
     def _property_to_dict(self, prop, is_debug: bool = False) -> dict[str, Any]:
         d: dict[str, Any] = {"name": prop.name, "type": prop.type, "value": prop.value}
-        # standard 模式下省略默认值字段
+        # Omit default value fields in standard mode
         if is_debug or prop.array_index != -1:
             d["array_index"] = prop.array_index
         if is_debug or prop.guid is not None:
             d["guid"] = prop.guid
-        # StructValue 元数据精简（standard 模式）
+        # StructValue metadata trimming (standard mode)
         if not is_debug and hasattr(prop.value, "__dataclass_fields__"):
             value_dict = dataclasses.asdict(prop.value)
             for field_name, default in [
@@ -204,7 +204,7 @@ class JSONRenderer(IRenderer):
                 if value_dict.get(field_name) == default:
                     value_dict.pop(field_name, None)
             d["value"] = value_dict
-        # ObjectProperty full_name 省略（standard 模式）
+        # ObjectProperty full_name omission (standard mode)
         if not is_debug and d.get("type") == "ObjectProperty" and isinstance(d.get("value"), dict):
             val = d["value"]
             if "full_name" in val and "object_name" in val:
@@ -231,15 +231,15 @@ class JSONRenderer(IRenderer):
             "node_class": node.node_class,
             "pins": [self._pin_to_dict(p, output_level) for p in node.pins],
         }
-        # node_comment: standard 模式下省略 null
+        # node_comment: omit null in standard mode
         if is_debug or node.node_comment is not None:
             d["node_comment"] = node.node_comment
-        # execution_flow: standard 模式下省略空列表
+        # execution_flow: omit empty list in standard mode
         if is_debug or node.execution_flow:
             d["execution_flow"] = node.execution_flow
         if node.macro_expansion is not None:
             d["macro_expansion"] = node.macro_expansion
-        # Enhanced Input 字段: standard 模式下省略 null/空
+        # Enhanced Input fields: omit null/empty in standard mode
         if is_debug or node.input_action_path is not None:
             d["input_action_path"] = node.input_action_path
         if is_debug or node.trigger_events:
@@ -256,11 +256,11 @@ class JSONRenderer(IRenderer):
             "direction": pin.direction,
             "pin_category": pin.pin_category,
         }
-        # container_type: standard 模式下省略默认值 "None"
+        # container_type: omit default value "None" in standard mode
         if is_debug or pin.container_type != "None":
             d["container_type"] = pin.container_type
         if is_debug:
-            # debug 模式：保留所有字段
+            # debug mode: keep all fields
             d["pin_type"] = pin.pin_type
             d["default_value"] = pin.default_value
             d["pin_subcategory"] = pin.pin_subcategory
@@ -269,7 +269,7 @@ class JSONRenderer(IRenderer):
             d["is_weak_pointer"] = pin.is_weak_pointer
             d["is_uobject_wrapper"] = pin.is_uobject_wrapper
         else:
-            # standard 模式：只输出非默认值
+            # standard mode: only output non-default values
             if pin.default_value:
                 d["default_value"] = pin.default_value
             if pin.pin_subcategory:
@@ -282,14 +282,14 @@ class JSONRenderer(IRenderer):
                 d["is_weak_pointer"] = True
             if pin.is_uobject_wrapper:
                 d["is_uobject_wrapper"] = True
-        # 条件字段（两种模式都适用）
+        # Conditional fields (applicable in both modes)
         if pin.pin_subcategory_object_name is not None:
             d["pin_subcategory_object"] = pin.pin_subcategory_object_name
         if pin.is_map_key:
             d["is_map_key"] = True
         if pin.is_map_value:
             d["is_map_value"] = True
-        # Map terminal 类型
+        # Map terminal type
         if pin.container_type == "Map":
             if pin.map_key_pin_category:
                 d["map_key_pin_category"] = pin.map_key_pin_category
@@ -300,22 +300,22 @@ class JSONRenderer(IRenderer):
         return d
 
     def _extract_error_pattern(self, error: str) -> str:
-        """提取 error 模式，替换数字为 {n} 占位符。"""
+        """Extract error pattern, replacing numbers with {n} placeholders."""
         return re.sub(r'\d+', '{n}', error)
 
     def _extract_position(self, diag: dict) -> int | None:
-        """从 diagnostic 字典中提取位置（使用 current_pos 字段）。"""
+        """Extract position from a diagnostic dictionary (uses the current_pos field)."""
         return diag.get("current_pos")
 
     def _fold_diagnostics(self, diagnostics: list) -> list:
-        """折叠相同 (kind, field) 模式的 diagnostics。
+        """Fold diagnostics with the same (kind, field) pattern.
 
-        单条不折叠，多条折叠为一条含 count 和 pos_range 的记录。
+        Single entries are not folded; multiple entries are folded into one record with count and pos_range.
         """
         if not diagnostics:
             return diagnostics
 
-        # 按 (kind, field) 分组
+        # Group by (kind, field)
         groups: dict[tuple[str, str], list] = {}
         for diag in diagnostics:
             key = (diag.get("kind", ""), diag.get("field", ""))
@@ -352,12 +352,12 @@ class JSONRenderer(IRenderer):
         return folded
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
-        """序列化 BlueprintIR 为字典（完整元数据）。"""
+        """Serialize BlueprintIR to a dictionary (full metadata)."""
         d: dict[str, Any] = {"parent_class": blueprint.parent_class}
         if getattr(blueprint, "description", ""):
             d["description"] = blueprint.description
         if getattr(blueprint, "interfaces", []):
-            # interfaces 已经是 dict 列表（来自 IR builder）
+            # interfaces is already a list of dicts (from IR builder)
             d["interfaces"] = blueprint.interfaces
         if blueprint.functions:
             d["functions"] = [self._function_to_dict(f) for f in blueprint.functions]
@@ -368,7 +368,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _variable_to_dict(self, var) -> dict[str, Any]:
-        """序列化 VariableIR 为字典（完整元数据，省略默认值字段）。"""
+        """Serialize VariableIR to a dictionary (full metadata, omit default value fields)."""
         d: dict[str, Any] = {"name": var.name, "type": var.type, "kind": var.kind}
         if var.default_value is not None:
             d["default_value"] = var.default_value
@@ -390,7 +390,7 @@ class JSONRenderer(IRenderer):
             d["flags_labels"] = var.flags_labels
         if var.edit_condition:
             d["edit_condition"] = var.edit_condition
-        # 布尔 flags 只在 True 时输出，减少噪音
+        # Boolean flags only output when True, reducing noise
         for flag in (
             "is_edit_anywhere", "is_visible_anywhere", "is_blueprint_read_only",
             "is_transient", "is_replicated", "is_rep_notify",
@@ -401,7 +401,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _function_to_dict(self, func) -> dict[str, Any]:
-        """序列化 BlueprintFunctionIR 为字典（完整元数据 + 实现关联）。"""
+        """Serialize BlueprintFunctionIR to a dictionary (full metadata + implementation association)."""
         d: dict[str, Any] = {
             "name": func.name,
             "return_type": func.return_type,
@@ -421,7 +421,7 @@ class JSONRenderer(IRenderer):
             d["access_specifier"] = func.access_specifier
         if func.meta_data:
             d["meta_data"] = func.meta_data
-        # 实现关联
+        # Implementation association
         if func.implementation:
             d["implementation"] = func.implementation
         if func.function_graph:
@@ -430,7 +430,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _event_to_dict(self, evt) -> dict[str, Any]:
-        """序列化 BlueprintEventIR 为字典（完整元数据 + 实现关联）。"""
+        """Serialize BlueprintEventIR to a dictionary (full metadata + implementation association)."""
         d: dict[str, Any] = {
             "name": evt.name,
             "event_type": evt.event_type,
@@ -456,7 +456,7 @@ class JSONRenderer(IRenderer):
                 d[flag] = True
         if evt.meta_data:
             d["meta_data"] = evt.meta_data
-        # 实现关联
+        # Implementation association
         if evt.implementation:
             d["implementation"] = evt.implementation
         if evt.function_graph:
@@ -465,7 +465,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _decompiled_function_to_dict(self, func) -> dict[str, Any]:
-        """序列化 DecompiledFunctionIR 为字典。"""
+        """Serialize DecompiledFunctionIR to a dictionary."""
         d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
         if func.fallback_reasons:
             d["fallback_reasons"] = func.fallback_reasons
@@ -474,7 +474,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _calculate_statistics(self, ir: PackageIR) -> dict:
-        """计算导出统计信息，包括 opaque 类分布。"""
+        """Calculate export statistics, including opaque class distribution."""
         stats = {
             "total_exports": len(ir.exports),
             "success_count": 0,
@@ -500,7 +500,7 @@ class JSONRenderer(IRenderer):
         return stats
 
     def _build_function_graphs(self, ir: PackageIR) -> list[dict]:
-        """直接返回 IR 中已构建的 function_graphs 数据。"""
+        """Directly return the already-built function_graphs data from IR."""
         return ir.function_graphs
 
     @property
@@ -508,7 +508,7 @@ class JSONRenderer(IRenderer):
         return "json"
 
     def _anim_blueprint_to_dict(self, anim_ir) -> dict[str, Any]:
-        """序列化 AnimBlueprintIR 为字典。"""
+        """Serialize AnimBlueprintIR to a dictionary."""
         d: dict[str, Any] = {}
         if anim_ir.target_skeleton:
             d["target_skeleton"] = anim_ir.target_skeleton
@@ -531,7 +531,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _baked_state_machine_to_dict(self, sm) -> dict[str, Any]:
-        """序列化 BakedStateMachineIR 为字典。"""
+        """Serialize BakedStateMachineIR to a dictionary."""
         return {
             "machine_name": sm.machine_name,
             "initial_state": sm.initial_state,
@@ -555,7 +555,7 @@ class JSONRenderer(IRenderer):
         }
 
     def _anim_notify_to_dict(self, notify) -> dict[str, Any]:
-        """序列化 AnimNotifyIR 为字典。"""
+        """Serialize AnimNotifyIR to a dictionary."""
         return {
             "notify_name": notify.notify_name,
             "trigger_time_offset": notify.trigger_time_offset,
@@ -565,7 +565,7 @@ class JSONRenderer(IRenderer):
         }
 
     def _anim_sequence_to_dict(self, anim_ir) -> dict[str, Any]:
-        """序列化 AnimSequenceIR 为字典。"""
+        """Serialize AnimSequenceIR to a dictionary."""
         d: dict[str, Any] = {}
         if anim_ir.target_skeleton:
             d["target_skeleton"] = anim_ir.target_skeleton
@@ -583,7 +583,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _anim_montage_to_dict(self, anim_ir) -> dict[str, Any]:
-        """序列化 AnimMontageIR 为字典。"""
+        """Serialize AnimMontageIR to a dictionary."""
         d: dict[str, Any] = {}
         if anim_ir.blend_mode_in:
             d["blend_mode_in"] = anim_ir.blend_mode_in
@@ -610,7 +610,7 @@ class JSONRenderer(IRenderer):
         return d
 
     def _hex_view_entry_to_dict(self, entry: "HexViewEntryIR") -> dict[str, Any]:
-        """序列化 HexViewEntryIR 为字典。"""
+        """Serialize HexViewEntryIR to a dictionary."""
         d: dict[str, Any] = {
             "key": entry.key,
             "type": entry.type,

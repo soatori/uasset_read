@@ -1,15 +1,15 @@
-"""蓝图节点 → C++ 语义调用映射器。
+"""Blueprint node to C++ semantic call mapper.
 
-将常见蓝图节点（如 ACharacter::AddMovementInput）转换为
-可读的 C++ 语义调用，使反编译输出更贴近手写代码。
+Converts common blueprint nodes (e.g. ACharacter::AddMovementInput) into
+readable C++ semantic calls, making decompiled output closer to hand-written code.
 
-设计理念：
-- 与 MathFunctionCleaner 互补：MathFunctionCleaner 处理数学/字符串/系统库函数，
-  BlueprintNodeCleaner 处理游戏逻辑/角色控制/Actor 操作等蓝图节点。
-- 作为 KismetTranslator 输出的后处理步骤，不修改表达式树本身。
-- 未知节点回退到 ClassName::FuncName 格式。
+Design principles:
+- Complements MathFunctionCleaner: MathFunctionCleaner handles math/string/system library functions,
+  BlueprintNodeCleaner handles game logic/character control/Actor operations and other blueprint nodes.
+- Used as a post-processing step for KismetTranslator output; does not modify the expression tree itself.
+- Unknown nodes fall back to ClassName::FuncName format.
 
-用法：
+Usage:
     from uasset_read.kismet.blueprint_node_cleaner import BlueprintNodeCleaner
 
     result = BlueprintNodeCleaner.clean("Character", "AddMovementInput", ["WorldDirection", "ScaleValue"])
@@ -20,16 +20,16 @@ from typing import Callable
 
 
 # ===========================================================================
-# 映射条目数据结构
+# Mapping entry data structures
 # ===========================================================================
 
 class _MappingEntry:
-    """单个蓝图节点映射条目。
+    """Single blueprint node mapping entry.
 
     Attributes:
-        class_name: UE 类名（不含前缀，如 "Character" 而非 "ACharacter"）
-        func_name: UE 函数名（如 "AddMovementInput"）
-        handler: 生成 C++ 输出的回调函数
+        class_name: UE class name (without prefix, e.g. "Character" not "ACharacter")
+        func_name: UE function name (e.g. "AddMovementInput")
+        handler: Callback function that generates C++ output
     """
 
     __slots__ = ("class_name", "func_name", "handler")
@@ -46,11 +46,11 @@ class _MappingEntry:
 
 
 # ===========================================================================
-# 映射表：按类别拆分的子函数
+# Mapping table: sub-functions split by category
 # ===========================================================================
 
 def _add_character_mappings(_add: Callable) -> None:
-    """ACharacter 移动控制映射。"""
+    """ACharacter movement control mappings."""
     _add("Character", "AddMovementInput",
          lambda p: f"AddMovementInput({p[0]}, {p[1]})" if len(p) >= 2
          else f"AddMovementInput({', '.join(p)})")
@@ -82,8 +82,8 @@ def _add_character_mappings(_add: Callable) -> None:
 
 
 def _add_actor_mappings(_add: Callable) -> None:
-    """AActor 通用操作映射（含 KismetSystemLibrary、GameplayStatics 等）。"""
-    # AActor 位置/变换
+    """AActor general operation mappings (including KismetSystemLibrary, GameplayStatics, etc.)."""
+    # AActor location/transform
     _add("Actor", "K2_GetActorLocation",
          lambda p: "GetActorLocation()")
 
@@ -124,7 +124,7 @@ def _add_actor_mappings(_add: Callable) -> None:
     _add("Actor", "GetActorUpVector",
          lambda p: "GetActorUpVector()")
 
-    # AActor 生命周期 / 通用
+    # AActor lifecycle / general
     _add("Actor", "K2_DestroyActor",
          lambda p: "Destroy()")
 
@@ -153,7 +153,7 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f"SetActorTickEnabled({p[0]})"
          if p else "SetActorTickEnabled()")
 
-    # AActor 组件
+    # AActor components
     _add("Actor", "GetComponentByClass",
          lambda p: f"GetComponentByClass<{p[0]}>()"
          if p else "GetComponentByClass()")
@@ -162,7 +162,7 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f"GetComponentsByClass<{p[0]}>()"
          if p else "GetComponentsByClass()")
 
-    # AActor 附着
+    # AActor attachment
     _add("Actor", "K2_AttachToActor",
          lambda p: f"AttachToActor({p[0]}, {p[1]}, {p[2]}, {p[3]})"
          if len(p) >= 4 else f"AttachToActor({', '.join(p)})")
@@ -175,7 +175,7 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f"DetachFromActor({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"DetachFromActor({', '.join(p)})")
 
-    # UKismetSystemLibrary 定时器
+    # UKismetSystemLibrary timers
     _add("KismetSystemLibrary", "K2_SetTimer",
          lambda p: f"GetWorldTimerManager().SetTimer({p[0]}, {p[1]}, {p[2]}, {p[3]})"
          if len(p) >= 4 else f"GetWorldTimerManager().SetTimer({', '.join(p)})")
@@ -212,7 +212,7 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f"GetWorldTimerManager().GetTimerRemainingTime({p[0]})"
          if p else "GetWorldTimerManager().GetTimerRemainingTime()")
 
-    # UKismetSystemLibrary 调试
+    # UKismetSystemLibrary debug
     _add("KismetSystemLibrary", "PrintString",
          lambda p: f'UE_LOG(LogTemp, Log, TEXT({p[0]}))'
          if p else 'UE_LOG(LogTemp, Log, TEXT(""))')
@@ -229,7 +229,7 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f'UE_LOG(LogTemp, Error, TEXT({p[0]}))'
          if p else 'UE_LOG(LogTemp, Error, TEXT(""))')
 
-    # UKismetSystemLibrary 碰撞/射线检测
+    # UKismetSystemLibrary collision/raycast
     _add("KismetSystemLibrary", "LineTraceSingle",
          lambda p: f"GetWorld()->LineTraceSingleByChannel({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"LineTraceSingle({', '.join(p)})")
@@ -242,12 +242,12 @@ def _add_actor_mappings(_add: Callable) -> None:
          lambda p: f"GetWorld()->OverlapMultiByChannel({p[0]}, {p[1]}, {p[2]})"
          if len(p) >= 3 else f"SphereOverlapActors({', '.join(p)})")
 
-    # UKismetSystemLibrary 延迟/异步
+    # UKismetSystemLibrary delay/async
     _add("KismetSystemLibrary", "Delay",
          lambda p: f"UKismetSystemLibrary::Delay(this, {p[0]}, {{}})"
          if p else "UKismetSystemLibrary::Delay(this, 0.0f, {})")
 
-    # UKismetMathLibrary 常见数学（补充 MathFunctionCleaner 未覆盖的语义映射）
+    # UKismetMathLibrary common math (supplements semantic mappings not covered by MathFunctionCleaner)
     _add("KismetMathLibrary", "RandomUnitVector",
          lambda p: "FMath::VRand()")
 
@@ -407,7 +407,7 @@ def _add_actor_mappings(_add: Callable) -> None:
 
 
 def _add_pawn_mappings(_add: Callable) -> None:
-    """APawn 角色控制映射。"""
+    """APawn character control mappings."""
     _add("Pawn", "AddControllerYawInput",
          lambda p: f"AddControllerYawInput({p[0]})"
          if p else "AddControllerYawInput()")
@@ -431,7 +431,7 @@ def _add_pawn_mappings(_add: Callable) -> None:
 
 
 def _add_anim_mappings(_add: Callable) -> None:
-    """AnimInstance 动画映射。"""
+    """AnimInstance animation mappings."""
     _add("AnimInstance", "Montage_Play",
          lambda p: f"Montage_Play({p[0]}, {p[1]})"
          if len(p) >= 2 else f"Montage_Play({', '.join(p)})")
@@ -453,7 +453,7 @@ def _add_anim_mappings(_add: Callable) -> None:
 
 
 def _add_widget_mappings(_add: Callable) -> None:
-    """UserWidget UI 映射。"""
+    """UserWidget UI mappings."""
     _add("UserWidget", "SetVisibility",
          lambda p: f"SetVisibility({p[0]})"
          if p else "SetVisibility()")
@@ -473,7 +473,7 @@ def _add_widget_mappings(_add: Callable) -> None:
 
 
 def _add_niagara_mappings(_add: Callable) -> None:
-    """NiagaraComponent 粒子映射。"""
+    """NiagaraComponent particle mappings."""
     _add("NiagaraComponent", "SetNiagaraVariableFloat",
          lambda p: f"SetNiagaraVariableFloat({p[0]}, {p[1]})"
          if len(p) >= 2 else f"SetNiagaraVariableFloat({', '.join(p)})")
@@ -490,11 +490,11 @@ def _add_niagara_mappings(_add: Callable) -> None:
 
 
 # ===========================================================================
-# 映射表构建入口
+# Mapping table construction entry point
 # ===========================================================================
 
 def _make_mappings() -> dict[str, _MappingEntry]:
-    """构建映射表，键为 "ClassName::FuncName" 规范化格式。"""
+    """Build mapping table, keyed by normalized "ClassName::FuncName" format."""
     entries: list[_MappingEntry] = []
 
     def _add(cls: str, func: str, handler: Callable[[list[str]], str]) -> None:
@@ -514,79 +514,79 @@ def _make_mappings() -> dict[str, _MappingEntry]:
     return result
 
 
-# 预构建映射表（模块级单例）
+# Pre-built mapping table (module-level singleton)
 _MAPPINGS: dict[str, _MappingEntry] = _make_mappings()
 
-# 已知类名集合（用于前缀剥离匹配）
+# Known class name set (for prefix stripping match)
 _KNOWN_CLASSES: set[str] = {e.class_name for e in _MAPPINGS.values()}
 
 
 # ===========================================================================
-# BlueprintNodeCleaner — 主入口
+# BlueprintNodeCleaner — main entry point
 # ===========================================================================
 
 class BlueprintNodeCleaner:
-    """蓝图节点 C++ 语义调用映射器。
+    """Blueprint node C++ semantic call mapper.
 
-    将已解析的 ClassName::FuncName 格式转换为更可读的 C++ 调用。
-    作为 KismetTranslator 输出的后处理步骤使用。
+    Converts resolved ClassName::FuncName format to more readable C++ calls.
+    Used as a post-processing step for KismetTranslator output.
 
-    用法：
+    Usage:
         result = BlueprintNodeCleaner.clean("Character", "AddMovementInput", ["WorldDirection", "1.0f"])
-        # → "AddMovementInput(WorldDirection, 1.0f)"
+        # -> "AddMovementInput(WorldDirection, 1.0f)"
 
-        # 带 UE 前缀的类名会自动剥离
+        # Class names with UE prefix are auto-stripped
         result = BlueprintNodeCleaner.clean("ACharacter", "Jump", [])
-        # → "Jump()"
+        # -> "Jump()"
 
-        # 未知节点回退到 ClassName::FuncName 格式
+        # Unknown nodes fall back to ClassName::FuncName format
         result = BlueprintNodeCleaner.clean("MyClass", "MyFunc", ["arg1"])
-        # → "MyClass::MyFunc(arg1)"
+        # -> "MyClass::MyFunc(arg1)"
     """
 
     @staticmethod
     def clean(class_name: str, func_name: str, params: list[str]) -> str:
-        """将蓝图节点调用转换为 C++ 语义格式。
+        """Convert Blueprint node call to C++ semantic format.
 
         Args:
-            class_name: UE 类名（可带前缀如 "ACharacter"，也可不带 "Character"）
-            func_name: 函数名（如 "AddMovementInput"）
-            params: 已翻译的参数字符串列表
+            class_name: UE class name (with or without prefix, e.g. "ACharacter" or "Character")
+            func_name: Function name (e.g. "AddMovementInput")
+            params: List of already-translated parameter strings
 
         Returns:
-            清理后的 C++ 表达式字符串
+            Cleaned C++ expression string
         """
         if not func_name:
             return f"{class_name}::{func_name}({', '.join(params)})"
 
-        # 剥离 UE 前缀（A=Actor, U=Object, F=Struct, I=Interface, E=Enum）
+        # Strip UE prefix (A=Actor, U=Object, F=Struct, I=Interface, E=Enum)
         stripped_class = _strip_ue_prefix(class_name)
 
-        # 尝试精确匹配
+        # Try exact match
         key = f"{stripped_class}::{func_name}"
         entry = _MAPPINGS.get(key)
         if entry is not None:
             return entry.handler(params)
 
-        # 尝试仅按 func_name 匹配（对于跨类通用函数）
-        # 仅在 func_name 在映射表中唯一时才使用
+        # Try matching by func_name only (for cross-class generic functions)
+        # Only used when func_name is unique in the mapping table
         func_only_entry = _find_unique_func(func_name)
         if func_only_entry is not None:
             return func_only_entry.handler(params)
 
-        # 回退：ClassName::FuncName 格式
+        # Fallback: ClassName::FuncName format
         return f"{class_name}::{func_name}({', '.join(params)})"
 
     @staticmethod
     def clean_from_string(call_str: str, params: list[str] | None = None) -> str:
-        """从 "ClassName::FuncName" 字符串解析并清理。
+        """Parse and clean from a "ClassName::FuncName" string.
 
         Args:
-            call_str: 格式为 "ClassName::FuncName" 的调用字符串
-            params: 参数列表，None 时使用空列表
+            call_str: Call string in "ClassName::FuncName" format
+            params: Parameter list, uses empty list when None
 
         Returns:
-            清理后的 C++ 表达式字符串
+            Cleaned C++ expression string
         """
         if params is None:
             params = []
@@ -594,7 +594,7 @@ class BlueprintNodeCleaner:
         if "::" in call_str:
             class_name, func_name = call_str.split("::", 1)
         else:
-            # 没有类名前缀时，用空字符串作为类名
+            # When no class name prefix, use empty string as class name
             class_name = ""
             func_name = call_str
 
@@ -602,14 +602,14 @@ class BlueprintNodeCleaner:
 
     @staticmethod
     def has_mapping(class_name: str, func_name: str) -> bool:
-        """检查是否存在该节点的映射。
+        """Check if a mapping exists for this node.
 
         Args:
-            class_name: UE 类名
-            func_name: 函数名
+            class_name: UE class name
+            func_name: Function name
 
         Returns:
-            True 如果存在映射
+            True if mapping exists
         """
         stripped = _strip_ue_prefix(class_name)
         key = f"{stripped}::{func_name}"
@@ -617,21 +617,21 @@ class BlueprintNodeCleaner:
 
     @staticmethod
     def get_supported_nodes() -> list[tuple[str, str]]:
-        """返回所有支持的 (class_name, func_name) 对。"""
+        """Return all supported (class_name, func_name) pairs."""
         return [(e.class_name, e.func_name) for e in _MAPPINGS.values()]
 
 
 # ===========================================================================
-# 辅助函数
+# Helper functions
 # ===========================================================================
 
 def _strip_ue_prefix(class_name: str) -> str:
-    """剥离 UE 类型前缀。
+    """Strip UE type prefix.
 
-    "ACharacter" → "Character"
-    "UKismetSystemLibrary" → "KismetSystemLibrary"
-    "FVector" → "Vector"
-    "Character" → "Character"（无前缀不变）
+    "ACharacter" -> "Character"
+    "UKismetSystemLibrary" -> "KismetSystemLibrary"
+    "FVector" -> "Vector"
+    "Character" -> "Character" (no prefix, unchanged)
     """
     if len(class_name) > 1 and class_name[0] in "AUFEISB" and class_name[1].isupper():
         return class_name[1:]
@@ -639,10 +639,10 @@ def _strip_ue_prefix(class_name: str) -> str:
 
 
 def _find_unique_func(func_name: str) -> _MappingEntry | None:
-    """查找 func_name 在映射表中是否唯一。
+    """Find whether func_name is unique in the mapping table.
 
-    如果同一 func_name 仅映射到一个类，返回该条目；
-    否则返回 None（避免歧义）。
+    If the same func_name maps to only one class, returns that entry;
+    otherwise returns None (to avoid ambiguity).
     """
     matches = [e for e in _MAPPINGS.values() if e.func_name == func_name]
     if len(matches) == 1:

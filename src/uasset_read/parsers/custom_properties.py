@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""CustomProperty 注册表 — 处理 0xFD/0xFE 等自定义属性槽位。
+"""CustomProperty registry -- handles custom property slots like 0xFD/0xFE.
 
-UE PropertyTag.h 定义了自定义属性槽位（CustomProperty 0xFD/0xFE），
-用于插件/Mod 扩展的自定义属性类型。
+UE PropertyTag.h defines custom property slots (CustomProperty 0xFD/0xFE),
+used for plugin/Mod extended custom property types.
 
-本模块提供注册表机制，允许动态注册自定义属性处理器。
+This module provides a registry mechanism allowing dynamic registration of custom property handlers.
 """
 
 import logging
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CustomPropertyContext:
-    """CustomProperty handler 调用上下文。"""
+    """CustomProperty handler invocation context."""
     type_id: int
     tag: PropertyTag
     archive: FArchive
@@ -30,15 +30,15 @@ class CustomPropertyContext:
     summary: Optional[Any] = None
 
 
-# 自定义属性处理器注册表: (game, type_id/property_name) -> handler
+# Custom property handler registry: (game, type_id/property_name) -> handler
 CUSTOM_PROPERTY_HANDLERS: Dict[Tuple[Optional[str], Any], Callable[[CustomPropertyContext], Any]] = {}
 
 
 def register_custom_property(type_id: int | str, game: Optional[str] = None):
-    """装饰器：注册自定义属性处理器。
+    """Decorator: register a custom property handler.
 
     Args:
-        type_id: 自定义属性类型 ID（如 0xFD, 0xFE）
+        type_id: Custom property type ID (e.g. 0xFD, 0xFE)
 
     Usage:
         @register_custom_property(0xFD)
@@ -60,16 +60,16 @@ def handle_custom_property(
     game: Optional[str] = None,
     summary: Optional[Any] = None,
 ) -> Any | None:
-    """查找并调用已注册的自定义属性处理器。
+    """Find and invoke a registered custom property handler.
 
     Args:
-        type_id: 自定义属性类型 ID
-        tag: PropertyTag 实例
-        archive: FArchive 实例
-        name_map: 名称映射表（可选）
+        type_id: Custom property type ID
+        tag: PropertyTag instance
+        archive: FArchive instance
+        name_map: Name mapping table (optional)
 
     Returns:
-        处理器返回值，未找到处理器时返回 None
+        Handler return value, or None if no handler found
     """
     game_key = game.lower() if game else None
     handler = (
@@ -103,14 +103,14 @@ def handle_custom_property(
 
 
 # ============================================================================
-# 默认处理器 — 0xFD / 0xFE（Borderlands 4, 2XKO 等游戏使用）
+# Default handlers -- 0xFD / 0xFE (used by Borderlands 4, 2XKO, etc.)
 # ============================================================================
 
 @register_custom_property(0xFD)
 def _parse_fd_custom_property(context: CustomPropertyContext) -> dict:
-    """处理 0xFD 自定义属性（Borderlands 4, 2XKO 等）。
+    """Handle 0xFD custom property (Borderlands 4, 2XKO, etc.).
 
-    默认 tolerant 行为：读取 tag.size 字节作为 raw_data 返回。
+    Default tolerant behavior: read tag.size bytes as raw_data and return.
     """
     raw_data = context.archive.read(context.tag.size) if context.tag.size > 0 else b""
     logger.debug("CustomProperty 0xFD: read %d bytes of custom data", len(raw_data))
@@ -123,9 +123,9 @@ def _parse_fd_custom_property(context: CustomPropertyContext) -> dict:
 
 @register_custom_property(0xFE)
 def _parse_fe_custom_property(context: CustomPropertyContext) -> dict:
-    """处理 0xFE 自定义属性（Borderlands 4, 2XKO 等）。
+    """Handle 0xFE custom property (Borderlands 4, 2XKO, etc.).
 
-    默认 tolerant 行为：读取 tag.size 字节作为 raw_data 返回。
+    Default tolerant behavior: read tag.size bytes as raw_data and return.
     """
     raw_data = context.archive.read(context.tag.size) if context.tag.size > 0 else b""
     logger.debug("CustomProperty 0xFE: read %d bytes of custom data", len(raw_data))

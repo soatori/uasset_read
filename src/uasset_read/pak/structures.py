@@ -1,7 +1,7 @@
 """
-Pak 文件数据结构
+Pak file data structures.
 
-镜像 UE 引擎 IPlatformFilePak.h 中的 FPakInfo、FPakEntry、FPakDirectoryEntry 等结构。
+Mirrors UE engine IPlatformFilePak.h structures: FPakInfo, FPakEntry, FPakDirectoryEntry, etc.
 """
 import struct
 from dataclasses import dataclass, field
@@ -24,20 +24,20 @@ from uasset_read.pak.game_versions import detect_game_from_magic, EGame
 # ============================================================================
 
 def read_fstring(stream: BinaryIO, version: int = 0) -> str:
-    """读取 UE FString（带长度前缀，null-terminated）。
+    """Read a UE FString (length-prefixed, null-terminated).
 
     Args:
-        stream: 二进制流
-        version: Pak 文件版本（>= 12 可能使用 FUtf8String）
+        stream: Binary stream
+        version: Pak file version (>= 12 may use FUtf8String)
 
     Returns:
-        解码后的字符串
+        Decoded string
 
-    UE FString 格式：
-    - int32 length: 正数=ANSI，负数=UTF-16，0=空字符串
-    - length 字节的数据 + 1 字节 null 终止符（ANSI）
-    - abs(length)*2 字节数据 + 2 字节 null 终止符（UTF-16）
-    - version >= 12: uint32 length（无符号），UTF-8 编码
+    UE FString format:
+    - int32 length: positive=ANSI, negative=UTF-16, 0=empty string
+    - length bytes of data + 1 null terminator byte (ANSI)
+    - abs(length)*2 bytes data + 2 null terminator bytes (UTF-16)
+    - version >= 12: uint32 length (unsigned), UTF-8 encoded
     """
     if version >= PakFileVersion.Utf8PakDirectory:
         # FUtf8String: uint32 length + UTF-8 bytes + 1 null terminator
@@ -76,7 +76,7 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
         data = stream.read(utf16_len)
         if len(data) < utf16_len:
             raise ParseError(
-                f"UTF-16 string truncated: 读取 {len(data)} < 预期 {utf16_len} bytes"
+                f"UTF-16 string truncated: read {len(data)} < expected {utf16_len} bytes"
             )
         stream.read(2)  # null terminator (2 bytes for UTF-16)
         return data.decode('utf-16-le', errors='replace').rstrip('\x00')
@@ -89,7 +89,7 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
         data = stream.read(length)
         if len(data) < length:
             raise ParseError(
-                f"ANSI string truncated: 读取 {len(data)} < 预期 {length} bytes"
+                f"ANSI string truncated: read {len(data)} < expected {length} bytes"
             )
         stream.read(1)  # null terminator
         return data.decode('ascii', errors='replace').rstrip('\x00')
@@ -101,13 +101,13 @@ def read_fstring(stream: BinaryIO, version: int = 0) -> str:
 
 @dataclass
 class FPakCompressedBlock:
-    """压缩块信息。
+    """Compressed block info.
 
-    compressed_start/compressed_end 在解析后转换为绝对文件偏移。
-    对于 version < 5 (RelativeChunkOffsets)，需要在加载后加上 entry.offset。
+    compressed_start/compressed_end are converted to absolute file offsets after parsing.
+    For version < 5 (RelativeChunkOffsets), entry.offset must be added after loading.
     """
-    compressed_start: int  # int64 — 绝对文件偏移
-    compressed_end: int    # int64 — 独占结束偏移
+    compressed_start: int  # int64 — absolute file offset
+    compressed_end: int    # int64 — exclusive end offset
 
 
 # ============================================================================
@@ -116,38 +116,38 @@ class FPakCompressedBlock:
 
 @dataclass
 class FPakEntry:
-    """Pak 文件条目。
+    """Pak file entry.
 
-    描述 pak 中单个文件的偏移、大小、压缩、加密和哈希信息。
-    对应 UE IPlatformFilePak.h 中的 FPakEntry 结构。
+    Describes offset, size, compression, encryption, and hash info for a single file in a pak.
+    Corresponds to the FPakEntry struct in UE IPlatformFilePak.h.
     """
-    offset: int = 0                      # int64 — 条目数据起始偏移
-    uncompressed_size: int = 0           # int64 — 解压后大小
-    size: int = 0                        # int64 — 压缩大小（未压缩时 == uncompressed_size）
-    compression_method_index: int = 0    # uint32 — 在 FPakInfo.compression_methods 中的索引
-    is_encrypted: bool = False           # 是否加密
-    is_compressed: bool = False          # 是否压缩（derived from compression_method_index > 0）
-    compression_block_count: int = 0     # uint16/uint32 取决于版本
-    compression_block_size: int = 0      # uint32 — 每个压缩块的大小（未压缩）
+    offset: int = 0                      # int64 — entry data start offset
+    uncompressed_size: int = 0           # int64 — decompressed size
+    size: int = 0                        # int64 — compressed size (== uncompressed_size when not compressed)
+    compression_method_index: int = 0    # uint32 — index in FPakInfo.compression_methods
+    is_encrypted: bool = False           # whether encrypted
+    is_compressed: bool = False          # whether compressed (derived from compression_method_index > 0)
+    compression_block_count: int = 0     # uint16/uint32 depending on version
+    compression_block_size: int = 0      # uint32 — uncompressed size per compression block
     compression_blocks: list = field(default_factory=list)  # list[FPakCompressedBlock]
     hash: bytes = b""                    # 20 bytes — SHA1 of uncompressed data
-    flags: int = 0                       # 原始标志位
-    is_deleted: bool = False             # 是否已删除（derived from flags）
-    serialized_size: int = 0             # v10+ bitfield 编码时的条目大小
+    flags: int = 0                       # raw flags
+    is_deleted: bool = False             # whether deleted (derived from flags)
+    serialized_size: int = 0             # entry size for v10+ bitfield encoding
 
     @classmethod
     def deserialize_legacy(cls, stream: BinaryIO, version: int) -> "FPakEntry":
-        """从流中反序列化完整 FPakEntry（version < 10 的旧格式）。
+        """Deserialize a full FPakEntry from stream (legacy format, version < 10).
 
-        序列化顺序（UE FPakEntry::Serialize, IPlatformFilePak.h:521-570）：
+        Serialization order (UE FPakEntry::Serialize, IPlatformFilePak.h:521-570):
         - Offset (int64)
-        - Size (int64) — 压缩后大小
+        - Size (int64) — compressed size
         - UncompressedSize (int64)
         - CompressionMethodIndex (uint32)
         - [Timestamp (int64) — version <= 1 only]
-        - Hash [20 bytes] — 始终存在
+        - Hash [20 bytes] — always present
         - [version >= 3 (CompressionEncryption)]:
-          - CompressionBlocks [TArray: int32 count + N * (int64, int64)] — 仅 compression_method_index != 0
+          - CompressionBlocks [TArray: int32 count + N * (int64, int64)] — only when compression_method_index != 0
           - Flags (uint8)
           - CompressionBlockSize (uint32)
         """
@@ -162,7 +162,7 @@ class FPakEntry:
         if version < PakFileVersion.NoTimestamps:
             stream.read(8)
 
-        # Hash — UE 在 CompressionBlocks 之前写入 Hash
+        # Hash — UE writes Hash before CompressionBlocks
         entry.hash = stream.read(20)
 
         # [version >= CompressionEncryption (3)]: CompressionBlocks, Flags, CompressionBlockSize
@@ -192,12 +192,12 @@ class FPakEntry:
 
     @classmethod
     def decode_bitfield(cls, data: bytes, offset: int, pak_info: "FPakInfo") -> tuple["FPakEntry", int]:
-        """解码 v10+ bitfield 编码的 FPakEntry。
+        """Decode a v10+ bitfield-encoded FPakEntry.
 
-        UE 读取顺序：
-        bitfield → CompressionBlockSize(if 0x3F) → Offset → UncompressedSize → Size
+        UE read order:
+        bitfield -> CompressionBlockSize(if 0x3F) -> Offset -> UncompressedSize -> Size
 
-        Bitfield 布局（UE PakFile.cpp DecodePakEntry）：
+        Bitfield layout (UE PakFile.cpp DecodePakEntry):
         - Bit 31: Offset fits in 32-bit
         - Bit 30: UncompressedSize fits in 32-bit
         - Bit 29: Size fits in 32-bit
@@ -207,9 +207,9 @@ class FPakEntry:
         - Bits 0-5: Compression block size index (6 bits, 0x3F=read from stream)
 
         Args:
-            data: 包含 bitfield 的字节流
-            offset: bitfield 在 data 中的起始偏移
-            pak_info: FPakInfo 实例，提供压缩方法表
+            data: Byte stream containing the bitfield
+            offset: Starting offset of the bitfield in data
+            pak_info: FPakInfo instance providing the compression method table
 
         Returns:
             (FPakEntry, bytes_consumed)
@@ -230,7 +230,7 @@ class FPakEntry:
         entry.compression_block_count = (bitfield >> 6) & 0xFFFF
         block_size_index = bitfield & 0x3F
 
-        # UE 顺序: CompressionBlockSize 在 Offset 之前
+        # UE order: CompressionBlockSize before Offset
         if block_size_index == 0x3F:
             entry.compression_block_size = struct.unpack_from('<I', data, offset)[0]
             offset += 4
@@ -270,19 +270,19 @@ class FPakEntry:
         return entry, entry.serialized_size
 
     def encode_bitfield(self) -> bytes:
-        """编码 v10+ bitfield 格式的 FPakEntry。
+        """Encode an FPakEntry in v10+ bitfield format.
 
-        与 decode_bitfield 对称的编码方法，用于序列化写入。
+        Symmetric encoding method to decode_bitfield, used for serialization.
 
         Returns:
-            编码后的字节数据
+            Encoded byte data
         """
         result = bytearray()
 
-        # 构建 bitfield (4 bytes)
+        # Build bitfield (4 bytes)
         bitfield = 0
 
-        # 判断是否适合 32 位
+        # Check whether values fit in 32 bits
         offset_fits_32 = self.offset <= 0xFFFFFFFF
         uncompressed_size_fits_32 = self.uncompressed_size <= 0xFFFFFFFF
         size_fits_32 = self.size <= 0xFFFFFFFF
@@ -294,26 +294,26 @@ class FPakEntry:
         if size_fits_32:
             bitfield |= (1 << 29)
 
-        # 压缩方法索引 (6 bits)
+        # Compression method index (6 bits)
         bitfield |= (self.compression_method_index & 0x3F) << 23
 
-        # 加密标志
+        # Encryption flag
         if self.is_encrypted:
             bitfield |= (1 << 22)
 
-        # 压缩块数量 (16 bits)
+        # Compression block count (16 bits)
         bitfield |= (self.compression_block_count & 0xFFFF) << 6
 
-        # 压缩块大小索引 (6 bits)
-        # 如果大小是 2048 的倍数且 <= 131072，使用索引；否则使用 0x3F 并在后面写入实际大小
-        # 压缩条目要求 block_size > 0，否则编解码不对称
+        # Compression block size index (6 bits)
+        # If size is a multiple of 2048 and <= 131072, use index; otherwise use 0x3F and write actual size
+        # Compressed entries require block_size > 0 for symmetric encoding/decoding
         if self.compression_method_index > 0 and self.compression_block_size == 0:
             raise ValueError(
                 "compression_block_size must be > 0 for compressed entries"
             )
         elif self.compression_block_size % 2048 == 0:
             block_size_index = self.compression_block_size >> 11
-            if block_size_index <= 0x3E:  # 0x3F 保留给 "read from stream"
+            if block_size_index <= 0x3E:  # 0x3F reserved for "read from stream"
                 bitfield |= block_size_index
             else:
                 bitfield |= 0x3F
@@ -322,24 +322,24 @@ class FPakEntry:
 
         result.extend(struct.pack('<I', bitfield))
 
-        # UE 顺序: CompressionBlockSize 在 Offset 之前
-        # 仅当 bitfield 索引为 0x3F 且 block_size > 0 时写入流数据
+        # UE order: CompressionBlockSize before Offset
+        # Only write stream data when bitfield index is 0x3F and block_size > 0
         if (bitfield & 0x3F) == 0x3F and self.compression_block_size > 0:
             result.extend(struct.pack('<I', self.compression_block_size))
 
-        # 写入 Offset
+        # Write Offset
         if offset_fits_32:
             result.extend(struct.pack('<I', self.offset))
         else:
             result.extend(struct.pack('<q', self.offset))
 
-        # 写入 UncompressedSize
+        # Write UncompressedSize
         if uncompressed_size_fits_32:
             result.extend(struct.pack('<I', self.uncompressed_size))
         else:
             result.extend(struct.pack('<q', self.uncompressed_size))
 
-        # 写入 Size（仅压缩时）
+        # Write Size (only for compressed entries)
         if self.compression_method_index > 0:
             if size_fits_32:
                 result.extend(struct.pack('<I', self.size))
@@ -356,27 +356,28 @@ class FPakEntry:
 
 @dataclass
 class FPakInfo:
-    """Pak 文件尾部信息结构。
+    """Pak file trailer info structure.
 
-    FPakInfo 位于文件末尾，通过从尾部反向扫描不同大小的版本来检测。
-    新字段 prepend 在 Magic 之前以保持向后兼容。
+    FPakInfo is located at the end of the file, detected by reverse-scanning
+    different version sizes from the trailer. New fields are prepended before
+    Magic to maintain backward compatibility.
 
-    对应 UE IPlatformFilePak.h 中的 FPakInfo::Serialize。
+    Corresponds to FPakInfo::Serialize in UE IPlatformFilePak.h.
     """
     magic: int = PAK_FILE_MAGIC
     version: int = 0
-    index_offset: int = 0          # int64 — Primary Index 在文件中的偏移
-    index_size: int = 0            # int64 — Index blob 大小
+    index_offset: int = 0          # int64 — Primary Index offset in the file
+    index_size: int = 0            # int64 — Index blob size
     index_hash: bytes = b""        # 20 bytes — SHA1 of index blob
     encryption_key_guid: bytes = b""  # 16 bytes, version >= 7
     encrypted_index: bool = False     # version >= 7
     compression_methods: list = field(default_factory=list)  # up to 5 names, version >= 8
     index_is_frozen: bool = False   # version 9 only
-    detected_game: int = EGame.UNKNOWN  # 检测到的游戏标识
+    detected_game: int = EGame.UNKNOWN  # detected game identifier
 
     @classmethod
     def _serialized_size(cls, version: int) -> int:
-        """返回指定版本的 FPakInfo 序列化大小。"""
+        """Return the serialized size of FPakInfo for the given version."""
         if version <= 6:
             return PAK_INFO_SIZES["v1-6"]
         elif version == 7:
@@ -390,21 +391,21 @@ class FPakInfo:
 
     @classmethod
     def deserialize(cls, stream: BinaryIO, file_size: int) -> "FPakInfo":
-        """从文件尾部检测并反序列化 FPakInfo。
+        """Detect and deserialize FPakInfo from the file trailer.
 
-        算法：从最新版本 (12) 到最早版本 (1) 迭代，
-        计算 pos = file_size - serialized_size，seek 到 pos，
-        读取 4 字节检查 magic 是否匹配。
+        Algorithm: iterate from latest version (12) to earliest version (1),
+        compute pos = file_size - serialized_size, seek to pos,
+        read 4 bytes to check if magic matches.
 
         Args:
-            stream: 文件流
-            file_size: 文件总大小
+            stream: File stream
+            file_size: Total file size
 
         Returns:
-            解析后的 FPakInfo 实例
+            Parsed FPakInfo instance
 
         Raises:
-            ParseError: 如果没有版本匹配
+            ParseError: If no version matches
         """
         # Version groups by serialized size, ordered latest first within each size
         version_groups = [
@@ -434,11 +435,11 @@ class FPakInfo:
                 continue
 
             magic = struct.unpack('<I', raw)[0]
-            # 检查标准魔数和游戏特定魔数
+            # Check standard magic and game-specific magic values
             if magic not in PAK_FILE_MAGICS:
                 continue
 
-            # 检测游戏标识
+            # Detect game identifier
             detected_game = detect_game_from_magic(magic)
 
             # Magic matched — read version field to determine exact version
@@ -504,10 +505,10 @@ class FPakInfo:
 
 @dataclass
 class FPakDirectoryEntry:
-    """目录树节点。
+    """Directory tree node.
 
-    表示目录路径下的一个文件条目。
+    Represents a file entry under a directory path.
     """
-    path: str                    # 目录路径
-    filename: str                # 文件名
-    entry: FPakEntry             # 实际的条目数据
+    path: str                    # directory path
+    filename: str                # filename
+    entry: FPakEntry             # actual entry data

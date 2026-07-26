@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Kismet 表达式 — 向量和变换常量表达式。"""
+"""Kismet expression -- vector and transform constant expressions."""
 
 
 from dataclasses import dataclass
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_VectorConst(KismetExpression):
-    """向量常量 (X, Y, Z)"""
+    """Vector constant (X, Y, Z)"""
 
     X: float = 0.0
     Y: float = 0.0
@@ -67,8 +67,8 @@ class EX_RotationConst(KismetExpression):
 class EX_TransformConst(KismetExpression):
     """Transform constant expression (EX_TransformConst, 0x2B).
 
-    UE FTransform 序列化顺序：四元数旋转 (XYZW) -> 平移 (XYZ) -> 缩放 (XYZ)。
-    字段命名保留 Pitch/Yaw/Roll 作为平移分量以对齐计划文档。
+    UE FTransform serialization order: quaternion rotation (XYZW) -> translation (XYZ) -> scale (XYZ).
+    Field naming retains Pitch/Yaw/Roll as translation components to align with design documents.
     """
 
     X: float = 0.0

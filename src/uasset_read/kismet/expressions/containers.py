@@ -29,7 +29,7 @@ class EX_SetArray(KismetExpression):
         return cls(AssigningProperty=prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndArray = make_simple_expression(EExprToken.EX_EndArray)
 
 
@@ -48,7 +48,7 @@ class EX_SetMap(KismetExpression):
         return cls(MapProperty=prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndMap = make_simple_expression(EExprToken.EX_EndMap)
 
 
@@ -67,7 +67,7 @@ class EX_SetSet(KismetExpression):
         return cls(SetProperty=prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndSet = make_simple_expression(EExprToken.EX_EndSet)
 
 
@@ -87,7 +87,7 @@ class EX_ArrayConst(KismetExpression):
         return cls(InnerProperty=prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndArrayConst = make_simple_expression(EExprToken.EX_EndArrayConst)
 
 
@@ -109,7 +109,7 @@ class EX_MapConst(KismetExpression):
         return cls(KeyProperty=key_prop, ValueProperty=val_prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndMapConst = make_simple_expression(EExprToken.EX_EndMapConst)
 
 
@@ -129,7 +129,7 @@ class EX_SetConst(KismetExpression):
         return cls(InnerProperty=prop, Elements=elements)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndSetConst = make_simple_expression(EExprToken.EX_EndSetConst)
 
 

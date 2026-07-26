@@ -1,8 +1,8 @@
-"""渲染器基础 — IRenderer ABC + RenderOptions。
+"""Renderer base — IRenderer ABC + RenderOptions.
 
-渲染器只接收 PackageIR，不访问 ParseResult。
-渲染器不做数据转换（GUID 格式化等在 IR 构建时完成）。
-渲染器不拼接业务逻辑，只负责格式排版。
+Renderers only accept PackageIR, they do not access ParseResult.
+Renderers do not perform data transformations (GUID formatting etc. is done during IR construction).
+Renderers do not assemble business logic, they only handle format layout.
 """
 from __future__ import annotations
 
@@ -14,39 +14,39 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
-# ── 渲染器共享常量 ──
-# 以下是各渲染器共用的过滤列表，统一定义于此。
+# ── Renderer shared constants ──
+# Filter lists shared across renderers, defined here in a unified location.
 
-# 编辑器布局属性（不影响运行时和 C++ 翻译）
+# Editor layout properties (do not affect runtime and C++ translation)
 EDITOR_PROPERTY_NAMES = frozenset({
-    # 节点布局
+    # Node layout
     "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
     "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
-    # 注释相关
+    # Comment-related
     "CommentColor", "FontSize",
     "bCommentBubbleVisible_InDetailsPanel",
     "bCommentBubblePinned", "bCommentBubbleVisible",
-    # 图相关
+    # Graph-related
     "Schema", "GraphGuid", "ErrorType",
     "AdvancedPinDisplay", "MoveMode",
-    # 事件/函数引用（已提取到其他字段）
+    # Event/function references (already extracted to other fields)
     "EventReference", "bOverrideFunction",
 })
 
-# 编辑器内部变量（不影响运行时和 C++ 翻译）
+# Editor internal variables (do not affect runtime and C++ translation)
 EDITOR_VARIABLE_NAMES = frozenset({
-    "UbergraphPages",  # 图页面索引列表
-    "FunctionGraphs",  # 函数图索引列表
-    "CategorySorting",  # 编辑器分类排序
-    "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
-    "LastEditedDocuments",  # 最后编辑文档
-    "ThumbnailInfo",  # 缩略图信息
-    "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+    "UbergraphPages",  # Graph page index list
+    "FunctionGraphs",  # Function graph index list
+    "CategorySorting",  # Editor category sorting
+    "ImplementedInterfaces",  # Implemented interfaces (already in blueprint.interfaces)
+    "LastEditedDocuments",  # Last edited documents
+    "ThumbnailInfo",  # Thumbnail information
+    "bLegacyNeedToPurgeSkelRefs",  # Skeleton reference cleanup flag
 })
 
-# 编辑器内部节点类（不影响运行时，UE 编译时移除）
+# Editor internal node classes (do not affect runtime, removed during UE compilation)
 EDITOR_NODE_CLASSES = frozenset({
-    "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+    "K2Node_Knot",  # Redirect node, used for editor layout only
 })
 
 
@@ -55,7 +55,7 @@ def filter_editor_items(
     class_field: str = "object_class",
     exclude_classes: frozenset = EDITOR_NODE_CLASSES,
 ) -> list:
-    """过滤编辑器专用项（供渲染器共用）。"""
+    """Filter editor-specific items (shared across renderers)."""
     return [item for item in items if getattr(item, class_field, None) not in exclude_classes]
 
 
@@ -63,16 +63,16 @@ def filter_variables(
     variables: list,
     exclude_names: frozenset = EDITOR_VARIABLE_NAMES,
 ) -> list:
-    """过滤编辑器内部变量（供渲染器共用）。"""
+    """Filter editor internal variables (shared across renderers)."""
     return [v for v in variables if v.name not in exclude_names]
 
 
 def is_blueprint_export(export: ExportIR) -> bool:
-    """判断是否为蓝图相关 export。
+    """Determine whether an export is blueprint-related.
 
-    蓝图 export 定义：
-    - 类名以 _C 结尾（如 BP_Character_C）
-    - 或有 graphs 数据
+    Blueprint export definition:
+    - Class name ends with _C (e.g., BP_Character_C)
+    - Or has graphs data
     """
     if getattr(export, "object_name", None) is not None and export.object_name.endswith("_C"):
         return True
@@ -83,41 +83,41 @@ def is_blueprint_export(export: ExportIR) -> bool:
 
 @dataclass
 class RenderOptions:
-    """渲染选项（渲染器只读，不修改）。"""
+    """Render options (read-only by renderers, not modified)."""
     verbose: bool = False
     indent: int = 2
     include_schema: bool = False
     include_function_graphs: bool = False
-    output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
-    hex_view: bool = False  # 输出 HexView 解析轨迹数据
+    output_level: str = "standard"  # "standard" (default, filters UI/empty fields) or "debug" (full output)
+    hex_view: bool = False  # Output HexView parsing trace data
 
 
 class IRenderer(ABC):
-    """渲染器抽象基类。"""
+    """Renderer abstract base class."""
 
     @abstractmethod
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        """将 IR 渲染为字符串。
+        """Render IR to a string.
 
         Args:
-            ir: PackageIR 实例
-            options: 渲染选项
+            ir: PackageIR instance
+            options: Render options
 
         Returns:
-            渲染后的字符串
+            Rendered string
         """
         ...
 
     def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
-        """渲染到文件/流。
+        """Render to a file/stream.
 
-        默认实现写入 render() 结果。
-        JSONRenderer 覆盖此方法以使用 json.dump() 流式写入。
+        Default implementation writes the render() result.
+        JSONRenderer overrides this method to use json.dump() for streaming writes.
 
         Args:
-            ir: PackageIR 实例
-            writer: 可写文本流
-            options: 渲染选项，None 时使用默认值
+            ir: PackageIR instance
+            writer: Writable text stream
+            options: Render options, defaults to RenderOptions() when None
         """
         if options is None:
             options = RenderOptions()
@@ -126,5 +126,5 @@ class IRenderer(ABC):
     @property
     @abstractmethod
     def format_name(self) -> str:
-        """此渲染器处理的格式名称。"""
+        """Format name handled by this renderer."""
         ...

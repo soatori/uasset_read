@@ -1,4 +1,4 @@
-"""parse_utils.py — 轻量解析辅助函数。"""
+"""parse_utils.py — Lightweight parse helper functions."""
 from __future__ import annotations
 
 import logging
@@ -33,7 +33,7 @@ def _should_use_lightweight_tolerant_parse(
         if lightweight_threshold is not None
         else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
     )
-    # ControlRig 等大型文件：检测 export 类名，使用更高的阈值
+    # Large files like ControlRig: detect export class names, use higher threshold
     if (
         threshold == LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
         and lightweight_threshold is None
@@ -44,15 +44,16 @@ def _should_use_lightweight_tolerant_parse(
 
 
 def _is_large_file_asset(result) -> bool:
-    """检测是否为 ControlRig/RigVM 等天然大型文件资产。
+    """Detect whether the asset is a naturally large file like ControlRig/RigVM.
 
-    通过 export 类名子串匹配判断，避免将这类资产误判为超大蓝图。
-    参考: UE ControlRig.cpp 序列化结构。
+    Uses export class name substring matching to avoid misclassifying these assets
+    as oversized blueprints.
+    Reference: UE ControlRig.cpp serialization structure.
     """
     from uasset_read.serializers.object_resources import resolve_class_name
     export_map = getattr(result, "export_map", None) or []
     import_map = getattr(result, "import_map", None) or []
-    # 仅检查前 20 个 export 的类名即可判断（避免全量扫描性能开销）
+    # Only check first 20 exports' class names for detection (avoid full scan performance overhead)
     for export in export_map[:20]:
         try:
             class_name = resolve_class_name(
@@ -66,7 +67,7 @@ def _is_large_file_asset(result) -> bool:
 
 
 def _build_lightweight_graphs(result) -> list:
-    """在轻量模式下提取基本图信息（仅名称）。"""
+    """Extract basic graph information in lightweight mode (names only)."""
     from uasset_read.serializers.object_resources import get_asset_class
     from uasset_read.models.core import UEdGraph
 
@@ -79,10 +80,10 @@ def _build_lightweight_graphs(result) -> list:
         if not name:
             continue
 
-        # 检测 EdGraph 类型导出
+        # Detect EdGraph type exports
         class_name = get_asset_class(export, result.import_map, result.export_map)
         if class_name in ("EdGraph", "UberEdGraph"):
-            # 创建最小化的 UEdGraph，仅包含名称
+            # Create minimal UEdGraph with name only
             graph = UEdGraph(
                 graph_name=name,
                 graph_class=class_name,
@@ -120,7 +121,7 @@ def _apply_lightweight_parse(
     lightweight_threshold: int | None,
     force_full_parse: bool,
 ) -> bool:
-    """轻量解析路径：若触发则填充 result 并返回 True。"""
+    """Lightweight parse path: if triggered, populates result and returns True."""
     if not _should_use_lightweight_tolerant_parse(result, tolerant, lightweight_threshold, force_full_parse):
         return False
     result.warnings.append(
@@ -144,20 +145,21 @@ def _resolve_parse_params(
     config: ParseConfig | None,
     kwargs: dict,
 ) -> dict:
-    """将 ParseConfig 和旧风格关键字参数合并为最终参数字典。
+    """Merge ParseConfig and legacy-style keyword arguments into final parameter dict.
 
-    - 若提供 config，config 的值作为默认，显式传入的旧参数可覆盖。
-    - 若未提供 config，旧参数保持原样。
-    - 对同时从 config 和旧参数传入的值，发出 DeprecationWarning。
+    - If config is provided, config values serve as defaults; explicitly passed legacy parameters can override.
+    - If config is not provided, legacy parameters remain as-is.
+    - Issues DeprecationWarning when values are passed from both config and legacy parameters.
 
-    kwargs 中值为 None 的条目视为"调用方未指定"，不覆盖 config 值。
+    kwargs entries with None values are treated as "caller not specified" and do not override config values.
     """
     if config is None:
         return kwargs
 
-    # 所有旧参数在 parse_package() 签名中默认为 None（哨兵），
-    # 只有调用方显式传入非 None 值才算"显式覆盖"。
-    # 但如果调用方显式传入了与 config 值不同的非 None 值，发出弃用警告。
+    # All legacy parameters in parse_package() signature default to None (sentinel);
+    # only non-None values explicitly passed by the caller count as "explicit override".
+    # But if the caller explicitly passes a non-None value different from config value,
+    # issue a deprecation warning.
     conflicting = []
     for fld in config.__dataclass_fields__:
         if fld in kwargs and kwargs[fld] is not None:
@@ -167,18 +169,18 @@ def _resolve_parse_params(
 
     if conflicting:
         warnings.warn(
-            f"同时传入 config 和旧参数 {conflicting}，旧参数将覆盖 config 中的对应值。"
-            "请统一使用 ParseConfig。",
+            f"Both config and legacy parameters {conflicting} were passed; legacy parameters will override corresponding config values. "
+            "Please use ParseConfig exclusively.",
             DeprecationWarning,
             stacklevel=3,
         )
 
-    # 合并：kwargs 非 None 值覆盖 config，None 不覆盖
+    # Merge: non-None kwargs values override config, None values do not override
     merged = {}
     for fld in config.__dataclass_fields__:
         kw_val = kwargs.get(fld)
         merged[fld] = kw_val if kw_val is not None else getattr(config, fld)
-    # 保留 kwargs 中不在 config 中的键（如 path, provider 等）
+    # Keep keys in kwargs that are not in config (e.g., path, provider, etc.)
     for key in kwargs:
         if key not in merged:
             merged[key] = kwargs[key]

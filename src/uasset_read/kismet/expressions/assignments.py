@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""Kismet 赋值表达式。
+"""Kismet assignment expressions.
 
-包含 EX_Let 系列赋值指令的表达式子类。
+Contains expression subclasses for the EX_Let family of assignment instructions.
 """
 
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_LetBase(KismetExpression):
-    """赋值表达式的抽象基类。"""
+    """Abstract base class for assignment expressions."""
 
     Variable: KismetExpression | None = None
     Assignment: KismetExpression | None = None
@@ -39,7 +39,7 @@ class EX_LetBase(KismetExpression):
 
 @dataclass
 class EX_Let(KismetExpression):
-    """标准赋值表达式，包含属性指针。"""
+    """Standard assignment expression with a property pointer."""
 
     Property: FKismetPropertyPointer | None = None
     Variable: KismetExpression | None = None
@@ -68,7 +68,7 @@ class EX_Let(KismetExpression):
 
 @dataclass
 class EX_LetBool(EX_LetBase):
-    """布尔类型赋值。"""
+    """Boolean type assignment."""
 
     @property
     def Token(self) -> EExprToken:
@@ -77,7 +77,7 @@ class EX_LetBool(EX_LetBase):
 
 @dataclass
 class EX_LetDelegate(EX_LetBase):
-    """委托类型赋值。"""
+    """Delegate type assignment."""
 
     @property
     def Token(self) -> EExprToken:
@@ -86,7 +86,7 @@ class EX_LetDelegate(EX_LetBase):
 
 @dataclass
 class EX_LetMulticastDelegate(EX_LetBase):
-    """多播委托类型赋值。"""
+    """Multicast delegate type assignment."""
 
     @property
     def Token(self) -> EExprToken:
@@ -95,7 +95,7 @@ class EX_LetMulticastDelegate(EX_LetBase):
 
 @dataclass
 class EX_LetObj(EX_LetBase):
-    """对象类型赋值。"""
+    """Object type assignment."""
 
     @property
     def Token(self) -> EExprToken:
@@ -104,7 +104,7 @@ class EX_LetObj(EX_LetBase):
 
 @dataclass
 class EX_LetWeakObjPtr(EX_LetBase):
-    """弱对象指针赋值。"""
+    """Weak object pointer assignment."""
 
     @property
     def Token(self) -> EExprToken:
@@ -113,7 +113,7 @@ class EX_LetWeakObjPtr(EX_LetBase):
 
 @dataclass
 class EX_LetValueOnPersistentFrame(KismetExpression):
-    """在持久化帧上设置值（用于循环变量/局部变量）。"""
+    """Set value on persistent frame (used for loop variables / local variables)."""
 
     DestinationProperty: FKismetPropertyPointer | None = None
     AssignmentExpression: KismetExpression | None = None

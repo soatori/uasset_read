@@ -1,7 +1,7 @@
 """
-核心数据模型 — UE 蓝图图容器、节点、引脚、蓝图元数据及 ParseResult。
+Core data models — UE Blueprint graph containers, nodes, pins, blueprint metadata, and ParseResult.
 
-通过扁平导出（D-03），调用者使用 from uasset_read.models import UEdGraph 等。
+Exported flat (D-03), callers use ``from uasset_read.models import UEdGraph`` etc.
 """
 
 from .core import (
@@ -101,24 +101,24 @@ from .diagnostics import (
 )
 
 __all__ = [
-    # 核心模型（models/core.py）
+    # Core models (models/core.py)
     "FEdGraphPinType",
     "UEdGraphPin",
     "UEdGraphNode",
     "UEdGraph",
     "FMemberReference",
-    # 节点类型（node_types.py）
+    # Node types (node_types.py)
     "K2NodeCallFunction",
     "K2NodeEvent",
     "K2NodeKnot",
     "EdGraphNodeComment",
     "K2NodeEnhancedInputAction",
     "K2NodeFunctionEntry",
-    # 结果（result.py）
+    # Result (result.py)
     "BaseResult",
     "ParseResult",
     "StatusInfo",
-    # 蓝图元数据（blueprint.py）
+    # Blueprint metadata (blueprint.py)
     "BlueprintMetadata",
     "BlueprintVariable",
     "BlueprintFunction",
@@ -126,7 +126,7 @@ __all__ = [
     "BlueprintInterface",
     "FunctionParameter",
     "MulticastDelegate",
-    # 属性数据模型
+    # Property data models
     "PropertyTag",
     "PropertyTypeName",
     "PropertyValue",
@@ -138,12 +138,12 @@ __all__ = [
     "EnumValue",
     "TextValue",
     "DelegateValue",
-    # 变换数据类
+    # Transform data classes
     "VectorValue",
     "RotatorValue",
     "ScaleValue",
     "format_transform_value",
-    # IR 中间表示（ir.py）
+    # IR intermediate representation (ir.py)
     "PackageHeaderIR",
     "PinIR",
     "NodeIR",
@@ -169,7 +169,7 @@ __all__ = [
     "AnimationDataIR",
     "PackageDependenciesIR",
     "DiagnosticsDataIR",
-    # 动画 IR（ir_anim.py）
+    # Animation IR (ir_anim.py)
     "AnimNotifyIR",
     "AnimBlueprintIR",
     "AnimSequenceIR",
@@ -178,12 +178,12 @@ __all__ = [
     "BakedStateIR",
     "BakedTransitionIR",
     "BakedStateMachineIR",
-    # Fallback 模型
+    # Fallback models
     "PropertyFallback",
     "StructFallback",
     "GenericUObject",
     "ExportParseStatus",
     "FallbackReason",
-    # 诊断模型
+    # Diagnostic models
     "OffsetRangeDiagnostic",
 ]

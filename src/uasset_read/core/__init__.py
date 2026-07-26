@@ -1,6 +1,6 @@
-"""核心解析 API — 纯函数，无 argparse、无 sys.exit、无 print。
+"""Core parse API — pure functions, no argparse, no sys.exit, no print.
 
-CLI、独立脚本、未来 Skill 共享此 API。
+CLI, standalone scripts, and future Skills share this API.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchResult:
-    """批量导出结果。"""
+    """Batch export result."""
     total: int = 0
     success: list[str] = field(default_factory=list)
     partial: list[str] = field(default_factory=list)
@@ -100,12 +100,12 @@ def _configure_logging(
     log_max_bytes: int = 10_000_000,
     log_backup_count: int = 5,
 ):
-    """配置项目日志。
+    """Configure project logging.
 
-    优先使用 log_config（LogConfig 实例），旧风格参数保留兼容。
+    Prefer log_config (LogConfig instance); legacy parameters kept for compatibility.
     """
     if log_config is not None:
-        # 检测是否有旧参数也显式传入
+        # Check if legacy parameters were also explicitly passed
         has_legacy = any(v is not None and v != {
             "log_level": None, "log_dir": None, "log_run_id": None,
             "log_keep_latest": None, "log_max_total_bytes": None,
@@ -124,7 +124,7 @@ def _configure_logging(
             )
         return configure_project_logging(**log_config.to_configure_kwargs())
 
-    # 旧风格路径
+    # Legacy-style path
     effective_enabled = log_enabled and log_level != "off"
     if (
         log_level is None
@@ -184,36 +184,36 @@ def parse_single(
     log_config: LogConfig | None = None,
     parse_config: "ParseConfig | None" = None,
 ) -> str:
-    """解析单个 .uasset/.umap，返回格式化字符串。
+    """Parse a single .uasset/.umap, return formatted string.
 
-    纯函数，无 argparse、无 sys.exit、无 print。
-    需要 linker 的格式内部自动选择 parse_uasset_with_linker。
-    解析阶段使用集中式 MemoryPolicy 检查点。
+    Pure function, no argparse, no sys.exit, no print.
+    Formats requiring a linker internally select parse_uasset_with_linker.
+    Parse phase uses centralized MemoryPolicy checkpoints.
 
     Args:
-        file_path: .uasset/.umap 文件路径
-        format: 输出格式（json, markdown）
-        tolerant: 容错模式，遇到错误继续解析。None 表示使用 ParseConfig 或默认值 True
-        verbose: 详细输出
-        include_schema: 包含 JSON Schema
-        include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产。None 表示使用 ParseConfig 或默认值 False
-        asset_roots: 资产根目录列表
-        mappings_path: .usmap 映射文件路径
-        game: 游戏名称
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）。None 表示使用 ParseConfig 或默认值 False
-        hex_view: 启用 HexView 字节偏移追踪。None 表示使用 ParseConfig 或默认值 False
-        memory_policy: 可选内存策略
-        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
-        log_config: 可选 LogConfig 实例，集中管理日志参数。
-        parse_config: 可选 ParseConfig 实例，集中管理解析参数。
+        file_path: .uasset/.umap file path
+        format: Output format (json, markdown)
+        tolerant: Fault-tolerant mode, continue parsing on error. None means use ParseConfig or default True
+        verbose: Verbose output
+        include_schema: Include JSON Schema
+        include_function_graphs: Include function graphs
+        include_parent_assets: Parse parent assets. None means use ParseConfig or default False
+        asset_roots: Asset root directory list
+        mappings_path: .usmap mapping file path
+        game: Game name
+        force_full_parse: Force full parse of large blueprints (ignore lightweight mode threshold). None means use ParseConfig or default False
+        hex_view: Enable HexView byte offset tracking. None means use ParseConfig or default False
+        memory_policy: Optional memory policy
+        output_level: Output level (standard/debug), standard filters UI properties and empty fields
+        log_config: Optional LogConfig instance for centralized log parameter management.
+        parse_config: Optional ParseConfig instance for centralized parse parameter management.
 
     Returns:
-        格式化后的字符串
+        Formatted string
 
     Raises:
-        ParseError: 解析失败
-        ValueError: 渲染格式不存在
+        ParseError: Parse failed
+        ValueError: Render format does not exist
     """
     # #423: Skip reconfiguration when scoped_project_logging already owns the session.
     already_configured = (log_config is None and current_log_run_id() is not None)
@@ -269,9 +269,9 @@ def _parse_and_render(
     output_level: str = "standard",
     parse_config: "ParseConfig | None" = None,
 ) -> tuple[str, "ParseResult | LinkerParseResult"]:
-    """解析并渲染，返回 (output_str, parse_result)。
+    """Parse and render, return (output_str, parse_result).
 
-    parse_single 和 parse_batch 共用的核心逻辑。
+    Core logic shared by parse_single and parse_batch.
     """
     set_last_parse_result(None)
 
@@ -311,7 +311,7 @@ def _parse_and_render(
 
     ir = build_package_ir(result)
 
-    # 释放临时大对象，防止批量解析时内存累积
+    # Release temporary large objects to prevent memory accumulation during batch parsing
     try:
         for export in getattr(result, "export_map", []) or []:
             if hasattr(export, "_asset_type_data"):
@@ -368,7 +368,7 @@ def parse_batch(
     game: str | None = None,
     force_full_parse: bool | None = None,
     hex_view: bool | None = None,
-    max_memory_usage: float = 0.85,  # 内存使用上限（85%）
+    max_memory_usage: float = 0.85,  # Memory usage limit (85%)
     isolate_assets: bool | str = True,  # True/False/"auto"
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
@@ -384,35 +384,35 @@ def parse_batch(
     log_config: LogConfig | None = None,
     parse_config: "ParseConfig | None" = None,
 ) -> BatchResult:
-    """批量解析目录下所有 .uasset/.umap。
+    """Batch parse all .uasset/.umap in a directory.
 
     Args:
-        input_dir: 输入目录
-        format: 输出格式
-        output_dir: 输出目录（默认为 input_dir/output）
-        tolerant: 容错模式
-        verbose: 详细输出
-        include_schema: 包含 JSON Schema
-        include_function_graphs: 包含函数图
-        include_parent_assets: 解析父资产
-        asset_roots: 资产根目录列表
-        mappings_path: .usmap 映射文件路径
-        game: 游戏名称
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
-        max_memory_usage: 系统内存使用上限（0.0-1.0），超过时停止启动 worker
-        skip_large_files: 已弃用；文件大小仅用于选择资源档位
-        isolate_assets: 是否为每个资产启动独立子进程。True/False/\"auto\"（auto 根据文件大小自动选择）
-        memory_policy: 可选内存策略
-        output_level: 输出级别（standard/debug），standard 过滤 UI 属性和空字段
+        input_dir: Input directory
+        format: Output format
+        output_dir: Output directory (defaults to input_dir/output)
+        tolerant: Fault-tolerant mode
+        verbose: Verbose output
+        include_schema: Include JSON Schema
+        include_function_graphs: Include function graphs
+        include_parent_assets: Parse parent assets
+        asset_roots: Asset root directory list
+        mappings_path: .usmap mapping file path
+        game: Game name
+        force_full_parse: Force full parse of large blueprints (ignore lightweight mode threshold)
+        hex_view: Enable HexView byte offset tracking
+        max_memory_usage: System memory usage limit (0.0-1.0), stops spawning workers when exceeded
+        skip_large_files: Deprecated; file size is only used for tier selection
+        isolate_assets: Whether to spawn a separate subprocess per asset. True/False/\"auto\" (auto selects based on file size)
+        memory_policy: Optional memory policy
+        output_level: Output level (standard/debug), standard filters UI properties and empty fields
 
     Returns:
-        BatchResult 包含成功、跳过、失败的文件列表
+        BatchResult containing lists of succeeded, skipped, and failed files
 
     Raises:
-        ValueError: 目录不存在或没有资产文件
+        ValueError: Directory does not exist or contains no asset files
     """
-    # 验证 isolate_assets 参数
+    # Validate isolate_assets parameter
     if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
         raise ValueError(
             f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
@@ -484,7 +484,7 @@ def parse_batch(
     if parse_config is not None:
         parse_options["parse_config"] = parse_config
 
-    # #346: 智能混合模式 — 将导入移到循环外部
+    # #346: Smart hybrid mode — move imports outside the loop
     if isolate_assets == "auto":
         from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
 
@@ -504,7 +504,7 @@ def parse_batch(
 
         out_file = output_path / f"{pf.name}{extension}"
         try:
-            # #346: 智能混合模式
+            # #346: Smart hybrid mode
             if isolate_assets == "auto":
                 file_size = check_file_size(pf)
                 tier = FileSizeTier.from_size(file_size)
@@ -568,7 +568,7 @@ def parse_batch(
                     if exp_status and exp_status in PARTIAL_STATUSES:
                         result.partial_reasons.setdefault(exp_status, []).append(str(pf))
 
-            # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
+            # Atomic write: write to temp file then replace, prevents incomplete output on interruption (#434)
             tmp_fd = -1
             tmp_path = ""
             try:
@@ -577,7 +577,7 @@ def parse_batch(
                 )
                 with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
                     tmp_f.write(output_str)
-                tmp_fd = -1  # fdopen 已接管 fd，无需再 close
+                tmp_fd = -1  # fdopen has taken ownership of fd, no need to close
                 os.replace(tmp_path, str(out_file))
             except BaseException:
                 if tmp_fd >= 0:
@@ -601,7 +601,7 @@ def parse_batch(
 
 
 def list_formats() -> list[str]:
-    """返回所有支持的格式名列表。"""
+    """Return list of all supported format names."""
     return _list_renderer_formats()
 
 
@@ -627,24 +627,24 @@ def diff_single(
     log_backup_count: int = 5,
     log_config: LogConfig | None = None,
 ) -> str:
-    """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
+    """Compare text summary differences of two .uasset files, return unified diff output.
 
-    解析失败不会抛出异常，而是在 diff 输出中标注解析错误信息。
-    当提供 writer 时，diff 写入流而不是返回字符串（流式输出）。
+    Parse failures do not raise exceptions; instead, parse error messages are annotated in the diff output.
+    When a writer is provided, the diff is written to the stream instead of returning a string (streaming output).
 
     Args:
-        file_path1: 第一个 .uasset 文件路径
-        file_path2: 第二个 .uasset 文件路径
-        tolerant: 容错模式
-        context_lines: diff 上下文行数
-        mappings_path: 可选 .usmap/.jmap 类型映射
-        game: 可选游戏名（启用游戏特定属性解析）
-        force_full_parse: 是否强制完整蓝图解析
-        writer: 可选输出流，提供时 diff 写入该流
-        log_config: 可选 LogConfig 实例，集中管理日志参数。
+        file_path1: First .uasset file path
+        file_path2: Second .uasset file path
+        tolerant: Fault-tolerant mode
+        context_lines: Number of diff context lines
+        mappings_path: Optional .usmap/.jmap type mapping
+        game: Optional game name (enables game-specific property parsing)
+        force_full_parse: Whether to force full blueprint parsing
+        writer: Optional output stream; when provided, diff is written to this stream
+        log_config: Optional LogConfig instance for centralized log parameter management.
 
     Returns:
-        writer 为 None 时返回 unified diff 文本；否则返回空字符串
+        Unified diff text when writer is None; empty string otherwise
     """
     _configure_logging(
         log_config=log_config,
@@ -693,13 +693,13 @@ def _diff_to(
     game: str | None = None,
     force_full_parse: bool | None = None,
 ) -> None:
-    """将 unified diff 流式写入 writer。
+    """Stream unified diff to writer.
 
-    逐行写入，不累积完整 diff 字符串。
+    Writes line by line without accumulating the full diff string.
     """
     import difflib
 
-    # 解析文件 1
+    # Parse file 1
     try:
         text1 = parse_single(
             file_path1,
@@ -713,7 +713,7 @@ def _diff_to(
     except Exception as e:
         text1 = f"[Parse error] {Path(file_path1).name}: {e}"
 
-    # 解析文件 2
+    # Parse file 2
     try:
         text2 = parse_single(
             file_path2,

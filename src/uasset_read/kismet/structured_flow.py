@@ -95,9 +95,9 @@ class StructuredControlFlow:
         expressions: list["KismetExpression"],
         jump_analyzer: "JumpAnalyzer",
     ) -> list[dict]:
-        """使用 JumpAnalyzer 检测结构化模式（统一入口）。
+        """Use JumpAnalyzer to detect structured patterns (unified entry point).
 
-        将 JumpAnalyzer 的检测结果转换为 _emit_structured 所需的格式。
+        Converts JumpAnalyzer detection results to the format needed by _emit_structured.
         """
         regions: list[dict] = []
         used_indices: set[int] = set()
@@ -111,7 +111,7 @@ class StructuredControlFlow:
             if result is not None:
                 ptype = result["type"]
                 if ptype in ("push_pop", "if_else"):
-                    # 统一为 if_else 格式供 _emit_structured 使用
+                    # Unify to if_else format for _emit_structured
                     region = {
                         "type": "if_else",
                         "start": result["start"],
@@ -137,7 +137,7 @@ class StructuredControlFlow:
                     for j in range(result["start"], result["body_end"] + 1):
                         used_indices.add(j)
                 elif ptype == "for":
-                    # for 循环也转为 while 格式输出（简化处理）
+                    # for loops also output as while format (simplified handling)
                     region = {
                         "type": "while",
                         "start": result["start"],
@@ -149,7 +149,7 @@ class StructuredControlFlow:
                     regions.append(region)
                     for j in range(result["start"], result["body_end"] + 1):
                         used_indices.add(j)
-                # switch 作为独立表达式处理，不创建 region
+                # switch handled as independent expression, no region created
             i += 1
 
         return regions
@@ -216,9 +216,9 @@ class StructuredControlFlow:
         """
         Emit goto-based output as fallback when no structured patterns detected.
 
-        使用 offset_to_index 映射（与 body_builder.py 一致）精确匹配跳转目标。
+        Use offset_to_index mapping (consistent with body_builder.py) to precisely match jump targets.
         """
-        # 若未传入映射则自行构建
+        # Build mapping if not provided
         if offset_to_index is None:
             offset_to_index = {}
             for idx, expr in enumerate(expressions):
@@ -229,9 +229,9 @@ class StructuredControlFlow:
                     offset_to_index[expr.CodeOffset] = idx
 
         result: list[str] = []
-        label_set: set[int] = set()  # 已输出的标签，防止重复
+        label_set: set[int] = set()  # Already emitted labels, prevent duplicates
         for i, expr in enumerate(expressions):
-            # 检查当前索引是否对应某个跳转目标 — 输出标签
+            # Check if current index corresponds to a jump target — emit label
             for target in sorted(jump_targets):
                 if offset_to_index.get(target) == i and target not in label_set:
                     result.append(f"Label_{target}:")

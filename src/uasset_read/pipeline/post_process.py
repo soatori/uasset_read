@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""后处理阶段 — Kismet 反编译、蓝图图提取、依赖分析。"""
+"""Post-processing stage — Kismet decompilation, Blueprint graph extraction, dependency analysis."""
 
 import logging
 import struct
@@ -74,15 +74,15 @@ def _extract_blueprint_graphs_and_metadata(
     linker: Optional["PackageLinker"] = None,
     archive_factory=None,
 ):
-    """提取蓝图图和元数据（BPGC 优先 + UBlueprint 回退）。
+    """Extract Blueprint graphs and metadata (BPGC priority + UBlueprint fallback).
 
     Returns:
-        提取到的 BlueprintMetadata，未找到时返回 None。
+        Extracted BlueprintMetadata, or None if not found.
     """
-    # 延迟导入 extras 模块（per #117 core/extras 分层）
+    # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.blueprint import extract_blueprint_metadata
 
-    # --- Blueprint Graph 提取（先于元数据提取，以便传递 graphs 参数） ---
+    # --- Blueprint Graph extraction (before metadata extraction to pass graphs parameter) ---
     graphs_list = None
     try:
         from uasset_read.graph import extract_blueprint_graphs
@@ -94,9 +94,9 @@ def _extract_blueprint_graphs_and_metadata(
                 )
                 graphs_list = result.graphs
     except ImportError:
-        logger.debug("graph 模块不存在，跳过蓝图图提取")
+        logger.debug("graph module not found, skipping Blueprint graph extraction")
 
-    # --- Blueprint 元数据提取（BPGC 优先） ---
+    # --- Blueprint metadata extraction (BPGC priority) ---
     blueprint_metadata = None
     asset_name = name_map[0] if name_map else None
 
@@ -124,7 +124,7 @@ def _extract_blueprint_graphs_and_metadata(
                 if owned_archive:
                     temp_archive.close()
 
-    # --- UBlueprint 回退 ---
+    # --- UBlueprint fallback ---
     if not blueprint_metadata:
         for export in export_map:
             if linker is not None:
@@ -153,7 +153,7 @@ def _extract_blueprint_graphs_and_metadata(
                         temp_archive.close()
                 break
 
-    # 仅在 blueprint_metadata 不为 None 时赋值，避免覆盖已有蓝图数据
+    # Only assign when blueprint_metadata is not None, to avoid overwriting existing Blueprint data
     if blueprint_metadata is not None and hasattr(result, 'blueprint'):
         result.blueprint = blueprint_metadata
 
@@ -172,10 +172,10 @@ def _run_kismet_and_dependency_analysis(
     linker: Optional["PackageLinker"] = None,
     blueprint_metadata=None,
 ) -> None:
-    """Kismet 反编译 + 组件提取 + 依赖分析。"""
+    """Kismet decompilation + component extraction + dependency analysis."""
     # Kismet decompilation (per D-02, D-10)
     try:
-        from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — 模块存在性检查
+        from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — module existence check
         if hasattr(result, 'decompiled_functions'):
             decompiled = _extract_kismet_decompiled(
                 path, archive, summary, name_map,
@@ -188,7 +188,7 @@ def _run_kismet_and_dependency_analysis(
             if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
                 result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
     except ImportError:
-        logger.debug("kismet 模块不存在，跳过字节码反编译")
+        logger.debug("kismet module not found, skipping bytecode decompilation")
     except (OSError, struct.error, ValueError, KeyError) as e:
         if hasattr(result, 'warnings'):
             result.warnings.append(f"Kismet decompilation error: {e}")
@@ -199,12 +199,12 @@ def _run_kismet_and_dependency_analysis(
         if hasattr(result, 'components'):
             result.components = extract_components(export_map, import_map)
     except ImportError:
-        logger.debug("component_extractor 模块不存在，跳过组件属性提取")
+        logger.debug("component_extractor module not found, skipping component property extraction")
     except (KeyError, TypeError, ValueError) as e:
         if hasattr(result, 'errors'):
             result.errors.append(f"component extraction error: {e}")
 
-    # 依赖分析
+    # Dependency analysis
     with tolerant_parse(result, "dependency analysis"):
         if hasattr(result, 'imports'):
             result.imports = build_imports_list(import_map)
@@ -229,9 +229,9 @@ def _post_process(
     archive_factory=None,
     memory_policy: Optional["MemoryPolicy"] = None,
 ) -> None:
-    """共享后处理：blueprint 元数据、图提取、依赖分析。
+    """Shared post-processing: Blueprint metadata, graph extraction, dependency analysis.
 
-    通过 hasattr 守卫写入字段，同时支持 ParseResult 和 LinkerParseResult。
+    Writes fields via hasattr guards, supporting both ParseResult and LinkerParseResult.
     """
     blueprint_metadata = _extract_blueprint_graphs_and_metadata(
         archive, summary, name_map, import_map, export_map,
@@ -250,13 +250,13 @@ def _post_process(
             memory_policy=memory_policy,
         )
 
-    # name_map 一致性检查
+    # name_map consistency check
     if hasattr(result, 'name_map') and not result.name_map:
         if summary is not None and getattr(summary, 'name_count', 0) > 0:
             if hasattr(result, 'errors'):
                 result.errors.append(
-                    f"name_map 为空（summary.name_count={summary.name_count}），"
-                    f"名称表读取失败"
+                    f"name_map is empty (summary.name_count={summary.name_count}), "
+                    f"name table read failed"
                 )
 
     result.is_success = not result.errors
@@ -320,7 +320,7 @@ def _resolve_parent_assets(
         )
         return
 
-    # 延迟导入避免循环依赖
+    # Lazy import to avoid circular dependencies
     from uasset_read.parse_uasset import parse_uasset_with_linker
 
     try:

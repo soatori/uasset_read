@@ -1,7 +1,7 @@
-"""UStringTable 资产类型处理器（opaque partial metadata）。
+"""UStringTable Asset type handler (opaque partial metadata).
 
-UStringTable 仅使用标准 UPROPERTY 序列化（TableNamespace、StringTable TMap），
-无自定义 Serialize()。Handler 提供类型识别。
+UStringTable only uses standard UPROPERTY serialization (TableNamespace, StringTable TMap),
+no custom Serialize(). Handler provides type identification.
 """
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub

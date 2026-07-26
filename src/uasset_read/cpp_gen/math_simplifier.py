@@ -1,22 +1,22 @@
 """
-蓝图数学函数简化器 — KismetMathLibrary 运算符映射。
+Blueprint math function simplifier -- KismetMathLibrary operator mapping.
 
-将蓝图中的 KismetMathLibrary 函数调用简化为对应的运算符表达式，
-提升 C++ 代码生成的可读性和简洁性。
+Simplifies KismetMathLibrary function calls in blueprints to corresponding operator expressions,
+improving readability and conciseness of generated C++ code.
 
-导出：
-    MathSimplifier: 数学函数简化器类
+Exports:
+    MathSimplifier: Math function simplifier class
 """
 
 from typing import Optional
 
 
 class MathSimplifier:
-    """将 KismetMathLibrary 函数调用简化为运算符。"""
+    """Simplify KismetMathLibrary function calls to operators."""
 
-    # 运算符映射表
+    # Operator mapping table
     OPERATOR_MAP = {
-        # 算术运算
+        # Arithmetic operations
         "Add_IntInt": "+",
         "Add_FloatFloat": "+",
         "Add_DoubleDouble": "+",
@@ -35,7 +35,7 @@ class MathSimplifier:
         "Negate_Float": "-",
         "Negate_Double": "-",
 
-        # 比较运算
+        # Comparison operations
         "EqualEqual_IntInt": "==",
         "EqualEqual_FloatFloat": "==",
         "EqualEqual_DoubleDouble": "==",
@@ -53,19 +53,19 @@ class MathSimplifier:
         "LessEqual_IntInt": "<=",
         "LessEqual_FloatFloat": "<=",
 
-        # 逻辑运算
+        # Logical operations
         "BooleanAND": "&&",
         "BooleanOR": "||",
         "BooleanNOT": "!",
 
-        # 向量运算
+        # Vector operations
         "Add_VectorVector": "+",
         "Subtract_VectorVector": "-",
         "Multiply_VectorFloat": "*",
         "Multiply_FloatVector": "*",
         "Divide_VectorFloat": "/",
 
-        # 数学函数 (保持函数形式)
+        # Math functions (keep as function form)
         "Abs_Int": "FMath::Abs",
         "Abs_Float": "FMath::Abs",
         "Abs_Double": "FMath::Abs",
@@ -81,16 +81,16 @@ class MathSimplifier:
         "FClamp": "FMath::Clamp",
     }
 
-    # 前缀映射 (用于类型变体)
+    # Prefix mapping (for type variants)
     TYPE_PREFIXES = ["Int", "Float", "Double", "Byte"]
 
     def simplify(self, function_name: str) -> Optional[str]:
-        """简化函数名为运算符。"""
-        # 直接查找
+        """Simplify function name to operator."""
+        # Direct lookup
         if function_name in self.OPERATOR_MAP:
             return self.OPERATOR_MAP[function_name]
 
-        # 尝试去除类型后缀查找
+        # Try removing type suffix for lookup
         for prefix in self.TYPE_PREFIXES:
             for op_name, op_symbol in self.OPERATOR_MAP.items():
                 if op_name.endswith(prefix) and function_name == op_name[:-len(prefix)]:
@@ -99,17 +99,17 @@ class MathSimplifier:
         return None
 
     def is_math_library_function(self, function_name: str) -> bool:
-        """检查是否为 KismetMathLibrary 函数。"""
+        """Check if it is a KismetMathLibrary function."""
         return function_name in self.OPERATOR_MAP
 
     def get_operator_info(self, function_name: str) -> Optional[dict]:
-        """获取运算符详细信息。"""
+        """Get detailed operator information."""
         if function_name not in self.OPERATOR_MAP:
             return None
 
         op = self.OPERATOR_MAP[function_name]
 
-        # 判断运算符类型
+        # Determine operator type
         if op in ["+", "-", "*", "/", "%"]:
             return {"type": "arithmetic", "operator": op}
         elif op in ["==", "!=", ">", "<", ">=", "<="]:

@@ -1,15 +1,15 @@
 """
-C++ JSON IR 格式化模块 — CppProperty, CppHeaderMeta, CppClassIR, CppStatement 数据模型。
+C++ JSON IR formatter module — CppProperty, CppHeaderMeta, CppClassIR, CppStatement data models.
 
-Per D-06: JSON IR 结构包含 header_meta, properties, methods, constructor 四部分。
-只填充 header_meta 和 properties，methods 和 constructor 留空。
+Per D-06: JSON IR structure contains header_meta, properties, methods, constructor sections.
+Only header_meta and properties are populated; methods and constructor are left empty.
 
-导出：
-    CppProperty: 单个 C++ UPROPERTY 声明数据模型
-    CppHeaderMeta: 头文件元数据模型
-    CppClassIR: 完整 C++ 类骨架 IR 数据模型
-    format_cpp_class_json: JSON IR 格式化函数
-    kismet_to_cpp_body: Kismet 表达式 → 结构化 C++ 语句列表
+Exports:
+    CppProperty: single C++ UPROPERTY declaration data model
+    CppHeaderMeta: header file metadata model
+    CppClassIR: complete C++ class skeleton IR data model
+    format_cpp_class_json: JSON IR formatting function
+    kismet_to_cpp_body: Kismet expressions → structured C++ statement list
 """
 from __future__ import annotations
 
@@ -27,35 +27,35 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# C++ 属性数据模型（Per D-06）
+# C++ Property Data Model (Per D-06)
 # ============================================================================
 
 @dataclass
 class CppProperty:
-    """单个 C++ UPROPERTY 声明。
+    """Single C++ UPROPERTY declaration.
 
-    用于表示蓝图变量或组件的 C++ 属性声明。
+    Represents a C++ property declaration for a Blueprint variable or component.
 
     Attributes:
-        cpp_type: C++ 类型名（如 "USceneComponent*", "FVector", "float")
-        name: 属性名（如 "DefaultSceneRoot", "MoveSpeed")
-        uproperty_marks: UPROPERTY 标记列表（如 ["VisibleAnywhere", "BlueprintReadOnly", "Instanced"]）
-        category: 属性类别（"component" 或 "variable"）
-        default_value: 默认值（组件为 None，float 变量可能是 100.0）
-        cpp_comment: 可选注释（原 UE 类型参考）
+        cpp_type: C++ type name (e.g. "USceneComponent*", "FVector", "float")
+        name: property name (e.g. "DefaultSceneRoot", "MoveSpeed")
+        uproperty_marks: UPROPERTY specifiers list (e.g. ["VisibleAnywhere", "BlueprintReadOnly", "Instanced"])
+        category: property category ("component" or "variable")
+        default_value: default value (None for components, 100.0 for float variables)
+        cpp_comment: optional comment (original UE type reference)
     """
     cpp_type: str
     name: str
     uproperty_marks: List[str]
-    category: str  # "component" 或 "variable"
+    category: str  # "component" or "variable"
     default_value: Any = None
     cpp_comment: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典（D-06 格式）。
+        """Serialize to JSON-compatible dict (D-06 format).
 
         Returns:
-            包含所有字段的字典，default_value 保留原值（None → JSON null）
+            Dict containing all fields; default_value is kept as-is (None -> JSON null)
         """
         result = {
             "cpp_type": self.cpp_type,
@@ -70,20 +70,20 @@ class CppProperty:
 
 
 # ============================================================================
-# C++ 头文件元数据模型（Per D-05, D-06）
+# C++ Header Metadata Model (Per D-05, D-06)
 # ============================================================================
 
 @dataclass
 class CppHeaderMeta:
-    """头文件元数据。
+    """Header file metadata.
 
-    Per D-05: 完整 UE 头文件模板结构。
+    Per D-05: full UE header file template structure.
 
     Attributes:
-        pragma_once: 是否包含 #pragma once（默认 True）
-        includes: 包含的头文件列表（如 '"Engine/GameFramework/Character.h"'）
-        forward_declarations: 前向声明列表
-        generated_include: .generated.h 包含路径（必须为最后一个 include）
+        pragma_once: whether to include #pragma once (default True)
+        includes: list of included header files (e.g. '"Engine/GameFramework/Character.h"')
+        forward_declarations: forward declaration list
+        generated_include: .generated.h include path (must be the last include)
     """
     pragma_once: bool = True
     includes: List[str] = field(default_factory=list)
@@ -92,24 +92,24 @@ class CppHeaderMeta:
 
     @classmethod
     def build_from_parent(cls, parent_class: str, class_name: str) -> "CppHeaderMeta":
-        """根据父类构建头文件元数据。
+        """Build header metadata from parent class.
 
-        Per D-05: 设置 generated_include 为 '{class_name}.generated.h'。
-        根据父类类型添加对应的头文件包含。
+        Per D-05: set generated_include to '{class_name}.generated.h'.
+        Add corresponding header file includes based on parent class type.
 
         Args:
-            parent_class: 父类 C++ 名（如 "ACharacter", "UActorComponent"）
-            class_name: 当前类名（用于生成 .generated.h 路径）
+            parent_class: parent class C++ name (e.g. "ACharacter", "UActorComponent")
+            class_name: current class name (used to generate .generated.h path)
 
         Returns:
-            配置好的 CppHeaderMeta 实例
+            Configured CppHeaderMeta instance
         """
-        # T-056-04: 清理类名 — 只允许字母数字和下划线
+        # T-056-04: sanitize class name - allow only alphanumeric and underscores
         if class_name:
             import re
             if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', class_name):
                 logger.warning(f"Invalid class name format: '{class_name}', sanitizing")
-                # 移除非法字符
+                # Remove invalid characters
                 class_name = re.sub(r'[^A-Za-z0-9_]', '_', class_name)
 
         meta = cls(
@@ -119,25 +119,25 @@ class CppHeaderMeta:
             generated_include=f'"{class_name}.generated.h"' if class_name else ""
         )
 
-        # 根据父类前缀推断头文件路径
+        # Infer header file path from parent class prefix
         if parent_class:
-            # 提取类名部分（去掉前缀）
+            # Extract class name part (remove prefix)
             base_name = parent_class
             if parent_class.startswith(('A', 'U', 'F', 'E', 'I')):
                 base_name = parent_class[1:]
 
-            # Actor 类使用 GameFramework 路径
+            # Actor classes use GameFramework path
             if parent_class.startswith('A'):
                 meta.includes.append(f'"Engine/GameFramework/{base_name}.h"')
-            # Component 类使用 Components 路径
+            # Component classes use Components path
             elif parent_class.startswith('U') and base_name.endswith('Component'):
                 meta.includes.append(f'"Components/{base_name}.h"')
-            # 其他 UObject 派生类
+            # Other UObject-derived classes
             elif parent_class.startswith('U'):
                 meta.includes.append(f'"Engine/{base_name}.h"')
-            # 结构体
+            # Structs
             elif parent_class.startswith('F'):
-                # 核心结构体在 CoreUObject
+                # Core structs are in CoreUObject
                 if base_name in ('Vector', 'Rotator', 'Transform', 'Vector2D',
                                   'LinearColor', 'Color', 'Guid', 'Quat', 'Plane', 'Box'):
                     meta.includes.append('"CoreUObject.h"')
@@ -147,7 +147,7 @@ class CppHeaderMeta:
         return meta
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典（D-06 格式）。"""
+        """Serialize to JSON-compatible dict (D-06 format)."""
         return {
             "pragma_once": self.pragma_once,
             "includes": self.includes,
@@ -158,11 +158,11 @@ class CppHeaderMeta:
 
 @dataclass
 class CppCallParameter:
-    """函数/调用中的单个参数。
+    """Single parameter in a function/call.
 
     Attributes:
-        name:  sanitized C++ 标识符（如 "LeftRight"）
-        cpp_type: C++ 类型（含方向修饰，如 "const FString&", "double"）
+        name: sanitized C++ identifier (e.g. "LeftRight")
+        cpp_type: C++ type (with direction modifier, e.g. "const FString&", "double")
         direction: "input" | "output" | "return"
     """
     name: str
@@ -179,24 +179,24 @@ class CppCallParameter:
 
 @dataclass
 class CppMethodIR:
-    """蓝图函数 → C++ 方法声明（D-57-02）。
+    """Blueprint function -> C++ method declaration (D-57-02).
 
     Attributes:
-        cpp_name: C++ 函数名（已清理，如 "PrimaryThumbstick"）
-        return_type: C++ 返回类型（默认 "void"）
-        parameters: 参数列表
-        ufunction_specifiers: UFUNCTION 宏标记（如 ["BlueprintCallable"]）
-        is_override: True 表示 K2Node_Event 的 bOverrideFunction
-        is_const: const 方法修饰符（默认 False）
-        is_static: static 方法修饰符
-        is_virtual: virtual 方法修饰符
-        is_pure: 纯函数（无副作用）
-        is_event: 事件函数
-        is_native: 原生函数
-        access_modifier: 访问修饰符（"public"、"protected"、"private"）
+        cpp_name: C++ function name (sanitized, e.g. "PrimaryThumbstick")
+        return_type: C++ return type (default "void")
+        parameters: Argument list
+        ufunction_specifiers: UFUNCTION macro specifiers (e.g. ["BlueprintCallable"])
+        is_override: True indicates K2Node_Event bOverrideFunction
+        is_const: const method modifier (default False)
+        is_static: static method modifier
+        is_virtual: virtual method modifier
+        is_pure: pure function (no side effects)
+        is_event: event function
+        is_native: native function
+        access_modifier: access modifier ("public", "protected", "private")
         source_node_type: "K2Node_FunctionEntry" | "K2Node_Event" | ""
-        body: 函数体语句（结构化 IR）
-        body_text: Kismet 反编译函数体文本（原始 C++ 伪代码）
+        body: function body statements (structured IR)
+        body_text: Kismet decompiled function body text (raw C++ pseudocode)
     """
     cpp_name: str
     return_type: str
@@ -209,11 +209,11 @@ class CppMethodIR:
     is_pure: bool = False
     is_event: bool = False
     is_native: bool = False
-    access_modifier: str = "protected"  # 默认 protected
+    access_modifier: str = "protected"  # default protected
     source_node_type: str = ""
-    class_name: str = ""  # 所属类名（用于 .cpp 实现中 ClassName::Method 前缀）
-    body: List["CppStatement"] = field(default_factory=list)  # 函数体语句
-    body_text: Optional[str] = None  # Kismet 反编译函数体文本 (D-66-03)
+    class_name: str = ""  # owning class name (for ClassName::Method prefix in .cpp implementation)
+    body: List["CppStatement"] = field(default_factory=list)  # function body statements
+    body_text: Optional[str] = None  # Kismet decompiled function body text (D-66-03)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -241,14 +241,14 @@ class CppMethodIR:
 
 @dataclass
 class CppCallStatement:
-    """K2Node_CallFunction → C++ 调用语句参考（D-57-02）。
+    """K2Node_CallFunction -> C++ call statement reference (D-57-02).
 
     Attributes:
-        method_name: 被调用的方法名
-        target: 调用目标（"this" 或变量名）
-        target_type: "this" | "pointer"（控制 -> 访问符）
-        args: 参数名列表（已清理的标识符）
-        is_self_context: 来自 FMemberReference.b_self_context
+        method_name: called method name
+        target: call target ("this" or variable name)
+        target_type: "this" | "pointer" (controls -> access operator)
+        args: argument name list (sanitized identifiers)
+        is_self_context: from FMemberReference.b_self_context
     """
     method_name: str
     target: str
@@ -268,9 +268,9 @@ class CppCallStatement:
 
 @dataclass
 class CppStatement:
-    """C++ 语句基类。
+    """C++ statement base class.
 
-    所有具体语句类型继承此类，用于表示函数体中的单条 C++ 语句。
+    All concrete statement types inherit from this class, representing a single C++ statement in a function body.
     """
     statement_type: str = ""
 
@@ -280,13 +280,13 @@ class CppStatement:
 
 @dataclass
 class CppCallStmt(CppStatement):
-    """函数调用语句。
+    """Function call statement.
 
     Attributes:
-        target: 调用目标对象（"Super", "this", 或变量名）
-        method_name: 方法名
-        args: 参数列表（字符串）
-        is_pure: 是否为 pure 函数调用
+        target: call target object ("Super", "this", or variable name)
+        method_name: method name
+        args: argument list (strings)
+        is_pure: whether this is a pure function call
     """
     target: str = ""
     method_name: str = ""
@@ -306,12 +306,12 @@ class CppCallStmt(CppStatement):
 
 @dataclass
 class CppAssignmentStmt(CppStatement):
-    """赋值语句：lhs = rhs;
+    """Assignment statement: lhs = rhs;
 
     Attributes:
-        lhs: 左值变量名
-        rhs: 右值表达式
-        cpp_type: C++ 类型
+        lhs: left-hand side variable name
+        rhs: right-hand side expression
+        cpp_type: C++ type
     """
     lhs: str = ""
     rhs: str = ""
@@ -329,12 +329,12 @@ class CppAssignmentStmt(CppStatement):
 
 @dataclass
 class CppIfStmt(CppStatement):
-    """条件语句：if (condition) { then_body } [else { else_body }]
+    """Conditional statement: if (condition) { then_body } [else { else_body }]
 
     Attributes:
-        condition: 条件表达式
-        then_body: then 分支语句列表
-        else_body: else 分支语句列表（可为空）
+        condition: condition expression
+        then_body: then-branch statement list
+        else_body: else-branch statement list (may be empty)
     """
     condition: str = ""
     then_body: List["CppStatement"] = field(default_factory=list)
@@ -354,10 +354,10 @@ class CppIfStmt(CppStatement):
 
 @dataclass
 class CppInlineExprStmt(CppStatement):
-    """内联表达式语句（不独立成行，仅嵌入到其他语句参数中）。
+    """Inline expression statement (not standalone, embedded in other statement parameters).
 
     Attributes:
-        expression: 内联表达式文本
+        expression: inline expression text
     """
     expression: str = ""
     statement_type: str = "inline_expr"
@@ -371,10 +371,10 @@ class CppInlineExprStmt(CppStatement):
 
 @dataclass
 class CppReturnStmt(CppStatement):
-    """return 语句。
+    """Return statement.
 
     Attributes:
-        value: 返回值表达式（空字符串表示无返回值的 return）
+        value: return value expression (empty string for void return)
     """
     value: str = ""
     statement_type: str = "return"
@@ -388,10 +388,10 @@ class CppReturnStmt(CppStatement):
 
 @dataclass
 class CppWhileStmt(CppStatement):
-    """while 循环语句。
+    """While loop statement.
 
     Attributes:
-        condition: 循环条件表达式
+        condition: loop condition expression
     """
     condition: str = ""
     statement_type: str = "while"
@@ -405,13 +405,13 @@ class CppWhileStmt(CppStatement):
 
 @dataclass
 class CppForStmt(CppStatement):
-    """for 循环语句：for (init; condition; increment) { body }
+    """For loop statement: for (init; condition; increment) { body }
 
     Attributes:
-        init: 初始化表达式
-        condition: 循环条件
-        increment: 递增表达式
-        body: 循环体语句列表
+        init: initialization expression
+        condition: loop condition
+        increment: increment expression
+        body: loop body statement list
     """
     init: str = ""
     condition: str = ""
@@ -431,13 +431,13 @@ class CppForStmt(CppStatement):
 
 @dataclass
 class CppForEachStmt(CppStatement):
-    """range-based for 循环：for (auto& elem : container) { body }
+    """Range-based for loop: for (auto& elem : container) { body }
 
     Attributes:
-        element: 循环变量名
-        element_type: 元素类型（默认 "auto&"）
-        container: 容器表达式
-        body: 循环体语句列表
+        element: loop variable name
+        element_type: element type (default "auto&")
+        container: container expression
+        body: loop body statement list
     """
     element: str = ""
     element_type: str = "auto&"
@@ -457,12 +457,12 @@ class CppForEachStmt(CppStatement):
 
 @dataclass
 class CppRawStmt(CppStatement):
-    """未分类的原始 C++ 文本语句。
+    """Unclassified raw C++ text statement.
 
-    用于无法归入其他具体类型的文本输出（如 goto、switch、注释等）。
+    Used for text output that cannot be categorized into other concrete types (e.g. goto, switch, comments).
 
     Attributes:
-        raw_text: 原始 C++ 文本
+        raw_text: raw C++ text
     """
     raw_text: str = ""
     statement_type: str = "raw"
@@ -475,11 +475,11 @@ class CppRawStmt(CppStatement):
 
 
 # ============================================================================
-# Kismet 表达式 → 结构化 C++ 语句分类器
+# Kismet Expression -> Structured C++ Statement Classifier
 # ============================================================================
 
-# 分类优先级顺序：从最具体到最通用
-# 每个模式元组: (compiled_regex, factory_function)
+# Classification priority order: most specific to most general
+# Each pattern tuple: (compiled_regex, factory_function)
 _IF_PATTERN = re.compile(r'^if\s*\((.+)\)\s*\{?$')
 _WHILE_PATTERN = re.compile(r'^while\s*\((.+)\)\s*\{?$')
 _RETURN_PATTERN = re.compile(r'^return(?:\s+(.+))?$')
@@ -489,50 +489,50 @@ _GOTO_PATTERN = re.compile(r'^goto\s+(\w+);?$')
 
 
 def _classify_cpp_line(line: str) -> CppStatement:
-    """将单行 C++ 文本分类为结构化语句。
+    """Classify a single line of C++ text into a structured statement.
 
-    分类规则（按优先级）:
+    Classification rules (by priority):
     1. if (cond) {  → CppIfStmt
     2. while (cond) { → CppWhileStmt
     3. return [expr] → CppReturnStmt
     4. lhs = rhs → CppAssignmentStmt
     5. func(args) / Class::Func(args) → CppCallStmt
     6. goto Label_N → CppRawStmt
-    7. 其他 → CppRawStmt
+    7. other → CppRawStmt
 
     Args:
-        line: 单行 C++ 文本（已 strip）
+        line: single line of C++ text (already stripped)
 
     Returns:
-        分类后的 CppStatement 实例
+        Classified CppStatement instance
     """
-    # 1. if 语句
+    # 1. if statement
     m = _IF_PATTERN.match(line)
     if m:
         return CppIfStmt(condition=m.group(1))
 
-    # 2. while 语句
+    # 2. while statement
     m = _WHILE_PATTERN.match(line)
     if m:
         return CppWhileStmt(condition=m.group(1))
 
-    # 3. return 语句
+    # 3. return statement
     m = _RETURN_PATTERN.match(line)
     if m:
         return CppReturnStmt(value=m.group(1) or "")
 
-    # 4. 赋值语句: lhs = rhs
-    #    仅当行中存在顶层 = 且左侧不是函数名时分类为赋值
+    # 4. assignment statement: lhs = rhs
+    #    classified as assignment only when top-level = exists and left side is not a function name
     m = _ASSIGN_PATTERN.match(line)
     if m:
         lhs = m.group(1)
         rhs = m.group(2)
-        # 排除误匹配：如果左侧包含 :: 或 -> 后紧跟 (，则是调用不是赋值
-        # 例如 "Obj->Func()" 不应匹配为赋值
+        # Exclude false positives: if left side contains :: or -> followed by (, it is a call not an assignment
+        # e.g. "Obj->Func()" should not match as assignment
         if '(' not in lhs and not rhs.lstrip().startswith('('):
             return CppAssignmentStmt(lhs=lhs, rhs=rhs)
 
-    # 5. 函数调用: Func(args) 或 Class::Func(args)
+    # 5. function call: Func(args) or Class::Func(args)
     m = _CALL_PATTERN.match(line)
     if m:
         method_name = m.group(1)
@@ -540,18 +540,18 @@ def _classify_cpp_line(line: str) -> CppStatement:
         args = _split_args(args_str) if args_str else []
         return CppCallStmt(method_name=method_name, args=args)
 
-    # 6. 其他: goto、switch、注释等统一归为 CppRawStmt
+    # 6. other: goto, switch, comments etc. all classified as CppRawStmt
     return CppRawStmt(raw_text=line)
 
 
 def _split_args(args_str: str) -> List[str]:
-    """安全分割函数参数字符串（处理嵌套括号）。
+    """Safely split a function argument string (handles nested brackets).
 
     Args:
-        args_str: 逗号分隔的参数字符串
+        args_str: comma-separated argument string
 
     Returns:
-        参数列表
+        Argument list
     """
     if not args_str:
         return []
@@ -583,17 +583,17 @@ def kismet_to_cpp_body(
     expressions: List["KismetExpression"],
     translator: "KismetTranslator",
 ) -> List[CppStatement]:
-    """将 Kismet 表达式列表转换为结构化 C++ 语句列表。
+    """Convert a list of Kismet expressions to a list of structured C++ statements.
 
-    遍历每个表达式，调用 translator.line_cpp() 获取 C++ 文本，
-    然后将文本分类为 CppCallStmt、CppAssignmentStmt、CppIfStmt 等。
+    Iterate over each expression, call translator.line_cpp() to get C++ text,
+    then classify the text into CppCallStmt, CppAssignmentStmt, CppIfStmt, etc.
 
     Args:
-        expressions: Kismet 表达式列表（来自字节码解析）
-        translator: KismetTranslator 实例（含 JumpAnalyzer 结构化检测）
+        expressions: Kismet expression list (from bytecode parsing)
+        translator: KismetTranslator instance (with JumpAnalyzer structured detection)
 
     Returns:
-        结构化 CppStatement 列表
+        Structured CppStatement list
     """
     statements: List[CppStatement] = []
 
@@ -602,7 +602,7 @@ def kismet_to_cpp_body(
         if not text or not text.strip():
             continue
 
-        # 处理多行输出（如 EX_SwitchValue 产生的 switch/case）
+        # Handle multi-line output (e.g. switch/case generated by EX_SwitchValue)
         lines = text.split("\n")
         for sub_line in lines:
             sub_line = sub_line.strip()
@@ -614,20 +614,20 @@ def kismet_to_cpp_body(
     return statements
 
 # ============================================================================
-# C++ 类骨架 IR 数据模型（Per D-01, D-06）
+# C++ Class Skeleton IR Data Model (Per D-01, D-06)
 # ============================================================================
 
 @dataclass
 class CppClassIR:
-    """完整 C++ 类骨架 IR（D-01, D-06）。
+    """Complete C++ class skeleton IR (D-01, D-06).
 
     Attributes:
-        name: C++ 类名（如 "ABP_FirstPersonCharacter"）
-        parent_class: 父类名（如 "ACharacter"）
-        header_meta: 头文件元数据
-        properties: 属性列表（组件 + 变量）
-        methods: 方法列表（填充后可用）
-        constructor: 构造函数数据（填充后可用）
+        name: C++ class name (e.g. "ABP_FirstPersonCharacter")
+        parent_class: parent class name (e.g. "ACharacter")
+        header_meta: header file metadata
+        properties: property list (components + variables)
+        methods: method list (available when populated)
+        constructor: constructor data (available when populated)
     """
     name: str
     parent_class: str
@@ -638,12 +638,12 @@ class CppClassIR:
         "component_creations": [],
         "component_assignments": [],
         "default_values": [],
-    })  # 填充
+    })  # to be populated
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典（D-06 格式）。
+        """Serialize to JSON-compatible dict (D-06 format).
 
-        输出结构：
+        Output structure:
         {
             "name": "...",
             "parent_class": "...",
@@ -654,7 +654,7 @@ class CppClassIR:
         }
 
         Returns:
-            JSON 兼容的字典结构
+            JSON-compatible dict structure
         """
         return {
             "name": self.name,
@@ -662,18 +662,18 @@ class CppClassIR:
             "header_meta": self.header_meta.to_dict(),
             "properties": [prop.to_dict() for prop in self.properties],
             "methods": [m.to_dict() if hasattr(m, "to_dict") else m for m in self.methods],
-            "constructor": self.constructor,  # 空字典
+            "constructor": self.constructor,  # empty dict
         }
 
 
 # ============================================================================
-# JSON IR 格式化函数
+# JSON IR Formatting Functions
 # ============================================================================
 
 def format_cpp_class_json(ir: CppClassIR, output_version: str = "1.0") -> Dict[str, Any]:
-    """格式化 CppClassIR 为 JSON IR 输出（D-06）。
+    """Format CppClassIR to JSON IR output (D-06).
 
-    输出结构：
+    Output structure:
     {
         "cpp_class": {
             "name": "...",
@@ -687,11 +687,11 @@ def format_cpp_class_json(ir: CppClassIR, output_version: str = "1.0") -> Dict[s
     }
 
     Args:
-        ir: CppClassIR 数据模型
-        output_version: 输出版本号（默认 "1.0"）
+        ir: CppClassIR data model
+        output_version: output version string (default "1.0")
 
     Returns:
-        包含 cpp_class 和 output_version 的字典
+        Dict containing cpp_class and output_version
     """
     return {
         "cpp_class": ir.to_dict(),
@@ -700,7 +700,7 @@ def format_cpp_class_json(ir: CppClassIR, output_version: str = "1.0") -> Dict[s
 
 
 # ============================================================================
-# 导出列表
+# Export List
 # ============================================================================
 
 __all__ = [

@@ -1,8 +1,9 @@
 """
-统一版本管理 — VersionContainer / EUEVersion 枚举。
+Unified version management — VersionContainer / EUEVersion enum.
 
-提供基于 GUID 的版本查询和基于流的版本比较，替代各处 hardcode 的版本判断。
-对应 COR-02: FCustomVersion 体系。
+Provides GUID-based version lookup and stream-based version comparison,
+replacing hardcoded version checks throughout the codebase.
+Corresponds to COR-02: FCustomVersion system.
 """
 from __future__ import annotations
 
@@ -46,26 +47,26 @@ from uasset_read.constants import (
 
 
 # ============================================================================
-# EUEVersion — 语义化版本枚举
+# EUEVersion — Semantic version enum
 # ============================================================================
 
 class EUEVersion(IntEnum):
-    """关键 UE 版本阈值，用于版本比较。
+    """Key UE version thresholds for version comparison.
 
-    值对应 EUnrealEngineObjectUE5Version 枚举中的 CustomVersion 阈值
-    （ObjectVersion.cs），而非 file_version_ue5 的全部可能值。
-    file_version_ue5 在包头中存储的是该包引入的最高 CustomVersion 枚举值，
-    与本枚举的语义不同。
-    UE4 版本使用 file_version_ue4（通常 516-520）。
+    Values correspond to CustomVersion thresholds in the EUnrealEngineObjectUE5Version
+    enum (ObjectVersion.cs), not all possible values of file_version_ue5.
+    file_version_ue5 stores the highest CustomVersion enum value introduced by the
+    package in the package header, which differs semantically from this enum.
+    UE4 versions use file_version_ue4 (typically 516-520).
     """
-    # UE4 版本（file_version_ue4 范围）
+    # UE4 versions (file_version_ue4 range)
     UE4_23 = 516     # FFrameworkObjectVersion::Before
     UE4_24 = 517     # FFrameworkObjectVersion::PinTypeContainers
     UE4_25 = 518
     UE4_26 = 519
     UE4_27 = 520
 
-    # UE5 版本（CustomVersion 阈值，对应 EUnrealEngineObjectUE5Version）
+    # UE5 versions (CustomVersion thresholds, corresponding to EUnrealEngineObjectUE5Version)
     UE5_0 = 1000     # INITIAL_VERSION
     UE5_1 = 1001     # NAMES_REFERENCED_FROM_EXPORT_DATA
     UE5_2 = 1005     # REMOVE_OBJECT_EXPORT_PACKAGE_GUID
@@ -78,12 +79,12 @@ class EUEVersion(IntEnum):
 
 
 # ============================================================================
-# Stream 定义
+# Stream definitions
 # ============================================================================
 
 @dataclass(frozen=True)
 class VersionStream:
-    """一个版本流：GUID + 名称。"""
+    """A version stream: GUID + name."""
     guid: str
     name: str
 
@@ -108,15 +109,15 @@ STREAM_MOBILE = VersionStream(FMOBILE_OBJECT_VERSION_GUID, "mobile")
 STREAM_CINECAMERA = VersionStream(FCINECAMERA_OBJECT_VERSION_GUID, "cinecamera")
 STREAM_NIAGARA = VersionStream(FNIAGARA_OBJECT_VERSION_GUID, "niagara")
 
-# Phase 2: P1 核心版本流
+# Phase 2: P1 core version streams
 STREAM_UE5_SPECIAL_PROJECT = VersionStream(FUE5_SPECIAL_PROJECT_STREAM_OBJECT_VERSION_GUID, "ue5_special_project")
 STREAM_RIGVM = VersionStream(FRIGVM_OBJECT_VERSION_GUID, "rigvm")
 STREAM_CONTROL_RIG = VersionStream(FCONTROL_RIG_OBJECT_VERSION_GUID, "control_rig")
 
-# Phase 2: P2 特定资产类型版本流
+# Phase 2: P2 asset-type-specific version streams
 STREAM_NANITE_RESEARCH = VersionStream(FNANITE_RESEARCH_STREAM_OBJECT_VERSION_GUID, "nanite_research")
 
-# Phase 2: P3 插件级版本
+# Phase 2: P3 plugin-level versions
 STREAM_SKELETAL_MESH_CUSTOM = VersionStream(FSKELETAL_MESH_CUSTOM_VERSION_GUID, "skeletal_mesh_custom")
 STREAM_NIAGARA_CUSTOM = VersionStream(FNIAGARA_CUSTOM_VERSION_GUID, "niagara_custom")
 STREAM_INTERCHANGE = VersionStream(FINTERCHANGE_CUSTOM_VERSION_GUID, "interchange")
@@ -160,16 +161,16 @@ STREAM_MAP: dict[str, VersionStream] = {
 # ============================================================================
 
 class _CustomVersionLike(Protocol):
-    """任何具有 guid: str 和 version: int 属性的对象（协议类型）。"""
+    """Any object with guid: str and version: int attributes (protocol type)."""
     guid: str
     version: int
 
 
 @dataclass
 class FPackageFileVersion:
-    """UE 文件版本封装（双版本联合比较）。
+    """UE file version wrapper (dual-version joint comparison).
 
-    对应 UE 的 FPackageFileVersion 结构：
+    Corresponds to UE's FPackageFileVersion struct:
     - FileVersionUE4: int32
     - FileVersionUE5: int32
     """
@@ -177,34 +178,34 @@ class FPackageFileVersion:
     file_version_ue5: int = 0
 
     def to_value(self) -> int:
-        """返回最高有效版本（UE 源码: FPackageFileVersion::ToValue()）。"""
+        """Return the highest effective version (UE source: FPackageFileVersion::ToValue())."""
         if self.file_version_ue5 > 0:
             return self.file_version_ue5
         return self.file_version_ue4
 
     def __ge__(self, other: int) -> bool:
-        """版本比较：是否达到指定阈值。"""
+        """Version comparison: whether the threshold is reached."""
         return self.to_value() >= other
 
     def __gt__(self, other: int) -> bool:
-        """版本比较：是否超过指定阈值。"""
+        """Version comparison: whether it exceeds the threshold."""
         return self.to_value() > other
 
     def __le__(self, other: int) -> bool:
-        """版本比较：是否低于指定阈值。"""
+        """Version comparison: whether it is below the threshold."""
         return self.to_value() <= other
 
     def __lt__(self, other: int) -> bool:
-        """版本比较：是否未达到指定阈值。"""
+        """Version comparison: whether it has not reached the threshold."""
         return self.to_value() < other
 
 
 @dataclass
 class VersionContainer:
-    """统一版本查询入口。
+    """Unified version query entry point.
 
-    从 PackageFileSummary 构建后，提供：
-    - get_version(guid) → 查找 CustomVersion 版本号
+    After construction from PackageFileSummary, provides:
+    - get_version(guid) -> look up CustomVersion number
     """
     custom_versions: list[_CustomVersionLike] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
@@ -213,16 +214,16 @@ class VersionContainer:
 
     @property
     def file_version(self) -> FPackageFileVersion:
-        """返回封装的文件版本对象。"""
+        """Return the wrapped file version object."""
         return FPackageFileVersion(
             file_version_ue4=self.file_version_ue4,
             file_version_ue5=self.file_version_ue5,
         )
 
     def get_version(self, guid: str, default: int = 0) -> int:
-        """按 GUID 查找版本号，未找到返回 default。
+        """Look up version number by GUID, returning default if not found.
 
-        GUID 比较时自动去除横杠并转小写。
+        GUID comparison automatically strips hyphens and converts to lowercase.
         """
         normalized = normalize_hex_guid(guid)
         cached = self._guid_cache.get(normalized)
@@ -235,24 +236,24 @@ class VersionContainer:
                 self._guid_cache[normalized] = cv.version
                 return cv.version
 
-        # 未命中时不缓存 default，避免不同调用者的 default 互相污染
+        # Do not cache default on miss to avoid cross-caller default pollution
         return default
 
     @property
     def is_ue5(self) -> bool:
-        """file_version_ue5 是否在 UE5 范围内。"""
+        """Whether file_version_ue5 is in the UE5 range."""
         return self.file_version_ue5 >= UE5_VERSION_MIN
 
 
 # ============================================================================
-# 快捷函数
+# Convenience functions
 # ============================================================================
 
 def build_version_container(summary) -> "VersionContainer":
-    """从 PackageFileSummary 构建 VersionContainer。
+    """Build a VersionContainer from a PackageFileSummary.
 
     Args:
-        summary: PackageFileSummary 实例，需具有 custom_versions 和 file_version_ue5 属性。
+        summary: PackageFileSummary instance, must have custom_versions and file_version_ue5 attributes.
     """
     return VersionContainer(
         custom_versions=summary.custom_versions,

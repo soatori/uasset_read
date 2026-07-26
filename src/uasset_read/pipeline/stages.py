@@ -103,13 +103,13 @@ def _run_required_stage(
     except Exception as e:
         if not tolerant:
             raise
-        logger.exception("解析阶段 %s 意外错误: %s", stage, e)
+        logger.exception("Unexpected error in parse stage %s: %s", stage, e)
         _record_parse_stage_error(result, archive, path, stage, field, e)
         return None
 
 
 def _derive_package_name(path: str, summary) -> None:
-    """package_name 为空时从文件路径推导。"""
+    """Derive package_name from file path when it is empty."""
     from pathlib import Path
     if summary.package_name:
         return
@@ -137,9 +137,9 @@ def _init_parse_env(
     check_aes_key: Optional[bytes],
     hex_view: bool,
 ):
-    """初始化解析环境：验证参数、打开 archive、读取 mmap 信息。
+    """Initialize parse environment: validate parameters, open archive, read mmap info.
 
-    返回 (archive, bundle, mappings_provider) 或遇到 early-return 条件时返回 None。
+    Returns (archive, bundle, mappings_provider) or None when early-return condition is met.
     """
     if check_aes_key is not None:
         raise ParseError(
@@ -177,11 +177,11 @@ def _read_core_tables(
     mappings_provider=None,
     validate_range: bool = True,
 ) -> bool:
-    """读取 summary + name + import + export 核心表。
+    """Read summary + name + import + export core tables.
 
-    成功返回 True；early return（某阶段失败）返回 False。
+    Returns True on success; early return (when a stage fails) returns False.
     """
-    # 读取文件头
+    # Read file header
     result.summary = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="package_summary", field="summary",
@@ -194,11 +194,11 @@ def _read_core_tables(
     result.version_container = build_version_container(result.summary)
     archive._file_version_ue5 = result.summary.file_version_ue5
 
-    # 标记 UE4 legacy 资产
+    # Mark UE4 legacy assets
     if getattr(result.summary, "is_legacy", False):
         result.metadata["is_legacy"] = True
 
-    # 截断文件检测：验证导出数据范围
+    # Truncated file detection: validate export data range
     if validate_range:
         try:
             validate_export_data_range(archive, result.summary)
@@ -210,7 +210,7 @@ def _read_core_tables(
             )
             return False
 
-    # 读取名称表
+    # Read name table
     result.name_map = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="name_table", field="name_map",
@@ -223,7 +223,7 @@ def _read_core_tables(
         memory_monitor.checkpoint("name_map")
     _derive_package_name(path, result.summary)
 
-    # 读取导入表
+    # Read import table
     result.import_map = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="import_map", field="import_map",
@@ -235,7 +235,7 @@ def _read_core_tables(
     if memory_monitor is not None:
         memory_monitor.checkpoint("import_map")
 
-    # 读取导出表
+    # Read export table
     result.export_map = _run_required_stage(
         result=result, archive=archive, path=path, tolerant=tolerant,
         stage="export_map", field="export_map",
@@ -260,18 +260,18 @@ def _read_secondary_tables(
     memory_monitor,
     extra_linker_setup=None,
 ) -> None:
-    """读取 DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData。"""
-    # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
+    """Read DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData."""
+    # Read DependsMap (dependency table) and PreloadDependencies (preload dependencies)
     if hasattr(result.summary, 'depends_offset'):
         result.summary.depends_map = read_depends_map(archive, result.summary)
     if hasattr(result.summary, 'preload_dependency_count'):
         result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
-    # 读取 SoftPackageReferences（软包引用表）
+    # Read SoftPackageReferences (soft package reference table)
     if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
         result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
 
-    # 读取 SoftObjectPathList（UE5.7+ 用于索引化 SoftObjectProperty 解析）
+    # Read SoftObjectPathList (UE5.7+ for indexed SoftObjectProperty parsing)
     if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
         result.soft_object_path_list = read_soft_object_paths(
             archive, result.summary, result.name_map
@@ -279,10 +279,10 @@ def _read_secondary_tables(
     else:
         result.soft_object_path_list = []
 
-    # 将 soft_object_path_list 存储在 summary 上供属性解析器访问
+    # Store soft_object_path_list on summary for property parser access
     setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
 
-    # 读取 AssetRegistryData（资产元数据标签）
+    # Read AssetRegistryData (asset metadata tags)
     try:
         is_cooked = bool(result.summary.package_flags & PKG_Cooked)
         result.asset_registry_data = read_asset_registry_data(
@@ -293,8 +293,8 @@ def _read_secondary_tables(
         )
     except (struct.error, OSError, ValueError) as e:
         if not tolerant:
-            raise ParseError(f"AssetRegistryData 解析失败: {e}") from e
-        result.warnings.append(f"AssetRegistryData 解析失败: {e}")
+            raise ParseError(f"AssetRegistryData parse failed: {e}") from e
+        result.warnings.append(f"AssetRegistryData parse failed: {e}")
         result.asset_registry_data = None
 
 
@@ -307,8 +307,8 @@ def _parse_export_properties(
     game: str,
     memory_monitor,
 ) -> None:
-    """解析 ExportMap 属性 — 通过 linker.preload() 统一调度。"""
-    # 延迟导入 extras 模块（per #117 core/extras 分层）
+    """Parse ExportMap properties — unified dispatch via linker.preload()."""
+    # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.blueprint import extract_component_transforms
     from uasset_read.memory_safety import MemoryLimitExceeded
 
@@ -362,7 +362,7 @@ def _parse_export_properties(
                 setattr(export, "fallback_reason", "parse_error")
                 setattr(export, "error_message", str(e))
 
-            # 提取组件变换属性
+            # Extract component transform properties
             if export.properties:
                 export.transforms = extract_component_transforms(export.properties)
 
@@ -378,7 +378,7 @@ def _create_linker(
     version_container=None,
     extra_linker_setup: Optional[Callable] = None,
 ) -> Optional["PackageLinker"]:
-    """创建并链接 PackageLinker。返回 linker 或 None。"""
+    """Create and link PackageLinker. Returns linker or None."""
     from uasset_read.link.linker import PackageLinker
     try:
         linker = PackageLinker(
@@ -409,28 +409,28 @@ def _read_package_headers(
     validate_range: bool = True,
     check_aes_key: Optional[bytes] = None,
 ) -> tuple:
-    """读取包文件头（Summary + NameTable + ImportMap + ExportMap + Linker）。
+    """Read package file header (Summary + NameTable + ImportMap + ExportMap + Linker).
 
-    复用 _init_parse_env + _read_core_tables，额外创建 linker。
+    Reuses _init_parse_env + _read_core_tables, additionally creates linker.
 
     Returns:
-        (bundle, archive, linker, mappings_provider) — 调用方负责关闭 archive。
-        如果 result.summary is None，表示早期失败，调用方应直接返回。
+        (bundle, archive, linker, mappings_provider) — caller is responsible for closing archive.
+        If result.summary is None, it indicates early failure; caller should return directly.
     """
-    # 初始化解析环境（archive、bundle、mappings_provider）
+    # Initialize parse environment (archive, bundle, mappings_provider)
     archive, bundle, mappings_provider = _init_parse_env(
         path, result, tolerant, provider, mappings_path, game,
         check_aes_key=check_aes_key, hex_view=hex_view,
     )
 
-    # 读取核心表（summary/name/import/export）
+    # Read core tables (summary/name/import/export)
     if not _read_core_tables(
         archive, result, path, tolerant,
         validate_range=validate_range,
     ):
         return bundle, archive, None, mappings_provider
 
-    # 创建 linker
+    # Create linker
     linker = _create_linker(
         archive, result.summary, result.name_map,
         result.import_map, result.export_map or [],

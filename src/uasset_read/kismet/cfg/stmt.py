@@ -1,7 +1,9 @@
-"""CFG 结构化语句定义。
+"""CFG structured statement definitions.
 
-定义基于 CFG 区域分解的结构化语句类型，用于生成伪代码输出。
-语句树反映控制流结构：Branch、Loop、Switch、Sequence、Assignment、Call、Return。
+Defines structured statement types based on CFG region decomposition,
+used for generating pseudocode output.
+Statement tree reflects control flow structure: Branch, Loop, Switch,
+Sequence, Assignment, Call, Return.
 """
 
 
@@ -9,23 +11,23 @@ from dataclasses import dataclass, field
 
 
 # ---------------------------------------------------------------------------
-# Stmt 基类
+# Stmt base class
 # ---------------------------------------------------------------------------
 
 class Stmt:
-    """结构化语句基类。"""
+    """Structured statement base class."""
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}()"
 
 
 # ---------------------------------------------------------------------------
-# 叶节点语句
+# Leaf node statements
 # ---------------------------------------------------------------------------
 
 @dataclass
 class Assignment(Stmt):
-    """赋值语句。"""
+    """Assignment statement."""
 
     lhs: str = ""
     rhs: str = ""
@@ -36,7 +38,7 @@ class Assignment(Stmt):
 
 @dataclass
 class Call(Stmt):
-    """函数调用语句。"""
+    """Function call statement."""
 
     text: str = ""
 
@@ -46,7 +48,7 @@ class Call(Stmt):
 
 @dataclass
 class Return(Stmt):
-    """返回语句。"""
+    """Return statement."""
 
     value: str = ""
 
@@ -56,7 +58,7 @@ class Return(Stmt):
 
 @dataclass
 class GotoLabel(Stmt):
-    """跳转标签（goto 回退）。"""
+    """Jump label (goto fallback)."""
 
     label: str = ""
 
@@ -65,12 +67,12 @@ class GotoLabel(Stmt):
 
 
 # ---------------------------------------------------------------------------
-# 复合语句
+# Compound statements
 # ---------------------------------------------------------------------------
 
 @dataclass
 class Sequence(Stmt):
-    """语句序列（顺序执行）。"""
+    """Statement sequence (sequential execution)."""
 
     stmts: list[Stmt] = field(default_factory=list)
 
@@ -80,7 +82,7 @@ class Sequence(Stmt):
 
 @dataclass
 class Branch(Stmt):
-    """条件分支语句。"""
+    """Conditional branch statement."""
 
     condition: str = ""
     then_body: Stmt | None = None
@@ -92,7 +94,7 @@ class Branch(Stmt):
 
 @dataclass
 class Loop(Stmt):
-    """循环语句（while / do-while）。"""
+    """Loop statement (while / do-while)."""
 
     kind: str = "while"  # "while" | "do_while"
     condition: str = ""
@@ -104,7 +106,7 @@ class Loop(Stmt):
 
 @dataclass
 class Switch(Stmt):
-    """switch/case 语句。"""
+    """switch/case statement."""
 
     expression: str = ""
     cases: list[tuple[str, Stmt]] = field(default_factory=list)

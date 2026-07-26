@@ -44,30 +44,32 @@ _PLAUSIBLE_SCRIPT_START_TOKENS = {
     0x1B,  # EX_VirtualFunction
     0x1C,  # EX_FinalFunction
     0x46,  # EX_LocalFinalFunction
-    # 已移除 0x1D (EX_IntConst)、0x5A (EX_WireTracepoint)、0x5E (EX_Tracepoint)
-    # 这些 token 频繁出现在内嵌数据中，导致 scanner 误选起始位置，
-    # 产生裸数字（如 1509949440）等错误反编译输出。
+    # Removed 0x1D (EX_IntConst), 0x5A (EX_WireTracepoint), 0x5E (EX_Tracepoint)
+    # These tokens frequently appear in inline data, causing the scanner to
+    # incorrectly select start positions, producing bare numbers (e.g. 1509949440)
+    # and other erroneous decompilation output.
 }
 
 # ---------------------------------------------------------------------------
-# 伪数据检测 (#424)
+# False positive data detection (#424)
 # ---------------------------------------------------------------------------
 
 
 def _has_false_positive_pattern(data: bytes) -> bool:
-    """检测伪数据特征：过多连续常量 token 或重复字节模式。
+    """Detect false positive data patterns: too many consecutive constant tokens or repeated byte patterns.
 
-    serial_scan_recovery 在 export serial 中搜索可解析字节码时，
-    可能将内嵌数据（如属性表、整数数组）误判为合法表达式流。
-    该函数通过统计特征过滤明显非代码段的候选。
+    When serial_scan_recovery searches export serial for parseable bytecode,
+    it may misidentify inline data (such as property tables, integer arrays)
+    as valid expression streams. This function filters candidates that are
+    clearly non-code segments using statistical characteristics.
     """
     if len(data) < 4:
         return False
-    # 检测连续 IntConst (0x1D) 后跟 4 字节整数的模式
+    # Detect consecutive IntConst (0x1D) followed by 4-byte integer patterns
     int_const_count = sum(1 for i in range(len(data) - 5) if data[i] == 0x1D)
     if int_const_count > 3:
         return True
-    # 检测超过 50% 的字节是相同值（伪数据特征）
+    # Detect if more than 50% of bytes are the same value (false positive characteristic)
     from collections import Counter
     most_common_count = Counter(data).most_common(1)[0][1]
     if most_common_count / len(data) > 0.5:
@@ -75,9 +77,9 @@ def _has_false_positive_pattern(data: bytes) -> bool:
     return False
 
 
-# 扫描复杂度限制 — 防止大型蓝图组合爆炸导致超时
-_MAX_SCAN_ATTEMPTS = 500       # 单个函数最多尝试的 (start, end) 组合数
-_MAX_CANDIDATE_SIZE = 4096     # 单个候选字节流最大长度（字节）
+# Scan complexity limits — prevent combinatorial explosion in large Blueprints
+_MAX_SCAN_ATTEMPTS = 500       # Maximum (start, end) combinations to try per function
+_MAX_CANDIDATE_SIZE = 4096     # Maximum candidate byte stream length (bytes)
 
 
 # ===========================================================================
@@ -344,7 +346,7 @@ def _bpgc_fallback(
                     _bpgc_bytecode_cache = {}
                 return None
 
-            # Map buffers to Function exports by name (传入 metrics 以记录映射质量)
+            # Map buffers to Function exports by name (pass metrics to record mapping quality)
             _bpgc_bytecode_cache = map_bytecode_to_functions(
                 bytecode_buffers, export_map, name_map, import_map, export_map,
                 metrics=bpgc_metrics,
@@ -389,7 +391,7 @@ def reset_bpgc_cache() -> None:
     global _bpgc_bytecode_cache, _bpgc_cache_retries
     _bpgc_bytecode_cache = None
     _bpgc_cache_retries = 0
-    # 同时重置 FKismetArchive 的警告去重集合
+    # Also reset FKismetArchive's warning deduplication set
     from uasset_read.kismet.archive import FKismetArchive
     FKismetArchive.reset_warned_offsets()
 

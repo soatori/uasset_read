@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-"""src/uasset_read/parsers/class_registry.py — Class Handler Registry。
+"""src/uasset_read/parsers/class_registry.py -- Class Handler Registry.
 
-参考 CUE4Parse ObjectTypeRegistry 模式：
-1. 精确 class handler 查找
-2. 父类 handler 查找（后续扩展）
-3. generic UObject fallback
-4. skip policy 作为最后的 fallback
+Reference: CUE4Parse ObjectTypeRegistry pattern:
+1. Exact class handler lookup
+2. Parent class handler lookup (for future extension)
+3. Generic UObject fallback
+4. Skip policy as last resort
 
-handler 接口：
+Handler interface:
 - can_handle(class_name) -> bool
 - parse(export, archive, context) -> HandlerResult
 - fallback_policy -> FallbackPolicy
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class FallbackPolicy(str, Enum):
-    """当 handler 无法处理时的 fallback 策略。"""
+    """Fallback strategy when a handler cannot process the class."""
     GENERIC_UOBJECT = "generic_uobject"
     SKIP = "skip"
     RAISE = "raise"
@@ -38,7 +38,7 @@ class FallbackPolicy(str, Enum):
 
 @dataclass
 class HandlerResult:
-    """Class handler 的解析结果。"""
+    """Parse result from a class handler."""
     success: bool
     properties: List["PropertyValue"] = field(default_factory=list)
     data: Optional[Dict[str, Any]] = None
@@ -47,22 +47,22 @@ class HandlerResult:
 
 
 class ClassHandler(ABC):
-    """Class handler 抽象基类。"""
+    """Abstract base class for class handlers."""
 
     @abstractmethod
     def can_handle(self, class_name: str) -> bool:
-        """判断此 handler 是否能处理给定 class_name。"""
+        """Determine whether this handler can handle the given class_name."""
         ...
 
     @property
     @abstractmethod
     def handler_name(self) -> str:
-        """handler 名称（用于日志和诊断）。"""
+        """Handler name (used for logging and diagnostics)."""
         ...
 
     @property
     def fallback_policy(self) -> FallbackPolicy:
-        """当 handler 解析失败时的 fallback 策略。"""
+        """Fallback strategy when handler parsing fails."""
         return FallbackPolicy.GENERIC_UOBJECT
 
     @abstractmethod
@@ -72,24 +72,24 @@ class ClassHandler(ABC):
         archive: "FArchive",
         context: Optional[Any] = None,
     ) -> HandlerResult:
-        """解析 export 的属性数据。"""
+        """Parse property data from an export."""
         ...
 
 
 class ClassHandlerRegistry:
-    """Class handler 注册表。"""
+    """Class handler registry."""
 
     def __init__(self) -> None:
         self._handlers: List[ClassHandler] = []
         self._cache: Dict[str, Optional[ClassHandler]] = {}
 
     def register(self, handler: ClassHandler) -> None:
-        """注册一个 class handler。"""
+        """Register a class handler."""
         self._handlers.append(handler)
         self._cache.clear()
 
     def find_handler(self, class_name: str) -> Optional[ClassHandler]:
-        """查找能处理给定 class_name 的 handler。"""
+        """Find a handler that can handle the given class_name."""
         if class_name in self._cache:
             return self._cache[class_name]
 
@@ -102,25 +102,25 @@ class ClassHandlerRegistry:
         return None
 
     def get_registered_handlers(self) -> List[ClassHandler]:
-        """返回所有已注册的 handler。"""
+        """Return all registered handlers."""
         return list(self._handlers)
 
     def clear(self) -> None:
-        """清空所有注册和缓存。"""
+        """Clear all registrations and cache."""
         self._handlers.clear()
         self._cache.clear()
 
     def reset_cache(self) -> None:
-        """清空 class_name → handler 查找缓存。
+        """Clear the class_name -> handler lookup cache.
 
-        用于批量解析场景，在 parse_package 的 finally 块中调用，
-        防止 _cache 字典在批量解析时无界增长。
-        注意：不清空已注册的 handlers。
+        Intended for batch parsing scenarios; called from the finally block
+        of parse_package to prevent the _cache dict from growing unboundedly.
+        Note: does not clear the registered handlers.
         """
         self._cache.clear()
 
 
-# 全局默认 registry 实例
+# Global default registry instance
 _default_registry: Optional[ClassHandlerRegistry] = None
 _bootstrap_done: bool = False
 
@@ -144,7 +144,7 @@ def _bootstrap_handlers() -> None:
 
 
 def get_class_registry() -> ClassHandlerRegistry:
-    """获取全局默认 class handler registry。
+    """Get the global default class handler registry.
 
     The first call automatically bootstraps all built-in asset type
     handlers, so callers never need to import or call
@@ -158,7 +158,7 @@ def get_class_registry() -> ClassHandlerRegistry:
 
 
 def reset_class_registry() -> None:
-    """重置全局默认 registry（测试用）。"""
+    """Reset the global default registry (for testing)."""
     global _default_registry, _bootstrap_done
     _default_registry = None
     _bootstrap_done = False

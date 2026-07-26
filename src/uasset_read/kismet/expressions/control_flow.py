@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-"""Kismet 控制流表达式。
+"""Kismet control flow expressions.
 
-包含跳转、条件分支、执行流栈操作等控制流相关的表达式子类。
+Contains expression subclasses for jumps, conditional branches, execution flow stack operations,
+and other control-flow-related constructs.
 """
 
 
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_Jump(KismetExpression):
-    """无条件跳转到指定代码偏移量。"""
+    """Unconditional jump to a specified code offset."""
 
     CodeOffset: int = 0
 
@@ -41,7 +42,7 @@ class EX_Jump(KismetExpression):
 
 @dataclass
 class EX_JumpIfNot(EX_Jump):
-    """条件跳转：如果布尔表达式为假则跳转。"""
+    """Conditional jump: jump if the boolean expression is false."""
 
     BooleanExpression: KismetExpression | None = None
 
@@ -65,7 +66,7 @@ class EX_JumpIfNot(EX_Jump):
 
 @dataclass
 class EX_Skip(EX_Jump):
-    """跳过一段表达式代码块。"""
+    """Skip over an expression code block."""
 
     SkipExpression: KismetExpression | None = None
 
@@ -89,7 +90,7 @@ class EX_Skip(EX_Jump):
 
 @dataclass
 class EX_ComputedJump(KismetExpression):
-    """动态计算跳转目标偏移量。"""
+    """Dynamically computed jump target offset."""
 
     CodeOffsetExpression: KismetExpression | None = None
 
@@ -112,7 +113,7 @@ class EX_ComputedJump(KismetExpression):
 
 @dataclass
 class EX_PushExecutionFlow(KismetExpression):
-    """将返回地址压入执行流栈。"""
+    """Push the return address onto the execution flow stack."""
 
     PushingAddress: int = 0
 
@@ -131,13 +132,13 @@ class EX_PushExecutionFlow(KismetExpression):
         return d
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_PopExecutionFlow = make_simple_expression(EExprToken.EX_PopExecutionFlow)
 
 
 @dataclass
 class EX_PopExecutionFlowIfNot(KismetExpression):
-    """条件弹出执行流：布尔表达式为假时弹出并跳转。"""
+    """Conditional execution flow pop: pop and jump when the boolean expression is false."""
 
     BooleanExpression: KismetExpression | None = None
 
@@ -158,13 +159,13 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
         return d
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_EndOfScript = make_simple_expression(EExprToken.EX_EndOfScript)
 
 
 @dataclass
 class EX_SkipOffsetConst(KismetExpressionT[int]):
-    """Skip 偏移量常量。"""
+    """Skip offset constant."""
 
     @property
     def Token(self) -> EExprToken:

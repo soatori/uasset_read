@@ -1,8 +1,8 @@
-"""UPoseAsset 资产类型处理器（opaque partial metadata）。
+"""UPoseAsset Asset type handler (opaque partial metadata).
 
-UPoseAsset::Serialize 仅调用 Super::Serialize，数据通过 UPROPERTY 序列化
-（PoseNames TArray<FName>、PoseValues TArray<FTransform>）。
-Handler 提供类型识别。
+UPoseAsset::Serialize only calls Super::Serialize, data serialized via UPROPERTY
+(PoseNames TArray<FName>, PoseValues TArray<FTransform>).
+Handler provides type identification.
 """
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub

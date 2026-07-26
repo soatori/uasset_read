@@ -1,6 +1,6 @@
-"""变换属性数据类 — VectorValue, RotatorValue, ScaleValue。
+"""Transform property data classes — VectorValue, RotatorValue, ScaleValue.
 
-等价迁移 uasset_read.py §1435-1480。
+Equivalent migration from uasset_read.py section 1435-1480.
 """
 
 from dataclasses import dataclass, field
@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 @dataclass(kw_only=True)
 class VectorValue:
-    """Vector struct property value。X/Y/Z 坐标值，用于 RelativeLocation 等。"""
+    """Vector struct property value. X/Y/Z coordinate values, used for RelativeLocation etc."""
     x: float
     y: float
     z: float
@@ -17,7 +17,7 @@ class VectorValue:
 
 @dataclass(kw_only=True)
 class RotatorValue:
-    """Rotator struct property value。Roll/Pitch/Yaw 角度值（度数格式）。"""
+    """Rotator struct property value. Roll/Pitch/Yaw angle values (degrees format)."""
     roll: float
     pitch: float
     yaw: float
@@ -27,7 +27,7 @@ class RotatorValue:
 
 @dataclass(kw_only=True)
 class ScaleValue:
-    """Scale3D struct property value。X/Y/Z 缩放因子。"""
+    """Scale3D struct property value. X/Y/Z scale factors."""
     x: float
     y: float
     z: float
@@ -36,12 +36,12 @@ class ScaleValue:
 
 def format_transform_value(value: float, precision_type: str) -> float | int:
     """
-    格式化变换属性值，应用类型自适应精度处理。
-    Location: 整数优先（is_integer 时返回 int），否则 3 位小数。
-    Rotation: 3 位小数。
-    Scale: 4 位小数。
+    Format transform property values with type-adaptive precision.
+    Location: integer preferred (returns int when is_integer), otherwise 3 decimal places.
+    Rotation: 3 decimal places.
+    Scale: 4 decimal places.
 
-    NaN/inf 值直接透传，不进行整数转换（避免 OverflowError/ValueError）。
+    NaN/inf values are passed through without integer conversion (avoids OverflowError/ValueError).
     """
     import math
     if precision_type == 'location':

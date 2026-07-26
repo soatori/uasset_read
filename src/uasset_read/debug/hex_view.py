@@ -1,7 +1,7 @@
-"""debug/hex_view.py — HexView 调试系统。
+"""debug/hex_view.py — HexView debug system.
 
-结构化字节偏移追踪，记录每次读取操作的字段名称、类型、值和文件偏移范围。
-仅在 --hex-view 模式下启用，避免性能损失。
+Structured byte offset tracking, recording field names, types, values, and file offset ranges for each read operation.
+Only enabled in --hex-view mode to avoid performance overhead.
 """
 
 from dataclasses import dataclass
@@ -10,34 +10,34 @@ from typing import Any
 
 @dataclass
 class HexViewEntry:
-    """单次读取操作的结构化记录。"""
+    """Structured record of a single read operation."""
 
     key: str
-    """字段名称（如 "Magic", "Summary.NameCount"）"""
+    """Field name (e.g. "Magic", "Summary.NameCount")"""
     type: str
-    """类型标识（如 "u32", "i32", "fstring", "bytes"）"""
+    """Type identifier (e.g. "u32", "i32", "fstring", "bytes")"""
     value: Any
-    """读取的值"""
+    """Value read"""
     start: int
-    """文件起始偏移（字节）"""
+    """File start offset (bytes)"""
     stop: int
-    """文件结束偏移（字节）"""
+    """File end offset (bytes)"""
     field_path: str | None = None
-    """完整字段路径（如 "PackageSummary.Magic"），比 key 更精确"""
+    """Full field path (e.g. "PackageSummary.Magic"), more precise than key"""
     semantic_type: str | None = None
-    """语义类型标识（如 "header", "name_table", "export"），用于分类和过滤"""
+    """Semantic type identifier (e.g. "header", "name_table", "export"), used for classification and filtering"""
 
     @property
     def size(self) -> int:
-        """读取的字节数。"""
+        """Number of bytes read."""
         return self.stop - self.start
 
     def hex_range(self) -> str:
-        """格式化偏移范围为十六进制。"""
+        """Format offset range as hexadecimal."""
         return f"0x{self.start:08X}-0x{self.stop:08X}"
 
     def hex_value(self) -> str:
-        """格式化值为十六进制（适用于整数和字节）。"""
+        """Format value as hexadecimal (for integers and bytes)."""
         if isinstance(self.value, bytes):
             return self.value.hex()
         if isinstance(self.value, int):
@@ -46,7 +46,7 @@ class HexViewEntry:
         return repr(self.value)
 
     def to_dict(self) -> dict[str, Any]:
-        """转为 JSON 兼容字典。"""
+        """Convert to JSON-compatible dictionary."""
         d: dict[str, Any] = {
             "key": self.key,
             "type": self.type,
@@ -74,15 +74,15 @@ def format_hex_view(
     file_size: int = 0,
     max_entries: int = 500,
 ) -> str:
-    """将 HexViewEntry 列表格式化为可读的十六进制视图。
+    """Format a list of HexViewEntry into a readable hex view.
 
     Args:
-        entries: HexViewEntry 列表
-        file_size: 文件总大小（可选，用于头部显示）
-        max_entries: 最大输出条目数（防止单文件输出过大）
+        entries: List of HexViewEntry
+        file_size: Total file size (optional, for header display)
+        max_entries: Maximum output entries (prevents excessively large output)
 
     Returns:
-        格式化的十六进制视图文本
+        Formatted hex view text
     """
     if not entries:
         return "(no hex view entries recorded)"
@@ -97,7 +97,7 @@ def format_hex_view(
     sorted_entries = sorted(entries, key=lambda e: e.start)
     display = sorted_entries[:max_entries]
 
-    # 计算对齐宽度
+    # Calculate alignment widths
     max_key_len = max(len(e.key) for e in display) if display else 0
     max_type_len = max(len(e.type) for e in display) if display else 0
     max_key_len = min(max_key_len, 40)
@@ -124,18 +124,18 @@ def format_hex_dump(
     bytes_per_line: int = 16,
     start_offset: int = 0,
 ) -> str:
-    """生成带字段标注的十六进制转储。
+    """Generate a hex dump with field annotations.
 
-    在标准 hex dump 的基础上，在右侧显示每个字节范围对应的字段名。
+    On top of a standard hex dump, displays the field name corresponding to each byte range on the right.
 
     Args:
-        entries: HexViewEntry 列表
-        raw_data: 原始文件字节
-        bytes_per_line: 每行字节数
-        start_offset: 起始偏移
+        entries: List of HexViewEntry
+        raw_data: Raw file bytes
+        bytes_per_line: Bytes per line
+        start_offset: Start offset
 
     Returns:
-        带标注的 hex dump 文本
+        Annotated hex dump text
     """
     if not raw_data:
         return "(no data)"
@@ -147,7 +147,7 @@ def format_hex_dump(
         line_end = min(line_start + bytes_per_line, len(raw_data))
         chunk = raw_data[line_start:line_end]
 
-        # 十六进制部分
+        # Hex part
         hex_parts = []
         for i, b in enumerate(chunk):
             _offset = line_start + i  # noqa: F841 - computed for context
@@ -155,10 +155,10 @@ def format_hex_dump(
         hex_str = " ".join(hex_parts)
         hex_str = hex_str.ljust(bytes_per_line * 3 - 1)
 
-        # ASCII 部分
+        # ASCII part
         ascii_str = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
 
-        # 字段标注（该行覆盖的字段）
+        # Field annotations (fields covered by this line)
         labels = []
         for entry in sorted_entries:
             if entry.start < line_end and entry.stop > line_start:
@@ -175,7 +175,7 @@ def format_hex_dump(
 
 
 def _format_value_short(value: Any, max_len: int = 60) -> str:
-    """将值格式化为简短的显示字符串。"""
+    """Format value as a short display string."""
     if isinstance(value, bytes):
         if len(value) <= 8:
             return f"0x{value.hex()}"

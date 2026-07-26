@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""IoStore 核心数据结构 — 镜像 IoStore 结构"""
+"""IoStore core data structures — mirrors IoStore structures"""
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
 from typing import BinaryIO, List
@@ -8,11 +8,11 @@ import struct
 
 
 # ============================================================================
-# 枚举定义
+# Enum definitions
 # ============================================================================
 
 class EIoStoreTocVersion(IntEnum):
-    """IoStore TOC 版本枚举"""
+    """IoStore TOC version enum"""
     Invalid = 0
     Initial = 1
     DirectoryIndex = 2
@@ -27,7 +27,7 @@ class EIoStoreTocVersion(IntEnum):
 
 
 class EIoContainerFlags(IntFlag):
-    """IoStore 容器标志"""
+    """IoStore container flags"""
     None_ = 0
     Compressed = 1 << 0
     Encrypted = 1 << 1
@@ -37,36 +37,36 @@ class EIoContainerFlags(IntFlag):
 
 
 class EIoChunkType(IntEnum):
-    """IoStore 数据块类型
+    """IoStore chunk type
 
-    UE5 IoStore 专用类型。UE4 使用不同的存储机制。
-    类型 0-6 在 UE5.0+ 中定义，类型 7+ 在后续版本中添加。
+    UE5 IoStore-specific types. UE4 uses a different storage mechanism.
+    Types 0-6 are defined in UE5.0+, types 7+ were added in later versions.
     """
     Invalid = 0
-    ExportBundleData = 1       # UE5.0+: 导出包数据
-    BulkData = 2               # UE5.0+: 批量数据
-    OptionalBulkData = 3       # UE5.0+: 可选批量数据
-    MemoryMappedBulkData = 4   # UE5.0+: 内存映射批量数据
-    ScriptObjects = 5          # UE5.0+: 脚本对象
-    ContainerHeader = 6        # UE5.0+: 容器头部
-    ExternalFile = 7           # UE5.1+: 外部文件引用
-    ShaderCodeLibrary = 8      # UE5.1+: 着色器代码库
-    ShaderCode = 9             # UE5.1+: 着色器代码
-    PackageStoreEntry = 10     # UE5.2+: 包存储条目
-    DerivedData = 11           # UE5.3+: 派生数据
-    EditorDerivedData = 12     # UE5.4+: 编辑器派生数据
-    PackageResource = 13       # UE5.5+: 包资源
+    ExportBundleData = 1       # UE5.0+: Export bundle data
+    BulkData = 2               # UE5.0+: Bulk data
+    OptionalBulkData = 3       # UE5.0+: Optional bulk data
+    MemoryMappedBulkData = 4   # UE5.0+: Memory-mapped bulk data
+    ScriptObjects = 5          # UE5.0+: Script objects
+    ContainerHeader = 6        # UE5.0+: Container header
+    ExternalFile = 7           # UE5.1+: External file reference
+    ShaderCodeLibrary = 8      # UE5.1+: Shader code library
+    ShaderCode = 9             # UE5.1+: Shader code
+    PackageStoreEntry = 10     # UE5.2+: Package store entry
+    DerivedData = 11           # UE5.3+: Derived data
+    EditorDerivedData = 12     # UE5.4+: Editor derived data
+    PackageResource = 13       # UE5.5+: Package resource
 
 
 class EIoStoreTocEntryMetaFlags(IntEnum):
-    """IoStore TOC 条目元数据标志"""
+    """IoStore TOC entry metadata flags"""
     None_ = 0
     Compressed = 1 << 0
     MemoryMapped = 1 << 1
 
 
 class EIoStoreTocReadOptions(IntFlag):
-    """IoStore TOC 读取选项"""
+    """IoStore TOC read options"""
     Default = 0
     ReadDirectoryIndex = 1 << 0
     ReadTocMeta = 1 << 1
@@ -74,47 +74,47 @@ class EIoStoreTocReadOptions(IntFlag):
 
 
 # ============================================================================
-# 核心数据结构
+# Core data structures
 # ============================================================================
 
 @dataclass
 class FIoChunkId:
-    """IoStore Chunk 标识符（12 字节）。
+    """IoStore Chunk identifier (12 bytes).
 
-    结构布局（UE FIoChunkId）：
-    - 字节 0-7: ChunkId (uint64, little-endian)
-    - 字节 8-9: ChunkIndex (uint16, big-endian)
-    - 字节 10: ChunkGroup (uint8)
-    - 字节 11: ChunkType (uint8, EIoChunkType)
+    Struct layout (UE FIoChunkId):
+    - Bytes 0-7: ChunkId (uint64, little-endian)
+    - Bytes 8-9: ChunkIndex (uint16, big-endian)
+    - Byte 10: ChunkGroup (uint8)
+    - Byte 11: ChunkType (uint8, EIoChunkType)
 
-    比较使用完整 12 字节，与 UE 源码一致。
+    Comparison uses all 12 bytes, consistent with UE source.
     """
     bytes: bytes  # 12 bytes
 
     @staticmethod
     def from_hash(chunk_hash: int) -> FIoChunkId:
-        """从 64 位哈希创建（低 12 字节）"""
+        """Create from 64-bit hash (low 12 bytes)"""
         data = struct.pack('<Q', chunk_hash) + b'\x00' * 4
         return FIoChunkId(bytes=data[:12])
 
     @property
     def id(self) -> int:
-        """返回 64 位 ID（低 8 字节）"""
+        """Return 64-bit ID (low 8 bytes)"""
         return struct.unpack('<Q', self.bytes[:8])[0]
 
     @property
     def chunk_index(self) -> int:
-        """返回 ChunkIndex（字节 8-9，大端序）"""
+        """Return ChunkIndex (bytes 8-9, big-endian)"""
         return (self.bytes[8] << 8) | self.bytes[9]
 
     @property
     def chunk_group(self) -> int:
-        """返回 ChunkGroup（字节 10）"""
+        """Return ChunkGroup (byte 10)"""
         return self.bytes[10]
 
     @property
     def chunk_type(self) -> int:
-        """返回 ChunkType（字节 11）"""
+        """Return ChunkType (byte 11)"""
         return self.bytes[11]
 
     def __eq__(self, other: object) -> bool:
@@ -128,18 +128,18 @@ class FIoChunkId:
 
 @dataclass
 class FIoOffsetAndSize:
-    """偏移和大小（打包为 40 位偏移 + 24 位大小）— 旧版兼容"""
+    """Offset and size (packed as 40-bit offset + 24-bit size) — legacy compatibility"""
     offset: int
     size: int
 
     def pack(self) -> bytes:
-        """打包为 8 字节"""
+        """Pack into 8 bytes"""
         value = (self.offset << 24) | (self.size & 0xFFFFFF)
         return struct.pack('<Q', value)
 
     @staticmethod
     def unpack(data: bytes) -> FIoOffsetAndSize:
-        """从 8 字节解包"""
+        """Unpack from 8 bytes"""
         value = struct.unpack('<Q', data)[0]
         offset = value >> 24
         size = value & 0xFFFFFF
@@ -148,34 +148,34 @@ class FIoOffsetAndSize:
 
 @dataclass
 class FIoOffsetAndLength:
-    """偏移和长度（10 字节大端编码，5 字节偏移 + 5 字节长度）
+    """Offset and length (10-byte big-endian encoding, 5-byte offset + 5-byte length)
 
-    FIoOffsetAndLength — IoStore 标准格式
+    FIoOffsetAndLength — IoStore standard format
     """
     offset: int
     length: int
 
     @staticmethod
     def from_bytes(data: bytes) -> FIoOffsetAndLength:
-        """从 10 字节解包（大端序）"""
+        """Unpack from 10 bytes (big-endian)"""
         if len(data) < 10:
-            raise ValueError("FIoOffsetAndLength 需要至少 10 字节")
-        # 偏移：字节 0-4，大端序
+            raise ValueError("FIoOffsetAndLength requires at least 10 bytes")
+        # Offset: bytes 0-4, big-endian
         offset = (data[0] << 32) | (data[1] << 24) | (data[2] << 16) | (data[3] << 8) | data[4]
-        # 长度：字节 5-9，大端序
+        # Length: bytes 5-9, big-endian
         length = (data[5] << 32) | (data[6] << 24) | (data[7] << 16) | (data[8] << 8) | data[9]
         return FIoOffsetAndLength(offset=offset, length=length)
 
     @staticmethod
     def from_stream(stream: BinaryIO) -> FIoOffsetAndLength:
-        """从流中读取 10 字节"""
+        """Read 10 bytes from stream"""
         data = stream.read(10)
         return FIoOffsetAndLength.from_bytes(data)
 
 
 @dataclass
 class FIoDirectoryIndexEntry:
-    """目录索引条目"""
+    """Directory index entry"""
     name: int
     first_child_entry: int
     next_sibling_entry: int
@@ -183,7 +183,7 @@ class FIoDirectoryIndexEntry:
 
     @staticmethod
     def deserialize(stream: BinaryIO) -> FIoDirectoryIndexEntry:
-        """从流反序列化"""
+        """Deserialize from stream"""
         data = stream.read(16)
         if len(data) < 16:
             raise ValueError("Unexpected end of stream")
@@ -220,21 +220,21 @@ class FIoFileIndexEntry:
 
 
 # ============================================================================
-# IoStore TOC 结构（144 字节头部）
+# IoStore TOC structure (144-byte header)
 # ============================================================================
 
-# IoStore TOC 魔数："-==--==--==--==-" (16 字节)
+# IoStore TOC magic number: "-==--==--==--==-" (16 bytes)
 TOC_MAGIC = b'-==--==--==--==-'
 
-# FIoStoreTocHeader 大小
+# FIoStoreTocHeader size
 TOC_HEADER_SIZE = 144
 
 
 @dataclass
 class FIoStoreTocHeader:
-    """IoStore TOC 头部结构（144 字节）
+    """IoStore TOC header structure (144 bytes)
 
-    镜像 FIoStoreTocHeader
+    Mirrors FIoStoreTocHeader
     """
     toc_magic: bytes  # 16 bytes
     version: int  # uint8
@@ -260,18 +260,18 @@ class FIoStoreTocHeader:
 
     @staticmethod
     def from_stream(stream: BinaryIO) -> FIoStoreTocHeader:
-        """从流中读取 TOC 头部"""
+        """Read TOC header from stream"""
         header_data = stream.read(TOC_HEADER_SIZE)
         if len(header_data) < TOC_HEADER_SIZE:
             raise ValueError(
-                f"TOC 头部数据不足：需要 {TOC_HEADER_SIZE} 字节，实际 {len(header_data)} 字节"
+                f"TOC header data insufficient: need {TOC_HEADER_SIZE} bytes, got {len(header_data)} bytes"
             )
 
         toc_magic = header_data[0:16]
         if toc_magic != TOC_MAGIC:
-            raise ValueError(f"无效的 IoStore TOC 魔数: {toc_magic!r}")
+            raise ValueError(f"Invalid IoStore TOC magic: {toc_magic!r}")
 
-        # 解析头部字段（小端序）offset 16-59
+        # Parse header fields (little-endian) offset 16-59
         (version, reserved0, reserved1,
          toc_header_size, toc_entry_count,
          toc_compressed_block_entry_count, toc_compressed_block_entry_size,
@@ -289,7 +289,7 @@ class FIoStoreTocHeader:
         container_flags = header_data[80]
 
         # reserved3(1 byte at 81) + reserved4(2 bytes at 82)
-        # 这些是保留字段，跳过
+        # These are reserved fields, skip them
 
         # toc_chunk_perfect_hash_seeds_count (uint32) at offset 84
         toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 84)[0]
@@ -333,60 +333,60 @@ class FIoStoreTocHeader:
 
     @property
     def is_encrypted(self) -> bool:
-        """容器是否加密"""
+        """Whether the container is encrypted"""
         return bool(self.container_flags & EIoContainerFlags.Encrypted)
 
     @property
     def is_compressed(self) -> bool:
-        """容器是否压缩"""
+        """Whether the container is compressed"""
         return bool(self.container_flags & EIoContainerFlags.Compressed)
 
     @property
     def is_signed(self) -> bool:
-        """容器是否签名"""
+        """Whether the container is signed"""
         return bool(self.container_flags & EIoContainerFlags.Signed)
 
     @property
     def is_indexed(self) -> bool:
-        """容器是否有目录索引"""
+        """Whether the container has a directory index"""
         return bool(self.container_flags & EIoContainerFlags.Indexed)
 
 
 @dataclass
 class FIoStoreTocCompressedBlockEntry:
-    """IoStore TOC 压缩块条目（12 字节）
+    """IoStore TOC compressed block entry (12 bytes)
 
-    位分布：
-    - Offset: 5 字节（位 0-39）
-    - CompressedSize: 3 字节（位 40-63）
-    - UncompressedSize: 3 字节（位 64-87）
-    - CompressionMethodIndex: 1 字节（位 88-95）
+    Bit distribution:
+    - Offset: 5 bytes (bits 0-39)
+    - CompressedSize: 3 bytes (bits 40-63)
+    - UncompressedSize: 3 bytes (bits 64-87)
+    - CompressionMethodIndex: 1 byte (bits 88-95)
     """
     offset: int  # 5 bytes
     compressed_size: int  # 3 bytes
     uncompressed_size: int  # 3 bytes
     compression_method_index: int  # 1 byte
 
-    SIZE = 12  # 字节大小
+    SIZE = 12  # Size in bytes
 
     @staticmethod
     def from_stream(stream: BinaryIO) -> FIoStoreTocCompressedBlockEntry:
-        """从流中读取"""
+        """Read from stream"""
         data = stream.read(12)
         if len(data) < 12:
-            raise ValueError("压缩块条目数据不足")
+            raise ValueError("Compressed block entry data insufficient")
 
-        # 12 字节小端解析
-        # 字节 0-4: Offset (5 bytes, little-endian)
+        # 12-byte little-endian parsing
+        # Bytes 0-4: Offset (5 bytes, little-endian)
         offset = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24) | ((data[4] & 0xFF) << 32)
 
-        # 字节 5-7: CompressedSize (3 bytes)
+        # Bytes 5-7: CompressedSize (3 bytes)
         compressed_size = data[5] | (data[6] << 8) | (data[7] << 16)
 
-        # 字节 8-10: UncompressedSize (3 bytes)
+        # Bytes 8-10: UncompressedSize (3 bytes)
         uncompressed_size = data[8] | (data[9] << 8) | (data[10] << 16)
 
-        # 字节 11: CompressionMethodIndex (1 byte)
+        # Byte 11: CompressionMethodIndex (1 byte)
         compression_method_index = data[11]
 
         return FIoStoreTocCompressedBlockEntry(
@@ -399,9 +399,9 @@ class FIoStoreTocCompressedBlockEntry:
 
 @dataclass
 class FIoStoreTocEntryMeta:
-    """IoStore TOC 条目元数据
+    """IoStore TOC entry metadata
 
-    包含哈希（20 字节）和标志（1 字节）
+    Contains hash (20 bytes) and flags (1 byte)
     """
     chunk_hash: bytes  # 20 bytes (FSHAHash / FIoHash)
     flags: int  # 1 byte (FIoStoreTocEntryMetaFlags)
@@ -410,22 +410,22 @@ class FIoStoreTocEntryMeta:
 
     @staticmethod
     def from_stream(stream: BinaryIO, use_io_hash: bool = False) -> FIoStoreTocEntryMeta:
-        """从流中读取
+        """Read from stream
 
         Args:
-            stream: 输入流
-            use_io_hash: 是否使用 FIoHash (20 bytes) 替代 FIoChunkHash (20 bytes)
+            stream: Input stream
+            use_io_hash: Whether to use FIoHash (20 bytes) instead of FIoChunkHash (20 bytes)
         """
         chunk_hash = stream.read(20)
         if len(chunk_hash) < 20:
-            raise ValueError("条目元数据哈希数据不足")
+            raise ValueError("Entry metadata hash data insufficient")
 
         flags_data = stream.read(1)
         if len(flags_data) < 1:
-            raise ValueError("条目元数据标志数据不足")
+            raise ValueError("Entry metadata flags data insufficient")
         flags = flags_data[0]
 
-        # 3 字节填充（对齐到 24 字节）
+        # 3-byte padding (align to 24 bytes)
         if use_io_hash:
             stream.read(3)
 
@@ -434,14 +434,14 @@ class FIoStoreTocEntryMeta:
 
 @dataclass
 class FIoContainerHeader:
-    """IoStore 容器头部
+    """IoStore container header
 
-    读取 ContainerHeader chunk 后解析
+    Parsed after reading the ContainerHeader chunk
     """
-    # 简化版本，仅存储原始数据
+    # Simplified version, stores raw data only
     data: bytes = b''
 
     @staticmethod
     def from_bytes(data: bytes) -> FIoContainerHeader:
-        """从字节数据创建"""
+        """Create from byte data"""
         return FIoContainerHeader(data=data)

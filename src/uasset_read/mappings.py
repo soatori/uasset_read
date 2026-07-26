@@ -1,4 +1,4 @@
-"""Usmap/Jmap 映射读取与统一类型模型。"""
+"""Usmap/Jmap mapping reader and unified type model."""
 
 from dataclasses import dataclass, field
 import gzip
@@ -60,7 +60,7 @@ _PROPERTY_TYPE_NAMES = {
 
 @dataclass
 class PropertyType:
-    """映射文件中的属性类型描述。"""
+    """Property type description from mapping file."""
     type: str
     struct_type: Optional[str] = None
     inner_type: Optional["PropertyType"] = None
@@ -71,7 +71,7 @@ class PropertyType:
 
 @dataclass
 class PropertyInfo:
-    """映射文件中的字段描述。"""
+    """Field description from mapping file."""
     index: int
     name: str
     mapping_type: PropertyType
@@ -80,7 +80,7 @@ class PropertyInfo:
 
 @dataclass
 class StructMapping:
-    """映射文件中的类/结构体描述。"""
+    """Class/struct description from mapping file."""
     name: str
     super_type: Optional[str] = None
     properties: Dict[int, PropertyInfo] = field(default_factory=dict)
@@ -96,7 +96,7 @@ class StructMapping:
 
 @dataclass
 class TypeMappings:
-    """统一的 Usmap/Jmap 映射容器。"""
+    """Unified Usmap/Jmap mapping container."""
     types: Dict[str, StructMapping] = field(default_factory=dict)
     enums: Dict[str, Dict[int, str]] = field(default_factory=dict)
 
@@ -126,7 +126,7 @@ class _BytesReader:
 
     def read(self, size: int) -> bytes:
         if self.pos + size > len(self.data):
-            raise ParseError("映射文件数据不足")
+            raise ParseError("Mapping file data insufficient")
         value = self.data[self.pos:self.pos + size]
         self.pos += size
         return value
@@ -151,12 +151,12 @@ class _BytesReader:
         if idx == -1:
             return None
         if idx < 0 or idx >= len(lut):
-            raise ParseError(f"Usmap 名称索引越界: {idx}")
+            raise ParseError(f"Usmap name index out of bounds: {idx}")
         return lut[idx]
 
 
 class UsmapParser:
-    """读取 CUE4Parse 兼容的 .usmap 映射文件。"""
+    """Read CUE4Parse-compatible .usmap mapping file."""
     FILE_MAGIC = 0x30C4
 
     def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
@@ -174,16 +174,16 @@ class UsmapParser:
         reader = _BytesReader(data)
         magic = reader.u16()
         if magic != self.FILE_MAGIC:
-            raise ParseError("Usmap magic 无效")
+            raise ParseError("Invalid Usmap magic")
         version = reader.u8()
         if version > 4:
-            raise ParseError(f"Usmap 版本无效: {version}")
+            raise ParseError(f"Invalid Usmap version: {version}")
 
         if version >= 1 and reader.u8():
             reader.read(8)  # PackageFileVersion
             custom_count = reader.i32()
             if custom_count < 0:
-                raise ParseError("Usmap CustomVersion 数量无效")
+                raise ParseError("Invalid Usmap CustomVersion count")
             reader.read(custom_count * 20)
             reader.read(4)  # NetCL
 
@@ -227,31 +227,31 @@ class UsmapParser:
         if method == 0:
             if comp_size != decomp_size:
                 raise ParseError(
-                    f"Usmap 无压缩模式下大小不一致: {comp_size} != {decomp_size}"
+                    f"Usmap uncompressed size mismatch: {comp_size} != {decomp_size}"
                 )
             return payload
         if method == 2:
             try:
                 import brotli  # type: ignore
             except ImportError as exc:
-                raise ParseError("Usmap Brotli 压缩需要安装 brotli 包") from exc
+                raise ParseError("Usmap Brotli compression requires the brotli package") from exc
             if budget is not None:
                 budget.reserve(decomp_size, "usmap_brotli_decompress")
             result = brotli.decompress(payload)
             if len(result) > decomp_size:
                 raise ParseError(
-                    f"Usmap Brotli 解压后大小超出预期: {len(result)} > {decomp_size}"
+                    f"Usmap Brotli decompressed size exceeds expected: {len(result)} > {decomp_size}"
                 )
             return result
         if method == 3:
             try:
                 import zstandard as zstd  # type: ignore
             except ImportError as exc:
-                raise ParseError("Usmap ZStandard 压缩需要安装 zstandard 包") from exc
+                raise ParseError("Usmap ZStandard compression requires the zstandard package") from exc
             if budget is not None:
                 budget.reserve(decomp_size, "usmap_zstd_decompress")
             return zstd.ZstdDecompressor().decompress(payload, max_output_size=decomp_size)
-        raise ParseError(f"不支持的 Usmap 压缩方式: {method}")
+        raise ParseError(f"Unsupported Usmap compression method: {method}")
 
     def _parse_struct(self, ar: _BytesReader, lut: list[str]) -> StructMapping:
         name = ar.name(lut) or ""
@@ -278,7 +278,7 @@ class UsmapParser:
 
     def _parse_property_type(self, ar: _BytesReader, lut: list[str], depth: int = 0) -> PropertyType:
         if depth > MAX_RECURSION_DEPTH:
-            raise ParseError(f"Usmap 属性类型递归深度超过上限 {MAX_RECURSION_DEPTH}")
+            raise ParseError(f"Usmap property type recursion depth exceeds limit {MAX_RECURSION_DEPTH}")
         type_id = ar.u8()
         type_name = _PROPERTY_TYPE_NAMES.get(type_id, "Unknown")
         if type_name == "EnumProperty":
@@ -294,7 +294,7 @@ class UsmapParser:
 
 
 class JmapParser:
-    """读取 CUE4Parse 兼容的 .jmap/.jmap.gz 映射文件。"""
+    """Read CUE4Parse-compatible .jmap/.jmap.gz mapping file."""
 
     def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
         if isinstance(path_or_bytes, bytes):
@@ -362,7 +362,7 @@ class JmapParser:
 
     def _parse_property_type(self, prop: Dict[str, Any], depth: int = 0) -> PropertyType:
         if depth > MAX_RECURSION_DEPTH:
-            raise ParseError(f"Jmap 属性类型递归深度超过上限 {MAX_RECURSION_DEPTH}")
+            raise ParseError(f"Jmap property type recursion depth exceeds limit {MAX_RECURSION_DEPTH}")
         type_name = str(prop.get("type") or "Unknown")
         inner_src = prop.get("container") or prop.get("inner") or prop.get("key_prop")
         value_src = prop.get("value_prop")
@@ -385,23 +385,23 @@ class JmapParser:
 
 
 def parse_jmap(path: str, budget: ResourceBudget | None = None) -> TypeMappings:
-    """解析 .jmap/.jmap.gz 文件，返回 TypeMappings。
+    """Parse .jmap/.jmap.gz file and return TypeMappings.
 
     Args:
-        path: 映射文件路径
-        budget: 可选资源预算，用于限制解压大小
+        path: Mapping file path
+        budget: Optional resource budget to limit decompression size
 
     Returns:
-        TypeMappings 映射容器
+        TypeMappings mapping container
 
     Raises:
-        MemoryLimitExceeded: 解压大小超出预算
+        MemoryLimitExceeded: Decompressed size exceeds budget
     """
     return JmapParser(path, budget=budget).mappings
 
 
 class TypeMappingsProvider:
-    """按扩展名加载 Usmap/Jmap 映射。"""
+    """Load Usmap/Jmap mapping by file extension."""
 
     def __init__(self, mappings: TypeMappings):
         self.mappings = mappings
@@ -413,4 +413,4 @@ class TypeMappingsProvider:
             return cls(UsmapParser(path, budget=budget).mappings)
         if lower.endswith(".jmap") or lower.endswith(".jmap.gz"):
             return cls(JmapParser(path, budget=budget).mappings)
-        raise ParseError(f"不支持的映射文件类型: {os.path.basename(path)}")
+        raise ParseError(f"Unsupported mapping file type: {os.path.basename(path)}")

@@ -1,10 +1,10 @@
-"""AnimMontage 资产类型处理器
+"""AnimMontage Asset type handler
 
-解析 UAnimMontage 的动画特有数据：
-- BlendModeIn/Out（混合模式）
-- SyncGroup（同步组）
-- AnimNotifies（动画通知）
-- RateScale（速率缩放）
+Parse UAnimMontage animation-specific data:
+- BlendModeIn/Out (blend mode)
+- SyncGroup (sync group)
+- AnimNotifies (animation notifies)
+- RateScale (rate scale)
 """
 
 from typing import Any
@@ -26,21 +26,21 @@ from uasset_read.parsers.asset_types.property_extractor import (
 
 
 class AnimMontageHandler:
-    """AnimMontage 资产类型处理器"""
+    """AnimMontage Asset type handler"""
 
-    # 反射注册元数据
+    # Reflection registration metadata
     export_type: str = "AnimMontage"
     priority: int = 100
 
     def handle(self, export: Any, context: Any) -> ParseStatus:
-        """处理 AnimMontage export
+        """Handle AnimMontage export
 
         Args:
-            export: ObjectExport 实例
-            context: 解析上下文
+            export: ObjectExport instance
+            context: parse context
 
         Returns:
-            ParseStatus: SUCCESS 或 PARTIAL
+            ParseStatus: SUCCESS or PARTIAL
         """
         try:
             properties_list = getattr(export, "properties", [])
@@ -51,46 +51,46 @@ class AnimMontageHandler:
 
             anim_ir = AnimMontageIR()
 
-            # 提取混合参数
+            # Extract blend parameters
             extract_property(properties, "BlendModeIn", anim_ir, "blend_mode_in")
             extract_property(properties, "BlendModeOut", anim_ir, "blend_mode_out")
             extract_property(properties, "BlendInAlpha", anim_ir, "blend_in_alpha")
             extract_property(properties, "BlendOutAlpha", anim_ir, "blend_out_alpha")
             extract_property(properties, "BlendOutTriggerTime", anim_ir, "blend_out_trigger_time")
 
-            # 提取同步组
+            # Extract sync group
             extract_property(properties, "SyncGroup", anim_ir, "sync_group")
             extract_property(properties, "SyncSlotIndex", anim_ir, "sync_slot_index")
 
-            # 提取其他参数
+            # Extract other parameters
             extract_property(properties, "bEnableAutoBlendOut", anim_ir, "b_enable_auto_blend_out")
             extract_property(properties, "RateScale", anim_ir, "rate_scale")
 
-            # 提取 AnimNotifies
+            # Extract AnimNotifies
             anim_ir.notifies = extract_array_property(
                 properties, "AnimNotifies", parse_anim_notifies
             )
 
-            # 提取 CompositeSections
+            # Extract CompositeSections
             anim_ir.composite_sections = extract_array_property(
                 properties, "CompositeSections", self._parse_composite_sections
             )
 
-            # 提取 SlotAnimTracks
+            # Extract SlotAnimTracks
             anim_ir.slot_anim_tracks = extract_array_property(
                 properties, "SlotAnimTracks", self._parse_slot_anim_tracks
             )
 
-            # 提取 BranchingPointMarkers
+            # Extract BranchingPointMarkers
             anim_ir.branching_point_markers = extract_array_property(
                 properties, "BranchingPointMarkers", self._parse_branching_point_markers
             )
 
-            # 提取 BlendInOption/BlendOutOption
+            # Extract BlendInOption/BlendOutOption
             extract_object_ref(properties, "BlendInOption", anim_ir, "blend_in_option", "BlendOption")
             extract_object_ref(properties, "BlendOutOption", anim_ir, "blend_out_option", "BlendOption")
 
-            # 提取 FloatCurveNames
+            # Extract FloatCurveNames
             if "RawCurveData" in properties:
                 anim_ir.float_curve_names = parse_float_curve_names(
                     properties["RawCurveData"]
@@ -102,11 +102,11 @@ class AnimMontageHandler:
 
         except (KeyError, TypeError, ValueError) as e:
             if hasattr(context, "warnings"):
-                context.warnings.append(f"AnimMontage 解析错误: {e}")
+                context.warnings.append(f"AnimMontage parse error: {e}")
             return ParseStatus.PARTIAL
 
     def _parse_composite_sections(self, data: Any) -> list[dict]:
-        """解析 CompositeSections 数组"""
+        """Parse CompositeSections array"""
 
         def _parse_section(section: dict) -> dict:
             return {
@@ -117,7 +117,7 @@ class AnimMontageHandler:
         return parse_dict_list(data, _parse_section)
 
     def _parse_slot_anim_tracks(self, data: Any) -> list[dict]:
-        """解析 SlotAnimTracks 数组"""
+        """Parse SlotAnimTracks array"""
 
         def _parse_track(track: dict) -> dict:
             return {
@@ -127,7 +127,7 @@ class AnimMontageHandler:
         return parse_dict_list(data, _parse_track)
 
     def _parse_branching_point_markers(self, data: Any) -> list[dict]:
-        """解析 BranchingPointMarkers 数组"""
+        """Parse BranchingPointMarkers array"""
 
         def _parse_marker(marker: dict) -> dict:
             return {

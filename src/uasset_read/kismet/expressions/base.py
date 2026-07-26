@@ -1,7 +1,7 @@
 """
-Kismet 表达式系统 — 基类定义。
+Kismet expression system -- base class definitions.
 
-包含 KismetExpression 抽象基类和 KismetExpressionT 泛型子类。
+Contains the KismetExpression abstract base class and the KismetExpressionT generic subclass.
 """
 
 
@@ -16,10 +16,10 @@ T = TypeVar("T")
 
 class KismetExpression(ABC):
     """
-    Kismet 字节码表达式抽象基类。
+    Kismet bytecode expression abstract base class.
 
-    所有 EX_* 指令的解析结果都继承此类。
-    子类必须实现 Token 属性并定义 from_archive 类方法。
+    All EX_* instruction parse results inherit from this class.
+    Subclasses must implement the Token property and define a from_archive classmethod.
     """
 
     StatementIndex: int
@@ -30,11 +30,11 @@ class KismetExpression(ABC):
     @property
     @abstractmethod
     def Token(self) -> EExprToken:
-        """返回此表达式对应的 EExprToken 值。"""
+        """Return the EExprToken value corresponding to this expression."""
         ...
 
     def to_dict(self) -> dict:
-        """序列化为字典格式（用于 JSON 输出）。"""
+        """Serialize to dictionary format (for JSON output)."""
         return {
             "Inst": self.Token.name,
             "StatementIndex": self.StatementIndex,
@@ -47,9 +47,9 @@ class KismetExpression(ABC):
 @dataclass(kw_only=True)
 class KismetExpressionT(KismetExpression, Generic[T]):
     """
-    携带值的 Kismet 表达式泛型基类。
+    Generic base class for Kismet expressions that carry a value.
 
-    适用于具有关联数据（常量、变量引用等）的表达式。
+    Suitable for expressions with associated data (constants, variable references, etc.).
 
     Uses kw_only=True so subclasses can freely pass Value=... from
     from_archive() without positional-argument conflicts.
@@ -75,9 +75,9 @@ class KismetExpressionT(KismetExpression, Generic[T]):
 
 
 def make_simple_expression(token: EExprToken):
-    """创建简单表达式类（无额外字段，仅返回 Token 值）。
+    """Create a simple expression class (no extra fields, only returns Token value).
 
-    用于 EX_Nothing, EX_IntZero, EX_IntOne 等无数据的表达式。
+    Used for EX_Nothing, EX_IntZero, EX_IntOne and other data-free expressions.
     """
     @dataclass
     class _SimpleExpr(KismetExpression):
@@ -91,13 +91,13 @@ def make_simple_expression(token: EExprToken):
 
 
 def make_value_expression(token: EExprToken, read_func_name: str):
-    """创建带值的表达式类（从 archive 读取单个值）。
+    """Create a value-carrying expression class (reads a single value from the archive).
 
-    用于 EX_IntConst, EX_FloatConst 等读取单个值的表达式。
+    Used for EX_IntConst, EX_FloatConst and other single-value expressions.
 
     Args:
-        token: 对应的 EExprToken 枚举值
-        read_func_name: FArchive 上的读取方法名（如 "read_i32", "read_f32"）
+        token: The corresponding EExprToken enum value.
+        read_func_name: The read method name on FArchive (e.g. "read_i32", "read_f32").
     """
     @dataclass
     class _ValueExpr(KismetExpressionT):

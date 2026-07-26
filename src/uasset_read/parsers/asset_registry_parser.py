@@ -1,18 +1,18 @@
-"""AssetRegistryData 解析器 — 提取资产元数据标签。
+"""AssetRegistryData parser -- extract asset metadata tags.
 
-解析 UE 资产文件中的 AssetRegistryData 区段，提取：
-- ObjectPath：对象路径
-- ObjectClassName：对象类名
-- Tags：键值对标签列表
+Parses the AssetRegistryData section in UE asset files, extracting:
+- ObjectPath: object path
+- ObjectClassName: object class name
+- Tags: key-value tag list
 
-数据格式（UE 源码参考：PackageReader.cpp ReadPackageDataMain）：
-- DependencyDataOffset (int64, 仅非 Cooked 且版本 >= VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS)
+Data format (UE source reference: PackageReader.cpp ReadPackageDataMain):
+- DependencyDataOffset (int64, only non-Cooked and version >= VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS)
 - ObjectCount (int32)
-- 对每个 object:
+- For each object:
   - ObjectPath (FString)
   - ObjectClassName (FString)
   - TagCount (int32)
-  - 对每个 tag:
+  - For each tag:
     - Key (FString)
     - Value (FString)
 """
@@ -31,26 +31,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AssetRegistryTag:
-    """单个资产标签（键值对）。"""
+    """Single asset tag (key-value pair)."""
     key: str
     value: str
 
 
 @dataclass
 class AssetRegistryObjectData:
-    """单个对象的资产注册表数据。"""
+    """Asset registry data for a single object."""
     object_path: str
     object_class_name: str
     tags: List[AssetRegistryTag] = field(default_factory=list)
 
     def tags_as_dict(self) -> Dict[str, str]:
-        """将标签列表转换为字典。"""
+        """Convert tag list to dictionary."""
         return {tag.key: tag.value for tag in self.tags}
 
 
 @dataclass
 class AssetRegistryData:
-    """AssetRegistryData 解析结果。"""
+    """AssetRegistryData parse result."""
     dependency_data_offset: int = 0
     objects: List[AssetRegistryObjectData] = field(default_factory=list)
     corrupted: bool = False
@@ -61,7 +61,7 @@ class AssetRegistryData:
         return len(self.objects)
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典（用于 JSON 序列化）。"""
+        """Convert to dictionary (for JSON serialization)."""
         d = {
             "dependency_data_offset": self.dependency_data_offset,
             "object_count": self.object_count,
@@ -85,16 +85,16 @@ def read_asset_registry_data(
     file_version_ue4: int = 0,
     is_cooked: bool = False,
 ) -> Optional[AssetRegistryData]:
-    """读取 AssetRegistryData。
+    """Read AssetRegistryData.
 
     Args:
-        archive: FArchive 实例
-        asset_registry_data_offset: AssetRegistryData 在文件中的偏移
-        file_version_ue4: UE4 文件版本号
-        is_cooked: 是否为 Cooked 包
+        archive: FArchive instance
+        asset_registry_data_offset: AssetRegistryData offset in file
+        file_version_ue4: UE4 file version
+        is_cooked: whether this is a Cooked package
 
     Returns:
-        AssetRegistryData 实例，或 None（偏移为 0 或读取失败时）
+        AssetRegistryData instance, or None (if offset is 0 or read fails)
     """
     if asset_registry_data_offset <= 0:
         return None
@@ -102,30 +102,30 @@ def read_asset_registry_data(
     try:
         archive.seek(asset_registry_data_offset)
     except (OSError, OverflowError) as e:
-        logger.debug("无法定位到 AssetRegistryDataOffset=%d: %s", asset_registry_data_offset, e)
+        logger.debug("Cannot locate AssetRegistryDataOffset=%d: %s", asset_registry_data_offset, e)
         return None
 
     result = AssetRegistryData()
 
     try:
         # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS = 510
-        # 非 Cooked 且版本 >= 510 时读取 DependencyDataOffset
-        # UE 写入时使用 int64（见 SavePackageUtilities.cpp:1684、IAssetRegistry.h:1366）
-        # 部分资产（如 pre-dependency 格式保存的编辑器资产）不包含此字段，
-        # 通过验证偏移值合理性来检测格式差异
+        # Read DependencyDataOffset when not Cooked and version >= 510
+        # UE writes this as int64 (see SavePackageUtilities.cpp:1684, IAssetRegistry.h:1366)
+        # Some assets (e.g. editor assets saved in pre-dependency format) do not include this field;
+        # detect format differences by validating the offset value reasonableness
         if not is_cooked and file_version_ue4 >= 510:
             pos_before = archive.tell()
             dep_offset_64 = archive.read_i64()
-            # 合理性校验：偏移应为 -1（INDEX_NONE）、0、或不超过文件大小
+            # Reasonableness check: offset should be -1 (INDEX_NONE), 0, or not exceed file size
             file_size = archive.total_size()
             if dep_offset_64 < -1 or (dep_offset_64 > 0 and file_size > 0 and dep_offset_64 > file_size):
-                # 值不合理 — 可能是 pre-dependency 格式（无此字段），
-                # 回退 8 字节，将 object_count 重新读为 int32
+                # Value is unreasonable -- likely pre-dependency format (no such field);
+                # rewind 8 bytes and re-read object_count as int32
                 archive.seek(pos_before)
                 result.dependency_data_offset = -1
                 logger.debug(
-                    "AssetRegistryData: DependencyDataOffset=%d 超出文件范围 "
-                    "(file_size=%d)，疑似 pre-dependency 格式，跳过此字段",
+                    "AssetRegistryData: DependencyDataOffset=%d exceeds file bounds "
+                    "(file_size=%d), likely pre-dependency format, skipping this field",
                     dep_offset_64, file_size,
                 )
             else:
@@ -133,17 +133,17 @@ def read_asset_registry_data(
         else:
             result.dependency_data_offset = -1
 
-        # 读取 ObjectCount
+        # Read ObjectCount
         object_count = archive.read_i32()
         if object_count < 0:
-            logger.debug("AssetRegistryData: ObjectCount 为负数 (%d)，跳过", object_count)
+            logger.debug("AssetRegistryData: ObjectCount is negative (%d), skipping", object_count)
             return result
 
-        # 安全检查：object_count 不能过大
+        # Safety check: object_count must not be too large
         file_size = archive.total_size()
         if file_size > 0 and object_count > file_size:
             logger.debug(
-                "AssetRegistryData: ObjectCount=%d 明显过大（文件大小=%d），跳过",
+                "AssetRegistryData: ObjectCount=%d is clearly too large (file_size=%d), skipping",
                 object_count, file_size,
             )
             return result
@@ -158,8 +158,8 @@ def read_asset_registry_data(
                 result.corrupted = True
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        logger.debug("AssetRegistryData 解析异常: %s", e)
-        # 返回已解析的部分数据并标记为 corrupted
+        logger.debug("AssetRegistryData parse exception: %s", e)
+        # Return partially parsed data and mark as corrupted
         result.corrupted = True
         return result
 
@@ -167,14 +167,14 @@ def read_asset_registry_data(
 
 
 def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
-    """读取单个对象的资产注册表数据。"""
+    """Read asset registry data for a single object."""
     try:
         object_path = archive.read_fstring()
         object_class_name = archive.read_fstring()
         tag_count = archive.read_i32()
 
         if tag_count < 0:
-            logger.debug("AssetRegistryData: TagCount 为负数 (%d)，跳过对象", tag_count)
+            logger.debug("AssetRegistryData: TagCount is negative (%d), skipping object", tag_count)
             return None
 
         tags: List[AssetRegistryTag] = []
@@ -191,5 +191,5 @@ def _read_object_data(archive: Any) -> Optional[AssetRegistryObjectData]:
         )
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        logger.debug("AssetRegistryData: 读取对象数据异常: %s", e)
+        logger.debug("AssetRegistryData: exception reading object data: %s", e)
         return None

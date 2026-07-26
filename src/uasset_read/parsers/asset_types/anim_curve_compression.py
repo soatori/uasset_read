@@ -1,7 +1,7 @@
-"""UAnimCurveCompressionCodec 资产类型处理器（opaque partial metadata）。
+"""UAnimCurveCompressionCodec Asset type handler (opaque partial metadata).
 
-纯 UPROPERTY 序列化，无自定义 Serialize()。
-定义动画曲线的压缩编解码器。
+Pure UPROPERTY serialization, no custom Serialize().
+Defines the animation curve compression codec.
 """
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub

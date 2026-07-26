@@ -1,8 +1,8 @@
 """
-uasset_read异常类定义
+uasset_read exception class definitions
 
-包含所有异常类，用于错误处理和优雅降级。
-从uasset_read.py提取（per D-13）。
+Contains all exception classes for error handling and graceful degradation.
+Extracted from uasset_read.py (per D-13).
 """
 
 from dataclasses import dataclass, field
@@ -10,66 +10,66 @@ from typing import Optional, Dict
 
 
 # ============================================================================
-# 自定义异常（优雅降级）
+# Custom exceptions (graceful degradation)
 # ============================================================================
 
 class UAssetError(Exception):
-    """uasset解析错误基类"""
+    """uasset parsing error base class"""
     pass
 
 
 class VersionError(UAssetError):
-    """版本不支持错误"""
+    """Unsupported version error"""
     pass
 
 
 class DecompressionError(UAssetError):
-    """解压缩失败（zlib/Oodle/LZ4 等）"""
+    """Decompression failure (zlib/Oodle/LZ4, etc.)"""
     pass
 
 
 class LinkerError(UAssetError):
-    """Linker 阶段错误（import/export 解析失败）"""
+    """Linker phase error (import/export parsing failure)"""
     pass
 
 
 @dataclass
 class ErrorContext:
     """
-    错误上下文信息。
+    Error context information.
 
-    记录错误发生时的解析状态，帮助定位问题。
+    Records the parsing state at the time of an error to aid in diagnosis.
     """
 
-    offset: int           # 文件偏移位置
-    phase: str            # 解析阶段：header/name_table/import_map/export_map/properties/blueprint
-    operation: str        # 操作类型：read_i32/read_name/seek 等
-    context_name: str = ""  # 相关对象名或属性名
-    # 导出表解析阶段信息
-    export_index: Optional[int] = None    # 当前导出索引（0-based）
-    expected_offset: Optional[int] = None  # 期望偏移
-    actual_offset: Optional[int] = None    # 实际偏移
-    field_name: str = ""                  # 字段名（如 "TemplateIndex"）
-    version_info: Dict[str, int] = field(default_factory=dict)  # 版本检查失败信息
+    offset: int           # File offset position
+    phase: str            # Parsing phase: header/name_table/import_map/export_map/properties/blueprint
+    operation: str        # Operation type: read_i32/read_name/seek, etc.
+    context_name: str = ""  # Related object or property name
+    # Export table parsing stage information
+    export_index: Optional[int] = None    # Current export index (0-based)
+    expected_offset: Optional[int] = None  # Expected offset
+    actual_offset: Optional[int] = None    # Actual offset
+    field_name: str = ""                  # Field name (e.g. "TemplateIndex")
+    version_info: Dict[str, int] = field(default_factory=dict)  # Version check failure info
 
 
 class ParseError(UAssetError):
-    """解析错误（可携带部分结果、上下文和丰富的诊断信息）。
+    """Parse error (can carry partial results, context, and rich diagnostic info).
 
     Attributes:
-        partial_result: 部分解析结果（容错场景）
-        context: 旧版 ErrorContext（向后兼容）
-        reader_name: 读取器名称（如 FArchive、ByteArchive）
-        position: 当前读取位置
-        length: 文件总长度
-        export_name: 当前导出名称（如有）
+        partial_result: Partial parsing result (error-tolerant scenarios)
+        context: Legacy ErrorContext (backward compatibility)
+        reader_name: Reader name (e.g. FArchive, ByteArchive)
+        position: Current read position
+        length: Total file length
+        export_name: Current export name (if applicable)
     """
 
     def __init__(self, message: str, partial_result: Optional[Dict] = None, context: Optional[ErrorContext] = None):
         super().__init__(message)
         self.partial_result = partial_result
         self.context = context
-        # 新增上下文信息
+        # Additional context information
         self.reader_name: str = ""
         self.position: int = 0
         self.length: int = 0

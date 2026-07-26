@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""Kismet 表达式 — Struct 相关表达式。
+"""Kismet expression -- Struct-related expressions.
 
-包含 EX_StructConst、EX_EndStructConst、EX_PropertyConst、EX_BitFieldConst。
+Contains EX_StructConst, EX_EndStructConst, EX_PropertyConst, EX_BitFieldConst.
 """
 
 

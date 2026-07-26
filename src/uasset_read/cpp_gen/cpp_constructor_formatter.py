@@ -1,15 +1,15 @@
-"""C++ 构造函数文本格式化器。
+"""C++ constructor text formatter.
 
-将 CppClassIR.constructor 字典中的 IR 数据格式化为完整的 C++ 构造函数文本。
+Formats IR data from CppClassIR.constructor dictionary into complete C++ constructor text.
 
-函数：
-    build_constructor_sections: 将 constructor IR 分类为 5 个代码段
-    format_cpp_constructor: 组装完整构造函数文本
+Functions:
+    build_constructor_sections: Classify constructor IR into 5 code sections
+    format_cpp_constructor: Assemble complete constructor text
 
-安全缓解（威胁模型）：
-    T-059-05: 字符串值传入 TEXT() 时转义引号和反斜杠
-    T-059-06: 组件创建按拓扑排序排列（基于 attach 关系）
-    T-059-07: InputAction asset_path 验证 /Game/... 模式
+Security mitigations (threat model):
+    T-059-05: Escape quotes and backslashes in string values passed to TEXT()
+    T-059-06: Component creation ordered by topological sort (based on attach relationships)
+    T-059-07: InputAction asset_path validation for /Game/... pattern
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters.cpp_json_ir import CppClassIR
 
 # ============================================================================
-# 常量
+# Constants
 # ============================================================================
 
 _SECTION_COMMENTS = {
@@ -49,7 +49,7 @@ _INDENT = "    "  # 4-space indent
 
 
 # ============================================================================
-# 拓扑排序（T-059-06）
+# Topological sort (T-059-06)
 # ============================================================================
 
 
@@ -57,27 +57,27 @@ def _topological_sort_creations(
     creations: List[CppComponentCreation],
     assignments: List[CppComponentAssignment],
 ) -> List[CppComponentCreation]:
-    """按拓扑排序排列组件创建顺序（T-059-06）。
+    """Topologically sort component creation order (T-059-06).
 
-    基于 attach 关系：被 attach 的组件（parent_name）必须先创建。
+    Based on attach relationships: components that are attached to (parent_name) must be created first.
 
     Args:
-        creations: 原始组件创建列表
-        assignments: attach 关系列表
+        creations: Raw component creation list
+        assignments: Attach relationship list
 
     Returns:
-        拓扑排序后的组件创建列表
+        Topologically sorted component creation list
     """
     if not creations:
         return []
 
-    # 构建组件名到 creation 的映射
+    # Build component name to creation mapping
     name_to_creation = {c.variable_name: c for c in creations}
     all_names = set(name_to_creation.keys())
 
-    # 构建依赖图：child 依赖 parent（parent 必须先创建）
-    # 注意：assignments 中的 parent_name 可能不是 components（如 RootComponent）
-    # 只关注都在 creations 中的组件
+    # Build dependency graph: child depends on parent (parent must be created first)
+    # Note: parent_name in assignments may not be in components (e.g. RootComponent)
+    # Only consider components that are in creations
     dependencies: Dict[str, set] = {name: set() for name in all_names}
     for assign in assignments:
         child = assign.child_name
@@ -88,7 +88,7 @@ def _topological_sort_creations(
     # Kahn's algorithm
     in_degree = {name: len(deps) for name, deps in dependencies.items()}
     queue = [name for name, deg in in_degree.items() if deg == 0]
-    queue.sort()  # 稳定排序
+    queue.sort()  # Stable sort
     result: List[CppComponentCreation] = []
 
     while queue:
@@ -102,7 +102,7 @@ def _topological_sort_creations(
                     queue.append(name)
                     queue.sort()
 
-    # 如果有循环依赖，剩余组件按原始顺序追加
+    # If there are circular dependencies, append remaining components in original order
     if len(result) < len(creations):
         seen = {c.variable_name for c in result}
         for c in creations:
@@ -151,22 +151,22 @@ def _normalize_transform_keys(transforms: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
-    """将 constructor 字典中的三个列表分类为有注释的代码段。
+    """Classify the three lists in the constructor dictionary into annotated code sections.
 
-    分类逻辑：
-    1. creation: 从 component_creations 生成 CreateDefaultSubobject 调用
-    2. attach: 从 component_assignments 生成 SetupAttachment 调用
-    3. transform: 从 default_values 筛选 is_method_call=True, method_type="transform"
-    4. property: 从 default_values 筛选普通属性赋值
-    5. load_object: 从 default_values 筛选 needs_load_object=True
+    Classification logic:
+    1. creation: Generate CreateDefaultSubobject calls from component_creations
+    2. attach: Generate SetupAttachment calls from component_assignments
+    3. transform: Filter default_values for is_method_call=True, method_type="transform"
+    4. property: Filter default_values for regular property assignments
+    5. load_object: Filter default_values for needs_load_object=True
 
-    组件创建顺序按拓扑排序排列（T-059-06）。
+    Component creation order is topologically sorted (T-059-06).
 
     Args:
-        ir: CppClassIR 实例，其 constructor 字典已填充
+        ir: CppClassIR instance with constructor dictionary populated
 
     Returns:
-        包含 5 个代码段的字典，每段为代码行字符串列表
+        Dictionary containing 5 code sections, each as a list of code line strings
     """
     constructor = ir.constructor
     creations: List[CppComponentCreation] = constructor.get("component_creations", [])
@@ -181,7 +181,7 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
         "load_object": [],
     }
 
-    # 1. creation 段 — 拓扑排序（T-059-06）
+    # 1. creation section -- topological sort (T-059-06)
     sorted_creations = _topological_sort_creations(creations, assignments)
     for creation in sorted_creations:
         safe_var = sanitize_identifier(creation.variable_name)
@@ -193,7 +193,7 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
         )
         sections["creation"].append(line)
 
-    # 2. attach 段
+    # 2. attach section
     for assign in assignments:
         if assign.socket_name:
             safe_socket = sanitize_string_literal(assign.socket_name)
@@ -205,9 +205,9 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
             line = f"{assign.child_name}->SetupAttachment({assign.parent_name});"
         sections["attach"].append(line)
 
-    # 3. transform 段 — 从 default_values 筛选 is_method_call=True, method_type="transform"
-    # 4. property 段 — 从 default_values 筛选普通属性赋值
-    # 5. load_object 段 — 从 default_values 筛选 needs_load_object=True
+    # 3. transform section -- filter default_values for is_method_call=True, method_type="transform"
+    # 4. property section -- filter default_values for regular property assignments
+    # 5. load_object section -- filter default_values for needs_load_object=True
     for entry in default_values:
         # T-059-07: InputAction LoadObject
         if entry.needs_load_object:
@@ -216,7 +216,7 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
                 if load_line:
                     sections["load_object"].append(load_line)
             except ValueError as e:
-                # 路径验证失败 — 记录警告并跳过
+                # Path validation failed -- log warning and skip
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(
@@ -224,7 +224,7 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
                 )
             continue
 
-        # Transform 方法调用
+        # Transform method call
         if entry.is_method_call and entry.method_type == "transform":
             # Normalize scale key for format_cpp_transform compatibility
             normalized_value = _normalize_transform_keys(entry.value)
@@ -232,7 +232,7 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
             sections["transform"].extend(transform_lines)
             continue
 
-        # 普通属性赋值（排除方法调用和 LoadObject）
+        # Regular property assignment (excluding method calls and LoadObject)
         if not entry.is_method_call and not entry.needs_load_object:
             cpp_value = format_cpp_default_value(entry.value, entry.cpp_type)
             if cpp_value:
@@ -247,9 +247,9 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
 
 
 def format_cpp_constructor(ir: "CppClassIR") -> str:
-    """组装完整 C++ 构造函数文本。
+    """Assemble complete C++ constructor text.
 
-    输出格式：
+    Output format:
     ```cpp
     ClassName::ClassName()
         : Super::ParentClass()
@@ -271,49 +271,49 @@ def format_cpp_constructor(ir: "CppClassIR") -> str:
     }
     ```
 
-    - 函数签名：ClassName::ClassName()
-    - 初始化列表：Super::ClassName()（无条件，D-59-05）
-    - 每段之间空一行
-    - 空段被跳过
-    - 4 空格缩进
+    - Function signature: ClassName::ClassName()
+    - Initializer list: Super::ClassName() (unconditional, D-59-05)
+    - Blank line between sections
+    - Empty sections are skipped
+    - 4-space indent
 
     Args:
-        ir: CppClassIR 实例
+        ir: CppClassIR instance
 
     Returns:
-        完整的 C++ 构造函数文本
+        Complete C++ constructor text
     """
     sections = build_constructor_sections(ir)
 
     lines: List[str] = []
 
-    # 函数签名
+    # Function signature
     lines.append(f"{ir.name}::{ir.name}()")
 
-    # 初始化列表 — UE5 使用 Super() 作为父类构造调用
+    # Initializer list -- UE5 uses Super() as parent class constructor call
     lines.append("    : Super()")
 
-    # 函数体开始
+    # Function body start
     lines.append("{")
 
-    # 按顺序输出各段（跳过空段）
+    # Output sections in order (skip empty sections)
     first_section = True
     for section_key in _SECTION_ORDER:
         section_lines = sections.get(section_key, [])
         if not section_lines:
             continue
 
-        # 段之间空一行
+        # Blank line between sections
         if not first_section:
             lines.append("")
         first_section = False
 
-        # 段注释
+        # Section comment
         lines.append(f"{_INDENT}{_SECTION_COMMENTS[section_key]}")
 
-        # 段内代码
+        # Section code
         for code_line in section_lines:
-            # 多行语句（如 transform 的多行调用）需要逐行缩进
+            # Multi-line statements (e.g. transform multi-line calls) need line-by-line indent
             code_lines = code_line.split("\n")
             for i, cl in enumerate(code_lines):
                 if i == 0:
@@ -321,14 +321,14 @@ def format_cpp_constructor(ir: "CppClassIR") -> str:
                 else:
                     lines.append(f"{_INDENT}{cl}")
 
-    # 函数体结束
+    # Function body end
     lines.append("}")
 
     return "\n".join(lines)
 
 
 # ============================================================================
-# 导出列表
+# Export list
 # ============================================================================
 
 __all__ = [

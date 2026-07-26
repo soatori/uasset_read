@@ -1,7 +1,7 @@
-"""组件提取模块 — 从 ExportMap 发现 SCS 组件并提取数值属性。
+"""Component extraction module -- discovers SCS components from ExportMap and extracts scalar attributes.
 
-组件属性递归解析 (D-01, D-02, D-04)。
-通过 Outer 层级扫描发现组件对象，提取变换 + 标量属性。
+Component property recursive parsing (D-01, D-02, D-04).
+Discovers component objects via Outer hierarchy scanning, extracts transforms + scalar attributes.
 """
 from __future__ import annotations
 
@@ -29,14 +29,14 @@ def extract_components(
     export_map: List["ObjectExport"],
     import_map: List["ObjectImport"],
 ) -> List[Dict[str, Any]]:
-    """从 ExportMap 发现组件并提取变换 + 标量属性。
+    """Discover components from ExportMap and extract transforms + scalar attributes.
 
     Args:
-        export_map: 导出表条目列表
-        import_map: 导入表条目列表
+        export_map: Export table entry list
+        import_map: Import table entry list
 
     Returns:
-        组件字典列表，每个包含 name/class/properties/transforms 键。
+        List of component dictionaries, each containing name/class/properties/transforms keys.
     """
     result: List[Dict[str, Any]] = []
     skipped_no_props = 0
@@ -71,10 +71,10 @@ def extract_components(
 
 
 def _filter_scalar_properties(properties: List[PropertyValue]) -> Dict[str, Any]:
-    """从属性列表中过滤并提取标量属性（D-02）。
+    """Filter and extract scalar attributes from property list (D-02).
 
-    包含 Float/Int/Int64/Bool/Byte/Enum 类型 + 简单 StructProperty（一层展开）。
-    排除变换相关的 StructProperty（已由 extract_component_transforms 处理）。
+    Includes Float/Int/Int64/Bool/Byte/Enum types + simple StructProperty (one-level expansion).
+    Excludes transform-related StructProperty (already handled by extract_component_transforms).
     """
     result: Dict[str, Any] = {}
     for prop in properties:
@@ -90,7 +90,7 @@ def _filter_scalar_properties(properties: List[PropertyValue]) -> Dict[str, Any]
 
 
 def _serialize_scalar_value(value: Any) -> Any:
-    """将属性值序列化为 JSON 兼容格式。"""
+    """Serialize property value to JSON-compatible format."""
     if isinstance(value, EnumValue):
         return value.value_name
     if isinstance(value, StructValue):

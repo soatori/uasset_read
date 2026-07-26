@@ -1,11 +1,11 @@
-"""C++ 默认值格式化器 — 将 Python 值转换为类型正确的 C++ 字面量。
+"""C++ default value formatter -- converts Python values to type-correct C++ literals.
 
-为构造函数生成器提供类型安全的值格式化工具。
+Provides type-safe value formatting tools for the constructor generator.
 
-安全缓解（威胁模型 T-059-03, T-059-04）：
-- 字符串值中引号转义
-- 拒绝包含 C++ 语法令牌（;, {, }, //）的值
-- InputAction asset_path 验证 /Game/... 模式
+Security mitigations (threat model T-059-03, T-059-04):
+- Quote escaping in string values
+- Reject values containing C++ syntax tokens (;, {, }, //)
+- InputAction asset_path validation for /Game/... pattern
 """
 
 import re
@@ -13,30 +13,30 @@ from typing import Any, Dict, List, Optional
 
 
 # ============================================================================
-# 安全常量（T-059-03）
+# Security constants (T-059-03)
 # ============================================================================
 
-# 拒绝包含这些 C++ 语法令牌的值
+# Reject values containing these C++ syntax tokens
 CPP_SYNTAX_TOKENS = [';', '{', '}', '//']
 
-# UE 资源路径模式（T-059-04）
+# UE asset path pattern (T-059-04)
 UE_ASSET_PATH_PATTERN = re.compile(r'^/Game/')
 
 
 def _escape_cpp_string(value: str) -> str:
-    """转义字符串值以防止 C++ 注入（T-059-03）。
+    """Escape string values to prevent C++ injection (T-059-03).
 
     Args:
-        value: 原始字符串值
+        value: Raw string value
 
     Returns:
-        转义后的字符串值
+        Escaped string value
     """
-    # 转义反斜杠（必须先处理）
+    # Escape backslashes (must be done first)
     value = value.replace('\\', '\\\\')
-    # 转义双引号
+    # Escape double quotes
     value = value.replace('"', '\\"')
-    # 转义控制字符
+    # Escape control characters
     value = value.replace('\n', '\\n')
     value = value.replace('\r', '\\r')
     value = value.replace('\t', '\\t')
@@ -44,16 +44,16 @@ def _escape_cpp_string(value: str) -> str:
 
 
 def _validate_no_cpp_syntax(value: str) -> str:
-    """验证字符串值不包含 C++ 语法令牌（T-059-03）。
+    """Validate that string value does not contain C++ syntax tokens (T-059-03).
 
     Args:
-        value: 要验证的字符串值
+        value: String value to validate
 
     Returns:
-        原始值（如果安全）
+        Original value (if safe)
 
     Raises:
-        ValueError: 如果值包含 C++ 语法令牌
+        ValueError: If value contains C++ syntax tokens
     """
     for token in CPP_SYNTAX_TOKENS:
         if token in value:
@@ -64,16 +64,16 @@ def _validate_no_cpp_syntax(value: str) -> str:
 
 
 def _format_float_value(value: float) -> str:
-    """格式化 float 值为 C++ 字面量（55.f 格式）。
+    """Format float value as C++ literal (55.f format).
 
-    - 整数值：`55.f`
-    - 有小数部分：`400.12f`
+    - Integer values: `55.f`
+    - With decimal part: `400.12f`
 
     Args:
-        value: 浮点数值
+        value: Floating point value
 
     Returns:
-        C++ float 字面量字符串
+        C++ float literal string
     """
     fval = float(value)
     if fval == int(fval):
@@ -82,43 +82,43 @@ def _format_float_value(value: float) -> str:
 
 
 def format_cpp_default_value(value: Any, cpp_type: str) -> str:
-    """根据 cpp_type 将 value 格式化为 C++ 字面量。
+    """Format value as C++ literal based on cpp_type.
 
-    | cpp_type | 格式化规则 | 示例 |
-    |----------|-----------|------|
+    | cpp_type | Formatting rule | Example |
+    |----------|----------------|---------|
     | float | {value}f | 55.f, 400.0f |
-    | double | {value} 无后缀 | 96.0 |
+    | double | {value} no suffix | 96.0 |
     | bool | true / false | true |
-    | int32/int/int64 | 无后缀整数 | 1500 |
+    | int32/int/int64 | Integer without suffix | 1500 |
     | FString/FName | TEXT("value") | TEXT("value") |
     | FText | FText::FromString("value") | FText::FromString("hello") |
-    | uint8/byte | 无后缀 | 255 |
-    | E* (枚举) | 直接使用值 | EFirstPersonPrimitiveType::FirstPerson |
-    | 其他 | str(value) | 直接返回 |
+    | uint8/byte | Without suffix | 255 |
+    | E* (enum) | Use value directly | EFirstPersonPrimitiveType::FirstPerson |
+    | Other | str(value) | Return as-is |
 
     Args:
-        value: Python 默认值
-        cpp_type: C++ 类型名
+        value: Python default value
+        cpp_type: C++ type name
 
     Returns:
-        C++ 字面量表达式字符串
+        C++ literal expression string
     """
     if value is None:
         return ""
 
-    # 空字符串或纯空白 — 无有效默认值（防止输出 "= ;"）
+    # Empty string or pure whitespace -- no valid default value (prevent output "= ;")
     if isinstance(value, str) and not value.strip():
         return ""
 
-    # float — 55.f 格式
+    # float -- 55.f format
     if cpp_type == "float":
         return _format_float_value(value)
 
-    # double — 无后缀
+    # double -- no suffix
     if cpp_type == "double":
         return str(float(value))
 
-    # bool — true/false
+    # bool -- true/false
     if cpp_type == "bool":
         if isinstance(value, bool):
             return "true" if value else "false"
@@ -128,82 +128,82 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
             return "true" if value.lower() in ("true", "1") else "false"
         return "false"
 
-    # 整数类型 — 无后缀
+    # Integer types -- no suffix
     if cpp_type in ("int32", "int", "int64", "uint8", "uint16", "uint32", "uint64", "byte"):
         return str(int(value))
 
-    # FString / FName — TEXT() 包装
+    # FString / FName -- TEXT() wrapping
     if cpp_type in ("FString", "FName"):
         str_val = str(value)
         _validate_no_cpp_syntax(str_val)
         return f'TEXT("{_escape_cpp_string(str_val)}")'
 
-    # FText — FText::FromString() 包装
+    # FText -- FText::FromString() wrapping
     if cpp_type == "FText":
         str_val = str(value)
         _validate_no_cpp_syntax(str_val)
         return f'FText::FromString("{_escape_cpp_string(str_val)}")'
 
-    # 枚举类型（UE 约定：E + 大写字母，如 EFirstPersonPrimitiveType）— 直接使用值
+    # Enum types (UE convention: E + uppercase letter, e.g. EFirstPersonPrimitiveType) -- use value directly
     if len(cpp_type) > 1 and cpp_type[0] == "E" and cpp_type[1].isupper():
         return str(value)
 
-    # 数组 / StructValue / opaque fallback — 输出空字符串而非 Python repr
-    # 这些类型无法在 C++ 中用字面量表达，跳过赋值比输出非法语法更好
+    # Array / StructValue / opaque fallback -- output empty string instead of Python repr
+    # These types cannot be expressed as literals in C++; skipping assignment is better than outputting invalid syntax
     if isinstance(value, (list, tuple)):
         return ""
     str_val = str(value)
     if "StructValue(" in str_val or "[" in str_val:
         return ""
 
-    # 其他类型 — 直接返回字符串表示
+    # Other types -- return string representation directly
     return str_val
 
 
 def _format_fvector(x: float, y: float, z: float) -> str:
-    """格式化 FVector 字面量。
+    """Format FVector literal.
 
     Args:
-        x, y, z: 三维坐标值
+        x, y, z: 3D coordinate values
 
     Returns:
-        FVector(x, y, z) C++ 表达式
+        FVector(x, y, z) C++ expression
     """
     return f"FVector({_format_float_value(x)}, {_format_float_value(y)}, {_format_float_value(z)})"
 
 
 def _format_frotator(pitch: float, yaw: float, roll: float) -> str:
-    """格式化 FRotator 字面量。
+    """Format FRotator literal.
 
-    注意：UE FRotator 构造函数参数顺序为 (pitch, yaw, roll)，
-    而 RotatorValue 存储顺序为 (roll, pitch, yaw)。
+    Note: UE FRotator constructor parameter order is (pitch, yaw, roll),
+    while RotatorValue storage order is (roll, pitch, yaw).
 
     Args:
-        pitch: 俯仰角（度）
-        yaw: 偏航角（度）
-        roll: 翻滚角（度）
+        pitch: Pitch angle (degrees)
+        yaw: Yaw angle (degrees)
+        roll: Roll angle (degrees)
 
     Returns:
-        FRotator(pitch, yaw, roll) C++ 表达式
+        FRotator(pitch, yaw, roll) C++ expression
     """
     return f"FRotator({_format_float_value(pitch)}, {_format_float_value(yaw)}, {_format_float_value(roll)})"
 
 
 def format_cpp_transform(transforms: Dict[str, Any], component_name: str) -> List[str]:
-    """从组件的 transforms 字典生成 C++ transform 赋值语句。
+    """Generate C++ transform assignment statements from a component's transforms dictionary.
 
-    规则（D-59-06）：
-    - 同时有 location + rotation → SetRelativeLocationAndRotation 组合调用
-    - 只有 location → SetRelativeLocation
-    - 只有 rotation → SetRelativeRotation
-    - 有 scale → SetRelativeScale3D
+    Rules (D-59-06):
+    - Both location + rotation -> SetRelativeLocationAndRotation combined call
+    - Only location -> SetRelativeLocation
+    - Only rotation -> SetRelativeRotation
+    - Has scale -> SetRelativeScale3D
 
     Args:
-        transforms: 包含 relative_location/relative_rotation/relative_scale 的字典
-        component_name: 组件变量名
+        transforms: Dictionary containing relative_location/relative_rotation/relative_scale
+        component_name: Component variable name
 
     Returns:
-        C++ 语句字符串列表（每条末尾带分号）
+        List of C++ statement strings (each ending with semicolon)
     """
     if not transforms:
         return []
@@ -213,10 +213,10 @@ def format_cpp_transform(transforms: Dict[str, Any], component_name: str) -> Lis
     rot = transforms.get("relative_rotation")
     scale = transforms.get("relative_scale")
 
-    # Location + Rotation → 组合调用
+    # Location + Rotation -> combined call
     if loc is not None and rot is not None:
         loc_expr = _format_fvector(loc.x, loc.y, loc.z)
-        # RotatorValue 存储顺序: (roll, pitch, yaw) → FRotator 顺序: (pitch, yaw, roll)
+        # RotatorValue storage order: (roll, pitch, yaw) -> FRotator order: (pitch, yaw, roll)
         rot_expr = _format_frotator(rot.pitch, rot.yaw, rot.roll)
         lines.append(
             f"{component_name}->SetRelativeLocationAndRotation(\n"
@@ -245,34 +245,34 @@ def format_cpp_component_init(
     transforms: Optional[Dict[str, Any]] = None,
     properties: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
-    """为单个组件生成完整的初始化代码块。
+    """Generate complete initialization code block for a single component.
 
-    生成：
+    Generates:
     1. CreateDefaultSubobject<Type>(TEXT("ComponentName"))
-    2. Transform 赋值语句（如果有）
-    3. 属性赋值语句（如果有）
+    2. Transform assignment statements (if any)
+    3. Property assignment statements (if any)
 
     Args:
-        component_name: 组件变量名
-        cpp_type: 去指针的 C++ 类型名（如 USkeletalMeshComponent）
-        transforms: 变换字典（relative_location/relative_rotation/relative_scale）
-        properties: 属性字典（标量属性名 → (cpp_type, value)）
+        component_name: Component variable name
+        cpp_type: Dereferenced C++ type name (e.g. USkeletalMeshComponent)
+        transforms: Transform dictionary (relative_location/relative_rotation/relative_scale)
+        properties: Property dictionary (scalar property name -> (cpp_type, value))
 
     Returns:
-        C++ 语句字符串列表
+        List of C++ statement strings
     """
     lines: List[str] = []
 
-    # 1. 组件创建
+    # 1. Component creation
     lines.append(
         f'{component_name} = CreateDefaultSubobject<{cpp_type}>(TEXT("{component_name}"));'
     )
 
-    # 2. Transform 赋值
+    # 2. Transform assignment
     if transforms:
         lines.extend(format_cpp_transform(transforms, component_name))
 
-    # 3. 属性赋值
+    # 3. Property assignment
     if properties:
         for prop_name, (prop_type, prop_value) in properties.items():
             cpp_value = format_cpp_default_value(prop_value, prop_type)
@@ -283,28 +283,28 @@ def format_cpp_component_init(
 
 
 def format_cpp_input_action_load(variable_name: str, asset_path: str) -> str:
-    """为 InputAction 变量生成 LoadObject 调用。
+    """Generate LoadObject call for InputAction variable.
 
-    D-59-06 补充：InputAction 使用 LoadObject 而非 CreateDefaultSubobject。
+    D-59-06 supplement: InputAction uses LoadObject instead of CreateDefaultSubobject.
 
-    安全验证（T-059-04）：asset_path 必须匹配 /Game/... 模式。
+    Security validation (T-059-04): asset_path must match /Game/... pattern.
 
     Args:
-        variable_name: 变量名
-        asset_path: UE 资源路径（如 /Game/Input/Actions/IA_Jump.IA_Jump）
+        variable_name: Variable name
+        asset_path: UE asset path (e.g. /Game/Input/Actions/IA_Jump.IA_Jump)
 
     Returns:
-        LoadObject C++ 表达式字符串，如果 asset_path 为空或无效则返回空字符串
+        LoadObject C++ expression string, empty string if asset_path is empty or invalid
     """
     if not asset_path:
         return ""
 
-    # T-059-04: 验证资产路径格式
+    # T-059-04: Validate asset path format
     if not UE_ASSET_PATH_PATTERN.match(asset_path):
         raise ValueError(
             f"Invalid asset path (must start with /Game/...): {asset_path!r}"
         )
 
-    # 转义引号
+    # Escape quotes
     safe_path = _escape_cpp_string(asset_path)
     return f'{variable_name} = LoadObject<UInputAction>(nullptr, TEXT("{safe_path}"));'

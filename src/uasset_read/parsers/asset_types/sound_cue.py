@@ -1,12 +1,12 @@
-"""USoundCue 资产类型处理器
+"""USoundCue Asset type handler
 
-解析 USoundCue 的 custom serialization 数据：
-- FirstNode: int32（opaque pointer，SoundCue 节点图的根节点）
-- VolumeMultiplier: float（音量倍增器）
-- PitchMultiplier: float（音高倍增器）
-- SoundCueNodes: TArray<int32>（节点数组，每项为节点对象引用）
+Parse USoundCue custom serialization data:
+- FirstNode: int32 (opaque pointer, root node of the SoundCue node graph)
+- VolumeMultiplier: float (volume multiplier)
+- PitchMultiplier: float (pitch multiplier)
+- SoundCueNodes: TArray<int32> (node array, each item is a node object reference)
 
-格式参考：
+Format reference:
 - Engine/Source/Runtime/Engine/Classes/Sound/SoundCue.h
 - Engine/Source/Runtime/Engine/Private/Sound/SoundCue.cpp
 """
@@ -21,22 +21,22 @@ logger = logging.getLogger(__name__)
 
 
 def parse_sound_cue(archive: Any, name_map: List[str]) -> Dict[str, Any]:
-    """解析 USoundCue 资产的 custom serialization 数据。
+    """Parse USoundCue asset custom serialization data.
 
     Args:
-        archive: FArchive 实例（已定位到 export 的 serial_offset）
-        name_map: 名称表
+        archive: FArchive instance (positioned at export's serial_offset)
+        name_map: Name table
 
     Returns:
-        解析结果字典，包含 first_node、volume_multiplier、pitch_multiplier、sound_cue_nodes 等
+        Parse result dictionary containing first_node, volume_multiplier, pitch_multiplier, sound_cue_nodes etc.
     """
     result: Dict[str, Any] = {
         "parse_status": "success",
     }
 
     try:
-        # 1. FirstNode: int32 — opaque pointer to the first SoundCue node
-        #    SoundCue.cpp: USoundCue::Serialize 起始位置
+        # 1. FirstNode: int32 -- opaque pointer to the first SoundCue node
+        #    SoundCue.cpp: USoundCue::Serialize start position
         result["first_node"] = archive.read_i32("SoundCue.FirstNode")
 
         # 2. VolumeMultiplier: float (f32)
@@ -45,7 +45,7 @@ def parse_sound_cue(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         # 3. PitchMultiplier: float (f32)
         result["pitch_multiplier"] = archive.read_f32("SoundCue.PitchMultiplier")
 
-        # 4. SoundCueNodes: TArray<int32> — 节点对象引用数组
+        # 4. SoundCueNodes: TArray<int32> -- node object reference array
         node_count = archive.read_i32("SoundCue.SoundCueNodes.Count")
 
         if node_count < 0 or node_count > 10000:
@@ -63,7 +63,7 @@ def parse_sound_cue(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         result["sound_cue_nodes"] = nodes
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        logger.debug("SoundCue handler 解析失败: %s", e)
+        logger.debug("SoundCue handler Parse failed: %s", e)
         result["parse_status"] = "failed"
         result["error"] = str(e)
 

@@ -1,20 +1,20 @@
 """
-构造函数 IR 构建器模块。
+Constructor IR builder module.
 
-从 CppClassIR.properties、component 数据和 blueprint.variables 提取数据，
-填充 CppClassIR.constructor 字典的 component_creations、component_assignments、
-default_values 三个列表。
+Extracts data from CppClassIR.properties, component data, and blueprint.variables
+to populate the component_creations, component_assignments, and default_values
+lists in CppClassIR.constructor dictionary.
 
-数据模型：
-    CppComponentCreation: CreateDefaultSubobject 调用
-    CppComponentAssignment: SetupAttachment 调用
-    CppDefaultValue: 属性赋值（含 transform 方法调用）
+Data models:
+    CppComponentCreation: CreateDefaultSubobject call
+    CppComponentAssignment: SetupAttachment call
+    CppDefaultValue: Property assignment (including transform method calls)
 
-构建函数：
-    build_component_creations: 从 ir.properties 提取组件创建
-    build_component_assignments: 从 components 数据提取 attach 关系
-    build_default_values: 从 ir.properties 和 blueprint_vars 提取默认值
-    build_transform_assignments: 从 component transforms 提取变换数据
+Builder functions:
+    build_component_creations: Extract component creation from ir.properties
+    build_component_assignments: Extract attach relationships from components data
+    build_default_values: Extract default values from ir.properties and blueprint_vars
+    build_transform_assignments: Extract transform data from component transforms
 """
 from __future__ import annotations
 
@@ -35,35 +35,35 @@ from uasset_read.constants import BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA
 
 
 def _is_blueprint_metadata(var_name: str) -> bool:
-    """检查变量名是否为蓝图元数据键。"""
+    """Check if variable name is a blueprint metadata key."""
     return var_name in _BLUEPRINT_METADATA_KEYS
 
 
 # ============================================================================
-# 数据模型
+# Data models
 # ============================================================================
 
 
 @dataclass
 class CppComponentCreation:
-    """CreateDefaultSubobject 调用。
+    """CreateDefaultSubobject call.
 
-    表示在 C++ 构造函数中创建一个组件实例：
+    Represents creating a component instance in a C++ constructor:
     ```cpp
     FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
     ```
 
     Attributes:
-        variable_name: C++ 变量名（如 "FirstPersonMesh"）
-        cpp_type: 去指针的 C++ 类型（如 "USkeletalMeshComponent"）
-        component_name: TEXT() 参数（如 "FirstPersonMesh"）
+        variable_name: C++ variable name (e.g. "FirstPersonMesh")
+        cpp_type: Dereferenced C++ type (e.g. "USkeletalMeshComponent")
+        component_name: TEXT() parameter (e.g. "FirstPersonMesh")
     """
     variable_name: str
     cpp_type: str
     component_name: str
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典。"""
+        """Serialize to JSON-compatible dictionary."""
         return {
             "variable_name": self.variable_name,
             "cpp_type": self.cpp_type,
@@ -73,24 +73,24 @@ class CppComponentCreation:
 
 @dataclass
 class CppComponentAssignment:
-    """SetupAttachment 调用。
+    """SetupAttachment call.
 
-    表示在 C++ 构造函数中将子组件 attach 到父组件：
+    Represents attaching a child component to a parent component in a C++ constructor:
     ```cpp
     FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, TEXT("head"));
     ```
 
     Attributes:
-        child_name: 子组件变量名
-        parent_name: 父组件变量名
-        socket_name: 插槽名（可为空字符串）
+        child_name: Child component variable name
+        parent_name: Parent component variable name
+        socket_name: Socket name (can be empty string)
     """
     child_name: str
     parent_name: str
     socket_name: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典。"""
+        """Serialize to JSON-compatible dictionary."""
         return {
             "child_name": self.child_name,
             "parent_name": self.parent_name,
@@ -100,21 +100,21 @@ class CppComponentAssignment:
 
 @dataclass
 class CppDefaultValue:
-    """属性赋值或方法调用式赋值。
+    """Property assignment or method call assignment.
 
-    表示在 C++ 构造函数中设置属性值或调用方法：
-    - 普通赋值: `TargetArmLength = 400.0f;`
-    - 方法调用: `GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);`
+    Represents setting a property value or calling a method in a C++ constructor:
+    - Regular assignment: `TargetArmLength = 400.0f;`
+    - Method call: `GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);`
     - Transform: `FirstPersonCameraComponent->SetRelativeLocationAndRotation(...);`
     - LoadObject: `IA_JumpAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/..."));`
 
     Attributes:
-        target: 赋值目标（如 "FirstPersonCameraComponent->bUsePawnControlRotation"）
-        value: 格式化后的值字符串
-        cpp_type: C++ 类型（如 "float", "bool", "transform"）
-        is_method_call: 是否为方法调用式赋值
-        method_type: 方法调用类型分类（"transform" 表示 transform 赋值，空字符串表示普通赋值）
-        needs_load_object: 是否需要 LoadObject 加载（UInputAction* 等数据资产标记为 True）
+        target: Assignment target (e.g. "FirstPersonCameraComponent->bUsePawnControlRotation")
+        value: Formatted value string
+        cpp_type: C++ type (e.g. "float", "bool", "transform")
+        is_method_call: Whether this is a method call assignment
+        method_type: Method call type classification ("transform" for transform assignments, empty string for regular assignments)
+        needs_load_object: Whether LoadObject loading is needed (UInputAction* and similar data assets marked True)
     """
     target: str
     value: str
@@ -124,7 +124,7 @@ class CppDefaultValue:
     needs_load_object: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        """序列化为 JSON 兼容字典。"""
+        """Serialize to JSON-compatible dictionary."""
         result: Dict[str, Any] = {
             "target": self.target,
             "value": self.value,
@@ -140,24 +140,24 @@ class CppDefaultValue:
 
 
 # ============================================================================
-# 构建函数
+# Builder functions
 # ============================================================================
 
 
 def build_component_creations(ir: "CppClassIR") -> List[CppComponentCreation]:
-    """从 CppClassIR.properties 中提取组件创建信息。
+    """Extract component creation information from CppClassIR.properties.
 
-    遍历 ir.properties，筛选 category == "component" 的条目，
-    为每个组件生成 CppComponentCreation。
+    Iterates ir.properties, filters entries where category == "component",
+    and generates CppComponentCreation for each component.
 
-    特殊处理：
-    - UInputAction* 类型被跳过（它们作为数据资产存在，不使用 CreateDefaultSubobject）
+    Special handling:
+    - UInputAction* types are skipped (they exist as data assets, not using CreateDefaultSubobject)
 
     Args:
-        ir: CppClassIR 实例
+        ir: CppClassIR instance
 
     Returns:
-        CppComponentCreation 列表
+        List of CppComponentCreation
     """
     creations: List[CppComponentCreation] = []
 
@@ -165,7 +165,7 @@ def build_component_creations(ir: "CppClassIR") -> List[CppComponentCreation]:
         if prop.category != "component":
             continue
 
-        # D-59-06: InputAction 特殊处理 — 跳过 CreateDefaultSubobject
+        # D-59-06: InputAction special handling -- skip CreateDefaultSubobject
         if prop.cpp_type == "UInputAction*":
             logger.debug(
                 f"Skipping CreateDefaultSubobject for InputAction component: {prop.name}"
@@ -188,22 +188,22 @@ def build_component_creations(ir: "CppClassIR") -> List[CppComponentCreation]:
 def build_component_assignments(
     components: List[Dict[str, Any]]
 ) -> List[CppComponentAssignment]:
-    """从组件数据中提取 attach 关系。
+    """Extract attach relationships from component data.
 
-    遍历 components 列表（来自 extract_components 的输出），
-    检查每个组件是否存在 attach_parent 字段。
+    Iterates the components list (from extract_components output),
+    checking each component for the attach_parent field.
 
     Args:
-        components: 组件字典列表，每个包含 name/class/properties/transforms 键，
-                    可能包含 attach_parent/attach_socket_name 字段
+        components: List of component dictionaries, each containing name/class/properties/transforms keys,
+                    may contain attach_parent/attach_socket_name fields
 
     Returns:
-        CppComponentAssignment 列表
+        List of CppComponentAssignment
     """
     assignments: List[CppComponentAssignment] = []
 
     for comp in components:
-        # 支持多种字段命名方式
+        # Support multiple field naming conventions
         attach_parent = (
             comp.get("attach_parent")
             or comp.get("AttachParent")
@@ -217,12 +217,12 @@ def build_component_assignments(
         if not child_name:
             continue
 
-        # 映射 Root/RootComponent -> RootComponent
+        # Map Root/RootComponent -> RootComponent
         parent_name = attach_parent
         if parent_name in ("Root", "RootComponent", "root"):
             parent_name = "RootComponent"
 
-        # 提取 socket 名称
+        # Extract socket name
         socket_name = (
             comp.get("attach_socket_name")
             or comp.get("AttachSocketName")
@@ -243,31 +243,31 @@ def build_default_values(
     ir: "CppClassIR",
     blueprint_vars: Optional[List["VariableIR"]] = None,
 ) -> List[CppDefaultValue]:
-    """从 CppClassIR.properties 和 VariableIR 列表中提取默认值。
+    """Extract default values from CppClassIR.properties and VariableIR list.
 
-    遍历 ir.properties 中 category == "variable" 的条目，以及可选的
-    VariableIR 列表，生成 CppDefaultValue 条目。
+    Iterates entries in ir.properties where category == "variable", and optionally
+    the VariableIR list, generating CppDefaultValue entries.
 
-    特殊处理：
-    - UInputAction* 类型：标记 needs_load_object=True（需要 LoadObject 加载）
-    - 非 InputAction 变量但 default_value 为 None：跳过
-    - T-059-02: 过滤 value 中的潜在注入字符（;, {}, //）
+    Special handling:
+    - UInputAction* types: Mark needs_load_object=True (requires LoadObject loading)
+    - Non-InputAction variables with default_value None: Skip
+    - T-059-02: Filter potential injection characters in value (;, {}, //)
 
     Args:
-        ir: CppClassIR 实例
-        blueprint_vars: 可选的 VariableIR 列表
+        ir: CppClassIR instance
+        blueprint_vars: Optional VariableIR list
 
     Returns:
-        CppDefaultValue 列表
+        List of CppDefaultValue
     """
     defaults: List[CppDefaultValue] = []
 
-    # 从 ir.properties 提取变量默认值
+    # Extract variable default values from ir.properties
     for prop in ir.properties:
         if prop.category != "variable":
             continue
 
-        # InputAction 特殊处理
+        # InputAction special handling
         if prop.cpp_type == "UInputAction*":
             if prop.default_value and str(prop.default_value).strip():
                 defaults.append(CppDefaultValue(
@@ -281,7 +281,7 @@ def build_default_values(
                 )
             continue
 
-        # 普通变量 — 跳过无默认值的
+        # Regular variables -- skip those without default values
         if prop.default_value is None:
             continue
 
@@ -292,10 +292,10 @@ def build_default_values(
             cpp_type=prop.cpp_type,
         ))
 
-    # 从 VariableIR 列表补充提取
+    # Supplement extraction from VariableIR list
     if blueprint_vars:
         for var in blueprint_vars:
-            # 兼容 VariableIR（kind）和 BlueprintVariable（is_component）
+            # Compatible with both VariableIR (kind) and BlueprintVariable (is_component)
             is_comp = getattr(var, 'kind', None) == "component" or getattr(var, 'is_component', False)
             if is_comp:
                 continue
@@ -305,7 +305,7 @@ def build_default_values(
             if _is_blueprint_metadata(var_name):
                 continue
 
-            # 跳过已经在 ir.properties 中处理过的变量
+            # Skip variables already processed in ir.properties
             already_processed = any(
                 d.target == var_name for d in defaults
             )
@@ -328,20 +328,20 @@ def build_transform_assignments(
     ir: "CppClassIR",
     components: List[Dict[str, Any]],
 ) -> List[CppDefaultValue]:
-    """从组件 transforms 数据提取变换赋值到 IR。
+    """Extract transform assignments from component transforms data into IR.
 
-    遍历 components 列表，检查每个组件的 transforms 字典是否包含
-    relative_location 或 relative_rotation 等键。如果存在，
-    创建 CppDefaultValue 条目，标记 is_method_call=True, method_type="transform"。
+    Iterates the components list, checking each component's transforms dictionary
+    for keys like relative_location or relative_rotation. If present,
+    creates CppDefaultValue entries with is_method_call=True, method_type="transform".
 
-    Blocker 2 fix: transform 数据流入 IR default_values。
+    Blocker 2 fix: transform data flows into IR default_values.
 
     Args:
-        ir: CppClassIR 实例
-        components: 组件字典列表
+        ir: CppClassIR instance
+        components: List of component dictionaries
 
     Returns:
-        CppDefaultValue 列表（is_method_call=True, method_type="transform"）
+        List of CppDefaultValue (is_method_call=True, method_type="transform")
     """
     entries: List[CppDefaultValue] = []
 
@@ -374,22 +374,22 @@ def build_transform_assignments(
 
 
 # ============================================================================
-# 辅助函数
+# Helper functions
 # ============================================================================
 
 
 def _sanitize_value(value: str, cpp_type: str) -> str:
-    """T-059-02: 清理值字符串，防止代码注入。
+    """T-059-02: Sanitize value string to prevent code injection.
 
-    拒绝包含 ;, {, }, // 的值（可能用于注入 C++ 代码）。
-    对于检测到的危险值，返回清理后的版本（移除危险字符）并记录警告。
+    Rejects values containing ;, {, }, // (which could be used to inject C++ code).
+    For detected dangerous values, returns a sanitized version (dangerous characters removed) and logs a warning.
 
     Args:
-        value: 原始值字符串
-        cpp_type: C++ 类型（用于上下文）
+        value: Raw value string
+        cpp_type: C++ type (for context)
 
     Returns:
-        清理后的值字符串
+        Sanitized value string
     """
     dangerous_chars = [";", "{", "}"]
     dangerous_patterns = ["//"]
@@ -409,7 +409,7 @@ def _sanitize_value(value: str, cpp_type: str) -> str:
             f"Potentially dangerous value for type {cpp_type}: "
             f"{value!r} — sanitizing"
         )
-        # 移除危险字符
+        # Remove dangerous characters
         cleaned = value
         for ch in dangerous_chars:
             cleaned = cleaned.replace(ch, "")
@@ -421,19 +421,19 @@ def _sanitize_value(value: str, cpp_type: str) -> str:
 
 
 def _variable_type_to_cpp(var: Any) -> str:
-    """从 VariableIR 或 BlueprintVariable 推导 C++ 类型。
+    """Derive C++ type from VariableIR or BlueprintVariable.
 
-    支持 VariableIR（type 字段为 str）和 BlueprintVariable（var_type 为 FEdGraphPinType）。
+    Supports VariableIR (type field is str) and BlueprintVariable (var_type is FEdGraphPinType).
 
     Args:
-        var: VariableIR 或 BlueprintVariable 实例
+        var: VariableIR or BlueprintVariable instance
 
     Returns:
-        C++ 类型字符串
+        C++ type string
     """
     from uasset_read.cpp_gen.cpp_type_mapper import ue_path_to_cpp_type
 
-    # VariableIR: type 字段为 str
+    # VariableIR: type field is str
     if hasattr(var, 'type') and isinstance(var.type, str):
         ue_type = var.type
         if not ue_type:
@@ -441,12 +441,12 @@ def _variable_type_to_cpp(var: Any) -> str:
         cpp_type = ue_path_to_cpp_type(ue_type)
         return cpp_type
 
-    # BlueprintVariable: var_type 为 FEdGraphPinType
+    # BlueprintVariable: var_type is FEdGraphPinType
     var_type = getattr(var, 'var_type', None)
     category = var_type.pin_category if var_type else ""
     subcategory = var_type.pin_subcategory if var_type else ""
 
-    # 基本类型映射
+    # Basic type mapping
     type_map = {
         "FloatProperty": "float",
         "DoubleProperty": "double",
@@ -462,7 +462,7 @@ def _variable_type_to_cpp(var: Any) -> str:
     if category in type_map:
         return type_map[category]
 
-    # object 类型
+    # object types
     if category in ("object", "ObjectProperty", "SoftObjectProperty"):
         if subcategory:
             cpp_type = ue_path_to_cpp_type(subcategory)
@@ -471,21 +471,21 @@ def _variable_type_to_cpp(var: Any) -> str:
             return cpp_type
         return "UObject*"
 
-    # struct 类型
+    # struct types
     if category in ("struct", "StructProperty"):
         if subcategory:
             cpp_type = ue_path_to_cpp_type(subcategory)
             return cpp_type
         return "FName"
 
-    # 回退
+    # Fallback
     if category:
         return ue_path_to_cpp_type(category)
     return "FString"
 
 
 # ============================================================================
-# 导出列表
+# Export list
 # ============================================================================
 
 __all__ = [

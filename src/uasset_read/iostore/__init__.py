@@ -1,4 +1,4 @@
-"""IoStore 容器系统 — UE5.3+ 新格式支持"""
+"""IoStore container system — UE5.3+ new format support"""
 from uasset_read.iostore.structures import (
     FIoChunkId,
     FIoOffsetAndSize,
@@ -19,7 +19,7 @@ from uasset_read.iostore.structures import (
 from uasset_read.iostore.reader import IoStoreReader, IoStoreInfo
 
 __all__ = [
-    # 结构
+    # Structures
     "FIoChunkId",
     "FIoOffsetAndSize",
     "FIoOffsetAndLength",
@@ -28,16 +28,16 @@ __all__ = [
     "FIoStoreTocCompressedBlockEntry",
     "FIoStoreTocEntryMeta",
     "FIoContainerHeader",
-    # 枚举
+    # Enums
     "EIoStoreTocVersion",
     "EIoContainerFlags",
     "EIoChunkType",
     "EIoStoreTocEntryMetaFlags",
     "EIoStoreTocReadOptions",
-    # 常量
+    # Constants
     "TOC_MAGIC",
     "TOC_HEADER_SIZE",
-    # 读取器
+    # Readers
     "IoStoreReader",
     "IoStoreInfo",
 ]

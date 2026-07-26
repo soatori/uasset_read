@@ -1,7 +1,7 @@
-"""USubsurfaceProfile 资产类型处理器（opaque partial metadata）。
+"""USubsurfaceProfile Asset type handler (opaque partial metadata).
 
-纯 UPROPERTY 序列化，无自定义 Serialize()。
-定义次表面散射材质配置参数。
+Pure UPROPERTY serialization, no custom Serialize().
+Defines subsurface scattering material profile parameters.
 """
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub

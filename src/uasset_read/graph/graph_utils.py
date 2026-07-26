@@ -1,7 +1,7 @@
-"""蓝图图构建工具函数。
+"""Blueprint graph construction utility functions.
 
-从 flow_builder.py 提取的共享辅助函数：字符串清理、Pin 引用格式化、
-节点索引构建、连接遍历等。
+Shared helper functions extracted from flow_builder.py: string sanitization,
+Pin reference formatting, node index building, connection traversal, etc.
 """
 
 from typing import Dict, List, Optional, Tuple, Set, Any, Iterable
@@ -11,25 +11,25 @@ from uasset_read.core.utils import normalize_hex_guid as _normalize_pin_id
 
 
 # ============================================================================
-# 字符串清理
+# String sanitization
 # ============================================================================
 
 def _sanitize_string(value: str) -> str:
-    """清理字符串中的二进制/null 字符，确保 JSON 安全输出。
+    """Sanitize binary/null characters from strings to ensure JSON-safe output.
 
-    保留 \n \r \t 等常用控制字符，移除 null 和其他控制字符。
+    Preserves common control characters like \n \r \t, removes null and other control characters.
     """
     if not value:
         return value
-    # 移除 null 字符
+    # Remove null characters
     value = value.replace('\x00', '')
-    # 移除其他控制字符（保留 \n \r \t）
+    # Remove other control characters (preserve \n \r \t)
     value = ''.join(c for c in value if c >= ' ' or c in '\n\r\t')
     return value
 
 
 def _sanitize_pin_dict(pin_dict: dict) -> dict:
-    """清理 pin dict 中所有字符串字段。"""
+    """Sanitize all string fields in a pin dict."""
     sanitized = {}
     for key, val in pin_dict.items():
         if isinstance(val, str):
@@ -42,21 +42,21 @@ def _sanitize_pin_dict(pin_dict: dict) -> dict:
 
 
 def _sanitize_recursive(obj, visited=None):
-    """递归清理列表/字典中的字符串。
+    """Recursively sanitize strings in lists/dictionaries.
 
     Args:
-        obj: 要清理的对象
-        visited: 已访问对象的 id 集合，用于防止循环引用导致的无限递归
+        obj: object to sanitize
+        visited: set of visited object ids, used to prevent infinite recursion from circular references
     """
-    # 初始化 visited 集合（仅在顶层调用时）
+    # Initialize visited set (only on top-level call)
     if visited is None:
         visited = set()
 
-    # 对可变对象检查循环引用
+    # Check circular references for mutable objects
     if isinstance(obj, (list, dict)):
         obj_id = id(obj)
         if obj_id in visited:
-            # 检测到循环引用，返回安全的替代值
+            # Circular reference detected, return safe replacement value
             if isinstance(obj, dict):
                 return {}
             return []
@@ -81,14 +81,14 @@ def _sanitize_recursive(obj, visited=None):
 
 
 # ============================================================================
-# Pin 引用与 GUID 工具
+# Pin reference and GUID utilities
 # ============================================================================
 
 def _pin_ref_guid(ref: object) -> str | None:
-    """从 LinkedTo/PinReference 结构中提取 pin guid（归一化为 32 字符小写 hex）。
+    """Extract pin guid from LinkedTo/PinReference structures (normalized to 32-char lowercase hex).
 
-    PinReference GUID 原始格式为 8-4-4-4-12 带 dash（_read_guid 输出），
-    而归一化后与 pin_id（.hex() 输出）格式一致，确保连接查找匹配。
+    PinReference GUID raw format is 8-4-4-4-12 with dashes (_read_guid output),
+    and normalization aligns with pin_id (.hex() output) format, ensuring connection lookup matches.
     """
     raw_guid: str | None = None
     if isinstance(ref, dict):
@@ -101,7 +101,7 @@ def _pin_ref_guid(ref: object) -> str | None:
     if not raw_guid:
         return None
 
-    # 归一化：移除 dash，转小写
+    # Normalize: remove dashes, convert to lowercase
     return _normalize_pin_id(raw_guid)
 
 
@@ -129,29 +129,29 @@ def _is_exec_pin(pin: UEdGraphPin) -> bool:
 
 
 def _is_valid_pin_guid(guid: object) -> bool:
-    """验证 Pin GUID 有效性。
+    """Validate Pin GUID validity.
 
-    支持两种格式：
-    - 32 字符纯 hex（pin_id 格式）
-    - 36 字符带 dash hex（PinReference 格式，如 A1B2C3D4-E5F6-...）
-    - "pin-" 前缀（测试 fixture）
-    - 全零 GUID（ParentPin 空引用）
+    Supports multiple formats:
+    - 32-char pure hex (pin_id format)
+    - 36-char hex with dashes (PinReference format, e.g. A1B2C3D4-E5F6-...)
+    - "pin-" prefix (test fixture)
+    - all-zero GUID (ParentPin empty reference)
     """
     if not isinstance(guid, str) or not guid:
         return False
 
-    # 测试 fixture 兼容
+    # Test fixture compatibility
     if guid.startswith("pin-"):
         return True
 
-    # 归一化：移除 dash，转小写
+    # Normalize: remove dashes, convert to lowercase
     normalized = _normalize_pin_id(guid)
 
-    # 全零 GUID（有效空引用）
+    # All-zero GUID (valid empty reference)
     if normalized == "0" * 32:
         return True
 
-    # 验证 32 字符 hex（normalized 为小写）
+    # Validate 32-char hex (normalized is lowercase)
     if len(normalized) != 32:
         return False
 
@@ -159,13 +159,13 @@ def _is_valid_pin_guid(guid: object) -> bool:
 
 
 # ============================================================================
-# 节点名称与索引
+# Node names and indices
 # ============================================================================
 
 def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
-    """从节点派生用户友好的节点名（D-19-02）。
+    """Derive a user-friendly node name from the node (D-19-02).
 
-    策略：使用 f"{class_name}_{idx}" 格式，避免同名节点冲突。
+    Strategy: use f"{class_name}_{idx}" format to avoid conflicts with same-named nodes.
     """
     return f"{node.class_name}_{idx}"
 
@@ -176,16 +176,16 @@ def format_pin_ref(
     node_name_lookup: Dict[str, str],
     mode: str = "name"
 ) -> Dict:
-    """格式化 Pin 引用（D-19-02, D-19-05）。
+    """Format a Pin reference (D-19-02, D-19-05).
 
     Args:
-        node_guid: 节点 GUID
-        pin_name: Pin 名称
-        node_name_lookup: node_guid → node_name 查找表
-        mode: "name" 或 "guid" 模式（默认 name）
+        node_guid: node GUID
+        pin_name: Pin name
+        node_name_lookup: node_guid -> node_name lookup table
+        mode: "name" or "guid" mode (default "name")
 
     Returns:
-        Dict: 格式化后的 Pin 引用对象
+        Dict: formatted Pin reference object
     """
     if mode == "name":
         if node_guid in node_name_lookup:
@@ -240,16 +240,16 @@ def _format_blueprint_pin_dto(
 
 
 # ============================================================================
-# 图索引构建
+# Graph index building
 # ============================================================================
 
 def _build_graph_indexes(
     graph: UEdGraph,
 ) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, UEdGraphNode], Dict[str, UEdGraphPin]]:
-    """构建节点和 Pin 查找表。
+    """Build node and Pin lookup tables.
 
-    Pin key 统一归一化为小写 hex（与 _pin_ref_guid 输出格式对齐），
-    避免大小写不一致导致的连接查找失败。
+    Pin keys are uniformly normalized to lowercase hex (aligned with _pin_ref_guid output format),
+    preventing connection lookup failures due to case inconsistency.
     """
     pin_lookup: Dict[str, Tuple[str, str]] = {}
     node_lookup: Dict[str, UEdGraphNode] = {}
@@ -264,32 +264,32 @@ def _build_graph_indexes(
 
 
 # ============================================================================
-# 合成边配置（可配置的游戏特定映射表）
+# Synthetic edge configuration (configurable game-specific mapping tables)
 # ============================================================================
 
-# 默认禁用游戏特定合成边（需要显式配置才启用）
-# 配置格式：
+# Game-specific synthetic edges disabled by default (require explicit configuration to enable)
+# Configuration format:
 #   EXEC_PIN_MAPPING: { (source_class, action_name): { target_func: exec_pin_name } }
 #   PARAM_EDGE_MAPPING: { target_func: [(source_pin, target_pin)] }
 
 EXEC_PIN_MAPPING: Dict[str, Dict[str, str]] = {}
-"""EnhancedInputAction/Event → exec pin 名称映射。
-默认为空（不启用游戏特定映射）。"""
+"""EnhancedInputAction/Event -> exec pin name mapping.
+Default is empty (game-specific mapping not enabled)."""
 
 PARAM_EDGE_MAPPING: Dict[str, List[Tuple[str, str]]] = {}
-"""函数参数边映射：{ target_func: [(source_pin_name, target_pin_name)] }。
-默认为空（不启用游戏特定映射）。"""
+"""Function parameter edge mapping: { target_func: [(source_pin_name, target_pin_name)] }.
+Default is empty (game-specific mapping not enabled)."""
 
 
 def configure_synthetic_edges(
     exec_mapping: Optional[Dict[str, Dict[str, str]]] = None,
     param_mapping: Optional[Dict[str, List[Tuple[str, str]]]] = None,
 ) -> None:
-    """配置合成边映射表。
+    """Configure synthetic edge mapping tables.
 
     Args:
-        exec_mapping: EnhancedInputAction → exec pin 名称映射
-        param_mapping: 函数参数边映射
+        exec_mapping: EnhancedInputAction -> exec pin name mapping
+        param_mapping: function parameter edge mapping
     """
     global EXEC_PIN_MAPPING, PARAM_EDGE_MAPPING
     if exec_mapping is not None:
@@ -319,9 +319,9 @@ def _enhanced_input_action_name(node: Optional[UEdGraphNode]) -> str:
 
 
 def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGraphNode, target_pin: UEdGraphPin) -> str:
-    """当目标 LinkedTo 只保留 owning_node 但源 pin 未解析时，推断可读源 pin 名。
+    """Infer a readable source pin name when target LinkedTo only retains owning_node but source pin is unresolved.
 
-    使用配置的 EXEC_PIN_MAPPING 查找映射，而非硬编码游戏特定值。
+    Uses configured EXEC_PIN_MAPPING for lookup instead of hardcoding game-specific values.
     """
     target_category = target_pin.pin_type.pin_category if target_pin.pin_type else ""
     target_func = _node_member_name(target_node)
@@ -331,26 +331,26 @@ def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGrap
             return "then"
         if source_node.class_name == "K2Node_EnhancedInputAction":
             action = _enhanced_input_action_name(source_node)
-            # 查找配置的 exec pin 映射
+            # Look up configured exec pin mapping
             mapping_key = f"{source_node.class_name}:{action}"
             if mapping_key in EXEC_PIN_MAPPING:
                 pin_map = EXEC_PIN_MAPPING[mapping_key]
                 if target_func in pin_map:
                     return pin_map[target_func]
-            # 默认行为
+            # Default behavior
             return "Triggered"
 
     return "Output"
 
 
 def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphNode) -> List[Tuple[str, str]]:
-    """为错位导致缺失的参数 pin 补充语义数据边名称。
+    """Supplement semantic data edge names for parameter pins missing due to misalignment.
 
-    使用配置的 PARAM_EDGE_MAPPING 查找映射，而非硬编码游戏特定值。
+    Uses configured PARAM_EDGE_MAPPING for lookup instead of hardcoding game-specific values.
     """
     target_func = _node_member_name(target_node)
 
-    # 查找配置的参数边映射
+    # Look up configured parameter edge mapping
     if target_func in PARAM_EDGE_MAPPING:
         return PARAM_EDGE_MAPPING[target_func]
 
@@ -360,11 +360,12 @@ def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphN
 def _iter_normalized_edges(
     graph: UEdGraph,
 ) -> Iterable[Dict[str, Any]]:
-    """遍历归一化连接边。
+    """Iterate normalized connection edges.
 
-    UE 文本导出的 LinkedTo 在 input/output 两端都可能出现。旧实现只从
-    output pin 正向扫描，会漏掉真实资产中大量记录在 input pin 上的连接。
-    此 helper 统一输出 from(output) -> to(input)，保留 raw 方向用于诊断。
+    UE text-exported LinkedTo may appear on both input/output sides. The old implementation
+    only scanned forward from output pins, missing many connections recorded on input pins
+    in real assets. This helper uniformly outputs from(output) -> to(input), preserving
+    raw direction for diagnostics.
     """
     pin_lookup, node_lookup, pin_object_lookup = _build_graph_indexes(graph)
     export_name_lookup: Dict[str, UEdGraphNode] = {}
@@ -468,9 +469,9 @@ def _iter_normalized_edges(
                             yield from _emit_synthetic_params(edge["from_node"], edge["to_node"])
                     continue
 
-                # Fallback：PinId 没解析出来时，用 LinkedTo 的 owning_node 还原
-                # from owning node -> current input pin。这覆盖 UE 文本参考中的
-                # Touch/EnhancedInput 事件边和部分参数边。
+                # Fallback: when PinId is not resolved, reconstruct from LinkedTo's owning_node
+                # from owning node -> current input pin. This covers
+                # Touch/EnhancedInput event edges and some parameter edges in UE text references.
                 if pin.direction != 0 or not isinstance(ref, dict):
                     continue
                 owning_node_name = ref.get("owning_node")
@@ -501,7 +502,7 @@ def _iter_normalized_edges(
 def _build_normalized_edge_indexes(
     graph: UEdGraph,
 ) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
-    """返回 from_pin_id/to_pin_id 两种方向索引。"""
+    """Return from_pin_id/to_pin_id bidirectional indices."""
     by_from: Dict[str, List[Dict[str, Any]]] = {}
     by_to: Dict[str, List[Dict[str, Any]]] = {}
     for edge in _iter_normalized_edges(graph):

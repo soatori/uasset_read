@@ -1,4 +1,4 @@
-"""Property data classes — PropertyTag, PropertyValue and advanced property containers."""
+﻿"""Property data classes — PropertyTag, PropertyValue and advanced property containers."""
 
 from __future__ import annotations
 
@@ -30,37 +30,37 @@ class PropertyTypeName:
 
 @dataclass
 class PropertyTag:
-    """PropertyTag 结构（PROP-01）。来自 PropertyTag.h lines 37-105."""
-    name: str                         # 属性名（FName）
-    type: str                         # 类型名字符串（如 "IntProperty")
-    size: int                         # 序列化数据大小（字节）
-    array_index: int = 0              # 数组元素索引（默认 0）
-    flags: int = 0                    # EPropertyTagFlags 标志位
-    property_guid: bytes | None = None  # 16 bytes GUID（HasPropertyGuid 时）
-    bool_val: int = 0                 # BoolProperty 值（BoolTrue 标志位）
+    """PropertyTag structure (PROP-01). From PropertyTag.h lines 37-105."""
+    name: str                         # Property name (FName)
+    type: str                         # Type name string (e.g. "IntProperty")
+    size: int                         # Serialized data size (bytes)
+    array_index: int = 0              # Array element index (default 0)
+    flags: int = 0                    # EPropertyTagFlags bit flags
+    property_guid: bytes | None = None  # 16 bytes GUID (when HasPropertyGuid)
+    bool_val: int = 0                 # BoolProperty value (BoolTrue flag)
     override_operation: int | None = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: int | None = None  # bExperimentalOverridableLogic (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
-    type_name: PropertyTypeName | None = None  # 递归 FPropertyTypeName
-    tag_data: Any | None = None     # 映射系统提供的 PropertyType
-    enum_type: str | None = None   # ByteProperty/EnumProperty 的枚举类型（从 FPropertyTypeName 提取）
-    type_parts: list[tuple[str, int]] = field(default_factory=list)  # 完整 FPropertyTypeName 节点
-    struct_type: str | None = None  # StructProperty 的结构体类型名
-    inner_type: str | None = None   # Array/Set 内层类型
-    inner_type_struct: str | None = None  # Array/Set 内层 StructProperty 的结构体类型
-    key_type: str | None = None     # Map key 类型
-    key_type_struct: str | None = None  # Map key StructProperty 的结构体类型
-    value_type: str | None = None   # Map value 类型
-    value_type_struct: str | None = None  # Map value StructProperty 的结构体类型
-    tag_start_offset: int | None = None  # PropertyTag 开始读取位置（archive.tell()）
-    value_start_offset: int | None = None  # Property value 开始位置（tag 读取后）
-    value_end_offset: int | None = None  # Property value 期望结束位置（value_start + size）
+    type_name: PropertyTypeName | None = None  # Recursive FPropertyTypeName
+    tag_data: Any | None = None     # PropertyType from mapping system
+    enum_type: str | None = None   # ByteProperty/EnumProperty enum type (extracted from FPropertyTypeName)
+    type_parts: list[tuple[str, int]] = field(default_factory=list)  # Complete FPropertyTypeName nodes
+    struct_type: str | None = None  # StructProperty struct type name
+    inner_type: str | None = None   # Array/Set inner type
+    inner_type_struct: str | None = None  # Array/Set inner StructProperty struct type
+    key_type: str | None = None     # Map key type
+    key_type_struct: str | None = None  # Map key StructProperty struct type
+    value_type: str | None = None   # Map value type
+    value_type_struct: str | None = None  # Map value StructProperty struct type
+    tag_start_offset: int | None = None  # PropertyTag start read position (archive.tell())
+    value_start_offset: int | None = None  # Property value start position (after tag read)
+    value_end_offset: int | None = None  # Property value expected end position (value_start + size)
     size_exceeded: bool = False  # True when tag.size exceeds remaining bytes (tolerant mode)
 
 
 @dataclass
 class PropertyValue:
-    """属性值容器（D-08/D-09）。"""
+    """Property value container (D-08/D-09)."""
     name: str
     type: str
     value: Any = None
@@ -69,29 +69,30 @@ class PropertyValue:
 
 @dataclass
 class SoftObjectPathValue:
-    """统一 SoftObject/LazyObject/AssetObject 解析结果。"""
+    """Unified SoftObject/LazyObject/AssetObject parse result."""
     raw_kind: str
     asset_path: str = ""
     sub_path: str = ""
     package_index: int | None = None
     guid: str | None = None
     property_type: str = "SoftObjectPath"
-    index: int | None = None  # SoftObjectPathList 索引（UE5.7+）
-    error: str | None = None  # 越界等诊断信息
+    index: int | None = None  # SoftObjectPathList index (UE5.7+)
+    error: str | None = None  # Out-of-bounds and other diagnostic info
 
 
 class AdvancedPropertyValue:
-    """高级属性值基类（D-07a）。所有高级属性 dataclass 继承此基类。
+    """Advanced property value base class (D-07a). All advanced property dataclasses inherit this.
 
-    Note: 非 dataclass — property_type 字段定义在各子类中，
-    直接设置默认值避免 dataclass 继承时的字段顺序问题（CR-13）。
+    Note: Not a dataclass — property_type field is defined in each subclass,
+    with default values set directly to avoid field ordering issues in dataclass
+    inheritance (CR-13).
     """
     pass
 
 
 @dataclass
 class StructValue(AdvancedPropertyValue):
-    """StructProperty 值容器（D-01a）。"""
+    """StructProperty value container (D-01a)."""
     struct_type: str
     fields: dict[str, Any] = field(default_factory=dict)
     raw_size: int | None = None
@@ -101,7 +102,7 @@ class StructValue(AdvancedPropertyValue):
 
 @dataclass
 class MapValue(AdvancedPropertyValue):
-    """MapProperty 值容器（D-02a）。"""
+    """MapProperty value container (D-02a)."""
     key_type: str
     value_type: str
     entries: list[dict[str, Any]] = field(default_factory=list)
@@ -110,7 +111,7 @@ class MapValue(AdvancedPropertyValue):
 
 @dataclass
 class SetValue(AdvancedPropertyValue):
-    """SetProperty 值容器（D-03a）。"""
+    """SetProperty value container (D-03a)."""
     element_type: str
     elements: list[Any] = field(default_factory=list)
     property_type: str = "SetProperty"
@@ -118,7 +119,7 @@ class SetValue(AdvancedPropertyValue):
 
 @dataclass
 class EnumValue(AdvancedPropertyValue):
-    """EnumProperty 值容器（D-04a）。"""
+    """EnumProperty value container (D-04a)."""
     enum_type: str
     value_name: str
     property_type: str = "EnumProperty"
@@ -126,7 +127,7 @@ class EnumValue(AdvancedPropertyValue):
 
 @dataclass
 class TextValue(AdvancedPropertyValue):
-    """TextProperty 值容器（D-05a）。"""
+    """TextProperty value container (D-05a)."""
     namespace: str = ""
     key: str = ""
     source_string: str = ""
@@ -135,7 +136,7 @@ class TextValue(AdvancedPropertyValue):
 
 @dataclass
 class DelegateValue(AdvancedPropertyValue):
-    """DelegateProperty 值容器（D-06a）。"""
+    """DelegateProperty value container (D-06a)."""
     object_ref: int
     function_name: str
     property_type: str = "DelegateProperty"

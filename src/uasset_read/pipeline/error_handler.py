@@ -21,10 +21,10 @@ def _handle_parse_error(
     path: str,
     tolerant: bool,
 ) -> None:
-    """统一处理解析异常（VersionError / ParseError / MemoryError / 其他）。
+    """Unified handling of parse exceptions (VersionError / ParseError / MemoryError / Other).
 
-    注意：错误记录统一通过 _record_parse_stage_error 完成（含去重），
-    不再额外调用 result.errors.append，避免重复记录。
+    Note: Error recording is done uniformly via _record_parse_stage_error (with deduplication),
+    and result.errors.append is no longer called separately to avoid duplicate recording.
     """
 
     if isinstance(exc, MemoryLimitExceeded):

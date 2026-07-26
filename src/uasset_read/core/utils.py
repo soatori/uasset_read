@@ -1,15 +1,15 @@
-"""核心工具函数"""
+"""Core utility functions."""
 
 
 def safe_str(value: object, default: str = "") -> str:
-    """安全转换为字符串"""
+    """Safely convert to string."""
     if value is None:
         return default
     return str(value)
 
 
 def safe_int(value: object, default: int = 0) -> int:
-    """安全转换为整数，仅接受 int 和 str 类型"""
+    """Safely convert to integer, only accepts int and str types."""
     if value is None:
         return default
     if isinstance(value, int):
@@ -23,7 +23,7 @@ def safe_int(value: object, default: int = 0) -> int:
 
 
 def normalize_hex_guid(guid_str: str | None) -> str | None:
-    """归一化十六进制 GUID 为小写无连字符格式"""
+    """Normalize hexadecimal GUID to lowercase hyphen-free format."""
     if not guid_str:
         return guid_str
     return guid_str.replace("-", "").lower()

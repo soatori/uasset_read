@@ -1,7 +1,7 @@
 """
-Object Resources — ObjectImport, ObjectExport, PackageIndex 及相关读取函数。
+Object Resources — ObjectImport, ObjectExport, PackageIndex and related read functions.
 
-从 uasset_read.py 提取（第 940-3048 行核心部分）。
+Extracted from uasset_read.py (core lines 940-3048).
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from uasset_read.exceptions import ParseError
 
 @dataclass
 class PackageIndex:
-    """FPackageIndex 编码。Index > 0: Export, Index < 0: Import, Index = 0: null"""
+    """FPackageIndex encoding. Index > 0: Export, Index < 0: Import, Index = 0: null"""
     index: int
 
     @property
@@ -55,7 +55,7 @@ class PackageIndex:
 
 @dataclass
 class ObjectImport:
-    """FObjectImport 导入表条目。"""
+    """FObjectImport import table entry."""
     class_package: str
     class_name: str
     outer_index: PackageIndex
@@ -66,7 +66,7 @@ class ObjectImport:
 
 @dataclass
 class ObjectExport:
-    """FObjectExport 导出表条目。"""
+    """FObjectExport export table entry."""
     class_index: PackageIndex
     super_index: PackageIndex
     outer_index: PackageIndex
@@ -88,16 +88,16 @@ class ObjectExport:
 
     @property
     def script_serialization_size(self) -> int:
-        """脚本序列化区块大小（end_offset - start_offset）。"""
+        """Script serialization block size (end_offset - start_offset)."""
         return self.script_serialization_end_offset - self.script_serialization_start_offset
 
     @property
     def has_script_serialization(self) -> bool:
-        """是否存在脚本序列化区块。"""
+        """Whether script serialization block exists."""
         return self.script_serialization_end_offset > self.script_serialization_start_offset
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
-    guid: str = ""  # 16 bytes GUID (版本 < 1005 时存在)
+    guid: str = ""  # 16 bytes GUID (exists when version < 1005)
 
 
 def read_import_map(
@@ -105,12 +105,12 @@ def read_import_map(
     summary: PackageFileSummary,
     name_map: List[str]
 ) -> List[ObjectImport]:
-    """读取导入表。"""
-    # CR-05: 验证 import_count 范围
+    """Read import table."""
+    # CR-05: validate import_count range
     if summary.import_count < 0:
-        raise ParseError(f"负数导入计数: {summary.import_count}")
+        raise ParseError(f"Negative import count: {summary.import_count}")
     if summary.import_count > MAX_IMPORT_COUNT:
-        raise ParseError(f"导入计数 {summary.import_count} 超过最大值 {MAX_IMPORT_COUNT}")
+        raise ParseError(f"Import count {summary.import_count} exceeds maximum {MAX_IMPORT_COUNT}")
 
     archive.seek(summary.import_offset)
 
@@ -146,7 +146,7 @@ def read_import_map(
 
 
 def build_imports_list(import_map: List[ObjectImport]) -> List[Dict]:
-    """构建 imports 依赖列表（去重，保持顺序）。"""
+    """Build imports dependency list (deduplicated, order preserved)."""
     seen = set()
     imports = []
     for imp in import_map:
@@ -166,7 +166,7 @@ def read_soft_object_paths(
     summary: PackageFileSummary,
     name_map: List[str]
 ) -> List[Dict]:
-    """读取 SoftObjectPaths 数组（UE5.7 专用）。"""
+    """Read SoftObjectPaths array (UE5.7 specific)."""
     if summary.soft_object_paths_count <= 0 or summary.soft_object_paths_offset <= 0:
         return []
 
@@ -189,12 +189,12 @@ def read_export_map(
     summary: PackageFileSummary,
     name_map: List[str]
 ) -> List[ObjectExport]:
-    """读取导出表。"""
-    # CR-05: 验证 export_count 范围
+    """Read export table."""
+    # CR-05: validate export_count range
     if summary.export_count < 0:
-        raise ParseError(f"负数导出计数: {summary.export_count}")
+        raise ParseError(f"Negative export count: {summary.export_count}")
     if summary.export_count > MAX_EXPORT_COUNT:
-        raise ParseError(f"导出计数 {summary.export_count} 超过最大值 {MAX_EXPORT_COUNT}")
+        raise ParseError(f"Export count {summary.export_count} exceeds maximum {MAX_EXPORT_COUNT}")
 
     archive.seek(summary.export_offset)
 
@@ -226,18 +226,18 @@ def read_export_map(
                 serial_size = archive.read_i64(f"Export[{export_idx}].SerialSize")
                 serial_offset = archive.read_i64(f"Export[{export_idx}].SerialOffset")
 
-            # CR-05: 验证 serial_size/serial_offset 非负
-            # Tolerant: 负数时设为 0 并记录 warning，后续属性解析会因 size=0 被跳过
+            # CR-05: validate serial_size/serial_offset non-negative
+            # Tolerant: set to 0 and log warning on negative values, subsequent property parsing will be skipped due to size=0
             if serial_size < 0:
                 logger.debug(
-                    "Export #%d serial_size 为负数: %d, 设为 0",
+                    "Export #%d serial_size is negative: %d, set to 0",
                     export_idx, serial_size,
                 )
                 serial_size = 0
 
             if serial_offset < 0:
                 logger.debug(
-                    "Export #%d serial_offset 为负数: %d, 跳过该 export",
+                    "Export #%d serial_offset is negative: %d, skipping export",
                     export_idx, serial_offset,
                 )
                 serial_offset = 0
@@ -294,16 +294,16 @@ def read_export_map(
             ):
                 script_serialization_start_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationStartOffset")
                 script_serialization_end_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationEndOffset")
-                # CR-05: 验证非负（Tolerant: 负数时设为 0 并记录 warning）
+                # CR-05: validate non-negative (Tolerant: set to 0 and log warning on negative values)
                 if script_serialization_start_offset < 0:
                     logger.debug(
-                        "Export #%d ScriptSerializationStartOffset 为负数: %d, 设为 0",
+                        "Export #%d ScriptSerializationStartOffset is negative: %d, set to 0",
                         export_idx, script_serialization_start_offset,
                     )
                     script_serialization_start_offset = 0
                 if script_serialization_end_offset < 0:
                     logger.debug(
-                        "Export #%d ScriptSerializationEndOffset 为负数: %d, 设为 0",
+                        "Export #%d ScriptSerializationEndOffset is negative: %d, set to 0",
                         export_idx, script_serialization_end_offset,
                     )
                     script_serialization_end_offset = 0
@@ -326,9 +326,9 @@ def read_export_map(
                 guid=package_guid,
             ))
         except (struct.error, OSError, ValueError, AttributeError) as e:
-            # 容错模式：记录错误并跳过失败的导出，保留已成功解析的导出
+            # Tolerant mode: log error and skip failed export, keep successfully parsed exports
             logger.warning(
-                "导出 #%d 解析失败（%s），跳过继续解析后续导出",
+                "Export #%d parse failed (%s), skipping and continuing with subsequent exports",
                 export_idx, str(e),
             )
     return export_map
@@ -339,7 +339,7 @@ def get_asset_class(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> Optional[str]:
-    """从导出条目识别资产类型。"""
+    """Identify asset type from export entry."""
     if export.class_index.is_import:
         import_idx = export.class_index.to_import_index()
         if 0 <= import_idx < len(import_map):
@@ -356,7 +356,7 @@ def resolve_class_name(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> Optional[str]:
-    """从 PackageIndex 解析类名。"""
+    """Resolve class name from PackageIndex."""
     if class_index.is_import:
         import_idx = class_index.to_import_index()
         if 0 <= import_idx < len(import_map):
@@ -373,7 +373,7 @@ def detect_blueprint(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> bool:
-    """检测导出是否为蓝图资产。"""
+    """Detect whether export is a Blueprint asset."""
     class_name = get_asset_class(export, import_map, export_map)
     return class_name is not None and "Blueprint" in class_name
 
@@ -383,10 +383,10 @@ def detect_blueprint_generated_class(
     import_map: List[ObjectImport],
     export_map: List[ObjectExport]
 ) -> bool:
-    """检测导出是否为 BlueprintGeneratedClass。
+    """Detect whether export is a BlueprintGeneratedClass.
 
-    检查 import.object_name 而非 class_name，
-    因为 BPGC 的 import.class_name 为 "Class"，object_name 为 "BlueprintGeneratedClass"。
+    Checks import.object_name rather than class_name,
+    because BPGC's import.class_name is "Class" and object_name is "BlueprintGeneratedClass".
     """
     if export.class_index.is_import:
         idx = export.class_index.to_import_index()
@@ -401,7 +401,7 @@ def validate_package_index(
     export_map: List[ObjectExport],
     context: str = ""
 ) -> Optional[str]:
-    """PackageIndex 完整验证。"""
+    """PackageIndex full validation."""
     if index.is_null:
         return None
     if index.is_import:
@@ -420,7 +420,7 @@ def resolve_class_name_with_linker(
     class_index: PackageIndex,
     linker: "PackageLinker",
 ) -> Optional[str]:
-    """从 PackageIndex 解析类名（通过 linker）。"""
+    """Resolve class name from PackageIndex (via linker)."""
     if class_index.is_null:
         return None
     inst = linker.resolve_package_index(class_index)
@@ -431,7 +431,7 @@ def get_asset_class_with_linker(
     export: ObjectExport,
     linker: "PackageLinker",
 ) -> Optional[str]:
-    """从导出条目识别资产类型（通过 linker）。"""
+    """Identify asset type from export entry (via linker)."""
     inst = linker.resolve_package_index(export.class_index)
     return inst.object_name if inst else None
 
@@ -440,7 +440,7 @@ def detect_blueprint_with_linker(
     export: ObjectExport,
     linker: "PackageLinker",
 ) -> bool:
-    """检测导出是否为蓝图资产（通过 linker）。"""
+    """Detect whether export is a Blueprint asset (via linker)."""
     cls = get_asset_class_with_linker(export, linker)
     return cls is not None and "Blueprint" in cls
 
@@ -450,7 +450,7 @@ def resolve_parent_class_with_linker(
     linker: "PackageLinker",
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Resolve ParentClass FPackageIndex to object name (通过 linker)。
+    Resolve ParentClass FPackageIndex to object name (via linker).
 
     Returns:
         Tuple of (resolved_name, warning_if_any)
@@ -471,10 +471,10 @@ def find_main_blueprint_generated_class(
     asset_name: str,
 ) -> Optional[ObjectExport]:
     """
-    查找主 BlueprintGeneratedClass 导出（等价迁移 uasset_read.py §3063-3092）。
+    Find the main BlueprintGeneratedClass export (equivalent migration from uasset_read.py section 3063-3092).
 
-    使用 object_name 匹配 + serial_size 最大原则。
-    主 BPGC 的 object_name 通常为 asset_name + "_C"。
+    Uses object_name matching + serial_size maximum principle.
+    The main BPGC's object_name is typically asset_name + "_C".
     """
     candidates = []
     for export in export_map:

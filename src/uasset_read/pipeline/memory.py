@@ -1,4 +1,4 @@
-"""parse_memory.py — 内存清理和资源释放。"""
+"""parse_memory.py — Memory cleanup and resource release."""
 from __future__ import annotations
 
 import logging
@@ -7,13 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 def _cleanup_parse_memory(result) -> None:
-    """统一内存清理：打破循环引用、重置全局缓存。
+    """Unified memory cleanup: break circular references, reset global caches.
 
-    在 parse_package / parse_package_lazy 的 finally 块中调用，
-    防止批量解析时 UObjectInstance ↔ linker 循环引用导致的内存泄漏，
-    以及全局缓存（ClassHandlerRegistry）无界增长。
+    Called in the finally block of parse_package / parse_package_lazy to prevent
+    memory leaks from UObjectInstance <-> linker circular references during batch parsing,
+    and unbounded growth of global caches (ClassHandlerRegistry).
     """
-    # 打破 UObjectInstance ↔ linker 循环引用
+    # Break UObjectInstance <-> linker circular references
     if result is not None and result.linker:
         try:
             if hasattr(result.linker, '_export_objects'):
@@ -27,14 +27,14 @@ def _cleanup_parse_memory(result) -> None:
             result.linker._root_objects.clear()
             result.linker._preload_cache.clear()
             result.linker._archive = None
-            logger.debug("linker 循环引用已打破，导出/导入对象已清理")
+            logger.debug("linker circular references broken, export/import objects cleared")
         except Exception as e:
-            logger.debug("linker 循环引用清理异常，已忽略: %s", e)
+            logger.debug("linker circular reference cleanup exception, ignored: %s", e)
 
-    # 重置全局 class_registry 缓存
+    # Reset global class_registry cache
     try:
         from uasset_read.parsers.class_registry import get_class_registry
         get_class_registry().reset_cache()
-        logger.debug("class_registry.reset_cache() 已调用")
+        logger.debug("class_registry.reset_cache() called")
     except Exception as e:
-        logger.debug("class_registry.reset_cache() 异常，已忽略: %s", e)
+        logger.debug("class_registry.reset_cache() exception, ignored: %s", e)

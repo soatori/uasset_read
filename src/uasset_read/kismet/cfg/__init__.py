@@ -1,6 +1,6 @@
-"""CFG (Control Flow Graph) 基础设施。
+"""CFG (Control Flow Graph) infrastructure.
 
-提供基本块构建、支配树计算、区域分解、结构化语句输出功能。
+Provides basic block construction, dominator tree computation, region decomposition, and structured statement output.
 """
 
 from uasset_read.kismet.cfg.build import build_cfg

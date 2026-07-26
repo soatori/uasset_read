@@ -1,12 +1,12 @@
 """
-C++ 头文件格式化模块 — CppClassIR → UE 标准 .h 文本。
+C++ header file formatting module — CppClassIR -> UE standard .h text.
 
-Per D-05: 完整 UE 头文件模板从 JSON IR。
-Per T-056-05: 转义字符串值中的注释。
-Per T-056-06: 验证类名匹配 UE 命名约定。
+Per D-05: Complete UE header file template from JSON IR.
+Per T-056-05: Escape comments in string values.
+Per T-056-06: Validate class name matches UE naming convention.
 
-导出：
-    format_cpp_header: CppClassIR → .h 文本转换函数
+Exports:
+    format_cpp_header: CppClassIR -> .h text conversion function
 """
 from __future__ import annotations
 
@@ -24,106 +24,106 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# 安全相关常量（T-056-05, T-056-06）
+# Security-related constants (T-056-05, T-056-06)
 # ============================================================================
 
-# UE 类名允许的模式：字母数字和下划线，以字母或下划线开头
+# Allowed UE class name pattern: alphanumeric and underscore, starting with letter or underscore
 UE_CLASS_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
 # ============================================================================
-# 核心格式化函数
+# Core formatting functions
 # ============================================================================
 
 def format_cpp_header(ir: CppClassIR) -> str:
-    """将 CppClassIR 转换为标准 UE .h 头文件文本。
+    """Convert CppClassIR to standard UE .h header file text.
 
-    Per D-05: 输出格式包含：
-    1. #pragma once（如果 header_meta.pragma_once）
-    2. #include "CoreMinimal.h"（始终添加）
-    3. header_meta.includes 的 #include 行（排序）
-    4. header_meta.generated_include 的 #include（始终最后）
-    5. UCLASS() 宏
-    6. class 声明和继承
+    Per D-05: Output format includes:
+    1. #pragma once (if header_meta.pragma_once)
+    2. #include "CoreMinimal.h" (always added)
+    3. #include lines from header_meta.includes (sorted)
+    4. #include from header_meta.generated_include (always last)
+    5. UCLASS() macro
+    6. class declaration and inheritance
     7. GENERATED_BODY()
-    8. public: 构造函数声明
-    9. protected: 属性声明
+    8. public: constructor declaration
+    9. protected: property declarations
 
     Args:
-        ir: CppClassIR 数据模型
+        ir: CppClassIR data model
 
     Returns:
-        标准 UE .h 头文件文本
+        Standard UE .h header file text
     """
-    # T-056-06: 验证并清理类名
+    # T-056-06: validate and sanitize class name
     class_name = _sanitize_class_name(ir.name)
     parent_class = _sanitize_class_name(ir.parent_class)
 
-    # 构建输出行
+    # Build output lines
     lines: List[str] = []
 
     # 1. #pragma once
     if ir.header_meta.pragma_once:
         lines.append("#pragma once")
 
-    # 2. 空行
+    # 2. blank line
     lines.append("")
 
-    # 3. #include "CoreMinimal.h"（UE 约定，始终添加）
+    # 3. #include "CoreMinimal.h" (UE convention, always added)
     lines.append('#include "CoreMinimal.h"')
 
-    # 4. header_meta.includes（去重 + 排序）
+    # 4. header_meta.includes (deduplicated + sorted)
     includes = sorted(set(ir.header_meta.includes))
     for inc in includes:
         lines.append(f'#include {inc}')
 
-    # 5. generated_include（始终最后一个 include）
+    # 5. generated_include (always the last include)
     if ir.header_meta.generated_include:
         generated_inc = _sanitize_generated_include(class_name)
         lines.append(f'#include {generated_inc}')
 
-    # 6. 空行
+    # 6. blank line
     lines.append("")
 
-    # 7. UCLASS 宏（蓝图生成的类默认 Blueprintable）
+    # 7. UCLASS macro (Blueprint-generated classes default to Blueprintable)
     lines.append("UCLASS(Blueprintable)")
 
-    # 8. class 声明
+    # 8. class declaration
     lines.append(f"class {class_name} : public {parent_class}")
     lines.append("{")
     lines.append("    GENERATED_BODY()")
 
-    # 9. 空行
+    # 9. blank line
     lines.append("")
 
-    # 10. public: 构造函数声明
+    # 10. public: constructor declaration
     lines.append("public:")
     lines.append(f"    {class_name}();")
 
-    # 11. 空行
+    # 11. blank line
     lines.append("")
 
-    # 12. protected: 属性声明
+    # 12. protected: property declarations
     lines.append("protected:")
 
-    # 分离组件和变量属性（组件优先）
+    # Separate component and variable properties (components first)
     components = [p for p in ir.properties if p.category == "component"]
     variables = [p for p in ir.properties if p.category != "component"]
 
-    # 组件声明
+    # Component declarations
     if components:
         lines.append("    // Components")
         for prop in components:
             lines.extend(_format_component_property(prop))
 
-    # 变量声明
+    # Variable declarations
     if variables:
         if components:
-            lines.append("")  # 组件和变量之间空行
+            lines.append("")  # blank line between components and variables
         for prop in variables:
             lines.extend(_format_variable_property(prop))
 
-    # 13. 方法声明
+    # 13. Method declarations
     if ir.methods:
         lines.append("")
         lines.append("public:")
@@ -133,38 +133,38 @@ def format_cpp_header(ir: CppClassIR) -> str:
                 lines.append("")
             lines.extend(_format_method_declaration(method))
 
-    # 14. 类结束
+    # 14. class end
     lines.append("};")
 
-    # 14. 尾随换行
+    # 14. trailing newline
     lines.append("")
 
     return '\n'.join(lines)
 
 
 # ============================================================================
-# 辅助函数
+# Helper functions
 # ============================================================================
 
 def _sanitize_class_name(name: str) -> str:
-    """清理类名以匹配 UE 命名约定（T-056-06）。
+    """Sanitize class name to match UE naming convention (T-056-06).
 
-    只允许字母数字和下划线，以字母或下划线开头。
-    非法字符替换为下划线。
+    Only allows alphanumeric characters and underscore, starting with letter or underscore.
+    Invalid characters are replaced with underscore.
 
     Args:
-        name: 原始类名
+        name: Raw class name
 
     Returns:
-        清理后的类名
+        Sanitized class name
     """
     if not name:
         return "UUnknownClass"
 
-    # 移除非法字符，替换为下划线
+    # Remove invalid characters, replace with underscore
     sanitized = re.sub(r'[^A-Za-z0-9_]', '_', name)
 
-    # 确保以字母或下划线开头
+    # Ensure starts with letter or underscore
     if sanitized and sanitized[0].isdigit():
         sanitized = f"_{sanitized}"
 
@@ -176,38 +176,38 @@ def _sanitize_class_name(name: str) -> str:
 
 
 def _sanitize_generated_include(class_name: str) -> str:
-    """清理 generated.h 包含路径。
+    """Sanitize the generated.h include path.
 
     Args:
-        include: 原始包含路径
-        class_name: 清理后的类名
+        include: Raw include path
+        class_name: Sanitized class name
 
     Returns:
-        清理后的包含路径（使用清理后的类名）
+        Sanitized include path (using sanitized class name)
     """
-    # 使用清理后的类名重建 generated_include
-    # 格式: "{ClassName}.generated.h"
+    # Rebuild generated_include using sanitized class name
+    # Format: "{ClassName}.generated.h"
     return f'"{class_name}.generated.h"'
 
 
 def _sanitize_comment(comment: str) -> str:
-    """清理注释字符串以防止注入（T-056-05）。
+    """Sanitize comment string to prevent injection (T-056-05).
 
-    移除会导致块注释提前关闭的序列（*/），防止 C++ 注入。
+    Removes sequences that would cause premature block comment closure (*/), preventing C++ injection.
 
     Args:
-        comment: 原始注释文本
+        comment: Raw comment text
 
     Returns:
-        清理后的注释文本
+        Sanitized comment text
     """
     if not comment:
         return ""
 
-    # 移除可能导致块注释提前关闭的序列
+    # Remove sequences that could cause premature block comment closure
     sanitized = comment.replace("*/", "* /")
 
-    # 移除可能导致问题的其他字符
+    # Remove other characters that could cause issues
     sanitized = sanitized.replace('\n', ' ')
     sanitized = sanitized.replace('\r', '')
 
@@ -215,20 +215,20 @@ def _sanitize_comment(comment: str) -> str:
 
 
 def _format_component_property(prop: CppProperty) -> List[str]:
-    """格式化组件属性声明。
+    """Format component property declaration.
 
-    Per D-04: 组件使用 UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Instanced)
-    并添加 Category = "Components" 和 AllowPrivateAccess。
+    Per D-04: Components use UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Instanced)
+    with Category = "Components" and AllowPrivateAccess.
 
     Args:
-        prop: CppProperty（category="component"）
+        prop: CppProperty (category="component")
 
     Returns:
-        格式化后的行列表
+        List of formatted lines
     """
     lines: List[str] = []
 
-    # 构建完整 UPROPERTY 参数
+    # Build full UPROPERTY arguments
     marks = sanitize_uproperty_marks(prop.uproperty_marks)
     uproperty_args = ", ".join(marks)
     uproperty_args += ', Category = "Components"'
@@ -236,11 +236,11 @@ def _format_component_property(prop: CppProperty) -> List[str]:
 
     lines.append(f"    UPROPERTY({uproperty_args})")
 
-    # 属性声明
+    # Property declaration
     safe_name = sanitize_identifier(prop.name)
     decl = f"    {prop.cpp_type} {safe_name};"
 
-    # 添加注释（如果有）
+    # Add comment (if present)
     if prop.cpp_comment:
         sanitized_comment = _sanitize_comment(prop.cpp_comment)
         decl += f" // {sanitized_comment}"
@@ -251,35 +251,35 @@ def _format_component_property(prop: CppProperty) -> List[str]:
 
 
 def _format_variable_property(prop: CppProperty) -> List[str]:
-    """格式化变量属性声明。
+    """Format variable property declaration.
 
-    Per D-04: 变量使用 UPROPERTY 标记列表，添加 Category。
-    默认值根据类型格式化。
+    Per D-04: Variables use UPROPERTY marks list, add Category.
+    Default value formatted according to type.
 
     Args:
-        prop: CppProperty（category != "component"）
+        prop: CppProperty (category != "component")
 
     Returns:
-        格式化后的行列表
+        List of formatted lines
     """
     lines: List[str] = []
 
-    # 构建完整 UPROPERTY 参数
+    # Build full UPROPERTY arguments
     marks = sanitize_uproperty_marks(prop.uproperty_marks)
     uproperty_args = ", ".join(marks)
 
-    # 添加 Category（如果有）
+    # Add Category (if present)
     if prop.category:
         safe_category = sanitize_category(prop.category)
         uproperty_args += f', Category = "{safe_category}"'
 
     lines.append(f"    UPROPERTY({uproperty_args})")
 
-    # 属性声明
+    # Property declaration
     safe_name = sanitize_identifier(prop.name)
     decl = f"    {prop.cpp_type} {safe_name}"
 
-    # 添加默认值（如果有且非空）
+    # Add default value (if present and non-empty)
     if prop.default_value is not None:
         default_str = _format_default_value(prop.cpp_type, prop.default_value)
         if default_str:
@@ -287,7 +287,7 @@ def _format_variable_property(prop: CppProperty) -> List[str]:
 
     decl += ";"
 
-    # 添加注释（如果有）
+    # Add comment (if present)
     if prop.cpp_comment:
         sanitized_comment = _sanitize_comment(prop.cpp_comment)
         decl += f" // {sanitized_comment}"
@@ -298,70 +298,70 @@ def _format_variable_property(prop: CppProperty) -> List[str]:
 
 
 def _format_default_value(cpp_type: str, value: any) -> str:
-    """格式化默认值字符串。
+    """Format default value string.
 
     Args:
-        cpp_type: C++ 类型名
-        value: 默认值
+        cpp_type: C++ type name
+        value: Default value
 
     Returns:
-        格式化后的默认值字符串
+        Formatted default value string
     """
     if value is None:
         return ""
 
-    # 空字符串或纯空白 — 无有效默认值
+    # Empty string or pure whitespace — no valid default value
     if isinstance(value, str) and not value.strip():
         return ""
 
-    # 处理布尔值
+    # Handle boolean values
     if cpp_type == "bool":
         return "true" if value else "false"
 
-    # 处理浮点类型
+    # Handle floating-point types
     if cpp_type == "float":
         return f"{float(value)}f"
     if cpp_type == "double":
         return str(float(value))
 
-    # 处理整数类型（无后缀）
+    # Handle integer types (no suffix)
     if cpp_type in ("int", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "byte"):
         return str(int(value))
 
-    # 处理字符串类型（TEXT 包装，转义引号和反斜杠）
+    # Handle string types (TEXT wrapper, escape quotes and backslashes)
     if cpp_type in ("FString", "FName"):
         escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
         return f'TEXT("{escaped}")'
 
-    # FText 太复杂，跳过（当前不支持）
+    # FText too complex, skip (currently not supported)
     if cpp_type == "FText":
         return "FText::GetEmpty()"
 
-    # 其他类型直接返回
+    # Other types, return directly
     return str(value)
 
 
 def _format_method_declaration(method: CppMethodIR) -> List[str]:
-    """将 CppMethodIR 渲染为 .h 声明行列表。
+    """Render CppMethodIR into .h declaration line list.
 
-    改进：支持 is_static、is_virtual、is_pure 等新字段。
+    Supports is_static, is_virtual, is_pure and other new fields.
 
     Examples:
-        Move → ["    UFUNCTION(BlueprintCallable)", "    void Move(double LeftRight, double ForwardBackward);"]
-        PrimaryThumbstick → ["    void PrimaryThumbstick(double Axis_X, double Axis_Y) override;"]
-        Aim → ["    UFUNCTION(BlueprintPure)", "    static float GetAimAngle();"]
+        Move -> ["    UFUNCTION(BlueprintCallable)", "    void Move(double LeftRight, double ForwardBackward);"]
+        PrimaryThumbstick -> ["    void PrimaryThumbstick(double Axis_X, double Axis_Y) override;"]
+        Aim -> ["    UFUNCTION(BlueprintPure)", "    static float GetAimAngle();"]
     """
     lines: List[str] = []
 
-    # UFUNCTION 宏
+    # UFUNCTION macro
     if method.ufunction_specifiers:
         spec_str = ", ".join(method.ufunction_specifiers)
         lines.append(f"    UFUNCTION({spec_str})")
 
-    # 参数列表
+    # Parameter list
     param_str = ", ".join(f"{p.cpp_type} {p.name}" for p in method.parameters)
 
-    # 修饰符
+    # Modifiers
     modifiers = []
     if method.is_static:
         modifiers.append("static")
@@ -372,7 +372,7 @@ def _format_method_declaration(method: CppMethodIR) -> List[str]:
     if method.is_override:
         modifiers.append("override")
 
-    # 构建声明
+    # Build declaration
     decl = f"    {method.return_type} {method.cpp_name}({param_str})"
 
     if modifiers:
@@ -385,17 +385,17 @@ def _format_method_declaration(method: CppMethodIR) -> List[str]:
 
 
 def format_cpp_call_statements(statements: List["CppCallStatement"]) -> str:
-    """将 CppCallStatement 列表渲染为 .cpp 参考文本。
+    """Render CppCallStatement list into .cpp reference text.
 
     Examples:
-        CppCallStatement(method_name="Jump", target="this", args=[]) → "this->Jump();"
+        CppCallStatement(method_name="Jump", target="this", args=[]) -> "this->Jump();"
     """
     if not statements:
         return ""
 
     lines = ["// Call Reference"]
     for stmt in statements:
-        op = "->"  # UE 指针访问符
+        op = "->"  # UE pointer access operator
         args_str = ", ".join(stmt.args)
         lines.append(f"{stmt.target}{op}{stmt.method_name}({args_str});")
 
@@ -403,7 +403,7 @@ def format_cpp_call_statements(statements: List["CppCallStatement"]) -> str:
 
 
 # ============================================================================
-# 导出列表
+# Export list
 # ============================================================================
 
 __all__ = [

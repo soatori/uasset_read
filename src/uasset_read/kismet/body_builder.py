@@ -39,12 +39,12 @@ def _needs_semicolon(line: str) -> bool:
 
 
 def _is_structured_block_start(jump_analyzer, idx: int) -> bool:
-    """判断指定索引是否是结构化块（while/if/for/switch）的起始位置。"""
+    """Check if the specified index is the start of a structured block (while/if/for/switch)."""
     return jump_analyzer.detect_pattern(idx) is not None
 
 
 def _get_structured_block_end(jump_analyzer, idx: int) -> int:
-    """获取从 idx 开始的结构化块的结束索引（含）。"""
+    """Get the end index (inclusive) of the structured block starting at idx."""
     result = jump_analyzer.detect_pattern(idx)
     if result is None:
         return idx
@@ -57,7 +57,7 @@ def _get_structured_block_end(jump_analyzer, idx: int) -> int:
     if ptype == "if":
         return result["then_end"]
     if ptype == "switch":
-        # switch 自身是单个表达式
+        # switch itself is a single expression
         return idx
     return idx
 
@@ -71,9 +71,9 @@ def _emit_structured_block(
     offset_to_index: dict[int, int],
     label_set: set[int],
 ) -> list[str]:
-    """检测并输出从 start_idx 开始的结构化控制流块。"""
+    """Detect and emit the structured control flow block starting at start_idx."""
 
-    # --- for 模式（优先于 while） ---
+    # --- for pattern (higher priority than while) ---
     for_result = jump_analyzer.detect_for_pattern(start_idx)
     if for_result is not None:
         return _emit_for_block(
@@ -81,7 +81,7 @@ def _emit_structured_block(
             jump_targets, offset_to_index, label_set,
         )
 
-    # --- while 模式 ---
+    # --- while pattern ---
     while_result = jump_analyzer.detect_while_pattern(start_idx)
     if while_result is not None:
         return _emit_while_block(
@@ -89,14 +89,14 @@ def _emit_structured_block(
             jump_targets, offset_to_index, label_set,
         )
 
-    # --- Push/Pop if/else 模式 ---
+    # --- Push/Pop if/else pattern ---
     push_pop_result = jump_analyzer.detect_push_pop_pattern(start_idx)
     if push_pop_result is not None:
         return _emit_push_pop_block(
             push_pop_result, translator, expressions,
         )
 
-    # --- if/else 模式（JumpIfNot 起始） ---
+    # --- if/else pattern (JumpIfNot start) ---
     if_else_result = jump_analyzer.detect_if_else_pattern(start_idx)
     if if_else_result is not None:
         return _emit_if_else_block(
@@ -104,7 +104,7 @@ def _emit_structured_block(
             jump_targets, offset_to_index, label_set,
         )
 
-    # --- switch/case 模式 ---
+    # --- switch/case pattern ---
     switch_result = jump_analyzer.detect_switch_pattern(start_idx)
     if switch_result is not None:
         return _emit_switch_block(
@@ -122,7 +122,7 @@ def _emit_for_block(
     offset_to_index: dict[int, int],
     label_set: set[int],
 ) -> list[str]:
-    """输出 for 循环块。"""
+    """Emit a for loop block."""
     _start_idx = for_result["start"]  # noqa: F841 - extracted for clarity
     body_start = for_result["body_start"]
     _body_end = for_result["body_end"]  # noqa: F841 - extracted for clarity
@@ -132,7 +132,7 @@ def _emit_for_block(
 
     cond_str = translator.line_cpp(condition)
 
-    # 生成递增表达式字符串
+    # Generate increment expression string
     inc_parts: list[str] = []
     for j in range(inc_start, inc_end + 1):
         line = translator.line_cpp(expressions[j], index=j)
@@ -142,7 +142,7 @@ def _emit_for_block(
 
     result: list[str] = [f"for (; {cond_str}; {inc_str}) {{" ]
 
-    # 输出循环体（不含递增和回跳）
+    # Emit loop body (excluding increment and back jump)
     for j in range(body_start, inc_start):
         byte_off = getattr(expressions[j], "StatementIndex", None)
         if byte_off is not None and byte_off in jump_targets:
@@ -164,7 +164,7 @@ def _emit_switch_block(
     translator,
     expressions: list,
 ) -> list[str]:
-    """输出 switch/case 块。"""
+    """Emit a switch/case block."""
     index_term = switch_result["index_term"]
     cases = switch_result["cases"]
     default_term = switch_result["default_term"]
@@ -198,7 +198,7 @@ def _emit_while_block(
     offset_to_index: dict[int, int],
     label_set: set[int],
 ) -> list[str]:
-    """输出 while 循环块。"""
+    """Emit a while loop block."""
     _start_idx = while_result["start"]  # noqa: F841 - extracted for clarity
     body_start = while_result["body_start"]
     body_end = while_result["body_end"]
@@ -207,9 +207,9 @@ def _emit_while_block(
     cond_str = translator.line_cpp(condition)
     result: list[str] = [f"while ({cond_str}) {{"]
 
-    # 输出循环体（跳过回跳 EX_Jump，由 while 结构处理）
+    # Emit loop body (skip back jump EX_Jump, handled by while structure)
     for j in range(body_start, body_end):
-        # 检查是否是跳转目标（标签）
+        # Check if this is a jump target (label)
         byte_off = getattr(expressions[j], "StatementIndex", None)
         if byte_off is not None and byte_off in jump_targets:
             target_idx = offset_to_index.get(byte_off)
@@ -233,13 +233,13 @@ def _emit_if_else_block(
     offset_to_index: dict[int, int],
     label_set: set[int],
 ) -> list[str]:
-    """输出 if/else 块。"""
+    """Emit an if/else block."""
     condition = if_else_result["condition"]
     cond_str = translator.line_cpp(condition)
     result: list[str] = [f"if ({cond_str}) {{"]
 
     if if_else_result["type"] == "if_else":
-        # then 分支
+        # then branch
         then_start = if_else_result["then_start"]
         then_end = if_else_result["then_end"]
         for j in range(then_start, then_end):
@@ -249,16 +249,16 @@ def _emit_if_else_block(
 
         result.append("} else {")
 
-        # else 分支
+        # else branch
         else_start = if_else_result["else_start"]
         else_end = if_else_result["else_end"]
         for j in range(else_start, else_end + 1):
-            # 跳过 PopExecutionFlow（由 if/else 结构处理）
+            # Skip PopExecutionFlow (handled by if/else structure)
             line = translator.line_cpp(expressions[j], index=j)
             if line and line.strip():
                 result.append(f"    {line}")
     else:
-        # 简单 if 模式
+        # Simple if pattern
         then_start = if_else_result["then_start"]
         then_end = if_else_result["then_end"]
         for j in range(then_start, then_end + 1):
@@ -275,15 +275,15 @@ def _emit_push_pop_block(
     translator,
     expressions: list,
 ) -> list[str]:
-    """输出 Push/Pop 标记的 if/else 块。
+    """Emit Push/Pop-tagged if/else block.
 
-    Push/Pop 模式：PushExecutionFlow + JumpIfNot + then + PopExecutionFlow + else
+    Push/Pop pattern: PushExecutionFlow + JumpIfNot + then + PopExecutionFlow + else
     """
     condition = push_pop_result["condition"]
     cond_str = translator.line_cpp(condition)
     result: list[str] = [f"if ({cond_str}) {{"]
 
-    # then 分支
+    # then branch
     then_start = push_pop_result["then_start"]
     then_end = push_pop_result["then_end"]
     for j in range(then_start, then_end):
@@ -293,7 +293,7 @@ def _emit_push_pop_block(
 
     result.append("} else {")
 
-    # else 分支
+    # else branch
     else_start = push_pop_result["else_start"]
     else_end = push_pop_result["else_end"]
     for j in range(else_start, else_end + 1):
@@ -338,7 +338,7 @@ class FunctionBodyBuilder:
         from uasset_read.kismet.jump_analyzer import JumpAnalyzer
         from uasset_read.kismet.translator import KismetTranslator
 
-        # 创建带 JumpAnalyzer 的翻译器用于结构化检测
+        # Create translator with JumpAnalyzer for structured detection
         jump_analyzer = JumpAnalyzer(expressions)
         translator = KismetTranslator(self.type_registry, linker=self._linker, expressions=expressions)
 
@@ -361,21 +361,21 @@ class FunctionBodyBuilder:
         # Translate each expression
         lines: list[str] = []
         label_set: set[int] = set()
-        skip_until: int = -1  # 结构化块结束索引，跳过内部表达式
+        skip_until: int = -1  # Structured block end index, skip internal expressions
 
         for idx, expr in enumerate(expressions):
-            # 跳过结构化块内部的表达式（已由块处理）
+            # Skip expressions inside structured blocks (already handled by block)
             if idx <= skip_until:
                 continue
 
-            # 检查是否开始一个结构化块
+            # Check if starting a structured block
             if _is_structured_block_start(jump_analyzer, idx):
                 block_lines = _emit_structured_block(
                     jump_analyzer, translator, expressions, idx,
                     jump_targets, offset_to_index, label_set,
                 )
                 lines.extend(block_lines)
-                # 确定跳过范围
+                # Determine skip range
                 skip_until = _get_structured_block_end(jump_analyzer, idx)
                 continue
 
@@ -414,17 +414,17 @@ class FunctionBodyBuilder:
         func_name: str | None = None,
     ) -> str:
         """
-        统一结构化函数体构建（JumpAnalyzer 作为唯一检测器）。
+        Unified structured function body construction (JumpAnalyzer as sole detector).
 
-        使用 JumpAnalyzer 检测所有控制流模式（for/while/push_pop/if_else/switch），
-        无法匹配时回退到 goto 输出。
+        Uses JumpAnalyzer to detect all control flow patterns (for/while/push_pop/if_else/switch),
+        falls back to goto output when no patterns match.
 
         Args:
-            expressions: 从字节码解析得到的表达式列表。
-            func_name: 可选的函数名包装。
+            expressions: List of expressions parsed from bytecode.
+            func_name: Optional function name wrapper.
 
         Returns:
-            格式化的 C++ 函数体字符串。
+            Formatted C++ function body string.
         """
         from uasset_read.kismet.jump_analyzer import JumpAnalyzer
         from uasset_read.kismet.translator import KismetTranslator
@@ -432,13 +432,13 @@ class FunctionBodyBuilder:
         if not expressions:
             return self.to_function_body([], func_name)
 
-        # 构建 JumpAnalyzer（统一检测器）
+        # Build JumpAnalyzer (unified detector)
         jump_analyzer = JumpAnalyzer(expressions)
         translator = KismetTranslator(
             self.type_registry, linker=self._linker, expressions=expressions
         )
 
-        # 构建辅助映射
+        # Build auxiliary mappings
         offset_to_index: dict[int, int] = {}
         for idx, expr in enumerate(expressions):
             stmt_idx = getattr(expr, "StatementIndex", None)
@@ -452,7 +452,7 @@ class FunctionBodyBuilder:
             if hasattr(expr, "CodeOffset"):
                 jump_targets.add(expr.CodeOffset)
 
-        # 检查是否有任何结构化模式
+        # Check if any structured pattern exists
         has_structured = False
         for idx in range(len(expressions)):
             if jump_analyzer.detect_pattern(idx) is not None:
@@ -460,10 +460,10 @@ class FunctionBodyBuilder:
                 break
 
         if not has_structured:
-            # 无结构化模式 → goto 回退
+            # No structured pattern → goto fallback
             return self.to_function_body(expressions, func_name)
 
-        # 使用 JumpAnalyzer + goto 回退输出结构化代码
+        # Use JumpAnalyzer + goto fallback to output structured code
         lines: list[str] = []
         label_set: set[int] = set()
         skip_until: int = -1
@@ -511,17 +511,17 @@ class FunctionBodyBuilder:
         func_name: str | None = None,
     ) -> tuple[str, "CFG"]:
         """
-        基于 CFG 的函数体构建。
+        CFG-based function body construction.
 
-        构建控制流图，计算支配树和区域分解，然后按基本块顺序
-        翻译为 C++ 函数体。
+        Builds control flow graph, computes dominator tree and region decomposition,
+        then translates to C++ function body in basic block order.
 
         Args:
-            expressions: 从字节码解析得到的表达式列表。
-            func_name: 可选的函数名包装。
+            expressions: List of expressions parsed from bytecode.
+            func_name: Optional function name wrapper.
 
         Returns:
-            (formatted C++ function body, CFG) 元组。
+            Tuple of (formatted C++ function body, CFG).
         """
         from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree
         from uasset_read.kismet.translator import KismetTranslator
@@ -548,7 +548,7 @@ class FunctionBodyBuilder:
             if hasattr(expr, "CodeOffset"):
                 jump_targets.add(expr.CodeOffset)
 
-        # 按 CFG 拓扑顺序翻译
+        # Translate in CFG topological order
         lines: list[str] = []
         label_set: set[int] = set()
         visited: set[int] = set()
@@ -566,7 +566,7 @@ class FunctionBodyBuilder:
                     continue
                 expr = expressions[expr_idx]
 
-                # 检查是否是跳转目标（标签）
+                # Check if this is a jump target (label)
                 stmt_idx = getattr(expr, "StatementIndex", None)
                 if stmt_idx is not None and stmt_idx in jump_targets:
                     target_idx = offset_to_index.get(stmt_idx)
@@ -586,7 +586,7 @@ class FunctionBodyBuilder:
                         sub_line += ";"
                     lines.append(sub_line)
 
-            # 递归访问后继
+            # Recursively visit successors
             for succ in block.successors:
                 if succ not in visited and succ != cfg.exit_id:
                     _visit(succ)

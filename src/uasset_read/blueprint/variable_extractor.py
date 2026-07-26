@@ -1,6 +1,6 @@
-"""蓝图变量提取模块 — 从属性数据中提取蓝图变量、函数、事件元数据。
+"""Blueprint variable extraction module -- extracts blueprint variables, functions, and event metadata from property data.
 
-独立模块（per D-02），可被属性解析和蓝图图解析共同使用。
+Standalone module (per D-02), shared by property parsing and blueprint graph parsing.
 """
 
 import logging
@@ -22,8 +22,8 @@ from uasset_read.constants import (
     CPF_NonPIEDuplicateTransient, format_guid_bytes, UE_NONE_SENTINEL,
 )
 
-# UE 属性类型名 → 标准化 pin_category 映射
-# 用于将序列化数据中的 "BoolProperty" 等名称转换为 "bool" 等标准 pin_category
+# UE property type name -> standardized pin_category mapping
+# Used to convert serialized names like "BoolProperty" to standard pin_category like "bool"
 _PROPERTY_TYPE_TO_PIN_CATEGORY: Dict[str, str] = {
     "BoolProperty": "bool",
     "IntProperty": "int",
@@ -52,11 +52,11 @@ _PROPERTY_TYPE_TO_PIN_CATEGORY: Dict[str, str] = {
 }
 
 # ============================================================================
-# Pin Category 到 C++ 类型映射
+# Pin Category to C++ type mapping
 # ============================================================================
 
 _PIN_CATEGORY_TO_CPP_TYPE = {
-    # 基本类型
+    # Basic types
     "real": "float",
     "double": "double",
     "float": "float",
@@ -66,11 +66,11 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "byte": "uint8",
     "bool": "bool",
     "boolean": "bool",
-    # 字符串类型
+    # String types
     "string": "FString",
     "name": "FName",
     "text": "FText",
-    # 结构体类型
+    # Struct types
     "struct": "FStruct",
     "vector": "FVector",
     "rotator": "FRotator",
@@ -78,11 +78,11 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "vector2d": "FVector2D",
     "linearcolor": "FLinearColor",
     "guid": "FGuid",
-    # 对象类型
+    # Object types
     "object": "UObject*",
     "class": "UClass*",
     "widget": "UWidget*",
-    # 特殊类型
+    # Special types
     "wildcard": "Wildcard",
     "exec": "void",
     "delegate": "void",
@@ -90,36 +90,36 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
 }
 
 def _map_pin_category_to_cpp_type(pin_category: str) -> str:
-    """将 pin_category 映射到 C++ 类型。
+    """Map pin_category to C++ type.
 
     Args:
-        pin_category: Pin 类型名称（如 "real", "object", "struct"）
+        pin_category: Pin type name (e.g. "real", "object", "struct")
 
     Returns:
-        C++ 类型字符串
+        C++ type string
     """
     normalized = pin_category.strip()
 
-    # 精确匹配
+    # Exact match
     if normalized in _PIN_CATEGORY_TO_CPP_TYPE:
         return _PIN_CATEGORY_TO_CPP_TYPE[normalized]
 
-    # 大小写不敏感匹配
+    # Case-insensitive match
     lower_category = normalized.lower()
     for key, value in _PIN_CATEGORY_TO_CPP_TYPE.items():
         if key.lower() == lower_category:
             return value
 
-    # 如果是对象类型路径（以 /Script/ 开头），直接返回
+    # If it's an object type path (starts with /Script/), return directly
     if normalized.startswith("/Script/"):
         return normalized
 
-    # 默认返回原始类型名
+    # Default: return the original type name
     return normalized
 
-# Blueprint 资产元数据属性名称（不是用户定义的变量）
+# Blueprint asset metadata property names (not user-defined variables)
 BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
-    # 核心蓝图元数据
+    # Core blueprint metadata
     "ParentClass",
     "ParentClassProperty",
     "SuperClass",
@@ -135,9 +135,9 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "SupportedClasses",
     "HiddenCategories",
     "ModulesToIgnoreInReloadAndBlueprints",
-    "None",  # 终止标记
+    "None",  # Sentinel marker
     "NoneProperty",
-    # 内部引擎属性（非用户定义变量）
+    # Internal engine properties (not user-defined variables)
     "CachedEditorData",
     "BlueprintStatus",
     "BlueprintLogLevel",
@@ -191,30 +191,30 @@ BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
     "bIsRegeneratingEnumFunction",
     "bIsRegeneratingEnumEvent",
     "bIsRegeneratingEnumDelegate",
-    # 渲染/编辑器相关
+    # Rendering/editor related
     "SelectedNodes",
     "GraphZoom",
     "PanningAmount",
     "bAllowRenaming",
     "bAllowMultipleOutputs",
     "bAllowMultipleInputs",
-    # 变量描述数组（已通过 NewVariables 处理）
+    # Variable description array (already handled via NewVariables)
     "NewVariables",
-    # 函数/事件列表
+    # Function/event lists
     "UbergraphGraph",
     "FunctionList",
     "EventGraphs",
 })
 
 def _is_internal_engine_property(prop_name: str) -> bool:
-    """判断属性是否为内部引擎属性（非用户定义变量）。
+    """Determine if property is an internal engine property (not user-defined variable).
 
-    仅匹配明确的引擎内部属性名（如编译状态标志、蓝图生成类引用等）。
-    不使用前缀匹配，避免误过滤合法蓝图变量（如 bIsPlayer、CachedHealth 等）。
+    Only matches explicit engine internal property names (e.g. compile status flags, blueprint generated class references).
+    Does not use prefix matching to avoid filtering out legitimate blueprint variables (e.g. bIsPlayer, CachedHealth).
     """
-    # 明确的内部引擎属性名（精确匹配）
+    # Explicit internal engine property names (exact match)
     internal_exact_names = frozenset({
-        # 编译/生成状态标志
+        # Compile/generation status flags
         "bBeingCompiled",
         "bCompiled",
         "bRegenerating",
@@ -260,9 +260,9 @@ def _is_internal_engine_property(prop_name: str) -> bool:
         "bIsRegeneratingEnumFunction",
         "bIsRegeneratingEnumEvent",
         "bIsRegeneratingEnumDelegate",
-        # 蓝图生成类引用
+        # Blueprint generated class references
         "BlueprintGeneratedClass",
-        # 编辑器相关
+        # Editor related
         "SelectedNodes",
         "GraphZoom",
         "PanningAmount",
@@ -275,7 +275,7 @@ def _is_internal_engine_property(prop_name: str) -> bool:
 
 
 def _map_property_flags(flags: int) -> Dict[str, bool]:
-    """将 CPF_* 位标志映射到 BlueprintVariable 布尔属性。"""
+    """Map CPF_* bit flags to BlueprintVariable boolean attributes."""
     return {
         "is_edit_anywhere": bool(flags & CPF_Edit),
         "is_edit_instance_only": bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst),
@@ -290,17 +290,17 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
     }
 
 def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
-    """从 PropertyValue 提取 FEdGraphPinType 类型信息。"""
+    """Extract FEdGraphPinType type information from PropertyValue."""
     value = prop.value
 
-    # StructProperty: 查找 pin_category, pin_subcategory 等字段
+    # StructProperty: look up pin_category, pin_subcategory, etc.
     if isinstance(value, dict):
         pin_category = value.get("pin_category", "")
         pin_subcategory = value.get("pin_subcategory", "")
         pin_subcategory_object = value.get("pin_subcategory_object")
         container_type = value.get("container_type", 0)
 
-        # 处理 StructValue 对象（高级属性容器）
+        # Handle StructValue objects (advanced property containers)
         if hasattr(prop, "type") and prop.type == "StructProperty":
             if isinstance(value, dict):
                 pin_category = value.get("PinCategory", value.get("pin_category", ""))
@@ -310,8 +310,8 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
                 elif "pin_subcategory_object" in value:
                     pin_subcategory_object = value["pin_subcategory_object"]
 
-        # dict 是属性值（含 object_class / struct_type）而非 pin 类型 dict 时，
-        # 从 prop.type 和 dict 内容推断类型信息
+        # When dict is a property value (containing object_class / struct_type) rather than a pin type dict,
+        # infer type info from prop.type and dict content
         prop_type = getattr(prop, 'type', None)
         if not pin_category and prop_type:
             pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, "")
@@ -321,7 +321,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
             elif prop_type == "StructProperty":
                 pin_subcategory = value.get("struct_type", "")
 
-        # 标准化 pin_category：将 "BoolProperty" 等 UE 内部类型名转换为 "bool" 等标准名
+        # Standardize pin_category: convert UE internal type names like "BoolProperty" to standard names like "bool"
         if pin_category in _PROPERTY_TYPE_TO_PIN_CATEGORY:
             pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY[pin_category]
 
@@ -332,7 +332,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
             container_type=container_type,
         )
 
-    # 简单类型映射
+    # Simple type mapping
     type_mapping = {
         "BoolProperty": FEdGraphPinType(pin_category="bool"),
         "IntProperty": FEdGraphPinType(pin_category="int"),
@@ -359,37 +359,37 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
         "SoftClassProperty": FEdGraphPinType(pin_category="soft_class"),
     }
 
-    # 非 dict 值：根据 prop.type 查找标准化 pin_category
+    # Non-dict values: look up standardized pin_category based on prop.type
     prop_type = getattr(prop, 'type', None)
     if prop_type and prop_type in type_mapping:
         return type_mapping[prop_type]
 
-    # 回退：将属性类型名标准化为 pin_category
+    # Fallback: standardize property type name to pin_category
     pin_category = "unknown"
     if prop_type:
         pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type)
     return FEdGraphPinType(pin_category=pin_category)
 
 def extract_blueprint_variables(properties: List[PropertyValue]) -> List[BlueprintVariable]:
-    """从已解析的属性数据中提取蓝图变量。
+    """Extract blueprint variables from parsed property data.
 
-    遍历 PropertyValue 列表，识别变量相关的属性（包含名称、类型、分类、
-    标志位等信息），并将其转换为 BlueprintVariable 实例。
+    Iterates through PropertyValue list, identifies variable-related properties (containing name, type, category,
+    flags, etc.), and converts them to BlueprintVariable instances.
 
     Args:
-        properties: 已解析的属性值列表
+        properties: Parsed property value list
 
     Returns:
-        BlueprintVariable 实例列表
+        List of BlueprintVariable instances
     """
     variables: List[BlueprintVariable] = []
 
     if not properties:
         return variables
 
-    # 查找变量描述属性
-    # UE 蓝图变量通常在属性中以特定模式出现
-    # 我们遍历所有属性，识别可能的变量定义
+    # Find variable description properties
+    # UE blueprint variables typically appear in properties with a specific pattern
+    # We iterate through all properties to identify possible variable definitions
     for prop in properties:
         prop_name = prop.name
         prop_value = prop.value
@@ -398,48 +398,48 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
             variables.extend(_extract_blueprint_variable_descriptions(prop_value))
             continue
 
-        # 跳过终止标记、系统属性和蓝图元数据属性
+        # Skip sentinel markers, system properties, and blueprint metadata properties
         if prop_name in BLUEPRINT_METADATA_PROPERTY_NAMES:
             continue
 
-        # 额外过滤：跳过以常见内部引擎属性名开头的属性
-        # 这些属性通常不是用户定义的蓝图变量
+        # Additional filter: skip properties starting with common internal engine property names
+        # These properties are typically not user-defined blueprint variables
         if _is_internal_engine_property(prop_name):
             continue
 
-        # 检测是否为蓝图变量描述属性
-        # 变量通常带有类型信息和默认值
+        # Detect if this is a blueprint variable description property
+        # Variables typically carry type information and default values
         var_type = _extract_pin_type_from_property(prop)
 
-        # 从属性值提取分类
+        # Extract category from property value
         category = ""
         if isinstance(prop_value, dict):
             category = prop_value.get("Category", prop_value.get("category", ""))
 
-        # 提取属性标志位
+        # Extract property flags
         property_flags = 0
         if isinstance(prop_value, dict):
             property_flags = prop_value.get("property_flags", prop_value.get("PropertyFlags", 0))
 
-        # 检查是否为组件变量
+        # Check if this is a component variable
         is_component = False
         if hasattr(prop, "type") and prop.type in ("ObjectProperty", "ClassProperty"):
             type_name = var_type.pin_subcategory or var_type.pin_category
             component_keywords = ["Component", "SceneComponent", "ActorComponent"]
             is_component = any(kw in type_name for kw in component_keywords)
 
-        # 构建 BlueprintVariable
+        # Build BlueprintVariable
         flag_mapping = _map_property_flags(property_flags)
         flags_labels = parse_property_flags_to_labels(property_flags)
 
-        # 提取默认值
+        # Extract default value
         default_value = None
         if isinstance(prop_value, dict):
             default_value = prop_value.get("default_value", prop_value.get("DefaultValue"))
         else:
             default_value = prop_value
 
-        # 提取元数据
+        # Extract metadata
         metadata = {}
         meta_class = ""
         edit_condition = ""
@@ -450,7 +450,7 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
             meta_class = prop_value.get("meta_class", prop_value.get("MetaClass", ""))
             edit_condition = prop_value.get("edit_condition", prop_value.get("EditCondition", ""))
 
-        # 推断变量类型的额外属性
+        # Infer additional variable type attributes
         is_blueprint_writable = flag_mapping.get("is_blueprint_readable", False) and not flag_mapping.get("is_blueprint_read_only", False)
 
         var = BlueprintVariable(
@@ -504,7 +504,7 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         var.rep_notify_func = str(fields.get("RepNotifyFunc") or fields.get("rep_notify_func") or "")
         var.replication_condition = _replication_condition_value(rep_condition)
 
-        # 组件变量检测（与 read_blueprint_variable 逻辑对齐）
+        # Component variable detection (aligned with read_blueprint_variable logic)
         type_str = ""
         if var.var_type:
             if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
@@ -538,14 +538,14 @@ def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
     )
 
 def _guid_from_description(value: Any) -> str:
-    # StructValue(Guid, {A:int, B:int, C:int, D:int}) — StructProperty 解析结果
+    # StructValue(Guid, {A:int, B:int, C:int, D:int}) -- StructProperty parsing result
     if isinstance(value, StructValue) and value.struct_type == "Guid":
         fields = value.fields
         a = int(fields.get("A", 0))
         b = int(fields.get("B", 0))
         c = int(fields.get("C", 0))
         d = int(fields.get("D", 0))
-        # 每个 uint32 按小端序转为 4 字节
+        # Convert each uint32 to 4 bytes in little-endian order
         def _u32_to_bytes(v: int) -> bytes:
             return v.to_bytes(4, byteorder='little')
         raw = _u32_to_bytes(a) + _u32_to_bytes(b) + _u32_to_bytes(c) + _u32_to_bytes(d)
@@ -555,7 +555,7 @@ def _guid_from_description(value: Any) -> str:
         raw = value.get("raw_data")
         if isinstance(raw, bytes) and len(raw) == 16:
             return format_guid_bytes(raw)
-    # #143: struct_binary_decoded 格式的 Guid
+    # #143: Guid in struct_binary_decoded format
     if isinstance(value, dict) and value.get("kind") == "struct_binary_decoded":
         if value.get("struct_type") == "Guid":
             fields = value.get("fields", {})
@@ -601,16 +601,16 @@ def _replication_condition_value(value: Any) -> int:
     return 0
 
 def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]:
-    """从已解析的属性数据中提取组件变换属性。
+    """Extract component transform attributes from parsed property data.
 
-    识别并提取 RelativeLocation、RelativeRotation、RelativeScale3D、
-    Mobility 等组件变换相关的属性。
+    Identifies and extracts RelativeLocation, RelativeRotation, RelativeScale3D,
+    Mobility and other component transform-related properties.
 
     Args:
-        properties: 已解析的属性值列表
+        properties: Parsed property value list
 
     Returns:
-        包含变换组件的字典，可能的键：
+        Dictionary containing transform components, possible keys:
         - relative_location: {X, Y, Z}
         - relative_rotation: {Pitch, Yaw, Roll}
         - relative_scale3d: {X, Y, Z}
@@ -636,9 +636,9 @@ def parse_component_transform(properties: List[PropertyValue]) -> Dict[str, Any]
     return transform
 
 def _extract_vector(value: Any) -> Dict[str, float]:
-    """从属性值中提取 Vector 结构 {X, Y, Z}。
+    """Extract Vector struct {X, Y, Z} from property value.
 
-    支持 StructValue dataclass 和 dict 类型。
+    Supports StructValue dataclass and dict types.
     """
     fields: Dict[str, Any] = {}
     if isinstance(value, StructValue):
@@ -654,9 +654,9 @@ def _extract_vector(value: Any) -> Dict[str, float]:
     return {"X": 0.0, "Y": 0.0, "Z": 0.0}
 
 def _extract_rotator(value: Any) -> Dict[str, float]:
-    """从属性值中提取 Rotator 结构 {Pitch, Yaw, Roll}。
+    """Extract Rotator struct {Pitch, Yaw, Roll} from property value.
 
-    支持 StructValue dataclass 和 dict 类型。
+    Supports StructValue dataclass and dict types.
     """
     fields: Dict[str, Any] = {}
     if isinstance(value, StructValue):
@@ -672,7 +672,7 @@ def _extract_rotator(value: Any) -> Dict[str, float]:
     return {"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}
 
 def _extract_mobility(value: Any) -> str:
-    """从属性值中提取 Mobility 枚举值。"""
+    """Extract Mobility enum value from property value."""
     if isinstance(value, dict):
         return value.get("value", value.get("name", str(value)))
     if isinstance(value, str):
@@ -721,10 +721,10 @@ def _resolve_property_to_function_name(value: Any) -> Optional[str]:
     return None
 
 def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
-    """从图的 K2Node_FunctionEntry 和 K2Node_Event 节点提取函数元数据（Fallback 路径）。
+    """Extract function metadata from graph K2Node_FunctionEntry and K2Node_Event nodes (fallback path).
 
-    遍历图列表，查找 K2Node_FunctionEntry / K2Node_Event 节点，
-    从 node_data 和 pins 提取函数签名。
+    Iterates through graph list, finds K2Node_FunctionEntry / K2Node_Event nodes,
+    and extracts function signatures from node_data and pins.
     """
     if not graphs:
         return []
@@ -741,7 +741,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
 
             is_event_node = class_name == "K2Node_Event"
 
-            # 提取函数名
+            # Extract function name
             func_name = "Unknown"
             if is_event_node:
                 er = nd.get("event_reference")
@@ -759,7 +759,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 else:
                     func_name = nd.get("function_name", nd.get("custom_function_name", "Unknown"))
 
-            # 从 pins 提取参数和返回值
+            # Extract parameters and return values from pins
             parameters: List[FunctionParameter] = []
             return_type = ""
 
@@ -779,7 +779,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                     is_output = pin_dir == "EGPD_Output"
                     is_input = pin_dir == "EGPD_Input"
 
-                # 跳过执行流 pin（exec）和委托 pin
+                # Skip execution flow pins (exec) and delegate pins
                 if pin_type_name.lower() in ("exec", "delegate", "multicastdelegate"):
                     continue
 
@@ -787,7 +787,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 pin_name_lower = pin_name.lower()
 
                 if not is_event_node and is_output:
-                    # FunctionEntry: 输出引脚中含 "return" 的是返回值，其余是输出参数
+                    # FunctionEntry: output pins containing "return" are return values, rest are output parameters
                     if "return" in pin_name_lower:
                         if return_type == "":
                             return_type = _map_pin_category_to_cpp_type(pin_type_name)
@@ -800,7 +800,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                             is_output=True,
                         ))
                 elif is_input:
-                    # 输入引脚作为参数（排除 self/target）
+                    # Input pins as parameters (excluding self/target)
                     if pin_name_lower in ("self", "target", "worldcontext"):
                         continue
                     cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
@@ -811,7 +811,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                         is_output=False,
                     ))
                 elif is_output and is_event_node:
-                    # K2Node_Event 输出引脚（非 exec/delegate）= 事件参数
+                    # K2Node_Event output pins (non-exec/delegate) = event parameters
                     cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
                     parameters.append(FunctionParameter(
                         name=pin_name,
@@ -826,7 +826,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 parameters=parameters,
                 is_implemented=not is_event_node,
             )
-            # 标记事件节点
+            # Mark event nodes
             if is_event_node:
                 func.is_blueprint_implementable_event = True
                 if nd.get("b_override_function", False):
@@ -841,10 +841,10 @@ def _resolve_parent_class(
     import_map: Any = None,
     export_map: Any = None,
 ) -> Optional[str]:
-    """从属性和 export 元数据中解析父类。
+    """Resolve parent class from properties and export metadata.
 
-    优先从属性中查找 ParentClass / ParentClassProperty / SuperClass，
-    其次从 export 的 super_index 推断。
+    First looks for ParentClass / ParentClassProperty / SuperClass in properties,
+    then infers from export's super_index.
     """
     parent_class = None
     for prop in properties:
@@ -878,7 +878,7 @@ def _resolve_parent_class(
                         else:
                             parent_class = object_name
 
-    # 从 export 的 super_index 推断父类
+    # Infer parent class from export's super_index
     if not parent_class and hasattr(export, 'super_index'):
         if linker is not None:
             from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
@@ -895,7 +895,7 @@ def _extract_and_merge_functions(
     properties: List[Any],
     graphs: Any = None,
 ) -> List[BlueprintFunction]:
-    """合并 BPGC 属性路径和图路径的函数列表，按名称去重。"""
+    """Merge function lists from BPGC property path and graph path, deduplicated by name."""
     functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
     functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
     seen_names: set = set()
@@ -907,7 +907,7 @@ def _extract_and_merge_functions(
     return functions
 
 def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[BlueprintEvent]:
-    """从函数列表中提取事件（可实现事件和蓝图事件）。"""
+    """Extract events from function list (implementable events and blueprint events)."""
     events: List[BlueprintEvent] = []
     for f in functions:
         if f.is_blueprint_implementable_event or f.is_blueprint_event:
@@ -925,9 +925,9 @@ def _extract_interfaces_from_props(
     props_list: List[Any],
     import_map: Any = None,
 ) -> List[Any]:
-    """从属性列表中提取 ImplementedInterfaces。
+    """Extract ImplementedInterfaces from property list.
 
-    解析 FBPInterfaceDescription 结构，将 Interface 对象引用索引解析为接口名。
+    Parses FBPInterfaceDescription structs, resolves Interface object reference indices to interface names.
     """
     from uasset_read.models.blueprint import BlueprintInterface
     result: List[Any] = []
@@ -964,15 +964,15 @@ def _extract_interfaces(
     import_map: Any = None,
     linker: Any = None,
 ) -> List[Any]:
-    """提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）。
+    """Extract ImplementedInterfaces (from current export or other blueprint exports).
 
-    先从当前 export 属性中查找，未找到时遍历其他蓝图 export 搜索。
+    First searches in current export properties, then iterates other blueprint exports if not found.
     """
     from uasset_read.parsers.property_parser import parse_properties_from_export
 
     interfaces = _extract_interfaces_from_props(properties, import_map)
 
-    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
+    # If current export has no ImplementedInterfaces, search in other blueprint exports
     if not interfaces and export_map:
         from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
         for other_export in export_map:
@@ -987,7 +987,7 @@ def _extract_interfaces(
                 )
                 interfaces = _extract_interfaces_from_props(other_props, import_map)
             except (KeyError, TypeError, ValueError) as e:
-                logger.debug("提取接口属性失败: %s", e, exc_info=True)
+                logger.debug("Failed to extract interface properties: %s", e, exc_info=True)
             if interfaces:
                 break
 
@@ -1000,10 +1000,10 @@ def _resolve_parent_class(
     import_map: Any = None,
     export_map: Any = None,
 ) -> Optional[str]:
-    """从属性和 export 元数据中解析父类。
+    """Resolve parent class from properties and export metadata.
 
-    优先从属性中查找 ParentClass / ParentClassProperty / SuperClass，
-    其次从 export 的 super_index 推断。
+    First looks for ParentClass / ParentClassProperty / SuperClass in properties,
+    then infers from export's super_index.
     """
     parent_class = None
     for prop in properties:
@@ -1036,7 +1036,7 @@ def _resolve_parent_class(
                         else:
                             parent_class = object_name
 
-    # 从 export 的 super_index 推断父类
+    # Infer parent class from export's super_index
     if not parent_class and hasattr(export, 'super_index'):
         if linker is not None:
             from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
@@ -1054,7 +1054,7 @@ def _extract_and_merge_functions(
     properties: List[Any],
     graphs: Any = None,
 ) -> List[BlueprintFunction]:
-    """合并 BPGC 属性路径和图路径的函数列表，按名称去重。"""
+    """Merge function lists from BPGC property path and graph path, deduplicated by name."""
     functions_bpgc = _extract_functions_from_bpgc_properties(properties) if properties else []
     functions_graph = _extract_functions_from_graphs(graphs) if graphs else []
     seen_names: set = set()
@@ -1067,7 +1067,7 @@ def _extract_and_merge_functions(
 
 
 def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[BlueprintEvent]:
-    """从函数列表中提取事件（可实现事件和蓝图事件）。"""
+    """Extract events from function list (implementable events and blueprint events)."""
     events: List[BlueprintEvent] = []
     for f in functions:
         if f.is_blueprint_implementable_event or f.is_blueprint_event:
@@ -1086,9 +1086,9 @@ def _extract_interfaces_from_props(
     props_list: List[Any],
     import_map: Any = None,
 ) -> List[Any]:
-    """从属性列表中提取 ImplementedInterfaces。
+    """Extract ImplementedInterfaces from property list.
 
-    解析 FBPInterfaceDescription 结构，将 Interface 对象引用索引解析为接口名。
+    Parses FBPInterfaceDescription structs, resolves Interface object reference indices to interface names.
     """
     from uasset_read.models.blueprint import BlueprintInterface
     result: List[Any] = []
@@ -1126,15 +1126,15 @@ def _extract_interfaces(
     import_map: Any = None,
     linker: Any = None,
 ) -> List[Any]:
-    """提取 ImplementedInterfaces（从当前 export 或其他蓝图 export）。
+    """Extract ImplementedInterfaces (from current export or other blueprint exports).
 
-    先从当前 export 属性中查找，未找到时遍历其他蓝图 export 搜索。
+    First searches in current export properties, then iterates other blueprint exports if not found.
     """
     from uasset_read.parsers.property_parser import parse_properties_from_export
 
     interfaces = _extract_interfaces_from_props(properties, import_map)
 
-    # 如果当前 export 没有 ImplementedInterfaces，从其他蓝图 export 搜索
+    # If current export has no ImplementedInterfaces, search in other blueprint exports
     if not interfaces and export_map:
         from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
         for other_export in export_map:
@@ -1149,7 +1149,7 @@ def _extract_interfaces(
                 )
                 interfaces = _extract_interfaces_from_props(other_props, import_map)
             except (KeyError, TypeError, ValueError) as e:
-                logger.debug("提取接口属性失败: %s", e, exc_info=True)
+                logger.debug("Failed to extract interface properties: %s", e, exc_info=True)
             if interfaces:
                 break
 
@@ -1166,30 +1166,30 @@ def extract_blueprint_metadata(
     linker=None,
     graphs=None,
 ) -> tuple:
-    """综合变量提取和通用元数据，构建 BlueprintMetadata 实例。
+    """Combine variable extraction and general metadata to build BlueprintMetadata instance.
 
-    等价迁移 uasset_read.py §6100-6220。
-    从指定的 export 读取属性并提取蓝图元数据。
+    Equivalent migration from uasset_read.py section 6100-6220.
+    Reads properties from the specified export and extracts blueprint metadata.
 
     Args:
-        export: ObjectExport 条目（通常是 BPGC）
-        archive: FArchive 实例
-        import_map: 导入表
-        export_map: 导出表
-        name_map: 名称表
+        export: ObjectExport entry (typically BPGC)
+        archive: FArchive instance
+        import_map: Import table
+        export_map: Export table
+        name_map: Name table
         summary: PackageFileSummary
-        linker: PackageLinker 实例（可选，用于更精确的父类解析）
-        graphs: UEdGraph 列表（可选，用于从 K2Node_FunctionEntry 提取函数）
+        linker: PackageLinker instance (optional, for more precise parent class resolution)
+        graphs: UEdGraph list (optional, for extracting functions from K2Node_FunctionEntry)
 
     Returns:
-        Tuple[BlueprintMetadata | None, str | None] — (元数据, 警告)
+        Tuple[BlueprintMetadata | None, str | None] -- (metadata, warning)
     """
     from uasset_read.parsers.property_parser import parse_properties_from_export
 
     if export is None or export.serial_size <= 0:
         return None, None
 
-    # 解析 export 属性
+    # Parse export properties
     try:
         properties = parse_properties_from_export(
             export, archive, summary, name_map, export_map, import_map,
@@ -1200,26 +1200,26 @@ def extract_blueprint_metadata(
     if not properties:
         return None, None
 
-    # 提取变量
+    # Extract variables
     variables = extract_blueprint_variables(properties)
 
-    # 提取父类
+    # Extract parent class
     parent_class = _resolve_parent_class(properties, export, linker, import_map, export_map)
 
-    # 提取函数（BPGC + 图路径合并去重）
+    # Extract functions (BPGC + graph path merged and deduplicated)
     functions = _extract_and_merge_functions(properties, graphs)
 
-    # 提取事件
+    # Extract events
     events = _extract_events_from_functions(functions)
 
-    # 提取描述
+    # Extract description
     description = ""
     for prop in properties:
         if prop.name == "BlueprintDescription":
             description = str(prop.value) if prop.value else ""
             break
 
-    # 提取接口
+    # Extract interfaces
     interfaces = _extract_interfaces(
         properties, export, export_map, archive, summary, name_map, import_map, linker,
     )
@@ -1236,33 +1236,33 @@ def extract_blueprint_metadata(
     return meta, None
 
 def parse_property_flags_to_labels(flags: int) -> List[str]:
-    """将 CPF_* 位标志转换为可读标签列表。
+    """Convert CPF_* bit flags to readable label list.
 
-    等价迁移 uasset_read.py §4775-4827。
-    包含语义映射：CPF_Edit → EditAnywhere/EditConst,
-    CPF_BlueprintVisible → BlueprintReadWrite/BlueprintReadOnly。
+    Equivalent migration from uasset_read.py section 4775-4827.
+    Includes semantic mapping: CPF_Edit -> EditAnywhere/EditConst,
+    CPF_BlueprintVisible -> BlueprintReadWrite/BlueprintReadOnly.
     """
     labels = []
 
-    # Edit 标志（互斥模式）
+    # Edit flags (mutually exclusive modes)
     if flags & CPF_Edit:
         if flags & CPF_EditConst:
             labels.append("EditConst")
         else:
             labels.append("EditAnywhere")
 
-    # 蓝图可见性标志（互斥）
+    # Blueprint visibility flags (mutually exclusive)
     if flags & CPF_BlueprintVisible:
         if flags & CPF_BlueprintReadOnly:
             labels.append("BlueprintReadOnly")
         else:
             labels.append("BlueprintReadWrite")
 
-    # 组件引用标志
+    # Component reference flags
     if flags & CPF_InstancedReference:
         labels.append("InstancedReference")
 
-    # 其他标志
+    # Other flags
     if flags & CPF_Protected:
         labels.append("Protected")
     if flags & CPF_ExposeOnSpawn:
@@ -1295,19 +1295,19 @@ def read_blueprint_variable(
     summary,
 ) -> BlueprintVariable:
     """
-    从 blueprint export 读取 FBPVariableDescription（BLUE-03）。
-    
-    参考 UE C++ FBPVariableDescription::Serialize() 实现
+    Read FBPVariableDescription from blueprint export (BLUE-03).
 
-    序列化顺序:
+    Reference: UE C++ FBPVariableDescription::Serialize() implementation.
+
+    Serialization order:
     1. VarName (FName)
-    2. VarGuid (FGuid - 16 bytes) — 跳过
+    2. VarGuid (FGuid - 16 bytes) -- skipped
     3. VarType (FEdGraphPinType)
     4. FriendlyName (FString)
-    5. Category (FText — 简化为 FString)
+    5. Category (FText -- simplified to FString)
     6. PropertyFlags (uint64)
-    7. RepNotifyFunc (FName) — 跳过
-    8. ReplicationCondition (uint8) — 跳过
+    7. RepNotifyFunc (FName) -- skipped
+    8. ReplicationCondition (uint8) -- skipped
     9. MetaDataArray (TArray)
     10. DefaultValue (FString)
     """
@@ -1323,7 +1323,7 @@ def read_blueprint_variable(
     # FriendlyName (FString)
     var.friendly_name = archive.read_fstring()
 
-    # Category (FText) — 简化为 FString
+    # Category (FText) -- simplified to FString
     var.category = archive.read_fstring()
 
     var.property_flags = archive.read_u64()
@@ -1340,10 +1340,10 @@ def read_blueprint_variable(
         if key:
             var.metadata[key] = value
 
-    # 解析 PropertyFlags 为可读标签
+    # Parse PropertyFlags to readable labels
     var.flags_labels = parse_property_flags_to_labels(var.property_flags)
 
-    # 解析属性标志为布尔字段
+    # Parse property flags to boolean fields
     flags = var.property_flags
     var.is_edit_anywhere = bool(flags & CPF_Edit)
     var.is_edit_instance_only = bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst)
@@ -1364,7 +1364,7 @@ def read_blueprint_variable(
     var.is_replicated = bool(flags & CPF_Net)
     var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
 
-    # 提取元数据字段
+    # Extract metadata fields
     var.edit_condition = var.metadata.get('EditCondition', '')
     var.meta_class = var.metadata.get('MetaClass', '')
     var.edit_category = var.metadata.get('Category', '')
@@ -1373,7 +1373,7 @@ def read_blueprint_variable(
     default_str = archive.read_fstring()
     var.default_value = parse_default_value(default_str, var.var_type)
 
-    # 组件变量识别（双重验证）
+    # Component variable identification (double verification)
     type_str = ""
     if var.var_type:
         if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Markdown + Mermaid 流程图渲染器。"""
+"""Markdown + Mermaid flow chart renderer."""
 
 from typing import TYPE_CHECKING
 
@@ -17,12 +17,12 @@ if TYPE_CHECKING:
 
 
 def _escape_md_cell(text: str) -> str:
-    """转义会破坏 Markdown 表格格式的字符。"""
+    """Escape characters that would break Markdown table formatting."""
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
 def _escape_mermaid_label(text: str) -> str:
-    """转义 Mermaid 标签中的特殊字符，防止图解析失败。"""
+    """Escape special characters in Mermaid labels to prevent graph parsing failures."""
     s = str(text)
     for ch in ('"', '[', ']', '{', '}'):
         s = s.replace(ch, f'#{ord(ch)};')
@@ -30,7 +30,7 @@ def _escape_mermaid_label(text: str) -> str:
 
 
 def _format_transforms(transforms) -> str:
-    """格式化 Transform 字典为紧凑字符串。"""
+    """Format Transform dict into a compact string."""
     if not transforms:
         return "Identity"
     parts = []
@@ -56,22 +56,22 @@ def _format_transforms(transforms) -> str:
 
 
 def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
-    """从 PackageIR 收集 Enhanced Input Action 绑定。
+    """Collect Enhanced Input Action bindings from PackageIR.
 
-    支持两种来源：
-    1. graphs 中的 K2Node_EnhancedInputAction 节点（优先使用新字段）
-    2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名（降级）
+    Supports two sources:
+    1. K2Node_EnhancedInputAction nodes in graphs (prefer new fields)
+    2. InpActEvt_*_K2Node_EnhancedInputActionEvent_* function names in decompiled_functions (fallback)
     """
     import re
     input_actions: list[tuple[str, dict]] = []
     seen_actions: set[str] = set()
 
-    # 来源1: graphs 中的节点（优先使用新字段）
+    # Source 1: nodes in graphs (prefer new fields)
     for export in ir.exports:
         for graph in export.graphs:
             for node in graph.nodes:
                 if node.node_class == "K2Node_EnhancedInputAction":
-                    # 使用新字段
+                    # Use new fields
                     path = node.input_action_path or "?"
                     triggers = node.trigger_events or []
 
@@ -79,8 +79,8 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
                         seen_actions.add(path)
                         input_actions.append((path, triggers))
 
-    # 来源2: decompiled_functions 中的函数名（降级路径）
-    # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
+    # Source 2: function names in decompiled_functions (fallback path)
+    # Format: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
     pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
     for func in (ir.decompiled_functions or []):
         match = pattern.match(func.name)
@@ -88,17 +88,17 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
             action_name = match.group(1)
             if action_name not in seen_actions:
                 seen_actions.add(action_name)
-                # 降级：从函数名解析，无法获取详细信息
+                # Fallback: parse from function name, no detailed info available
                 input_actions.append((action_name, {}))
 
     return input_actions
 
 
 class MarkdownRenderer(IRenderer):
-    """Markdown + Mermaid 流程图渲染器。"""
+    """Markdown + Mermaid flow chart renderer."""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        # 如果启用 hex_view 且 IR 中有 hex_view 数据，返回 hex 视图格式
+        # If hex_view is enabled and IR has hex_view data, return hex view format
         if options.hex_view and ir.debug and ir.debug.hex_view:
             from uasset_read.debug.hex_view import format_hex_view
             result = format_hex_view(ir.debug.hex_view)
@@ -111,12 +111,12 @@ class MarkdownRenderer(IRenderer):
 
         lines: list[str] = []
 
-        # 标题
+        # Title
         asset_name = ir.header.package_name.split("/")[-1] if "/" in ir.header.package_name else ir.header.package_name
         lines.append(f"# {asset_name}")
         lines.append("")
 
-        # 概述表
+        # Overview table
         lines.append("## Asset Overview")
         lines.append("| Field | Value |")
         lines.append("|-------|-------|")
@@ -144,7 +144,7 @@ class MarkdownRenderer(IRenderer):
             for cls, count in sorted(opaque_classes.items(), key=lambda x: -x[1]):
                 lines.append(f"- {cls}: {count}")
 
-        # === Blueprint Details（仅蓝图资产） ===
+        # === Blueprint Details (blueprint assets only) ===
         if ir.blueprint:
             lines.append("## Blueprint Details")
             lines.append("| Field | Value |")
@@ -161,7 +161,7 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |")
             lines.append("")
 
-            # === Component Hierarchy Mermaid 图 ===
+            # === Component Hierarchy Mermaid Diagram ===
             if ir.blueprint.components:
                 lines.append("### Component Hierarchy")
                 lines.append("")
@@ -178,7 +178,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append("```")
                 lines.append("")
 
-                # 组件详情表
+                # Component details table
                 lines.append("| Component | Class | Transform |")
                 lines.append("|-----------|-------|-----------|")
                 for comp in ir.blueprint.components:
@@ -217,7 +217,7 @@ class MarkdownRenderer(IRenderer):
                         lines.append(f"| {action_name} | — | — |")
                 lines.append("")
 
-        # 导出 — 只显示蓝图 export，过滤编辑器节点类 export（与 JSON 渲染器一致）
+        # Exports — only show blueprint exports, filter editor node class exports (consistent with JSON renderer)
         blueprint_exports = [
             e for e in filter_editor_items(ir.exports)
             if is_blueprint_export(e)
@@ -236,7 +236,7 @@ class MarkdownRenderer(IRenderer):
                 )
             lines.append("")
 
-        # 图 + Mermaid
+        # Graph + Mermaid
         for export in blueprint_exports:
             for graph in export.graphs:
                 lines.append(f"## Graph: {graph.graph_name}")
@@ -256,7 +256,7 @@ class MarkdownRenderer(IRenderer):
                     lines.append("```")
                     lines.append("")
 
-            # 属性详情（过滤编辑器布局属性，与 JSON 渲染器一致）
+            # Property details (filter editor layout properties, consistent with JSON renderer)
             self._render_export_properties(lines, export)
 
         # === Event Graph ===
@@ -271,16 +271,16 @@ class MarkdownRenderer(IRenderer):
         # === Asset Registry Data ===
         self._render_asset_registry(lines, ir)
 
-        # === 动画数据 ===
+        # === Animation Data ===
         self._render_anim_data(lines, ir)
 
-        # === 诊断信息 ===
+        # === Diagnostics ===
         self._render_diagnostics(lines, ir)
 
         return "\n".join(lines)
 
     def _render_status_section(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Status / Errors / Warnings 章节。"""
+        """Render Status / Errors / Warnings section."""
         dd = ir.diagnostics_data
         if not dd or dd.status == "success":
             return
@@ -312,7 +312,7 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
     def _render_event_graph(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Event Graph 章节 — 每个事件函数一个子章节，包含 C++ 代码块。"""
+        """Render Event Graph section — one subsection per event function, including C++ code blocks."""
         events = ir.blueprint.events if ir.blueprint and ir.blueprint.events else []
         if not events and not ir.execution_chains:
             return
@@ -320,12 +320,12 @@ class MarkdownRenderer(IRenderer):
         lines.append("## Event Graph")
         lines.append("")
 
-        # 使用 execution_chains 中的事件信息
+        # Use event info from execution_chains
         chains_by_event: dict[str, list[str]] = {}
         for chain in ir.execution_chains:
             chains_by_event.setdefault(chain.event, []).extend(chain.chain)
 
-        # 去重后的事件名
+        # Deduplicated event names
         seen_events: set[str] = set()
         for event in events:
             if event.name in seen_events:
@@ -335,12 +335,12 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"### {event.name}")
             lines.append("")
 
-            # 查找匹配的反编译函数
+            # Find matching decompiled function
             decompiled = self._find_decompiled(ir, event.name)
             if decompiled:
                 if decompiled.bytecode_confidence == "heuristic":
                     lines.append("> [!WARNING]")
-                    lines.append("> bytecode 为启发式恢复（serial scan），置信度较低")
+                    lines.append("> bytecode is heuristic recovery (serial scan), low confidence")
                     lines.append("")
                 lines.append("```cpp")
                 lines.append(decompiled.signature)
@@ -351,7 +351,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append("}")
                 lines.append("```")
             else:
-                # 生成事件 override 签名
+                # Generate event override signature
                 lines.append("```cpp")
                 lines.append(self._gen_event_signature(event))
                 lines.append("{")
@@ -360,7 +360,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append("```")
             lines.append("")
 
-            # 调用链
+            # Execution chain
             chain = chains_by_event.get(event.name, [])
             if chain:
                 lines.append("**Execution Chain:**")
@@ -368,7 +368,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append(" -> ".join(chain))
                 lines.append("")
 
-        # 处理 execution_chains 中未在 events 里列出的事件
+        # Handle events in execution_chains not listed in events
         for event_name, chain in chains_by_event.items():
             if event_name not in seen_events:
                 seen_events.add(event_name)
@@ -384,8 +384,8 @@ class MarkdownRenderer(IRenderer):
                 lines.append("")
 
     def _render_functions(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Functions 章节 — 每个蓝图函数一个子章节，含签名、参数、C++ 代码。"""
-        # 收集所有函数：反编译函数 + 蓝图函数元数据（去重）
+        """Render Functions section — one subsection per blueprint function with signature, parameters, C++ code."""
+        # Collect all functions: decompiled functions + blueprint function metadata (deduplicated)
         func_map: dict[str, dict] = {}
 
         for func in ir.decompiled_functions:
@@ -422,7 +422,7 @@ class MarkdownRenderer(IRenderer):
             lines.append(f"### {func_info['name']}")
             lines.append("")
 
-            # 签名
+            # Signature
             if func_info["signature"]:
                 lines.append(f"**Signature:** `{func_info['signature']}`")
             else:
@@ -440,7 +440,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"**Signature:** `{sig}`")
             lines.append("")
 
-            # 参数列表
+            # Parameter list
             params = func_info["parameters"]
             if params:
                 lines.append("| Parameter | Type | Default |")
@@ -453,11 +453,11 @@ class MarkdownRenderer(IRenderer):
                     lines.append(f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |")
                 lines.append("")
 
-            # C++ 实现代码块
+            # C++ implementation code block
             if func_info["cpp_code"] and func_info["cpp_code"].strip():
                 if func_info.get("bytecode_confidence") == "heuristic":
                     lines.append("> [!WARNING]")
-                    lines.append("> bytecode 为启发式恢复（serial scan），置信度较低")
+                    lines.append("> bytecode is heuristic recovery (serial scan), low confidence")
                     lines.append("")
                 lines.append("```cpp")
                 lines.append(func_info["cpp_code"].strip())
@@ -465,11 +465,11 @@ class MarkdownRenderer(IRenderer):
                 lines.append("")
 
     def _render_variables(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Variables 章节 — 变量表格，包含名称、类型、默认值。"""
+        """Render Variables section — variable table with name, type, default value."""
         if not ir.variables:
             return
 
-        # 过滤编辑器内部变量（与 JSON 渲染器一致）
+        # Filter editor-internal variables (consistent with JSON renderer)
         filtered_variables = filter_variables(ir.variables)
         if not filtered_variables:
             return
@@ -484,7 +484,7 @@ class MarkdownRenderer(IRenderer):
         lines.append("")
 
     def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染 Asset Registry Data 章节 — 资产元数据标签。"""
+        """Render Asset Registry Data section — asset metadata tags."""
         data = ir.dependencies.asset_registry_data if ir.dependencies else None
         if not data:
             return
@@ -514,7 +514,7 @@ class MarkdownRenderer(IRenderer):
                 lines.append("")
 
     def _render_anim_data(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染动画数据章节 — AnimBlueprint, AnimSequence, AnimMontage。"""
+        """Render animation data section — AnimBlueprint, AnimSequence, AnimMontage."""
         anim = ir.animation
         if not anim:
             return
@@ -649,7 +649,7 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
-        """渲染诊断信息章节 — 按严重度分组并显示图标。"""
+        """Render diagnostics section — grouped by severity with icons."""
         # Show section header if there are diagnostics or truncation to report
         dd = ir.diagnostics_data
         has_truncation = dd and dd.diagnostics_truncated_count > 0
@@ -663,7 +663,7 @@ class MarkdownRenderer(IRenderer):
             "info": "ℹ️",
         }
 
-        # 按严重度分组
+        # Group by severity
         by_severity: dict[str, list] = {}
         for diag in ir.diagnostics:
             d = diag.to_dict() if hasattr(diag, "to_dict") else {}
@@ -672,7 +672,7 @@ class MarkdownRenderer(IRenderer):
                 by_severity[severity] = []
             by_severity[severity].append(d)
 
-        lines.append("## 诊断信息")
+        lines.append("## Diagnostics")
         lines.append("")
 
         # Show truncation notice if any diagnostics were dropped
@@ -690,7 +690,7 @@ class MarkdownRenderer(IRenderer):
             icon = severity_icons.get(severity, "")
             lines.append(f"### {icon} {severity.upper()} ({len(diagnostics)})")
             lines.append("")
-            lines.append("| 类型 | 模块 | 对象名 | 字段 | 错误信息 |")
+            lines.append("| Type | Module | Object | Field | Error |")
             lines.append("|------|------|--------|------|----------|")
             for d in diagnostics:
                 kind = _escape_md_cell(d.get("kind", ""))
@@ -702,8 +702,8 @@ class MarkdownRenderer(IRenderer):
             lines.append("")
 
     def _render_export_properties(self, lines: list[str], export) -> None:
-        """渲染 export 的属性表格。"""
-        # 过滤编辑器属性（standard 输出级别）
+        """Render export property table."""
+        # Filter editor properties (standard output level)
         filtered_props = [
             p for p in (export.properties or [])
             if p.name not in EDITOR_PROPERTY_NAMES
@@ -720,7 +720,7 @@ class MarkdownRenderer(IRenderer):
             prop_type = _escape_md_cell(prop.type)
             value = prop.value if prop.value is not None else "null"
 
-            # 截断长值
+            # Truncate long values
             value_str = str(value)
             if len(value_str) > 50:
                 value_str = value_str[:50]
@@ -730,8 +730,8 @@ class MarkdownRenderer(IRenderer):
         lines.append("")
 
     def _render_export_properties(self, lines: list[str], export) -> None:
-        """渲染 export 的属性表格。"""
-        # 过滤编辑器属性（standard 输出级别）
+        """Render export property table."""
+        # Filter editor properties (standard output level)
         filtered_props = [
             p for p in (export.properties or [])
             if p.name not in EDITOR_PROPERTY_NAMES
@@ -748,7 +748,7 @@ class MarkdownRenderer(IRenderer):
             prop_type = _escape_md_cell(prop.type)
             value = prop.value if prop.value is not None else "null"
 
-            # 截断长值
+            # Truncate long values
             value_str = str(value)
             if len(value_str) > 50:
                 value_str = value_str[:50]
@@ -758,14 +758,14 @@ class MarkdownRenderer(IRenderer):
         lines.append("")
 
     def _find_decompiled(self, ir: PackageIR, name: str):
-        """根据函数名查找反编译函数。"""
+        """Find decompiled function by function name."""
         for func in ir.decompiled_functions:
             if func.name == name:
                 return func
         return None
 
     def _gen_event_signature(self, event) -> str:
-        """从 BlueprintEventIR 生成 C++ override 签名。"""
+        """Generate C++ override signature from BlueprintEventIR."""
         params = []
         for p in event.parameters:
             if p.get("is_input"):
@@ -774,7 +774,7 @@ class MarkdownRenderer(IRenderer):
         return f"void {event.name}({param_str}) override"
 
     def _build_pin_to_node_index(self, graph) -> dict[str, str]:
-        """构建 Pin GUID → Node GUID 的映射索引。"""
+        """Build Pin GUID -> Node GUID mapping index."""
         pin_to_node: dict[str, str] = {}
         for node in graph.nodes:
             node_guid = node.node_guid
@@ -786,7 +786,7 @@ class MarkdownRenderer(IRenderer):
         return pin_to_node
 
     def _render_mermaid_edges(self, graph, pin_to_node: dict[str, str], indent: int = 0) -> list[str]:
-        """渲染 Mermaid 边，使用 Node GUID 替代 Pin GUID。"""
+        """Render Mermaid edges, using Node GUID instead of Pin GUID."""
         prefix = "    " * indent
         edge_lines: list[str] = []
         seen_edges: set[tuple[str, str]] = set()
@@ -795,20 +795,20 @@ class MarkdownRenderer(IRenderer):
             source_guid = (node.node_guid or "")[:8]
             for pin in node.pins:
                 for linked_pin_guid in (pin.linked_to or []):
-                    # 将 Pin GUID 转换为 Node GUID
+                    # Convert Pin GUID to Node GUID
                     target_node_guid = pin_to_node.get(linked_pin_guid)
 
-                    # 跳过无法解析的 Pin 引用
+                    # Skip unresolvable Pin references
                     if target_node_guid is None:
                         continue
 
                     target_guid = target_node_guid[:8]
 
-                    # 跳过自连接
+                    # Skip self-loops
                     if source_guid == target_guid:
                         continue
 
-                    # 去重
+                    # Deduplicate
                     edge_key = (source_guid, target_guid)
                     if edge_key in seen_edges:
                         continue
@@ -819,21 +819,21 @@ class MarkdownRenderer(IRenderer):
         return edge_lines
 
     def _render_mermaid_nodes(self, lines: list[str], graph, indent: int = 0) -> None:
-        """渲染 Mermaid 节点和连接（递归支持嵌套子图）。"""
+        """Render Mermaid nodes and connections (recursive support for nested subgraphs)."""
         prefix = "    " * indent
 
-        # 定义节点
+        # Define nodes
         for node in graph.nodes:
             label = _escape_mermaid_label(node.node_comment or node.node_class)
             safe_guid = node.node_guid[:8] if node.node_guid else "unknown"
             lines.append(f'{prefix}    {safe_guid}["{label}"]')
 
-        # 定义连接（使用索引转换 Pin GUID -> Node GUID）
+        # Define connections (using index to convert Pin GUID -> Node GUID)
         pin_to_node = self._build_pin_to_node_index(graph)
         edge_lines = self._render_mermaid_edges(graph, pin_to_node, indent)
         lines.extend(edge_lines)
 
-        # 递归渲染嵌套子图
+        # Recursively render nested subgraphs
         for subgraph in graph.subgraphs or []:
             sg_name = subgraph.graph_name or "subgraph"
             safe_sg_name = sg_name.replace(" ", "_").replace(".", "_")[:20]

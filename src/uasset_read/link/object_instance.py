@@ -80,7 +80,7 @@ class UObjectInstance:
     """Resolved weak object references (WeakObjectProperty)."""
 
     script_serialization_start_offset: int = 0
-    """UE5 蓝图脚本序列化起始偏移。"""
+    """UE5 blueprint script serialization start offset."""
 
     # ---- Internal state ----
     _preloaded: bool = False

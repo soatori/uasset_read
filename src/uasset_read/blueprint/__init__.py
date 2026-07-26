@@ -1,7 +1,7 @@
-"""蓝图模块 — 蓝图变量提取、组件变换解析。
+"""Blueprint module -- blueprint variable extraction, component transform parsing.
 
-独立模块（per D-02），可被属性解析和蓝图图解析共同使用。
-所有函数通过扁平导出（per D-03）。
+Standalone module (per D-02), shared by property parsing and blueprint graph parsing.
+All functions are exported via flat exports (per D-03).
 """
 
 from uasset_read.blueprint.variable_extractor import (

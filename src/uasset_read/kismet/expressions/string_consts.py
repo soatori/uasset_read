@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Kismet 表达式 — 字符串常量表达式。"""
+"""Kismet expression -- string constant expressions."""
 
 
 from dataclasses import dataclass

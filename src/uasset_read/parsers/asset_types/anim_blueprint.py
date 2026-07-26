@@ -1,10 +1,10 @@
-"""AnimBlueprint 资产类型处理器
+"""AnimBlueprint Asset type handler
 
-解析 UAnimBlueprintGeneratedClass 的动画特有数据：
-- BakedStateMachines（烘焙后的状态机）
-- AnimNotifies（动画通知）
-- SyncGroupNames（同步组）
-- AnimNodeData（动画节点常量数据）
+Parse UAnimBlueprintGeneratedClass animation-specific data:
+- BakedStateMachines (baked state machines)
+- AnimNotifies (animation notifies)
+- SyncGroupNames (sync groups)
+- AnimNodeData (animation node constant data)
 """
 
 from typing import Any
@@ -31,60 +31,60 @@ from uasset_read.parsers.asset_types.property_extractor import (
 
 
 def _extract_int_array(data: Any, key: str) -> list[int]:
-    """从 dict 提取整数数组，跳过非 int 值。"""
+    """Extract integer array from dict, skipping non-int values."""
     arr = data.get(key, [])
     return [i for i in arr if isinstance(i, int)]
 
 
 class AnimBlueprintHandler:
-    """AnimBlueprint 资产类型处理器"""
+    """AnimBlueprint Asset type handler"""
 
-    # 反射注册元数据
+    # Reflection registration metadata
     export_type: str = "AnimBlueprintGeneratedClass"
     priority: int = 100
 
     def handle(self, export: Any, context: Any) -> ParseStatus:
-        """处理 AnimBlueprintGeneratedClass export
+        """Handle AnimBlueprintGeneratedClass export
 
         Args:
-            export: ObjectExport 实例
-            context: 解析上下文
+            export: ObjectExport instance
+            context: parse context
 
         Returns:
-            ParseStatus: SUCCESS 或 PARTIAL
+            ParseStatus: SUCCESS or PARTIAL
         """
         try:
-            # 从 export 提取属性数据
-            # ObjectExport 有 properties 属性（解析后的属性列表）
+            # Extract property data from export
+            # ObjectExport has a properties attribute (parsed property list)
             properties_list = getattr(export, "properties", [])
             if not properties_list:
                 return ParseStatus.PARTIAL
 
-            # 将属性列表转换为字典格式（name -> value）
+            # Convert property list to dictionary format（name -> value）
             properties = build_properties_dict(properties_list)
 
-            # 构建 AnimBlueprintIR
+            # Build AnimBlueprintIR
             anim_ir = AnimBlueprintIR()
 
-            # 提取 BakedStateMachines
+            # Extract BakedStateMachines
             anim_ir.baked_state_machines = extract_array_property(
                 properties, "BakedStateMachines", self._parse_baked_state_machines
             )
 
-            # 提取 AnimNotifies
+            # Extract AnimNotifies
             anim_ir.anim_notifies = extract_array_property(
                 properties, "AnimNotifies", parse_anim_notifies
             )
 
-            # 提取 TargetSkeleton（对象引用）
+            # Extract TargetSkeleton (object reference)
             extract_object_ref(properties, "TargetSkeleton", anim_ir, "target_skeleton")
 
-            # 提取 SyncGroupNames
+            # Extract SyncGroupNames
             anim_ir.sync_group_names = extract_array_property(
                 properties, "SyncGroupNames", self._parse_sync_group_names
             )
 
-            # 提取简单属性
+            # Extract simple properties
             extract_property(
                 properties, "GraphAssetPlayerInformation", anim_ir, "graph_asset_player_info"
             )
@@ -93,19 +93,19 @@ class AnimBlueprintHandler:
             )
             extract_property(properties, "AnimNodeData", anim_ir, "anim_node_data")
 
-            # 存储到 export 的自定义数据
+            # Store in export custom data
             ensure_custom_data(export)["anim_blueprint"] = anim_ir
 
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # 记录错误但不中断解析
+            # Log error but do not abort parsing
             if hasattr(context, "warnings"):
-                context.warnings.append(f"AnimBlueprint 解析错误: {e}")
+                context.warnings.append(f"AnimBlueprint parse error: {e}")
             return ParseStatus.PARTIAL
 
     def _parse_baked_state_machines(self, data: Any) -> list[BakedStateMachineIR]:
-        """解析烘焙后的状态机数组"""
+        """Parse baked state machine array"""
 
         def _parse_machine(machine_data: dict) -> BakedStateMachineIR:
             machine = BakedStateMachineIR(
@@ -125,7 +125,7 @@ class AnimBlueprintHandler:
         return parse_dict_list(data, _parse_machine)
 
     def _parse_baked_states(self, data: list) -> list[BakedStateIR]:
-        """解析烘焙后的状态数组"""
+        """Parse baked state array"""
 
         def _parse_state(state_data: dict) -> BakedStateIR:
             state = BakedStateIR(
@@ -148,7 +148,7 @@ class AnimBlueprintHandler:
         return parse_dict_list(data, _parse_state)
 
     def _parse_baked_exit_transitions(self, data: list) -> list[BakedExitTransitionIR]:
-        """解析退出转换规则"""
+        """Parse exit transition rules"""
 
         def _parse_transition(trans_data: dict) -> BakedExitTransitionIR:
             return BakedExitTransitionIR(
@@ -172,7 +172,7 @@ class AnimBlueprintHandler:
         return parse_dict_list(data, _parse_transition)
 
     def _parse_baked_transitions(self, data: list) -> list[BakedTransitionIR]:
-        """解析状态间转换"""
+        """Parse inter-state transitions"""
 
         def _parse_transition(trans_data: dict) -> BakedTransitionIR:
             transition = BakedTransitionIR(
@@ -193,7 +193,7 @@ class AnimBlueprintHandler:
         return parse_dict_list(data, _parse_transition)
 
     def _parse_sync_group_names(self, data: Any) -> list[str]:
-        """解析同步组名称"""
+        """Parse sync group names"""
         if not isinstance(data, list):
             return []
         return [name for name in data if isinstance(name, str)]

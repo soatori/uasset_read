@@ -1,7 +1,7 @@
-"""统一错误处理模式 — 容错解析上下文管理器。
+"""Unified error handling pattern — fault-tolerant parse context manager.
 
-将重复的 try/except ParseError + result.errors.append 模式
-收敛为声明式上下文管理器，减少样板代码并统一错误消息格式。
+Consolidates the repeated try/except ParseError + result.errors.append pattern
+into a declarative context manager, reducing boilerplate and unifying error message format.
 """
 from __future__ import annotations
 
@@ -23,19 +23,19 @@ def tolerant_parse(
     result: "ParseResult | LinkerParseResult",
     stage: str,
 ):
-    """容错解析上下文管理器。
+    """Fault-tolerant parse context manager.
 
-    用法::
+    Usage::
 
         with tolerant_parse(result, "blueprint extraction"):
             do_something()
 
-    行为:
-        捕获 ParseError → 记录到 result.errors → 重新抛出
+    Behavior:
+        Catch ParseError -> log to result.errors -> re-raise
 
     Args:
-        result: ParseResult 或 LinkerParseResult 对象（必须有 errors 属性）
-        stage: 阶段名称，用于错误消息前缀
+        result: ParseResult or LinkerParseResult object (must have errors attribute)
+        stage: Stage name, used as error message prefix
     """
     try:
         yield

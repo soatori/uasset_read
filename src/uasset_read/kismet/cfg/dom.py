@@ -1,9 +1,9 @@
-"""支配树计算。
+"""Dominator tree computation.
 
-实现 Cooper-Harvey-Kennedy (CHK) 迭代支配者算法。
-参考: "A Simple, Fast Dominance Algorithm" (Cooper, Harvey, Kennedy, 2001)
+Implements the Cooper-Harvey-Kennedy (CHK) iterative dominator algorithm.
+Reference: "A Simple, Fast Dominance Algorithm" (Cooper, Harvey, Kennedy, 2001)
 
-该算法在大多数情况下 2-3 轮迭代即可收敛，时间复杂度接近 O(N)。
+The algorithm converges in 2-3 iterations in most cases, with near O(N) time complexity.
 """
 
 
@@ -11,10 +11,10 @@ from uasset_read.kismet.cfg.data import CFG, DominatorTree
 
 
 def _reverse_postorder(cfg: CFG) -> list[int]:
-    """计算 CFG 的逆后序 (reverse post-order)。
+    """Compute the reverse post-order of the CFG.
 
-    逆后序保证：如果节点 A 支配 B，则 A 在逆后序中先于 B。
-    这是 CHK 算法正确收敛的前提条件。
+    Reverse post-order guarantees: if node A dominates B, then A precedes B
+    in the reverse post-order. This is a prerequisite for correct CHK convergence.
     """
     visited: set[int] = set()
     postorder: list[int] = []
@@ -36,35 +36,35 @@ def _reverse_postorder(cfg: CFG) -> list[int]:
 
 
 def compute_dominator_tree(cfg: CFG) -> DominatorTree:
-    """使用 Cooper-Harvey-Kennedy 算法计算支配树。
+    """Compute dominator tree using Cooper-Harvey-Kennedy algorithm.
 
-    算法步骤:
-    1. 计算逆后序编号
-    2. 初始化: entry 支配自身，其余未确定
-    3. 迭代: 对每个节点，用 intersect 求前驱的最近公共支配者
-    4. 直到无变化
+    Algorithm steps:
+    1. Compute reverse post-order numbering
+    2. Initialize: entry dominates itself, others undefined
+    3. Iterate: for each node, use intersect to find nearest common dominator of predecessors
+    4. Until no changes
 
     Args:
-        cfg: 控制流图。
+        cfg: Control flow graph.
 
     Returns:
-        支配树，包含 idom、dominators、dominated 和支配前沿。
+        Dominator tree containing idom, dominators, dominated, and dominator frontiers.
     """
     rpo = _reverse_postorder(cfg)
     if not rpo:
         return DominatorTree()
 
-    # 建立逆后序索引
+    # Build reverse post-order index
     rpo_index: dict[int, int] = {bid: i for i, bid in enumerate(rpo)}
 
-    # 初始化 idom
+    # Initialize idom
     idom: dict[int, int | None] = {}
     for bid in rpo:
         idom[bid] = None
     idom[cfg.entry_id] = cfg.entry_id  # type: ignore[assignment]
 
     def _intersect(b1: int, b2: int) -> int | None:
-        """求 b1 和 b2 的最近公共支配者。"""
+        """Find the nearest common dominator of b1 and b2."""
         finger1 = b1
         finger2 = b2
         while finger1 != finger2:
@@ -86,7 +86,7 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
                 idx2 = rpo_index.get(finger2, -1)
         return finger1
 
-    # 迭代求解
+    # Iterative solving
     changed = True
     while changed:
         changed = False
@@ -98,7 +98,7 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
             if block is None:
                 continue
 
-            # 找到第一个已确定的前驱
+            # Find first predecessor with known dominator
             new_idom: int | None = None
             for pred in block.predecessors:
                 if pred in idom and idom[pred] is not None:
@@ -108,7 +108,7 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
             if new_idom is None:
                 continue
 
-            # 与其余前驱取 intersect
+            # Intersect with remaining predecessors
             for pred in block.predecessors:
                 if pred == bid:
                     continue
@@ -124,7 +124,7 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
                 idom[bid] = new_idom
                 changed = True
 
-    # 构建完整支配集合: 从每个节点沿 idom 链向上收集
+    # Build full dominance sets: collect from each node up the idom chain
     dominators: dict[int, set[int]] = {}
     for bid in rpo:
         chain: set[int] = set()
@@ -139,14 +139,14 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
             node = parent
         dominators[bid] = chain
 
-    # 构建被支配集合
+    # Build dominated sets
     dominated: dict[int, set[int]] = {bid: set() for bid in rpo}
     for bid in rpo:
         for d in dominators.get(bid, set()):
             if d != bid:
                 dominated.setdefault(d, set()).add(bid)
 
-    # 计算支配前沿
+    # Compute dominator frontiers
     frontiers: dict[int, set[int]] = {bid: set() for bid in rpo}
 
     for bid in rpo:
@@ -155,7 +155,7 @@ def compute_dominator_tree(cfg: CFG) -> DominatorTree:
             continue
         if len(block.predecessors) < 2:
             continue
-        # 多前驱块: 检查每个前驱的 runner
+        # Multi-predecessor block: check runner for each predecessor
         for pred in block.predecessors:
             if pred not in rpo_index:
                 continue

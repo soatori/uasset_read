@@ -1,9 +1,9 @@
-"""动画解析共享模块
+"""Shared animation parsing module
 
-提取自 anim_blueprint.py / anim_montage.py / anim_sequence.py 的重复逻辑：
-- parse_anim_notifies: 动画通知数组解析
-- parse_float_curve_names: 浮点曲线名称解析
-- ensure_custom_data: export.custom_data 初始化
+Extracted from anim_blueprint.py / anim_montage.py / anim_sequence.py duplicate logic:
+- parse_anim_notifies: animation notify array parsing
+- parse_float_curve_names: float curve name parsing
+- ensure_custom_data: export.custom_data initialization
 """
 
 from typing import Any
@@ -16,10 +16,10 @@ from uasset_read.parsers.asset_types.property_extractor import (
 
 
 def parse_anim_notifies(data: Any) -> list[AnimNotifyIR]:
-    """解析动画通知数组（完整字段版本）
+    """Parse animation notify array (full field version)
 
-    提取所有 AnimNotifyIR 字段，包括 LinkedMontage / LinkedSequence 对象引用。
-    三个动画解析器共享此实现。
+    Extracts all AnimNotifyIR fields, including LinkedMontage / LinkedSequence object references.
+    Shared implementation across three animation parsers.
     """
 
     def _parse_notify(notify_data: dict) -> AnimNotifyIR:
@@ -48,10 +48,10 @@ def parse_anim_notifies(data: Any) -> list[AnimNotifyIR]:
 
 
 def parse_float_curve_names(data: Any) -> list[str]:
-    """解析浮点曲线名称列表
+    """Parse float curve name list
 
-    从 RawCurveData 属性中提取 FloatCurves 的 Name 字段。
-    anim_montage 和 anim_sequence 共享此实现。
+    Extracts the Name field from FloatCurves in the RawCurveData property.
+    Shared implementation between anim_montage and anim_sequence.
     """
 
     def _parse_curve(curve: dict) -> str | None:
@@ -70,10 +70,10 @@ def parse_float_curve_names(data: Any) -> list[str]:
 
 
 def ensure_custom_data(export: Any) -> dict:
-    """确保 export 具有 custom_data 属性并返回它
+    """Ensure export has custom_data attribute and return it
 
-    如果 export 尚未设置 custom_data，则初始化为空字典。
-    用于动画和 MovieScene 处理器存储解析结果。
+    Initializes custom_data to an empty dict if not yet set on the export.
+    Used by animation and MovieScene handlers to store parse results.
     """
     if not hasattr(export, "custom_data"):
         export.custom_data = {}

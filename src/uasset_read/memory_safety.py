@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class FileSizeTier(Enum):
-    """文件大小分级，用于决定是否需要子进程隔离。"""
+    """File size tier, used to determine whether subprocess isolation is needed."""
 
     SMALL = "small"
     MEDIUM = "medium"
@@ -23,7 +23,7 @@ class FileSizeTier(Enum):
 
     @classmethod
     def from_size(cls, file_size: int) -> "FileSizeTier":
-        """根据文件大小返回对应分级。
+        """Return the tier corresponding to the given file size.
 
         - SMALL: < 20MB
         - MEDIUM: 20MB - 100MB
@@ -40,14 +40,14 @@ MEDIUM_FILE_ISOLATION_THRESHOLD = 50 * 1024 * 1024  # 50 MB
 
 
 def should_isolate(file_size: int, tier: FileSizeTier) -> bool:
-    """判断文件是否需要在隔离的子进程中处理。
+    """Determine whether a file needs to be processed in an isolated subprocess.
 
     Args:
-        file_size: 文件大小（字节）
-        tier: 文件大小分级
+        file_size: File size in bytes
+        tier: File size tier
 
     Returns:
-        True 表示应在隔离子进程中处理
+        True if the file should be processed in an isolated subprocess
     """
     if tier == FileSizeTier.SMALL:
         return False
@@ -64,7 +64,7 @@ MAX_ASSET_COUNT = 200
 
 @dataclass
 class AllocationLimits:
-    """分配限制配置 — 用于资源预算跟踪。"""
+    """Allocation limit configuration — used for resource budget tracking."""
     max_single_read_bytes: int = 16 * 1024 * 1024  # 16 MB
     max_decompressed_block_bytes: int = 64 * 1024 * 1024  # 64 MB
     max_total_decompressed_bytes: int = 256 * 1024 * 1024  # 256 MB
@@ -74,7 +74,7 @@ class AllocationLimits:
 
 
 class ResourceBudget:
-    """资源预算跟踪器 — 在实际读取或扩容前检查配额。"""
+    """Resource budget tracker — checks quota before actual reads or expansion."""
 
     def __init__(self, limits: AllocationLimits | None = None):
         self.limits = limits or AllocationLimits()
@@ -84,7 +84,7 @@ class ResourceBudget:
         self._max_work_units: int = 10_000_000  # 10M work units
 
     def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
-        """预留资源，超限抛 MemoryLimitExceeded。"""
+        """Reserve resources, raises MemoryLimitExceeded if quota exceeded."""
         if bytes_needed > self.limits.max_single_read_bytes:
             raise MemoryLimitExceeded(
                 asset_path=asset,
@@ -109,16 +109,16 @@ class ResourceBudget:
             )
 
     def checkpoint(self) -> None:
-        """保存当前状态。"""
+        """Save current state."""
         self._checkpoints.append(self._total_decompressed)
 
     def rollback(self) -> None:
-        """回滚到上一个检查点。"""
+        """Roll back to the previous checkpoint."""
         if self._checkpoints:
             self._total_decompressed = self._checkpoints.pop()
 
     def consume_work(self, units: int, stage: str) -> None:
-        """消耗工作量单位，超限抛 MemoryLimitExceeded。"""
+        """Consume work units, raises MemoryLimitExceeded if quota exceeded."""
         self._work_units += units
         if self._work_units > self._max_work_units:
             raise MemoryLimitExceeded(
@@ -130,18 +130,18 @@ class ResourceBudget:
 
     @property
     def total_decompressed(self) -> int:
-        """当前累计解压字节数。"""
+        """Current cumulative decompressed bytes."""
         return self._total_decompressed
 
 
 @dataclass
 class MemoryStats:
-    """内存使用统计。"""
+    """Memory usage statistics."""
     total_mb: float = 0.0
     available_mb: float = 0.0
     used_mb: float = 0.0
     usage_percent: float = 0.0
-    process_rss_mb: float = 0.0  # 当前进程 RSS
+    process_rss_mb: float = 0.0  # Current process RSS
 
 
 @dataclass(frozen=True)
@@ -239,9 +239,9 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         process = psutil.Process(target_pid)
         return process.memory_info().rss / 1024 / 1024
     except (ImportError, OSError) as e:
-        logger.debug("psutil RSS 获取失败: %s", e, exc_info=True)
+        logger.debug("psutil RSS retrieval failed: %s", e, exc_info=True)
 
-    # Windows 降级方案：使用 ctypes 调用 GetProcessMemoryInfo
+    # Windows fallback: use ctypes to call GetProcessMemoryInfo
     if sys.platform == "win32":
         try:
             import ctypes
@@ -287,7 +287,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
                 if close_handle:
                     kernel32.CloseHandle(handle)
         except (OSError, ValueError, OverflowError) as e:
-            logger.debug("Windows GetProcessMemoryInfo 获取 RSS 失败: %s", e, exc_info=True)
+            logger.debug("Windows GetProcessMemoryInfo failed to get RSS: %s", e, exc_info=True)
 
     if sys.platform.startswith("linux"):
         try:
@@ -296,7 +296,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
             )
             return resident_pages * os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
         except (OSError, ValueError, IndexError) as e:
-            logger.debug("Linux /proc RSS 获取失败: %s", e)
+            logger.debug("Linux /proc RSS retrieval failed: %s", e)
 
     if pid is not None and not (
         sys.platform == "win32" or sys.platform.startswith("linux")
@@ -307,17 +307,17 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
 
     import warnings
     warnings.warn(
-        "无法获取进程 RSS，内存保护已禁用。建议安装 psutil: pip install psutil",
+        "Cannot retrieve process RSS, memory protection is disabled. Consider installing psutil: pip install psutil",
         stacklevel=2,
     )
     return 0.0
 
 
 def get_memory_stats() -> MemoryStats:
-    """获取当前内存使用情况（系统级 + 进程级）。
+    """Get current memory usage (system-level + process-level).
 
     Returns:
-        MemoryStats 包含总内存、可用内存、已用内存、使用百分比和进程 RSS
+        MemoryStats containing total memory, available memory, used memory, usage percentage, and process RSS
     """
     process_rss = _get_process_rss_mb()
 
@@ -337,14 +337,14 @@ def get_memory_stats() -> MemoryStats:
 
 
 def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
-    """估算内存使用（无 psutil 时的降级方案）。
+    """Estimate memory usage (fallback when psutil is unavailable).
 
-    使用 ctypes 获取系统内存信息（Windows），而非假设 16GB。
+    Uses ctypes to get system memory info (Windows), instead of assuming 16GB.
     """
     total_mb = 0.0
     available_mb = 0.0
 
-    # Windows: 使用 ctypes 调用 GlobalMemoryStatusEx
+    # Windows: use ctypes to call GlobalMemoryStatusEx
     if sys.platform == "win32":
         try:
             import ctypes
@@ -369,10 +369,10 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
                 total_mb = stat.ullTotalPhys / 1024 / 1024
                 available_mb = stat.ullAvailPhys / 1024 / 1024
         except (OSError, ValueError, OverflowError) as e:
-            logger.debug("Windows GlobalMemoryStatusEx 获取内存信息失败: %s", e, exc_info=True)
+            logger.debug("Windows GlobalMemoryStatusEx failed to get memory info: %s", e, exc_info=True)
 
     if total_mb <= 0:
-        total_mb = 16 * 1024  # 最终降级
+        total_mb = 16 * 1024  # Final fallback
         available_mb = 8 * 1024
 
     used_mb = total_mb - available_mb
@@ -388,16 +388,16 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
 
 
 def check_file_size(path: Path) -> int:
-    """获取文件大小（字节）。
+    """Get file size in bytes.
 
     Args:
-        path: 文件路径
+        path: File path
 
     Returns:
-        文件大小（字节）
+        File size in bytes
 
     Raises:
-        ValueError: 如果文件不存在
+        ValueError: If the file does not exist
     """
     if not path.exists():
         raise ValueError(f"File not found: {path}")
@@ -410,20 +410,20 @@ def cleanup_after_parse() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 跨平台硬限制
+# Cross-platform hard limits
 # ---------------------------------------------------------------------------
 
 def set_hard_rss_limit(limit_mb: int) -> Callable[[], None]:
-    """设置当前进程的硬性 RSS 内存上限。
+    """Set a hard RSS memory limit for the current process.
 
-    在 Windows 上使用 WorkingSet 限制，在 Linux/macOS 上使用 ``resource.setrlimit``。
-    返回一个清理函数，用于恢复原始限制。
+    Uses WorkingSet limit on Windows, ``resource.setrlimit`` on Linux/macOS.
+    Returns a cleanup function that restores the original limit.
 
     Args:
-        limit_mb: RSS 上限（MB）
+        limit_mb: RSS limit in MB
 
     Returns:
-        清理函数，调用后恢复原始限制
+        Cleanup function that restores the original limit when called
     """
     limit_bytes = limit_mb * 1024 * 1024
     original_limit: Any = None
@@ -432,29 +432,29 @@ def set_hard_rss_limit(limit_mb: int) -> Callable[[], None]:
         try:
             import ctypes
             kernel32 = ctypes.windll.kernel32
-            # GetCurrentProcess 返回 -1 (伪句柄)
+            # GetCurrentProcess returns -1 (pseudo handle)
             handle = kernel32.GetCurrentProcess()
-            # c_size_t 在 64 位 Windows 上是 8 字节，但 32 位应用上是 4 字节
-            # SetProcessWorkingSetSize 期望 SIZE_T 参数，用 c_size_t 即可
+            # c_size_t is 8 bytes on 64-bit Windows, but 4 bytes on 32-bit apps
+            # SetProcessWorkingSetSize expects SIZE_T parameters, c_size_t suffices
             try:
                 result = kernel32.SetProcessWorkingSetSize(
                     handle, ctypes.c_size_t(limit_bytes), ctypes.c_size_t(limit_bytes)
                 )
                 if not result:
-                    logger.debug("SetProcessWorkingSetSize 返回失败")
+                    logger.debug("SetProcessWorkingSetSize returned failure")
             except OverflowError as e:
-                logger.debug("SetProcessWorkingSetSize 参数溢出: %s", e)
+                logger.debug("SetProcessWorkingSetSize parameter overflow: %s", e)
         except (OSError, OverflowError) as e:
-            logger.debug("Windows 设置 RSS 硬限制失败: %s", e)
+            logger.debug("Windows failed to set RSS hard limit: %s", e)
     else:
         try:
             import resource
-            # 保存原始限制
+            # Save original limit
             original_limit = resource.getrlimit(resource.RLIMIT_AS)
-            # 设置虚拟内存上限（RSS 的上限）
+            # Set virtual memory limit (upper bound on RSS)
             resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
         except (ImportError, ValueError, OSError) as e:
-            logger.debug("Unix 设置 RSS 硬限制失败: %s", e)
+            logger.debug("Unix failed to set RSS hard limit: %s", e)
 
     def _cleanup() -> None:
         if sys.platform != "win32" and original_limit is not None:
@@ -462,16 +462,16 @@ def set_hard_rss_limit(limit_mb: int) -> Callable[[], None]:
                 import resource
                 resource.setrlimit(resource.RLIMIT_AS, original_limit)
             except (ImportError, ValueError, OSError) as exc:
-                logger.debug("恢复 RSS 硬限制失败: %s", exc)
+                logger.debug("Failed to restore RSS hard limit: %s", exc)
 
     return _cleanup
 
 
 def get_platform_limits() -> dict[str, Any]:
-    """返回当前平台的资源限制信息。
+    """Return resource limit information for the current platform.
 
     Returns:
-        包含 platform、pid、rss_limit_source 等字段的字典
+        Dictionary containing platform, pid, rss_limit_source, and other fields
     """
     info: dict[str, Any] = {
         "platform": sys.platform,
@@ -485,11 +485,11 @@ def get_platform_limits() -> dict[str, Any]:
             import ctypes
             kernel32 = ctypes.windll.kernel32
             _handle = kernel32.GetCurrentProcess()  # noqa: F841 - API call for context
-            # Windows 没有直接 API 查询 WorkingSet 限制
-            # 只能报告当前 RSS
+            # Windows has no direct API to query WorkingSet limits
+            # Can only report current RSS
             info["current_rss_mb"] = _get_process_rss_mb()
         except Exception as exc:
-            logger.debug("获取 Windows 平台限制失败: %s", exc)
+            logger.debug("Failed to get Windows platform limits: %s", exc)
     else:
         try:
             import resource
@@ -499,6 +499,6 @@ def get_platform_limits() -> dict[str, Any]:
             info["virtual_memory_hard_limit_bytes"] = hard
             info["current_rss_mb"] = _get_process_rss_mb()
         except (ImportError, ValueError, OSError) as exc:
-            logger.debug("获取 Unix 平台限制失败: %s", exc)
+            logger.debug("Failed to get Unix platform limits: %s", exc)
 
     return info

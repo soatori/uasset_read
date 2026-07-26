@@ -1,14 +1,14 @@
-"""资产类型解析器模块 — 特定 UE 资产类型的专用解析器。
+"""Asset type parser module — Dedicated parsers for specific UE asset types.
 
-所有 handler 返回 opaque partial metadata（原始字节样本），
-不尝试解析 UE 标准 Serialize 布局。
+All handlers return opaque partial metadata (raw byte samples),
+not attempting to parse the UE standard Serialize layout.
 
 Handlers are bootstrapped deterministically by ``get_class_registry()``
 on first access — no module-level side effects required.
 
-支持两种注册方式：
-1. 手动注册：通过 register_asset_type_handlers() 显式注册
-2. 反射注册：通过 discover_handlers() 自动扫描 asset_types/ 目录下的处理器类
+Supports two registration methods:
+1. Manual registration: explicitly register via register_asset_type_handlers()
+2. Reflection registration: auto-scan handler classes in asset_types/ via discover_handlers()
 """
 from __future__ import annotations
 
@@ -34,22 +34,22 @@ logger = logging.getLogger(__name__)
 
 
 class HandlerClassAdapter(ClassHandler):
-    """将 Handler 类（如 AnimBlueprintHandler）适配为 ClassHandler 接口。
+    """Adapt the Handler class (e.g. AnimBlueprintHandler) to the ClassHandler interface.
 
-    Handler 类的 handle(export, context) 方法与 ClassHandler.parse(export, archive, context)
-    接口不匹配，此类负责桥接两者。
+    Handler method (export, context) does not match ClassHandler.parse(export, archive, context)
+    interface; this class bridges the two.
     """
 
     def __init__(self, handler_instance: Any, handler_name: str) -> None:
         self._handler = handler_instance
         self._handler_name = handler_name
-        # 从 Handler 类名推断支持的 class names
-        # 例如 AnimBlueprintHandler -> AnimBlueprintGeneratedClass
+        # Infer supported class names from Handler class name
+        # e.g. AnimBlueprintHandler -> AnimBlueprintGeneratedClass
         self._class_names = self._infer_class_names(handler_instance)
 
     def _infer_class_names(self, handler_instance: Any) -> set[str]:
-        """从 Handler 实例推断支持的 class names。"""
-        # 映射表：Handler 类名 -> 支持的 UE class names
+        """Infer supported class names from Handler instance."""
+        # Mapping table: Handler class name -> supported UE class names
         handler_class_map = {
             "AnimBlueprintHandler": {"AnimBlueprintGeneratedClass"},
             "AnimSequenceHandler": {"AnimSequence"},
@@ -78,18 +78,18 @@ class HandlerClassAdapter(ClassHandler):
         archive: "FArchive",
         context: Optional[Any] = None,
     ) -> HandlerResult:
-        """调用 Handler.handle(export, context) 并转换为 HandlerResult。"""
+        """Call Handler.handle(export, context) and convert to HandlerResult."""
         try:
             status = self._handler.handle(export, context)
-            # 将 ParseStatus 转换为 HandlerResult
+            # Convert ParseStatus to HandlerResult
             success = status.value in ("success", "partial")
 
-            # 从 export.custom_data 提取实际数据
-            # Handler 会将数据存储在 export.custom_data 中
+            # Extract actual data from export.custom_data
+            # Handler will store data in export.custom_data
             custom_data = getattr(export, "custom_data", {})
             data = {}
             if custom_data:
-                # 根据 handler 类型提取对应的数据
+                # Extract corresponding data based on handler type
                 for key in [
                     "anim_blueprint", "anim_sequence", "anim_montage",
                     "movie_scene", "movie_scene_control_rig_track",
@@ -98,7 +98,7 @@ class HandlerClassAdapter(ClassHandler):
                     if key in custom_data:
                         data[key] = custom_data[key]
 
-            # 添加 parse_status
+            # Add parse_status
             data["parse_status"] = status.value
 
             return HandlerResult(
@@ -119,13 +119,14 @@ class HandlerClassAdapter(ClassHandler):
 
 
 def discover_handlers() -> Dict[str, Any]:
-    """自动发现 asset_types/ 目录下的处理器。
+    """Auto-discover handlers in the asset_types/ directory.
 
-    扫描所有非私有 Python 模块，查找具有 export_type 和 priority 属性的类。
-    这些类会被自动注册到处理器映射中。
+    Scans all non-private Python modules to find classes with export_type and
+    priority attributes. These classes are automatically registered to the
+    handler mapping.
 
     Returns:
-        Dict[str, Any]: export_type -> handler_class 的映射
+        Dict[str, Any]: export_type -> handler_class mapping
     """
     handlers: Dict[str, Any] = {}
     asset_types_dir = Path(__file__).parent
@@ -154,35 +155,35 @@ def discover_handlers() -> Dict[str, Any]:
     return handlers
 
 
-# 手动注册的处理器映射（优先级高于自动发现）
-手动注册的处理器: Dict[str, Any] = {}
+# Manually registered handler mapping (higher priority than auto-discovery)
+manually_registered_handlers: Dict[str, Any] = {}
 
-# 模块级缓存：discover_handlers() 结果，避免每次调用都扫描文件系统
+# Module-level cache: discover_handlers() result, avoid scanning file system every call
 _handler_cache: Optional[Dict[str, Any]] = None
 
 
 def register_handler(export_type: str, handler: Any) -> None:
-    """手动注册处理器（优先级高于自动发现）。"""
-    手动注册的处理器[export_type] = handler
+    """Register handler manually (higher priority than auto-discovery)."""
+    manually_registered_handlers[export_type] = handler
 
 
 def get_handler(export_type: str) -> Optional[Any]:
-    """获取处理器，手动注册优先于自动发现。
+    """Get handler, manual registration takes priority over auto-discovery.
 
-    使用模块级缓存避免重复扫描文件系统。
-    缓存在模块重新加载时自动失效（_handler_cache 重置为 None）。
+    Uses module-level cache to avoid repeated file system scanning.
+    Cache invalidates automatically on module reload (_handler_cache resets to None).
 
     Args:
-        export_type: UE export 类型名称
+        export_type: UE export type name
 
     Returns:
-        处理器类或 None
+        Handler class or None
     """
-    # 手动注册优先
-    if export_type in 手动注册的处理器:
-        return 手动注册的处理器[export_type]
+    # Manual registration priority
+    if export_type in manually_registered_handlers:
+        return manually_registered_handlers[export_type]
 
-    # 自动发现 fallback（带缓存）
+    # Auto-discovery fallback (with cache)
     global _handler_cache
     if _handler_cache is None:
         _handler_cache = discover_handlers()
@@ -193,14 +194,14 @@ def get_handler(export_type: str) -> Optional[Any]:
     return None
 
 
-# 导入专用解析函数
+# Import dedicated parse functions
 from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
 from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
 from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
 from uasset_read.parsers.asset_types.texture2d import parse_texture2d
 
-# 导入处理器类（用于反射注册）
+# Import handler classes (for reflection registration)
 from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
 from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
 from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
@@ -223,7 +224,7 @@ __all__ = [
 
 
 class AssetTypeHandler(ClassHandler):
-    """将 parse_*() 函数包装为 ClassHandler。"""
+    """Wrap parse_*() functions as ClassHandler."""
 
     def __init__(
         self,
@@ -273,7 +274,7 @@ class AssetTypeHandler(ClassHandler):
 
 
 def register_asset_type_handlers() -> None:
-    """将资产类型解析器注册到 ClassHandlerRegistry。"""
+    """Register asset type parsers to ClassHandlerRegistry."""
     registry = get_class_registry()
 
     handlers = [
@@ -304,7 +305,7 @@ def register_asset_type_handlers() -> None:
         ),
     ]
 
-    # 可选解析器（导入成功则注册）
+    # Optional parsers (register if import succeeds)
     _optional = [
         ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
         ("anim_sequence", "AnimSequenceHandler", ["AnimSequence"], "AnimSequenceHandler"),
@@ -335,12 +336,12 @@ def register_asset_type_handlers() -> None:
                 fromlist=[func_name],
             )
             parse_func = getattr(mod, func_name)
-            # 检查是否是类（如 AnimBlueprintHandler）
+            # Check if it is a class (e.g. AnimBlueprintHandler)
             if isinstance(parse_func, type):
-                # 类需要实例化，创建适配器包装
+                # Class needs instantiation, create adapter wrapper
                 handler_instance = parse_func()
-                # 创建适配器：将 ClassHandler.parse(export, archive, context)
-                # 转换为 Handler.handle(export, context)
+                # Create adapter: convert ClassHandler.parse(export, archive, context)
+                # to Handler.handle(export, context)
                 adapter = HandlerClassAdapter(handler_instance, handler_name)
                 handlers.append(adapter)
             else:
@@ -352,7 +353,7 @@ def register_asset_type_handlers() -> None:
                     ),
                 )
         except ImportError as e:
-            logger.debug("跳过资产类型处理器 %s: %s", handler_name, e)
+            logger.debug("Skip asset type handler %s: %s", handler_name, e)
 
     for handler in handlers:
         registry.register(handler)

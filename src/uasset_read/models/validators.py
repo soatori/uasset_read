@@ -1,20 +1,20 @@
-"""状态值验证器。"""
+"""Status value validators."""
 from .fallback import ExportParseStatus
 
 VALID_PARSE_STATUSES = {s.value for s in ExportParseStatus}
 
 
 def validate_parse_status(value: str) -> str:
-    """验证 export 级 parse_status 值。
+    """Validate export-level parse_status value.
 
     Args:
-        value: 待验证的 parse_status 字符串。
+        value: The parse_status string to validate.
 
     Returns:
-        验证通过的原始值。
+        The original value if validation passes.
 
     Raises:
-        ValueError: 值不在合法的 parse_status 集合中。
+        ValueError: If the value is not in the valid parse_status set.
     """
     if value not in VALID_PARSE_STATUSES:
         raise ValueError(

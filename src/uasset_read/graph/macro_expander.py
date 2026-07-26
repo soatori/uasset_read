@@ -1,4 +1,4 @@
-"""蓝图宏展开引擎 — 递归展开 MacroInstance，循环检测，引脚映射，标准宏定义。"""
+"""Blueprint macro expansion engine — recursive MacroInstance expansion, cycle detection, pin mapping, standard macro definitions."""
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 @dataclass
 class MacroExpansionContext:
-    """宏展开的上下文信息。"""
+    """Macro expansion context information."""
     macro_name: str
     macro_guid: str
     macro_graph_ref: Dict[str, Any]
@@ -14,17 +14,17 @@ class MacroExpansionContext:
 
 
 class MacroCycleError(Exception):
-    """宏循环检测异常。"""
+    """Macro cycle detection exception."""
     def __init__(self, cycle_path: List[MacroExpansionContext]):
         self.cycle_path = cycle_path
         names = [ctx.macro_name for ctx in cycle_path]
-        message = f"宏循环检测: {' -> '.join(names)} -> {names[0]}"
+        message = f"Macro cycle detected: {' -> '.join(names)} -> {names[0]}"
         super().__init__(message)
 
 
 @dataclass
 class MacroExpansion:
-    """宏展开结果。"""
+    """Macro expansion result."""
     context: MacroExpansionContext
     expanded_nodes: List[Dict[str, Any]] = field(default_factory=list)
     pin_mapping: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -36,7 +36,7 @@ class MacroExpansion:
 
 
 # ──────────────────────────────────────────────────────
-# 标准宏定义（内置于引擎，不在用户资产中）
+# Standard macro definitions (built into the engine, not in user assets)
 # ──────────────────────────────────────────────────────
 
 STANDARD_MACROS: Dict[str, Dict[str, Any]] = {
@@ -134,7 +134,7 @@ STANDARD_MACROS: Dict[str, Dict[str, Any]] = {
 
 
 # ──────────────────────────────────────────────────────
-# 标准宏 → C++ 控制流映射
+# Standard macro -> C++ control flow mapping
 # ──────────────────────────────────────────────────────
 
 STANDARD_MACRO_CPP_MAPPING: Dict[str, Dict[str, Any]] = {
@@ -212,7 +212,7 @@ STANDARD_MACRO_CPP_MAPPING: Dict[str, Dict[str, Any]] = {
 
 
 class MacroExpander:
-    """宏展开器。"""
+    """Macro expander."""
 
     def __init__(self, asset_context: Dict[str, Any]):
         self.asset_context = asset_context
@@ -220,32 +220,32 @@ class MacroExpander:
         self.expansion_stack: List[MacroExpansionContext] = []
 
     def expand_macro_instance(self, instance_node: Dict[str, Any]) -> MacroExpansion:
-        """展开单个宏实例。
+        """Expand a single macro instance.
 
         Args:
-            instance_node: 包含 macro_graph_reference 的节点字典
+            instance_node: node dictionary containing macro_graph_reference
 
         Returns:
-            MacroExpansion 展开结果
+            MacroExpansion expansion result
 
         Raises:
-            MacroCycleError: 检测到宏循环时抛出
+            MacroCycleError: raised when a macro cycle is detected
         """
         macro_ref = instance_node.get("macro_graph_reference", {})
         graph_guid = macro_ref.get("graph_guid", "")
         graph_name = macro_ref.get("graph_name", "")
 
-        # 优先查找用户定义的宏图（同名时用户定义优先于标准宏）
-        # 如果资产中存在同名图，则展开用户定义版本
+        # Prioritize user-defined macro graphs (user-defined takes precedence over standard macros when names match)
+        # If the asset contains a graph with the same name, expand the user-defined version
         macro_graph = self._find_macro_graph(macro_ref)
         if macro_graph is not None:
-            # 用户定义宏优先，正常展开
+            # User-defined macro takes priority, expand normally
             pass
         elif graph_name in STANDARD_MACROS:
-            # 无同名图时才使用标准宏展开
+            # Only use standard macro expansion when no same-name graph exists
             return self._create_standard_expansion(graph_name, macro_ref)
 
-        # 循环检测
+        # Cycle detection
         if graph_guid and graph_guid in self.visited_guids:
             raise MacroCycleError(self.expansion_stack.copy() + [
                 MacroExpansionContext(
@@ -255,12 +255,12 @@ class MacroExpander:
                 )
             ])
 
-        # 查找宏图
+        # Find macro graph
         macro_graph = self._find_macro_graph(macro_ref)
         if macro_graph is None:
             return self._create_unresolved_expansion(instance_node, macro_ref)
 
-        # 标记已访问
+        # Mark as visited
         if graph_guid:
             self.visited_guids.add(graph_guid)
 
@@ -280,32 +280,32 @@ class MacroExpander:
                 self.visited_guids.discard(graph_guid)
 
     def _find_macro_graph(self, macro_ref: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """在资产中查找宏图。
+        """Find macro graph in the asset.
 
-        按优先级查找：
-        1. 当前资产的 graphs 列表（按 GUID 精确匹配，跳过空 GUID）
-        2. 当前资产的 graphs 列表（按名称精确匹配，跳过空名称）
-        3. 当前资产的 graphs 列表（按名称大小写不敏感匹配 — GUID fallback）
-        4. resolved_parent_assets 中的 graphs（跨蓝图引用）
+        Search priority:
+        1. Current asset's graphs list (exact GUID match, skip empty GUID)
+        2. Current asset's graphs list (exact name match, skip empty name)
+        3. Current asset's graphs list (case-insensitive name match -- GUID fallback)
+        4. graphs in resolved_parent_assets (cross-blueprint references)
         """
         graph_guid = macro_ref.get("graph_guid") or ""
         graph_name = macro_ref.get("graph_name") or ""
 
         all_graphs = self.asset_context.get("graphs", [])
 
-        # 1. GUID 精确匹配（跳过空/None GUID，避免误匹配）
+        # 1. GUID exact match (skip empty/None GUID to avoid false matches)
         if graph_guid:
             for graph in all_graphs:
                 if graph.get("guid") == graph_guid:
                     return graph
 
-        # 2. 名称精确匹配（跳过空名称）
+        # 2. Name exact match (skip empty name)
         if graph_name:
             for graph in all_graphs:
                 if graph.get("name") == graph_name:
                     return graph
 
-        # 3. 名称大小写不敏感匹配（GUID 失败时的 fallback）
+        # 3. Case-insensitive name match (fallback when GUID fails)
         if graph_name:
             name_lower = graph_name.lower()
             for graph in all_graphs:
@@ -313,7 +313,7 @@ class MacroExpander:
                 if gname.lower() == name_lower:
                     return graph
 
-        # 4. resolved_parent_assets 中查找（跨蓝图引用）
+        # 4. Search in resolved_parent_assets (cross-blueprint references)
         for parent_asset in self.asset_context.get("resolved_parent_assets", []):
             for graph in parent_asset.get("graphs", []):
                 if graph_guid and graph.get("guid") == graph_guid:
@@ -324,13 +324,13 @@ class MacroExpander:
         return None
 
     def _expand_graph(self, macro_graph: Dict[str, Any], ctx: MacroExpansionContext) -> MacroExpansion:
-        """展开宏图内部节点。
+        """Expand internal nodes of a macro graph.
 
-        处理流程：
-        1. 分离 Tunnel 节点和普通节点
-        2. 从 Tunnel 构建引脚映射
-        3. 递归展开嵌套 MacroInstance
-        4. 构建内部执行流
+        Processing flow:
+        1. Separate Tunnel nodes and regular nodes
+        2. Build pin mapping from Tunnels
+        3. Recursively expand nested MacroInstance
+        4. Build internal execution flow
         """
         nodes = macro_graph.get("nodes", [])
 
@@ -340,7 +340,7 @@ class MacroExpander:
 
         for node in nodes:
             if node.get("node_type") == "K2Node_Tunnel":
-                # 只处理精确的 UK2Node_Tunnel（排除子类）
+                # Only process exact UK2Node_Tunnel (exclude subclasses)
                 if node.get("exact_class") == "UK2Node_Tunnel":
                     if node.get("b_can_have_outputs"):
                         exit_tunnels.append(node)
@@ -349,17 +349,17 @@ class MacroExpander:
                     continue
             internal_nodes.append(node)
 
-        # 构建引脚映射
+        # Build pin mapping
         pin_mapping = self._build_pin_mapping(entry_tunnels, exit_tunnels)
 
-        # 递归展开嵌套宏
+        # Recursively expand nested macros
         nested_expansions: List[MacroExpansion] = []
         for node in internal_nodes:
             if node.get("node_type") == "K2Node_MacroInstance":
                 nested = self.expand_macro_instance(node)
                 nested_expansions.append(nested)
 
-        # 构建内部执行流
+        # Build internal execution flow
         internal_flows = self._build_internal_flows(entry_tunnels, internal_nodes, exit_tunnels)
 
         return MacroExpansion(
@@ -377,18 +377,18 @@ class MacroExpander:
         entry_tunnels: List[Dict[str, Any]],
         exit_tunnels: List[Dict[str, Any]],
     ) -> Dict[str, Dict[str, Any]]:
-        """构建 Tunnel 引脚到 Instance 引脚的映射。
+        """Build mapping from Tunnel pins to Instance pins.
 
-        规则：
-        - 方向取反：Tunnel 的 Output -> Instance 的 Input
-        - 只处理顶层引脚（parent_pin 为 None）
+        Rules:
+        - Direction reversal: Tunnel's Output -> Instance's Input
+        - Only process top-level pins (parent_pin is None)
         """
         mapping: Dict[str, Dict[str, Any]] = {}
         for tunnel in entry_tunnels + exit_tunnels:
             for pin in tunnel.get("pins", []):
                 if pin.get("parent_pin") is None:
                     direction = pin.get("direction", "")
-                    # 方向取反（兼容 int 和 str）
+                    # Direction reversal (compatible with int and str)
                     if self._is_output_direction(direction):
                         instance_dir = "EGPD_Input"
                     else:
@@ -403,12 +403,12 @@ class MacroExpander:
 
     @staticmethod
     def _is_output_direction(direction) -> bool:
-        """判断 direction 是否为 output（兼容 int 1 和 str "EGPD_Output"）。"""
+        """Determine if direction is output (compatible with int 1 and str "EGPD_Output")."""
         return direction == 1 or direction == "EGPD_Output"
 
     @staticmethod
     def _is_input_direction(direction) -> bool:
-        """判断 direction 是否为 input（兼容 int 0 和 str "EGPD_Input"）。"""
+        """Determine if direction is input (compatible with int 0 and str "EGPD_Input")."""
         return direction == 0 or direction == "EGPD_Input"
 
     def _build_internal_flows(
@@ -417,20 +417,20 @@ class MacroExpander:
         internal_nodes: List[Dict[str, Any]],
         exit_tunnels: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """构建宏内部执行流。
+        """Build internal execution flow within a macro.
 
-        从 entry_tunnels 的 exec output pin 出发，通过 linked_to_raw
-        找到连接的内部节点入口，然后沿 exec output pin 追踪执行链。
+        Starting from entry_tunnels' exec output pins, finds connected internal node entries
+        via linked_to_raw, then traces the execution chain along exec output pins.
 
         Returns:
-            List of flow dicts，每个包含:
-            - "entry_tunnel": 入口 Tunnel 引脚名
-            - "nodes": 按执行顺序排列的内部节点列表
+            List of flow dicts, each containing:
+            - "entry_tunnel": entry Tunnel pin name
+            - "nodes": list of internal nodes in execution order
         """
         if not entry_tunnels or not internal_nodes:
             return []
 
-        # 构建内部节点的 pin_id → (node_guid, pin_name) 查找表
+        # Build pin_id -> (node_guid, pin_name) lookup table for internal nodes
         pin_lookup: Dict[str, Tuple[str, str]] = {}
         node_by_guid: Dict[str, Dict[str, Any]] = {}
         for node in internal_nodes:
@@ -442,8 +442,8 @@ class MacroExpander:
                 if pid:
                     pin_lookup[pid] = (guid, pin.get("pin_name", ""))
 
-        # 收集 exit tunnel 的 exec input pin_id 用于终止检测
-        # 同时记录所有 exit tunnel 的 node_guid，避免误判内部节点
+        # Collect exit tunnel exec input pin_ids for termination detection
+        # Also record all exit tunnel node_guids to avoid misclassifying internal nodes
         exit_pin_ids: Set[str] = set()
         exit_node_guids: Set[str] = set()
         for tunnel in exit_tunnels:
@@ -459,7 +459,7 @@ class MacroExpander:
         flows: List[Dict[str, Any]] = []
 
         for entry in entry_tunnels:
-            # 找 entry tunnel 的 exec output pin (direction=1)
+            # Find entry tunnel's exec output pin (direction=1)
             for pin in entry.get("pins", []):
                 if not self._is_output_direction(pin.get("direction")):
                     continue
@@ -470,7 +470,7 @@ class MacroExpander:
                 pin_name = pin.get("pin_name", "")
                 _start_pid = pin.get("pin_id", "")  # noqa: F841 - extracted for clarity
 
-                # 通过 linked_to_raw 找到连接的第一个内部节点
+                # Find the first connected internal node via linked_to_raw
                 first_node = None
                 for linked_ref in (pin.get("linked_to_raw") or []):
                     if isinstance(linked_ref, str):
@@ -488,18 +488,18 @@ class MacroExpander:
                 if first_node is None:
                     continue
 
-                # BFS 追踪 exec 链
+                # BFS trace exec chain
                 flow_nodes: List[Dict[str, Any]] = []
                 visited: Set[str] = set()
-                # 待处理的 exec output pin 引用列表
+                # Pending exec output pin reference list
                 pending_refs: List[str] = []
 
-                # 从第一个内部节点开始
+                # Start from the first internal node
                 first_guid = first_node.get("node_guid", "")
                 if first_guid:
                     visited.add(first_guid)
                     flow_nodes.append(first_node)
-                    # 收集该节点的 exec output pin 的 linked_to_raw
+                    # Collect linked_to_raw of this node's exec output pin
                     for out_pin in first_node.get("pins", []):
                         if not self._is_output_direction(out_pin.get("direction")):
                             continue
@@ -524,7 +524,7 @@ class MacroExpander:
                         target_guid, _ = pin_lookup[ref_pid]
                         if not target_guid or target_guid in visited:
                             continue
-                        # 到达 exit tunnel 节点时终止
+                        # Terminate when reaching exit tunnel node
                         if target_guid in exit_node_guids:
                             continue
                         visited.add(target_guid)
@@ -534,7 +534,7 @@ class MacroExpander:
                             continue
                         flow_nodes.append(node)
 
-                        # 收集该节点的 exec output pin 的 linked_to_raw
+                        # Collect linked_to_raw of this node's exec output pin
                         for out_pin in node.get("pins", []):
                             if not self._is_output_direction(out_pin.get("direction")):
                                 continue
@@ -567,13 +567,13 @@ class MacroExpander:
         macro_name: str,
         macro_ref: Dict[str, Any],
     ) -> MacroExpansion:
-        """为标准宏创建展开结果（不展开内部节点）。"""
+        """Create expansion result for standard macros (does not expand internal nodes)."""
         info = STANDARD_MACROS[macro_name]
         pin_mapping: Dict[str, Dict[str, Any]] = {}
-        # 输入引脚
+        # Input pins
         for name in info["inputs"]:
             pin_mapping[name] = {"instance_direction": "EGPD_Input", "is_standard": True}
-        # 输出引脚
+        # Output pins
         for name in info["outputs"]:
             pin_mapping[name] = {"instance_direction": "EGPD_Output", "is_standard": True}
         return MacroExpansion(
@@ -592,7 +592,7 @@ class MacroExpander:
         instance_node: Dict[str, Any],
         macro_ref: Dict[str, Any],
     ) -> MacroExpansion:
-        """创建未解析的展开结果（宏图找不到）。"""
+        """Create unresolved expansion result (macro graph not found)."""
         return MacroExpansion(
             context=MacroExpansionContext(
                 macro_name=macro_ref.get("graph_name", "Unknown"),

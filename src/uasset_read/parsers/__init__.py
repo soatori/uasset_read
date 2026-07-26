@@ -1,6 +1,6 @@
-"""解析器模块 — 属性解析函数及分派器。
+"""Parsers module -- property parsing functions and dispatchers.
 
-所有解析器通过扁平导出（per D-03），调用者使用：
+All parsers are flat-exported (per D-03), callers use:
     from uasset_read.parsers import parse_property_value
     from uasset_read.parsers import parse_properties_from_export
 """
@@ -25,7 +25,7 @@ from uasset_read.parsers.property_types import (
     parse_enum_property,
     parse_text_property,
     parse_delegate_property,
-    # 新增属性类型解析函数
+    # Additional property type parsers
     parse_uint16_property,
     parse_uint32_property,
     parse_uint64_property,
@@ -68,10 +68,10 @@ from uasset_read.parsers.utils import (
 )
 
 __all__ = [
-    # 分派器（property_parser.py）
+    # Dispatchers (property_parser.py)
     "parse_property_value",
     "parse_properties_from_export",
-    # 属性类型解析器（property_types.py）
+    # Property type parsers (property_types.py)
     "parse_bool_property",
     "parse_int_property",
     "parse_float_property",
@@ -86,7 +86,7 @@ __all__ = [
     "parse_enum_property",
     "parse_text_property",
     "parse_delegate_property",
-    # 新增属性类型解析函数
+    # Additional property type parsers
     "parse_uint16_property",
     "parse_uint32_property",
     "parse_uint64_property",
@@ -111,14 +111,14 @@ __all__ = [
     "parse_ansi_str_property",
     "parse_double_property",
     "parse_guid_property",
-    # CustomProperty 注册表（custom_properties.py）
+    # CustomProperty registry (custom_properties.py)
     "CUSTOM_PROPERTY_HANDLERS",
     "CustomPropertyContext",
     "register_custom_property",
     "handle_custom_property",
-    # 辅助函数（测试依赖）
+    # Utility functions (test dependency)
     "get_struct_size",
-    # 共享辅助函数（parsers/utils.py）
+    # Shared utility functions (parsers/utils.py)
     "resolve_name_from_index",
     "read_validated_count_tolerant",
     "make_enum_value",

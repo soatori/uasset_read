@@ -1,7 +1,7 @@
-"""执行流链式表达构建器。
+"""Execution chain expression builder.
 
-将 build_execution_flows() 的逐对执行流转换为链式字符串格式（N1->N2->N3），
-替代原有 pair 格式，提供更简洁的 LLM 优化输出。
+Converts per-pair execution flows from build_execution_flows() to chain string format (N1->N2->N3),
+replacing the original pair format to provide a more concise LLM-optimized output.
 """
 
 from typing import Dict, List, Optional
@@ -11,17 +11,17 @@ from uasset_read.models.core import UEdGraph
 
 
 def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
-    """DFS 环检测。
+    """DFS cycle detection.
 
     Args:
-        adjacency: {node_id: [successor_ids]} 邻接表
+        adjacency: {node_id: [successor_ids]} adjacency list
 
     Returns:
-        True 如果检测到环
+        True if a cycle is detected
     """
     WHITE, GRAY, BLACK = 0, 1, 2
-    # 收集邻接表中所有出现的节点（包括仅作为 target 出现的节点），
-    # 确保 DFS 不会遗漏只作为邻居出现的节点。
+    # Collect all nodes appearing in the adjacency list (including nodes that only appear as targets),
+    # ensuring DFS does not miss nodes that only appear as neighbors.
     all_nodes: set[str] = set(adjacency.keys())
     for neighbors in adjacency.values():
         all_nodes.update(neighbors)
@@ -33,7 +33,7 @@ def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
             if neighbor not in color:
                 continue
             if color[neighbor] == GRAY:
-                return True  # 后向边 = 环
+                return True  # Back edge = cycle
             if color[neighbor] == WHITE and dfs(neighbor):
                 return True
         color[node] = BLACK
@@ -47,9 +47,9 @@ def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
 
 
 def _derive_short_id(guid: str, index: int) -> str:
-    """从 GUID 和 index 派生短 ID。
+    """Derive a short ID from GUID and index.
 
-    格式：N{index}（从 0 开始）
+    Format: N{index} (starting from 0)
     """
     return f"N{index}"
 
@@ -58,30 +58,30 @@ def build_execution_chains(
     graph: UEdGraph,
     execution_flows: Optional[List[Dict]] = None,
 ) -> List[Dict]:
-    """构建执行流链式表达。
+    """Build execution chain expressions.
 
-    将逐对执行流转换为链式字符串格式：
-    - 线性流: ["N1->N2->N3"]
-    - 分支流: ["N1->N2", "N1->N3"]
-    - 环检测: has_cycle=True，返回已提取的链
+    Converts per-pair execution flows to chain string format:
+    - Linear flow: ["N1->N2->N3"]
+    - Branch flow: ["N1->N2", "N1->N3"]
+    - Cycle detection: has_cycle=True, returns extracted chains
 
     Args:
-        graph: UEdGraph 对象
-        execution_flows: 可选的预计算 execution_flows（避免重复计算）
+        graph: UEdGraph object
+        execution_flows: optional precomputed execution_flows (avoids redundant computation)
 
     Returns:
-        List[Dict]: 每个 flow entry 包含:
-            - start_event: 事件名称
-            - chains: 链式字符串列表
-            - has_cycle: bool（True 时 chains 可能不完整）
-            - chain_metadata: 可选元数据（branch_count 等）
+        List[Dict]: each flow entry contains:
+            - start_event: event name
+            - chains: list of chain strings
+            - has_cycle: bool (chains may be incomplete when True)
+            - chain_metadata: optional metadata (branch_count, etc.)
     """
-    # 如果未提供 execution_flows，调用 build_execution_flow_entries
+    # If execution_flows not provided, call build_execution_flow_entries
     if execution_flows is None:
         from uasset_read.graph.flow_builder import build_execution_flow_entries
         execution_flows = build_execution_flow_entries(graph)
 
-    # 构建 GUID → 短 ID 映射（基于节点顺序）
+    # Build GUID -> short ID mapping (based on node order)
     guid_to_short: Dict[str, str] = {}
     for idx, node in enumerate(graph.nodes):
         if node.node_guid:
@@ -121,7 +121,7 @@ def build_execution_chains(
             guid = node_info["node_guid"]
             short_id = guid_to_short.get(guid)
             if short_id is None:
-                # Fallback: 使用节点在图中的索引
+                # Fallback: use node index in graph
                 short_id = f"N{len(guid_to_short)}"
                 guid_to_short[guid] = short_id
             short_ids.append(short_id)
@@ -156,13 +156,13 @@ def build_execution_chains(
                 branch_indices.append(i)
 
         def _build_chain_segment(ids: List[str], names: List[str]) -> str:
-            """构建带引脚名称的链式字符串: N0--exec-->N1--Completed-->N2"""
+            """Build a chain string with pin names: N0--exec-->N1--Completed-->N2"""
             parts: List[str] = []
             for i in range(len(ids)):
                 parts.append(ids[i])
                 if i < len(ids) - 1:
-                    # pin 名称来自源节点（names[i]），而非目标节点（names[i+1]）
-                    # used_exec_pin_name 设置在源节点上，其 exec output pin 连接到前方
+                    # pin name comes from the source node (names[i]), not the target node (names[i+1])
+                    # used_exec_pin_name is set on the source node, its exec output pin connects forward
                     pin_name = names[i] if i < len(names) else ""
                     if pin_name:
                         parts.append(f"--{pin_name}-->")

@@ -1,19 +1,19 @@
 """
-游戏版本映射 — 通过游戏标识推断 PAK 文件版本。
+Game version mapping -- infer PAK file version from game identifier.
 
-参考 external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs 实现。
+Reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs implementation.
 """
 
 from typing import Dict, Tuple
 from uasset_read.pak.constants import PakFileVersion
 
 
-# 游戏标识枚举
+# Game identifier enumeration
 class EGame:
-    """游戏标识枚举。"""
+    """Game identifier enumeration."""
     UNKNOWN = 0
 
-    # 自定义魔数游戏（13 个，与 CUE4Parse FPakInfo.cs 完全对齐）
+    # Custom magic games (13, fully aligned with CUE4Parse FPakInfo.cs)
     OUTLAST_TRIALS = 1
     TORCHLIGHT_INFINITE = 2
     WILD_ASSAULT = 3
@@ -28,7 +28,7 @@ class EGame:
     ARENA_BREAKOUT_INFINITE = 12
     ASSAULT_FIRE_FUTURE = 13
 
-    # UE5 热门游戏（标准魔数 0x5A6F12E1）
+    # UE5 popular games (standard magic 0x5A6F12E1)
     BLACK_MYTH_WUKONG = 100
     STALKER_2 = 101
     MARVEL_RIVALS = 102
@@ -41,7 +41,7 @@ class EGame:
     BORDERLANDS_4 = 109
     GRAY_ZONE_WARFARE = 110
 
-    # UE4 热门游戏（标准魔数 0x5A6F12E1）
+    # UE4 popular games (standard magic 0x5A6F12E1)
     PUBG = 200
     FORTNITE = 201
     APEX_LEGENDS = 202
@@ -56,10 +56,10 @@ class EGame:
     BORDERLANDS_3 = 211
 
 
-# 游戏到 PAK 版本的映射
-# UE 源码参考: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs GetVersion()
+# Game to PAK version mapping
+# UE source reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs GetVersion()
 GAME_PAK_VERSION_MAP: Dict[int, int] = {
-    # 自定义魔数游戏
+    # Custom magic games
     EGame.UNKNOWN: PakFileVersion.Utf8PakDirectory,
     EGame.OUTLAST_TRIALS: PakFileVersion.PathHashIndex,
     EGame.TORCHLIGHT_INFINITE: PakFileVersion.PathHashIndex,
@@ -74,7 +74,7 @@ GAME_PAK_VERSION_MAP: Dict[int, int] = {
     EGame.PROMISE_MASCOT_AGENCY: PakFileVersion.PathHashIndex,
     EGame.ARENA_BREAKOUT_INFINITE: PakFileVersion.PathHashIndex,
     EGame.ASSAULT_FIRE_FUTURE: PakFileVersion.PathHashIndex,
-    # UE5 游戏（file_version_ue5 映射）
+    # UE5 games (file_version_ue5 mapping)
     EGame.BLACK_MYTH_WUKONG: PakFileVersion.Utf8PakDirectory,     # UE5.0+
     EGame.STALKER_2: PakFileVersion.Utf8PakDirectory,             # UE5.1
     EGame.MARVEL_RIVALS: PakFileVersion.Utf8PakDirectory,         # UE5.3
@@ -86,7 +86,7 @@ GAME_PAK_VERSION_MAP: Dict[int, int] = {
     EGame.DUNE_AWAKENING: PakFileVersion.Utf8PakDirectory,        # UE5.2
     EGame.BORDERLANDS_4: PakFileVersion.Utf8PakDirectory,         # UE5.5
     EGame.GRAY_ZONE_WARFARE: PakFileVersion.Utf8PakDirectory,     # UE5.5
-    # UE4 游戏
+    # UE4 games
     EGame.PUBG: PakFileVersion.FNameBasedCompressionMethod,       # UE4.16
     EGame.FORTNITE: PakFileVersion.Utf8PakDirectory,              # UE4.20+
     EGame.APEX_LEGENDS: PakFileVersion.FNameBasedCompressionMethod, # UE4.23
@@ -102,7 +102,7 @@ GAME_PAK_VERSION_MAP: Dict[int, int] = {
 }
 
 
-# 魔数到游戏标识的映射
+# Magic to game identifier mapping
 MAGIC_TO_GAME_MAP: Dict[int, int] = {
     0xA590ED1E: EGame.OUTLAST_TRIALS,
     0x6B2A56B8: EGame.TORCHLIGHT_INFINITE,
@@ -121,31 +121,31 @@ MAGIC_TO_GAME_MAP: Dict[int, int] = {
 
 
 def detect_game_from_magic(magic: int) -> int:
-    """根据魔数检测游戏标识。
+    """Detect game identifier from magic value.
 
     Args:
-        magic: PAK 文件魔数
+        magic: PAK file magic value
 
     Returns:
-        游戏标识（EGame 枚举值）
+        Game identifier (EGame enum value)
     """
     return MAGIC_TO_GAME_MAP.get(magic, EGame.UNKNOWN)
 
 
 def get_pak_version_for_game(game: int) -> int:
-    """获取游戏对应的 PAK 版本。
+    """Get PAK file version for a game.
 
     Args:
-        game: 游戏标识（EGame 枚举值）
+        game: Game identifier (EGame enum value)
 
     Returns:
-        PAK 文件版本（PakFileVersion 枚举值）
+        PAK file version (PakFileVersion enum value)
     """
     return GAME_PAK_VERSION_MAP.get(game, PakFileVersion.Utf8PakDirectory)
 
 
 def get_game_info(game: int) -> Tuple[str, int]:
-    """获取游戏信息。"""
+    """Get game information."""
     game_names = {
         EGame.UNKNOWN: "Unknown",
         EGame.OUTLAST_TRIALS: "Outlast Trials",

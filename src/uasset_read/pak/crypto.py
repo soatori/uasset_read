@@ -1,7 +1,7 @@
 """
-Pak 文件 AES-ECB 加密/解密模块
+Pak file AES-ECB encryption/decryption module.
 
-用于加密索引和文件条目的 AES-ECB 解密。
+AES-ECB decryption for encrypted index and file entries.
 """
 import hashlib
 
@@ -9,20 +9,20 @@ from uasset_read.exceptions import ParseError
 
 
 def decrypt_aes_ecb(data: bytes, key: bytes) -> bytes:
-    """使用 AES-ECB 解密数据（无填充，16-byte 对齐）。
+    """Decrypt data using AES-ECB (no padding, 16-byte aligned).
 
-    匹配 UE 引擎的 FAES::DecryptData。
+    Matches UE engine's FAES::DecryptData.
 
     Args:
-        data: 加密数据
-        key: AES 密钥（16 bytes / 128-bit）
+        data: Encrypted data
+        key: AES key (16 bytes / 128-bit)
 
     Returns:
-        解密后的数据（裁剪到原始长度）
+        Decrypted data (trimmed to original length)
 
     Raises:
-        ValueError: 密钥长度不正确
-        ImportError: 缺少 cryptography 包
+        ValueError: Incorrect key length
+        ImportError: Missing cryptography package
     """
     if len(key) != 16:
         raise ValueError("AES key must be 16 bytes (128-bit)")
@@ -54,34 +54,34 @@ def decrypt_aes_ecb(data: bytes, key: bytes) -> bytes:
 
 
 def validate_index_hash(decrypted_index_blob: bytes, expected_hash: bytes) -> bool:
-    """验证解密后的索引 blob 的 SHA1 哈希。
+    """Validate SHA1 hash of decrypted index blob.
 
     Args:
-        decrypted_index_blob: 解密后的索引数据
-        expected_hash: 期望的 SHA1 哈希（20 bytes）
+        decrypted_index_blob: Decrypted index data
+        expected_hash: Expected SHA1 hash (20 bytes)
 
     Returns:
-        True 如果哈希匹配
+        True if hash matches
     """
     computed_hash = hashlib.sha1(decrypted_index_blob).digest()
     return computed_hash == expected_hash
 
 
 def decrypt_index_blob(index_data: bytes, key: bytes, expected_hash: bytes) -> bytes:
-    """解密索引 blob 并验证哈希。
+    """Decrypt index blob and validate hash.
 
-    便捷包装函数：先解密，后验证 SHA1。
+    Convenience wrapper: decrypt first, then validate SHA1.
 
     Args:
-        index_data: 加密的索引数据
-        key: AES 密钥（16 bytes）
-        expected_hash: 期望的 SHA1 哈希
+        index_data: Encrypted index data
+        key: AES key (16 bytes)
+        expected_hash: Expected SHA1 hash
 
     Returns:
-        解密并验证后的索引数据
+        Decrypted and validated index data
 
     Raises:
-        ParseError: 哈希验证失败
+        ParseError: Hash validation failed
     """
     decrypted = decrypt_aes_ecb(index_data, key)
     if not validate_index_hash(decrypted, expected_hash):

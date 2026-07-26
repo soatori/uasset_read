@@ -1,6 +1,6 @@
-"""C++ 函数体提取模块 — 从 execution_flows / data_flows 生成 CppStatement 树。
+"""C++ function body extraction module — generates CppStatement trees from execution_flows / data_flows.
 
-将蓝图函数体逻辑翻译为中间 IR 结构。
+Translates blueprint function body logic into intermediate IR structures.
 """
 
 import logging
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# Pure 函数内联映射表（D-58-04）
+# Pure function inline mapping table (D-58-04)
 # ============================================================================
 
 PURE_FUNCTION_INLINE_MAP: Dict[str, Callable] = {
@@ -38,7 +38,7 @@ PURE_FUNCTION_INLINE_MAP: Dict[str, Callable] = {
 
 
 def _build_call_expression(func_name: str, args: List[str]) -> str:
-    """从函数名和参数构建 C++ 调用表达式。"""
+    """Build C++ call expression from function name and arguments."""
     inline_fn = PURE_FUNCTION_INLINE_MAP.get(func_name, PURE_FUNCTION_INLINE_MAP["DEFAULT"])
     if inline_fn is PURE_FUNCTION_INLINE_MAP["DEFAULT"]:
         return inline_fn(func_name, args)
@@ -48,17 +48,17 @@ def _build_call_expression(func_name: str, args: List[str]) -> str:
 
 
 def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
-    """从 CallFunction 节点推导调用目标和类型。
+    """Derive call target and type from a CallFunction node.
 
     Returns:
-        (target, target_type) — target_type 为 "this" | "pointer" | "super"
+        (target, target_type) — target_type is "this" | "pointer" | "super"
     """
     params = node_info.get("parameters", {})
     fr = params.get("function_reference", {}) if isinstance(params, dict) else {}
     member_parent = fr.get("member_parent", "")
     b_self_context = fr.get("b_self_context", True)
 
-    # Super 调用检测
+    # Super call detection
     if member_parent and member_parent != method_ir.cpp_name and not b_self_context:
         return ("Super", "super")
 
@@ -70,7 +70,7 @@ def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
 
 
 # ============================================================================
-# 核心函数：extract_function_body
+# Core function: extract_function_body
 # ============================================================================
 
 def extract_function_body(
@@ -79,16 +79,16 @@ def extract_function_body(
     data_flows: List[Dict],
     node_lookup: Dict,
 ) -> List[CppStatement]:
-    """从执行流和数据流生成函数体语句序列。
+    """Generate function body statement sequence from execution flow and data flows.
 
     Args:
-        method_ir: 方法 IR（含签名信息）
-        execution_flow: execution_flows 中的单个 flow（含 nodes 列表）
-        data_flows: 数据流列表（用于参数推导）
-        node_lookup: node_guid → node 查找表（用于获取完整 pin 信息）
+        method_ir: method IR (contains signature information)
+        execution_flow: single flow from execution_flows (contains nodes list)
+        data_flows: data flow list (used for argument derivation)
+        node_lookup: node_guid → node lookup table (used to retrieve full pin information)
 
     Returns:
-        CppStatement 列表
+        CppStatement list
     """
     nodes = execution_flow.get("nodes", [])
     statements: List[CppStatement] = []
@@ -96,7 +96,7 @@ def extract_function_body(
     for node_info in nodes:
         node_type = node_info.get("node_type", "")
 
-        # 跳过 FunctionEntry 本身
+        # Skip FunctionEntry itself
         if node_type == "K2Node_FunctionEntry":
             continue
 
@@ -117,7 +117,7 @@ def extract_function_body(
                 statements.append(stmt)
 
         elif node_type == "K2Node_FunctionResult":
-            # 函数返回点，在纯语句序列中不生成显式语句
+            # Function return point, no explicit statement generated in pure statement sequence
             continue
 
         else:
@@ -131,21 +131,21 @@ def _translate_call_function(
     method_ir: CppMethodIR,
     data_flows: List[Dict],
 ) -> Optional[CppStatement]:
-    """翻译单个 K2Node_CallFunction 节点为 CppStatement。"""
+    """Translate a single K2Node_CallFunction node into CppStatement."""
     func_name = node_info.get("function_name", "Unknown")
     is_pure = node_info.get("pure", False)
 
-    # 推导参数
+    # Derive arguments
     args = _extract_call_args(node_info, method_ir, data_flows)
 
-    # 推导调用目标
+    # Derive call target
     target, target_type = _resolve_target(node_info, method_ir)
 
     if is_pure:
-        # Pure 函数：走内联决策
+        # Pure function: go through inlining decision
         return _decide_pure_inline(node_info, func_name, args, data_flows)
 
-    # 非 pure 函数调用 → CppCallStmt
+    # Non-pure function call -> CppCallStmt
     if target_type == "super":
         return CppCallStmt(
             target="Super",
@@ -174,7 +174,7 @@ def _extract_call_args(
     method_ir: CppMethodIR,
     data_flows: List[Dict],
 ) -> List[str]:
-    """从 CallFunction 节点的 parameters 和 data_flows 推导参数列表。"""
+    """Derive parameter list from CallFunction node's parameters and data_flows."""
     params = node_info.get("parameters", {})
     param_list = params.get("parameters", []) if isinstance(params, dict) else []
 
@@ -183,13 +183,13 @@ def _extract_call_args(
         if isinstance(param, dict):
             name = param.get("name", "")
             direction = param.get("direction", "input")
-            # 跳过 exec/return 参数
+            # Skip exec/return parameters
             if direction in ("exec", "return"):
                 continue
             if name:
                 args.append(sanitize_identifier(name))
 
-    # Fallback: 从 data_sources 推导
+    # Fallback: derive from data_sources
     if not args:
         data_sources = node_info.get("data_sources", [])
         for ds in data_sources:
@@ -213,7 +213,7 @@ def _extract_call_args(
 
 
 # ============================================================================
-# Pure 函数内联决策（D-58-04）
+# Pure function inlining decision (D-58-04)
 # ============================================================================
 
 def _decide_pure_inline(
@@ -222,11 +222,11 @@ def _decide_pure_inline(
     args: List[str],
     data_flows: List[Dict],
 ) -> CppStatement:
-    """决定 pure 函数是内联还是创建中间变量。
+    """Decide whether pure function is inlined or creates intermediate variable.
 
-    规则：
-    - 单一使用者 → CppInlineExprStmt
-    - 多使用者 → CppAssignmentStmt（临时变量）
+    Rules:
+    - Single user -> CppInlineExprStmt
+    - Multiple users -> CppAssignmentStmt (temporary variable)
     """
     data_providers = node_info.get("data_providers", [])
     user_count = len(data_providers) if data_providers else 1
@@ -236,7 +236,7 @@ def _decide_pure_inline(
     if user_count <= 1:
         return CppInlineExprStmt(expression=expression)
     else:
-        # 多使用者：创建临时变量
+        # Multiple users: create temporary variable
         temp_var = f"_temp_{func_name.lower()}"
         return CppAssignmentStmt(
             lhs=temp_var,
@@ -246,7 +246,7 @@ def _decide_pure_inline(
 
 
 # ============================================================================
-# 控制流节点翻译（D-58-01）
+# Control flow node translation (D-58-01)
 # ============================================================================
 
 def _translate_control_flow(
@@ -255,19 +255,19 @@ def _translate_control_flow(
     data_flows: List[Dict],
     node_lookup: Dict,
 ) -> Optional[CppStatement]:
-    """翻译控制流节点（IfThenElse / Switch*）为 CppIfStmt。"""
+    """Translate control flow nodes (IfThenElse / Switch*) to CppIfStmt."""
     node_type = node_info.get("node_type", "")
     _branch_type = node_info.get("branch_type", "unknown")  # noqa: F841 - extracted for clarity
 
-    # 推导条件表达式
+    # Derive condition expression
     condition = _derive_condition(node_info, data_flows)
 
     if node_type == "K2Node_MacroInstance":
         return _translate_macro_instance(node_info, method_ir, data_flows, node_lookup)
 
-    # K2Node_Switch* 暂时翻译为 if-else if-else 链
-    # then_body 和 else_body 需要从执行流的分支中推导
-    # 当前实现：使用占位条件，分支体为空
+    # K2Node_Switch* temporarily translated to if-else if-else chain
+    # then_body and else_body need to be derived from execution flow branches
+    # Current implementation: use placeholder condition, branch bodies are empty
     return CppIfStmt(
         condition=condition,
         then_body=[],
@@ -276,7 +276,7 @@ def _translate_control_flow(
 
 
 def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
-    """从控制流节点的 data_sources 推导条件表达式。"""
+    """Derive condition expression from control flow node's data_sources."""
     data_sources = node_info.get("data_sources", [])
     if data_sources:
         for ds in data_sources:
@@ -294,7 +294,7 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
                             elif src.get("source_type") == "function_parameter":
                                 return sanitize_identifier(src.get("pin", "condition"))
 
-    # Fallback: 从节点类型推导默认条件
+    # Fallback: derive default condition from node type
     branch_type = node_info.get("branch_type", "unknown")
     if branch_type == "if":
         return "condition"
@@ -305,7 +305,7 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
 
 
 # ============================================================================
-# 宏实例翻译（蓝图宏 → C++ 控制流）
+# Macro instance translation (blueprint macro -> C++ control flow)
 # ============================================================================
 
 def _translate_macro_instance(
@@ -314,12 +314,12 @@ def _translate_macro_instance(
     data_flows: List[Dict],
     node_lookup: Dict,
 ) -> Optional[CppStatement]:
-    """翻译 MacroInstance 节点为 CppStatement。
+    """Translate MacroInstance node to CppStatement.
 
-    策略：
-    1. 标准宏 → 根据 STANDARD_MACRO_CPP_MAPPING 生成对应 C++ 控制流 IR
-    2. 非标准宏 → 使用 macro_internal_flows 递归翻译内部节点
-    3. 未知宏 → 输出注释
+    Strategy:
+    1. Standard macro -> generate corresponding C++ control flow IR based on STANDARD_MACRO_CPP_MAPPING
+    2. Non-standard macro -> use macro_internal_flows to recursively translate internal nodes
+    3. Unknown macro -> output comment
     """
     expansion = node_info.get("macro_expansion", {})
     macro_name = expansion.get("macro_name", "")
@@ -341,7 +341,7 @@ def _translate_standard_macro(
     node_info: Dict,
     data_flows: List[Dict],
 ) -> CppStatement:
-    """翻译标准宏为 C++ 控制流 IR。"""
+    """Translate standard macro to C++ control flow IR."""
     mapping = STANDARD_MACRO_CPP_MAPPING.get(macro_name, {})
     cpp_stmt_type = mapping.get("cpp_statement", "unknown")
     condition = _derive_condition_from_macro(expansion, data_flows)
@@ -388,7 +388,7 @@ def _translate_user_macro(
     data_flows: List[Dict],
     node_lookup: Dict,
 ) -> CppStatement:
-    """翻译用户自定义宏的内部执行流为 CppStatement。"""
+    """Translate user-defined macro internal execution flow to CppStatement."""
     stmts: List[CppStatement] = []
     for flow in internal_flows:
         nodes = flow.get("nodes", [])
@@ -404,7 +404,7 @@ def _translate_user_macro(
 
 
 def _derive_condition_from_macro(expansion: Dict, data_flows: List[Dict]) -> str:
-    """从宏展开的 pin_mapping 推导条件表达式。"""
+    """Derive condition expression from macro expansion's pin_mapping."""
     pin_mapping = expansion.get("pin_mapping", {})
     for key in ("Condition", "Input"):
         if key in pin_mapping:
@@ -416,7 +416,7 @@ def _derive_condition_from_macro(expansion: Dict, data_flows: List[Dict]) -> str
 
 
 def _get_pin_default(pin_mapping: Dict, pin_name: str, default: str) -> str:
-    """从 pin_mapping 获取引脚的默认值。"""
+    """Get pin default value from pin_mapping."""
     if pin_name in pin_mapping:
         val = pin_mapping[pin_name].get("default_value", "")
         if val:

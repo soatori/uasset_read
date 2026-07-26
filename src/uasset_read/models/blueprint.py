@@ -1,11 +1,11 @@
 """
-蓝图元数据数据类 — BlueprintMetadata, BlueprintVariable, BlueprintFunction,
-BlueprintEvent, FunctionParameter, MulticastDelegate。
+Blueprint metadata dataclasses — BlueprintMetadata, BlueprintVariable, BlueprintFunction,
+BlueprintEvent, FunctionParameter, MulticastDelegate.
 
-蓝图元数据通过 blueprint/variable_extractor.py 的
-extract_blueprint_metadata() 填充，不经过 from_archive 序列化路径。
+Blueprint metadata is populated by blueprint/variable_extractor.py's
+extract_blueprint_metadata(), bypassing the from_archive serialization path.
 
-Per D-10: Python 3.10+ 严格类型提示。
+Per D-10: Python 3.10+ strict type hints.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class FunctionParameter:
-    """函数参数（META-02）。"""
+    """Function parameter (META-02)."""
     name: str = ""
     param_type: str = ""
     default_value: Any = None
@@ -31,7 +31,7 @@ class FunctionParameter:
 
 @dataclass
 class MulticastDelegate:
-    """多播委托。"""
+    """Multicast delegate."""
     delegate_name: str = ""
     signature_function: str = ""
     is_callable_in_blueprint: bool = False
@@ -39,7 +39,7 @@ class MulticastDelegate:
 
 @dataclass
 class BlueprintEvent:
-    """蓝图事件元数据。"""
+    """Blueprint event metadata."""
     name: str = ""
     event_type: str = ""
     function_flags: int = 0
@@ -66,19 +66,19 @@ class BlueprintEvent:
 
 @dataclass
 class BlueprintInterface:
-    """蓝图实现的接口。"""
+    """Blueprint-implemented interface."""
     name: str = ""
     guid: str = ""
 
 
 @dataclass
 class BlueprintFunction:
-    """蓝图函数元数据。"""
+    """Blueprint function metadata."""
     name: str = ""
     return_type: str = ""
     parameters: List[FunctionParameter] = field(default_factory=list)
     function_flags: int = 0
-    is_implemented: bool = True  # False = 继承事件占位（如 ReceiveBeginPlay）
+    is_implemented: bool = True  # False = inherited event placeholder (e.g. ReceiveBeginPlay)
     is_pure: bool = False
     is_blueprint_callable: bool = False
     is_blueprint_event: bool = False
@@ -110,7 +110,7 @@ class BlueprintFunction:
 
 @dataclass
 class BlueprintVariable:
-    """蓝图变量定义（FBPVariableDescription）。"""
+    """Blueprint variable definition (FBPVariableDescription)."""
     var_name: str
     var_type: Optional["FEdGraphPinType"] = None
     category: str = ""
@@ -153,7 +153,7 @@ class BlueprintVariable:
 
 @dataclass
 class BlueprintMetadata:
-    """Blueprint 元数据，从 ExportMap 提取。"""
+    """Blueprint metadata, extracted from ExportMap."""
     is_blueprint: bool
     parent_class: Optional[str] = None
     description: str = ""

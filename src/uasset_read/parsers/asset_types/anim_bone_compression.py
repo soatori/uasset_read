@@ -1,7 +1,7 @@
-"""UAnimBoneCompressionSettings 资产类型处理器（opaque partial metadata）。
+"""UAnimBoneCompressionSettings Asset type handler (opaque partial metadata).
 
-纯 UPROPERTY 序列化，无自定义 Serialize()。
-AnimSequence 使用此类型决定骨骼压缩策略。
+Pure UPROPERTY serialization, no custom Serialize().
+AnimSequence uses this type to determine bone compression strategy.
 """
 
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub

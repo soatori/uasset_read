@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-"""CFG 构建器。
+"""CFG builder.
 
-从 KismetExpression 序列构建基本块和控制流图。
+Builds basic blocks and control flow graphs from KismetExpression sequences.
 
-算法:
-1. Leader 识别: 跳转目标 + 跳转/结束语句后一条
-2. 分配基本块: 每个 leader 是一个块的起点
-3. 构建边: 根据跳转指令类型建立块间边
-4. 合成 sink: 所有 fall-through 指向的终止块
+Algorithm:
+1. Leader identification: jump targets + instruction after jump/termination statements
+2. Assign basic blocks: each leader is the start of a block
+3. Build edges: construct inter-block edges based on jump instruction types
+4. Synthetic sink: the terminal block that all fall-throughs point to
 """
 
 
@@ -21,17 +21,17 @@ if TYPE_CHECKING:
 
 
 def _get_statement_index(expr: KismetExpression) -> int | None:
-    """获取表达式的语句索引。"""
+    """Get the statement index of the expression."""
     return getattr(expr, "StatementIndex", None)
 
 
 def _get_code_offset(expr: KismetExpression) -> int | None:
-    """获取跳转指令的目标偏移量。"""
+    """Get the target offset of the jump instruction."""
     return getattr(expr, "CodeOffset", None)
 
 
 def _get_token_name(expr: KismetExpression) -> str | None:
-    """获取表达式的 token 名称。"""
+    """Get the token name of the expression."""
     token = getattr(expr, "Token", None)
     if token is None:
         return None
@@ -39,7 +39,7 @@ def _get_token_name(expr: KismetExpression) -> str | None:
 
 
 def _is_terminator(expr: KismetExpression) -> bool:
-    """判断表达式是否是基本块终结符。"""
+    """Determine if the expression is a basic block terminator."""
     name = _get_token_name(expr)
     if name is None:
         return False
@@ -54,7 +54,7 @@ def _is_terminator(expr: KismetExpression) -> bool:
 
 
 def _is_unconditional_jump(expr: KismetExpression) -> bool:
-    """判断是否是无条件跳转。"""
+    """Determine if this is an unconditional jump."""
     name = _get_token_name(expr)
     if name is None:
         return False
@@ -62,7 +62,7 @@ def _is_unconditional_jump(expr: KismetExpression) -> bool:
 
 
 def _is_conditional_jump(expr: KismetExpression) -> bool:
-    """判断是否是条件跳转。"""
+    """Determine if this is a conditional jump."""
     name = _get_token_name(expr)
     if name is None:
         return False
@@ -70,24 +70,24 @@ def _is_conditional_jump(expr: KismetExpression) -> bool:
 
 
 def _is_end_of_script(expr: KismetExpression) -> bool:
-    """判断是否是脚本结束标记。"""
+    """Determine if this is an end-of-script marker."""
     return _get_token_name(expr) == "EX_EndOfScript"
 
 
 def build_cfg(expressions: list[KismetExpression]) -> CFG:
-    """从表达式列表构建控制流图。
+    """Build a control flow graph from a list of expressions.
 
-    步骤:
-    1. Leader 识别：跳转目标 + 跳转/结束语句后一条
-    2. 分配基本块
-    3. 构建边
-    4. 添加合成 sink（EX_EndOfScript / fall-through）
+    Steps:
+    1. Leader identification: jump targets + instruction after jump/termination statements
+    2. Assign basic blocks
+    3. Build edges
+    4. Add synthetic sink (EX_EndOfScript / fall-through)
 
     Args:
-        expressions: 解析后的 Kismet 表达式列表。
+        expressions: Parsed Kismet expression list.
 
     Returns:
-        构建好的控制流图。
+        The constructed control flow graph.
     """
     if not expressions:
         cfg = CFG()
@@ -97,23 +97,23 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
         cfg.exit_id = 0
         return cfg
 
-    # --- Step 1: 构建偏移→索引映射，识别 leaders ---
-    # 使用 StatementIndex 建立权威的 offset → expression index 映射。
-    # CodeOffset 是跳转目标偏移，通过 offset_to_index 查找目标索引。
+    # --- Step 1: Build offset→index mapping, identify leaders ---
+    # Use StatementIndex to build authoritative offset → expression index mapping.
+    # CodeOffset is jump target offset, look up target index via offset_to_index.
     offset_to_index: dict[int, int] = {}
     for idx, expr in enumerate(expressions):
         stmt_idx = _get_statement_index(expr)
         if stmt_idx is not None:
             offset_to_index[stmt_idx] = idx
 
-    # 收集所有跳转目标偏移量
+    # Collect all jump target offsets
     jump_targets: set[int] = set()
     for expr in expressions:
         code_off = _get_code_offset(expr)
         if code_off is not None:
             jump_targets.add(code_off)
 
-    # Leaders: 首条指令 + 跳转目标 + 跳转/结束语句的后一条
+    # Leaders: first instruction + jump targets + instruction after jump/termination
     leaders: set[int] = {0}
     for target_offset in jump_targets:
         if target_offset in offset_to_index:
@@ -123,7 +123,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
         if _is_terminator(expr) and idx + 1 < len(expressions):
             leaders.add(idx + 1)
 
-    # --- Step 2: 分配基本块 ---
+    # --- Step 2: Assign basic blocks ---
     sorted_leaders = sorted(leaders)
     leader_to_block: dict[int, int] = {}
     block_id_counter = 0
@@ -131,10 +131,10 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
         leader_to_block[leader] = block_id_counter
         block_id_counter += 1
 
-    # 合成 sink block ID
+    # Synthetic sink block ID
     sink_block_id = block_id_counter
 
-    # 确定每个块的起止范围
+    # Determine start/end range for each block
     blocks: dict[int, BasicBlock] = {}
     leader_list = sorted(leader_to_block.keys())
     for i, leader_idx in enumerate(leader_list):
@@ -154,7 +154,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
         )
         blocks[bid] = block
 
-    # 合成 sink（空块，所有 fall-through 指向它）
+    # Synthetic sink (empty block, all fall-throughs point to it)
     sink = BasicBlock(
         block_id=sink_block_id,
         start_idx=len(expressions),
@@ -162,7 +162,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
     )
     blocks[sink_block_id] = sink
 
-    # --- Step 3: 构建边 ---
+    # --- Step 3: Build edges ---
     for bid, block in blocks.items():
         if bid == sink_block_id:
             continue
@@ -205,7 +205,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
                 block.edge_kinds[next_bid] = EdgeKind.TRUE_BRANCH
 
         elif _is_end_of_script(last_expr):
-            # 连接到 sink
+            # Connect to sink
             if sink_block_id not in block.successors:
                 block.successors.append(sink_block_id)
             if bid not in sink.predecessors:
@@ -213,7 +213,7 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
             block.edge_kinds[sink_block_id] = EdgeKind.UNCONDITIONAL
 
         else:
-            # Fall-through 到下一条
+            # Fall-through to next
             next_idx = block.end_idx + 1
             if next_idx < len(expressions) and next_idx in leader_to_block:
                 next_bid = leader_to_block[next_idx]
@@ -223,14 +223,14 @@ def build_cfg(expressions: list[KismetExpression]) -> CFG:
                     blocks[next_bid].predecessors.append(bid)
                 block.edge_kinds[next_bid] = EdgeKind.FALLTHROUGH
             elif next_idx >= len(expressions):
-                # Fall-through 到 sink
+                # Fall-through to sink
                 if sink_block_id not in block.successors:
                     block.successors.append(sink_block_id)
                 if bid not in sink.predecessors:
                     sink.predecessors.append(bid)
                 block.edge_kinds[sink_block_id] = EdgeKind.FALLTHROUGH
 
-    # --- Step 4: 构建 CFG ---
+    # --- Step 4: Build CFG ---
     cfg = CFG(
         blocks=blocks,
         entry_id=leader_to_block[0],

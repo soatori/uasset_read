@@ -1,10 +1,10 @@
 """
-Kismet 表达式系统 — Token 枚举定义。
+Kismet Expression System — Token Enum Definitions.
 
-镜像 的 EExprToken / ECastToken / EScriptInstrumentationType /
-EBlueprintTextLiteralType / EAutoRtfmStopTransactMode 枚举。
+Mirrors the EExprToken / ECastToken / EScriptInstrumentationType /
+EBlueprintTextLiteralType / EAutoRtfmStopTransactMode enums.
 
-参考：E:\\Develop\\lib\\参考实现\\参考实现\\UE4\\Kismet\\EExprToken.cs
+Reference: EExprToken.cs
 """
 
 from enum import IntEnum
@@ -12,10 +12,10 @@ from enum import IntEnum
 
 class EExprToken(IntEnum):
     """
-    Kismet 字节码 Token 枚举。
+    Kismet bytecode Token enum.
 
-    值域 0x00-0xFF，对应 UE 蓝图脚本虚拟机指令集。
-    完全对齐 EExprToken.cs。
+    Value range 0x00-0xFF, corresponding to UE Blueprint script VM instruction set.
+    Fully aligned with EExprToken.cs.
     """
 
     # Variable references
@@ -145,10 +145,10 @@ class EExprToken(IntEnum):
 
 class ECastToken(IntEnum):
     """
-    EX_Cast 转换类型枚举。
+    EX_Cast conversion type enum.
 
-    紧随 EX_Cast (0x38) 字节之后读取的单个字节，
-    指定目标转换类型。
+    The single byte read after EX_Cast (0x38),
+    specifying the target conversion type.
     """
 
     CST_ObjectToInterface = 0x00
@@ -164,7 +164,7 @@ class ECastToken(IntEnum):
 
 class EScriptInstrumentationType(IntEnum):
     """
-    脚本插装事件类型（EX_InstrumentationEvent 参数）。
+    Script instrumentation event type (EX_InstrumentationEvent parameter).
     """
 
     None_ = -1
@@ -193,9 +193,9 @@ class EScriptInstrumentationType(IntEnum):
 
 class EBlueprintTextLiteralType(IntEnum):
     """
-    蓝图文本字面量类型。
+    Blueprint text literal type.
 
-    用于 EX_TextConst 反序列化时判断文本来源。
+    Used during EX_TextConst deserialization to determine text source.
     """
 
     # Text is an empty string — use FText::GetEmpty()
@@ -212,7 +212,7 @@ class EBlueprintTextLiteralType(IntEnum):
 
 class EAutoRtfmStopTransactMode(IntEnum):
     """
-    AutoRTFM 停止事务模式（EX_AutoRtfmStopTransact 参数）。
+    AutoRTFM stop transaction mode (EX_AutoRtfmStopTransact parameter).
     """
 
     Commit = 0

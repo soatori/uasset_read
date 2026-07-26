@@ -1,6 +1,6 @@
-"""蓝图 Pin 二进制序列化器 — FEdGraphPinType, UEdGraphPin 读取函数。
+"""Blueprint Pin binary serializer — FEdGraphPinType, UEdGraphPin read functions.
 
-从 serializers/graph.py 拆分而来，包含所有 Pin 相关的读取逻辑。
+Split from serializers/graph.py, contains all Pin-related read logic.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# FEdGraphPinType 读取
+# FEdGraphPinType read functions
 # ============================================================================
 
 def read_ed_graph_pin_type(
@@ -46,12 +46,12 @@ def read_ed_graph_pin_type(
     export_map: Optional[List[ObjectExport]] = None,
     linker: Optional["PackageLinker"] = None,
 ) -> FEdGraphPinType:
-    """解析 FEdGraphPinType（UE5.7 专用 — 自定义序列化路径）。"""
+    """Parse FEdGraphPinType (UE5.7 specific — custom serialization path)."""
     pin_type = FEdGraphPinType()
 
     _release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0)  # noqa: F841 - extracted for clarity
 
-    # PinCategory / PinSubCategory (UE5 始终使用 FName 格式)
+    # PinCategory / PinSubCategory (UE5 always uses FName format)
     pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")
     pin_type.pin_subcategory = archive.read_name(name_map, "PinType.PinSubCategory")
 
@@ -74,11 +74,11 @@ def read_ed_graph_pin_type(
             pin_type.pin_subcategory_object_ref = None
             pin_type.pin_subcategory_object_name = None
 
-    # ContainerType (UE5 始终使用现代 uint8 格式)
+    # ContainerType (UE5 always uses modern uint8 format)
     pin_type.container_type = archive.read_u8("PinType.ContainerType")
     if pin_type.container_type == 3:  # Map
-        # Map key 的 terminal 类型（FEdGraphTerminalType 序列化）
-        # 参照 UE EdGraphPin.cpp:218 — Ar << PinValueType
+        # Map key terminal type (FEdGraphTerminalType serialization)
+        # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType
         pin_type.map_key_terminal_category = archive.read_name(name_map, "PinType.TerminalCategory")
         pin_type.map_key_terminal_sub_category = archive.read_name(name_map, "PinType.TerminalSubCategory")
         terminal_sub_category_object = archive.read_i32("PinType.TerminalSubCategoryObject")
@@ -103,7 +103,7 @@ def read_ed_graph_pin_type(
     pin_type.is_reference = archive.read_bool("PinType.bIsReference")
     pin_type.is_weak_pointer = archive.read_bool("PinType.bIsWeakPointer")
 
-    # FSimpleMemberReference (UE5 始终存在)
+    # FSimpleMemberReference (UE5 always present)
     archive.read_i32("PinType.MemberParent")
     archive.read_name(name_map, "PinType.MemberName")
     archive.read_bytes(16, "PinType.MemberGuid")
@@ -121,7 +121,7 @@ def read_ed_graph_pin_type(
 
 
 # ============================================================================
-# Pin 引用辅助函数
+# Pin reference helper functions
 # ============================================================================
 
 def read_pin_reference(
@@ -131,7 +131,7 @@ def read_pin_reference(
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
-    """读取单个 Pin 引用（FBlueprintEditorUtils::FPinReference）。"""
+    """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
     b_null_ptr = archive.read_i32("PinRef.BNullPtr")
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
@@ -139,10 +139,10 @@ def read_pin_reference(
     owning_node_index = archive.read_i32("PinRef.OwningNode")
     pin_guid_raw = _read_guid(archive)
 
-    # 归一化为 32 字符小写 hex（移除 dash），与 pin_id 格式一致
+    # Normalize to 32-char lowercase hex (remove dashes), matching pin_id format
     pin_guid = normalize_hex_guid(pin_guid_raw)
 
-    # 解析 owning node 名称
+    # Resolve owning node name
     owning_node_name: Optional[str] = None
     if owning_node_index > 0:
         node_idx = owning_node_index - 1
@@ -153,13 +153,13 @@ def read_pin_reference(
         if import_idx < len(import_map):
             owning_node_name = import_map[import_idx].object_name
 
-    # pin_guid 已在上方归一化为 32 字符小写 hex（无 dash）
+    # pin_guid already normalized above to 32-char lowercase hex (no dashes)
     result = {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
     }
 
-    # 如果有 linker，解析 owning_node_index 为对象引用
+    # If linker available, resolve owning_node_index to object reference
     if linker is not None and owning_node_index != 0:
         pkg_idx = PackageIndex(owning_node_index)
         if not pkg_idx.is_null:
@@ -175,19 +175,19 @@ def read_pin_array(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     linker: Optional["PackageLinker"] = None,
-    recovery_context: str = "linkedto",  # 区分 linkedto vs subpins
+    recovery_context: str = "linkedto",  # Distinguish linkedto vs subpins
 ) -> List[dict]:
-    """读取 Pin 引用数组（SerializePinArray 格式）。
+    """Read Pin reference array (SerializePinArray format).
 
-    滑动恢复机制 — count 异常时扫描附近字节寻找合法 i32 count，
-    验证候选后恢复解析，避免单个字段错位导致整个 pin 数组丢失。
+    Sliding recovery mechanism — when count is abnormal, scan nearby bytes for a valid i32 count,
+    validate candidates before resuming parsing, to avoid losing entire pin arrays due to a single field misalignment.
 
-    恢复上下文标记，区分 LinkedTo 恢复和 SubPins 恢复。
+    Recovery context marker distinguishes LinkedTo recovery from SubPins recovery.
     """
     array_count = archive.read_i32("PinArray.Count")
 
     if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
-        # 滑动恢复：在当前指针 ±8 字节范围内扫描合法 count
+        # Sliding recovery: scan within ±8 bytes of current pointer for valid count
         recovery_pos = archive.tell()
         recovered = _recover_pin_array_count(
             archive, recovery_pos, array_count, export_map, import_map
@@ -204,7 +204,7 @@ def read_pin_array(
                 "reason": recovered["reason"],
             })
             if recovered["confidence"] == "low" and recovery_context == "linkedto":
-                # 低置信度恢复不参与 LinkedTo 连接构建，避免污染后续语义
+                # Low-confidence recovery excluded from LinkedTo connection building to avoid polluting downstream semantics
                 logger.info(
                     "[P73-RECOVERY] %s low-confidence recovered (count=%d, reason=%s) -> ignored",
                     recovery_context, array_count, recovered["reason"]
@@ -246,22 +246,22 @@ def _recover_pin_array_count(
     import_map: List[ObjectImport] = None,
     scan_window: int = 16,
 ) -> Optional[Dict[str, Any]]:
-    """滑动恢复增强校验（Phase 75: 动态窗口）。
+    """Sliding recovery enhanced validation (Phase 75: dynamic window).
 
-    扫描 error_pos ± scan_window 寻找合法 i32 count (0..20)。
+    Scan error_pos +/- scan_window for a valid i32 count (0..20).
 
-    scan_window 根据 bad_count 大小动态调整：
-    - bad_count <= 20: 基础窗口 16 字节
-    - bad_count <= 100: 窗口 32 字节
-    - bad_count > 100: 窗口 64 字节
+    scan_window adjusts dynamically based on bad_count size:
+    - bad_count <= 20: base window 16 bytes
+    - bad_count <= 100: window 32 bytes
+    - bad_count > 100: window 64 bytes
 
-    改进：
-    - count=0 不能单独作为成功条件，需要验证后续是否有合理结构
-    - count>0 必须验证全部或至少前两个 PinReference
-    - 恢复成功返回结构化结果：{count, candidate_pos, confidence, reason}
+    Improvements:
+    - count=0 alone cannot be a success condition; must verify subsequent structure is reasonable
+    - count>0 must validate all or at least the first two PinReferences
+    - Successful recovery returns structured result: {count, candidate_pos, confidence, reason}
 
     Returns:
-        None: 恢复失败
+        None: recovery failed
         Dict: {
             "count": int,
             "candidate_pos": int,
@@ -271,7 +271,7 @@ def _recover_pin_array_count(
     """
     import struct
 
-    # Phase 75: 动态调整 scan_window
+    # Phase 75: dynamically adjust scan_window
     if bad_count > 100:
         scan_window = max(scan_window, 64)
     elif bad_count > 20:
@@ -279,8 +279,8 @@ def _recover_pin_array_count(
 
     current_pos = archive.tell()
     search_start = max(0, error_pos - scan_window)
-    # 安全获取 archive 大小：优先使用公开 API total_size()，
-    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    # Safely get archive size: prefer public API total_size(),
+    # fall back to _file_size attribute for mock archive compatibility in tests
     try:
         archive_size = archive.total_size()
         if not isinstance(archive_size, int):
@@ -300,59 +300,59 @@ def _recover_pin_array_count(
         candidate_bytes = window[offset:offset + 4]
         candidate = struct.unpack('<i', candidate_bytes)[0]
         if candidate < 0 or candidate > 20:
-            continue  # 不合理范围
+            continue  # Out of reasonable range
 
         candidate_pos = search_start + offset
         after_count = offset + 4
 
-        # count=0 需要额外验证后续结构
+        # count=0 requires additional verification of subsequent structure
         if candidate == 0:
-            # count=0 后面应该是 SubPins 数组或其他合理结构
-            # 检查是否有另一个小整数 count (0..20) 紧随其后
+            # count=0 should be followed by a SubPins array or other reasonable structure
+            # Check if another small integer count (0..20) follows immediately
             if after_count + 4 <= len(window):
                 next_val = struct.unpack('<i', window[after_count:after_count + 4])[0]
                 if 0 <= next_val <= 20:
-                    # 后面有另一个数组 count，符合 SubPins 结构
+                    # Another array count follows, matches SubPins structure
                     best_candidate = (candidate_pos, candidate)
                     best_confidence = "medium"
                     best_reason = "count=0 followed by valid SubPins count"
-                    # 不 break，继续寻找更高置信度的候选
+                    # Don't break, continue searching for higher confidence candidates
                     continue
-            # count=0 但后续结构不明，置信度低（仅作为最后兜底）
+            # count=0 but subsequent structure unknown, low confidence (fallback only)
             if best_candidate is None:
                 best_candidate = (candidate_pos, candidate)
                 best_confidence = "low"
                 best_reason = "count=0 without verified subsequent structure"
             continue
 
-        # count > 0: 验证 PinReference 结构
+        # count > 0: validate PinReference structure
         if after_count + 24 > len(window):
-            continue  # 空间不足
+            continue  # Insufficient space
 
-        # 验证第一个 PinReference
+        # Validate first PinReference
         pin_ref_1 = validate_pin_reference_at(
             archive, candidate_pos + 4, export_map, import_map
         )
         if pin_ref_1 is None or not pin_ref_1["valid"]:
             continue
 
-        # 验证第二个 PinReference（如果 count >= 2）
+        # Validate second PinReference (if count >= 2)
         if candidate >= 2 and after_count + 48 <= len(window):
             pin_ref_2 = validate_pin_reference_at(
                 archive, candidate_pos + 4 + 24, export_map, import_map
             )
             if pin_ref_2 is None or not pin_ref_2["valid"]:
-                # 第二个 ref 无效，置信度中等
+                # Second ref invalid, medium confidence
                 best_candidate = (candidate_pos, candidate)
                 best_confidence = "medium"
                 best_reason = f"count={candidate}, ref1 valid but ref2 invalid"
                 continue
 
-        # 所有验证通过，高置信度
+        # All validations passed, high confidence
         best_candidate = (candidate_pos, candidate)
         best_confidence = "high"
         best_reason = f"count={candidate}, all refs validated"
-        break  # 找到高置信度候选，停止搜索
+        break  # Found high-confidence candidate, stop search
 
     if best_candidate is not None:
         candidate_pos, recovered_count = best_candidate
@@ -371,7 +371,7 @@ def _recover_pin_array_count(
             "reason": best_reason,
         }
 
-    # 恢复失败：seek 回原始错误位置
+    # Recovery failed: seek back to original error position
     archive.seek(current_pos)
     return None
 
@@ -383,18 +383,19 @@ def _try_recover_to_subpins(
     import_map: List[ObjectImport] = None,
     max_scan: int = 256,
 ) -> Optional[Dict[str, Any]]:
-    """LinkedTo 失败后恢复到 SubPins。
+    """Recover to SubPins after LinkedTo failure.
 
-    扫描策略：在 error_pos 到 error_pos + max_scan 范围内寻找合理的小整数
-    (0..20)，验证该位置后的数据是否符合 pin reference header 结构。
+    Scan strategy: search for a reasonable small integer (0..20) in the range
+    error_pos to error_pos + max_scan, then verify the data after that position
+    matches pin reference header structure.
 
-    改进：
-    - 使用 validate_pin_reference_at() 进行结构校验
-    - 区分 linkedto_recovered（找到合法 Pin 数组）和 subpins_resync（跳到下一个结构）
-    - 返回结构化恢复结果
+    Improvements:
+    - Use validate_pin_reference_at() for structural validation
+    - Distinguish linkedto_recovered (valid Pin array found) from subpins_resync (jump to next structure)
+    - Return structured recovery result
 
     Returns:
-        None: 恢复失败
+        None: recovery failed
         Dict: {
             "recovered_pos": int,
             "count": int,
@@ -405,8 +406,8 @@ def _try_recover_to_subpins(
     import struct
 
     scan_start = archive.tell()
-    # 安全获取 archive 大小：优先使用公开 API total_size()，
-    # 回退到 _file_size 属性以兼容测试中的 mock archive
+    # Safely get archive size: prefer public API total_size(),
+    # fall back to _file_size attribute for mock archive compatibility in tests
     try:
         archive_size = archive.total_size()
         if not isinstance(archive_size, int):
@@ -425,7 +426,7 @@ def _try_recover_to_subpins(
         candidate_pos = scan_start + offset
         after = offset + 4
 
-        # 使用 validate_pin_reference_at 校验
+        # Validate using validate_pin_reference_at
         if candidate > 0 and after + 24 <= len(window):
             pin_ref_result = validate_pin_reference_at(
                 archive, candidate_pos + 4, export_map, import_map
@@ -433,7 +434,7 @@ def _try_recover_to_subpins(
             if pin_ref_result is not None and pin_ref_result["valid"]:
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
-                # 收敛：此路径仅用于 SubPins 重同步，不再标记为 linkedto_recovered
+                # Converged: this path is only for SubPins resync, no longer marked as linkedto_recovered
                 recovery_type = "subpins_resync"
                 logger.debug(
                     "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
@@ -453,11 +454,11 @@ def _try_recover_to_subpins(
                     "reason": pin_ref_result["reason"],
                 }
 
-        # count=0 或 b_null!=0 情况：检查是否是空数组或 null ref
+        # count=0 or b_null!=0 case: check if empty array or null ref
         if after + 4 <= len(window):
             b_null = struct.unpack('<i', window[after:after + 4])[0]
             if b_null != 0:
-                # b_null!=0: 空引用，有效
+                # b_null!=0: null reference, valid
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
                 logger.debug(
@@ -474,11 +475,11 @@ def _try_recover_to_subpins(
                 return {
                     "recovered_pos": recovered_pos,
                     "count": candidate,
-                    "recovery_type": "subpins_resync",  # 跳到下一个结构
+                    "recovery_type": "subpins_resync",  # Jump to next structure
                     "reason": "b_null!=0 null reference",
                 }
 
-    # 恢复失败，保持在当前位置
+    # Recovery failed, stay at current position
     logger.debug(
         "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
         max_scan, error_pos,
@@ -495,7 +496,7 @@ def _read_pin_fstring_field(
     pin_name: str = "",
     max_length: int = 4096,
 ) -> str:
-    """读取 Pin 的 FString 字段（DefaultValue / AutogeneratedDefaultValue / PinToolTip）。"""
+    """Read Pin FString field (DefaultValue / AutogeneratedDefaultValue / PinToolTip)."""
     from uasset_read.archive import _contains_binary_data
     _field_start = archive.tell()
     try:
@@ -525,7 +526,7 @@ def _read_pin_ftext_field(
     trace_mode: bool,
     trace_fields: Dict[str, Any],
 ) -> tuple:
-    """读取 Pin 的 FText 字段（PinFriendlyName / DefaultTextValue）。"""
+    """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
         value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True)
@@ -542,14 +543,14 @@ def _read_pin_ftext_field(
                 read_size=consumed, file_size=archive.total_size(),
                 error=f"FText consumed {consumed} bytes, exceeding limit {MAX_FTEXT_CONSUMPTION}",
             )
-            archive.seek(_start)  # 回到字段起始位置，而非 _start + 5
+            archive.seek(_start)  # Seek back to field start, not _start + 5
             value = None
         if trace_mode:
             _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
                                  f"flags={flags},htype={history_type}")
         return value, True
     except (struct.error, OSError, ValueError):
-        archive.seek(_start)  # 异常时也回退到起始位置
+        archive.seek(_start)  # On exception, also seek back to start position
         if trace_mode:
             _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
                                  "", is_exception=True, is_fallback=True)
@@ -566,7 +567,7 @@ def _read_pin_linkedto(
     trace_fields: Dict[str, Any],
     pin_name: str,
 ) -> list:
-    """读取 Pin 的 LinkedTo 数组。"""
+    """Read Pin LinkedTo array."""
     linkedto_start = archive.tell()
     linkedto_raw_count: Optional[int] = None
     try:
@@ -615,7 +616,7 @@ def _read_pin_subpins(
     trace_mode: bool,
     trace_fields: Dict[str, Any],
 ) -> list:
-    """读取 Pin 的 SubPins 数组。"""
+    """Read Pin SubPins array."""
     subpins_start = archive.tell()
     subpins_raw_count: Optional[int] = None
     try:
@@ -642,7 +643,7 @@ def _read_pin_bitfield(
     trace_mode: bool,
     trace_fields: Dict[str, Any],
 ) -> tuple:
-    """读取 Pin 的 BitField（EditorOnly）。返回 (hidden, not_connectable, advanced_view, orphaned_pin)。"""
+    """Read Pin BitField (EditorOnly). Returns (hidden, not_connectable, advanced_view, orphaned_pin)."""
     hidden = False
     not_connectable = False
     advanced_view = False
@@ -657,7 +658,7 @@ def _read_pin_bitfield(
         if trace_mode:
             _trace_fields_append(trace_fields, "BitField", bitfield_start, archive.tell(), str(bitfield))
     except (struct.error, OSError, ValueError, AttributeError) as e:
-        logger.debug("读取 Pin BitField 失败: %s", e, exc_info=True)
+        logger.debug("Failed to read Pin BitField: %s", e, exc_info=True)
     return hidden, not_connectable, advanced_view, orphaned_pin
 
 
@@ -670,9 +671,9 @@ def read_ue_graph_pin(
     linker: Optional["PackageLinker"] = None,
     header_owning_node: Optional[int] = None,
     header_pin_id: Optional[str] = None,
-    trace_mode: bool = False,  # 字段级诊断开关
+    trace_mode: bool = False,  # Field-level diagnostic switch
 ) -> UEdGraphPin:
-    """读取 UEdGraphPin 完整序列化格式（UE5.7 专用）。
+    """Read UEdGraphPin full serialization format (UE5.7 specific).
 
     D-12: UE5 Pin array uses PinReference format with external header:
       - Header: b_null_ptr + owning_node + pin_guid (read by caller)
@@ -680,11 +681,11 @@ def read_ue_graph_pin(
 
     If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
 
-    trace_mode=True 时输出字段级诊断日志 [P73-PINTRACE]。
+    When trace_mode=True, outputs field-level diagnostic logs [P73-PINTRACE].
     """
     trace_mode = _pin_trace_enabled(trace_mode)
 
-    # 诊断记录
+    # Diagnostic records
     _trace_fields: Dict[str, Any] = {}
 
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
@@ -721,7 +722,7 @@ def read_ue_graph_pin(
     # 4. PinFriendlyName (FText)
     pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", trace_mode, _trace_fields)
 
-    # 5. SourceIndex (UE5 始终存在)
+    # 5. SourceIndex (UE5 always present)
     _field_start = archive.tell()
     source_index = archive.read_i32("Pin.SourceIndex")
     if trace_mode:
@@ -744,7 +745,7 @@ def read_ue_graph_pin(
     if trace_mode:
         _trace_fields_append(_trace_fields, "PinType", _field_start, archive.tell(), "[PinType struct]")
 
-    # 9-10. DefaultValue strings (容错)
+    # 9-10. DefaultValue strings (tolerant)
     default_value = _read_pin_fstring_field(archive, "DefaultValue", trace_mode, _trace_fields)
     autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue", trace_mode, _trace_fields)
 
@@ -803,15 +804,15 @@ def read_ue_graph_pin(
         except (KeyError, IndexError, AttributeError):
             default_object_ref = None
 
-    # 从 raw dict 中提取对象引用
+    # Extract object references from raw dicts
     linked_to_objects = [pin.get("owning_node_object") for pin in linked_to]
     sub_pins_objects = [pin.get("owning_node_object") for pin in sub_pins]
     parent_pin_object = parent_pin.get("owning_node_object") if parent_pin else None
     ref_pass_through_object = ref_pass_through.get("owning_node_object") if ref_pass_through else None
 
-    # 诊断日志输出
+    # Diagnostic log output
     if trace_mode:
-        # 找出第一个可能错位的字段
+        # Find the first potentially misaligned field
         first_misaligned = ""
         for f in _trace_fields.get("fields", []):
             if f.get("exception") and not f.get("fallback"):

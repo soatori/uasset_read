@@ -65,7 +65,7 @@ def decompile_single_function(
     func_name = export.object_name
 
     def _failed_result(reason: str) -> KismetDecompiledResult:
-        """构建失败结果，保留 per-function failure 信号。"""
+        """Build failure result, preserving per-function failure signal."""
         return KismetDecompiledResult(
             function_name=func_name,
             signature=f"void {func_name}()",
@@ -77,7 +77,7 @@ def decompile_single_function(
             fallback_reasons=[reason],
         )
 
-    # 复用 extract_and_parse() 提取和解析字节码
+    # Reuse extract_and_parse() to extract and parse bytecode
     try:
         expressions, error, extraction_reason = extract_and_parse(
             archive, export, summary, name_map, import_map, export_map,
@@ -95,7 +95,7 @@ def decompile_single_function(
             return _failed_result(reason)
         return None
 
-    # 构建退回原因列表
+    # Build fallback reason list
     fallback_reasons: list[str] = []
     if extraction_reason != "function_export":
         fallback_reasons.append(extraction_reason)
@@ -108,7 +108,7 @@ def decompile_single_function(
     cpp_code = builder.to_function_body_structured(expressions, func_name=func_name)
     warnings = _collect_translation_warnings(cpp_code)
 
-    # 收集结构化率指标
+    # Collect structured rate metrics
     structured_rate: float | None = None
     try:
         from uasset_read.kismet.jump_analyzer import JumpAnalyzer
@@ -118,11 +118,11 @@ def decompile_single_function(
     except (ImportError, AttributeError, TypeError, ValueError):
         structured_rate = None
 
-    # 提取函数引用解析统计
+    # Extract function reference resolution statistics
     func_ref_stats: dict = {}
     if builder._translator._func_resolver is not None:
         func_ref_stats = builder._translator._func_resolver.get_statistics()
-        # 如果有未解析引用，添加警告
+        # Add warning if there are unresolved references
         unresolved_report = builder._translator._func_resolver.get_unresolved_report()
         if unresolved_report:
             warnings.append(unresolved_report)

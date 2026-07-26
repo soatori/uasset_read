@@ -34,7 +34,7 @@ class PackageArchive(FArchive):
             self._main_size = main_archive.total_size()
             self._uexp_size = uexp_archive.total_size() if uexp_archive else 0
         except Exception:
-            # 初始化失败时关闭所有已打开的归档（#464）
+            # Close all opened archives on initialization failure (#464)
             if uexp_archive is not None:
                 uexp_archive.close()
             main_archive.close()
@@ -52,7 +52,7 @@ class PackageArchive(FArchive):
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
         self._hex_view_context: str = ""
         self._name_map: Optional[list] = None
-        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # 已见的越界索引（去重用，#481）
+        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # Seen out-of-bounds indices (for dedup, #481)
 
     def read(self, size: int) -> bytes:
         if size < 0:
@@ -105,7 +105,7 @@ class PackageArchive(FArchive):
         if self._uexp_archive is not None:
             self._uexp_archive.close()
         self._use_mmap = False
-        # 释放诊断缓冲区以回收内存
+        # Release diagnostic buffers to reclaim memory
         self._diagnostics.clear()
         self._hex_view_entries.clear()
 
@@ -205,9 +205,9 @@ class PackageBundle:
         return FArchive(path, tolerant=tolerant)
 
     def close(self) -> None:
-        """关闭所有打开的资源（幂等）。"""
-        # PackageBundle 本身不持有文件句柄，仅持有 provider 引用
-        # Provider 的生命周期由调用者管理
+        """Close all opened resources (idempotent)."""
+        # PackageBundle itself does not hold file handles, only provider references
+        # Provider lifecycle is managed by the caller
         pass
 
 
@@ -223,10 +223,10 @@ class PackageProvider:
         raise NotImplementedError
 
     def open_file(self, path: str) -> Optional[ArchiveLike]:
-        """打开文件返回 ArchiveLike，支持范围读取（推荐用于大文件）。
+        """Open file and return ArchiveLike, supporting range reads (recommended for large files).
 
-        默认实现：读取完整 bytes 并包装为 ByteArchive。
-        子类可覆写此方法以提供更高效的实现（如 FArchive 的 mmap 支持）。
+        Default implementation: reads the full bytes and wraps as ByteArchive.
+        Subclasses can override this method for more efficient implementations (e.g., FArchive's mmap support).
         """
         data = self.read_file(path)
         if data is None:
@@ -453,10 +453,10 @@ class FileSystemPackageProvider(PackageProvider):
     def __init__(self, root: str | os.PathLike[str] | None = None):
         self.root = Path(root).resolve() if root is not None else None
         self._list_files_cache: list[str] | None = None
-        self._cache_mtime: float | None = None  # 缓存时的目录修改时间
+        self._cache_mtime: float | None = None  # Directory modification time when cached
 
     def _get_root_mtime(self) -> float:
-        """获取 root 目录的修改时间。"""
+        """Get the modification time of the root directory."""
         if self.root is None or not self.root.exists():
             return 0.0
         try:
@@ -466,7 +466,7 @@ class FileSystemPackageProvider(PackageProvider):
 
     @staticmethod
     def _assert_within_root(path: Path, root: Path | None) -> Path:
-        """校验路径在 root 内，返回 resolved 路径。"""
+        """Validate that the path is within root, return resolved path."""
         if root is None:
             return path.resolve()
         resolved = (root / path).resolve()
@@ -480,7 +480,7 @@ class FileSystemPackageProvider(PackageProvider):
 
     def list_files(self) -> list[str]:
         current_mtime = self._get_root_mtime()
-        # 检查缓存是否有效：存在且修改时间未变
+        # Check if cache is valid: exists and modification time unchanged
         if (self._list_files_cache is not None
                 and self._cache_mtime == current_mtime):
             return self._list_files_cache
@@ -496,7 +496,7 @@ class FileSystemPackageProvider(PackageProvider):
         return result
 
     def refresh_file_cache(self) -> None:
-        """清除文件列表缓存，下次 list_files() 调用时重新扫描。"""
+        """Clear the file list cache; next list_files() call will rescan."""
         self._list_files_cache = None
         self._cache_mtime = None
 
@@ -510,7 +510,7 @@ class FileSystemPackageProvider(PackageProvider):
             return f.read()
 
     def open_file(self, path: str) -> Optional[ArchiveLike]:
-        """打开文件返回 FArchive（支持 mmap 大文件）。"""
+        """Open file and return FArchive (supports mmap for large files)."""
         p = Path(path)
         if self.root is not None:
             p = self._assert_within_root(p, self.root)

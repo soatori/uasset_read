@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""蓝图图解析入口 — 从 ExportMap 提取所有 EdGraph/UberEdGraph。
+"""Blueprint graph parsing entry — extract all EdGraph/UberEdGraph from ExportMap.
 
-等价迁移 uasset_read.py L3095-3143。
+Equivalent migration from uasset_read.py L3095-3143.
 """
 
 from typing import TYPE_CHECKING, List, Optional
@@ -22,69 +22,69 @@ from uasset_read.models.core import UEdGraph
 
 logger = logging.getLogger(__name__)
 
-# 已知的 EdGraph 子类名称（用于图类型匹配）
-# 包括引擎内置子类和常见自定义图类型
+# Known EdGraph subclass names (used for graph type matching)
+# Includes engine built-in subclasses and common custom graph types
 EDGRAPH_CLASS_NAMES = frozenset({
     "EdGraph",
     "UberEdGraph",
-    # 动画图
+    # Animation graphs
     "AnimGraph",
     "AnimBlueprintGeneratedClass",
-    # 控制绑定图
+    # Control Rig graphs
     "ControlRigGraph",
     "RigGraph",
-    # 材质图
+    # Material graphs
     "MaterialGraph",
     "MaterialGraphEdNode",
-    # 粒子系统图
+    # Particle system graphs
     "CascadeParticleSystemGraph",
-    # Niagara 图
+    # Niagara graphs
     "NiagaraGraph",
     "NiagaraScript",
-    # 自定义图类型（常见前缀匹配）
+    # Custom graph types (common prefix matching)
     "K2Node_Graph",
 })
 
 
 def _validate_graph_export_offset(export, archive_size: int) -> bool:
-    """验证图 export 的序列化偏移是否在有效范围内。
+    """Validate whether a graph export's serialization offset is within valid range.
 
-    当 serial_offset 为 0 且 serial_size > 0 时，偏移异常（非 Default__ export）。
-    当 serial_offset + serial_size 超出 archive 边界时，数据截断。
+    When serial_offset is 0 and serial_size > 0, the offset is abnormal (non-Default__ export).
+    When serial_offset + serial_size exceeds archive boundary, data is truncated.
 
     Args:
-        export: ObjectExport 实例
-        archive_size: 归档文件总大小（字节）
+        export: ObjectExport instance
+        archive_size: total archive file size (bytes)
 
     Returns:
-        True 表示偏移有效，可安全读取
+        True indicates offset is valid and safe to read
     """
     serial_offset = getattr(export, "serial_offset", 0)
     serial_size = getattr(export, "serial_size", 0)
 
     if serial_size == 0:
-        return True  # 空 export 跳过检查
+        return True  # empty export, skip check
 
-    # 检查负数
+    # Check for negative values
     if serial_offset < 0 or serial_size < 0:
         logger.warning(
-            "图 export '%s' 偏移异常: offset=%d, size=%d",
+            "Graph export '%s' offset abnormal: offset=%d, size=%d",
             export.object_name, serial_offset, serial_size,
         )
         return False
 
-    # 偏移不应为 0（除非是特殊 Default__ export）
+    # Offset should not be 0 (unless it is a special Default__ export)
     if serial_offset == 0 and not str(getattr(export, "object_name", "")).startswith("Default__"):
         logger.warning(
-            "图 export '%s' serial_offset=0 且 serial_size=%d，偏移异常",
+            "Graph export '%s' serial_offset=0 and serial_size=%d, offset abnormal",
             export.object_name, serial_size,
         )
         return False
 
-    # 检查是否超出归档边界
+    # Check if exceeding archive boundary
     if archive_size > 0 and serial_offset + serial_size > archive_size:
         logger.warning(
-            "图 export '%s' 偏移越界: offset=%d + size=%d > archive_size=%d",
+            "Graph export '%s' offset out of bounds: offset=%d + size=%d > archive_size=%d",
             export.object_name, serial_offset, serial_size, archive_size,
         )
         return False
@@ -101,31 +101,32 @@ def extract_blueprint_graphs(
     linker: Optional["PackageLinker"] = None,
 ) -> List[UEdGraph]:
     """
-    从 ExportMap 提取蓝图图（等价迁移 uasset_read.py L3095-3143）。
+    Extract Blueprint graphs from ExportMap (equivalent migration from uasset_read.py L3095-3143).
 
-    遍历 ExportMap，ClassIndex 解析后包含 "EdGraph" 或 "UberEdGraph" 的导出视为图对象。
-    对每个图调用 read_ue_graph 完整解析 Graph→Node→Pin 三层结构。
+    Iterates ExportMap; exports whose ClassIndex resolves to contain "EdGraph" or "UberEdGraph"
+    are treated as graph objects. For each graph, calls read_ue_graph to fully parse the
+    Graph->Node->Pin three-layer structure.
 
-    安全检查：PKG_Cooked 检查避免解析已剥离资产。
+    Safety check: PKG_Cooked check avoids parsing stripped assets.
 
     Args:
-        archive: FArchive 二进制读取器
-        summary: PackageFileSummary 包含 package_flags
-        name_map: 名称表列表
-        import_map: 导入表列表（用于 ClassIndex 解析）
-        export_map: 导出表列表（用于 ClassIndex 解析）
+        archive: FArchive binary reader
+        summary: PackageFileSummary containing package_flags
+        name_map: name table list
+        import_map: import table list (for ClassIndex resolution)
+        export_map: export table list (for ClassIndex resolution)
 
     Returns:
-        List[UEdGraph]: 检测到的图列表
+        List[UEdGraph]: list of detected graphs
     """
     graphs: List[UEdGraph] = []
 
-    # PKG_Cooked 检查 — cooked 资产无图数据
+    # PKG_Cooked check — cooked assets have no graph data
     is_cooked = (summary.package_flags & PKG_Cooked) != 0
     if is_cooked:
         return []
 
-    # 获取 archive 大小用于偏移验证
+    # Get archive size for offset validation
     archive_size = 0
     if archive is not None:
         try:
@@ -133,11 +134,11 @@ def extract_blueprint_graphs(
         except (OSError, AttributeError):
             archive_size = 0
 
-    # 遍历 ExportMap 寻找 EdGraph/UberEdGraph 类型导出
+    # Iterate ExportMap to find EdGraph/UberEdGraph type exports
     for export_idx, export in enumerate(export_map):
         class_name = get_asset_class(export, import_map, export_map)
 
-        # 扩展图类型匹配：精确匹配 + 后缀匹配（覆盖自定义图子类）
+        # Extended graph type matching: exact match + suffix match (covers custom graph subclasses)
         is_graph_type = (
             class_name is not None
             and (
@@ -148,10 +149,10 @@ def extract_blueprint_graphs(
         )
 
         if class_name and is_graph_type:
-            # 验证图 export 偏移在有效范围内
+            # Validate graph export offset is within valid range
             if not _validate_graph_export_offset(export, archive_size):
                 logger.warning(
-                    "跳过图 export '%s'（偏移验证失败）",
+                    "Skipping graph export '%s' (offset validation failed)",
                     export.object_name,
                 )
                 continue

@@ -1,34 +1,34 @@
-"""类序列化策略表 — 按 UE class 名称映射序列化策略。
+"""Class serialization strategy table -- maps UE class names to serialization strategies.
 
-与 class_specific_skip.py（property_parser 层级）互补：
-- 本模块在 linker.preload() 层级提前拦截，避免进入 property parser
-- class_specific_skip.py 在 property_parser 内部作为二次安全网
+Complements class_specific_skip.py (property_parser level):
+- This module intercepts early at linker.preload() level, avoiding entry into property parser
+- class_specific_skip.py acts as a secondary safety net inside property_parser
 
-策略定义：
-- TAGGED_PROPERTIES_ONLY: 仅解析 tagged properties（通用 parser 可处理）
-- OPAQUE_CLASS_PAYLOAD: 类专属二进制 payload，不尝试解析
-- SKIP_UNSUPPORTED: 完全不支持，直接跳过
+Strategies:
+- TAGGED_PROPERTIES_ONLY: parse only tagged properties (generic parser can handle)
+- OPAQUE_CLASS_PAYLOAD: class-specific binary payload, no parsing attempted
+- SKIP_UNSUPPORTED: completely unsupported, skip entirely
 
-注：FULL_SERIALIZER 已移除 — 当前无任何实际 handler 实现。
+Note: FULL_SERIALIZER has been removed -- no actual handler implementations exist currently.
 """
 
 from enum import Enum
 
 
 class SerializationStrategy(str, Enum):
-    """序列化策略枚举。"""
-    # FULL_SERIALIZER 已移除 — 当前无实际 handler 实现
-    # 仅 tagged properties（通用 property parser 可处理）
+    """Serialization strategy enum."""
+    # FULL_SERIALIZER removed -- no actual handler implementations exist
+    # Tagged properties only (generic property parser can handle)
     TAGGED_PROPERTIES_ONLY = "tagged_properties_only"
-    # 类专属 opaque payload（有自定义 Serialize() 但我们不实现）
+    # Class-specific opaque payload (has custom Serialize() but not implemented)
     OPAQUE_CLASS_PAYLOAD = "opaque_class_payload"
-    # 完全不支持（格式未知或风险过高）
+    # Completely unsupported (format unknown or too risky)
     SKIP_UNSUPPORTED = "skip_unsupported"
 
 
-# ========== 策略映射表 ==========
+# ========== Strategy mapping table ==========
 
-# Tagged properties only — 通用 parser 可处理
+# Tagged properties only — generic parser can handle
 _TAGGED_PROPERTIES_CLASSES = frozenset({
     "BlueprintGeneratedClass",
     "WidgetBlueprintGeneratedClass",
@@ -39,16 +39,16 @@ _TAGGED_PROPERTIES_CLASSES = frozenset({
     "EdGraphNode",
     "K2Node",
     "AnimBlueprintGeneratedClass",
-    # #320: ControlRig / RigVM 蓝图生成类（含 tagged properties）
+    # #320: ControlRig / RigVM blueprint-generated classes (containing tagged properties)
     "ControlRigBlueprintGeneratedClass",
     "RigVMBlueprintGeneratedClass",
-    # MovieScene 系列类（#317）
+    # MovieScene series classes (#317)
     "MovieScene",
     "MovieSceneControlRigParameterTrack",
     "MovieSceneControlRigParameterSection",
 })
 
-# Opaque class payload — 有专用 Serialize() 但我们不实现
+# Opaque class payload — has dedicated Serialize() but not implemented
 _OPAQUE_CLASSES = frozenset({
     "StaticMesh",
     "SkeletalMesh",
@@ -62,9 +62,9 @@ _OPAQUE_CLASSES = frozenset({
     "SoundCue",
     "ParticleSystem",
     "NiagaraSystem",
-    # #164: MovieScene/Sequencer 类（MovieScene/ControlRig 已迁移到 TAGGED_PROPERTIES_ONLY）
+    # #164: MovieScene/Sequencer classes (MovieScene/ControlRig migrated to TAGGED_PROPERTIES_ONLY)
     "MovieSceneBuiltInEasingFunction",
-    # #320: ControlRig / RigVM 序列化类（自定义 Serialize()）
+    # #320: ControlRig / RigVM serialization classes (custom Serialize())
     "ControlRig",
     "RigHierarchy",
     "RigVM",
@@ -83,24 +83,24 @@ _OPAQUE_CLASSES = frozenset({
     "RigVMStruct",
     "RigVMUserWorkflowOptions",
     "RigVMEditorSettings",
-    # #165: MetaSound 编辑器元数据类
+    # #165: MetaSound editor metadata classes
     "MetasoundEditorGraphMemberDefaultBool",
     "MetasoundEditorGraphMemberDefaultInt",
     "MetasoundEditorGraphMemberDefaultFloat",
     "MetasoundEditorGraphMemberDefaultString",
     "MetasoundEditorGraphMemberDefaultLiteral",
     "MetasoundEditorGraphMemberDefaultObjectArray",
-    # 纯 UPROPERTY 但当前 parser 无法完整解析的类
+    # Pure UPROPERTY classes that the current parser cannot fully parse
     "FoliageType",
     "SkeletalMeshLODSettings",
 })
 
-# Skip entirely — 格式未知或风险过高
+# Skip entirely — format unknown or too risky
 _SKIP_CLASSES = frozenset({
     "NiagaraGraph",
     "NiagaraScript",
     "NiagaraDataInterface",
-    # 从 class_specific_skip.py SKIP_CLASS_NAMES 迁移（消除策略冲突）
+    # Migrated from class_specific_skip.py SKIP_CLASS_NAMES (eliminates strategy conflict)
     "NiagaraScriptSource",
     "NiagaraDataInterfaceExport",
     "NiagaraDataInterfaceGrid2D",
@@ -135,7 +135,7 @@ _SKIP_CLASSES = frozenset({
     "SoundClass",
     "ReverbEffect",
     "AmbientSound",
-    # 从 class_specific_skip.py SKIP_CLASS_NAMES 迁移（消除策略冲突 #6）
+    # Migrated from class_specific_skip.py SKIP_CLASS_NAMES (eliminates strategy conflict #6)
     "NiagaraEmitter",
     "NiagaraSpriteRendererProperties",
     "NiagaraMeshRendererProperties",
@@ -157,24 +157,24 @@ CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = {
 
 
 def get_serialization_strategy(class_name: str) -> SerializationStrategy:
-    """获取给定 class 的序列化策略（支持精确名和前缀匹配）。
+    """Get the serialization strategy for a given class (supports exact name and prefix matching).
 
-    查找顺序：
-    1. CLASS_STRATEGY_TABLE 精确名匹配
-    2. class_specific_skip 模块的前缀匹配（SKIP_CLASS_PREFIXES）
-    3. 默认 TAGGED_PROPERTIES_ONLY
+    Lookup order:
+    1. CLASS_STRATEGY_TABLE Exact name match
+    2. Prefix matching from class_specific_skip module (SKIP_CLASS_PREFIXES)
+    3. Default TAGGED_PROPERTIES_ONLY
 
     Args:
-        class_name: UE class 名称（如 "StaticMesh"）
+        class_name: UE class name (e.g. "StaticMesh")
 
     Returns:
-        SerializationStrategy 枚举值
+        SerializationStrategy enum value
     """
-    # 精确名匹配
+    # Exact name match
     if class_name in CLASS_STRATEGY_TABLE:
         return CLASS_STRATEGY_TABLE[class_name]
 
-    # 前缀匹配：从 class_specific_skip 模块获取
+    # Prefix match: from class_specific_skip module
     from uasset_read.parsers.class_specific_skip import should_skip_export_class_prefix
     if should_skip_export_class_prefix(class_name):
         return SerializationStrategy.SKIP_UNSUPPORTED
@@ -183,13 +183,13 @@ def get_serialization_strategy(class_name: str) -> SerializationStrategy:
 
 
 def should_skip_class(class_name: str) -> bool:
-    """判断是否应完全跳过该 class（不尝试任何解析）。
+    """Determine whether this class should be skipped entirely (no parsing attempted).
 
     Args:
-        class_name: UE class 名称
+        class_name: UE class name
 
     Returns:
-        True 表示应跳过（SKIP_UNSUPPORTED）
+        True if the class should be skipped (SKIP_UNSUPPORTED)
     """
     return (
         get_serialization_strategy(class_name)
@@ -198,13 +198,13 @@ def should_skip_class(class_name: str) -> bool:
 
 
 def is_opaque_class(class_name: str) -> bool:
-    """判断该 class 是否为 opaque payload（有专用 Serialize() 但不实现）。
+    """Determine whether this class is an opaque payload (has dedicated Serialize() but not implemented).
 
     Args:
-        class_name: UE class 名称
+        class_name: UE class name
 
     Returns:
-        True 表示为 opaque class
+        True if the class is opaque
     """
     return (
         get_serialization_strategy(class_name)

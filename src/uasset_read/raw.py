@@ -132,28 +132,28 @@ def _detect_audio_container(data: bytes, ext: str) -> str:
 
 
 def _scrape_locres_strings(data: bytes) -> list[dict[str, Any]]:
-    """从 locres 二进制数据中提取可读字符串。
+    """Extract readable strings from locres binary data.
 
-    支持 ASCII（32-126）和 UTF-8 多字节序列（0x80-0xFF），
-    以 null 字节（0x00）作为字符串分隔符。
+    Supports ASCII (32-126) and UTF-8 multibyte sequences (0x80-0xFF),
+    using null bytes (0x00) as string separators.
     """
     strings: list[str] = []
     current = bytearray()
     for byte in data:
         if byte == 0:
-            # null 字节作为字符串分隔符
+            # Null byte as string separator
             if len(current) >= 3:
                 decoded = current.decode("utf-8", errors="replace").strip("\x00")
                 if decoded:
                     strings.append(decoded)
             current.clear()
         elif byte >= 32:
-            # 可打印 ASCII (32-126) 和 UTF-8 多字节起始字节 (128-255)
-            # 注意：128-191 是 UTF-8 延续字节，不应作为字符串起始，
-            # 但在 locres 格式中它们可能出现在多字节序列中间
+            # Printable ASCII (32-126) and UTF-8 multibyte start bytes (128-255)
+            # Note: 128-191 are UTF-8 continuation bytes and should not start strings,
+            # but in locres format they may appear in the middle of multibyte sequences
             current.append(byte)
         else:
-            # 控制字符（非 null）— 中断当前字符串
+            # Control characters (non-null) — break the current string
             if len(current) >= 3:
                 decoded = current.decode("utf-8", errors="replace").strip("\x00")
                 if decoded:

@@ -1,7 +1,7 @@
 """
-Pak 文件 Primary Index 解析模块
+Pak file Primary Index parsing module.
 
-处理 legacy (v<10) 和 v10+ (PathHashIndex + bitfield 编码) 两种索引格式。
+Handles legacy (v<10) and v10+ (PathHashIndex + bitfield encoded) index formats.
 """
 import struct
 import logging
@@ -14,7 +14,7 @@ from uasset_read.pak.structures import FPakInfo, FPakEntry, read_fstring
 
 logger = logging.getLogger(__name__)
 
-# 条目数量上限 — 防止损坏文件导致资源耗尽
+# Entry count limit -- prevents resource exhaustion from corrupted files
 MAX_PAK_ENTRIES = 10_000_000
 
 
@@ -23,22 +23,22 @@ def parse_primary_index(
     pak_info: FPakInfo,
     aes_key: bytes | None = None,
 ) -> tuple[str, dict[str, FPakEntry], dict]:
-    """解析 Primary Index blob。
+    """Parse the Primary Index blob.
 
     Args:
-        stream: 文件流（已打开）
-        pak_info: 已解析的 FPakInfo
-        aes_key: AES 密钥（加密索引时需要）
+        stream: File stream (already opened)
+        pak_info: Parsed FPakInfo
+        aes_key: AES key (required for encrypted index)
 
     Returns:
         (mount_point, entries_dict, extra_info)
-        - mount_point: 挂载点路径
-        - entries_dict: path -> FPakEntry 映射
-        - extra_info: 附加信息（path_hash_index, directory_index 等）
+        - mount_point: Mount point path
+        - entries_dict: path -> FPakEntry mapping
+        - extra_info: Additional info (path_hash_index, directory_index, etc.)
 
     Raises:
-        ParseError: 哈希验证失败或索引格式错误
-        ImportError: 需要 AES 密钥但缺少 cryptography 包
+        ParseError: Hash verification failed or index format error
+        ImportError: AES key required but cryptography package missing
     """
     from uasset_read.pak.crypto import decrypt_index_blob, validate_index_hash
 
@@ -93,7 +93,7 @@ def _parse_legacy_index(
     num_entries: int,
     version: int,
 ) -> dict[str, FPakEntry]:
-    """解析 legacy 格式索引（v<10）：mount_point + N 个 (path, FPakEntry) 对。"""
+    """Parse legacy format index (v<10): mount_point + N (path, FPakEntry) pairs."""
     entries: dict[str, FPakEntry] = {}
 
     for _ in range(num_entries):
@@ -115,9 +115,9 @@ def _parse_v10_index(
     pak_info: FPakInfo,
     mount_point: str,
 ) -> tuple[str, dict[str, FPakEntry], dict]:
-    """解析 v10+ 格式索引：PathHashSeed + PathHashIndex + DirectoryIndex + 编码条目。
+    """Parse v10+ format index: PathHashSeed + PathHashIndex + DirectoryIndex + encoded entries.
 
-    序列化顺序（UE PakFile.cpp LoadIndex）：
+    Serialization order (UE PakFile.cpp LoadIndex):
     1. PathHashSeed (uint64)
     2. bHasPathHashIndex (bool)
     3. If true: PathHashIndexOffset (int64) + PathHashIndexSize (int64)
@@ -203,17 +203,17 @@ def parse_path_hash_index(
     size: int,
     pak_info: FPakInfo,
 ) -> dict[int, tuple[int, int]]:
-    """解析 PathHashIndex（v10+）。
+    """Parse PathHashIndex (v10+).
 
     TMap<uint64 path_hash, FPakEntryLocation>:
     - num_entries (uint32)
     - For each: key=uint64 (hash), value=file_offset(int64) + size(int64)
 
     Args:
-        file_stream: 文件流
-        offset: PathHashIndex 在文件中的偏移
-        size: PathHashIndex 的大小
-        pak_info: FPakInfo 实例
+        file_stream: File stream
+        offset: PathHashIndex offset in the file
+        size: PathHashIndex size
+        pak_info: FPakInfo instance
 
     Returns:
         dict mapping path_hash -> (file_offset, size)
@@ -245,7 +245,7 @@ def parse_directory_index(
     size: int,
     pak_info: FPakInfo,
 ) -> dict[str, dict[str, tuple[int, int]]]:
-    """解析 DirectoryIndex（v10+）。
+    """Parse DirectoryIndex (v10+).
 
     TMap<FString directory, TMap<FString filename, FPakEntryLocation>>:
     - num_directories (uint32)
@@ -253,10 +253,10 @@ def parse_directory_index(
     - For each file: file_name(FString), file_offset(int64), file_size(int64)
 
     Args:
-        file_stream: 文件流
-        offset: DirectoryIndex 在文件中的偏移
-        size: DirectoryIndex 的大小
-        pak_info: FPakInfo 实例
+        file_stream: File stream
+        offset: DirectoryIndex offset in the file
+        size: DirectoryIndex size
+        pak_info: FPakInfo instance
 
     Returns:
         Nested dict: directory -> {filename -> (file_offset, size)}

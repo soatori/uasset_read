@@ -1,8 +1,8 @@
-"""支持 python -m uasset_read 直接运行。"""
+"""Support running via python -m uasset_read."""
 import sys
 from pathlib import Path
 
-# 注入 src/ 到 Python 路径，确保从项目根目录可直接调用
+# Inject src/ into Python path so it can be called directly from the project root
 _src_dir = Path(__file__).resolve().parent
 if str(_src_dir.parent) not in sys.path:
     sys.path.insert(0, str(_src_dir.parent))

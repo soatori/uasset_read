@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_linker_post_load(linker, result, tolerant: bool) -> None:
-    """执行 linker.post_load() 并处理异常。"""
+    """Execute linker.post_load() and handle exceptions."""
     if linker is None:
         return
     try:
@@ -70,7 +70,7 @@ def _run_linker_post_load(linker, result, tolerant: bool) -> None:
 
 
 def _cleanup_archive_diagnostics(result, archive) -> None:
-    """收集 linker/FArchive 诊断记录并在最后关闭 archive。"""
+    """Collect linker/FArchive diagnostic records and close archive at the end."""
     if result.linker and getattr(result.linker, 'diagnostics', None):
         result.diagnostics.extend(result.linker.diagnostics)
     if archive:
@@ -98,23 +98,23 @@ def _parse_package_core(
     hex_view: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
 ) -> None:
-    """共享核心解析逻辑 — 读取 package 并填充 result。
+    """Shared core parse logic — read package and populate result.
 
     Args:
-        path: 文件路径
-        result: ParseResult 或 LinkerParseResult 实例（被原地修改）
-        tolerant: 容错模式（None 表示使用默认 True）
+        path: File path
+        result: ParseResult or LinkerParseResult instance (modified in place)
+        tolerant: Tolerant mode (None means use default True)
         provider: package provider
-        mappings_path: 类型映射文件路径
-        game: 游戏标识
-        include_parent_assets: 是否解析父资产（None 表示使用默认 False）
-        asset_roots: 资产根目录列表
-        extra_linker_setup: linker 创建后的额外回调 (linker, result) -> None
-        check_aes_key: 如果提供则抛出 ParseError（parse_package 兼容）
-        force_full_parse: 强制完整解析大蓝图（None 表示使用默认 False）
-        hex_view: 启用 HexView 字节偏移追踪（None 表示使用默认 False）
+        mappings_path: Type mappings file path
+        game: Game identifier
+        include_parent_assets: Whether to parse parent assets (None means use default False)
+        asset_roots: Asset root directory list
+        extra_linker_setup: Extra callback after linker creation (linker, result) -> None
+        check_aes_key: If provided, raises ParseError (parse_package compatibility)
+        force_full_parse: Force full parse for large blueprints (None means use default False)
+        hex_view: Enable HexView byte offset tracking (None means use default False)
     """
-    # 将 None 解析为内部默认值
+    # Resolve None to internal defaults
     if tolerant is None:
         tolerant = True
     if include_parent_assets is None:
@@ -142,7 +142,7 @@ def _parse_package_core(
 
     with memory_monitor:
         try:
-            # 初始化环境
+            # Initialize environment
             init_result = _init_parse_env(
                 path, result, tolerant, provider, mappings_path, game,
                 check_aes_key, hex_view,
@@ -151,13 +151,13 @@ def _parse_package_core(
                 return
             archive, bundle, mappings_provider = init_result
 
-            # 读取核心表（summary/name/import/export）
+            # Read core tables (summary/name/import/export)
             if not _read_core_tables(
                 archive, result, path, tolerant, memory_monitor, mappings_provider,
             ):
                 return
 
-            # 读取 secondary 表 + 创建 linker
+            # Read secondary tables + create linker
             _read_secondary_tables(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
@@ -171,11 +171,11 @@ def _parse_package_core(
                 extra_linker_setup=extra_linker_setup,
             )
 
-            # 轻量解析路径（提前返回）
+            # Lightweight parse path (early return)
             if _apply_lightweight_parse(result, tolerant, lightweight_threshold, force_full_parse):
                 return
 
-            # 完整解析：preload → post_load → post_process
+            # Full parse: preload -> post_load -> post_process
             _parse_export_properties(
                 archive, result, linker, tolerant, mappings_provider, game, memory_monitor,
             )
@@ -193,13 +193,13 @@ def _parse_package_core(
                 memory_policy=policy,
             )
 
-            # 将 result.graphs 分配给蓝图 export（IR 构建器从 export.graphs 读取）
+            # Assign result.graphs to blueprint exports (IR builder reads from export.graphs)
             if result.graphs and result.export_map:
                 for export in result.export_map:
                     name = str(getattr(export, "object_name", "") or "")
                     if name.endswith("_C") and not name.startswith("Default__"):
                         export.graphs = result.graphs
-                        break  # 只分配给主蓝图 export
+                        break  # Only assign to main blueprint export
 
             result.is_success = not result.errors
 
@@ -220,7 +220,7 @@ def parse_package(
     provider: PackageProvider | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # 已废弃，linker 始终创建
+    include_linker: bool = True,  # Deprecated, linker is always created
     lightweight_threshold: int | None = None,
     force_full_parse: bool | None = None,
     hex_view: bool | None = None,
@@ -229,33 +229,33 @@ def parse_package(
     log_config: LogConfig | None = None,
 ) -> ParseResult:
     """
-    主入口：解析 Unreal package（.uasset 或 .umap）。
+    Main entry point: parse Unreal package (.uasset or .umap).
 
     Args:
-        path: .uasset/.umap 文件路径
-        tolerant: 是否启用容错模式（默认开启）
+        path: .uasset/.umap file path
+        tolerant: Whether to enable tolerant mode (default enabled)
         aes_key: Deprecated. Construct encrypted container readers/providers with
             their AES key instead; the parser no longer accepts an unused key.
-        provider: 可选 package provider（filesystem/pak/iostore）
+        provider: Optional package provider (filesystem/pak/iostore)
         include_linker: Deprecated. Linker is now always created for complete
             object graph resolution. Parameter retained for backward compatibility.
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
-        config: 可选 ParseConfig 实例，集中管理解析参数。
-            传入 config 时，旧风格的个别参数仍可覆盖 config 中的值
-            （但不推荐混用）。
+        force_full_parse: Force full parse for large blueprints (ignore lightweight threshold)
+        hex_view: Enable HexView byte offset tracking
+        config: Optional ParseConfig instance for centralized parameter management.
+            When config is passed, legacy-style individual parameters can still override
+            config values (but mixing is not recommended).
 
     Returns:
-        ParseResult 实例（含解析数据和错误信息）
+        ParseResult instance (containing parse data and error messages)
     """
     configure_project_logging()
     result = ParseResult()
 
-    # 处理已废弃的 include_linker 参数
+    # Handle deprecated include_linker parameter
     if include_linker is not True:
         warnings.warn(
-            "include_linker 参数已废弃，linker 始终包含在结果中。"
-            "请移除该参数调用。",
+            "The include_linker parameter is deprecated; linker is always included in the result. "
+            "Please remove this parameter from the call.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -269,7 +269,7 @@ def parse_package(
         result.is_success = False
         return result
 
-    # 合并 config 和旧参数
+    # Merge config and legacy parameters
     core_kwargs = _resolve_parse_params(config, {
         "tolerant": tolerant,
         "include_parent_assets": include_parent_assets,
@@ -298,22 +298,22 @@ def parse_uasset(
     asset_roots: Sequence[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # 已废弃，linker 始终创建
+    include_linker: bool = True,  # Deprecated, linker is always created
     force_full_parse: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
 ) -> ParseResult:
     """
-    兼容入口：解析 .uasset 文件。
+    Compatibility entry point: parse .uasset files.
 
     Internally delegates to parse_package(), so sidecar payload discovery is
     shared with .umap/package parsing.
     """
-    # 处理已废弃的 include_linker 参数
+    # Handle deprecated include_linker parameter
     if include_linker is not True:
         warnings.warn(
-            "include_linker 参数已废弃，linker 始终包含在结果中。"
-            "请移除该参数调用。",
+            "The include_linker parameter is deprecated; linker is always included in the result. "
+            "Please remove this parameter from the call.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -348,21 +348,21 @@ def parse_uasset_with_linker(
     config: ParseConfig | None = None,
     log_config: LogConfig | None = None,
 ) -> "LinkerParseResult":
-    """使用 PackageLinker 的并行解析入口（D-01, D-04）。
+    """Parse entry point using PackageLinker (D-01, D-04).
 
     Args:
-        path: .uasset 文件路径
-        tolerant: 是否启用容错模式（默认开启）
-        preload_all: 是否预加载所有 exports（默认 False，惰性加载）
-        provider: 可选 package provider（filesystem/pak/iostore）
-        force_full_parse: 强制完整解析大蓝图（忽略轻量模式阈值）
-        hex_view: 启用 HexView 字节偏移追踪
-        config: 可选 ParseConfig 实例，集中管理解析参数。
+        path: .uasset file path
+        tolerant: Whether to enable tolerant mode (default enabled)
+        preload_all: Whether to preload all exports (default False, lazy loading)
+        provider: Optional package provider (filesystem/pak/iostore)
+        force_full_parse: Force full parse for large blueprints (ignore lightweight threshold)
+        hex_view: Enable HexView byte offset tracking
+        config: Optional ParseConfig instance for centralized parameter management.
 
     Returns:
-        LinkerParseResult 实例（含对象图和后处理数据）
+        LinkerParseResult instance (containing object graph and post-processed data)
     """
-    # 延迟导入 extras 模块（per #117 core/extras 分层）
+    # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.link.result import LinkerParseResult
 
     result = LinkerParseResult()
@@ -371,7 +371,7 @@ def parse_uasset_with_linker(
         res.all_objects = linker._import_objects + linker._export_objects
         res.root_objects = linker._root_objects
 
-    # 合并 config 和旧参数
+    # Merge config and legacy parameters
     core_kwargs = _resolve_parse_params(config, {
         "tolerant": tolerant,
         "include_parent_assets": include_parent_assets,
@@ -396,9 +396,9 @@ def parse_uasset_with_linker(
             try:
                 result.linker.preload(i)
             except ParseError as e:
-                logger.warning("预加载 export %d 失败，跳过: %s", i, e)
+                logger.warning("Failed to preload export %d, skipping: %s", i, e)
             except Exception as e:
-                logger.exception("预加载 export %d 意外错误: %s", i, e)
+                logger.exception("Unexpected error preloading export %d: %s", i, e)
 
     return result
 
@@ -413,27 +413,27 @@ def parse_package_lazy(
     game: str | None = None,
     memory_policy: MemoryPolicy | None = None,
 ) -> ParseResult:
-    """懒加载模式解析包 — 按需解析 export body。
+    """Lazy-loading mode package parsing — parse export bodies on demand.
 
-    始终解析：Header、NameMap、ImportMap、ExportMap（元数据）。
-    仅解析指定 export_indices 的 body；未指定时所有 export 标记为未加载。
+    Always parses: Header, NameMap, ImportMap, ExportMap (metadata).
+    Only parses body for specified export_indices; when not specified, all exports are marked as not loaded.
 
-    当 provider 提供 open_file() 时，优先使用它获取 archive（支持 mmap
-    范围读取），避免将整个文件读入内存；否则回退到 read_file() 路径。
+    When provider offers open_file(), it is preferred for obtaining the archive (supports mmap
+    range reads) to avoid loading the entire file into memory; otherwise falls back to read_file() path.
 
     Args:
-        path: .uasset/.umap 文件路径
-        export_indices: 需要解析 body 的 export 索引列表，None 表示全部跳过
-        store_raw_bytes: 是否将 export body 原始字节存入 lazy_load_archive
-            （默认 False — 懒加载场景不缓存原始字节以节省内存）
-        tolerant: 容错模式
-        provider: 可选 package provider
-        mappings_path: 类型映射文件路径
-        game: 游戏标识
-        memory_policy: 内存策略
+        path: .uasset/.umap file path
+        export_indices: List of export indices whose bodies need parsing, None means skip all
+        store_raw_bytes: Whether to store export body raw bytes in lazy_load_archive
+            (default False — lazy loading scenario does not cache raw bytes to save memory)
+        tolerant: Tolerant mode
+        provider: Optional package provider
+        mappings_path: Type mappings file path
+        game: Game identifier
+        memory_policy: Memory policy
 
     Returns:
-        ParseResult 实例（export body 按需解析）
+        ParseResult instance (export bodies parsed on demand)
     """
     from uasset_read.blueprint import extract_component_transforms
 
@@ -441,9 +441,9 @@ def parse_package_lazy(
     archive = None
     linker = None
 
-    # 当 provider 提供 open_file() 时，直接用它获取 archive，
-    # 避免通过 open_package_bundle() 将整个文件读入内存。
-    # open_file() 支持 mmap 范围读取，适合懒加载场景。
+    # When provider offers open_file(), use it directly to obtain archive,
+    # to avoid loading the entire file into memory via open_package_bundle().
+    # open_file() supports mmap range reads, suitable for lazy loading scenarios.
     use_direct_archive = (
         provider is not None
         and hasattr(provider, 'open_file')
@@ -460,12 +460,12 @@ def parse_package_lazy(
             result.metadata["game"] = game
 
         if use_direct_archive:
-            # 快速路径：通过 open_file() 获取 archive，不读取整个文件
+            # Fast path: obtain archive via open_file(), do not read entire file
             archive = provider.open_file(path)
             if archive is None:
                 raise FileNotFoundError(f"Package not found: {path}")
 
-            # 读取核心表
+            # Read core tables
             if not _read_core_tables(
                 archive, result, path, tolerant,
                 validate_range=True,
@@ -473,14 +473,14 @@ def parse_package_lazy(
                 if result.summary is None:
                     return result
 
-            # 读取 secondary 表
+            # Read secondary tables
             _read_secondary_tables(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
                 path=path, memory_monitor=None,
             )
         else:
-            # 回退路径：通过 bundle 读取（read_file）
+            # Fallback path: read via bundle (read_file)
             bundle_obj, archive, linker, mappings_provider = _read_package_headers(
                 path, result,
                 tolerant=tolerant, provider=provider,
@@ -489,7 +489,7 @@ def parse_package_lazy(
             if result.summary is None:
                 return result
 
-        # 按需解析指定 export body
+        # Parse specified export bodies on demand
         parse_indices = set(export_indices) if export_indices else set()
         _mappings = mappings_provider.mappings if mappings_provider else None
 
@@ -522,11 +522,11 @@ def parse_package_lazy(
                     setattr(export, "fallback_reason", "parse_error")
                     setattr(export, "error_message", str(e))
 
-                # 提取组件变换属性
+                # Extract component transform properties
                 if export.properties:
                     export.transforms = extract_component_transforms(export.properties)
 
-            # 存储原始字节（可选）
+            # Store raw bytes (optional)
             if store_raw_bytes and export.serial_size > 0:
                 try:
                     archive.seek(export.serial_offset)
@@ -534,11 +534,11 @@ def parse_package_lazy(
                 except (OSError, struct.error) as e:
                     if not tolerant:
                         raise ParseError(
-                            f"读取 export {export.object_name} 原始字节失败: {e}"
+                            f"Failed to read raw bytes for export {export.object_name}: {e}"
                         ) from e
                     setattr(export, "lazy_load_archive", None)
 
-            # 设置懒加载标记（通过 setattr 兼容 ObjectExport 和 ExportIR）
+            # Set lazy loading flag (via setattr for compatibility with ObjectExport and ExportIR)
             setattr(export, "is_loaded", idx in parse_indices)
 
         # post_load

@@ -1,7 +1,7 @@
-"""src/uasset_read/models/diagnostics.py — 偏移范围诊断数据模型。
+"""src/uasset_read/models/diagnostics.py — Offset range diagnostic data model.
 
-用于记录解析过程中遇到的偏移/范围异常情况，
-包括序列偏移越界、脚本偏移溢出、CodeOffset 异常等。
+Records offset/range anomalies encountered during parsing, including
+serial offset out-of-bounds, script offset overflow, CodeOffset anomalies, etc.
 """
 
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ class DiagnosticSeverity(Enum):
 
 @dataclass
 class OffsetRangeDiagnostic:
-    """偏移范围诊断记录 — 捕获解析过程中的偏移异常。"""
+    """Offset range diagnostic record — captures offset anomalies during parsing."""
 
     kind: str = "offset_range_diagnostic"
     severity: DiagnosticSeverity = DiagnosticSeverity.WARNING
@@ -42,12 +42,12 @@ class OffsetRangeDiagnostic:
     fallback_result: str = ""  # failed|partial|success
 
     def to_dict(self) -> dict[str, Any]:
-        """转为 JSON 兼容字典。None 值字段自动省略。"""
+        """Convert to JSON-compatible dict. None-valued fields are omitted."""
         d: dict[str, Any] = {
             "kind": self.kind,
             "severity": self.severity.value,
         }
-        # 字符串字段：非空时输出
+        # String fields: output when non-empty
         for str_field in (
             "asset_path", "asset_type", "module", "object_name",
             "field", "source", "error", "fallback_result",
@@ -55,19 +55,19 @@ class OffsetRangeDiagnostic:
             val = getattr(self, str_field)
             if val:
                 d[str_field] = val
-        # 整数字段：始终输出（含 0）
+        # Integer fields: always output (including 0)
         for int_field in ("current_pos", "target_offset", "read_size", "file_size"):
             d[int_field] = getattr(self, int_field)
-        # 可选整数字段：非 None 时输出
+        # Optional integer fields: output when not None
         for opt_field in ("export_index", "import_index", "range_start", "range_end"):
             val = getattr(self, opt_field)
             if val is not None:
                 d[opt_field] = val
-        # 布尔字段：True 时输出
+        # Boolean fields: output when True
         if self.fallback_used:
             d["fallback_used"] = True
         return d
 
     def is_structural(self) -> bool:
-        """判断是否为结构性诊断（会影响状态）。"""
+        """Check if this is a structural diagnostic (affects status)."""
         return self.severity in (DiagnosticSeverity.ERROR, DiagnosticSeverity.CRITICAL)

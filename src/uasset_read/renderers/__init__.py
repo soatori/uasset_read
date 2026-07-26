@@ -1,25 +1,25 @@
-"""渲染器注册表 — 格式名到渲染器的映射与分发。
+"""Renderer registry — maps format names to renderers and dispatches.
 
-取代旧的 ExporterRegistry + FORMAT_REGISTRY。
+Replaces the old ExporterRegistry + FORMAT_REGISTRY.
 """
 
 from typing import Type
 
 from uasset_read.renderers.base import IRenderer
 
-# 渲染器注册表（由具体渲染器模块 import 时自动注册）
+# Renderer registry (auto-populated when concrete renderer modules are imported)
 RENDERER_REGISTRY: dict[str, Type[IRenderer]] = {}
 
 
 def register_renderer(format_name: str, renderer_class: Type[IRenderer]) -> None:
-    """注册一个格式名到渲染器类的映射。"""
+    """Register a mapping from a format name to a renderer class."""
     if format_name in RENDERER_REGISTRY:
         raise ValueError(f"Render format '{format_name}' is already registered")
     RENDERER_REGISTRY[format_name] = renderer_class
 
 
 def get_renderer(format_name: str) -> IRenderer:
-    """获取指定格式的渲染器实例。"""
+    """Get a renderer instance for the specified format."""
     renderer_class = RENDERER_REGISTRY.get(format_name)
     if renderer_class is None:
         available = ", ".join(sorted(RENDERER_REGISTRY.keys()))
@@ -28,10 +28,10 @@ def get_renderer(format_name: str) -> IRenderer:
 
 
 def list_formats() -> list[str]:
-    """返回所有已注册的格式名。"""
+    """Return all registered format names."""
     return sorted(RENDERER_REGISTRY.keys())
 
 
-# 导入具体渲染器模块以触发注册
+# Import concrete renderer modules to trigger registration
 from uasset_read.renderers import json_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402

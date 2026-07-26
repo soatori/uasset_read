@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""属性类型解析函数 — 14 种 parse_*_property 函数及 TypeName 提取辅助函数。
+"""Property type parsing functions -- 14 parse_*_property functions and TypeName extraction helpers.
 
-等价迁移 uasset_read.py 第 5289-6004 行。
+Equivalent migration of uasset_read.py lines 5289-6004.
 """
 
 import logging
@@ -60,33 +60,33 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
     "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
     "Transform": 40,           # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
-    "TopLevelAssetPath": None,  # 两个 FName，大小可变，由 fast-path 直接处理
-    # 时间/帧类型
+    "TopLevelAssetPath": None,  # Two FNames, variable size, handled directly by fast-path
+    # Time/frame types
     "Timespan": 8,           # int64
     "DateTime": 8,           # uint64
     "FrameNumber": 4,        # int32
-    # 整数向量类型
+    # Integer vector types
     "IntVector2": 8,         # 2 * int32
-    "Int32Vector2": 8,       # 别名
+    "Int32Vector2": 8,       # alias
     "IntVector4": 16,        # 4 * int32
     "UintVector": 12,        # 3 * uint32
     "UintVector2": 8,        # 2 * uint32
-    "Uint32Point": 8,        # 别名
+    "Uint32Point": 8,        # alias
     "UintVector4": 16,       # 4 * uint32
-    # 64 位整数向量类型
+    # 64-bit integer vector types
     "Int64Vector2": 16,      # 2 * int64
-    "Int64Point": 16,        # 别名
+    "Int64Point": 16,        # alias
     "Int64Vector": 24,       # 3 * int64
     "Int64Vector4": 32,      # 4 * int64
     "UInt64Vector2": 16,     # 2 * uint64
-    "UInt64Point": 16,       # 别名
+    "UInt64Point": 16,       # alias
     "UInt64Vector": 24,      # 3 * uint64
     "UInt64Vector4": 32,     # 4 * uint64
-    # 别名类型
-    "DeprecateSlateVector2D": 16,  # 别名 Vector2D
-    "VectorDouble": 24,            # Wuthering Waves 别名 Vector3d
-    "Int32Point": 8,               # 别名 IntPoint
-    # UE5 LWC 数学类型
+    # Alias types
+    "DeprecateSlateVector2D": 16,  # alias of Vector2D
+    "VectorDouble": 24,            # Wuthering Waves alias for Vector3d
+    "Int32Point": 8,               # alias of IntPoint
+    # UE5 LWC math types
     "Vector2f": 8,           # 2 * float32
     "Vector3f": 12,          # 3 * float32
     "Vector3d": 24,          # 3 * float64
@@ -104,18 +104,18 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Box3f": 24,             # 2 * Vector3f(12)
     "Matrix44f": 64,         # 4 * Plane4f(16)
     "Transform3f": 40,       # FTransform3f: Quat4f(16) + Vector3f(12) + Vector3f(12)
-    # 动画/混合空间高频结构体（报告补充）
-    "FrameRate": 8,          # 紧凑格式：int32 Numerator + int32 Denominator
-                             # tagged 格式 size 不固定（实测 37），通过 tagged fallback 静默解析
-    "AnimNotifyTrack": 8,    # 紧凑格式大小
-                             # tagged 格式 size=0，通过 tagged fallback 静默解析（数据实际存在）
-    "GuidProperty": 16,      # FGuid 标准大小
+    # Animation/blendspace high-frequency structs (reported additions)
+    "FrameRate": 8,          # compact format: int32 Numerator + int32 Denominator
+                             # tagged format size is not fixed (measured 37), silently parsed via tagged fallback
+    "AnimNotifyTrack": 8,    # compact format size
+                             # tagged format size=0, silently parsed via tagged fallback (data actually exists)
+    "GuidProperty": 16,      # FGuid standard size
 }
 
-# LWC（Large World Coordinates）类型映射
-# UE5 UE5_LARGE_WORLD_COORDINATES(1004) 起，数学向量类型使用 double 精度。
-# _LWC_TYPE_MAP: 基础类型名 → (float_size, double_size)
-# 当 version_container 的 file_version_ue5 >= 1004 时，基础类型使用 double_size。
+# LWC (Large World Coordinates) type mapping
+# From UE5 UE5_LARGE_WORLD_COORDINATES(1004), math vector types use double precision.
+# _LWC_TYPE_MAP: base type name → (float_size, double_size)
+# When version_container's file_version_ue5 >= 1004, base types use double_size.
 _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "Vector":        (12, 24),   # FVector3f → FVector3d
     "Rotator":       (12, 24),   # FRotator3f → FRotator3d
@@ -128,11 +128,11 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
     "Matrix":        (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (40, 80),   # FTransform3f(40) → FTransform3d(80)，根据 tag.size 选择读取精度
+    "Transform":     (40, 80),   # FTransform3f(40) → FTransform3d(80), select read precision based on tag.size
 }
 
-# LWC 双精度类型名 → 对应的基础类型名
-# e.g. "Vector3d" → "Vector"，用于 get_struct_size 回退查询
+# LWC double precision type name → corresponding base type name
+# e.g. "Vector3d" → "Vector", used for get_struct_size fallback lookup
 _LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
     "Vector3d":    "Vector",
     "Vector4d":    "Vector4",
@@ -142,7 +142,7 @@ _LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
     "Sphere3d":    "Sphere",
 }
 
-# LWC 单精度类型名 → 对应的基础类型名
+# LWC single precision type name → corresponding base type name
 _LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
     "Vector3f":    "Vector",
     "Vector4f":    "Vector4",
@@ -157,33 +157,33 @@ def get_struct_size(
     struct_type: str,
     version_container: Optional["VersionContainer"] = None,
 ) -> Optional[int]:
-    """返回固定布局结构体的预期字节大小（版本感知）。
+    """Return expected byte size for fixed-layout structs (version-aware).
 
-    对于 LWC（Large World Coordinates）类型：
-    - 若 version_container 指示 UE5 LWC (file_version_ue5 >= 1004)，返回双精度大小
-    - 否则返回单精度大小
-    - 若 struct_type 是显式双精度变体（如 "Vector3d"），始终返回双精度大小
+    For LWC (Large World Coordinates) types:
+    - If version_container indicates UE5 LWC (file_version_ue5 >= 1004), return double precision size
+    - Otherwise return single precision size
+    - If struct_type is an explicit double variant (e.g. "Vector3d"), always return double precision size
 
     Args:
-        struct_type: 结构体类型名（如 "Vector", "Vector3d"）
-        version_container: 版本容器（可选）
+        struct_type: struct type name (e.g. "Vector", "Vector3d")
+        version_container: version container (optional)
 
     Returns:
-        预期字节大小，未知类型返回 None
+        expected byte size, None for unknown types
     """
-    # 显式双精度变体：直接返回 double 大小，不看版本
+    # Explicit double variant: return double size directly, ignoring version
     base_for_double = _LWC_DOUBLE_TYPE_TO_BASE.get(struct_type)
     if base_for_double is not None:
         _, double_size = _LWC_TYPE_MAP[base_for_double]
         return double_size
 
-    # 显式单精度变体：直接返回 float 大小，不看版本
+    # Explicit float variant: return float size directly, ignoring version
     base_for_float = _LWC_FLOAT_TYPE_TO_BASE.get(struct_type)
     if base_for_float is not None:
         float_size, _ = _LWC_TYPE_MAP[base_for_float]
         return float_size
 
-    # LWC 感知的基础类型：根据版本判断
+    # LWC-aware base type: determine by version
     if struct_type in _LWC_TYPE_MAP:
         float_size, double_size = _LWC_TYPE_MAP[struct_type]
         if version_container is not None and version_container.is_ue5:
@@ -191,58 +191,58 @@ def get_struct_size(
                 return double_size
         return float_size
 
-    # 非 LWC 类型：直接查表
+    # Non-LWC type: direct table lookup
     return _EXPECTED_STRUCT_SIZES.get(struct_type)
 
 _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "MemberReference",
     "SimpleMemberReference",
-    # Blueprint 变量描述 struct（ArrayProperty 内层，size=0 时仍需 tagged 解析）
+    # Blueprint variable description struct (ArrayProperty inner, size=0 still needs tagged parsing)
     "FBPVariableDescription",
     "BPVariableDescription",
     "EdGraphPinType",
     "FEdGraphPinType",
     "BPVariableDescriptionHelper",
-    # Blueprint 相关 struct
+    # Blueprint related structs
     "ImplementedInterfaces",
     "LastEditedDocuments",
     "CategorySorting",
-    # AnimSequence 结构体（部分资产使用 tagged 格式）
-    "FrameRate",         # 部分资产 tag.size=37，使用 tagged PropertyTag 格式
-    "AnimNotifyTrack",   # 部分资产 tag.size=0，使用 tagged PropertyTag 格式
-    # 编辑器结构体
-    "FEditorElement",    # 蓝图编辑器组合框选项（DisplayName/Value/bIsDefault）
+    # AnimSequence structs (some assets use tagged format)
+    "FrameRate",         # some assets tag.size=37, uses tagged PropertyTag format
+    "AnimNotifyTrack",   # some assets tag.size=0, uses tagged PropertyTag format
+    # Editor structs
+    "FEditorElement",    # Blueprint editor combo box options (DisplayName/Value/bIsDefault)
     "EditorElement",
-    # 材质参数结构体（材质实例资产使用 tagged 格式）
+    # Material parameter structs (material instance assets use tagged format)
     "ScalarParameterValue",
     "FScalarParameterValue",
     "FMaterialParameterInfo",
-    # 动画混合空间结构体（部分资产使用 tagged 格式）
-    "BlendSample",          # FBlendSample — BlendSpace 采样点（SampleValue/Time/RateScale/bIsValid）
+    # Animation blendspace structs (some assets use tagged format)
+    "BlendSample",          # FBlendSample — BlendSpace sample point (SampleValue/Time/RateScale/bIsValid)
     "FBlendSample",
-    # 材质实例参数结构体（MaterialInstanceConstant 资产，tag.size=0 的 tagged 格式）
-    "VectorParameterValue",     # FVectorParameterValue — 向量参数（ParameterInfo/ParameterValue）
-    "TextureParameterValue",    # FTextureParameterValue — 纹理参数（ParameterInfo/ParameterValue）
-    "MaterialTextureInfo",      # FMaterialTextureInfo — 纹理流送信息（UVChannelIndex 等）
-    # BoxSphereBounds（FBoxSphereBounds UPROPERTY 结构体始终使用 tagged 格式，
-    # 因为 TBoxSphereBoundsStructOpsTypeTraits 未设置 WithSerialize）
+    # Material instance parameter structs (MaterialInstanceConstant assets, tag.size=0 tagged format)
+    "VectorParameterValue",     # FVectorParameterValue — vector parameter (ParameterInfo/ParameterValue)
+    "TextureParameterValue",    # FTextureParameterValue — texture parameter (ParameterInfo/ParameterValue)
+    "MaterialTextureInfo",      # FMaterialTextureInfo — texture streaming info (UVChannelIndex etc.)
+    # BoxSphereBounds (FBoxSphereBounds UPROPERTY structs always use tagged format,
+    # because TBoxSphereBoundsStructOpsTypeTraits does not set WithSerialize)
     "BoxSphereBounds",
     "BoxSphereBounds3f",
     "BoxSphereBounds3d",
-    # BPInterfaceDescription（ImplementedInterfaces 数组元素）
+    # BPInterfaceDescription (ImplementedInterfaces array element)
     "BPInterfaceDescription",
 }
-"""需要 tagged fallback 解析的结构体名称集合。
+"""Set of struct names requiring tagged fallback parsing.
 
-当结构体属性使用 tagged 格式（PropertyTag 包含类型信息）但无法通过
-标准 StructProperty 解析时，使用 _TAGGED_FALLBACK_STRUCT_SCHEMAS 中
-定义的字段列表进行回退解析。
+When struct properties use tagged format (PropertyTag contains type information)
+but cannot be parsed via standard StructProperty, use the field lists defined in
+_TAGGED_FALLBACK_STRUCT_SCHEMAS for fallback parsing.
 """
 
 _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
     "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
-    # 新增 UE5.5 结构体
+    # New UE5.5 structs
     "NewVariables": [
         ("VarName", "NameProperty"),
         ("VarGuid", "GuidProperty"),
@@ -262,16 +262,16 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     "CategorySorting": [
         ("CategoryName", "NameProperty"),
     ],
-    # AnimSequence 结构体 tagged fallback schemas
+    # AnimSequence struct tagged fallback schemas
     "FrameRate": [
-        ("Numerator", "IntProperty"),      # UE 源码: int32 Numerator（非 float）
-        # Denominator 在部分资产中未被序列化，由 tagged 循环自然处理
+        ("Numerator", "IntProperty"),      # UE source: int32 Numerator (not float)
+        # Denominator is not serialized in some assets, handled naturally by tagged loop
     ],
     "AnimNotifyTrack": [
         ("TrackIndex", "Int64Property"),
         ("TrackName", "NameProperty"),
     ],
-    # 编辑器结构体
+    # Editor structs
     "FEditorElement": [
         ("DisplayName", "TextProperty"),
         ("Value", "StrProperty"),
@@ -282,7 +282,7 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("Value", "StrProperty"),
         ("bIsDefault", "BoolProperty"),
     ],
-    # 材质参数结构体 tagged fallback schemas
+    # Material parameter struct tagged fallback schemas
     "FMaterialParameterInfo": [
         ("ParameterName", "NameProperty"),
         ("Index", "IntProperty"),
@@ -299,18 +299,18 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("ParameterValue", "FloatProperty"),
         ("bOverride", "BoolProperty"),
     ],
-    # 动画混合空间结构体 tagged fallback schemas
+    # Animation blend space struct tagged fallback schemas
     "BlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
-        ("Time", "FloatProperty"),            # float — 动画时间值
-        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
-        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
+        ("SampleValue", "StructProperty"),   # FVector -- blend space sample point coordinates
+        ("Time", "FloatProperty"),            # float -- animation time value
+        ("RateScale", "IntProperty"),         # int32 -- playback rate scale
+        ("bIsValid", "BoolProperty"),         # bool -- whether sample point is valid
     ],
     "FBlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector — 混合空间采样点坐标
-        ("Time", "FloatProperty"),            # float — 动画时间值
-        ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
-        ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
+        ("SampleValue", "StructProperty"),   # FVector -- blend space sample point coordinates
+        ("Time", "FloatProperty"),            # float -- animation time value
+        ("RateScale", "IntProperty"),         # int32 -- playback rate scale
+        ("bIsValid", "BoolProperty"),         # bool -- whether sample point is valid
     ],
 }
 
@@ -334,21 +334,21 @@ def _get_read_tag_value_bounded():
     return read_tag_value_bounded
 
 def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
-    """从 summary 构建 VersionContainer（Lazy，避免循环导入）。"""
+    """Build VersionContainer from summary (lazy, to avoid circular imports)."""
     if summary is None:
         return None
-    # 已缓存则直接返回
+    # Already cached, return directly
     cached = getattr(summary, "_version_container", None)
     if cached is not None:
         return cached
     try:
         from uasset_read.versioning import build_version_container
         vc = build_version_container(summary)
-        # 缓存到 summary 上，避免重复构建
+        # Cache to summary to avoid rebuilding
         try:
             summary._version_container = vc
         except AttributeError as e:
-            logger.debug("缓存 version_container 失败: %s", e)
+            logger.debug("Failed to cache version_container: %s", e)
         return vc
     except (AttributeError, TypeError, ValueError, KeyError):
         return None
@@ -358,18 +358,18 @@ def _build_version_container_from_summary(summary: Any) -> Optional["VersionCont
 # ============================================================================
 
 def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
-    """解析 BoolProperty（PROP-04）。值存储在 tag.bool_val，无额外读取。"""
+    """Parse BoolProperty (PROP-04). Value stored in tag.bool_val, no extra read."""
     return bool(tag.bool_val)
 
 def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> Any:
-    """解析 IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty（PROP-02）。
+    """Parse IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty (PROP-02).
 
-    ByteProperty 特殊处理：
-    - 无 enum backing：读取 1 byte
-    - 有 enum backing (tag.enum_type)：读取 FName (8 bytes)，返回 EnumValue
+    ByteProperty special handling:
+    - No enum backing: read 1 byte
+    - With enum backing (tag.enum_type): read FName (8 bytes), return EnumValue
 
-    参考 ByteProperty/EnumProperty 处理逻辑：
-    ByteProperty with enum_type → EnumProperty → ReadFName()
+    Reference: ByteProperty/EnumProperty handling logic:
+    ByteProperty with enum_type -> EnumProperty -> ReadFName()
     """
     type_name = tag.type
 
@@ -400,19 +400,19 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
         return archive.read_i32()
 
 def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 UInt16Property"""
+    """Parse UInt16Property."""
     return _simple_read(archive, "read_u16")
 
 def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 UInt32Property"""
+    """Parse UInt32Property."""
     return _simple_read(archive, "read_u32")
 
 def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 UInt64Property"""
+    """Parse UInt64Property."""
     return _simple_read(archive, "read_u64")
 
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
-    """解析 FloatProperty/DoubleProperty（PROP-03）。"""
+    """Parse FloatProperty/DoubleProperty (PROP-03)."""
     type_name = tag.type
     if type_name == "DoubleProperty":
         return archive.read_f64()
@@ -420,15 +420,15 @@ def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
         return archive.read_f32()
 
 def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
-    """解析 StrProperty（PROP-05）。"""
+    """Parse StrProperty (PROP-05)."""
     return archive.read_fstring()
 
 def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> str:
-    """解析 NameProperty（PROP-06）。"""
+    """Parse NameProperty (PROP-06)."""
     return archive.read_name(name_map)
 
 def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 ObjectProperty（PROP-07）。返回原始 FPackageIndex。"""
+    """Parse ObjectProperty (PROP-07). Returns raw FPackageIndex."""
     return _simple_read(archive, "read_i32")
 
 def parse_soft_object_property(
@@ -437,13 +437,13 @@ def parse_soft_object_property(
     name_map: List[str],
     soft_object_path_list: Optional[List[Dict]] = None,
 ) -> SoftObjectPathValue:
-    """解析 SoftObjectProperty（FSoftObjectPath）。
+    """Parse SoftObjectProperty (FSoftObjectPath).
 
-    当 soft_object_path_list 存在时（UE5.7+），读取 int32 索引。
-    否则读取 FString 对（传统格式）。
+    When soft_object_path_list exists (UE5.7+), read int32 index.
+    Otherwise read FString pair (legacy format).
     """
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
-        # UE5.7+ 索引格式
+        # UE5.7+ index format
         index = archive.read_i32()
         if 0 <= index < len(soft_object_path_list):
             entry = soft_object_path_list[index]
@@ -462,27 +462,27 @@ def parse_soft_object_property(
                 error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
     else:
-        # 传统 FString 格式
+        # Legacy FString format
         asset_path = archive.read_fstring()
         sub_path = archive.read_fstring()
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
-    """解析 Utf8StrProperty"""
+    """Parse Utf8StrProperty."""
     return archive.read_fstring()
 
 def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 WeakObjectProperty"""
+    """Parse WeakObjectProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
-    """解析 LazyObjectProperty"""
+    """Parse LazyObjectProperty."""
     read_size = tag.size if tag.size > 0 else 16
     raw = archive.read_bytes(read_size)
     return SoftObjectPathValue(raw_kind=tag.type, guid=raw.hex())
 
 def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 ClassProperty"""
+    """Parse ClassProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_soft_class_property(
@@ -491,11 +491,11 @@ def parse_soft_class_property(
     name_map: List[str] = None,
     soft_object_path_list: Optional[List[Dict]] = None,
 ) -> SoftObjectPathValue:
-    """解析 SoftClassProperty — 与 SoftObjectProperty 解析方式相同。"""
+    """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
     return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
-    """解析 AssetObjectProperty"""
+    """Parse AssetObjectProperty."""
     return SoftObjectPathValue(raw_kind=tag.type, asset_path=archive.read_fstring())
 
 # ============================================================================
@@ -503,12 +503,12 @@ def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObje
 # ============================================================================
 
 def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> List[Any]:
-    """解析 ArrayProperty（PROP-08, D-16）。
+    """Parse ArrayProperty (PROP-08, D-16).
 
-    UE 序列化格式：
+    UE serialization format:
       - int32 ArrayCount
-      - 对于每个元素，按其类型原生序列化（不是均分 remaining_size）
-      - 对于 StructProperty，每个元素都有完整的 FPropertyTag
+      - For each element, serialized natively by its type (not evenly dividing remaining_size)
+      - For StructProperty, each element has a complete FPropertyTag
     """
     MAX_DEPTH = 10
 
@@ -524,31 +524,31 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         )
 
     if tag.size < 4:
-        # #345: tag.size < 4 通常是空数组或 RigVM DebugWatch 属性
-        # 使用 debug 级别，避免日志噪音
-        # 提前返回，避免无意义地读取 count
+        # #345: tag.size < 4 is usually an empty array or RigVM DebugWatch property
+        # Use debug level to avoid log noise
+        # Return early to avoid reading count needlessly
         logger.debug(
-            "ArrayProperty '%s': tag.size=%d < 4, 返回空数组",
+            "ArrayProperty '%s': tag.size=%d < 4, returning empty array",
             tag.name, tag.size,
         )
         return []
 
-    count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "数组数量")
+    count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "array count")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
 
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
-    # 对于 StructProperty 类型的数组元素，UE 使用完整的 PropertyTag 序列化
-    # 对于其他类型，按类型原生序列化（每个元素大小由类型决定）
+    # For StructProperty array elements, UE uses complete PropertyTag serialization
+    # For other types, serialized natively by type (each element size determined by type)
     for i in range(count):
-        # 创建内部标签，size=0 表示由解析函数自行决定读取多少字节
+        # Create inner tag, size=0 means the parse function decides how many bytes to read
         inner_tag = PropertyTag(
             name=f"{tag.name}[{i}]",
             type=inner_type,
-            size=0  # 让解析函数按类型原生序列化
+            size=0  # Let parse function serialize by type natively
         )
-        # 对于 StructProperty 数组元素，传递 struct_type 使 parse_struct_property 能命中 fast-path
+        # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
         if inner_type == "StructProperty":
             inner_tag.struct_type = getattr(tag, "inner_type_struct", None)
         inner_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
@@ -562,7 +562,7 @@ def _try_fast_path_struct(
     archive: FArchive,
     name_map: List[str],
 ) -> Optional[StructValue]:
-    """尝试快速路径解析简单结构体（无 PropertyTag 循环）。返回 None 表示无匹配。"""
+    """Try fast-path parsing for simple structs (no PropertyTag loop). Returns None if no match."""
     handler = _FAST_PATH_STRUCT_HANDLERS.get(struct_type)
     if handler is not None:
         fields = handler(tag, archive, name_map)
@@ -573,17 +573,17 @@ def _try_fast_path_struct(
 # --- Fast-path struct handlers (table-driven) ---
 
 def _fp_vec3(fields, tag, archive):
-    """读取 3-float 向量（Vector/Rotator 等），支持 LWC 双精度。"""
+    """Read 3-float vector (Vector/Rotator etc.), supports LWC double precision."""
     reader = archive.read_f64 if tag.size == 24 else archive.read_f32
     return {f: reader() for f in fields}
 
 def _fp_vec4(tag, archive):
-    """读取 4-float 向量（Vector4/Quat/Plane），支持 LWC 双精度。"""
+    """Read 4-float vector (Vector4/Quat/Plane), supports LWC double precision."""
     reader = archive.read_f64 if tag.size == 32 else archive.read_f32
     return {f: reader() for f in ("X", "Y", "Z", "W")}
 
 def _fp_vec2(tag, archive):
-    """读取 2-float 向量（Vector2D），支持 LWC 双精度。"""
+    """Read 2-float vector (Vector2D), supports LWC double precision."""
     reader = archive.read_f64 if tag.size == 16 else archive.read_f32
     return {"X": reader(), "Y": reader()}
 
@@ -694,12 +694,12 @@ def _fp_box_sphere_bounds(tag, archive):
 
 
 def _make_fp_vec3(fields):
-    """生成读取 N-float 向量的 handler。"""
+    """Generate a handler for reading N-float vectors."""
     def handler(tag, archive, _name_map):
         return _fp_vec3(fields, tag, archive)
     return handler
 
-# 表驱动分派：结构体类型 → handler(tag, archive, name_map) -> Optional[dict]
+# Table-driven dispatch: struct type -> handler(tag, archive, name_map) -> Optional[dict]
 _FAST_PATH_STRUCT_HANDLERS = {
     "Vector": _make_fp_vec3(("X", "Y", "Z")),
     "Rotator": _make_fp_vec3(("Pitch", "Yaw", "Roll")),
@@ -730,7 +730,7 @@ def _try_fast_path_struct(
     archive: FArchive,
     name_map: List[str],
 ) -> Optional[StructValue]:
-    """尝试快速路径解析简单结构体（无 PropertyTag 循环）。返回 None 表示无匹配。"""
+    """Try fast-path parsing for simple structs (no PropertyTag loop). Returns None if no match."""
     if struct_type == "Vector":
         reader = archive.read_f64 if tag.size == 24 else archive.read_f32
         return StructValue(struct_type="Vector", fields={"X": reader(), "Y": reader(), "Z": reader()})
@@ -839,7 +839,7 @@ def _try_fast_path_struct(
         })
 
     if struct_type == "Transform":
-        # 序列化顺序: Rotation → Translation → Scale3D (UE 源码 TransformNonVectorized.h:616-622)
+        # Serialization order: Rotation -> Translation -> Scale3D (UE source TransformNonVectorized.h:616-622)
         if tag.size == 40:  # FTransform3f (all float): 16 + 12 + 12
             rx, ry, rz, rw = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
             tx, ty, tz = archive.read_f32(), archive.read_f32(), archive.read_f32()
@@ -849,7 +849,7 @@ def _try_fast_path_struct(
             tx, ty, tz = archive.read_f64(), archive.read_f64(), archive.read_f64()
             sx, sy, sz = archive.read_f64(), archive.read_f64(), archive.read_f64()
         else:
-            # 未知大小：可能是损坏数据，拒绝解析
+            # Unknown size: likely corrupted data, refuse to parse
             if not archive._tolerant:
                 raise ParseError(f"Transform: unexpected size {tag.size} (expected 40 or 80)")
             logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
@@ -896,7 +896,7 @@ def _try_fast_path_struct(
 
 
 def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
-    """解析 StructProperty（ADVP-01）。"""
+    """Parse StructProperty (ADVP-01)."""
     MAX_DEPTH = 5
 
     if depth > MAX_DEPTH:
@@ -914,23 +914,23 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     declared_struct_type = struct_type
 
     # Fast-path pre-check: validate tag.size matches expected layout.
-    # 使用 get_struct_size 进行版本感知的尺寸验证（支持 LWC 双精度）。
-    # 对于 LWC 类型，同时接受 float 和 double 尺寸（fast-path 自行按 tag.size 选择读取精度）。
+    # Use get_struct_size for version-aware size validation (supporting LWC double precision).
+    # For LWC types, accept both float and double sizes (fast-path selects precision based on tag.size).
     version_container = _build_version_container_from_summary(summary)
     expected_size = get_struct_size(struct_type, version_container)
     if expected_size is not None and tag.size != expected_size:
-        # Tagged fallback 结构体：size 不匹配是预期行为（tagged 格式 vs 紧凑格式），
-        # 静默跳过 fast-path，直接进入 tagged 解析，不产生警告。
+        # Tagged fallback structs: size mismatch is expected behavior (tagged format vs compact format),
+        # Silently skip fast-path, go straight to tagged parsing, no warning generated.
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             struct_type = None  # Skip all fast-path branches
         else:
-            # 对于 LWC 类型，检查 tag.size 是否匹配另一种精度
+            # For LWC types, check whether tag.size matches the other precision
             lwc_entry = _LWC_TYPE_MAP.get(struct_type)
             if lwc_entry is not None:
                 float_size, double_size = lwc_entry
                 if tag.size not in (float_size, double_size):
                     logger.debug(
-                        "StructProperty '%s': tag.size=%d 不匹配 float(%d) 或 double(%d), using fallback",
+                        "StructProperty '%s': tag.size=%d does not match float(%d) or double(%d), using fallback",
                         struct_type, tag.size, float_size, double_size,
                     )
                     struct_type = None  # Skip all fast-path branches
@@ -986,8 +986,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     # Track expected struct end position for recovery
     struct_start = archive.tell()
     struct_end = struct_start + tag.size if tag.size > 0 else None
-    # tag.size=0 的 tagged 格式结构体：无已知边界，使用安全字节上限防止偏移级联
-    # （对应 issue #134: PackageIndex out of bounds 的潜在根因之一）
+    # tag.size=0 tagged format structs: no known boundary, use safe byte limit to prevent offset cascade
+    # (corresponds to issue #134: one potential root cause of PackageIndex out of bounds)
     _MAX_TAGGED_FALLBACK_BYTES = 4096
     tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
@@ -995,7 +995,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         while property_count < MAX_PROPERTY_COUNT:
             property_count += 1
 
-            # 字节安全上限：防止 tag.size=0 时无边界循环吞没后续属性
+            # Byte safety limit: prevent unbounded loops from consuming subsequent properties when tag.size=0
             if tagged_byte_limit is not None and archive.tell() >= tagged_byte_limit:
                 break
 
@@ -1049,26 +1049,26 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     )
 
 def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:
-    """解析 MapProperty（ADVP-02）。
+    """Parse MapProperty (ADVP-02).
 
-    UE 序列化格式：
-      - int32 numKeysToRemove（待删除的键数量）
-      - int32 numEntries（实际条目数量）
-      - 循环读取 key-value 对
+    UE serialization format:
+      - int32 numKeysToRemove (number of keys to remove)
+      - int32 numEntries (number of actual entries)
+      - loop reading key-value pairs
     """
     key_type = getattr(tag, "key_type", None)
     value_type = getattr(tag, "value_type", None)
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 
-    # 读取待删除的键数量（UE 源码中用于增量更新）
-    num_keys_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 待删除键数量")
-    # 跳过待删除的键（按 key_type 序列化）
+    # Read number of keys to remove (used in UE source for incremental updates)
+    num_keys_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty keys to remove count")
+    # Skip keys to remove (serialized by key_type)
     for _ in range(num_keys_to_remove):
         _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
 
-    # 读取实际条目数量
-    num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty 条目数量")
+    # Read number of actual entries
+    num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty entry count")
     entries: List[Dict[str, Any]] = []
 
     for _ in range(num_entries):
@@ -1083,25 +1083,25 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     )
 
 def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> SetValue:
-    """解析 SetProperty（ADVP-03）。
+    """Parse SetProperty (ADVP-03).
 
-    UE 序列化格式：
-      - int32 numElementsToRemove（待删除元素数量）
-      - int32 numElements（实际元素数量）
-      - 循环读取元素
+    UE serialization format:
+      - int32 numElementsToRemove (number of elements to remove)
+      - int32 numElements (number of actual elements)
+      - loop reading elements
     """
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
-    # 读取待删除的元素数量（UE 源码中用于增量更新）
-    num_elements_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty 待删除元素数量")
-    # 跳过待删除的元素（按 element_type 序列化）
+    # Read number of elements to remove (used in UE source for incremental updates)
+    num_elements_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty elements to remove count")
+    # Skip elements to remove (serialized by element_type)
     parse_property_value = _get_parse_property_value()
     for _ in range(num_elements_to_remove):
         dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
         parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
-    # 读取实际元素数量
-    num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty 元素数量")
+    # Read number of actual elements
+    num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty element count")
     elements: List[Any] = []
 
     for _ in range(num_elements):
@@ -1115,20 +1115,20 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     )
 
 def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str], summary: Optional[Any] = None) -> EnumValue:
-    """解析 EnumProperty（ADVP-04）。"""
+    """Parse EnumProperty (ADVP-04)."""
     enum_type = _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
     return make_enum_value(enum_type, enum_value_name)
 
 def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
-    """读取 Base FText: namespace + key + source_string。"""
+    """Read Base FText: namespace + key + source_string."""
     namespace = archive.read_fstring()
     key = archive.read_fstring()
     source_string = archive.read_fstring()
     return namespace, key, source_string
 
 def _read_ftext_args(archive: FArchive) -> None:
-    """读取 FText 参数字典并丢弃（仅消耗字节）。"""
+    """Read and discard FText argument dictionary (only consumes bytes)."""
     from uasset_read.parsers.utils import read_validated_count_tolerant
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
     for _ in range(count):
@@ -1136,12 +1136,12 @@ def _read_ftext_args(archive: FArchive) -> None:
         archive.read_fstring()  # value
 
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
-    """解析 TextProperty（ADVP-05）。
+    """Parse TextProperty (ADVP-05).
 
-    UE FText 序列化格式:
+    UE FText serialization format:
       - flags: i32 (4 bytes)
-      - history_type: u8 (1 byte) — FTextHistory 类型标识
-      - body: 根据 history_type 不同而不同
+      - history_type: u8 (1 byte) -- FTextHistory type identifier
+      - body: varies based on history_type
         - history_type == 0 (Base): namespace + key + source_string
         - history_type == 1 (NamedFormat): namespace + key + args
         - history_type == 2 (OrderedFormat): namespace + key + source_string + args
@@ -1203,7 +1203,7 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
     )
 
 def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> DelegateValue:
-    """解析 DelegateProperty（ADVP-06）。"""
+    """Parse DelegateProperty (ADVP-06)."""
     object_ref = archive.read_i32()
     function_name = archive.read_name(name_map)
 
@@ -1217,10 +1217,10 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
-    """解析 MulticastDelegateProperty。
+    """Parse MulticastDelegateProperty.
 
-    UE FMulticastScriptDelegate::SerializeItem 使用 FName 序列化函数名
-    （4 字节索引 + 4 字节实例号），与 parse_delegate_property 一致。
+    UE FMulticastScriptDelegate::SerializeItem serializes function name with FName
+    (4-byte index + 4-byte instance number), consistent with parse_delegate_property.
     """
     from uasset_read.parsers.utils import read_validated_count_tolerant
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "MulticastDelegate")
@@ -1232,11 +1232,11 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
     return delegates
 
 def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
-    """解析 MulticastInlineDelegateProperty"""
+    """Parse MulticastInlineDelegateProperty."""
     return parse_multicast_delegate_property(tag, archive, name_map)
 
 def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
-    """解析 MulticastSparseDelegateProperty"""
+    """Parse MulticastSparseDelegateProperty."""
     return parse_multicast_delegate_property(tag, archive, name_map)
 
 # ============================================================================
@@ -1244,14 +1244,14 @@ def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive
 # ============================================================================
 
 def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 InterfaceProperty"""
+    """Parse InterfaceProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
-    """解析 FieldPathProperty。
+    """Parse FieldPathProperty.
 
-    UE FFieldPath::Serialize 将路径序列化为 TArray<FName>
-    （int32 计数 + N * FName），而非 FString 数组。
+    UE FFieldPath::Serialize serializes the path as TArray<FName>
+    (int32 count + N * FName), not FString array.
     """
     from uasset_read.parsers.utils import read_validated_count_tolerant
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FieldPath")
@@ -1261,7 +1261,7 @@ def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Lis
     return {"path": path}
 
 def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
-    """解析 OptionalProperty"""
+    """Parse OptionalProperty."""
     has_value = archive.read_bool()
     if has_value:
         parse_property_value = _get_parse_property_value()
@@ -1280,33 +1280,33 @@ def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
-    """解析 VerseStringProperty"""
+    """Parse VerseStringProperty."""
     return archive.read_fstring()
 
 def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 VerseClassProperty"""
+    """Parse VerseClassProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 VerseFunctionProperty"""
+    """Parse VerseFunctionProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
-    """解析 VerseDynamicProperty"""
+    """Parse VerseDynamicProperty."""
     return _simple_read(archive, "read_i32")
 
 def parse_ansi_str_property(tag: PropertyTag, archive: FArchive) -> str:
-    """解析 AnsiStrProperty — UE4/老版本资产中的 ANSI 字符串。
+    """Parse AnsiStrProperty -- ANSI string in UE4/legacy assets.
 
-    与 FString 使用相同的长度前缀格式，但内容以 Latin-1 解码而非 UTF-8/UTF-16。
+    Uses the same length-prefixed format as FString, but content is decoded as Latin-1 instead of UTF-8/UTF-16.
     """
-    return archive.read_fstring()  # read_fstring 已经处理长度前缀字符串
+    return archive.read_fstring()  # read_fstring already handles length-prefixed strings
 
 def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
-    """解析 VerseCellProperty（UE5.6+ Verse 脚本系统）。
+    """Parse VerseCellProperty (UE5.6+ Verse scripting system).
 
-    VerseCell 引用指向 Verse 文件中的单元格，序列化格式为 PackageIndex + 名称索引。
-    当前返回原始引用值，完整解析需要 Verse 文件系统。
+    VerseCell reference points to a cell in a Verse file, serialized as PackageIndex + name index.
+    Currently returns raw reference value; full parsing requires Verse file system.
     """
     start = archive.tell()
     package_index = archive.read_i32() if tag.size >= 4 else 0
@@ -1320,10 +1320,10 @@ def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
     }
 
 def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
-    """解析 VerseValueProperty（UE5.6+ Verse 脚本系统）。
+    """Parse VerseValueProperty (UE5.6+ Verse scripting system).
 
-    VerseValue 是 Verse 类型系统的运行时值容器，序列化包含类型标签 + 值。
-    当前读取类型标签和原始数据，完整解析需要 Verse 类型系统知识。
+    VerseValue is a runtime value container of the Verse type system, serialization includes type tag + value.
+    Currently reads type tag and raw data; full parsing requires Verse type system knowledge.
     """
     start = archive.tell()
     type_tag = archive.read_u8() if tag.size >= 1 else 0
@@ -1343,16 +1343,16 @@ def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
     }
 
 def parse_double_property(tag: PropertyTag, archive: FArchive) -> float:
-    """解析 DoubleProperty（独立解析器）。"""
+    """Parse DoubleProperty (standalone parser)."""
     return _simple_read(archive, "read_f64")
 
 def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
-    """解析 GuidProperty — FGuid 结构体（16 字节）。
+    """Parse GuidProperty -- FGuid struct (16 bytes).
 
-    返回标准十六进制字符串格式的 GUID，如 "A1B2C3D4-E5F6-...".
+    Returns GUID in standard hex string format, e.g. "A1B2C3D4-E5F6-..."
     """
     data = archive.read_bytes(16)
-    # 标准 GUID 格式: 8-4-4-4-12 十六进制
+    # Standard GUID format: 8-4-4-4-12 hex
     return (
         f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
         f"{data[4]:02x}{data[5]:02x}-"
@@ -1366,22 +1366,22 @@ def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
 # ============================================================================
 
 def _get_inner_type(array_type: str) -> str:
-    """从 ArrayProperty 类型名推断内部元素类型。
+    """Infer inner element type from ArrayProperty type name.
 
-    支持基本的类型映射，从 UE5 完整类型名格式（如 ArrayProperty(IntProperty)）
-    或带下划线的类型名推断内部类型。
+    Supports basic type mapping from UE5 full type name format (e.g. ArrayProperty(IntProperty))
+    or underscore-separated type names to infer inner type.
     """
-    # 尝试从括号格式提取：ArrayProperty(IntProperty) -> IntProperty
+    # Try to extract from bracket format: ArrayProperty(IntProperty) -> IntProperty
     if "(" in array_type and ")" in array_type:
         start = array_type.find("(")
         end = array_type.find(")")
         inner = array_type[start + 1:end].strip()
-        # 处理带路径的类型：/Script/CoreUObject.IntProperty -> IntProperty
+        # Handle types with path: /Script/CoreUObject.IntProperty -> IntProperty
         if "." in inner:
             inner = inner.split(".")[-1]
         return inner
 
-    # 基本类型映射（用于下划线分隔的类型名）
+    # Basic type mapping (for underscore-separated type names)
     type_mapping = {
         "ArrayProperty_IntProperty": "IntProperty",
         "ArrayProperty_FloatProperty": "FloatProperty",
@@ -1400,7 +1400,7 @@ def _get_inner_type(array_type: str) -> str:
     return type_mapping.get(array_type, "Unknown")
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取结构体类型名（D-08）。"""
+    """Extract struct type name from PropertyTag (D-08)."""
     if getattr(tag, "struct_type", None):
         return str(tag.struct_type).split(".")[-1]
 
@@ -1413,7 +1413,7 @@ def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     return "UnknownStruct"
 
 def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
-    """从 PropertyTag 提取 Map Key/Value 类型（D-08）。"""
+    """Extract Map Key/Value types from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
     if inner is not None:
         parts = inner.split(",", 1)  # split on first comma only (type names may contain commas)
@@ -1423,7 +1423,7 @@ def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
     return "IntProperty", "IntProperty"
 
 def _extract_set_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取 Set 元素类型（D-08）。"""
+    """Extract Set element type from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
     if inner is not None:
         return inner.strip()
@@ -1431,7 +1431,7 @@ def _extract_set_type_from_tag(tag: PropertyTag) -> str:
     return "IntProperty"
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
-    """从 PropertyTag 提取枚举类型名（D-08）。"""
+    """Extract enum type name from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
     if inner is not None:
         if "." in inner:
@@ -1445,7 +1445,7 @@ def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
 # ============================================================================
 
 def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
-    """键类型分派解析（D-02b）。"""
+    """Key type dispatch parsing (D-02b)."""
     basic_types = [
         "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
         "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
@@ -1463,8 +1463,8 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
         return archive.read_name(name_map)
 
     if key_type == "StructProperty":
-        # StructProperty key 需要知道具体结构体类型才能正确解析
-        # 从 tag 获取 key_type_struct，若 tag 为 None 则尝试从 archive 获取
+        # StructProperty key needs to know the concrete struct type for correct parsing
+        # Get key_type_struct from tag; if tag is None, try to get from archive
         struct_type = None
         if tag is not None:
             struct_type = getattr(tag, 'key_type_struct', None)
@@ -1474,35 +1474,35 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
     return None
 
 def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> Any:
-    """值类型分派解析。"""
+    """Value type dispatch parsing."""
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     parse_property_value = _get_parse_property_value()
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
 # ============================================================================
-# 默认值解析（等价迁移 uasset_read.py §4650-4704）
+# Default value parsing (equivalent migration of uasset_read.py section 4650-4704)
 # ============================================================================
 
 def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
     """
-    解析 DefaultValue 字符串到 Python 原生类型（BLUE-03）。
+    Parse DefaultValue string to Python native types (BLUE-03).
 
-    Per D-13: 解析为 int, float, bool, str。
-    Per D-14: 解析失败时回退到原始字符串。
-    Per D-15: 仅基本类型 — 无数组、向量、对象。
-    Per D-16: Vector 类型保持为字符串 "(X=...,Y=...,Z=...)"。
+    Per D-13: parse to int, float, bool, str.
+    Per D-14: fall back to raw string on parse failure.
+    Per D-15: basic types only -- no arrays, vectors, or objects.
+    Per D-16: Vector types kept as string "(X=...,Y=...,Z=...)".
     """
     if not value_str:
         return None
 
-    # 检查向量格式，保持为字符串
+    # Check vector format, keep as string
     if value_str.startswith("(") and value_str.endswith(")"):
         return value_str
 
-    # 使用 PinCategory 进行类型检测
+    # Use PinCategory for type detection
     category = var_type.pin_category.lower()
 
-    # 布尔解析
+    # Boolean parsing
     if category in ("bool", "boolean"):
         if value_str.lower() in ("true", "1"):
             return True
@@ -1510,34 +1510,34 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
             return False
         return value_str
 
-    # 整数解析
+    # Integer parsing
     if category in ("int", "integer"):
         if re.match(r'^-?\d+$', value_str):
             return int(value_str)
         return value_str
 
-    # 浮点/实数解析
+    # Float/real number parsing
     if category in ("float", "real", "double"):
         if re.match(r'^-?\d+\.?\d*$', value_str):
             return float(value_str)
         return value_str
 
-    # 字符串/名称：保持原样
+    # String/Name: keep as-is
     if category in ("string", "name", "text"):
         return value_str
 
-    # 未知类别：回退到原始字符串
+    # Unknown category: fall back to raw string
     return value_str
 
 # ============================================================================
-# 变量类型格式化（等价迁移 uasset_read.py §4829-4907）
+# Variable type formatting (equivalent migration of uasset_read.py section 4829-4907)
 # ============================================================================
 
 def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
     """
-    将 FEdGraphPinType 格式化为完整类型字符串（per D-04）。
+    Format FEdGraphPinType into a complete type string (per D-04).
 
-    处理：基本类型、容器类型（TArray/TSet/TMap）、引用类型、const 类型。
+    Handles: basic types, container types (TArray/TSet/TMap), reference types, const types.
     """
     # Container type prefix
     container_prefix = ""

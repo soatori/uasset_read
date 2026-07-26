@@ -1,6 +1,6 @@
-"""CFG 数据结构定义。
+"""CFG data structure definitions.
 
-定义基本块、控制流图、支配树、区域等核心数据结构。
+Defines core data structures: basic blocks, control flow graph, dominator tree, regions.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class EdgeKind(Enum):
-    """CFG 边类型。"""
+    """CFG edge types."""
 
     FALLTHROUGH = auto()  # fall-through to next (non-conditional)
     TRUE_BRANCH = auto()  # EX_JumpIfNot true path (fall-through when condition is TRUE)
@@ -25,29 +25,29 @@ class EdgeKind(Enum):
 
 @dataclass
 class BasicBlock:
-    """控制流图基本块。
+    """Control flow graph basic block.
 
-    基本块是从入口到出口的直线代码序列，内部无分支。
+    A basic block is a straight-line code sequence from entry to exit with no branches.
     """
 
-    block_id: int  # 唯一标识
-    start_idx: int  # 起始表达式索引（含）
-    end_idx: int  # 结束表达式索引（含，闭区间）
+    block_id: int  # unique identifier
+    start_idx: int  # start expression index (inclusive)
+    end_idx: int  # end expression index (inclusive, closed interval)
     expressions: list[KismetExpression] = field(default_factory=list)
-    successors: list[int] = field(default_factory=list)  # 后继块 ID
-    predecessors: list[int] = field(default_factory=list)  # 前驱块 ID
+    successors: list[int] = field(default_factory=list)  # successor block IDs
+    predecessors: list[int] = field(default_factory=list)  # predecessor block IDs
     edge_kinds: dict[int, EdgeKind] = field(
         default_factory=dict
-    )  # 后继 → 边类型
+    )  # successor → edge type
 
     @property
     def label(self) -> str:
-        """块标签，格式 BB0, BB1, ..."""
+        """Block label, format BB0, BB1, ..."""
         return f"BB{self.block_id}"
 
     @property
     def size(self) -> int:
-        """块内表达式数量。"""
+        """Number of expressions in block."""
         return self.end_idx - self.start_idx + 1
 
     def __repr__(self) -> str:
@@ -68,44 +68,44 @@ class BasicBlock:
 
 @dataclass
 class CFG:
-    """控制流图 (Control Flow Graph)。
+    """Control Flow Graph.
 
-    由基本块和边组成，包含入口块和合成 sink 块。
+    Composed of basic blocks and edges, contains entry block and synthetic sink block.
     """
 
     blocks: dict[int, BasicBlock] = field(default_factory=dict)
     entry_id: int = 0
-    exit_id: int = -1  # 合成 sink 块 ID
+    exit_id: int = -1  # synthetic sink block ID
 
     @property
     def entry(self) -> BasicBlock:
-        """入口块。"""
+        """Entry block."""
         return self.blocks[self.entry_id]
 
     @property
     def exit(self) -> BasicBlock:
-        """合成 sink 块（所有 fall-through 的目标）。"""
+        """Synthetic sink block (target of all fall-throughs)."""
         return self.blocks[self.exit_id]
 
     @property
     def block_count(self) -> int:
-        """基本块总数。"""
+        """Total number of basic blocks."""
         return len(self.blocks)
 
     @property
     def edge_count(self) -> int:
-        """边总数。"""
+        """Total number of edges."""
         total = 0
         for block in self.blocks.values():
             total += len(block.successors)
         return total
 
     def ordered_blocks(self) -> list[BasicBlock]:
-        """按 block_id 升序返回所有基本块。"""
+        """Return all basic blocks in ascending block_id order."""
         return [self.blocks[bid] for bid in sorted(self.blocks.keys())]
 
     def add_block(self, block: BasicBlock) -> None:
-        """添加基本块到 CFG。"""
+        """Add a basic block to the CFG."""
         self.blocks[block.block_id] = block
 
     def __repr__(self) -> str:
@@ -113,40 +113,40 @@ class CFG:
 
 
 class RegionKind(Enum):
-    """区域类型。"""
+    """Region types."""
 
-    BLOCK = auto()  # 直线序列（无分支）
-    IF_THEN = auto()  # if-then（单分支）
-    IF_THEN_ELSE = auto()  # if-then-else（双分支）
-    WHILE_LOOP = auto()  # while 循环（head 有外部前驱）
-    DO_WHILE = auto()  # do-while 循环（head 无外部前驱）
-    FOR_LOOP = auto()  # for 循环（语法糖，由 while 识别）
-    SELF_LOOP = auto()  # 自环（单块循环）
-    IRREDUCIBLE = auto()  # 不可规约区域
+    BLOCK = auto()  # straight-line sequence (no branches)
+    IF_THEN = auto()  # if-then (single branch)
+    IF_THEN_ELSE = auto()  # if-then-else (dual branches)
+    WHILE_LOOP = auto()  # while loop (head has external predecessor)
+    DO_WHILE = auto()  # do-while loop (head has no external predecessor)
+    FOR_LOOP = auto()  # for loop (syntactic sugar, identified as while)
+    SELF_LOOP = auto()  # self-loop (single-block cycle)
+    IRREDUCIBLE = auto()  # irreducible region
 
 
 @dataclass
 class Region:
-    """控制流区域（SESE 区间）。
+    """Control flow region (SESE interval).
 
-    每个区域有唯一的 head（入口块）和 tail（出口块），
-    满足单入口单出口 (SESE) 性质。
+    Each region has a unique head (entry block) and tail (exit block),
+    satisfying the single-entry single-exit (SESE) property.
     """
 
     region_id: int
     kind: RegionKind
-    head: int  # 入口块 ID
-    tail: int  # 出口块 ID（SESE 的唯一出口）
-    body_blocks: list[int] = field(default_factory=list)  # 区域内所有块
-    exit_blocks: list[int] = field(default_factory=list)  # 区域退出块
-    children: list[int] = field(default_factory=list)  # 子区域 ID
+    head: int  # entry block ID
+    tail: int  # exit block ID (unique exit of SESE)
+    body_blocks: list[int] = field(default_factory=list)  # all blocks in region
+    exit_blocks: list[int] = field(default_factory=list)  # region exit blocks
+    children: list[int] = field(default_factory=list)  # child region IDs
     loop_back_edges: list[tuple[int, int]] = field(
         default_factory=list
-    )  # 回边 (src, dst)
+    )  # back edges (src, dst)
 
     @property
     def block_count(self) -> int:
-        """区域包含的块数。"""
+        """Number of blocks in the region."""
         return len(self.body_blocks)
 
     def __repr__(self) -> str:
@@ -159,9 +159,9 @@ class Region:
 
 @dataclass
 class RegionTree:
-    """区域树。
+    """Region tree.
 
-    存储所有区域及层次关系。
+    Stores all regions and their hierarchical relationships.
     """
 
     regions: dict[int, Region] = field(default_factory=dict)
@@ -169,15 +169,15 @@ class RegionTree:
 
     @property
     def root(self) -> Region:
-        """根区域。"""
+        """Root region."""
         return self.regions[self.root_id]
 
     def add_region(self, region: Region) -> None:
-        """添加区域。"""
+        """Add a region."""
         self.regions[region.region_id] = region
 
     def get_region(self, region_id: int) -> Region | None:
-        """根据 ID 获取区域。"""
+        """Get a region by ID."""
         return self.regions.get(region_id)
 
     def __repr__(self) -> str:
@@ -186,9 +186,9 @@ class RegionTree:
 
 @dataclass
 class DominatorTree:
-    """支配树。
+    """Dominator tree.
 
-    存储立即支配者 (idom) 和完整支配关系。
+    Stores immediate dominators (idom) and full dominance relationships.
     """
 
     idom: dict[int, int | None] = field(default_factory=dict)
@@ -197,17 +197,17 @@ class DominatorTree:
     _frontiers: dict[int, set[int]] = field(default_factory=dict)
 
     def is_dominator(self, dom_id: int, node_id: int) -> bool:
-        """判断 dom_id 是否支配 node_id。"""
+        """Check if dom_id dominates node_id."""
         if node_id not in self.dominators:
             return False
         return dom_id in self.dominators[node_id]
 
     def immediate_dominator(self, block_id: int) -> int | None:
-        """获取 block_id 的立即支配者。"""
+        """Get the immediate dominator of block_id."""
         return self.idom.get(block_id)
 
     def dominator_frontier(self, block_id: int) -> set[int]:
-        """获取 block_id 的支配前沿。"""
+        """Get the dominator frontier of block_id."""
         return self._frontiers.get(block_id, set())
 
     def __repr__(self) -> str:

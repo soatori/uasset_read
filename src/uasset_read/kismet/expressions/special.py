@@ -1,8 +1,8 @@
 """
-Kismet 表达式系统 — 特殊表达式。
+Kismet expression system -- special expressions.
 
-包含 switch/instrumentation/常量/自引用等特殊表达式类型。
-对应 EX_Return, EX_Assert, EX_SwitchValue, EX_InstrumentationEvent 等。
+Contains special expression types such as switch/instrumentation/constants/self-references.
+Corresponding opcodes: EX_Return, EX_Assert, EX_SwitchValue, EX_InstrumentationEvent, etc.
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ class EX_InstrumentationEvent(KismetExpression):
         return cls(EventType=evt_type, EventName=name)
 
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_DeprecatedOp4A = make_simple_expression(EExprToken.EX_DeprecatedOp4A)
 EX_Breakpoint = make_simple_expression(EExprToken.EX_Breakpoint)
 EX_Tracepoint = make_simple_expression(EExprToken.EX_Tracepoint)
@@ -183,7 +183,7 @@ class EX_NameConst(KismetExpressionT[str]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
-        # Read FName: index + number（对齐 UE FName 序列化为两个 int32）
+        # Read FName: index + number (aligned with UE FName serialized as two int32 values)
         idx = archive.read_i32()
         num = archive.read_i32()
         name = archive.resolve_fname(idx, num)
@@ -202,7 +202,7 @@ class EX_Unknown6E(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6E:
-        # 格式未知；opcode 已由 FKismetArchive 消费，保留占位表达式继续解析。
+        # Unknown format; opcode already consumed by FKismetArchive, keep placeholder expression and continue parsing.
         return cls(Value=b"")
 
 
@@ -218,15 +218,15 @@ class EX_Unknown6F(KismetExpressionT[bytes]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Unknown6F:
-        # 格式未知；opcode 已由 FKismetArchive 消费，保留占位表达式继续解析。
+        # Unknown format; opcode already consumed by FKismetArchive, keep placeholder expression and continue parsing.
         return cls(Value=b"")
 
 
 @dataclass
 class EX_UnknownF9(KismetExpressionT[bytes]):
-    """Game-specific opcode 0xF9 — Borderlands 4 私有扩展。
+    """Game-specific opcode 0xF9 -- Borderlands 4 private extension.
 
-    UE 源码未定义此操作码。格式未知，交由 tolerant 模式处理。
+    Not defined in UE source. Unknown format, handled by tolerant mode.
     """
 
     Value: bytes = b""
@@ -242,7 +242,7 @@ class EX_UnknownF9(KismetExpressionT[bytes]):
 
 @dataclass
 class EX_UnknownFD(KismetExpressionT[bytes]):
-    """Game-specific opcode 0xFD — Borderlands 4, 2XKO 私有扩展。"""
+    """Game-specific opcode 0xFD -- Borderlands 4, 2XKO private extension."""
 
     Value: bytes = b""
 
@@ -257,7 +257,7 @@ class EX_UnknownFD(KismetExpressionT[bytes]):
 
 @dataclass
 class EX_UnknownFE(KismetExpressionT[bytes]):
-    """Game-specific opcode 0xFE — Borderlands 4 私有扩展。"""
+    """Game-specific opcode 0xFE -- Borderlands 4 private extension."""
 
     Value: bytes = b""
 
@@ -272,11 +272,11 @@ class EX_UnknownFE(KismetExpressionT[bytes]):
 
 @dataclass
 class EX_MaxSentinel(KismetExpression):
-    """EX_Max (0xFF) 哨兵值 — 标记脚本结束，与 EX_EndOfScript 行为相同。
+    """EX_Max (0xFF) sentinel value -- marks end of script, behaves the same as EX_EndOfScript.
 
-    在 UE 蓝图中，0xFF 是 EExprToken 枚举的上限哨兵，不是有效操作码。
-    出现在字节码末尾 padding 或未初始化数据中。
-    将其视为脚本结束标记，避免 tolerant 模式逐字节跳过导致组合爆炸。
+    In UE Blueprints, 0xFF is the upper-bound sentinel of the EExprToken enum, not a valid opcode.
+    Appears in bytecode trailing padding or uninitialized data.
+    Treated as end-of-script marker to avoid combinatorial explosion from byte-by-byte skipping in tolerant mode.
     """
 
     @property
@@ -285,5 +285,5 @@ class EX_MaxSentinel(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MaxSentinel:
-        # EX_Max 无额外数据，仅消耗 1 字节 opcode
+        # EX_Max has no additional data, consumes only the 1-byte opcode
         return cls()

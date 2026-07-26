@@ -1,11 +1,11 @@
-"""CurveTable 资产类型处理器
+"""CurveTable Asset type handler
 
-解析 UCurveTable 的特有数据：
-- NumRows: int32 — 行数
-- CurveTableMode: uint8 — 曲线类型 (0=Empty, 1=SimpleCurves, 2=RichCurves)
+Parse UCurveTable specific data:
+- NumRows: int32 — row count
+- CurveTableMode: uint8 — curve type (0=Empty, 1=SimpleCurves, 2=RichCurves)
 - RowMap: TArray<FName + FRichCurve/FSimpleCurve>
 
-格式参考：
+Format reference:
 - Engine/Source/Runtime/Engine/Classes/Engine/CurveTable.h
 - Engine/Source/Runtime/Engine/Private/CurveTable.cpp
 """
@@ -19,7 +19,7 @@ from uasset_read.exceptions import ParseError
 logger = logging.getLogger(__name__)
 
 
-# ECurveTableMode 枚举值（CurveTable.h:29-33）
+# ECurveTableMode enum values (CurveTable.h:29-33)
 _CURVE_TABLE_MODE_EMPTY = 0
 _CURVE_TABLE_MODE_SIMPLE = 1
 _CURVE_TABLE_MODE_RICH = 2
@@ -30,7 +30,7 @@ _MODE_NAMES = {
     _CURVE_TABLE_MODE_RICH: "RichCurves",
 }
 
-# 行数安全上限（与 DataTable 对齐，防止恶意大行数强制构造巨大 rows 列表）
+# Row count safety limit (aligned with DataTable, prevent malicious large row counts)
 _MAX_ROWS = 100000
 
 
@@ -38,19 +38,19 @@ def parse_curve_table(
     archive: Any,
     name_map: List[str],
 ) -> Dict[str, Any]:
-    """解析 CurveTable 资产元数据。
+    """Parse CurveTable asset metadata.
 
-    CurveTable 与 DataTable 不同，其 Serialize 布局为：
+    CurveTable differs from DataTable; its Serialize layout is:
       NumRows (int32) + CurveTableMode (uint8) + N × (FName + curve payload)
 
-    参照 CurveTable.cpp:102-130 UCurveTable::Serialize。
+    Reference CurveTable.cpp:102-130 UCurveTable::Serialize.
 
     Args:
-        archive: FArchive 实例（已定位到 payload 起始位置）
-        name_map: 名称表
+        archive: FArchive instance (positioned at payload start)
+        name_map: name table
 
     Returns:
-        解析结果字典，包含 curve_table_mode、row_count、rows 等
+        Parse result dictionary, containing curve_table_mode, row_count, rows, etc.
     """
     result: Dict[str, Any] = {
         "parse_status": "success",
@@ -62,7 +62,7 @@ def parse_curve_table(
 
     try:
         # 1. NumRows: int32
-        #    参照 CurveTable.cpp:112-113 Ar << NumRows
+        #    Reference CurveTable.cpp:112-113 Ar << NumRows
         num_rows = archive.read_i32("NumRows")
         if num_rows < 0:
             result["parse_status"] = "partial"
@@ -76,14 +76,14 @@ def parse_curve_table(
         result["row_count"] = num_rows
 
         # 2. CurveTableMode: uint8
-        #    参照 CurveTable.cpp:122-123 Ar << CurveTableMode
-        #    旧版本（bUpgradingCurveTable）没有此字段，但当前格式均有
+        #    Reference CurveTable.cpp:122-123 Ar << CurveTableMode
+        #    Old versions (bUpgradingCurveTable) lack this field, but current format always has it
         mode_raw = archive.read_u8("CurveTableMode")
         result["curve_table_mode_raw"] = mode_raw
         result["curve_table_mode"] = _MODE_NAMES.get(mode_raw, f"Unknown({mode_raw})")
 
-        # 3. 逐行解析 RowMap
-        #    每行：FName (Index:int32 + Number:int32) + curve payload
+        # 3. Parse RowMap line by line
+        #    Each row: FName (Index:int32 + Number:int32) + curve payload
         rows: List[Dict[str, Any]] = []
 
         for row_idx in range(num_rows):
@@ -91,7 +91,7 @@ def parse_curve_table(
             name_index = archive.read_i32(f"Row[{row_idx}].FName.Index")
             name_number = archive.read_i32(f"Row[{row_idx}].FName.Number")
 
-            # 解析行名称
+            # Parse row name
             if 0 <= name_index < len(name_map):
                 row_name = name_map[name_index]
             else:
@@ -103,17 +103,17 @@ def parse_curve_table(
                 "name_number": name_number,
             }
 
-            # 根据 CurveTableMode 解析曲线数据
+            # Parse curve data based on CurveTableMode
             if mode_raw == _CURVE_TABLE_MODE_RICH:
                 curve_data = _read_rich_curve(archive, row_idx, name_map)
                 row["curve"] = curve_data
             elif mode_raw == _CURVE_TABLE_MODE_SIMPLE:
-                # SimpleCurve: 使用 SerializeTaggedProperties 序列化
-                # 参照 CurveTable.cpp:138-145
+                # SimpleCurve: uses SerializeTaggedProperties
+                # Reference CurveTable.cpp:138-145
                 curve_data = _read_simple_curve(archive, row_idx, name_map)
                 row["curve"] = curve_data
             else:
-                # Empty 模式不应有行数据，但格式上仍可能有
+                # Empty mode should not have row data, but format may still contain it
                 row["curve"] = {"type": "Unknown", "mode": mode_raw}
 
             rows.append(row)
@@ -128,36 +128,36 @@ def parse_curve_table(
 
 
 def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
-    """解析 FRichCurve 的 tagged properties 格式。
+    """Parse FRichCurve tagged properties format.
 
-    FRichCurve 通过 SerializeTaggedProperties 序列化：
-    - 每个属性前有 FName（属性名）+ FName（类型名）+ int32（size）+ int32（array_index）
-    - 以及类型相关的额外字段（InnerTypeName 等）
-    - 属性名为空 FName 时表示结束
-    - Keys 属性包含 TArray<FRichCurveKey>
+    FRichCurve serialized via SerializeTaggedProperties:
+    - Each property preceded by FName (property name) + FName (type name) + int32 (size) + int32 (array_index)
+    - and type-related extra fields (InnerTypeName, etc.)
+    - Empty FName as property name indicates end
+    - Keys property contains TArray<FRichCurveKey>
 
-    参照 UStruct::SerializeTaggedProperties：
+    Reference UStruct::SerializeTaggedProperties:
     Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
     FPropertyTag::Serialize
     """
     keys: List[Dict[str, float]] = []
 
     try:
-        # 循环读取 tagged properties 直到遇到空 FName
+        # Loop reading tagged properties until an empty FName is encountered
         while True:
-            # 属性名 FName
+            # Property name FName
             prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
             prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
 
-            # 空 FName（index=0 且 number=0）表示属性列表结束
+            # Empty FName (index=0 and number=0) indicates property list end
             if prop_name_index == 0 and prop_name_number == 0:
                 break
 
-            # 类型名 FName
+            # Type name FName
             type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
             _type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # noqa: F841 - protocol read
 
-            # 解析类型名（用于判断是否需要跳过额外字段）
+            # Parse type name (to determine if extra fields need skipping)
             type_name = _resolve_name(type_name_index, name_map)
 
             # Size: int32
@@ -166,17 +166,17 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
             # ArrayIndex: int32
             _array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # noqa: F841 - protocol read
 
-            # EnumName: FName（EnumProperty 或 ByteProperty 特有字段）
+            # EnumName: FName (EnumProperty or ByteProperty specific field)
             if type_name in ("EnumProperty", "ByteProperty"):
                 archive.read_i32()  # index
                 archive.read_i32()  # number
 
-            # InnerTypeName: FName（ArrayProperty 或 SetProperty）
+            # InnerTypeName: FName (ArrayProperty or SetProperty)
             if type_name in ("ArrayProperty", "SetProperty"):
                 archive.read_i32()  # index
                 archive.read_i32()  # number
 
-            # KeyType + ValueType: 2 x FName（MapProperty）
+            # KeyType + ValueType: 2 x FName (MapProperty)
             if type_name == "MapProperty":
                 archive.read_i32()  # key type index
                 archive.read_i32()  # key type number
@@ -195,15 +195,15 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
                     "error": f"Invalid property size: {prop_size}",
                 }
 
-            # 读取属性数据
+            # Read property data
             if prop_size > 0:
                 prop_data = archive.read(prop_size)
 
                 prop_name = _resolve_name(prop_name_index, name_map)
 
-                # 如果是 TArray 属性且属性名为 "Keys"，解析 FRichCurveKey 数组
+                # If TArray property named "Keys", parse the FRichCurveKey array
                 if "ArrayProperty" in type_name and "Keys" in prop_name:
-                    # FRichCurveKey 完整布局（RichCurve.h:80-118）：
+                    # FRichCurveKey full layout (RichCurve.h:80-118):
                     # InterpMode: u8 (1)
                     # TangentMode: u8 (1)
                     # TangentWeightMode: u8 (1)
@@ -213,7 +213,7 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
                     # ArriveTangentWeight: f32 (4)
                     # LeaveTangent: f32 (4)
                     # LeaveTangentWeight: f32 (4)
-                    # 总计 27 bytes per key
+                    # Total 27 bytes per key
                     FRICH_CURVE_KEY_SIZE = 27
                     if len(prop_data) >= 4:
                         arr_count = struct.unpack("<i", prop_data[:4])[0]
@@ -243,43 +243,43 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
                                 offset += FRICH_CURVE_KEY_SIZE
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        # 解析失败时返回已解析的部分数据
-        logger.debug("RichCurve 解析失败: %s", e, exc_info=True)
+        # Return partially parsed data on parse failure
+        logger.debug("RichCurve Parse failed: %s", e, exc_info=True)
 
     return {"type": "RichCurve", "keys": keys}
 
 
 def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
-    """解析 FSimpleCurve 的 tagged properties 格式。
+    """Parse FSimpleCurve tagged properties format.
 
-    FSimpleCurve 通过 SerializeTaggedProperties 序列化（CurveTable.cpp:138-145）：
+    FSimpleCurve serialized via SerializeTaggedProperties (CurveTable.cpp:138-145):
     - InterpMode: EnumProperty tagged property (TEnumAsByte<ERichCurveInterpMode>)
     - Keys: ArrayProperty tagged property (TArray<FSimpleCurveKey>)
-    - FSimpleCurveKey: Time(f32) + Value(f32) = 8 bytes（自定义序列化，SimpleCurve.cpp:10-18）
+    - FSimpleCurveKey: Time(f32) + Value(f32) = 8 bytes (custom serialization, SimpleCurve.cpp:10-18)
 
-    参照 UStruct::SerializeTaggedProperties：
+    Reference UStruct::SerializeTaggedProperties:
     Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
     FPropertyTag::Serialize
     """
-    interp_mode: int = 0  # 默认 RCIM_Linear
+    interp_mode: int = 0  # Default RCIM_Linear
     keys: List[Dict[str, float]] = []
 
     try:
-        # 循环读取 tagged properties 直到遇到空 FName
+        # Loop reading tagged properties until an empty FName is encountered
         while True:
-            # 属性名 FName
+            # Property name FName
             prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
             prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
 
-            # 空 FName（index=0 且 number=0）表示属性列表结束
+            # Empty FName (index=0 and number=0) indicates property list end
             if prop_name_index == 0 and prop_name_number == 0:
                 break
 
-            # 类型名 FName
+            # Type name FName
             type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
             _type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # noqa: F841 - protocol read
 
-            # 解析类型名（用于判断是否需要跳过额外字段）
+            # Parse type name (to determine if extra fields need skipping)
             type_name = _resolve_name(type_name_index, name_map)
 
             # Size: int32
@@ -288,17 +288,17 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
             # ArrayIndex: int32
             _array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # noqa: F841 - protocol read
 
-            # EnumName: FName（EnumProperty 或 ByteProperty 特有字段）
+            # EnumName: FName (EnumProperty or ByteProperty specific field)
             if type_name in ("EnumProperty", "ByteProperty"):
                 archive.read_i32()  # index
                 archive.read_i32()  # number
 
-            # InnerTypeName: FName（ArrayProperty 或 SetProperty）
+            # InnerTypeName: FName (ArrayProperty or SetProperty)
             if type_name in ("ArrayProperty", "SetProperty"):
                 archive.read_i32()  # index
                 archive.read_i32()  # number
 
-            # KeyType + ValueType: 2 x FName（MapProperty）
+            # KeyType + ValueType: 2 x FName (MapProperty)
             if type_name == "MapProperty":
                 archive.read_i32()  # key type index
                 archive.read_i32()  # key type number
@@ -318,20 +318,20 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
                     "error": f"Invalid property size: {prop_size}",
                 }
 
-            # 读取属性数据
+            # Read property data
             if prop_size > 0:
                 prop_data = archive.read(prop_size)
 
                 prop_name = _resolve_name(prop_name_index, name_map)
 
-                # EnumProperty: InterpMode（FSimpleCurve 的 UPROPERTY）
+                # EnumProperty: InterpMode (FSimpleCurve UPROPERTY)
                 if "EnumProperty" in type_name and "InterpMode" in prop_name:
-                    # Enum 值作为 u8 存储在属性数据中
+                    # Enum value stored as u8 in property data
                     if len(prop_data) >= 1:
                         interp_mode = struct.unpack_from("<B", prop_data, 0)[0]
 
-                # ArrayProperty: Keys（FSimpleCurveKey 数组）
-                # FSimpleCurveKey 使用自定义序列化（SimpleCurve.cpp:10-18）：
+                # ArrayProperty: Keys (FSimpleCurveKey array)
+                # FSimpleCurveKey uses custom serialization (SimpleCurve.cpp:10-18):
                 # Time(f32) + Value(f32) = 8 bytes per key
                 if "ArrayProperty" in type_name and "Keys" in prop_name:
                     SIMPLE_CURVE_KEY_SIZE = 8
@@ -346,13 +346,13 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
                                 offset += SIMPLE_CURVE_KEY_SIZE
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        # 解析失败时返回已解析的部分数据
-        logger.debug("SimpleCurve 解析失败: %s", e, exc_info=True)
+        # Return partially parsed data on parse failure
+        logger.debug("SimpleCurve Parse failed: %s", e, exc_info=True)
 
     return {"type": "SimpleCurve", "interp_mode": interp_mode, "keys": keys}
 
 
 def _resolve_name(name_index: int, name_map: List[str]) -> str:
-    """从名称表解析名称。"""
+    """Parse name from name table."""
     from uasset_read.parsers.utils import resolve_name_from_index
     return resolve_name_from_index(None, name_map, name_index, fallback_prefix="name")

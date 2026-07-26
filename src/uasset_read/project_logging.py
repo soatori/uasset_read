@@ -92,7 +92,7 @@ class _RepeatedDebugFilter(logging.Filter):
         if msg not in self.message_counts:
             self.message_counts[msg] = 0
         self.message_counts[msg] += 1
-        # 按 suppress_levels 抑制重复消息，按原始模板分组
+        # Suppress repeated messages per suppress_levels, grouped by original template
         if self.limit <= 0 or record.levelno not in self.suppress_levels:
             return True
         key = (_log_asset.get(), _log_stage.get(), record.name, str(record.msg))
@@ -258,7 +258,7 @@ class ProjectLogSession:
 
 
 class _DisabledLogSession:
-    """无操作日志会话 — 日志禁用时的占位实现。"""
+    """No-op log session — placeholder implementation when logging is disabled."""
 
     _owns_scope_lock: bool = False
     _closed: bool = False
@@ -636,6 +636,6 @@ def setup_logging(
     level: str | int | None = "DEBUG",
     **kwargs,
 ) -> Path | None:
-    """便捷日志配置入口，重置状态后调用 configure_project_logging。"""
+    """Convenience logging setup entry point; resets state then calls configure_project_logging."""
     _reset_logging_state_for_tests()
     return configure_project_logging(log_dir=log_dir, level=level, **kwargs)

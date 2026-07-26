@@ -1,6 +1,6 @@
-"""组件变换解析函数 — extract_component_transforms 及值解析辅助函数。
+"""Component transform parsing functions -- extract_component_transforms and value parsing helpers.
 
-等价迁移 uasset_read.py §1514-1630。
+Equivalent migration from uasset_read.py section 1514-1630.
 """
 
 import struct
@@ -13,9 +13,9 @@ from uasset_read.models.transforms import (
 
 
 def _decode_raw_vector(raw_data: bytes) -> Optional[VectorValue]:
-    """从 binary_or_native_property 的 raw_data 解码 Vector/Rotator。
+    """Decode Vector/Rotator from binary_or_native_property raw_data.
 
-    支持 float32 (12 bytes) 和 float64/LWC (24 bytes)。
+    Supports float32 (12 bytes) and float64/LWC (24 bytes).
     """
     if not raw_data:
         return None
@@ -29,21 +29,21 @@ def _decode_raw_vector(raw_data: bytes) -> Optional[VectorValue]:
 
 
 def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
-    """从 PropertyValue.value 提取 {X, Y, Z} 或 {Pitch, Yaw, Roll} 字段。
+    """Extract {X, Y, Z} or {Pitch, Yaw, Roll} fields from PropertyValue.value.
 
-    支持三种存储格式：
-    1. StructValue 对象（标准解析路径）
-    2. binary_or_native_property dict（LWC fast-path 跳过时的 raw_data）
-    3. struct_binary_decoded dict（#143 新格式，已解码的 struct fields）
+    Supports three storage formats:
+    1. StructValue objects (standard parsing path)
+    2. binary_or_native_property dict (raw_data when LWC fast-path is skipped)
+    3. struct_binary_decoded dict (#143 new format, decoded struct fields)
     """
-    # 标准路径: StructValue 对象
+    # Standard path: StructValue object
     if isinstance(prop_value, StructValue):
         return prop_value.fields
 
     if isinstance(prop_value, dict):
         kind = prop_value.get('kind')
 
-        # binary_or_native_property dict（#143: raw_data 解码）
+        # binary_or_native_property dict (#143: raw_data decoding)
         if kind == 'binary_or_native_property':
             raw = prop_value.get('raw_data')
             if isinstance(raw, bytes):
@@ -51,7 +51,7 @@ def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
                 if vec is not None:
                     return {"X": vec.x, "Y": vec.y, "Z": vec.z}
 
-        # struct_binary_decoded dict（#143: 已解码的 struct fields）
+        # struct_binary_decoded dict (#143: decoded struct fields)
         elif kind == 'struct_binary_decoded':
             fields = prop_value.get('fields')
             if isinstance(fields, dict):
@@ -61,7 +61,7 @@ def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
 
 
 def parse_vector_value(struct_value: StructValue, precision_type: str = 'location') -> VectorValue:
-    """解析 Vector struct property 到 VectorValue。从 fields 提取 X/Y/Z 字段。"""
+    """Parse Vector struct property to VectorValue. Extract X/Y/Z fields from fields."""
     fields = struct_value.fields
     x = format_transform_value(fields.get("X", 0.0), precision_type)
     y = format_transform_value(fields.get("Y", 0.0), precision_type)
@@ -70,7 +70,7 @@ def parse_vector_value(struct_value: StructValue, precision_type: str = 'locatio
 
 
 def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
-    """解析 Rotator struct property 到 RotatorValue。从 fields 提取 Roll/Pitch/Yaw 字段。"""
+    """Parse Rotator struct property to RotatorValue. Extract Roll/Pitch/Yaw fields from fields."""
     fields = struct_value.fields
     roll = format_transform_value(fields.get("Roll", 0.0), 'rotation')
     pitch = format_transform_value(fields.get("Pitch", 0.0), 'rotation')
@@ -79,7 +79,7 @@ def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
 
 
 def parse_scale_value(struct_value: StructValue) -> ScaleValue:
-    """解析 Scale3D struct property 到 ScaleValue。从 fields 提取 X/Y/Z 字段。"""
+    """Parse Scale3D struct property to ScaleValue. Extract X/Y/Z fields from fields."""
     fields = struct_value.fields
     x = format_transform_value(fields.get("X", 0.0), 'scale')
     y = format_transform_value(fields.get("Y", 0.0), 'scale')
@@ -92,20 +92,21 @@ def extract_component_transforms(
     component_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    从组件 export 的 properties 中提取变换属性。
-    筛选 RelativeLocation/RelativeRotation/RelativeScale3D 属性，
-    分派到对应解析函数转换为 VectorValue/RotatorValue/ScaleValue。
+    Extract transform attributes from component export properties.
 
-    支持两种存储格式（#143）：
-    - StructValue 对象（标准解析路径）
-    - binary_or_native_property dict（LWC 双精度 raw_data 解码）
+    Filters RelativeLocation/RelativeRotation/RelativeScale3D properties
+    and dispatches to corresponding parsing functions to convert to VectorValue/RotatorValue/ScaleValue.
+
+    Supports two storage formats (#143):
+    - StructValue objects (standard parsing path)
+    - binary_or_native_property dict (LWC double-precision raw_data decoding)
 
     Args:
-        export_properties: 导出属性列表
-        component_name: 可选的组件名称（当前未使用，保留接口兼容）
+        export_properties: Export property list
+        component_name: Optional component name (currently unused, kept for interface compatibility)
 
     Returns:
-        Dict 包含 relative_location/relative_rotation/relative_scale 键
+        Dict containing relative_location/relative_rotation/relative_scale keys
     """
     transforms: Dict[str, Any] = {}
     for prop in export_properties:
@@ -113,7 +114,7 @@ def extract_component_transforms(
             continue
         prop_name = prop.name
 
-        # 尝试提取字段（支持 StructValue 和 binary_or_native_property dict）
+        # Try to extract fields (supports StructValue and binary_or_native_property dict)
         fields = _try_extract_struct_value(prop.value)
         if fields is None:
             continue

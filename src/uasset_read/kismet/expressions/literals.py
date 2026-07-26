@@ -9,7 +9,7 @@ from uasset_read.kismet.expressions.base import (
 from uasset_read.kismet.tokens import EExprToken
 
 
-# 单值表达式：从 archive 读取一个值
+# Single-value expression: read one value from the archive
 EX_IntConst = make_value_expression(EExprToken.EX_IntConst, "read_i32")
 EX_FloatConst = make_value_expression(EExprToken.EX_FloatConst, "read_f32")
 EX_ByteConst = make_value_expression(EExprToken.EX_ByteConst, "read_u8")
@@ -18,7 +18,7 @@ EX_Int64Const = make_value_expression(EExprToken.EX_Int64Const, "read_i64")
 EX_UInt64Const = make_value_expression(EExprToken.EX_UInt64Const, "read_u64")
 EX_DoubleConst = make_value_expression(EExprToken.EX_DoubleConst, "read_f64")
 
-# 无数据表达式：仅返回 Token
+# Data-free expression: returns Token only
 EX_IntZero = make_simple_expression(EExprToken.EX_IntZero)
 EX_IntOne = make_simple_expression(EExprToken.EX_IntOne)
 EX_True = make_simple_expression(EExprToken.EX_True)

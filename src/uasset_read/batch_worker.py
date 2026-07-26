@@ -17,8 +17,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-# 抑制 runpy 的 RuntimeWarning — 当通过 `python -m uasset_read.batch_worker` 启动时，
-# runpy 先导入包再执行模块，导致 "found in sys.modules after import" 警告
+# Suppress RuntimeWarning from runpy — when launched via `python -m uasset_read.batch_worker`,
+# runpy imports the package before executing the module, causing the "found in sys.modules after import" warning.
 warnings.filterwarnings(
     "ignore",
     message=".*found in sys.modules after import.*",
@@ -34,17 +34,18 @@ from uasset_read.memory_safety import (
 )
 from uasset_read.config import ParseConfig
 
-# stderr drain 默认上限：保留最后 1 MB 输出
+# stderr drain default cap: keep the last 1 MB of output
 _STDERR_DRAIN_MAX_BYTES = 1024 * 1024
 _STDERR_DRAIN_MAX_LINES = 10_000
 
 
 class _StderrDrain:
-    """有界 stderr drain — 保留尾部，防止管道死锁。
+    """Bounded stderr drain — keeps the tail to prevent pipe deadlock.
 
-    使用后台线程持续读取子进程 stderr，避免管道缓冲区填满后子进程阻塞写入
-    导致父进程 ``wait()`` 永远不返回的死锁。内部使用 deque 保留最后 N 行 /
-    N 字节，超出部分自动丢弃。
+    Uses a background thread to continuously read child process stderr, preventing
+    pipe buffer exhaustion that would block the child's writes and cause the parent's
+    ``wait()`` to never return. Internally uses a deque to keep the last N lines /
+    N bytes; excess is automatically dropped.
     """
 
     def __init__(
@@ -76,7 +77,7 @@ class _StderrDrain:
         self._thread.start()
 
     def _drain_loop(self, proc: subprocess.Popen[bytes]) -> None:
-        """持续读取 stderr 行直到 EOF。"""
+        """Continuously read stderr lines until EOF."""
         try:
             if proc.stderr is None:
                 return
@@ -84,12 +85,12 @@ class _StderrDrain:
                 line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
                 self._append(line)
         except (OSError, ValueError) as exc:
-            logger.debug("stderr drain 异常: %s", exc)
+            logger.debug("stderr drain exception: %s", exc)
 
     def _append(self, line: str) -> None:
-        """添加一行，超出字节上限时丢弃最旧行。"""
+        """Append a line; drop oldest lines when byte limit is exceeded."""
         line_bytes = len(line.encode("utf-8", errors="replace"))
-        # 检查 deque 是否会自动丢弃旧行
+        # Check if deque will automatically drop the oldest line
         if self._lines.maxlen is not None and len(self._lines) >= self._lines.maxlen:
             old = self._lines[0]
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
@@ -98,7 +99,7 @@ class _StderrDrain:
         self._total_bytes += line_bytes
         if self._line_callback is not None:
             self._line_callback(line)
-        # 如果总字节数仍超限，继续丢弃旧行
+        # If total bytes still exceed the limit, continue dropping oldest lines
         while self._total_bytes > self._max_bytes and len(self._lines) > 1:
             old = self._lines.popleft()
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
@@ -121,7 +122,7 @@ class _StderrDrain:
 
     @property
     def text(self) -> str:
-        """返回收集到的 stderr 文本。"""
+        """Return the collected stderr text."""
         return "".join(self._lines)
 
     @property
@@ -282,7 +283,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         try:
             temporary_path.unlink(missing_ok=True)
         except OSError as e:
-            logger.debug("清理临时文件失败: %s", e)
+            logger.debug("Failed to clean up temp file: %s", e)
 
 
 class _SubprocessAdapter:
@@ -322,8 +323,8 @@ class _SubprocessAdapter:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            logger.debug("子进程 join 超时，继续执行")
-        # 等待 drain 线程消费完管道中剩余数据
+            logger.debug("Subprocess join timed out, continuing")
+        # Wait for the drain thread to consume remaining data in the pipe
         self._stderr_drain.join(timeout=5)
 
     def close(self) -> None:
@@ -396,7 +397,7 @@ def _monitor_worker(
     if process.exitcode and process.exitcode != 0:
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
-            logger.warning("子进程 stderr (exit %d):\n%s", process.exitcode, stderr_out)
+            logger.warning("Subprocess stderr (exit %d):\n%s", process.exitcode, stderr_out)
     if result_queue is None:
         return BatchWorkerOutcome(
             False,
@@ -477,7 +478,7 @@ def run_isolated_asset(
                     missing_ok=True
                 )
             except OSError as e:
-                logger.debug("清理临时输出文件失败: %s", e)
+                logger.debug("Failed to clean up temp output file: %s", e)
             process.close()
         request_path.unlink(missing_ok=True)
         result_path.unlink(missing_ok=True)

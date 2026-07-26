@@ -1,7 +1,7 @@
 """
-GameDirectoryProvider — 游戏目录自动扫描提供者。
+GameDirectoryProvider — game directory auto-scan provider.
 
-扫描指定根目录下的游戏资产文件，支持按扩展名过滤和模式匹配。
+Scans game asset files under a specified root directory, with extension filtering and pattern matching.
 """
 
 import fnmatch
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 
-# 支持的资产扩展名
+# Supported asset extensions
 UE_ASSET_EXTENSIONS = (".uasset", ".umap")
 UE_PAK_EXTENSIONS = (".upak",)
 UE_UTOC_EXTENSIONS = (".utoc",)
@@ -18,54 +18,54 @@ UE_UTOC_EXTENSIONS = (".utoc",)
 
 class GameDirectoryProvider:
     """
-    游戏目录自动扫描提供者。
+    Game directory auto-scan provider.
 
-    扫描指定根目录，检测 .uproject 文件，
-    并列出指定扩展名的游戏资产文件。
+    Scans the specified root directory, detects .uproject files,
+    and lists game asset files with specified extensions.
 
     Parameters
     ----------
     root_dir : str | Path
-        游戏项目根目录路径。
+        Game project root directory path.
 
     Raises
     ------
     FileNotFoundError
-        如果 root_dir 不存在或不是一个目录。
+        If root_dir does not exist or is not a directory.
     """
 
     def __init__(self, root_dir: str | Path) -> None:
         self._root = Path(root_dir).resolve()
         if not self._root.exists():
-            raise FileNotFoundError(f"目录不存在: {self._root}")
+            raise FileNotFoundError(f"Directory does not exist: {self._root}")
         if not self._root.is_dir():
-            raise NotADirectoryError(f"路径不是目录: {self._root}")
+            raise NotADirectoryError(f"Path is not a directory: {self._root}")
         self._list_files_cache: dict[str, list[Path]] = {}
 
     @property
     def root(self) -> Path:
-        """返回解析后的根目录路径。"""
+        """Returns the resolved root directory path."""
         return self._root
 
     def has_uproject(self) -> bool:
         """
-        检测根目录下是否存在 .uproject 文件。
+        Check if a .uproject file exists in the root directory.
 
         Returns
         -------
         bool
-            如果存在至少一个 .uproject 文件则返回 True。
+            True if at least one .uproject file exists.
         """
         return any(self._root.glob("*.uproject"))
 
     def get_uproject_file(self) -> Optional[Path]:
         """
-        获取根目录下的第一个 .uproject 文件。
+        Get the first .uproject file in the root directory.
 
         Returns
         -------
         Optional[Path]
-            .uproject 文件路径，不存在则返回 None。
+            .uproject file path, or None if not found.
         """
         for f in self._root.glob("*.uproject"):
             return f
@@ -73,17 +73,17 @@ class GameDirectoryProvider:
 
     def list_files(self, extension: str) -> List[Path]:
         """
-        列出指定扩展名的所有文件（递归扫描，带缓存）。
+        List all files with a given extension (recursive scan, cached).
 
         Parameters
         ----------
         extension : str
-            文件扩展名，如 ".uasset"、".pak"。带或不带前导点均可。
+            File extension, e.g. ".uasset", ".pak". With or without leading dot.
 
         Returns
         -------
         List[Path]
-            匹配的文件路径列表，按字母顺序排序。
+            Matching file paths, sorted alphabetically.
         """
         ext = extension if extension.startswith(".") else f".{extension}"
         ext_lower = ext.lower()
@@ -99,17 +99,17 @@ class GameDirectoryProvider:
         return sorted_results
 
     def refresh_file_cache(self) -> None:
-        """清除文件列表缓存，下次 list_files() 调用时重新扫描。"""
+        """Clear the file list cache; next list_files() call will rescan."""
         self._list_files_cache.clear()
 
     def list_uasset_files(self) -> List[Path]:
         """
-        列出所有 .uasset 和 .umap 文件。
+        List all .uasset and .umap files.
 
         Returns
         -------
         List[Path]
-            资产文件路径列表。
+            Asset file paths.
         """
         results: List[Path] = []
         for ext in UE_ASSET_EXTENSIONS:
@@ -118,12 +118,12 @@ class GameDirectoryProvider:
 
     def list_pak_files(self) -> List[Path]:
         """
-        列出所有 .upak 文件。
+        List all .upak files.
 
         Returns
         -------
         List[Path]
-            PAK 文件路径列表。
+            PAK file paths.
         """
         results: List[Path] = []
         for ext in UE_PAK_EXTENSIONS:
@@ -132,12 +132,12 @@ class GameDirectoryProvider:
 
     def list_utoc_files(self) -> List[Path]:
         """
-        列出所有 .utoc 文件。
+        List all .utoc files.
 
         Returns
         -------
         List[Path]
-            UToc 文件路径列表。
+            UToc file paths.
         """
         results: List[Path] = []
         for ext in UE_UTOC_EXTENSIONS:
@@ -146,17 +146,17 @@ class GameDirectoryProvider:
 
     def find_file(self, pattern: str) -> List[Path]:
         """
-        使用 fnmatch 模式匹配文件名。
+        Match filenames using fnmatch pattern.
 
         Parameters
         ----------
         pattern : str
-            匹配模式（支持 *, ?, [seq] 等 shell 通配符）。
+            Match pattern (supports *, ?, [seq] and other shell wildcards).
 
         Returns
         -------
         List[Path]
-            匹配的文件路径列表，按字母顺序排序。
+            Matching file paths, sorted alphabetically.
         """
         results: List[Path] = []
         for dirpath, _, filenames in os.walk(self._root):

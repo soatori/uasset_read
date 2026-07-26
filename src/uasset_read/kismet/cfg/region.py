@@ -1,13 +1,14 @@
-"""SESE 区域分解。
+"""SESE region decomposition.
 
-基于支配树和回边识别，将 CFG 划分为结构化区域 (Single-Entry Single-Exit)。
+Decomposes CFG into structured regions (Single-Entry Single-Exit) based on
+dominator tree and back edge identification.
 
-算法:
-1. 识别回边 (back edges)
-2. 为每条回边创建循环区域
-3. 为分支创建 if-then / if-then-else 区域
-4. 剩余块形成 BLOCK 区域
-5. 组装区域树
+Algorithm:
+1. Identify back edges
+2. Create loop regions for each back edge
+3. Create if-then / if-then-else regions for branches
+4. Remaining blocks form BLOCK regions
+5. Assemble region tree
 """
 
 
@@ -22,16 +23,17 @@ from uasset_read.kismet.cfg.data import (
 
 
 def find_back_edges(cfg: CFG, dom_tree: DominatorTree) -> list[tuple[int, int]]:
-    """识别所有回边。
+    """Identify all back edges.
 
-    回边定义: 如果目标节点支配源节点，则边 (src, dst) 是回边。
+    Back edge definition: edge (src, dst) is a back edge if the destination
+    node dominates the source node.
 
     Args:
-        cfg: 控制流图。
-        dom_tree: 支配树。
+        cfg: Control flow graph.
+        dom_tree: Dominator tree.
 
     Returns:
-        回边列表，每条回边为 (source_id, destination_id)。
+        List of back edges, each as (source_id, destination_id).
     """
     back_edges: list[tuple[int, int]] = []
     for bid, block in cfg.blocks.items():
@@ -46,17 +48,17 @@ def compute_loop_blocks(
     back_edge_src: int,
     back_edge_dst: int,
 ) -> set[int]:
-    """计算回边定义的循环体所有块。
+    """Compute all blocks in the loop body defined by a back edge.
 
-    从 back_edge_src 开始反向 BFS，直到 back_edge_dst。
+    Reverse BFS from back_edge_src until back_edge_dst.
 
     Args:
-        cfg: 控制流图。
-        back_edge_src: 回边源节点（循环体内的跳转语句块）。
-        back_edge_dst: 回边目标节点（循环头）。
+        cfg: Control flow graph.
+        back_edge_src: Back edge source node (jump statement block inside loop body).
+        back_edge_dst: Back edge destination node (loop head).
 
     Returns:
-        循环体内所有块的 ID 集合。
+        Set of block IDs in the loop body.
     """
     loop_blocks: set[int] = {back_edge_dst}
     worklist: list[int] = [back_edge_src]
@@ -82,20 +84,20 @@ def classify_loop(
     back_edge_src: int,
     back_edge_dst: int,
 ) -> RegionKind:
-    """分类循环类型。
+    """Classify loop type.
 
-    - SELF_LOOP: back_edge_dst 是唯一块（自环）
-    - WHILE_LOOP: back_edge_dst (head) 有外部前驱
-    - DO_WHILE: back_edge_dst 无外部前驱（所有前驱都在循环体内）
+    - SELF_LOOP: back_edge_dst is the only block (self-loop)
+    - WHILE_LOOP: back_edge_dst (head) has external predecessor
+    - DO_WHILE: back_edge_dst has no external predecessor (all predecessors in loop body)
 
     Args:
-        cfg: 控制流图。
-        loop_blocks: 循环体块集合。
-        back_edge_src: 回边源。
-        back_edge_dst: 回边目标。
+        cfg: Control flow graph.
+        loop_blocks: Set of loop body block IDs.
+        back_edge_src: Back edge source.
+        back_edge_dst: Back edge destination.
 
     Returns:
-        循环类型。
+        Loop type.
     """
     if len(loop_blocks) == 1 and back_edge_src == back_edge_dst:
         return RegionKind.SELF_LOOP
@@ -104,7 +106,7 @@ def classify_loop(
     if head_block is None:
         return RegionKind.WHILE_LOOP
 
-    # 检查 head 是否有外部前驱（pre-header）
+    # Check if head has external predecessor (pre-header)
     head_has_external_pred = any(
         pred not in loop_blocks for pred in head_block.predecessors
     )
@@ -119,29 +121,29 @@ def decompose_regions(
     cfg: CFG,
     dom_tree: DominatorTree,
 ) -> RegionTree:
-    """将 CFG 分解为 SESE 区域。
+    """Decompose CFG into SESE regions.
 
-    步骤:
-    1. 识别回边
-    2. 为每条回边创建循环区域
-    3. 为分支创建 if-then / if-then-else 区域
-    4. 剩余块形成 BLOCK 区域
-    5. 组装区域树
+    Steps:
+    1. Identify back edges
+    2. Create loop regions for each back edge
+    3. Create if-then / if-then-else regions for branches
+    4. Remaining blocks form BLOCK regions
+    5. Assemble region tree
 
     Args:
-        cfg: 控制流图。
-        dom_tree: 支配树。
+        cfg: Control flow graph.
+        dom_tree: Dominator tree.
 
     Returns:
-        区域树。
+        Region tree.
     """
     region_tree = RegionTree()
     region_id_counter = 0
 
-    # --- Step 1: 识别回边 ---
+    # --- Step 1: Identify back edges ---
     back_edges = find_back_edges(cfg, dom_tree)
 
-    # --- Step 2: 创建循环区域 ---
+    # --- Step 2: Create loop regions ---
     loop_blocks_used: set[int] = set()
 
     for src, dst in back_edges:
@@ -160,7 +162,7 @@ def decompose_regions(
         loop_blocks_used.update(loop_body)
         region_id_counter += 1
 
-    # --- Step 3: 为分支创建区域 ---
+    # --- Step 3: Create branch regions ---
     for bid, block in cfg.blocks.items():
         if bid in loop_blocks_used:
             continue
@@ -174,7 +176,7 @@ def decompose_regions(
             kind0 = block.edge_kinds.get(s0)
             kind1 = block.edge_kinds.get(s1)
 
-            # 判断 then/else 分支
+            # Determine then/else branches
             then_block: int = -1
             else_block: int = -1
 
@@ -188,7 +190,7 @@ def decompose_regions(
                 else_block, then_block = s1, s0
 
             if then_block >= 0 and else_block >= 0:
-                # 检查两个分支是否汇合
+                # Check if two branches join
                 then_b = cfg.blocks.get(then_block)
                 else_b = cfg.blocks.get(else_block)
                 then_succs = set(then_b.successors) if then_b else set()
@@ -208,7 +210,7 @@ def decompose_regions(
                     region_tree.add_region(region)
                     region_id_counter += 1
                 else:
-                    # if-then（无 else 或 else 到 sink）
+                    # if-then (no else or else goes to sink)
                     region = Region(
                         region_id=region_id_counter,
                         kind=RegionKind.IF_THEN,
@@ -220,7 +222,7 @@ def decompose_regions(
                     region_tree.add_region(region)
                     region_id_counter += 1
 
-    # --- Step 4: 剩余块作为 BLOCK 区域 ---
+    # --- Step 4: Remaining blocks as BLOCK regions ---
     for bid in sorted(cfg.blocks.keys()):
         if bid == cfg.exit_id:
             continue
@@ -238,7 +240,7 @@ def decompose_regions(
             region_tree.add_region(region)
             region_id_counter += 1
 
-    # --- Step 5: 设置 root ---
+    # --- Step 5: Set root ---
     entry_region = None
     for region in region_tree.regions.values():
         if cfg.entry_id in region.body_blocks:

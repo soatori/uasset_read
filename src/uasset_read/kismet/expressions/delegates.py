@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Kismet 表达式 — Delegate 相关表达式。
+"""Kismet expression -- Delegate-related expressions.
 
-包含 EX_AddMulticastDelegate、EX_ClearMulticastDelegate、EX_BindDelegate、
-EX_RemoveMulticastDelegate、EX_InstanceDelegate。
+Contains EX_AddMulticastDelegate, EX_ClearMulticastDelegate, EX_BindDelegate,
+EX_RemoveMulticastDelegate, EX_InstanceDelegate.
 """
 
 

@@ -1,12 +1,12 @@
 """
-CPF 属性标志 → UPROPERTY 标记映射模块。
+CPF property flag -> UPROPERTY specifier mapping module.
 
-提供 CPF 标志位到 UPROPERTY 宏标记的转换。
-Per D-04: CPF 标志直接映射到 UPROPERTY 标记。
+Provides conversion from CPF flag bits to UPROPERTY macro specifiers.
+Per D-04: CPF flags map directly to UPROPERTY specifiers.
 
-导出：
-    CPF_TO_UPROPERTY_MAP: CPF 标志到 UPROPERTY 标记的映射
-    cpf_flags_to_uproperty_marks: CPF 标志 → UPROPERTY 标记列表转换函数
+Exports:
+    CPF_TO_UPROPERTY_MAP: CPF flag to UPROPERTY specifier mapping
+    cpf_flags_to_uproperty_marks: CPF flag -> UPROPERTY specifier list conversion function
 """
 
 import logging
@@ -36,17 +36,17 @@ from uasset_read.constants import (
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# CPF 标志 → UPROPERTY 标记映射
-# D-04: 按优先级排序的组合检查映射
+# CPF flag -> UPROPERTY specifier mapping
+# D-04: Combined check mapping sorted by priority
 # ============================================================================
 
-# 映射格式: (check_flags, result_marks, is_combined_check)
-# - is_combined_check=True: 所有 check_flags 必须设置才触发
-# - is_combined_check=False: 任一 check_flags 设置即触发
-# 顺序很重要：更具体的组合检查在前
+# Mapping format: (check_flags, result_marks, is_combined_check)
+# - is_combined_check=True: All check_flags must be set to trigger
+# - is_combined_check=False: Any check_flags set triggers
+# Order matters: more specific combined checks come first
 
 _CPF_UPROPERTY_RULES: List[Tuple[int, List[str], bool]] = [
-    # 单标志检查（按 UE UPROPERTY 文档顺序）
+    # Single flag check (in UE UPROPERTY documentation order)
     (CPF_Edit, ["EditAnywhere"], False),
     (CPF_BlueprintReadOnly, ["BlueprintReadOnly"], False),
     (CPF_BlueprintVisible, ["BlueprintReadWrite"], False),
@@ -67,22 +67,22 @@ _CPF_UPROPERTY_RULES: List[Tuple[int, List[str], bool]] = [
     (CPF_Protected, ["Protected"], False),
 ]
 
-# CPF_Net 映射为 UPROPERTY Replicated 标记
+# CPF_Net maps to UPROPERTY Replicated specifier
 
 
 def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> List[str]:
     """
-    将 CPF 标志位转换为 UPROPERTY 标记列表。
+    Convert CPF flag bits to UPROPERTY specifier list.
 
-    按照映射规则将 CPF 标志转换为 UPROPERTY 宏中的标记。
-    对于组件，如果未设置明确的可见性标志，自动添加默认标记。
+    Converts CPF flags to UPROPERTY macro specifiers according to mapping rules.
+    For components, automatically adds default specifiers if no explicit visibility flags are set.
 
     Args:
-        cpf_flags: CPF 属性标志位掩码（来自 .uasset 解析）
-        is_component: 是否为组件属性（影响默认标记）
+        cpf_flags: CPF property flag bit mask (from .uasset parsing)
+        is_component: Whether this is a component property (affects default specifiers)
 
     Returns:
-        UPROPERTY 标记字符串列表
+        List of UPROPERTY specifier strings
 
     Examples:
         >>> from uasset_read.constants import CPF_Edit, CPF_BlueprintVisible
@@ -93,35 +93,35 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
         >>> cpf_flags_to_uproperty_marks(CPF_InstancedReference)
         ['Instanced']
     """
-    # T-056-02: 验证标志范围
+    # T-056-02: Validate flag range
     if cpf_flags < 0:
         logger.warning(f"Invalid CPF flags (negative): {cpf_flags}")
         return []
 
-    # CPF 标志是 64 位无符号整数
+    # CPF flags are 64-bit unsigned integers
     if cpf_flags >= (1 << 64):
         logger.warning(f"CPF flags out of 64-bit range: {cpf_flags}")
         cpf_flags = cpf_flags & ((1 << 64) - 1)
 
     marks: List[str] = []
 
-    # 遍历映射规则
+    # Iterate mapping rules
     for check_flags, result_marks, is_combined in _CPF_UPROPERTY_RULES:
         if is_combined:
-            # 组合检查：所有标志都必须设置
+            # Combined check: all flags must be set
             if (cpf_flags & check_flags) == check_flags:
                 for mark in result_marks:
                     if mark not in marks:
                         marks.append(mark)
         else:
-            # 单标志检查
+            # Single flag check
             if cpf_flags & check_flags:
                 for mark in result_marks:
                     if mark not in marks:
                         marks.append(mark)
 
-    # 组件默认标记：UE SCS 组件默认行为
-    # 如果是组件且没有明确的可见性/编辑标志，添加 VisibleAnywhere + BlueprintReadOnly
+    # Component default specifiers: UE SCS component default behavior
+    # If component and no explicit visibility/edit flags, add VisibleAnywhere + BlueprintReadOnly
     if is_component:
         has_edit_flag = any(
             m in marks
@@ -132,11 +132,11 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
             for m in ["VisibleAnywhere", "VisibleInstanceOnly", "VisibleDefaultsOnly"]
         )
 
-        # 如果没有编辑或可见标志，添加默认的 VisibleAnywhere + BlueprintReadOnly
+        # If no edit or visible flags, add default VisibleAnywhere + BlueprintReadOnly
         if not has_edit_flag and not has_visible_flag:
             marks.insert(0, "VisibleAnywhere")
 
-        # 组件通常是只读的（由蓝图管理）
+        # Components are typically read-only (managed by blueprint)
         has_blueprint_access = any(
             m in marks
             for m in ["BlueprintReadWrite", "BlueprintReadOnly", "BlueprintCallable"]
@@ -148,7 +148,7 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
 
 
 # ============================================================================
-# 反向映射：UPROPERTY 标记 → CPF 标志（用于测试和调试）
+# Reverse mapping: UPROPERTY specifier -> CPF flag (for testing and debugging)
 # ============================================================================
 
 _UPROPERTY_TO_CPF: dict[str, int] = {
@@ -179,24 +179,24 @@ _UPROPERTY_TO_CPF: dict[str, int] = {
 
 def uproperty_mark_to_cpf(mark: str) -> int:
     """
-    将单个 UPROPERTY 标记转换为对应的 CPF 标志。
+    Convert a single UPROPERTY specifier to its corresponding CPF flag.
 
-    用于测试和调试目的。
+    For testing and debugging purposes.
 
     Args:
-        mark: UPROPERTY 标记字符串
+        mark: UPROPERTY specifier string
 
     Returns:
-        对应的 CPF 标志值，如果未知则返回 0
+        Corresponding CPF flag value, or 0 if unknown
     """
     return _UPROPERTY_TO_CPF.get(mark, 0)
 
 
 # ============================================================================
-# 导出列表
+# Export list
 # ============================================================================
 
-# 暴露规则列表供外部使用（只读）
+# Expose rules list for external use (read-only)
 CPF_TO_UPROPERTY_MAP = _CPF_UPROPERTY_RULES
 
 __all__ = [

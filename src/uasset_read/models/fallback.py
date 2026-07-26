@@ -1,7 +1,7 @@
-"""src/uasset_read/models/fallback.py — 未知资产结构化 Fallback 模型。
+"""src/uasset_read/models/fallback.py — Structured fallback model for unknown assets.
 
-参考 CUE4Parse: FStructFallback, generic UObject, FPropertyTag fallback.
-目标：让未知的 property/struct/export 仍能保留可诊断的结构化信息。
+Reference: CUE4Parse: FStructFallback, generic UObject, FPropertyTag fallback.
+Goal: allow unknown property/struct/export to retain diagnostic structured information.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class ExportParseStatus(str, Enum):
-    """Export 级解析状态。"""
+    """Export-level parse status."""
     SUCCESS = "success"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -38,7 +38,7 @@ class ExportParseStatus(str, Enum):
 
 
 class FallbackReason(str, Enum):
-    """Fallback 原因。"""
+    """Fallback reason."""
     UNSUPPORTED_TYPE = "unsupported_type"
     UNSUPPORTED_STRUCT = "unsupported_struct"
     PARSE_ERROR = "parse_error"
@@ -50,7 +50,7 @@ class FallbackReason(str, Enum):
 
 @dataclass
 class PropertyFallback:
-    """未知/损坏 property 的结构化 fallback（替代原 None 返回）。"""
+    """Structured fallback for unknown/corrupted properties (replaces original None return)."""
     name: str
     type: str
     size: int
@@ -89,7 +89,7 @@ class PropertyFallback:
         return d
 
     def _serialize_error_context(self) -> Dict[str, Any]:
-        """将 ErrorContext 序列化为字典。"""
+        """Serialize ErrorContext to a dictionary."""
         ctx = self.error_context
         d: Dict[str, Any] = {
             "offset": ctx.offset,
@@ -113,7 +113,7 @@ class PropertyFallback:
 
 @dataclass
 class StructFallback:
-    """未知 struct 的结构化 fallback（参考 CUE4Parse FStructFallback）。"""
+    """Structured fallback for unknown structs (reference: CUE4Parse FStructFallback)."""
     struct_type: str
     size: int
     raw_bytes: bytes = b""
@@ -142,7 +142,7 @@ class StructFallback:
 
 @dataclass
 class GenericUObject:
-    """通用 UObject fallback（参考 CUE4Parse generic UObject）。"""
+    """Generic UObject fallback (reference: CUE4Parse generic UObject)."""
     name: str
     class_name: str
     serial_offset: int = 0

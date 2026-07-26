@@ -9,7 +9,7 @@ from uasset_read.kismet.result import KismetDecompiledResult
 
 logger = logging.getLogger(__name__)
 
-# 表达式数量阈值：低于此值的函数体视为"空"，可从图拓扑补充
+# Expression count threshold: function bodies below this are considered "empty", can be supplemented from graph topology
 _EMPTY_BODY_THRESHOLD = 3
 
 
@@ -28,7 +28,7 @@ def enrich_decompiled_functions(
     """
     semantic_calls = extract_eventgraph_semantic_calls(graphs)
     if not semantic_calls:
-        # 无 EventGraph 语义数据时，仍尝试为空函数体从图拓扑补充
+        # When no EventGraph semantic data, still try to enrich empty function bodies from graph topology
         _enrich_empty_functions_from_graphs(functions, graphs)
         return
 
@@ -46,7 +46,7 @@ def enrich_decompiled_functions(
             result.cpp_code = _format_event_semantics(result.function_name, semantic)
             result.warnings.append("Kismet bytecode semantics enriched from EventGraph pin topology")
 
-    # 第二轮：为空函数体从图拓扑补充执行流
+    # Second pass: enrich empty function bodies with execution flow from graph topology
     _enrich_empty_functions_from_graphs(functions, graphs)
 
 
@@ -54,17 +54,18 @@ def _enrich_empty_functions_from_graphs(
     functions: List[KismetDecompiledResult],
     graphs: List[UEdGraph],
 ) -> None:
-    """对表达式数量极少的函数，尝试从 UEdGraph 拓扑中补充执行流 C++ 代码。
+    """For functions with very few expressions, attempt to supplement execution flow C++ code from UEdGraph topology.
 
-    某些蓝图函数（如 Move、Aim）的 Kismet 字节码本身为空或极简，
-    实际逻辑完全由 K2Node 拓扑定义。此函数在主循环之后扫描这些"空壳"函数，
-    从对应图的 K2Node_FunctionEntry 追踪执行链并生成可读的 C++ 伪代码。
+    Some Blueprint functions (e.g. Move, Aim) have Kismet bytecode that is empty or minimal,
+    with actual logic entirely defined by K2Node topology. This function scans these "shell"
+    functions after the main loop, traces execution chains from the corresponding graph's
+    K2Node_FunctionEntry and generates readable C++ pseudocode.
     """
     for result in functions:
-        # 已有 cpp_code 或语义已丰富则跳过
+        # Skip if already has cpp_code or semantics already enriched
         if result.cpp_code and any("enriched" in w for w in result.warnings):
             continue
-        # 表达式数量超过阈值的函数保留原始反编译结果
+        # Functions with expression count above threshold keep original decompilation result
         if len(result.expressions) > _EMPTY_BODY_THRESHOLD:
             continue
 
@@ -82,17 +83,18 @@ def _enrich_empty_function_from_graph(
     function_name: str,
     graphs: List[UEdGraph],
 ) -> Optional[str]:
-    """查找匹配的 K2Node_FunctionEntry 并从图拓扑生成 C++ 代码。
+    """Find matching K2Node_FunctionEntry and generate C++ code from graph topology.
 
-    遍历所有图，找到 K2Node_FunctionEntry 的 function_reference.member_name
-    与 function_name 匹配的图，然后追踪执行流并转换为 C++ 伪代码。
+    Iterates all graphs to find the one whose K2Node_FunctionEntry's
+    function_reference.member_name matches function_name, then traces
+    execution flow and converts to C++ pseudocode.
 
     Args:
-        function_name: 要补充的函数名（如 "Move", "Aim"）
-        graphs: 所有 UEdGraph 列表
+        function_name: Function name to enrich (e.g. "Move", "Aim")
+        graphs: List of all UEdGraph objects
 
     Returns:
-        C++ 伪代码字符串，或 None（未找到匹配图）
+        C++ pseudocode string, or None (no matching graph found)
     """
     from uasset_read.graph import (
         build_execution_flow_entries,
@@ -102,22 +104,22 @@ def _enrich_empty_function_from_graph(
     )
 
     for graph in graphs:
-        # 查找匹配的 FunctionEntry 节点
+        # Find matching FunctionEntry node
         entry_node = _find_function_entry(graph, function_name)
         if entry_node is None:
             continue
 
-        # 构建 node_lookup 用于提取函数名
+        # Build node_lookup for extracting function names
         _, node_lookup, _ = build_graph_indexes(graph)
         node_name_lookup = {
             n.node_guid: f"{n.class_name}_{idx}"
             for idx, n in enumerate(graph.nodes)
         }
 
-        # 追踪执行流
+        # Trace execution flow
         execution_flows = build_execution_flow_entries(graph)
         if not execution_flows:
-            # 回退：直接从 FunctionEntry 追踪
+            # Fallback: trace directly from FunctionEntry
             pin_lookup, _, _ = build_graph_indexes(graph)
             edges_by_from_pin, source_edges_by_to_pin = build_normalized_edge_indexes(graph)
             execution_flows = [{
@@ -136,14 +138,14 @@ def _enrich_empty_function_from_graph(
 
 
 def _find_function_entry(graph: UEdGraph, function_name: str) -> Optional[Any]:
-    """在图中查找匹配函数名的 K2Node_FunctionEntry 节点。
+    """Find K2Node_FunctionEntry node matching the function name in the graph.
 
     Args:
-        graph: UEdGraph 对象
-        function_name: 目标函数名
+        graph: UEdGraph object
+        function_name: Target function name
 
     Returns:
-        匹配的 UEdGraphNode，或 None
+        Matching UEdGraphNode, or None
     """
     from uasset_read.graph import node_member_name
 
@@ -151,7 +153,7 @@ def _find_function_entry(graph: UEdGraph, function_name: str) -> Optional[Any]:
         if node.class_name != "K2Node_FunctionEntry":
             continue
         member_name = node_member_name(node)
-        # 处理路径形式 "/Game/.../FunctionName"
+        # Handle path format "/Game/.../FunctionName"
         if '/' in member_name:
             member_name = member_name.split('/')[-1]
         if member_name == function_name:
@@ -164,18 +166,19 @@ def _flow_to_cpp(
     execution_flows: List[Dict[str, Any]],
     node_lookup: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """将执行流拓扑转换为简洁的 C++ 伪代码。
+    """Convert execution flow topology to concise C++ pseudocode.
 
-    遍历执行流中的 CallFunction 节点，生成链式调用列表。
-    纯函数（Pure）作为数据提供者内联标注，非纯函数作为独立语句。
+    Iterates CallFunction nodes in the execution flow, generating a chained
+    call list. Pure functions are annotated inline as data providers,
+    non-pure functions as standalone statements.
 
     Args:
-        function_name: 函数名
-        execution_flows: build_execution_flow_entries() 返回的执行流列表
-        node_lookup: node_guid → UEdGraphNode 查找表（用于提取函数名）
+        function_name: Function name
+        execution_flows: List of execution flows from build_execution_flow_entries()
+        node_lookup: node_guid → UEdGraphNode lookup table (for extracting function names)
 
     Returns:
-        C++ 伪代码字符串
+        C++ pseudocode string
     """
     lines: List[str] = [f"void {function_name}() {{"]
     call_count = 0
@@ -186,39 +189,39 @@ def _flow_to_cpp(
             continue
 
         start_event = flow_entry.get("start_event", "")
-        # 仅处理 FunctionEntry 流
+        # Only handle FunctionEntry flows
         if start_event and not start_event.startswith("FunctionEntry."):
             continue
 
         for node_info in nodes:
             node_type = node_info.get("node_type", "")
 
-            # 跳过起点 FunctionEntry 本身
+            # Skip the starting FunctionEntry itself
             if node_type == "K2Node_FunctionEntry":
                 continue
 
-            # CallFunction 节点：提取函数名和参数
+            # CallFunction node: extract function name and parameters
             if node_type == "K2Node_CallFunction":
                 call_str = _format_call_node(node_info, node_lookup)
                 if call_str:
                     lines.append(f"    {call_str};")
                     call_count += 1
 
-            # VariableSet 节点：变量赋值
+            # VariableSet node: variable assignment
             elif node_type == "K2Node_VariableSet":
                 var_name = _variable_name_from_node(node_info, node_lookup)
                 if var_name:
                     lines.append(f"    {var_name} = <value>;")
                     call_count += 1
 
-            # VariableGet 节点：变量读取
+            # VariableGet node: variable read
             elif node_type == "K2Node_VariableGet":
                 var_name = _variable_name_from_node(node_info, node_lookup)
                 if var_name:
                     lines.append(f"    // read {var_name}")
                     call_count += 1
 
-            # 控制流节点（Branch 等）
+            # Control flow nodes (Branch, etc.)
             elif node_type == "K2Node_MacroInstance":
                 cpp_mapping = node_info.get("cpp_macro_mapping", {})
                 macro_expansion = node_info.get("macro_expansion", {})
@@ -237,7 +240,7 @@ def _flow_to_cpp(
 
     lines.append("}")
 
-    # 没有实际调用则不生成代码
+    # No actual calls, do not generate code
     if call_count == 0:
         return ""
 
@@ -248,24 +251,24 @@ def _format_call_node(
     node_info: Dict[str, Any],
     node_lookup: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """从执行流节点信息格式化函数调用字符串。
+    """Format function call string from execution flow node information.
 
-    优先从 node_lookup 中的节点数据提取函数名（function_reference.member_name），
-    回退到 data_source 推断。
+    Prefers extracting function name from node_lookup's node data
+    (function_reference.member_name), falls back to data_source inference.
 
     Args:
-        node_info: 执行流中的节点字典
-        node_lookup: node_guid → UEdGraphNode 查找表（可选）
+        node_info: Node dict from execution flow
+        node_lookup: node_guid → UEdGraphNode lookup table (optional)
 
     Returns:
-        "FuncName(Arg1, Arg2)" 格式的调用字符串
+        Call string in "FuncName(Arg1, Arg2)" format
     """
     from uasset_read.graph import node_member_name
 
     params = node_info.get("parameters", {})
     input_params = params.get("input_params", []) if isinstance(params, dict) else []
 
-    # 从 node_lookup 提取真实函数名
+    # Extract real function name from node_lookup
     func_name = ""
     node_guid = node_info.get("node_guid")
     if node_guid and node_lookup:
@@ -273,7 +276,7 @@ def _format_call_node(
         if node:
             func_name = node_member_name(node)
 
-    # 回退：从 data_source 推断
+    # Fallback: infer from data_source
     if not func_name:
         for param in input_params:
             if not isinstance(param, dict):
@@ -287,11 +290,11 @@ def _format_call_node(
             if func_name:
                 break
 
-    # 最终回退
+    # Final fallback
     if not func_name:
         func_name = "CallFunction"
 
-    # 从 parameters 中提取有意义的参数名
+    # Extract meaningful parameter names from parameters
     args: List[str] = []
     for param in input_params:
         if not isinstance(param, dict):
@@ -299,12 +302,12 @@ def _format_call_node(
         name = param.get("name", "")
         if not name or name.lower() in ("self", "target", "worldcontext"):
             continue
-        # 跳过 exec pin
+        # Skip exec pin
         category = param.get("pin_category", "")
         if category == "exec":
             continue
 
-        # 优先使用 data_source 追踪到的真实参数名
+        # Prefer real parameter name traced from data_source
         resolved_name = _resolve_param_name(param)
         final_name = resolved_name if resolved_name else sanitize_identifier(name)
         args.append(final_name)
@@ -316,19 +319,19 @@ def _variable_name_from_node(
     node_info: Dict[str, Any],
     node_lookup: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """从 VariableSet/VariableGet 节点信息中提取变量名。
+    """Extract variable name from VariableSet/VariableGet node information.
 
-    优先从 node_lookup 中的真实节点数据提取（node_data.variable_name），
-    回退到 node_info 字典中的 variable_name 字段。
+    Prefers extracting from node_lookup's real node data (node_data.variable_name),
+    falls back to variable_name field in node_info dict.
 
     Args:
-        node_info: 执行流中的节点字典
-        node_lookup: node_guid → UEdGraphNode 查找表（可选）
+        node_info: Node dict from execution flow
+        node_lookup: node_guid → UEdGraphNode lookup table (optional)
 
     Returns:
-        变量名，或空字符串
+        Variable name, or empty string
     """
-    # 从 node_lookup 提取真实变量名
+    # Extract real variable name from node_lookup
     node_guid = node_info.get("node_guid")
     if node_guid and node_lookup:
         node = node_lookup.get(node_guid)
@@ -338,24 +341,24 @@ def _variable_name_from_node(
             if var_name:
                 return var_name
 
-    # 回退：直接从 node_info 字典提取
+    # Fallback: extract directly from node_info dict
     return node_info.get("variable_name", "")
 
 
 def _resolve_param_name(param: Dict[str, Any]) -> str:
-    """从 data_source 解析参数的真实语义名称。
+    """Resolve the true semantic name of a parameter from data_source.
 
-    优先级：
-    1. function_parameter → 使用 FunctionEntry 的 pin 名（如 "Yaw"）
-    2. default_value → 使用默认值字面量
-    3. pure_function → 使用函数调用表达式
-    4. 其他 → 返回空字符串（回退到原始 pin 名）
+    Priority:
+    1. function_parameter → use FunctionEntry's pin name (e.g. "Yaw")
+    2. default_value → use default value literal
+    3. pure_function → use function call expression
+    4. other → return empty string (fallback to original pin name)
 
     Args:
-        param: input_params 中的参数字典
+        param: Parameter dict from input_params
 
     Returns:
-        解析后的参数名，或空字符串（表示无法解析）
+        Resolved parameter name, or empty string (unresolvable)
     """
     ds = param.get("data_source")
     if not isinstance(ds, dict):
@@ -369,17 +372,17 @@ def _resolve_param_name(param: Dict[str, Any]) -> str:
     source_type = src.get("source_type", "")
 
     if source_type == "function_parameter":
-        # FunctionEntry 参数 → 使用 pin 名（如 "Yaw", "Pitch"）
+        # FunctionEntry parameter → use pin name (e.g. "Yaw", "Pitch")
         return sanitize_identifier(src.get("pin", ""))
 
     if source_type == "default_value":
-        # 默认值字面量
+        # Default value literal
         value = src.get("value", "")
         if value:
             return value
 
     if source_type == "pure_function":
-        # Pure 函数输出 → 使用函数调用形式
+        # Pure function output → use function call form
         func = src.get("function_name", "")
         if func:
             return f"{func}()"
@@ -390,7 +393,7 @@ def _resolve_param_name(param: Dict[str, Any]) -> str:
 def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, Any]]:
     """Extract readable event -> function call mappings from EventGraph.
 
-    提取每个事件节点下的所有 CallFunction 节点（不仅第一个）。
+    Extracts all CallFunction nodes under each event node (not just the first).
     """
     from uasset_read.graph import build_execution_flow_entries, node_member_name
 
@@ -406,7 +409,7 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
         if event_info is None:
             continue
 
-        # 提取该事件下的所有 CallFunction 节点（不仅取第一个）
+        # Extract all CallFunction nodes under this event (not just the first)
         call_nodes = [node for node in nodes if node.get("node_type") == "K2Node_CallFunction"]
         if not call_nodes:
             continue
@@ -415,13 +418,13 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
         event_parent = _event_parent(node_by_guid.get(event_info.get("node_guid")))
 
         for call_info in call_nodes:
-            # 从 node_by_guid 查找真实节点以提取函数名
+            # Look up real node from node_by_guid to extract function name
             function_name = ""
             node_guid = call_info.get("node_guid")
             if node_guid and node_guid in node_by_guid:
                 function_name = node_member_name(node_by_guid[node_guid])
 
-            # 回退：从 flow 节点的 parameters 推断
+            # Fallback: infer from flow node's parameters
             if not function_name:
                 params = call_info.get("parameters") or {}
                 input_params = params.get("input_params") or []
@@ -437,7 +440,7 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
                     if function_name:
                         break
 
-            # 最终回退
+            # Final fallback
             if not function_name:
                 function_name = call_info.get("function_name") or ""
             if not function_name:

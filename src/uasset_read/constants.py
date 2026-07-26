@@ -1,8 +1,8 @@
 """
-uasset_read常量定义
+uasset_read Constants Definition
 
-包含所有版本号、属性类型阈值、边界常量。
-从uasset_read.py提取（per D-11）。
+Contains all version numbers, property type thresholds, and boundary constants.
+Extracted from uasset_read.py (per D-11).
 """
 
 from enum import IntEnum
@@ -17,28 +17,28 @@ EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
 
 # ============================================================================
-# Package文件标签（来自UE源码）
+# Package file tags (from UE source code)
 # ============================================================================
 
-PACKAGE_FILE_TAG = 0x9E2A83C1       # 正确字节序魔术标签
-PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
+PACKAGE_FILE_TAG = 0x9E2A83C1       # Correct byte order magic tag
+PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # Swapped byte order magic tag
 
 # ============================================================================
-# 版本常量
+# Version constants
 # ============================================================================
 
-UE5_VERSION_MIN = 0                # UE5 版本最低值
-UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定值
-# -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
-UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
+UE5_VERSION_MIN = 0                # UE5 version minimum
+UE5_LEGACY_VERSION = -9            # Fixed LegacyFileVersion for UE5.6+ files
+# -8: FileVersionUE5 field added, -7: texture allocation info removed, -6: custom version serialization optimization
+UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # Supported UE5 LegacyFileVersion
 
-# UE4 LegacyFileVersion（GUID-based custom versions）
-# -3: GUID-based custom versions, 有 LegacyUE3Version
-# -4: GUID-based custom versions, 无 LegacyUE3Version（移除 UE3 版本字段）
-# -5: GUID-based custom versions, 有 LegacyUE3Version（替换 UE3 版本字段）
+# UE4 LegacyFileVersion (GUID-based custom versions)
+# -3: GUID-based custom versions, has LegacyUE3Version
+# -4: GUID-based custom versions, no LegacyUE3Version (removed UE3 version field)
+# -5: GUID-based custom versions, has LegacyUE3Version (replaces UE3 version field)
 UE4_LEGACY_VERSIONS = frozenset({-3, -4, -5})
 
-# 所有支持的 LegacyFileVersion（UE4 + UE5）
+# All supported LegacyFileVersion (UE4 + UE5)
 SUPPORTED_LEGACY_VERSIONS = UE5_LEGACY_VERSIONS | UE4_LEGACY_VERSIONS
 
 # ============================================================================
@@ -48,7 +48,7 @@ SUPPORTED_LEGACY_VERSIONS = UE5_LEGACY_VERSIONS | UE4_LEGACY_VERSIONS
 FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 
 # ============================================================================
-# 边界验证常量（防御性编程）
+# Boundary validation constants (defensive programming)
 # ============================================================================
 
 MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
@@ -59,17 +59,17 @@ MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
 MAX_GENERATIONS = 10_000           # Maximum Generations table entries
 MAX_COMPRESSED_CHUNKS = 100_000    # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
-MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (降低阈值，减少内存峰值)
+MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (lower threshold to reduce memory peak)
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
-MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
-MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
-                                      # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
+MAX_RECURSION_DEPTH = 50           # Maximum property nesting recursion depth (prevents stack overflow from malicious/malformed assets)
+MIN_UASSET_SIZE = 64               # Minimum legal .uasset file size (bytes)
+                                      # Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)
 MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
 MAX_ARRAY_DIM = 256               # Maximum array dimension in mapping property info
 MAX_FSTRING_LENGTH = 10_000_000   # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================
-# PropertyTag标志
+# PropertyTag flags
 # ============================================================================
 
 PROP_TAG_NONE = 0x00
@@ -81,17 +81,17 @@ PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
 PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
 
 # ============================================================================
-# PropertyTag版本阈值
+# PropertyTag version thresholds
 # ============================================================================
 
 PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
 
 # ============================================================================
 # Package Flags (EPackageFlags)
-# 来源: UE 源码 ObjectMacros.h
+# Source: UE source code ObjectMacros.h
 # ============================================================================
 
-PKG_None                        = 0x00000000  # No flags — 仅用于 decode_package_flags
+PKG_None                        = 0x00000000  # No flags — only used in decode_package_flags
 PKG_NewlyCreated                = 0x00000001  # Newly created package, not saved yet. In editor only.
 PKG_ClientOptional              = 0x00000002  # Purely optional for clients.
 PKG_ServerSideOnly              = 0x00000004  # Only needed on the server side.
@@ -121,15 +121,15 @@ PKG_RuntimeGenerated            = 0x20000000  # This package contains elements t
 PKG_ReloadingForCooker          = 0x40000000  # This package is reloading in the cooker, try to avoid getting data we will never need.
 PKG_FilterEditorOnly            = 0x80000000  # Package has editor-only data filtered out
 
-# 组合标志位（UE 源码宏定义）
+# Combined flag bits (UE source macro definitions)
 PKG_TransientFlags = PKG_NewlyCreated | PKG_IsSaving | PKG_ReloadingForCooker
 PKG_InMemoryOnly = PKG_CompiledIn | PKG_NewlyCreated
 
 
 def decode_package_flags(flags: int) -> list[str]:
-    """将 PackageFlags 位掩码解码为人类可读的标志名列表。
+    """Decode PackageFlags bitmask into a list of human-readable flag names.
 
-    返回已设置的标志位名称列表，未知位标记为 'Unknown_<hex>'。
+    Returns a list of set flag bit names, with unknown bits marked as 'Unknown_<hex>'.
     """
     result = []
     known_flags = [
@@ -171,28 +171,28 @@ def decode_package_flags(flags: int) -> list[str]:
     return result if result else ["PKG_None"]
 
 # ============================================================================
-# 蓝图图解析安全常量
+# Blueprint graph parsing safety constants
 # ============================================================================
 
-MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
-MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
-MAX_SUBGRAPHS = 1000                   # 单图最大子图数（损坏资产防御）
-MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
-MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
+MAX_PINS_PER_NODE = 1000               # Maximum pins per node
+MAX_NODES_PER_GRAPH = 5000             # Maximum nodes per graph
+MAX_SUBGRAPHS = 1000                   # Maximum subgraphs per graph (corrupted asset defense)
+MAX_LINKEDTO_PER_PIN = 100             # Maximum connections per pin
+MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText parsing safety net maximum byte consumption
 
 # ============================================================================
-# 轻量容错解析阈值
+# Lightweight tolerant parse threshold
 # ============================================================================
 
-LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用轻量容错解析
+LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # Enable lightweight tolerant parse when export_count exceeds this value
 
-# ControlRig 等大型资产文件的特殊阈值
-# 这些文件的 export 数量天然很大（RigVM 节点、RigHierarchy 元素等），
-# 300 的默认阈值会误触发轻量解析导致蓝图数据丢失
-# 参考: UE ControlRig.cpp / RigVM 相关模块
-CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # ControlRig 类文件的轻量解析阈值
+# Special threshold for large asset files like ControlRig
+# These files naturally have large export counts (RigVM nodes, RigHierarchy elements, etc.),
+# and the default 300 threshold would falsely trigger lightweight parsing, causing blueprint data loss
+# Reference: UE ControlRig.cpp / RigVM related modules
+CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # Lightweight parse threshold for ControlRig class files
 
-# 已知大型文件类名子串 — export class 名称包含以下任一子串时使用高阈值
+# Known large file class name substrings — use high threshold when export class name contains any of these substrings
 CONTROL_RIG_LARGE_FILE_CLASSES = frozenset({
     "ControlRig",
     "RigHierarchy",
@@ -213,7 +213,7 @@ MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name
 PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
 
 # ============================================================================
-# UE5版本常量（EUnrealEngineObjectUE5Version）
+# UE5 version constants (EUnrealEngineObjectUE5Version)
 # ============================================================================
 
 UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID = 1005
@@ -236,7 +236,7 @@ UE5_OS_SUB_OBJECT_SHADOW_SERIALIZATION = 1017
 UE5_IMPORT_TYPE_HIERARCHIES = 1018
 
 # ============================================================================
-# UE4 版本常量（对应 EUnrealEngineObjectUE4Version）
+# UE4 version constants (corresponding to EUnrealEngineObjectUE4Version)
 # ============================================================================
 
 UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID = 516
@@ -245,7 +245,7 @@ UE4_SERIALIZE_TEXT_IN_PACKAGES = 459
 UE4_ADDED_SEARCHABLE_NAMES = 510
 UE4_ADDED_PACKAGE_OWNER = 518
 UE4_NON_OUTER_PACKAGE_IMPORT = 520
-UE4_NAME_HASHES_SERIALIZED = 504  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
+UE4_NAME_HASHES_SERIALIZED = 504  # VER_UE4_NAME_HASHES_SERIALIZED: Add 4-byte hash after name table entries (UE 4.14+)
 UE4_LOAD_FOR_EDITOR_GAME = 365
 UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
 UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
@@ -253,14 +253,14 @@ UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
 UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
 
 # ============================================================================
-# 更多 CustomVersion GUIDs
+# Additional CustomVersion GUIDs
 # ============================================================================
 FUE5_MAINSTREAM_VERSION_GUID = "697DD581-E64F41AB-AA4A51EC-BEB7B628"
 FRELEASE_OBJECT_VERSION_GUID = "9C54D522-A8264FBE-94210746-61B482D0"
 FUE5RELEASESTREAM_OBJECT_VERSION_GUID = "D89B5E42-24BD4D46-8412ACA8-DF641779"
 
-# 子系统版本 GUIDs（扩展版本系统覆盖）
-# UE 源码: Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp (行 174-357)
+# Subsystem version GUIDs (extended version system coverage)
+# UE source: Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp (lines 174-357)
 FBLUEPRINTS_OBJECT_VERSION_GUID = "B0D832E4-1F894F0D-ACCF7EB7-36FD4AA2"
 FCORE_OBJECT_VERSION_GUID = "375EC13C-06E448FB-B50084F0-262A717E"
 FEDITOR_OBJECT_VERSION_GUID = "E4B068ED-F49442E9-A231DA0B-2E46BB41"
@@ -268,7 +268,7 @@ FANIM_OBJECT_VERSION_GUID = "AF43A65D-7FD34947-98733E8E-D9C1BB05"
 FPHYSICS_OBJECT_VERSION_GUID = "78F01B33-EBEA4F98-B9B484EA-CCB95AA2"
 FRENDERING_OBJECT_VERSION_GUID = "12F88B9F-88754AFC-A67CD90C-383ABD29"
 
-# Phase 1: 高优先级缺失版本流（LevelSequence/动画/破坏/物理等常见资产类型依赖）
+# Phase 1: High-priority missing version streams (LevelSequence/animation/destruction/physics and other common asset type dependencies)
 FSEQUENCER_OBJECT_VERSION_GUID = "7B5AE74C-D2704C10-A9585798-0B212A5A"
 FANIMPHYS_OBJECT_VERSION_GUID = "29E575DD-E0A34627-9D10D276-232CDCEA"
 FDESTRUCTION_OBJECT_VERSION_GUID = "174F1F0B-B4C645A5-B13F2EE8-D0FB917D"
@@ -279,15 +279,15 @@ FMOBILE_OBJECT_VERSION_GUID = "B02B49B5-BB2044E9-A30432B7-52E40360"
 FCINECAMERA_OBJECT_VERSION_GUID = "B2E18506-4273CFC2-A54EF4BB-758BBA07"
 FNIAGARA_OBJECT_VERSION_GUID = "F2AED0AC-9AFE416F-8664AA7F-FA26D6FC"
 
-# Phase 2: P1 核心版本流（LevelSequence/MorphTarget/RigVM/ControlRig）
+# Phase 2: P1 core version streams (LevelSequence/MorphTarget/RigVM/ControlRig)
 FUE5_SPECIAL_PROJECT_STREAM_OBJECT_VERSION_GUID = "59DA5D52-12324948-B8785978-70B8E98B"
 FRIGVM_OBJECT_VERSION_GUID = "DC49959B-53C04DE7-9156EA88-5E7C5D39"
 FCONTROL_RIG_OBJECT_VERSION_GUID = "A7820CFB-20A74359-8C542C14-9623CF50"
 
-# Phase 2: P2 特定资产类型版本流
+# Phase 2: P2 specific asset type version streams
 FNANITE_RESEARCH_STREAM_OBJECT_VERSION_GUID = "30D58BE3-95EA4282-A6E3B159-D8EBB06A"
 
-# Phase 2: P3 插件级版本
+# Phase 2: P3 plugin-level versions
 FSKELETAL_MESH_CUSTOM_VERSION_GUID = "D78A4A00-E8584697-BAA819B5-487D46B4"
 FNIAGARA_CUSTOM_VERSION_GUID = "FCF57AFA-50764283-B9A9E658-FFA02D32"
 FINTERCHANGE_CUSTOM_VERSION_GUID = "92738C43-29884D9C-9A3D9BBE-6EFF9FC0"
@@ -295,20 +295,20 @@ FASSET_REGISTRY_VERSION_GUID = "717F9EE7-E9B0493A-88B39132-1B388107"
 FCURVE_EXPRESSION_CUSTOM_VERSION_GUID = "A26D36AE-26935388-A8C5CB96-2B95B4AF"
 
 # ============================================================================
-# FrameworkObjectVersion阈值
+# FrameworkObjectVersion thresholds
 # ============================================================================
 
 FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE = 15
 FFRAMEWORK_VERSION_PINS_STORE_FNAME = 19
 
 # ============================================================================
-# FUE5MainStreamObjectVersion阈值
+# FUE5MainStreamObjectVersion thresholds
 # ============================================================================
 
 FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX = 50
 
 # ============================================================================
-# FReleaseObjectVersion阈值
+# FReleaseObjectVersion thresholds
 # ============================================================================
 
 FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
@@ -318,7 +318,7 @@ FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
 # ============================================================================
 
 # ============================================================================
-# 蓝图元数据键（UE 编辑器内部字段）
+# Blueprint metadata keys (UE editor internal fields)
 # ============================================================================
 
 BLUEPRINT_METADATA_KEYS = frozenset({
@@ -335,7 +335,7 @@ BLUEPRINT_METADATA_KEYS = frozenset({
 })
 
 # ============================================================================
-# 控制流节点集合（用于蓝图图解析）
+# Control flow node set (used in blueprint graph parsing)
 # ============================================================================
 
 CONTROL_FLOW_NODES = frozenset({
@@ -345,20 +345,20 @@ CONTROL_FLOW_NODES = frozenset({
     "K2Node_SwitchEnum",
     "K2Node_SwitchInteger",
     "K2Node_MacroInstance",
-    # 循环类宏
+    # Loop macros
     "K2Node_ForLoop",
     "K2Node_WhileLoop",
     "K2Node_DoOnce",
-    # 多门控
+    # Multi-gate
     "K2Node_Sequence",
     "K2Node_MultiGate",
-    # 选择
+    # Selection
     "K2Node_Select",
     "K2Node_ExecutionSequence",
 })
 
 # ============================================================================
-# 开始事件类型集合
+# Start event type set
 # ============================================================================
 
 START_EVENT_TYPES = frozenset({
@@ -366,20 +366,20 @@ START_EVENT_TYPES = frozenset({
     "K2Node_EnhancedInputAction",
     "K2Node_VariableSet",
     "K2Node_CustomEvent",
-    "K2Node_FunctionEntry",  # 函数图执行流起点
+    "K2Node_FunctionEntry",  # Function graph execution flow start point
 })
 
 # ============================================================================
-# 数据流边界节点集合
+# Data flow boundary node set
 # ============================================================================
 
 DATA_BOUNDARY_NODES = frozenset({
-    "K2Node_FunctionEntry",  # 函数参数输出作为数据流起点
-    "K2Node_VariableSet",    # 本地变量定义（边界）
+    "K2Node_FunctionEntry",  # Function parameter output as data flow start point
+    "K2Node_VariableSet",    # Local variable definition (boundary)
 })
 
 # ============================================================================
-# EnhancedInput TriggerEvent 引脚映射
+# EnhancedInput TriggerEvent pin mapping
 # ============================================================================
 
 ETRIGGER_EVENT_PIN_MAP = {
@@ -390,7 +390,7 @@ ETRIGGER_EVENT_PIN_MAP = {
 }
 
 # ============================================================================
-# 分支类型映射
+# Branch type mapping
 # ============================================================================
 
 BRANCH_TYPE_MAP = {
@@ -409,7 +409,7 @@ BRANCH_TYPE_MAP = {
 }
 
 # ============================================================================
-# 输出格式配置
+# Output format configuration
 # ============================================================================
 
 FORMAT_CONFIG = {
@@ -417,7 +417,7 @@ FORMAT_CONFIG = {
 }
 
 # ============================================================================
-# 图类型映射
+# Graph type mapping
 # ============================================================================
 
 GRAPH_TYPE_MAP = {
@@ -426,9 +426,9 @@ GRAPH_TYPE_MAP = {
 }
 
 # ============================================================================
-# EPropertyFlags — CPF_* 属性标志位常量
-# 对齐 UE5 ObjectMacros.h EPropertyFlags 枚举（64-bit）
-# 源码: Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h
+# EPropertyFlags — CPF_* property flag constants
+# Aligned with UE5 ObjectMacros.h EPropertyFlags enum (64-bit)
+# Source: Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h
 # ============================================================================
 
 CPF_Edit = 0x0000000000000001          # L434
@@ -492,18 +492,18 @@ CPF_AllowSelfReference = 0x1000000000000000  # L494
 CPF_ForcePostConstructLink = 0x2000000000000000  # L495
 
 # ============================================================================
-# 游戏变体枚举（GameVariant）
+# Game variant enum (GameVariant)
 # ============================================================================
 
 class GameVariant(IntEnum):
-    """游戏变体枚举。"""
+    """Game variant enum."""
     NONE = 0
     FORTNITE = 1001
     PUBG = 1002
     APEX_LEGENDS = 1003
     VALORANT = 1004
 
-# 版本映射表
+# Version mapping table
 GAME_VARIANT_VERSIONS = {
     GameVariant.NONE: {
         "override_file_version": None,
@@ -525,7 +525,7 @@ GAME_VARIANT_VERSIONS = {
 }
 
 # ============================================================================
-# 属性类型名 → 无版本化大小映射（property_parser._fixed_unversioned_size）
+# Property type name → unversioned size mapping (property_parser._fixed_unversioned_size)
 # ============================================================================
 
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
@@ -547,30 +547,30 @@ FIXED_UNVERSIONED_SIZES: dict[str, int] = {
 }
 
 # ============================================================================
-# EPinContainerType 整数 → 字符串映射
+# EPinContainerType integer → string mapping
 # ============================================================================
 
 CONTAINER_TYPE_MAP: dict[int, str] = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
 CONTAINER_TYPE_PREFIX: dict[int, str] = {1: "TArray", 2: "TSet", 3: "TMap"}
 
 # ============================================================================
-# UE PropertyTag 终止标记
+# UE PropertyTag sentinel value
 # ============================================================================
 
 UE_NONE_SENTINEL = "None"
 
 # ============================================================================
-# 通用安全计数上限
+# General safety count limits
 # ============================================================================
 
-MAX_SAFE_COUNT = 10_000  # 用于 FText args / MulticastDelegate / FieldPath 等子元素计数验证
+MAX_SAFE_COUNT = 10_000  # Used for FText args / MulticastDelegate / FieldPath sub-element count validation
 
 # ============================================================================
-# GUID 字节格式化
+# GUID byte formatting
 # ============================================================================
 
 def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
-    """将 16 原始 FGuid 字节格式化为稳定的 8-4-4-4-12 字符串。"""
+    """Format 16 raw FGuid bytes into a stable 8-4-4-4-12 string."""
     if not isinstance(data, (bytes, bytearray)) or len(data) < 16:
         raise ValueError(
             f"GUID requires exactly 16 bytes, got {type(data).__name__} of length "
@@ -587,15 +587,15 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
 
 
 def get_game_variant_config(variant: GameVariant) -> dict:
-    """获取游戏变体配置。"""
+    """Get game variant configuration."""
     return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
 
 
 # ============================================================================
-# UE5 大型属性类型阈值 (#404)
+# UE5 large property type thresholds (#404)
 # ============================================================================
 
-MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — 标准属性大小上限
+MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — Standard property size cap
 
 UE5_LARGE_PROPERTY_TYPES = frozenset({
     "BoneAnimationTracks",
@@ -604,21 +604,21 @@ UE5_LARGE_PROPERTY_TYPES = frozenset({
     "RigVM",
 })
 
-UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 大型属性上限
+UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large property size cap
 
 
 def get_max_reasonable(property_type: str, engine_version: int) -> int:
-    """根据属性类型和引擎版本返回合理的大小上限。
+    """Return reasonable size cap based on property type and engine version.
 
-    对 UE5 已知的大型属性类型（BoneAnimationTracks、PoseContainer、
-    ArrayConnectionMap、RigVM），放宽阈值至 500MB。
+    For UE5 known large property types (BoneAnimationTracks, PoseContainer,
+    ArrayConnectionMap, RigVM), relax threshold to 500MB.
 
     Args:
-        property_type: 属性类型名（如 "IntProperty"、"StructProperty"）
-        engine_version: 引擎版本（4 或 5）
+        property_type: Property type name (e.g., "IntProperty", "StructProperty")
+        engine_version: Engine version (4 or 5)
 
     Returns:
-        该属性类型允许的最大合理大小（字节）
+        Maximum reasonable size (bytes) allowed for this property type
     """
     if engine_version >= 5 and property_type in UE5_LARGE_PROPERTY_TYPES:
         return UE5_LARGE_PROPERTY_MAX_REASONABLE

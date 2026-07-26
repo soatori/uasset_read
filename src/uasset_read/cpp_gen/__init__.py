@@ -1,42 +1,42 @@
 """
-C++ 代码生成模块。
+C++ code generation module.
 
-提供 UE 蓝图数据到 C++ 骨架代码的映射和生成功能。
+Provides mapping and generation from UE blueprint data to C++ skeleton code.
 
-模块：
-    cpp_type_mapper: UE 类型路径 → C++ 类型名映射
-    cpp_uproperty_mapper: CPF 标志 → UPROPERTY 标记映射
-    extract_cpp_skeleton: C++ 类骨架提取
-    formatters: C++ JSON IR 格式化和 .h 头文件生成
-    math_simplifier: KismetMathLibrary 函数 → 运算符简化
+Modules:
+    cpp_type_mapper: UE type path -> C++ type name mapping
+    cpp_uproperty_mapper: CPF flag -> UPROPERTY specifier mapping
+    extract_cpp_skeleton: C++ class skeleton extraction
+    formatters: C++ JSON IR formatting and .h header file generation
+    math_simplifier: KismetMathLibrary function -> operator simplification
 
-导出符号：
-    类型映射：
-        UE_TO_CPP_TYPE_MAP: UE 类型路径 → C++ 类型名字典
-        ENGINE_CLASS_PATHS: Engine 类路径 → C++ 类名字典
-        ue_path_to_cpp_type: UE 类型路径 → C++ 类型名转换函数
-        ue_package_path_to_cpp_class: 包路径 → C++ 类名转换函数
-        infer_class_prefix: 父类名 → C++ 前缀推断函数
-        resolve_ue_type: 完整 UE 路径 → C++ 类型名解析函数
+Exported symbols:
+    Type mapping:
+        UE_TO_CPP_TYPE_MAP: UE type path -> C++ type name dictionary
+        ENGINE_CLASS_PATHS: Engine class path -> C++ class name dictionary
+        ue_path_to_cpp_type: UE type path -> C++ type name conversion function
+        ue_package_path_to_cpp_class: Package path -> C++ class name conversion function
+        infer_class_prefix: Parent class name -> C++ prefix inference function
+        resolve_ue_type: Full UE path -> C++ type name resolution function
 
-    属性映射：
-        CPF_TO_UPROPERTY_MAP: CPF 标志 → UPROPERTY 标记映射规则
-        cpf_flags_to_uproperty_marks: CPF 标志 → UPROPERTY 标记列表转换函数
+    Property mapping:
+        CPF_TO_UPROPERTY_MAP: CPF flag -> UPROPERTY specifier mapping rules
+        cpf_flags_to_uproperty_marks: CPF flag -> UPROPERTY specifier list conversion function
 
-    骨架提取：
-        extract_cpp_class_skeleton: PackageIR → CppClassIR 提取函数
+    Skeleton extraction:
+        extract_cpp_class_skeleton: PackageIR -> CppClassIR extraction function
 
-    JSON IR 格式化（从 formatters 子模块）：
-        CppProperty: 单个 C++ UPROPERTY 声明数据模型
-        CppHeaderMeta: 头文件元数据模型
-        CppClassIR: 完整 C++ 类骨架 IR 数据模型
-        format_cpp_class_json: JSON IR 格式化函数
+    JSON IR formatting (from formatters sub-module):
+        CppProperty: Single C++ UPROPERTY declaration data model
+        CppHeaderMeta: Header file metadata model
+        CppClassIR: Full C++ class skeleton IR data model
+        format_cpp_class_json: JSON IR formatting function
 
-    .h 头文件生成：
-        format_cpp_header: CppClassIR → .h 文本转换函数
+    .h header file generation:
+        format_cpp_header: CppClassIR -> .h text conversion function
 
-    数学函数简化：
-        MathSimplifier: KismetMathLibrary 函数 → 运算符简化器
+    Math function simplification:
+        MathSimplifier: KismetMathLibrary function -> operator simplifier
 """
 from uasset_read.cpp_gen.cpp_type_mapper import (
     UE_TO_CPP_TYPE_MAP,
@@ -100,24 +100,24 @@ from uasset_read.cpp_gen.math_simplifier import (
 )
 
 __all__ = [
-    # 类型映射
+    # Type mapping
     "UE_TO_CPP_TYPE_MAP",
     "ENGINE_CLASS_PATHS",
     "ue_path_to_cpp_type",
     "ue_package_path_to_cpp_class",
     "infer_class_prefix",
     "resolve_ue_type",
-    # 属性映射
+    # Property mapping
     "CPF_TO_UPROPERTY_MAP",
     "cpf_flags_to_uproperty_marks",
-    # 骨架提取
+    # Skeleton extraction
     "extract_cpp_class_skeleton",
-    # JSON IR 格式化
+    # JSON IR formatting
     "CppProperty",
     "CppHeaderMeta",
     "CppClassIR",
     "format_cpp_class_json",
-    # .h 头文件生成
+    # .h header file generation
     "format_cpp_header",
     # Call statement formatting
     "format_cpp_call_statements",
@@ -136,20 +136,20 @@ __all__ = [
     "CppRawStmt",
     # Body builder
     "kismet_to_cpp_body",
-    # C++ 默认值格式化
+    # C++ default value formatting
     "format_cpp_default_value",
     "format_cpp_transform",
     "format_cpp_component_init",
     "format_cpp_input_action_load",
-    # C++ 构造函数格式化
+    # C++ constructor formatting
     "build_constructor_sections",
     "format_cpp_constructor",
     "extract_cpp_constructor",
-    # C++ 标识符清理
+    # C++ identifier sanitization
     "sanitize_identifier",
     "sanitize_string_literal",
     "sanitize_uproperty_marks",
     "sanitize_category",
-    # 数学函数简化
+    # Math function simplification
     "MathSimplifier",
 ]

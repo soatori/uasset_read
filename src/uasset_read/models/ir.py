@@ -1,12 +1,16 @@
-"""IR（中间表示）数据结构 — PackageIR 层级模型。
+"""IR (Intermediate Representation) data structures — PackageIR hierarchy model.
 
-IR 是解析结果的统一数据源，渲染器只接收 PackageIR，不访问 ParseResult。
-所有 GUID（Node/Pin）统一为 32 位小写 hex。
+IR is the unified data source for parse results; renderers only receive PackageIR
+and do not access ParseResult. All GUIDs (Node/Pin) are normalized to 32-char
+lowercase hex.
 
-分层说明：
-- 本模块（ir.py）定义呈现模型，面向渲染器的简化表示（str 类型、str 方向等）
-- models/core.py 定义序列化模型，保留 UE 原始类型（int 方向、嵌套对象等）
-- IR Builder 负责从序列化模型（UEdGraph*）转换为呈现模型（GraphIR*）
+Layering:
+- This module (ir.py) defines presentation models: simplified representation for
+  renderers (str type, str direction, etc.)
+- models/core.py defines serialization models, preserving UE native types
+  (int direction, nested objects, etc.)
+- IR Builder converts serialization models (UEdGraph*) to presentation models
+  (GraphIR*).
 """
 
 from __future__ import annotations
@@ -20,11 +24,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class PackageHeaderIR:
-    """包头信息，与 UE 文件格式完全对齐。
+    """Package header info, fully aligned with UE file format.
 
-    字段来源于 PackageFileSummary（UE 的 FPackageFileSummary）。
+    Fields sourced from PackageFileSummary (UE's FPackageFileSummary).
     """
-    # 核心字段（必填）
+    # Core fields (required)
     package_name: str
     package_class: str
     package_flags: int
@@ -33,124 +37,125 @@ class PackageHeaderIR:
     ue_version: str
     saved_hash: bytes = field(default_factory=lambda: b'')
 
-    # 文件版本
+    # File version
     file_version_ue4: int = 0
     file_version_ue5: int = 0
     file_version_licensee: int = 0
 
-    # 头部结构偏移
+    # Header structure offset
     total_header_size: int = 0
     custom_versions: list[dict] = field(default_factory=list)
     folder_name: str = ""
 
-    # 名称表
+    # Name table
     name_count: int = 0
     name_offset: int = 0
 
-    # 软引用路径表
+    # Soft reference path table
     soft_object_paths_count: int = 0
     soft_object_paths_offset: int = 0
 
-    # 本地化
+    # Localization
     localization_id: str = ""
 
-    # 可收集文本数据
+    # Gatherable text data
     gatherable_text_data_count: int = 0
     gatherable_text_data_offset: int = 0
 
-    # 导出/导入表
+    # Export/Import table
     export_count: int = 0
     export_offset: int = 0
     import_count: int = 0
     import_offset: int = 0
 
-    # 元数据
+    # Metadata
     metadata_offset: int = 0
 
-    # 依赖表
+    # Dependency table
     depends_offset: int = 0
 
-    # 软包引用
+    # Soft package references
     soft_package_references_count: int = 0
     soft_package_references_offset: int = 0
 
-    # 可搜索名称
+    # Searchable names
     searchable_names_offset: int = 0
 
-    # 缩略图表
+    # Thumbnail table
     thumbnail_table_offset: int = 0
 
-    # 导入类型层级
+    # Import type hierarchies
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
 
-    # 持久化 GUID
+    # Persistent GUID
     persistent_guid: str = "00000000000000000000000000000000"
 
-    # 版本世代
+    # Version generations
     generations: list[dict] = field(default_factory=list)
 
-    # 引擎版本
+    # Engine version
     saved_by_engine_version: str = ""
     compatible_with_engine_version: str = ""
 
-    # 压缩
+    # Compression
     compression_flags: int = 0
 
-    # 包来源
+    # Package source
     package_source: int = 0
 
-    # 批量数据
+    # Bulk data
     bulk_data_start_offset: int = 0
 
-    # 世界分块信息
+    # World tile info
     world_tile_info_data_offset: int = 0
 
-    # 分块 ID
+    # Chunk IDs
     chunk_ids: list[int] = field(default_factory=list)
 
-    # 预加载依赖
+    # Preload dependencies
     preload_dependency_count: int = 0
     preload_dependency_offset: int = 0
 
-    # 名称引用计数
+    # Name reference count
     names_referenced_from_export_data_count: int = 0
 
     # Payload TOC
     payload_toc_offset: int = 0
 
-    # 数据资源
+    # Data resources
     data_resource_offset: int = 0
 
 
 @dataclass
 class PinIR:
-    """单个 Pin 的呈现模型（IR 层）。
+    """Single Pin presentation model (IR layer).
 
-    与序列化模型 UEdGraphPin 的区别：
-    - direction 为 str（"EGPD_Input"/"EGPD_Output"），而非 int
-    - pin_category/pin_subcategory 等结构化字段替代 _safe_str() 的 FEdGraphPinType 字符串化
-    - linked_to 为 str GUID 列表，而非 UObjectInstance 列表
+    Differences from serialization model UEdGraphPin:
+    - direction is str ("EGPD_Input"/"EGPD_Output") instead of int
+    - pin_category/pin_subcategory etc. are structured fields replacing
+      _safe_str() stringification of FEdGraphPinType
+    - linked_to is a list of str GUIDs instead of UObjectInstance list
 
-    新增字段（v0.5.2）对应 FEdGraphPinType 的 10 个结构化属性：
-    - pin_category: Pin 类型大类（"bool"/"int"/"float"/"object"/"struct"/"exec" 等）
-    - pin_subcategory: Pin 类型子类（如 "bool"→"int" 的子类型路径）
-    - pin_subcategory_object: PinSubCategoryObject 解析后的对象名（如 "/Script/Engine.Actor"）
-    - container_type: 容器类型（"None"/"Array"/"Set"/"Map"），对应 EPinContainerType
-    - is_reference: 是否按引用传递
-    - is_const: 是否不可变常量
-    - is_weak_pointer: 是否弱引用
-    - is_uobject_wrapper: 是否 UObject 包装类型（如 TSubclassOf）
-    - is_map_key: Map 容器的 key 类型标记（来自 PinValueType）
-    - is_map_value: Map 容器的 value 类型标记（来自 PinValueType）
+    Added fields (v0.5.2) corresponding to 10 FEdGraphPinType structured attributes:
+    - pin_category: Pin type category ("bool"/"int"/"float"/"object"/"struct"/"exec" etc.)
+    - pin_subcategory: Pin subtype (e.g. "bool"->"int" subtype path)
+    - pin_subcategory_object: Resolved PinSubCategoryObject name (e.g. "/Script/Engine.Actor")
+    - container_type: Container type ("None"/"Array"/"Set"/"Map"), maps to EPinContainerType
+    - is_reference: Passed by reference
+    - is_const: Immutable constant
+    - is_weak_pointer: Weak reference
+    - is_uobject_wrapper: UObject wrapper type (e.g. TSubclassOf)
+    - is_map_key: Map container key type flag (from PinValueType)
+    - is_map_value: Map container value type flag (from PinValueType)
     """
     pin_name: str
-    pin_type: str  # 保留向后兼容：FEdGraphPinType 的 _safe_str() 输出
+    pin_type: str  # Backward compat: FEdGraphPinType _safe_str() output
     linked_to: list[str]
     direction: str
     default_value: str | None
-    pin_guid: str = ""  # Pin GUID（用于建立 pin_guid -> node_guid 索引）
-    # --- 结构化类型字段（FEdGraphPinType 拆解） ---
+    pin_guid: str = ""  # Pin GUID (used to build pin_guid -> node_guid index)
+    # --- Structured type fields (FEdGraphPinType decomposition) ---
     pin_category: str = ""
     pin_subcategory: str = ""
     pin_subcategory_object_name: str | None = None
@@ -161,7 +166,7 @@ class PinIR:
     is_uobject_wrapper: bool = False
     is_map_key: bool = False
     is_map_value: bool = False
-    # Map terminal 类型字段（Map 容器专用）
+    # Map terminal type fields (Map container specific)
     map_key_pin_category: str = ""
     map_key_pin_subcategory: str = ""
     map_key_pin_subcategory_object_name: str | None = None
@@ -169,13 +174,13 @@ class PinIR:
 
 @dataclass
 class NodeIR:
-    """单个节点的呈现模型（IR 层）。
+    """Single node presentation model (IR layer).
 
-    与序列化模型 UEdGraphNode 的区别：
-    - node_class 为 str，对应 UEdGraphNode.class_name
-    - pins 为 list[PinIR]，而非 list[UEdGraphPin]
-    - 包含 execution_flow 和 macro_expansion 等 IR 特有字段
-    - 不包含 node_pos_x/y（渲染器不需要）
+    Differences from serialization model UEdGraphNode:
+    - node_class is str, corresponding to UEdGraphNode.class_name
+    - pins is list[PinIR] instead of list[UEdGraphPin]
+    - Contains IR-specific fields like execution_flow and macro_expansion
+    - Does not contain node_pos_x/y (not needed by renderers)
     """
     node_guid: str
     node_class: str
@@ -183,20 +188,20 @@ class NodeIR:
     pins: list[PinIR]
     execution_flow: list[dict]
     macro_expansion: dict | None = None
-    # Enhanced Input 相关字段（v0.5.2）
-    input_action_path: str | None = None  # Input Action 资产路径
-    trigger_events: list[dict] = field(default_factory=list)  # 触发事件列表
-    event_type: str | None = None  # 事件类型（Triggered/Completed/Started/Stopped/Ongoing）
+    # Enhanced Input related fields (v0.5.2)
+    input_action_path: str | None = None  # Input Action asset path
+    trigger_events: list[dict] = field(default_factory=list)  # Trigger events list
+    event_type: str | None = None  # Event type (Triggered/Completed/Started/Stopped/Ongoing)
 
 
 @dataclass
 class GraphIR:
-    """单个图的呈现模型（IR 层）。
+    """Single graph presentation model (IR layer).
 
-    与序列化模型 UEdGraph 的区别：
-    - nodes 为 list[NodeIR]，而非 list[UEdGraphNode]
-    - 包含 execution_chains 等 IR 特有字段
-    - 不包含 schema/b_editable（渲染器不需要）
+    Differences from serialization model UEdGraph:
+    - nodes is list[NodeIR] instead of list[UEdGraphNode]
+    - Contains IR-specific fields like execution_chains
+    - Does not contain schema/b_editable (not needed by renderers)
     """
     graph_guid: str
     graph_name: str
@@ -209,7 +214,7 @@ class GraphIR:
 
 @dataclass
 class PropertyIR:
-    """单个属性的 IR 表示。"""
+    """Single property IR representation."""
     name: str
     type: str
     value: Any
@@ -219,14 +224,16 @@ class PropertyIR:
 
 @dataclass
 class ExportRawIR:
-    """UE 原始导出表字段（FObjectExport 对应）。
+    """UE raw export table fields (corresponds to FObjectExport).
 
-    保留所有 UE 序列化表字段，与解析后的语义字段（ExportIR）隔离。
+    Preserves all UE serialization table fields, isolated from the parsed
+    semantic fields (ExportIR).
 
-    注意: package_flags 对应 FObjectExport.PackageFlags，仅当 export 是通过
-    OBJECTMARK_ForceTagExp 强制加入导出表的顶层包时才有意义（存储原始包的 flags）。
-    与 PackageHeaderIR.package_flags（FPackageFileSummary.PackageFlags）不同。
-    参见 ObjectResource.h:359-363。
+    Note: package_flags corresponds to FObjectExport.PackageFlags, only meaningful
+    when the export is a top-level package forced into the export table via
+    OBJECTMARK_ForceTagExp (stores the original package flags).
+    Different from PackageHeaderIR.package_flags (FPackageFileSummary.PackageFlags).
+    See ObjectResource.h:359-363.
     """
     class_index: int = 0
     super_index: int = 0
@@ -234,7 +241,7 @@ class ExportRawIR:
     template_index: int = 0
     object_flags: int = 0
     serial_offset: int = 0
-    package_flags: int = 0  # FObjectExport.PackageFlags（仅顶层包 export 有意义）
+    package_flags: int = 0  # FObjectExport.PackageFlags (only meaningful for top-level package exports)
     b_forced_export: bool = False
     b_not_for_client: bool = False
     b_not_for_server: bool = False
@@ -249,7 +256,7 @@ class ExportRawIR:
 
 @dataclass
 class ImportIR:
-    """单个导入对象的 IR 表示，与 UE 的 FObjectImport 对齐。"""
+    """Single import object IR representation, aligned with UE's FObjectImport."""
     index: int
     class_package: str
     class_name: str
@@ -264,7 +271,7 @@ class ImportIR:
 
 @dataclass
 class ExportIR:
-    """单个导出对象的 IR 表示。"""
+    """Single export object IR representation."""
     index: int
     object_name: str
     object_class: str
@@ -284,11 +291,11 @@ class ExportIR:
     anim_montage: AnimMontageIR | None = None
     ue_export_raw: ExportRawIR | None = None
     diagnostics: dict | None = None
-    # 懒加载标记
+    # Lazy load flag
     is_loaded: bool = False
     lazy_load_archive: bytes | None = None
 
-    # --- 从 ExportRawIR 代理的属性（保持向后兼容） ---
+    # --- Proxied properties from ExportRawIR (backward compat) ---
 
     @property
     def template_index(self) -> int:
@@ -333,10 +340,10 @@ class ExportIR:
 
 @dataclass
 class ExportDependencyIR:
-    """Export 依赖关系。
+    """Export dependency relationships.
 
-    对应 UE 的 FExportMapEntry 中的依赖关系字段。
-    用于描述 export 之间的序列化和创建顺序依赖。
+    Corresponds to dependency fields in UE's FExportMapEntry.
+    Describes serialization and creation order dependencies between exports.
     """
     export_index: int
     serialization_before_serialization: list[int]
@@ -347,12 +354,12 @@ class ExportDependencyIR:
 
 @dataclass
 class BlueprintFunctionIR:
-    """蓝图函数 IR（完整元数据，等价 UFunction 描述）。"""
+    """Blueprint function IR (full metadata, equivalent to UFunction description)."""
     name: str
     return_type: str
     parameters: list[dict]
     function_flags: int = 0
-    is_implemented: bool = True  # False = 继承事件占位（如 ReceiveBeginPlay）
+    is_implemented: bool = True  # False = inherited event placeholder (e.g. ReceiveBeginPlay)
     is_pure: bool = False
     is_blueprint_callable: bool = False
     is_const: bool = False
@@ -369,7 +376,7 @@ class BlueprintFunctionIR:
 
 @dataclass
 class BlueprintEventIR:
-    """蓝图事件 IR（完整元数据，等价蓝图事件描述）。"""
+    """Blueprint event IR (full metadata, equivalent to blueprint event description)."""
     name: str
     event_type: str
     parameters: list[dict]
@@ -392,7 +399,7 @@ class BlueprintEventIR:
 
 @dataclass
 class BlueprintIR:
-    """蓝图元数据 IR（来自 BlueprintMetadata）。"""
+    """Blueprint metadata IR (from BlueprintMetadata)."""
     parent_class: str | None
     description: str = ""
     interfaces: list[dict] = field(default_factory=list)
@@ -403,7 +410,7 @@ class BlueprintIR:
 
 @dataclass
 class DecompiledFunctionIR:
-    """反编译函数 IR（来自 KismetDecompiledResult）。"""
+    """Decompiled function IR (from KismetDecompiledResult)."""
     name: str
     signature: str
     cpp_code: str
@@ -415,14 +422,14 @@ class DecompiledFunctionIR:
 
 @dataclass
 class ExecutionChainIR:
-    """执行链 IR。"""
+    """Execution chain IR."""
     event: str
     chain: list[str]
 
 
 @dataclass
 class FunctionGraphIR:
-    """函数图数据（基于 _build_function_graphs_safe() 实际字段）。"""
+    """Function graph data (based on _build_function_graphs_safe() actual fields)."""
     function_name: str
     graph_source: str = ""
     entry_node_guid: str = ""
@@ -433,7 +440,7 @@ class FunctionGraphIR:
 
 @dataclass
 class LinkerSummaryIR:
-    """包链接摘要。"""
+    """Package linker summary."""
     has_linker: bool
     import_paths: list[str]
     export_paths: list[str]
@@ -441,7 +448,7 @@ class LinkerSummaryIR:
 
 @dataclass
 class VariableIR:
-    """蓝图变量 IR（完整元数据，等价 FBPVariableDescription）。"""
+    """Blueprint variable IR (full metadata, equivalent to FBPVariableDescription)."""
     name: str
     type: str
     default_value: str | None
@@ -467,10 +474,10 @@ class VariableIR:
 
 @dataclass
 class SourceSiteContextIR:
-    """本地化上下文信息 — FTextSourceSiteContext。
+    """Localization context information — FTextSourceSiteContext.
 
-    参照 GatherableTextData.h:12
-    描述文本在源代码中的使用位置及其本地化属性。
+    Reference: GatherableTextData.h:12
+    Describes where text is used in source code and its localization attributes.
     """
     key_name: str
     site_description: str
@@ -480,10 +487,10 @@ class SourceSiteContextIR:
 
 @dataclass
 class GatherableTextDataIR:
-    """可收集文本数据 — FGatherableTextData。
+    """Gatherable text data — FGatherableTextData.
 
-    参照 GatherableTextData.h:49
-    包含命名空间名称、源字符串和来源上下文列表。
+    Reference: GatherableTextData.h:49
+    Contains namespace name, source string, and source context list.
     """
     namespace_name: str
     source_string: str
@@ -492,7 +499,7 @@ class GatherableTextDataIR:
 
 @dataclass
 class HexViewEntryIR:
-    """单次读取操作的 IR 表示（从 HexViewEntry 转换而来）。"""
+    """Single read operation IR representation (converted from HexViewEntry)."""
     key: str
     type: str
     value: Any
@@ -507,7 +514,7 @@ class HexViewEntryIR:
 
 @dataclass
 class DebugIR:
-    """调试数据 IR（解析轨迹信息）。"""
+    """Debug data IR (parsing trace information)."""
     hex_view: list[HexViewEntryIR] = field(default_factory=list)
     hex_view_truncated_count: int = 0
     """Number of hex view entries dropped by BoundedEventBuffer truncation."""
@@ -515,7 +522,7 @@ class DebugIR:
 
 @dataclass
 class AnimationDataIR:
-    """动画数据聚合。"""
+    """Animation data aggregation."""
     anim_blueprint: AnimBlueprintIR | None = None
     anim_sequence: AnimSequenceIR | None = None
     anim_montage: AnimMontageIR | None = None
@@ -523,7 +530,7 @@ class AnimationDataIR:
 
 @dataclass
 class PackageDependenciesIR:
-    """包依赖数据。"""
+    """Package dependency data."""
     resolved_parent_assets: list[dict] = field(default_factory=list)
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)
     depends_map: list[list[int]] = field(default_factory=list)
@@ -536,7 +543,7 @@ class PackageDependenciesIR:
 
 @dataclass
 class DiagnosticsDataIR:
-    """诊断和状态数据。"""
+    """Diagnostic and status data."""
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     status: str = "success"
@@ -548,10 +555,10 @@ class DiagnosticsDataIR:
 
 @dataclass
 class PackageIR:
-    """顶层 IR 结构（重组后）。"""
+    """Top-level IR structure (recomposed)."""
     header: PackageHeaderIR
     name_map: tuple[str, ...]
-    imports: list[ImportIR]  # 修正：原 list[dict] 是类型注解 bug
+    imports: list[ImportIR]  # Fix: original list[dict] was a type annotation bug
     exports: list[ExportIR]
     linker: LinkerSummaryIR | None
     blueprint: BlueprintIR | None = None
@@ -567,7 +574,7 @@ class PackageIR:
     debug: DebugIR | None = None
 
 
-# 动画模型从 ir_anim.py 重导出，保持向后兼容
+# Animation models re-exported from ir_anim.py for backward compat
 from .ir_anim import (  # noqa: F401
     AnimNotifyIR,
     BakedExitTransitionIR,

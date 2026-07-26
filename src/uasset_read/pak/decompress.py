@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 """
-Pak 文件解压缩模块
+Pak file decompression module.
 
-支持 Zlib/LZ4/Zstd/Oodle 压缩方法分派。
-- Zlib: Python stdlib，始终可用
-- LZ4/Zstd: 可选 PyPI 包，延迟导入
-- Oodle: 不支持（专有库），优雅降级
+Supports Zlib/LZ4/Zstd/Oodle compression method dispatch.
+- Zlib: Python stdlib, always available
+- LZ4/Zstd: optional PyPI packages, lazy import
+- Oodle: not supported (proprietary library), graceful degradation
 """
 import gzip
 import io
@@ -54,20 +54,20 @@ def normalize_compression_method(method: str | int | None) -> str:
 
 
 def decompress_block(data: bytes, uncompressed_size: int, method: str | int | None) -> bytes:
-    """解压单个压缩块。
+    """Decompress a single compressed block.
 
     Args:
-        data: 压缩数据
-        uncompressed_size: 期望的解压后大小
-        method: 压缩方法名称（"Zlib", "Gzip", "LZ4", "Zstd", "Oodle"）
+        data: Compressed data
+        uncompressed_size: Expected decompressed size
+        method: Compression method name ("Zlib", "Gzip", "LZ4", "Zstd", "Oodle")
 
     Returns:
-        解压后的数据
+        Decompressed data
 
     Raises:
-        ValueError: method 为 None 或未知的压缩方法
-        NotImplementedError: Oodle 不支持
-        ImportError: 缺少必需的包（lz4/zstandard）
+        ValueError: method is None or unknown compression method
+        NotImplementedError: Oodle not supported
+        ImportError: Missing required package (lz4/zstandard)
     """
     if method is None:
         raise ValueError(
@@ -75,14 +75,14 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         )
     method = normalize_compression_method(method)
 
-    # 压缩比检查：防止解压炸弹
+    # Compression ratio check: prevent decompression bomb
     MAX_COMPRESSION_RATIO = 10.0
     if uncompressed_size > 0 and len(data) > 0:
         ratio = uncompressed_size / len(data)
         if ratio > MAX_COMPRESSION_RATIO:
             raise ParseError(
-                f"解压压缩比过高: {ratio:.1f}:1（上限 {MAX_COMPRESSION_RATIO}:1），"
-                f"压缩 {len(data)} 字节 → 声明 {uncompressed_size} 字节"
+                f"Decompression ratio too high: {ratio:.1f}:1 (limit {MAX_COMPRESSION_RATIO}:1), "
+                f"compressed {len(data)} bytes -> declared {uncompressed_size} bytes"
             )
 
     if method == "None":
@@ -94,11 +94,11 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
             raw = zlib.decompress(data)
         if len(raw) > uncompressed_size:
             logger.warning(
-                "Zlib 解压输出 %d 字节超过声明大小 %d 字节，已截断（解压炸弹防护）",
+                "Zlib decompression output %d bytes exceeds declared size %d bytes, truncated (decompression bomb protection)",
                 len(raw), uncompressed_size,
             )
             warnings.warn(
-                f"Zlib 解压输出 {len(raw)} 字节超过声明大小 {uncompressed_size} 字节，已截断",
+                f"Zlib decompression output {len(raw)} bytes exceeds declared size {uncompressed_size} bytes, truncated",
                 ResourceWarning,
                 stacklevel=2,
             )
@@ -108,11 +108,11 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         raw = gzip.decompress(data)
         if len(raw) > uncompressed_size:
             logger.warning(
-                "Gzip 解压输出 %d 字节超过声明大小 %d 字节，已截断（解压炸弹防护）",
+                "Gzip decompression output %d bytes exceeds declared size %d bytes, truncated (decompression bomb protection)",
                 len(raw), uncompressed_size,
             )
             warnings.warn(
-                f"Gzip 解压输出 {len(raw)} 字节超过声明大小 {uncompressed_size} 字节，已截断",
+                f"Gzip decompression output {len(raw)} bytes exceeds declared size {uncompressed_size} bytes, truncated",
                 ResourceWarning,
                 stacklevel=2,
             )
@@ -151,27 +151,27 @@ def decompress_block_chunked(
     budget: "ResourceBudget | None" = None,
     chunk_size: int = 64 * 1024,
 ) -> Iterator[bytes]:
-    """分块解压，支持预算检查。
+    """Chunked decompression with budget checking.
 
-    与 ``decompress_block`` 类似，但以迭代器方式逐块产出解压数据，
-    并可在解压前通过 ``ResourceBudget`` 检查解压大小是否超限，
-    防止压缩炸弹。
+    Similar to ``decompress_block``, but yields decompressed data in chunks
+    as an iterator, and can check decompressed size against a ``ResourceBudget``
+    limit before decompression to prevent compression bombs.
 
     Args:
-        data: 压缩数据
-        uncompressed_size: 期望的解压后大小
-        method: 压缩方法（"Zlib", "Gzip", "LZ4", "Zstd", "Oodle"）
-        budget: 资源预算（可选），传入时会在解压前检查额度
-        chunk_size: 每次产出的数据块大小（默认 64KB）
+        data: Compressed data
+        uncompressed_size: Expected decompressed size
+        method: Compression method ("Zlib", "Gzip", "LZ4", "Zstd", "Oodle")
+        budget: Resource budget (optional), checked before decompression
+        chunk_size: Size of each yielded chunk (default 64KB)
 
     Yields:
-        解压后的数据块
+        Decompressed data chunks
 
     Raises:
-        MemoryError: 预算超限（通过 ``MemoryLimitExceeded``）
-        ParseError: 解压失败
-        ValueError: 未知压缩方法
-        NotImplementedError: Oodle 不支持
+        MemoryError: Budget exceeded (via ``MemoryLimitExceeded``)
+        ParseError: Decompression failed
+        ValueError: Unknown compression method
+        NotImplementedError: Oodle not supported
     """
     method = normalize_compression_method(method)
 
@@ -212,11 +212,11 @@ def decompress_block_chunked(
 def _decompress_zlib_chunked(
     data: bytes, expected_size: int, chunk_size: int
 ) -> Iterator[bytes]:
-    """Zlib (raw deflate) 分块解压。
+    """Zlib (raw deflate) chunked decompression.
 
-    使用 ``decompressobj`` 以 ``max_length`` 控制每次产出大小，
-    全部输入在第一次 ``decompress()`` 调用中传入，后续调用传入
-    空字节以取出内部缓冲的剩余输出。
+    Uses ``decompressobj`` with ``max_length`` to control chunk output size.
+    All input is passed in the first ``decompress()`` call; subsequent calls
+    pass empty bytes to drain remaining output from the internal buffer.
     """
     decompressor = zlib.decompressobj(wbits=-15)
 
@@ -226,14 +226,14 @@ def _decompress_zlib_chunked(
         while pos < len(output):
             yield output[pos : pos + chunk_size]
             pos += chunk_size
-        # 取出内部缓冲的剩余输出
+        # Drain remaining output from the internal buffer
         while True:
             tail = decompressor.decompress(b"", chunk_size)
             if not tail:
                 break
             yield tail
     except zlib.error:
-        # raw deflate 失败 → 尝试带 zlib header 的格式
+        # raw deflate failed -> try format with zlib header
         try:
             decompressor = zlib.decompressobj()
             output = decompressor.decompress(data, expected_size)
@@ -253,7 +253,7 @@ def _decompress_zlib_chunked(
 def _decompress_gzip_chunked(
     data: bytes, expected_size: int, chunk_size: int
 ) -> Iterator[bytes]:
-    """Gzip 分块解压。"""
+    """Gzip chunked decompression."""
     with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
         total_yielded = 0
         while total_yielded < expected_size:
@@ -265,7 +265,7 @@ def _decompress_gzip_chunked(
 
 
 def _decompress_lz4(data: bytes, uncompressed_size: int) -> bytes:
-    """LZ4 解压（需要完整解压）。"""
+    """LZ4 decompression (requires full decompression)."""
     try:
         import lz4.block
     except ImportError:
@@ -274,7 +274,7 @@ def _decompress_lz4(data: bytes, uncompressed_size: int) -> bytes:
 
 
 def _decompress_zstd(data: bytes, uncompressed_size: int) -> bytes:
-    """Zstd 解压（需要完整解压）。"""
+    """Zstd decompression (requires full decompression)."""
     try:
         import zstandard
     except ImportError:
@@ -290,16 +290,16 @@ def decompress_entry(
     compression_method: str = "None",
     encryption_key: bytes | None = None,
 ) -> bytes:
-    """解压整个文件条目（可能包含多个压缩块）。
+    """Decompress an entire file entry (may contain multiple compressed blocks).
 
     Args:
-        stream: 文件流
-        entry: FPakEntry 实例
-        compression_method: 压缩方法名称（从 FPakInfo.compression_methods 获取）
-        encryption_key: AES 密钥（如果条目被加密）
+        stream: File stream
+        entry: FPakEntry instance
+        compression_method: Compression method name (from FPakInfo.compression_methods)
+        encryption_key: AES key (if the entry is encrypted)
 
     Returns:
-        解压后的完整数据
+        Fully decompressed data
     """
     if entry.is_encrypted and encryption_key is None:
         raise ParseError("Encrypted pak entry requires AES key")
@@ -313,7 +313,7 @@ def decompress_entry(
         raw = stream.read(raw_size)
         if len(raw) < raw_size:
             raise ParseError(
-                f"Pak 非压缩短读: 读取 {len(raw)} < 预期 {raw_size} bytes "
+                f"Pak uncompressed short read: read {len(raw)} < expected {raw_size} bytes "
                 f"(uncompressed_size={entry.uncompressed_size})"
             )
         if entry.is_encrypted:
@@ -323,7 +323,7 @@ def decompress_entry(
     # Compressed: process block by block
     if not entry.compression_blocks:
         raise ParseError(
-            f"压缩条目缺少 compression_blocks 数据 "
+            f"Compressed entry missing compression_blocks data "
             f"(compression_block_count={entry.compression_block_count})"
         )
 
@@ -333,7 +333,7 @@ def decompress_entry(
     for i, block in enumerate(entry.compression_blocks):
         if block.compressed_end < block.compressed_start:
             raise ParseError(
-                f"压缩块 {i}: compressed_end ({block.compressed_end}) < "
+                f"Compression block {i}: compressed_end ({block.compressed_end}) < "
                 f"compressed_start ({block.compressed_start})"
             )
         stream.seek(block.compressed_start)
@@ -345,7 +345,7 @@ def decompress_entry(
 
         if len(raw) < block_size:
             raise ParseError(
-                f"压缩块 {i}: 读取不足 ({len(raw)} < {block_size} bytes)"
+                f"Compression block {i}: insufficient read ({len(raw)} < {block_size} bytes)"
             )
 
         if entry.is_encrypted:
@@ -356,7 +356,7 @@ def decompress_entry(
 
     if len(result) < entry.uncompressed_size:
         raise ParseError(
-            f"解压结果过短: {len(result)} < {entry.uncompressed_size} bytes"
+            f"Decompressed result too short: {len(result)} < {entry.uncompressed_size} bytes"
         )
 
     return bytes(result[:entry.uncompressed_size])

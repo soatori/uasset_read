@@ -1,15 +1,15 @@
-"""UMovieScene 资产类型处理器
+"""UMovieScene Asset type handler
 
-解析 UMovieScene 的 tagged properties 数据：
-- DisplayRate: FFrameRate（显示帧率，Numerator + Denominator）
-- TickResolution: FFrameRate（Tick 分辨率，Numerator + Denominator）
-- EvaluationType: EMovieSceneEvaluationType（求值类型）
-- ClockSource: EUpdateClockSource（时钟源）
-- Tracks: TArray<UMovieSceneTrack>（轨道列表，提取类名）
-- Spawnables: TArray<FMovieSceneSpawnable>（可生成对象）
-- Possessables: TArray<FMovieScenePossessable>（可持有对象）
+Parse UMovieScene tagged properties data:
+- DisplayRate: FFrameRate (display frame rate, Numerator + Denominator)
+- TickResolution: FFrameRate (tick resolution, Numerator + Denominator)
+- EvaluationType: EMovieSceneEvaluationType (evaluation type)
+- ClockSource: EUpdateClockSource (clock source)
+- Tracks: TArray<UMovieSceneTrack> (track list, extract class names)
+- Spawnables: TArray<FMovieSceneSpawnable> (spawnable objects)
+- Possessables: TArray<FMovieScenePossessable> (possessable objects)
 
-格式参考：
+Format reference:
 - Engine/Source/Runtime/MovieScene/Public/MovieScene.h
 - Engine/Source/Runtime/MovieScene/Private/MovieScene.cpp
 """
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_frame_rate(value: Any) -> dict | None:
-    """解析 FFrameRate 属性值（dict 或 list/tuple）"""
+    """Parse FFrameRate property value (dict or list/tuple)."""
     if isinstance(value, dict):
         return {
             "numerator": value.get("Numerator", 0),
@@ -45,7 +45,7 @@ def _parse_frame_rate(value: Any) -> dict | None:
 
 
 def _parse_track_classes(value: Any) -> list[str]:
-    """从 Tracks 数组提取轨道类名"""
+    """Extract track class names from Tracks array."""
     if not isinstance(value, list):
         return []
     return [
@@ -58,7 +58,7 @@ def _parse_track_classes(value: Any) -> list[str]:
 
 
 class _MovieSceneData:
-    """MovieScene 解析结果容器，支持 extract_property 的 setattr 访问"""
+    """MovieScene parse result container, supports setattr access for extract_property."""
 
     __slots__ = (
         "display_rate", "tick_resolution", "evaluation_type", "clock_source",
@@ -83,61 +83,61 @@ class _MovieSceneData:
 
 
 class MovieSceneHandler:
-    """UMovieScene 资产类型处理器"""
+    """UMovieScene Asset type handler"""
 
-    # 反射注册元数据
+    # Reflection registration metadata
     export_type: str = "MovieScene"
     priority: int = 100
 
     def handle(self, export: Any, context: Any) -> ParseStatus:
-        """处理 MovieScene export
+        """Handle MovieScene export.
 
         Args:
-            export: ObjectExport 实例
-            context: 解析上下文
+            export: ObjectExport instance
+            context: parse context
 
         Returns:
-            ParseStatus: SUCCESS 或 PARTIAL
+            ParseStatus: SUCCESS or PARTIAL
         """
         try:
-            # 从 export 提取属性数据
+            # Extract properties from export
             properties_list = getattr(export, "properties", [])
             if not properties_list:
                 return ParseStatus.PARTIAL
 
-            # 将属性列表转换为字典格式（name -> value）
+            # Convert property list to dictionary format (name -> value)
             properties = build_properties_dict(properties_list)
 
-            # 构建 MovieScene 元数据
+            # Build MovieScene metadata
             data = _MovieSceneData()
 
-            # FFrameRate 属性提取
+            # FFrameRate property extraction
             extract_property(properties, "DisplayRate", data, "display_rate", transform=_parse_frame_rate)
             extract_property(properties, "TickResolution", data, "tick_resolution", transform=_parse_frame_rate)
 
-            # 简单属性提取
+            # Simple property extraction
             extract_property(properties, "EvaluationType", data, "evaluation_type")
             extract_property(properties, "ClockSource", data, "clock_source")
 
-            # 数组属性提取（Tracks 同时提取类名）
+            # Array property extraction (Tracks also extracts class names)
             tracks = extract_array_property(properties, "Tracks", _parse_track_classes)
             data.track_count = len(tracks)
             data.track_classes = tracks
 
-            # 数组长度提取
+            # Array length extraction
             data.spawnable_count = len(extract_array_property(properties, "Spawnables", lambda x: x if isinstance(x, list) else []))
             data.possessable_count = len(extract_array_property(properties, "Possessables", lambda x: x if isinstance(x, list) else []))
             data.binding_count = len(extract_array_property(properties, "ObjectBindings", lambda x: x if isinstance(x, list) else []))
             data.marked_frame_count = len(extract_array_property(properties, "MarkedFrames", lambda x: x if isinstance(x, list) else []))
 
-            # 存储到 export 的自定义数据
+            # Store to export custom data
             ensure_custom_data(export)["movie_scene"] = data.to_dict()
 
             return ParseStatus.SUCCESS
 
         except (KeyError, TypeError, ValueError) as e:
-            # 记录错误但不中断解析
-            logger.debug("MovieScene 解析错误: %s", e)
+            # Log error but don't interrupt parse
+            logger.debug("MovieScene parse error: %s", e)
             if hasattr(context, "warnings"):
-                context.warnings.append(f"MovieScene 解析错误: {e}")
+                context.warnings.append(f"MovieScene parse error: {e}")
             return ParseStatus.PARTIAL

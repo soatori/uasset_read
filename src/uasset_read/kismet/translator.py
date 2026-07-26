@@ -190,7 +190,7 @@ class MathFunctionCleaner:
 
     # --- Math library ---
 
-    # Lookup 表：prefix → lambda(p) -> str，用于分类分派降低圈复杂度
+    # Lookup table: prefix -> lambda(p) -> str, used for categorized dispatch to reduce cyclomatic complexity
     _MATH_COMPARISON_TABLE: dict[str, any] = {
         "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
         "EqualEqual_ByteByte": lambda p: f"((!{p[0]}) == (!{p[1]}))",
@@ -237,17 +237,17 @@ class MathFunctionCleaner:
     @staticmethod
     def _dispatch_table_lookup(func_name: str, p: list[str],
                                table: dict[str, any]) -> str | None:
-        """按最长前缀匹配查找 table，返回格式化结果或 None。"""
-        # 先检查精确匹配
+        """Look up table by longest prefix match, return formatted result or None."""
+        # Check exact match first
         if func_name in table:
             return table[func_name](p)
-        # 按前缀长度降序查找（最长优先）
+        # Look up by prefix length descending (longest first)
         for prefix in sorted(table, key=len, reverse=True):
             if prefix != func_name and func_name.startswith(prefix):
                 return table[prefix](p)
         return None
 
-    # 数学函数表（精确匹配优先，前缀匹配按长度降序）
+    # Math function table (exact match first, prefix match by length descending)
     _MATH_FN_TABLE: dict[str, any] = {
         "Max": lambda p: f"(({p[0]} > {p[1]}) ? {p[0]} : {p[1]})",
         "Min": lambda p: f"(({p[0]} < {p[1]}) ? {p[0]} : {p[1]})",
@@ -272,17 +272,17 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _clean_math_functions(func_name: str, p: list[str]) -> str | None:
-        """处理数学函数类（Abs/Floor/Ceil/Round/...）。"""
-        # 精确匹配
+        """Handle math function class (Abs/Floor/Ceil/Round/...)."""
+        # Exact match
         result = MathFunctionCleaner._MATH_FN_TABLE.get(func_name)
         if result is not None:
             return result(p)
-        # 前缀匹配
+        # Prefix match
         return MathFunctionCleaner._dispatch_table_lookup(
             func_name, p, MathFunctionCleaner._MATH_FN_TABLE
         )
 
-    # 类型转换前缀 → C++ 强制转换
+    # Type conversion prefix -> C++ cast
     _CONV_PREFIX_TABLE: dict[str, str] = {
         "Conv_IntToBool": "({p} != 0)",
         "Conv_BoolToInt": "({p} ? 1 : 0)",
@@ -296,7 +296,7 @@ class MathFunctionCleaner:
         "Conv_IntToInt64": "((int64){p})",
         "Conv_Int64ToInt": "((int32){p})",
     }
-    # 类型转换后缀 → C++ 强制转换
+    # Type conversion suffix -> C++ cast
     _CONV_SUFFIX_TABLE: dict[str, str] = {
         "ToDouble": "((double){p})",
         "ToFloat": "((float){p})",
@@ -307,7 +307,7 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _clean_type_conversions(func_name: str, p: list[str]) -> str | None:
-        """处理类型转换和后缀转换。"""
+        """Handle type conversion and suffix conversion."""
         if func_name == "UncheckedConvertI32I64":
             return f"{p[0]}"
         for prefix, fmt in MathFunctionCleaner._CONV_PREFIX_TABLE.items():
@@ -318,7 +318,7 @@ class MathFunctionCleaner:
                 return fmt.format(p=p[0])
         return None
 
-    # 构造器前缀 → lambda(p) -> str
+    # Constructor prefix -> lambda(p) -> str
     _CONSTRUCTOR_TABLE: dict[str, any] = {
         "Select": lambda p: f"({p[2]} ? {p[0]} : {p[1]})",
         "IsValid": lambda p: f"{p[0]} != nullptr",
@@ -335,7 +335,7 @@ class MathFunctionCleaner:
         "ToLinearColor": lambda p: f"FLinearColor({p[0]})",
         "ToVector": lambda p: f"FVector((float){p[0]})",
     }
-    # 向量操作：精确匹配或前缀匹配 → lambda(p) -> str
+    # Vector operations: exact match or prefix match -> lambda(p) -> str
     _VECTOR_OP_TABLE: dict[str, any] = {
         "Dot_": lambda p: f"Dot({p[0]}, {p[1]})",
         "Dot_VectorVector": lambda p: f"Dot({p[0]}, {p[1]})",
@@ -353,8 +353,8 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _clean_constructors_and_vectors(func_name: str, p: list[str]) -> str | None:
-        """处理构造器和向量操作。"""
-        # MakeTimespan 特殊处理：需要 bounds check
+        """Handle constructors and vector operations."""
+        # MakeTimespan special handling: needs bounds check
         if func_name.startswith("MakeTimespan"):
             if len(p) >= 5:
                 return f"FTimespan({p[0]}, {p[1]}, {p[2]}, {p[4]} * 1000 * 1000)"
@@ -362,17 +362,17 @@ class MathFunctionCleaner:
                 return f"FTimespan({p[0]}, {p[1]}, {p[2]})"
             else:
                 return f"FTimespan({', '.join(p)})"
-        # 先精确匹配
+        # Exact match first
         result = MathFunctionCleaner._VECTOR_OP_TABLE.get(func_name)
         if result is not None:
             return result(p)
-        # 表驱动分派：构造器（前缀匹配）
+        # Table-driven dispatch: constructors (prefix match)
         result = MathFunctionCleaner._dispatch_table_lookup(
             func_name, p, MathFunctionCleaner._CONSTRUCTOR_TABLE
         )
         if result is not None:
             return result
-        # 向量操作（前缀匹配）
+        # Vector operations (prefix match)
         result = MathFunctionCleaner._dispatch_table_lookup(
             func_name, p, MathFunctionCleaner._VECTOR_OP_TABLE
         )
@@ -390,13 +390,13 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _clean_break_functions(func_name: str, p: list[str]) -> str | None:
-        """处理 Break 函数。"""
+        """Handle Break functions."""
         result = MathFunctionCleaner._BREAK_TABLE.get(func_name)
         return result(p) if result is not None else None
 
     @staticmethod
     def _clean_math(func_name: str, p: list[str]) -> str:
-        # 1. 表驱动分派：comparison / arithmetic / bitwise / boolean / compound assignment
+        # 1. Table-driven dispatch: comparison / arithmetic / bitwise / boolean / compound assignment
         for table in (
             MathFunctionCleaner._MATH_COMPARISON_TABLE,
             MathFunctionCleaner._MATH_ARITHMETIC_TABLE,
@@ -408,7 +408,7 @@ class MathFunctionCleaner:
             if result is not None:
                 return result
 
-        # 2. 子函数分派：math functions / type conversions / constructors+vectors / break
+        # 2. Sub-function dispatch: math functions / type conversions / constructors+vectors / break
         for handler in (
             MathFunctionCleaner._clean_math_functions,
             MathFunctionCleaner._clean_type_conversions,
@@ -423,7 +423,7 @@ class MathFunctionCleaner:
 
     # --- String library ---
 
-    # 字符串库精确匹配表
+    # String library exact match table
     _STRING_EXACT_TABLE: dict[str, any] = {
         "Concat_StrStr": lambda p: " += ".join(p),
         "ParseIntoArray": lambda p: f"{p[0]}.Split({p[1]}, /* removeEmpty = */ {p[2]})",
@@ -435,7 +435,7 @@ class MathFunctionCleaner:
         "ToUpper": lambda p: f"{p[0]}.ToUpper()",
         "ToLower": lambda p: f"{p[0]}.ToLower()",
     }
-    # 字符串库前缀匹配表（按长度降序）
+    # String library prefix match table (by length descending)
     _STRING_PREFIX_TABLE: dict[str, any] = {
         "Conv_BoolToString": lambda p: f"{p[0]} ? \"true\" : \"false\"",
         "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
@@ -456,11 +456,11 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _clean_string(func_name: str, p: list[str]) -> str:
-        # 精确匹配
+        # Exact match
         result = MathFunctionCleaner._STRING_EXACT_TABLE.get(func_name)
         if result is not None:
             return result(p)
-        # 前缀匹配
+        # Prefix match
         result = MathFunctionCleaner._dispatch_table_lookup(
             func_name, p, MathFunctionCleaner._STRING_PREFIX_TABLE
         )
@@ -470,7 +470,7 @@ class MathFunctionCleaner:
 
     # --- System library ---
 
-    # System library 前缀匹配表（按长度降序）
+    # System library prefix match table (by length descending)
     _SYSTEM_PREFIX_TABLE: dict[str, any] = {
         "Conv_SoftClassPathToSoftClassRef": lambda p: f"TSoftClassPtr<UObject>({p[0]})",
         "Conv_SoftClassReferenceToClass": lambda p: f"{p[0]}",
@@ -586,7 +586,7 @@ class KismetTranslator:
     ):
         self.type_registry = type_registry or TypeRegistry()
         self._func_resolver: FunctionRefResolver | None = None
-        # 统计计数器：跟踪 deprecated / instrumentation token
+        # Statistics counters: track deprecated / instrumentation tokens
         self.skipped_tokens: dict[str, int] = {}
         if linker is not None:
             from uasset_read.kismet.function_resolver import FunctionRefResolver
@@ -599,10 +599,10 @@ class KismetTranslator:
             self._structured_indices = self._build_structured_indices(expressions)
 
     def _build_structured_indices(self, expressions: list["KismetExpression"]) -> set[int]:
-        """构建结构化控制流块中所有表达式的索引集合。
+        """Build index set of all expressions in structured control flow blocks.
 
-        委托给 JumpAnalyzer.get_structured_indices()，覆盖 while/for/if/switch 模式。
-        这些索引对应的表达式在线性翻译中应被跳过或特殊处理。
+        Delegates to JumpAnalyzer.get_structured_indices(), covering while/for/if/switch patterns.
+        Expressions at these indices should be skipped or specially handled in linear translation.
         """
         if self._jump_analyzer is None:
             return set()
@@ -641,7 +641,7 @@ class KismetTranslator:
     def _translate_variables(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """变量引用：Local / Instance / Default / LocalOut / SparseData。"""
+        """Variable references: Local / Instance / Default / LocalOut / SparseData."""
         from uasset_read.kismet.expressions import (
             EX_LocalVariable, EX_InstanceVariable, EX_DefaultVariable,
             EX_LocalOutVariable, EX_ClassSparseDataVariable,
@@ -661,7 +661,7 @@ class KismetTranslator:
     def _translate_literals(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """字面量：Int / Float / Byte / Bool / String / Object / Name / Vector。"""
+        """Literals: Int / Float / Byte / Bool / String / Object / Name / Vector."""
         from uasset_read.kismet.expressions import (
             EX_IntConst, EX_FloatConst, EX_ByteConst, EX_IntConstByte,
             EX_Int64Const, EX_UInt64Const, EX_DoubleConst,
@@ -736,8 +736,8 @@ class KismetTranslator:
             inner = self.line_cpp(expr.Value) if hasattr(expr, 'Value') and expr.Value else '""'
             return f"FSoftObjectPath({inner})"
         # --- Vector / Rotation / Transform ---
-        # 这些表达式继承自 KismetExpression（非 KismetExpressionT），
-        # 字段直接是 X/Y/Z 等，不通过 Value 属性。
+        # These expressions inherit from KismetExpression (not KismetExpressionT),
+        # fields are directly X/Y/Z etc., not accessed via Value property.
         if isinstance(expr, EX_Vector3fConst):
             return f"FVector3f({expr.X}, {expr.Y}, {expr.Z})"
         if isinstance(expr, EX_VectorConst):
@@ -757,7 +757,7 @@ class KismetTranslator:
     def _translate_special(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """特殊关键字：Self / Nothing / EndOfScript / RTFM。"""
+        """Special keywords: Self / Nothing / EndOfScript / RTFM."""
         from uasset_read.kismet.expressions import (
             EX_Self, EX_NoObject, EX_NoInterface,
             EX_Nothing, EX_NothingInt32, EX_EndOfScript,
@@ -789,7 +789,7 @@ class KismetTranslator:
     def _translate_return(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """EX_Return。"""
+        """EX_Return."""
         from uasset_read.kismet.expressions import EX_Return, EX_Nothing, EX_NothingInt32
         if isinstance(expr, EX_Return):
             ret_expr = (
@@ -807,7 +807,7 @@ class KismetTranslator:
     def _translate_jumps(
         self, expr: KismetExpression, index: int | None,
     ) -> str | None:
-        """跳转 / 执行流控制：JumpIfNot / Jump / ComputedJump / Skip / Pop。"""
+        """Jump / execution flow control: JumpIfNot / Jump / ComputedJump / Skip / Pop."""
         from uasset_read.kismet.expressions import (
             EX_Jump, EX_JumpIfNot, EX_Skip, EX_ComputedJump,
             EX_SkipOffsetConst, EX_PopExecutionFlow, EX_PopExecutionFlowIfNot,
@@ -858,7 +858,7 @@ class KismetTranslator:
     def _translate_casts(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """类型转换：Cast / MetaCast / DynamicCast 等。"""
+        """Type conversion: Cast / MetaCast / DynamicCast, etc."""
         from uasset_read.kismet.expressions import (
             EX_Cast, EX_MetaCast, EX_DynamicCast,
             EX_ObjToInterfaceCast, EX_CrossInterfaceCast, EX_InterfaceToObjCast,
@@ -894,7 +894,7 @@ class KismetTranslator:
     def _translate_context(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """上下文表达式：Context / ClassContext / InterfaceContext / StructMemberContext。"""
+        """Context expressions: Context / ClassContext / InterfaceContext / StructMemberContext."""
         from uasset_read.kismet.expressions import (
             EX_Context, EX_Context_FailSilent, EX_ClassContext,
             EX_InterfaceContext, EX_StructMemberContext,
@@ -928,7 +928,7 @@ class KismetTranslator:
     def _translate_assignments(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """赋值：Let / LetBool / LetObj / LetValueOnPersistentFrame 等。"""
+        """Assignment: Let / LetBool / LetObj / LetValueOnPersistentFrame, etc."""
         from uasset_read.kismet.expressions import (
             EX_Let, EX_LetBase, EX_LetBool, EX_LetDelegate,
             EX_LetObj, EX_LetWeakObjPtr, EX_LetMulticastDelegate,
@@ -953,7 +953,7 @@ class KismetTranslator:
     def _translate_functions(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """函数调用：FinalFunction / CallMath / VirtualFunction / CallMulticastDelegate。"""
+        """Function calls: FinalFunction / CallMath / VirtualFunction / CallMulticastDelegate."""
         from uasset_read.kismet.expressions import (
             EX_FinalFunction, EX_CallMath, EX_LocalFinalFunction,
             EX_VirtualFunction, EX_LocalVirtualFunction,
@@ -1022,7 +1022,7 @@ class KismetTranslator:
     def _translate_containers(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """容器：SetArray / ArrayConst / SetMap / MapConst / SetSet / SetConst / ArrayGetByRef。"""
+        """Containers: SetArray / ArrayConst / SetMap / MapConst / SetSet / SetConst / ArrayGetByRef."""
         from uasset_read.kismet.expressions import (
             EX_SetArray, EX_ArrayConst, EX_SetMap, EX_MapConst,
             EX_SetSet, EX_SetConst, EX_ArrayGetByRef,
@@ -1068,7 +1068,7 @@ class KismetTranslator:
     def _translate_structs(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """结构体常量 / 位字段 / 属性常量。"""
+        """Struct constants / bit fields / property constants."""
         from uasset_read.kismet.expressions import EX_StructConst, EX_BitFieldConst, EX_PropertyConst
         if isinstance(expr, EX_StructConst):
             struct_name = (str(expr.Struct.Name)
@@ -1085,7 +1085,7 @@ class KismetTranslator:
     def _translate_delegates(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """委托操作：Add / Clear / Bind / Remove multicast delegate。"""
+        """Delegate operations: Add / Clear / Bind / Remove multicast delegate."""
         from uasset_read.kismet.expressions import (
             EX_AddMulticastDelegate, EX_ClearMulticastDelegate,
             EX_BindDelegate, EX_RemoveMulticastDelegate,
@@ -1123,7 +1123,7 @@ class KismetTranslator:
     def _translate_misc(
         self, expr: KismetExpression, _index: int | None,
     ) -> str | None:
-        """SwitchValue / Assert / Deprecated / Breakpoint / FieldPath。"""
+        """SwitchValue / Assert / Deprecated / Breakpoint / FieldPath."""
         from uasset_read.kismet.expressions import (
             EX_SwitchValue, EX_Assert,
             EX_DeprecatedOp4A, EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint,
@@ -1170,7 +1170,7 @@ class KismetTranslator:
     # -----------------------------------------------------------------------
 
     def _resolve_stack_node(self, stack_node: int) -> tuple[str | None, str | None]:
-        """通过 FunctionRefResolver 解析 StackNode → (class_name, func_name)。"""
+        """Resolve StackNode via FunctionRefResolver to (class_name, func_name)."""
         if self._func_resolver and isinstance(stack_node, int) and stack_node != 0:
             result = self._func_resolver.resolve(stack_node)
             if result is not None:
@@ -1178,7 +1178,7 @@ class KismetTranslator:
         return None, None
 
     def _extract_map_pairs(self, elements: list) -> list[str]:
-        """从键值交替的元素列表中提取 "key: val" 字符串对。"""
+        """Extract "key: val" string pairs from alternating key-value element list."""
         pairs: list[str] = []
         for i in range(0, len(elements), 2):
             if i + 1 < len(elements):

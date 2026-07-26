@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-"""Kismet 表达式 — 类型转换。
+"""Kismet expression -- type casts.
 
-包含类型转换相关表达式（EX_Cast / EX_MetaCast / EX_DynamicCast 等）。
+Contains type-cast related expressions (EX_Cast / EX_MetaCast / EX_DynamicCast, etc.).
 """
 
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_CastBase(KismetExpression):
-    """转换表达式的抽象基类 — 读取类指针和目标表达式。"""
+    """Abstract base class for cast expressions -- reads class pointer and target expression."""
 
     ClassPtr: int = 0
     Target: Optional[KismetExpression] = None
@@ -32,7 +32,7 @@ class EX_CastBase(KismetExpression):
 
 @dataclass
 class EX_Cast(KismetExpression):
-    """通用类型转换操作符 — 读取转换类型字节后跟目标表达式。"""
+    """General type cast operator -- reads a conversion type byte followed by the target expression."""
 
     ConversionType: ECastToken = ECastToken.CST_ObjectToInterface
     Target: Optional[KismetExpression] = None
@@ -55,7 +55,7 @@ class EX_Cast(KismetExpression):
 
 @dataclass
 class EX_MetaCast(EX_CastBase):
-    """元类转换（metaclass cast）。"""
+    """Metaclass cast."""
 
     @property
     def Token(self) -> EExprToken:
@@ -64,7 +64,7 @@ class EX_MetaCast(EX_CastBase):
 
 @dataclass
 class EX_DynamicCast(EX_CastBase):
-    """安全动态类转换。"""
+    """Safe dynamic class cast."""
 
     @property
     def Token(self) -> EExprToken:
@@ -73,7 +73,7 @@ class EX_DynamicCast(EX_CastBase):
 
 @dataclass
 class EX_ObjToInterfaceCast(EX_CastBase):
-    """对象引用转原生接口。"""
+    """Object reference to native interface."""
 
     @property
     def Token(self) -> EExprToken:
@@ -82,7 +82,7 @@ class EX_ObjToInterfaceCast(EX_CastBase):
 
 @dataclass
 class EX_CrossInterfaceCast(EX_CastBase):
-    """接口转接口转换。"""
+    """Interface-to-interface cast."""
 
     @property
     def Token(self) -> EExprToken:
@@ -91,7 +91,7 @@ class EX_CrossInterfaceCast(EX_CastBase):
 
 @dataclass
 class EX_InterfaceToObjCast(EX_CastBase):
-    """接口引用转对象。"""
+    """Interface reference to object."""
 
     @property
     def Token(self) -> EExprToken:

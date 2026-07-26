@@ -1,6 +1,6 @@
-"""蓝图图解析模块 — 图入口、执行流/数据流/连接映射构建。
+"""Blueprint graph parsing module — graph entry, execution flow/data flow/connection map construction.
 
-执行流链式表达（build_execution_chains）。
+Execution chain expression (build_execution_chains).
 """
 
 from .parser import extract_blueprint_graphs

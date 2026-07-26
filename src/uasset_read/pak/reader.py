@@ -1,10 +1,10 @@
 """
-PakFileReader — .pak 文件主读取器
+PakFileReader -- Main .pak file reader
 
-类似 的 PakFileReader.cs，提供：
-- open/close + 上下文管理器
+Similar to PakFileReader.cs, provides:
+- open/close + context manager
 - list_files / get_entry / extract
-- 自动处理 FPakInfo 检测、索引解密、条目解析、解压缩
+- Automatic FPakInfo detection, index decryption, entry parsing, decompression
 """
 import logging
 from pathlib import PurePosixPath
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class PakFileReader:
-    """.pak 文件主读取器。
+    """.pak file main reader.
 
     Usage:
         reader = PakFileReader("game.pak")
@@ -49,7 +49,7 @@ class PakFileReader:
         self._path_hash_index: dict[int, tuple[int, int]] = {}
 
     def open(self) -> None:
-        """打开 .pak 文件并解析 FPakInfo + Primary Index。"""
+        """Open .pak file and parse FPakInfo + Primary Index."""
         logger.debug("Opening pak file: %s", self._path)
 
         try:
@@ -85,17 +85,17 @@ class PakFileReader:
             raise
 
     def close(self) -> None:
-        """关闭文件句柄。"""
+        """Close the file handle."""
         if self._file:
             self._file.close()
             self._file = None
 
     def __del__(self) -> None:
-        """安全网：确保文件句柄被释放。"""
+        """Safety net: ensure the file handle is released."""
         try:
             self.close()
         except Exception:
-            logger.debug("PakFileReader.__del__ 清理失败", exc_info=True)
+            logger.debug("PakFileReader.__del__ cleanup failed", exc_info=True)
 
     def __enter__(self) -> "PakFileReader":
         self.open()
@@ -106,39 +106,39 @@ class PakFileReader:
 
     @property
     def info(self) -> FPakInfo | None:
-        """已解析的 FPakInfo（未打开时为 None）。"""
+        """Parsed FPakInfo (None if not opened)."""
         return self._info
 
     @property
     def entries(self) -> dict[str, FPakEntry]:
-        """path -> FPakEntry 映射。"""
+        """path -> FPakEntry mapping."""
         return self._entries
 
     @property
     def mount_point(self) -> str:
-        """Primary Index 中的挂载点。"""
+        """Mount point from the Primary Index."""
         return self._mount_point
 
     def list_files(self) -> list[str]:
-        """返回所有非删除条目的路径列表。"""
+        """Return a list of paths for all non-deleted entries."""
         return [p for p, e in self._entries.items() if not e.is_deleted]
 
     def get_entry(self, path: str) -> FPakEntry | None:
-        """获取指定路径的 FPakEntry，找不到返回 None。"""
+        """Get the FPakEntry for a given path, or None if not found."""
         resolved = self._resolve_entry_path(path)
         return self._entries.get(resolved) if resolved is not None else None
 
     def extract(self, path: str) -> bytes | None:
-        """提取文件条目的字节数据（解压缩）。
+        """Extract file entry byte data (decompressed).
 
         Args:
-            path: 文件在 pak 中的路径
+            path: File path within the pak
 
         Returns:
-            解压后的字节数据，找不到路径时返回 None
+            Decompressed byte data, or None if path not found
 
         Raises:
-            ParseError: 条目已删除或偏移无效
+            ParseError: Entry is deleted or offset is invalid
         """
         resolved = self._resolve_entry_path(path)
         entry = self._entries.get(resolved) if resolved is not None else None
@@ -171,20 +171,20 @@ class PakFileReader:
         """Resolve full, mount-relative, case-insensitive, and stem paths."""
         normalized = path.replace("\\", "/").strip("/")
 
-        # 路径遍历防护：拒绝包含 ".." 的路径组件
+        # Path traversal protection: reject path components containing ".."
         normalized_parts = PurePosixPath(normalized).parts
         if ".." in normalized_parts:
-            logger.warning("路径遍历尝试被拒绝: %r", path)
+            logger.warning("Path traversal attempt rejected: %r", path)
             return None
 
-        # 验证解析后的路径不会逃逸 mount_point 边界
+        # Verify resolved path does not escape mount_point boundary
         if self._mount_point:
-            # 使用 "/" 的 replace 而非 os.path.join 保持跨平台一致
+            # Use "/" replace instead of os.path.join to keep cross-platform consistency
             resolved = PurePosixPath(self._mount_point) / normalized
             resolved_str = resolved.as_posix()
             mount_str = self._mount_point.replace("\\", "/").strip("/")
             if not resolved_str.startswith(mount_str + "/") and resolved_str != mount_str:
-                logger.warning("路径逃逸 mount_point 边界被拒绝: %r (mount_point=%r)",
+                logger.warning("Path escaping mount_point boundary rejected: %r (mount_point=%r)",
                                path, self._mount_point)
                 return None
 

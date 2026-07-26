@@ -18,7 +18,7 @@ MAX_EXPRESSION_RECURSION_DEPTH = 256
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
-    # 类级别去重集合：跨实例共享，同一偏移只打印一次警告
+    # Class-level dedup set: shared across instances, same offset prints warning only once
     _warned_offsets: set[int] = set()
 
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
@@ -36,7 +36,7 @@ class FKismetArchive(FArchive):
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
-        """重置类级别警告去重集合（在新资产反编译开始时调用）。"""
+        """Reset class-level warning dedup set (called at start of new asset decompilation)."""
         cls._warned_offsets = set()
 
     def read_expression(self) -> KismetExpression:
@@ -162,14 +162,14 @@ class FKismetArchive(FArchive):
         return result
 
     def resolve_fname(self, index: int, number: int = 0) -> str:
-        """统一的 FName 解析逻辑
+        """Unified FName resolution logic.
 
         Args:
-            index: name_map 中的索引
-            number: FName 的 number 后缀
+            index: Index in name_map
+            number: FName number suffix
 
         Returns:
-            格式化后的 FName 字符串 (如 "ClassName_0")
+            Formatted FName string (e.g. "ClassName_0")
         """
         if 0 <= index < len(self._name_map):
             base_name = self._name_map[index]

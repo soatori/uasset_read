@@ -1,16 +1,16 @@
 """
-UE 类型路径 → C++ 类型名映射模块。
+UE type path -> C++ type name mapping module.
 
-提供 UE 资产路径（如 ScriptStruct'CoreUObject.Vector'）到 C++ 类型名（FVector）的转换。
-Per D-03: 核心类型硬编码字典 + 可扩展脚本路径策略。
+Provides conversion from UE asset paths (e.g. ScriptStruct'CoreUObject.Vector') to C++ type names (FVector).
+Per D-03: Hardcoded core type dictionary + extensible script path strategy.
 
-导出：
-    UE_TO_CPP_TYPE_MAP: 核心类型映射字典
-    ENGINE_CLASS_PATHS: Engine 类路径映射字典
-    ue_path_to_cpp_type: UE 类型路径 → C++ 类型名转换函数
-    ue_package_path_to_cpp_class: /Script/Engine.XXX → C++ 类名转换函数
-    infer_class_prefix: 父类名 → C++ 前缀推断函数
-    resolve_ue_type: 完整 UE 路径 → C++ 类型名解析函数
+Exports:
+    UE_TO_CPP_TYPE_MAP: Core type mapping dictionary
+    ENGINE_CLASS_PATHS: Engine class path mapping dictionary
+    ue_path_to_cpp_type: UE type path -> C++ type name conversion function
+    ue_package_path_to_cpp_class: /Script/Engine.XXX -> C++ class name conversion function
+    infer_class_prefix: Parent class name -> C++ prefix inference function
+    resolve_ue_type: Full UE path -> C++ type name resolution function
 """
 
 import logging
@@ -20,12 +20,12 @@ from typing import Dict
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# UE 类型路径 → C++ 类型名映射
-# D-03: 核心类型硬编码字典
+# UE type path -> C++ type name mapping
+# D-03: Hardcoded core type dictionary
 # ============================================================================
 
 UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
-    # ScriptStruct 类型（F 前缀）
+    # ScriptStruct types (F prefix)
     "/Script/CoreUObject.Vector": "FVector",
     "/Script/CoreUObject.Rotator": "FRotator",
     "/Script/CoreUObject.Transform": "FTransform",
@@ -53,7 +53,7 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/Engine.GameplayTag": "FGameplayTag",
     "/Script/Engine.GameplayTagContainer": "FGameplayTagContainer",
 
-    # Class 类型（A 前缀 Actor，U 前缀 UObject/Component）
+    # Class types (A prefix for Actor, U prefix for UObject/Component)
     "/Script/Engine.SceneComponent": "USceneComponent",
     "/Script/Engine.ActorComponent": "UActorComponent",
     "/Script/Engine.Character": "ACharacter",
@@ -104,7 +104,7 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/UMG.ProgressBar": "UProgressBar",
     "/Script/UMG.Spacer": "USpacer",
 
-    # 基本类型（无前缀或 UE 特定包装）
+    # Basic types (no prefix or UE-specific wrappers)
     "float": "float",
     "double": "double",
     "bool": "bool",
@@ -135,12 +135,12 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
 }
 
 # ============================================================================
-# Engine 类路径映射（支持 D-02 继承链解析）
-# /Script/Engine.XXX → AXXX/UXXX/FXXX
+# Engine class path mapping (supports D-02 inheritance chain resolution)
+# /Script/Engine.XXX -> AXXX/UXXX/FXXX
 # ============================================================================
 
 ENGINE_CLASS_PATHS: Dict[str, str] = {
-    # Actors (A 前缀)
+    # Actors (A prefix)
     "/Script/Engine.Actor": "AActor",
     "/Script/Engine.Pawn": "APawn",
     "/Script/Engine.Character": "ACharacter",
@@ -163,7 +163,7 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.PlayerStart": "APlayerStart",
     "/Script/Engine.TriggerVolume": "ATriggerVolume",
 
-    # Components (U 前缀)
+    # Components (U prefix)
     "/Script/Engine.ActorComponent": "UActorComponent",
     "/Script/Engine.SceneComponent": "USceneComponent",
     "/Script/Engine.PrimitiveComponent": "UPrimitiveComponent",
@@ -191,7 +191,7 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.SphereComponent": "USphereComponent",
     "/Script/Engine.CapsuleComponent": "UCapsuleComponent",
 
-    # UObjects (U 前缀)
+    # UObjects (U prefix)
     "/Script/Engine.Object": "UObject",
     "/Script/Engine.Blueprint": "UBlueprint",
     "/Script/Engine.BlueprintGeneratedClass": "UBlueprintGeneratedClass",
@@ -210,7 +210,7 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.ParticleSystem": "UParticleSystem",
 }
 
-# Actor 类后缀集合（用于启发式前缀判断）
+# Actor class suffix set (used for heuristic prefix inference)
 ACTOR_SUFFIXES = frozenset({
     "Actor", "Pawn", "Character", "Controller", "GameMode", "GameModeBase",
     "GameState", "GameStateBase", "PlayerState",
@@ -218,7 +218,7 @@ ACTOR_SUFFIXES = frozenset({
     "Trigger", "Zone",
 })
 
-# Component 类后缀集合
+# Component class suffix set
 COMPONENT_SUFFIXES = frozenset({
     "Component", "Subcomponent",
 })
@@ -226,18 +226,18 @@ COMPONENT_SUFFIXES = frozenset({
 
 def ue_path_to_cpp_type(ue_type: str) -> str:
     """
-    将 UE 类型路径转换为 C++ 类型名。
+    Convert UE type path to C++ type name.
 
-    支持的输入格式：
-    1. 引用格式: "ScriptStruct'CoreUObject.Vector'"
-    2. 路径格式: "/Script/CoreUObject.Vector"
-    3. 基本类型: "float", "bool", "name", "text"
+    Supported input formats:
+    1. Reference format: "ScriptStruct'CoreUObject.Vector'"
+    2. Path format: "/Script/CoreUObject.Vector"
+    3. Basic types: "float", "bool", "name", "text"
 
     Args:
-        ue_type: UE 类型字符串
+        ue_type: UE type string
 
     Returns:
-        C++ 类型名字符串。如果无法识别，返回输入值并记录警告日志。
+        C++ type name string. Returns input value and logs warning if unrecognized.
 
     Examples:
         >>> ue_path_to_cpp_type("ScriptStruct'CoreUObject.Vector'")
@@ -253,46 +253,46 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
         logger.warning("Empty UE type path provided")
         return ue_type
 
-    # 1. 尝试精确匹配
+    # 1. Try exact match
     if ue_type in UE_TO_CPP_TYPE_MAP:
         return UE_TO_CPP_TYPE_MAP[ue_type]
 
-    # UE 编辑器元数据属性名 — 非真实 C++ 类型，作为 FString 处理
+    # UE editor metadata property names -- not real C++ types, treated as FString
     if ue_type in ("Warning", "Info", "Details", "Category"):
         return "FString"
 
-    # 2. 处理引用格式 (ScriptStruct'...' 或 Class'...')
-    # 格式: Type'SubPath.Name' 或 Type'/Script/Package.Name'
+    # 2. Handle reference format (ScriptStruct'...' or Class'...')
+    # Format: Type'SubPath.Name' or Type'/Script/Package.Name'
     match = re.match(r"^(ScriptStruct|Class|Enum|Interface)'(.+)'$", ue_type)
     if match:
         inner = match.group(2)
-        # 尝试构建完整路径
-        # 格式可能是 "CoreUObject.Vector" 或 "/Script/CoreUObject.Vector"
+        # Try to build full path
+        # Format may be "CoreUObject.Vector" or "/Script/CoreUObject.Vector"
         if not inner.startswith("/"):
-            # 简化路径: "CoreUObject.Vector" → "/Script/CoreUObject.Vector"
-            # 假设简化的 ScriptStruct 路径在 CoreUObject 包下
+            # Simplified path: "CoreUObject.Vector" -> "/Script/CoreUObject.Vector"
+            # Assume simplified ScriptStruct paths are under CoreUObject package
             inner = f"/Script/{inner}"
 
-        # 尝试匹配
+        # Try to match
         if inner in UE_TO_CPP_TYPE_MAP:
             return UE_TO_CPP_TYPE_MAP[inner]
 
-        # 尝试作为完整路径再次处理
+        # Try processing as full path again
         return _apply_type_heuristic(inner)
 
-    # 3. 处理路径格式 /Script/Package.Name
+    # 3. Handle path format /Script/Package.Name
     if ue_type.startswith("/Script/"):
         if ue_type in UE_TO_CPP_TYPE_MAP:
             return UE_TO_CPP_TYPE_MAP[ue_type]
-        # World Partition hashed 路径规范化（如 /Script/Engine_3103784960 → /Script/Engine）
+        # World Partition hashed path normalization (e.g. /Script/Engine_3103784960 -> /Script/Engine)
         from uasset_read.link.linker import normalize_world_partition_path
         normalized = normalize_world_partition_path(ue_type)
         if normalized != ue_type and normalized in UE_TO_CPP_TYPE_MAP:
             return UE_TO_CPP_TYPE_MAP[normalized]
         return _apply_type_heuristic(ue_type)
 
-    # 4. 简单类型名（可能是基本类型或已知类型）
-    # 尝试小写匹配（"vector" → "FVector"）
+    # 4. Simple type name (may be a basic or known type)
+    # Try lowercase matching ("vector" -> "FVector")
     lower_type = ue_type.lower()
     if lower_type in ("vector",):
         return "FVector"
@@ -306,74 +306,74 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
         return "FColor"
     if lower_type in ("guid",):
         return "FGuid"
-    # 基本类型直接返回（已在 UE_TO_CPP_TYPE_MAP 中）
+    # Basic types returned directly (already in UE_TO_CPP_TYPE_MAP)
     if lower_type in ("float", "double", "bool", "int", "int32", "int64",
                        "uint8", "uint16", "uint32", "uint64",
                        "byte", "char", "string", "fstring", "fname", "ftext",
                        "uobject", "uobject*", "fstring*"):
         return UE_TO_CPP_TYPE_MAP.get(lower_type, ue_type)
 
-    # 5. 未知类型 - 应用启发式
+    # 5. Unknown type -- apply heuristic
     logger.warning(f"Unknown UE type path: '{ue_type}', returning as-is")
     return ue_type
 
 
 def _apply_type_heuristic(path: str) -> str:
     """
-    对未知类型路径应用启发式前缀判断。
+    Apply heuristic prefix inference for unknown type paths.
 
-    规则：
-    - Actor 后缀 → A 前缀
-    - Component 后缀 → U 前缀
-    - ScriptStruct → F 前缀（结构体）
-    - Enum → E 前缀
-    - Interface → I 前缀
-    - 默认 → U 前缀（UObject）
+    Rules:
+    - Actor suffix -> A prefix
+    - Component suffix -> U prefix
+    - ScriptStruct -> F prefix (struct)
+    - Enum -> E prefix
+    - Interface -> I prefix
+    - Default -> U prefix (UObject)
 
     Args:
-        path: UE 类型路径（如 /Script/Engine.MyCustomActor）
+        path: UE type path (e.g. /Script/Engine.MyCustomActor)
 
     Returns:
-        推断的 C++ 类型名
+        Inferred C++ type name
     """
-    # 提取类名部分
+    # Extract class name portion
     if "/" in path:
         class_name = path.rsplit(".", 1)[-1]
     else:
         class_name = path
 
-    # 检查是否在已知映射中
+    # Check if in known mappings
     if path in ENGINE_CLASS_PATHS:
         return ENGINE_CLASS_PATHS[path]
     if path in UE_TO_CPP_TYPE_MAP:
         return UE_TO_CPP_TYPE_MAP[path]
 
-    # 启发式前缀判断
-    # Actor 后缀
+    # Heuristic prefix inference
+    # Actor suffix
     for suffix in ACTOR_SUFFIXES:
         if class_name.endswith(suffix):
             return f"A{class_name}"
 
-    # Component 后缀
+    # Component suffix
     for suffix in COMPONENT_SUFFIXES:
         if class_name.endswith(suffix):
             return f"U{class_name}"
 
-    # 默认：U 前缀（UObject）
+    # Default: U prefix (UObject)
     return f"U{class_name}"
 
 
 def ue_package_path_to_cpp_class(package_path: str) -> str:
     """
-    将 UE 包路径转换为 C++ 类名。
+    Convert UE package path to C++ class name.
 
-    主要用于 D-02 继承链解析。
+    Primarily used for D-02 inheritance chain resolution.
 
     Args:
-        package_path: UE 包路径（如 "/Script/Engine.Character"）
+        package_path: UE package path (e.g. "/Script/Engine.Character")
 
     Returns:
-        C++ 类名字符串
+        C++ class name string
 
     Examples:
         >>> ue_package_path_to_cpp_class("/Script/Engine.Character")
@@ -385,23 +385,23 @@ def ue_package_path_to_cpp_class(package_path: str) -> str:
         logger.warning("Empty package path provided")
         return ""
 
-    # 1. 尝试精确匹配
+    # 1. Try exact match
     if package_path in ENGINE_CLASS_PATHS:
         return ENGINE_CLASS_PATHS[package_path]
 
-    # 2. 尝试 UE_TO_CPP_TYPE_MAP
+    # 2. Try UE_TO_CPP_TYPE_MAP
     if package_path in UE_TO_CPP_TYPE_MAP:
         return UE_TO_CPP_TYPE_MAP[package_path]
 
-    # 3. 应用启发式
+    # 3. Apply heuristic
     return _apply_type_heuristic(package_path)
 
 
 # ============================================================================
-# 父类前缀推断
+# Parent class prefix inference
 # ============================================================================
 
-# 父类名前缀 → C++ 类型前缀映射
+# Parent class name prefix -> C++ type prefix mapping
 _PREFIX_MAP = {
     "A": "A",
     "U": "U",
@@ -413,21 +413,21 @@ _PREFIX_MAP = {
 
 def infer_class_prefix(parent_class: str) -> str:
     """
-    根据父类名推断 C++ 类型前缀。
+    Infer C++ type prefix from parent class name.
 
-    规则：
-    - 父类以 A 开头 → 返回 A（Actor 派生）
-    - 父类以 U 开头 → 返回 U（UObject 派生）
-    - 父类以 F 开头 → 返回 F（结构体）
-    - 父类以 E 开头 → 返回 E（枚举）
-    - 父类以 I 开头 → 返回 I（接口）
-    - 默认返回 U
+    Rules:
+    - Parent starts with A -> return A (Actor derived)
+    - Parent starts with U -> return U (UObject derived)
+    - Parent starts with F -> return F (struct)
+    - Parent starts with E -> return E (enum)
+    - Parent starts with I -> return I (interface)
+    - Default returns U
 
     Args:
-        parent_class: 父类 C++ 类名（如 "ACharacter"、"USceneComponent"）
+        parent_class: Parent class C++ class name (e.g. "ACharacter", "USceneComponent")
 
     Returns:
-        C++ 类型前缀字符
+        C++ type prefix character
 
     Examples:
         >>> infer_class_prefix("ACharacter")
@@ -451,24 +451,24 @@ def infer_class_prefix(parent_class: str) -> str:
 
 
 # ============================================================================
-# UE 类型路径 → C++ 类型名解析
+# UE type path -> C++ type name resolution
 # ============================================================================
 
 def resolve_ue_type(ue_path: str) -> str:
     """
-    从完整 UE 路径解析出 C++ 类型名。
+    Resolve C++ type name from full UE path.
 
-    支持的路径格式：
-    - /Script/Engine.Actor → AActor
-    - /Script/CoreUObject.Object → UObject
-    - /Script/Engine.SceneComponent → USceneComponent
-    - /Script/CoreUObject.Vector → FVector
+    Supported path formats:
+    - /Script/Engine.Actor -> AActor
+    - /Script/CoreUObject.Object -> UObject
+    - /Script/Engine.SceneComponent -> USceneComponent
+    - /Script/CoreUObject.Vector -> FVector
 
     Args:
-        ue_path: UE 完整类型路径（如 "/Script/Engine.Actor"）
+        ue_path: Full UE type path (e.g. "/Script/Engine.Actor")
 
     Returns:
-        C++ 类型名字符串。如果无法解析，返回 UObject 作为安全默认值。
+        C++ type name string. Returns UObject as safe default if unresolvable.
 
     Examples:
         >>> resolve_ue_type("/Script/Engine.Actor")
@@ -485,33 +485,33 @@ def resolve_ue_type(ue_path: str) -> str:
     if not ue_path:
         return "UObject"
 
-    # 尝试精确匹配已知映射
+    # Try exact match with known mappings
     if ue_path in UE_TO_CPP_TYPE_MAP:
         return UE_TO_CPP_TYPE_MAP[ue_path]
 
     if ue_path in ENGINE_CLASS_PATHS:
         return ENGINE_CLASS_PATHS[ue_path]
 
-    # 从路径提取类名部分
-    # /Script/Engine.Actor → Actor, /Script/CoreUObject.Vector → Vector
+    # Extract class name portion from path
+    # /Script/Engine.Actor -> Actor, /Script/CoreUObject.Vector -> Vector
     class_name = ue_path.rsplit(".", 1)[-1] if "." in ue_path else ue_path
 
-    # 根据路径包推断前缀
-    # CoreUObject 包下的类型通常是 F 前缀（结构体）
+    # Infer prefix from path package
+    # Types under CoreUObject package are typically F prefix (structs)
     if "/CoreUObject." in ue_path:
         return f"F{class_name}"
 
-    # Engine 包下的类型需要进一步判断
+    # Types under Engine package need further inference
     if "/Engine." in ue_path:
-        # 尝试启发式
+        # Try heuristic
         return _apply_type_heuristic(ue_path)
 
-    # 其他包默认使用 U 前缀
+    # Other packages default to U prefix
     return f"U{class_name}"
 
 
 # ============================================================================
-# 导出列表
+# Export list
 # ============================================================================
 
 __all__ = [
