@@ -85,6 +85,32 @@ STABLE_ASSETS = [
         "AnimStruct",
         "Lyra_AnimStruct_CardinalDirections.uasset",
     ),
+    # --- Benchmark samples for previously uncovered asset types (Task #505) ---
+    SampleAsset(
+        "gray_light_texture_cube",
+        "TextureCube",
+        "MutableSample_GrayLightTextureCube.uasset",
+    ),
+    SampleAsset(
+        "teeth_subsurface_profile",
+        "SubsurfaceProfile",
+        "GameAnimSample_TeethSubsurfaceProfile.uasset",
+    ),
+    SampleAsset(
+        "sandbox_anim_curve_comp_settings",
+        "AnimCurveCompressionCodec",
+        "GameAnimSample_SandboxAnimCurveCompSettings.uasset",
+    ),
+    SampleAsset(
+        "face_archetype_lod_settings_high",
+        "SkeletalMeshLODSettings",
+        "GameAnimSample_FaceArchetype_LODSettings_High.uasset",
+    ),
+    SampleAsset(
+        "grass_blade_foliage_type",
+        "FoliageType",
+        "ProjectTitan_SM_GrassBlade_FoliageType.uasset",
+    ),
 ]
 
 

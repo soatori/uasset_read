@@ -270,6 +270,32 @@ LOCAL_SAMPLES = [
         "SkeletalMesh",
         "CiciToon_SK_Mannequin.uasset",
     ),
+    # --- Benchmark samples for previously uncovered asset types ---
+    SampleAsset(
+        "gray_light_texture_cube",
+        "TextureCube",
+        "MutableSample_GrayLightTextureCube.uasset",
+    ),
+    SampleAsset(
+        "teeth_subsurface_profile",
+        "SubsurfaceProfile",
+        "GameAnimSample_TeethSubsurfaceProfile.uasset",
+    ),
+    SampleAsset(
+        "sandbox_anim_curve_comp_settings",
+        "AnimCurveCompressionCodec",
+        "GameAnimSample_SandboxAnimCurveCompSettings.uasset",
+    ),
+    SampleAsset(
+        "face_archetype_lod_settings_high",
+        "SkeletalMeshLODSettings",
+        "GameAnimSample_FaceArchetype_LODSettings_High.uasset",
+    ),
+    SampleAsset(
+        "grass_blade_foliage_type",
+        "FoliageType",
+        "ProjectTitan_SM_GrassBlade_FoliageType.uasset",
+    ),
 ]
 
 
