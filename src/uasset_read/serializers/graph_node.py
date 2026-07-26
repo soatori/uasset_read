@@ -22,7 +22,7 @@ from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin, FMemberReference
 
-from uasset_read.serializers.graph import (
+from uasset_read.serializers.graph_helpers import (
     _read_guid, _rcn, _gac, _get_thread_local,
     _read_tag_bool, _read_tag_i32, _read_tag_fname,
     read_ftext_with_history,

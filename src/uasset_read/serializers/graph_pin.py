@@ -24,7 +24,7 @@ from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 from uasset_read.core.utils import normalize_hex_guid
 
-from uasset_read.serializers.graph import (
+from uasset_read.serializers.graph_helpers import (
     _read_guid, _rcn, _get_thread_local, _pin_trace_enabled,
     _record_pin_recovery, _trace_fields_append,
     _read_fstring_safe, _read_ftext_value,
