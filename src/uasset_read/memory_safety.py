@@ -244,10 +244,15 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         logger.debug("psutil RSS retrieval failed: %s", e, exc_info=True)
     except Exception as e:
         # psutil.NoSuchProcess, psutil.AccessDenied etc. inherit from psutil.Error
-        if type(e).__name__ in ("NoSuchProcess", "AccessDenied", "ZombieProcess"):
-            logger.debug("psutil RSS retrieval failed (%s): %s", type(e).__name__, e)
-        else:
-            raise
+        # but not from OSError. If psutil was imported, check isinstance.
+        try:
+            import psutil
+            if isinstance(e, psutil.Error):
+                logger.debug("psutil RSS retrieval failed (%s): %s", type(e).__name__, e)
+                return 0.0
+        except ImportError:
+            pass
+        raise
 
     # Windows fallback: use ctypes to call GetProcessMemoryInfo
     if sys.platform == "win32":
