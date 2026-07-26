@@ -258,11 +258,12 @@ def _read_secondary_tables(
     path: str,
     memory_monitor,
     extra_linker_setup=None,
+    budget: "ResourceBudget | None" = None,
 ) -> None:
     """读取 DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData。"""
     # 读取 DependsMap（依赖表）和 PreloadDependencies（预加载依赖）
     if hasattr(result.summary, 'depends_offset'):
-        result.summary.depends_map = read_depends_map(archive, result.summary)
+        result.summary.depends_map = read_depends_map(archive, result.summary, budget=budget)
     if hasattr(result.summary, 'preload_dependency_count'):
         result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 

@@ -164,6 +164,7 @@ def _parse_package_core(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
                 path=path, memory_monitor=memory_monitor,
+                budget=resource_budget,
             )
             linker = _create_linker(
                 archive, result.summary, result.name_map,
@@ -495,6 +496,7 @@ def parse_package_lazy(
                 archive, result, tolerant, linker=None,
                 mappings_provider=mappings_provider,
                 path=path, memory_monitor=None,
+                budget=resource_budget,
             )
         else:
             # 回退路径：通过 bundle 读取（read_file）
