@@ -154,7 +154,7 @@ class JSONRenderer(IRenderer):
                 data["debug"] = debug_dict
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
-        data["statistics"] = self._calculate_statistics(ir)
+        data["statistics"] = ir.statistics
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:

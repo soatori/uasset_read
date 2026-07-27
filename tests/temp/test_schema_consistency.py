@@ -49,3 +49,16 @@ def test_summary_enriched_fields():
     assert "total_properties" in summary, "Missing total_properties"
     assert "total_name_entries" in summary, "Missing total_name_entries"
     assert summary["total_name_entries"] > 0, "name_map should not be empty"
+
+
+def test_statistics_content():
+    """Statistics should contain meaningful counts."""
+    sample = Path(__file__).resolve().parent.parent / "samples" / "FirstPerson_BP_FirstPersonCharacter.uasset"
+    if not sample.exists():
+        pytest.skip("sample not available")
+    output = parse_single(str(sample), format="json", tolerant=True)
+    data = json.loads(output)
+    stats = data["statistics"]
+    assert stats["total_exports"] > 0
+    assert stats["total_properties"] >= 0
+    assert isinstance(stats["export_status_counts"], dict)

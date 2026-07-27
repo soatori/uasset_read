@@ -76,6 +76,25 @@ def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int
     return count
 
 
+def _build_statistics(result: "ParseResult | LinkerParseResult") -> dict:
+    """Build statistics dict from parse result for JSON output."""
+    export_status_counts: dict[str, int] = {}
+    total_props = 0
+    for export in result.export_map or []:
+        ps = getattr(export, "parse_status", None)
+        ps_str = str(ps.value) if hasattr(ps, "value") else str(ps) if ps else "success"
+        export_status_counts[ps_str] = export_status_counts.get(ps_str, 0) + 1
+        total_props += len(getattr(export, "properties", None) or [])
+
+    return {
+        "total_exports": len(result.export_map or []),
+        "total_properties": total_props,
+        "export_status_counts": export_status_counts,
+        "warning_count": len(getattr(result, "warnings", None) or []),
+        "diagnostic_count": len(getattr(result, "diagnostics", None) or []),
+    }
+
+
 def _build_animation_data(result: "ParseResult | LinkerParseResult") -> AnimationDataIR | None:
     """Aggregate animation data from ParseResult (anim_blueprint, anim_sequence, anim_montage).
 
@@ -236,6 +255,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         ),
         import_map=import_map,
         name_map_entries=name_map_entries,
+        statistics=_build_statistics(result),
     )
 
     # Bind function/event implementation associations
