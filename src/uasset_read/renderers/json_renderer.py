@@ -82,6 +82,8 @@ class JSONRenderer(IRenderer):
             "total_import_count": ir.header.total_import_count,
             "ue_version": ir.header.ue_version,
             "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
+            "total_properties": ir.header.total_properties,
+            "total_name_entries": ir.header.total_name_entries,
         }
         all_exports = ir.exports if is_debug else filter_editor_items(ir.exports)
         # Filter exports with absurd serial_size (corrupted metadata)

@@ -36,3 +36,16 @@ def test_all_samples_have_warnings_and_diagnostics():
         assert "diagnostics" in data, f"{sample.name}: missing diagnostics"
         assert isinstance(data["warnings"], list), f"{sample.name}: warnings not list"
         assert isinstance(data["diagnostics"], list), f"{sample.name}: diagnostics not list"
+
+
+def test_summary_enriched_fields():
+    """Summary should include total_properties and total_name_entries."""
+    sample = Path(__file__).resolve().parent.parent / "samples" / "FirstPerson_BP_FirstPersonCharacter.uasset"
+    if not sample.exists():
+        pytest.skip("sample not available")
+    output = parse_single(str(sample), format="json", tolerant=True)
+    data = json.loads(output)
+    summary = data["summary"]
+    assert "total_properties" in summary, "Missing total_properties"
+    assert "total_name_entries" in summary, "Missing total_name_entries"
+    assert summary["total_name_entries"] > 0, "name_map should not be empty"

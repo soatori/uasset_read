@@ -126,6 +126,10 @@ class PackageHeaderIR:
     # Data resources
     data_resource_offset: int = 0
 
+    # Enriched summary fields
+    total_properties: int = 0
+    total_name_entries: int = 0
+
 
 @dataclass
 class PinIR:

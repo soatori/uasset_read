@@ -333,6 +333,9 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
             })
         return result_list
 
+    # Count total properties across all exports
+    total_props = sum(len(getattr(e, "properties", []) or []) for e in result.export_map or [])
+
     return PackageHeaderIR(
         package_name=_safe_str(getattr(summary, "package_name", None)),
         package_class=_safe_str(getattr(summary, "package_class", None)),
@@ -405,6 +408,9 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         payload_toc_offset=_safe_int(getattr(summary, "payload_toc_offset", 0)),
         # Data resource
         data_resource_offset=_safe_int(getattr(summary, "data_resource_offset", 0)),
+        # Enriched summary fields
+        total_properties=total_props,
+        total_name_entries=len(result.name_map) if result.name_map else 0,
     )
 
 def _get_version_string(result: ParseResult) -> str:
