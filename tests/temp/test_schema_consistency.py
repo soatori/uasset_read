@@ -21,3 +21,18 @@ def test_all_samples_have_import_map_and_name_map():
         assert "name_map" in data, f"{sample.name}: missing name_map"
         assert isinstance(data["import_map"], list), f"{sample.name}: import_map not list"
         assert isinstance(data["name_map"], list), f"{sample.name}: name_map not list"
+
+
+def test_all_samples_have_warnings_and_diagnostics():
+    """All output files should include warnings and diagnostics (even if empty)."""
+    samples_dir = Path(__file__).resolve().parent.parent / "samples"
+    samples = list(sorted(samples_dir.glob("*.uasset")))
+    if not samples:
+        pytest.skip("no samples available")
+    for sample in samples:
+        output = parse_single(str(sample), format="json", tolerant=True)
+        data = json.loads(output)
+        assert "warnings" in data, f"{sample.name}: missing warnings"
+        assert "diagnostics" in data, f"{sample.name}: missing diagnostics"
+        assert isinstance(data["warnings"], list), f"{sample.name}: warnings not list"
+        assert isinstance(data["diagnostics"], list), f"{sample.name}: diagnostics not list"

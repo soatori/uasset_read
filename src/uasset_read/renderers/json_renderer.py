@@ -123,18 +123,14 @@ class JSONRenderer(IRenderer):
             data["logic_sources"] = ir.logic_sources
         if ir.diagnostics_data and ir.diagnostics_data.errors:
             data["errors"] = ir.diagnostics_data.errors
-        if ir.diagnostics_data and ir.diagnostics_data.warnings:
-            data["warnings"] = ir.diagnostics_data.warnings
+        data["warnings"] = ir.diagnostics_data.warnings if ir.diagnostics_data else []
         if ir.diagnostics_data and ir.diagnostics_data.diagnostics_truncated_count > 0:
             data["diagnostics_truncated_count"] = ir.diagnostics_data.diagnostics_truncated_count
-        if ir.diagnostics:
-            if is_debug:
-                data["diagnostics"] = [d.to_dict() for d in ir.diagnostics]
-            else:
-                all_diags = [d.to_dict() for d in ir.diagnostics]
-                folded = self._fold_diagnostics(all_diags)
-                if folded:
-                    data["diagnostics"] = folded
+        if is_debug:
+            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+        else:
+            all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+            data["diagnostics"] = self._fold_diagnostics(all_diags)
         if ir.dependencies and ir.dependencies.asset_registry_data:
             data["asset_registry_data"] = ir.dependencies.asset_registry_data
         if ir.animation and ir.animation.anim_blueprint:
