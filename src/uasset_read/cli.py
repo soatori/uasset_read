@@ -83,7 +83,6 @@ def create_parser():
                         help='Resolve and parse parent Blueprint assets')
     parser.add_argument('--mappings', metavar='FILE', help='Load .usmap/.jmap type mappings')
     parser.add_argument('--game', metavar='NAME', help='Enable game-specific property readers')
-    parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode (default)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
     parser.add_argument('--full-parse', action='store_true', default=False,
                         help='Force full parse for large blueprints (skip lightweight mode)')

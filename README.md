@@ -96,8 +96,8 @@ python run.py path/to/file.uasset --list-formats # List available formats
 python run.py path/to/input/dir/ --batch --batch-dir path/to/output/dir/
 
 # Strictness
+python run.py path/to/file.uasset                # Continue on recoverable errors (default)
 python run.py path/to/file.uasset --strict       # Stop on warnings
-python run.py path/to/file.uasset --tolerant     # Continue on recoverable errors (default)
 
 # Debug
 python run.py path/to/file.uasset --verbose      # Enable verbose logging
