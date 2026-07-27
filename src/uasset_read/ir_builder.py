@@ -442,6 +442,14 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
             logger.debug("Failed to build export %d IR: %s", idx, e, exc_info=True)
     return exports
 
+_MAX_SERIAL_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB sanity limit
+
+def _clamp_serial_size(size: int) -> int:
+    """Clamp corrupted serial_size values (negative or absurdly large)."""
+    if size < 0 or size > _MAX_SERIAL_SIZE:
+        return 0
+    return size
+
 def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
     super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
@@ -480,7 +488,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         index=idx,
         object_name=_safe_str(getattr(export, "object_name", None)),
         object_class=_safe_str(resolved_class),
-        serial_size=getattr(export, "serial_size", 0) or 0,
+        serial_size=_clamp_serial_size(getattr(export, "serial_size", 0) or 0),
         outer_index_resolved=outer_resolved,
         super_index_resolved=super_resolved,
         parent_class=parent_class,
