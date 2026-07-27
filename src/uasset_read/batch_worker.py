@@ -295,6 +295,10 @@ class _SubprocessAdapter:
 
     def _forward_stderr_line(self, line: str) -> None:
         rendered = line.rstrip("\r\n")
+        from uasset_read.project_logging import forward_worker_log_event
+
+        if forward_worker_log_event(rendered):
+            return
         level = logging.DEBUG
         for name in ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"):
             if f"[{name}]" in rendered:

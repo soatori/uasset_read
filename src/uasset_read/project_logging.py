@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import sys
 import threading
@@ -19,6 +20,7 @@ from uuid import uuid4
 _LOGGER_NAME = "uasset_read"
 _HANDLER_MARKER = "_uasset_read_project_log_handler"
 _WORKER_HANDLER_MARKER = "_uasset_read_worker_log_handler"
+WORKER_LOG_EVENT_PREFIX = "__uasset_read_worker_log__:"
 _state_lock = threading.Lock()
 _scope_lock = threading.Lock()
 _configured_log_path: Path | None = None
@@ -70,10 +72,14 @@ class _LogContextFilter(logging.Filter):
         self.run_id = run_id
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.run_id = self.run_id
-        record.process_id = record.process
-        record.asset = _log_asset.get()
-        record.stage = _log_stage.get()
+        if not hasattr(record, "run_id"):
+            record.run_id = self.run_id
+        if not hasattr(record, "process_id"):
+            record.process_id = record.process
+        if not hasattr(record, "asset"):
+            record.asset = _log_asset.get()
+        if not hasattr(record, "stage"):
+            record.stage = _log_stage.get()
         return True
 
 
@@ -95,7 +101,12 @@ class _RepeatedDebugFilter(logging.Filter):
         # Suppress repeated messages per suppress_levels, grouped by original template
         if self.limit <= 0 or record.levelno not in self.suppress_levels:
             return True
-        key = (_log_asset.get(), _log_stage.get(), record.name, str(record.msg))
+        key = (
+            getattr(record, "asset", _log_asset.get()),
+            getattr(record, "stage", _log_stage.get()),
+            record.name,
+            str(record.msg),
+        )
         count = self.counts.get(key, 0) + 1
         self.counts[key] = count
         if count > self.limit:
@@ -384,20 +395,68 @@ def configure_worker_stream_logging(
         if getattr(existing, _WORKER_HANDLER_MARKER, False):
             package_logger.removeHandler(existing)
             existing.close()
-    handler = logging.StreamHandler(stream or sys.stderr)
+    handler = _WorkerLogEventHandler(
+        stream or sys.stderr,
+        run_id=run_id,
+        asset=asset,
+    )
     setattr(handler, _WORKER_HANDLER_MARKER, True)
     handler.setLevel(_coerce_level(level))
-    handler.setFormatter(logging.Formatter(
-        fmt=(
-            f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
-            f"asset={asset} stage=worker] %(name)s: %(message)s"
-        ),
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
     package_logger.setLevel(logging.DEBUG)
     package_logger.propagate = False
     package_logger.addHandler(handler)
     return handler
+
+
+class _WorkerLogEventHandler(logging.StreamHandler):
+    """Write worker records as framed JSON for the parent process."""
+
+    def __init__(self, stream, *, run_id: str, asset: str) -> None:
+        super().__init__(stream)
+        self.run_id = run_id
+        self.asset = asset
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            payload = {
+                "asset": self.asset,
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+                "pid": record.process,
+                "run_id": self.run_id,
+                "stage": "worker",
+            }
+            self.stream.write(WORKER_LOG_EVENT_PREFIX + json.dumps(payload) + self.terminator)
+            self.flush()
+        except (OSError, TypeError, ValueError):
+            self.handleError(record)
+
+
+def forward_worker_log_event(line: str) -> bool:
+    """Restore a framed worker event into the parent-owned project logger."""
+    if not line.startswith(WORKER_LOG_EVENT_PREFIX):
+        return False
+    try:
+        payload = json.loads(line.removeprefix(WORKER_LOG_EVENT_PREFIX))
+        level = getattr(logging, payload["level"])
+        logger_name = payload["logger"]
+        if not isinstance(level, int) or not isinstance(logger_name, str):
+            return False
+        logging.getLogger(logger_name).log(
+            level,
+            "%s",
+            payload["message"],
+            extra={
+                "asset": payload["asset"],
+                "process_id": payload["pid"],
+                "run_id": payload["run_id"],
+                "stage": payload["stage"],
+            },
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return True
 
 
 def configure_project_logging(
@@ -429,6 +488,8 @@ def configure_project_logging(
         if not enabled or (isinstance(level, str) and level.lower() == "off"):
             _shutdown_locked(package_logger)
             _disabled_by_request = True
+            return None
+        if any(getattr(handler, _WORKER_HANDLER_MARKER, False) for handler in package_logger.handlers):
             return None
 
         default_request = (
