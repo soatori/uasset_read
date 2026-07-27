@@ -84,6 +84,9 @@ class JSONRenderer(IRenderer):
             "saved_hash": ir.header.saved_hash.hex() if ir.header.saved_hash else None,
         }
         all_exports = ir.exports if is_debug else filter_editor_items(ir.exports)
+        # Filter exports with absurd serial_size (corrupted metadata)
+        if not is_debug:
+            all_exports = [e for e in all_exports if e.serial_size > 0]
         data["exports"] = [
             self._export_to_dict(e, options, is_debug)
             for e in all_exports
