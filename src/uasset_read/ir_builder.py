@@ -184,6 +184,20 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status_code = None
         status_message = None
 
+    # Build import_map for JSON output
+    import_map = []
+    for imp in result.import_map or []:
+        import_map.append({
+            "index": getattr(imp, "index", 0),
+            "class_package": getattr(imp, "class_package", ""),
+            "class_name": getattr(imp, "class_name", ""),
+            "object_name": getattr(imp, "object_name", ""),
+            "outer_index": getattr(imp, "outer_index", 0),
+        })
+
+    # Build name_map_entries for JSON output
+    name_map_entries = list(result.name_map) if result.name_map else []
+
     ir = PackageIR(
         header=header,
         name_map=tuple(result.name_map) if result.name_map else (),
@@ -220,6 +234,8 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             getattr(result, 'hex_view_entries', []),
             hex_view_truncated_count=getattr(result, 'hex_view_dropped_count', 0),
         ),
+        import_map=import_map,
+        name_map_entries=name_map_entries,
     )
 
     # Bind function/event implementation associations

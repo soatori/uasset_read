@@ -88,6 +88,12 @@ class JSONRenderer(IRenderer):
             self._export_to_dict(e, options, is_debug)
             for e in all_exports
         ]
+        data["import_map"] = [
+            {"index": i["index"], "class_package": i["class_package"],
+             "class_name": i["class_name"], "object_name": i["object_name"]}
+            for i in ir.import_map
+        ]
+        data["name_map"] = ir.name_map_entries
         if ir.blueprint is not None:
             data["blueprint"] = self._blueprint_to_dict(ir.blueprint)
         if ir.decompiled_functions:

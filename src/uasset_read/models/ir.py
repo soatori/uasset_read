@@ -572,6 +572,8 @@ class PackageIR:
     dependencies: PackageDependenciesIR | None = None
     diagnostics_data: DiagnosticsDataIR | None = None
     debug: DebugIR | None = None
+    import_map: list[dict] = field(default_factory=list)
+    name_map_entries: list[str] = field(default_factory=list)
 
 
 # Animation models re-exported from ir_anim.py for backward compat
