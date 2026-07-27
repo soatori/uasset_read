@@ -90,7 +90,7 @@ class JSONRenderer(IRenderer):
         if not is_debug:
             all_exports = [e for e in all_exports if e.serial_size > 0]
         data["exports"] = [
-            self._export_to_dict(e, options, is_debug)
+            self._export_to_dict(e, options, is_debug, name_map=ir.name_map)
             for e in all_exports
         ]
         data["import_map"] = [
@@ -157,13 +157,13 @@ class JSONRenderer(IRenderer):
         data["statistics"] = ir.statistics
         return data
 
-    def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False) -> dict[str, Any]:
+    def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False, name_map: tuple = ()) -> dict[str, Any]:
         # Filter editor layout properties in standard mode
         if is_debug:
-            properties = [self._property_to_dict(p, is_debug=True) for p in export.properties]
+            properties = [self._property_to_dict(p, is_debug=True, name_map=name_map) for p in export.properties]
         else:
             properties = [
-                self._property_to_dict(p, is_debug=False) for p in export.properties
+                self._property_to_dict(p, is_debug=False, name_map=name_map) for p in export.properties
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
@@ -193,7 +193,7 @@ class JSONRenderer(IRenderer):
             d["error_message"] = export.error_message
         return d
 
-    def _property_to_dict(self, prop, is_debug: bool = False) -> dict[str, Any]:
+    def _property_to_dict(self, prop, is_debug: bool = False, name_map: tuple[str, ...] = ()) -> dict[str, Any]:
         d: dict[str, Any] = {"name": prop.name, "type": prop.type, "value": prop.value}
         # Omit default value fields in standard mode
         if is_debug or prop.array_index != -1:
@@ -216,6 +216,14 @@ class JSONRenderer(IRenderer):
             val = d["value"]
             if "full_name" in val and "object_name" in val:
                 d["value"] = {k: v for k, v in val.items() if k != "full_name"}
+        # ObjectProperty resolved_name: resolve numeric index to human-readable string
+        if d.get("type") == "ObjectProperty" and isinstance(d.get("value"), dict):
+            val = d["value"]
+            obj_name = val.get("object_name", "")
+            if obj_name and obj_name.lstrip("-").isdigit() and name_map:
+                idx = int(obj_name)
+                if 0 <= idx < len(name_map):
+                    d["value"]["resolved_name"] = name_map[idx]
         return d
 
     def _graph_to_dict(self, graph, options: RenderOptions) -> dict[str, Any]:
