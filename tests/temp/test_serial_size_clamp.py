@@ -3,6 +3,9 @@
 
 import json
 from pathlib import Path
+
+import pytest
+
 from uasset_read import parse_single
 
 
@@ -10,7 +13,7 @@ def test_als_animbp_serial_size_clamped():
     """ALS_AnimBP has 89 exports with serial_size in 10^18 range."""
     sample = Path(__file__).resolve().parent.parent / "samples" / "ALS_AnimBP.uasset"
     if not sample.exists():
-        return  # Skip if sample not available
+        pytest.skip("ALS_AnimBP.uasset sample not available")
     output = parse_single(str(sample), format="json", tolerant=True)
     data = json.loads(output)
     for export in data["exports"]:
