@@ -73,6 +73,7 @@ class JSONRenderer(IRenderer):
             "message": ir.diagnostics_data.status_message if ir.diagnostics_data else None,
             "code": ir.diagnostics_data.status_code if ir.diagnostics_data else None,
         }
+        data["metadata"] = {}
         data["summary"] = {
             "package_name": ir.header.package_name,
             "package_class": ir.header.package_class,
@@ -154,7 +155,22 @@ class JSONRenderer(IRenderer):
                 data["debug"] = debug_dict
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
-        data["statistics"] = ir.statistics
+        stats = dict(ir.statistics)
+        total_in_table = stats.get("total_exports_in_table", len(ir.exports))
+        exports_rendered = len(data["exports"])
+        omitted_by_reason: dict[str, int] = {}
+        if not is_debug:
+            editor_filtered = len(ir.exports) - len(filter_editor_items(ir.exports))
+            if editor_filtered:
+                omitted_by_reason["editor_filtered"] = editor_filtered
+            corrupted = len(filter_editor_items(ir.exports)) - exports_rendered
+            if corrupted:
+                omitted_by_reason["corrupted_serial_size"] = corrupted
+        stats["total_exports_in_table"] = total_in_table
+        stats["exports_rendered"] = exports_rendered
+        stats["exports_omitted"] = total_in_table - exports_rendered
+        stats["omitted_by_reason"] = omitted_by_reason
+        data["statistics"] = stats
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False, name_map: tuple = ()) -> dict[str, Any]:
