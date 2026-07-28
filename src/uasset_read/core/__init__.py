@@ -25,7 +25,7 @@ from uasset_read.project_logging import (
     set_last_parse_result,
 )
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
-from uasset_read.renderers.base import RenderOptions
+from uasset_read.renderers.base import RenderOptions, validate_output_level
 from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
@@ -215,6 +215,7 @@ def parse_single(
         ParseError: Parse failed
         ValueError: Render format does not exist
     """
+    validate_output_level(output_level)
     # #423: Skip reconfiguration when scoped_project_logging already owns the session.
     # A set _configured_run_id means the scoped wrapper already configured logging,
     # regardless of whether log_config is None or not.
@@ -414,6 +415,7 @@ def parse_batch(
     Raises:
         ValueError: Directory does not exist or contains no asset files
     """
+    validate_output_level(output_level)
     # Validate isolate_assets parameter
     if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
         raise ValueError(
