@@ -80,16 +80,22 @@ def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: 
     """Build statistics dict from parse result for JSON output."""
     export_status_counts: dict[str, int] = {}
     total_props = 0
-    for export in result.export_map or []:
+    parsed_exports = list(result.export_map or [])
+    for export in parsed_exports:
         ps = getattr(export, "parse_status", None)
         ps_str = str(ps.value) if hasattr(ps, "value") else str(ps) if ps else "success"
         export_status_counts[ps_str] = export_status_counts.get(ps_str, 0) + 1
         total_props += len(getattr(export, "properties", None) or [])
 
-    export_table_total = len(result.export_map or [])
+    declared_export_count = getattr(getattr(result, "summary", None), "export_count", None)
+    if isinstance(declared_export_count, int) and declared_export_count >= 0:
+        export_table_total = declared_export_count
+    else:
+        export_table_total = len(parsed_exports)
     return {
-        "total_exports": export_table_total,
+        "total_exports": len(parsed_exports),
         "total_exports_in_table": export_table_total,
+        "exports_parsed": len(parsed_exports),
         "exports_built": exports_built,
         "total_properties": total_props,
         "export_status_counts": export_status_counts,

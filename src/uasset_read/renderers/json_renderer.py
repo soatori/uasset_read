@@ -167,20 +167,25 @@ class JSONRenderer(IRenderer):
             data["function_graphs"] = self._build_function_graphs(ir)
         stats = dict(ir.statistics)
         total_in_table = stats.get("total_exports_in_table", ir.header.total_export_count)
+        exports_parsed = stats.get("exports_parsed", len(ir.exports))
         exports_built = stats.get("exports_built", len(ir.exports))
         exports_rendered = len(data["exports"])
         omitted_by_reason: dict[str, int] = {}
-        ir_build_failed = max(total_in_table - exports_built, 0)
+        export_table_parse_failed = max(total_in_table - exports_parsed, 0)
+        if export_table_parse_failed:
+            omitted_by_reason["export_table_parse_failed"] = export_table_parse_failed
+        ir_build_failed = max(exports_parsed - exports_built, 0)
         if ir_build_failed:
             omitted_by_reason["ir_build_failed"] = ir_build_failed
         if not is_debug:
-            editor_filtered = len(ir.exports) - len(filter_editor_items(ir.exports))
+            editor_filtered = exports_built - len(filter_editor_items(ir.exports))
             if editor_filtered:
                 omitted_by_reason["editor_filtered"] = editor_filtered
             corrupted = len(filter_editor_items(ir.exports)) - exports_rendered
             if corrupted:
                 omitted_by_reason["corrupted_serial_size"] = corrupted
         stats["total_exports_in_table"] = total_in_table
+        stats["exports_parsed"] = exports_parsed
         stats["exports_built"] = exports_built
         stats["exports_rendered"] = exports_rendered
         stats["exports_omitted"] = max(total_in_table - exports_rendered, 0)
