@@ -132,10 +132,15 @@ class JSONRenderer(IRenderer):
         data["warnings"] = ir.diagnostics_data.warnings if ir.diagnostics_data else []
         if ir.diagnostics_data and ir.diagnostics_data.diagnostics_truncated_count > 0:
             data["diagnostics_truncated_count"] = ir.diagnostics_data.diagnostics_truncated_count
+        all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+        all_diags = [
+            self._normalize_structured_diagnostic(diagnostic, ir.header.ue_version)
+            if diagnostic.get("code") else diagnostic
+            for diagnostic in all_diags
+        ]
         if is_debug:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+            data["diagnostics"] = all_diags
         else:
-            all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
             structured = [diagnostic for diagnostic in all_diags if diagnostic.get("code")]
             legacy = [diagnostic for diagnostic in all_diags if not diagnostic.get("code")]
             data["diagnostics"] = (
@@ -429,6 +434,14 @@ class JSONRenderer(IRenderer):
         return folded
 
     @staticmethod
+    def _normalize_structured_diagnostic(diagnostic: dict[str, Any], ue_version: str) -> dict[str, Any]:
+        """Hydrate render-only structured diagnostic context without mutating the IR."""
+        normalized = dict(diagnostic)
+        if not normalized.get("ue_version"):
+            normalized["ue_version"] = ue_version
+        return normalized
+
+    @staticmethod
     def _aggregate_structured_diagnostics(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Aggregate repeated structured diagnostics while preserving concise evidence."""
         groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
@@ -437,7 +450,7 @@ class JSONRenderer(IRenderer):
                 diagnostic.get("code", ""),
                 diagnostic.get("severity", ""),
                 diagnostic.get("stage", ""),
-                diagnostic.get("fallback") or "",
+                diagnostic.get("fallback", ""),
             )
             groups.setdefault(key, []).append(diagnostic)
 
@@ -455,6 +468,27 @@ class JSONRenderer(IRenderer):
                 "fallback": first.get("fallback", ""),
                 "count": len(items),
             }
+            for field in ("asset", "ue_version"):
+                values = [item.get(field) for item in items]
+                if all(value == values[0] for value in values):
+                    entry[field] = values[0]
+                else:
+                    examples: list[Any] = []
+                    for value in values:
+                        if value not in examples:
+                            examples.append(value)
+                        if len(examples) == 3:
+                            break
+                    entry[f"{field}_examples"] = examples
+            messages: list[Any] = []
+            for item in items:
+                message = item.get("message")
+                if message is not None and message not in messages:
+                    messages.append(message)
+                if len(messages) == 3:
+                    break
+            if messages:
+                entry["message_examples"] = messages
             raw_values = [item.get("raw_value") for item in items if item.get("raw_value") is not None]
             if raw_values and all(isinstance(value, (int, float)) for value in raw_values):
                 entry["raw_value_range"] = {"min": min(raw_values), "max": max(raw_values)}
@@ -462,6 +496,7 @@ class JSONRenderer(IRenderer):
                 entry["raw_value_examples"] = raw_values[:3]
             offsets = [item.get("offset") for item in items if item.get("offset") is not None]
             if offsets:
+                entry["offset_range"] = {"min": min(offsets), "max": max(offsets)}
                 entry["offset_examples"] = offsets[:3]
             aggregated.append(entry)
 

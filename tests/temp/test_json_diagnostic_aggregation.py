@@ -19,43 +19,66 @@ def _render_sample(name: str, output_level: str = "standard") -> str:
     )
 
 
-def test_repeated_structured_diagnostics_are_aggregated_with_evidence() -> None:
-    renderer = JSONRenderer()
+def test_repeated_structured_diagnostics_preserve_bounded_audit_context() -> None:
     diagnostics = [
         {
-            "code": "invalid_serial_size",
-            "severity": "warning",
-            "stage": "read_export_map",
-            "fallback": "set_to_zero",
-            "raw_value": value,
-            "offset": offset,
+            "code": "invalid_serial_size", "severity": "warning",
+            "asset": "ALS_AnimBP.uasset", "stage": "read_export_map",
+            "offset": offset, "raw_value": value, "ue_version": "5.x",
+            "fallback": "set_to_zero", "message": message,
         }
-        for value, offset in ((-5, 10), (-2, 20), (-9, 30), (-1, 40))
+        for value, offset, message in (
+            (-5, 10, "export 0 has invalid serial size"),
+            (-2, 20, "export 1 has invalid serial size"),
+            (-9, 30, "export 2 has invalid serial size"),
+            (-1, 40, "export 3 has invalid serial size"),
+        )
     ]
 
-    aggregated = renderer._aggregate_structured_diagnostics(diagnostics)
-
-    assert aggregated == [{
+    assert JSONRenderer()._aggregate_structured_diagnostics(diagnostics) == [{
         "code": "invalid_serial_size",
         "severity": "warning",
+        "asset": "ALS_AnimBP.uasset",
         "stage": "read_export_map",
+        "ue_version": "5.x",
         "fallback": "set_to_zero",
         "count": 4,
+        "message_examples": [
+            "export 0 has invalid serial size", "export 1 has invalid serial size",
+            "export 2 has invalid serial size",
+        ],
         "raw_value_range": {"min": -9, "max": -1},
+        "offset_range": {"min": 10, "max": 40},
         "offset_examples": [10, 20, 30],
     }]
 
 
-def test_als_repeated_serial_diagnostics_are_compact() -> None:
-    output = _render_sample("ALS_AnimBP.uasset")
-    data = json.loads(output)
-    matches = [
-        item for item in data["diagnostics"]
-        if item.get("code") == "invalid_serial_size"
+def test_structured_diagnostic_fallback_none_and_empty_string_do_not_merge() -> None:
+    diagnostics = [
+        {
+            "code": "invalid_serial_size", "severity": "warning",
+            "stage": "read_export_map", "fallback": fallback,
+        }
+        for fallback in (None, "")
     ]
 
-    assert len(matches) == 1
-    assert matches[0]["count"] > 1
+    aggregated = JSONRenderer()._aggregate_structured_diagnostics(diagnostics)
+
+    assert len(aggregated) == 2
+    assert [item["fallback"] for item in aggregated] == [None, ""]
+
+
+def test_als_repeated_serial_diagnostics_are_compact_and_auditable() -> None:
+    output = _render_sample("ALS_AnimBP.uasset")
+    data = json.loads(output)
+    aggregate = next(item for item in data["diagnostics"]
+                     if item.get("code") == "invalid_serial_size")
+    assert aggregate["count"] == 92
+    assert aggregate["asset"].endswith("ALS_AnimBP.uasset")
+    assert aggregate["ue_version"] == data["summary"]["ue_version"] == "5.x"
+    assert len(aggregate["message_examples"]) == 3
+    assert aggregate["offset_range"]["min"] <= min(aggregate["offset_examples"])
+    assert aggregate["offset_range"]["max"] >= max(aggregate["offset_examples"])
     assert len(output.splitlines()) < 30_000
     assert len(output.encode("utf-8")) < 3 * 1024 * 1024
 
