@@ -197,6 +197,7 @@ def _handle_batch(args) -> None:
             output_dir=output_dir,
             tolerant=not args.strict,
             verbose=args.verbose,
+            output_level=args.output_level,
             include_schema=args.schema or args.verbose,
             include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,

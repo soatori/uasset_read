@@ -2,11 +2,13 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import jsonschema
 import pytest
 
 from uasset_read import parse_batch, parse_single
+from uasset_read import cli
 from uasset_read.cli import create_parser
 from uasset_read.renderers.base import RenderOptions
 
@@ -74,3 +76,24 @@ def test_cli_accepts_only_public_output_levels() -> None:
     assert parser.parse_args(["--output-level", "debug"]).output_level == "debug"
     with pytest.raises(SystemExit):
         parser.parse_args(["--output-level", "compact"])
+
+
+def test_cli_batch_passes_output_level_to_parse_batch(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_parse_batch(*args, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            total=0, success=[], partial=[], partial_reasons={}, skipped=[], failed=[],
+        )
+
+    monkeypatch.setattr(cli, "parse_batch", fake_parse_batch)
+    args = create_parser().parse_args([
+        str(tmp_path), "--batch", "--output-level", "debug",
+    ])
+
+    with pytest.raises(SystemExit) as exited:
+        cli._handle_batch(args)
+
+    assert exited.value.code == 0
+    assert captured["output_level"] == "debug"
