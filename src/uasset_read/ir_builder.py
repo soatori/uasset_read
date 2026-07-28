@@ -89,7 +89,7 @@ def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: 
 
     declared_export_count = getattr(getattr(result, "summary", None), "export_count", None)
     if isinstance(declared_export_count, int) and declared_export_count >= 0:
-        export_table_total = declared_export_count
+        export_table_total = max(declared_export_count, len(parsed_exports))
     else:
         export_table_total = len(parsed_exports)
     return {

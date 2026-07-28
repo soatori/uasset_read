@@ -65,6 +65,35 @@ def test_json_statistics_account_for_skipped_ir_exports_and_all_diagnostics(
         assert sum(statistics["omitted_by_reason"].values()) == statistics["exports_omitted"]
 
 
+def test_json_statistics_keep_loss_accounting_when_header_understates_exports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A smaller declared count must not hide parsed-table or IR-build losses."""
+    result = ParseResult(
+        summary=PackageFileSummary(tag=0, legacy_file_version=0, export_count=1),
+        export_map=[SimpleNamespace(), SimpleNamespace(), SimpleNamespace()],
+    )
+
+    def build_or_fail(index: int, export: object, parse_result: ParseResult) -> ExportIR:
+        if index == 1:
+            raise ValueError("forced IR build failure")
+        return _built_export(index)
+
+    monkeypatch.setattr("uasset_read.ir_builder._build_export_ir", build_or_fail)
+    package_ir = build_package_ir(result)
+
+    for options in (RenderOptions(), RenderOptions(output_level="debug")):
+        statistics = JSONRenderer()._build_data(package_ir, options)["statistics"]
+        assert statistics["total_exports"] == 3
+        assert statistics["total_exports_in_table"] == 3
+        assert statistics["exports_parsed"] == 3
+        assert statistics["exports_built"] == 2
+        assert statistics["exports_rendered"] == 2
+        assert statistics["exports_omitted"] == 1
+        assert statistics["omitted_by_reason"] == {"ir_build_failed": 1}
+        assert sum(statistics["omitted_by_reason"].values()) == statistics["exports_omitted"]
+
+
 class _TolerantExportTableArchive:
     """Minimal archive that makes the second declared export-table row fail."""
 
