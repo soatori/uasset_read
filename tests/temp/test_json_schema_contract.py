@@ -38,3 +38,11 @@ def test_all_standard_sample_outputs_validate_against_schema() -> None:
 
     for sample in sorted(SAMPLES_DIR.glob("*.uasset")):
         jsonschema.validate(_parse_standard_sample(sample.name), schema)
+
+
+def test_schema_declares_compact_graph_node_summary() -> None:
+    """The published schema documents compact graph summaries explicitly."""
+    schema = json.loads((Path(__file__).resolve().parents[2] / "schemas" / "package.schema.json").read_text(encoding="utf-8"))
+    graph_properties = schema["$defs"]["GraphEntry"]["properties"]
+
+    assert graph_properties["node_summary"]["$ref"] == "#/$defs/NodeSummary"
