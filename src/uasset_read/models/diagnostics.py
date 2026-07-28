@@ -78,6 +78,7 @@ DIAGNOSTIC_CODE_NAME_INDEX_OUT_OF_RANGE = "name_index_out_of_range"
 DIAGNOSTIC_CODE_FSTRING_ALL_NULL = "fstring_all_null"
 DIAGNOSTIC_CODE_FSTRING_LENGTH_EXCEEDS_LIMIT = "fstring_length_exceeds_limit"
 DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE = "invalid_serial_size"
+DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET = "invalid_serial_offset"
 DIAGNOSTIC_CODE_UNKNOWN_SERIALIZATION_CONTROL_BITS = "unknown_serialization_control_bits"
 
 

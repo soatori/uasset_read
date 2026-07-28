@@ -76,7 +76,7 @@ def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int
     return count
 
 
-def _build_statistics(result: "ParseResult | LinkerParseResult") -> dict:
+def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: int) -> dict:
     """Build statistics dict from parse result for JSON output."""
     export_status_counts: dict[str, int] = {}
     total_props = 0
@@ -86,12 +86,18 @@ def _build_statistics(result: "ParseResult | LinkerParseResult") -> dict:
         export_status_counts[ps_str] = export_status_counts.get(ps_str, 0) + 1
         total_props += len(getattr(export, "properties", None) or [])
 
+    export_table_total = len(result.export_map or [])
     return {
-        "total_exports": len(result.export_map or []),
+        "total_exports": export_table_total,
+        "total_exports_in_table": export_table_total,
+        "exports_built": exports_built,
         "total_properties": total_props,
         "export_status_counts": export_status_counts,
         "warning_count": len(getattr(result, "warnings", None) or []),
-        "diagnostic_count": len(getattr(result, "diagnostics", None) or []),
+        "diagnostic_count": (
+            len(getattr(result, "diagnostics", None) or [])
+            + len(getattr(result, "structured_diagnostics", None) or [])
+        ),
     }
 
 
@@ -255,7 +261,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         ),
         import_map=import_map,
         name_map_entries=name_map_entries,
-        statistics=_build_statistics(result),
+        statistics=_build_statistics(result, len(exports)),
     )
 
     # Bind function/event implementation associations

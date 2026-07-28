@@ -1,4 +1,8 @@
-"""Acceptance coverage for the standard JSON output contract (#510)."""
+"""JSON contract acceptance coverage for #507, #509, and #510.
+
+Exercises standard/debug output across all bundled samples and compact
+Blueprint graph summaries against the published schema.
+"""
 
 import copy
 import json
