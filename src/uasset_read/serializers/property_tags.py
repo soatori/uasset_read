@@ -27,6 +27,13 @@ from uasset_read.models.properties import PropertyTag, PropertyTypeName
 
 T = TypeVar("T")
 
+# Legacy package-version gates from UE's ObjectVersion.h.  The parser remains
+# UE5-first; these gates only preserve alignment for pre-UE5 property tags.
+UE4_ARRAY_PROPERTY_INNER_TAGS = 282
+UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
+UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
+UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509
+
 
 def _read_property_type_name(
     archive: FArchive,
@@ -174,11 +181,14 @@ def read_property_tag(
     if tag.name == UE_NONE_SENTINEL:
         return tag
 
-    # Get UE5 version from archive (set by parse_uasset after summary parsing)
+    # Versions are set after PackageFileSummary parsing.
     file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
+    file_version_ue4 = getattr(archive, '_file_version_ue4', 0)
 
     if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
-        return _read_property_tag_legacy(archive, name_map, tag, tolerant, file_version_ue5)
+        return _read_property_tag_legacy(
+            archive, name_map, tag, tolerant, file_version_ue5, file_version_ue4,
+        )
 
     # === UE5 >= 1012: full FPropertyTypeName format ===
     tag.type_name = _read_property_type_name(archive, name_map, file_version_ue5=file_version_ue5)
@@ -243,6 +253,7 @@ def _read_property_tag_legacy(
     tag: "PropertyTag",
     tolerant: bool = False,
     file_version_ue5: int = 0,
+    file_version_ue4: int = 0,
 ) -> "PropertyTag":
     """Read legacy format property tag for UE5 < 1012 (PROPERTY_TAG_COMPLETE_TYPE_NAME).
 
@@ -286,9 +297,8 @@ def _read_property_tag_legacy(
         if tag.type == "StructProperty":
             # StructName (FName) + StructGuid (FGuid = 16 bytes)
             tag.struct_type = archive.read_name(name_map)
-            # StructGuid — UE5 assets always have file_version_ue4 >=
-            # VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG, always read
-            tag.property_guid = archive.read_bytes(16)
+            if file_version_ue4 >= UE4_STRUCT_GUID_IN_PROPERTY_TAG:
+                tag.struct_guid = archive.read_bytes(16)
         elif tag.type == "BoolProperty":
             # BoolVal: uint8 — serialized as 1 byte in binary format
             # Reference: PropertyTag.cpp:271-281 (Slot << SA_ATTRIBUTE(TEXT("BoolVal"), Tag.BoolVal))
@@ -303,16 +313,16 @@ def _read_property_tag_legacy(
             enum_name = archive.read_name(name_map)
             if enum_name and enum_name != UE_NONE_SENTINEL:
                 tag.enum_type = enum_name
-        elif tag.type == "ArrayProperty":
+        elif tag.type == "ArrayProperty" and file_version_ue4 >= UE4_ARRAY_PROPERTY_INNER_TAGS:
             # InnerType (FName) — Reference: PropertyTag.cpp:318-330
             tag.inner_type = archive.read_name(name_map)
-        elif tag.type == "SetProperty":
+        elif tag.type == "SetProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             # InnerType (FName) — Reference: PropertyTag.cpp:346-355
             tag.inner_type = archive.read_name(name_map)
-        elif tag.type == "OptionalProperty":
+        elif tag.type == "OptionalProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             # InnerType (FName) — Reference: PropertyTag.cpp:333-342
             tag.inner_type = archive.read_name(name_map)
-        elif tag.type == "MapProperty":
+        elif tag.type == "MapProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             # InnerType (FName) + ValueType (FName) — Reference: PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
@@ -326,11 +336,11 @@ def _read_property_tag_legacy(
         tag.serialize_type = "Property"
         return tag
 
-    # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG (always satisfied in UE5)
-    # Reference: PropertyTag.cpp:378-393
-    has_property_guid = archive.read_u8()
-    if has_property_guid:
-        tag.property_guid = archive.read_bytes(16)
+    if file_version_ue4 >= UE4_PROPERTY_GUID_IN_PROPERTY_TAG:
+        # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG.
+        has_property_guid = archive.read_u8()
+        if has_property_guid:
+            tag.property_guid = archive.read_bytes(16)
 
     # PropertyExtensions (ue5 >= 1011)
     # Reference: PropertyTag.cpp:395-399, SerializePropertyExtensions
@@ -375,6 +385,4 @@ def read_tag_value_bounded(
     finally:
         if archive.tell() != final_pos:
             archive.seek(final_pos)
-
-
 

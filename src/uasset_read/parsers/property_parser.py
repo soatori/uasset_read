@@ -946,13 +946,6 @@ def _read_property_loop(
                 e, tag, start_pos, archive, name_map, property_end,
             ))
 
-    # Asset type handler dispatch: called after property parsing
-    if skip_class_name is not None:
-        _try_asset_type_handler(
-            export, archive, name_map, skip_class_name,
-            parsed_properties=properties, property_end=property_end,
-        )
-
     return properties
 
 
@@ -1053,14 +1046,14 @@ def parse_properties_from_export(
         mappings, import_map, property_end, tolerant,
     )
     if unversioned_result is not None:
-        return unversioned_result
-
-    # Main property reading loop
-    properties = _read_property_loop(
-        export, archive, summary, name_map, export_map,
-        import_map, linker, mappings, property_end, tolerant,
-        skip_class_name=skip_class_name,
-    )
+        properties = unversioned_result
+    else:
+        # Main property reading loop
+        properties = _read_property_loop(
+            export, archive, summary, name_map, export_map,
+            import_map, linker, mappings, property_end, tolerant,
+            skip_class_name=skip_class_name,
+        )
 
     # Asset type handler dispatch: called after property parsing
     if skip_class_name is not None:
