@@ -569,10 +569,13 @@ def _handle_serialization_control(
         for bit, name in _SERIALIZATION_CONTROL_BIT_NAMES.items():
             if unknown_bits & bit:
                 bit_names.append(name)
-        logger.warning(
-            "Export '%s' SerializationControlExtensions unknown bits: 0x%02X (bits: %s) at offset %d — Skip subsequent reads",
-            getattr(export, "object_name", ""), unknown_bits,
-            ", ".join(bit_names), control_offset,
+        archive._record_structured_diagnostic(
+            code="unknown_serialization_control_bits",
+            stage="parse_properties",
+            offset=control_offset,
+            raw_value=serialization_control,
+            fallback="skipped_subsequent_reads",
+            message=f"Export '{getattr(export, 'object_name', '')}' SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} (bits: {', '.join(bit_names)})",
         )
         # Record diagnostic info
         archive._record_diagnostic(

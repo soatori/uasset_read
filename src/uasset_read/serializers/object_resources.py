@@ -27,6 +27,10 @@ from uasset_read.constants import (
     UE4_TemplateIndex_IN_COOKED_EXPORTS, UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.models.diagnostics import (
+    DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
+    DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
+)
 
 
 @dataclass
@@ -220,25 +224,37 @@ def read_export_map(
 
             # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (510), i64 after
             if file_version < UE4_64BIT_EXPORTMAP_SERIALSIZES:
+                serial_size_offset = archive.tell()
                 serial_size = archive.read_i32(f"Export[{export_idx}].SerialSize")
+                serial_offset_offset = archive.tell()
                 serial_offset = archive.read_i32(f"Export[{export_idx}].SerialOffset")
             else:
+                serial_size_offset = archive.tell()
                 serial_size = archive.read_i64(f"Export[{export_idx}].SerialSize")
+                serial_offset_offset = archive.tell()
                 serial_offset = archive.read_i64(f"Export[{export_idx}].SerialOffset")
 
             # CR-05: validate serial_size/serial_offset non-negative
             # Tolerant: set to 0 and log warning on negative values, subsequent property parsing will be skipped due to size=0
             if serial_size < 0:
-                logger.debug(
-                    "Export #%d serial_size is negative: %d, set to 0",
-                    export_idx, serial_size,
+                archive._record_structured_diagnostic(
+                    code=DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
+                    stage="read_export_map",
+                    offset=serial_size_offset,
+                    raw_value=serial_size,
+                    fallback="set_to_zero",
+                    message=f"Export #{export_idx} serial_size is negative: {serial_size}, set to 0",
                 )
                 serial_size = 0
 
             if serial_offset < 0:
-                logger.debug(
-                    "Export #%d serial_offset is negative: %d, skipping export",
-                    export_idx, serial_offset,
+                archive._record_structured_diagnostic(
+                    code=DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
+                    stage="read_export_map",
+                    offset=serial_offset_offset,
+                    raw_value=serial_offset,
+                    fallback="set_to_zero",
+                    message=f"Export #{export_idx} serial_offset is negative: {serial_offset}, skipping export",
                 )
                 serial_offset = 0
                 serial_size = 0

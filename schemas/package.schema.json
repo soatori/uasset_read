@@ -4,7 +4,7 @@
   "title": "uasset_read PackageIR 输出",
   "description": "uasset_read 解析器 PackageIR 的 JSON 输出 Schema。描述 .uasset 文件解析后的完整结构。",
   "type": "object",
-  "required": ["status", "summary", "exports"],
+  "required": ["status", "summary", "exports", "warnings", "diagnostics", "metadata", "import_map", "name_map", "statistics"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -82,8 +82,42 @@
       "type": "array",
       "description": "诊断信息列表",
       "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/RawLegacyDiagnostic" },
+          { "$ref": "#/$defs/FoldedLegacyDiagnostic" },
+          { "$ref": "#/$defs/StructuredDiagnostic" },
+          { "$ref": "#/$defs/AggregatedStructuredDiagnostic" }
+        ]
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "解析警告列表",
+      "items": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "资产元数据"
+    },
+    "import_map": {
+      "type": "array",
+      "description": "导入映射表",
+      "items": {
         "type": "object"
       }
+    },
+    "name_map": {
+      "type": "array",
+      "description": "名称映射表",
+      "items": {
+        "type": "string"
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "description": "导出统计信息"
     },
     "asset_registry_data": {
       "type": ["object", "null"],
@@ -130,6 +164,99 @@
         }
       }
     },
+    "RawLegacyDiagnostic": {
+      "type": "object",
+      "required": ["kind", "severity", "current_pos", "target_offset", "read_size", "file_size"],
+      "properties": {
+        "kind": { "type": "string" },
+        "severity": { "type": "string" },
+        "current_pos": { "type": "integer" },
+        "target_offset": { "type": "integer" },
+        "read_size": { "type": "integer" },
+        "file_size": { "type": "integer" }
+      }
+    },
+    "FoldedLegacyDiagnostic": {
+      "type": "object",
+      "required": ["kind", "field", "error", "error_pattern", "count"],
+      "not": { "required": ["severity"] },
+      "properties": {
+        "kind": { "type": "string" },
+        "field": { "type": "string" },
+        "error": { "type": "string" },
+        "error_pattern": { "type": "string" },
+        "count": { "type": "integer", "minimum": 2 },
+        "pos_range": { "$ref": "#/$defs/NumericRange" }
+      }
+    },
+    "StructuredDiagnostic": {
+      "type": "object",
+      "required": ["code", "severity", "asset", "stage", "offset", "raw_value", "ue_version", "fallback", "message"],
+      "not": { "required": ["count"] },
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string" },
+        "asset": { "type": ["string", "null"] },
+        "stage": { "type": "string" },
+        "offset": { "type": "integer" },
+        "raw_value": {},
+        "ue_version": { "type": ["string", "null"] },
+        "fallback": { "type": ["string", "null"] },
+        "message": { "type": "string" }
+      }
+    },
+    "AggregatedStructuredDiagnostic": {
+      "type": "object",
+      "required": ["code", "severity", "stage", "fallback", "count", "message_examples", "offset_range", "offset_examples"],
+      "allOf": [
+        { "anyOf": [{ "required": ["asset"] }, { "required": ["asset_examples"] }] },
+        { "anyOf": [{ "required": ["ue_version"] }, { "required": ["ue_version_examples"] }] }
+      ],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string" },
+        "asset": { "type": ["string", "null"] },
+        "asset_examples": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": ["string", "null"] }
+        },
+        "stage": { "type": "string" },
+        "ue_version": { "type": ["string", "null"] },
+        "ue_version_examples": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": ["string", "null"] }
+        },
+        "fallback": { "type": ["string", "null"] },
+        "count": { "type": "integer", "minimum": 2 },
+        "message_examples": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": "string" }
+        },
+        "raw_value_range": { "$ref": "#/$defs/NumericRange" },
+        "raw_value_examples": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {}
+        },
+        "offset_range": { "$ref": "#/$defs/NumericRange" },
+        "offset_examples": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "type": "integer" }
+        }
+      }
+    },
+    "NumericRange": {
+      "type": "object",
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
     "PackageSummary": {
       "type": "object",
       "required": ["package_name", "package_class", "package_flags", "total_export_count", "total_import_count", "ue_version"],
@@ -168,6 +295,14 @@
         "saved_hash": {
           "type": ["string", "null"],
           "description": "保存哈希（hex 字符串）"
+        },
+        "total_properties": {
+          "type": "integer",
+          "description": "所有导出的属性总数"
+        },
+        "total_name_entries": {
+          "type": "integer",
+          "description": "名称映射表的总条目数"
         }
       }
     },
@@ -207,7 +342,7 @@
         },
         "parse_status": {
           "type": "string",
-          "enum": ["success", "partial", "failed"],
+          "enum": ["success", "partial", "failed", "opaque", "partial_metadata"],
           "description": "解析状态（仅非 success 时存在）"
         },
         "fallback_reason": {
@@ -222,7 +357,7 @@
     },
     "PropertyEntry": {
       "type": "object",
-      "required": ["name", "type", "value", "array_index"],
+      "required": ["name", "type", "value"],
       "properties": {
         "name": {
           "type": "string",
@@ -247,14 +382,24 @@
     },
     "GraphEntry": {
       "type": "object",
-      "required": ["graph_name", "graph_guid", "nodes", "execution_chains"],
+      "required": ["graph_name", "graph_guid", "execution_chains"],
+      "oneOf": [
+        {
+          "required": ["nodes"],
+          "not": { "required": ["node_summary"] }
+        },
+        {
+          "required": ["node_summary"],
+          "not": { "required": ["nodes"] }
+        }
+      ],
       "properties": {
         "graph_name": {
           "type": "string",
           "description": "图名称"
         },
         "graph_guid": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "图 GUID（32 位小写 hex）"
         },
         "graph_type": {
@@ -263,10 +408,14 @@
         },
         "nodes": {
           "type": "array",
-          "description": "节点列表",
+          "description": "节点列表（standard/debug 模式）",
           "items": {
             "$ref": "#/$defs/NodeEntry"
           }
+        },
+        "node_summary": {
+          "$ref": "#/$defs/NodeSummary",
+          "description": "节点聚合摘要（compact 模式）"
         },
         "execution_chains": {
           "type": "array",
@@ -285,9 +434,37 @@
         }
       }
     },
+    "NodeSummary": {
+      "type": "object",
+      "required": ["total_nodes", "by_type"],
+      "properties": {
+        "total_nodes": {
+          "type": "integer",
+          "description": "节点总数"
+        },
+        "by_type": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "pin_types": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "referenced_functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "NodeEntry": {
       "type": "object",
-      "required": ["node_guid", "node_class", "pins", "execution_flow"],
+      "required": ["node_guid", "node_class", "pins"],
       "properties": {
         "node_guid": {
           "type": "string",
@@ -323,7 +500,7 @@
     },
     "PinEntry": {
       "type": "object",
-      "required": ["pin_name", "pin_type", "linked_to", "direction"],
+      "required": ["pin_name", "pin_category", "linked_to", "direction"],
       "properties": {
         "pin_name": {
           "type": "string",
@@ -332,6 +509,10 @@
         "pin_type": {
           "type": "string",
           "description": "Pin 类型"
+        },
+        "pin_category": {
+          "type": "string",
+          "description": "Pin 主类别（标准输出）"
         },
         "pin_type_value": {
           "type": ["string", "null"],
@@ -346,7 +527,6 @@
         },
         "direction": {
           "type": "string",
-          "enum": ["input", "output"],
           "description": "方向"
         },
         "default_value": {

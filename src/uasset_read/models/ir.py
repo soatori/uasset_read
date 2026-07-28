@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .diagnostics import OffsetRangeDiagnostic
+    from .diagnostics import OffsetRangeDiagnostic, StructuredDiagnostic
 
 
 @dataclass
@@ -570,7 +570,7 @@ class PackageIR:
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
     animation: AnimationDataIR | None = None
-    diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
+    diagnostics: list[OffsetRangeDiagnostic | StructuredDiagnostic] = field(default_factory=list)
     function_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
     dependencies: PackageDependenciesIR | None = None

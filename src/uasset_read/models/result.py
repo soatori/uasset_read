@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from uasset_read.versioning import VersionContainer
     from uasset_read.link.linker import PackageLinker
     from uasset_read.parsers.asset_registry_parser import AssetRegistryData
-    from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+    from uasset_read.models.diagnostics import OffsetRangeDiagnostic, StructuredDiagnostic
 
 
 @dataclass
@@ -51,6 +51,8 @@ class BaseResult:
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     diagnostics: list[OffsetRangeDiagnostic] = field(default_factory=list)
+    structured_diagnostics: list[StructuredDiagnostic] = field(default_factory=list)
+    """Structured diagnostics with stable codes for audit."""
     diagnostics_dropped_count: int = 0
     """Number of diagnostics entries dropped by BoundedEventBuffer truncation."""
     _error_keys: set = field(default_factory=set)

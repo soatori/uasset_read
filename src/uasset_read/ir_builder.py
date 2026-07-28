@@ -76,22 +76,34 @@ def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int
     return count
 
 
-def _build_statistics(result: "ParseResult | LinkerParseResult") -> dict:
+def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: int) -> dict:
     """Build statistics dict from parse result for JSON output."""
     export_status_counts: dict[str, int] = {}
     total_props = 0
-    for export in result.export_map or []:
+    parsed_exports = list(result.export_map or [])
+    for export in parsed_exports:
         ps = getattr(export, "parse_status", None)
         ps_str = str(ps.value) if hasattr(ps, "value") else str(ps) if ps else "success"
         export_status_counts[ps_str] = export_status_counts.get(ps_str, 0) + 1
         total_props += len(getattr(export, "properties", None) or [])
 
+    declared_export_count = getattr(getattr(result, "summary", None), "export_count", None)
+    if isinstance(declared_export_count, int) and declared_export_count >= 0:
+        export_table_total = max(declared_export_count, len(parsed_exports))
+    else:
+        export_table_total = len(parsed_exports)
     return {
-        "total_exports": len(result.export_map or []),
+        "total_exports": len(parsed_exports),
+        "total_exports_in_table": export_table_total,
+        "exports_parsed": len(parsed_exports),
+        "exports_built": exports_built,
         "total_properties": total_props,
         "export_status_counts": export_status_counts,
         "warning_count": len(getattr(result, "warnings", None) or []),
-        "diagnostic_count": len(getattr(result, "diagnostics", None) or []),
+        "diagnostic_count": (
+            len(getattr(result, "diagnostics", None) or [])
+            + len(getattr(result, "structured_diagnostics", None) or [])
+        ),
     }
 
 
@@ -228,7 +240,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
         animation=_build_animation_data(result),
-        diagnostics=result.diagnostics or [],
+        diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),
         dependencies=PackageDependenciesIR(
@@ -255,7 +267,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         ),
         import_map=import_map,
         name_map_entries=name_map_entries,
-        statistics=_build_statistics(result),
+        statistics=_build_statistics(result, len(exports)),
     )
 
     # Bind function/event implementation associations

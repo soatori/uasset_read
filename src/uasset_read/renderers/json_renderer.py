@@ -73,6 +73,7 @@ class JSONRenderer(IRenderer):
             "message": ir.diagnostics_data.status_message if ir.diagnostics_data else None,
             "code": ir.diagnostics_data.status_code if ir.diagnostics_data else None,
         }
+        data["metadata"] = {}
         data["summary"] = {
             "package_name": ir.header.package_name,
             "package_class": ir.header.package_class,
@@ -131,11 +132,21 @@ class JSONRenderer(IRenderer):
         data["warnings"] = ir.diagnostics_data.warnings if ir.diagnostics_data else []
         if ir.diagnostics_data and ir.diagnostics_data.diagnostics_truncated_count > 0:
             data["diagnostics_truncated_count"] = ir.diagnostics_data.diagnostics_truncated_count
+        all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+        all_diags = [
+            self._normalize_structured_diagnostic(diagnostic, ir.header.ue_version)
+            if diagnostic.get("code") else diagnostic
+            for diagnostic in all_diags
+        ]
         if is_debug:
-            data["diagnostics"] = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
+            data["diagnostics"] = all_diags
         else:
-            all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
-            data["diagnostics"] = self._fold_diagnostics(all_diags)
+            structured = [diagnostic for diagnostic in all_diags if diagnostic.get("code")]
+            legacy = [diagnostic for diagnostic in all_diags if not diagnostic.get("code")]
+            data["diagnostics"] = (
+                self._fold_diagnostics(legacy)
+                + self._aggregate_structured_diagnostics(structured)
+            )
         if ir.dependencies and ir.dependencies.asset_registry_data:
             data["asset_registry_data"] = ir.dependencies.asset_registry_data
         if ir.animation and ir.animation.anim_blueprint:
@@ -154,7 +165,32 @@ class JSONRenderer(IRenderer):
                 data["debug"] = debug_dict
         if options.include_function_graphs:
             data["function_graphs"] = self._build_function_graphs(ir)
-        data["statistics"] = ir.statistics
+        stats = dict(ir.statistics)
+        total_in_table = stats.get("total_exports_in_table", ir.header.total_export_count)
+        exports_parsed = stats.get("exports_parsed", len(ir.exports))
+        exports_built = stats.get("exports_built", len(ir.exports))
+        exports_rendered = len(data["exports"])
+        omitted_by_reason: dict[str, int] = {}
+        export_table_parse_failed = max(total_in_table - exports_parsed, 0)
+        if export_table_parse_failed:
+            omitted_by_reason["export_table_parse_failed"] = export_table_parse_failed
+        ir_build_failed = max(exports_parsed - exports_built, 0)
+        if ir_build_failed:
+            omitted_by_reason["ir_build_failed"] = ir_build_failed
+        if not is_debug:
+            editor_filtered = exports_built - len(filter_editor_items(ir.exports))
+            if editor_filtered:
+                omitted_by_reason["editor_filtered"] = editor_filtered
+            corrupted = len(filter_editor_items(ir.exports)) - exports_rendered
+            if corrupted:
+                omitted_by_reason["corrupted_serial_size"] = corrupted
+        stats["total_exports_in_table"] = total_in_table
+        stats["exports_parsed"] = exports_parsed
+        stats["exports_built"] = exports_built
+        stats["exports_rendered"] = exports_rendered
+        stats["exports_omitted"] = max(total_in_table - exports_rendered, 0)
+        stats["omitted_by_reason"] = omitted_by_reason
+        data["statistics"] = stats
         return data
 
     def _export_to_dict(self, export, options: RenderOptions, is_debug: bool = False, name_map: tuple = ()) -> dict[str, Any]:
@@ -167,9 +203,9 @@ class JSONRenderer(IRenderer):
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
-        # graphs: in standard mode, only keep graphs with content
+        # Standard output keeps only graphs with nodes; compact output keeps summaries.
         graphs = [self._graph_to_dict(g, options) for g in export.graphs]
-        if not is_debug:
+        if not is_debug and options.output_level != "compact":
             graphs = [g for g in graphs if g.get("nodes")]
 
         d = {
@@ -230,14 +266,55 @@ class JSONRenderer(IRenderer):
         result = {
             "graph_name": graph.graph_name,
             "graph_guid": graph.graph_guid,
-            "nodes": [self._node_to_dict(n, options.output_level) for n in graph.nodes],
             "execution_chains": graph.execution_chains,
         }
+        if options.output_level == "compact":
+            result["node_summary"] = self._aggregate_nodes(graph.nodes)
+        else:
+            result["nodes"] = [self._node_to_dict(n, options.output_level) for n in graph.nodes]
         if graph.graph_type:
             result["graph_type"] = graph.graph_type
         if graph.subgraphs:
             result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
         return result
+
+    @staticmethod
+    def _pin_semantic_key(pin) -> str:
+        """Return a stable, compact pin-type key for graph summaries."""
+        category = getattr(pin, "pin_category", "") or ""
+        subcategory = getattr(pin, "pin_subcategory", "") or ""
+        container = getattr(pin, "container_type", "None") or "None"
+        parts = [category]
+        if subcategory and subcategory != "None":
+            parts.append(subcategory)
+        if container != "None":
+            parts.append(container)
+        return ":".join(parts) if parts else "unknown"
+
+    def _aggregate_nodes(self, nodes: list) -> dict[str, Any]:
+        """Summarize graph nodes without serializing their full pin records."""
+        from collections import Counter
+
+        node_types = Counter()
+        pin_types = Counter()
+        referenced_functions: set[str] = set()
+        for node in nodes:
+            node_types[getattr(node, "node_class", "") or "unknown"] += 1
+            for pin in node.pins:
+                pin_types[self._pin_semantic_key(pin)] += 1
+                referenced = getattr(pin, "pin_subcategory_object_name", None)
+                if isinstance(referenced, str) and referenced:
+                    referenced_functions.add(referenced)
+
+        summary: dict[str, Any] = {
+            "total_nodes": len(nodes),
+            "by_type": dict(node_types.most_common()),
+        }
+        if pin_types:
+            summary["pin_types"] = dict(pin_types.most_common())
+        if referenced_functions:
+            summary["referenced_functions"] = sorted(referenced_functions)
+        return summary
 
     def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
         is_debug = output_level == "debug"
@@ -365,6 +442,75 @@ class JSONRenderer(IRenderer):
                 folded.append(folded_item)
 
         return folded
+
+    @staticmethod
+    def _normalize_structured_diagnostic(diagnostic: dict[str, Any], ue_version: str) -> dict[str, Any]:
+        """Hydrate render-only structured diagnostic context without mutating the IR."""
+        normalized = dict(diagnostic)
+        if not normalized.get("ue_version"):
+            normalized["ue_version"] = ue_version
+        return normalized
+
+    @staticmethod
+    def _aggregate_structured_diagnostics(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Aggregate repeated structured diagnostics while preserving concise evidence."""
+        groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+        for diagnostic in diagnostics:
+            key = (
+                diagnostic.get("code", ""),
+                diagnostic.get("severity", ""),
+                diagnostic.get("stage", ""),
+                diagnostic.get("fallback", ""),
+            )
+            groups.setdefault(key, []).append(diagnostic)
+
+        aggregated: list[dict[str, Any]] = []
+        for items in groups.values():
+            if len(items) == 1:
+                aggregated.append(items[0])
+                continue
+
+            first = items[0]
+            entry: dict[str, Any] = {
+                "code": first.get("code", ""),
+                "severity": first.get("severity", ""),
+                "stage": first.get("stage", ""),
+                "fallback": first.get("fallback", ""),
+                "count": len(items),
+            }
+            for field in ("asset", "ue_version"):
+                values = [item.get(field) for item in items]
+                if all(value == values[0] for value in values):
+                    entry[field] = values[0]
+                else:
+                    examples: list[Any] = []
+                    for value in values:
+                        if value not in examples:
+                            examples.append(value)
+                        if len(examples) == 3:
+                            break
+                    entry[f"{field}_examples"] = examples
+            messages: list[Any] = []
+            for item in items:
+                message = item.get("message")
+                if message is not None and message not in messages:
+                    messages.append(message)
+                if len(messages) == 3:
+                    break
+            if messages:
+                entry["message_examples"] = messages
+            raw_values = [item.get("raw_value") for item in items if item.get("raw_value") is not None]
+            if raw_values and all(isinstance(value, (int, float)) for value in raw_values):
+                entry["raw_value_range"] = {"min": min(raw_values), "max": max(raw_values)}
+            elif raw_values:
+                entry["raw_value_examples"] = raw_values[:3]
+            offsets = [item.get("offset") for item in items if item.get("offset") is not None]
+            if offsets:
+                entry["offset_range"] = {"min": min(offsets), "max": max(offsets)}
+                entry["offset_examples"] = offsets[:3]
+            aggregated.append(entry)
+
+        return aggregated
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """Serialize BlueprintIR to a dictionary (full metadata)."""
