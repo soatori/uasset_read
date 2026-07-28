@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from uasset_read.parsers import property_parser
 from uasset_read.parsers.asset_types import PropertyMetadataHandler
 from uasset_read.parsers.asset_types.property_metadata import build_property_metadata
 from uasset_read.parsers.asset_types.sound_cue import parse_sound_cue
+from uasset_read.parsers.class_registry import get_class_registry, reset_class_registry
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.renderers.json_renderer import JSONRenderer
 from uasset_read.serializers.property_tags import read_property_tag
@@ -160,10 +162,49 @@ def test_property_metadata_handler_keeps_native_tail_opaque() -> None:
     assert archive.tell() == 40
 
 
-def test_standard_json_exposes_asset_metadata_without_raw_bytes() -> None:
+def test_property_metadata_registration_uses_ue5_property_first_handlers() -> None:
+    reset_class_registry()
+    try:
+        registry = get_class_registry()
+        for class_name in ("StaticMesh", "SkeletalMesh", "Material", "Texture2D", "SoundCue"):
+            handler = registry.find_handler(class_name)
+            assert isinstance(handler, PropertyMetadataHandler)
+            assert handler.handler_name == f"{class_name}PropertyMetadataHandler"
+    finally:
+        reset_class_registry()
+
+
+def test_opaque_status_is_not_upgraded_without_projected_business_metadata() -> None:
+    for class_name in ("StaticMesh", "SkeletalMesh", "Material", "Texture2D", "SoundCue"):
+        data = build_property_metadata(
+            class_name,
+            [SimpleNamespace(name="UnrelatedProperty", value=123)],
+            tail_offset=40,
+            tail_size=12,
+        )
+
+        assert data == {
+            "asset_type": class_name,
+            "parse_status": "opaque",
+            "tail_offset": 40,
+            "tail_size": 12,
+        }
+
+
+def test_static_and_skeletal_mesh_remain_opaque_even_with_tagged_properties() -> None:
+    for class_name in ("StaticMesh", "SkeletalMesh"):
+        data = build_property_metadata(
+            class_name,
+            [SimpleNamespace(name="ImportedSize", value={"X": 512, "Y": 512})],
+        )
+
+        assert data == {"asset_type": class_name, "parse_status": "opaque"}
+
+
+def test_standard_json_recursively_removes_raw_asset_type_payloads() -> None:
     export = SimpleNamespace(
-        object_name="M_BotBase",
-        object_class="Material",
+        object_name="T_BotBase",
+        object_class="Texture2D",
         serial_size=128,
         parent_class=None,
         properties=[],
@@ -172,18 +213,59 @@ def test_standard_json_exposes_asset_metadata_without_raw_bytes() -> None:
         fallback_reason=None,
         error_message=None,
         asset_type_data={
-            "asset_type": "Material",
+            "asset_type": "Texture2D",
             "parse_status": "partial_metadata",
-            "blend_mode": "EBlendMode::BLEND_Masked",
+            "source": {
+                "width": 512,
+                "raw_bytes": b"source-bytes",
+                "layers": [
+                    {"name": "base", "raw_data": b"layer-bytes"},
+                ],
+            },
             "tail_offset": 64,
             "tail_size": 64,
         },
     )
+    header = SimpleNamespace(
+        package_name="/Game/T_BotBase",
+        package_class="Texture2D",
+        package_flags=0,
+        total_export_count=1,
+        total_import_count=0,
+        ue_version="5.7",
+        saved_hash=None,
+        total_properties=1,
+        total_name_entries=0,
+    )
+    ir = SimpleNamespace(
+        header=header,
+        diagnostics_data=None,
+        exports=[export],
+        import_map=[],
+        name_map_entries=[],
+        name_map=(),
+        blueprint=None,
+        decompiled_functions=[],
+        execution_chains=[],
+        variables=[],
+        dependencies=None,
+        logic_sources=[],
+        diagnostics=[],
+        animation=None,
+        debug=None,
+        function_graphs=[],
+        statistics={},
+    )
 
-    rendered = JSONRenderer()._export_to_dict(export, RenderOptions())
+    rendered = json.loads(JSONRenderer().render(ir, RenderOptions()))
+    metadata = rendered["exports"][0]["asset_type_data"]
 
-    assert rendered["asset_type_data"] == export.asset_type_data
-    assert "raw_bytes" not in rendered["asset_type_data"]
+    assert metadata["source"] == {
+        "width": 512,
+        "layers": [{"name": "base"}],
+    }
+    assert "raw_bytes" not in json.dumps(metadata)
+    assert "raw_data" not in json.dumps(metadata)
 
 
 def test_legacy_sound_cue_function_never_reads_a_native_prefix() -> None:

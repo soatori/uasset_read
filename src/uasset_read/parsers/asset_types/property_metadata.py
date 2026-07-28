@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from uasset_read.models.asset_metadata import (
+    has_meaningful_metadata,
+    sanitize_asset_metadata,
+)
 from uasset_read.models.validators import validate_parse_status
 
 
@@ -55,8 +59,16 @@ def build_property_metadata(
     values = _properties_by_name(properties)
     data: dict[str, Any] = {
         "asset_type": class_name,
-        "parse_status": validate_parse_status("partial_metadata"),
+        "parse_status": validate_parse_status("opaque"),
     }
+    business_field_count = 0
+
+    def project(field_name: str, value: Any) -> None:
+        nonlocal business_field_count
+        sanitized = sanitize_asset_metadata(value)
+        if has_meaningful_metadata(sanitized):
+            data[field_name] = sanitized
+            business_field_count += 1
 
     if class_name == "Material":
         for property_name, field_name in (
@@ -65,11 +77,11 @@ def build_property_metadata(
             ("ShadingModel", "shading_model"),
         ):
             if property_name in values:
-                data[field_name] = _enum_value(values[property_name])
+                project(field_name, _enum_value(values[property_name]))
         texture_data = values.get("TextureStreamingData", values.get("ReferencedTextures"))
         texture_references = _texture_references(texture_data)
         if texture_references:
-            data["texture_references"] = texture_references
+            project("texture_references", texture_references)
     elif class_name == "Texture2D":
         imported_size = _size(values.get("ImportedSize"))
         if imported_size is not None:
@@ -82,7 +94,7 @@ def build_property_metadata(
             ("Source", "source"),
         ):
             if property_name in values:
-                data[field_name] = _enum_value(values[property_name])
+                project(field_name, _enum_value(values[property_name]))
     elif class_name == "SoundCue":
         for names, field_name in (
             (("FirstNode",), "first_node"),
@@ -91,8 +103,11 @@ def build_property_metadata(
         ):
             for property_name in names:
                 if property_name in values:
-                    data[field_name] = values[property_name]
+                    project(field_name, values[property_name])
                     break
+
+    if business_field_count:
+        data["parse_status"] = validate_parse_status("partial_metadata")
 
     if tail_offset is not None and tail_size > 0:
         data["tail_offset"] = tail_offset

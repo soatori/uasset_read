@@ -17,6 +17,7 @@ from uasset_read.renderers.base import (
 )
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
+from uasset_read.models.asset_metadata import sanitize_asset_metadata
 from uasset_read.models.ir import HexViewEntryIR
 
 if TYPE_CHECKING:
@@ -228,7 +229,7 @@ class JSONRenderer(IRenderer):
         if export.error_message:
             d["error_message"] = export.error_message
         if export.asset_type_data:
-            d["asset_type_data"] = export.asset_type_data
+            d["asset_type_data"] = sanitize_asset_metadata(export.asset_type_data)
         return d
 
     def _property_to_dict(self, prop, is_debug: bool = False, name_map: tuple[str, ...] = ()) -> dict[str, Any]:
