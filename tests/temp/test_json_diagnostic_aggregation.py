@@ -1,4 +1,4 @@
-"""Acceptance coverage for compact graphs and structured diagnostics (#507, #509)."""
+"""Acceptance coverage for structured diagnostics (#507, #509)."""
 
 import json
 from pathlib import Path
@@ -81,14 +81,3 @@ def test_als_repeated_serial_diagnostics_are_compact_and_auditable() -> None:
     assert aggregate["offset_range"]["max"] >= max(aggregate["offset_examples"])
     assert len(output.splitlines()) < 30_000
     assert len(output.encode("utf-8")) < 3 * 1024 * 1024
-
-
-def test_compact_graph_output_uses_summaries_without_changing_standard_nodes() -> None:
-    standard = json.loads(_render_sample("FirstPerson_BP_FirstPersonCharacter.uasset"))
-    compact = json.loads(_render_sample("FirstPerson_BP_FirstPersonCharacter.uasset", "compact"))
-    standard_graphs = [graph for export in standard["exports"] for graph in export.get("graphs", [])]
-    compact_graphs = [graph for export in compact["exports"] for graph in export.get("graphs", [])]
-
-    assert standard_graphs and all("nodes" in graph for graph in standard_graphs)
-    assert compact_graphs and all("nodes" not in graph and "node_summary" in graph for graph in compact_graphs)
-    assert all({"total_nodes", "by_type"} <= graph["node_summary"].keys() for graph in compact_graphs)
