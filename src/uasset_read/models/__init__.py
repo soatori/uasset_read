@@ -98,6 +98,12 @@ from .fallback import (
 )
 from .diagnostics import (
     OffsetRangeDiagnostic,
+    StructuredDiagnostic,
+    DIAGNOSTIC_CODE_NAME_INDEX_OUT_OF_RANGE,
+    DIAGNOSTIC_CODE_FSTRING_ALL_NULL,
+    DIAGNOSTIC_CODE_FSTRING_LENGTH_EXCEEDS_LIMIT,
+    DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
+    DIAGNOSTIC_CODE_UNKNOWN_SERIALIZATION_CONTROL_BITS,
 )
 
 __all__ = [
@@ -186,4 +192,10 @@ __all__ = [
     "FallbackReason",
     # Diagnostic models
     "OffsetRangeDiagnostic",
+    "StructuredDiagnostic",
+    "DIAGNOSTIC_CODE_NAME_INDEX_OUT_OF_RANGE",
+    "DIAGNOSTIC_CODE_FSTRING_ALL_NULL",
+    "DIAGNOSTIC_CODE_FSTRING_LENGTH_EXCEEDS_LIMIT",
+    "DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE",
+    "DIAGNOSTIC_CODE_UNKNOWN_SERIALIZATION_CONTROL_BITS",
 ]

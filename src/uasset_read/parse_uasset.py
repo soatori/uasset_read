@@ -78,6 +78,10 @@ def _cleanup_archive_diagnostics(result, archive) -> None:
         archive_diagnostics = archive.get_diagnostics()
         if archive_diagnostics:
             result.diagnostics = archive_diagnostics + result.diagnostics
+        # Collect structured diagnostics
+        structured_diags = archive.get_structured_diagnostics()
+        if structured_diags:
+            result.structured_diagnostics = structured_diags + result.structured_diagnostics
         # Propagate archive BoundedEventBuffer truncation counts
         result.diagnostics_dropped_count += archive.diagnostics_dropped_count
         result.hex_view_dropped_count += archive.hex_view_dropped_count

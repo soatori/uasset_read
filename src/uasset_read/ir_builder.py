@@ -228,7 +228,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
         animation=_build_animation_data(result),
-        diagnostics=result.diagnostics or [],
+        diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),
         dependencies=PackageDependenciesIR(

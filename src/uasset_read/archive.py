@@ -15,7 +15,9 @@ from uasset_read.constants import (
     MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT,
     get_max_reasonable, MAX_REASONABLE_CAP,
 )
-from uasset_read.models.diagnostics import OffsetRangeDiagnostic
+from uasset_read.models.diagnostics import (
+    OffsetRangeDiagnostic, StructuredDiagnostic,
+)
 from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,7 @@ class FArchive:
         self._hex_view_enabled: bool = hex_view
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
+        self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
 
     def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
         self._init_archive_attrs(path, tolerant, hex_view)
@@ -361,6 +364,34 @@ class FArchive:
         """Record offset/range diagnostic (internal helper)."""
         self._diagnostics.append(OffsetRangeDiagnostic(**kwargs))
 
+    def _record_structured_diagnostic(
+        self,
+        code: str,
+        stage: str,
+        offset: int,
+        raw_value: Any = None,
+        ue_version: str = "",
+        fallback: str = "",
+        message: str = "",
+        severity: str = "warning",
+    ) -> None:
+        """Record a structured diagnostic with stable code."""
+        self._structured_diagnostics.append(StructuredDiagnostic(
+            code=code,
+            severity=severity,
+            asset=self._path,
+            stage=stage,
+            offset=offset,
+            raw_value=raw_value,
+            ue_version=ue_version,
+            fallback=fallback,
+            message=message,
+        ))
+
+    def get_structured_diagnostics(self) -> list[StructuredDiagnostic]:
+        """Return collected structured diagnostics."""
+        return list(self._structured_diagnostics)
+
     def get_diagnostics(self) -> list[OffsetRangeDiagnostic]:
         """Return collected offset diagnostics."""
         return self._diagnostics.entries
@@ -630,10 +661,13 @@ class FArchive:
                 )
                 self.seek(pos_before)
                 if self._tolerant:
-                    self._logger.warning(
-                        "FString at pos %d: UTF-16 length %d exceeds maximum %d, "
-                        "returning empty string (tolerant)",
-                        pos_before, utf16_len, MAX_FSTRING_LENGTH,
+                    self._record_structured_diagnostic(
+                        code="fstring_length_exceeds_limit",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=utf16_len,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: UTF-16 length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}",
                     )
                     return ""
                 raise ParseError(
@@ -679,10 +713,13 @@ class FArchive:
                         pos_before, -length, len(data),
                     )
                 else:
-                    self._logger.warning(
-                        "FString at pos %d: length=%d, encoding=UTF-16, "
-                        "all nulls → empty string, consumed=%d bytes",
-                        pos_before, -length, len(data),
+                    self._record_structured_diagnostic(
+                        code="fstring_all_null",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=-length,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: length={-length}, encoding=UTF-16, all nulls",
                     )
         else:
             if length > MAX_FSTRING_LENGTH:
@@ -696,10 +733,13 @@ class FArchive:
                 )
                 self.seek(pos_before)
                 if self._tolerant:
-                    self._logger.warning(
-                        "FString at pos %d: UTF-8 length %d exceeds maximum %d, "
-                        "returning empty string (tolerant)",
-                        pos_before, length, MAX_FSTRING_LENGTH,
+                    self._record_structured_diagnostic(
+                        code="fstring_length_exceeds_limit",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=length,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: UTF-8 length {length} exceeds maximum {MAX_FSTRING_LENGTH}",
                     )
                     return ""
                 raise ParseError(
@@ -734,9 +774,13 @@ class FArchive:
                     error=f"FString at pos {pos_before}: length={length}, "
                           f"encoding=UTF-8, all nulls (empty result)",
                 )
-                self._logger.warning(
-                    "FString at pos %d: length=%d, encoding=UTF-8, all nulls → empty string",
-                    pos_before, length,
+                self._record_structured_diagnostic(
+                    code="fstring_all_null",
+                    stage="read_fstring",
+                    offset=pos_before,
+                    raw_value=length,
+                    fallback="used_empty_string",
+                    message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls",
                 )
 
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
@@ -786,11 +830,13 @@ class FArchive:
                             pos_before, length, len(data), self.tell()
                         )
                     else:
-                        self._logger.warning(
-                            "FString at pos %d: length=%d, encoding=UTF-8, "
-                            "all nulls (completely corrupted), "
-                            "consumed=%d bytes, end_pos=%d",
-                            pos_before, length, len(data), self.tell()
+                        self._record_structured_diagnostic(
+                            code="fstring_all_null",
+                            stage="read_fstring",
+                            offset=pos_before,
+                            raw_value=length,
+                            fallback="used_empty_string",
+                            message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
                         )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s",
@@ -867,10 +913,13 @@ class FArchive:
         # Maximum length check
         if length > MAX_FSTRING_LENGTH:
             if tolerant:
-                self._logger.warning(
-                    "read_utf8_string at pos %d: length %d exceeds maximum %d, "
-                    "returning empty string (tolerant)",
-                    pos_before, length, MAX_FSTRING_LENGTH,
+                self._record_structured_diagnostic(
+                    code="fstring_length_exceeds_limit",
+                    stage="read_utf8_string",
+                    offset=pos_before,
+                    raw_value=length,
+                    fallback="used_empty_string",
+                    message=f"read_utf8_string at pos {pos_before}: length {length} exceeds maximum {MAX_FSTRING_LENGTH}",
                 )
                 self.seek(pos_before)
                 return ""
@@ -891,10 +940,13 @@ class FArchive:
                     f"read_utf8_string at pos {pos_before}: length={length}, "
                     "all nulls (completely corrupted), strict mode"
                 )
-            self._logger.warning(
-                "read_utf8_string at pos %d: length=%d, all nulls, "
-                "returning empty string (tolerant)",
-                pos_before, length,
+            self._record_structured_diagnostic(
+                code="fstring_all_null",
+                stage="read_utf8_string",
+                offset=pos_before,
+                raw_value=length,
+                fallback="used_empty_string",
+                message=f"read_utf8_string at pos {pos_before}: length={length}, all nulls",
             )
 
         return result
@@ -978,9 +1030,13 @@ class FArchive:
             # Deduplication: same out-of-bounds index only logged once (#411)
             if index not in self._name_warnings_seen:
                 self._name_warnings_seen.add(index)
-                logger.warning(
-                    "read_name: index %d out of range (name_map len=%d) at pos %d",
-                    index, len(name_map), self.tell() - 8
+                self._record_structured_diagnostic(
+                    code="name_index_out_of_range",
+                    stage="read_name",
+                    offset=self.tell() - 8,
+                    raw_value=index,
+                    fallback="used_default_name",
+                    message=f"Name index {index} out of range [0, {len(name_map)}]",
                 )
                 # Add diagnostic record
                 self._record_diagnostic(

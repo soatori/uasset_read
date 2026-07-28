@@ -136,7 +136,12 @@ class JSONRenderer(IRenderer):
             data["diagnostics"] = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
         else:
             all_diags = [d.to_dict() for d in ir.diagnostics] if ir.diagnostics else []
-            data["diagnostics"] = self._fold_diagnostics(all_diags)
+            structured = [diagnostic for diagnostic in all_diags if diagnostic.get("code")]
+            legacy = [diagnostic for diagnostic in all_diags if not diagnostic.get("code")]
+            data["diagnostics"] = (
+                self._fold_diagnostics(legacy)
+                + self._aggregate_structured_diagnostics(structured)
+            )
         if ir.dependencies and ir.dependencies.asset_registry_data:
             data["asset_registry_data"] = ir.dependencies.asset_registry_data
         if ir.animation and ir.animation.anim_blueprint:
@@ -183,9 +188,9 @@ class JSONRenderer(IRenderer):
                 if p.name not in EDITOR_PROPERTY_NAMES
             ]
 
-        # graphs: in standard mode, only keep graphs with content
+        # Standard output keeps only graphs with nodes; compact output keeps summaries.
         graphs = [self._graph_to_dict(g, options) for g in export.graphs]
-        if not is_debug:
+        if not is_debug and options.output_level != "compact":
             graphs = [g for g in graphs if g.get("nodes")]
 
         d = {
@@ -246,14 +251,55 @@ class JSONRenderer(IRenderer):
         result = {
             "graph_name": graph.graph_name,
             "graph_guid": graph.graph_guid,
-            "nodes": [self._node_to_dict(n, options.output_level) for n in graph.nodes],
             "execution_chains": graph.execution_chains,
         }
+        if options.output_level == "compact":
+            result["node_summary"] = self._aggregate_nodes(graph.nodes)
+        else:
+            result["nodes"] = [self._node_to_dict(n, options.output_level) for n in graph.nodes]
         if graph.graph_type:
             result["graph_type"] = graph.graph_type
         if graph.subgraphs:
             result["subgraphs"] = [self._graph_to_dict(sg, options) for sg in graph.subgraphs]
         return result
+
+    @staticmethod
+    def _pin_semantic_key(pin) -> str:
+        """Return a stable, compact pin-type key for graph summaries."""
+        category = getattr(pin, "pin_category", "") or ""
+        subcategory = getattr(pin, "pin_subcategory", "") or ""
+        container = getattr(pin, "container_type", "None") or "None"
+        parts = [category]
+        if subcategory and subcategory != "None":
+            parts.append(subcategory)
+        if container != "None":
+            parts.append(container)
+        return ":".join(parts) if parts else "unknown"
+
+    def _aggregate_nodes(self, nodes: list) -> dict[str, Any]:
+        """Summarize graph nodes without serializing their full pin records."""
+        from collections import Counter
+
+        node_types = Counter()
+        pin_types = Counter()
+        referenced_functions: set[str] = set()
+        for node in nodes:
+            node_types[getattr(node, "node_class", "") or "unknown"] += 1
+            for pin in node.pins:
+                pin_types[self._pin_semantic_key(pin)] += 1
+                referenced = getattr(pin, "pin_subcategory_object_name", None)
+                if isinstance(referenced, str) and referenced:
+                    referenced_functions.add(referenced)
+
+        summary: dict[str, Any] = {
+            "total_nodes": len(nodes),
+            "by_type": dict(node_types.most_common()),
+        }
+        if pin_types:
+            summary["pin_types"] = dict(pin_types.most_common())
+        if referenced_functions:
+            summary["referenced_functions"] = sorted(referenced_functions)
+        return summary
 
     def _node_to_dict(self, node, output_level: str = "standard") -> dict[str, Any]:
         is_debug = output_level == "debug"
@@ -381,6 +427,45 @@ class JSONRenderer(IRenderer):
                 folded.append(folded_item)
 
         return folded
+
+    @staticmethod
+    def _aggregate_structured_diagnostics(diagnostics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Aggregate repeated structured diagnostics while preserving concise evidence."""
+        groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+        for diagnostic in diagnostics:
+            key = (
+                diagnostic.get("code", ""),
+                diagnostic.get("severity", ""),
+                diagnostic.get("stage", ""),
+                diagnostic.get("fallback") or "",
+            )
+            groups.setdefault(key, []).append(diagnostic)
+
+        aggregated: list[dict[str, Any]] = []
+        for items in groups.values():
+            if len(items) == 1:
+                aggregated.append(items[0])
+                continue
+
+            first = items[0]
+            entry: dict[str, Any] = {
+                "code": first.get("code", ""),
+                "severity": first.get("severity", ""),
+                "stage": first.get("stage", ""),
+                "fallback": first.get("fallback", ""),
+                "count": len(items),
+            }
+            raw_values = [item.get("raw_value") for item in items if item.get("raw_value") is not None]
+            if raw_values and all(isinstance(value, (int, float)) for value in raw_values):
+                entry["raw_value_range"] = {"min": min(raw_values), "max": max(raw_values)}
+            elif raw_values:
+                entry["raw_value_examples"] = raw_values[:3]
+            offsets = [item.get("offset") for item in items if item.get("offset") is not None]
+            if offsets:
+                entry["offset_examples"] = offsets[:3]
+            aggregated.append(entry)
+
+        return aggregated
 
     def _blueprint_to_dict(self, blueprint) -> dict[str, Any]:
         """Serialize BlueprintIR to a dictionary (full metadata)."""

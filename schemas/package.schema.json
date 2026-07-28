@@ -300,10 +300,14 @@
         },
         "nodes": {
           "type": "array",
-          "description": "节点列表",
+          "description": "节点列表（standard/debug 模式）",
           "items": {
             "$ref": "#/$defs/NodeEntry"
           }
+        },
+        "node_summary": {
+          "$ref": "#/$defs/NodeSummary",
+          "description": "节点聚合摘要（compact 模式）"
         },
         "execution_chains": {
           "type": "array",
@@ -318,6 +322,34 @@
           "description": "子图列表",
           "items": {
             "$ref": "#/$defs/GraphEntry"
+          }
+        }
+      }
+    },
+    "NodeSummary": {
+      "type": "object",
+      "required": ["total_nodes", "by_type"],
+      "properties": {
+        "total_nodes": {
+          "type": "integer",
+          "description": "节点总数"
+        },
+        "by_type": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "pin_types": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "referenced_functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }

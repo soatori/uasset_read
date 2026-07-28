@@ -4,9 +4,9 @@ Records offset/range anomalies encountered during parsing, including
 serial offset out-of-bounds, script offset overflow, CodeOffset anomalies, etc.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 
 class DiagnosticSeverity(Enum):
@@ -71,3 +71,34 @@ class OffsetRangeDiagnostic:
     def is_structural(self) -> bool:
         """Check if this is a structural diagnostic (affects status)."""
         return self.severity in (DiagnosticSeverity.ERROR, DiagnosticSeverity.CRITICAL)
+
+
+# Stable diagnostic codes for structured warnings
+DIAGNOSTIC_CODE_NAME_INDEX_OUT_OF_RANGE = "name_index_out_of_range"
+DIAGNOSTIC_CODE_FSTRING_ALL_NULL = "fstring_all_null"
+DIAGNOSTIC_CODE_FSTRING_LENGTH_EXCEEDS_LIMIT = "fstring_length_exceeds_limit"
+DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE = "invalid_serial_size"
+DIAGNOSTIC_CODE_UNKNOWN_SERIALIZATION_CONTROL_BITS = "unknown_serialization_control_bits"
+
+
+@dataclass
+class StructuredDiagnostic:
+    """Structured diagnostic record with stable codes.
+
+    Each diagnostic carries asset context, read stage, offset, raw value,
+    UE version, and fallback action for auditability.
+    """
+
+    code: str
+    severity: str = "warning"  # "warning" | "error" | "info"
+    asset: str = ""
+    stage: str = ""
+    offset: int = 0
+    raw_value: Any = None
+    ue_version: str = ""
+    fallback: str = ""
+    message: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to JSON-compatible dict."""
+        return asdict(self)
