@@ -81,6 +81,19 @@ def is_blueprint_export(export: ExportIR) -> bool:
     return False
 
 
+VALID_OUTPUT_LEVELS = frozenset({"standard", "debug"})
+
+
+def validate_output_level(output_level: str) -> str:
+    """Validate and return a public renderer output level."""
+    if output_level not in VALID_OUTPUT_LEVELS:
+        raise ValueError(
+            f"Unsupported output_level {output_level!r}; "
+            "expected one of: 'standard', 'debug'"
+        )
+    return output_level
+
+
 @dataclass
 class RenderOptions:
     """Render options (read-only by renderers, not modified)."""
@@ -90,6 +103,9 @@ class RenderOptions:
     include_function_graphs: bool = False
     output_level: str = "standard"  # "standard" (default, filters UI/empty fields) or "debug" (full output)
     hex_view: bool = False  # Output HexView parsing trace data
+
+    def __post_init__(self) -> None:
+        validate_output_level(self.output_level)
 
 
 class IRenderer(ABC):
