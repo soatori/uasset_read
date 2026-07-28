@@ -194,6 +194,7 @@ def _read_core_tables(
     if memory_monitor is not None:
         memory_monitor.checkpoint("package_summary")
     result.version_container = build_version_container(result.summary)
+    archive._file_version_ue4 = result.summary.file_version_ue4
     archive._file_version_ue5 = result.summary.file_version_ue5
 
     # Mark UE4 legacy assets

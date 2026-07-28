@@ -24,6 +24,7 @@ from uasset_read.parsers.class_registry import (
     HandlerResult,
     get_class_registry,
 )
+from uasset_read.parsers.asset_types.property_metadata import build_property_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ __all__ = [
     "AnimBlueprintHandler",
     "AnimSequenceHandler",
     "AnimMontageHandler",
+    "PropertyMetadataHandler",
 ]
 
 
@@ -103,36 +105,57 @@ class AssetTypeHandler(ClassHandler):
             )
 
 
+class PropertyMetadataHandler(ClassHandler):
+    """Project tagged properties while leaving native serialization opaque."""
+
+    def __init__(self, class_name: str) -> None:
+        self._class_name = class_name
+
+    def can_handle(self, class_name: str) -> bool:
+        return class_name == self._class_name
+
+    @property
+    def handler_name(self) -> str:
+        return f"{self._class_name}PropertyMetadataHandler"
+
+    @property
+    def fallback_policy(self) -> FallbackPolicy:
+        return FallbackPolicy.GENERIC_UOBJECT
+
+    def parse(
+        self,
+        export: "ObjectExport",
+        archive: "FArchive",
+        context: Optional[Any] = None,
+    ) -> HandlerResult:
+        tail_offset = archive.tell()
+        serial_end = export.serial_offset + export.serial_size
+        data = build_property_metadata(
+            self._class_name,
+            list(getattr(export, "properties", None) or []),
+            tail_offset=tail_offset,
+            tail_size=max(0, serial_end - tail_offset),
+        )
+        return HandlerResult(
+            success=True,
+            data=data,
+            fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+        )
 def register_asset_type_handlers() -> None:
     """Register asset type parsers to ClassHandlerRegistry."""
     registry = get_class_registry()
 
     handlers = [
-        AssetTypeHandler(
-            class_names=["StaticMesh"],
-            parse_func=parse_static_mesh,
-            handler_name="StaticMeshHandler",
-        ),
-        AssetTypeHandler(
-            class_names=["SkeletalMesh"],
-            parse_func=parse_skeletal_mesh,
-            handler_name="SkeletalMeshHandler",
-        ),
-        AssetTypeHandler(
-            class_names=["Material"],
-            parse_func=parse_material,
-            handler_name="MaterialHandler",
-        ),
+        PropertyMetadataHandler("StaticMesh"),
+        PropertyMetadataHandler("SkeletalMesh"),
+        PropertyMetadataHandler("Material"),
         AssetTypeHandler(
             class_names=["MaterialInstance", "MaterialInstanceConstant"],
             parse_func=parse_material_instance,
             handler_name="MaterialInstanceHandler",
         ),
-        AssetTypeHandler(
-            class_names=["Texture2D"],
-            parse_func=parse_texture2d,
-            handler_name="Texture2DHandler",
-        ),
+        PropertyMetadataHandler("Texture2D"),
+        PropertyMetadataHandler("SoundCue"),
     ]
 
     # Optional parsers (register if import succeeds)
@@ -157,7 +180,6 @@ def register_asset_type_handlers() -> None:
         ("movie_scene", "MovieSceneHandler", ["MovieScene"], "MovieSceneHandler"),
         ("movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler", ["MovieSceneControlRigParameterTrack"], "MovieSceneControlRigParameterTrackHandler"),
         ("movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler", ["MovieSceneControlRigParameterSection"], "MovieSceneControlRigParameterSectionHandler"),
-        ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

@@ -227,6 +227,8 @@ class JSONRenderer(IRenderer):
             d["fallback_reason"] = export.fallback_reason
         if export.error_message:
             d["error_message"] = export.error_message
+        if export.asset_type_data:
+            d["asset_type_data"] = export.asset_type_data
         return d
 
     def _property_to_dict(self, prop, is_debug: bool = False, name_map: tuple[str, ...] = ()) -> dict[str, Any]:
